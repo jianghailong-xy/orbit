@@ -1,0 +1,16 @@
+{
+ "label": "nb-fix-p0",
+ "step": "p0",
+ "tree": "/mnt/data/tmp/overlay-first-frame-34brok/run",
+ "command": "npm run test:ui-migration -w @orbit/web",
+ "commit": "c4c94c924e6163abd1bcff74d376899f69c4a8a0",
+ "webChanges": [],
+ "webDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+ "startedAt": "2026-10-08T13:36:42Z",
+ "endedAt": "2026-10-08T13:41:26+00:00",
+ "loadAverage": {
+  "start": "11.59 23.16 27.62",
+  "end": "15.04 21.92 26.12"
+ },
+ "exitCode": 0
+}

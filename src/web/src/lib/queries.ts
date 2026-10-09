@@ -19,6 +19,7 @@ import {
   getSessionDiff,
   getSessionRequest,
   listShareLinks,
+  listAccessTokens,
   type SessionFolder,
   type SessionListItem,
   type WorkspacePermissionRuleInfo,
@@ -50,13 +51,16 @@ import type {
   WikiPlanState,
   WikiPlanVersion,
   WikiPlanVersionSummary,
+  WikiJobsRead,
   WikiSearchRow,
   WikiSpaceHealth,
+  WikiSystemModelRead,
 } from '@orbit/shared';
 import type {
   WikiChangeset,
   WikiEntry,
   WikiEntryDetail,
+  WikiEntryKind,
   WikiSpaceRow,
   WikiSpaceWithUsage,
   WikiTimeline,
@@ -184,6 +188,16 @@ export interface UserPreferences {
   /** Smart model selection for the whole account — the Suggested tiers and the Agent switch that
    *  routes task runs onto them. Absent means OFF; only turning it on has to be written. */
   modelRouting?: boolean;
+  /** Whether Claude sessions offer the next message you would probably type once a turn ends
+   *  (lib/promptSuggestion). Each one is a request on the session's account, read when its engine
+   *  starts. Absent means on; only opting out is ever written. */
+  promptSuggestions?: boolean;
+}
+
+/** How an account signs in (docs/google-sign-in-design.md §6): a password, and the Google account linked. */
+export interface SignInMethods {
+  password: boolean;
+  google: { email: string } | null;
 }
 
 export interface Me {
@@ -195,6 +209,8 @@ export interface Me {
   role?: 'MEMBER' | 'ADMIN';
   /** When the account's profile photo was set — the version it is fetched by. Null without one. */
   avatarUpdatedAt?: string | null;
+  /** Absent from a server that predates Google sign-in, where an account has a password and nothing else. */
+  signInMethods?: SignInMethods;
 }
 
 /** The signed-in user — backs the account page and the nav footer's avatar + name. */
@@ -539,13 +555,19 @@ export const openProjectsQuery = () =>
   });
 
 /** The project document also supplies title and task counts when a finished project is
- *  absent from the Open-only sidebar. Shares the detail page's existing cache entry. */
+ *  absent from the Open-only sidebar, and the workspace its coordinator runs in, which the Wiki opens
+ *  the space of (design §12.3.4). Shares the detail page's existing cache entry. */
 export const projectDetailsQuery = (projectId: string) =>
   queryOptions({
     queryKey: ['project', projectId] as const,
-    queryFn: () => api<{ id: string; title: string; tasksByStatus?: Record<string, number> }>(
-      `/projects/${encodeURIComponent(projectId)}`,
-    ),
+    queryFn: () =>
+      api<{
+        id: string;
+        title: string;
+        status?: string;
+        tasksByStatus?: Record<string, number>;
+        coordinatorWorkspaceId?: string | null;
+      }>(`/projects/${encodeURIComponent(projectId)}`),
   });
 
 /**
@@ -908,6 +930,13 @@ export const shareLinksQuery = () =>
     queryFn: listShareLinks,
   });
 
+/** The account's personal access tokens (Settings → Access tokens) — never the tokens themselves. */
+export const accessTokensQuery = () =>
+  queryOptions({
+    queryKey: ['access-tokens'] as const,
+    queryFn: listAccessTokens,
+  });
+
 /**
  * One watch by id, for a link to one no list above holds — a wake card names the watch that queued
  * it, however old. Under the `['watches']` prefix, so whatever re-reads the list re-reads it too.
@@ -980,7 +1009,7 @@ export const wikiSpacesQuery = () =>
   });
 
 /**
- * One space, with the rolling usage window the home page's right rail reads.
+ * One space, with the rolling usage window Activity's Agents used the wiki reads.
  *
  * `include=usage` costs four aggregates over `wiki_exposure` that no other reader of the space
  * document pays for, which is why it is asked for here and nowhere else.
@@ -1007,11 +1036,71 @@ export const wikiHealthQuery = (spaceId: string | null) =>
     staleTime: 30_000,
   });
 
-/** A space's entries, newest record first. The home page and the topic grid are both drawn from it. */
+/**
+ * The deployment's System model and the executor switch as it stands for this account (`GET /api/wiki/system-model`,
+ * contracts `systemModel.read` and `jobs.executor.read`): what the wiki settings page reads to draw the System model
+ * instead of the provider. `null` is a control plane from before the read (a 404 that is not the wiki being off),
+ * which runs nothing on the server — the page is then what it always was.
+ */
+export const wikiSystemModelQuery = () =>
+  queryOptions({
+    queryKey: ['wiki', 'system-model'] as const,
+    queryFn: async (): Promise<WikiSystemModelRead | null> => {
+      try {
+        return await api<WikiSystemModelRead>('/wiki/system-model');
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 404 && !isWikiDisabled(error)) return null;
+        throw error;
+      }
+    },
+    staleTime: 15_000,
+  });
+
+/**
+ * A space's server runs and their calls (`GET /api/wiki/spaces/:id/jobs`, contract `jobs.read`): what Activity's
+ * Runs card and its call logs draw. Read again every few seconds while a run is on its way, since the worker moves
+ * it on without a wiki write to announce it. `null` is a control plane from before the read.
+ */
+export const wikiJobsQuery = (spaceId: string | null) =>
+  queryOptions({
+    queryKey: ['wiki', 'space', spaceId, 'jobs'] as const,
+    queryFn: async (): Promise<WikiJobsRead | null> => {
+      try {
+        return await api<WikiJobsRead>(`/wiki/spaces/${encodeURIComponent(spaceId!)}/jobs`);
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 404 && !isWikiDisabled(error)) return null;
+        throw error;
+      }
+    },
+    enabled: spaceId !== null,
+    staleTime: 5_000,
+    refetchInterval: (query) =>
+      (query.state.data?.jobs ?? []).some((job) => job.state === 'queued' || job.state === 'running' || job.state === 'waiting')
+        ? 5_000
+        : false,
+  });
+
+/** A space's newest entries of every kind, newest record first: what Activity and the status line read. */
 export const wikiEntriesQuery = (spaceId: string | null) =>
   queryOptions({
     queryKey: ['wiki', 'space', spaceId, 'entries'] as const,
     queryFn: () => api<WikiEntry[]>(`/wiki/spaces/${encodeURIComponent(spaceId!)}/entries?limit=200`),
+    enabled: spaceId !== null,
+  });
+
+/**
+ * A space's entries of one kind, newest record first, at most `limit` (the server stops at 200) — the
+ * home's Principles and Activity's Recent decisions.
+ *
+ * READ BY KIND, NOT PICKED OUT OF `wikiEntriesQuery`: that read is the 200 newest entries of every kind,
+ * and a space holds thousands, so a principle recorded before the 200th newest entry was not in it and
+ * the home said the space had nothing recorded.
+ */
+export const wikiEntriesOfKindQuery = (spaceId: string | null, kind: WikiEntryKind, limit: number) =>
+  queryOptions({
+    queryKey: ['wiki', 'space', spaceId, 'entries', kind, limit] as const,
+    queryFn: () =>
+      api<WikiEntry[]>(`/wiki/spaces/${encodeURIComponent(spaceId!)}/entries?kind=${kind}&limit=${limit}`),
     enabled: spaceId !== null,
   });
 
@@ -1069,7 +1158,7 @@ export const wikiArticleIndexQuery = (spaceId: string | null) =>
     enabled: spaceId !== null,
   });
 
-/** What changed in this space lately — the home page's timeline. */
+/** What changed in this space lately — Activity's Recently changed. */
 export const wikiTimelineQuery = (spaceId: string | null) =>
   queryOptions({
     queryKey: ['wiki', 'space', spaceId, 'timeline'] as const,
@@ -1140,8 +1229,8 @@ export const wikiReviewQuery = (spaceId?: string | null) =>
 
 /**
  * A space's documents, by the plan its owner confirmed (contract `docs.reads.directory`): categories →
- * documents → sections, each saying whether it is written yet. `plan: null` while no plan is confirmed —
- * the directory then lists the topic articles instead (`wikiReadsByDocs`).
+ * documents → sections, each saying whether it is written yet, and a written document's lead. `plan: null`
+ * while no plan is confirmed — the directory and the home then list the topic articles instead (`wikiReadsByDocs`).
  */
 export const wikiDocsQuery = (spaceId: string | null) =>
   queryOptions({

@@ -190,6 +190,8 @@ type engineHealth struct {
 	planUsage     *PlanUsage
 	onServicePath bool // found on the background service's baked PATH (not just the shell's)
 	installError  string
+	// Kimi only: the site its own login is on (kimi_region.go), "" when there is none.
+	kimiRegion string
 }
 
 // serviceLoginPath reconstructs the PATH the background service runs with, the
@@ -273,6 +275,9 @@ func checkEngine(spec engineSpec, servicePath string) engineHealth {
 		h.auth, h.authSource, h.planUsage = probeAntigravityAuth(ctx, abs, nil)
 	} else {
 		h.auth = probeAuth(spec.bin, abs)
+	}
+	if spec.bin == providerKimi {
+		h.kimiRegion = probeKimiLoginRegion(abs, nil)
 	}
 	return h
 }
@@ -389,7 +394,9 @@ func probeAuthIn(ctx context.Context, bin, binPath string, env []string) authSta
 		// directory arrives as a CODEX_HOME in env (codexSlotLoginStatus).
 		return codexLoginStatus(ctx, binPath, env)
 	case providerKimi:
-		return probeKimiACPAuth(ctx, binPath)
+		// Like Codex's: nil is this process's own home, Default; an account's arrives as a
+		// KIMI_CODE_HOME in env (kimiSlotLoginStatus).
+		return probeKimiACPAuth(ctx, binPath, env)
 	case providerOpenCode:
 		out, err := exec.CommandContext(ctx, binPath, "auth", "list").CombinedOutput()
 		if err != nil {
@@ -459,9 +466,11 @@ func readKimiACPResponse(dec *json.Decoder, wantID int) (kimiACPResponse, error)
 // validate the login already stored on disk. The initialize/authenticate pair is
 // the ACP-supported status check: authenticate returns -32000 only when login is
 // required. Protocol, process, and other errors stay authUnknown so doctor never
-// reports a false signed-out state.
-func probeKimiACPAuth(ctx context.Context, binPath string) authState {
+// reports a false signed-out state. env is the CLI's environment (nil: this process's
+// own), so one account's KIMI_CODE_HOME can be asked instead of the runner's.
+func probeKimiACPAuth(ctx context.Context, binPath string, env []string) authState {
 	cmd := exec.CommandContext(ctx, binPath, "acp")
+	cmd.Env = env
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return authUnknown
@@ -578,12 +587,17 @@ func remoteMachine() bool {
 // on an unknown argument. env is the CLI's environment (nil: this process's own):
 // even printing its help, codex writes helper binaries into its CODEX_HOME.
 func supportsLoginFlag(binPath string, spec engineSpec, env []string) bool {
+	return loginHelpMentions(binPath, spec, env, spec.loginRemoteFlag)
+}
+
+// loginHelpMentions is supportsLoginFlag for any flag of the sign-in — Kimi's `--region`.
+func loginHelpMentions(binPath string, spec engineSpec, env []string, flag string) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, binPath, append(append([]string{}, spec.loginArgs...), "--help")...)
 	cmd.Env = env
 	out, _ := cmd.CombinedOutput()
-	return strings.Contains(string(out), spec.loginRemoteFlag)
+	return strings.Contains(string(out), flag)
 }
 
 // signInEngine asks for consent, then runs the CLI's sign-in with the terminal
@@ -599,6 +613,13 @@ func signInEngine(spec engineSpec, binPath string) bool {
 	}
 	if !confirm(fmt.Sprintf("\nSign in to %s now? (%s)\n  %s\n  [Y/n] ", spec.name, note, cmdLine), true) {
 		return false
+	}
+	// Kimi's two sites keep separate accounts, and left to itself the CLI picks one (kimi_region.go).
+	if spec.bin == providerKimi && interactive() && loginHelpMentions(binPath, spec, nil, "--region") {
+		if region := askKimiRegion(); region != "" {
+			args = append(args, "--region", region)
+			cmdLine += " --region " + region
+		}
 	}
 	fmt.Printf("  running: %s\n", cmdLine)
 	cmd := exec.Command(binPath, args...)

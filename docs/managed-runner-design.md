@@ -615,3 +615,95 @@ shared client status; two-user end-to-end, independent backup restore and operat
 must update this record with actual versions, authorized test scope and observed differences. Final
 acceptance and integration follow the project's independent evidence review and project branch;
 production enablement is a separately authorized undertaking.
+
+## Implementation record: manager core
+
+Recorded 2026-10-07 for the code-track manager task. It was verified only with injected fake
+Kubernetes clients and disposable PostgreSQL databases; no cluster, kubeconfig or Ceph credential was
+used, and nothing here is evidence about a real cluster.
+
+| Area | As implemented |
+| --- | --- |
+| Switch | `ORBIT_MANAGED_RUNNERS_ENABLED`, read once through `ConfigService` by the global gate module and shared by every consumer. Values follow the table above; an unreadable value disables the feature and logs one warning. |
+| Disabled | The process builds only the gate, the read-only status facade and the guard that refuses writes. The runtime factory returns null without reading a profile or kubeconfig. No Kubernetes client, watch or timer exists. |
+| Enabled prerequisites | `ORBIT_MANAGED_RUNNERS_PROFILE` names an absolute JSON profile file; the shape is in [manager-profile.example.json](../deploy/managed-runner/manager-profile.example.json). It names the JSON kubeconfig file, context, expected API server and namespace, the storage class and capacity, a digest-pinned image, the runner's Orbit URL, resource amounts and every lifecycle budget. No budget has a default. The real client reads only that kubeconfig and only the named context. It refuses `current-context` fallback, in-cluster credentials, exec and auth-provider plugins, basic auth and disabled TLS verification. A missing or invalid profile reports `MANAGED_RUNNER_UNAVAILABLE` (writes answer 503); login and the rest of the server are unaffected. |
+| Routes | `GET /api/auth/capabilities`; `GET /api/managed-runner`; `POST /api/managed-runner/ensure` and `/retry` (202 with the status). `/wake`, `/sleep` and `/delete` exist and are guarded. While enabled they answer 409 `MANAGED_RUNNER_TRANSITION_REFUSED` without writing, because this version does not perform them. Off, every write is 401 without a login and then 404 `MANAGED_RUNNER_DISABLED`. Every write requires `idempotencyKey`; retry also requires the read `revision`. Tokens may read status (`runners:read`) but never write (`RUNNER_CONTROL`). |
+| Data | Migration 0399 adds `managed_runner` and its two enums. Additions to the proposed field list: `resourceOperationKind`, `startupDeadlineAt`, the manager lease (`leaseHolder`, `leaseExpiresAt`), `lastRequestKey` and `stateEnteredAt`. A CHECK holds `pvcName` and `podName` to the runner UUID. Unique keys cover the owner, runner, default workspace, PVC location, PVC UID and volume handle. All three foreign keys are `ON DELETE RESTRICT`, and the runner and workspace keys are composite with the owner. |
+| Manager | Moves REQUESTED → PROVISIONING (PVC, PV identity, bootstrap Secret, credential hash) → STARTING (the one Pod of the generation, until a fresh runner heartbeat after STARTING began) → READY, or FAILED with a structured cause. Each step is a compare-and-set on `revision` under a lease. A failed create is always read back by its deterministic name and compared before anything is retried. Transient failures back off with jitter up to `maxAttempts`. Identity mismatches fail immediately and are not retryable. The capacity admission hook admits everything; WAITING_CAPACITY is reserved for it. |
+| Compute release | Only an explicit retry of a mapping whose recorded Pod has terminated deletes that Pod, with a UID precondition. Nothing deletes a PVC, Secret, runner row or workspace. A vanished or replaced predecessor Pod leaves the mapping FAILED with `PREDECESSOR_STOP_UNPROVEN`, and the generation does not advance. |
+| Bootstrap credential | Observed difference from the Pod example: the runner row already exists, so the manager issues that row's credential into Secret `mr-boot-<runner-uuid>`. The Secret is mounted at `/run/orbit-bootstrap` and named by `ORBIT_RUNNER_CREDENTIAL_FILE`; the control plane stores only its hash. No enrollment token is minted and `ORBIT_RUNNER_ENROLLMENT_TOKEN_FILE` is not set. The current image entrypoint does not consume this credential yet; it stops before registering. |
+| Existing paths | `DELETE /api/runners/:id` and runner deregistration refuse a managed runner with 409 `MANAGED_RUNNER_DELETE_REFUSED`, even when the feature is off. Enrollment-token registration and device approval no longer reuse a managed runner by name. |
+
+Left to later work: generation-bound runner authentication, per-generation credentials and image
+consumption of them, the admission guard, fencing receipts and replacement (single-writer work);
+the login hook, `initialProvider` and `MODEL_UNAVAILABLE` (login work); capacity admission, wake,
+sleep and drain (wake/sleep work); the explicit deletion workflow; client rendering and realtime
+revision notices. Every real-cluster item in the verification table above remains unexecuted.
+
+The local evidence lives in `src/apiserver/src/managed-runners/*.spec.ts`, run by the unit suite, and
+in the three `*.pg.spec.ts` files there, each run with `scripts/run-pg-spec.sh <spec>`.
+
+## Implementation record: sign-in provisioning
+
+Recorded 2026-10-07 for the code-track sign-in task. It was verified with the in-memory Kubernetes
+namespace of `test-support/fake-kube-client.ts`, disposable PostgreSQL databases and a test playing
+the runner (heartbeat and claim with the credential the manager put in the bootstrap Secret). No
+cluster, kubeconfig, Ceph or model credential was used, and nothing here is evidence about a real
+cluster, a real runner heartbeat or a real model session.
+
+| Area | As implemented |
+| --- | --- |
+| Hook | `AuthService.completeLogin`, the exit of password login, first-user bootstrap and the Google ticket exchange, calls `ManagedRunnerService.signedIn` after the tokens are issued. It is injected as `MANAGED_RUNNER_SIGN_IN`, the one export of `ManagedRunnerModule`, which is global for it. Nothing else calls it: refresh, logout, a password change, an administrator opening an account and the capability and status reads record nothing. A unit spec holds the call site to that one method. |
+| Off | `signedIn` returns before reading anything. Login and bootstrap make exactly the database calls they made before. |
+| On | An eligible owner without a mapping gets one (mapping, runner row and default workspace in the manager-core transaction), and the reconcile worker is kicked. The sign-in waits for no instance and makes no Kubernetes call. An existing mapping is left as it is in every state: a sign-in does not retry FAILED, recreate a removed workspace or a tombstone, or wake anything. Every failure is logged and swallowed, so the issued session stands; an explicit `ensure`, or the next sign-in, records the intent. |
+| Eligibility | `ManagedRunnerEligibility` (`managed-runner-eligibility.ts`) is the one decision of who is given a managed runner. Sign-in, explicit `ensure` (403 `MANAGED_RUNNER_NOT_ELIGIBLE`) and the status read (`canEnsure` false, with that reason) ask it. With the switch on it answers yes for every account; narrowing it to invited testers changes that implementation and nothing else. No configuration was added. |
+| Default workspace | Created once with the mapping, bound by `runnerId` and `targetRunnerId`, with `position` NULL, so it sorts after every workspace the owner already has. Existing order, the first workspace a client lands on, selections and deep links are unchanged. Nothing is matched by name. An owner who removes it does not get it, or another, back at the next sign-in. |
+| Model supply | READY also needs the fresh heartbeat after STARTING to report a runtime installed and signed in: `auth: yes`, no installation error, and advertised where the claim requires it. Claude Code, Codex, Kimi Code and Antigravity count, preferred in that order, and the first is stored as `initialProvider`. Without one the mapping stays STARTING with reason `MODEL_UNAVAILABLE`; a runtime signed in meanwhile makes the next pass READY. At the startup deadline it turns FAILED with that reason, retryable, and a retry waits on the same Pod. OpenCode and DeepSeek Harness are not counted as supply in this version. |
+| First session | The derived provider seed (`lastProviderByWorkspace`) answers a managed default workspace with no interactive history with its `initialProvider`. Its `lastProvider` in workspace payloads, and a session created there without a provider, start on that runtime; every other workspace keeps the Claude floor. `SessionsService.create` refuses a first session there with 409 `MODEL_UNAVAILABLE`, before anything is created, on a runtime the managed runner did not report installed and signed in, whether the provider was named or derived. A session bringing its own credential needs only the CLI installed. After the first interactive session the workspace's history decides, as for every workspace. The deprecated workspace `provider` alias is neither read nor written. |
+
+Left for the authorized test environment: a real sign-in provisioning a real PVC and Pod; the managed
+image consuming the bootstrap credential and heartbeating with real engine health (its entrypoint
+still stops before registering, as the manager record says); a real first session executed by a real
+runtime with a real model credential; how a real runner's engine probe reports supply (an `unknown`
+answer from a slow probe delays READY); and sign-in under load alongside manager passes. Client
+rendering of these states, capacity admission and wake/sleep belong to the client and wake/sleep work.
+
+The local evidence is `managed-runner-sign-in.spec.ts` and `managed-runner-supply.spec.ts` in the
+unit suite, and `managed-runner-sign-in.pg.spec.ts`, run with `scripts/run-pg-spec.sh <spec>`.
+
+## Implementation record: single-writer protection
+
+Recorded 2026-10-09 for the code-track single-writer task. It was verified with the in-memory
+Kubernetes namespace of `test-support/fake-kube-client.ts` (which now passes Pod creates and updates
+through the admission decision below and models VolumeAttachments), disposable PostgreSQL
+databases, the Go runner against local HTTP servers and the image entrypoint on a scratch
+filesystem. No cluster, kubeconfig, Ceph, node power or model credential was used. Nothing here is
+evidence that a real API server refused a Pod, that a real node was fenced or that a real old writer
+could not reach the disk. It supersedes the manager core record's "Compute release" and "Bootstrap
+credential" rows and the sign-in record's note that the entrypoint stops before registering.
+
+| Area | As implemented |
+| --- | --- |
+| Instance binding | A managed runner sends `X-Orbit-Managed-Runner-Generation` and `X-Orbit-Managed-Runner-Pod-Uid` on every credentialed request and declares `managed-runner-instance-v1`. `RunnerAuthGuard` and the runner-credential branch of `RunnerSessionAuthGuard` read the runner's mapping (one unique-key read, no write) and accept a managed credential only from the recorded generation and Pod UID: 403 `MANAGED_RUNNER_INSTANCE_REQUIRED` without the protocol, `..._SUPERSEDED` for an earlier generation, `..._NOT_AUTHORIZED` for another Pod or an unissued generation, `..._FENCED` while FENCING/DELETING/DELETED; 503 `..._PENDING` (retryable) before the manager records the Pod. That covers heartbeat, claim, inbox, events, session leases and every other runner-door route. The claim re-reads the mapping under `FOR SHARE` inside the claim transaction and also refuses DRAINING; later rounds of the inbox long poll re-check it. A runner with no mapping is not asked, so self-managed runners keep their protocol. Enforced whatever the switch says, like the deletion refusal: it reads one row and calls no cluster. The account check comes first: both guards read the runner with its owner's account state and refuse a disabled account 403 `ACCOUNT_DISABLED` (X1, docs/google-sign-in-design.md §5.5) before any instance is considered, so a disabled owner's managed runner is refused even from its authorized instance and served again once the account is enabled. |
+| Credentials | Issued per generation. The bootstrap Secret carries `token` and `generation`; when a generation is retired or fenced, the runner row's credential is replaced in the same transaction by one nobody holds, so the predecessor's requests fail with 401; the retired Secret is deleted by UID and the next one issued. The owner's `rotate-token` refuses a managed runner (409 `MANAGED_RUNNER_ROTATE_REFUSED`) whether or not the feature is on. |
+| Image and runner | With `ORBIT_RUNNER_CREDENTIAL_FILE` the entrypoint never enrolls: it requires the expected runner ID and the Downward API generation and Pod UID, checks the Secret's generation against the Pod's, refuses another runner's config or volume, a volume a later generation (or another Pod of this generation) ran on, and an uncertain enrollment, then writes the credential into `config.json` and passes the identity to `orbit run`. `runner-pod.yaml.example` is now exactly the Pod the manager builds, and a spec compares them. The Go runner reads the identity once, refuses to start on a partial or malformed one, sends it on every credentialed request (JSON calls and attachment transfers), forwards it to `orbit mcp` where an engine allowlists the environment (Codex, OpenCode, DeepSeek Harness, Wiki maintenance), and stops claiming and drains on a revocation, exiting 3. |
+| Replacement gate | Generation N+1 is reserved — and its Secret, credential and Pod follow — only from proof that generation N stopped: the kubelet's report (terminal phase, every container terminated or never started, no PodGC/taint-manager DisruptionTarget), recorded when observed, then the Pod object gone and no VolumeAttachment for the PV; or a fencing receipt bound to that instance and volume, with the object gone and the volume detached. A Pod that vanished or was replaced unobserved, or was made terminal by the control plane, sends the mapping to FENCING (predecessor credential replaced, disk/Secret/Pod object untouched). A stale heartbeat, an OFFLINE runner, an expired manager lease, more passes or an owner's retry never authorize anything; FENCING is not retryable by the owner. Both proofs live in `fencingReceipt` (`OBSERVED_STOP` or `FENCING_RECEIPT`), marked `retiredAt` when used; a used one opens nothing for the next generation. No migration was needed. |
+| Fencing receipt | Version 1, as `deploy/managed-runner/fencing-receipt.example.json`, in ConfigMap `mr-fence-<runner-uuid>`, key `receipt.json` — a kind the manager reads and cannot write. `NODE_POWER_OFF` or `STORAGE_FENCE`; bound field by field to the recorded runner, generation, Pod name/UID, node, PVC UID, volume handle and the PV's RBD pool/image; an action and an independent observation; power-off needs a quarantined node, a storage fence a persistent, non-expiring blocklist with addresses, nonces, OSD map epoch and propagation time. Problems are reported as `FENCING_RECEIPT_INVALID` and change nothing. |
+| Admission | A validating webhook (`deploy/managed-runner/admission/pod-admission-webhook.template.json`, `failurePolicy: Fail`, every Pod create/update and `pods/ephemeralcontainers` in the managed namespace, no label selector), answered by `POST /api/managed-runner/admission` from the database: the mapping owning the claim, the manager's Kubernetes username (profile `admission.managerUsername`), the fixed name, the identity annotations, the reserved generation (STARTING, no Pod, CREATE_POD pending), the pinned image and template. Chosen over a ValidatingAdmissionPolicy because the reservation is a PostgreSQL row under the mapping's compare-and-set; CEL would need a cluster copy that could lag or move backwards. The route needs the API server's bearer token (profile `admission.webhookTokenSha256`), answers 404 off and 503 unavailable, and fails closed. The manager creates no Pod until a dry-run create the guard must refuse is refused by it (`ADMISSION_GUARD_MISSING` otherwise). |
+| Not protection on their own | ReadWriteOnce (two Pods on one node may share it), RBD `exclusive-lock` (it moves between clients), the manager lease, the runner's heartbeat and the local `container.lock`. |
+
+Left for the authorized multi-node Ceph environment (T02/T04): a real API server running the webhook
+and refusing differently named, unlabelled, concurrently created, same-node and cross-node Pods that
+use the original PVC, including with the webhook or its database down, and recording that the
+refused Pods never mounted; the manager's dry-run probe against that API server; the real
+kubelet/PodGC/VolumeAttachment sequence of a normal cross-node migration, and its timing; an
+operator-performed power-off or storage fence, its receipt, the out-of-service procedure and the
+takeover on node B with data and SQLite checks; a late old-generation runner and the old node's
+mount both unable to write after takeover; the Downward API values the image actually receives; and
+the forced-detach behaviour of the cluster's controller manager.
+
+The local evidence is `managed-runner-instance.spec.ts`, `managed-runner-admission.spec.ts`,
+`managed-runner-fencing.spec.ts` and `managed-runner-resources.spec.ts` in the unit suite;
+`managed-runner-fencing.pg.spec.ts` with the manager, boot, existing and sign-in pg specs, each run
+with `scripts/run-pg-spec.sh <spec>`; `src/runner-go/managed_instance_test.go`; and
+`scripts/managed-runner/entrypoint_test.py` with `deployment_boundary_test.py`.

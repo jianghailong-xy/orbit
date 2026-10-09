@@ -43,14 +43,25 @@ type Row = {
    *  conversation is generating, and — when it is not — on which of these processes are up. */
   engineTurnActive?: boolean | null;
   runningBgShells?: string[];
+  /** The SOURCE snapshot (migration 0231): which baseline this run was to start from, and, on a
+   *  session a runner refused, the §10.1 code and the diagnosis the "never started" card reads. */
+  sourceState?: string | null;
+  sourceRefusalCode?: string | null;
+  sourceRefusalDetail?: unknown;
 };
 
-// Fake just the Prisma surface streamForUser touches: session.findUnique (owner + summary —
-// the mock ignores `select` and returns the whole row, which satisfies both selects),
-// approval.count, project.findMany (no project is coordinated from these conversations) and
+// Fake just the Prisma surface streamForUser touches: session.findUnique (owner + summary,
+// answering each with the columns its `select` names), approval.count, project.findMany (no
+// project is coordinated from these conversations) and
 // taskOwnerConfirmationRequest.findMany (no OWNER_CONFIRMED run is waiting on its owner in them),
 // so the owner-decision half of the count is zero, and the $executeRawUnsafe that publish() fires
 // for the cross-replica NOTIFY.
+//
+// HONOURING `select` IS THE POINT OF THE SECOND HALF. A summary built from a row a mock hands over
+// whole proves only that the mapper copies keys; whether the QUERY asks for the column is exactly
+// the half that goes wrong silently (a mapped `undefined` is not a missing field a client can tell
+// from a null). So the double answers with the selected keys and nothing else — the summary's own
+// select has to name a column for the value to reach the assertion at all.
 function fakePrisma(
   rows: Record<string, Row>,
   pendingApprovals: number | ((where: Record<string, never>) => number) = 0,
@@ -67,12 +78,14 @@ function fakePrisma(
       } : null }];
     },
     session: {
-      findUnique: async ({ where }: { where: { id: string } }) => {
+      findUnique: async ({ where, select }: { where: { id: string }; select?: Record<string, unknown> }) => {
         const row = rows[where.id];
         if (!row) return null;
         // `runningBgShells` is NOT NULL DEFAULT '{}' (schema.prisma), so a fixture that does not
         // spell it answers with the empty set — as the row would if it had been inserted without it.
-        return { ...row, runningBgShells: row.runningBgShells ?? [] };
+        const full: Record<string, unknown> = { ...row, runningBgShells: row.runningBgShells ?? [] };
+        if (!select) return full;
+        return Object.fromEntries(Object.keys(select).map((column) => [column, full[column]]));
       },
       // Which of these conversations are runs of a task, for the evidence cards of dispatched tasks
       // a run can hold (`tasks/pending-evidence-judgments.ts#countDispatchedEvidenceJudgments`):
@@ -121,6 +134,11 @@ const rowA: Row = {
   lastTurnAt: new Date('2026-06-26T00:00:00.000Z'),
   workspace: { id: 'workspaceA', name: 'builder', model: 'opus', effort: 'high' },
   coordinatorForProject: { id: 'projectA', title: 'Fix the project' },
+  // The SOURCE columns, as migration 0231 leaves them on every session that resolves no baseline:
+  // NOT NULL DEFAULT 'UNBOUND', both refusal keys null.
+  sourceState: 'UNBOUND',
+  sourceRefusalCode: null,
+  sourceRefusalDetail: null,
 };
 
 // Do NOT call onModuleInit — that would open a real pg LISTEN connection. The constructor only
@@ -614,6 +632,64 @@ test('session.updated carries the session\'s folderId, and null as a value', asy
   assert.ok(byId.has('sessB'));
   assert.ok('folderId' in byId.get('sessB')!, 'null is sent, not omitted');
   assert.equal(byId.get('sessB')!.folderId, null);
+});
+
+/**
+ * A RUN THE RUNNER REFUSED IS NOT A RUN THAT IS STILL COMING.
+ *
+ * A session whose SOURCE was refused sits REFUSED with no engine ever spawned — on 2026-09-23 one
+ * kept a session idle for 5.5 hours with every row saying nothing was wrong. The clients draw that
+ * as a card instead of a spinner, and the realtime summary is how a row already on screen learns
+ * it: a run that never started produces no transcript event, so without these three keys the only
+ * thing that ever reaches the owner's other devices is a status the row cannot interpret.
+ *
+ * Both halves are asserted, because only the first is about this mapper: the summary must CARRY the
+ * three keys (the fake answers with the columns the query selects, so a missing `select` fails
+ * here rather than shipping an `undefined`), and the values must be the session's own. The second
+ * session is the control the cardinality of this whole feature turns on — every Legacy session
+ * resolves no SOURCE, and `UNBOUND` with nulls is what a row holding a refusal is cleared by.
+ */
+test('a refused SOURCE reaches the owner\'s stream in the summary, UNBOUND and nulls included', async () => {
+  const refused: Row = {
+    ...rowA,
+    id: 'sessRefused',
+    status: RunStatus.FAILED,
+    sourceState: 'REFUSED',
+    sourceRefusalCode: 'BASE_REF_NOT_FOUND',
+    sourceRefusalDetail: {
+      ref: 'refs/heads/project/atlas',
+      refAuthority: 'REMOTE',
+      remoteName: 'origin',
+      stderr: "fatal: couldn't find remote ref refs/heads/project/atlas",
+      fixAction: 'FIX_REF',
+    },
+  };
+  const ordinary: Row = { ...rowA, id: 'sessOrdinary' };
+  const svc = svcWith({ sessRefused: refused, sessOrdinary: ordinary }, 0);
+  const got: ControlEvent[] = [];
+  const sub = svc.streamForUser('userA').subscribe((e) => got.push(e));
+
+  svc.publishSessionUpdated('sessRefused');
+  svc.publishSessionUpdated('sessOrdinary');
+  await delay(30);
+  sub.unsubscribe();
+
+  const byId = new Map(got.map((e) => [e.sessionId, e.data as Record<string, unknown>]));
+  assert.equal(byId.get('sessRefused')?.sourceState, 'REFUSED');
+  assert.equal(byId.get('sessRefused')?.sourceRefusalCode, 'BASE_REF_NOT_FOUND');
+  // The diagnosis travels whole, and `fixAction` with it: §10.1 pairs the code with the one
+  // executable next step, and a client that derived the pairing itself would be a second copy of
+  // that table. `ref` and `stderr` are what the card names and quotes.
+  assert.deepEqual(byId.get('sessRefused')?.sourceRefusalDetail, refused.sourceRefusalDetail);
+
+  // The control: a session that resolves no baseline says so, with both refusal keys present and
+  // null — "nothing was ever refused here" is a value, not an absent key a client has to guess at.
+  const plain = byId.get('sessOrdinary')!;
+  assert.equal(plain.sourceState, 'UNBOUND');
+  assert.ok(Object.hasOwn(plain, 'sourceRefusalCode'));
+  assert.equal(plain.sourceRefusalCode, null);
+  assert.ok(Object.hasOwn(plain, 'sourceRefusalDetail'));
+  assert.equal(plain.sourceRefusalDetail, null);
 });
 
 test('task.changed carries a bounded row set or an explicit full-resync signal', async () => {

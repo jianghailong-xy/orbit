@@ -24,7 +24,11 @@ export class SharedRateLimiter {
   private readonly hits = new Map<string, number[]>();
   private sweptAt = 0;
 
-  constructor(private readonly limit: { max: number; windowMs: number } = SHARED_RATE_LIMIT) {}
+  constructor(
+    private readonly limit: { max: number; windowMs: number } = SHARED_RATE_LIMIT,
+    /** What a refused request is told; the share links' wording unless the door is another. */
+    private readonly refusal = 'too many requests for this shared link, slow down',
+  ) {}
 
   /** Spend one request of `key`'s window, or refuse with 429 when it is spent. */
   take(key: string, now = Date.now()): void {
@@ -38,10 +42,7 @@ export class SharedRateLimiter {
     const recent = (this.hits.get(key) ?? []).filter((t) => now - t < windowMs);
     if (recent.length >= max) {
       this.hits.set(key, recent);
-      throw new HttpException(
-        'too many requests for this shared link, slow down',
-        HttpStatus.TOO_MANY_REQUESTS,
-      );
+      throw new HttpException(this.refusal, HttpStatus.TOO_MANY_REQUESTS);
     }
     recent.push(now);
     this.hits.set(key, recent);

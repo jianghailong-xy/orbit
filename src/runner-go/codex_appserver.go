@@ -52,6 +52,13 @@ const (
 	codexInstructionsAdditionalContext
 )
 
+// codexClientName is the name a session's codex app-server is initialized with, which codex carries as
+// the `originator` header and the product token of its User-Agent on every model request. It is the
+// official CLI's own name, not Orbit's, so a session on a pool gateway reaches the model backend with
+// the identity a stock CLI sends there. The version segment codex appends is codex's own, and
+// codexInstructionModeForUserAgent reads only that segment, so the name here does not affect it.
+const codexClientName = "codex_cli_rs"
+
 // codexApprovalFn answers one inbound approval request. nil keeps the fail-closed behaviour that
 // predates the bridge, which is also what the protocol tests exercise.
 type codexApprovalFn func(context.Context, codexApprovalRequest, map[string]interface{}) bool
@@ -76,6 +83,13 @@ type codexAppServer struct {
 	notifications chan codexRPCMessage
 	done          chan struct{}
 	doneOnce      sync.Once
+	// sideThreads routes the notifications of a thread Orbit opened for itself — the naming thread
+	// (codex_naming.go) — to the one goroutine waiting on it, rather than to the session's handler,
+	// which drops every thread but the session's own. Guarded by mu.
+	sideThreads map[string]chan codexRPCMessage
+	// orbitMCP is whether this process was started with Orbit's own MCP server
+	// (codexOrbitMCPServer), which a side thread turns off for itself.
+	orbitMCP bool
 
 	orbitExecutable     string
 	instructionMode     codexInstructionMode
@@ -151,7 +165,7 @@ func finishCodexAppTurnFinalize(activeMu *sync.Mutex, active **codexAppActiveTur
 	activeMu.Unlock()
 }
 
-func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Transport, job *ClaimedSession, leaseGeneration, execDir, scratchDir string, emit emitFn, emitFor emitTurnFn, setTurn func(string), _ bool, bg *bgTailer, onRateLimits codexRateLimitSink, completeTurn turnCompleter, waitTurnPermit turnPermitWaiter, onLeaseLost leaseLossHandler) (string, bool, bool) {
+func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Transport, job *ClaimedSession, leaseGeneration, execDir, scratchDir string, emit emitFn, emitFor emitTurnFn, setTurn func(string), firstSpawn bool, bg *bgTailer, onRateLimits codexRateLimitSink, completeTurn turnCompleter, waitTurnPermit turnPermitWaiter, onLeaseLost leaseLossHandler) (string, bool, bool) {
 	setTurn("")
 	upDir := uploadsDir(job.SessionID)
 	_ = os.MkdirAll(upDir, 0o755)
@@ -459,6 +473,7 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 		}
 	}()
 
+	var namingOnce sync.Once
 	startTurn := func(resp *RunInboxResponse, pendingShellCtx []string) {
 		activeMu.Lock()
 		if active != nil {
@@ -527,6 +542,17 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 				return
 			}
 			recordCodexTurnID(respCopy.TurnID, codexTurnID)
+			// The opening turn is underway: name the session in a side thread of this same
+			// app-server, once, when the control plane asked for it (codex_naming.go).
+			if firstSpawn && !resumedThread && job.Naming != nil {
+				namingOnce.Do(func() {
+					asyncWg.Add(1)
+					go func() {
+						defer asyncWg.Done()
+						nameCodexSession(workerCtx, t, app, job)
+					}()
+				})
+			}
 		}()
 	}
 
@@ -1018,8 +1044,9 @@ func startCodexAppServer(ctx context.Context, job *ClaimedSession, execDir, stat
 	configureSessionProcessTree(cmd)
 	cmd.Dir = execDir
 	// processEnv is the caller's (envWithAgent plus CODEX_HOME), and this is where the session's
-	// ORBIT_* go on, so a person's own credential is dropped here whatever the caller handed in.
-	cmd.Env = withoutUserCredentials(processEnv)
+	// ORBIT_* go on, so a person's own credential is dropped, and the runner's mark put on, here
+	// whatever the caller handed in.
+	cmd.Env = runnerChildEnv(processEnv)
 	cmd.Env = append(cmd.Env,
 		"ORBIT_SESSION_ID="+publicID(job.SessionID),
 		"ORBIT_AGENT_ID="+publicID(job.AgentID),
@@ -1068,6 +1095,7 @@ func startCodexAppServer(ctx context.Context, job *ClaimedSession, execDir, stat
 		notifications:   make(chan codexRPCMessage, 256),
 		done:            make(chan struct{}),
 		orbitExecutable: orbitCLIExecutable(),
+		orbitMCP:        exe != "",
 	}
 	if err := startSessionProcess(cmd); err != nil {
 		cancel()
@@ -1102,6 +1130,7 @@ func startCodexAppServer(ctx context.Context, job *ClaimedSession, execDir, stat
 
 func codexAppServerCommandArgs(job *ClaimedSession, stateDir, exe string) []string {
 	args := []string{"app-server", "--stdio", "-c", fmt.Sprintf("sqlite_home=%q", stateDir)}
+	args = appendCodexSessionToolConfig(args)
 	args = appendCodexOrbitMCPConfig(args, exe)
 	return append(args, codexProviderArgs(job.Agent.Env)...)
 }
@@ -1109,8 +1138,8 @@ func codexAppServerCommandArgs(job *ClaimedSession, stateDir, exe string) []stri
 func (a *codexAppServer) initialize(ctx context.Context) error {
 	result, err := a.request(ctx, "initialize", map[string]interface{}{
 		"clientInfo": map[string]interface{}{
-			"name":    "orbit",
-			"title":   "Orbit",
+			"name":    codexClientName,
+			"title":   "Codex CLI",
 			"version": "0.1.0",
 		},
 		"capabilities": map[string]interface{}{"experimentalApi": true},
@@ -1423,7 +1452,9 @@ func codexThreadParams(job *ClaimedSession, execDir, upDir string) map[string]in
 		"approvalPolicy":        codexApprovalPolicy(job.Agent.PermissionMode),
 		"sandbox":               codexSandboxMode(job.Agent.PermissionMode),
 		"runtimeWorkspaceRoots": codexRuntimeWorkspaceRoots(job.Agent.PermissionMode, job, execDir, upDir),
-		"threadSource":          "orbit",
+		// The thread's own source: a user's turn, as the CLI reports one, not Orbit's "orbit" — the
+		// backend sees `thread_source: user` in the turn metadata.
+		"threadSource": "user",
 	}
 	if reviewer := codexApprovalsReviewer(job.Agent.PermissionMode); reviewer != "" {
 		params["approvalsReviewer"] = reviewer
@@ -1546,7 +1577,7 @@ func (a *codexAppServer) readLoop(r io.Reader) {
 				a.handleServerRequest(msg)
 			} else if msg.ID != nil {
 				a.deliverResponse(msg)
-			} else if msg.Method != "" {
+			} else if msg.Method != "" && !a.routeSideThread(msg) {
 				// Never lose this state transition even if the high-volume notification
 				// channel is full; the next turn must restore compacted instructions. The
 				// durable system event is the control plane's matching boundary for sparse
@@ -1685,7 +1716,14 @@ func (a *codexAppServer) answerElicitation(msg codexRPCMessage) {
 }
 
 func (a *codexAppServer) handleServerRequest(msg codexRPCMessage) {
+	// A thread Orbit opened for itself asks nobody: whatever it raises is declined here, so none of
+	// it reaches the session's permission mode or puts a card in front of its owner.
+	side := a.isSideThread(codexNotificationThreadID(msg))
 	if msg.Method == codexMCPElicitationMethod {
+		if side {
+			_ = a.write(map[string]interface{}{"id": msg.ID, "result": codexElicitationResult(false)})
+			return
+		}
 		a.answerElicitation(msg)
 		return
 	}
@@ -1698,6 +1736,10 @@ func (a *codexAppServer) handleServerRequest(msg codexRPCMessage) {
 				"message": "Orbit runner does not implement app-server request " + msg.Method,
 			},
 		})
+		return
+	}
+	if side {
+		_ = a.write(map[string]interface{}{"id": msg.ID, "result": map[string]interface{}{"decision": request.decision(false)}})
 		return
 	}
 	// Answer on a goroutine: readLoop calls this inline, and an approval blocks on a human who

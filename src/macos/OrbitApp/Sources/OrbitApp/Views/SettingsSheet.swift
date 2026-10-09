@@ -23,10 +23,10 @@ extension View {
 }
 
 /// Settings' own stack: the list at its root, and each page it opens as a frame of
-/// `NavState.settingsPath` — the runners list, a runner's record and its engine and name pages, the
-/// `SettingsPage`s, and an account's record under Admin. A form row pushes with its `NavigationLink`
-/// value; a list row inside a page pushes through `AppModel.push`, which lands here while the sheet
-/// is up.
+/// `NavState.settingsPath` — the `SettingsPage`s; from Infrastructure a machine's record and its engine
+/// and name pages, and a pool's page; and an account's record under Admin. A form row pushes with its
+/// `NavigationLink` value; a list row inside a page pushes through `AppModel.push`, which lands here
+/// while the sheet is up.
 struct SettingsSheet: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
@@ -39,13 +39,13 @@ struct SettingsSheet: View {
                 .navigationDestination(for: NavNode.self) { node in
                     Group {
                         switch node {
-                        case .settingsRunners:            RunnersSettingsList()
                         case .runnerDetail(let runnerID): RunnerDetailView(runnerID: runnerID)
                         case .runnerEngine(let runnerID, let engine): RunnerEnginePage(runnerID: runnerID, engine: engine)
                         case .runnerName(let runnerID):   RunnerNamePage(runnerID: runnerID)
                         case .settingsPage(let page):     SettingsPageView(page: page)
                         case .accountPool(let poolID):    AccountPoolSettingsPage(poolID: poolID)
                         case .sharedPool(let poolID):     SharedPoolSettingsPage(poolID: poolID)
+                        case .providerDetail(let providerID): ProviderDetailSettingsPage(providerID: providerID)
                         case .userDetail(let userID):     AdminUserDetailView(userID: userID)
                         default:                          EmptyView()
                         }
@@ -73,9 +73,12 @@ private struct SettingsPageView: View {
 
     var body: some View {
         switch page {
-        case .providers:      ProvidersSettingsPage()
+        // The page the Infrastructure section shows, pushing onto Settings' stack: Machines & models'
+        // one row, where the web's Runners and Providers pages became one.
+        case .infrastructure: RunnersListView(rowNavigation: .push)
         case .notifications:  NotificationSettingsPage()
         case .sharedLinks:    SharedLinksSettingsPage()
+        case .accessTokens:   AccessTokensSettingsPage()
         case .changePassword: ChangePasswordPage()
         case .admin:          AdminUsersView(rowNavigation: .push)
         }
@@ -95,6 +98,8 @@ struct SettingsHomeView: View {
     @State private var orchestration = true
     /// The account's switch for smart model selection. Absent on the server means off.
     @State private var modelRouting = false
+    /// The account's switch for suggested replies. Absent on the server means on.
+    @State private var promptSuggestions = true
     @State private var seeded = false
     /// This device's own answer to "may Orbit alert you" — nil until asked.
     @State private var alertsAllowed: Bool?
@@ -118,6 +123,10 @@ struct SettingsHomeView: View {
                     }
                 } header: {
                     SettingsHeader(SettingsHome.header(group))
+                } footer: {
+                    if let footer = SettingsHome.footer(group) {
+                        Text(footer)
+                    }
                 }
             }
             signOutSection
@@ -128,6 +137,12 @@ struct SettingsHomeView: View {
             ToolbarItem(placement: .principal) {
                 Text("Settings").font(.headline).opacity(headerScrolledAway ? 1 : 0)
             }
+        }
+        // Signing out asks first, in the shape the width calls for (see `ConfirmationStyle`): an alert
+        // on a phone, the anchored panel on a tablet.
+        .orbitConfirmation(SettingsCopy.signOutTitle, isPresented: $confirmingSignOut) {
+            Button(SettingsCopy.signOut, role: .destructive) { model.logout() }
+            Button(SharePanelCopy.cancel, role: .cancel) {}
         }
         .sheet(isPresented: $editingProfile) {
             ProfileEditSheet(name: model.user?.name ?? "")
@@ -152,11 +167,23 @@ struct SettingsHomeView: View {
             guard (model.user?.preferences?.smartModelSelection ?? false) != value else { return }
             Task { await model.savePreferences(UpdatePreferencesRequest(modelRouting: value)) }
         }
+        .onChange(of: promptSuggestions) { _, value in
+            guard (model.user?.preferences?.suggestedReplies ?? true) != value else { return }
+            Task { await model.savePreferences(UpdatePreferencesRequest(promptSuggestions: value)) }
+        }
         .onAppear(perform: seed)
-        // Each row's value is its own read, so they are asked for side by side.
+        // Each row's value is its own read, so they are asked for side by side. Infrastructure's is what
+        // its page's Needs you holds: the machines, and the pools — a Codex one of the account's own with
+        // its people and keys, which say whether it can run.
         .task { alertsAllowed = await model.notifications.alertsAllowed() }
         .task { await model.runners?.load() }
+        .task { await model.agents?.reloadPools() }
+        .task { await model.sharedPools?.load() }
+        .task(id: InfrastructureLists.codexPoolIDs(model)) {
+            for id in InfrastructureLists.codexPoolIDs(model) { await model.sharedPools?.loadAccess(id) }
+        }
         .task { await model.sharedLinks?.load() }
+        .task { await model.accessTokens?.load() }
         // Back from the system's Settings, where the card sends you: say what it is now.
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
@@ -244,6 +271,20 @@ struct SettingsHomeView: View {
                     Image(systemName: SettingsHome.systemImage(row)).foregroundStyle(Color.primary)
                 }
             }
+        case .promptSuggestions:
+            // The same shape: what it does, and what each one costs, goes under the name.
+            Toggle(isOn: $promptSuggestions) {
+                Label {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(SettingsHome.title(row)).foregroundStyle(Color.primary)
+                        Text(SettingsCopy.suggestedRepliesHint)
+                            .font(.orbitListSubtitle)
+                            .foregroundStyle(.secondary)
+                    }
+                } icon: {
+                    Image(systemName: SettingsHome.systemImage(row)).foregroundStyle(Color.primary)
+                }
+            }
         case .appearance:
             Picker(selection: $theme) {
                 Text("System").tag("system")
@@ -254,11 +295,17 @@ struct SettingsHomeView: View {
             LabeledContent { Text(model.user?.email ?? "") } label: { label }
         case .instance:
             LabeledContent { Text(SettingsHome.instanceName(model.baseURL) ?? "") } label: { label }
-        case .runners:
-            NavigationLink(value: NavNode.settingsRunners) {
-                LabeledContent { if let value = runnersValue { Text(value) } } label: { label }
+        case .infrastructure:
+            NavigationLink(value: NavNode.settingsPage(.infrastructure)) {
+                LabeledContent {
+                    if let value = infrastructureValue {
+                        // What needs a person is said in amber, as the mock's row says it.
+                        Text(value.text)
+                            .foregroundStyle(value.needsYou ? RunnerInk.amber : Color.secondary)
+                    }
+                } label: { label }
             }
-        case .providers, .notifications, .sharedLinks, .changePassword, .admin:
+        case .notifications, .sharedLinks, .accessTokens, .changePassword, .admin:
             if let page = SettingsHome.page(row) {
                 NavigationLink(value: NavNode.settingsPage(page)) {
                     LabeledContent { if let value = value(of: row) { Text(value) } } label: { label }
@@ -267,10 +314,12 @@ struct SettingsHomeView: View {
         }
     }
 
-    /// Only an answer the server gave — never the empty list a model starts with.
-    private var runnersValue: String? {
+    /// Only an answer the server gave — never the empty list a model starts with: how many lines the
+    /// page's Needs you holds, or with none how many machines are online.
+    private var infrastructureValue: (text: String, needsYou: Bool)? {
         guard let runners = model.runners, runners.loadState.hasLoaded else { return nil }
-        return SettingsHome.runnersValue(runners.runners)
+        let needsYou = InfrastructureLists(model).attention.count
+        return (SettingsHome.infrastructureValue(needsYou: needsYou, runners: runners.runners), needsYou > 0)
     }
 
     private func value(of row: SettingsHome.Row) -> String? {
@@ -279,6 +328,8 @@ struct SettingsHomeView: View {
             return SettingsHome.notificationsValue(allowed: alertsAllowed)
         case .sharedLinks:
             return model.sharedLinks?.activeCount.map(SettingsHome.sharedLinksValue)
+        case .accessTokens:
+            return model.accessTokens?.activeCount.map(SettingsHome.accessTokensValue)
         default:
             return nil
         }
@@ -294,14 +345,6 @@ struct SettingsHomeView: View {
                 } icon: {
                     Image(systemName: "rectangle.portrait.and.arrow.right").foregroundStyle(Color.red)
                 }
-            }
-            // On the row, not on the `Form`: the system anchors the panel to the view this is declared
-            // on, and a `Form` covering the whole page put it at the top of the screen — over the
-            // header — while the row that asked for it sat at the bottom.
-            .confirmationDialog(SettingsCopy.signOutTitle(instance: SettingsHome.instanceName(model.baseURL)),
-                                isPresented: $confirmingSignOut, titleVisibility: .visible) {
-                Button(SettingsCopy.signOut, role: .destructive) { model.logout() }
-                Button(SharePanelCopy.cancel, role: .cancel) {}
             }
         } footer: {
             if let line = SettingsHome.versionLine(
@@ -324,6 +367,7 @@ struct SettingsHomeView: View {
         permMode = PermissionMode(rawValue: p?.defaultPermissionMode ?? "") ?? AgentDefaults.defaultPermissionMode
         orchestration = p?.enableOrchestration ?? true
         modelRouting = p?.smartModelSelection ?? false
+        promptSuggestions = p?.suggestedReplies ?? true
     }
 }
 
@@ -880,48 +924,14 @@ private struct ChangePasswordPage: View {
     }
 }
 
-// MARK: - Providers
+// MARK: - Account pools
 
-/// Where the account's models come from: the engines signed in on each runner (a row opens that runner,
-/// where signing in lives), the account's pools (a row opens the pool's page) and its API keys. A Codex
-/// pool of the account's own is drawn with its people and keys, read pool by pool beside its accounts.
-private struct ProvidersSettingsPage: View {
-    @Environment(AppModel.self) private var model
-
-    var body: some View {
-        ProvidersOverviewForm(runners: model.runners?.runners ?? [],
-                              pools: pools,
-                              sharedPools: model.sharedPools?.pools ?? [],
-                              keys: model.agents?.configuredProviders ?? [])
-            .navigationTitle(SettingsPage.providers.title)
-            .task { await model.runners?.load() }
-            .task { await model.agents?.load() }
-            .task { await model.sharedPools?.load() }
-            .task(id: codexPoolIDs) {
-                for id in codexPoolIDs { await model.sharedPools?.loadAccess(id) }
-            }
-    }
-
-    /// The account's own pools, each Codex one drawn with its people and keys once they are read.
-    private var pools: [ProviderPool] {
-        (model.agents?.providerPools ?? []).map { pool -> ProviderPool in
-            guard CodexLoginPool.isLoginPool(pool),
-                  let access = model.sharedPools?.access(pool.id) else { return pool }
-            return SharedPools.ownPoolWithAccess(pool, access)
-        }
-    }
-
-    /// The account's own Codex pools, whose people and keys are read one by one.
-    private var codexPoolIDs: [String] {
-        (model.agents?.providerPools ?? []).filter(CodexLoginPool.isLoginPool).map(\.id)
-    }
-}
-
-/// An account pool's page: the pool as Providers last read it, with account pause controls; for a
+/// An account pool's page: the pool as Infrastructure last read it, with account pause controls; for a
 /// Codex pool of one's own, its page (`CodexPoolPageView`) with its people and keys read beside its ChatGPT
 /// accounts, run from here: an account signed in, in again or out, keys and people added and taken out,
-/// the pool deleted. Deleting the pool closes the page.
-private struct AccountPoolSettingsPage: View {
+/// the pool deleted. Deleting the pool closes the page. Pushed from Infrastructure's Account pools, on
+/// Settings' stack or the Infrastructure section's own.
+struct AccountPoolSettingsPage: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     let poolID: String
@@ -981,10 +991,29 @@ private struct AccountPoolSettingsPage: View {
     }
 }
 
+/// A DeepSeek key's page, read-only: the key as the account's own list last read it, and the balance of
+/// its DeepSeek account — read with the list, and asked of DeepSeek again by Refresh or Retry. Pushed from
+/// Infrastructure's API keys, on Settings' stack or the Infrastructure section's own.
+struct ProviderDetailSettingsPage: View {
+    @Environment(AppModel.self) private var model
+    let providerID: String
+
+    var body: some View {
+        let key = PublicID.storageKey(providerID)
+        if let agents = model.agents,
+           let provider = agents.personalProviders.first(where: { $0.providerID.map(PublicID.storageKey) == key }) {
+            DeepSeekKeyPageView(key: provider, reading: agents.deepSeekBalances[providerID],
+                                refresh: { await agents.refreshDeepSeekBalance(providerID) })
+        } else {
+            ContentUnavailableView(ProvidersOverview.keyGone, systemImage: "key")
+        }
+    }
+}
+
 /// A Codex pool the account is in as one of its people — a shared pool, or somebody else's own — run from
 /// here: each press goes to the server, and the pool it answers with is the one drawn. Deleting the pool
 /// (its owner) or leaving it (anybody else) closes the page.
-private struct SharedPoolSettingsPage: View {
+struct SharedPoolSettingsPage: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     let poolID: String
@@ -1106,13 +1135,6 @@ private struct SharedLinksSettingsPage: View {
         .navigationTitle(SharedLinksList.title)
         .task { await model.sharedLinks?.load() }
         .refreshable { await model.sharedLinks?.load() }
-        .confirmationDialog(SharePanelCopy.turnOffTitle, isPresented: turnOffAsked, titleVisibility: .visible,
-                            presenting: pendingTurnOff) { link in
-            Button(SharePanelCopy.turnOff, role: .destructive) { Task { await turnOff(link) } }
-            Button(SharePanelCopy.cancel, role: .cancel) {}
-        } message: { _ in
-            Text(SharePanelCopy.turnOffDetail)
-        }
         .overlay(alignment: .bottom) {
             if let notice {
                 Text(notice)
@@ -1167,6 +1189,15 @@ private struct SharedLinksSettingsPage: View {
                 }
             }
         }
+        // On the link's own row — the swipe and the long-press menu both raise it — so the panel opens
+        // against that row rather than at the top of the page.
+        .orbitConfirmation({ _ in SharePanelCopy.turnOffTitle },
+                           isPresented: turnOffAsked, presenting: pendingTurnOff) { link in
+            Button(SharePanelCopy.turnOff, role: .destructive) { Task { await turnOff(link) } }
+            Button(SharePanelCopy.cancel, role: .cancel) {}
+        } message: { _ in
+            Text(SharePanelCopy.turnOffDetail)
+        }
     }
 
     private func turnOff(_ link: OrbitKit.ShareLink) async {
@@ -1175,6 +1206,121 @@ private struct SharedLinksSettingsPage: View {
             return
         }
         show(SharedLinksList.turnedOff(count))
+    }
+
+    /// A line over the list's foot for a moment — the app's toast lives under this sheet.
+    private func show(_ text: String) {
+        notice = text
+        Task {
+            try? await Task.sleep(for: .seconds(2))
+            if notice == text { notice = nil }
+        }
+    }
+}
+
+// MARK: - Access tokens
+
+/// Every personal access token this account has issued, by whether it still works — the web page's
+/// tabs, lines and words. A token that works is revoked by a swipe or from its context menu, which
+/// asks first: anything using it stops working at once. A new token is issued on the web only
+/// (docs/personal-access-token-design.md §9), which the page's footer says.
+private struct AccessTokensSettingsPage: View {
+    @Environment(AppModel.self) private var model
+
+    @State private var tab: AccessTokensList.Tab = .active
+    @State private var pendingRevoke: AccessToken?
+    @State private var notice: String?
+
+    var body: some View {
+        let tokens = model.accessTokens?.tokens ?? []
+        let shown = AccessTokensList.tokens(tokens, in: tab)
+        List {
+            Section {
+                Picker(AccessTokensList.title, selection: $tab) {
+                    ForEach(AccessTokensList.Tab.allCases) { tab in
+                        Text("\(tab.label) \(AccessTokensList.tokens(tokens, in: tab).count)").tag(tab)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets())
+            } footer: {
+                Text(AccessTokensList.subtitle + " " + AccessTokensList.issuedOnTheWeb)
+            }
+
+            Section {
+                switch LoadFailureLogic.presentation(model.accessTokens?.loadState ?? ListLoadState(),
+                                                     isEmpty: tokens.isEmpty) {
+                case .loading:
+                    HStack { Spacer(); ProgressView(); Spacer() }
+                case .failed:
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(model.accessTokens?.errorText ?? AccessTokensList.couldNotLoad)
+                            .foregroundStyle(.secondary)
+                        Button(SharePanelCopy.retry) { Task { await model.accessTokens?.load() } }
+                    }
+                case .empty, .content:
+                    if shown.isEmpty {
+                        Text(tab.empty).foregroundStyle(.secondary)
+                    }
+                    ForEach(shown) { token in
+                        row(token)
+                    }
+                }
+            }
+        }
+        .navigationTitle(AccessTokensList.title)
+        .task { await model.accessTokens?.load() }
+        .refreshable { await model.accessTokens?.load() }
+        .orbitConfirmation(AccessTokensList.revokeTitle, isPresented: revokeAsked,
+                           presenting: pendingRevoke) { token in
+            Button(AccessTokensList.revoke, role: .destructive) { Task { await revoke(token) } }
+            Button(SharePanelCopy.cancel, role: .cancel) {}
+        } message: { _ in
+            Text(AccessTokensList.revokeDetail)
+        }
+        .overlay(alignment: .bottom) {
+            if let notice {
+                Text(notice)
+                    .font(.orbitListSubtitle.weight(.semibold))
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(.regularMaterial, in: Capsule())
+                    .padding(.bottom, 24)
+                    .transition(.opacity)
+            }
+        }
+        .animation(.default, value: notice)
+    }
+
+    private var revokeAsked: Binding<Bool> {
+        Binding(get: { pendingRevoke != nil }, set: { if !$0 { pendingRevoke = nil } })
+    }
+
+    private func row(_ token: AccessToken) -> some View {
+        AccessTokenRow(token: token, now: Date())
+            .opacity(model.accessTokens?.revokingID == token.id ? 0.5 : 1)
+            .swipeActions(edge: .trailing) {
+                if AccessTokensList.canRevoke(token) {
+                    Button(AccessTokensList.revoke, role: .destructive) { pendingRevoke = token }
+                }
+            }
+            .contextMenu {
+                if AccessTokensList.canRevoke(token) {
+                    Button(role: .destructive) { pendingRevoke = token } label: {
+                        Label(AccessTokensList.revoke, systemImage: "xmark.circle")
+                    }
+                }
+            }
+    }
+
+    private func revoke(_ token: AccessToken) async {
+        guard let accessTokens = model.accessTokens else { return }
+        if let reason = await accessTokens.revoke(token) {
+            show(AccessTokensList.notRevoked(reason))
+        } else {
+            show(AccessTokensList.revoked)
+        }
     }
 
     /// A line over the list's foot for a moment — the app's toast lives under this sheet.

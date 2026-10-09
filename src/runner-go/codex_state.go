@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -168,40 +167,13 @@ func legacyCodexStateExists(scratch string) bool {
 	return err == nil && len(matches) > 0
 }
 
-// codexHomeOverlayEntries are what a credential-isolated session borrows from the real CODEX_HOME:
-// the user's own configuration. Two things Codex keeps there are left out on purpose:
-//
-//   - sessions/ and archived_sessions/, the rollout history. Codex backfills a fresh state database
-//     from every rollout under its CODEX_HOME before it answers initialize, so a session-local
-//     database over the real home first read the runner's whole history — 5 GB on a busy runner,
-//     past the 20-minute handshake window (codex 0.159.2) — and indexed another account's threads.
-//   - auth.json, the runner account's login. The session runs on the credentials injected into it,
-//     and Codex rewrites the file when it refreshes a token.
-//
-// Entries come and go between Codex versions, so a missing one is skipped.
-var codexHomeOverlayEntries = []string{
-	"config.toml",
-	"AGENTS.md",
-	"AGENTS.override.md",
-	"rules",
-	"skills",
-	"prompts",
-	"plugins",
-	// Codex's checkout of the curated plugins, about 100 MB it would otherwise clone per session.
-	".tmp",
-	// One-time migration markers, so the borrowed config.toml counts as migrated already.
-	".personality_migration",
-	".sandbox_migration",
-}
-
 // isolatedCodexStateForEnv is a credential-isolated session's Codex state: a CODEX_HOME of its own
-// under scratch, which is its SQLite home too, with the configuration of the CODEX_HOME env resolves
-// linked in. Its history is its own threads and nothing else, so Codex has nothing to backfill.
-func isolatedCodexStateForEnv(scratch string, env []string, execDir string) (codexStateSelection, error) {
-	realHome, err := effectiveCodexHome(env, execDir)
-	if err != nil {
-		return codexStateSelection{}, err
-	}
+// under scratch, which is its SQLite home too. Nothing of the runner's home is linked in — the
+// session's configuration is the one Orbit builds for it (the `-c` overrides, the injected
+// credentials, the agent's instructions), never the account's config.toml, AGENTS.md, skills or
+// plugins: a session's tools and instructions are Orbit's to decide, not the login's. Its history
+// is its own threads and nothing else, so Codex has nothing to backfill.
+func isolatedCodexStateForEnv(scratch string) (codexStateSelection, error) {
 	home, err := filepath.Abs(filepath.Join(scratch, "codex-home"))
 	if err != nil {
 		return codexStateSelection{}, err
@@ -209,41 +181,7 @@ func isolatedCodexStateForEnv(scratch string, env []string, execDir string) (cod
 	if err := ensurePrivateDir(home); err != nil {
 		return codexStateSelection{}, err
 	}
-	if err := linkCodexHomeOverlay(home, realHome); err != nil {
-		return codexStateSelection{}, err
-	}
 	return codexStateSelection{Dir: home, Layout: codexStateLayoutIsolated, CodexHome: home}, nil
-}
-
-// linkCodexHomeOverlay links realHome's codexHomeOverlayEntries into home. It runs on every start,
-// so each link is made again to describe the real home as it is now; a file or directory Codex wrote
-// in a link's place is the session's own and stays.
-func linkCodexHomeOverlay(home, realHome string) error {
-	for _, name := range codexHomeOverlayEntries {
-		link := filepath.Join(home, name)
-		info, err := os.Lstat(link)
-		switch {
-		case err == nil && info.Mode()&os.ModeSymlink == 0:
-			continue
-		case err == nil:
-			// os.Remove never follows the link, so the real entry is untouched.
-			if err := os.Remove(link); err != nil {
-				return err
-			}
-		case !errors.Is(err, os.ErrNotExist):
-			return err
-		}
-		target := filepath.Join(realHome, name)
-		if _, err := os.Lstat(target); errors.Is(err, os.ErrNotExist) {
-			continue
-		} else if err != nil {
-			return err
-		}
-		if err := os.Symlink(target, link); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func codexSharedStateAllowed(env []string) bool {
@@ -338,6 +276,13 @@ func codexSessionAccountHomes(sessionIDs []string) map[string]bool {
 	return out
 }
 
+// sharedCodexStateForEnv is a built-in session's shared partition, keyed by its CODEX_HOME. The
+// session runs with that home, so the account's own config.toml applies to it: an `mcp_servers` or
+// `notify` a human configured for their own codex TUI reaches the session too. Codex merges `-c`
+// over the file per key, so a table cannot be cleared from the outside — `-c mcp_servers={}` is a
+// no-op (measured on 0.161.0) — and only the plugins feature is overridable, which every spawn does
+// (codexPluginsOffConfig). Closing this last door means not running the session in the account's
+// home at all, a change to the shared-state design rather than a flag.
 func sharedCodexStateForEnv(env []string, cwd string) (codexStateSelection, error) {
 	codexHome, err := effectiveCodexHome(env, cwd)
 	if err != nil {
@@ -373,7 +318,7 @@ func resolveCodexStateDir(scratch, runtimeSessionID string, meta *sessionMeta, e
 			}
 		case codexStateLayoutIsolated:
 			if runtimeSessionID != "" {
-				return isolatedCodexStateForEnv(scratch, env, execDir)
+				return isolatedCodexStateForEnv(scratch)
 			}
 		case codexStateLayoutShared:
 			codexHome := meta.CodexStateHome
@@ -402,7 +347,7 @@ func resolveCodexStateDir(scratch, runtimeSessionID string, meta *sessionMeta, e
 		return codexStateSelection{Dir: dir, Layout: codexStateLayoutLegacy}, err
 	}
 	if runtimeSessionID == "" && !codexSharedStateAllowed(env) {
-		return isolatedCodexStateForEnv(scratch, env, execDir)
+		return isolatedCodexStateForEnv(scratch)
 	}
 	return sharedCodexStateForEnv(env, execDir)
 }

@@ -1,16 +1,17 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { DownOutlined, SearchOutlined } from '@ant-design/icons';
 import { OrbitLinkCardsProvider } from '../components/OrbitLinkCard';
 import { statusLabel } from '../components/WorkspaceView';
+import { WikiActivityButton, WikiActivityPage } from '../components/WikiActivityPage';
 import { WikiArticleRoute } from '../components/WikiArticlePage';
 import { WikiBrowsePage } from '../components/WikiBrowsePage';
 import { WikiDocRoute } from '../components/WikiDocPage';
 import { WikiCard, WikiEmpty } from '../components/WikiCards';
 import { WikiContentsButton, WikiContentsProvider, WikiDirectory, type WikiDirectoryAt } from '../components/WikiDirectory';
 import { WikiEntryDrawer } from '../components/WikiEntryDrawer';
-import { WikiHome } from '../components/WikiHome';
+import { WikiHome, WikiHomeState } from '../components/WikiHome';
 import { WikiIndexPage } from '../components/WikiIndexPage';
 import { WikiMaintenanceStatus } from '../components/WikiMaintenanceStatus';
 import { WikiNewEntryButton } from '../components/WikiNewEntry';
@@ -18,10 +19,11 @@ import { WikiPlanRoute } from '../components/WikiPlanPage';
 import { WikiReviewPage } from '../components/WikiReviewPage';
 import { WikiRunDrawer } from '../components/WikiRunPage';
 import { WikiSettingsButton } from '../components/WikiSettingsButton';
+import { WikiShareButton } from '../components/WikiShareButton';
 import { WikiSettingsPage } from '../components/WikiSettingsPage';
 import { openSessionSearch } from '../components/SessionSearch';
 import { wikiLinkHost } from '../components/WikiSources';
-import { wikiEntriesQuery, wikiEntryQuery, wikiHealthQuery, wikiSpaceQuery, wikiSpacesQuery } from '../lib/queries';
+import { wikiEntriesQuery, wikiEntryQuery, wikiHealthQuery, wikiSpacesQuery } from '../lib/queries';
 import { routeId } from '../lib/idCodec';
 import {
   WIKI_DISABLED_NOTE,
@@ -35,9 +37,19 @@ import {
   WIKI_TO_REVIEW,
   wikiAnchorsVerified,
   wikiSpacePath,
+  type WikiSpaceRow,
 } from '../lib/wiki';
 import { wikiArticlePath, wikiCount } from '../lib/wikiArticles';
 import { wikiDocPath } from '../lib/wikiDocs';
+import {
+  readWikiFromWorkspace,
+  readWikiLastSpace,
+  wikiDefaultSpace,
+  wikiSpaceNames,
+  wikiSpaceOption,
+  wikiWaiting,
+  writeWikiLastSpace,
+} from '../lib/wikiSpace';
 
 /**
  * The Wiki's routes, and the chrome they share.
@@ -48,29 +60,34 @@ import { wikiDocPath } from '../lib/wikiDocs';
  * (mock 03): `/wiki/:space/e/:entry` leaves the entry's topic page in place and slides the drawer
  * over it, so the page a reader came from is still there when they close it.
  *
- * A SPACE IS A CODEBASE, addressed by slug. `/wiki` is the first space rather than a space list: a
- * wiki belongs to the account, one of its spaces is what a reader means when they open the Wiki, and
- * the picker in the header is how they mean another one.
+ * A SPACE IS A CODEBASE, addressed by slug. `/wiki` is one space rather than a space list: a wiki
+ * belongs to the account, one of its spaces is what a reader means when they open the Wiki — the one
+ * bound to the workspace they came from, else the one they last looked at, else the one with the most
+ * written (`wikiDefaultSpace`, design §12.3.4) — and the picker in the header is how they mean another.
  */
 
-export type WikiRoute = 'home' | 'topic' | 'entry' | 'review' | 'settings' | 'run' | 'browse' | 'index' | 'doc' | 'plan' | 'planDoc' | 'planSection';
+export type WikiRoute = 'home' | 'activity' | 'topic' | 'entry' | 'review' | 'settings' | 'run' | 'browse' | 'index' | 'doc' | 'plan' | 'planDoc' | 'planSection';
 
-interface SpaceRow {
-  id: string;
-  slug: string;
-  title: string;
-  rootCommitSha: string | null;
-  pendingOps: number;
-}
+type SpaceRow = WikiSpaceRow;
 
 export function WikiPage({ route }: { route: WikiRoute }) {
   const spaces = useQuery(wikiSpacesQuery());
   const params = useParams();
   const asked = params.space ?? null;
+  // Where the reader came from and what they last looked at are read once per answer of the list, so
+  // the space this page opens does not move under them when it records itself as the last one.
   const resolved = useMemo(
-    () => spaces.data?.find((row) => row.slug === asked) ?? (asked ? null : (spaces.data?.[0] ?? null)),
+    () =>
+      asked
+        ? (spaces.data?.find((row) => row.slug === asked) ?? null)
+        : wikiDefaultSpace(spaces.data ?? [], { workspaceId: readWikiFromWorkspace(), lastSlug: readWikiLastSpace() }),
     [spaces.data, asked],
   );
+  // Review's own route asks across every space, so it is no look at the space `/wiki` would open.
+  const looked = route === 'review' && !asked ? null : (resolved?.slug ?? null);
+  useEffect(() => {
+    if (looked) writeWikiLastSpace(looked);
+  }, [looked]);
 
   // The server has not switched the wiki on for this account (WIKI_DISABLED): every route below it
   // would be refused, so the page says why instead of drawing a wiki with nothing in it.
@@ -100,11 +117,9 @@ export function WikiPage({ route }: { route: WikiRoute }) {
     );
   }
   if (!resolved) {
-    return (
-      <WikiFrame space={null}>
-        <WikiEmpty>{WIKI_NO_SPACES}</WikiEmpty>
-      </WikiFrame>
-    );
+    // Still reading the list (a page opened by its address, before the drawer read it): nothing is known
+    // yet, so nothing is said — not that there is no space.
+    return <WikiFrame space={null}>{spaces.isPending ? null : <WikiEmpty>{WIKI_NO_SPACES}</WikiEmpty>}</WikiFrame>;
   }
 
   const space: SpaceRow = resolved;
@@ -116,6 +131,14 @@ export function WikiPage({ route }: { route: WikiRoute }) {
     return (
       <WikiFrame space={space}>
         <WikiReviewPage spaceSlug={space.slug} />
+      </WikiFrame>
+    );
+  }
+  // What the home said besides its content (design §12.3.2): the status row moves under its title.
+  if (route === 'activity') {
+    return (
+      <WikiFrame space={space} at={{ view: 'activity' }}>
+        <WikiActivityPage key={space.slug} space={space} spaces={spaces.data ?? [space]} status={<WikiStatusRow space={space} />} />
       </WikiFrame>
     );
   }
@@ -170,7 +193,7 @@ export function WikiPage({ route }: { route: WikiRoute }) {
   }
   return (
     <WikiFrame space={space} at={{ view: 'home' }}>
-      <HomeBody spaceId={space.id} />
+      <WikiHome space={space} />
     </WikiFrame>
   );
 }
@@ -179,13 +202,6 @@ export function WikiPage({ route }: { route: WikiRoute }) {
 function wikiPartParam(raw: string | undefined): number {
   const part = Number(raw ?? 0);
   return Number.isInteger(part) && part > 0 ? part : 0;
-}
-
-/** The home page's body: the space document with its usage window, and the two columns under it. */
-function HomeBody({ spaceId }: { spaceId: string }) {
-  const space = useQuery(wikiSpaceQuery(spaceId));
-  if (!space.data) return <WikiEmpty>{WIKI_NO_SPACES}</WikiEmpty>;
-  return <WikiHome space={space.data} />;
 }
 
 /**
@@ -229,7 +245,7 @@ function EntryRoute({ space, entryParam }: { space: SpaceRow; entryParam: string
             </WikiFrame>
           ) : (
             <WikiFrame space={space} at={{ view: 'home' }}>
-              <HomeBody spaceId={space.id} />
+              <WikiHome space={space} />
             </WikiFrame>
           )}
         </div>
@@ -252,7 +268,7 @@ function RunRoute({ space, runParam }: { space: SpaceRow; runParam: string }) {
     <div className="wk-with-drawer">
       <div className="wk-drawer-bg" aria-hidden="true">
         <WikiFrame space={space} at={{ view: 'home' }}>
-          <HomeBody spaceId={space.id} />
+          <WikiHome space={space} />
         </WikiFrame>
       </div>
       <button type="button" className="wk-scrim" aria-label="Close" onClick={() => navigate(back)} />
@@ -262,15 +278,22 @@ function RunRoute({ space, runParam }: { space: SpaceRow; runParam: string }) {
 }
 
 /**
- * The chrome every Wiki view wears: the title row (space picker, New entry), the search line and the
- * status row. It is the project page's own title row and toolbar, which is what the design's mock
- * links and draws — the counts are the page's counts, not a new row of numbers.
+ * The chrome every Wiki view wears: the title row (the space, Contents, Activity, Settings, Share, New entry),
+ * the search line and the status row. It is the project page's own title row and toolbar, which is
+ * what the design's mock links and draws — the counts are the page's counts, not a new row of numbers.
+ *
+ * THE HOME HAS NO STATUS ROW (design §12.3.1): the line under its head says what the space holds
+ * (`WikiHomeState`, mocks 30 ③ and 33 ①), and how the space is kept is Activity's.
  *
  * THE DIRECTORY STANDS BESIDE EVERY READING VIEW (`at`: the home, a topic's article, Browse, the
  * index — mocks 11, 13, 15): a column on a desktop, and on anything narrower the Contents drawer the
  * head's list button opens. On a phone a reading view other than the home also drops the head — its
- * crumb row carries the list button instead (mock 14 ①) — and the home's status row comes before
- * the search (mock 12 ①). Review and the settings are not reading views and keep the frame as it was.
+ * crumb row carries the list button instead (mock 14 ①). Review and the settings are not reading
+ * views and keep the frame as it was.
+ *
+ * ACTIVITY (design §12.3.2) stands beside the directory too, with none of its rows lit, under the home's
+ * head and its line, and takes the status row under its own title (mock 33 ④ ⑤); a phone draws it
+ * under its own head instead of this one (mock 31 ②), as Review's mock does (09).
  */
 function WikiFrame({
   space,
@@ -281,40 +304,26 @@ function WikiFrame({
   at?: WikiDirectoryAt | null;
   children: React.ReactNode;
 }) {
-  const navigate = useNavigate();
   const spaces = useQuery(wikiSpacesQuery());
-  const entries = useQuery(wikiEntriesQuery(space?.id ?? null));
-  // The status line's health (criterion 5): every active entry of the space — the entry list stops at
-  // 200, so its length is the count only until the health read is in — and where maintenance stands.
-  const health = useQuery(wikiHealthQuery(space?.id ?? null));
-  const count = health.data?.entries ?? entries.data?.length ?? 0;
+  const rows = spaces.data ?? (space ? [space] : []);
+  const activity = at?.view === 'activity';
+  const home = at?.view === 'home';
 
   const page = (
-    <div className={`wk-page${at && at.view !== 'home' ? ' wk-page--reading' : ''}`}>
+    <div className={`wk-page${at && !home && !activity ? ' wk-page--reading' : ''}${activity ? ' wk-page--activity' : ''}`}>
       <div className="wk-title-row">
         <h1 className="page-title">{WIKI_TITLE}</h1>
-        {space && (
-          <span className="wk-select" title={WIKI_SPACE_PICKER_HINT}>
-            <select
-              value={space.slug}
-              aria-label={WIKI_SPACE_PICKER_HINT}
-              onChange={(event) => navigate(wikiSpacePath(event.target.value))}
-            >
-              {(spaces.data ?? []).map((row) => (
-                <option key={row.id} value={row.slug}>
-                  {row.slug}
-                </option>
-              ))}
-            </select>
-            <DownOutlined className="ic caret" />
-          </span>
-        )}
+        {space && <WikiHeadSpace space={space} spaces={rows} />}
         <div className="wk-actions">
           {space && at && <WikiContentsButton />}
+          {space && <WikiActivityButton spaceSlug={space.slug} waiting={wikiWaiting(rows)} on={activity} />}
           {space && <WikiSettingsButton spaceSlug={space.slug} />}
+          {space && <WikiShareButton spaceId={space.id} spaceSlug={space.slug} />}
           {space && <WikiNewEntryButton spaceId={space.id} />}
         </div>
       </div>
+
+      {space && (home || activity) && <WikiHomeState spaceId={space.id} />}
 
       {space && (
         <div className="wk-search" role="search">
@@ -327,6 +336,74 @@ function WikiFrame({
         </div>
       )}
 
+      {!home && !activity && <WikiStatusRow space={space} />}
+
+      {space && at ? (
+        <div className={`wk-layout${home ? ' home' : ''}`}>
+          <div className="wk-dir-col">
+            <WikiDirectory spaceId={space.id} spaceSlug={space.slug} at={at} />
+          </div>
+          <div className="wk-main">{children}</div>
+        </div>
+      ) : (
+        <div className="wk-body">{children}</div>
+      )}
+    </div>
+  );
+
+  return (
+    <OrbitLinkCardsProvider stateWord={statusLabel} host={wikiLinkHost()}>
+      {space && at ? (
+        <WikiContentsProvider spaceId={space.id} spaceSlug={space.slug} at={at}>
+          {page}
+        </WikiContentsProvider>
+      ) : (
+        page
+      )}
+    </OrbitLinkCardsProvider>
+  );
+}
+
+/**
+ * The head's space (design §12.3.4, mock 31 ④): with one space, its name as a label with nothing to
+ * choose; with more, the native select — closed, the name alone; open, every space with what waits in
+ * it. The name is the repository's (`wikiSpaceNames`), not the slug.
+ */
+function WikiHeadSpace({ space, spaces }: { space: SpaceRow; spaces: readonly SpaceRow[] }) {
+  const navigate = useNavigate();
+  const names = useMemo(() => wikiSpaceNames(spaces), [spaces]);
+  const name = names.get(space.id) ?? space.title;
+  if (spaces.length < 2) {
+    return (
+      <span className="wk-space-tag" title={WIKI_SPACE_PICKER_HINT}>
+        {name}
+      </span>
+    );
+  }
+  return (
+    <span className="wk-select" title={WIKI_SPACE_PICKER_HINT}>
+      <span className="v">{name}</span>
+      <select value={space.slug} aria-label={WIKI_SPACE_PICKER_HINT} onChange={(event) => navigate(wikiSpacePath(event.target.value))}>
+        {spaces.map((row) => (
+          <option key={row.id} value={row.slug}>
+            {wikiSpaceOption(names.get(row.id) ?? row.title, row)}
+          </option>
+        ))}
+      </select>
+      <DownOutlined className="ic caret" />
+    </span>
+  );
+}
+
+/** The status row: what the space holds, how fresh its anchors are, and where maintenance stands. */
+function WikiStatusRow({ space }: { space: SpaceRow | null }) {
+  const entries = useQuery(wikiEntriesQuery(space?.id ?? null));
+  // The status line's health (criterion 5): every active entry of the space — the entry list stops at
+  // 200, so its length is the count only until the health read is in — and where maintenance stands.
+  const health = useQuery(wikiHealthQuery(space?.id ?? null));
+  const count = health.data?.entries ?? entries.data?.length ?? 0;
+  return (
+    <>
       {space && (
         <div className="project-integration wk-status-row">
           <div className="project-integration-row">
@@ -349,34 +426,11 @@ function WikiFrame({
               )}
               {/* The maintenance run's part of this line, after the anchors, on every width (mocks 11 ②,
                   12 ④): `Maintained 2h ago ✓ · 6 to catch up` and its other looks. */}
-              {health.data && <WikiMaintenanceStatus health={health.data.maintenance} spaceSlug={space.slug} />}
+              {health.data && <WikiMaintenanceStatus health={health.data} spaceSlug={space.slug} />}
             </span>
           </div>
         </div>
       )}
-
-      {space && at ? (
-        <div className={`wk-layout${at.view === 'home' ? ' home' : ''}`}>
-          <div className="wk-dir-col">
-            <WikiDirectory spaceId={space.id} spaceSlug={space.slug} at={at} />
-          </div>
-          <div className="wk-main">{children}</div>
-        </div>
-      ) : (
-        <div className="wk-body">{children}</div>
-      )}
-    </div>
-  );
-
-  return (
-    <OrbitLinkCardsProvider stateWord={statusLabel} host={wikiLinkHost()}>
-      {space && at ? (
-        <WikiContentsProvider spaceId={space.id} spaceSlug={space.slug} at={at}>
-          {page}
-        </WikiContentsProvider>
-      ) : (
-        page
-      )}
-    </OrbitLinkCardsProvider>
+    </>
   );
 }

@@ -211,7 +211,6 @@ func cliWikiImport(args []string, out io.Writer, ctx cliOrchestrationContext) er
 	if opts.statePath == "" {
 		opts.statePath = wikiImportDefaultState(spaceID, absFrom)
 	}
-	opts.model, opts.modelMissing = wikiImportModelFromEnv(*model)
 	t, err := cliTransport()
 	if err != nil {
 		return err
@@ -220,7 +219,18 @@ func cliWikiImport(args []string, out io.Writer, ctx cliOrchestrationContext) er
 	if *jsonOut {
 		progress = io.Discard
 	}
-	summary, runErr := runWikiImport(t, ctx.sessionID, opts, progress)
+	// Which path the import takes is the server's to say: its own import job when the account's wiki runs
+	// on the server (wiki_import_server.go), this machine's model otherwise — and for a server that predates
+	// the question.
+	executor, onServer := wikiImportOnServer(t, ctx.sessionID, spaceID)
+	var summary wikiImportSummary
+	var runErr error
+	if onServer {
+		summary, runErr = runWikiImportOnServer(t, ctx.sessionID, opts, executor, progress)
+	} else {
+		opts.model, opts.modelMissing = wikiImportModelFromEnv(*model)
+		summary, runErr = runWikiImport(t, ctx.sessionID, opts, progress)
+	}
 	if *jsonOut {
 		raw, err := json.Marshal(summary)
 		if err != nil {
@@ -309,6 +319,8 @@ type wikiImportSummary struct {
 	// what stopped it.
 	Refusals []wikiImportRefusal `json:"refusals"`
 	Stopped  string              `json:"stopped,omitempty"`
+	// The server's import job that read the notes, when the server read them: these numbers are its report's.
+	Job string `json:"job,omitempty"`
 }
 
 type wikiImportRefusal struct {
@@ -345,6 +357,9 @@ func describeWikiImportSummary(s wikiImportSummary) string {
 	if s.Calls > 0 {
 		fmt.Fprintf(&b, "\nModel %s: %s, %d tokens in and %d out, in %.0fs.", s.Model, wikiCount(s.Calls, "call", "calls"), s.InputTokens, s.OutputTokens, s.Seconds)
 	}
+	if s.Job != "" {
+		fmt.Fprintf(&b, "\nRead on the Orbit server: import job %s.", s.Job)
+	}
 	if s.Stopped != "" {
 		fmt.Fprintf(&b, "\nStopped: %s.", s.Stopped)
 	}
@@ -369,7 +384,9 @@ type wikiImportState struct {
 	Calls        int `json:"calls"`
 	InputTokens  int `json:"inputTokens"`
 	OutputTokens int `json:"outputTokens"`
-	path         string
+	// The server's import job a run handed its notes to and has not collected yet (wiki_import_server.go).
+	Job  string `json:"job,omitempty"`
+	path string
 }
 
 // wikiImportFile is one file, and how far the import has taken it.
@@ -555,6 +572,9 @@ type wikiImporter struct {
 	queue []wikiImportRef
 	// The endpoint answered /health this run.
 	endpointUp bool
+	// "server" when the server reads the notes (wiki_import_server.go): what the note route is told, so it
+	// registers the note and keeps its text for the server's model.
+	readBy string
 }
 
 type wikiImportRef struct {
@@ -787,6 +807,9 @@ func (im *wikiImporter) register(source wikiImportSource) (bool, error) {
 		return false, fmt.Errorf("orbit wiki import: reading %s: %w", source.abs, err)
 	}
 	body := map[string]interface{}{"path": source.rel, "text": string(raw)}
+	if im.readBy != "" {
+		body["readBy"] = im.readBy
+	}
 	out, sends, err := im.t.registerWikiNote(im.sessionID, im.opts.spaceID, body)
 	if err != nil {
 		var httpErr *transportHTTPError

@@ -20,7 +20,7 @@ export class SessionCreatedTasksController {
    * (`SessionCreatedTasks`, @orbit/shared). `limit` caps `items` (default 20, at most 50) and
    * nothing else. Another account's session answers 404, exactly as a missing one does.
    */
-  @PatScope('sessions:read')
+  @PatScope('sessions:read', { workspaceConfinable: false })
   @Get(':id/created-tasks')
   read(
     @CurrentUser() user: AuthUser,

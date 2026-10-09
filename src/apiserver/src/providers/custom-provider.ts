@@ -3,14 +3,20 @@ import {
   DEFAULT_MODEL_BY_PROVIDER,
   antigravityBaseModel,
   isRetiredModel,
+  keyDialect,
   modelForProvider,
+  OPENCODE_DIALECT_NPM,
+  openCodeBaseUrl,
+  openCodeKeyOf,
+  openCodeKeyProvider,
   providerPreset,
 } from '@orbit/shared';
 import { Prisma } from '@prisma/client';
 import { BadRequestException } from '@nestjs/common';
-import { accountDir } from '@orbit/shared';
-import { accountEnvVar, accountOnRunner } from './account';
+import { accountDir, isAccountEngine } from '@orbit/shared';
+import { ACCOUNT_CHOICE, accountEnvVar, accountOnRunner } from './account';
 import { catalogModels } from './model-catalog';
+import { ANTHROPIC_HOST } from './plan-usage';
 import { decryptSecret } from './provider-crypto';
 import { followsRuntimeCatalog, presetDefaultModel } from './preset-overlay';
 import {
@@ -131,6 +137,54 @@ export function execRuntime(args: {
 }
 
 /**
+ * The configured providers `ownerId` may resolve a slug to: their own, and the shared ones (ownerId
+ * NULL, which an admin keeps under /admin/providers) only when `ownerId` is an admin. A session on a
+ * configured provider is handed its key — decrypted into the engine's environment (injectedEnv) on the
+ * runner the session runs on, which its owner registered themselves — so a shared row any account
+ * could resolve would give its key to anybody who can sign up. The owner decided (2026-10-07) that a
+ * shared provider is the admins' own: a key is shared with other people through a shared pool, whose
+ * owner adds each person and whose gateway keeps the key off their runners (resolveSharedPool).
+ *
+ * The role is read on every resolution, as AdminRoleGuard reads it, so a promotion or a demotion
+ * counts from the next door asked. Every door that resolves a slug to a row asks this, and the claim
+ * asks usableProviderSql, its twin in SQL, so no two doors disagree about which rows a session may run
+ * on.
+ */
+export async function usableProviderScope(
+  db: Pick<Prisma.TransactionClient, 'user'>,
+  ownerId: string,
+): Promise<Prisma.ModelProviderWhereInput> {
+  return (await isAdmin(db, ownerId)) ? { OR: [{ ownerId: null }, { ownerId }] } : { ownerId };
+}
+
+/** usableProviderScope in SQL: `row` names a model_provider row, `ownerId` the id of the account asking. */
+export function usableProviderSql(row: string, ownerId: Prisma.Sql): Prisma.Sql {
+  const provider = Prisma.raw(row);
+  return Prisma.sql`(${provider}."owner_id" = ${ownerId} OR (${provider}."owner_id" IS NULL AND EXISTS (
+    SELECT 1 FROM "user" u WHERE u."id" = ${ownerId} AND u."role" = 'ADMIN')))`;
+}
+
+/**
+ * What a door tells someone who names a shared provider they may not use (usableProviderScope), or null
+ * when `slug` names no shared provider or they are an admin. The row exists and only the role keeps it
+ * from them, so "not available" would send them looking for a typo.
+ */
+export async function adminOnlyProviderRefusal(
+  db: Pick<Prisma.TransactionClient, 'user' | 'modelProvider'>,
+  ownerId: string,
+  slug: string,
+): Promise<string | null> {
+  const shared = await db.modelProvider.findFirst({ where: { slug, ownerId: null }, select: { id: true } });
+  if (!shared || (await isAdmin(db, ownerId))) return null;
+  return `provider "${slug}" is available to admins only; ask an admin to add you to a shared pool`;
+}
+
+async function isAdmin(db: Pick<Prisma.TransactionClient, 'user'>, userId: string): Promise<boolean> {
+  const user = await db.user.findUnique({ where: { id: userId }, select: { role: true } });
+  return user?.role === 'ADMIN';
+}
+
+/**
  * The built-in runtime a session's turns actually execute on, resolving a configured (BYOK)
  * slug to the runtime it borrows. The ModelProvider lookup happens only for a slug that needs
  * one, so a built-in session costs nothing.
@@ -148,7 +202,7 @@ export async function sessionExecRuntime(
   const customRow = builtin
     ? null
     : await tx.modelProvider.findFirst({
-        where: { slug: session.provider, OR: [{ ownerId: null }, { ownerId: session.ownerId }] },
+        where: { slug: session.provider, ...(await usableProviderScope(tx, session.ownerId)) },
       });
   // A pool holds no provider row: it runs on its own engine — a shared pool on Codex, not the Claude a
   // slug nothing holds falls back to.
@@ -165,12 +219,13 @@ export async function sessionExecRuntime(
 
 /**
  * Every provider slug whose sessions run on `runtime` for `ownerId`: the built-in slug itself, and
- * each enabled configured row of theirs — or a shared one — that borrows it, the way a Gemini key
- * runs on Antigravity under a slug of its own. This is what a runner-capability gate has to ask
+ * each enabled configured row they may resolve (usableProviderScope) that borrows it, the way a Gemini
+ * key runs on Antigravity under a slug of its own. This is what a runner-capability gate has to ask
  * (ADVERTISED_RUNTIMES): a runner that never advertised the runtime is handed that runtime's job
  * whichever of these slugs the session names. A disabled row cannot dispatch, so it is not one of
- * them. The claim SQL (QueueService.trySessionClaim) and migration 0372's trigger
- * ask the same question of the same rows.
+ * them. The claim SQL (QueueService.trySessionClaim) asks the same question of the same rows;
+ * migration 0372's trigger still counts every shared row, which can only refuse a claim the claim SQL
+ * never makes.
  */
 export async function providerSlugsOn(
   db: Prisma.TransactionClient,
@@ -178,7 +233,7 @@ export async function providerSlugsOn(
   runtime: AgentProvider,
 ): Promise<string[]> {
   const borrowing = await db.modelProvider.findMany({
-    where: { runtime, enabled: true, OR: [{ ownerId: null }, { ownerId }] },
+    where: { runtime, enabled: true, ...(await usableProviderScope(db, ownerId)) },
     select: { slug: true },
   });
   return [runtime, ...borrowing.map((row) => row.slug)];
@@ -226,6 +281,16 @@ export async function accountPoolRuntime(
     select: { id: true },
   });
   return shared ? AgentProvider.CODEX : null;
+}
+
+/** Whether a row points at Anthropic's own endpoint — compared by hostname, so a path such as
+ *  `/anthropic` on a vendor's domain is not mistaken for it. */
+function isAnthropicEndpoint(baseUrl: string): boolean {
+  try {
+    return new URL(baseUrl).hostname.toLowerCase() === ANTHROPIC_HOST;
+  } catch {
+    return false;
+  }
 }
 
 // Env injected so the borrowed runtime CLI talks to the provider's endpoint. Claude runtime →
@@ -286,6 +351,20 @@ function injectedEnv(row: ModelProviderRow, model: string): Record<string, strin
     // inherit the session model; `CLAUDE_CODE_SUBAGENT_MODEL` does not (measured on 2.1.278).
     CLAUDE_CODE_DISABLE_EXPLORE_INHERIT_CAP: '1',
   };
+  // A late tool discovery inside a conversation that has run on Anthropic's own endpoint travels
+  // inline — `tool_addition` carrying the whole `tool_definition` — the shape that endpoint's
+  // inline-tools beta asks for. Switching that same conversation to a vendor shim replays the
+  // recorded blocks, and a shim that implements only the by-name form answers 422; DeepSeek words
+  // it "unknown variant `tool_definition`", which the CLI's rejection classifier does not know (it
+  // matches Anthropic's own "Input tag 'tool_definition'"), so the CLI's built-in fallback —
+  // re-declare the late tools in `tools[]` and reference them by name — never fires, and every
+  // turn of that session keeps failing until the model is switched back. With this off the engine
+  // takes the by-name path from the start (measured on 2.1.292 against DeepSeek: the conversation
+  // that 422s without it completes a turn with it). Injected only where the host is not
+  // Anthropic's: there the inline form is served, and the session keeps it.
+  if (!isAnthropicEndpoint(row.baseUrl)) {
+    claudeEnv.CLAUDE_CODE_INLINE_TOOLS = 'false';
+  }
   // A model id the CLI's own catalog doesn't describe gets 200k assumed for it, and auto-compact
   // keeps the session inside that. The endpoint can't correct the CLI — an Anthropic-compatible
   // shim like DeepSeek's serves no /v1/models for it to ask — so the declared window travels as
@@ -309,6 +388,70 @@ function injectedEnv(row: ModelProviderRow, model: string): Record<string, strin
     claudeEnv.CLAUDE_CODE_EFFORT_LEVEL = 'unset';
   }
   return claudeEnv;
+}
+
+/** A Claude subscription token: Anthropic serves it to its own clients only, so OpenCode never gets
+ *  one (plan-usage.ts reads the same prefix for the same reason). */
+const SUBSCRIPTION_TOKEN_PREFIX = 'sk-ant-oat';
+
+/**
+ * Whether an OpenCode session may spend this configured key (shared `openCodeKeys`): enabled, on a
+ * dialect OpenCode speaks — every one a configured key can speak — and holding an API key rather than
+ * a Claude subscription token. A pool's members are rows too and answer the same way; the pool itself
+ * holds no key to hand over, so it is not one.
+ */
+export function runsOnOpenCode(row: Pick<ModelProviderRow, 'runtime' | 'enabled' | 'apiKeyEnc'>): boolean {
+  if (!row.enabled || !keyDialect(row.runtime)) return false;
+  try {
+    return !decryptSecret(row.apiKeyEnc).trim().startsWith(SUBSCRIPTION_TOKEN_PREFIX);
+  } catch {
+    return false;
+  }
+}
+
+/** A configured row with the slug an OpenCode model names it by. */
+export type OpenCodeKeyRow = ModelProviderRow & { slug: string };
+
+/**
+ * Every configured key `ownerId` could name in an OpenCode model: the rows a session's provider
+ * resolves to (usableProviderScope) — their own, and the shared ones only for an admin. Read for an
+ * OpenCode session only, and handed to resolveProviderExec, which takes the one the model names.
+ */
+export async function openCodeKeyRows(
+  db: Prisma.TransactionClient,
+  ownerId: string,
+): Promise<OpenCodeKeyRow[]> {
+  return db.modelProvider.findMany({ where: { enabled: true, ...(await usableProviderScope(db, ownerId)) } });
+}
+
+/**
+ * The OPENCODE_CONFIG_CONTENT that runs `model` on this key: one provider named for the key, driving
+ * its endpoint through the AI SDK package of its dialect with its key — the endpoint and protocol
+ * Orbit already runs it on with its own CLI — and declaring the model, which OpenCode refuses to
+ * select otherwise. Merged over the workspace's own content, and the runner merges its agent and
+ * permission config over this in turn (runner-go openCodeConfigContent).
+ */
+function openCodeKeyConfig(row: OpenCodeKeyRow, model: string, base?: string): string {
+  const dialect = keyDialect(row.runtime)!;
+  let config: Record<string, unknown> = {};
+  try {
+    const parsed: unknown = base ? JSON.parse(base) : {};
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) config = parsed as Record<string, unknown>;
+  } catch {
+    // Not JSON: the runner reports the workspace's broken value on its own; this key's provider
+    // still goes through.
+  }
+  const providers =
+    config.provider && typeof config.provider === 'object' ? (config.provider as Record<string, unknown>) : {};
+  config.provider = {
+    ...providers,
+    [openCodeKeyProvider(row.slug)]: {
+      npm: OPENCODE_DIALECT_NPM[dialect],
+      options: { baseURL: openCodeBaseUrl(dialect, row.baseUrl), apiKey: decryptSecret(row.apiKeyEnc) },
+      models: { [model]: { name: model } },
+    },
+  };
+  return JSON.stringify(config);
 }
 
 /**
@@ -353,8 +496,19 @@ export function resolveProviderExec(args: {
   /** The Claude account slot this session runs on (Workspace.claudeAccount today), the sibling of
    *  codexAccount and read the same way: resolved into the CLAUDE_CONFIG_DIR injected below. */
   claudeAccount?: string | null;
+  /** The Antigravity Google account slot this session runs on (Session.antigravityAccount ??
+   *  Workspace.antigravityAccount), read the same way: resolved into the ORBIT_ANTIGRAVITY_GOOGLE_DIR
+   *  injected below, which the runner reads to pick the sign-in the session's agy runs on. */
+  antigravityAccount?: string | null;
+  /** The Kimi Code account slot this session runs on (Session.kimiAccount ?? Workspace.kimiAccount),
+   *  read the same way: resolved into the KIMI_CODE_HOME injected below, the directory Kimi Code keeps
+   *  its whole login in. */
+  kimiAccount?: string | null;
   /** Runner.engines of the assigned runner: where each account's directory is reported. */
   runnerEngines?: unknown;
+  /** The owner's configured keys (openCodeKeyRows), for an OpenCode session whose model names one
+   *  (`orbit-<slug>/<model>`): that key is written into the run's OPENCODE_CONFIG_CONTENT. */
+  openCodeKeys?: OpenCodeKeyRow[];
 }): {
   provider: AgentProvider;
   model: string;
@@ -404,11 +558,11 @@ export function resolveProviderExec(args: {
   // the sign-in card (RunnerSignIn) rather than the control plane holding a credential for it.
   const provider = execRuntime(args);
   // A session on an account other than Default runs in that account's own directory — a Codex
-  // CODEX_HOME, a Claude Code CLAUDE_CONFIG_DIR. Built-in only: a configured provider brings its
-  // own key, so no sign-in on the machine is spent. The chosen account replaces any such variable
-  // typed into the workspace's env.
-  const accountId =
-    provider === AgentProvider.CLAUDE ? args.claudeAccount : args.codexAccount;
+  // CODEX_HOME, a Claude Code CLAUDE_CONFIG_DIR, an Antigravity Google sign-in's Gemini directory, a
+  // Kimi Code KIMI_CODE_HOME.
+  // Built-in only: a configured provider brings its own key, so no sign-in on the machine is spent.
+  // The chosen account replaces any such variable typed into the workspace's env.
+  const accountId = isAccountEngine(provider) ? args[ACCOUNT_CHOICE[provider]] : undefined;
   const account = accountOnRunner(provider, accountId, args.runnerEngines);
   const dirVar = accountEnvVar(provider);
   const env =
@@ -438,9 +592,26 @@ export function resolveProviderExec(args: {
         savedRuntimeDefaultModel(args.runtimeDefaultModels, provider),
         firstRuntimeCatalogModel(args.modelCatalog, provider),
       );
+  const model = modelForProvider(provider, explicitSessionModel ?? inheritedModel, offered);
+  // An OpenCode model on one of the owner's configured keys runs on that key, and on nothing else:
+  // a key that is gone, disabled or not one OpenCode may spend refuses the run rather than letting
+  // OpenCode fall back to whatever this machine's own config holds for that name.
+  const key = provider === AgentProvider.OPENCODE ? openCodeKeyOf(model) : null;
+  if (key) {
+    const row = args.openCodeKeys?.find((candidate) => candidate.slug === key.slug);
+    if (!row || !runsOnOpenCode(row)) {
+      throw new BadRequestException(`provider not available on OpenCode: "${key.slug}"`);
+    }
+    return {
+      provider,
+      model,
+      env: { ...(env ?? {}), OPENCODE_CONFIG_CONTENT: openCodeKeyConfig(row, key.model, env?.OPENCODE_CONFIG_CONTENT) },
+      ...(retired ? { retiredPin: true } : {}),
+    };
+  }
   return {
     provider,
-    model: modelForProvider(provider, explicitSessionModel ?? inheritedModel, offered),
+    model,
     env,
     ...(retired ? { retiredPin: true } : {}),
   };

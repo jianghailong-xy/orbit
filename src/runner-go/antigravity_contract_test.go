@@ -9,7 +9,8 @@ package main
 //
 // docs/antigravity-runtime-contract.md is what these hold agy to. Run them before taking a new agy
 // release (`go test -run TestAntigravityContract -v .`): agy is closed source, ships almost daily, and
-// rests on a hidden flag (--gemini_dir). Skipped when agy is not installed.
+// rests on a hidden flag (--gemini_dir). Skipped when agy is not installed, unless
+// ORBIT_REQUIRE_REAL_AGY=1 (requireRealAgy).
 
 import (
 	"bufio"
@@ -75,11 +76,25 @@ type agyContractApproval struct {
 	body map[string]interface{}
 }
 
+// requireRealAgy finds the real agy on PATH (TestMain adds the installers' ~/.local/bin), or skips:
+// most machines have no agy, CI included. A skip checks nothing, though, so a run that is meant to
+// check agy — before taking a new release (docs/antigravity-runtime-contract.md §6.3) — sets
+// ORBIT_REQUIRE_REAL_AGY=1, and a missing agy fails it instead.
+func requireRealAgy(t *testing.T) string {
+	t.Helper()
+	path, err := exec.LookPath(agyExecutable)
+	if err != nil {
+		if os.Getenv("ORBIT_REQUIRE_REAL_AGY") == "1" {
+			t.Fatal("real agy is required (ORBIT_REQUIRE_REAL_AGY=1):", err)
+		}
+		t.Skip("agy is not installed on this machine, so this contract is not checked against it (ORBIT_REQUIRE_REAL_AGY=1 fails instead) — install it with `curl -fsSL https://antigravity.google/cli/install.sh | bash` (docs/antigravity-runtime-contract.md §6.4):", err)
+	}
+	return path
+}
+
 func newAgyContract(t *testing.T) *agyContract {
 	t.Helper()
-	if _, err := exec.LookPath(agyExecutable); err != nil {
-		t.Skip("agy is not installed on this machine — install it with `curl -fsSL https://antigravity.google/cli/install.sh | bash` (docs/antigravity-runtime-contract.md §6.4)")
-	}
+	requireRealAgy(t)
 	c := &agyContract{
 		t:           t,
 		dir:         t.TempDir(),

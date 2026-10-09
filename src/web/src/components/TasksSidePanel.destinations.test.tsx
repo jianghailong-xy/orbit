@@ -6,7 +6,8 @@ import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { encodeId } from '../lib/idCodec';
 import type { SidebarProject } from '../lib/projectAttention';
-import { TasksSidePanel } from './TasksSidePanel';
+import { MOBILE_QUERY } from '../lib/useMediaQuery';
+import { isInfrastructureRoute, TasksSidePanel } from './TasksSidePanel';
 
 /**
  * Every sidebar row is a destination, as on the iPhone drawer: a section, a workspace's session list,
@@ -28,6 +29,8 @@ const B = encodeId('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb');
 const RUNNER = encodeId('0000000f-0000-4000-8000-00000000000f');
 const MEMBER = encodeId('0000000a-0000-4000-8000-00000000000a');
 const PROJECT = encodeId('0196a000-0000-7000-8000-000000000002');
+const KEY = encodeId('0196a000-0000-7000-8000-0000000000c1');
+const POOL = encodeId('0196a000-0000-7000-8000-0000000000c2');
 
 const WORKSPACES = [
   { id: A, name: 'alpha', createdAt: '2026-09-01T00:00:00.000Z', position: 0, runnerId: RUNNER },
@@ -165,6 +168,27 @@ describe('the sidebar’s rows as destinations', () => {
     expect(location).toBe(`/workspaces/${A}?project=${PROJECT}`);
   });
 
+  // As the iPad's sidebar has it: beside an open conversation only the list column changes.
+  it('opens a project beside the conversation showing on a wide screen, so the conversation stays', async () => {
+    serve();
+    await visit(`/sessions/${MEMBER}`);
+    await click(projectRow());
+    expect(location).toBe(`/sessions/${MEMBER}?project=${PROJECT}`);
+    expect(projectRow().classList.contains('active')).toBe(true);
+  });
+
+  it('opens the project’s page on a phone, which shows one pane, even from a conversation', async () => {
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: query === MOBILE_QUERY, media: query, onchange: null,
+      addListener: () => {}, removeListener: () => {}, addEventListener: () => {}, removeEventListener: () => {},
+      dispatchEvent: () => false,
+    }));
+    serve();
+    await visit(`/sessions/${MEMBER}`);
+    await click(projectRow());
+    expect(location).toBe(`/workspaces/${B}?project=${PROJECT}`);
+  });
+
   it('keeps the project lit on a member’s conversation opened from its page', async () => {
     serve();
     await visit(`/sessions/${MEMBER}?project=${PROJECT}`);
@@ -194,5 +218,51 @@ describe('the sidebar’s rows as destinations', () => {
     expect(location).toBe(path);
     expect(navigations).toBe(0);
     expect(onNavigate).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('the sidebar’s Infrastructure row', () => {
+  const litTopEntries = () =>
+    [...container!.querySelectorAll<HTMLElement>('.tp-section .tp-item.active .tp-label')].map((label) => label.textContent);
+  const litRailEntries = () =>
+    [...container!.querySelectorAll<HTMLElement>('.tp-rail-item.active')].map((item) => item.getAttribute('title'));
+
+  it('is the one row for machines, keys and pools, and opens their page', async () => {
+    serve();
+    await visit('/tasks');
+    const labels = [...container!.querySelectorAll('.tp-section .tp-label')].map((label) => label.textContent);
+    expect(labels).toContain('Infrastructure');
+    expect(labels).not.toContain('Runners');
+    expect(labels).not.toContain('Providers');
+    await click(topEntry('Infrastructure'));
+    expect(location).toBe('/infrastructure');
+    expect(litTopEntries()).toEqual(['Infrastructure']);
+  });
+
+  it.each([
+    '/infrastructure',
+    '/infrastructure?runner=x&engine=codex',
+    '/runners',
+    `/runners/${RUNNER}`,
+    '/runners/register',
+    '/providers',
+    '/providers/new',
+    '/providers/new/anthropic',
+    `/providers/${KEY}`,
+    `/providers/pools/${POOL}`,
+  ])('is lit, in both forms, on %s', async (path) => {
+    serve();
+    await visit(path);
+    expect(litTopEntries()).toEqual(['Infrastructure']);
+    expect(litRailEntries()).toEqual(['Infrastructure']);
+  });
+
+  it('belongs to those addresses alone', () => {
+    for (const path of ['/infrastructure', '/runners', `/runners/${RUNNER}`, '/providers', `/providers/pools/${POOL}`]) {
+      expect(isInfrastructureRoute(path), path).toBe(true);
+    }
+    for (const path of ['/', '/tasks', '/settings', '/admin/providers', '/runnersx', '/providers-old', '/infra']) {
+      expect(isInfrastructureRoute(path), path).toBe(false);
+    }
   });
 });

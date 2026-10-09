@@ -1,0 +1,60 @@
+{
+ "chromium-dark-desktop :: wide screens show full questions and actions without opening a preview :: coordinator-inline.json": {
+  "kind": "json",
+  "equal": true,
+  "differences": []
+ },
+ "chromium-dark-desktop :: wide screens show full questions and actions without opening a preview :: coordinator-inline.png": {
+  "kind": "png",
+  "equal": true
+ },
+ "chromium-dark-phone :: long plan scrolls above visible actions and owns the foreground shortcut :: plan-scrolled.json": {
+  "kind": "json",
+  "equal": true,
+  "differences": []
+ },
+ "chromium-dark-phone :: long plan scrolls above visible actions and owns the foreground shortcut :: plan-scrolled.png": {
+  "kind": "png",
+  "equal": true
+ },
+ "chromium-dark-phone :: question traps focus, preserves choices and drafts, and suspends background shortcuts :: question-retained.json": {
+  "kind": "json",
+  "equal": true,
+  "differences": []
+ },
+ "chromium-dark-phone :: question traps focus, preserves choices and drafts, and suspends background shortcuts :: question-retained.png": {
+  "kind": "png",
+  "equal": true
+ },
+ "chromium-light-desktop :: wide screens show full questions and actions without opening a preview :: coordinator-inline.json": {
+  "kind": "json",
+  "equal": true,
+  "differences": []
+ },
+ "chromium-light-desktop :: wide screens show full questions and actions without opening a preview :: coordinator-inline.png": {
+  "kind": "png",
+  "equal": true
+ },
+ "chromium-light-phone :: long plan scrolls above visible actions and owns the foreground shortcut :: plan-scrolled.json": {
+  "kind": "json",
+  "equal": true,
+  "differences": []
+ },
+ "chromium-light-phone :: long plan scrolls above visible actions and owns the foreground shortcut :: plan-scrolled.png": {
+  "kind": "png",
+  "equal": true
+ },
+ "chromium-light-phone :: question traps focus, preserves choices and drafts, and suspends background shortcuts :: question-retained.json": {
+  "kind": "json",
+  "equal": true,
+  "differences": []
+ },
+ "chromium-light-phone :: question traps focus, preserves choices and drafts, and suspends background shortcuts :: question-retained.png": {
+  "kind": "png",
+  "equal": true
+ },
+ "_missing": {
+  "onlyReference": [],
+  "onlyDelivery": []
+ }
+}

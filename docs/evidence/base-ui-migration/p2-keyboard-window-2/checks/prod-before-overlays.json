@@ -1,0 +1,17 @@
+{
+ "command": "unshare -n bash -c 'ip link set lo up && NO_COLOR=1 nice -n -10 npm run test:ui-overlays -w @orbit/web'",
+ "commit": "0594f6d2c33ee60179eae2784ad781491e275e30",
+ "webTree": "b12625256d13a586b91846f64d759f384a90d8ca",
+ "dirtyWeb": "?? src/web/src/components/kw2scratch/",
+ "startedAt": "2026-10-07T13:15:22Z",
+ "endedAt": "2026-10-07T13:19:27+00:00",
+ "loadAverage": {
+  "start": "16.53 24.31 20.20",
+  "end": [
+   "18.48",
+   "20.49",
+   "19.53"
+  ]
+ },
+ "exitCode": 0
+}

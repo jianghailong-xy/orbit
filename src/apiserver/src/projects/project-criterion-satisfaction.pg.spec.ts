@@ -183,6 +183,34 @@ const DONE_PROJECTION = 'src/apiserver/src/projects/project-done-derived.ts';
  * of a link whose project is gone — is decided before the answer is read.
  */
 const PUBLIC_PROJECT = 'src/apiserver/src/share-links/public-project.ts';
+/**
+ * The fourth reader that is not a test, and the first that refuses a write on the strength of the
+ * answer — so the other half of the sentence below had to be rewritten too, not kept and made to
+ * pass.
+ *
+ * WHAT IT DOES WITH THE ANSWER. `readDoneState` reads each stated criterion's `satisfied`, and the
+ * work its `unmet` reasons hold up, into what a coordinator's request to have its project recorded
+ * done is checked against. `doneReadiness` turns every criterion not satisfied into a REFUSE finding
+ * (`DONE_CRITERION_UNSATISFIED`), and `ProjectOpenItemService.requestDone` — the coordinator's
+ * `project_request_done` — answers any REFUSE with 409 `DONE_REQUEST_NOT_READY` and files nothing.
+ * `doneStateDigest` also folds `satisfied` into the digest a filed request carries, so a request the
+ * answer has moved under is superseded on the next read (`supersedeStaleDoneRequest`) and the
+ * owner's press that answers it is a 409 (`doneRequestMoved`): it asks about a project that is no
+ * longer there.
+ *
+ * WHOSE DECISION THAT WAS. `MODULE`'s header leaves whether an unsatisfied criterion should block
+ * anything to the owner, and for this one door the owner answered: on 2026-10-01 they decided (D2
+ * of the project-closing redesign, project 34Y7My8sqhKLWtmCQYv1l, and its criterion 2) that the
+ * coordinator asks for a project to be closed, behind a check that refuses while a criterion is not
+ * met — `project-done-request.pg.spec.ts` holds that refusal. What it stands between is the
+ * coordinator and the owner's card, not the owner and the record: `recordProjectDone` reads the
+ * answer only to tell whether a request it is answering has gone stale, so the owner can still
+ * record a project done over a criterion that is not met. The case below holds the refusal to the
+ * coordinator's door.
+ */
+const DONE_REQUEST = 'src/apiserver/src/projects/project-done-request.ts';
+/** The coordinator's door, and the only one that turns `doneReadiness`'s REFUSE into a refusal. */
+const DONE_REQUEST_DOOR = 'src/apiserver/src/projects/project-open-item.service.ts';
 
 /** Every source file that could wire this derivation into something. */
 function sourceFiles(dir: string): string[] {
@@ -633,14 +661,17 @@ test('T3: a criterion is satisfied by three clauses, and says which one is missi
     assert.deepEqual(
       mentions,
       [MODULE, SPEC, REDECLARATION_SPEC, PENDING_JUDGMENTS_SPEC, CRITERION_READY_SPEC,
-        SERVICE, SERVICE_SPEC, DONE_PROJECTION, PUBLIC_PROJECT].sort(),
+        SERVICE, SERVICE_SPEC, DONE_PROJECTION, PUBLIC_PROJECT, DONE_REQUEST].sort(),
       'the readers of the derivation — the module itself, and every file that imports it — are '
         + 'exactly these, each named above with what it does with the answer: four tests of it, '
         + 'two read endpoints that serve it (the owner’s project, and a shared project’s public '
-        + 'page), the first one’s own test, and — since the owner’s '
-        + '2026-09-08 re-deliberation of 0229 — one projection that folds it into '
-        + '`project.status`. Not one of them is a gate: none refuses anybody’s write, and a file '
-        + 'arriving here is a consumer somebody has to come and write down');
+        + 'page), the first one’s own test, one projection that folds it into `project.status` '
+        + '(since the owner’s 2026-09-08 re-deliberation of 0229), and the check a coordinator’s '
+        + 'done request has to pass (since the owner’s 2026-10-01 decision on how a project is '
+        + 'closed). That check is the one gate among them, and what it refuses is the '
+        + 'coordinator’s request: nothing keeps the owner from recording a project done over a '
+        + 'criterion that is not met. A file arriving here is a consumer somebody has to come and '
+        + 'write down');
 
     const source = readFileSync(path.join(REPO_ROOT, MODULE), 'utf8');
     assert.doesNotMatch(
@@ -657,5 +688,20 @@ test('T3: a criterion is satisfied by three clauses, and says which one is missi
     assert.doesNotMatch(projection, /\bthrow\b/u,
       'the projection refuses nobody: it recomputes the column from committed rows and stores the '
         + 'answer, so there is no write for it to turn away');
+
+    // The one gate, held to the door it was decided for. `doneReadiness` is where a criterion that
+    // is not met becomes a REFUSE, and the coordinator's `project_request_done` is the only door
+    // that asks it: the same call from the owner's `recordProjectDone`, or from any other write,
+    // would leave every sentence above intact while turning a check on a request into a gate on
+    // the record. Comments are stripped for the reason given above.
+    const askers = sourceFiles(path.join(REPO_ROOT, 'src/apiserver/src'))
+      .map((file) => path.relative(REPO_ROOT, file))
+      .filter((file) => file.endsWith('.ts') && !file.endsWith('.spec.ts') && file !== DONE_REQUEST)
+      .filter((file) => /\bdoneReadiness\s*\(/u.test(readFileSync(path.join(REPO_ROOT, file), 'utf8')
+        .replace(/\/\*[\s\S]*?\*\//gu, '').replace(/^\s*\/\/.*$/gmu, '')))
+      .sort();
+    assert.deepEqual(askers, [DONE_REQUEST_DOOR],
+      'only the coordinator’s done request is refused on `doneReadiness`, and no write of the '
+        + 'owner’s is');
   });
 });

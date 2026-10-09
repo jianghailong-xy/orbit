@@ -38,6 +38,40 @@ JSON 里是 `plan` 一节。
 生成时的 origin/main 提交；条目被拒、退役或锚点失效时经它引用的句子撤下；一个新拒绝码 `WIKI_DOC_INVALID`，见新增的 §22；
 迁移 `0326_wiki_docs`，JSON 里是 `docs` 一节。§18 的按主题文章保留，直到客户端切换。
 
+**服务端执行 P1a（项目「Wiki 服务端执行与 System model」，2026-10-07）：wiki-worker 与 System model**：新增 compose 服务
+`wiki-worker`（与 apiserver 同一镜像，换入口），System model 的地址和 key 只配给它；worker 每 10 秒探测 `{base}/health`，把模型状态
+和自己的心跳写进单行表 `wiki_model_status`；apiserver 经 `GET /api/wiki/system-model` 只给出模型名和状态，心跳过期时是
+`worker_not_running`。流式客户端（`/v1/messages`、SSE、单次超时、空闲断开、取消、错误分三类）也在这一期；作业表、请求队列和执行器开关在
+P1b。见新增的 §23，迁移 `0400_wiki_model_status`，JSON 里是 `systemModel` 一节。
+
+**服务端执行 P1b（2026-10-08）：作业与模型请求队列**：新增 `wiki_job`（服务端作业的领取、租约、代数、重试，同一空间同时只跑一个）
+与 `wiki_model_request`（所有模型调用的持久化队列：`(job_id, step, unit, attempt)` 唯一即断点，advisory 锁里数在途数再按并发上限
+领取，中断的请求带着 partial 重排队）；`wiki_maintenance_run` 与 `wiki_plan_job` 增加 `job_id`、`task_id` 改为可空；执行器开关
+`ORBIT_WIKI_EXECUTOR`（默认 `runner`，行为不变）在这一期只由 worker 读；作业种类先只有端到端验证队列用的 `smoke`。见新增的 §24、§25，
+迁移 `0401_wiki_job`，JSON 里是 `jobs` 与 `modelQueue` 两节。
+
+**服务端执行 P4（2026-10-08）：文章**：执行器把账号交给服务端时（`server`，或 `canary` 名单内），主题文章由 wiki-worker 的
+`articles` 作业用 System model 写：维护运行成功结束、记下了 op、且不在追赶期时，服务端给该空间排一个文章作业（owner 2026-10-08 定），
+只重写指纹变了的主题；文章的 ref 取空间最近一份仓库快照的 sha，没有快照就先请求一次。runner 门对这样的账号回新拒绝码
+`WIKI_SERVER_EXECUTES`（409），`orbit wiki articles` 读到它就说明文章由服务端写、不调模型、以 0 退出。runner 模式下一切照旧：
+维护运行自判据 3 第 3 版起不再重写文章。见新增的 §18.8，JSON 里是 `articles.serverExecution`、`articles.job` 与
+`jobs.kindRuns.articles`。
+
+**服务端执行 · 回退收尾（2026-10-09）：`jobs.executor.rollback`**：执行器改回 `runner`（或账号离开 `canary` 名单）时，服务端在途的
+作业和请求此前没有任何代码收尾，留在 `running` 的 `maintain` 作业还会堵住维护触发器、让空间两条路径都没有维护（2026-10-08 生产事故）。
+现 apiserver 启动时清扫一遍：作业与它的模型请求、仓库操作置为 `cancelled`（按 0401 约束清错与租约列），maintain 的运行记为
+`failed` / `infra` 且不计连续失败，plan 作业随之以失败结束并保留来源，verify 留下的 `verifying` op 由下一次维护运行收养；触发器
+只在服务端执行该账号时才查 `unfinishedMaintainJob`。见新增的 §24.9，JSON 里是 `jobs.executor.rollback`，实现在
+`src/apiserver/src/wiki/wiki-executor-sweep.ts`，pg spec 是 `wiki-executor-sweep.pg.spec.ts`。
+
+**服务端执行 · 文档两个 bug 与作业重试上限（2026-10-09）**：重开 canary 后生产上暴露的三处。一是会话条件的 `projects` 有两种写法——存下的版本
+是项目 id，plan 的读（`plan.reads.version`）是 `{ id, title }`——维护作业的文档步骤读的是后者，把对象当 id 传给 `::uuid[]`，报 22P02、
+一节也没写；现在每个读会话条件的地方都把两种写法统一读成 id 列表（`docs.material.projects`，§22.10）。二是服务端文档构建在两节同时用到
+同一个文件时，后一节等不到前一节的读取就展示它，报「was shown before it was read」，owner 确认的 v27 一直建不出来；现在一节要等别的节
+已经在读的文件读完（`docs.build.server.shown`，§22.13）。三是作业的 infra 重试没有上限，这样的断言错误每次空间空出来就再失败一次；
+现在最多试 `maxAttempts` = 10 次，意外的错误（断言、类型错误）最多 `unexpectedMaxAttempts` = 3 次，到上限就以失败结束，错误写在作业上，
+它的运行行或 plan 作业在同一个事务里收尾（`jobs.retry.limit`，§24.4）。
+
 **权威来源**
 
 | 来源 | 位置 |
@@ -51,8 +85,10 @@ JSON 里是 `plan` 一节。
 | 审阅模式的行为测试 | `src/apiserver/src/wiki/wiki-review-mode.pg.spec.ts`，经 `scripts/run-pg-spec.sh` 跑 |
 | Automatic 核实的行为测试 | `src/apiserver/src/wiki/wiki-verify.pg.spec.ts`（服务端），`src/runner-go/wiki_verify_test.go`（`orbit wiki verify`，假 vLLM 端点） |
 | 案卷与游标的行为测试 | `src/apiserver/src/wiki/wiki-dossier.pg.spec.ts`（服务端），`src/runner-go/wiki_dossier_test.go`（`orbit wiki dossier` / `orbit wiki cursor advance`） |
-| 文章的行为测试 | `src/apiserver/src/wiki/wiki-articles.pg.spec.ts`（服务端），`src/runner-go/wiki_articles_test.go`（`orbit wiki articles`，假 vLLM 端点），`WikiArticlesContractTests.swift`（OrbitKit） |
+| 文章的行为测试 | `src/apiserver/src/wiki/wiki-articles.pg.spec.ts`（服务端），`src/runner-go/wiki_articles_test.go`（`orbit wiki articles`，假 vLLM 端点），`WikiArticlesContractTests.swift`（OrbitKit）；服务端执行：`src/apiserver/src/wiki-worker/wiki-articles-writer.spec.ts`、`wiki-articles-job.spec.ts`、`wiki-articles-job.pg.spec.ts`，两条路径共用 `src/shared/src/wiki-article-writer.fixture.json` |
 | plan 的行为测试 | `src/apiserver/src/wiki/wiki-plan.pg.spec.ts`（服务端：检查闸、版本、确认、修改建议、跨租户），`src/runner-go/wiki_plan_test.go`（runner 门三条路由与检查闸的错误），`WikiPlanContractTests.swift`（OrbitKit） |
+| System model 的行为测试 | `src/apiserver/src/wiki-worker/wiki-model-status.pg.spec.ts`（状态行、读接口、心跳与 worker 启停），`wiki-model-client.spec.ts`（本地 http 服务模拟 SSE），`test/compose-topology.test.mjs`（compose 里的 `wiki-worker`） |
+| 服务端核实的行为测试 | `src/apiserver/src/wiki-worker/wiki-verify.spec.ts`（提示词、编号、结论解析，照 `wiki_verify_test.go` 改写），`wiki-verify-job.pg.spec.ts`（建作业、跑作业、结论落库，对 fake System model）|
 
 **本任务不做**：服务、控制器、MCP 工具、推送、实时事件的实现，以及任何 UI。它们各自的任务照本契约写。
 
@@ -152,6 +188,20 @@ pg spec 用执行计划钉住了这一点。它声明为 IMMUTABLE（里面的 `
   - `reviewModeChangedAt` / `reviewModeChangedBy`（`owner`、`spot_checks` 或 `verification`）：服务端写，记录模式最近一次
     在何时、被谁改——`verification` 是核实拒绝率超阈值把 Automatic 退回 Tiered；
   - `maintenance`、`embedding` 留给阶段 2。
+- **列表**（`space.list`）：`GET /api/wiki/spaces` 按 slug 列出 owner 的全部 space，每行是单个 space 的读，外加四个字段（单个
+  space 的读不带它们；老服务器没有后三个，客户端读作没有）：
+  - `pendingOps`：这个 space 变更集里等 owner 决定的 op 数（Review 的数）。plan 的修改建议不是 op，不算在里面。所有 space
+    的 `pendingOps` 之和，就是 Activity 页第一条横幅和 Review 页头的数；
+  - `planWaiting`：这个 space 的 plan 里等 owner 的件数，各算一件：在途的起草、修订或生成作业（plan 读给出的那个作业）被挡住——
+    服务端挂起（`plan.jobs.held`），或已建任务还没开跑而维护 workspace 的 runner 不在线；起草或修订失败、之后没有存过新版本；
+    等确认的草稿；每条待处理的修改建议。只是在进行中的（排队、起草中、写文档中）和失败的生成不算。runner 是维护 workspace 所在的
+    那台，在线与否用 runners 列表的同一条规则（`isRunnerOnline`）；没设维护 workspace、它已删除或没有 runner，就是不知道，
+    不知道不算不在线。口径与 web `wikiPlanPending`、OrbitKit `WikiPlanLogic.pending` 相同，三方都钉在
+    `src/shared/src/wiki-docs.fixture.json` 的 `plan.states`（每个用例的 `pending`）上，服务端是 `wiki-plan-waiting.spec.ts`。
+    所有 space 的 `pendingOps + planWaiting` 之和，就是抽屉、web 侧栏和 Wiki 页头 Activity 角标的那个「等你」数，等于
+    Activity 页琥珀横幅之和；
+  - `workspaceIds`：绑在这个 space 上、没被删的 workspace，按绑定的先后，和 user 门上所有 id 一样是 public id；
+  - `docs`：`{ written, total }`，已确认 plan 的篇数与已写篇数，算法同目录（§22.7）；没有已确认的 plan 时为 null。
 
 ---
 
@@ -286,6 +336,28 @@ JSON 的 `kinds.<kind>.fields` 与 TS 的 `KIND_SPECS[kind].fields` 用同一套
   目录按 frontmatter 的 type（feedback、user、reference、project、其余）再按文件名排序，跳过 `MEMORY.md`。
   在本机（`$ORBIT_HOME/wiki-import` 或 `--state`）记住导到了哪：重跑从断点续，导过的文件不再送模型，内容变了的按新
   note 导。碰到模型端点的第一个 401 就停；首次调用前先等 `/health` 回 200。
+- **服务端执行时的导入**（服务端执行 P5，契约 `import.server`；执行器开关为 `server`，或账号在 `canary` 名单内）：
+  - 命令先问 `GET /api/runner/wiki/spaces/:id/import`：回答 `{ executor, model, modelState }`。回答不是 `server` 的——`runner`、
+    老服务端的 404、拒绝、没有回答——都按上面的老路径走，行为和文案都不变。问错了也不会调模型：服务端执行时，不带
+    `readBy: "server"` 的登记会被拒（见下）。
+  - 回 `server` 时，命令照旧列文件、读 frontmatter、登记 note（body 带 `readBy: "server"`，回答里不再有 `text`），然后把
+    要读的 note 和带着上次没提议的 op 的 note，按顺序一次交给 `POST .../import-jobs`（作业 id 由命令起，重发是同一个作业；
+    至多 1000 条 note），等 `GET .../import-jobs/:jobId` 的作业结束，打印作业报告里的数字，并把报告写回本机的记忆，
+    所以下一次运行不管走哪条路都从断点续。不需要会话的 provider，不起 Claude Code，`--model` 不用。
+  - 作业（wiki-worker 的 `import`，优先级 1）：每条 note 经模型请求队列调一次 System model（step `import`，unit 是 note id，
+    system prompt 和 prompt 与 runner 上逐字相同，max_tokens 8192），不合格的带着问题再问一次（step `import_retry`）；解析、
+    修复、字段和语言检查、verify.command 必须出现在 note 的代码里、引文逐字匹配，全部与 Go 一致——
+    `src/shared/src/wiki-import.fixture.json` 把两边逐字节绑在同一组输出上。回答的 JSON 按 encoding/json 的读法：`{entries}`
+    包裹键不区分大小写，字符串和键里的孤立代理字符读作 U+FFFD，超出 float64 范围的数字使整个回答判为解析失败（不读成 Infinity）。
+    锚点查 space 的快照：路径在 origin/main 的树里、
+    提交被 origin/main 可达；space 的 runner 能取时先要一份新快照（最多等 180 秒，持租约等），取不到就用 space 已有的快照，
+    都没有就不带锚点。之后先 dry run，再以 import 来源、调用会话的身份、`wiki-import:<空间和 op 的哈希>` 幂等键提议；
+    分批规则和老路径相同：遇到 `WIKI_QUOTA` 或 `WIKI_REVIEW_QUEUE_FULL`，剩下的留给下一次。
+  - 命令停止等待（作业留在服务端，id 记在本机，下一次运行先收它的结果）：System model 拒了 key 或没配置时立即停；模型
+    不在线、或作业没开始，超过 10 分钟时停；作业已经失败重试 3 次时停。作业失败时，交给它的 note 保持已登记，下一次运行交给新作业。
+  - runner 门在此时归服务端（`WIKI_SERVER_EXECUTES`，409）：不带 `readBy: "server"` 的登记——也就是会用会话自己的模型
+    读 note 的老版命令——在登记任何东西之前就被拒；`POST .../imports` 也被拒，因为提议由作业来做，不收会话模型写的条目。
+    老版命令因此在第一次登记就停下，不会调任何模型。
 
 ---
 
@@ -650,13 +722,16 @@ op（owner 自己的、reinforce、审阅模式放行的）和等核实的 op（
   提示词手写：条目的 kind、标题、摘要、字段，每条出处的原文，以及可被判为重复的条目（op 自己 similar[] 里 active 的，amend 的目标条目）。
   可被判为重复的条目只给短编号（按列出的顺序 E1…En），不给 id：本地模型抄 21 位的 id 会抄错——09-30 到 10-02，`34XhYj76NhjjOJTEFEtFE`
   一再被写成 `34XhYj76NhjjOJTEFE`，这个 op 一直拿不到结论。回答必须是一个 JSON 对象 `{"verdict", "reason", "duplicateOf"}`，duplicateOf
-  填编号，命令把它映射回条目 id 再回报。编号必须是提示里列出的之一、原样：id（完整的或截断的）都不算编号，不按前缀或相似度猜；
+  填编号，命令把它映射回条目 id 再回报。键按 encoding/json 读结构体字段的读法，不区分大小写（`{"Verdict": …, "Reason": …}` 同样算给出
+  verdict 和 reason）；reason 的首尾按 Go `strings.TrimSpace` 的集合修剪（U+0085 也去掉）。编号必须是提示里列出的之一、原样：id（完整的或截断的）都不算编号，不按前缀或相似度猜；
   verdict 与编号的读法同 21.3 的枚举值（只去包裹的反引号、引号和首尾空白）。**读不成结论就不放行**：不回报、计入失败，op 继续等。
   遇到模型端点 401 立即停（真 Claude Code 每次 401 要重试约 3 分钟），space 不再是 Automatic 时停；有 op 没拿到结论就非零退出。
   单独调用时这个退出码的语义不变。维护运行不看它：它在自己的进程里核实本次运行的 op，没结论的再问一遍，仍没结论的不让运行失败（19.4 第 8 步）。
+  **服务端模式**（`ORBIT_WIKI_EXECUTOR=server`，或 `canary` 名单内的账号）：核实由服务端自己的 `verify` 作业做，会话不必跑这条命令；
+  命令的含义变成"请求服务端核实并等结果"，runner 那一半随下一次 runner 发版上线，默认 `runner` 模式下这条命令一字未改（`agentSurface.verify.serverExecution`，§24.7）。
   描述文案把「只核实本会话的 op、绝不手写结论」写成前置条件（`agentSurface.verify.precondition`），逐词测试。
 - **`wiki_propose` 的描述**把「这是提议、要等 owner 审」写成前置条件（JSON 的 `agentSurface.proposeDescription`），T5 做逐词测试。
-- **用户门** `/api/wiki`（JwtAuthGuard，owner 本人）：spaces 列表与待审数、建 space、改设置（含审阅模式）、绑 workspace、首页、条目列表、主题、
+- **用户门** `/api/wiki`（JwtAuthGuard，owner 本人）：spaces 列表（待审数、plan 等你数、绑定的 workspace、文档数，§2）、建 space、改设置（含审阅模式）、绑 workspace、首页、条目列表、主题、
   时间线、owner 的变更集（立即生效，带 CAS）、条目详情、pin / unpin、逐条 Reject 与 Confirm、`GET /api/wiki/search`（⌘K 的独立端点）、Review、
   按 id 读一次运行（`GET /api/wiki/changesets/:id`，§7.6）、decide、整次撤回、重开核实（§7.5）。
 - **runner 门** `/api/runner/wiki`（RunnerAuthGuard，外加照 `runner-watches.controller.ts` 校验调用会话）：search（只返回 active 条目，
@@ -937,6 +1012,13 @@ JSON 里是 `anchorRules.verify`；实现在 `src/apiserver/src/wiki/wiki-anchor
 
 - 每个条目一个事务（同核实结论）。条目已不 active、已不是报告里的 revision、或某个下标上已不是报告的那种锚点，就回 `stale`，
   什么都不写，下次运行重读。畸形的条目 `WIKI_SCHEMA` 并指出字段；别的 space 的条目 404。全部被拒才按第一个拒绝的状态码回。
+- **身份核对**（2026-10-09，canary 事故修复）：报告里每个 check 可以带它说 belongs 的那个锚点的身份——path 锚点带 `path`，symbol 带
+  `path` + `symbol`，commit 带 40 位 `sha`，只带类型自己名字的字段。带了身份的检查只写在该身份对得上的锚点上：下标对了但
+  path / symbol / sha 对不上（那是对别的条目的结论被摊平的下标对回来了），整个条目回 `stale`，什么都不写，维护作业把它计为失败、
+  当次运行判失败——不许默默跳过。不带身份的检查（runner 自己的 CLI 就不带）按老规矩只核对该下标的类型。服务端的维护作业发
+  一页锚点时把整页摊平成一个仓库操作、**按页内全局序号**下发（runner 原样回填），收回时经这个序号对回（条目，条目内序号），再带上
+  身份写回；条目内序号在一页之内不唯一，直接拿它对回会让同号锚点互相覆盖（2026-10-08 canary 事故，两次运行 content 失败、
+  无基线的 symbol 锚点错采了页邻的 region 当基线）。
 - **基线**：symbol 锚点对自己的 `regionSha256`；没写的，对第一次检查找到的区域（存为检查里的 `baselineSha256`）。找到的 symbol 由服务端
   对基线判 verified / changed，runner 的判断不作数；changed / missing 的检查不会移动基线，只有 owner 的 Re-confirm 会。
 - 每个锚点最近一次检查存在 `wiki_entry.anchors[i].check`：`{ state, ref, at }`，找到的 symbol 另有 `regionSha256`（这次找到的）和
@@ -1015,7 +1097,11 @@ JSON 里是 `articles`；实现在 `src/apiserver/src/wiki/wiki-articles.ts`（�
 - **指纹**：主题条目的 `<id>:<当前修订号>` 按 id 排序、换行拼接后的 sha256。条目加入、离开或被 amend 都会改变它。
 - **不变不重写**：写入带上生成时依据的指纹；它等于已存 part 0 的指纹就什么都不写（`unchanged`）；它既不是已存的、也不是主题
   当前的，就回 `WIKI_ARTICLE_STALE`（409），什么都不写——条目在写作期间变了，下一次运行按新条目重写。所以已存的文章永远
-  准确说明它是依据哪些条目写的。重写只由维护作业在事实到达后触发，不用时钟。
+  准确说明它是依据哪些条目写的。
+- **谁来重写，不用时钟**：看执行器把账号交给谁（`jobs.executor`）。runner 模式（默认）下，维护运行自判据 3 第 3 版起不再重写主题文章，
+  也没有别的东西自动重写；维护会话里手动跑 `orbit wiki articles` 才写。服务端执行的账号（owner 2026-10-08 定）：该空间的一次维护运行
+  成功结束、记下了 op、且不是在落后时建的（追赶进行中或暂停时都不算，与文档那一步同一条规则），服务端就给它排一个文章作业（§18.8），
+  不管这次运行是 runner 跑的还是服务端跑的；作业只重写指纹变了的主题。
 - 一个主题的各行在一个事务里整体替换（先 `FOR NO KEY UPDATE` 锁主题行，再核一次指纹）。
 
 ### 18.4 代码校验
@@ -1039,9 +1125,12 @@ JSON 里是 `articles`；实现在 `src/apiserver/src/wiki/wiki-articles.ts`（�
 
 ### 18.6 谁能读写
 
-- **写**：只有该 space 的维护会话（`isWikiMaintenanceSession`）经 runner 门，以及 API 服务器容器里的一次性导入（principal 为
+- **写**：只有该 space 的维护会话（`isWikiMaintenanceSession`）经 runner 门、服务端自己的文章作业（principal 为
+  `origin: 'maintenance'`、无会话、无用户，修订署名 `system`，§18.8），以及 API 服务器容器里的一次性导入（principal 为
   `origin: 'import'`、无会话、无用户，给预览 space 用）。其余一律 `WIKI_NOT_MAINTENANCE_SESSION`；headless 400；别的 owner 的 space 404。
   user 门没有写文章的路由。
+- 执行器把账号交给服务端时，该 space 的维护会话调 runner 门的计划、输入、写入三条路由都回 `WIKI_SERVER_EXECUTES`（409）：文章由
+  wiki-worker 写，不交出材料、也不收写入，所以无论 runner 是哪个版本，都不会拿会话的 provider 调模型。
 - runner 门三条（都在 `maintenanceRoutes`）：`POST /api/runner/wiki/spaces/:id/article-plan`（计划；空 space 先写默认主题）、
   `GET …/articles/:slug/input`（主题的条目，按出处数、时间排好，带归组用的路径和指纹）、`POST …/articles/:slug`（写入）。
 - **读**：owner 经 user 门：`GET /api/wiki/spaces/:id/articles`（大类 → 主题 → 文章与子主题）、`GET …/articles/:slug`、
@@ -1059,12 +1148,51 @@ JSON 里是 `articles`；实现在 `src/apiserver/src/wiki/wiki-articles.ts`（�
   提交。模型只读条目，不读会话原文；每篇最多用组里出处最多的 30 条。
 - 干净调用照抄 `orbit wiki verify` 的启动参数、环境白名单和 apiKeyHelper，只换系统提示；thinking 默认关：`CLAUDE_CODE_EFFORT_LEVEL=unset`
   且 `MAX_THINKING_TOKENS=0`（只设前者仍会发 adaptive thinking）。碰到第一个 401 就停；有主题没写成就以非 0 退出。
+- 服务端执行的账号：服务端回 `WIKI_SERVER_EXECUTES`，命令打印「The Orbit server writes the articles of space …」，不调模型、不写任何东西，
+  以 0 退出；运行中途开关切过去（读输入或写入时才回这个码）也一样就此停下。这部分随下一次 runner 发版上线；旧版 runner 在这里报错退出，
+  同样不调模型。
+
+### 18.8 服务端执行（服务端执行 P4，2026-10-08）
+
+JSON 里是 `articles.serverExecution`、`articles.job` 与 `jobs.kindRuns.articles`；实现在 `src/apiserver/src/wiki-worker/`
+（作业 `wiki-articles-job.ts`、移植过来的写作与分组 `wiki-articles-writer.ts`）和 `src/apiserver/src/wiki/wiki-articles-jobs.ts`（排作业）。
+
+- **对谁**：执行器开关把账号交给服务端的（`server`，或 `canary` 名单内）。runner 模式下这一节都不发生。
+- **什么时候排**：服务端记下一次维护运行结束的地方（runner 路径是 finish 路由，`finishWikiMaintenanceRun`）判断：运行成功、记下了 op
+  （有这次会话的 `maintenance` 来源 changeset）、不是在落后时建的——满足就给空间排一个 `articles` 作业，优先级 0（后台，排在 owner 主动发起
+  的请求之后）。每个空间最多排一个：排队中的作业运行时才读计划，挂起等快照的作业重放时会重读，所以都能覆盖之后结束的运行；已经在跑的
+  作业可能读过计划了，下一次运行结束就在它后面再排一个。排作业失败只记日志，不影响运行本身的结束。P8 的服务端维护作业结束时调同一个入口。
+- **作业做什么**：
+  1. 以作业的身份（`origin: 'maintenance'`、无会话、无用户）读计划；空间没有主题时照常先写默认主题；只取指纹变了的主题，一个都没有就直接成功、
+     不调模型。
+  2. **ref**：取空间最近一份仓库快照（§26.4）的 sha，写进每篇文章的 `ref`。没有快照就向空间的 runner 请求一次 `snapshot`，作业挂起等它
+     （`waiting_for = 'repo'`，最多 `articles.job.snapshotWaitSeconds` = 900 秒），快照落地后作业回到队列、从头重放。请求过却没拿到（操作失败，
+     或没在时限内完成），或者空间没有可读的 checkout，就不带 ref 写，报告里写明原因——文章是从条目写的，不读仓库原文。
+  3. 每个主题：读输入；超过 45 条的主题用和 runner 逐步相同的分组（tf-idf 球面 k-means，锚点路径优先），算的时候分片让出事件循环
+     （设计 §4.5）；按组依次起名、每次告诉模型已用的名字；子主题文章和总览（或小主题的一篇文章）每次 4 个并行；保留字数不到 400 的稿子、
+     素材够 8 条时再要一次（字数用服务端自己的校验来数）。
+  4. 经 `WikiArticles.write` 写回，和 runner 门是同一个写入口：脚注只在指向本主题条目时保留，没有脚注的句子删掉，超长的从最长一段末尾删；
+     `model` 是 System model 的名字。
+- **提示词**：与 runner 逐字相同（系统提示、文章/子主题/总览提示、条目行、起名提示、再要一次的后缀）。两条路径由
+  `src/shared/src/wiki-article-writer.fixture.json` 钉成同一个答案：同一个主题的每一次调用逐字相同、大主题的分组逐条相同，
+  `wiki_articles_test.go` 和 `wiki-articles-job.spec.ts` 都读它。
+- **调用即断点**：每次调用是队列里的一条请求，step `articles`，unit 是 `<slug>@<指纹前 12 位>/name-<n>`、`/part-<n>` 或 `/part-<n>/again`；
+  作业被重放时答过的调用直接复用，主题条目在两次尝试之间变了就重新问。5xx、429、断连由队列退避重试；401 让整个队列停下（§25.6）。
+  `max_tokens`：文章、总览、子主题 4096，起名 512（`articles.job`）。
+- **怎么结束**：拿起的主题全部写成或无变化就成功，报告就是 runner 的 summary（seeded、ref 与 refWhy、各主题的结果、written / unchanged /
+  failed、调用数、token、校验统计）。有主题没写成（调用以作业自己的原因结束，或写入被拒，包括 `WIKI_ARTICLE_STALE`）：其余主题照常写完，
+  然后作业以 content 失败结束，报告留在作业行上——和命令以非 0 退出一样，下一个作业按当时的条目重写。平台的失败（请求等待超限、数据库、
+  worker 停机）按 infra 处理，重放时从计划重新开始。
+- **runner 门**：见 §18.6 与 §18.7。
 
 ## 19. 维护作业：由事实建任务、`orbit wiki maintain` 与 `orbit wiki check`（判据 3）
 
 JSON 里是 `maintenance.job`；迁移 `0320_wiki_maintenance_run`；服务端在 `src/apiserver/src/wiki/wiki-maintenance-run.ts`
 （触发、运行的起止与判据）、`wiki-maintenance-breaker.ts`（整次运行的熔断），runner 门在
 `runner-api/runner-wiki-maintain.controller.ts`；runner-go 在 `wiki_maintain.go`。
+
+服务端执行的账号（`ORBIT_WIKI_EXECUTOR`）由 wiki-worker 跑同一条流水线：触发建 `maintain` 作业而不是任务，章节见 §27；
+本节讲的是 runner 模式（默认）下的任务、命令与检查。
 
 ### 19.1 触发：事实驱动，不用时钟
 
@@ -1116,7 +1244,8 @@ JSON 里是 `maintenance.job`；迁移 `0320_wiki_maintenance_run`；服务端�
    的仓库（`repo_url_norm`、有记录时的根提交）不一致就判失败并说明原因。
 3. **案卷**：从游标翻页到期望位置（`until`）；自上次处理后没变的案卷跳过。
 4. **抽取**：每个案卷一次干净的 Claude Code 调本地模型——照演示的 A2+6：8k 案卷、不开 thinking、每例最多 6 条；提示里带 space 的仓库
-   名、地址和一两句它是做什么的（取自仓库 README 的开头），要求讲的不是这个仓库的会话回答 `{"offTopic": true}`。每条照演示的
+   名、地址和一两句它是做什么的（取自仓库 README 的开头），要求讲的不是这个仓库的会话回答 `{"offTopic": true}`（键不区分大小写，
+   按 encoding/json 读结构体字段的读法）。每条照演示的
    `extract.py` 校验：种类与字段、出处必须是案卷里的行且引文逐字出自该行、锚点必须在 origin/main 上存在；没过的整批再问一次。
    代码锚点全都不在本仓库的条目丢弃（计 `entries.foreign`），离题的会话计 `offTopic`。principle 只有 owner 能写，抽到的丢弃并计数。
 5. **自检**：按主题分批（每批最多 `limits.opsPerChangeset` 个 op；Manual 最多 `limits.opsPerTurn`），逐批 `dryRun`：服务端找不到的
@@ -1279,7 +1408,12 @@ JSON 里是 `maintenance.health`；服务端在 `src/apiserver/src/wiki/wiki-hea
   - `lastRun`：最后结束的那次运行 `{sessionId, outcome, endedAt}`，或 null——状态行的 View run 打开它的会话；
   - `lastFailure`：最近一次尝试失败（failed / truncated）的运行里最后结束的那个 `{kind, reason, at, sessionId}`，或 null；
     `kind` 是 `infra` 或 `content`（19.7），`reason` 是它的 error。客户端据此区分「平台挂了」与「运行本身失败」；本契约版本客户端尚未使用。
+  - `running`、`lastRun`、`lastFailure` 自 P9 起各多一个 `jobId`：服务端作业跑的运行（§24.6 的 `job_id`）没有会话，View run 改为打开
+    Activity 里这次运行的那一行（§24.8），不再去 `/sessions/…`；维护会话跑的运行 `jobId` 为 null，View run 照旧打开它的会话。
   - `look`：状态行画哪一种（20.2）。
+- `executor`（P9）：执行器开关对这个 owner 怎么说，`{ mode, serverExecutes }`（§24.5 的「读」）。
+- `systemModel`（P9）：`serverExecutes` 为真时是 §23.5 读到的 System model 状态（`{ state, model, since, checkedAt, workerSeenAt }`，
+  不含地址和 key）；`runner` 下为 null，也不去读。状态行的服务端原因就从它和 `repo` 说出来。
 
 ### 20.2 四种样子（另加「正在跑」）
 
@@ -1367,7 +1501,9 @@ runner-go 在 `wiki_plan.go`，OrbitKit 在 `Models/WikiPlan.swift`。起草作�
   模型把值写成了带反引号的 `` `decision` ``，报错没加引号，读起来像「decision 不是 decision」，模型三轮都没改对。枚举类字段（节的
   kind、会话条件的 entryKinds 与 topics、newFields 的 at、facts 的 kind）校验前去掉首尾空白和包裹整个值的反引号或引号（`` ` `` `"`
   `'` `“”` `‘’` `「」` `『』` `«»`，可以套几层；成对、且里面不再有同样的符号才算包裹）。只去包裹，不做别的宽读：`` `decision` `` 读作
-  decision，Decision、decisions、后面跟着零宽空格的 decision 照样拒。runner 自己的闸和维护运行对修改建议的检查，读法和写法都一样。
+  decision，Decision、decisions、后面跟着零宽空格的 decision 照样拒。首尾的空白取两条路修剪集合的并集：全部 Unicode 空白（含只有
+  Go 的 TrimSpace 才修的 U+0085）和 U+FEFF——任一路接受的值这里都读，runner 拒绝 BOM 开头值的读法不回退（P10，2026-10-08）。
+  runner 自己的闸和维护运行对修改建议的检查，读法和写法都一样。
 - **仓库引用不在服务端查**：文件、docs 章节、符号、契约只在 checkout 里有，服务端没有。起草作业在 runner 上、在某个 sha 上核对，随草稿报
   `repoCheck: { sha, checked, missing: [{ kind, ref, at }] }`（`kind` 为 file / docSection / symbol / contract）；服务端原样存在版本上
   （`repo_sha`、`repo_check`），不评判。owner 做出的版本没有 runner 核对过，这两项为空。
@@ -1494,6 +1630,60 @@ JSON 里是 `plan.jobs`；迁移 `0338_wiki_plan_job`；服务端在 `src/apiser
   或是起草作业的会话，照常写、什么也不报。生成作业的会话里 `--doc`、`--section` 不可用。
 - **只重写变了的**：材料指纹没变的节跳过，所以小改后重新确认，只重写变了的节。写到一半 plan 又被确认了新版本：旧版本的写入会被
   `WIKI_PLAN_STALE` 拒绝，这次生成以失败结束；等着的那个生成接着写新版本。
+- **服务端执行**：执行器开关把账号交给服务端时，生成作业不建任务，由 wiki-worker 的 `docs_build` 作业来写，见 22.13。
+
+### 21.10 服务端起草与修订（服务端执行 P6，`plan.jobs.server`）
+
+JSON 里是 `plan.jobs.server`；迁移 `0404_wiki_plan_server_draft`；实现在 `src/apiserver/src/wiki-worker/`（行格式 `wiki-plan-format.ts`、
+快照上的仓库 `wiki-plan-repo.ts`、材料与聚类 `wiki-plan-materials.ts`、提示 `wiki-plan-prompts.ts`、检查闸 `wiki-plan-gate.ts`、作业
+`wiki-plan-draft-job.ts`），是 `src/runner-go/wiki_plan_*.go` 的移植；常量是 `src/shared/src/wikiPlan.ts` 的 `WIKI_PLAN_SERVER_JOB`。
+
+- **什么时候走这条路**：执行器开关是 `server`，或是 `canary` 且账号在名单内（24.5）。`runner`（默认）和名单外的账号，作业照 21.7、21.8
+  建任务、由维护会话跑，一字不改。
+- **怎么建**：`advanceWikiPlanJob` 先问开关：起草建 `plan_draft`、修订建 `plan_revise` 的 `wiki_job`（优先级 1，输入 `{ planJobId }`），
+  和把 plan 作业记为 `made`（`wiki_plan_job.job_id`）在同一个事务里。仍然要维护 workspace——worker 经它的 runner 读仓库——没有就照旧
+  held `no_maintenance_workspace`；不问 provider（不调任何会话的模型），也不等隐藏清单（`staggered` 是 runner 那条路的规则：服务端由队列和
+  「同一空间同时只跑一个作业」保证模型不被两边同时调）。不建任务、不建会话。建 space 和 owner 的要求都是 owner 发起的，所以作业的每个
+  请求都排在后台维护前面（`jobs.priority`）。
+- **调用**：每次调用是模型请求队列里的一个请求。step 是 `plan_skeleton` / `plan_details` / `plan_outline` / `plan_rules` /
+  `plan_revise_catalogue` / `plan_revise_doc` / `plan_redo_doc`，都是 `plan_*`：等待至多 20 分钟，一次调用至多 60 分钟（25.5）。unit 是
+  `a<轮次>/<runner 上的单元名>@<这次调用 sha256 的前 12 位>`，所以重放碰到的是已经发出的那个请求，问题变了就是新请求。max_tokens 32,000，
+  system prompt 与 runner 逐字相同，一条 user 消息；已收到的部分随调用写进请求的 `partial`。回答读不成行格式的，把格式要求再说一遍重问，
+  一个单元至多 3 次；一个作业同时至多 4 个请求在途，和 runner 的 `--concurrency` 默认值一样。
+- **分几步**：同 21.8。起草先出目录骨架，篇数不在范围内时带着篇数重问，至多两次，仍不对的交给检查闸；再按大类并行补每篇的读者与范围，
+  逐篇并行出大纲与每节来源，规则草案和它们同时问。修订先出新目录，只重写合并或新增的篇，受保护的篇原样带过去。
+- **材料**：作业第一次运行时读一次，存在 plan 作业上（`wiki_plan_job.materials`）：space 快照的 sha——runner 能取时先要一份新快照（至多等
+  300 秒），否则用 space 已有的快照，都没有就按 infra 等——plan 材料（`GET …/plan/materials` 用的同一个函数）、读材料的日期，以及快照
+  不带的原文：概览的几篇文档和 `schema.prisma`，经 runner 的 read 在该 sha 上读（至多等 300 秒）。重放读回它们，问模型的还是那些问题；
+  快照在作业下面换了（别的作业取了更新的快照），就在新快照上从头起草，和 runner 起草所用的 sha 离开 origin/main 时一样。
+- **材料上限**（字符，沿用 runner 的现值）：出目录读概览 14,000、模块结构 32,000、docs 标题树 45,000；按大类补细节读 10,000 / 26,000 /
+  30,000；逐篇出大纲读概览 8,000，代码符号摘录 16,000 字节。会话标题照旧按 TF-IDF k-means 聚类，每算 20 毫秒让出一次事件循环。
+- **仓库**：runner 的作业在 checkout 里读的，全部在同一个 sha 的快照索引上读：文件和大小（模块结构、`hasPath`）、每篇文档的标题（标题树、
+  `hasDocSection`）、每个源文件的符号（代码摘录、`hasSymbol`）、契约的顶层键（契约清单）。索引里没有的符号，和 runner 一样在文件原文里
+  找这个词——原文在这一轮过闸之前按该 sha 读，读的是**整个文件**（`repoOps.read`，owner 2026-10-08）。两条路仅剩的一处可能不同，是索引
+  只记对象的键（JSON 是数组或空对象的契约读作「非 JSON」）；原文本身不再有窗口。空间的 runner 只声明了 `wiki-repo-op/v1` 时仍是旧窗口，
+  写明的缺失会说明这一点（§26.5）。
+- **检查闸**：先过作业自己的闸——21.8 的本地检查，错误文案逐字相同，文件、docs 章节、符号、契约都在快照上查——再过服务端的闸（21.3）：
+  作业在进程内提交（`WikiPlans.submitServerDraft`），带草稿的幂等键，`repoCheck` 是快照的 sha 和作业的闸查到的结果，所以服务端的闸
+  现在也查得了仓库。两道闸查出的错误，连同可用的章节标题和符号，按单元交回模型重做，一共至多 `rules.attemptsMax`（3）轮。
+- **作者**：存下的版本记跑出它的 `wiki_job`（`wiki_plan.author_job_id`，读出来是 `authorJobId`），会话存下的照旧记会话；来源 `maintenance`，
+  模型名是 System model 的。
+- **进度与结束**：plan 作业照 21.7 记进度——第一次运行记 `started_at`，每轮记 `attempt`，plan 页读的就是这些；`wiki_job` 自己的进度是
+  `{ planJobId, attempt, step }`。运行照 21.7 的规则结束 plan 作业（`WikiPlans.finishServerJob`）：成功时带上这个作业存下的本 space 的版本，
+  失败时带最后一轮的错误、出错原因、报告和最后那份草稿；`wiki_job` 以 `{ kind, planJobId, outcome, version, error, plan }` 结束。平台的
+  失败——请求等待超限、space 的 runner 不在、worker 停机——不算草稿的失败：`wiki_job` 重试（24.4），plan 作业保持 running。`wiki_job`
+  结束了而 plan 作业没结束的，记为失败；开关不再把账号交给服务端时，还没开始的 `wiki_job` 被取消，plan 作业随之结束。
+- **runner 门归服务端**（`WIKI_SERVER_EXECUTES`，409）：找到 space 之后，不论谁来问，起草用的路由——`GET …/plan/job`、
+  `POST …/plan/job/progress`、`POST …/plan/job/finish`、`GET …/plan/materials`、`POST …/plan/drafts`——一律拒绝，生成作业
+  （`build`）自己的会话也一样：P7 起文档也由服务端写（22.13），不再建生成任务；开关切换之前建的生成任务，它的会话在第一次调用时就停下，
+  作业随任务结束。所以会话里的 `orbit wiki plan draft` 或 `revise`，包括本期之前的版本，在第一次调用时就停下，没问过任何模型；
+  新版命令（随下一个 runner 版本发布）说明 plan 由服务端用 System model 起草、这里什么也没读也没问模型、要起草请 owner 在 plan
+  页要求。维护运行读 plan（`GET …/plan`）、提修改建议、`plan check` 都不变。`runner` 下每条路由照 21.7。
+- **迁移 0404**：加 `wiki_plan.author_job_id`，`wiki_plan_author_chk` 改为维护来源的版本恰好记会话或作业之一；加 `wiki_plan_job.materials`；
+  `wiki_plan_job_made_chk` 改为 made / ended 时恰好有一个来源（任务或作业），与文档构建的 0405（P7）逐字相同，谁先跑另一条就什么也不做。
+- **两边同一个答案**：`src/shared/src/wiki-plan.fixture.json` 由 `src/runner-go/wiki_plan_fixture_test.go` 从一个真实的 checkout 按 runner 的
+  方式读出，`src/apiserver/src/wiki-worker/wiki-plan-golden.spec.ts` 按服务端的方式读——行格式读回、引用、材料、每一步的 prompt、每一轮
+  的草稿、检查闸的错误和仓库检查，逐字节相同。
 
 ## 22. 文档：按确认的 plan 逐节写，脚注引一手原文（判据 9 第 2 版）
 
@@ -1593,7 +1783,10 @@ runner 门在 `runner-api/runner-wiki-docs.controller.ts`；共享类型在 `src
 
 - **user 门**（JWT，owner 本人；别的 owner 的 space 或文档一律 404）：
   - `GET /api/wiki/spaces/:id/docs`：目录。已确认 plan 的大类（编号从 1 起）→ 篇（编号 `<大类>.<序号>`、标题、读者的问题、是否写了、
-    状态、更新时间、依据的 plan 版本）→ 节（编号、标题、类别、是否写了、是否待重写）。没有已确认的 plan 时 `plan` 为 null、目录为空。
+    状态、更新时间、依据的 plan 版本、导语）→ 节（编号、标题、类别、是否写了、是否待重写）。没有已确认的 plan 时 `plan` 为 null、目录为空。
+    **导语**（`lead`，`docs.lead`）是首页上每篇的两行：已写的篇取第一节（按已确认 plan 里节的顺序）按位置排、不是 `withdrawn`
+    的头两句，照原样连起来（英文句号后空一格，全角句号后不空），超过 200 字（code point）就截断、末尾加「…」；句子是文档页上的
+    原文，行内标记照留。没写的篇为 null；写了但第一节没写、或第一节的句子都撤下了，也为 null。
   - `GET /api/wiki/spaces/:id/docs/:slug`：文档页。编号、标题、读者的问题、写给谁、含与不含（不含的篇给出编号和标题）、大类、篇幅、
     状态、依据的 plan 版本与当前版本、`repoSha`、更新时间；各节按 plan 的顺序，带 `repoSha`、块和句子（状态、脚注号、新事实记号、
     撤下的原因与条目）；脚注按首次出现编号（同一原文、同一位置、同一引文只编一个号），每个带种类、结论、谁核对的、引文、位置字符串
@@ -1640,6 +1833,11 @@ runner 门在 `runner-api/runner-wiki-docs.controller.ts`；共享类型在 `src
   - 没有 `section` 400；plan 这篇没有这一节、或没有这篇 404；没有已确认的 plan `WIKI_PLAN_UNCONFIRMED`；别的会话 `WIKI_NOT_MAINTENANCE_SESSION`，
     不带会话头 400，别的 owner 的 space 404。
   - `condition`：已确认 plan 里这一节的会话条件，项目带现在的标题；没有会话条件时为 null，其余都空。
+  - **项目一律按 id 读**（`docs.material.projects`）：存下的版本里项目是它解析到的 id，plan 的读（`plan.reads.version`）里是
+    `{ id, title }`。读会话条件的每个地方都把两种写法读成 id，不是 id 的值不算任何项目：这个材料读、服务端的文档构建（22.13）、经 plan 的读
+    取条件的维护作业文档步骤、条目归节（22.12 的 `docs.affected.fit`），以及 plan 自己的读和门。runner 路径读 plan 的读，把项目 id 单独
+    排好序放进指纹（22.5），材料则从这个读来取，而这个读读的是存下的条件：两条路径上同一节点名的项目一样，拿到的材料也一样。
+    2026-10-09 之前，维护作业的文档步骤把读到的 `{ id, title }` 当 id 传给 `::uuid[]`，PostgreSQL 报 22P02，这一步一节也没写。
   - **条目引路**：space 里 active、锚点既非 changed 也非 missing、**符合**这一节来源条件的条目（`docs.affected.fit`）：关键词（标题、摘要、
     字段、别名里出现，每个 3 分）或锚点路径（在 `anchorPaths` 之下，2 分）命中，或者——属于 `entryKinds` 之一（没列就不限）——在 `topics`
     之一，或取自 `projects` 之一的会话或任务；主题、种类、项目各再加 1；分高的在前，同分取新，最多 `entriesPerSection` = 6 条。维护作业把
@@ -1712,3 +1910,640 @@ orbit wiki docs build --space <id> [--doc <slug>] [--section <key>] [--repo <pat
 - **`POST /api/runner/wiki/spaces/:id/maintenance/docs/withdrawals`**（`docs.withdrawalPaths`，维护会话）：`{ repoSha, paths: [{ path, change:
   deleted | renamed, to? }] }`，`repoSha` 是这些路径已不在的 origin/main 提交（40 位），至多 `withdrawPathsMax` = 500 条；形状不对
   `WIKI_DOC_INVALID`，逐条列出。回答 `{ spaceId, withdrawn, sections: [{ doc, key }] }`：这次撤下的句子数（已撤的不再算）和它们所在的节。
+
+### 22.13 服务端执行（服务端执行 P7，2026-10-08）
+
+JSON 里是 `docs.build.server`、`jobs.kindRuns.docs_build` 与 `plan.jobs.server.build`；迁移 `0405_wiki_plan_job_server_maker`；实现在
+`src/apiserver/src/wiki-worker/`（作业 `wiki-docs-build-job.ts`、一次构建 `wiki-docs-build.ts`、移植过来的写作 `wiki-docs-writer.ts`）和
+`src/apiserver/src/wiki/wiki-plan-job.ts`（排作业）、`wiki-docs.ts`（写入者与门）。
+
+- **对谁**：执行器开关把账号交给服务端的（`server`，或 `canary` 名单内）。runner 模式下这一节都不发生：确认照 21.9 建任务，
+  `orbit wiki docs build` 照 22.11 写，逐字不变。
+- **怎么排**：owner 确认一个版本，照 21.9 要一个生成作业；对这样的账号，生成作业不建隐藏列表里的任务，而是建一个 `docs_build` 作业：
+  plan 作业以 made 记下这个作业（`wiki_plan_job.job_id`，没有 `task_id`），作业优先级 1（owner 发起，排在后台维护之前），输入
+  `{ planJobId }`，二者在同一个事务里写。空间的维护没有指定 workspace 时照样 held（`no_maintenance_workspace`）：作业要经这个 workspace
+  所在的 runner 读仓库。不检查 provider，也不排在列表里未结束的任务后面——没有哪个会话的模型参与。迁移 0405 把 0338 的
+  `wiki_plan_job_made_chk` 改写成「made / ended 的作业有一个制造者：任务或 wiki 作业」，否则这样的 plan 作业根本建不出来。
+  开关改回 runner 时，还在排队、服务端没开始的这种作业，会在下一次要生成时被取消，plan 作业以失败结束并写明原因。
+- **仓库**：先请求一次 `snapshot`（空间已有这个提交的快照时 runner 回 `skipped`），它给出的提交就是 origin/main——runner 的 fetch，和
+  命令自己的 fetch 一样。各节来源点名的文件，在这个提交上**整个**读回（不带 section；owner 2026-10-08）：按快照里的大小打包，一次操作
+  至多 `repoOps.read.operationBytes`（4 MiB），超过 `inlineBytes` 的回答走分片（§26.4）；服务端按 `(space, sha, path)` 缓存，同一份原文
+  不再读第二次。然后照 22.11 第 2 步在服务端切出设计文档的节、符号、声明和契约，行号相同。目录照 git 显示树的样子给出（从快照的路径
+  列出），和 runner 的 `git show` 一样。超过 `wholeFileBytes`（2 MiB）的文件不读：按缺失处理，原因写明 `too_large`。空间的 runner 只
+  声明了 `wiki-repo-op/v1` 时是旧窗口（22,000 字）：保留截断前的整行，不在其中的标题或符号记为缺失并写明原因——这样的文件里只找名字或
+  编号对得上的标题，不找只是包含这个名字的标题，那可能是另一节。读取持有作业租约等待（`repoOps.waiting` 的例外），每次至多 300 秒；
+  空间的 runner 不能领操作（`no_workspace` / `runner_missing` / `runner_offline`）或等待超时都是 infra 失败，稍后重试——只声明了
+  `wiki-repo-op/v1` 的机器不算，它照旧跑，只是读得短。
+- **先读后展示**（`docs.build.server.shown`）：文件要读回来以后才展示，和 runner 的写入器一样（它展示时才 `git show`，不会展示没读的文件）。
+  一篇的节 `docs.build.rules.parallel` = 4 节同时写，常有两节点名同一个文件：后一节发现别的节已经在读这个文件时，要等那次读取落地，
+  不能自己不读、在读取回来之前就展示它。2026-10-09 之前就是这样：v27 一篇里有几节都点名 `docs/article-durable-agent-work.md`，
+  构建每次都以「was shown before it was read」失败。
+- **会话材料**：在进程里直接调 `wiki-docs-material.ts`，和 22.10 的材料读一样：条件挑出的条目、它们引用的记录、项目与时间窗与关键词找到的
+  记录，都按 owner 的 workspace.env 脱敏、定位。
+- **调用**：每次调用是队列里的一条请求：系统提示与 runner 逐字相同，一条 user 消息，`max_tokens` 8192，step 是 `docs_merge`、`docs_write`、
+  `docs_rewrite`（只在段末标一次的段落再问一次）、`docs_quotes`（引文缺了或找不到再问一次）或 `docs_overview`，unit 由文档、节和提示词的
+  sha256 组成，作业被重放时问题没变的调用直接复用答案。5xx、429、断连由队列退避重试；401 让整个队列停下（§25.6）。
+- **确定性部分与 runner 相同**：提示词、过滤、上限、指纹、归并与草稿的读法、脚注及其行号。`src/shared/src/wiki-docs-build.fixture.json`
+  把两条路径钉成同一个答案，由 `src/runner-go/wiki_docs_build_fixture_test.go` 写出、`wiki-docs-build-golden.spec.ts` 读取——指纹一致，
+  空间从 runner 路径切到服务端时，runner 写过的节不会因此重写。
+- **写入**：经 `WikiDocs.write`，和 runner 门是同一个写入口，身份是服务端自己（`origin: 'maintenance'`、无会话、无用户）；一次写一节，
+  一次构建的写入一个一个来；`model` 是 System model 的名字。被拒（`WIKI_DOC_INVALID`、`WIKI_PLAN_STALE`、`WIKI_PLAN_UNCONFIRMED`）就是
+  这一节失败，原因照 runner 的说法写。
+- **写入里的 NUL**（`docs.build.server.nul`，2026-10-09）：一节的写入——Markdown、脚注的 `quote` 和 `excerpt`、处置的理由——交给
+  `WikiDocs.write` 之前去掉 U+0000（§24.4 `jobs.serverWrites`）：脚注的 `excerpt` 是代码的那几行，可能带着文件里的 NUL，模型也可能把
+  NUL 抄进文字。交给模型的材料保留它（§25.1），文件本身在原文缓存里完整保存（§26.4）。
+- **进度与结束**：每开始写一篇和结束时，写 plan 作业的 `progress`（21.9 的 `{ docs: { done, total }, current }`）和作业自己的 progress。
+  拿起的节全部写成或无变化：plan 作业以 succeeded 结束，带写的版本和 `WikiPlanBuildReport`；作业成功，报告是这次构建的 summary。
+  有节没写成：其余节照常写完，plan 作业以失败结束（`<n> sections were left unwritten`），作业以 content 失败结束、报告留在行上——
+  和命令以非 0 退出一样。平台的失败（runner 不在、读取或请求等待超限、worker 停机）两者都不结束：作业稍后重放，已写的节靠指纹原样不动。
+  重放时发现 plan 作业已经结束，就按那个结束回答。
+- **runner 门**：对这样的账号，文档在 runner 门上的路由（`writerState`、`writerDoc`、`material`、`write`、`affected`、`withdraw`）
+  对维护会话一律回 `WIKI_SERVER_EXECUTES`，什么都不读；plan 作业的路由对所有会话也都这样回，生成作业的会话在内（21.10）——所以旧
+  runner 的 `orbit wiki docs build` 和维护运行的文档步骤都问不到会话的模型。别的会话照旧是 `WIKI_NOT_MAINTENANCE_SESSION`。runner 模式下
+  照 22.10、22.12 回答。
+- **命令行（随下一次 runner 发版）**：`orbit wiki docs build` 把 `WIKI_SERVER_EXECUTES` 读作「文档由服务端写」——第一次调用读作业时
+  如此，读写文档的路由上也如此：不调模型、不再写、说明一句（`--json` 里 `serverExecutes`），以 0 退出。开关切换之前建的生成任务，它的
+  会话在第一次调用时就被拒，作业随任务结束；运行到一半开关切换、结束作业也被拒的，同样留给任务。在那之前，旧 runner 碰到拒绝会以非 0
+  退出，同样什么都没问。
+
+## 23. System model 与 wiki-worker（服务端执行 P1a）
+
+JSON 里是 `systemModel`；设计见 `docs/wiki-server-execution-design.md` §2.1、§4.1、§4.5、§5.3、§6。迁移 `0400_wiki_model_status`；
+worker 在 `src/apiserver/src/wiki-worker/`（入口 `main.ts`、配置 `wiki-system-model.ts`、客户端 `wiki-model-client.ts`、状态与心跳
+`wiki-model-status.ts`），读接口在 `src/apiserver/src/wiki/wiki-system-model.ts` 与 `wiki-system-model.controller.ts`，metrics 在
+`wiki/wiki-model-metrics.ts`；共享常量在 `src/shared/src/wikiSystemModel.ts`。本阶段 worker 只探测模型、写状态和心跳；作业表、请求队列
+和执行器开关在 P1b，还没有流水线经它调用模型。
+
+### 23.1 服务
+
+- compose 服务 `wiki-worker`：镜像 `orbit-apiserver:local`，`command: node src/apiserver/dist/wiki-worker/main.js`；`depends_on`
+  apiserver（`service_healthy`），自己不跑迁移；`restart: unless-stopped`，`stop_grace_period: 30s`；不监听端口，不挂卷。
+- 入口用 `NestFactory.createApplicationContext` 起 `WikiWorkerModule`：只有 Prisma 和 worker 自己的 provider，没有控制器。打开
+  `enableShutdownHooks([], { useProcessExit: true })`：容器里 node 是 PID 1，收到 SIGTERM 后停止探测、等最后一次写入完成、关闭数据库，
+  然后显式退出。
+- owner 2026-10-07 同意新增这个服务。`test/compose-topology.test.mjs` 的 (l) 逐行钉住它的定义，(k) 把它放在一边之后，仍要求 compose
+  比基线删的行多于加的行。
+
+### 23.2 配置（`systemModel.env`）
+
+| 变量 | 说明 |
+|---|---|
+| `ORBIT_WIKI_MODEL_BASE_URL` | 不带凭据的 http(s) 地址；去掉末尾的 `/` 后，调用发到 `{base}/v1/messages`，探测发到 `{base}/health` |
+| `ORBIT_WIKI_MODEL_API_KEY` | 以 Bearer 发送 |
+| `ORBIT_WIKI_MODEL` | 模型名 |
+| `ORBIT_WIKI_MODEL_CONCURRENCY` | 所有空间合计的在途请求上限，默认 4；不是正整数时用默认值 |
+
+- 前三项齐全且可用才算已配置；缺任何一项就是 `unconfigured`，不探测，也不调用。
+- 只配给 wiki-worker，apiserver 的环境里一项都没有。名字都不是 `ANTHROPIC_*`。
+- `readWikiSystemModel(env)` 是纯函数，返回配置、缺了哪几项（`missing`）和 `problems`。worker 启动时经 `currentWikiSystemModel()` 读一次，
+  问题只记一次日志。`problems` 和日志都不引用 key 和地址（日志只写地址的 origin）。
+
+### 23.3 调用（`systemModel.request`）
+
+- `POST {base}/v1/messages`，头是 `authorization: Bearer {key}`、`anthropic-version: 2023-06-01`、`content-type: application/json`；体是
+  `{model, max_tokens, system, messages: [一条 user], stream: true}`。`max_tokens` 由每次调用显式给出；不带 tools，不开 thinking。
+- 用 Node 自带的 fetch 流式读取，按 SSE 的规则逐行解析：`event:` 给事件名，多行 `data:` 用换行拼接，空行派发，`:` 开头是注释；CRLF 和
+  跨块切开的行照常读。`message_start` 给出模型名和初始用量；`content_block_delta` 里的 `text_delta` 依次拼成答案；`message_delta` 给出
+  `stop_reason` 和截至目前的用量；收到 `message_stop` 才算结束。`error` 事件按类型分类。`ping`、`content_block_start` / `stop`、不认识的事件，
+  以及不是对象的 data（如 `[DONE]`），都跳过。
+- 用量取流里最后报出的值：有 `message_delta` 的就用它的，否则用 `message_start` 的。
+- 中断：一个 `AbortController` 管三件事——单次调用的预算（各步骤的上限）、空闲断开（`idleTimeoutSeconds` = 300 秒没收到任何字节，
+  从发出请求起就开始计）、调用方的取消。
+- 部分文本：每个 delta 之后，把目前收到的全文交给 `onPartial`；失败时，错误也带着 `partial`。§25 的队列用它写请求的 partial。
+- 错误分三类（`WikiModelError.kind`）：
+
+| 类 | 包括 |
+|---|---|
+| `retryable` | HTTP 5xx、429；连接被拒、被重置、中途断开、域名解析失败；流在 `message_stop` 之前结束；空闲断开；SSE `error` 的 `overloaded_error`、`api_error`、`rate_limit_error` |
+| `unauthorized` | HTTP 401，或 SSE `error` 的 `authentication_error` |
+| `other` | 其余状态码和 SSE 错误、不是事件流的回答、预算用完、调用方取消 |
+
+- 错误消息里去掉 key、地址和主机名，可以原样存、原样显示。连接错误只写错误码（如 `ECONNREFUSED`），不写 Node 带地址的原文。
+- 连接用 fetch 自带的连接池：keep-alive 复用，每个 origin 不限连接数，所以不会低于并发上限。收到 `message_stop` 之后仍把流读到结束
+  （最多再等 1 秒），连接才能回到池里。
+
+### 23.4 探测与状态行（`systemModel.health`、`systemModel.status`）
+
+- 每 `intervalSeconds` = 10 秒 `GET {base}/health` 一次，带同样的 Bearer 和版本头，超时 5 秒：200 或 404 是 up，401 是 auth_failed，
+  其余状态、超时、连不上都是 down。
+- 每次探测（未配置时是每一拍）都写 `wiki_model_status` 唯一的一行（id = 1），语句是 `INSERT … ON CONFLICT (id) DO UPDATE`：
+
+| 列 | 含义 |
+|---|---|
+| `state` | `up` / `down` / `auth_failed` / `unconfigured` |
+| `model` | 模型名；只有未配置时可以为 NULL |
+| `since` | 这个状态从什么时候开始；状态和模型都没变时保持不动 |
+| `last_error` | 不是 up 的原因，不含地址和 key（HTTP 状态、连接错误码、变量名）；恰好在 up 时为 NULL |
+| `checked_at` | 最近一次探测；未配置时为 NULL |
+| `worker_seen_at` | worker 的心跳，随每次写入更新 |
+
+- `auth_failed` 一直保持到 worker 重启：`/health` 通常不校验 key，它恢复 200 并不说明 key 已经改好；重启时才会读到改好的 key。调用遇到 401
+  时，由请求队列（P1b）调 `WikiModelStatusProbe.keyRefused` 报告。
+- down 时请求留在队列里不动（§25.6），探测继续，下一次 up 就恢复。
+- 只有 worker 写这一行（db-write inventory 里是一条 `ONE_ROW_BY_KEY` 语句），apiserver 只读。
+
+### 23.5 读：`GET /api/wiki/system-model`（`systemModel.read`）
+
+- JWT 门加 `WikiRolloutGuard`；个人访问令牌要有 `wiki:read`。读的是部署的模型，不分 space：wiki 对其开放的账号都读到同一个回答。只读。
+- 回答 `{ state, model, since, checkedAt, workerSeenAt }`（`WikiSystemModelStatus`）。`state` 比状态行多一个 `worker_not_running`：没有这一行，
+  或 `worker_seen_at` 已超过 `workerStaleSeconds` = 60 秒，就是它，设置页和健康行显示「wiki worker 未运行」；这时 `since` 是最后一次心跳。
+- 不返回地址和 key，也不返回 `last_error`。
+- P9 起多一个 `executor`：执行器开关对**提问的这个账号**怎么说，`{ mode, serverExecutes }`（§24.5 的「读」）。设置页据此在服务端执行时
+  画 System model、不画 provider；其余五个字段是部署的，每个账号读到的都一样。
+
+### 23.6 `/api/metrics`（`systemModel.metrics`）
+
+| 序列 | 类型 | 说明 |
+|---|---|---|
+| `orbit_wiki_model_state{state}` | gauge | 读接口给出的那个状态为 1，其余为 0 |
+| `orbit_wiki_worker_heartbeat_age_seconds` | gauge | 距最后一次心跳的秒数；还没有心跳时不输出 |
+| `orbit_wiki_model_calls_total{outcome}` | counter | `succeeded` / `retryable` / `unauthorized` / `other`；读请求队列的行（§25.8）|
+| `orbit_wiki_model_call_duration_seconds` | summary | 0.5 与 0.95 分位、sum、count，取自结束的行（§25.8）|
+
+- 调用都发生在不监听端口的 worker 里，所以这些数都在读 metrics 时从库里取，每个副本给出的都一样；标签值只来自闭集。
+
+## 24. 服务端作业 `wiki_job`（服务端执行 P1b）
+
+JSON 里是 `jobs` 一节；设计见 `docs/wiki-server-execution-design.md` §5.1、§5.4、§10。迁移 `0401_wiki_job`；实现在
+`src/apiserver/src/wiki-worker/`（表访问与领取 `wiki-jobs.ts`、执行循环与种类注册 `wiki-job-executor.ts`、冒烟作业 `wiki-smoke-job.ts`、
+执行器开关 `../wiki/wiki-executor-switch.ts`）；共享常量在 `src/shared/src/wikiJobs.ts`。
+
+### 24.1 表与状态
+
+- `wiki_job`：`id`、`owner_id`、`space_id`（复合外键到 `wiki_space`，随空间删除而删）、`kind`、`input`（JSONB，作业自己的材料，
+  从不含地址和 key）、`priority`（默认 0，owner 主动发起的高于后台维护）、`state`、`waiting_for`、`attempts`、`next_attempt_at`、
+  租约三列（`lease_owner` / `lease_generation` / `lease_deadline_at`）、`progress`、`report`、`error`、`failure_kind`、
+  `created_at` / `updated_at` / `started_at` / `ended_at`。
+- `state`：`queued` / `running` / `waiting` / `succeeded` / `failed` / `cancelled`；`waiting_for`：`repo` / `model`（只在 waiting 时非空，
+  且此时不占租约）；`failure_kind`：`infra` / `content`。本期还没有代码把作业置为 `waiting`：作业在等模型请求时保持 `running` 并续租，
+  由请求的等待上限收尾；把作业停在仓库操作上（P2）或停在模型不在时的那套转换，随需要它的阶段到来。
+- CHECK：租约三列与 `running` 互为条件；只有结束态有 `ended_at`；`succeeded` 没有 `error`；`report` / `progress` 是对象。
+- `kind` 闭集：`verify` / `articles` / `import` / `plan_draft` / `plan_revise` / `docs_build` / `maintain`，加上本期的 `smoke`——
+  只调一次模型、把答案和用量写进 `report`，是队列最短的一条端到端路径（`wiki-jobs.pg.spec.ts` 对 fake 端点跑通它）；`verify` 自 P3 起有实现（§24.7）。
+  还没落地的种类留在队列里：领取只取本 build 认识的种类，不会被交给一个只能失败的 worker。
+- `import`（P5，§5.1 的服务端执行、契约 `jobs.kindRuns.import`）：由 runner 门的 `POST .../import-jobs` 建，输入是命令交来的 note
+  和调用会话，报告就是命令打印并记下的那份（`wiki-import-job.ts`）。执行中写 `progress`（`snapshot` / `reading` / `proposing` 和计数）。
+- `verify`（P3，§24.7）：由记录 op 进入 `verifying` 的那次提交建（业主重开核实也建），按会话排一条、`priority = 1`。
+- `plan_draft` / `plan_revise`（P6，§21.10、契约 `jobs.kindRuns.plan_draft` / `plan_revise`）：由 `advanceWikiPlanJob` 在开关把账号交给服务端时
+  建，和 plan 作业同一个事务，输入是 `{ planJobId }`，优先级 1；报告是 `{ kind, planJobId, outcome, version, error, plan }`
+  （`wiki-plan-draft-job.ts`）。执行中写 `progress`（`planJobId`、`attempt`、`step`）。
+- 作业重放时，某个单元上一次的请求如果是因等待超限而失败的（平台的失败，不是这次调用的），就换下一个 `attempt` 再问一次；否则
+  作业每次重放都会碰到同一行失败的请求，模型回来以后也永远不再问（`wikiModelRequestAttempt`，P5 补上）。
+
+### 24.2 领取、租约、回收
+
+- 领取照 `watch_delivery`：一条 `UPDATE "wiki_job" … FROM (SELECT … FOR UPDATE SKIP LOCKED)`，候选是
+  `state = 'queued' AND (next_attempt_at IS NULL OR next_attempt_at <= now())`、`attempts` 没到重试上限（§24.4）、本 build 认识的种类、本 worker 服务的账号（§24.5）、
+  且**同一空间没有在跑的作业**；顺序是 `priority DESC, created_at, id`；每条给一个新的 `lease_generation`，`started_at` 取第一次领取。
+- 每次领取 `lease_deadline_at = now + 60s`，执行中每 20 秒续租一次；回写（成功、infra 重试、content 失败）都按代数比较并交换，
+  被接管的旧进程写不进任何一行。
+- 过期回收：`running` 且租约过期的行回到 `queued`，`attempts + 1`，`next_attempt_at = now + 退避`（§24.4），`failure_kind = 'infra'`；
+  接管者从头跑这个作业，已经发出过的请求由请求行本身回答重放（§25.3）。
+- 同一空间同时只跑一个作业：领取的谓词跳过一个在跑作业的空间，`wiki_job_space_running_key`（`space_id` 上的部分唯一索引）是数据库里
+  同一条规则；两个调度器同时读表时，输的一方拿到的是空领取，不是错误。
+- 一个 worker 同时执行 `maxConcurrentPerWorker` = 4 个作业。
+
+### 24.3 开机与停机
+
+- 开机先补跑一轮：worker 启动时立刻做一遍「回收 → 领取」，把上次死掉的 worker 留下的作业接起来。
+- SIGTERM（docker 30 秒宽限，设计 §5.4，owner 2026-10-07 定的方案 A：不等在途请求）：停止领取；取消在跑的作业，每个作业把自己的
+  租约截止时间设为现在并退出，让新进程的回收立刻接手；请求那一侧同理（§25.7）。
+
+### 24.4 失败与退避
+
+| 失败 | 处理 |
+| --- | --- |
+| infra（端点不可达、5xx、429、runner 离线、worker 重启、等待超限）| 回到 `queued`，`attempts + 1`，`next_attempt_at = now + backoffSeconds[attempts]`（0 / 10 / 30 秒；`attempts` 是这次失败之前已有的次数），不计入连续失败 |
+| content（模型给不出可解析的结果、服务端拒绝）| 结束：`state = 'failed'`、`failure_kind = 'content'`、`ended_at`，计入连续失败 |
+| 作业的请求等待超过步骤上限 | 请求以 `other` 失败（§25.5），作业读到后按 infra 处理 |
+
+- 本 build 不认识的错误（不是作业自己抛的两类）按 infra 处理：宁可重试，不拿它去计空间的连续失败。
+- **重试上限**（`jobs.retry.limit`，2026-10-09）：没有作业会被无限地放回队列。第 `maxAttempts` = 10 次尝试以 infra 失败时，作业不再回队，
+  而是结束：`state = 'failed'`、`failure_kind = 'infra'`、`ended_at`，`attempts` 算上这一次，`error` 是「Ended after <n> attempts: <最后一次的错误>」
+  （至多 2,000 字），Activity 的 Runs 卡显示它（§24.8）。按上面的退避，大约是 runner 连不上四分钟、System model 不在半小时以上。
+  本 build 不认识的错误（断言不成立、类型错误这类）照样先按 infra 重试，以防只是偶发，但第 `unexpectedMaxAttempts` = 3 次时就这样结束，
+  错误里写明是意外的错误：再试只会再碰上它。2026-10-09 之前没有上限，docs_build 作业 79620f23 的写入器断言不成立，空间每空出来一次
+  就再失败一次。
+- 执行器结束它自己收尾的那次尝试；租约回收或仓库操作的等待把作业放回队列时已经到了上限的，领取不会再拿它（§24.2），worker 的下一轮把它
+  结束。两种情况都在同一个事务里收尾等着它的行，和回退清扫一样（§24.9，`wiki-worker/wiki-jobs.ts` 的 `settleWikiJobRows`）：它名下排队或
+  在跑的模型请求和仓库操作取消；maintain 作业的运行行记为 `failed` / `infra`、写上错误，不计连续失败，游标没动，下一次运行会重读这次没读完的
+  内容；plan_draft / plan_revise / docs_build 作业的 plan 作业以失败结束、写上错误，仍保留 `job_id`——plan 页显示起草或生成失败，owner 的
+  下次请求会建新的。
+- **作业写出去的模型产出不带 NUL**（`jobs.serverWrites`，2026-10-09）：作业从模型回答里得出、交给共用写入者的东西，一律先去掉 U+0000
+  再交——文档的节、脚注和处置（`WikiDocs.write`）、文章（`WikiArticles.write`）、changeset 的 op（维护和导入的 `submitChangeset`）、
+  核实结论（`recordVerifications`）、plan 草稿与修改建议、plan 作业结束时带的最后一稿和错误、维护运行的报告和错误。做法和 runner 门对
+  runner 回报的处理一样（`runner-api/strip-nul.ts`）。作业自己行上的 progress、report、error，以及一次调用的 error，也这样写。
+  模型可能把展示给它的代码里的 NUL 抄进回答：回答本身按模型发来的原样保存、原样解析（§25.1），所以 JSON 字符串里的原始 NUL 照样解析
+  失败，和 Go 的解析器一样；模型写成 `\u0000` 的，在交给写入者时去掉，不再以 22P05 写入失败。runner 门上 wiki 的写入路由不做这一步，
+  runner 路径遇到这种写入会回 500——旧路径不改，随旧路径一起删除。
+
+### 24.5 执行器开关 `jobs.executor`
+
+| 变量 | 说明 |
+|---|---|
+| `ORBIT_WIKI_EXECUTOR` | `runner`（默认）/ `canary` / `server` |
+| `ORBIT_WIKI_EXECUTOR_CANARY_OWNERS` | 只在 `canary` 下读：逗号分隔的账号 uuid |
+
+- 纯函数 `readWikiExecutorSwitch(env)`（`src/apiserver/src/wiki/wiki-executor-switch.ts`，照 `wiki-rollout.ts` 的形状）由 apiserver 与
+  worker 共用；`wikiExecutorServes` / `wikiExecutorClaimOwners` 把模式变成领取时的账号过滤：`server` 不过滤，`canary` 只取名单内，
+  `runner` 是空集合——默认值下没有 worker 领取任何作业。
+- 误拼的值读作 `runner` 并记一条 problem：拿不准时落在已经在跑的旧路径上，而不是落在一个没人部署 worker 的新路径上。
+- 开关只管执行，不删历史；改回 `runner` 停止新的领取，而在途的作业和请求由 apiserver 启动时的清扫收尾——逐种作业怎么收尾见 §24.9
+  （`jobs.executor.rollback`，2026-10-08 回退事故的修复）。
+- 两个变量进服务环境的方式和 System model 的一样：compose 从部署的 `.env` 传给 **apiserver 与 wiki-worker 两个服务**（P3 接上；
+  `test/compose-topology.test.mjs` 逐行钉住这两行，`wiki-compose-env.spec.ts` 确认它们读的是宿主同名变量），都没设就是 `runner`。
+  把开关改成 `canary` 或 `server` 是 owner 的事：生产上停在 `runner` 直到 P10。
+- **读（`jobs.executor.read`，P9）**：读接口只告诉提问的账号两件事——`mode`（部署的开关）和 `serverExecutes`（服务端是否执行这个账号的
+  wiki：`server`，或 `canary` 且名单里有它）。名单本身、别的账号在不在名单里，都不出读接口（`wikiExecutorView`）。
+  `GET /api/wiki/system-model` 和 `GET /api/wiki/spaces/:id/health` 都带它；客户端只在 `serverExecutes` 为真时画服务端的设置、
+  Runs 卡和状态行的服务端原因，`runner` 下（或读不到这个字段的旧控制面）一切照旧。
+
+### 24.6 运行行与计数
+
+- `wiki_maintenance_run.job_id` 与 `wiki_plan_job.job_id` 记下跑出这一行的作业；两个表的 `task_id` 自 0401 起可空，CHECK 要求已开始的行
+  恰好有一个来源（plan job 在 `queued` / `held` 时豁免——它两个都还没有）。
+- 健康行与每日计数按运行行统计：`wiki_maintenance_run` 里由作业跑的运行（`job_id` 非空）按自己的行计数，与旧路径一样排除
+  本地端点上的追赶运行和失败的运行；任务那条路径的计数一字未改，所以同一个部署今天算出的数和昨天一样。
+- 服务端运行不建任务、不建会话：不占 `runnerActiveTurns`，runner 在服务端路径里只做 P2 的仓库操作。
+
+### 24.7 核实作业：Automatic 的 op 由服务端核实（服务端执行 P3）
+
+JSON 里是 `jobs.kindRuns.verify`、`jobs.make`、`agentSurface.verify.serverExecution`、`reviewModes.verification.who.server`；设计见
+`docs/wiki-server-execution-design.md` §2.2、§8。实现在 `src/apiserver/src/wiki-worker/`（提示词与结论解析 `wiki-verify.ts`、作业
+`wiki-verify-job.ts`、建作业端 `../wiki/wiki-verify-jobs.ts`）；测试是 `wiki-verify.spec.ts`（从 `src/runner-go/wiki_verify_test.go`
+逐条改写来的）与端到端的 `wiki-verify-job.pg.spec.ts`。
+
+**会话侧的门关上了（`servedBy`，P3 第 2 版）**：账号由服务端执行时（`jobs.executor` 为 server，或在 canary 名单内），
+runner 门对非维护会话不再交出核实的材料——`GET …/verifications` 返回空页，带 `servedBy: "server"` 与 `waiting`（这个会话还有几条
+op 在等），于是旧版 `orbit wiki verify` 读到空列表就正常退出，不会用会话自己的 provider 去调模型（下一次 runner 发版的命令连 provider 环境都不再需要：它先问谁核实，由服务端核实就不读 endpoint、token 和模型，直接请求并等待）；`POST …/verifications`
+对这类会话回 409 `WIKI_SERVER_EXECUTES`（合同 `refusals`，与 P4 同一条）；`POST …/verifications/request` 让会话请服务端核实一次，
+返回它等的那条作业（同一 space+session 只排一条，所以重复请求还是那条）。`submitChangeset` 的回答同样带 `servedBy: "server"`，
+`wiki_propose` 对会话的说明随之改成「由服务端核实，结论会自己到，不需要跑命令」。维护会话与 runner 模式一字未改：维护运行照旧
+读自己的列表、自己报结论（P8 之前仍在 runner 上），runner 模式下这些字段一律不出现。
+
+**什么时候建作业**
+
+- 一次提交里只要有 op 因为 Automatic 落成 `verifying`，就在这次提交的事务**提交之后**建一个 `verify` 作业：`input = { sessionId }`，
+  `priority = 1`——提议的那个会话正在等这条结论，而 space 在这条结论到来之前不认这次提议（`jobs.make`、`jobs.priority`）。
+- 作业的身份是**提出 op 的那个会话**：结论只认提出者的 op（§7.4），作业不是会话，所以它带着会话 id 去读、去写，写下的行 authored
+  `system`，因为这是服务端用自己的账号做的（`reviewModes.verification.who.server`）。
+- 同一 space 同一会话同时只有一个**排队中**的 verify 作业：作业跑起来时才读"此刻在等的 op"，所以排队期间又来一次提交搭这班车；
+  作业已经在跑之后进来的 op 会有自己的作业（同一 space 一次只跑一个作业，排在后面）。
+- 业主重开核实（§7.5，`POST /api/wiki/spaces/:id/verifications/reopen`）把 op 送回 `verifying` 时同样建作业：那些 op 所属的会话
+  多半早就结束了，结论仍然得有人去问。
+- 执行器开关不为这个账号开（`runner`，默认）就不建作业，一切照旧；维护运行提议的 op 也不建作业（本节末）。
+
+**作业做什么**
+
+- 逐页读该会话在这个 space 里等待核实的 op（`listVerifications`，一页 `rules.verificationListMax` 条），证据用服务端自己的读取器：
+  同一条列表路由、同一份 `wiki-verify-evidence.ts` 的取文本、脱敏与截断。
+- 每个 op 组装一条提示（`wiki-verify.ts`，与 runner 的 `wikiVerifyPrompt` 逐句相同：条目、每条出处的原文、可判重复的条目按
+  E1…En 编号），经请求队列问 System model：一条 op 一个请求，`step = verify`、`unit = op id`，所以作业重放时已经答过的请求直接复用。
+- 回答按 runner 的严格程度解析：**读不成结论就什么都不报**，这个 op 记进 `report.failures`，继续等下一次（09-30 的教训：89 个里 1 个没结论
+  不该让整次运行失败）。作业因此以 `succeeded` 结束，`report` 是 `{ kind, spaceId, mode, model, looked, verified, supported, partial,
+  unsupported, duplicate, failed, failures[{opId, why, refused}], stopped, usage }`。
+- 结论走 `recordVerifications`（唯一的结论写入方）：supported 按 Auto 生效并推送、partial 记 Unreviewed、unsupported 驳回并留理由、
+  duplicate 把出处追到它指向的那条——与 runner 路径同一条写入路径、同一份留痕。
+- space 不再是 Automatic 就地停下（`stopped` 写明），剩下的继续等。单条 op 的调用以"这不是平台的错"的方式结束（队列的 content 类）
+  算这个 op 的失败，不算整次的失败；平台的错照 §24.4 回队列重试。
+- P8 的维护运行调用同一个函数的另外两个参数：维护的第二遍（带着 `refused` 的 retry 后缀再问一次）和收养（`adopt`，最多 50 条）。
+
+**会话这一侧**
+
+- server（或 canary 名单内）下会话不必再跑 `orbit wiki verify`：发起提交就有结论。命令保留，含义变成"请求服务端核实并等结果"——
+  runner 那一半（命令改为请求服务端并等待，不再自己起一个模型）随下一次 runner 发版上线；在那之前、以及默认 `runner` 模式下，
+  这条命令的行为一字未改（`agentSurface.verify.serverExecution`）。
+- 维护运行不是会话：它至今仍在自己的进程里核实自己的 op（P8 才搬过来），所以它的提交不为它建作业。
+
+**compose 里的执行器开关**
+
+- `ORBIT_WIKI_EXECUTOR` 与 `ORBIT_WIKI_EXECUTOR_CANARY_OWNERS` 现在同时给 apiserver 和 wiki-worker（两个服务的 `environment`，
+  默认 `runner`）：一个建作业、一个领作业，两个进程对同一账号必须给出同一个答案。`test/compose-topology.test.mjs` 逐行钉住这两行，
+  `src/apiserver/src/wiki/wiki-compose-env.spec.ts` 确认它们读的是宿主同名变量（不是会话会带进来的 `ORBIT_*` 名字）。
+- 生产上把开关改成 `canary` 或 `server` 是 owner 的事（设计 §10，P10）。
+
+### 24.8 Activity 的读：`GET /api/wiki/spaces/:id/jobs`（`jobs.read`，服务端执行 P9）
+
+服务端的运行没有任务、也没有会话可打开（设计 §2.2）：它在做什么——步骤、调用、在哪里排队——都在 Activity 里，Runs 卡和运行页读的就是
+这条。实现在 `src/apiserver/src/wiki/wiki-job-reads.ts`，用户门在 `wiki/wiki-jobs.controller.ts`；共享类型 `WikiJobsRead` 在
+`src/shared/src/wikiJobs.ts`。
+
+- 只给 space 的 owner（JWT 门加 `WikiRolloutGuard`；个人访问令牌要有 `wiki:read`）；别的账号的 space 是普通的 404。只读。
+- 回答 `{ spaceId, jobs }`：这个空间最新的 `limits.jobs` = 10 行 `wiki_job`，按 `created_at` 新的在前。每行：
+
+| 字段 | 含义 |
+|---|---|
+| `id`、`kind`、`state`、`waitingFor`、`priority`、`attempts` | 作业行本身 |
+| `createdAt`、`updatedAt`、`startedAt`、`endedAt`、`nextAttemptAt` | 时间；`nextAttemptAt` 是 infra 失败后下一次重试的时间 |
+| `failureKind`、`error` | 失败的类别和原因 |
+| `ahead` | 排队（`queued`）时：部署里按领取顺序（`priority DESC, created_at, id`）排在它前面的排队作业数；其余状态为 null |
+| `progress` | 流水线自己写的进度（§24.1）读成 `{ step, done, total }`：写了 `done` / `total` 的照读；导入的形状（`notes`、`read`、`failed`）读成「读完或放弃的 note / 交来的 note」；没写为 null |
+| `calls` | 它的调用按状态计数（`total`、`queued`、`running`、`succeeded`、`failed`、`cancelled`），加上报出的输入、输出 token 合计 |
+| `nextCall` | 它排队的调用里队列最先轮到的那个：`{ ahead, enqueuedAt }`；没有排队的为 null |
+| `requests` | 按 `enqueued_at` 最新的 `limits.callsPerJob` = 40 个调用，旧的在前；没列出的由 `calls.total` 计着 |
+
+- 每个调用只有元数据：`id`、`step`、`unit`、`attempt`、`attempts`、`state`、`enqueuedAt`、`startedAt`、`endedAt`、`inputTokens`、
+  `outputTokens`、`httpStatus`、`error`、`errorKind`，排队时再加 `ahead`——部署里按队列的领取顺序（`priority DESC, enqueued_at, id`）
+  排在它前面的排队请求数，不论是谁的。排队时长从 `enqueuedAt` 到 `startedAt`（排队中到现在），耗时从 `startedAt` 到 `endedAt`
+  （执行中到现在）；`startedAt` 是第一次领取的，所以重试花的时间算在这个调用自己身上。
+- **不出这条读的**：调用本身（system prompt、prompt、`max_tokens`）、`request_sha256`、`answer` 和 `partial`；两张表的租约列；作业的
+  `input` 和 `report`；队列里排在前面的是谁；System model 的地址和 key——两张表的任何一行都不含它们（§23.3：队列的错误消息不写
+  key、地址和主机名）。
+
+### 24.9 回退：不再服务的账号，在途作业由 apiserver 启动清扫收尾（`jobs.executor.rollback`）
+
+把开关改回 `runner`，或把账号从 `canary` 名单去掉，之后服务端在途的作业和请求没有一个会自然结束：worker 的领取按开关过滤名单，
+不会再碰这个账号的任何行。2026-10-08 的生产事故就是这样——回退时 owner 空间的 `maintain` 作业还在抽取，作业和 3 条 extract 请求
+一直停在在途；而维护触发器不分模式都查 `unfinishedMaintainJob`，这一个作业把 runner 路径的维护任务也堵死了（作业由 owner 批准后
+手工取消，SQL 记在 P10 的评论里）。设计 §10 写的「回退……服务端在途的作业和请求会被取消，游标保证下一次会重新读取这些内容」
+由这一节实现。实现在 `src/apiserver/src/wiki/wiki-executor-sweep.ts`（`cancelUnservedWikiJobs`，由 `WikiExecutorSweep` 在
+`OnModuleInit` 时跑一遍），pg spec 是 `wiki-executor-sweep.pg.spec.ts`。
+
+- **时机与位置**：改执行器要重建 apiserver 和 wiki-worker（`docs/configuration.md`），所以 apiserver 启动时扫一遍就够。清扫放在
+  apiserver 而不是 worker：被堵住的触发器在 apiserver 这边；worker 是停止服务的一侧，而且不重建它时它本来也不会再领这些作业。
+  每个写入都只匹配仍在途的行，所以清扫跑两遍、或者和正在收尾的 worker 撞上，都不会改动一次运行已经写下的话。
+- **作业本身**：`queued`、`running`、`waiting` 的 `wiki_job` 置为 `cancelled`，`ended_at` 记下，`waiting_for` 与租约三列清空，
+  `error` 写明原因（开关不再服务这个账号、作业在 apiserver 启动时被取消）。下面四条（请求、仓库操作、运行行、plan 作业）由
+  `settleWikiJobRows` 写，重试上限结束作业时用的是同一个函数（§24.4）。
+- **模型请求**：它名下 `queued`、`running` 的 `wiki_model_request` 置为 `cancelled`，`ended_at` 记下；按 0401 迁移的约束，
+  `error`、`error_kind`、`partial` 连同退避的 `not_before` 和租约三列都清空（这些列是排队或在跑的行才有的）；已成功的行不动。
+- **仓库操作**：它名下 `queued`、`running` 的 `wiki_repo_op` 同样置为 `cancelled`、带上原因，认领（`lease_owner`、`claimed_at`、
+  `heartbeat_at`、`runner_id`）清空——没有 runner 会再去执行一个没人读的结果。
+- **maintain 作业**：`input.runId` 记的运行行，只要还没写结局，就记为 `failed` / `infra`，原因写清。失败是平台的（回退），不是流水线的：
+  连续失败计数在游标行上、只有运行推进游标时才写，清扫不碰它；游标也没动，所以下一次运行（回退后是 runner 路径的）会重读这次没读完的
+  内容——这正是设计 §10 说的游标语义。
+- **plan_draft / plan_revise / docs_build 作业**：`input.planJobId` 记的 plan job 置为 `ended` / `failed`，原因写清，
+  **仍保留 `job_id`**（`made` 或 `ended` 的 plan job 必须记着自己的来源，0405）——owner 的下次请求会在现在运行的那条路径上重新生成。
+- **verify 作业**：不再写别的。留在 `verifying` 的 op 按设计等着：空间的下一次维护运行会收养它们给出结论
+  （`reviewModes.verification.adoption.who`），回退后那就是 runner 路径的运行。
+- **articles / import / smoke 作业**：不再写别的。文章按 `articles.regeneration` 的规则由后续运行重写；导入提议的 op 同样等下一次
+  核实的结论，轮询的命令读作业的结束；smoke 作业没有自己的行。
+- **触发器的双保险**：清扫跑完之前，以及在清扫失败（数据库抖动，清扫是尽力而为的启动动作，不挡住启动）的情况下，维护触发器只在
+  `onServer` 为真时才查 `unfinishedMaintainJob`（`wiki-maintenance-run.ts`）：一个再也没人执行的服务端作业，不得堵住空间的
+  runner 路径任务。这是事故的另一半——只取消作业不改触发器，回退后空间可能在一段时间里两条路径都没有维护。
+
+## 25. 模型请求队列 `wiki_model_request`（服务端执行 P1b）
+
+JSON 里是 `modelQueue` 一节；设计见 `docs/wiki-server-execution-design.md` §5.2、§5.4、§5.5、§6。迁移 `0401_wiki_job`；实现在
+`src/apiserver/src/wiki-worker/`（表访问与领取 `wiki-model-queue.ts`、调度与执行循环 `wiki-model-queue.service.ts`、`pg_notify` 监听
+`wiki-model-notify.ts`）；共享常量在 `src/shared/src/wikiJobs.ts`。
+
+### 25.1 表与身份
+
+- `wiki_model_request`：`id`、`job_id`（外键到 `wiki_job`，随作业删除而删）、`owner_id`、`space_id`、`step`、`unit`、`attempt`、
+  `attempts`、`priority`、`request`（`{ system, prompt, maxTokens }`）与 `request_sha256`、`state`、租约三列、`enqueued_at`、
+  `not_before`、`started_at`、`ended_at`、`answer`、`partial`、`input_tokens`、`output_tokens`、`http_status`、`error`、`error_kind`。
+- `request` 里的 system 或 prompt 含 U+0000 时——prompt 带着仓库的原文，源文件里可能有 NUL（§26.4）——两段都按 UTF-8 字节的 base64 存，
+  旁边写 `encoding: "base64"`；领取时解码，发给模型的就是流水线拼出的那次调用，和 runner 路径一样逐字节相同。`request_sha256` 按调用
+  本身算，不按列里存的形式（`modelQueue.requestEncoding`）。
+- `answer` 和 `partial` 含 U+0000 时——模型可能把代码里的 NUL 抄进回答——按 UTF-8 字节的 base64 存，`answer_encoding` /
+  `partial_encoding`（迁移 `0412_wiki_stored_text_encoding`）说明怎么读回；每个读者都解码，流水线解析的就是模型发来的原文，和 runner
+  路径一样（`modelQueue.answerEncoding`）。2026-10-09 之前，回答里有原始 NUL 时写入以 22021 失败，调用一直 running 到租约过期再重问。
+- `(job_id, step, unit, attempt)` 唯一，`(step, unit)` 是这次调用在作业里的地址；`attempt` 是这一单元的第几次（真重做才 +1），
+  `attempts` 是这一行被跑过几次（租约过期和可重试失败各记一次，退避读它）。
+- `state`：`queued` / `running` / `succeeded` / `failed` / `cancelled`；`error_kind`：`retryable` / `unauthorized` / `other`。
+- CHECK：租约三列与 `running` 互为条件；`succeeded` 当且仅当有 `answer` 和 `ended_at`；`partial` 只在非 `cancelled` 的行上。
+
+### 25.2 全局并发与公平（`modelQueue.concurrency`）
+
+- `ORBIT_WIKI_MODEL_CONCURRENCY`（默认 4）是整个部署在途请求的上限，与有几个 worker 无关。
+- 调度器在一个事务里领取（`claimWikiModelRequests`）：先 `pg_advisory_xact_lock` 拿全队列一把锁；数出 `state = 'running' AND
+  lease_deadline_at > now()` 的行数 r；只领 `N − r` 条（哪次领取都不会越过上限）；候选按 `priority DESC, enqueued_at, id`，
+  `FOR UPDATE SKIP LOCKED`，每条给一个新的 `lease_generation`。
+- 同一优先级先来先得；每个作业最多 `maxInFlightPerJob` = 4 条在途，避免一个作业占满队列。
+
+### 25.3 请求即断点
+
+- 流水线对 `(step, unit)` 只发一次：重发同一次调用会「撞上」那一行（`enqueueWikiModelRequest` 的 `ON CONFLICT` 返回已有行的 id），
+  再等它（`WikiModelRequestQueue.whenSettled`）——已成功的直接用它的答案，还在排队或执行中的继续等。作业被回收后重跑，已经答过的
+  调用不会再发一次。
+- 同一单元带着不同的调用再次出现（`request_sha256` 不同）是错误：答案不是这次问的问题，作业按 content 失败。
+
+### 25.4 执行与租约（`modelQueue.lease`）
+
+- 领取时 `lease_deadline_at = now + 60s`；执行中每 20 秒续租；每 5 秒把目前收到的文本写回 `partial`（只有变长了才写）。
+- 结束按代数比较并交换：成功写 `answer` 和两组 token（`state = 'succeeded'`）；失败按类处理（§25.5）。被接管后迟到的写不进任何一行，
+  接管者重发这次调用。
+- 租约过期的 `running` 行回到 `queued`，`attempts + 1`，**保留 partial**；下一次领取带着已经收到的部分重发。
+
+### 25.5 失败、退避与等待上限
+
+| 情况 | 处理 |
+| --- | --- |
+| `retryable`（5xx、429、连接失败、空闲断开、流提前结束）| 回到 `queued`，`attempts + 1`，`not_before = now + backoffSeconds[attempts]`（0 / 10 / 30 秒；`attempts` 是这次失败之前已有的次数）|
+| `unauthorized`（401、authentication_error）| 回到 `queued`（等部署方改 key，不是这条请求的错），并把拒绝报给状态探测：状态转 `auth_failed`，队列停领（§25.6）|
+| `other`（预算用完、不是事件流、其它错误）| 结束：`state = 'failed'`、`error_kind = 'other'`；作业读到后按 content 处理 |
+
+- 等待上限（`waitLimit`，从 `enqueued_at` 起算，重试不重新计时）：`extract*` / `docs*` 180 秒、`import*` 600 秒、`plan*` 1200 秒，
+  其余 900 秒。排队超过它的请求以 `other` 失败，错误文案以「the request waited past its step's limit」开头；作业读到这个前缀就按
+  infra 失败处理（稍后重试），所以模型长时间不在时是以一次失败的作业收场，而不是永远挂着。
+- 单次调用的预算（`callBudget`，设计 §6）：`docs*` 20 分钟、`plan*` 60 分钟，其余 15 分钟；另加合同里的空闲断开。
+
+### 25.6 暂停与恢复
+
+- 每一轮领取前读一次 `wiki_model_status`（§23.4）：状态不是 `up` 就不领——`down` 和 `auth_failed` 期间请求留在队列里不动。
+- `down` 会自愈：探测继续，下一次 `up` 之后的领取自动继续；`auth_failed` 保持到 worker 重启（那时才读到改好的 key）。
+
+### 25.7 停机与唤醒
+
+- SIGTERM：停止领取；取消在途的调用，每个把已收到的文本写进 `partial`、把租约截止时间设为现在，让新进程的回收立刻接手并带着 partial
+  重发（方案 A，不等在途请求）。
+- 结束的请求用 `pg_notify` 在 `wiki_model_request` 频道上广播自己的 id；worker 用一条专用的 LISTEN 连接（照
+  `realtime/realtime.service.ts`）唤醒等待的作业，另有 2 秒一次的轮询兜底——通知丢了只丢延迟，不丢答案。
+
+### 25.8 `/api/metrics`（`modelQueue.metrics`）
+
+| 序列 | 类型 | 说明 |
+|---|---|---|
+| `orbit_wiki_model_calls_total{outcome}` | counter | 按行的现状读：成功行是 `succeeded`，失败行是它 `error_kind` 的类，失败后重排队的行在成功或超限之前算在失败的那一类 |
+| `orbit_wiki_model_call_duration_seconds` | summary | 结束的行从 `started_at` 到 `ended_at` 的耗时（0.5 / 0.95 分位、sum、count）|
+| `orbit_wiki_model_queue_depth` | gauge | 排队中的请求数 |
+| `orbit_wiki_model_requests_in_flight` | gauge | 当下在途（租约未过期）的请求数，不会超过并发上限 |
+| `orbit_wiki_model_request_wait_seconds` | summary | 结束的行从 `enqueued_at` 到 `started_at` 的排队时长 |
+| `orbit_wiki_model_request_run_seconds` | summary | 结束的行从 `started_at` 到 `ended_at` 的执行时长 |
+| `orbit_wiki_model_request_tokens_total{direction}` | counter | 成功调用花掉的 token（input / output）|
+| `orbit_wiki_model_request_errors_total{status}` | counter | 失败的调用按 HTTP 状态分；没有回答的失败（连接、超时）是 `none` |
+
+- 与 §23.6 同理：全部在读 metrics 时从库里取，每个副本一致；标签值来自闭集，状态标签是行里的状态码（这条序列本来就是讲状态码的）。
+
+## 26. 仓库操作 `wiki_repo_op`、快照缓存与原文缓存（服务端执行 P2）
+
+JSON 里是 `repoOps` 一节；设计见 `docs/wiki-server-execution-design.md` §4.3 和 §7。迁移 `0402_wiki_repo_op`（操作、分片暂存与快照缓存）
+、`0406_wiki_repo_file`（按 (space, sha, path) 保存读到的原文）和 `0412_wiki_stored_text_encoding`（原文怎么读回）；服务端实现在
+`src/apiserver/src/wiki-worker/`（表、领取、结算、快照与原文缓存 `wiki-repo-ops.ts`、`pg_notify` 监听 `wiki-repo-op-notify.ts`、
+两个通道共用的 LISTEN 连接 `wiki-notify-channel.ts`），runner 侧在 `src/runner-go/wiki_repo_ops.go`（四种操作复用
+`wiki_plan_repo.go` 的索引和 `wiki_anchors.go` 的锚点检查）；共享常量在 `src/shared/src/wikiRepoOps.ts`。
+
+### 26.1 表与状态
+
+- `wiki_repo_op`：`id`、`job_id`（复合外键到 `wiki_job`，作业删掉它也跟着删）、`owner_id`、`space_id`（复合外键到 `wiki_space`）、
+  `workspace_id`（复合外键到 `workspace`：读的是它的 `work_dir`，路由按它的 `runner_id`）、`runner_id`（领取时写入，接管时刷新）、
+  `kind`、`input`（JSONB，从不含地址和 key）、`state`、租约四列（`lease_owner` / `claim_generation` / `claimed_at` / `heartbeat_at`）、
+  `result`、`error`、`created_at` / `updated_at` / `ended_at`。
+- `state`：`queued` / `running` / `succeeded` / `failed` / `cancelled`；`kind`：`snapshot` / `read` / `diff` / `anchors`。
+- CHECK：租约三列（owner、claimed_at、heartbeat_at）与 `running` 互为条件；只有结束态有 `ended_at`；`succeeded` 没有 `error`；
+  `input` / `result` 是对象。
+- 领取**不占槽位**：仓库操作不是任务也不是会话，`runnerActiveTurns`（runner 上 RUNNING 的会话数）在领取前后不变
+  （`wiki-repo-ops.pg.spec.ts` 断言）。
+
+### 26.2 下发：心跳与路由
+
+- 能力 `wiki-repo-op/v1`（`src/runner-go/transport.go` 声明，服务端 `WIKI_REPO_OP_CAPABILITY`）。没有声明它的 runner 什么都拿不到：
+  操作留在队列里，等它的步骤挂起，健康行说「升级 runner」（§26.6）。没有 `leaseOwner`、正在 drain 的进程同样什么都拿不到——
+  这不是错误，是一台机器普通的状态。
+- 第二个能力 `wiki-repo-op-read/v1`（`WIKI_REPO_OP_READ_CAPABILITY`，owner 2026-10-08）：声明了它的 runner，`read` 回答的是指定 sha 上的
+  整个文件。只声明 `wiki-repo-op/v1` 的 runner 照旧能领到操作，只是 `read` 只给每个文件的前 `boundedChars`（22,000）字——服务端照旧处理，
+  健康行给出同一个「升级 runner」的原因（§26.6）。
+- 领取照集成作业：一条 `UPDATE "wiki_repo_op" … FROM (SELECT … JOIN workspace w ON w.id = o.workspace_id
+  WHERE w.runner_id = <本机> AND (state = 'queued' OR (state = 'running' AND heartbeat_at < now - 60s AND lease_owner <> <本进程>))
+  ORDER BY created_at, id LIMIT 1 FOR UPDATE SKIP LOCKED)`，每条给一个新代数。**每次心跳最多 2 个**，两个 apiserver 同时心跳时
+  在 `SKIP LOCKED` 上错开，而不是互相等待。
+- 按 `workspace.runner_id` 路由，`work_dir` 与空间记录的 `repo_url_norm`、`root_commit_sha` 一起下发：runner 读的是自己的
+  checkout，检查也是在自己的 checkout 上做的。
+- 入队时 `notifyRunnerWake`（与集成作业同一条通道，事务内发出、提交时投递），机器立刻心跳一次，而不是等 30 秒。
+
+### 26.3 回写：三条路由与租约代数
+
+| 路由 | 作用 |
+|---|---|
+| `POST /runner/wiki/repo-ops/:id/progress` | 续租：`heartbeat_at` 只在 `(runner_id, lease_owner, claim_generation)` 还对得上、且仍在 `running` 时写入 |
+| `POST /runner/wiki/repo-ops/:id/fragments` | 分片上传：一片一次调用，同一把租约锁；按 `(op_id, ordinal)` 幂等，重发一片就是同一片 |
+| `POST /runner/wiki/repo-ops/:id/result` | 结算：先按代数比较并交换（`updateMany` 的谓词就是租约），再写结果与快照缓存 |
+
+- 过期的回写（换过 owner、换过代数、换过 runner，或行已终结）得到 **409 `STALE_CLAIM`**，什么都不写；结果重复到达（回包丢了）
+  不算错误，回答行里已有的状态。没有这条操作的账号得到 404。
+- 结算与它引发的一切在同一个事务里：快照的载荷变成空间的那一份、暂存分片删掉、`pg_notify` 发出。读者看不到「已结算但字节不齐」。
+- **写不进去的回写，操作要收尾**（`repoOps.unsettled`，2026-10-09）：结果或分片被拒（**400 `INVALID_RESULT`**），或者数据库存不下
+  （**422 `UNSTORABLE_RESULT`**：数据库拒绝了这次写入——存不下的值、约束——原因里写 SQLSTATE），在回答之前先按 runner 回写时的租约
+  代数把操作收尾成 `failed`、原因写在 `error` 上，删掉暂存分片并发 `pg_notify`。runner 收到 4xx 就不再重发；等这个操作的作业被通知
+  叫醒，马上看到失败，不再等满 300 秒。之后 runner 再发同一个结果，回答行里的状态（`accepted: false, state: 'failed'`）。
+- 两种情况不收尾：`STALE_CLAIM`（409）和 404——操作不是这台 runner 的；数据库回滚的冲突、或者数据库自己出问题
+  （`classifyTransactionFault` 的 TRANSIENT 和 RESOURCE）——写入没有发生，不是被拒，路由回 503 / 500，runner 照旧重发。收尾本身失败时，
+  原来的错误照旧回给 runner。
+- 2026-10-09 之前，数据库拒绝的结果回 500：runner 再发五次后放弃，操作一直停在 running，租约挂着，没有任何东西收尾。
+
+### 26.4 分片上传、快照缓存与原文缓存
+
+- API 的请求体上限 10 MB（`src/apiserver/src/main.ts`），所以一份回答大于 `inlineBytes`（4 MiB）时走分片：每片不超过
+  `fragmentBytes`（2 MiB），按 3 MiB 的整数倍切字符（不会把一个字符切成两半）；服务端按 ordinal 拼回、按 sha256 和字节数与结果
+  对照，全部通过才落库。整份上限 `maxSnapshotBytes`（64 MiB）。**快照的索引和 `read` 的回答用同一套**：读很多文件时整份回答可能
+  超过一个请求体，就以同样的方式分片上传和拼回。
+- 缓存 `wiki_repo_snapshot`（每空间一行：`sha`、`digest`、`size_bytes`、`fragment_count`）与它保存载荷的
+  `wiki_repo_snapshot_fragment`（按 ordinal）。**每个空间只留最近一份**：新的整份替换旧的，外键把旧的分片一起带走；空间删除时
+  随复合外键一起删。没有路由返回它的内容，只对 owner 可见（设计 §9），发给模型前过共享脱敏器。
+- 缓存 `wiki_repo_file`（`0406`）：一行一个 `(space, sha, path)`——`state`（`found` / `cut` / `missing` / `too_large`）、`content`（`found`
+  和 `cut` 时的原文，至多一个文件的上限）、`size_bytes`（该 sha 上文件的大小）。**同一份原文只从 runner 读一次**：命中缓存就不再下发
+  `read`。新的快照落地时，这个空间只留它那个 sha 的行（和快照一起换代）；空间删除时随复合外键一起删。`cut` 是只声明了
+  `wiki-repo-op/v1` 的 runner 给的窗口：读旧路径的调用者能用，声明了整文件能力的调用者按未命中重新读。
+- 上传途中死掉的进程不会破坏缓存：分片先落在 `wiki_repo_op_fragment`（挂在操作上，随操作删），只有结算那一刻才写缓存。
+- **原文逐字节保存**（`repoOps.storedText`，迁移 `0412_wiki_stored_text_encoding`，2026-10-09）：Postgres 的 `text` 和 `jsonb`
+  都存不下 U+0000（22021 / 22P05），源文件里却可能有——main 上有 3 个文件在字面量里带原始 NUL。`wiki_repo_file.content_encoding`
+  说明 `content` 怎么读回：`text` 是原样（没有 NUL 的文件，以及此前缓存的每一行），`base64` 是原文 UTF-8 字节的 base64（含 NUL 的文件）。
+  读缓存时解码，所以交给文档构建、plan 的符号回退和维护的文本，和 runner 上 `git show` 打印的逐字节相同。
+- 操作自己的 `result` 从不写原始回答：read 和 snapshot 结算后只留下结算的结果（read 每项的 state 和字数，快照的 sha、字节数、digest、
+  分片数），原文和索引在缓存里。diff 的路径和 anchors 的状态就是回答本身，原样留下——它们不会有 NUL。
+- 孤立的代理项（JSON 能写成 `\ud800`，但没有任何字节序列解码成它；runner 的编码器把非法字节写成 U+FFFD）不是 runner 读到的文本：
+  出现在 read 的路径或原文、分片、快照索引、diff 或 anchors 的结果里，一律按 `INVALID_RESULT` 拒绝。分片和快照索引是 JSON 文本，NUL
+  在里面写作 `\u0000`，出现原始的 U+0000 也同样拒绝；树里的路径不会有 NUL。
+
+### 26.5 读取：指定 sha 上的整个文件（owner 2026-10-08）
+
+- 一项（`read` 的一个 item）：不给上限时回答的是**该 sha 上的整个文件**。单个文件上限 `wholeFileBytes`（2 MiB）；更大的文件不截断，
+  而是「缺失并注明原因」：`found: false`、`reason: "too_large"` 和它的大小，服务端照缺失处理。
+- 一次请求：不再有「一节材料」的读取上限。服务端按快照给出的大小打包（`operationBytes`，4 MiB 一份），一份回答超过 `inlineBytes`
+  就分片（§26.4）。runner 只对声明了 `wiki-repo-op-read/v1` 的调用者这么回答。
+- 只声明 `wiki-repo-op/v1` 的 runner：一项最多 `boundedChars`（22,000 字），整份回答不超过 `sectionChars`（22,000 字），超出的截断并标
+  `truncated`；服务端照旧处理（截断按缺失并写明），健康行给出升级原因。
+- **每节材料的切取上限**（文档一节 `docSectionChars` 4,200 字、合同 `contractChars` 2,500 字、一节材料 `sectionChars` 22,000 字）仍然是
+  服务端切取材料时的规则：plan 和文档构建照旧按这些数字给模型材料，它们不再是读取的上限。
+- 带 `section` 的 item 仍然可以要一节：它按一节回答，缓存里记作 `cut`（不是整个文件）。
+
+### 26.6 等待：pg_notify 与健康行
+
+- 作业要用仓库时 `waitForWikiRepoOpAsJob`：作业先落到 `waiting` / `waiting_for = 'repo'`，**交出租约**（等的是别的东西，
+  就不该占着租约）；操作结算的通知（`wiki_repo_op` 通道）一到就把它放回 `queued`，领取用新代数接手，流水线从头重放，答案已经在缓存里。
+  等待本身超时（或 worker 停机）是 infra 失败：作业回 `queued`、`attempts + 1`、`failure_kind = 'infra'`、理由写在行上；
+  操作留在队列里给下一次尝试。轮询是兜底，不是主路径。worker 停机时等待立即结束（`WikiRepoOpWaitCancelled`），不再空转到超时。
+- 导入的快照是例外（§5.1、契约 `import.server.snapshot`）：持着租约有上限地等，等不到就用 space 已有的快照或不带锚点，
+  所以 runner 不在时，导入只是少了新快照，不会卡住。
+- **没人会收尾的操作由 worker 清扫**（`repoOps.abandoned`，2026-10-09）：wiki-worker 每一轮（领取之前，不管 `ORBIT_WIKI_EXECUTOR`
+  是什么）把仍在 running、但再没有谁会结算的操作收尾成 `failed`，原因写在行上：它的作业已经结束（succeeded / failed / cancelled），
+  或者它的租约已经沉默了 `abandonedSeconds`（900 秒）。两种都至少沉默过接管窗口（60 秒），不抢在快要到达的结果前面；每收尾一条都在
+  `wiki_repo_op` 通道上通知。之后才到的结果，回答行里的状态。runner 只在上传分片时续租，一个作业等一个操作最多 300 秒，所以沉默
+  15 分钟的租约，只能是 runner 放弃了它或者已经不在。2026-10-09 canary 留下的 3 条读取（作业 ba63b441 早已结束）属于第一种：部署后
+  worker 的第一轮就把它们收尾。
+- 健康行新增 `wikiRepo`：`GET /api/wiki/spaces/:id/health` 的回答多一个 `repo` 字段（`look` / `workspace` / `runner` / `pending`），
+  `look` 取 `ready` / `no_workspace` / `runner_missing` / `runner_offline` / `runner_upgrade`。`runner_upgrade` 就是「升级 runner」，它盖两种
+  机器：没有声明 `wiki-repo-op/v1` 的（什么都领不到，需要仓库的步骤会挂起），和只声明了它、没有声明 `wiki-repo-op-read/v1` 的
+  （照旧只读到 22,000 字）。`runner` 字段里的 `capability` 和 `wholeFile` 把这两者分开：前者说这台机器能不能领，后者说它读不读整个文件。
+
+## 27. 服务端执行的维护运行：`maintain` 作业（服务端执行 P8）
+
+JSON 里是 `maintenance.job.server` 和 `jobs.kindRuns.maintain`；迁移 `0407_wiki_maintain_job`；设计见
+`docs/wiki-server-execution-design.md` §5、§5.5 和 §8。服务端实现在 `src/apiserver/src/wiki-worker/`：
+`wiki-maintain.ts`（抽取的提示词、离题判定、逐条检查、引文定位、重问、分批与熔断的算术）、
+`wiki-maintain-plan.ts`（一次 plan 修改建议：提示词、解析、按快照检查）、`wiki-maintain-job.ts`（整条流水线）；
+触发与运行行的收尾在 `src/apiserver/src/wiki/wiki-maintenance-run.ts`；runner 侧同一套逻辑在 `wiki_maintain.go` 与
+`wiki_maintain_docs.go`，P10 之前两条路并存。
+
+### 27.1 触发：建作业，不建任务
+
+- `ORBIT_WIKI_EXECUTOR` 给这个账号服务端执行时（`server`，或 `canary` 名单内），`considerWikiMaintenance` 的判定读法一字不变
+  （到期、当日次数、队列余量、期望位置），写入换成 `MaintenanceJobWriter.makeJob`：一个 `wiki_job`（`kind = maintain`，
+  `input = { runId }`，优先级 0）和它名下的 `wiki_maintenance_run` 行（`job_id` 写在同一事务里，
+  `wiki_maintenance_run_maker_chk` 要求每行恰好一个建者），**不建任务、不建会话**。空间行 `FOR NO KEY UPDATE` 是它的锁：
+  两个事实同时到达只建一个作业，进行中的作业像未结束的任务一样挡住下一次（`unfinished`），排队的 plan 作业照旧先走。
+- 服务端这条路上隐藏列表不是必需的：`settings.maintenance.enabled` 与 `workspaceId` 就够。列表存在时，死在里面的维护任务照旧先被
+  重跑或收尾（§19.7）。
+- 当日计数、追赶与熔断都按运行行统计：`wikiMaintenanceRunsToday` 的 `byJob` 分支数 `job_id` 非空的运行行（不再要求有列表），
+  追赶期本地端点不计数的判定改看运行行上的 `local_endpoint`——worker 起跑时按 System model 的地址写入，
+  apiserver 不读、也不校验任何 provider。
+- 打开维护（PATCH 空间设置）在服务端执行的账号上不校验 provider（`checkWikiMaintenanceInput`、`setWikiMaintenance`）：
+  一个没有任何 provider 行的账号也能打开维护并跑通一次运行。runner 模式下这段校验逐字不变。
+
+### 27.2 运行的身份：作业，而不是会话
+
+- 运行没有会话，所以**运行就是它的 `wiki_job`**：`wiki_changeset.job_id`（0407）记下它，熔断按它统计本次运行此前的改动
+  （`wikiMaintenanceRunChanges`），核实列表按它找自己的 op（`proposerScope`），plan 修改建议的 `author_job_id` 也写它
+  （`author_session_id` 为空，`wiki_plan_proposal_author_chk` 要求恰好一个作者）。写入的 principal 是 origin `maintenance`、
+  无会话、无 user（与文档构建作业相同）。
+- runner 门不再把运行的模型工作交给会话：`GET …/maintenance/run`、`GET …/spaces/:id/dossiers`、
+  `POST …/maintenance/changesets`、`GET`/`POST …/maintenance/verifications`、`POST …/maintenance/advance`、
+  `POST …/maintenance/finish` 在服务端执行的账号上回 **409 `WIKI_SERVER_EXECUTES`**（`RunnerWikiMaintainController`、
+  `RunnerWikiMaintenanceController`）；`GET …/maintenance/check` 不在其中——它是验收命令的只读调用。runner 模式下两个门都不变。
+
+### 27.3 流水线：与 `orbit wiki maintain` 同序
+
+1. **仓库**：一次 `snapshot` 仓库操作拿到 origin/main 的 sha 与索引（路径与大小、文档标题与章节、符号、契约、可达提交、
+   README 首段）；锚点查快照，不再有 checkout。
+2. **案卷**：`WikiMaintenance.dossierPage` 同一条服务端读法，从游标读到运行期望的位置；已处理过的（`unchanged`）跳过。
+3. **抽取**：每个案卷一个请求（step `extract`，unit 是案卷的 session id），同一作业最多
+   `maintenance.job.rules.extractConcurrency` 个在途；离题回 `{"offTopic": true}`；每条按案卷的行与 spans 检查字段与引文、
+   按快照检查锚点、按 `WIKI_MAINTAIN_JOB.planMaxTokens` 之外的同一条提示词重问一次（unit 加 `#retry`，拒绝原因写进提示词）。
+   引文的定位与 runner 逐字一致（`wikiMaintainPlain` / `wikiMaintainPlace`）。
+4. **自查与熔断**：按主题分组，每批最多 `limits.opsPerChangeset`（Manual 空间 `limits.opsPerTurn`）；先 dry run，
+   服务端找不到的引文从来源上摘掉再查一次，仍被拒的丢掉，被审阅队列挡下的不提交；熔断按 dry run 的回答把整页整页挡回，
+   游标停在那一页的起点。
+5. **提交**：每批用 `wiki-maintain-<runId>-<ops 摘要>` 的幂等键提交 changeset（origin maintenance，挂在作业上）；
+   dry run 通过而此刻被拒的 op 让这次运行失败。
+6. **推进游标**：op 记下后立刻 `advanceRecorded`（判据 3 第 4 版）：成功推进不再动它，之后任何一步失败仍以 failed 结束，
+   游标留在原处。
+7. **核实**：用 P3 的 `verifyWikiOps`，自己的 op 核两遍（第二次带上被拒原因），再收养最多
+   `rules.adoptOpsMax` 个等待中的 op；没有结论的 op 不上线、留给下一次运行，不算失败。
+8. **锚点**：一页一页取 `listWikiAnchorsForJob`，把这一页的锚点作为一次 `anchors` 仓库操作交给空间所在的 runner，
+   结果按现有写入口 `recordAnchorChecks` 写回（锚点状态、挑战 op）。
+9. **文档**（追赶期整步跳过）：`wikiDocsAffected` 拿服务端那一半；仓库那一半用 `diff` 仓库操作按节自己的 `repoSha`
+   比到 head（消失的路径先撤回，`withdrawPaths`），只重写受影响的节（P7 的 `runWikiDocsBuild`，`only` 传入本次要写的节）；
+   新增的设计文档（`--diff-filter=AR -- docs/`，去掉 `docs/mocks/` 与 `docs/evidence/`、已被引用或已被建议的）算出标题、
+   章节与开头；最后提一次 plan 修改建议，用 P6 的门（`proposeServer`）检查，最多三轮把门报的错回给模型。
+10. **结束**：写报告与 token 合计，`finishWikiMaintenanceJob` 推进游标、写运行行、按 owner 2026-10-08 的决定调用
+    `queueWikiArticlesAfterRun`——只有成功、记下了 op、且不在追赶期才排文章作业（§24）。
+
+### 27.4 失败与恢复（设计 §5.5）
+
+- **infra**：runner 不在或太旧、仓库操作超时、请求等过上限、worker 停机。运行行不结束，作业回 `queued` 按退避重试，
+  **不计入连续失败**（`consecutive_failures` 不动）。
+- **content**：模型给不出可用的答案、dry run 通过却被服务端拒绝、某一步自己的错误。运行以 failed 结束：
+  游标按规则不动，`consecutive_failures` 加一，连续三次通知 owner；作业以 `failure_kind = content` 结束。
+- **worker 停机**：模型请求与仓库等待被中止（`WikiModelWaitCancelled` / `WikiRepoOpWaitCancelled`），运行不结算，
+  租约交回，下一个进程重放；已经答过的请求直接复用。

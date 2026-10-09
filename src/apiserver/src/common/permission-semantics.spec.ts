@@ -119,8 +119,10 @@ test("DeepSeek Harness enforces Default, Auto and Don't Ask and rejects the rest
       if (measured[effective]) {
         assert.deepEqual({ u: semantics.unapproved, h: semantics.honored }, { u: measured[effective], h: true }, `${mode}/${runsAsRoot}`);
         assert.equal(semantics.shortNote, undefined);
-        // The boundary is stated, not implied: what runs without asking, and that subagents are gone.
-        assert.match(semantics.note ?? '', /MCP tools \(Orbit’s included\) run without asking/);
+        // The boundary is stated, not implied: what runs without asking, what the tool gate asks
+        // about instead, and that subagents are gone.
+        assert.match(semantics.note ?? '', /Orbit’s MCP tools run without asking/);
+        assert.match(semantics.note ?? '', /network ones included — except a push, a remote shell, an HTTP write/);
         assert.match(semantics.note ?? '', /subagents are not available/);
       } else {
         assert.deepEqual({ u: semantics.unapproved, h: semantics.honored }, { u: 'deny', h: false }, `${mode}/${runsAsRoot}`);

@@ -278,11 +278,15 @@ public struct ThinkingBlock: Equatable, Sendable, Codable {
     /// stretch whose start this client never saw, and on transcripts recorded before these existed.
     public var startedTs: String?
     public var finishedTs: String?
+    /// How long the runner timed the stretch, as stored on the durable event that closed it
+    /// (`thinkingMs`), and summed when blocks fold. Unlike the two stamps above it survives a
+    /// reload, so the row prefers it. Absent on a block an older runner stored.
+    public var thinkingMs: Int?
     public var isFinalized: Bool { seq != nil }
     public var displayText: String { text.isEmpty ? streamingText : text }
 
     public init(id: String, text: String, streamingText: String, seq: Int?,
-                blocks: Int = 1, startedTs: String? = nil, finishedTs: String? = nil) {
+                blocks: Int = 1, startedTs: String? = nil, finishedTs: String? = nil, thinkingMs: Int? = nil) {
         self.id = id
         self.text = text
         self.streamingText = streamingText
@@ -290,12 +294,13 @@ public struct ThinkingBlock: Equatable, Sendable, Codable {
         self.blocks = blocks
         self.startedTs = startedTs
         self.finishedTs = finishedTs
+        self.thinkingMs = thinkingMs
     }
 
     // Tolerant decode, like `UserBubble` above: a snapshot written before these keys existed still
     // rehydrates (they default) instead of discarding the whole cached session.
     enum CodingKeys: String, CodingKey {
-        case id, text, streamingText, seq, blocks, startedTs, finishedTs
+        case id, text, streamingText, seq, blocks, startedTs, finishedTs, thinkingMs
     }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -306,6 +311,7 @@ public struct ThinkingBlock: Equatable, Sendable, Codable {
         blocks = (try? c.decodeIfPresent(Int.self, forKey: .blocks)) ?? 1
         startedTs = try? c.decodeIfPresent(String.self, forKey: .startedTs)
         finishedTs = try? c.decodeIfPresent(String.self, forKey: .finishedTs)
+        thinkingMs = try? c.decodeIfPresent(Int.self, forKey: .thinkingMs)
     }
 }
 

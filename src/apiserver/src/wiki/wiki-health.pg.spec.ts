@@ -287,12 +287,12 @@ async function startRun(h: Harness, s: Space): Promise<{ taskId: string; run: st
   });
   assert.equal(made.made, true, `a due space makes its maintenance task: ${JSON.stringify(made)}`);
   if (!made.made) throw new Error('unreachable');
-  await h.sql.query(`UPDATE "task" SET "status" = 'IN_PROGRESS' WHERE "id" = $1`, [made.taskId]);
+  await h.sql.query(`UPDATE "task" SET "status" = 'IN_PROGRESS' WHERE "id" = $1`, [made.taskId!]);
   const run = await session(h, s.owner.id, {
-    workspaceId: s.workspaceId, runnerId: s.machine.id, taskId: made.taskId, status: 'RUNNING', lastTurnAt: minutesAgo(1),
+    workspaceId: s.workspaceId, runnerId: s.machine.id, taskId: made.taskId!, status: 'RUNNING', lastTurnAt: minutesAgo(1),
   });
   expectStatus(await call(h, { runner: s.machine.token, session: run }, 'GET', `/runner/wiki/spaces/${s.spaceId}/maintenance/run`), 200, 'the run reads where it starts');
-  return { taskId: made.taskId, run, expect: made.expect };
+  return { taskId: made.taskId!, run, expect: made.expect };
 }
 
 /** Page the dossiers a run covers, up to what its task expects, as `orbit wiki maintain` does: the token it may advance to. */

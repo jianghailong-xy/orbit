@@ -137,7 +137,14 @@ struct ConsoleView: View {
                         // Errors only, and sticky until the ✕ — this row is in flow, so anything that
                         // comes and goes on a timer here shoves the composer around while the user is
                         // typing in it. Confirmations belong in the toast host (see `showToast`).
-                        if let repair = console.queuedDshRepair {
+                        // Why this run produced nothing at all. Drawn first because it is about the
+                        // run itself rather than the message being sent, and drawn INSTEAD of the
+                        // two engine-repair cards below when it has something to say — one fact,
+                        // one card (an engine reason it does not claim is theirs, and the reverse).
+                        if let runStart = console.runStart {
+                            SessionRunStartCardView(console: console, card: runStart)
+                                .padding(.bottom, .composerBandGap)
+                        } else if let repair = console.queuedDshRepair {
                             DshRepairCardView(console: console, repair: repair)
                                 .padding(.bottom, .composerBandGap)
                         } else if let repair = console.queuedAntigravityRepair {
@@ -205,6 +212,8 @@ struct ConsoleView: View {
                 }
                 // Image cache for user-turn attachments, read by `UserBubbleView` down the tree.
                 .environment(registry.attachments)
+                // The tasks this conversation filed, which a watch's wake line names its targets by.
+                .environment(console.createdTasks)
                 // One full-screen viewer for the whole transcript: a thumbnail anywhere in it opens here
                 // and pages across every image in the session, in transcript order (web parity).
                 .environment(\.sessionImagePreview, sessionImagePreview(console))
@@ -350,12 +359,6 @@ struct ConsoleView: View {
                     }
             }
         }
-        .confirmationDialog("Delete permanently?", isPresented: $confirmPurge, titleVisibility: .visible) {
-            Button("Delete Permanently", role: .destructive) { appModel.purgeSession(sessionID) }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This session and its full transcript will be permanently deleted. This can't be undone.")
-        }
         #else
         // The same link on macOS, from the window toolbar: a detail pane's own actions sit at
         // `.primaryAction` there, as the project and task pages' menus do.
@@ -474,6 +477,14 @@ struct ConsoleView: View {
         }
         .menuOrder(.fixed)
         .accessibilityLabel("Session actions")
+        // Raised by this menu, so it hangs off the menu rather than off the page: the panel opens
+        // against the ⋯ that was pressed.
+        .orbitConfirmation("Delete permanently?", isPresented: $confirmPurge) {
+            Button("Delete Permanently", role: .destructive) { appModel.purgeSession(sessionID) }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This session and its full transcript will be permanently deleted. This can't be undone.")
+        }
     }
     #endif
 }
@@ -622,6 +633,27 @@ struct TranscriptView: View {
         #endif
     }
 
+    /// The viewport changed size under a pinned transcript — the keyboard rising, the composer
+    /// growing a line, the chrome folding away — and the tail is asked for, the way a tap on the
+    /// jump-to-latest disc asks for it (`heldScroll`: this arrives off a layout report, so the rows
+    /// it names are the ones the next update has, not whatever this frame holds).
+    private func repinAfterResize() {
+        // A window opened at a record ends at a gap, and a preview's place is held while its sheet
+        // is up: neither follows the tail, so neither follows a resize to it.
+        guard !console.detached, !reviewingCard else { return }
+        #if os(iOS)
+        // A lazy List's `contentSize` is an estimate until it lays out again, and a programmatic
+        // scroll is CLAMPED to it: asked in the same update that grew the composer, the scroll
+        // stops wherever the estimate ended, one line short of the tail. Settle the layout first.
+        DispatchQueue.main.async {
+            transcriptScroll.view?.layoutIfNeeded()
+            holdScroll(to: bottomID, anchor: .bottom, animated: false)
+        }
+        #else
+        holdScroll(to: bottomID, anchor: .bottom, animated: false)
+        #endif
+    }
+
     /// What `stranded` is re-decided on: the tail leaving or entering the view, the pin, and every
     /// publish — whose follow may yet close the gap.
     private var strandKey: String { "\(tailOutOfView)|\(atBottom)|\(console.stateRevision)" }
@@ -700,6 +732,7 @@ struct TranscriptView: View {
         .scrollDismissesKeyboard(.interactively)   // iOS: swipe the transcript to lower the keyboard
         .defaultScrollAnchor(.bottom)
         .modifier(tracker(ruler: ruler))
+        .modifier(ViewportResize(atBottom: atBottom, onResize: repinAfterResize))
         // The transcript viewport's top edge in global space — the line `AnchorRow` tests each row
         // against to find the one under the top. Stable during a scroll (only shifts on layout, e.g.
         // the keyboard), so reading it here doesn't churn.
@@ -828,10 +861,12 @@ struct TranscriptView: View {
                 // interrupted by the sheet and leave its row off-screen on return.
                 proxy.scrollTo(held.rowID, anchor: held.anchor)
                 openReview(for: row)
-            } else {
+            } else if held.animated {
                 withAnimation(.easeOut(duration: 0.2)) {
                     proxy.scrollTo(held.rowID, anchor: held.anchor)
                 }
+            } else {
+                proxy.scrollTo(held.rowID, anchor: held.anchor)
             }
         }
         .onAppear { proxy.scrollTo(bottomID, anchor: .bottom); recomputeStuck() }
@@ -893,8 +928,8 @@ struct TranscriptView: View {
     // top yet (freshly opened, before the first geometry callback) but we're scrolled below the top, fall
     // back to naming the last question so the header shows at once; at the very top / short transcripts it
     // stays nil. Queued turns are skipped (web's `:not(.chat-queued)`) — they haven't been asked yet — and
-    // so is a background job's news or a wakeup coming due, a line inside an answer rather than the head
-    // of one (`StickySummary.isAnchor`; web's line carries no `data-sticky-label`).
+    // so is a watch's wake, a background job's news or a wakeup coming due, a line inside an answer
+    // rather than the head of one (`StickySummary.isAnchor`; web's line carries no `data-sticky-label`).
     //
     // Which turns are questions is read once per published state (`StickyQuestions`, kept on the
     // ruler), so a scroll is a lookup rather than a walk re-reading every turn's text.
@@ -905,9 +940,13 @@ struct TranscriptView: View {
         console.noteTopVisible(ruler.topAnchorID)
         let questions = ruler.questions(console) { StickyQuestions($0.state.items, isQuestion: namesAQuestion) }
         var found: String? = nil
+        // Both answers are held (`StickyQuestionHold`): the header moves the list by its own height,
+        // so a reading taken with it shown and one taken with it hidden can disagree, and a single
+        // threshold between them flips the header on every frame.
         if let anchor = ruler.topAnchorID {
-            found = questions.above(anchor)
-        } else if ruler.contentOffset > 40 {
+            found = StickyQuestionHold.named(found: questions.above(anchor), anchor: anchor, showing: stuckID)
+        } else if StickyQuestionHold.fallbackNames(contentOffset: Double(ruler.contentOffset),
+                                                   showing: stuckID != nil) {
             found = questions.last
         }
         if found != stuckID { stuckID = found }
@@ -1010,9 +1049,9 @@ struct TranscriptView: View {
 
     /// Carry a scroll into the next update rather than making it from here (see `heldScroll`). A new
     /// tick each time, so asking twice for the same row scrolls twice.
-    private func holdScroll(to rowID: String, anchor: UnitPoint, opensReview: Bool = false) {
+    private func holdScroll(to rowID: String, anchor: UnitPoint, opensReview: Bool = false, animated: Bool = true) {
         heldScroll = HeldScroll(rowID: rowID, anchor: anchor, tick: (heldScroll?.tick ?? 0) &+ 1,
-                                sessionID: console.sessionID, opensReview: opensReview)
+                                sessionID: console.sessionID, opensReview: opensReview, animated: animated)
     }
 
     /// The bar opens the same review as tapping a preview. Inline cards remain scroll-only.
@@ -1034,10 +1073,10 @@ struct TranscriptView: View {
     // `anchor: .top` lands the bubble just under this header (it's a safe-area inset, so the scroll
     // region starts below it).
     private func stickyQuestion(_ bubble: UserBubble, proxy: ScrollViewProxy) -> some View {
-        // What this turn was and what it said. A watch's wake — or an exception item's delivery — is
-        // still the turn the bar points back at, but it is not the person's question: it gets its
-        // card's own title and line (`StickySummary`), so the bar can't say "your question" above a
-        // card reading "not typed by you".
+        // What this turn was and what it said. An exception item's delivery — or another card the
+        // control plane draws — is still the turn the bar points back at, but it is not the person's
+        // question: it gets its card's own title and line (`StickySummary`), so the bar can't say
+        // "your question" above a card reading otherwise. A wake is no such turn (`isAnchor`).
         let summary = StickySummary.of(text: bubble.text, note: bubble.note, itemCard: bubble.itemCard,
                                        taskStart: bubble.taskStart,
                                        startedCard: bubble.startedCard,
@@ -1060,8 +1099,8 @@ struct TranscriptView: View {
         } label: { _ in
             HStack(spacing: 8) {
                 // Priority, not `fixedSize()`: the label is served first, so the line beside it is
-                // what gives way — but a label as long as "Watch stopped: every target is gone"
-                // truncates itself rather than pushing the line off the row entirely.
+                // what gives way — but a card's label too long for the row truncates itself rather
+                // than pushing the line off the row entirely.
                 Text(summary.label)
                     .font(.orbitLabel).foregroundStyle(.secondary)
                     .lineLimit(1).truncationMode(.tail).layoutPriority(1)
@@ -1277,6 +1316,10 @@ private struct HeldScroll: Equatable {
     let tick: Int
     let sessionID: String
     let opensReview: Bool
+    /// Glide to the row or land on it at once. A tap gets the glide; a re-pin for a viewport that is
+    /// still moving does not — an animated scroll is aimed at the layout of the frame it starts in,
+    /// and a composer growing under it left the tail a line short of the bottom.
+    var animated = true
 }
 
 #if os(iOS)
@@ -1417,6 +1460,30 @@ private struct ScrollTouchConfigurator: UIViewRepresentable {
     }
 }
 #endif
+
+/// The transcript's viewport changing size — the keyboard rising, the composer growing a line, a
+/// phone's chrome folding away. `ScrollTracker` cannot answer this one: `onScrollGeometryChange`
+/// reports the scroll view scrolling (and the insets a keyboard moves), and the List's frame
+/// changing for any other reason is no sample of it — measured here, the composer growing a line
+/// reported nothing at all while the last message slid under it. A pinned transcript follows the
+/// resize anyway (see `TailPinning.followsResize`, web's ResizeObserver); the ask crosses to the
+/// transcript, which owns the scroll.
+private struct ViewportResize: ViewModifier {
+    /// The pin as of the last update — the rule's `wasPinned`. A reader away from the tail keeps
+    /// their place through a resize, however the viewport moved.
+    let atBottom: Bool
+    let onResize: () -> Void
+
+    func body(content: Content) -> some View {
+        if #available(iOS 18, macOS 15, *) {
+            content.onGeometryChange(for: Double.self) { Double($0.size.height) } action: { was, now in
+                if TailPinning.followsResize(wasPinned: atBottom, from: was, to: now) { onResize() }
+            }
+        } else {
+            content
+        }
+    }
+}
 
 /// The single scroll observer: drives the jump-to-latest button's `atBottom` and `tailOutOfView`,
 /// AND feeds the sticky header by stashing the live content offset into `ruler` and asking for a

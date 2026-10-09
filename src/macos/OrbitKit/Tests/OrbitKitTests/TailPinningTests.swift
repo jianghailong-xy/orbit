@@ -143,4 +143,51 @@ final class TailPinningTests: XCTestCase {
 
         XCTAssertTrue(pinned(justInsideTheSlack, readerDriven: true))
     }
+
+    // MARK: - The reported bug, third time round: the viewport changes size under a pinned reader
+
+    /// A phone's composer focused on a transcript at the tail: the keyboard rises and the viewport
+    /// shrinks by ~200pt (measured on an iPhone: 643 → 445, in steps, as the chrome folds and the
+    /// keyboard lands) — and typing a third line takes another ~70 off it. The offset does not move
+    /// and nothing removed content, so the `pinned` rule above keeps the pin, which is right: the
+    /// reader *is* still at the tail. What is not right is where the tail ended up — below the fold,
+    /// with the last line cut in half.
+    private let beforeKeyboard: Double = 643
+    private let underKeyboard: Double = 445
+
+    func testAShrinkingViewportUnderAPinnedTranscriptAsksForItsTail() {
+        XCTAssertTrue(TailPinning.followsResize(wasPinned: true, from: beforeKeyboard, to: underKeyboard))
+        // …and the pin rule itself keeps saying pinned through it, which is why this rule has to
+        // exist beside it: nothing about the scroll reading says the tail moved.
+        let before = TailScrollSample(offset: 9084, contentHeight: 9727, bottomGap: 0)
+        let under = TailScrollSample(offset: 9084, contentHeight: 9727, bottomGap: 160)
+
+        XCTAssertTrue(pinned(under, from: before))
+    }
+
+    func testAGrowingViewportAsksForTheTailToo() {
+        // The keyboard going away: the viewport grows back and the tail is left sitting mid-screen
+        // with a keyboard's worth of nothing under it.
+        XCTAssertTrue(TailPinning.followsResize(wasPinned: true, from: underKeyboard, to: beforeKeyboard))
+    }
+
+    func testAReaderAwayFromTheTailIsNotCarriedBackByAResize() {
+        // Rotating the phone, or focusing the composer, while the reader is reading history: the
+        // viewport moved, their place did not move with it, and the jump-to-latest disc is the way
+        // back — never a resize.
+        XCTAssertFalse(TailPinning.followsResize(wasPinned: false, from: beforeKeyboard, to: underKeyboard))
+    }
+
+    func testAnUnchangedViewportIsNotAResize() {
+        // Every other sample the transcript reports — a scroll, a publish that grew the rows — comes
+        // with the viewport it already had, and must not be read as one.
+        XCTAssertFalse(TailPinning.followsResize(wasPinned: true, from: underKeyboard, to: underKeyboard))
+    }
+
+    func testAViewportThatWasNeverMeasuredIsNotAResize() {
+        // 0 is the first reading, before a layout has happened: an unknown is not a resize, or the
+        // transcript would ask for its tail on the frame it appears.
+        XCTAssertFalse(TailPinning.followsResize(wasPinned: true, from: 0, to: underKeyboard))
+        XCTAssertFalse(TailPinning.followsResize(wasPinned: true, from: beforeKeyboard, to: 0))
+    }
 }

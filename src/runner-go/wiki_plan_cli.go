@@ -230,6 +230,10 @@ func wikiPlanCallError(command, spaceID string, err error) error {
 		return fmt.Errorf("%s: %w", command, err)
 	}
 	switch code := httpErr.code(); {
+	case code == wikiServerExecutesCode:
+		return fmt.Errorf("%s: space %s's plan is drafted and revised on the Orbit server, with its System model (%s: %s). "+
+			"Nothing was read or drafted here, and no model was asked: the owner asks for a draft on the plan page",
+			command, spaceID, code, refusalMessageOf(err))
 	case code == wikiNotMaintenanceSessionCode:
 		return fmt.Errorf("%s: only the plan job of space %s runs it — the session of the task the server made for a draft "+
 			"of the space's plan, a Wiki maintenance run of the space — and this session is not one (%s). Nothing was read "+

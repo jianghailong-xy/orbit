@@ -1,0 +1,13 @@
+{
+ "command": "cd /root/.orbit/worktrees/8a4a92fa-ce2f-5986-9131-9119c512dfc6 && git log --oneline -1 && git rev-parse HEAD:src/web && npm run build -w @orbit/web && npm run test -w @orbit/web",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_7353a10c77d4",
+ "cwd": "/root/.orbit/worktrees/8a4a92fa-ce2f-5986-9131-9119c512dfc6",
+ "commit": "28405c86d",
+ "webTree": "df7414507c6ffa7fa51b7cd6e3e2b8f70e13e816",
+ "outputLastWritten": "2026-10-07T05:17:42.654935+00:00",
+ "exitCode": 0,
+ "outputSha256": "f03cc88eee21c53949f136daee746ed5b8fed8479172805e59a204bb8f241dcd",
+ "outputBytes": 1068316,
+ "note": "Fixed tree (28405c86d, web tree df7414507c6f..., which later commits of this branch do not change). Build passes (tsc -b && vite build, with the existing larger-than-500kB chunk notice); vitest: 341 test files / 4345 tests passed (295.7 s), Menu.test.tsx included."
+}

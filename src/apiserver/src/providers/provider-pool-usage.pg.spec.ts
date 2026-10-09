@@ -39,6 +39,7 @@ import { OAUTH_USAGE_URL } from './plan-usage';
 import { ProviderPlanUsageService } from './plan-usage.service';
 import { ProvidersController } from './providers.controller';
 import { CodexLoginService } from './codex-login.service';
+import { DeepSeekBalanceService } from './deepseek-balance.service';
 import { ProvidersService } from './providers.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -106,6 +107,8 @@ async function openDoor(providers: ProvidersService, prisma: PrismaService) {
     // The ChatGPT sign-in's own controller dependency (migration 0323): no route this spec reads
     // reaches it, and a module that omitted it would fail to build the controller.
       { provide: CodexLoginService, useValue: {} },
+      // The DeepSeek balance route's dependency, for the same reason.
+      { provide: DeepSeekBalanceService, useValue: {} },
       JwtAuthGuard,
       Reflector,
       { provide: JwtService, useValue: { verifyAsync: async (token: string) => ({ sub: token }) } },

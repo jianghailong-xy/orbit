@@ -1,0 +1,45 @@
+{
+ "beyond": [],
+ "missing": [],
+ "screenshots": {
+  "antialias": 20,
+  "beyond": 0,
+  "identical": 232,
+  "missing": 0
+ },
+ "styleDeltas": {},
+ "tests": {
+  "notPassedDel": [
+   "chromium-dark-desktop :: record browser performance baseline",
+   "chromium-dark-phone :: both sides of existing 600, 640 and 960px rules",
+   "chromium-dark-phone :: record browser performance baseline",
+   "chromium-light-phone :: both sides of existing 600, 640 and 960px rules",
+   "chromium-light-phone :: record browser performance baseline",
+   "webkit-dark-desktop :: record browser performance baseline",
+   "webkit-dark-phone :: both sides of existing 600, 640 and 960px rules",
+   "webkit-dark-phone :: record browser performance baseline",
+   "webkit-light-desktop :: record browser performance baseline",
+   "webkit-light-phone :: both sides of existing 600, 640 and 960px rules",
+   "webkit-light-phone :: record browser performance baseline"
+  ],
+  "notPassedRef": [
+   "chromium-dark-desktop :: record browser performance baseline",
+   "chromium-dark-phone :: both sides of existing 600, 640 and 960px rules",
+   "chromium-dark-phone :: record browser performance baseline",
+   "chromium-light-phone :: both sides of existing 600, 640 and 960px rules",
+   "chromium-light-phone :: record browser performance baseline",
+   "webkit-dark-desktop :: record browser performance baseline",
+   "webkit-dark-phone :: both sides of existing 600, 640 and 960px rules",
+   "webkit-dark-phone :: record browser performance baseline",
+   "webkit-light-desktop :: record browser performance baseline",
+   "webkit-light-phone :: both sides of existing 600, 640 and 960px rules",
+   "webkit-light-phone :: record browser performance baseline"
+  ],
+  "total": 112
+ },
+ "traces": {
+  "differing": {},
+  "equal": 0,
+  "total": 0
+ }
+}

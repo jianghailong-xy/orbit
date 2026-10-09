@@ -1,0 +1,8 @@
+     12 "GET /api/providers/mine/p-usd/balance HTTP/1.1" 200 -
+     12 "GET /api/providers/mine/p-old/balance HTTP/1.1" 200 -
+     12 "GET /api/providers/mine/p-net/balance HTTP/1.1" 200 -
+     12 "GET /api/providers/mine/p-low/balance HTTP/1.1" 200 -
+      7 "GET /api/providers/mine/p-dsh/balance HTTP/1.1" 200 -
+      6 "GET /api/providers/mine/p-ds/balance HTTP/1.1" 200 -
+      1 "GET /api/providers/mine/p-old/balance?refresh=1 HTTP/1.1" 200 -
+      1 "GET /api/providers/mine/p-ds/balance?refresh=1 HTTP/1.1" 200 -

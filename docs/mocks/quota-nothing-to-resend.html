@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<link rel="stylesheet" href="../../src/web/src/index.css" />
+<style>
+/* ══ page chrome for the mock only (same idiom as quota-limit-retry.html) ═══ */
+body { margin: 0; background: var(--bg-base); color: var(--text-1);
+       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+.sheet { width: 860px; padding: 28px 32px 36px; box-sizing: border-box; }
+.sheet-h { font-size: 19px; font-weight: 650; letter-spacing: -.01em; margin: 0 0 2px; }
+.sheet-sub { font-size: 12.5px; color: var(--text-3); margin: 0 0 22px; }
+.case { margin: 0 0 26px; }
+.case-t { display: flex; align-items: baseline; gap: 9px; margin: 0 0 7px; }
+.case-n { font-size: 11px; font-weight: 700; color: var(--text-3); letter-spacing: .06em; }
+.case-l { font-size: 13px; font-weight: 600; color: var(--text-1); }
+.case-w { font-size: 12px; color: var(--text-3); }
+.frame { border: 1px dashed var(--border-subtle); border-radius: 12px; padding: 14px 16px;
+         background: var(--bg-subtle); }
+.rule { height: 1px; background: var(--border-subtle); margin: 30px 0 24px; }
+.between { margin: 14px 0 6px; font-size: 12px; color: var(--text-3); }
+
+/* the card's own CSS is the shipped one — src/web/src/index.css (.chat-quota*, .sw) */
+
+/* the ways out, drawn as chrome (not part of any card) */
+.flow { display: flex; gap: 12px; }
+.flow > div { flex: 1; border: 1px solid var(--border-subtle); border-radius: 10px;
+              padding: 10px 12px; background: var(--bg-raised); }
+.flow h4 { margin: 0 0 4px; font-size: 12.5px; color: var(--text-1); }
+.flow p { margin: 0; font-size: 12px; color: var(--text-3); line-height: 1.55; }
+</style>
+</head>
+<body>
+<div class="sheet">
+  <h1 class="sheet-h">Quota limit → nothing to re-send</h1>
+  <p class="sheet-sub">A run the limit killed on a background job's turn: there is no message for Retry to
+    carry — what the card offers instead · web card, the phone renders the same words ·
+    <span id="th">light</span> — rendered from the shipped <code>index.css</code></p>
+
+  <!-- ── TODAY ─────────────────────────────────────────────────────────── -->
+  <div class="case">
+    <div class="case-t"><span class="case-n">TODAY</span><span class="case-l">What ships right now</span>
+      <span class="case-w">no Retry — the server answers “nothing to re-send” · the switch arms a retry the
+        sweeper disarms as it comes due (“nothing to re-send”) · the body names the composer's pick
+        (deepseek), not the provider that ran and failed (claude)</span></div>
+    <div class="frame">
+      <div class="chat-quota" data-needs-you="true">
+        <div class="chat-quota-head">
+          <svg class="chat-quota-icon" width="15" height="15" viewBox="0 0 1024 1024" fill="currentColor"><path d="M955.7 856l-416-720c-6.2-10.7-16.9-16-27.7-16s-21.6 5.3-27.7 16l-416 720C56 877.4 71.4 904 96 904h832c24.6 0 40-26.6 27.7-48zM480 416c0-4.4 3.6-8 8-8h48c4.4 0 8 3.6 8 8v184c0 4.4-3.6 8-8 8h-48c-4.4 0-8-3.6-8-8V416zm32 352a48.01 48.01 0 010-96 48.01 48.01 0 010 96z"/></svg>
+          <div class="chat-quota-title">5-hour limit reached</div>
+        </div>
+        <div class="chat-quota-msg">The 5-hour quota for deepseek on “wikova” is used up. Auto-retry is off.</div>
+        <div class="chat-quota-auto">
+          <div class="chat-quota-auto-txt">
+            <div class="chat-quota-auto-l">Auto-retry when the quota resets</div>
+            <div class="chat-quota-auto-d">Off — nothing will re-send until you do.</div>
+          </div>
+          <button class="sw" data-on="false"></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="rule"></div>
+
+  <!-- ── A ─────────────────────────────────────────────────────────────── -->
+  <!-- What shipped (2026-10-07, docs/quota-limit-retry-design.md §9). One verb for a failure with
+       no words to re-send: Continue — and nothing about it is a decision the platform makes behind
+       a reader's back. The sentence is quoted under the button that sends it; it is armed by
+       default with the off switch beside it; and the card names the provider the RUN was on
+       (claude), never the composer's next-turn pick — the pick was the other reason this incident
+       read wrong, a card about claude's window saying deepseek's. -->
+  <div class="case">
+    <div class="case-t"><span class="case-n">A</span><span class="case-l">Armed — the default</span>
+      <span class="case-w">the server sends “Continue where you left off.” at the reset · neutral,
+        because something IS going to happen · it also holds the task's own re-run
+        (tasks.service RUN_RETRY_ARMED), so one outage cannot leave two runs</span></div>
+    <div class="frame">
+      <div class="chat-quota" data-needs-you="false">
+        <div class="chat-quota-head">
+          <svg class="chat-quota-icon" width="15" height="15" viewBox="0 0 1024 1024" fill="currentColor"><path d="M512 64C264.6 64 64 264.6 64 512s200.6 448 448 448 448-200.6 448-448S759.4 64 512 64zm176.5 585.7l-28.6 39a7.99 7.99 0 01-11.2 1.7L483.3 569.8a7.92 7.92 0 01-3.3-6.5V288c0-4.4 3.6-8 8-8h48.1c4.4 0 8 3.6 8 8v247.5l142.6 103.1c3.6 2.5 4.4 7.5 1.8 11.1z"/></svg>
+          <div class="chat-quota-title">5-hour limit reached</div>
+        </div>
+        <div class="chat-quota-msg">The 5-hour quota for claude on “wikova” is used up. Nothing to re-send —
+          the limit landed on a turn that wasn’t yours.</div>
+        <div class="chat-quota-when">Continues <b>6:20 PM</b> <span class="chat-quota-in">· in 3 hr</span></div>
+        <div class="chat-quota-auto">
+          <div class="chat-quota-auto-txt">
+            <div class="chat-quota-auto-l">Continue when the quota resets</div>
+            <div class="chat-quota-auto-d">Runs on the server — you can close this tab.</div>
+          </div>
+          <button class="sw" data-on="true"></button>
+        </div>
+        <div class="chat-quota-actions">
+          <button class="chat-quota-retry">Continue now anyway</button>
+          <span class="chat-quota-note">The quota hasn’t reset yet — this will likely fail again.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── B ─────────────────────────────────────────────────────────────── -->
+  <!-- Switched off: the ball is back in the reader's court, so the card escalates to the warning
+       tint and says the two things it can. The sentence the button sends is quoted, because it is
+       the platform's and goes out in the reader's name — the one promise this card can make about
+       words nobody wrote. No switch at all when the runtime named no reset moment: the manual
+       continue races nothing and stays. -->
+  <div class="case">
+    <div class="case-t"><span class="case-n">B</span><span class="case-l">Switched off</span>
+      <span class="case-w">the manual continue stays — one tap, and it goes out on what the composer
+        holds, so picking another provider first moves the run off the spent account</span></div>
+    <div class="frame">
+      <div class="chat-quota" data-needs-you="true">
+        <div class="chat-quota-head">
+          <svg class="chat-quota-icon" width="15" height="15" viewBox="0 0 1024 1024" fill="currentColor"><path d="M955.7 856l-416-720c-6.2-10.7-16.9-16-27.7-16s-21.6 5.3-27.7 16l-416 720C56 877.4 71.4 904 96 904h832c24.6 0 40-26.6 27.7-48zM480 416c0-4.4 3.6-8 8-8h48c4.4 0 8 3.6 8 8v184c0 4.4-3.6 8-8 8h-48c-4.4 0-8-3.6-8-8V416zm32 352a48.01 48.01 0 010-96 48.01 48.01 0 010 96z"/></svg>
+          <div class="chat-quota-title">5-hour limit reached</div>
+        </div>
+        <div class="chat-quota-msg">The 5-hour quota for claude on “wikova” is used up. Nothing to re-send —
+          the limit landed on a turn that wasn’t yours.</div>
+        <div class="chat-quota-auto">
+          <div class="chat-quota-auto-txt">
+            <div class="chat-quota-auto-l">Continue when the quota resets</div>
+            <div class="chat-quota-auto-d">Off — nothing will continue until you do.</div>
+          </div>
+          <button class="sw" data-on="false"></button>
+        </div>
+        <div class="chat-quota-actions">
+          <button class="chat-quota-retry" data-primary="true">Continue</button>
+          <span class="chat-quota-note">Sends “Continue where you left off.”</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="rule"></div>
+
+  <!-- ── PATHS ─────────────────────────────────────────────────────────── -->
+  <div class="case">
+    <div class="case-t"><span class="case-n">PATHS</span><span class="case-l">“I want to continue” — every way out</span>
+      <span class="case-w">the last one is the task's, not the card's — worth saying so the card does not
+        read as the only way</span></div>
+    <div class="flow">
+      <div><h4>Now</h4><p>Press <b>Continue</b>, or send any message of your own. It runs on what the
+        composer holds — picking another provider first also moves the run off the spent account.</p></div>
+      <div><h4>At the reset</h4><p>The default, and what the switch arms: the server sends the same
+        continue turn when the window resets. It also holds the task's own re-run while it waits, so
+        one outage cannot leave two runs.</p></div>
+      <div><h4>Stop it</h4><p>Switch it off and let it sit: the run's failure does not count against
+        its task, so the task re-dispatches at the reset — as a <b>new run</b>: the same task,
+        without this conversation.</p></div>
+    </div>
+  </div>
+
+  <!-- The rule this shipped under ─────────────────────────────────────────────────────────────────
+       The sweep writes one sentence nobody wrote (CONTINUE_MESSAGE, @orbit/shared). It is safe
+       because no arm exists that a reader was not shown: the failure arms it, the card renders the
+       sentence and the switch, and turning the switch off is the whole opt-out. The alternative was
+       measured on 2026-10-07: a run killed this way sat still, and the task around it re-dispatched
+       into a new session — 405k tokens of conversation, a pushed branch and $33 thrown away for a
+       turn the person could have typed themselves ("continue" is exactly what they typed in the
+       2026-08-03 incident this feature exists for). ───────────────────────────────────────────── -->
+
+</div>
+<script>
+  if (location.search.includes('dark')) {
+    document.documentElement.setAttribute('data-theme', 'dark');
+    document.getElementById('th').textContent = 'dark';
+  }
+</script>
+</body>
+</html>

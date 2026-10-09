@@ -42,15 +42,18 @@ import type {
   RunnerEngineHealth,
   RunnerInstallState,
   RunnerModelCatalog,
+  RunnerSelfUpdate,
   RuntimeDefaultModels,
   SlashCommandInfo,
 } from '@orbit/shared';
 import { api, clearToken, logoutSession } from '../api';
 import { routeId, encodeId } from '../lib/idCodec';
+import { useIsMobile } from '../lib/useMediaQuery';
 import {
   avatarQuery,
   meQuery,
   openProjectsQuery,
+  projectDetailsQuery,
   sessionQuery,
   wikiSpacesQuery,
   workspaceSessionCountsQuery,
@@ -64,7 +67,8 @@ import {
   sidebarProjects,
   type SidebarProject,
 } from '../lib/projectAttention';
-import { wikiProposalsToReview, wikiShown } from '../lib/wiki';
+import { wikiShown, wikiWaitingOnYou } from '../lib/wiki';
+import { wikiWaiting, writeWikiFromWorkspace } from '../lib/wikiSpace';
 import { SidebarNavIcon } from './SidebarNavIcon';
 
 const IS_MAC_PLATFORM =
@@ -140,10 +144,12 @@ const TOP: TopNavItem[] = [
   { key: 'wiki', icon: <SidebarNavIcon name="wiki" />, label: 'Wiki' },
   // No Following here: its watches are the waits agents keep for their own sessions, already shown
   // in each session's header and Watching strip, and those are what link to /following.
-  { key: 'runners', icon: <SidebarNavIcon name="runners" />, label: 'Runners' },
-  // Providers is for everyone: each user manages their own (BYOK) list; admins additionally
-  // manage the shared ones on the same page.
-  { key: 'providers', icon: <SidebarNavIcon name="providers" />, label: 'Providers' },
+  // Infrastructure is where agents run and whose quota they spend — what the Runners and Providers
+  // rows used to split between them: the user's own machines and API keys, and the account pools
+  // they own or were added to. Shared providers (those with no owner) are not on it, an admin's
+  // included: admins manage them through /api/admin/providers alone, and the UI manages only each
+  // user's own (PROVIDERS_BASE).
+  { key: 'infrastructure', icon: <SidebarNavIcon name="runners" />, label: 'Infrastructure' },
 ];
 
 // The left sidebar is user-resizable; the chosen width persists across refreshes.
@@ -155,6 +161,13 @@ const MIN_SIDEBAR_WIDTH = 200;
 const MAX_SIDEBAR_WIDTH = 480;
 const clampWidth = (w: number): number =>
   Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, w));
+
+/** Infrastructure's own page, and the pages under the Runners and Providers addresses it took over. */
+export function isInfrastructureRoute(pathname: string): boolean {
+  return ['/infrastructure', '/runners', '/providers'].some(
+    (root) => pathname === root || pathname.startsWith(`${root}/`),
+  );
+}
 
 /** The first nine Workspace rows own the matching global Cmd/Ctrl + number shortcut. */
 export function workspaceShortcutLabel(index: number, isMac = IS_MAC_PLATFORM): string | null {
@@ -201,7 +214,7 @@ export interface Runner {
   displayName?: string | null;
   online?: boolean;
   maxConcurrent?: number;
-  // Persisted order of the Runners page's cards; null until assigned by migration or a reorder.
+  // Persisted order of Infrastructure's machine cards; null until assigned by migration or a reorder.
   position?: number | null;
   // Live sessions currently occupying this runner's slots (of maxConcurrent).
   activeSessions?: number;
@@ -230,6 +243,10 @@ export interface Runner {
   // Bypass under root and exits before its first message. undefined/null = a runner too old to
   // report it, which stays unrestricted.
   runsAsRoot?: boolean | null;
+  // Where this runner's updates of itself stand, as it last reported: why it is or isn't on the
+  // latest release, and the last update it installed. undefined/null = a runner too old to report
+  // it, which runnerAttention judges by runsAsRoot as it always has.
+  selfUpdate?: RunnerSelfUpdate | null;
   // Free-space floor in MB (PATCH minFreeDiskMb): below it this machine takes no new task runs.
   // null = no floor.
   minFreeDiskMb?: number | null;
@@ -309,11 +326,12 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   const avatar = useQuery(avatarQuery(me.data?.avatarUpdatedAt));
   const { mode, setMode } = useThemeMode();
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
-  // The Wiki's amber count: the proposals waiting for the owner, summed over every space (a wiki
-  // belongs to the account, and Review's own page asks across all of them). Its own key root, so the
-  // control plane's `wiki.changed` refresh reaches it and nothing else has to.
+  // The Wiki's amber count: what waits on the owner across every space — the proposals in Review and
+  // what each plan waits for (design §12.3.3) — the number the Wiki head's Activity badge shows, from the
+  // same function. Its own key root, so the control plane's `wiki.changed` refresh reaches it and nothing
+  // else has to.
   const wikiSpaces = useQuery({ ...wikiSpacesQuery(), enabled: !!me.data });
-  const wikiPending = (wikiSpaces.data ?? []).reduce((sum, space) => sum + (space.pendingOps ?? 0), 0);
+  const wikiWaitingCount = wikiWaiting(wikiSpaces.data ?? []);
   // No Wiki row at all for an account the server has not switched the wiki on for (WIKI_DISABLED):
   // an entry that led to a refusal would be worse than none.
   const topItems = wikiShown(wikiSpaces) ? TOP : TOP.filter((t) => t.key !== 'wiki');
@@ -329,6 +347,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   const agentsMatch = useMatch('/agents/:id/*');
   const openWorkspaceId = routeId((workspacesMatch ?? agentsMatch)?.params.id);
   const sessionId = routeId(useMatch('/sessions/:id')?.params.id);
+  const narrow = useIsMobile();
   const sessionQ = useQuery({
     ...sessionQuery(sessionId),
     // Keep the previous session's data while the next one loads so activeWorkspaceId
@@ -376,9 +395,21 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
       : null;
   const litWorkspaceId = projectPageKey ? null : activeWorkspaceId;
 
+  // Where this tab is, for the space `/wiki` opens (design §12.3.4): the active workspace, or on a
+  // project's page or its sessions page the workspace the project's coordinator runs in. A page that
+  // is neither — the Projects or Tasks list — is nowhere, and the Wiki's own pages keep what the page
+  // before them said.
+  const projectInViewId = openProjectId ?? projectPageId;
+  const projectInView = useQuery({ ...projectDetailsQuery(projectInViewId ?? ''), enabled: !!projectInViewId });
+  const hereWorkspaceId = projectInViewId ? routeId(projectInView.data?.coordinatorWorkspaceId) : activeWorkspaceId;
+  const onWiki = loc.pathname === '/wiki' || loc.pathname.startsWith('/wiki/');
+  useEffect(() => {
+    if (!onWiki) writeWikiFromWorkspace(hereWorkspaceId);
+  }, [onWiki, hereWorkspaceId]);
+
   // Workspace/session routes have no proxy parent in TOP: a resolved Workspace highlights its own
-  // row, while an unresolved deep link briefly leaves the fixed nav unselected. Runner management
-  // remains scoped to Runners.
+  // row, while an unresolved deep link briefly leaves the fixed nav unselected. A machine's page, a
+  // key's and a pool's are Infrastructure's, under the addresses Runners and Providers gave them.
   const routeKey = projectPageKey
     ? projectPageKey
     : activeWorkspaceId
@@ -387,8 +418,8 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
         loc.pathname.startsWith('/sessions/') ||
         loc.pathname.startsWith('/agents/')
       ? ''
-      : loc.pathname.startsWith('/runner')
-        ? 'runners'
+      : isInfrastructureRoute(loc.pathname)
+        ? 'infrastructure'
         : loc.pathname.startsWith('/projects/')
           ? (projectRowKey ?? 'projects')
           // Every wiki route — a space, a topic, an entry's drawer, Review — is the Wiki's own
@@ -468,7 +499,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   };
 
   // Runners carry the computed `online` flag and the names the rows show. Poll on the same 15s
-  // cadence as the Runners page so status stays in sync while the sidebar is up.
+  // cadence as a machine's page so status stays in sync while the sidebar is up.
   const runners = useQuery({
     queryKey: ['runners'],
     queryFn: () => api<Runner[]>('/runners'),
@@ -492,7 +523,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   // runner is metadata on each row, not a sort key.
   const orderedWorkspaces = useMemo(() => orderWorkspaces(workspaces.data ?? []), [workspaces.data]);
 
-  // Each drop is saved at once, the Runners page's way: the rows (and their ⌘N) move immediately,
+  // Each drop is saved at once, the machine cards' way: the rows (and their ⌘N) move immediately,
   // the server's list settles it, and a refusal puts them back.
   const qc = useQueryClient();
   const message = useToast();
@@ -640,12 +671,18 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
 
   // A project's row opens its sessions page over the workspace showing (members span workspaces,
   // so the workspace only decides where the page's back leads), or the first one; with no
-  // workspace to show it over, the project's own page.
+  // workspace to show it over, the project's own page. Beside an open conversation on a wide screen
+  // only the list column changes and the conversation stays, as the iPad's sidebar has it; a phone
+  // shows one pane, so there the page is what opens.
   const openProject = (project: SidebarProject) => {
     onNavigate?.();
     const key = encodeId(project.id);
     if (sel === `project:${key}`) return;
     setSel(`project:${key}`);
+    if (sessionId && !narrow) {
+      navigate(`/sessions/${encodeId(sessionId)}?project=${key}`);
+      return;
+    }
     const over = activeWorkspaceId ?? orderedWorkspaces.find((a) => a.runner?.id ?? a.runnerId)?.id;
     navigate(over ? `/workspaces/${encodeId(over)}?project=${key}` : `/projects/${key}`);
   };
@@ -701,8 +738,14 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
             title={`${t.label}${t.shortcut ? `  ${t.shortcut}` : ''}`}
           >
             <span className="tp-ico">{t.icon}</span>
-            {t.key === 'wiki' && wikiPending > 0 && (
-              <span className="tp-rail-badge needs-you">{wikiPending}</span>
+            {t.key === 'wiki' && wikiWaitingCount > 0 && (
+              <span
+                className="tp-rail-badge needs-you"
+                title={wikiWaitingOnYou(wikiWaitingCount)}
+                aria-label={wikiWaitingOnYou(wikiWaitingCount)}
+              >
+                {wikiWaitingCount}
+              </span>
             )}
           </div>
         ))}
@@ -756,13 +799,13 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
             >
               <span className="tp-ico">{t.icon}</span>
               <span className="tp-label">{t.label}</span>
-              {t.key === 'wiki' && wikiPending > 0 ? (
+              {t.key === 'wiki' && wikiWaitingCount > 0 ? (
                 <span
                   className="tp-count needs-you"
-                  title={wikiProposalsToReview(wikiPending)}
-                  aria-label={wikiProposalsToReview(wikiPending)}
+                  title={wikiWaitingOnYou(wikiWaitingCount)}
+                  aria-label={wikiWaitingOnYou(wikiWaitingCount)}
                 >
-                  {wikiPending}
+                  {wikiWaitingCount}
                 </span>
               ) : (
                 t.shortcut && (
@@ -1240,7 +1283,7 @@ export function WorkspaceRow({
 }
 
 /** A Workspace row while the list is being arranged, dragged by its handle with the pointer or the
- *  keyboard — the Runners page's `SortableRunnerCard` idiom. */
+ *  keyboard — the idiom of Infrastructure's machine cards (`RunnerEngineCard`). */
 function SortableWorkspaceRow({
   workspace,
   disabled,

@@ -54,6 +54,10 @@ const (
 	// Orbit uses exactly one of them, effortLevel, and reads nothing back: unlike the two
 	// above, this subtype answers `success` whatever it was handed (claude_setconfig.go).
 	ctrlApplyFlagSettings = "apply_flag_settings"
+	// generate_session_title names the session from a description, on the process's own
+	// credentials; with persist false it only answers {"title": …} and writes nothing
+	// (session_naming.go).
+	ctrlGenerateSessionTitle = "generate_session_title"
 )
 
 var (

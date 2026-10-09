@@ -1,0 +1,100 @@
+{
+  "about": [
+    "Kimi Code quota from end to end, one set of cases both ends are proved against. Each case is what",
+    "Kimi Code's `GET <base_url>/usages` answered for each of a runner's Kimi accounts (`usages`, by",
+    "account id, exactly as Kimi sends it), the heartbeat planUsage the runner sends for those readings",
+    "(`planUsage`, fetchedAt left out), and what the control plane decides from it: the account a new",
+    "session starts on (`startOn`, accountToStartOn) and, per account, until when its quota holds a run",
+    "back (`blockedUntil`, planUsageBlockedUntil; null: it does not). src/runner-go",
+    "kimi_usage_test.go reads `usages` and must send `planUsage`; planUsage.spec.ts reads `planUsage`",
+    "and must decide `startOn` and `blockedUntil`."
+  ],
+  "now": "2026-10-08T12:00:00Z",
+  "accounts": [
+    { "id": "default", "home": "/root/.kimi-code", "auth": "yes", "kimiRegion": "global" },
+    { "id": "3fa91c2e", "name": "Work", "home": "/root/.orbit/kimi-accounts/3fa91c2e", "auth": "yes", "kimiRegion": "mainland-cn" }
+  ],
+  "cases": [
+    {
+      "name": "the account whose monthly quota resets first takes the session",
+      "usages": {
+        "default": {
+          "usages": {
+            "limit_5h": { "used_ratio": 0.05, "reset_time": "2026-10-08T15:00:00Z" },
+            "limit_7d": { "used_ratio": 0.2, "reset_time": "2026-10-13T00:00:00Z" },
+            "limit_month_total": { "used_ratio": 0.3, "reset_time": "2026-11-01T00:00:00Z" },
+            "limit_month_code": { "used_ratio": 0.1, "reset_time": "2026-11-01T00:00:00Z" }
+          },
+          "boosterWallet": null
+        },
+        "3fa91c2e": {
+          "usages": {
+            "limit_5h": { "used_ratio": "0.4", "reset_time": "2026-10-08T14:00:00Z" },
+            "limit_7d": { "used_ratio": 0.5, "reset_time": "2026-10-10T00:00:00Z" },
+            "limit_month_total": { "used_ratio": 0.45, "reset_time": "2026-10-20T00:00:00Z" }
+          }
+        }
+      },
+      "planUsage": {
+        "kimi": {
+          "provider": "kimi",
+          "fiveHour": { "utilization": 5, "resetsAt": "2026-10-08T15:00:00Z" },
+          "sevenDay": { "utilization": 20, "resetsAt": "2026-10-13T00:00:00Z" },
+          "month": { "utilization": 30, "resetsAt": "2026-11-01T00:00:00Z" },
+          "monthCode": { "utilization": 10, "resetsAt": "2026-11-01T00:00:00Z" },
+          "accounts": {
+            "3fa91c2e": {
+              "provider": "kimi",
+              "fiveHour": { "utilization": 40, "resetsAt": "2026-10-08T14:00:00Z" },
+              "sevenDay": { "utilization": 50, "resetsAt": "2026-10-10T00:00:00Z" },
+              "month": { "utilization": 45, "resetsAt": "2026-10-20T00:00:00Z" }
+            }
+          }
+        }
+      },
+      "startOn": "3fa91c2e",
+      "blockedUntil": { "default": null, "3fa91c2e": null }
+    },
+    {
+      "name": "a spent 5-hour window holds its account back until it resets",
+      "usages": {
+        "default": {
+          "usages": {
+            "limit_5h": { "used_ratio": 0.05, "reset_time": "2026-10-08T15:00:00Z" },
+            "limit_7d": { "used_ratio": 0.2, "reset_time": "2026-10-13T00:00:00Z" },
+            "limit_month_total": { "used_ratio": 0.3, "reset_time": "2026-11-01T00:00:00Z" },
+            "limit_month_code": { "used_ratio": 0.1, "reset_time": "2026-11-01T00:00:00Z" }
+          }
+        },
+        "3fa91c2e": {
+          "usages": {
+            "limit_5h": { "used_ratio": 1, "reset_time": "2026-10-08T14:00:00Z" },
+            "limit_7d": { "used_ratio": 0.5, "reset_time": "2026-10-10T00:00:00Z" },
+            "limit_month_total": { "used_ratio": 0.45, "reset_time": "2026-10-20T00:00:00Z" },
+            "limit_month_code": { "used_ratio": 0.3, "reset_time": "2026-10-20T00:00:00Z" }
+          }
+        }
+      },
+      "planUsage": {
+        "kimi": {
+          "provider": "kimi",
+          "fiveHour": { "utilization": 5, "resetsAt": "2026-10-08T15:00:00Z" },
+          "sevenDay": { "utilization": 20, "resetsAt": "2026-10-13T00:00:00Z" },
+          "month": { "utilization": 30, "resetsAt": "2026-11-01T00:00:00Z" },
+          "monthCode": { "utilization": 10, "resetsAt": "2026-11-01T00:00:00Z" },
+          "accounts": {
+            "3fa91c2e": {
+              "provider": "kimi",
+              "fiveHour": { "utilization": 100, "resetsAt": "2026-10-08T14:00:00Z" },
+              "sevenDay": { "utilization": 50, "resetsAt": "2026-10-10T00:00:00Z" },
+              "month": { "utilization": 45, "resetsAt": "2026-10-20T00:00:00Z" },
+              "monthCode": { "utilization": 30, "resetsAt": "2026-10-20T00:00:00Z" }
+            }
+          }
+        }
+      },
+      "startOn": "default",
+      "blockedUntil": { "default": null, "3fa91c2e": "2026-10-08T14:00:00Z" }
+    }
+  ]
+}

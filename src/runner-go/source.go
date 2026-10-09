@@ -141,7 +141,12 @@ func resolveSourceSha(job *ClaimedSession) (string, *SourcePinRefusal) {
 			Detail: map[string]interface{}{"ref": "", "refAuthority": src.RefAuthority},
 		}
 	}
-	dir := job.WorkDir
+	// An agent's workDir may carry a leading ~, which the session path expands before the engine
+	// chdirs into it (sessionExecDir, runloop.go). Gate G2 has to expand it too, or the answer stops
+	// being about this machine and starts being about how the directory was spelled: as written,
+	// "~/orbit" is not a path that exists, so every project task on an agent configured that way was
+	// refused SOURCE_AUTHORITY_UNREACHABLE by a repository this machine holds (2026-10-07).
+	dir := expandTilde(job.WorkDir)
 	if dir == "" || !isGitRepo(dir) {
 		// Not "the ref is missing" and not "the object is gone": this machine cannot ask the
 		// authority at all, which is gate G2 (§5). Keeping it separate from G3 is what lets a
@@ -186,13 +191,29 @@ func resolveSourceSha(job *ClaimedSession) (string, *SourcePinRefusal) {
 	if remote == "" {
 		remote = "origin"
 	}
-	if _, err := git(dir, "fetch", "--no-tags", remote, src.Ref); err != nil {
+	// The fetch lands in a ref of this session's own, and that ref is what is read — not FETCH_HEAD,
+	// one file per checkout that every fetch here rewrites: an integration job's, another session's
+	// resolution. A fetch empties it when it starts and fills it when it ends, so one that fell
+	// between this fetch and the read left it either empty — a ref that existed was refused
+	// BASE_REF_NOT_FOUND, "Needed a single revision" — or holding its own answer, and the session was
+	// pinned to another line's commit. Both happened on 2026-10-08 (runner workstation-gpu, project
+	// 34bmzOkov3xN2yLPrnsCk), each seconds after a landing or a promotion check fetched in this
+	// checkout. The `+` lets the fetch overwrite whatever an attempt that died before its cleanup left
+	// under this name; the ref is only ever read right after this fetch wrote it (SR38).
+	//
+	// The fetch still moves `refs/remotes/<remote>/<branch>` too, as git does for a branch the
+	// remote's refspec maps, and that ref is shared with every other fetch of the line here: losing
+	// its lock to one of them is retried the way an integration job's fetch retries it.
+	pinRef := sourcePinRefName(job.SessionID)
+	defer func() { _, _ = git(dir, "update-ref", "-d", pinRef) }()
+	if err := fetchRetryingRefLock(dir, "--no-tags", remote, "+"+src.Ref+":"+pinRef); err != nil {
 		// One fetch failure, two possible meanings, and the codes have to stay apart because the
 		// answers differ: "I could not ask" is retryable and "that ref is not there" is a
 		// configuration error that will fail identically forever (§10.2). git says which by
-		// naming the ref it could not find.
+		// naming the ref it could not find. A ref lock another process held past every retry is
+		// the first kind, whatever else the message says.
 		code := sourceRefusalAuthorityUnreachable
-		if mentionsMissingRef(err) {
+		if mentionsMissingRef(err) && !isRefLockConflict(err) {
 			code = sourceRefusalRefNotFound
 		}
 		return "", &SourcePinRefusal{
@@ -203,7 +224,7 @@ func resolveSourceSha(job *ClaimedSession) (string, *SourcePinRefusal) {
 			},
 		}
 	}
-	out, err := git(dir, "rev-parse", "--verify", "FETCH_HEAD^{commit}")
+	out, err := git(dir, "rev-parse", "--verify", pinRef+"^{commit}")
 	if err != nil || !fullSha.MatchString(strings.ToLower(out)) {
 		return "", &SourcePinRefusal{
 			Code: sourceRefusalRefNotFound,
@@ -214,6 +235,12 @@ func resolveSourceSha(job *ClaimedSession) (string, *SourcePinRefusal) {
 		}
 	}
 	return strings.ToLower(out), nil
+}
+
+// sourcePinRefName is the ref one session's resolution fetches into: the session's own, so no other
+// fetch in the checkout writes it, and normalized like baseRefName so one session has one name.
+func sourcePinRefName(sessionID string) string {
+	return "refs/orbit-source-pin/" + decodeSessionID(sessionID)
 }
 
 // mentionsMissingRef distinguishes "the remote answered and does not have that ref" from every

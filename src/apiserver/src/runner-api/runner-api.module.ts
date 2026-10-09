@@ -17,6 +17,7 @@ import { RunnerProvidersController } from './runner-providers.controller';
 import { RunnerNotifyController } from './runner-notify.controller';
 import { RunnerServiceTokensController } from './runner-service-tokens.controller';
 import { RunnerWatchesController } from './runner-watches.controller';
+import { RunnerReleaseController } from './runner-release.controller';
 import { RunnerSessionAuthGuard } from './runner-session-auth.guard';
 import {
   createServiceTokenJwt,
@@ -33,6 +34,7 @@ import { PushModule } from '../push/push.module';
 import { ProvidersModule } from '../providers/providers.module';
 import { RunnerWriteProtocolInterceptor } from './runner-write-protocol';
 import { IntegrationJobRelay } from './integration-job-relay';
+import { WikiRepoOps } from '../wiki-worker/wiki-repo-ops';
 import { OutcomeReconcilerModule } from '../outcome-reconciler/outcome-reconciler.module';
 import { WatchesModule } from '../watches/watches.module';
 import { WikiModule } from '../wiki/wiki.module';
@@ -85,6 +87,8 @@ import { RunnerWikiMaintainController } from './runner-wiki-maintain.controller'
     RunnerNotifyController,
     RunnerProjectsController,
     RunnerWatchesController,
+    // Which runner release each runner is to run (runner-release.ts).
+    RunnerReleaseController,
     RunnerWikiController,
     // The maintenance run's two routes (contract `maintenance`): its own controller, so the one above
     // injects exactly what it always did.
@@ -118,6 +122,7 @@ import { RunnerWikiMaintainController } from './runner-wiki-maintain.controller'
     ServiceTokenAuthorizer,
     WorkspacesService,
     IntegrationJobRelay,
+    WikiRepoOps,
   ],
 })
 export class RunnerApiModule {}

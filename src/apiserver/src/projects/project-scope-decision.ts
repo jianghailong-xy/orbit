@@ -84,6 +84,13 @@ export interface ScopeWriteRequest {
     projectStatus: Readonly<Record<string, ScopeProjectStatus>>;
     /** The user's answer about this crossing, if one has been asked for. */
     approval: HandoffApproval | null;
+    /**
+     * For a declared move of an existing task: whether that task serves one of the acceptance
+     * criteria of the project it would leave — its criterion declaration names one of them. Read by
+     * the server from the task row; nothing a client sends supplies it. Read only for a move out of
+     * a settled project (`settledEndRule`), and absent counts as not read, which lets nothing out.
+     */
+    servesSourceCriterion?: boolean;
   };
 }
 
@@ -111,6 +118,30 @@ function isOpen(
 ): boolean {
   if (projectId === null) return true;
   return status[projectId] === 'OPEN';
+}
+
+/**
+ * §4 R8 over the two ends of one write: the rule a settled end refuses it under, or null when
+ * neither does. Spelled once, because two places ask it — the decision below, about the write, and
+ * `decideHandoffAcceptance` (HP1), about the account owner's answer to a move, which IS the move.
+ *
+ * A settled project takes no work, filed or moved in, so a settled `to` refuses everything. Nor
+ * does it give up work its acceptance counted. What it may give up (account owner, 2026-10-06) is a
+ * task none of its criteria count, by a declared move into an open project: every criterion keeps
+ * the work it was settled on, so its status, its derived DONE and the digest it was recorded
+ * against all still describe it. So `move` — passed only for a declared move of an existing task —
+ * lets a settled `from` through when the task serves none of the source's criteria. One that serves
+ * one is R8B's, whatever the request would declare instead: taking the declaration back is itself
+ * the change to the record. And when nobody read which, it is R8's, exactly as before.
+ */
+export function settledEndRule(
+  ends: { fromOpen: boolean; toOpen: boolean },
+  move: { servesSourceCriterion?: boolean } | null,
+): 'R8_SETTLED_PROJECT' | 'R8B_SETTLED_CRITERION_SERVED' | null {
+  if (!ends.toOpen) return 'R8_SETTLED_PROJECT';
+  if (ends.fromOpen) return null;
+  if (move?.servesSourceCriterion === false) return null;
+  return move?.servesSourceCriterion ? 'R8B_SETTLED_CRITERION_SERVED' : 'R8_SETTLED_PROJECT';
 }
 
 /**
@@ -180,16 +211,33 @@ export function decideProjectScopeWrite(request: ScopeWriteRequest): ScopeWriteO
   // R6. Not a crossing, and not at home either: a plain write into somebody else's project. This is
   // the incident, in one line.
   if (!crossing && to !== scope.projectId) return refuse('R6_OUT_OF_SCOPE');
+  // ...and its declared twin: a crossing that holds neither of its ends. A move may be asked for
+  // from the project the task leaves or the one it would enter (account owner, 2026-10-06), never
+  // by a bystander between two goals that are both somebody else's. Undeclared, the same write is
+  // R7's, which refuses it with the same code; new work always leaves the scope that authored it,
+  // so only a move can reach this.
+  if (crossing && request.operation === 'HANDOFF_TASK'
+    && from !== scope.projectId && to !== scope.projectId) {
+    return refuse('R6_OUT_OF_SCOPE');
+  }
   // R7. A crossing that did not say it was crossing. The difference between this and a legal
   // request is entirely that the writer declared it — which is why `HANDOFF_TASK` is an operation
   // rather than an inference: an inferred crossing would let the rule be satisfied by accident.
   if (crossing && request.operation !== 'HANDOFF_TASK') return refuse('R7_UNDECLARED_CROSSING');
   // R8. Above the approval rules: a settled project takes no new work until somebody reopens it,
-  // approved or not. (This says nothing about the tasks it already owns — a status change inside a
-  // settled project still reopens it through PCC §13.4 AE8, untouched by this contract.)
-  if (!isOpen(world.projectStatus, from) || !isOpen(world.projectStatus, to)) {
-    return refuse('R8_SETTLED_PROJECT');
-  }
+  // approved or not, and gives up none of the work its acceptance counted (R8B). The one write let
+  // past a settled end is a declared move out of it, of a task none of its criteria count
+  // (`settledEndRule`). (This says nothing about the tasks it keeps. Its status is re-derived from
+  // its criteria by `storeDerivedProjectStatus`, untouched by this contract — PCC §13.4 AE8's
+  // reopen triggers went in 0182 and 0229 — and a task none of them count is not one of its inputs.)
+  const settled = settledEndRule(
+    { fromOpen: isOpen(world.projectStatus, from), toOpen: isOpen(world.projectStatus, to) },
+    crossing && request.operation === 'HANDOFF_TASK' && request.taskId !== null
+      && request.currentProjectId !== null
+      ? { servesSourceCriterion: world.servesSourceCriterion }
+      : null,
+  );
+  if (settled) return refuse(settled);
 
   if (crossing) {
     const approval = world.approval;

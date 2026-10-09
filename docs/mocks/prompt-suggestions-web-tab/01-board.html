@@ -1,0 +1,192 @@
+<!doctype html>
+<!-- Design mock: on the web, the prompt suggestion's "Use [Tab]" capsule goes; the Tab hint is written into the grey
+     line itself. Every frame is a screenshot of the real session page (WorkspaceView + index.css on vite, Chromium,
+     1280-wide desktop / 390-wide phone), fed by src/web/ui-migration's session fixture plus one prompt_suggestion
+     event. "现在" is main bc790273c; "改后" is the same tree with the change in it (WorkspaceView.tsx + index.css,
+     ~20 lines); the 备选 frames inject one CSS rule into that page. Dashed outlines and numbers are drawn on top.
+     Decided 2026-10-09 ("按推荐") and implemented: the implementation renders the 改后 states byte-identically. -->
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Web · 建议输入：去掉 Use Tab，Tab 写进灰字里</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<style>
+  .m-sheet { width: 1500px; }
+  .row2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 26px; align-items: start; }
+  .row2 + .row2 { margin-top: 22px; }
+  .fig { position: relative; }
+  .shot { display: block; width: 100%; border-radius: 12px; box-shadow: 0 0 0 1px rgba(15, 23, 42, .08), 0 1px 3px rgba(15, 23, 42, .06); }
+  .m-cap { font-size: 12.5px; line-height: 1.75; color: var(--text-2); margin: 10px 2px 0; }
+  .m-cap b { color: var(--text-1); }
+  .m-cap kbd, .m-sub kbd, .rules kbd, .files kbd, .ask kbd { font: inherit; font-size: 11.5px; padding: 0 5px; border: 1px solid var(--border); border-radius: 4px; color: var(--text-2); background: #fff; }
+  .mk { position: absolute; border: 1.5px dashed var(--warning-solid); border-radius: 8px; pointer-events: none; }
+  .mk > .m-n { position: absolute; top: -11px; right: -11px; margin: 0; box-shadow: 0 0 0 2px #fff; }
+  .mk-l { position: absolute; top: 50%; transform: translateY(-50%); white-space: nowrap; font-size: 12px; font-weight: 700;
+          color: #fff; background: var(--warning-solid); border-radius: 5px; padding: 1px 7px; }
+  .mk-l-right { left: calc(100% + 16px); }
+  .mk-l-below { left: 50%; top: calc(100% + 16px); transform: translateX(-50%); }
+  .mk-l-above { left: 50%; top: auto; bottom: calc(100% + 16px); transform: translateX(-50%); }
+  .m-k.rec { background: #e8f7ee; color: #16833a; }
+  .m-k.alt { background: #fff1e8; color: #c2410c; }
+  .phones { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .ph-l { font-size: 12.5px; font-weight: 700; color: var(--text-1); margin: 0 0 8px 2px; display: flex; gap: 8px; align-items: center; }
+  .ph-l span { font-weight: 400; color: var(--text-3); }
+  .alts { display: flex; flex-direction: column; gap: 14px; }
+  .alt-l { font-size: 12.5px; font-weight: 700; color: var(--text-1); margin: 0 0 6px 2px; display: flex; gap: 8px; align-items: baseline; }
+  .alt-l span { font-weight: 400; color: var(--text-2); }
+  .ref { display: flex; gap: 16px; align-items: center; margin-top: 4px; padding: 12px 14px; border-radius: 10px; background: #f5f6f8; }
+  .ref .fig { width: 250px; flex: none; }
+  .ref .shot { border-radius: 8px; }
+  .ref p { margin: 0; font-size: 12.5px; line-height: 1.75; color: var(--text-2); }
+  .rules { border-collapse: collapse; font-size: 12.5px; line-height: 1.65; width: 100%; }
+  .rules th, .rules td { border: 1px solid #dde0e6; padding: 8px 11px; text-align: left; vertical-align: top; }
+  .rules th { background: #f5f6f8; font-weight: 600; color: var(--text-1); white-space: nowrap; }
+  .rules td:first-child { font-weight: 600; color: var(--text-1); }
+  .rules td.same { color: var(--text-3); }
+  .rules td.chg { color: #0958d9; font-weight: 600; }
+  .rules code, .files code, .ask code { font-size: 11.5px; }
+  .grid-bottom { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 26px; align-items: start; }
+  .files { margin: 0; padding: 12px 16px; list-style: none; background: #f5f6f8; border-radius: 8px;
+           font-size: 12.5px; line-height: 1.75; color: #3f4652; }
+  .files li + li { margin-top: 6px; }
+  .files b { color: var(--text-1); }
+  .ask { margin-top: 14px; padding: 12px 16px; border-radius: 8px; background: #fff8e6; border: 1px solid #f5d79e;
+         font-size: 12.5px; line-height: 1.8; color: #5c4210; }
+  .ask b { color: #3d2b08; }
+  .ask ol { margin: 6px 0 0; padding-left: 20px; }
+  .ask li + li { margin-top: 4px; }
+  .ask .rec { color: #16833a; font-weight: 700; }
+</style>
+</head>
+<body class="m">
+<section class="m-sheet">
+  <h1 class="m-h1 zh">Web · 建议输入：去掉「Use Tab」胶囊，把 Tab 提示写进灰字里</h1>
+  <p class="m-sub zh">你说「Web 不需要展示 Use Tab 这个，如果要提示 Tab，是否可以展示在提示文字的输入框里」。可以：胶囊整个去掉，灰字后面紧跟一个小小的 <kbd>Tab</kbd> 键帽，就是左栏搜索框里 <kbd>Ctrl K</kbd>（Mac 上是 <kbd>⌘K</kbd>）的那种键帽。
+  下面每一张都是真实会话页的截图（vite + 仓库里 ui-migration 的会话 fixture，加一条 <code>prompt_suggestion</code> 事件）：「现在」取自 main <code>bc790273c</code>，「改后」是同一份代码按方案改了 <code>WorkspaceView.tsx</code> 和 <code>index.css</code> 跑出来的，不是画的（这两个文件在最新 main <code>870e33a1f</code> 上没有变化）。虚线和编号是标注。<b>只改 Web</b>；iPhone、Android、Mac App 不动。</p>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh"><span class="m-k">桌面 Web</span>有键盘：1280 宽窗口，光标在输入框里</div>
+    <div class="row2">
+      <div>
+        <div class="m-stage-l zh"><span class="m-k">现在</span>① 行尾一个「Use [Tab]」胶囊</div>
+        <div class="fig"><img class="shot" src="01a-today.png" alt=""><span class="mk" style="left:82.711%;top:80.433%;width:13.005%;height:7.311%"><span class="m-n">①</span><span class="mk-l mk-l-above zh">去掉</span></span></div>
+        <p class="m-cap zh">灰字后面空出一大段，行尾是蓝色的 Use 按钮，按钮里再套一个 Tab 键帽。窗口越宽，它离那句话越远，看上去像另一个控件，而且是整个输入框里最显眼的东西。</p>
+      </div>
+      <div>
+        <div class="m-stage-l zh"><span class="m-k new">改后</span>② 灰字后面紧跟一个 Tab 键帽 <span class="m-k rec">推荐</span></div>
+        <div class="fig"><img class="shot" src="01b-proposal.png" alt=""><span class="mk" style="left:18.695%;top:81.078%;width:6.345%;height:6.020%"><span class="m-n">②</span><span class="mk-l mk-l-above zh">Tab 键帽</span></span></div>
+        <p class="m-cap zh">胶囊去掉了。键帽紧跟在建议后面，和左栏 <kbd>Ctrl K</kbd> 同一种画法：细边框、无底色、灰字。它和灰字一样<b>不接收点击</b>：点这一行的任何地方，都只是把光标放进输入框，自己打字。<b>按 Tab 填入、不发送</b>，跟现在一样。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh"><span class="m-k">桌面 Web</span>细节</div>
+    <div class="row2">
+      <div>
+        <div class="m-stage-l zh"><span class="m-k state">状态</span>③ 光标不在输入框：只有灰字，没有键帽</div>
+        <div class="fig"><img class="shot" src="01c-unfocused.png" alt=""></div>
+        <p class="m-cap zh">比如刚从左边列表点开这个会话。这时按 Tab 是在页面上切换焦点，<b>不会填入</b>，所以这时不提示 Tab。点进输入框（或用 Tab 走到它）键帽就出现，变成 ②。</p>
+      </div>
+      <div>
+        <div class="m-stage-l zh"><span class="m-k state">状态</span>④ 按 Tab 之后（和现在一样）</div>
+        <div class="fig"><img class="shot" src="01d-after-tab.png" alt=""></div>
+        <p class="m-cap zh">建议填进输入框，光标停在末尾，发送键变蓝；<b>不发送</b>，可以接着改。键帽随灰字一起消失；删空后建议又回来，跟 placeholder 一样。</p>
+      </div>
+    </div>
+    <div class="row2">
+      <div>
+        <div class="m-stage-l zh"><span class="m-k state">状态</span>⑤ 长建议：灰字省略，键帽留在最后</div>
+        <div class="fig"><img class="shot" src="01e-long.png" alt=""><span class="mk" style="left:90.112%;top:20.721%;width:6.440%;height:25.225%"><span class="m-n">⑤</span></span></div>
+        <p class="m-cap zh">建议最长约 100 个字。放不下时灰字在末尾省略，键帽不会被挤掉。</p>
+      </div>
+      <div>
+        <div class="m-stage-l zh"><span class="m-k state">状态</span>⑥ 深色</div>
+        <div class="fig"><img class="shot" src="01f-dark.png" alt=""></div>
+        <p class="m-cap zh">键帽只用主题的边框色和灰字色，深色下自动跟着变。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="row2">
+      <div>
+        <div class="m-stage-l zh"><span class="m-k">手机网页</span>⑦ 触屏没有 Tab 键（手机浏览器、没接键盘的 iPad）</div>
+        <div class="phones">
+          <div>
+            <div class="ph-l zh">甲 · 保留 Use <span class="m-k rec">推荐</span></div>
+            <div class="fig"><img class="shot" src="01g-phone-keep-use.png" alt=""><span class="mk" style="left:80.152%;top:81.800%;width:13.950%;height:6.800%"><span class="m-n">⑦</span></span></div>
+          </div>
+          <div>
+            <div class="ph-l zh">乙 · Use 也去掉</div>
+            <div class="fig"><img class="shot" src="01h-phone-no-use.png" alt=""></div>
+          </div>
+        </div>
+        <p class="m-cap zh"><b>甲</b>和现在逐像素相同（现在的触屏本来就只有 Use、没有键帽），也和 iPhone App 一样。<b>乙</b>更干净，但手机上没有 Tab，就没有任何办法一下填入，建议只能看。</p>
+      </div>
+      <div>
+        <div class="m-stage-l zh"><span class="m-k alt">备选</span>别的写法（都试过，不推荐）</div>
+        <div class="alts">
+          <div>
+            <div class="alt-l zh">⑧ 键帽放行尾 <span>占的正是原来胶囊的位置，离那句话远，看着像没改。</span></div>
+            <div class="fig"><img class="shot" src="01i-alt-key-at-end.png" alt=""></div>
+          </div>
+          <div>
+            <div class="alt-l zh">⑨ 写成文字「· Tab to use」 <span>和建议同色同字号，读起来像建议的一部分。</span></div>
+            <div class="fig"><img class="shot" src="01j-alt-words.png" alt=""></div>
+          </div>
+          <div>
+            <div class="alt-l zh">⑩ 不提示 <span>最干净，但没人知道按 Tab 能填入。</span></div>
+            <div class="fig"><img class="shot" src="01k-alt-no-hint.png" alt=""></div>
+          </div>
+          <div class="ref">
+            <div class="fig"><img class="shot" src="01l-sidebar-ctrl-k.png" alt=""><span class="mk" style="left:77.056%;top:20.833%;width:17.023%;height:54.167%"></span></div>
+            <p class="zh">② 用的键帽就是左栏这一个（<code>.session-search-kbd</code>）：同样的边框、圆角、字号，没有发明新样式。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="grid-bottom">
+      <div>
+        <div class="m-stage-l zh"><span class="m-k state">规则</span>改了什么、没改什么</div>
+        <table class="rules zh">
+          <tr><th>情况</th><th>现在</th><th>改后</th></tr>
+          <tr><td>桌面，光标在输入框里</td><td>灰字 + 行尾「Use <kbd>Tab</kbd>」胶囊</td><td class="chg">灰字 + 紧跟的 <kbd>Tab</kbd> 键帽，没有胶囊（②）</td></tr>
+          <tr><td>桌面，光标不在输入框里</td><td>同上</td><td class="chg">只有灰字（③）</td></tr>
+          <tr><td>用鼠标一下填入</td><td>点 Use</td><td class="chg">桌面上没有了，用 Tab</td></tr>
+          <tr><td>按 Tab（光标在框里，<code>/ # @</code> 菜单没开）</td><td>填入，不发送</td><td class="same">不变</td></tr>
+          <tr><td><code>/ # @</code> 菜单开着时按 Tab；没有建议时按 Tab</td><td>选菜单项；切换焦点</td><td class="same">不变</td></tr>
+          <tr><td>点灰字那一行</td><td>光标进输入框（只有胶囊能点）</td><td class="same">不变：整行都是输入框，键帽也不接收点击</td></tr>
+          <tr><td>手机网页、没接键盘的 iPad（触屏）</td><td>灰字 + Use</td><td class="same">不变（已定 3）</td></tr>
+          <tr><td>输入框有字、有卡片在等你、正在运行</td><td>不显示</td><td class="same">不变</td></tr>
+          <tr><td>读屏</td><td>读按钮「Use suggestion: …」</td><td class="chg">桌面没有按钮了：输入框的描述读出建议和「Press Tab to use it」</td></tr>
+          <tr><td>iPhone、Android、Mac App</td><td>灰字 + Use（Mac 胶囊里多一个 ⇥）</td><td class="same">不动（Mac 见已定 4）</td></tr>
+        </table>
+      </div>
+      <div>
+        <div class="m-stage-l zh"><span class="m-k state">改动</span>只改 Web</div>
+        <ul class="files zh">
+          <li><b><code>src/web/src/components/WorkspaceView.tsx</code></b>（建议那几行，约 L10785）：键帽从 Use 按钮里拿出来，跟在灰字后面；Use 按钮只剩一个词（触屏用）；输入框加 <code>aria-describedby</code> 指向这一行。</li>
+          <li><b><code>src/web/src/index.css</code></b>（<code>.composer-suggestion*</code>，约 L6422–6492）：灰字不再撑满一行；键帽沿用 <code>.session-search-kbd</code> 的样子，只在有鼠标的设备上、光标在输入框里时出现；Use 只在触屏（<code>hover: none</code>）出现。</li>
+          <li><b>测试</b>：<code>WorkspaceView.promptSuggestion.test.tsx</code> 补键帽和读屏描述。jsdom 不跑 CSS，显示规则用真浏览器截图核对：本板就是那份代码跑出来的。</li>
+          <li><b>文档</b>：<code>docs/prompt-suggestions-design.md</code> §4.3 的 Web 一段和 §9-①「web/macOS 加 Tab」；本板放在 <code>docs/mocks/prompt-suggestions-web-tab/</code>。</li>
+        </ul>
+        <div class="ask zh">
+          <b>已定（2026-10-09）：按推荐。</b>四项都取绿色那一项，已照此实现；实现跑出来的画面和上面「改后」各帧逐字节相同。
+          <ol>
+            <li>提示怎么写：<span class="rec">灰字后面跟一个 Tab 键帽（②）</span>／键帽放行尾（⑧）／写成文字（⑨）／不提示（⑩）</li>
+            <li>键帽什么时候出现：<span class="rec">光标在输入框里才出现（③）</span>／一直出现（光标不在框里时按 Tab 并不会填入）</li>
+            <li>手机网页：<span class="rec">保留 Use（⑦甲，和现在一样）</span>／也去掉（⑦乙）</li>
+            <li>Mac App 也是「Use ⇥」胶囊：<span class="rec">这次只改 Web</span>／一起改成键帽（我再出一张 Mac 的图）</li>
+          </ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+</body>
+</html>

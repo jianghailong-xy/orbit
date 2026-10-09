@@ -1,0 +1,262 @@
+[
+ {
+  "id": "A1",
+  "class": "a-main",
+  "description": "Session list row: the selected session's \u2026 menu button is no longer drawn until hover/focus (12 px).",
+  "screenshotPatterns": [
+   "desktop/(session-|notification-error|breakpoint-961-session)"
+  ],
+  "projectLine": {
+   "commit": "ed108d8c8",
+   "run": "ed108d8c8"
+  },
+  "commits": [
+   [
+    "project-line absorb of main e8cc771b0",
+    "ed108d8c8"
+   ],
+   [
+    "main",
+    "918034e72"
+   ]
+  ],
+  "steps": [
+   {
+    "line": "main first-parent e8cc771b0 (scene: session, desktop)",
+    "rangeStart": "m1-d9c2516d6",
+    "before": "m1-293e12a85",
+    "at": "m1-918034e72",
+    "rangeEnd": "m1-e8cc771b0",
+    "only": "desktop/(session-|notification-error)"
+   },
+   {
+    "line": "full P0 matrix on the main commit and its first parent; end = project line after the absorb",
+    "rangeStart": "full-293e12a85",
+    "before": "full-293e12a85",
+    "at": "full-918034e72",
+    "rangeEnd": "ed108d8c8",
+    "only": "desktop/(session-|notification-error|breakpoint-961-session)"
+   }
+  ]
+ },
+ {
+  "id": "A2",
+  "class": "a-main",
+  "description": "Session list row: the title floats over the full row width (the reserved menu space is gone), so it is truncated later and 'just now' moves right (~620 px).",
+  "screenshotPatterns": [
+   "desktop/(session-|notification-error|breakpoint-961-session)"
+  ],
+  "projectLine": {
+   "commit": "e5a470fe6",
+   "run": "e5a470fe6"
+  },
+  "commits": [
+   [
+    "project-line absorb of main 72246fe2a",
+    "e5a470fe6"
+   ],
+   [
+    "main first-parent merge of origin/main",
+    "e3988ad7b"
+   ],
+   [
+    "main",
+    "f5bdd7fd3"
+   ]
+  ],
+  "steps": [
+   {
+    "line": "main first-parent 72246fe2a (scene: session, desktop)",
+    "rangeStart": "m2-08cef81fd",
+    "before": "m2-2c97b6b63",
+    "at": "m2-e3988ad7b",
+    "rangeEnd": "m2-72246fe2a",
+    "only": "desktop/(session-|notification-error)"
+   },
+   {
+    "line": "first-parent line of e3988ad7b^2 = d0eedc65c (scene: session, desktop)",
+    "rangeStart": "m1-e8cc771b0",
+    "before": "m2-6e5ba7544",
+    "at": "m2-f5bdd7fd3",
+    "rangeEnd": "m2-d0eedc65c",
+    "only": "desktop/(session-|notification-error)"
+   },
+   {
+    "line": "full P0 matrix on the main commit and its first parent; end = project line after the absorb",
+    "rangeStart": "full-6e5ba7544",
+    "before": "full-6e5ba7544",
+    "at": "full2-f5bdd7fd3",
+    "rangeEnd": "e5a470fe6",
+    "only": "desktop/(session-|notification-error|breakpoint-961-session)"
+   }
+  ]
+ },
+ {
+  "id": "A3",
+  "class": "a-main",
+  "description": "Project page: the work overview loses the 'Dispatch needs attention' card and the Ready tile highlight, the coordinator card and 'How it runs' move up; the dependency graph section moves with it.",
+  "screenshotPatterns": [
+   "/(project-overview|project-graph|breakpoint-639-graph|breakpoint-641-graph)"
+  ],
+  "projectLine": {
+   "commit": "42e7e01f4",
+   "run": "42e7e01f4"
+  },
+  "commits": [
+   [
+    "project-line absorb of main ec2326294",
+    "42e7e01f4"
+   ],
+   [
+    "main",
+    "93d3ec580"
+   ]
+  ],
+  "steps": [
+   {
+    "line": "main first-parent ec2326294 (scene: projects)",
+    "rangeStart": "m3-72246fe2a",
+    "before": "m3-06400e8ea",
+    "at": "m3-93d3ec580",
+    "rangeEnd": "m3-ec2326294",
+    "only": "/(project-overview|project-graph)"
+   },
+   {
+    "line": "full P0 matrix on the main commit and its first parent; end = project line after the absorb",
+    "rangeStart": "full2-06400e8ea",
+    "before": "full2-06400e8ea",
+    "at": "full2-93d3ec580",
+    "rangeEnd": "42e7e01f4",
+    "only": "/(project-overview|project-graph|breakpoint-639-graph|breakpoint-641-graph)"
+   }
+  ]
+ },
+ {
+  "id": "A4",
+  "class": "a-main",
+  "description": "Task panel without smart model selection: the 'Suggested' row is gone and the panel below moves up (also behind the share dialog's mask); Settings gains the 'Smart model selection' switch.",
+  "screenshotPatterns": [
+   "/(task-detail|task-action|task-share-dialog|breakpoint-599-dialog|breakpoint-601-dialog|settings)"
+  ],
+  "projectLine": {
+   "commit": "8ef6b60d1",
+   "run": "8ef6b60d1"
+  },
+  "commits": [
+   [
+    "project-line merge of the P2.2 delivery",
+    "8ef6b60d1"
+   ],
+   [
+    "P2.2 absorb of main 6cdca5a03",
+    "38947755e"
+   ],
+   [
+    "main first-parent merge of project 34Z2CCqHygFxrbqBlPljx",
+    "4088d37e6"
+   ],
+   [
+    "product commit merged by it",
+    "82c7e92ff"
+   ]
+  ],
+  "steps": [
+   {
+    "line": "P2.2 delivery first-parent line (scenes: task, settings)",
+    "rangeStart": "p22-e1eb1d379",
+    "before": "p22-9ccb09e86",
+    "at": "p22-38947755e",
+    "rangeEnd": "p22-8a29e3493",
+    "only": "/(task-detail|task-action|task-share|settings)"
+   },
+   {
+    "line": "main first-parent 6cdca5a03 (scenes: task, settings)",
+    "rangeStart": "m4-53da29cc1",
+    "before": "m4-14e64870f",
+    "at": "m4-4088d37e6",
+    "rangeEnd": "m4-6cdca5a03",
+    "only": "/(task-detail|task-action|task-share|settings)"
+   },
+   {
+    "line": "full P0 matrix on the main commit and its first parent; end = project line after the merge (Chromium settings-saved excluded: P2.3 b-class B1 sits on top there)",
+    "rangeStart": "full3-14e64870f",
+    "before": "full3-14e64870f",
+    "at": "full2-4088d37e6",
+    "rangeEnd": "8ef6b60d1",
+    "only": "/(task-detail|task-action|task-share-dialog|breakpoint-599-dialog|breakpoint-601-dialog|settings\\.png)|webkit-[a-z]+-[a-z]+/settings-saved"
+   }
+  ]
+ },
+ {
+  "id": "A5",
+  "class": "a-main",
+  "description": "Wiki at 961 px, Chromium dark: the active 'Home' contents item (icon, label, tinted background) composites one colour unit differently (<=1 per channel, 210 px; below the P0 comparator threshold).",
+  "screenshotPatterns": [
+   "chromium-dark-desktop/breakpoint-961-wiki"
+  ],
+  "projectLine": {
+   "commit": "8ef6b60d1",
+   "run": "8ef6b60d1"
+  },
+  "commits": [
+   [
+    "project-line merge of the P2.2 delivery",
+    "8ef6b60d1"
+   ],
+   [
+    "P2.2 absorb of main 6cdca5a03",
+    "38947755e"
+   ],
+   [
+    "main",
+    "e64d0c72a"
+   ]
+  ],
+  "steps": [
+   {
+    "line": "P2.2 delivery first-parent line (breakpoints, chromium-dark-desktop)",
+    "rangeStart": "w22-e1eb1d379",
+    "before": "w22-9ccb09e86",
+    "at": "w22-38947755e",
+    "rangeEnd": "w22-8a29e3493",
+    "only": "chromium-dark-desktop/breakpoint-961-wiki"
+   },
+   {
+    "line": "main first-parent 6cdca5a03 (breakpoints, chromium-dark-desktop)",
+    "rangeStart": "m5-53da29cc1",
+    "before": "m5-5bc8c9d63",
+    "at": "m5-e64d0c72a",
+    "rangeEnd": "m5-6cdca5a03",
+    "only": "chromium-dark-desktop/breakpoint-961-wiki"
+   }
+  ]
+ },
+ {
+  "id": "B1",
+  "class": "b-migration",
+  "description": "P2.3 success pill: the toast now paints in a top-layer popover host with will-change: transform; Chromium re-rasterizes the pill (same geometry), WebKit phones move the profile pill 4 px right (notification section 350 -> 358 px wide).",
+  "screenshotPatterns": [
+   "/(profile-validation|settings-saved)"
+  ],
+  "projectLine": {
+   "commit": "57f792135",
+   "run": "57f792135"
+  },
+  "commits": [
+   [
+    "P2.3 migration commit (task 34Za3974yqnhjQsRBl0R3)",
+    "57f792135"
+   ]
+  ],
+  "steps": [
+   {
+    "line": "project first-parent line",
+    "rangeStart": "42e7e01f4",
+    "before": "e361ee373",
+    "at": "57f792135",
+    "rangeEnd": "6d2156683",
+    "only": "/(profile-validation|settings-saved)"
+   }
+  ]
+ }
+]

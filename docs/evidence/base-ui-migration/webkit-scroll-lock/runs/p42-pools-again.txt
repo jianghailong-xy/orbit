@@ -1,0 +1,38 @@
+[WebServer] (node:1594544) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 4 tests using 1 worker
+
+(node:1594767) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/entries/f2-p42-pools-again-d49a8749b/shots/chromium-light-desktop/p42-pool-claude.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/entries/f2-p42-pools-again-d49a8749b/shots/chromium-light-desktop/p42-pool-tooltip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/entries/f2-p42-pools-again-d49a8749b/shots/chromium-light-desktop/p42-pool-delete.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/entries/f2-p42-pools-again-d49a8749b/shots/chromium-light-desktop/p42-pool-add-account.png, writing actual.
+  ✓  1 [chromium-light-desktop] › ui-migration/p42.browser.mjs:430:3 › P4.2 a pool on its own page › a Claude pool: its tooltip, delete question and Add account (5.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/entries/f2-p42-pools-again-d49a8749b/shots/chromium-light-desktop/p42-pool-codex.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/entries/f2-p42-pools-again-d49a8749b/shots/chromium-light-desktop/p42-pool-who.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/entries/f2-p42-pools-again-d49a8749b/shots/chromium-light-desktop/p42-pool-person-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/entries/f2-p42-pools-again-d49a8749b/shots/chromium-light-desktop/p42-pool-just-mine.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/entries/f2-p42-pools-again-d49a8749b/shots/chromium-light-desktop/p42-pool-share.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/entries/f2-p42-pools-again-d49a8749b/shots/chromium-light-desktop/p42-pool-replace-key.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/entries/f2-p42-pools-again-d49a8749b/shots/chromium-light-desktop/p42-pool-signout.png, writing actual.
+  ✓  2 [chromium-light-desktop] › ui-migration/p42.browser.mjs:477:3 › P4.2 a pool on its own page › a Codex pool of one’s own: who can use it, its menus and questions (6.9s)
+(node:1595677) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/entries/f2-p42-pools-again-d49a8749b/shots/chromium-dark-desktop/p42-pool-claude.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/entries/f2-p42-pools-again-d49a8749b/shots/chromium-dark-desktop/p42-pool-tooltip.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/entries/f2-p42-pools-again-d49a8749b/shots/chromium-dark-desktop/p42-pool-delete.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/entries/f2-p42-pools-again-d49a8749b/shots/chromium-dark-desktop/p42-pool-add-account.png, writing actual.
+  ✓  3 [chromium-dark-desktop] › ui-migration/p42.browser.mjs:430:3 › P4.2 a pool on its own page › a Claude pool: its tooltip, delete question and Add account (6.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/entries/f2-p42-pools-again-d49a8749b/shots/chromium-dark-desktop/p42-pool-codex.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/entries/f2-p42-pools-again-d49a8749b/shots/chromium-dark-desktop/p42-pool-who.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/entries/f2-p42-pools-again-d49a8749b/shots/chromium-dark-desktop/p42-pool-person-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/entries/f2-p42-pools-again-d49a8749b/shots/chromium-dark-desktop/p42-pool-just-mine.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/entries/f2-p42-pools-again-d49a8749b/shots/chromium-dark-desktop/p42-pool-share.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/entries/f2-p42-pools-again-d49a8749b/shots/chromium-dark-desktop/p42-pool-replace-key.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/entries/f2-p42-pools-again-d49a8749b/shots/chromium-dark-desktop/p42-pool-signout.png, writing actual.
+  ✓  4 [chromium-dark-desktop] › ui-migration/p42.browser.mjs:477:3 › P4.2 a pool on its own page › a Codex pool of one’s own: who can use it, its menus and questions (7.2s)
+
+  4 passed (29.2s)
+commit d49a8749be97c5654ca35230e1fa4087a199a98e entry p42 exit 0 start 2026-10-09T01:16:46Z end 2026-10-09T01:17:20Z screenshots 22

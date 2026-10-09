@@ -1,0 +1,233 @@
+[WebServer] (node:1209504) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+P0 expected screenshots: 88 P0.2 originals, 150 main drift references, 14 accepted migration differences.
+
+Running 60 tests using 1 worker
+
+(node:1209726) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Dialog opening and closing (3.8s)
+  ✓   2 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Drawer opening and closing (2.2s)
+  ✓   3 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Bottom drawer opening and closing (2.5s)
+  ✓   4 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Confirmation opening and closing (2.7s)
+  ✓   5 [webkit-light-desktop] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with no-preference motion (2.5s)
+  ✓   6 [webkit-light-desktop] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with reduce motion (4.7s)
+(node:1212991) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   7 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Dialog opening and closing (5.0s)
+  ✓   8 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Drawer opening and closing (5.8s)
+  ✓   9 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Bottom drawer opening and closing (3.3s)
+  ✓  10 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Confirmation opening and closing (2.9s)
+  ✓  11 [webkit-light-desktop] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with no-preference motion (3.6s)
+  ✘  12 [webkit-light-desktop] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with reduce motion (2.7s)
+(node:1217308) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  13 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Dialog opening and closing (3.6s)
+  ✓  14 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Drawer opening and closing (3.1s)
+  ✓  15 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Bottom drawer opening and closing (3.0s)
+  ✓  16 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Confirmation opening and closing (2.3s)
+  ✓  17 [webkit-light-desktop] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with no-preference motion (2.4s)
+  ✓  18 [webkit-light-desktop] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with reduce motion (2.2s)
+(node:1221143) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  19 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Dialog opening and closing (2.0s)
+  ✓  20 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Drawer opening and closing (2.7s)
+  ✓  21 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Bottom drawer opening and closing (3.0s)
+  ✓  22 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Confirmation opening and closing (2.9s)
+  ✓  23 [webkit-light-desktop] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with no-preference motion (2.3s)
+  ✘  24 [webkit-light-desktop] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with reduce motion (2.7s)
+(node:1224635) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  25 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Dialog opening and closing (2.8s)
+  ✓  26 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Drawer opening and closing (2.3s)
+  ✓  27 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Bottom drawer opening and closing (2.8s)
+  ✓  28 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Confirmation opening and closing (1.9s)
+  ✘  29 [webkit-light-desktop] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with no-preference motion (3.9s)
+(node:1226971) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  30 [webkit-light-desktop] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with reduce motion (2.1s)
+(node:1227431) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  31 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Dialog opening and closing (3.2s)
+(node:1227886) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  32 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Drawer opening and closing (3.6s)
+  ✓  33 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Bottom drawer opening and closing (3.6s)
+  ✓  34 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Confirmation opening and closing (2.6s)
+  ✓  35 [webkit-dark-desktop] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with no-preference motion (2.6s)
+  ✓  36 [webkit-dark-desktop] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with reduce motion (2.2s)
+(node:1230490) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  37 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Dialog opening and closing (2.7s)
+  ✓  38 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Drawer opening and closing (2.4s)
+  ✓  39 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Bottom drawer opening and closing (2.7s)
+  ✓  40 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Confirmation opening and closing (2.1s)
+  ✓  41 [webkit-dark-desktop] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with no-preference motion (2.4s)
+  ✓  42 [webkit-dark-desktop] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with reduce motion (2.2s)
+(node:1233581) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  43 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Dialog opening and closing (2.8s)
+  ✓  44 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Drawer opening and closing (2.8s)
+  ✓  45 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Bottom drawer opening and closing (2.8s)
+  ✓  46 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Confirmation opening and closing (2.4s)
+  ✓  47 [webkit-dark-desktop] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with no-preference motion (2.4s)
+  ✘  48 [webkit-dark-desktop] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with reduce motion (2.1s)
+(node:1236292) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  49 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Dialog opening and closing (2.5s)
+  ✓  50 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Drawer opening and closing (2.7s)
+  ✓  51 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Bottom drawer opening and closing (2.7s)
+  ✓  52 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Confirmation opening and closing (3.2s)
+  ✓  53 [webkit-dark-desktop] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with no-preference motion (2.5s)
+  ✓  54 [webkit-dark-desktop] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with reduce motion (1.8s)
+(node:1239345) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  55 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Dialog opening and closing (3.3s)
+  ✓  56 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Drawer opening and closing (2.2s)
+  ✓  57 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Bottom drawer opening and closing (2.3s)
+  ✓  58 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Confirmation opening and closing (1.7s)
+  ✓  59 [webkit-dark-desktop] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with no-preference motion (2.1s)
+  ✓  60 [webkit-dark-desktop] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with reduce motion (2.1s)
+
+
+  1) [webkit-light-desktop] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with reduce motion 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: 2
+    Received: 1
+
+      60 |     expect(connected.every((s) => s.inert && s.hidden === 'true' && s.sameCard)).toBe(true);
+      61 |     expect(connected.every((s) => s.animation === (motion === 'reduce' ? 'orbit-toast-fade' : 'orbit-toast-exit'))).toBe(true);
+    > 62 |     expect(new Set(connected.map((s) => s.owner)).size).toBe(2);
+         |                                                         ^
+      63 |     for (let i = 1; i < connected.length; i++) {
+      64 |       // CSS serializes the visible opacity; raw effect progress can differ by
+      65 |       // sub-ULP rounding when a delay replaces elapsed animation time.
+        at /var/tmp/34cBi-merge/src/web/ui-migration/toasts-promotion.browser.mjs:62:57
+
+    Error Context: .toasts-results/toasts-promotion.browser.m-71615-ransfers-with-reduce-motion-webkit-light-desktop-repeat1/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    .toasts-results/toasts-promotion.browser.m-71615-ransfers-with-reduce-motion-webkit-light-desktop-repeat1/trace.zip
+    Usage:
+
+        npx playwright show-trace .toasts-results/toasts-promotion.browser.m-71615-ransfers-with-reduce-motion-webkit-light-desktop-repeat1/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [webkit-light-desktop] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with reduce motion 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: 2
+    Received: 1
+
+      60 |     expect(connected.every((s) => s.inert && s.hidden === 'true' && s.sameCard)).toBe(true);
+      61 |     expect(connected.every((s) => s.animation === (motion === 'reduce' ? 'orbit-toast-fade' : 'orbit-toast-exit'))).toBe(true);
+    > 62 |     expect(new Set(connected.map((s) => s.owner)).size).toBe(2);
+         |                                                         ^
+      63 |     for (let i = 1; i < connected.length; i++) {
+      64 |       // CSS serializes the visible opacity; raw effect progress can differ by
+      65 |       // sub-ULP rounding when a delay replaces elapsed animation time.
+        at /var/tmp/34cBi-merge/src/web/ui-migration/toasts-promotion.browser.mjs:62:57
+
+    Error Context: .toasts-results/toasts-promotion.browser.m-71615-ransfers-with-reduce-motion-webkit-light-desktop-repeat3/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    .toasts-results/toasts-promotion.browser.m-71615-ransfers-with-reduce-motion-webkit-light-desktop-repeat3/trace.zip
+    Usage:
+
+        npx playwright show-trace .toasts-results/toasts-promotion.browser.m-71615-ransfers-with-reduce-motion-webkit-light-desktop-repeat3/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3) [webkit-light-desktop] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with no-preference motion 
+
+    Error: expect(received).toBeGreaterThan(expected)
+
+    Expected: > 3
+    Received:   3
+
+      55 |     await attach(info, 'native-exit', { motion, samples });
+      56 |     const connected = samples.filter((s) => s.connected);
+    > 57 |     expect(connected.length).toBeGreaterThan(3);
+         |                              ^
+      58 |     expect(connected[0].t).toBeLessThan(80);
+      59 |     expect(connected[0].opacity, 'entry delay must not skip the new exit').toBeGreaterThan(0.6);
+      60 |     expect(connected.every((s) => s.inert && s.hidden === 'true' && s.sameCard)).toBe(true);
+        at /var/tmp/34cBi-merge/src/web/ui-migration/toasts-promotion.browser.mjs:57:30
+
+    Error Context: .toasts-results/toasts-promotion.browser.m-cbd2c-s-with-no-preference-motion-webkit-light-desktop-repeat4/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    .toasts-results/toasts-promotion.browser.m-cbd2c-s-with-no-preference-motion-webkit-light-desktop-repeat4/trace.zip
+    Usage:
+
+        npx playwright show-trace .toasts-results/toasts-promotion.browser.m-cbd2c-s-with-no-preference-motion-webkit-light-desktop-repeat4/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  4) [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Dialog opening and closing 
+
+    Error: the real popup animation must exist; it is paused only for the screenshot
+
+    expect(received).toBeGreaterThan(expected)
+
+    Expected: > 0
+    Received:   0
+
+      218 |         expect(frozen.count).toBe(0);
+      219 |       } else {
+    > 220 |         expect(frozen.count, 'the real popup animation must exist; it is paused only for the screenshot').toBeGreaterThan(0);
+          |                                                                                                           ^
+      221 |       }
+      222 |       await page.mouse.move(0, 0);
+      223 |       // Only the popup/backdrop are frozen. Let button hover colors settle so
+        at /var/tmp/34cBi-merge/src/web/ui-migration/toasts-lifecycle.browser.mjs:220:107
+
+    Error Context: .toasts-results/toasts-lifecycle.browser.m-1b5d9--Dialog-opening-and-closing-webkit-dark-desktop/error-context.md
+
+    attachment #6: trace (application/zip) ─────────────────────────────────────────────────────────
+    .toasts-results/toasts-lifecycle.browser.m-1b5d9--Dialog-opening-and-closing-webkit-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .toasts-results/toasts-lifecycle.browser.m-1b5d9--Dialog-opening-and-closing-webkit-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  5) [webkit-dark-desktop] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with reduce motion 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: 2
+    Received: 1
+
+      60 |     expect(connected.every((s) => s.inert && s.hidden === 'true' && s.sameCard)).toBe(true);
+      61 |     expect(connected.every((s) => s.animation === (motion === 'reduce' ? 'orbit-toast-fade' : 'orbit-toast-exit'))).toBe(true);
+    > 62 |     expect(new Set(connected.map((s) => s.owner)).size).toBe(2);
+         |                                                         ^
+      63 |     for (let i = 1; i < connected.length; i++) {
+      64 |       // CSS serializes the visible opacity; raw effect progress can differ by
+      65 |       // sub-ULP rounding when a delay replaces elapsed animation time.
+        at /var/tmp/34cBi-merge/src/web/ui-migration/toasts-promotion.browser.mjs:62:57
+
+    Error Context: .toasts-results/toasts-promotion.browser.m-71615-ransfers-with-reduce-motion-webkit-dark-desktop-repeat2/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    .toasts-results/toasts-promotion.browser.m-71615-ransfers-with-reduce-motion-webkit-dark-desktop-repeat2/trace.zip
+    Usage:
+
+        npx playwright show-trace .toasts-results/toasts-promotion.browser.m-71615-ransfers-with-reduce-motion-webkit-dark-desktop-repeat2/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  5 failed
+    [webkit-light-desktop] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with reduce motion 
+    [webkit-light-desktop] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with reduce motion 
+    [webkit-light-desktop] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with no-preference motion 
+    [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Dialog opening and closing 
+    [webkit-dark-desktop] › ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with reduce motion 
+  55 passed (3.1m)
+d49a8749be97c5654ca35230e1fa4087a199a98e
+exit 1 start 2026-10-09T00:30:32Z end 2026-10-09T00:33:39Z

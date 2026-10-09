@@ -477,7 +477,7 @@ private struct SessionFolderManagement: ViewModifier {
             .onChange(of: renaming) { _, folder in
                 if let folder { draft = folder.name }
             }
-            .confirmationDialog(deleteTitle, isPresented: deletingPresented, titleVisibility: .visible) {
+            .orbitConfirmation(deleteTitle, isPresented: deletingPresented) {
                 Button(SessionFolderCopy.deleteConfirm, role: .destructive) { delete() }
                 Button(SessionFolderCopy.cancel, role: .cancel) {}
             } message: {

@@ -1,0 +1,11 @@
+--- a/src/web/src/pages/ProfilePage.tsx
++++ b/src/web/src/pages/ProfilePage.tsx
+@@ -36,6 +36,8 @@
+ 
+   const me = useQuery(meQuery());
+   const photo = useQuery(avatarQuery(me.data?.avatarUpdatedAt));
++  // P0 negative control only: one more request the fixtures do not model.
++  useQuery({ queryKey: ['p0-negative-control'], queryFn: () => api('/auth/methods-negative-control') });
+   const chooser = useRef<HTMLInputElement>(null);
+   /** The name as it is being edited; null until touched, so the saved one shows. */
+   const [edited, setEdited] = useState<string | null>(null);

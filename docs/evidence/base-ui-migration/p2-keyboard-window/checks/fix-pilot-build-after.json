@@ -1,0 +1,13 @@
+{
+ "command": "cd /var/tmp/p2kw-c2604b/after2 && git log --oneline -1 && git status --short && nice -n 10 npm run build -w @orbit/shared && nice -n 10 npm run build -w @orbit/web",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_8a06120c49d8",
+ "cwd": "/root/.orbit/worktrees/8a4a92fa-ce2f-5986-9131-9119c512dfc6",
+ "commit": "0d0bd2c8a",
+ "webTree": "df7414507c6ffa7fa51b7cd6e3e2b8f70e13e816",
+ "outputLastWritten": "2026-10-07T04:37:51.936937+00:00",
+ "exitCode": 0,
+ "outputSha256": "6479c3622960637cb79e1da3c85627b036f73f49835447a6d1f3f717c99e5a13",
+ "outputBytes": 1765,
+ "note": "Production build of the fixed tree (scratch worktree at 0d0bd2c8a, clean; its web tree is the fix commit's plus the Menu.test.tsx id change) for the pilot A/B: 4520 modules; index chunk 1,988.78 kB (gzip 601.08 kB) against 1,988.39 kB (601.03 kB) before the fix, so the fix adds about 0.39 kB minified, 0.05 kB gzip. The other chunks keep their minified sizes; the three that import the index chunk by its hashed name get new hashes, and ProjectDependencyGraph's gzip size moves from 5.21 to 5.22 kB."
+}

@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "valueKind": "example",
+  "environmentId": "REPLACE_ME",
+  "clusterKey": "REPLACE_ME",
+  "resourceProfileId": "REPLACE_ME",
+  "kubernetes": {
+    "kubeconfig": "/REPLACE_ME/kubeconfig.json",
+    "context": "REPLACE_ME",
+    "apiServer": "https://REPLACE_ME",
+    "namespace": "REPLACE_ME"
+  },
+  "storage": {
+    "className": "runner-data",
+    "capacity": "REPLACE_ME"
+  },
+  "runner": {
+    "image": "REPLACE_ME@sha256:REPLACE_ME",
+    "serverUrl": "https://REPLACE_ME",
+    "maxConcurrent": null,
+    "tmpSizeLimit": "REPLACE_ME",
+    "resources": {
+      "runner": {
+        "requests": { "cpu": "REPLACE_ME", "memory": "REPLACE_ME" },
+        "limits": { "cpu": "REPLACE_ME", "memory": "REPLACE_ME" }
+      },
+      "init": {
+        "requests": { "cpu": "REPLACE_ME", "memory": "REPLACE_ME" },
+        "limits": { "cpu": "REPLACE_ME", "memory": "REPLACE_ME" }
+      }
+    }
+  },
+  "admission": {
+    "managerUsername": "system:serviceaccount:REPLACE_ME:REPLACE_ME",
+    "webhookTokenSha256": "REPLACE_ME"
+  },
+  "lifecycle": {
+    "maxAttempts": null,
+    "backoffBaseSeconds": null,
+    "backoffMaxSeconds": null,
+    "startupDeadlineSeconds": null,
+    "requestTimeoutSeconds": null,
+    "leaseSeconds": null,
+    "pollIntervalSeconds": null,
+    "heartbeatFreshSeconds": null
+  }
+}

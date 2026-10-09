@@ -1,0 +1,88 @@
+{
+ "summaryOf": "Per-test JSON attachments of this directory, removed by the evidence slimming (docs/evidence/base-ui-migration/evidence-slimming/README.md). Each entry gives the file name, size, SHA-256 and its top-level scalar fields; the test results are in summary.json / report.summary.json and the numbers the conclusions use are in the README.",
+ "originals": "7732f14f82d4e6b4406d7d164c4b672f63aa0f56",
+ "retrieve": "git show 7732f14f82d4e6b4406d7d164c4b672f63aa0f56:docs/evidence/base-ui-migration/p2-select-keys/after-throttle/<name>",
+ "files": [
+  {
+   "name": "chromium-dark-desktop--antd-sample-ArrowDown-ArrowDown-Enter-at-1x-CPU-throttling--select-keys.json",
+   "bytes": 3385,
+   "sha256": "3722a0b20ed44af5dbfda35d0d322b2cd143ff2cbc4184b84e88cf544694935e",
+   "fields": {
+    "target": "antd-sample",
+    "rate": 1
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--antd-sample-ArrowDown-ArrowDown-Enter-at-20x-CPU-throttling--select-keys.json",
+   "bytes": 3414,
+   "sha256": "aa63b7751e9d13a252475e10d9f960cb936c12d3c6b1516120a45bdb7f1a2d81",
+   "fields": {
+    "target": "antd-sample",
+    "rate": 20
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--antd-sample-ArrowDown-ArrowDown-Enter-at-6x-CPU-throttling--select-keys.json",
+   "bytes": 3404,
+   "sha256": "6067ce2ae577086a18ec161e399676f86ed0f9aa4359cdb430ca7e91e87e543d",
+   "fields": {
+    "target": "antd-sample",
+    "rate": 6
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-field-ArrowDown-ArrowDown-Enter-at-1x-CPU-throttling--select-keys.json",
+   "bytes": 3210,
+   "sha256": "736c31f7b4901e35d8253da90221413b35f05cc465c935de43a24b835161f2b3",
+   "fields": {
+    "target": "orbit-field",
+    "rate": 1
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-field-ArrowDown-ArrowDown-Enter-at-20x-CPU-throttling--select-keys.json",
+   "bytes": 3214,
+   "sha256": "39226de60000a98571ff5915e52e60b3e03056dda14f8a7936e74a1a9763a296",
+   "fields": {
+    "target": "orbit-field",
+    "rate": 20
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-field-ArrowDown-ArrowDown-Enter-at-6x-CPU-throttling--select-keys.json",
+   "bytes": 3212,
+   "sha256": "73668ac7dc3746beb088d16e0844ecdbbc818a160508bd1de8ea11ede615bdca",
+   "fields": {
+    "target": "orbit-field",
+    "rate": 6
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-sample-ArrowDown-ArrowDown-Enter-at-1x-CPU-throttling--select-keys.json",
+   "bytes": 3437,
+   "sha256": "0ba443989e1ffbd075ef64ed8be08f7d776d5b5277b4b1c8a0a1a43a1eea37f5",
+   "fields": {
+    "target": "orbit-sample",
+    "rate": 1
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-sample-ArrowDown-ArrowDown-Enter-at-20x-CPU-throttling--select-keys.json",
+   "bytes": 3277,
+   "sha256": "b6833eefe1e9d89e171e4acfd45c6d90dea4b0ac4ab8586bb564e6624f36bd27",
+   "fields": {
+    "target": "orbit-sample",
+    "rate": 20
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--orbit-sample-ArrowDown-ArrowDown-Enter-at-6x-CPU-throttling--select-keys.json",
+   "bytes": 3274,
+   "sha256": "6fe59ff5b9b6af45175b614d6a8a825f368b1407291dd8ca6629174b068fd13e",
+   "fields": {
+    "target": "orbit-sample",
+    "rate": 6
+   }
+  }
+ ]
+}

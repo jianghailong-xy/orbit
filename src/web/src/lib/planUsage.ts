@@ -29,7 +29,9 @@ export interface PlanUsageSectionInfo {
  * legacy-flat payload into it. New runners nest snapshots by provider; older
  * runners reported one flat snapshot, where Claude may omit `provider` and
  * Codex/Kimi identify themselves explicitly (or, for Codex, by its bucket
- * fields). */
+ * fields). Antigravity's is never in a heartbeat's planUsage: it is found here
+ * only once a reader has folded its engine's in (withEnginePlanUsage), nested,
+ * or flat and naming itself when the runner reported no other quota. */
 export function planUsageSnapshotForProvider(
   usage: PlanUsage | null | undefined,
   provider: string,
@@ -38,6 +40,10 @@ export function planUsageSnapshotForProvider(
   if (provider === 'kimi') {
     if (usage.kimi) return usage.kimi;
     return usage.provider === 'kimi' ? usage : null;
+  }
+  if (provider === 'antigravity') {
+    if (usage.antigravity) return usage.antigravity;
+    return usage.provider === 'antigravity' ? usage : null;
   }
   if (provider === 'codex') {
     if (usage.codex) return usage.codex;
@@ -133,11 +139,22 @@ export function planUsageSnapshots(usage: PlanUsage): PlanUsageSectionInfo[] {
   ];
 }
 
-const CLAUDE_ROWS: { key: 'fiveHour' | 'sevenDay' | 'sevenDayOpus' | 'sevenDaySonnet'; label: string }[] = [
+type NamedWindowKey = 'fiveHour' | 'sevenDay' | 'sevenDayOpus' | 'sevenDaySonnet' | 'month';
+
+const CLAUDE_ROWS: { key: NamedWindowKey; label: string }[] = [
   { key: 'fiveHour', label: '5-hour limit' },
   { key: 'sevenDay', label: 'Weekly · all models' },
   { key: 'sevenDayOpus', label: 'Weekly · Opus' },
   { key: 'sevenDaySonnet', label: 'Weekly · Sonnet' },
+];
+
+/** Kimi Code's windows (PlanUsageSnapshot), in the words its own /usage panel uses for them. The month
+ *  is one bar, its total: the coding share of it (`monthCode`) is not drawn, on every client — the
+ *  owner's call, 2026-10-08 — though the quota decisions in @orbit/shared still read it. */
+const KIMI_ROWS: { key: NamedWindowKey; label: string }[] = [
+  { key: 'fiveHour', label: '5h limit' },
+  { key: 'sevenDay', label: 'Weekly limit' },
+  { key: 'month', label: 'Monthly limit' },
 ];
 
 function clampPercent(value: number): number {
@@ -221,7 +238,7 @@ export function planUsageRows(usage: PlanUsageSnapshot): PlanUsageDisplayRow[] {
   });
   const codex = usage.provider === 'codex' || !!usage.primary || !!usage.secondary || !!usage.rateLimits?.length;
   if (codex) return codexRows(usage);
-  return CLAUDE_ROWS.flatMap(({ key, label }) => {
+  return (usage.provider === 'kimi' ? KIMI_ROWS : CLAUDE_ROWS).flatMap(({ key, label }) => {
     const window = usage[key];
     if (!window || typeof window.utilization !== 'number') return [];
     const percent = clampPercent(window.utilization);
@@ -235,6 +252,24 @@ export function planUsageRows(usage: PlanUsageSnapshot): PlanUsageDisplayRow[] {
       },
     ];
   });
+}
+
+/**
+ * A Kimi login whose plan carries no quota limit: the runner read its quota and the answer held no
+ * window at all — Kimi Code's /usage skips a limit the backend omits, so a plan with none reads as
+ * none. Distinct from a login never read or whose read failed ("No quota reported"): this one was
+ * read, and there is no quota to gauge. The coding share of the month (`monthCode`) counts as a
+ * window here though it is never drawn: a plan that reports it has a limit.
+ */
+export function kimiNoQuotaLimit(snapshot: PlanUsageSnapshot | null | undefined): boolean {
+  return (
+    !!snapshot &&
+    snapshot.provider === 'kimi' &&
+    !snapshot.fiveHour &&
+    !snapshot.sevenDay &&
+    !snapshot.month &&
+    !snapshot.monthCode
+  );
 }
 
 /**

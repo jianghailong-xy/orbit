@@ -29,9 +29,16 @@ import Foundation
    `lib/projectStart.ts` declares each sentence of the start card, of How it runs and of the settings
    line once, and `StartProjectCardCopyParityTests` reads that file back: the two clients share no
    compiler, so a sentence re-worded at one end only turns nothing else red. The derivations — the
-   plan's order in one line, the ready check's warnings in the owner's words, the body a press
-   sends — are ports of the same file's functions, held to the browser's own examples by
-   `StartProjectTests`.
+   plan in levels, what still comes to the owner under the Automatic switch, the line under Start,
+   the body a press sends — are ports of the same file's functions, held to the browser's own
+   examples by `StartProjectTests`.
+
+   WHAT THE OWNER IS SHOWN (the owner, 2026-10-07)
+   -----------------------------------------------
+   Automatic opens on, whatever a coordinator suggested; the ready check's warnings are the
+   coordinator's and the card draws none of them, nor the check's ✓ line; an empty merge check is a
+   setting like any other; and a start with Automatic on opens the project's first coordinator when
+   it has none. Mocks: docs/mocks/start-card-redesign (v2).
    ───────────────────────────────────────────────────────────────────────────────────────────── */
 
 // MARK: - the wire
@@ -268,29 +275,38 @@ public enum StartProject {
 
     /// The card's question, and the heading of the open item that asks it.
     public static let title = "Start this project?"
-    /// Who asked, as the meta line says it.
-    public static let askedByCoordinator = "asked by the coordinator"
     /// What a session row, its header and the pinned strip say while the card is waiting.
     public static let readyToStart = "Ready to start"
     public static let doneWhen = "Done when"
     public static let plan = "Plan"
     public static let howItRuns = "How it runs"
-    public static let suggestedByCoordinator = "suggested by the coordinator"
-    /// The link beside the plan's order, to the tasks it names.
+    /// The link under the plan, to the tasks it names.
     public static let viewTasks = "View tasks ›"
+    /// Beside it, while the plan is drawn as levels: the project page's task graph, full screen.
+    public static let taskGraph = "Task graph"
     public static let action = "Start the project"
     /// What the armed composer asks for, once "Chat about this" has handed the reply to it.
     public static let chatPlaceholder = "What should change before it starts?"
-    /// What the ready check looked at, before the list of what it found true.
-    public static let checkedPlan = "Orbit checked the plan:"
-    public static let checkedCriteria = "every criterion has a task serving it"
-    public static let checkedRunners = "every task has a runner"
+    /// The card's header when nobody asked — the owner's own Start… — and, after it, when the project
+    /// has no coordinator either.
+    public static let nobodyAsked = "Nobody asked yet"
+    public static let noCoordinatorYet = "no coordinator yet"
+    /// What the coordinator's own words are headed with, and the press that shows all of them.
+    public static let coordinator = "Coordinator"
+    public static let more = "More"
+    public static let less = "Less"
     /// What a press the door did not take says, over the door's own message.
     public static let notRecorded = "That start was not recorded"
     /// Why Start is dead on a card whose request no longer stands.
     public static let requestGone =
         "The plan changed after the coordinator asked, so this request no longer stands. Orbit "
         + "shows the card again when the coordinator asks to start the new plan."
+    /// Said under the switch when Automatic is on and the project has no coordinator to run it yet:
+    /// the start opens one (`POST /projects/:id/start`).
+    public static let opensCoordinator =
+        "This project has no coordinator yet. Orbit opens one where its tasks run when it starts."
+    public static let now = "Now"
+    public static let you = "You"
 
     /// The most tasks a project may run at once, as the door bounds it
     /// (web's `START_MAX_CONCURRENT_TASKS`, the server's `MAX_PROJECT_CONCURRENT_TASKS`).
@@ -301,56 +317,147 @@ public enum StartProject {
         "\(doneWhen) · \(count) \(count == 1 ? "criterion" : "criteria")"
     }
 
-    /// "Plan · 5 tasks".
-    public static func planHead(_ count: Int) -> String {
-        "\(plan) · \(count) \(count == 1 ? "task" : "tasks")"
+    /// "Plan · 12 tasks in 7 levels" — the levels said only when there are more than one, and only
+    /// when the plan was drawn in them (a folded graph is just "Plan · N tasks").
+    public static func planHead(_ count: Int, levels: Int = 1) -> String {
+        let head = "\(plan) · \(count) \(count == 1 ? "task" : "tasks")"
+        return levels > 1 ? "\(head) in \(levels) levels" : head
     }
 
-    /// Which project, who asked and when, and the seal a press confirms — the version is last
-    /// because it is what a reader needs only once they have read the rest. `askedAgo` is nil for a
-    /// card no coordinator asked for; how long ago is the platform's own clock words
-    /// (`RelativeTime.format`), as the browser's is its own.
-    public static func meta(projectTitle: String, askedAgo: String?, seal: String) -> String {
-        let asked = askedAgo.map { " · \(askedByCoordinator) · \($0)" } ?? ""
-        return "\(projectTitle)\(asked) · seal \(seal)"
+    /// Who asked, under the project's name: "The coordinator asked 56m ago". `ago` is each end's own
+    /// clock words (`RelativeTime.format` here); a time the clock cannot say is the words alone.
+    public static let coordinatorAsked = "The coordinator asked"
+    public static func askedLine(_ ago: String?) -> String {
+        ago.map { "\(coordinatorAsked) \($0)" } ?? coordinatorAsked
     }
 
-    /// The one paragraph the card keeps: what starting binds the project to, and what happens when
-    /// the criteria move later — it asks again, and nothing stops.
+    /// The header line of a card nobody asked for: "Nobody asked yet", and "· no coordinator yet"
+    /// when there is not one to ask.
+    public static func nobodyAskedLine(hasCoordinator: Bool) -> String {
+        hasCoordinator ? nobodyAsked : "\(nobodyAsked) · \(noCoordinatorYet)"
+    }
+
+    /// The one paragraph under the criteria: what starting binds the project to, and what happens
+    /// when the criteria move later — it asks again, and nothing stops.
     public static func explanation(_ count: Int) -> String {
         "Orbit derives done from these \(count) criteria and nothing else. If they change later, it "
             + "asks you to confirm the new version — the project keeps running."
     }
 
-    /// What the ready check found true, in the order it checks: served, runnable, and the repository
-    /// the project integrates into when it has one.
-    public static func checkedLine(repository: String?) -> String {
-        var found = [checkedCriteria, checkedRunners]
-        if let repository, !repository.isEmpty {
-            found.append("repository \(repositoryLabel(repository))")
+    /// What pressing Start does, said under the button: who it opens, what starts at once, and what
+    /// it confirms — "Starts P1a now · confirms these 7 criteria · seal 3f2a…". A start that opens the
+    /// project's first coordinator says that first and leaves the seal out, so the line still fits.
+    public static func barCaption(opensCoordinator: Bool, startsNow: [String], criteria: Int,
+                                  seal: String) -> String {
+        var parts: [String] = []
+        if opensCoordinator { parts.append("opens a coordinator") }
+        if !startsNow.isEmpty { parts.append("starts \(joinAnd(startsNow)) now") }
+        parts.append(criteria == 1 ? "confirms this criterion" : "confirms these \(criteria) criteria")
+        if !opensCoordinator { parts.append("seal \(seal)") }
+        let line = parts.joined(separator: " · ")
+        return line.prefix(1).uppercased() + line.dropFirst()
+    }
+
+    // MARK: the footnote under How it runs
+
+    public static let automaticByDefault = "Automatic is on by default"
+    public static let coordinatorSuggestedOff = "the coordinator suggested off"
+    public static let restSuggested = "The rest is the coordinator’s suggestion."
+    public static let changeLater = "You can change any of these later on the project page."
+
+    /// Whose settings these are, and that they can change: Automatic is the owner's default whatever
+    /// a coordinator suggested, and the rest is the coordinator's suggestion when one asked.
+    public static func howItRunsNote(asked: Bool, suggestedOff: Bool) -> String {
+        let automatic = suggestedOff ? "\(automaticByDefault) (\(coordinatorSuggestedOff))."
+                                     : "\(automaticByDefault)."
+        return ([automatic] + (asked ? [restSuggested] : []) + [changeLater]).joined(separator: " ")
+    }
+
+    // MARK: what still comes to the owner
+
+    public static let comesToYou = "Comes to you"
+    public static let decideDone = "Whether each task is done"
+    public static let youConfirm = "you confirm it"
+    public static let problems = "Problems along the way"
+    public static let problemsDetail = "conflicts, failed checks"
+    public static let mergingIntoMain = "Merging the branch into main"
+    public static let eachMergeIntoMain = "Each merge into main"
+    public static let criteriaChanges = "Any change to the criteria"
+
+    /// "11 reviews": the evidence the owner decides on when Automatic is off.
+    public static func reviews(_ count: Int) -> String {
+        "\(count) \(count == 1 ? "review" : "reviews")"
+    }
+
+    /// More tasks the owner confirms than one list should name.
+    public static func tasksYouConfirm(_ count: Int) -> String {
+        "\(count) tasks you confirm"
+    }
+
+    /// "Problems it can’t resolve within 2 h": what reaches the owner of an Automatic project, after
+    /// the project's escalation window.
+    public static func problemsUnresolved(within: String) -> String {
+        "Problems it can’t resolve within \(within)"
+    }
+
+    /// An escalation window as the list says it: "30 min", "2 h".
+    public static func within(seconds: Int) -> String {
+        if seconds < 3600 { return "\(max(1, Int((Double(seconds) / 60).rounded()))) min" }
+        return "\(Int((Double(seconds) / 3600).rounded())) h"
+    }
+
+    /// One line of the list: what comes to the owner, and a few words after it.
+    public struct ComesToYouItem: Equatable, Sendable, Identifiable {
+        public let text: String
+        public let detail: String?
+        public var id: String { text }
+
+        public init(text: String, detail: String? = nil) {
+            self.text = text
+            self.detail = detail
         }
-        return "\(checkedPlan) \(found.joined(separator: " · "))"
     }
 
-    /// What the coordinator said about the plan, as the card quotes it under the settings.
-    public static func coordinatorSays(_ why: String) -> String {
-        "Coordinator: “\(why)”"
+    /// The escalation window a project has when the read does not say
+    /// (`project.exception_escalation_seconds`'s default) — web's `DEFAULT_ESCALATION_SECONDS`.
+    public static let defaultEscalationSeconds = 7_200
+
+    /// What still comes to the owner once the project starts with these settings — the consequence
+    /// of the Automatic switch, listed rather than described, so flipping it shows what it costs.
+    /// Web's `startComesToYou`, by the rules the server runs: an OWNER_CONFIRMED task is always the
+    /// owner's to confirm; with Automatic off every EVIDENCE_JUDGMENT task's evidence comes to them,
+    /// and so does every problem; a branch merges into main on the owner's word unless Automatic is
+    /// on, and a project that lands directly on main never merges by itself; with Automatic on, a
+    /// problem reaches the owner only after the project's escalation window.
+    public static func comesToYou(automatic: Bool, line: IntegrationLine,
+                                  ownerConfirmed: [StartPlanNamedTask], evidenceJudged: Int,
+                                  escalationSeconds: Int) -> [ComesToYouItem] {
+        let confirms: [ComesToYouItem] = ownerConfirmed.count > 3
+            ? [ComesToYouItem(text: tasksYouConfirm(ownerConfirmed.count))]
+            : ownerConfirmed.map { ComesToYouItem(text: "\($0.label) · \($0.title)", detail: youConfirm) }
+        let merges: [ComesToYouItem] = line == .main
+            ? [ComesToYouItem(text: eachMergeIntoMain)]
+            : automatic ? [] : [ComesToYouItem(text: mergingIntoMain)]
+        let criteria = ComesToYouItem(text: criteriaChanges)
+        if automatic {
+            return confirms + merges + [
+                criteria,
+                ComesToYouItem(text: problemsUnresolved(within: within(seconds: escalationSeconds))),
+            ]
+        }
+        return [ComesToYouItem(text: decideDone, detail: evidenceJudged > 0 ? reviews(evidenceJudged) : nil)]
+            + confirms
+            + [ComesToYouItem(text: problems, detail: problemsDetail)]
+            + merges
+            + [criteria]
     }
 
-    /// A repository as a reader names it: `owner/repo` out of whatever URL the binding holds.
-    public static func repositoryLabel(_ url: String) -> String {
-        var path = url.trimmingCharacters(in: .whitespacesAndNewlines)
-        if path.hasSuffix(".git") { path = String(path.dropLast(4)) }
-        while path.hasSuffix("/") { path = String(path.dropLast()) }
-        let parts = path.split(whereSeparator: { $0 == "/" || $0 == ":" }).map(String.init)
-        return parts.count >= 2 ? "\(parts[parts.count - 2])/\(parts[parts.count - 1])" : path
-    }
+    // MARK: the plan, by level
 
-    // MARK: the plan, in one line
-
-    /// What the order line calls a task: the marker its title opens with — "A · …", "① 服务端 · …",
-    /// "3) …", "B：…" — and otherwise the title itself, cut short. A plan is written with those
-    /// markers when its tasks are meant to be named by them, and a title with none is named whole.
+    /// What the plan calls a task: the marker its title opens with — "A · …", "① 服务端 · …", "3) …",
+    /// "B：…", "P1 Web：…", "P1a · …" — and otherwise the title itself, cut short. A plan is written
+    /// with those markers when its tasks are meant to be named by them, and a title with none is
+    /// named whole.
     public static func planTaskLabel(_ title: String) -> String {
         let text = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let scalars = Array(text.unicodeScalars)
@@ -359,6 +466,7 @@ public enum StartProject {
             return String(Character(first))
         }
         if let marker = leadingMarker(scalars) { return marker }
+        if let code = leadingCode(scalars) { return code }
         guard scalars.count > 24 else { return text }
         var cut = String.UnicodeScalarView()
         cut.append(contentsOf: scalars.prefix(23))
@@ -386,6 +494,21 @@ public enum StartProject {
         return nil
     }
 
+    /// A capital, one or two digits and at most one small letter — "P1", "D12", "P1a" — followed at
+    /// once by `.`, `)`, `:`, `：` or a space: a code rather than a word, so a space is separator
+    /// enough — the browser's `/^([A-Z]\d{1,2}[a-z]?)(?:[.):：]|\s)/u`, spelled out.
+    private static func leadingCode(_ s: [Unicode.Scalar]) -> String? {
+        guard s.count > 2, ("A"..."Z").contains(s[0]), isDigit(s[1]) else { return nil }
+        var length = isDigit(s[2]) ? 3 : 2
+        if length < s.count, ("a"..."z").contains(s[length]) { length += 1 }
+        guard length < s.count,
+              ".):：".unicodeScalars.contains(s[length]) || s[length].properties.isWhitespace
+        else { return nil }
+        var code = String.UnicodeScalarView()
+        code.append(contentsOf: s[0..<length])
+        return String(code)
+    }
+
     private static func isDigit(_ scalar: Unicode.Scalar) -> Bool {
         ("0"..."9").contains(scalar)
     }
@@ -405,121 +528,109 @@ public enum StartProject {
         return "\(words.dropLast().joined(separator: ", ")) and \(words[words.count - 1])"
     }
 
-    /// The plan's order in one line — "A starts now · B, C after A · D after B · E after C and D":
-    /// the tasks that wait on the same prerequisites said together, in the order they can run, each
-    /// group after everything it waits on. Tasks are given oldest first, which is the order within a
-    /// step; an edge to a task outside `tasks` (settled work, another project) waits on nothing here.
-    public static func planOrderLine(_ tasks: [StartPlanTask]) -> String {
-        var index: [String: Int] = [:]
-        var label: [String: String] = [:]
-        for (at, task) in tasks.enumerated() {
-            index[task.id] = at
-            label[task.id] = planTaskLabel(task.title)
-        }
+    /// A task's title without the label the plan already calls it by: "P1a · wiki-worker …" is
+    /// listed as "P1a" and "wiki-worker …" — web's `planTaskRest`.
+    public static func planTaskRest(_ title: String, label: String) -> String {
+        let text = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard label != text, text.hasPrefix(label) else { return text }
+        var rest = Substring(text.dropFirst(label.count))
+        rest = rest.drop(while: { $0.isWhitespace })
+        if let first = rest.first, ".):：·-–—|".contains(first) { rest = rest.dropFirst() }
+        let trimmed = String(rest.drop(while: { $0.isWhitespace }))
+        return trimmed.isEmpty ? text : trimmed
+    }
+
+    /// "5 in parallel": a level of more than one task.
+    public static func inParallel(_ count: Int) -> String {
+        "\(count) in parallel"
+    }
+
+    /// The plan in levels — the batch-create review's rule (`batchLevels`, web's `planLevels`): a task
+    /// sits one level after the deepest of what it waits on, and tasks on one level do not wait on
+    /// each other. Tasks are given oldest first, which is the order within a level; an edge to a task
+    /// outside `tasks` (settled work, another project) waits on nothing here, and a cycle the server
+    /// would never have allowed is cut rather than followed.
+    public static func planLevels(_ tasks: [StartPlanTask]) -> [[StartPlanLevelTask]] {
+        var known = Set<String>()
+        for task in tasks { known.insert(task.id) }
         var prerequisites: [String: [String]] = [:]
         for task in tasks {
             var seen = Set<String>()
-            let unique = task.after.filter { seen.insert($0).inserted }
-            prerequisites[task.id] = unique
-                .filter { index[$0] != nil && $0 != task.id }
-                .sorted { index[$0]! < index[$1]! }
+            prerequisites[task.id] = task.after.filter { known.contains($0) && $0 != task.id && seen.insert($0).inserted }
         }
-        // How far down the plan each task sits: one step after the furthest of what it waits on. A
-        // cycle the server would never have allowed is cut rather than followed.
         var level: [String: Int] = [:]
         func depth(_ id: String, _ seen: inout Set<String>) -> Int {
-            if let known = level[id] { return known }
+            if let at = level[id] { return at }
             if seen.contains(id) { return 0 }
             seen.insert(id)
             var at = 0
-            for each in prerequisites[id] ?? [] {
-                at = max(at, 1 + depth(each, &seen))
-            }
+            for each in prerequisites[id] ?? [] { at = max(at, 1 + depth(each, &seen)) }
             level[id] = at
             return at
         }
-        struct Group {
-            var level: Int
-            var order: Int
-            var members: [String]
-            var after: [String]
+        var levels: [[StartPlanLevelTask]] = []
+        for task in tasks {
+            var seen = Set<String>()
+            let at = depth(task.id, &seen)
+            while levels.count <= at { levels.append([]) }
+            levels[at].append(StartPlanLevelTask(
+                id: task.id, label: planTaskLabel(task.title), title: task.title,
+                now: at == 0 && task.autoRunWhenReady != false,
+                you: task.completionCriterion == "OWNER_CONFIRMED"))
         }
-        var groups: [String: Group] = [:]
-        var keys: [String] = []
-        for (order, task) in tasks.enumerated() {
-            let after = prerequisites[task.id] ?? []
-            let key = after.joined(separator: ",")
-            if var group = groups[key] {
-                group.members.append(task.id)
-                groups[key] = group
-            } else {
-                var seen = Set<String>()
-                groups[key] = Group(level: depth(task.id, &seen), order: order,
-                                    members: [task.id], after: after)
-                keys.append(key)
-            }
-        }
-        return keys.compactMap { groups[$0] }
-            .sorted { ($0.level, $0.order) < ($1.level, $1.order) }
-            .map { group in
-                let who = group.members.map { label[$0] ?? $0 }.joined(separator: ", ")
-                if group.after.isEmpty {
-                    return "\(who) \(group.members.count == 1 ? "starts" : "start") now"
-                }
-                return "\(who) after \(joinAnd(group.after.map { label[$0] ?? $0 }))"
-            }
-            .joined(separator: " · ")
-    }
-
-    /// The ready check's warnings, in the owner's words: a task set to start by hand is named by the
-    /// label the order line gives it, and the merge check's warning is the row it is about rather
-    /// than a line here. A code this build does not know is said in the server's own words.
-    public static func warningLines(_ warnings: [ProjectStartFinding],
-                                    tasks: [(id: String, title: String)]) -> [String] {
-        var titles: [String: String] = [:]
-        for task in tasks { titles[task.id] = task.title }
-        return warnings.flatMap { finding -> [String] in
-            if finding.code == "START_NO_MERGE_CHECK" { return [] }
-            if finding.code == "START_TASKS_START_BY_HAND", !finding.tasks.isEmpty {
-                return [byHandWarning(finding.tasks.map {
-                    planTaskLabel(titles[$0.taskId] ?? $0.title)
-                })]
-            }
-            return [finding.message]
-        }
-    }
-
-    /// "B, C, D and E are set to start by hand — they wait for the coordinator even after the
-    /// project starts."
-    public static func byHandWarning(_ labels: [String]) -> String {
-        let one = labels.count == 1
-        return "\(joinAnd(labels)) \(one ? "is" : "are") set to start by hand — "
-            + "\(one ? "it waits" : "they wait") for the coordinator even after the project starts."
+        return levels.filter { !$0.isEmpty }
     }
 
     /// The plan as the card reads it, off the project's dependency graph: the tasks nothing
-    /// cancelled, their order, and the check's warnings in the order line's names. A folded graph is
-    /// a plan too big for one line, and says only how many tasks it holds.
-    public static func planView(graph: ProjectDependencyGraph?, request: ProjectStartRequest,
-                                fallbackCount: Int) -> StartPlanView {
+    /// cancelled, in levels, and what the list of what comes to the owner reads off them. A folded
+    /// graph is a plan too big to list, and says only how many tasks it holds.
+    public static func planView(graph: ProjectDependencyGraph?, fallbackCount: Int) -> StartPlanView {
         // Folded is what the server says of a graph with any mark that is not a task
         // (`project-graph-fold.ts`), which is how this build reads it off the marks.
         guard let graph, !graph.truncated, !graph.marks.contains(where: { $0.kind != .task }) else {
-            return StartPlanView(count: graph?.taskCount ?? fallbackCount, order: nil,
-                                 warnings: warningLines(request.warnings, tasks: []))
+            return StartPlanView(count: graph?.taskCount ?? fallbackCount, levels: nil,
+                                 ownerConfirmed: [], evidenceJudged: 0, startsNow: [])
         }
         // Unfolded, every mark is one task. Cancelled ones are not part of the plan, and settled
-        // ones run nothing, so neither is given a place in the order.
+        // ones run nothing and ask nobody, so neither is listed or counted.
         let tasks = graph.marks.filter { $0.status != "CANCELLED" }
         let planned = tasks.filter { $0.status != "DONE" }.map { mark in
             StartPlanTask(id: mark.id, title: mark.title,
-                          after: graph.edges.filter { $0.targetMarkId == mark.id }.map(\.sourceMarkId))
+                          after: graph.edges.filter { $0.targetMarkId == mark.id }.map(\.sourceMarkId),
+                          completionCriterion: mark.completionCriterion,
+                          autoRunWhenReady: mark.autoRunWhenReady)
         }
+        let levels = planned.isEmpty ? nil : planLevels(planned)
         return StartPlanView(
             count: tasks.count,
-            order: planned.isEmpty ? nil : planOrderLine(planned),
-            warnings: warningLines(request.warnings,
-                                   tasks: tasks.map { (id: $0.taskId ?? $0.id, title: $0.title) }))
+            levels: levels,
+            ownerConfirmed: planned.filter { $0.completionCriterion == "OWNER_CONFIRMED" }.map {
+                let label = planTaskLabel($0.title)
+                return StartPlanNamedTask(label: label, title: planTaskRest($0.title, label: label))
+            },
+            evidenceJudged: planned.filter { $0.completionCriterion == "EVIDENCE_JUDGMENT" }.count,
+            startsNow: (levels?.first ?? []).filter(\.now).map(\.label))
+    }
+
+    /// The shrink below which the card lists the plan by level rather than drawing it: the browser's
+    /// `MIN_FIT_ZOOM`, the line its project page draws between fitting a plan and opening on its
+    /// frontier (docs/mocks/start-card-web-width, board 02, approved 2026-10-09).
+    public static let planGraphMinFit = 0.7
+
+    /// The plan as the project page's task graph, laid out top to bottom for a card
+    /// `availableWidth` points wide — or nil, and the card lists the plan by level with the graph
+    /// one press away, when the whole of it would have to shrink below `planGraphMinFit`, or the
+    /// read folded or cut the plan short: those marks stand for more tasks than a picture shows.
+    public static func planGraph(_ graph: ProjectDependencyGraph?, availableWidth: Double)
+        -> (layout: ProjectGraph.Layout, edges: [ProjectGraphEdge], scale: Double)? {
+        guard let graph, availableWidth > 0, !graph.truncated,
+              !graph.marks.contains(where: { $0.kind != .task }) else { return nil }
+        let prepared = ProjectGraph.prepare(graph, expanded: [])
+        guard !prepared.marks.isEmpty else { return nil }
+        let layout = ProjectGraph.layout(marks: prepared.marks, edges: prepared.edges, direction: .topToBottom,
+                                         availableWidth: availableWidth)
+        let scale = layout.fit(width: availableWidth)
+        return scale >= planGraphMinFit ? (layout, prepared.edges, scale) : nil
     }
 
     // MARK: the press
@@ -601,30 +712,74 @@ public enum StartProject {
     }
 }
 
-/// One task of the plan, as the order line reads it. `after` names its prerequisites by id.
+/// One task of the plan. `after` names its prerequisites by id; the two settlement facts are what
+/// the card marks it by (Now, You) and counts in what comes to the owner.
 public struct StartPlanTask: Equatable, Sendable {
     public let id: String
     public let title: String
     public let after: [String]
+    public let completionCriterion: String?
+    public let autoRunWhenReady: Bool?
 
-    public init(id: String, title: String, after: [String] = []) {
+    public init(id: String, title: String, after: [String] = [], completionCriterion: String? = nil,
+                autoRunWhenReady: Bool? = nil) {
         self.id = id
         self.title = title
         self.after = after
+        self.completionCriterion = completionCriterion
+        self.autoRunWhenReady = autoRunWhenReady
     }
 }
 
-/// The plan as the card reads it: how many tasks, their order in one line, and the warnings.
+/// One task as a level of the plan lists it.
+public struct StartPlanLevelTask: Equatable, Sendable, Identifiable {
+    public let id: String
+    public let label: String
+    public let title: String
+    /// Orbit starts it the moment the project does: first level, and not set to start by hand.
+    public let now: Bool
+    /// The owner confirms it (OWNER_CONFIRMED).
+    public let you: Bool
+
+    public init(id: String, label: String, title: String, now: Bool, you: Bool) {
+        self.id = id
+        self.label = label
+        self.title = title
+        self.now = now
+        self.you = you
+    }
+}
+
+/// A task by the label the plan calls it and the rest of its title.
+public struct StartPlanNamedTask: Equatable, Sendable {
+    public let label: String
+    public let title: String
+
+    public init(label: String, title: String) {
+        self.label = label
+        self.title = title
+    }
+}
+
+/// The plan as the card reads it: how many tasks, the plan in levels (nil when the graph came back
+/// folded — a plan too big to list), and the facts the list of what comes to the owner reads.
 public struct StartPlanView: Equatable, Sendable {
     public let count: Int
-    /// Nil when the plan is too big to say in a line (the graph came back folded).
-    public let order: String?
-    public let warnings: [String]
+    public let levels: [[StartPlanLevelTask]]?
+    /// Its OWNER_CONFIRMED tasks, by label and the rest of their title.
+    public let ownerConfirmed: [StartPlanNamedTask]
+    /// How many of its tasks are settled by a judgment of their evidence.
+    public let evidenceJudged: Int
+    /// The labels of the tasks Orbit starts the moment the project does.
+    public let startsNow: [String]
 
-    public init(count: Int, order: String?, warnings: [String]) {
+    public init(count: Int, levels: [[StartPlanLevelTask]]?, ownerConfirmed: [StartPlanNamedTask],
+                evidenceJudged: Int, startsNow: [String]) {
         self.count = count
-        self.order = order
-        self.warnings = warnings
+        self.levels = levels
+        self.ownerConfirmed = ownerConfirmed
+        self.evidenceJudged = evidenceJudged
+        self.startsNow = startsNow
     }
 }
 
@@ -644,9 +799,11 @@ public struct StartSettingsDraft: Equatable, Sendable {
         self.mergeCheckCommand = mergeCheckCommand
     }
 
-    /// The card's draft of what a suggestion says.
+    /// The card's draft of what a suggestion says — with Automatic on whatever was suggested:
+    /// delegating is the owner's default (the owner, 2026-10-07), and a coordinator that would keep it
+    /// off says so in its own words, which the card quotes.
     public init(_ settings: ProjectStartSettings) {
-        self.init(line: settings.line, automatic: settings.automatic,
+        self.init(line: settings.line, automatic: true,
                   maxConcurrentTasks: settings.maxConcurrentTasks,
                   mergeCheckCommand: settings.mergeCheckCommand ?? "")
     }
@@ -657,10 +814,9 @@ public struct StartSettingsDraft: Equatable, Sendable {
         line != .unknown && (1...StartProject.maxConcurrentTasks).contains(maxConcurrentTasks)
     }
 
-    /// Whether the merge check row is the amber one (`RunSettings.mergeCheckMissing`).
-    public var mergeCheckMissing: Bool {
-        RunSettings.mergeCheckMissing(line: line, automatic: automatic,
-                                      mergeCheckCommand: mergeCheckCommand)
+    /// Whether a merge check is set: an empty one is a setting like any other, said as None.
+    public var hasMergeCheck: Bool {
+        !mergeCheckCommand.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 }
 
@@ -710,6 +866,32 @@ public enum RunSettings {
     public static func automaticHint(_ line: IntegrationLine) -> String {
         line == .main ? automaticHintMain : automaticHintProjectBranch
     }
+
+    /// The start card's one sentence under the switch: who decides what, for the line and merge
+    /// check chosen. What still comes to the owner is the list beneath it (`StartProject.comesToYou`).
+    public static let automaticOnChecked =
+        "The coordinator decides when each task is done and merges into main once the merge check "
+        + "passes — with a receipt you can revert."
+    public static let automaticOnUnchecked =
+        "The coordinator decides when each task is done and merges into main by itself — with a "
+        + "receipt you can revert."
+    public static let automaticOnMain =
+        "The coordinator decides when each task is done. Each merge into main still asks you."
+    public static let automaticOff =
+        "You decide when each task is done and when the branch goes into main."
+    public static let automaticOffMain =
+        "You decide when each task is done, and each merge into main asks you."
+
+    public static func automaticSays(automatic: Bool, line: IntegrationLine, hasMergeCheck: Bool) -> String {
+        guard automatic else { return line == .main ? automaticOffMain : automaticOff }
+        if line == .main { return automaticOnMain }
+        return hasMergeCheck ? automaticOnChecked : automaticOnUnchecked
+    }
+
+    /// The merge check's row on the start card, folded to its value, and what an empty one means.
+    public static let mergeCheckSet = "Set"
+    public static let mergeCheckNone = "None"
+    public static let mergeCheckNoneSays = "Work lands once it rebases cleanly."
 
     /// The words after the number: "At most 3 tasks at a time".
     public static func tasksAtATime(_ count: Int?) -> String {

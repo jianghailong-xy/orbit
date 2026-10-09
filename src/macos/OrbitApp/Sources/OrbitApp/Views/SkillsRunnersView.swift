@@ -67,10 +67,15 @@ struct SkillRow: View {
 
 // MARK: - Runners
 
+/// The Infrastructure page (docs/mocks/infrastructure-page/03-ios.png): the Infrastructure section's list
+/// on a Mac and an iPad, the section's own page on a phone, and Settings › Infrastructure there — what needs
+/// a person, what each engine can run on, the machines (each opening its record; reordered and removed
+/// here), then the account pools and the API keys. Every way out stays in the app: an engine is signed in
+/// or installed on its page, a machine on its record, a pool on its page — iOS's own; the Mac has none.
 struct RunnersListView: View {
     @Environment(AppModel.self) private var model
-    /// How this list's rows navigate. Defaults to the three-column shape; the compact shell, whose
-    /// stack knows its own pushes, passes `.push`.
+    /// How this list's rows navigate. Defaults to the three-column shape; the compact shell and Settings,
+    /// whose stacks know their own pushes, pass `.push`.
     var rowNavigation: SessionRowNavigation = .selection
     @State private var addingRunner = false
     @State private var pendingRemoval: Runner?
@@ -78,26 +83,61 @@ struct RunnersListView: View {
     var body: some View {
         @Bindable var model = model
         if let runners = model.runners {
+            let lists = InfrastructureLists(model)
             // Runners' stack projection — the record on top — and only where there is a detail
             // column to select into.
             List(selection: rowNavigation == .selection ? $model.selectedRunnerID : nil) {
+                if lists.settled {
+                    let attention = lists.attention
+                    if !attention.isEmpty {
+                        InfrastructureNeedsYouSection(items: attention, opensPools: opensPools,
+                                                      open: openAttention)
+                    }
+                    InfrastructureEnginesSection(engines: lists.engines, install: install)
+                }
                 Section {
                     ForEach(runners.runners) { r in
                         row(r)
                     }
                     .onMove { moveRunners(runners, from: $0, to: $1) }
                     .onDelete { pendingRemoval = runnerToRemove(runners, at: $0) }
+                } header: {
+                    RunnerSectionHeader(Infrastructure.machines,
+                                        trailing: Infrastructure.machinesCount(runners.runners))
+                } footer: {
+                    Text(Infrastructure.machinesDetail)
                 }
                 RunnerAddSection { addingRunner = true }
+                InfrastructurePoolsSection(memberPools: lists.memberPools, ownPools: lists.ownPools,
+                                           open: opensPools ? push : nil)
+                InfrastructureKeysSection(keys: lists.keys, balances: model.agents?.deepSeekBalances ?? [:],
+                                          open: opensPools ? push : nil)
             }
             .orbitRevealSurface()   // macOS: reveal the unified `orbitSurface`
             .modifier(RunnersLoadOverlay(runners: runners, isEmpty: runners.runners.isEmpty,
-                                         failedTitle: "Runners couldn't be loaded",
+                                         failedTitle: "Machines couldn't be loaded",
                                          emptyTitle: nil, systemImage: "desktopcomputer"))
             .modifier(RunnerListEditing(runners: runners, addingRunner: $addingRunner,
                                         pendingRemoval: $pendingRemoval))
-            .navigationTitle("Runners")
-            .task { await runners.load() }
+            .navigationTitle(AppSection.runners.title)
+            // Each list is its own read, so they are asked for side by side. A machine checks in every
+            // 30s: the machines are read again while the page is up, so where each one stands — its row,
+            // and what needs you — moves with it, as a machine's own page does.
+            .task {
+                await runners.load()
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .seconds(15))
+                    guard !Task.isCancelled else { return }
+                    await runners.load()
+                }
+            }
+            .task { await self.model.agents?.reloadPools() }
+            .task { await self.model.agents?.loadOwnKeys() }
+            .task { await self.model.agents?.loadDeepSeekBalances() }
+            .task { await self.model.sharedPools?.load() }
+            .task(id: InfrastructureLists.codexPoolIDs(model)) {
+                for id in InfrastructureLists.codexPoolIDs(self.model) { await self.model.sharedPools?.loadAccess(id) }
+            }
         } else {
             ProgressView()
         }
@@ -122,54 +162,45 @@ struct RunnersListView: View {
             }
         }
     }
-}
 
-#if os(iOS)
-/// iOS: the runners list surfaced inside Settings, where Runners moved after leaving the drawer rail.
-/// A plain push list — each runner pushes its detail within the Settings navigation stack, reusing
-/// `RunnerRow`/`RunnerDetailContent` instead of the sidebar's split-view selection. The row pushes the
-/// same `NavNode.runnerDetail` frame the Runners section pushes, so the shape of a runner's record is
-/// one page in both places. Under the rows, Add Runner.
-struct RunnersSettingsList: View {
-    @Environment(AppModel.self) private var model
-    @State private var addingRunner = false
-    @State private var pendingRemoval: Runner?
+    /// A pool's page — and a DeepSeek key's — is pushed where the page is a stack's (iOS); the three-column
+    /// pane shows records only.
+    private var opensPools: Bool { rowNavigation == .push }
 
-    var body: some View {
-        Group {
-            if let runners = model.runners {
-                List {
-                    Section {
-                        ForEach(runners.runners) { r in
-                            // The same shape as the Runners section's row — a `Button` pushing the
-                            // frame by hand, so the list looks the same in both places
-                            // (`AppModel.push`). `Color.primary`: a button's label otherwise
-                            // inherits the tint, `.primary` included.
-                            Button { model.push(.runnerDetail(runnerID: r.id)) } label: {
-                                RunnerRow(runner: r, workspaces: runners.agents(forRunner: r.id),
-                                          latestVersion: runners.latestVersion, disclosure: true)
-                                    .foregroundStyle(Color.primary)
-                            }
-                        }
-                        .onMove { moveRunners(runners, from: $0, to: $1) }
-                        .onDelete { pendingRemoval = runnerToRemove(runners, at: $0) }
-                    }
-                    RunnerAddSection { addingRunner = true }
-                }
-                .modifier(RunnersLoadOverlay(runners: runners, isEmpty: runners.runners.isEmpty,
-                                             failedTitle: "Runners couldn't be loaded",
-                                             emptyTitle: nil, systemImage: "desktopcomputer"))
-                .modifier(RunnerListEditing(runners: runners, addingRunner: $addingRunner,
-                                            pendingRemoval: $pendingRemoval))
-                .task { await runners.load() }
+    private func push(_ page: NavNode) { model.push(page) }
+
+    /// A line of Needs you, opened: the engine's page, the machine's record, the pool's page.
+    private func openAttention(_ item: Infrastructure.Attention) {
+        switch item.kind {
+        case .signedOut(let runnerID, let engine):
+            openEngine(runnerID, engine.rawValue)
+        case .offline(let runnerID):
+            if rowNavigation == .selection {
+                model.selectedRunnerID = runnerID
             } else {
-                ProgressView()
+                model.push(.runnerDetail(runnerID: runnerID))
             }
+        case .poolUnavailable(let poolID, let own):
+            model.push(own ? .accountPool(poolID: poolID) : .sharedPool(poolID: poolID))
         }
-        .navigationTitle("Runners")
+    }
+
+    /// Install on a machine: that engine's page on the first machine online, where Install is — or, with
+    /// none online, registering one.
+    private func install(_ engine: LoginEngine) {
+        guard let runner = Infrastructure.installTarget(model.runners?.runners ?? []) else {
+            addingRunner = true
+            return
+        }
+        openEngine(runner.id, engine.rawValue)
+    }
+
+    /// An engine's page — over its machine's record where the pane shows the record the list selects.
+    private func openEngine(_ runnerID: String, _ engine: String) {
+        if rowNavigation == .selection { model.selectedRunnerID = runnerID }
+        model.push(.runnerEngine(runnerID: runnerID, engine: engine))
     }
 }
-#endif
 
 /// How a `RunnersModel` list shows its load outcome, the way TasksView shows its own: a failed fetch
 /// with nothing in hand says so with Retry instead of reading as an empty list, and rows left from an
@@ -251,8 +282,8 @@ private struct RunnerListEditing: ViewModifier {
     func body(content: Content) -> some View {
         content
             .sheet(isPresented: $addingRunner) { AddRunnerSheet() }
-            .confirmationDialog(removalTitle, isPresented: removalAsked, titleVisibility: .visible,
-                                presenting: pendingRemoval) { runner in
+            .orbitConfirmation({ _ in removalTitle },
+                               isPresented: removalAsked, presenting: pendingRemoval) { runner in
                 Button(RunnerPageCopy.RUNNER_REMOVE, role: .destructive) {
                     Task { await remove(runner) }
                 }
@@ -291,10 +322,11 @@ private struct RunnerListEditing: ViewModifier {
     return runners.runners[index]
 }
 
-/// One runner in a list (ios-list.png): its status dot and name, the slots in use and their bar at the
-/// end of the line; under it the hostname and version — or since when it has been offline — and,
-/// only when something needs a person, the list's third line in amber or red. Every word of it is
-/// `RunnerAttention`'s, the same line the web card and the runner's own page say.
+/// One machine in the list (03-ios.png): its status dot and name, the bar of its slots in use at the end
+/// of the line — or Offline; under it how many of them run and how many of its engines are signed out,
+/// in amber, or where its engines stand (`Infrastructure.machineLine`); and, only when something needs a
+/// person, the list's third line in amber or red — `RunnerAttention`'s, the line the web card and the
+/// machine's own page say.
 struct RunnerRow: View {
     let runner: Runner
     /// The runner's workspaces: what its attention line is weighed against.
@@ -313,6 +345,7 @@ struct RunnerRow: View {
         let nowMs = RunnerPageFormat.nowMs(now)
         let items = RunnerAttention.runnerAttention(runner: runner, workspaces: workspaces, nowMs: nowMs,
                                                     latestVersion: latestVersion)
+        let signedOut = !Infrastructure.signedOutEngines(runner).isEmpty
         HStack(spacing: 10) {
             HStack(alignment: .firstTextBaseline, spacing: 10) {
                 RunnerStatusDot(presence: RunnerPageFormat.presence(runner, now: now))
@@ -323,18 +356,17 @@ struct RunnerRow: View {
                             .lineLimit(1)
                         Spacer(minLength: 8)
                         if let slots = RunnerPageFormat.slots(runner, now: now) {
-                            HStack(spacing: 7) {
-                                Text(slots.text)
-                                    .font(.orbitListSubtitle)
-                                    .foregroundStyle(Color.secondary)
-                                    .monospacedDigit()
-                                RunnerSlotBar(slots: slots)
-                            }
+                            RunnerSlotBar(slots: slots)
+                                .alignmentGuide(.firstTextBaseline) { d in d[VerticalAlignment.center] + 4 }
+                        } else if RunnerPageFormat.isOffline(runner, now: now) {
+                            Text(RunnerPageCopy.RUNNER_OFFLINE)
+                                .font(.orbitListSubtitle)
+                                .foregroundStyle(Color.secondary)
                         }
                     }
-                    Text(RunnerAttention.runnerListSubtitle(runner, nowMs: nowMs))
+                    Text(Infrastructure.machineLine(runner, now: now))
                         .font(.orbitListSubtitle)
-                        .foregroundStyle(Color.secondary)
+                        .foregroundStyle(signedOut ? RunnerInk.amber : Color.secondary)
                         .lineLimit(1)
                     if let line = RunnerAttention.listAttentionLine(items) {
                         // Not a `Label`: a list gives a label's icon a column of its own, and the
@@ -465,29 +497,6 @@ struct RunnerDetailContent: View {
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
-        .confirmationDialog(RunnerPageCopy.RUNNER_KEEP_FREE, isPresented: $choosingReserve,
-                            titleVisibility: .visible) {
-            ForEach(RunnerAttention.KEEP_FREE_TIERS.filter { $0.mb != nil }, id: \.label) { tier in
-                Button(tier.label) { keepFree = tier.mb }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text(RunnerPageCopy.RUNNER_CAPACITY_FOOTER)
-        }
-        .confirmationDialog("Rotate token for “\(RunnerPageFormat.displayName(runner))”?",
-                            isPresented: $confirmingRotate, titleVisibility: .visible) {
-            Button("Rotate Token", role: .destructive) { rotate() }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text(RunnerPageCopy.RUNNER_ROTATE_TOKEN_FOOTER)
-        }
-        .confirmationDialog("Remove “\(RunnerPageFormat.displayName(runner))”?",
-                            isPresented: $confirmingRemove, titleVisibility: .visible) {
-            Button(RunnerPageCopy.RUNNER_REMOVE, role: .destructive) { remove() }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text(RunnerPageCopy.RUNNER_REMOVE_FOOTER)
-        }
         .runnerNotice(notice)
         .onAppear(perform: seed)
         .onChange(of: runner.maxConcurrent) { _, value in
@@ -675,6 +684,10 @@ struct RunnerDetailContent: View {
             aboutRow(RunnerPageCopy.RUNNER_ABOUT_HOSTNAME, runner.hostname)
             aboutRow(RunnerPageCopy.RUNNER_ABOUT_VERSION,
                      RunnerPageFormat.versionValue(runner, latest: runners.latestVersion))
+            aboutRow(RunnerPageCopy.RUNNER_ABOUT_LAST_UPDATE, RunnerPageFormat.lastUpdate(runner))
+            if RunnerAttention.runnerCanUpdateNow(runner, nowMs: RunnerPageFormat.nowMs(now)) {
+                Button(RunnerPageCopy.RUNNER_UPDATE_RUNNER_NOW) { updateRunner() }
+            }
             aboutRow(RunnerPageCopy.RUNNER_ABOUT_RUNS_AS, RunnerPageFormat.runsAsValue(runner))
             aboutRow(RunnerPageCopy.RUNNER_ABOUT_REPOS_FOLDER, runner.reposRoot)
             aboutRow(RunnerPageCopy.RUNNER_ABOUT_LAST_CHECK_IN, RunnerPageFormat.lastCheckIn(runner, now: now))
@@ -692,6 +705,13 @@ struct RunnerDetailContent: View {
     private var rotateSection: some View {
         Section {
             Button(RunnerPageCopy.RUNNER_ROTATE_TOKEN) { confirmingRotate = true }
+                .orbitConfirmation("Rotate token for “\(RunnerPageFormat.displayName(runner))”?",
+                                   isPresented: $confirmingRotate) {
+                    Button("Rotate Token", role: .destructive) { rotate() }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text(RunnerPageCopy.RUNNER_ROTATE_TOKEN_FOOTER)
+                }
             if let token = rotatedToken {
                 Text(token)
                     .font(.orbitMono)
@@ -709,6 +729,13 @@ struct RunnerDetailContent: View {
             Button(role: .destructive) { confirmingRemove = true } label: {
                 Text(RunnerPageCopy.RUNNER_REMOVE)
                     .frame(maxWidth: .infinity)
+            }
+            .orbitConfirmation("Remove “\(RunnerPageFormat.displayName(runner))”?",
+                               isPresented: $confirmingRemove) {
+                Button(RunnerPageCopy.RUNNER_REMOVE, role: .destructive) { remove() }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text(RunnerPageCopy.RUNNER_REMOVE_FOOTER)
             }
         } footer: {
             Text(RunnerPageCopy.RUNNER_REMOVE_FOOTER)
@@ -747,6 +774,16 @@ struct RunnerDetailContent: View {
             Button(RunnerPageCopy.RUNNER_REPAIR) { repair(action.workspaceId) }
         case .setReserve:
             Button(RunnerPageCopy.RUNNER_SET_A_RESERVE) { choosingReserve = true }
+                // On the button that asks, so the panel opens against it rather than at the top of
+                // the page.
+                .orbitConfirmation(RunnerPageCopy.RUNNER_KEEP_FREE, isPresented: $choosingReserve) {
+                    ForEach(RunnerAttention.KEEP_FREE_TIERS.filter { $0.mb != nil }, id: \.label) { tier in
+                        Button(tier.label) { keepFree = tier.mb }
+                    }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text(RunnerPageCopy.RUNNER_CAPACITY_FOOTER)
+                }
         case .copyCommand:
             Button { copy(action.command) } label: {
                 Label(RunnerPageCopy.RUNNER_COPY_COMMAND, systemImage: "doc.on.doc")
@@ -754,6 +791,8 @@ struct RunnerDetailContent: View {
         case .updateEngines:
             Button(RunnerPageCopy.RUNNER_UPDATE_ENGINES_NOW) { updateEngines() }
                 .disabled(RunnerPageFormat.engineUpdateInFlight(runner.install))
+        case .updateRunner:
+            Button(RunnerPageCopy.RUNNER_UPDATE_RUNNER_NOW) { updateRunner() }
         }
     }
 
@@ -841,6 +880,13 @@ struct RunnerDetailContent: View {
         Task {
             show(await runners.refreshModels(id)
                  ?? "Re-reading this machine’s model lists — the picker updates within a minute.")
+        }
+    }
+
+    private func updateRunner() {
+        let id = runner.id
+        Task {
+            show(await runners.updateRunner(id) ?? RunnerPageCopy.RUNNER_UPDATE_RUNNER_REQUESTED)
         }
     }
 

@@ -8,6 +8,8 @@ import {
   evidenceIdOfReviewTurn,
   evidenceReviewRetryTurnId,
   evidenceReviewTurnId,
+  evidenceSendBackMessage,
+  evidenceSendBackTurnId,
   isEvidenceReviewTurn,
   ownerEvidenceCard,
 } from './evidence-review';
@@ -41,6 +43,35 @@ test('every door that asks about a platform content turn answers for an evidence
   assert.equal(isOrbitAuthoredTurn(key), true, 'nothing goes back to a composer');
   assert.throws(() => assertClientTurnIdNotReserved(key), BadRequestException, 'and no caller takes the key');
   assert.doesNotThrow(() => assertClientTurnIdNotReserved('my-own-key'));
+});
+
+test('a send-back is delivered under a key derived from its decision, which no caller may take', () => {
+  const key = evidenceSendBackTurnId(EVIDENCE);
+  assert.equal(key, `evidence-send-back:v1:${EVIDENCE}`);
+  assert.throws(() => assertClientTurnIdNotReserved(key), BadRequestException);
+  assert.doesNotThrow(() => assertClientTurnIdNotReserved('my-own-key'));
+  assert.equal(isOrbitAuthoredTurn(key), true, 'Orbit wrote it, so nothing goes back to a composer');
+  // It is nobody's review turn: the review reads answer for their own keys only.
+  assert.equal(isEvidenceReviewTurn(key), false);
+});
+
+test('the send-back message names the task, the revision, the decider and the note', () => {
+  const owner = evidenceSendBackMessage({
+    taskId: EVIDENCE,
+    taskTitle: 'rename the invoices',
+    revision: '2',
+    decidedByType: 'USER',
+    note: 'show the before and after counts',
+  });
+  assert.match(owner, /^<orbit-evidence-send-back task="[0-9A-Za-z]+" revision="2">/);
+  assert.match(owner, /task “rename the invoices”/);
+  assert.match(owner, /sent back by the account owner/);
+  assert.match(owner, /show the before and after counts/);
+  assert.match(owner, /task_evidence_submit/);
+  const session = evidenceSendBackMessage({
+    taskId: EVIDENCE, taskTitle: 't', revision: '1', decidedByType: 'AGENT', note: 'n',
+  });
+  assert.match(session, /sent back by the session that reviewed it/);
 });
 
 test('the window is the 30 minutes a confirmation review gets outside a project', () => {

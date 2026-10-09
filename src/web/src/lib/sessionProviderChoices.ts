@@ -1,14 +1,16 @@
-import { AgentProvider, PROVIDER_PRESETS, type ProviderBrand } from '@orbit/shared';
-import type { PlanUsage, RunnerAntigravityState, RunnerEngineHealth, RunnerModelCatalog, RuntimeDefaultModels } from '@orbit/shared';
+import { AgentProvider, isAccountEngine, PROVIDER_PRESETS, withEnginePlanUsage, type ProviderBrand } from '@orbit/shared';
+import type { PlanUsage, ReportedEngine, RunnerAntigravityState, RunnerEngineHealth, RunnerModelCatalog, RuntimeDefaultModels } from '@orbit/shared';
 import type { CodexLogin } from './codexLogin';
 import { DSH_CONNECT_HREF, DSH_PRESET_SLUG, DSH_STATE_LABEL, dshRunnerState, type DshRunnerFacts } from './dshRuntime';
-import { accountNameOf, accountPlanUsage } from './engineAccounts';
+import { accountNameOf, accountPlanUsage, runsOnEnvKey } from './engineAccounts';
 import { encodeId } from './idCodec';
+import { ENGINE_CLI_NAME } from './runnerEngines';
 import { bindingPlanUsageRow, currentPlanUsageRows } from './planUsage';
 import type { SharedPool } from './sharedPools';
 import {
   defaultModelForProvider,
   modelOptionsForProvider,
+  openCodeKeyChoice,
   runtimeForProvider,
   type ConfiguredProvider,
 } from './workspaceDefaults';
@@ -21,9 +23,8 @@ import {
  *
  * Engines are the slugs a runner can sign into (LoginEngine in @orbit/shared). Antigravity is
  * offered when the server confirms an environment key or a runner Google account.
- * `opencode` is an AgentProvider that is neither,
- * so it never appears as a choice — it only shows up as the current pick when a workspace is
- * already set to it.
+ * `opencode` has no sign-in, so it is not one of them: it is offered after everything else once the
+ * runner reports it installed, with the keys it may spend (`providerChoices`).
  */
 export const ENGINE_SLUGS = [
   AgentProvider.CLAUDE,
@@ -64,10 +65,10 @@ export interface ProviderChoice {
    *  human label — so "switching provider changes your model" is visible before the click. */
   modelLabel: string;
   /** Why this row can't be picked, or absent when it can. Set for an engine whose CLI the runner
-   *  doesn't have, or has but says it isn't signed into: the row stays listed, and links to the
-   *  Providers page instead of picking, because that is where the install and the sign-in are. */
+   *  doesn't have, or has but says it isn't signed into: the row stays listed, and links to
+   *  Infrastructure instead of picking, because that is where the install and the sign-in are. */
   unavailable?: string;
-  /** Which engine row on the Providers page answers `unavailable`. That is the CLI this choice
+  /** Which engine row in Infrastructure answers `unavailable`. That is the CLI this choice
    *  runs on, which for a BYOK provider is not its own slug — a Moonshot row is fixed on the Kimi
    *  engine row. Set whenever `unavailable` is about this runner. */
   fixEngine?: string;
@@ -83,8 +84,9 @@ export interface ProviderChoice {
    *  since the pool beside it already runs on it. */
   inPool?: boolean;
   /** The runner's own accounts of this engine, when it has signed in more than one: offered under
-   *  its row, so a session can start on another account than its workspace's. Codex and Claude — the
-   *  engines whose CLI keeps a login per directory (Session.codexAccount, Session.claudeAccount). */
+   *  its row, so a session can start on another account than its workspace's. Codex, Claude,
+   *  Antigravity and Kimi — the engines whose CLI keeps a login per directory (Session.codexAccount,
+   *  Session.claudeAccount, Session.antigravityAccount, Session.kimiAccount). */
   accounts?: AccountChoice[];
   /** Not a provider at all: the offer to connect one (DeepSeek Harness with no key yet). Always
    *  `unavailable`, never a session's provider, so no runtime's menu lists it. */
@@ -97,7 +99,9 @@ export interface AccountChoice {
   id: string;
   label: string;
   /** Its own quota's tightest window — the one closest to its limit, which is the one that stops it
-   *  — compactly: "5h 100%", "Weekly 0%". Absent when the runner reports none. */
+   *  — compactly: "5h 100%", "Weekly 0%"; for Antigravity the bucket with the least left, by agy's
+   *  name for it: "gemini-5h 4% left". Absent when the runner reports none. "env key" for
+   *  Antigravity's Default on a runner that runs it on its Gemini key, which has no quota to show. */
   quota?: string;
   /** That window is at least 90% spent — where the composer's quota pill turns orange too. */
   nearLimit?: boolean;
@@ -243,7 +247,7 @@ function antigravityBlocker(state?: RunnerAntigravityState, health?: RunnerEngin
  *
  * Engines carry the health the runner last reported, because an engine choice is a claim about
  * someone else's machine. Not installed there, or installed but signed out → listed with the
- * reason, pointing at the Providers page where that machine gets its install or its sign-in (see
+ * reason, pointing at Infrastructure, where that machine gets its install or its sign-in (see
  * `unavailable`). Hiding the row instead would leave a user who pays for Kimi with no way to find
  * out why it isn't offered. A runner that has reported nothing claims nothing, so every engine
  * stays pickable — as does any engine missing from a partial report.
@@ -257,7 +261,9 @@ function antigravityBlocker(state?: RunnerAntigravityState, health?: RunnerEngin
  * away. `configured` is expected to carry the pools too (poolsAsProviders), since that is where a
  * pool's models and runtime are resolved from; `pools` says which of its entries are pools.
  *
- * `planUsage` is the runner's quota report, read for each of its Codex and Claude accounts' own windows.
+ * `planUsage` is the runner's quota report, read for each of its Codex, Claude and Kimi accounts' own
+ * windows; its Antigravity accounts' travel with `engineHealth` and are read from there
+ * (withEnginePlanUsage).
  */
 export function providerChoices(
   configured: ConfiguredProvider[],
@@ -271,15 +277,18 @@ export function providerChoices(
   dshRunner?: DshRunnerFacts | null,
 ): ProviderChoice[] {
   const usesGoogleAccount = antigravity?.authSource === 'google' && !(antigravityKeyAvailable && !antigravity.envKeyAvailable);
+  const usage = withEnginePlanUsage(planUsage, engineHealth);
   const engines: ProviderChoice[] = ENGINE_SLUGS.filter(
     (slug) => slug !== AgentProvider.ANTIGRAVITY || antigravityKeyAvailable || antigravity?.authSource === 'google',
   ).map((slug) => {
     const health = engineHealth?.find((e) => e.engine === slug);
     const blocker = slug === AgentProvider.ANTIGRAVITY ? antigravityBlocker(antigravity, health, !antigravityKeyAvailable || usesGoogleAccount) : engineBlocker(health);
     const accounts =
-      (slug === AgentProvider.CODEX || slug === AgentProvider.CLAUDE) && !blocker && (health?.accounts?.length ?? 0) >= 2
+      isAccountEngine(slug) && !blocker && (health?.accounts?.length ?? 0) >= 2
         ? health!.accounts!.map((account): AccountChoice => {
-            const snapshot = accountPlanUsage(planUsage, slug, account.id);
+            // Antigravity's Default on the runner's Gemini key: it runs, on the key, with no quota.
+            if (runsOnEnvKey(health, account)) return { id: account.id, label: accountNameOf(account), quota: 'env key' };
+            const snapshot = accountPlanUsage(usage, slug, account.id);
             // The window that stops it: a Claude login's 5-hour window can read 0% while its weekly
             // one is spent, and the first window alone would say it has room.
             const quota =
@@ -289,7 +298,10 @@ export function providerChoices(
               label: accountNameOf(account),
               ...(quota
                 ? {
-                    quota: `${compactWindowLabel(quota.label)} ${quota.percent}%`,
+                    // Antigravity's buckets say what is left, under agy's own names for them.
+                    quota: quota.remaining
+                      ? `${quota.groupLabel ?? quota.label} ${quota.percent}% left`
+                      : `${compactWindowLabel(quota.label)} ${quota.percent}%`,
                     ...(quota.nearLimit ? { nearLimit: true } : {}),
                   }
                 : {}),
@@ -386,11 +398,40 @@ export function providerChoices(
         }]
       : [];
   const antigravityKeys = byok.filter((choice) => runtimeForProvider(choice.slug, configured) === AgentProvider.ANTIGRAVITY);
+  // OpenCode, installed or not: Orbit installs it, so a machine without it is a row the picker can
+  // send somewhere rather than an empty space — the same rule DSH and the login engines are listed
+  // under. It has no sign-in to offer (its own login picks an underlying provider interactively), so
+  // the row is never a pick until the CLI is there. Then its keys, which are only worth listing once
+  // it runs (shared `openCodeKeys`): it speaks each dialect a configured key does, so the same key is
+  // listed under its own engine above and here, as `opencode/<slug>`.
+  const openCodeInstalled = engineHealth?.find((e) => e.engine === AgentProvider.OPENCODE)?.installed === true;
+  const openCode: ProviderChoice[] = [
+    {
+      slug: AgentProvider.OPENCODE,
+      label: ENGINE_LABELS[AgentProvider.OPENCODE],
+      kind: 'engine' as const,
+      ...brandForProvider(AgentProvider.OPENCODE, ENGINE_LABELS[AgentProvider.OPENCODE]),
+      modelLabel: defaultModelLabel(AgentProvider.OPENCODE, modelCatalog, configured, runtimeDefaultModels),
+      ...(openCodeInstalled ? {} : { unavailable: 'Not installed', fixEngine: AgentProvider.OPENCODE }),
+    },
+    ...(openCodeInstalled
+      ? configured
+          .filter((p) => p.runsOnOpenCode && !poolSlugs.has(p.slug))
+          .map((p) => ({
+            slug: openCodeKeyChoice(p.slug),
+            label: providerDisplayLabel(p.label, p.presetSlug),
+            kind: 'byok' as const,
+            ...brandForProvider(p.slug, p.label, p.presetSlug),
+            modelLabel: defaultModelLabel(openCodeKeyChoice(p.slug), modelCatalog, configured, runtimeDefaultModels),
+          }))
+      : []),
+  ];
   return [
     ...engines.flatMap((choice) => choice.slug === AgentProvider.KIMI ? [...antigravityKeys, choice] : [choice]),
     ...accountPools,
     ...byok.filter((choice) => !antigravityKeys.includes(choice)),
     ...dshSetup,
+    ...openCode,
   ];
 }
 
@@ -511,6 +552,33 @@ export function engineChoiceFor(provider: ProviderChoice, configured?: Configure
   };
 }
 
+/** The engine a session runs on, as the composer's model menu titles itself: the CLI's own product
+ *  name (`runnerEngines`' table — `Claude Code`, not `Claude`, because a BYOK session writes
+ *  DeepSeek's models while Claude Code executes them) over that engine's brand mark. Every row
+ *  under the title picks something for the next turn — which provider, which model, how hard — and
+ *  this is the one fact none of them states.
+ *
+ *  `nextProvider` is a pick that has been made but not yet carried (an ended session's held
+ *  switch). It becomes `nextName` only when it lands on a DIFFERENT engine: two providers of one
+ *  CLI read as the same title, and `Claude Code → Claude Code` would say nothing a reader can use. */
+export function engineTitleFor(
+  provider: string | null | undefined,
+  configured?: ConfiguredProvider[] | null,
+  nextProvider?: string | null,
+): { slug: string; name: string; nextName: string | null; brand: ProviderBrand; glyphKey?: string } {
+  const slug = runtimeForProvider(provider, configured);
+  // `runtimeForProvider` answers one of the six engines REPORTED_ENGINES names, which is exactly
+  // the key set the CLI-name table is keyed by.
+  const name = ENGINE_CLI_NAME[slug as ReportedEngine];
+  const next = nextProvider ? runtimeForProvider(nextProvider, configured) : null;
+  return {
+    slug,
+    name,
+    nextName: next && next !== slug ? ENGINE_CLI_NAME[next as ReportedEngine] : null,
+    ...brandForProvider(slug, name),
+  };
+}
+
 /**
  * `choices` grouped by the engine that runs them, in the order the engines first appear there. Each
  * engine lands on the first of `preferred` it holds that can run (the draft's pick, then what the
@@ -540,13 +608,3 @@ export function engineChoices(
     return engineChoiceFor(landing, configured);
   });
 }
-
-/** How the hero says which provider its engine runs on: nothing extra for the engine's own sign-in
- *  (bar how it signs in, for Antigravity), "via DeepSeek" for anything else. */
-export const engineProviderDetail = (engine: EngineChoice): string | undefined =>
-  engine.provider.slug === engine.slug
-    ? engine.provider.labelDetail
-    : // A key named for its engine (DeepSeek Harness) would only repeat it.
-      engine.provider.label === engine.label || engine.provider.setup
-      ? undefined
-      : `via ${engine.provider.label}`;

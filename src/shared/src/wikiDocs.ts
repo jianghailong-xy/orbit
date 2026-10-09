@@ -92,6 +92,27 @@ export const WIKI_DOC_BUILD_RULES = {
   parallel: 4,
 } as const;
 
+/**
+ * The documents built on the server (contract `docs.build.server`, `jobs.kindRuns.docs_build`; design §8, P7): for
+ * an account the executor switch gives the server, the owner's confirmation of a plan version makes a `docs_build`
+ * job of the wiki-worker instead of a task of the hidden list, and the System model writes through the queue.
+ */
+export const WIKI_DOCS_BUILD_JOB = {
+  kind: 'docs_build',
+  /** Asked for by the owner's confirmation: owner-initiated work, above background maintenance (contract `jobs.priority`). */
+  priority: 1,
+  /** The queue's step of each call; `docs_*` is the documents' wait limit and call budget (modelQueue). */
+  steps: { merge: 'docs_merge', write: 'docs_write', rewrite: 'docs_rewrite', quotes: 'docs_quotes', overview: 'docs_overview' },
+  /** One call's max_tokens: a section of a few thousand characters and its quotes, with room to spare. */
+  maxTokens: 8192,
+  /** How long the job waits for the snapshot that names the commit it reads, and for one read of files at it. */
+  repoWaitSeconds: 300,
+  /** Reads of one job in flight at once: each is a fetch in the same checkout on the space's runner. */
+  readsInFlight: 2,
+  /** A read that failed is asked again this many times in all before the attempt is the platform's failure. */
+  readAttempts: 3,
+} as const;
+
 /** A section's blocks: paragraphs and list items hold sentences; a heading or a code block its text. */
 export const WIKI_DOC_BLOCK_KINDS = ['paragraph', 'item', 'heading', 'code'] as const;
 export type WikiDocBlockKind = (typeof WIKI_DOC_BLOCK_KINDS)[number];
@@ -116,6 +137,15 @@ export const WIKI_DOC_RULES = {
   /** The pieces of material one section's ledger lists, and the longest reason one gives. */
   dispositionsPerSection: 200,
   reasonMaxChars: 500,
+} as const;
+
+/**
+ * A written document's lead on the directory (contract `docs.lead`): the first sentences of its first
+ * section, withdrawn ones skipped, and cut to this many characters with an ellipsis when longer.
+ */
+export const WIKI_DOC_LEAD_RULES = {
+  sentences: 2,
+  maxChars: 200,
 } as const;
 
 /**
@@ -285,6 +315,11 @@ export interface WikiDocsDirectoryDoc {
   updatedAt: string | null;
   /** The plan version it was written from. */
   planVersion: number | null;
+  /**
+   * Its two lines on the home (`WIKI_DOC_LEAD_RULES`): null until it is written, and while its first section
+   * has no sentence that is not withdrawn. Absent from a server older than it.
+   */
+  lead?: string | null;
   sections: WikiDocsDirectorySection[];
 }
 

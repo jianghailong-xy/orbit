@@ -11,6 +11,13 @@ public struct TranscriptState: Equatable, Sendable, Codable {
     /// row, in order) when the durable `user` event for the turn lands. Mirrors web's separate
     /// `queued` state (see `addOptimisticUser`).
     public var queued: [UserBubble] = []
+    /// Turns the server lists as the accepted head (`QueuedTurnInfo.isAccepted`): a runner has taken
+    /// them, or is about to, and their durable `user` event has not arrived. Not the queue's any more —
+    /// nothing withdraws them — so they are drawn where that echo will land, after every item and as
+    /// the transcript draws a user turn, and the echo takes over the same row (`appendUser`). Held
+    /// beside `items` rather than in it for the reason `queued` is: an event still arriving for the
+    /// turn before belongs above them. Mirrors web's `acceptedUserTurns`.
+    public var accepted: [UserBubble] = []
     public var status: RunStatus = .pending
     /// Persisted high-water seq — the `?sinceSeq=` value to reconnect with. Live events advance it
     /// only when durable; a historical page may also advance across a legacy live-only row that an
@@ -53,18 +60,28 @@ public struct TranscriptState: Equatable, Sendable, Codable {
     /// tool_use id — live from `task_progress`, and the last word from the `background_task` that
     /// ends it.
     public var taskProgress: [String: TaskProgress] = [:]
+    /// The engine's guess at the person's next message (`prompt_suggestion`), while nothing newer has
+    /// been said: a later `user` (from any device) or `turn_end` (a newer turn ending, one the engine
+    /// started itself included) clears it. The composer decides whether to offer it
+    /// (`ComposerLogic.offeredPromptSuggestion`).
+    public var promptSuggestion: String?
     public init() {}
+
+    /// Every server turn the tail draws — accepted, queued or steering — which is what a listing of
+    /// them is authoritative about: what `reconcileQueuedTurns` is told was known before its fetch.
+    public var listedTurnIDs: Set<String> { Set((accepted + queued).compactMap(\.turnId)) }
 
     // Tolerant decode so snapshots written before `queued` (or the history-window cursor) existed
     // still rehydrate (the keys just default) instead of discarding the whole cached session; the
     // other fields keep their prior strictness. `encode(to:)` stays synthesized from these keys.
-    enum CodingKeys: String, CodingKey { case items, pendingApprovals, background, queued, status, maxSeq, oldestSeq, hasMoreOlder, contextTokens, contextWindow, subagentItems, taskProgress }
+    enum CodingKeys: String, CodingKey { case items, pendingApprovals, background, queued, accepted, status, maxSeq, oldestSeq, hasMoreOlder, contextTokens, contextWindow, subagentItems, taskProgress, promptSuggestion }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         items = try c.decode([TranscriptItem].self, forKey: .items)
         pendingApprovals = try c.decode([PendingApproval].self, forKey: .pendingApprovals)
         background = try c.decode([BackgroundProc].self, forKey: .background)
         queued = (try? c.decodeIfPresent([UserBubble].self, forKey: .queued)) ?? []
+        accepted = (try? c.decodeIfPresent([UserBubble].self, forKey: .accepted)) ?? []
         status = try c.decode(RunStatus.self, forKey: .status)
         maxSeq = try c.decode(Int.self, forKey: .maxSeq)
         oldestSeq = (try? c.decodeIfPresent(Int.self, forKey: .oldestSeq)) ?? nil
@@ -73,6 +90,7 @@ public struct TranscriptState: Equatable, Sendable, Codable {
         contextWindow = (try? c.decodeIfPresent(Int.self, forKey: .contextWindow)) ?? nil
         subagentItems = (try? c.decodeIfPresent([String: [TranscriptItem]].self, forKey: .subagentItems)) ?? [:]
         taskProgress = (try? c.decodeIfPresent([String: TaskProgress].self, forKey: .taskProgress)) ?? [:]
+        promptSuggestion = (try? c.decodeIfPresent(String.self, forKey: .promptSuggestion)) ?? nil
     }
 }
 
@@ -252,12 +270,16 @@ public struct TranscriptReducer: Sendable, Codable {
         case .assistant:      finalizeAssistant(str(ev, "text") ?? str(ev, "content") ?? "", seq: ev.seq,
                                               turnId: ev.turnId, ts: ev.ts)
         case .thinkingDelta:  appendThinkingDelta(str(ev, "delta") ?? str(ev, "text") ?? "", ts: ev.ts)
-        case .thinking:       finalizeThinking(str(ev, "text") ?? "", seq: ev.seq, ts: ev.ts)
+        case .thinking:       finalizeThinking(str(ev, "text") ?? "", seq: ev.seq, ts: ev.ts,
+                                               thinkingMs: ev.payload["thinkingMs"]?.intValue)
         case .toolUse:        openTool(ev)
         case .toolOutput:     applyToolOutput(ev)
         case .toolResult:     closeTool(ev)
-        case .turnEnd:        endTurn(ev)
-        case .user:           appendUser(ev)
+        // A suggestion arrives after its own turn's turn_end, so a later turn_end or user event is
+        // something newer than what it guessed at.
+        case .turnEnd:        state.promptSuggestion = nil; endTurn(ev)
+        case .user:           state.promptSuggestion = nil; appendUser(ev)
+        case .promptSuggestion: state.promptSuggestion = nonEmpty(str(ev, "text")?.trimmingCharacters(in: .whitespacesAndNewlines))
         case .userDelivery:   applyUserDelivery(ev)
         case .interrupt:      appendInterrupt(seq: ev.seq, dropsQueue: Self.dropsQueue(ev))
         case .error:          appendError(ev)
@@ -331,7 +353,8 @@ public struct TranscriptReducer: Sendable, Codable {
     /// dedup set, both cursors, and the open-bubble marks (a bubble left open here would swallow
     /// the first deltas of the re-seeded window). What survives is the state the transcript stream
     /// doesn't own and other paths re-seed on the same reconnect — pending approvals, the
-    /// background tray, the composer's queued sends, the run status and the context gauge —
+    /// background tray, the composer's queued sends and the accepted head waiting on its echo, the
+    /// run status and the context gauge —
     /// because clearing those would blank live UI the re-seed cannot restore. Web's `reseed`
     /// draws the same line: it resets `events`/`seen`/`oldestSeq`/`lastSeq` and nothing else.
     public mutating func resetForResync() {
@@ -621,37 +644,91 @@ public struct TranscriptReducer: Sendable, Codable {
         state.queued.removeAll { $0.id == id }
     }
 
-    /// Reconcile the visible queued tail against GET /sessions/:id/turns. That endpoint is the
-    /// durable truth because a PENDING turn has no `user` event until the runner leases it.
+    /// Reconcile the visible queued tail, and the accepted head, against GET
+    /// /sessions/:id/turns?view=active. That endpoint is the durable truth because a turn has no
+    /// `user` event until the runner leases it and echoes it.
     ///
-    /// `knownBefore` contains only server-backed turn ids captured before the fetch. A listed row
-    /// is updated/deduplicated in server order; a previously-known row now absent was withdrawn on
-    /// another client and is removed. Optimistic bubbles without a turn id, plus bubbles created
-    /// while the request was in flight, survive a stale snapshot. When the POST and GET cross, an
-    /// untagged optimistic bubble is adopted by matching its content + attachment ids.
+    /// `knownBefore` contains only server-backed turn ids captured before the fetch
+    /// (`TranscriptState.listedTurnIDs`). A listed row is updated/deduplicated in server order; a
+    /// previously-known row now absent was withdrawn on another client, or delivered, and is removed.
+    /// Optimistic bubbles without a turn id, plus bubbles created while the request was in flight,
+    /// survive a stale snapshot. When the POST and GET cross, an untagged optimistic bubble is adopted
+    /// by matching its content + attachment ids.
+    ///
+    /// The row placed `accepted` is no longer the queue's: it goes to `state.accepted`, drawn where its
+    /// echo will land and with no Cancel, and keeps the bubble that drew it while it waited — a turn
+    /// moving up to the head of the queue is the same row the whole way to its echo. Web parity:
+    /// `reconcileAcceptedUserTurnSnapshot` beside `reconcileQueuedTurnSnapshot`.
     public mutating func reconcileQueuedTurns(_ turns: [QueuedTurnInfo], knownBefore: Set<String>) {
-        let previous = state.queued
-        let deliveredTurnIDs = Set(state.items.compactMap { item -> String? in
+        // Every row the tail drew before this listing, the accepted head's first — matched below
+        // whichever of the two a turn has moved between.
+        let previous = state.accepted + state.queued
+        let previouslyAccepted = state.accepted.count
+        let transcriptTurns = state.items.compactMap { item -> UserBubble? in
             guard case .user(let bubble) = item else { return nil }
-            return bubble.turnId
-        })
+            return bubble
+        }
+        let deliveredTurnIDs = Set(transcriptTurns.compactMap(\.turnId))
+        let listedTurnIDs = Set(turns.map(\.turnId))
         var consumed = Set<Int>()
+        var accepted: [UserBubble] = []
         var reconciled: [UserBubble] = []
 
         // The REST query may have read a row just before the runner leased it, then arrive after
         // that turn's durable `user` event. Never resurrect such a stale row below the transcript.
         for turn in turns where !deliveredTurnIDs.contains(turn.turnId) {
+            // The receipt for a message written into the running turn that never made it: a steer
+            // that is over, which the queue never listed and this end has no line for. It stays out
+            // of the tail, as it always has.
+            if turn.delivery != nil { continue }
             let incomingAttachments = turn.attachments?.map {
                 TurnAttachment(id: $0.id, mime: $0.mimeType)
             }
             let incomingAttachmentIDs = incomingAttachments?.map(\.id)
+            func untaggedSend(_ bubble: UserBubble) -> Bool {
+                guard bubble.turnId == nil, bubble.pending, bubble.text == turn.content else { return false }
+                return incomingAttachmentIDs == nil || bubble.attachments.map(\.id) == incomingAttachmentIDs
+            }
+            // Something already draws this accepted head where its echo will land: an idle send whose
+            // POST response has not tagged its bubble yet — the queue nudge every send broadcasts
+            // races that response — or nothing is ever to: a `!cmd` has no echo, the runner runs it
+            // as a Bash card (web parity: no placeholder for an accepted shell turn).
+            if turn.isAccepted, turn.kind == "shell" || transcriptTurns.contains(where: untaggedSend) {
+                continue
+            }
             let exact = previous.indices.first {
                 !consumed.contains($0) && previous[$0].turnId == turn.turnId
             }
             let optimistic = previous.indices.first {
-                guard !consumed.contains($0), previous[$0].turnId == nil,
-                      previous[$0].pending, previous[$0].text == turn.content else { return false }
-                return incomingAttachmentIDs == nil || previous[$0].attachments.map(\.id) == incomingAttachmentIDs
+                !consumed.contains($0) && untaggedSend(previous[$0])
+            }
+
+            if turn.isAccepted {
+                var bubble: UserBubble
+                if let i = exact ?? optimistic {
+                    consumed.insert(i)
+                    bubble = previous[i]
+                    bubble.text = turn.content
+                    if let incomingAttachments { bubble.attachments = incomingAttachments }
+                    bubble.turnId = turn.turnId
+                } else {
+                    bubble = UserBubble(id: "server-\(turn.turnId)", text: turn.content,
+                                        attachments: incomingAttachments ?? [], turnId: turn.turnId,
+                                        pending: true)
+                }
+                // Still waiting on its echo, but no longer on the queue: neither "Queued" nor
+                // withdrawable — the runner has it. Stamped with when it was filed until the echo
+                // brings the runner's own clock (web: `acceptedAt`).
+                bubble.pending = true
+                bubble.queued = false
+                bubble.steer = false
+                bubble.undelivered = false
+                bubble.ts = turn.createdAt ?? bubble.ts
+                // The cards the echo will carry, so the placeholder is the card it is replaced by.
+                bubble.cards = turn.cards
+                bubble.authoredByOrbit = turn.authoredByOrbit == true
+                accepted.append(bubble)
+                continue
             }
 
             if let i = exact ?? optimistic {
@@ -689,13 +766,20 @@ public struct TranscriptReducer: Sendable, Codable {
 
         // Preserve local work the REST snapshot cannot safely disprove: an untagged optimistic send,
         // or a server-backed bubble that arrived after this particular fetch began. Everything that
-        // was already known to the server and is now absent has been cancelled/leased elsewhere.
+        // was already known to the server and is now absent has been cancelled/leased elsewhere, and
+        // a turn the listing names but left out of the tail above is the listing's to say.
         for i in previous.indices where !consumed.contains(i) {
             let bubble = previous[i]
             if let turnId = bubble.turnId,
-               knownBefore.contains(turnId) || deliveredTurnIDs.contains(turnId) { continue }
-            reconciled.append(bubble)
+               knownBefore.contains(turnId) || deliveredTurnIDs.contains(turnId)
+                   || listedTurnIDs.contains(turnId) { continue }
+            if i < previouslyAccepted {
+                accepted.append(bubble)
+            } else {
+                reconciled.append(bubble)
+            }
         }
+        state.accepted = accepted
         state.queued = reconciled
     }
 
@@ -794,17 +878,19 @@ public struct TranscriptReducer: Sendable, Codable {
     /// DeepSeek turn: 10 at the median, 51 at p90). A row each was a stack of identical "Thinking"
     /// lines. Only ADJACENT blocks merge — one either side of a tool call keeps its own row, where
     /// it is what explains that call. Web twin: the `thinking` case in `buildNodes`.
-    private mutating func finalizeThinking(_ full: String, seq: Int, ts: String? = nil) {
+    private mutating func finalizeThinking(_ full: String, seq: Int, ts: String? = nil, thinkingMs: Int? = nil) {
         if let i = openThinking, case .thinking(var b) = state.items[i] {
             b.text = full.isEmpty ? b.streamingText : full
             b.streamingText = ""
             b.seq = seq
             b.finishedTs = ts
+            b.thinkingMs = thinkingMs
             state.items[i] = .thinking(b)
             foldIntoPrecedingThinking(at: i)
         } else if !full.isEmpty {
             state.items.append(.thinking(ThinkingBlock(id: nextID(), text: full, streamingText: "",
-                                                       seq: seq, startedTs: ts, finishedTs: ts)))
+                                                       seq: seq, startedTs: ts, finishedTs: ts,
+                                                       thinkingMs: thinkingMs)))
             foldIntoPrecedingThinking(at: state.items.count - 1)
         }
         openThinking = nil
@@ -822,6 +908,7 @@ public struct TranscriptReducer: Sendable, Codable {
         previous.blocks += settled.blocks
         previous.seq = settled.seq
         previous.finishedTs = settled.finishedTs ?? previous.finishedTs
+        if let ms = settled.thinkingMs { previous.thinkingMs = (previous.thinkingMs ?? 0) + ms }
         state.items[i - 1] = .thinking(previous)
         state.items.remove(at: i)
         // The open-bubble cursors are item INDICES — close the gap left behind, the same hazard
@@ -1009,6 +1096,9 @@ public struct TranscriptReducer: Sendable, Codable {
         flushStreaming()
         clearLiveToolOutputsAtBoundary()
         defer { turnAccountedFor = false }
+        // A turn that ended is no longer waiting on its echo: the head it drew goes with it (web
+        // parity: `clearAcceptedUserTurnsForTurn`).
+        if let tid = ev.turnId { state.accepted.removeAll { $0.turnId == tid } }
         if let s = str(ev, "status"), let st = RunStatus(rawValue: s) {
             setStatus(st)
             return
@@ -1080,6 +1170,15 @@ public struct TranscriptReducer: Sendable, Codable {
                 state.queued[i].pending = false
                 state.queued[i].undelivered = true
             }
+            return
+        }
+        // The accepted head, likewise: taken by the runner, and refused before it was ever echoed.
+        if let i = state.accepted.firstIndex(where: { $0.turnId == turnId }) {
+            state.accepted[i].delivery = delivery
+            if delivery == "failed" {
+                state.accepted[i].pending = false
+                state.accepted[i].undelivered = true
+            }
         }
     }
 
@@ -1149,6 +1248,9 @@ public struct TranscriptReducer: Sendable, Codable {
         if let qi = state.queued.firstIndex(where: echoes) {
             state.queued.remove(at: qi)
         }
+        // The accepted head this echoes (matched by its turn id): the echo takes over its row — the
+        // same id, where it was already drawn — so the turn is not drawn twice, nor drawn anew.
+        let acceptedHead = state.accepted.firstIndex(where: echoes).map { state.accepted.remove(at: $0) }
         // One message, one row. A steer the engine provably never read is handed back and delivered
         // again as the ordinary turn it would have been — the same row, the same turn id — so its
         // second `user` event is that message arriving, not another one: it amends the row already
@@ -1204,7 +1306,10 @@ public struct TranscriptReducer: Sendable, Codable {
             }
             return
         }
-        state.items.append(.user(UserBubble(id: nextID(), text: body, attachments: atts, ts: ev.ts,
+        // An echo that took over the accepted head keeps its inputs if it carries none of its own, as
+        // a reconciled send keeps its optimistic ones above.
+        let inputs = atts.isEmpty ? acceptedHead?.attachments ?? [] : atts
+        state.items.append(.user(UserBubble(id: acceptedHead?.id ?? nextID(), text: body, attachments: inputs, ts: ev.ts,
                                             clientTurnId: cid, turnId: ev.turnId, pending: false,
                                             undelivered: delivery == "failed",
                                             note: recorded?.note,

@@ -1,0 +1,11 @@
+diff --git a/src/web/src/index.css b/src/web/src/index.css
+index e6e1bd312..33934dde5 100755
+--- a/src/web/src/index.css
++++ b/src/web/src/index.css
+@@ -22764,3 +22764,6 @@ button.agent-progress-agent:hover {
+   text-align: center;
+   text-wrap: balance;
+ }
++
++/* P4.1 accepted-layer negative control, never delivered: on the profile page, the field error text 1px further right. */
++body:has(input[autocomplete="name"]) .orbit-field-error { position: relative; left: 1px; }

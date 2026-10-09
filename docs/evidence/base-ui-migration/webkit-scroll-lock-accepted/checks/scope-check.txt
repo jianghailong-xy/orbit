@@ -1,0 +1,40 @@
+registration 821e2d501d59983cbcc5e7407571b2a4f13e0b53, parent b2568f28d8bb87d12eec762d1f810562503ed2d9, head 821e2d501d59983cbcc5e7407571b2a4f13e0b53
+## files the registration commit changes
+M	docs/evidence/base-ui-migration/p0-drift/README.md
+A	docs/evidence/base-ui-migration/p0-drift/accepted/before/webkit-dark-desktop/notification-error.png
+A	docs/evidence/base-ui-migration/p0-drift/accepted/before/webkit-dark-desktop/profile-validation.png
+A	docs/evidence/base-ui-migration/p0-drift/accepted/before/webkit-dark-desktop/settings-saved.png
+A	docs/evidence/base-ui-migration/p0-drift/accepted/before/webkit-dark-phone/notification-error.png
+M	docs/evidence/base-ui-migration/p0-drift/accepted/before/webkit-dark-phone/profile-validation.png
+A	docs/evidence/base-ui-migration/p0-drift/accepted/before/webkit-dark-phone/settings-saved.png
+A	docs/evidence/base-ui-migration/p0-drift/accepted/before/webkit-light-desktop/notification-error.png
+A	docs/evidence/base-ui-migration/p0-drift/accepted/before/webkit-light-desktop/profile-validation.png
+A	docs/evidence/base-ui-migration/p0-drift/accepted/before/webkit-light-desktop/settings-saved.png
+M	docs/evidence/base-ui-migration/p0-drift/accepted/registry.json
+A	docs/evidence/base-ui-migration/p0-drift/accepted/screenshots/webkit-dark-desktop/notification-error.png
+A	docs/evidence/base-ui-migration/p0-drift/accepted/screenshots/webkit-dark-desktop/profile-validation.png
+A	docs/evidence/base-ui-migration/p0-drift/accepted/screenshots/webkit-dark-desktop/settings-saved.png
+A	docs/evidence/base-ui-migration/p0-drift/accepted/screenshots/webkit-dark-phone/notification-error.png
+M	docs/evidence/base-ui-migration/p0-drift/accepted/screenshots/webkit-dark-phone/profile-validation.png
+A	docs/evidence/base-ui-migration/p0-drift/accepted/screenshots/webkit-dark-phone/settings-saved.png
+A	docs/evidence/base-ui-migration/p0-drift/accepted/screenshots/webkit-light-desktop/notification-error.png
+A	docs/evidence/base-ui-migration/p0-drift/accepted/screenshots/webkit-light-desktop/profile-validation.png
+A	docs/evidence/base-ui-migration/p0-drift/accepted/screenshots/webkit-light-desktop/settings-saved.png
+outside p0-drift/accepted/ and p0-drift/README.md: []
+## p0-drift/README.md lines the registration changes
++| WebKit 滚动锁（[34cBi0yt6bFcSmbJFgDPj](orbit-task:34cBi0yt6bFcSmbJFgDPj)）第 1 版证据，`evidenceDigest` `fdb19816…8e7c`，CONFIRM，文档 [webkit-scroll-lock/README.md](../webkit-scrol
++WebKit 滚动锁另有 3 张截图（webkit-light-phone 的 settings-saved、profile-validation、notification-error）只差文档滚动条那 8px 一列与 (0,0) 一点，变化低于 P0 比较器�
+## protected paths, b2568f28d8bb87d12eec762d1f810562503ed2d9..HEAD (empty = unchanged)
+docs/evidence/base-ui-migration/p0.2: []
+docs/evidence/base-ui-migration/p0-drift/reference: []
+src/web/ui-migration: []
+src/web/package.json: []
+src: []
+package.json: []
+package-lock.json: []
+## accepted layer: entries of other batches unchanged; the earlier P4.1 entry kept as previous
+other entries identical (13 entries)
+webkit-dark-phone/profile-validation: previous = the P4.1 entry at b2568f28d8bb87d12eec762d1f810562503ed2d9
+entries: 14 at start, 22 at head, 9 of 34cBi0yt6bFcSmbJFgDPj
+## commits after the registration (each touches only docs/evidence/base-ui-migration/webkit-scroll-lock-accepted/)
+outside webkit-scroll-lock-accepted after the registration: []

@@ -1,0 +1,567 @@
+{
+ "config": {
+  "argv": [
+   "/usr/local/bin/node",
+   "/root/.orbit/worktrees/03e8c989-09f5-5d43-831c-c6187aea54e0/node_modules/@playwright/test/cli.js",
+   "test",
+   "--config",
+   "/tmp/promotion-toast-main-reference/src/web/ui-migration/toasts-reference.config.mjs",
+   "--grep",
+   "mixed pinned"
+  ],
+  "configFile": "/tmp/promotion-toast-main-reference/src/web/ui-migration/toasts-reference.config.mjs",
+  "rootDir": "/tmp/promotion-toast-main-reference/src/web/ui-migration",
+  "failOnFlakyTests": false,
+  "forbidOnly": false,
+  "fullyParallel": false,
+  "globalSetup": "/tmp/promotion-toast-main-reference/src/web/ui-migration/environment.mjs",
+  "globalTeardown": null,
+  "globalTimeout": 0,
+  "grep": {},
+  "grepInvert": null,
+  "maxFailures": 0,
+  "metadata": {
+   "actualWorkers": 1
+  },
+  "preserveOutput": "always",
+  "projects": [
+   {
+    "outputDir": "/tmp/promotion-toast-main-reference/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-desktop",
+    "name": "chromium-light-desktop",
+    "testDir": "/tmp/promotion-toast-main-reference/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts-reference.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/tmp/promotion-toast-main-reference/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-phone",
+    "name": "chromium-light-phone",
+    "testDir": "/tmp/promotion-toast-main-reference/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts-reference.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/tmp/promotion-toast-main-reference/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-desktop",
+    "name": "chromium-dark-desktop",
+    "testDir": "/tmp/promotion-toast-main-reference/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts-reference.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/tmp/promotion-toast-main-reference/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-phone",
+    "name": "chromium-dark-phone",
+    "testDir": "/tmp/promotion-toast-main-reference/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts-reference.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/tmp/promotion-toast-main-reference/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-desktop",
+    "name": "webkit-light-desktop",
+    "testDir": "/tmp/promotion-toast-main-reference/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts-reference.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/tmp/promotion-toast-main-reference/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-phone",
+    "name": "webkit-light-phone",
+    "testDir": "/tmp/promotion-toast-main-reference/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts-reference.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/tmp/promotion-toast-main-reference/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-desktop",
+    "name": "webkit-dark-desktop",
+    "testDir": "/tmp/promotion-toast-main-reference/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts-reference.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/tmp/promotion-toast-main-reference/src/web/.toasts-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-phone",
+    "name": "webkit-dark-phone",
+    "testDir": "/tmp/promotion-toast-main-reference/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "toasts-reference.browser.mjs"
+    ],
+    "timeout": 90000
+   }
+  ],
+  "quiet": false,
+  "reporter": [
+   [
+    "list",
+    null
+   ],
+   [
+    "json",
+    {
+     "outputFile": "/tmp/promotion-toast-main-reference/src/web/.toasts-results/report.json"
+    }
+   ]
+  ],
+  "reportSlowTests": {
+   "max": 5,
+   "threshold": 300000
+  },
+  "shard": null,
+  "tags": [],
+  "updateSnapshots": "none",
+  "updateSourceMethod": "patch",
+  "version": "1.63.0",
+  "workers": 1,
+  "webServer": {
+   "command": "npm run dev -- --host 127.0.0.1 --port 14379 --strictPort",
+   "cwd": "/tmp/promotion-toast-main-reference/src/web/",
+   "url": "http://127.0.0.1:14379",
+   "reuseExistingServer": false,
+   "timeout": 30000
+  }
+ },
+ "suites": [
+  {
+   "title": "toasts-reference.browser.mjs",
+   "file": "toasts-reference.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "mixed pinned and passing notifications stack without overlap and retain all pinned errors",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1739,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:59:00.936Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "mixed-stack",
+           "contentType": "image/png"
+          },
+          {
+           "name": "stack-geometry",
+           "contentType": "application/json"
+          },
+          {
+           "name": "expanded-pinned-stack",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "50b7f3b68b55a3231433-109a17ffd820ac4c3584",
+     "file": "toasts-reference.browser.mjs",
+     "line": 65,
+     "column": 1
+    },
+    {
+     "title": "mixed pinned and passing notifications stack without overlap and retain all pinned errors",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1511,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:59:03.004Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "mixed-stack",
+           "contentType": "image/png"
+          },
+          {
+           "name": "stack-geometry",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "50b7f3b68b55a3231433-450e63ad1ca9928c7b09",
+     "file": "toasts-reference.browser.mjs",
+     "line": 65,
+     "column": 1
+    },
+    {
+     "title": "mixed pinned and passing notifications stack without overlap and retain all pinned errors",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1172,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:59:04.790Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "mixed-stack",
+           "contentType": "image/png"
+          },
+          {
+           "name": "stack-geometry",
+           "contentType": "application/json"
+          },
+          {
+           "name": "expanded-pinned-stack",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "50b7f3b68b55a3231433-50d5187a8e7072e85b7d",
+     "file": "toasts-reference.browser.mjs",
+     "line": 65,
+     "column": 1
+    },
+    {
+     "title": "mixed pinned and passing notifications stack without overlap and retain all pinned errors",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1533,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:59:06.230Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "mixed-stack",
+           "contentType": "image/png"
+          },
+          {
+           "name": "stack-geometry",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "50b7f3b68b55a3231433-671e1cc3ba5d945e0c94",
+     "file": "toasts-reference.browser.mjs",
+     "line": 65,
+     "column": 1
+    },
+    {
+     "title": "mixed pinned and passing notifications stack without overlap and retain all pinned errors",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1289,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:59:08.037Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "mixed-stack",
+           "contentType": "image/png"
+          },
+          {
+           "name": "stack-geometry",
+           "contentType": "application/json"
+          },
+          {
+           "name": "expanded-pinned-stack",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "50b7f3b68b55a3231433-bdd68ad8c75eae20e9a9",
+     "file": "toasts-reference.browser.mjs",
+     "line": 65,
+     "column": 1
+    },
+    {
+     "title": "mixed pinned and passing notifications stack without overlap and retain all pinned errors",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1431,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:59:09.663Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "mixed-stack",
+           "contentType": "image/png"
+          },
+          {
+           "name": "stack-geometry",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "50b7f3b68b55a3231433-54bdd57ed3148e672f8f",
+     "file": "toasts-reference.browser.mjs",
+     "line": 65,
+     "column": 1
+    },
+    {
+     "title": "mixed pinned and passing notifications stack without overlap and retain all pinned errors",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1234,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:59:11.407Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "mixed-stack",
+           "contentType": "image/png"
+          },
+          {
+           "name": "stack-geometry",
+           "contentType": "application/json"
+          },
+          {
+           "name": "expanded-pinned-stack",
+           "contentType": "image/png"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "50b7f3b68b55a3231433-0ae7aeabce0c105699ad",
+     "file": "toasts-reference.browser.mjs",
+     "line": 65,
+     "column": 1
+    },
+    {
+     "title": "mixed pinned and passing notifications stack without overlap and retain all pinned errors",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1439,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-04T11:59:12.946Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "mixed-stack",
+           "contentType": "image/png"
+          },
+          {
+           "name": "stack-geometry",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "50b7f3b68b55a3231433-895e4767273e220d3cd1",
+     "file": "toasts-reference.browser.mjs",
+     "line": 65,
+     "column": 1
+    }
+   ]
+  }
+ ],
+ "errors": [],
+ "stats": {
+  "startTime": "2026-10-04T11:59:00.113Z",
+  "duration": 14417.349,
+  "expected": 8,
+  "skipped": 0,
+  "unexpected": 0,
+  "flaky": 0
+ }
+}

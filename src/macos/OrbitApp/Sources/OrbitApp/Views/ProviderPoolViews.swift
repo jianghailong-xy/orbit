@@ -2,147 +2,12 @@
 import SwiftUI
 import OrbitKit
 
-// Settings → Providers and the pool pages its rows open, drawn from what they are handed: the runners,
-// pools and keys to list, a pool, and the presses its page makes. Nothing here reads `AppModel` —
-// SettingsSheet's pages do, and hand these views the answers — so each page can also be drawn from
-// fixtures alone. The words, and what the pages make of a pool's numbers, are OrbitKit's
-// (`ProvidersOverview`, `CodexPoolPage`, `WhoCanUseIt`, `SharedPoolPage`, `AddPoolKey`, `ProviderPools`),
-// where they are tested.
-
-// MARK: - Providers
-
-/// Settings → Providers: where the account's models come from — the engines signed in on each runner
-/// (a row opens that runner, where signing in lives), the pools (a row opens the pool's page), and the
-/// account's API keys, which are added and changed on the web.
-struct ProvidersOverviewForm: View {
-    let runners: [Runner]
-    /// The account's own pools — a Codex one with its people and keys read beside its accounts, once they are.
-    let pools: [ProviderPool]
-    /// The Codex pools the account is in as one of their people.
-    let sharedPools: [SharedPool]
-    let keys: [ConfiguredProvider]
-
-    var body: some View {
-        Form {
-            Section {
-                ForEach(runners) { runner in
-                    NavigationLink(value: NavNode.runnerDetail(runnerID: runner.id)) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(runner.displayName?.isEmpty == false ? runner.displayName! : runner.name)
-                            Text(ProvidersOverview.runnerSummary(runner))
-                                .font(.orbitListSubtitle)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-            } header: {
-                SettingsHeader(ProvidersOverview.onYourRunners)
-            } footer: {
-                Text(ProvidersOverview.onYourRunnersDetail)
-            }
-
-            if !pools.isEmpty || !sharedPools.isEmpty {
-                Section {
-                    ForEach(sharedPools) { pool in
-                        NavigationLink(value: NavNode.sharedPool(poolID: pool.id)) {
-                            CodexPoolRowLabel(pool: SharedPools.asProviderPool(pool))
-                        }
-                    }
-                    ForEach(pools) { pool in
-                        NavigationLink(value: NavNode.accountPool(poolID: pool.id)) {
-                            if ProviderPools.runsCodex(pool) {
-                                CodexPoolRowLabel(pool: pool)
-                            } else {
-                                PoolRowLabel(engine: "claude", title: pool.label, line: nil,
-                                             value: ProvidersOverview.poolSummary(pool))
-                            }
-                        }
-                    }
-                } header: {
-                    SettingsHeader(ProvidersOverview.accountPools)
-                } footer: {
-                    Text(ProvidersOverview.accountPoolsDetail)
-                }
-            }
-
-            Section {
-                if keys.isEmpty {
-                    Text(ProvidersOverview.noKeys).foregroundStyle(.secondary)
-                }
-                ForEach(keys) { key in
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(key.label)
-                        if let defaultModel = key.defaultModel {
-                            Text(defaultModel)
-                                .font(.orbitListSubtitle)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-            } header: {
-                SettingsHeader(ProvidersOverview.apiKeys)
-            } footer: {
-                Text(ProvidersOverview.apiKeysDetail + " " + ProvidersOverview.editOnWeb)
-            }
-        }
-    }
-}
-
-/// A Codex pool's row, by who reads it (web's `PoolCard` head): its name — SHARED once anybody but its
-/// owner can use it — then whose it is and how many keys the reader can run on, or "Just me" and how many
-/// of its accounts can run, and at its end the head's gauge, where the reader has one.
-private struct CodexPoolRowLabel: View {
-    let pool: ProviderPool
-
-    var body: some View {
-        let value = ProvidersOverview.codexPoolValue(pool)
-        PoolRowLabel(engine: "codex", title: pool.label, shared: ProvidersOverview.isShared(pool),
-                     line: ProvidersOverview.codexPoolLine(pool), value: value?.label, valueTone: value?.tone)
-    }
-}
-
-/// A pool's row: its engine's mark and its name — and a line under it, where it has one — and at its
-/// end how many of its accounts a session could start on now, or the gauge a Codex pool's head reads, in
-/// that gauge's tone.
-private struct PoolRowLabel: View {
-    let engine: String
-    let title: String
-    var shared = false
-    let line: String?
-    let value: String?
-    var valueTone: PoolStatus.Tone? = nil
-
-    var body: some View {
-        LabeledContent {
-            if let value {
-                if let valueTone {
-                    Text(value)
-                        .foregroundStyle(PoolTone.color(valueTone))
-                } else {
-                    Text(value)
-                }
-            }
-        } label: {
-            HStack(spacing: 12) {
-                ProviderMark(provider: engine, size: 26)
-                VStack(alignment: .leading, spacing: 1) {
-                    HStack(spacing: 6) {
-                        Text(title)
-                            .lineLimit(1)
-                        if shared {
-                            PoolChip(text: CodexPoolPage.sharedChip, brand: true)
-                        }
-                    }
-                    if let line {
-                        Text(line)
-                            .font(.orbitListSubtitle)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-        }
-    }
-}
+// The pool pages Infrastructure's Account pools open, drawn from what they are handed: a pool, and the
+// presses its page makes. Nothing here reads `AppModel` — SettingsSheet's pages do, and hand these views
+// the answers — so each page can also be drawn from fixtures alone. The words, and what the pages make of
+// a pool's numbers, are OrbitKit's (`ProvidersOverview`, `CodexPoolPage`, `WhoCanUseIt`, `SharedPoolPage`,
+// `AddPoolKey`, `ProviderPools`), where they are tested. A pool's row on the page itself is
+// InfrastructureSections.swift's, which the Mac draws too.
 
 // MARK: - A Codex pool
 
@@ -247,53 +112,6 @@ struct CodexPoolPageView: View {
         .sheet(item: $sheet) { kind in
             sheetView(kind)
         }
-        .confirmationDialog(signingOut.map(CodexLoginPool.signOutTitle) ?? CodexLoginPool.signOut,
-                            isPresented: asked($signingOut), titleVisibility: .visible, presenting: signingOut) { login in
-            Button(CodexLoginPool.signOut, role: .destructive) {
-                run(done: CodexLoginPool.signedOut(login)) { await accountActions?.signOut(login) }
-            }
-            Button(CodexSignIn.cancel, role: .cancel) {}
-        } message: { _ in
-            Text(CodexLoginPool.signOutNote(pool))
-        }
-        .confirmationDialog(removingKey.map(SharedPoolPage.removeKeyTitle) ?? "",
-                            isPresented: asked($removingKey), titleVisibility: .visible, presenting: removingKey) { key in
-            Button(SharedPoolPage.remove, role: .destructive) {
-                run(done: SharedPoolPage.removedKey(key)) { await accessActions?.removeKey(key) }
-            }
-            Button(AddPoolKey.cancel, role: .cancel) {}
-        } message: { _ in
-            Text(SharedPoolPage.removeKeyNote)
-        }
-        .confirmationDialog(removingPerson.flatMap { person in page.access.map { SharedPoolPage.removePersonTitle(person, in: $0) } } ?? "",
-                            isPresented: asked($removingPerson), titleVisibility: .visible,
-                            presenting: removingPerson) { person in
-            Button(SharedPoolPage.remove, role: .destructive) {
-                run { await accessActions?.removePerson(person) }
-            }
-            Button(AddPoolKey.cancel, role: .cancel) {}
-        } message: { _ in
-            Text(SharedPoolPage.removePersonNote)
-        }
-        .confirmationDialog(page.access.map(JustMine.title) ?? "", isPresented: $confirmingJustMine,
-                            titleVisibility: .visible) {
-            Button(JustMine.confirm, role: .destructive) {
-                run { await accessActions?.keepToSelf() }
-            }
-            Button(AddPoolKey.cancel, role: .cancel) {}
-        } message: {
-            if let access = page.access {
-                Text(JustMine.cost(access, accounts: page.accounts))
-            }
-        }
-        .confirmationDialog(page.exitTitle, isPresented: $confirmingExit, titleVisibility: .visible) {
-            Button(page.exitConfirm, role: .destructive) {
-                run { await exit() }
-            }
-            Button(AddPoolKey.cancel, role: .cancel) {}
-        } message: {
-            Text(page.outNote)
-        }
         .overlay(alignment: .bottom) {
             if let notice {
                 Text(notice)
@@ -390,6 +208,17 @@ struct CodexPoolPageView: View {
                     }
                 }
             }
+            // On the row that asks — its own Sign out control and the swipe both raise this — so the
+            // panel opens against it rather than at the top of the page.
+            .orbitConfirmation(CodexLoginPool.signOutTitle,
+                               isPresented: asked($signingOut), presenting: signingOut) { login in
+                Button(CodexLoginPool.signOut, role: .destructive) {
+                    run(done: CodexLoginPool.signedOut(login)) { await accountActions?.signOut(login) }
+                }
+                Button(CodexSignIn.cancel, role: .cancel) {}
+            } message: { _ in
+                Text(CodexLoginPool.signOutNote(pool))
+            }
         } else if let key = member.key, let access = page.access {
             VStack(alignment: .leading, spacing: 10) {
                 PoolKeyRow(key: key, pool: access, next: member.next, tagged: page.tagged) {
@@ -413,6 +242,16 @@ struct CodexPoolPageView: View {
                     }
                     .tint(.gray)
                 }
+            }
+            // On the key's own row, whose swipe raises it.
+            .orbitConfirmation(SharedPoolPage.removeKeyTitle,
+                               isPresented: asked($removingKey), presenting: removingKey) { key in
+                Button(SharedPoolPage.remove, role: .destructive) {
+                    run(done: SharedPoolPage.removedKey(key)) { await accessActions?.removeKey(key) }
+                }
+                Button(AddPoolKey.cancel, role: .cancel) {}
+            } message: { _ in
+                Text(SharedPoolPage.removeKeyNote)
             }
         }
     }
@@ -453,6 +292,18 @@ struct CodexPoolPageView: View {
                         .foregroundStyle(.secondary)
                 }
                 .padding(.vertical, 4)
+                // The switch that asks: flipping it to Just me raises this, so it opens against the
+                // control rather than at the top of the page.
+                .orbitConfirmation(page.access.map(JustMine.title) ?? "", isPresented: $confirmingJustMine) {
+                    Button(JustMine.confirm, role: .destructive) {
+                        run { await accessActions?.keepToSelf() }
+                    }
+                    Button(AddPoolKey.cancel, role: .cancel) {}
+                } message: {
+                    if let access = page.access {
+                        Text(JustMine.cost(access, accounts: page.accounts))
+                    }
+                }
             }
             ForEach(card.rows) { person in
                 PoolPersonRow(person: person, pool: card.pool, line: card.line(person),
@@ -473,6 +324,17 @@ struct CodexPoolPageView: View {
                                 .tint(.gray)
                             }
                         }
+                    }
+                    // On the person's row, whose swipe raises it.
+                    .orbitConfirmation({ person in
+                        page.access.map { SharedPoolPage.removePersonTitle(person, in: $0) } ?? ""
+                    }, isPresented: asked($removingPerson), presenting: removingPerson) { person in
+                        Button(SharedPoolPage.remove, role: .destructive) {
+                            run { await accessActions?.removePerson(person) }
+                        }
+                        Button(AddPoolKey.cancel, role: .cancel) {}
+                    } message: { _ in
+                        Text(SharedPoolPage.removePersonNote)
                     }
             }
             if card.addsPeople {
@@ -538,6 +400,14 @@ struct CodexPoolPageView: View {
             Button(role: .destructive) { confirmingExit = true } label: {
                 Text(page.exitLabel)
                     .frame(maxWidth: .infinity)
+            }
+            .orbitConfirmation(page.exitTitle, isPresented: $confirmingExit) {
+                Button(page.exitConfirm, role: .destructive) {
+                    run { await exit() }
+                }
+                Button(AddPoolKey.cancel, role: .cancel) {}
+            } message: {
+                Text(page.outNote)
             }
         } footer: {
             Text(page.outNote)
@@ -1828,6 +1698,247 @@ private struct AccountRow: View {
     }
 }
 
+// MARK: - A DeepSeek key
+
+/// A DeepSeek key's page, read-only: the whole DeepSeek account's balance first — the server asks
+/// DeepSeek with the stored key, which never comes to the phone — then where the key runs. What the
+/// balance comes to, and every word of it, is `DeepSeekBalance`'s; no state but DeepSeek's own answer
+/// draws an amount. Changing the key happens on the web.
+struct DeepSeekKeyPageView: View {
+    let key: ConfiguredProvider
+    /// The balance as last read; nil until the first answer.
+    let reading: ProviderBalanceReading?
+    /// Ask DeepSeek again.
+    let refresh: () async -> Void
+    @State private var refreshing = false
+
+    var body: some View {
+        let state = DeepSeekBalance.state(reading)
+        Form {
+            Section {
+                balance(state)
+            } header: {
+                SettingsHeader(DeepSeekBalance.title)
+            } footer: {
+                footer(state)
+            }
+            Section {
+                LabeledContent(DeepSeekBalance.runsOn, value: DeepSeekBalance.engine(of: key))
+                if let model = key.defaultModel, !model.isEmpty {
+                    LabeledContent(DeepSeekBalance.defaultModel, value: model)
+                }
+                if let host = DeepSeekBalance.endpointHost(key) {
+                    LabeledContent(DeepSeekBalance.endpoint, value: host)
+                }
+            } header: {
+                SettingsHeader(DeepSeekBalance.providerHeader)
+            } footer: {
+                Text(ProvidersOverview.editOnWeb)
+            }
+        }
+        .navigationTitle(key.label)
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    @ViewBuilder private func balance(_ state: DeepSeekBalance.State) -> some View {
+        switch state {
+        case .loading:
+            HStack(spacing: 10) {
+                ProgressView()
+                Text(DeepSeekBalance.checking)
+                    .foregroundStyle(.secondary)
+            }
+        case .read(let balances, let low, let fetchedAt, _):
+            if low {
+                BalanceAlert(icon: "exclamationmark.circle.fill", tone: .danger, title: DeepSeekBalance.lowTitle,
+                             detail: DeepSeekBalance.lowDetail)
+            }
+            ForEach(Array(balances.enumerated()), id: \.element.currency) { index, amount in
+                BalanceAmountRow(amount: amount, first: index == 0, low: low)
+            }
+            TimelineView(.everyMinute) { context in
+                LabeledContent(DeepSeekBalance.updated, value: DeepSeekBalance.ago(fetchedAt, now: context.date))
+            }
+            refreshButton(DeepSeekBalance.refresh)
+            if low {
+                Link(destination: DeepSeekBalance.topUpURL) {
+                    Text("\(DeepSeekBalance.topUp) ↗")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
+                }
+                .buttonStyle(.borderedProminent)
+                .buttonBorderShape(.roundedRectangle(radius: 14))
+            } else {
+                Link(destination: DeepSeekBalance.topUpURL) {
+                    Label(DeepSeekBalance.topUp, systemImage: "arrow.up.right.square")
+                }
+            }
+        case .failed(let failure, let message, let triedAt):
+            BalanceAlert(icon: "exclamationmark.triangle.fill", tone: .warning, title: DeepSeekBalance.failedTitle,
+                         detail: DeepSeekBalance.detail(failure, message: message))
+            LabeledContent(DeepSeekBalance.balance, value: DeepSeekBalance.unknown)
+            if let triedAt {
+                TimelineView(.everyMinute) { context in
+                    LabeledContent(DeepSeekBalance.lastTried, value: DeepSeekBalance.ago(triedAt, now: context.date))
+                }
+            }
+            refreshButton(DeepSeekBalance.retry)
+        }
+    }
+
+    private func refreshButton(_ title: String) -> some View {
+        Button {
+            guard !refreshing else { return }
+            refreshing = true
+            Task {
+                await refresh()
+                refreshing = false
+            }
+        } label: {
+            HStack {
+                Label(title, systemImage: "arrow.clockwise")
+                if refreshing {
+                    Spacer()
+                    ProgressView()
+                }
+            }
+        }
+        .disabled(refreshing)
+    }
+
+    /// Whose balance this is, in words: the whole account's, not what anything spent — and, while there
+    /// is no balance, that none is drawn.
+    @ViewBuilder private func footer(_ state: DeepSeekBalance.State) -> some View {
+        switch state {
+        case .loading:
+            EmptyView()
+        case .failed:
+            Text(DeepSeekBalance.noAmountYet)
+        case .read(let balances, let low, _, let sharedWith):
+            VStack(alignment: .leading, spacing: 10) {
+                Text(low ? "\(DeepSeekBalance.opensInSafari) \(DeepSeekBalance.note)" : DeepSeekBalance.note)
+                if balances.count > 1 {
+                    Text(DeepSeekBalance.multiCurrency)
+                }
+                if let same = DeepSeekBalance.sameAccount(sharedWith) {
+                    Text(same.lead) + Text(same.names).bold() + Text(same.tail)
+                }
+            }
+        }
+    }
+}
+
+/// One currency of the balance: its total, then how much of it was granted and how much topped up.
+private struct BalanceAmountRow: View {
+    let amount: ProviderBalanceAmount
+    let first: Bool
+    let low: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 0) {
+                if first {
+                    Text(DeepSeekBalance.total)
+                        .font(.orbitListSubtitle)
+                        .foregroundStyle(.secondary)
+                }
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(DeepSeekBalance.amount(amount.totalBalance, currency: amount.currency))
+                        .font((first ? Font.largeTitle : Font.title).weight(.semibold))
+                        .monospacedDigit()
+                        .foregroundStyle(low ? PoolTone.color(.danger) : Color.primary)
+                    Text(amount.currency)
+                        .font(.orbitListSubtitle)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            BalanceSplitBar(split: DeepSeekBalance.split(amount))
+            HStack {
+                BalanceLegend(tint: Color.accentColor.opacity(0.35), label: DeepSeekBalance.granted,
+                              value: DeepSeekBalance.amount(amount.grantedBalance, currency: amount.currency))
+                Spacer(minLength: 8)
+                BalanceLegend(tint: Color.accentColor, label: DeepSeekBalance.toppedUp,
+                              value: DeepSeekBalance.amount(amount.toppedUpBalance, currency: amount.currency))
+            }
+        }
+        .padding(.vertical, 6)
+    }
+}
+
+/// The granted and topped-up shares of one currency, side by side in one bar; an empty bar when
+/// DeepSeek's two parts add up to nothing.
+private struct BalanceSplitBar: View {
+    let split: DeepSeekBalance.Split?
+
+    var body: some View {
+        GeometryReader { geometry in
+            HStack(spacing: 0) {
+                if let split {
+                    Rectangle()
+                        .fill(Color.accentColor.opacity(0.35))
+                        .frame(width: geometry.size.width * split.granted)
+                    Rectangle()
+                        .fill(Color.accentColor)
+                        .frame(width: geometry.size.width * split.toppedUp)
+                }
+            }
+            .frame(width: geometry.size.width, height: 6, alignment: .leading)
+            .background(Color.primary.opacity(0.08))
+            .clipShape(Capsule())
+        }
+        .frame(height: 6)
+    }
+}
+
+/// A legend entry under the bar: its colour, what it is and how much.
+private struct BalanceLegend: View {
+    let tint: Color
+    let label: String
+    let value: String
+
+    var body: some View {
+        HStack(spacing: 6) {
+            RoundedRectangle(cornerRadius: 2)
+                .fill(tint)
+                .frame(width: 8, height: 8)
+            Text(label)
+                .foregroundStyle(.secondary)
+            Text(value)
+                .fontWeight(.semibold)
+                .monospacedDigit()
+        }
+        .font(.orbitListSubtitle)
+    }
+}
+
+/// The balance's alert, at the top of its section: why there is no balance, or that the one there
+/// is can't pay for another request — in the tone it is, over a wash of it.
+private struct BalanceAlert: View {
+    let icon: String
+    let tone: PoolStatus.Tone
+    let title: String
+    let detail: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: icon)
+                .font(.title3)
+                .foregroundStyle(PoolTone.color(tone))
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.headline)
+                    .foregroundStyle(PoolTone.color(tone))
+                Text(detail)
+                    .font(.orbitListSubtitle)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 4)
+        .listRowBackground(PoolTone.color(tone).opacity(0.14))
+    }
+}
+
 // MARK: - Parts
 
 /// A section's heading — with how many it holds, where that is said ("Accounts 2") — and a few words at
@@ -1867,22 +1978,6 @@ private struct PoolSectionHeader: View {
                     .fixedSize()
             }
         }
-    }
-}
-
-/// A small capitalised tag: NEXT, ADMIN — and SHARED, in the brand colour.
-private struct PoolChip: View {
-    let text: String
-    var brand = false
-
-    var body: some View {
-        Text(text)
-            .font(.orbitMeta.weight(.bold))
-            .foregroundStyle(brand ? Color.accentColor : Color.secondary)
-            .padding(.horizontal, 5)
-            .padding(.vertical, 1)
-            .background(brand ? Color.accentColor.opacity(0.12) : Color.primary.opacity(0.065),
-                        in: RoundedRectangle(cornerRadius: 5, style: .continuous))
     }
 }
 
@@ -1946,23 +2041,4 @@ private struct WideButton: View {
     }
 }
 
-/// The colours a pool's status words and people are drawn in: web's tag colours, in the effect mock's
-/// inks on light (system green/orange/red on their own washes read too faint) and the system colours on
-/// dark.
-enum PoolTone {
-    static func color(_ tone: PoolStatus.Tone) -> Color {
-        switch tone {
-        case .success: return Color(light: Color(red: 0.141, green: 0.541, blue: 0.239), dark: .green)   // #248A3D
-        case .brand: return .accentColor
-        case .warning: return Color(light: Color(red: 0.702, green: 0.353, blue: 0), dark: .orange)      // #B35A00
-        case .danger: return Color(light: Color(red: 0.788, green: 0.149, blue: 0.106), dark: .red)      // #C9261B
-        case .neutral: return .secondary
-        }
-    }
-
-    static func hex(_ hex: String) -> Color {
-        guard let c = TagChipColor.components(hex: hex) else { return .gray }
-        return Color(red: c.red, green: c.green, blue: c.blue)
-    }
-}
 #endif

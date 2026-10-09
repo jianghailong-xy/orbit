@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ProjectOpenItemRow, ProjectPromotionView } from '@orbit/shared';
+import type { ProjectLandTask, ProjectOpenItemRow, ProjectPromotionView } from '@orbit/shared';
 import {
   BLOCKERS_DECIDED_TOO,
   CANCEL_MERGE,
@@ -21,9 +21,12 @@ import {
   ProjectPromotionCard,
   ProjectPromotionReceipt,
   UNDER_AUTOMATIC,
+  promotionItem,
+  resolvingPress,
   type PromotionProjectView,
 } from './ProjectPromotionCard';
 import { SHORTCUT_HINT } from './CardHotkey';
+import { CHAT_ABOUT_THIS } from '../lib/coordinatorChat';
 import { CriteriaDecisionCard, type PendingCriteriaDecisionRow } from './CriteriaDecisionCard';
 import { FROM_ORBIT } from './ProjectProgressStatus';
 
@@ -167,14 +170,21 @@ function markup(ui: JSX.Element): string {
 
 function card(
   view: ProjectPromotionView,
-  over: { item?: ProjectOpenItemRow | null; project?: PromotionProjectView | null } = {},
+  over: {
+    /** Undefined: the project's items have not been read. Null: they have, and none holds it. */
+    item?: ProjectOpenItemRow | null;
+    project?: PromotionProjectView | null;
+    /** The project's current landings, for state D's "who is in front of it" row. */
+    landings?: ProjectLandTask[] | null;
+  } = {},
 ): string {
   return markup(
     <ProjectPromotionCard
       projectId={PROJECT_ID}
       promotion={view}
-      item={over.item ?? null}
+      item={'item' in over ? over.item : null}
       project={over.project === undefined ? project() : over.project}
+      landings={over.landings ?? null}
       now={NOW}
     />,
   );
@@ -578,6 +588,43 @@ describe('state D — it cannot merge yet, and somebody is on it', () => {
     expect(html).toContain('src/apiserver/prisma/schema.prisma');
   });
 
+  /**
+   * The owner's report of 2026-10-08, on the project page: the orange card said "2 files conflict"
+   * and "Coordinator is resolving it" and nothing about what the merge was actually behind — a
+   * landing on the project branch, itself queued behind another task's landing. Both links are in
+   * the reads the page already holds, so the card names them.
+   */
+  it('names the landing in front of it, and what that landing is itself waiting for', () => {
+    const html = card(blocked, {
+      item: blockedItem(),
+      landings: [{
+        taskId: '34c2uuNTzRnCT03HWdCgq',
+        taskTitle: '同步项目线与 main：解开迁移台账冲突（0393/0394）',
+        integration: {
+          state: 'QUEUED', since: null, handler: null, openItemId: null, jobId: 'job-9',
+          checksRunningForMs: null,
+          landTask: {
+            jobId: 'job-9', state: 'QUEUED', phase: null, generation: '2',
+            queuedAt: at(3 * MINUTE), startedAt: null, heartbeatAt: null, finishedAt: null,
+            targetRef: 'project/bg-jobs', waitMs: 60_000,
+            blockingReason: { code: 'WAITING_SERIAL_SLOT', jobId: 'job-8',
+              summary: 'Waiting to land: the landing of “修合并树上的 11 个 Swift 失败” is running on this branch first' },
+          },
+        },
+      }],
+    });
+    expect(html).toContain('Blocked by');
+    expect(html).toContain('“同步项目线与 main：解开迁移台账冲突（0393/0394）” is landing on the project line');
+    expect(html).toContain('the landing of “修合并树上的 11 个 Swift 失败” is running on this branch first');
+    // The reason the reader was given before is still there, unchanged.
+    expect(html).toContain('2 files conflict');
+  });
+
+  it('says nothing about who is in front of it when the line is doing nothing here', () => {
+    expect(card(blocked, { item: blockedItem(), landings: [] })).not.toContain('Blocked by');
+    expect(card(blocked, { item: blockedItem() })).not.toContain('Blocked by');
+  });
+
   it('carries who has it and how long on the press, and does not say it twice', () => {
     const html = card(blocked, { item: blockedItem() });
     expect(html).toContain(`${RESOLVING} · 12m`);
@@ -632,14 +679,47 @@ describe('state D — it cannot merge yet, and somebody is on it', () => {
     expect(html).not.toContain('files conflict');
   });
 
-  it('still says who is on it when no item has been filed for it yet, and names no wait', () => {
-    const html = card(blocked, { item: null });
+  it('still says who is on it while the project’s items have not been read, and names no wait', () => {
+    const html = card(blocked, { item: undefined });
     expect(html).toContain('project/bg-jobs can’t merge into main yet');
     expect(html).toMatch(
       /<button[^>]*disabled[^>]*>(?:(?!<\/button>).)*Coordinator is resolving it/,
     );
     // How long it has waited is the item's to know: without one the press does not invent a clock.
     expect(html).not.toContain(`${RESOLVING} · `);
+  });
+
+  /**
+   * 2026-10-09: the coordinator closed the exception — the work was already on main — and the card
+   * went on saying "Coordinator is resolving it", mark turning. Once the items are read and none
+   * holds the candidate, nobody is resolving it, and the card names nobody.
+   */
+  it('names nobody, and turns nothing, once the items are read and none holds it', () => {
+    const html = card(blocked, { item: null });
+    expect(html).toContain('project/bg-jobs can’t merge into main yet');
+    expect(html).not.toContain(RESOLVING);
+    expect(html).not.toContain(IT_IS_YOURS);
+    expect(html).not.toContain('promotion-spin');
+    // The conversation about it is still there to be had.
+    expect(html).toContain(CHAT_ABOUT_THIS);
+    // The same three answers the strip on the sessions view reads.
+    expect(resolvingPress(null, NOW)).toBeNull();
+    expect(resolvingPress(undefined, NOW)).toEqual({ label: RESOLVING, spinning: true });
+    expect(promotionItem(undefined, blocked.promotionId)).toBeUndefined();
+    expect(promotionItem({ needsYou: [], withCoordinator: [] }, blocked.promotionId)).toBeNull();
+    const held = blockedItem();
+    expect(promotionItem({ needsYou: [], withCoordinator: [held] }, held.promotionId!)).toBe(held);
+  });
+
+  it('says there is nothing to merge, or that it stopped on an error — never that a check failed', () => {
+    const landed = card(promotion({ state: 'BLOCKED', conflicts: [], checks: [], blockedReason: 'ALREADY_LANDED' }),
+      { item: blockedItem() });
+    expect(landed).toContain('Nothing to merge — project/bg-jobs is already on main');
+    expect(landed).not.toContain('could not be built');
+    const errored = card(promotion({ state: 'BLOCKED', conflicts: [], checks: [], blockedReason: 'ERROR' }),
+      { item: blockedItem() });
+    expect(errored).toContain('The merge stopped on an error — no check failed');
+    expect(errored).not.toContain('could not be built');
   });
 });
 

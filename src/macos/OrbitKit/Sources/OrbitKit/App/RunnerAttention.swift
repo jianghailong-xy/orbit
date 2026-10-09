@@ -31,6 +31,8 @@ public struct RunnerAttentionRunner: Decodable, Equatable, Sendable {
     public let lastHeartbeatAt: String?
     public let activeSessions: Int?
     public let runsAsRoot: Bool?
+    /// Where its updates of itself stand; nil from a runner too old to report it.
+    public let selfUpdate: RunnerSelfUpdate?
     public let minFreeDiskMb: Int?
     public let engines: [RunnerEngineHealth]?
     public let planUsage: PlanUsage?
@@ -44,6 +46,7 @@ public struct RunnerAttentionRunner: Decodable, Equatable, Sendable {
         lastHeartbeatAt = runner.lastHeartbeatAt
         activeSessions = runner.activeSessions
         runsAsRoot = runner.runsAsRoot
+        selfUpdate = runner.selfUpdate
         minFreeDiskMb = runner.minFreeDiskMb
         engines = runner.engines
         planUsage = runner.planUsage
@@ -126,6 +129,8 @@ public enum RunnerAttentionActionKind: String, Codable, Equatable, Sendable {
     case setReserve
     case copyCommand
     case updateEngines
+    /// POST /runners/:id/self-update — Update Runner Now.
+    case updateRunner
 }
 
 public struct RunnerAttentionAction: Equatable, Sendable {
@@ -491,24 +496,46 @@ public enum RunnerAttention {
         }
     }
 
+    /// Antigravity's buckets by the label `PlanUsageSnapshot.rows` gives the window agy names for each.
+    private static let antigravityWindows: [String: String] = [
+        "5-hour": RunnerPageCopy.RUNNER_QUOTA_FIVE_HOUR,
+        "Weekly": RunnerPageCopy.RUNNER_QUOTA_WEEKLY,
+    ]
+
     private static func quotaWindow(_ row: PlanUsageRow) -> String {
         if let claude = claudeWindows[row.key] { return claude }
+        // An Antigravity bucket, by the window agy names for it.
+        if row.remaining { return antigravityWindows[row.label] ?? RunnerPageCopy.RUNNER_QUOTA_OTHER }
         return codexWindows.first { row.label.hasSuffix($0.label) }?.window ?? RunnerPageCopy.RUNNER_QUOTA_OTHER
     }
 
+    /// How much of a window is used, whichever way its row counts it, as a quota sentence says it ("at
+    /// 96%"): an Antigravity bucket's row says what is left (`PlanUsageRow.remaining`), which read as
+    /// used would rank the window with the most room fullest.
+    private static func usedPercent(_ row: PlanUsageRow) -> Int {
+        row.remaining ? 100 - row.percent : row.percent
+    }
+
     /// Warn only when every candidate account is near its limit. Show the fullest window of the
-    /// account with the most room; an unread account cannot establish an engine-wide shortage.
+    /// account with the most room; an unread account cannot establish an engine-wide shortage — and
+    /// neither can an Antigravity Default that runs on the machine's Gemini key
+    /// (`RunnerPageFormat.runsOnEnvKey`), which has no quota to run out of.
     private static func quotaItems(_ runner: RunnerAttentionRunner,
                                    _ workspaces: [RunnerAttentionWorkspace], nowMs: Int64) -> [RunnerAttentionItem] {
         LoginEngine.allCases.compactMap { engine in
             let users = workspacesOn(workspaces, engine)
             guard !users.isEmpty else { return nil }
-            let usage = runner.planUsage?.snapshot(for: engine.rawValue)
-            let accounts = runner.engines?.first(where: { $0.engine == engine.rawValue })?.accounts
+            // Antigravity's quota travels with its engine's health, not in the runner's plan usage.
+            let usage = CodexAccounts.usage(engine.rawValue, planUsage: runner.planUsage, engines: runner.engines)
+            let health = runner.engines?.first(where: { $0.engine == engine.rawValue })
             let snapshots: [PlanUsageSnapshot?]
-            if RunnerPageFormat.keepsAccounts(engine.rawValue), let accounts, !accounts.isEmpty {
-                snapshots = accounts.filter { $0.auth != "no" }.map {
-                    CodexAccounts.snapshot(usage, account: $0.id)
+            if RunnerPageFormat.keepsAccounts(engine.rawValue), let health, let accounts = health.accounts,
+               !accounts.isEmpty {
+                let onKey = { (account: RunnerEngineAccount) in
+                    RunnerPageFormat.runsOnEnvKey(health, account: account.id, auth: account.auth)
+                }
+                snapshots = accounts.filter { $0.auth != "no" || onKey($0) }.map {
+                    onKey($0) ? nil : CodexAccounts.snapshot(usage, account: $0.id)
                 }
             } else {
                 snapshots = [usage]
@@ -520,16 +547,17 @@ public enum RunnerAttention {
                 } ?? []
                 // The first of the fullest, as the web's reduce keeps it.
                 guard var accountFullest = near.first else { return nil }
-                for row in near.dropFirst() where row.percent > accountFullest.percent { accountFullest = row }
-                if fullest.map({ accountFullest.percent < $0.percent }) ?? true { fullest = accountFullest }
+                for row in near.dropFirst() where usedPercent(row) > usedPercent(accountFullest) { accountFullest = row }
+                if fullest.map({ usedPercent(accountFullest) < usedPercent($0) }) ?? true { fullest = accountFullest }
             }
             guard let fullest else { return nil }
             let name = loginName(engine)
             let window = quotaWindow(fullest)
+            let percent = usedPercent(fullest)
             return RunnerAttentionItem(
                 kind: .quotaNearLimit, tone: .warn,
-                short: RunnerPageCopy.attentionQuotaShort(engine: name, window: window, percent: fullest.percent),
-                title: RunnerPageCopy.attentionQuotaTitle(engine: name, window: window, percent: fullest.percent),
+                short: RunnerPageCopy.attentionQuotaShort(engine: name, window: window, percent: percent),
+                title: RunnerPageCopy.attentionQuotaTitle(engine: name, window: window, percent: percent),
                 detail: users.count == 1
                     ? RunnerPageCopy.attentionQuotaDetail(workspace: users[0], engine: name)
                     : RunnerPageCopy.attentionQuotaDetailMany(workspaces: namesPhrase(users), engine: name),
@@ -537,7 +565,7 @@ public enum RunnerAttention {
                 params: [
                     "engine": .string(engine.rawValue),
                     "window": .string(window),
-                    "percent": .int(fullest.percent),
+                    "percent": .int(percent),
                     "resetsAt": fullest.window.resetsAt.map(JSONValue.string) ?? .null,
                     "workspaces": .array(users.map(JSONValue.string)),
                 ])
@@ -571,24 +599,79 @@ public enum RunnerAttention {
             ])
     }
 
-    /// Behind the latest release on a runner that is not root: a regular user stays on its version
-    /// until someone runs `sudo orbit upgrade` there. Unknown (nil) is an older runner and is not
-    /// flagged; a root runner that is behind installs the release itself when no turn is running.
-    private static func cannotSelfUpdateItem(_ runner: RunnerAttentionRunner,
-                                             _ latestVersion: String?) -> RunnerAttentionItem? {
-        guard runner.runsAsRoot == false,
-              let version = runner.version?.trimmingCharacters(in: .whitespacesAndNewlines), !version.isEmpty,
+    /// The runner's own words as the start of a sentence: capitalized, with no closing full stop.
+    private static func runnerSaid(_ words: String?, otherwise: String) -> String {
+        var said = words?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        while said.hasSuffix(".") { said.removeLast() }
+        return said.isEmpty ? otherwise : said.prefix(1).uppercased() + said.dropFirst()
+    }
+
+    /// Behind the latest release, and not catching up by itself. A runner that reports where its
+    /// updates stand is taken at its word: `dirNotWritable` — the user it runs as can't write its
+    /// install folder, and `sudo orbit upgrade` there moves the install, once; `disabledByEnv` — its
+    /// updater is off, and only a reason naming ORBIT_NO_SELFUPDATE is a switch to turn back;
+    /// `failed` — in its own words, with Update Runner Now, so only while it is online. `enabled`,
+    /// `waitingForIdle`, `heldByRollout` and a state this client doesn't know raise nothing. One too
+    /// old to report it is judged by `runsAsRoot`, as before: a regular user stays on its version
+    /// until someone runs `sudo orbit upgrade` there; unknown (nil) is not flagged, and a root runner
+    /// that is behind installs the release itself when no turn is running.
+    private static func cannotSelfUpdateItem(_ runner: RunnerAttentionRunner, _ latestVersion: String?,
+                                             offline: Bool) -> RunnerAttentionItem? {
+        guard let version = runner.version?.trimmingCharacters(in: .whitespacesAndNewlines), !version.isEmpty,
               let latestVersion, !latestVersion.isEmpty,
               compareRunnerVersions(version, latestVersion) < 0 else { return nil }
         let command = RunnerPageCopy.RUNNER_UPGRADE_COMMAND
-        return RunnerAttentionItem(
-            kind: .cannotSelfUpdate, tone: .warn,
-            short: RunnerPageCopy.ATTENTION_CANT_UPDATE_ITSELF,
-            title: RunnerPageCopy.ATTENTION_CANT_UPDATE_ITSELF,
-            detail: RunnerPageCopy.attentionCantUpdateItselfDetail(version: version, latest: latestVersion,
-                                                                   command: command),
-            action: RunnerAttentionAction(kind: .copyCommand, engine: nil, workspaceId: nil, command: command),
-            params: ["version": .string(version), "latest": .string(latestVersion)])
+        guard let report = runner.selfUpdate else {
+            guard runner.runsAsRoot == false else { return nil }
+            return RunnerAttentionItem(
+                kind: .cannotSelfUpdate, tone: .warn,
+                short: RunnerPageCopy.ATTENTION_CANT_UPDATE_ITSELF,
+                title: RunnerPageCopy.ATTENTION_CANT_UPDATE_ITSELF,
+                detail: RunnerPageCopy.attentionCantUpdateItselfDetail(version: version, latest: latestVersion,
+                                                                       command: command),
+                action: RunnerAttentionAction(kind: .copyCommand, engine: nil, workspaceId: nil, command: command),
+                params: ["version": .string(version), "latest": .string(latestVersion)])
+        }
+        let reported: [String: JSONValue] = [
+            "version": .string(version), "latest": .string(latestVersion), "state": .string(report.state),
+            "reason": report.reason.map(JSONValue.string) ?? .null,
+        ]
+        switch report.state {
+        case "dirNotWritable":
+            let summary = RunnerPageCopy.ATTENTION_INSTALL_FOLDER_NOT_WRITABLE
+            return RunnerAttentionItem(
+                kind: .cannotSelfUpdate, tone: .warn, short: summary, title: summary,
+                detail: RunnerPageCopy.attentionInstallFolderNotWritableDetail(
+                    folder: report.installDir ?? RunnerPageCopy.RUNNER_INSTALL_FOLDER, version: version,
+                    latest: latestVersion, command: command),
+                action: RunnerAttentionAction(kind: .copyCommand, engine: nil, workspaceId: nil, command: command),
+                params: [
+                    "version": .string(version), "latest": .string(latestVersion), "state": .string(report.state),
+                    "installDir": report.installDir.map(JSONValue.string) ?? .null,
+                ])
+        case "disabledByEnv":
+            let summary = RunnerPageCopy.ATTENTION_UPDATES_TURNED_OFF
+            let detail = RunnerPageCopy.attentionUpdatesTurnedOffDetail(
+                reason: runnerSaid(report.reason, otherwise: RunnerPageCopy.ATTENTION_UPDATER_OFF),
+                version: version, latest: latestVersion)
+            let switchedOff = report.reason?.contains("ORBIT_NO_SELFUPDATE") == true
+            return RunnerAttentionItem(
+                kind: .cannotSelfUpdate, tone: .warn, short: summary, title: summary,
+                detail: switchedOff ? detail + " " + RunnerPageCopy.ATTENTION_UPDATES_TURN_ON : detail,
+                action: nil, params: reported)
+        case "failed":
+            guard !offline else { return nil }
+            let summary = RunnerPageCopy.ATTENTION_RUNNER_UPDATE_FAILED
+            return RunnerAttentionItem(
+                kind: .cannotSelfUpdate, tone: .warn, short: summary, title: summary,
+                detail: RunnerPageCopy.attentionRunnerUpdateFailedDetail(
+                    reason: runnerSaid(report.reason, otherwise: RunnerPageCopy.ATTENTION_UPDATE_DIDNT_GO_THROUGH),
+                    version: version, latest: latestVersion),
+                action: RunnerAttentionAction(kind: .updateRunner, engine: nil, workspaceId: nil, command: nil),
+                params: reported)
+        default:
+            return nil
+        }
     }
 
     /// An installed CLI whose update note is a warning (`updateNoteOf`).
@@ -624,7 +707,9 @@ public enum RunnerAttention {
             items += quotaItems(runner, input.workspaces, nowMs: input.nowMs)
             if let disk = diskItem(runner, input.workspaces) { items.append(disk) }
         }
-        if let cannotUpdate = cannotSelfUpdateItem(runner, input.latestVersion) { items.append(cannotUpdate) }
+        if let cannotUpdate = cannotSelfUpdateItem(runner, input.latestVersion, offline: offline) {
+            items.append(cannotUpdate)
+        }
         if !offline { items += engineUpdateItems(runner, nowMs: input.nowMs) }
         return items
     }
@@ -633,6 +718,19 @@ public enum RunnerAttention {
                                        latestVersion: String?) -> [RunnerAttentionItem] {
         runnerAttention(RunnerAttentionInput(runner: runner, workspaces: workspaces, nowMs: nowMs,
                                              latestVersion: latestVersion))
+    }
+
+    /// Whether Update Runner Now can do anything here. Only a runner that reports its updates takes
+    /// the request (the server refuses an older one), only while it is online, and not one whose
+    /// updater is off or can't write its install folder: a check now would find what the last one did.
+    public static func runnerCanUpdateNow(_ runner: RunnerAttentionRunner, nowMs: Int64) -> Bool {
+        guard let state = runner.selfUpdate?.state, !state.isEmpty,
+              state != "disabledByEnv", state != "dirNotWritable" else { return false }
+        return !runnerIsOffline(runner, nowMs: nowMs)
+    }
+
+    public static func runnerCanUpdateNow(_ runner: Runner, nowMs: Int64) -> Bool {
+        runnerCanUpdateNow(RunnerAttentionRunner(runner), nowMs: nowMs)
     }
 
     // MARK: the list row

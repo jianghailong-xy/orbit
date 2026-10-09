@@ -1,0 +1,13 @@
+{
+ "command": "cd /root/.orbit/worktrees/8a4a92fa-ce2f-5986-9131-9119c512dfc6 && git -C /var/tmp/p2kw-c2604b/after3 log --oneline -1 && python3 docs/evidence/base-ui-migration/p2-keyboard-window/run-chunks.py /var/tmp/p2kw-c2604b/after3 docs/evidence/base-ui-migration/p2-select-keys/select-keys-burst.config.mjs src/web/.choices-results/p2-select-keys-burst fix-select-keys-burst-after 'field=orbit-field ' 'sample=orbit-sample ' 'antd=antd-sample ' 'search-multiple=(orbit-combobox|antd-search|orbit-multiselect|antd-multiple) ' 'menu=orbit-menu '",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_b5ed6cee9f6c",
+ "cwd": "/root/.orbit/worktrees/8a4a92fa-ce2f-5986-9131-9119c512dfc6",
+ "commit": "28405c86d",
+ "webTree": "df7414507c6ffa7fa51b7cd6e3e2b8f70e13e816",
+ "outputLastWritten": "2026-10-07T05:47:40.098495+00:00",
+ "exitCode": 0,
+ "outputSha256": "db93abf2afa3c0e52153bcaf324be853769e173d492987c1c5669af16e6cfa8f",
+ "outputBytes": 1295,
+ "note": "The runner job that ran the same probe on the fixed tree (scratch worktree at 28405c86d) in the same five chunks, simultaneously. All five chunks exit 0."
+}

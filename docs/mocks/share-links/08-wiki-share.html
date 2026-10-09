@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>08 wiki share</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="share.css">
+<style>
+  .grid2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 22px; align-items: start; }
+  .mask { background: #8f8f8f; border-radius: 10px; padding: 26px 0; display: flex; justify-content: center; }
+  .dlg { width: 520px; }
+  .mk { position: relative; }
+  .mk > .m-n { position: absolute; left: -30px; top: 2px; margin: 0; box-shadow: 0 0 0 2px #fff; }
+  .live-line { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--text-2); }
+  .live-line i { width: 7px; height: 7px; border-radius: 50%; background: var(--success-solid); box-shadow: 0 0 0 3px var(--success-bg); }
+
+  /* the wiki head, as WikiFrame draws it on a desktop */
+  .head { background: var(--bg-base); border: 1px solid var(--border-subtle); border-radius: 10px; padding: 18px 22px 14px; }
+  .head + .head { margin-top: 14px; }
+  .head .wk-title-row { display: flex; align-items: center; gap: 10px; }
+  .head .page-title { margin: 0; font-size: 24px; }
+  .head .acts { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+  .head .line { font-size: 13px; color: var(--text-3); margin-top: 6px; }
+  .head .search { margin-top: 12px; height: 34px; border: 1px solid var(--border); border-radius: 8px; display: flex; align-items: center; gap: 8px; padding: 0 12px; color: var(--text-4); font-size: 13px; background: var(--bg-raised); }
+  .head .search kbd { margin-left: auto; font: 11px ui-monospace, monospace; color: var(--text-3); border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; }
+  .abtn { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 11px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-raised); font-size: 13px; color: var(--text-1); white-space: nowrap; position: relative; }
+  .abtn.primary { background: var(--brand); border-color: var(--brand); color: #fff; }
+  .abtn .badge { position: absolute; top: -7px; right: -7px; min-width: 16px; height: 16px; border-radius: 8px; background: var(--warning-solid); color: #fff; font-size: 10.5px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; padding: 0 4px; box-sizing: border-box; }
+  .pill-live { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 10px; border-radius: 999px; background: var(--success-bg); color: var(--success); font-size: 12.5px; font-weight: 600; }
+  .hl-mark { outline: 1.5px dashed var(--warning-solid); outline-offset: 3px; border-radius: 8px; position: relative; }
+  .hl-mark > .m-n { position: absolute; top: -12px; right: -12px; margin: 0; box-shadow: 0 0 0 2px #fff; }
+
+  /* Shared links */
+  .lrow { grid-template-columns: 26px minmax(0, 1fr) 200px 120px 100px 230px; }
+  .ico.w { background: #f3f0ff; color: #5b3fc4; }
+
+  /* iOS */
+  .phones { display: flex; gap: 34px; justify-content: center; zoom: .9; padding: 14px 0 6px; }
+  .capr { display: flex; gap: 34px; justify-content: center; zoom: .9; margin-top: 22px; }
+  .capr div { width: 393px; font-size: 13px; color: var(--text-2); text-align: center; }
+  .tb { display: flex; justify-content: flex-end; gap: 10px; padding: 4px 16px 0; }
+  .tb .b { width: 44px; height: 44px; border-radius: 22px; background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.08); display: inline-flex; align-items: center; justify-content: center; color: #1c1c1e; position: relative; }
+  .tb .b.live { color: #34c759; }
+  .tb .b .bd { position: absolute; top: -3px; right: -3px; min-width: 18px; height: 18px; border-radius: 9px; background: #ff9500; color: #fff; font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+  .tb .b.ring { box-shadow: 0 0 0 2px #ff9500, 0 1px 4px rgba(0,0,0,.08); }
+  .ios-home-h { padding: 12px 20px 0; display: flex; align-items: center; gap: 10px; }
+  .ios-home-h b { font-size: 34px; font-weight: 700; }
+  .ios-home-h .sp { margin-left: auto; font-size: 15px; color: #6d6d72; background: #e9e9ee; border-radius: 999px; padding: 3px 11px; }
+  .ios-line { padding: 4px 20px 0; font-size: 15px; color: #6d6d72; }
+  .ios-search { margin: 12px 16px 6px; height: 38px; border-radius: 12px; background: #e3e3e8; color: #8a8a8e; display: flex; align-items: center; padding: 0 12px; font-size: 17px; }
+  .ios-cat { margin: 18px 16px 0; }
+  .ios-cat .h { font-size: 13px; color: #6d6d72; margin: 0 16px 6px; }
+  .ios-doc { display: grid; grid-template-columns: 36px minmax(0, 1fr) 14px; gap: 6px; padding: 11px 16px; position: relative; }
+  .ios-doc + .ios-doc::before { content: ""; position: absolute; top: 0; left: 58px; right: 0; height: .5px; background: #d9d9de; }
+  .ios-doc .n { font: 600 14px/22px ui-monospace, monospace; color: #6d6d72; }
+  .ios-doc .t { font-size: 17px; font-weight: 600; line-height: 22px; }
+  .ios-doc .l { font-size: 14px; color: #3c3c43; opacity: .75; line-height: 19px; margin-top: 2px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .ios-doc .c { color: #c4c4c7; font-size: 15px; align-self: center; }
+</style>
+</head>
+<body class="m">
+<div class="m-sheet" id="sheet">
+  <h1 class="m-h1">8 · Wiki 分享：入口、对话框、Shared links、iOS</h1>
+  <p class="m-sub">一个链接 = 一个 wiki space（这个代码库的 wiki）：访客看到首页和每篇已经写好的文档，只读、免登录。用词和现有分享一致：页头是 <code>Share</code> / <code>Shared · Live</code>，对话框和 iOS 面板与图 3、图 7 是同一个。数字取自 space「orbit」（文档篇数、脚注数、访问次数为示意）。</p>
+
+  <!-- ① the entry -->
+  <div class="m-stage">
+    <div class="m-stage-l"><span class="m-k new">新</span> 入口 · web 的 wiki 页头（桌面），和项目页头同一套：没开链接是按钮，开着是胶囊</div>
+    <div class="head">
+      <div class="wk-title-row">
+        <h1 class="page-title">Wiki</h1>
+        <span class="wk-space-tag">orbit</span>
+        <div class="acts">
+          <span class="abtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></svg> Activity <span class="badge">3</span></span>
+          <span class="abtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg> Settings</span>
+          <span class="abtn hl-mark"><span class="m-n">1</span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg> Share</span>
+          <span class="abtn primary">+ New entry</span>
+        </div>
+      </div>
+      <div class="line">35 documents · 12 written</div>
+      <div class="search"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg> Search the wiki <kbd>⌘K</kbd></div>
+    </div>
+    <div class="head">
+      <div class="wk-title-row">
+        <h1 class="page-title">Wiki</h1>
+        <span class="wk-space-tag">orbit</span>
+        <div class="acts">
+          <span class="abtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></svg> Activity <span class="badge">3</span></span>
+          <span class="abtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg> Settings</span>
+          <span class="pill-live hl-mark"><span class="m-n">2</span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg> Shared · Live</span>
+          <span class="abtn primary">+ New entry</span>
+        </div>
+      </div>
+      <div class="line">35 documents · 12 written</div>
+    </div>
+    <p class="m-cap">位置在 Settings 和 New entry 之间：每个 wiki 页面（首页、文档页、Browse、A–Z）都带这个页头，所以在哪一页都能开。手机宽度下和 Activity、Settings 一样只留图标。</p>
+  </div>
+
+  <!-- ② the dialog -->
+  <div class="grid2" style="margin-top:22px">
+    <div class="m-stage">
+      <div class="m-stage-l"><span class="m-k new">默认</span> Share wiki · Footnotes 关（只公开正文）</div>
+      <div class="mask">
+        <div class="dlg">
+          <span class="dlg-x">×</span>
+          <div class="dlg-t">Share wiki</div>
+          <div class="acc">
+            <span class="acc-ic on"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg></span>
+            <div><div class="sel">Anyone with the link <span class="cv">▾</span></div>
+              <div class="acc-d">Anyone with the link can view — no sign-in. They can’t change anything.</div></div>
+          </div>
+          <div class="url"><div class="in">https://orbitd.io/s/Wk7pQ2xR9mT4vLs8nYb1cZe6hFj0uDa3</div><span class="btn primary"><svg class="ic-s" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg> Copy</span></div>
+          <div class="dlg-lbl mk"><span class="m-n">3</span>Includes</div>
+          <div class="chk"><span class="cb lock"></span><div><div class="n">Documents</div><div class="d">The wiki’s home and every document written so far</div></div><span class="c">12 documents</span></div>
+          <div class="chk mk"><span class="m-n">4</span><span class="cb"></span><div><div class="n">Footnotes</div><div class="d">The quotes and code each sentence cites, with file paths and lines. Can include command output and file contents.</div></div><span class="c">486 footnotes</span></div>
+          <div class="set-row" style="margin-top:8px"><span class="k">Updates</span><span class="live-line"><i></i>Live — viewers see changes as they happen</span></div>
+          <div class="set-row"><span class="k">Expires</span><span class="dd">Never <span class="cv">▾</span></span></div>
+          <div class="dlg-foot"><span class="stat">Viewed 3 times · last 12m ago</span><span class="btn">Preview ↗</span><span class="btn primary">Done</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="m-stage">
+      <div class="m-stage-l"><span class="m-k state">勾上</span> Footnotes 开 · 风险句变琥珀色；另设 7 天过期</div>
+      <div class="mask">
+        <div class="dlg">
+          <span class="dlg-x">×</span>
+          <div class="dlg-t">Share wiki</div>
+          <div class="acc">
+            <span class="acc-ic on"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg></span>
+            <div><div class="sel">Anyone with the link <span class="cv">▾</span></div>
+              <div class="acc-d">Anyone with the link can view — no sign-in. They can’t change anything.</div></div>
+          </div>
+          <div class="url"><div class="in">https://orbitd.io/s/Wk7pQ2xR9mT4vLs8nYb1cZe6hFj0uDa3</div><span class="btn primary"><svg class="ic-s" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg> Copied</span></div>
+          <div class="dlg-lbl">Includes</div>
+          <div class="chk"><span class="cb lock"></span><div><div class="n">Documents</div><div class="d">The wiki’s home and every document written so far</div></div><span class="c">12 documents</span></div>
+          <div class="chk"><span class="cb on"></span><div><div class="n">Footnotes</div><div class="d warn">The quotes and code each sentence cites, with file paths and lines. Can include command output and file contents.</div></div><span class="c">486 footnotes</span></div>
+          <div class="set-row" style="margin-top:8px"><span class="k">Updates</span><span class="live-line"><i></i>Live — viewers see changes as they happen</span></div>
+          <div class="set-row"><span class="k">Expires</span><span class="dd">7 days <span class="cv">▾</span></span><span class="h">Stops working Oct 14</span></div>
+          <div class="dlg-foot"><span class="stat">Viewed 3 times · last 12m ago</span><span class="btn">Preview ↗</span><span class="btn primary">Done</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ③ Shared links -->
+  <div class="m-stage" style="margin-top:22px">
+    <div class="m-stage-l"><span class="m-k new">新</span> Settings → Shared links：多一种 W（Wiki），同一套三个动作</div>
+    <div class="lrow head"><span></span><span>Shared item</span><span>Includes</span><span>Updates</span><span>Views</span><span></span></div>
+    <div class="m-mark" style="display:block"><span class="m-n">5</span><div class="lrow"><span class="ico w">W</span><div style="min-width:0"><div class="ti">orbit</div><div class="sub">Wiki</div></div>
+      <div><span class="chipx">Documents</span><span class="chipx warn">Footnotes</span></div><div class="tiny">Live · until Oct 14</div><div class="tiny">3 · 12m ago<div class="muted">since Oct 7</div></div>
+      <div class="acts2"><span class="btn sm"><svg class="ic-s" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg> Copy</span><span class="btn sm">Settings</span><span class="btn sm text danger">Turn off</span></div></div></div>
+    <div class="lrow"><span class="ico p">P</span><div style="min-width:0"><div class="ti">Claude 账号池：按订阅配额均衡派发</div><div class="sub">Project · Open</div></div>
+      <div><span class="chipx">Overview</span><span class="chipx">Task pages</span></div><div class="tiny">Live</div><div class="tiny">14 · 2h ago<div class="muted">since Sep 25</div></div>
+      <div class="acts2"><span class="btn sm"><svg class="ic-s" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg> Copy</span><span class="btn sm">Settings</span><span class="btn sm text danger">Turn off</span></div></div>
+    <div class="lrow"><span class="ico s">S</span><div style="min-width:0"><div class="ti">子代理模型由伺服器端設定</div><div class="sub">Session · Completed Sep 22</div></div>
+      <div><span class="chipx">Messages</span><span class="chipx">Tool output</span></div><div class="tiny">Live</div><div class="tiny">—<div class="muted">since Sep 21</div></div>
+      <div class="acts2"><span class="btn sm"><svg class="ic-s" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg> Copy</span><span class="btn sm">Settings</span><span class="btn sm text danger">Turn off</span></div></div>
+  </div>
+
+  <!-- ④ iOS -->
+  <div class="m-stage" style="margin-top:22px">
+    <div class="m-stage-l"><span class="m-k new">新</span> iOS / macOS · wiki 首页工具栏多一个地球；面板就是图 7 那一个</div>
+    <div class="phones">
+      <div class="phone"><div class="ph-status"><span>9:41</span><span style="font-size:13px">●●● ▮</span></div>
+        <div class="tb">
+          <span class="b"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/></svg></span>
+          <span class="b"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></svg><span class="bd">3</span></span>
+          <span class="b live ring"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg></span>
+          <span class="b"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg></span>
+        </div>
+        <div class="ios-home-h"><b>Wiki</b><span class="sp">orbit</span></div>
+        <div class="ios-line">35 documents · 12 written</div>
+        <div class="ios-search">⌕&nbsp; Search the wiki</div>
+        <div class="ios-cat"><div class="h">1 · 产品概览与架构</div><div class="ios-card">
+          <div class="ios-doc"><span class="n">1.1</span><div><div class="t">产品定位与核心能力</div><div class="l">Orbit 是自托管的 coding agent 控制台：agent 跑在你自己的机器上，计划、历史和控制都留在一个自托管的地方。</div></div><span class="c">›</span></div>
+          <div class="ios-doc"><span class="n">1.2</span><div><div class="t">系统架构与数据流</div><div class="l">Orbit 把协调和执行分开：服务器保存意图与历史，注册的 runner 在本来就有仓库、凭据和网络权限的机器上跑 agent 进程。</div></div><span class="c">›</span></div>
+        </div></div>
+        <div class="ios-cat"><div class="h">3 · 会话与交互</div><div class="ios-card">
+          <div class="ios-doc"><span class="n">3.1</span><div><div class="t">Session 运行与恢复</div><div class="l">session 是一个 runner 上、一个 agent runtime 的可恢复多轮会话：用户的回合先存后投，runner 长轮询领取、交给 runtime。</div></div><span class="c">›</span></div>
+        </div></div>
+      </div>
+
+      <div class="phone"><div class="ph-status"><span>9:41</span><span style="font-size:13px">●●● ▮</span></div>
+        <div class="ios-nav"><span style="width:60px"></span><span class="ttl">Share wiki</span><span class="dn">Done</span></div>
+        <div class="ios-sec" style="margin-top:6px"><div class="ios-card">
+          <div class="ios-row"><span style="color:#35c759;display:inline-flex"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg></span><span class="lbl"><span>Access</span></span><span class="v">Anyone with the link <span style="font-size:12px">⌃⌄</span></span></div>
+        </div><div class="ft">Anyone with the link can view — no sign-in. They can’t change anything.</div></div>
+        <div class="ios-sec"><div class="ios-card">
+          <div class="ios-row" style="font:13px ui-monospace,'DejaVu Sans Mono',monospace;color:#8a8a8e;min-height:44px">orbitd.io/s/Wk7pQ2xR9mT4vLs8nYb1cZ…</div>
+          <div class="ios-row"><span style="color:#2e6aff;display:inline-flex"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></span><span class="lbl tint"><span>Copy Link</span></span></div>
+          <div class="ios-row"><span style="color:#2e6aff;display:inline-flex"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v12M7 8l5-5 5 5"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg></span><span class="lbl tint"><span>Share Link…</span></span></div>
+        </div></div>
+        <div class="ios-sec"><div class="hd">Includes</div><div class="ios-card">
+          <div class="ios-row"><span class="lbl"><span>Documents</span><span class="sm">12 documents</span></span><span class="tgl lockd"></span></div>
+          <div class="ios-row"><span class="lbl"><span>Footnotes</span><span class="sm">486 footnotes</span></span><span class="tgl off"></span></div>
+        </div><div class="ft">Footnotes can include command output and file contents.</div></div>
+        <div class="ios-sec"><div class="ios-card">
+          <div class="ios-row"><span class="lbl"><span>Updates</span></span><span class="v">Live</span></div>
+          <div class="ios-row"><span class="lbl"><span>Expires</span></span><span class="v">Never <span style="font-size:12px">⌃⌄</span></span></div>
+        </div><div class="ft">Viewed 3 times · last 12m ago</div></div>
+      </div>
+    </div>
+    <div class="capr"><div>⑥ wiki 首页 · 工具栏 Contents · Activity · <b>Share</b> · Settings（开着链接时地球是绿的）</div><div>⑦ 点地球打开的面板（和会话、任务、项目同一个）</div></div>
+  </div>
+
+  <ul class="m-notes">
+    <li><span class="m-n">1</span><span><b>入口在 wiki 页头。</b>和项目页头同一个按钮：没开链接时是「Share」，点开对话框。分享的是整个 space，不是当前这一页，所以放在页头而不是文档页里。</span></li>
+    <li><span class="m-n">2</span><span><b>开着链接时换成「Shared · Live」胶囊</b>（项目页头已有的样式），点它回到同一个对话框改设置或关掉。</span></li>
+    <li><span class="m-n">3</span><span><b>Documents 锁定，数量是已经写好的篇数。</b>访客看到首页（按大类排的文档）和这些文档页。还没写的文档、Activity、Review、Settings、Plan、运行记录、条目详情、原则组都不公开。</span></li>
+    <li><span class="m-n">4</span><span><b>Footnotes 一层，默认关。</b>关着时公开页只有正文，没有脚注编号。打开后显示引文、代码摘录、文件路径和行号；不显示 SHA，不链到会话、任务或 GitHub，也没有记录 id。Merge receipt 和 Owner decision 两类脚注永远不公开。风险句固定写作「Can include command output and file contents.」，勾上后变琥珀色。数量按文档页上的编号算：同一篇里重复引用算一个，不含已撤回的句子。</span></li>
+    <li><span class="m-n">5</span><span><b>Shared links 里多一种 W。</b>标题是 space 名（仓库最后一段），Includes 是 Documents / Footnotes。已经装在手机上的旧版 iOS 不认识这一种，所以服务端只把 wiki 链接给声明了要它的客户端；新版 web、iOS、macOS 都会显示。</span></li>
+    <li><span class="m-n">6</span><span><b>iOS / macOS 在 wiki 首页工具栏加一个地球</b>，排在 Activity 后面；开着链接时地球是绿的。iPad 和 Mac 的三栏里，它在详情栏页头。</span></li>
+    <li><span class="m-n">7</span><span><b>面板复用现有的 ShareSheet。</b>只多出 wiki 自己的两行：Documents（锁定）和 Footnotes。</span></li>
+  </ul>
+</div>
+</body>
+</html>

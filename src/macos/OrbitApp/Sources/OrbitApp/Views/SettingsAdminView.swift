@@ -11,9 +11,9 @@ import UniformTypeIdentifiers
 
 #if os(macOS)
 /// macOS Settings: account info, theme/default permission preferences, session orchestration,
-/// change-password and the update channel, as one grouped form — in the Settings window (⌘,) and in
-/// the main window's middle column. iOS presents Settings as a sheet with a list and pages of its
-/// own instead (`SettingsSheet`), in the same words (`SettingsCopy`).
+/// change-password, access tokens and the update channel, as one grouped form — in the Settings
+/// window (⌘,) and in the main window's middle column. iOS presents Settings as a sheet with a list
+/// and pages of its own instead (`SettingsSheet`), in the same words (`SettingsCopy`).
 struct SettingsView: View {
     @Environment(AppModel.self) private var model
     @EnvironmentObject private var updater: UpdaterModel   // Sparkle; iOS updates via the App Store
@@ -24,6 +24,8 @@ struct SettingsView: View {
     @State private var orchestration = true
     /// The account's switch for smart model selection. Absent on the server means off.
     @State private var modelRouting = false
+    /// The account's switch for suggested replies. Absent on the server means on.
+    @State private var promptSuggestions = true
     @State private var loaded = false
 
     @State private var curPw = ""
@@ -85,6 +87,9 @@ struct SettingsView: View {
                 Toggle(SettingsCopy.smartModelSelection, isOn: $modelRouting)
                 Text(SettingsCopy.smartModelSelectionHint)
                     .font(.orbitLabel).foregroundStyle(.secondary)
+                Toggle(SettingsCopy.suggestedReplies, isOn: $promptSuggestions)
+                Text(SettingsCopy.suggestedRepliesHint)
+                    .font(.orbitLabel).foregroundStyle(.secondary)
                 Button("Save preferences") {
                     Task { await model.savePreferences(preferencesPatch) }
                 }
@@ -114,6 +119,8 @@ struct SettingsView: View {
                 }
             }
 
+            AccessTokensSection()
+
             Section("Updates") {
                 Toggle("Receive beta updates", isOn: $updater.betaChannel)
                 Text("Beta releases ship earlier and may be less stable.")
@@ -140,6 +147,8 @@ struct SettingsView: View {
         // afford.
         .onChange(of: orchestration) { saveOrchestration() }
         .onChange(of: modelRouting) { saveModelRouting() }
+        .onChange(of: promptSuggestions) { savePromptSuggestions() }
+        .task { await model.accessTokens?.load() }
         .onAppear {
             guard !loaded else { return }
             loaded = true
@@ -151,6 +160,7 @@ struct SettingsView: View {
                 ?? AgentDefaults.defaultPermissionMode
             orchestration = p?.enableOrchestration ?? true
             modelRouting = p?.smartModelSelection ?? false
+            promptSuggestions = p?.suggestedReplies ?? true
             name = model.user?.name ?? ""
         }
         .onChange(of: name) { accountMessage = nil }
@@ -185,6 +195,89 @@ struct SettingsView: View {
     private func saveModelRouting() {
         guard (model.user?.preferences?.smartModelSelection ?? false) != modelRouting else { return }
         Task { await model.savePreferences(UpdatePreferencesRequest(modelRouting: modelRouting)) }
+    }
+
+    /// And for suggested replies.
+    private func savePromptSuggestions() {
+        guard (model.user?.preferences?.suggestedReplies ?? true) != promptSuggestions else { return }
+        Task { await model.savePreferences(UpdatePreferencesRequest(promptSuggestions: promptSuggestions)) }
+    }
+}
+
+/// The form's Access tokens section: the account's personal access tokens in the web page's two
+/// tabs, each one that still works with a Revoke button that asks first — anything using it stops
+/// working at once. Issuing is the web's alone (docs/personal-access-token-design.md §9), which the
+/// section says where the web has its New token button.
+private struct AccessTokensSection: View {
+    @Environment(AppModel.self) private var model
+
+    @State private var tab: AccessTokensList.Tab = .active
+    @State private var pendingRevoke: AccessToken?
+    /// What the last revoke came to, under the list.
+    @State private var outcome: String?
+
+    var body: some View {
+        let tokens = model.accessTokens?.tokens ?? []
+        let shown = AccessTokensList.tokens(tokens, in: tab)
+        Section(AccessTokensList.title) {
+            Text(AccessTokensList.subtitle + " " + AccessTokensList.issuedOnTheWeb)
+                .font(.orbitLabel).foregroundStyle(.secondary)
+            Picker(AccessTokensList.title, selection: $tab) {
+                ForEach(AccessTokensList.Tab.allCases) { tab in
+                    Text("\(tab.label) \(AccessTokensList.tokens(tokens, in: tab).count)").tag(tab)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            switch LoadFailureLogic.presentation(model.accessTokens?.loadState ?? ListLoadState(),
+                                                 isEmpty: tokens.isEmpty) {
+            case .loading:
+                ProgressView().frame(maxWidth: .infinity)
+            case .failed:
+                HStack {
+                    Text(model.accessTokens?.errorText ?? AccessTokensList.couldNotLoad)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button(SharePanelCopy.retry) { Task { await model.accessTokens?.load() } }
+                }
+            case .empty, .content:
+                if shown.isEmpty {
+                    Text(tab.empty).foregroundStyle(.secondary)
+                }
+                ForEach(shown) { token in
+                    row(token)
+                }
+            }
+            if let outcome {
+                Text(outcome).font(.orbitLabel).foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func row(_ token: AccessToken) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            AccessTokenRow(token: token, now: Date())
+            if AccessTokensList.canRevoke(token) {
+                Button(AccessTokensList.revoke + "…", role: .destructive) { pendingRevoke = token }
+                    .disabled(model.accessTokens?.revokingID == token.id)
+                    // On the row that asked, so only its own token's question is ever up.
+                    .orbitConfirmation(AccessTokensList.revokeTitle(token), isPresented: revokeAsked(token)) {
+                        Button(AccessTokensList.revoke, role: .destructive) { Task { await revoke(token) } }
+                        Button(SharePanelCopy.cancel, role: .cancel) {}
+                    } message: {
+                        Text(AccessTokensList.revokeDetail)
+                    }
+            }
+        }
+    }
+
+    private func revokeAsked(_ token: AccessToken) -> Binding<Bool> {
+        Binding(get: { pendingRevoke?.id == token.id }, set: { if !$0 { pendingRevoke = nil } })
+    }
+
+    private func revoke(_ token: AccessToken) async {
+        guard let accessTokens = model.accessTokens else { return }
+        outcome = await accessTokens.revoke(token).map(AccessTokensList.notRevoked) ?? AccessTokensList.revoked
     }
 }
 #endif

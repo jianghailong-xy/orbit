@@ -8,18 +8,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Runner } from './TasksSidePanel';
 
 /**
- * The bar pinned to the top of the transcript, on a turn nobody typed.
+ * The bar pinned to the top of the transcript, over a turn nobody typed.
  *
  * It names the last turn that has scrolled above the fold so a reader halfway down an answer knows
- * what is being answered, and tapping it goes back to that turn. It scanned for `.chat-user`
- * bubbles — and a wake a watch queued is drawn as the watch's card, not as a bubble, so this end
- * walked straight past it and named the question *before* it: the bar credited the wake's answer to
- * an unrelated question and jumped somewhere else when tapped. (iOS had the other half of the same
- * bug and it was the louder one: it did pick the wake up, and labelled it "↑ Your question" with
- * the payload's raw UUID beside it, directly above a card reading "not typed by you".)
- *
- * So the wake is the turn the bar names, in the wake's own words: its card's title and the line
- * under it, which is the same sentence the card itself reads.
+ * what is being answered, and tapping it goes back to that turn. A watch's wake was once one of those
+ * turns, named in its card's own words — and so "↑ Watch triggered" took the bar over the reply the
+ * agent simply carried on with, and the person's question left the screen. A wake is now one line in
+ * the agent's stream, as a background job's news is (BackgroundWakeCard): neither is the head of a
+ * round, so the bar keeps naming the question the answer around them belongs to. (iOS holds the same
+ * rule in `StickySummary.isAnchor`.)
  */
 
 vi.mock('../api', async (importOriginal) => {
@@ -47,7 +44,7 @@ const TASK = '0195c0de-0000-7000-8000-0000000000d4';
 
 /** What the person actually typed, earlier in the same session. */
 const TYPED = 'deploy the new build';
-/** The condition as the server recorded it — the card reads it back as words. */
+/** The condition as the server recorded it — the line's fold reads it back as words. */
 const REASON = 'ANY_OF(ALL TASK_TERMINAL 1/1, ANY TASK_FAILED 1/1)';
 const IN_WORDS = '1 of 1 finished · 1 of 1 failed';
 
@@ -239,8 +236,8 @@ afterEach(async () => {
  *
  * jsdom lays nothing out, so every row reports the same empty rectangle and the scanner reads them
  * all as sitting above the fold — which is the state the bar exists for, with the LAST eligible
- * turn as the one it names. That is the wake here; before this fix the scanner could not see it and
- * named the question two turns earlier instead.
+ * turn as the one it names. A wake after the question is the last turn of all, so a bar that still
+ * named it would show here.
  */
 async function mountTranscript(drawn: string | null = '.watch-wake'): Promise<void> {
   const nextClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } } });
@@ -268,34 +265,33 @@ async function mountTranscript(drawn: string | null = '.watch-wake'): Promise<vo
 }
 
 describe('the sticky bar over a turn a watch queued', { timeout: 60_000 }, () => {
-  it('names it in the watch’s own words, not as the person’s question', async () => {
+  it('keeps naming the question the answer around it belongs to', async () => {
     await mountTranscript();
 
-    expect(text('.chat-sticky-label')).toBe('↑ Watch triggered');
-    expect(text('.chat-sticky-text')).toBe(IN_WORDS);
-    // The same sentence the card under it reads: one screen, one account of what happened.
+    expect(text('.chat-sticky-label')).toBe('↑ Your question');
+    expect(text('.chat-sticky-text')).toBe(TYPED);
+    // The wake is still drawn, in its own words, as the line in the answer it is.
+    expect(text('.watch-wake .bgwake-title')).toBe('Watch triggered');
     expect(text('.watch-wake-why')).toBe(IN_WORDS);
-    // Not the payload the agent was handed, which is what the bar drew before: a head line with a
-    // raw UUID in it, truncated to something no reader can place.
+    // And never the payload the agent was handed: a head line with a raw UUID in it.
     const bar = text('.chat-sticky-question');
     expect(bar).not.toContain(WATCH);
     expect(bar).not.toContain('Orbit Watch');
-    // And not the question two turns earlier, whose answer this is not.
-    expect(bar).not.toContain(TYPED);
+    expect(bar).not.toContain('Watch triggered');
   });
 
-  it('goes back to the wake’s own turn when tapped', async () => {
+  it('goes back to that question when tapped, not to the line in its answer', async () => {
     await mountTranscript();
 
-    const wake = mounted().querySelector<HTMLElement>('.watch-wake')!;
-    expect(wake.getAttribute('data-seq'), 'the card is where that turn starts').toBe('3');
+    const question = mounted().querySelector<HTMLElement>('.chat-user[data-seq="1"]')!;
+    expect(question, 'the question is drawn as the person’s bubble').not.toBeNull();
     await act(async () => {
       mounted()
         .querySelector<HTMLElement>('.chat-sticky-question')!
         .dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
-    expect(scrolledTo).toEqual([wake]);
+    expect(scrolledTo).toEqual([question]);
   });
 
   it('still calls a turn the person typed their question', async () => {

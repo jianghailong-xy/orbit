@@ -13,20 +13,20 @@ export class SessionFoldersController {
   constructor(private readonly folders: SessionFoldersService) {}
 
   /** The caller's folders across all their workspaces, by name: `{ id, workspaceId, name }`. */
-  @PatScope('sessions:read')
+  @PatScope('sessions:read', { workspaceConfinable: false })
   @Get()
   list(@CurrentUser() user: AuthUser) {
     return this.folders.list(user.userId);
   }
 
   /** A folder in one of the caller's workspaces. A name the workspace already has is a 409. */
-  @PatScope('sessions:write')
+  @PatScope('sessions:write', { workspaceConfinable: false })
   @Post()
   create(@CurrentUser() user: AuthUser, @Body() dto: CreateSessionFolderDto) {
     return this.folders.create(user.userId, dto);
   }
 
-  @PatScope('sessions:write')
+  @PatScope('sessions:write', { workspaceConfinable: false })
   @Patch(':id')
   rename(
     @CurrentUser() user: AuthUser,
@@ -37,7 +37,7 @@ export class SessionFoldersController {
   }
 
   /** Delete the folder only; the sessions in it go back to the workspace's list. */
-  @PatScope('sessions:write')
+  @PatScope('sessions:write', { workspaceConfinable: false })
   @Delete(':id')
   remove(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.folders.remove(user.userId, id);

@@ -1,14 +1,41 @@
 import { CheckCircleFilled, ExportOutlined, LoadingOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
-import type { LoginEngine, RunnerEngineHealth, RunnerLoginState } from '@orbit/shared';
+import {
+  KIMI_LOGIN_REGION_V1,
+  KIMI_REGIONS,
+  type KimiRegion,
+  type LoginEngine,
+  type RunnerEngineHealth,
+  type RunnerLoginState,
+} from '@orbit/shared';
 import { api } from '../api';
 import { runnersQuery } from '../lib/queries';
 
 const loginKey = (runnerId: string) => ['runner-login', runnerId] as const;
 
-/** The CLI's own name, as its vendor spells it. Shared with the Providers page's engine rows so
- *  the same machine never gets two names for the same binary. */
+/** Kimi Code's two sites, in the words Kimi's own sign-in uses: each keeps accounts of its own, so
+ *  the user picks the one they signed up on. */
+export const KIMI_SITE: Record<KimiRegion, { domain: string; where: string }> = {
+  'mainland-cn': { domain: 'kimi.com', where: 'Mainland China' },
+  global: { domain: 'kimi.ai', where: 'International' },
+};
+
+/** The site a device-flow page belongs to, read off the URL the CLI printed rather than the site
+ *  asked for: it is the page the user is about to sign in on. */
+export function kimiSiteOf(url: string | null | undefined): KimiRegion | null {
+  try {
+    const host = new URL(url ?? '').hostname;
+    if (host === 'kimi.ai' || host.endsWith('.kimi.ai')) return 'global';
+    if (host === 'kimi.com' || host.endsWith('.kimi.com')) return 'mainland-cn';
+  } catch {
+    // Not a URL at all: no site to name.
+  }
+  return null;
+}
+
+/** The CLI's own name, as its vendor spells it. Shared with a machine's engine rows (RunnerEngines)
+ *  so the same machine never gets two names for the same binary. */
 export const ENGINE_NAME: Record<LoginEngine, string> = {
   claude: 'Claude Code',
   codex: 'Codex',
@@ -25,19 +52,23 @@ export function GoogleSignInTerms() {
 const inFlight = (s: RunnerLoginState['status'] | null | undefined) =>
   s === 'pending' || s === 'awaiting_code' || s === 'awaiting_approval';
 
-/** The slice of GET /runners this card reads back: whether that machine's probe has caught up. */
-type ProbedRunner = { id: string; engines?: RunnerEngineHealth[] | null };
+/** The slice of GET /runners this card reads back: whether that machine's probe has caught up, and
+ *  for Kimi whether it can be told a site and which one its login is on. */
+type ProbedRunner = { id: string; engines?: RunnerEngineHealth[] | null; capabilities?: string[] | null };
 
 /** Does the runner's own probe now say this engine is signed in? "unknown" is not a yes — the
  *  wait below is bounded precisely because a CLI that won't answer never becomes one. Given an
  *  account of an engine that keeps them, it is that account's own answer: the engine's is Default's,
- *  and says nothing about any other. */
+ *  and says nothing about any other. Given Kimi's site, it is a login on that site — the account's own,
+ *  for an account: one moved from the other site was already signed in before, and that yes is the
+ *  old login's. */
 export function probeReportsSignedIn(
   runners: ProbedRunner[] | undefined,
   runnerId: string,
   engine: LoginEngine,
   account?: string,
   accountName?: string,
+  site?: KimiRegion,
 ): boolean {
   const health = runners
     ?.find((r) => r.id === runnerId)
@@ -48,7 +79,8 @@ export function probeReportsSignedIn(
       return accounts.some(
         (a) =>
           a.auth === 'yes' &&
-          (account ? a.id === account : a.name?.trim() === accountName?.trim()),
+          (account ? a.id === account : a.name?.trim() === accountName?.trim()) &&
+          (!site || a.kimiRegion === site),
       );
     }
     // A named account must appear in the account list before this wait can end. Falling back to
@@ -57,6 +89,7 @@ export function probeReportsSignedIn(
     // heartbeat. Default is the one exception because the engine bit is its own answer.
     if (accountName || account !== 'default') return false;
   }
+  if (site && health?.kimiRegion !== site) return false;
   return health?.auth === 'yes' && (engine !== 'antigravity' || health.authSource === 'google');
 }
 
@@ -123,6 +156,27 @@ export function RunnerSignIn({
   autoStart?: boolean;
 }) {
   const qc = useQueryClient();
+  // Kimi signs in on one of two sites. Whether this runner can be told which, and which one its login
+  // is on now, are the runner list's to say — read here rather than handed down, so every card that
+  // signs Kimi in (an engine row, a session's sign-in card) offers the same choice.
+  const kimiRunner = useQuery({
+    ...runnersQuery(),
+    enabled: engine === 'kimi',
+    select: (list) => (list as ProbedRunner[]).find((r) => r.id === runnerId),
+  });
+  const choosesSite = !!kimiRunner.data?.capabilities?.includes(KIMI_LOGIN_REGION_V1);
+  // The site of the login this card signs in again: the account's own, Default's being the engine's.
+  // A card adding an account has none yet.
+  const kimiHealth = kimiRunner.data?.engines?.find((e) => e.engine === 'kimi');
+  const currentSite = accountName !== undefined
+    ? undefined
+    : account && account !== 'default'
+      ? kimiHealth?.accounts?.find((a) => a.id === account)?.kimiRegion
+      : kimiHealth?.kimiRegion;
+  // Both sites can always be pressed. A runner too old to be told a site signs in where its CLI
+  // decides — kimi.com, on an install Orbit made — so kimi.com goes to it unnamed; kimi.ai is named
+  // either way, and such a runner is refused it in words that say to update it (RunnerApiController).
+  const kimiSiteToName = (region: KimiRegion) => (choosesSite || region === 'global' ? region : undefined);
   const [code, setCode] = useState('');
   // Set once a pasted code is on its way to the runner — see `verifying` below.
   const [sent, setSent] = useState(false);
@@ -152,15 +206,16 @@ export function RunnerSignIn({
   const put = (next: RunnerLoginState) => qc.setQueryData(loginKey(runnerId), next);
 
   const start = useMutation({
-    mutationFn: () =>
+    mutationFn: (region?: KimiRegion) =>
       api<RunnerLoginState>(`/runners/${runnerId}/login`, {
         method: 'POST',
         // Naming no account is the runner's own login, which is what every card said before
-        // accounts — so a card for none still says only which engine.
+        // accounts — so a card for none still says only which engine. The same goes for Kimi's site.
         body: {
           engine,
           ...(account !== undefined ? { account } : {}),
           ...(adding ? { accountName: accountName.trim() } : {}),
+          ...(region ? { region } : {}),
         },
       }),
     onSuccess: put,
@@ -184,7 +239,7 @@ export function RunnerSignIn({
     onSuccess: put,
   });
 
-  const begin = () => {
+  const begin = (region?: KimiRegion) => {
     // Park a tab now, while the click is still a user gesture, and hand it the URL when the poll
     // brings one back. A browser that blocked it leaves null here and the anchor takes over.
     //
@@ -197,7 +252,7 @@ export function RunnerSignIn({
       tab.current?.document.write(WAITING_PAGE);
     }
     setStartedHere(true);
-    start.mutate();
+    start.mutate(region);
   };
 
   // No tab is parked for this one: the press that asked was on another button, and a tab opened from
@@ -235,6 +290,12 @@ export function RunnerSignIn({
     if (inFlight(reported)) setWatched(true);
   }, [reported]);
 
+  // The Kimi site the sign-in under way is on, kept past its URL for the wait below.
+  const [signingInOn, setSigningInOn] = useState<KimiRegion | null>(null);
+  useEffect(() => {
+    if (engine === 'kimi' && reported === 'awaiting_approval') setSigningInOn(kimiSiteOf(s?.url));
+  }, [engine, reported, s?.url]);
+
   // A finished sign-in does not move the engine row this card opened under: that row reads the
   // runner's last heartbeat probe, and the runner only re-probes once the CLI exits, then (an
   // older one) waits for its next check-in — half a minute at worst, with nothing pushing it here
@@ -245,7 +306,7 @@ export function RunnerSignIn({
   useEffect(() => {
     if (status !== 'done') return;
     setAwaitingProbe(true);
-    // The runners query is usually already mounted by the Providers page. Mark it stale when the
+    // The runners query is usually already mounted by the page this card is on. Mark it stale when the
     // relay finishes so that this transition always starts a fresh list read; merely mounting a
     // second observer can otherwise reuse a just-read cache entry and leave the account rows old.
     void qc.invalidateQueries({ queryKey: runnersQuery().queryKey });
@@ -266,6 +327,9 @@ export function RunnerSignIn({
         // The name is still known locally and keeps the poll from mistaking Default's auth for the
         // new account's sign-in.
         adding ? accountName : undefined,
+        // A runner that can choose a site reports its login's: until it names this sign-in's, the
+        // yes it gives may be the login on the other site that this one replaced.
+        choosesSite ? (signingInOn ?? undefined) : undefined,
       )
         ? false
         : PROBE_POLL_MS,
@@ -349,29 +413,72 @@ export function RunnerSignIn({
   }
 
   // Device flow: the code goes to the browser, not back through here, so all we can do is show
-  // both halves and wait for the CLI to finish approving itself.
+  // both halves and wait for the CLI to finish approving itself. The code comes first, and the one
+  // press both copies it and opens the page it goes into (VS Code's "Copy & Continue to GitHub"), so
+  // what is left over there is a paste.
   if (status === 'awaiting_approval' && s?.url) {
+    // Kimi's page belongs to one of its two sites, named so the user knows which account it wants.
+    const site = engine === 'kimi' ? kimiSiteOf(s.url) : null;
+    const other: KimiRegion = site === 'global' ? 'mainland-cn' : 'global';
+    const userCode = s.userCode;
+    const cancelLink = (
+      <button className="rsi-link" onClick={() => cancel.mutate()} type="button">
+        Cancel
+      </button>
+    );
     return (
       <div className="rsi">
-        <a className="rsi-open" href={s.url} target="_blank" rel="noopener noreferrer">
-          <ExportOutlined /> Open the sign-in page
-        </a>
         <div className="rsi-hint">
-          {adding ? (
+          {adding && site ? (
+            <>
+              Sign in with the <b>{KIMI_SITE[site].domain}</b> account you are adding, then enter this one-time code:
+            </>
+          ) : adding ? (
             <>
               Sign in <b>with the other account</b>, then enter this one-time code:
             </>
+          ) : site ? (
+            <>
+              Sign in with your <b>{KIMI_SITE[site].domain}</b> account there, then enter this one-time code:
+            </>
           ) : (
-            'Sign in there, then enter this one-time code:'
+            'Enter this one-time code on the sign-in page:'
           )}
         </div>
-        <div className="rsi-usercode">{s.userCode}</div>
+        <div className="rsi-usercode">{userCode}</div>
+        <a
+          className="rsi-open"
+          href={s.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={() => {
+            if (userCode) void navigator.clipboard?.writeText(userCode).catch(() => undefined);
+          }}
+        >
+          <ExportOutlined />{' '}
+          {userCode
+            ? site
+              ? `Copy Code & Open ${KIMI_SITE[site].domain}`
+              : 'Copy Code & Open Sign-In Page'
+            : site
+              ? `Open the ${KIMI_SITE[site].domain} sign-in page`
+              : 'Open the sign-in page'}
+        </a>
         <div className="rsi-row">
           <LoadingOutlined /> Waiting for you to approve it…
         </div>
-        <button className="rsi-link" onClick={() => cancel.mutate()} type="button">
-          Cancel
-        </button>
+        {/* The wrong site is the one mistake the user can't see until they are on its page: their
+            account isn't there. Starting over on the other one is a single press. */}
+        {site ? (
+          <div className="rsi-links">
+            {cancelLink}
+            <button className="rsi-link" onClick={() => begin(kimiSiteToName(other))} type="button">
+              Use {KIMI_SITE[other].domain} instead
+            </button>
+          </div>
+        ) : (
+          cancelLink
+        )}
       </div>
     );
   }
@@ -421,6 +528,52 @@ export function RunnerSignIn({
   // signing in fixes this one machine with the account the user already pays for; a key fixes
   // every runner at once but has to be issued and pasted. Neither is the obvious default, so
   // they are shown as a choice, with the one that needs nothing new leading.
+  //
+  // Kimi's sign-in is itself a choice: kimi.com and kimi.ai keep separate accounts, and left to
+  // itself the CLI goes to the site its installer came from. So the press that starts it picks the
+  // site, and nothing is picked for the user — guessing wrong costs a trip to the other site's page.
+  if (engine === 'kimi') {
+    return (
+      <div className="rsi">
+        {status === 'failed' && s?.message && <div className="rsi-warn">{s.message}</div>}
+        {err && <div className="rsi-warn">{err.message}</div>}
+        <div className="rsi-q">Which Kimi account are you signing in with?</div>
+        <div className="rsi-sites">
+          {KIMI_REGIONS.map((region) => (
+            <button
+              key={region}
+              className="rsi-site"
+              type="button"
+              disabled={start.isPending || kimiRunner.isPending || (adding && !accountName.trim())}
+              onClick={() => begin(kimiSiteToName(region))}
+            >
+              <span className="rsi-site-name">
+                {KIMI_SITE[region].domain}
+                {currentSite === region && <span className="rsi-site-tag">Current</span>}
+              </span>
+              <span className="rsi-site-sub">{KIMI_SITE[region].where}</span>
+            </button>
+          ))}
+          {onUseApiKey && (
+            <button className="rsi-btn-alt" onClick={onUseApiKey} type="button">
+              Use an API key instead
+            </button>
+          )}
+          {onCancel && (
+            <button className="rsi-link" onClick={onCancel} type="button">
+              Cancel
+            </button>
+          )}
+        </div>
+        <div className="rsi-hint">The two sites keep separate accounts — pick the one you signed up on.</div>
+        {onUseApiKey && (
+          <div className="rsi-hint">
+            Signing in fixes this runner. A key is account-wide — switch to its model to use it.
+          </div>
+        )}
+      </div>
+    );
+  }
   return (
     <div className="rsi">
       {engine === 'antigravity' && <GoogleSignInTerms />}
@@ -429,7 +582,7 @@ export function RunnerSignIn({
       <div className="rsi-actions">
         <button
           className="rsi-btn"
-          onClick={begin}
+          onClick={() => begin()}
           disabled={start.isPending || (adding && !accountName.trim())}
           type="button"
         >

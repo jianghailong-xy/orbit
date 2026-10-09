@@ -15,18 +15,62 @@ final class SessionProviderChoicesTests: XCTestCase {
 
     func testAlwaysOffersTheEnginesWithNothingConfigured() {
         let choices = SessionProviderChoices.choices(configured: [])
-        XCTAssertEqual(choices.map(\.slug), ["claude", "codex", "kimi"])
+        XCTAssertEqual(choices.map(\.slug), ["claude", "codex", "kimi", "opencode"])
         XCTAssertTrue(choices.allSatisfy { $0.kind == .engine })
     }
 
     func testAppendsConfiguredProvidersAfterTheEngines() {
         let choices = SessionProviderChoices.choices(configured: [deepseek, custom])
-        XCTAssertEqual(choices.map(\.slug), ["claude", "codex", "kimi", "deepseek", "my-endpoint"])
-        XCTAssertTrue(choices.suffix(2).allSatisfy { $0.kind == .byok })
+        XCTAssertEqual(choices.map(\.slug),
+                       ["claude", "codex", "kimi", "deepseek", "my-endpoint", "opencode"])
+        XCTAssertEqual(choices.filter { $0.kind == .byok }.map(\.slug), ["deepseek", "my-endpoint"])
     }
 
-    func testNeverOffersOpenCodeBecauseItIsNotALoginEngine() {
-        XCTAssertFalse(SessionProviderChoices.choices(configured: []).contains { $0.slug == "opencode" })
+    /// OpenCode is listed whether or not the runner has it — Orbit installs it — so the row carries
+    /// the reason and where it is fixed rather than vanishing (the rule DSH and the login engines are
+    /// already listed under). It has no sign-in to relay, so it is never a pick before the CLI is
+    /// there, and the keys it could spend wait with it: each names a session that would run on it.
+    func testKeepsOpenCodeListedWithItsReasonUntilTheRunnerHasIt() {
+        let key = ConfiguredProvider(slug: "deepseek", label: "DeepSeek", runtime: "claude",
+                                     models: [ConfiguredProviderModel(value: "deepseek-v4-pro",
+                                                                     label: "DeepSeek V4 Pro")],
+                                     defaultModel: "deepseek-v4-pro", presetSlug: "deepseek",
+                                     runsOnOpenCode: true)
+        let reports: [[RunnerEngineHealth]?] = [nil, [health("opencode", installed: false, auth: "unknown")]]
+        for engines in reports {
+            let choices = SessionProviderChoices.choices(configured: [key], engines: engines)
+            XCTAssertEqual(
+                choices.filter { SessionProviderChoices.executingRuntime($0.slug, configured: [key]) == "opencode" }
+                    .map(\.slug),
+                ["opencode"], "the engine yes, the key it would spend no")
+            let row = choices.first { $0.slug == "opencode" }
+            XCTAssertEqual(row?.kind, .engine)
+            XCTAssertEqual(row?.unavailable, "Not installed")
+            XCTAssertEqual(row?.fixEngine, "opencode")
+            // What the row ends with: an install to send the user to, never a sign-in this client
+            // has no relay for.
+            XCTAssertEqual("\(row?.unavailable ?? "")\(SessionProviderChoices.fixSuffix(row?.fixEngine))",
+                           "Not installed →")
+        }
+        // The engine board offers it too, as the unpickable row that carries the fix.
+        let engines = SessionProviderChoices.engines(SessionProviderChoices.choices(configured: [key]),
+                                                     configured: [key])
+        XCTAssertEqual(engines.map(\.slug), ["claude", "codex", "kimi", "opencode"])
+        XCTAssertEqual(engines.last?.label, "OpenCode")
+        XCTAssertEqual(engines.last?.unavailable, "Not installed")
+        XCTAssertEqual(engines.last?.fixEngine, "opencode")
+    }
+
+    /// The arrow a row's reason ends with: only an engine this client can drive a sign-in for
+    /// promises one. Everything else — an install, a runner update, a key to paste — gets the bare
+    /// arrow, OpenCode included now that Orbit installs it.
+    func testOnlyASignInTheClientCanDriveClosesARowWithSignIn() {
+        for engine in ["claude", "codex", "kimi"] {
+            XCTAssertEqual(SessionProviderChoices.fixSuffix(engine), ", sign in →")
+        }
+        for engine in ["opencode", "dsh", DshRuntime.connectFix, "antigravity"] {
+            XCTAssertEqual(SessionProviderChoices.fixSuffix(engine), " →")
+        }
     }
 
     /// The compatibility entry is offered only with a server-confirmed environment key.
@@ -222,7 +266,7 @@ final class SessionProviderChoicesTests: XCTestCase {
                 health("codex", installed: false, auth: "unknown"),
                 health("kimi", installed: false, auth: "unknown"),
             ])
-        XCTAssertEqual(choices.map(\.slug), ["claude", "codex", "kimi", "deepseek"])
+        XCTAssertEqual(choices.map(\.slug), ["claude", "codex", "kimi", "deepseek", "opencode"])
         XCTAssertEqual(choices.first { $0.slug == "kimi" }?.unavailable, "Not installed")
         XCTAssertEqual(choices.first { $0.slug == "kimi" }?.fixEngine, "kimi")
         XCTAssertNil(choices.first { $0.slug == "claude" }?.unavailable)
@@ -335,12 +379,16 @@ final class SessionProviderChoicesTests: XCTestCase {
     }
 
     func testAnEngineTheRunnerHasClaimedNothingAboutStaysRunnable() {
+        // OpenCode is the one exception, and only because Orbit installs it: a runner that has said
+        // nothing about it is a runner that hasn't got it (`testKeepsOpenCodeListed…`).
         XCTAssertTrue(SessionProviderChoices.choices(configured: [], engines: nil)
+            .filter { $0.slug != "opencode" }
             .allSatisfy { $0.unavailable == nil })
         let partial = SessionProviderChoices.choices(
             configured: [], engines: [health("claude", installed: false, auth: "no")])
-        XCTAssertEqual(partial.map(\.slug), ["claude", "codex", "kimi"])
-        XCTAssertEqual(partial.filter { $0.unavailable != nil }.count, 1)
+        XCTAssertEqual(partial.map(\.slug), ["claude", "codex", "kimi", "opencode"])
+        // The engine the runner spoke about, and OpenCode, which it didn't and hasn't got.
+        XCTAssertEqual(partial.filter { $0.unavailable != nil }.map(\.slug), ["claude", "opencode"])
     }
 
     /// The composer's menu greys these out rather than dropping them — the bug that started this:
@@ -387,7 +435,7 @@ final class SessionProviderChoicesTests: XCTestCase {
             configured: withPools([anthropic, anthropic2, deepseek], [pool]), catalog: opus5, pools: [pool])
         XCTAssertEqual(choices.map(\.slug),
                        ["claude", "codex", "kimi", "claude-accounts", "anthropic", "anthropic-2",
-                        "deepseek"])
+                        "deepseek", "opencode"])
         let tile = choices.first { $0.slug == "claude-accounts" }
         XCTAssertEqual(tile?.kind, .pool)
         XCTAssertEqual(tile?.poolSize, 2)
@@ -633,18 +681,16 @@ final class SessionProviderChoicesTests: XCTestCase {
         let configured = [deepseek, moonshot]
         let engines = SessionProviderChoices.engines(SessionProviderChoices.choices(configured: configured),
                                                      configured: configured)
-        XCTAssertEqual(engines.map(\.slug), ["claude", "codex", "kimi"])
-        XCTAssertEqual(engines.map(\.provider.slug), ["claude", "codex", "kimi"])
-        XCTAssertEqual(engines.map(\.label), ["Claude", "Codex", "Kimi"])
-        XCTAssertNil(engines[0].providerDetail)
+        XCTAssertEqual(engines.map(\.slug), ["claude", "codex", "kimi", "opencode"])
+        XCTAssertEqual(engines.map(\.provider.slug), ["claude", "codex", "kimi", "opencode"])
+        XCTAssertEqual(engines.map(\.label), ["Claude", "Codex", "Kimi", "OpenCode"])
     }
 
     func testEnginesLandOnAPreferredProviderThatCanRun() {
         let configured = [deepseek, moonshot]
         let engines = SessionProviderChoices.engines(SessionProviderChoices.choices(configured: configured),
                                                      configured: configured, preferred: ["deepseek", "moonshot"])
-        XCTAssertEqual(engines.map(\.provider.slug), ["deepseek", "codex", "moonshot"])
-        XCTAssertEqual(engines[0].providerDetail, "via DeepSeek")
+        XCTAssertEqual(engines.map(\.provider.slug), ["deepseek", "codex", "moonshot", "opencode"])
     }
 
     func testEnginesSkipASignedOutEngineForAKeyThatCanRunAndCarryTheReasonWhenNothingCan() {
@@ -665,6 +711,97 @@ final class SessionProviderChoicesTests: XCTestCase {
         let gone = SessionProviderChoices.current("gone-away", in: [], configured: [])
         let engine = SessionProviderChoices.engine(for: gone, configured: [])
         XCTAssertEqual(engine.slug, "claude")
-        XCTAssertEqual(engine.providerDetail, "via gone-away")
+    }
+
+    // MARK: - OpenCode and the keys it may spend (web parity)
+
+    func testOpenCodeListsItsOwnConfigThenEveryKeyItMaySpend() {
+        let key = ConfiguredProvider(slug: "deepseek", label: "DeepSeek", runtime: "claude",
+                                     models: [ConfiguredProviderModel(value: "deepseek-v4-pro", label: "DeepSeek V4 Pro")],
+                                     defaultModel: "deepseek-v4-pro", presetSlug: "deepseek", runsOnOpenCode: true)
+        let subscription = ConfiguredProvider(slug: "anthropic-sub", label: "Subscription", runtime: "claude",
+                                              presetSlug: "anthropic", runsOnOpenCode: false)
+        let configured = [key, subscription, moonshot]
+        let choices = SessionProviderChoices.choices(
+            configured: configured, engines: [health("opencode", installed: true, auth: "unknown")])
+        let openCode = choices.filter { SessionProviderChoices.executingRuntime($0.slug, configured: configured) == "opencode" }
+        XCTAssertEqual(openCode.map(\.slug), ["opencode", "opencode/deepseek"])
+        XCTAssertEqual(openCode.map(\.label), ["OpenCode", "DeepSeek"])
+        XCTAssertEqual(openCode[1].modelLabel, "DeepSeek V4 Pro")
+        // The key stays under its own engine as well.
+        XCTAssertTrue(choices.contains { $0.slug == "deepseek" })
+
+        let engine = SessionProviderChoices.engines(choices, configured: configured, preferred: ["opencode/deepseek"])
+            .first { $0.slug == "opencode" }
+        XCTAssertEqual(engine?.label, "OpenCode")
+        XCTAssertEqual(SessionProviderChoices.sameRuntime("opencode/deepseek", in: choices, configured: configured).map(\.slug),
+                       ["opencode", "opencode/deepseek"])
+
+        XCTAssertEqual(AgentDefaults.models(for: "opencode/deepseek", catalog: nil, configured: configured).map(\.id),
+                       ["orbit-deepseek/deepseek-v4-pro"])
+        XCTAssertEqual(AgentDefaults.defaultModel(for: "opencode/deepseek", catalog: nil, configured: configured),
+                       "orbit-deepseek/deepseek-v4-pro")
+    }
+
+    func testOpenCodeKeysRoundTripAndNameNothingElse() {
+        let id = OpenCodeKeys.model("deepseek-2", "deepseek-v4-pro")
+        XCTAssertEqual(OpenCodeKeys.key(of: id)?.slug, "deepseek-2")
+        XCTAssertEqual(OpenCodeKeys.key(of: "orbit-glm/glm-5/turbo")?.model, "glm-5/turbo")
+        XCTAssertNil(OpenCodeKeys.key(of: "anthropic/claude-opus-5"))
+        XCTAssertNil(OpenCodeKeys.key(of: "orbit-/x"))
+        XCTAssertNil(OpenCodeKeys.key(of: "orbit-deepseek/"))
+        XCTAssertEqual(OpenCodeKeys.choice(provider: "opencode", model: id), "opencode/deepseek-2")
+        XCTAssertEqual(OpenCodeKeys.choice(provider: "opencode", model: ""), "opencode")
+        XCTAssertEqual(OpenCodeKeys.choice(provider: "claude", model: id), "claude")
+        XCTAssertEqual(OpenCodeKeys.choiceKey("opencode/glm"), "glm")
+        XCTAssertNil(OpenCodeKeys.choiceKey("opencode"))
+    }
+
+    // MARK: - engineTitle (the composer model menu's title)
+
+    /// The title answers "which engine runs this session" — the CLI that executes, not the vendor
+    /// whose models it writes (web `engineTitleFor`).
+    func testEngineTitleNamesTheCLIThatExecutes() {
+        XCTAssertEqual(SessionProviderChoices.engineTitle(provider: "claude", configured: []).name,
+                       "Claude Code")
+        XCTAssertEqual(SessionProviderChoices.engineTitle(provider: "deepseek", configured: [deepseek]).name,
+                       "Claude Code")
+        XCTAssertEqual(SessionProviderChoices.engineTitle(provider: "my-endpoint", configured: [custom]).name,
+                       "Claude Code")
+        XCTAssertEqual(SessionProviderChoices.engineTitle(provider: "codex", configured: []).name, "Codex")
+        XCTAssertEqual(SessionProviderChoices.engineTitle(provider: "kimi", configured: []).name, "Kimi Code")
+        XCTAssertEqual(SessionProviderChoices.engineTitle(provider: "opencode", configured: []).name, "OpenCode")
+        XCTAssertEqual(SessionProviderChoices.engineTitle(provider: "antigravity", configured: []).name,
+                       "Antigravity")
+        XCTAssertEqual(SessionProviderChoices.engineTitle(provider: "dsh", configured: []).name,
+                       "DeepSeek Harness")
+        // A provider the console cannot place takes the server's own Claude fallback.
+        XCTAssertEqual(SessionProviderChoices.engineTitle(provider: "nonsense", configured: []).name,
+                       "Claude Code")
+    }
+
+    /// A held pick becomes `nextName` only when it changes the engine: two providers of one CLI read
+    /// as the same title, and that pick is the Provider row's business, not the title's.
+    func testEngineTitleSaysWhereAHeldPickGoesOnlyWhenTheEngineChanges() {
+        XCTAssertEqual(
+            SessionProviderChoices.engineTitle(provider: "claude", configured: [], nextProvider: "codex").nextName,
+            "Codex")
+        XCTAssertEqual(
+            SessionProviderChoices.engineTitle(provider: "opencode", configured: [], nextProvider: "claude").nextName,
+            "Claude Code")
+        XCTAssertNil(
+            SessionProviderChoices.engineTitle(provider: "deepseek", configured: [deepseek],
+                                                nextProvider: "claude").nextName)
+        XCTAssertNil(
+            SessionProviderChoices.engineTitle(provider: "claude", configured: [], nextProvider: nil).nextName)
+    }
+
+    /// The one line both clients print, arrow and all.
+    func testEngineTitleLabelReadsAsOneLine() {
+        XCTAssertEqual(SessionProviderChoices.engineTitle(provider: "deepseek", configured: [deepseek]).label,
+                       "Claude Code")
+        XCTAssertEqual(
+            SessionProviderChoices.engineTitle(provider: "claude", configured: [], nextProvider: "codex").label,
+            "Claude Code → Codex")
     }
 }

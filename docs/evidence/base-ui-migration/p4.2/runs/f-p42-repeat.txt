@@ -1,0 +1,82 @@
+argv: env P42_SNAPSHOTS=/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots P42_OUTPUT=/mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-out npx playwright test --config ui-migration/p42.config.mjs --update-snapshots=all --project webkit-dark-desktop --project webkit-light-desktop -g engines|its menus --repeat-each=5
+tree: /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/del
+head: 822c00ff04b3f00af6d983e043b4275ad2f025c0
+uncommitted:
+load: 34.42 34.23 36.52 10/5922 24750
+disk: / 48803M available, TMPDIR /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/tmp
+started: 2026-10-08T12:07:52Z
+
+
+Running 30 tests using 1 worker
+
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-light-desktop/p42-providers.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-light-desktop/p42-engine-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-light-desktop/p42-engine-remove.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-light-desktop/p42-account-pause.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-light-desktop/p42-account-pause-custom.png, writing actual.
+  ✓   1 [webkit-light-desktop] › ui-migration/p42.browser.mjs:109:3 › P4.2 providers › engines: an account menu, its remove question and the pause dialog (5.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-light-desktop/p42-pool-codex.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-light-desktop/p42-pool-who.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-light-desktop/p42-pool-person-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-light-desktop/p42-pool-just-mine.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-light-desktop/p42-pool-share.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-light-desktop/p42-pool-replace-key.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-light-desktop/p42-pool-signout.png, writing actual.
+  ✓   2 [webkit-light-desktop] › ui-migration/p42.browser.mjs:477:3 › P4.2 a pool on its own page › a Codex pool of one’s own: who can use it, its menus and questions (9.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-light-desktop/p42-runner-detail.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-light-desktop/p42-runner-actions.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-light-desktop/p42-workspace-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-light-desktop/p42-workspace-edit.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-light-desktop/p42-workspace-advanced.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-light-desktop/p42-workspace-discard.png, writing actual.
+  ✓   3 [webkit-light-desktop] › ui-migration/p42.browser.mjs:718:3 › P4.2 a runner’s page › its menus, a workspace’s settings and the discard question (4.8s)
+  ✓   4 [webkit-light-desktop] › ui-migration/p42.browser.mjs:109:3 › P4.2 providers › engines: an account menu, its remove question and the pause dialog (8.3s)
+  ✓   5 [webkit-light-desktop] › ui-migration/p42.browser.mjs:477:3 › P4.2 a pool on its own page › a Codex pool of one’s own: who can use it, its menus and questions (8.8s)
+  ✓   6 [webkit-light-desktop] › ui-migration/p42.browser.mjs:718:3 › P4.2 a runner’s page › its menus, a workspace’s settings and the discard question (4.6s)
+  ✓   7 [webkit-light-desktop] › ui-migration/p42.browser.mjs:109:3 › P4.2 providers › engines: an account menu, its remove question and the pause dialog (4.5s)
+  ✓   8 [webkit-light-desktop] › ui-migration/p42.browser.mjs:477:3 › P4.2 a pool on its own page › a Codex pool of one’s own: who can use it, its menus and questions (7.7s)
+  ✓   9 [webkit-light-desktop] › ui-migration/p42.browser.mjs:718:3 › P4.2 a runner’s page › its menus, a workspace’s settings and the discard question (4.0s)
+  ✓  10 [webkit-light-desktop] › ui-migration/p42.browser.mjs:109:3 › P4.2 providers › engines: an account menu, its remove question and the pause dialog (3.9s)
+  ✓  11 [webkit-light-desktop] › ui-migration/p42.browser.mjs:477:3 › P4.2 a pool on its own page › a Codex pool of one’s own: who can use it, its menus and questions (7.5s)
+  ✓  12 [webkit-light-desktop] › ui-migration/p42.browser.mjs:718:3 › P4.2 a runner’s page › its menus, a workspace’s settings and the discard question (4.4s)
+  ✓  13 [webkit-light-desktop] › ui-migration/p42.browser.mjs:109:3 › P4.2 providers › engines: an account menu, its remove question and the pause dialog (4.0s)
+  ✓  14 [webkit-light-desktop] › ui-migration/p42.browser.mjs:477:3 › P4.2 a pool on its own page › a Codex pool of one’s own: who can use it, its menus and questions (7.5s)
+  ✓  15 [webkit-light-desktop] › ui-migration/p42.browser.mjs:718:3 › P4.2 a runner’s page › its menus, a workspace’s settings and the discard question (4.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-dark-desktop/p42-providers.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-dark-desktop/p42-engine-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-dark-desktop/p42-engine-remove.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-dark-desktop/p42-account-pause.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-dark-desktop/p42-account-pause-custom.png, writing actual.
+  ✓  16 [webkit-dark-desktop] › ui-migration/p42.browser.mjs:109:3 › P4.2 providers › engines: an account menu, its remove question and the pause dialog (5.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-dark-desktop/p42-pool-codex.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-dark-desktop/p42-pool-who.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-dark-desktop/p42-pool-person-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-dark-desktop/p42-pool-just-mine.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-dark-desktop/p42-pool-share.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-dark-desktop/p42-pool-replace-key.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-dark-desktop/p42-pool-signout.png, writing actual.
+  ✓  17 [webkit-dark-desktop] › ui-migration/p42.browser.mjs:477:3 › P4.2 a pool on its own page › a Codex pool of one’s own: who can use it, its menus and questions (8.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-dark-desktop/p42-runner-detail.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-dark-desktop/p42-runner-actions.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-dark-desktop/p42-workspace-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-dark-desktop/p42-workspace-edit.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-dark-desktop/p42-workspace-advanced.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39Feocgj42rrBYwzl/v2/runs/f-p42-repeat-shots/webkit-dark-desktop/p42-workspace-discard.png, writing actual.
+  ✓  18 [webkit-dark-desktop] › ui-migration/p42.browser.mjs:718:3 › P4.2 a runner’s page › its menus, a workspace’s settings and the discard question (4.3s)
+  ✓  19 [webkit-dark-desktop] › ui-migration/p42.browser.mjs:109:3 › P4.2 providers › engines: an account menu, its remove question and the pause dialog (3.9s)
+  ✓  20 [webkit-dark-desktop] › ui-migration/p42.browser.mjs:477:3 › P4.2 a pool on its own page › a Codex pool of one’s own: who can use it, its menus and questions (7.6s)
+  ✓  21 [webkit-dark-desktop] › ui-migration/p42.browser.mjs:718:3 › P4.2 a runner’s page › its menus, a workspace’s settings and the discard question (4.2s)
+  ✓  22 [webkit-dark-desktop] › ui-migration/p42.browser.mjs:109:3 › P4.2 providers › engines: an account menu, its remove question and the pause dialog (5.0s)
+  ✓  23 [webkit-dark-desktop] › ui-migration/p42.browser.mjs:477:3 › P4.2 a pool on its own page › a Codex pool of one’s own: who can use it, its menus and questions (8.1s)
+  ✓  24 [webkit-dark-desktop] › ui-migration/p42.browser.mjs:718:3 › P4.2 a runner’s page › its menus, a workspace’s settings and the discard question (4.4s)
+  ✓  25 [webkit-dark-desktop] › ui-migration/p42.browser.mjs:109:3 › P4.2 providers › engines: an account menu, its remove question and the pause dialog (4.3s)
+  ✓  26 [webkit-dark-desktop] › ui-migration/p42.browser.mjs:477:3 › P4.2 a pool on its own page › a Codex pool of one’s own: who can use it, its menus and questions (7.9s)
+  ✓  27 [webkit-dark-desktop] › ui-migration/p42.browser.mjs:718:3 › P4.2 a runner’s page › its menus, a workspace’s settings and the discard question (4.5s)
+  ✓  28 [webkit-dark-desktop] › ui-migration/p42.browser.mjs:109:3 › P4.2 providers › engines: an account menu, its remove question and the pause dialog (4.9s)
+  ✓  29 [webkit-dark-desktop] › ui-migration/p42.browser.mjs:477:3 › P4.2 a pool on its own page › a Codex pool of one’s own: who can use it, its menus and questions (7.8s)
+  ✓  30 [webkit-dark-desktop] › ui-migration/p42.browser.mjs:718:3 › P4.2 a runner’s page › its menus, a workspace’s settings and the discard question (4.4s)
+
+  30 passed (3.3m)
+exit=0
+load: 23.02 29.13 34.10 14/5607 39477
+ended: 2026-10-08T12:11:22Z

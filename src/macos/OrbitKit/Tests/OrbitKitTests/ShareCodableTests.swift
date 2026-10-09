@@ -117,8 +117,26 @@ final class ShareCodableTests: XCTestCase {
     }
 
     func testEachKindAnswersUnderItsOwnPath() {
-        XCTAssertEqual(ShareRootKind.allCases.map(\.pathSegment), ["sessions", "tasks", "projects"])
-        XCTAssertEqual(ShareRootKind.allCases.map(\.rawValue), ["SESSION", "TASK", "PROJECT"])
+        XCTAssertEqual(ShareRootKind.allCases.map(\.pathSegment), ["sessions", "tasks", "projects", "wiki/spaces"])
+        XCTAssertEqual(ShareRootKind.allCases.map(\.rawValue), ["SESSION", "TASK", "PROJECT", "WIKI"])
+    }
+
+    /// A wiki link (share-links §10): its one layer, its root's slug — and no status — and what its
+    /// dialog counts.
+    func testAWikiLinkAndItsCountsDecode() throws {
+        let read = try decode(ShareLinkRead.self, """
+            {"link":{"id":"L5","kind":"WIKI","token":"WikiToken","include":{"footnotes":false},"expiresAt":null,
+             "revokedAt":null,"viewCount":3,"lastViewedAt":null,"createdAt":"2026-10-07T04:00:00.000Z",
+             "updatedAt":"2026-10-07T04:00:00.000Z","state":"ACTIVE","stateReason":null,
+             "root":{"id":"w1","publicId":"w1","title":"orbit","slug":"orbit"}},
+             "counts":{"documents":12,"footnotes":486}}
+            """)
+        let link = try XCTUnwrap(read.link)
+        XCTAssertEqual(link.kind, .wiki)
+        XCTAssertEqual(link.include[.footnotes], false)
+        XCTAssertEqual(link.root.slug, "orbit")
+        XCTAssertNil(link.root.status)
+        XCTAssertEqual(read.counts, ShareCounts(documents: 12, footnotes: 486))
     }
 
     // MARK: the session detail's token

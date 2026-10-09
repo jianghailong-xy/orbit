@@ -59,8 +59,9 @@ func assertCodexOrbitMCPContextForwarded(t *testing.T, args []string) {
 	// constant with itself would assert nothing. Adding a name here is meant to be
 	// a deliberate edit, because Codex hands its MCP servers this ALLOWLIST instead
 	// of its own environment — a variable the spawn sets but this list omits simply
-	// never arrives (ORBIT_BG_SOCKET/ORBIT_BG_TOKEN are on it for that reason).
-	want := `mcp_servers.orbit.env_vars=["ORBIT_HOME","ORBIT_SESSION_ID","ORBIT_AGENT_ID","ORBIT_TASK_ID","ORBIT_ALLOW_ORCHESTRATION","ORBIT_WATCHES","ORBIT_WIKI","ORBIT_MCP_PERMISSION_PROMPT","ORBIT_BG_SOCKET","ORBIT_BG_TOKEN"]`
+	// never arrives (ORBIT_BG_SOCKET/ORBIT_BG_TOKEN are on it for that reason, and a managed runner's
+	// instance identity, without which its control plane refuses the credential `orbit mcp` uses).
+	want := `mcp_servers.orbit.env_vars=["ORBIT_HOME","ORBIT_SESSION_ID","ORBIT_AGENT_ID","ORBIT_TASK_ID","ORBIT_ALLOW_ORCHESTRATION","ORBIT_WATCHES","ORBIT_WIKI","ORBIT_MCP_PERMISSION_PROMPT","ORBIT_BG_SOCKET","ORBIT_BG_TOKEN","ORBIT_MANAGED_RUNNER_GENERATION","ORBIT_MANAGED_RUNNER_POD_UID"]`
 	for i, arg := range args {
 		if arg == want {
 			if i == 0 || args[i-1] != "-c" {
@@ -82,6 +83,28 @@ func TestCodexAppServerArgsForwardOrbitMCPContext(t *testing.T) {
 	job := &ClaimedSession{Agent: AgentExecConfig{Model: "gpt-5.5"}}
 	args := codexAppServerCommandArgs(job, "/tmp/codex-state", "/usr/local/bin/orbit")
 	assertCodexOrbitMCPContextForwarded(t, args)
+}
+
+// A session's tools come from Orbit, not from the account signed in on the runner: both spawn paths
+// turn Codex's plugins off, which is what keeps the account's remote plugin installs — plugin skills
+// in the model's prompt, and the connectors ("Apps") that arrive as the codex_apps MCP — out of every
+// session. See codexPluginsOffConfig for what was measured against the installed CLI.
+func TestCodexSpawnArgsTurnAccountPluginsOff(t *testing.T) {
+	job := &ClaimedSession{Agent: AgentExecConfig{Model: "gpt-5.5"}}
+	for name, args := range map[string][]string{
+		"exec":       codexExecCommandArgs(job, "/repo", "/tmp/uploads", nil, "/usr/local/bin/orbit"),
+		"app-server": codexAppServerCommandArgs(job, "/tmp/codex-state", "/usr/local/bin/orbit"),
+	} {
+		carried := false
+		for i, arg := range args {
+			if arg == codexPluginsOffConfig && i > 0 && args[i-1] == "-c" {
+				carried = true
+			}
+		}
+		if !carried {
+			t.Errorf("%s args do not carry %q as a -c value: %v", name, codexPluginsOffConfig, args)
+		}
+	}
 }
 
 func TestCodexAppServerThreadParams(t *testing.T) {

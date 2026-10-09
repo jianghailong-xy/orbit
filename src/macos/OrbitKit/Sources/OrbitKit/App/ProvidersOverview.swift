@@ -1,30 +1,25 @@
 import Foundation
 
-/// Settings → Providers on iOS: where the account's models come from — the web's Providers page in
-/// its own three groups and words (`SettingsCopyParityTests` reads them back out of the web source).
-/// Adding or editing a key stays on the web; signing an engine in is a runner's page, which each
-/// runner row here opens; a pool's row opens the pool's page, where a shared pool is run from.
+/// The Infrastructure page's Account pools and API keys (`Infrastructure` has the rest of it), in the
+/// web page's words (`SettingsCopyParityTests` reads them back out of the web source). Adding or
+/// editing a key stays on the web; a pool's row opens the pool's page, where a shared pool is run from.
 public enum ProvidersOverview {
-    public static let onYourRunners = "On your runners"
-    public static let onYourRunnersDetail = "Use subscriptions signed in on your machines."
     public static let accountPools = "Account pools"
     public static let accountPoolsDetail = "Several accounts under one name."
-    public static let apiKeys = "Your API keys"
-    public static let apiKeysDetail = "On your account and usable from every runner — billed per token."
+    public static let apiKeys = "API keys"
+    public static let apiKeysDetail = "On your account and usable from every machine — billed per token."
     public static let noKeys = "No keys yet"
     public static let editOnWeb = "Adding or changing a key happens on the web."
     /// A pool's page when the pool has gone — deleted, or left — as the web page says it.
     public static let poolGone = "That pool no longer exists."
+    /// A key's page when the key has gone, as the web's edit page says it.
+    public static let keyGone = "That provider no longer exists."
 
-    /// A runner's line: how many of its engines are signed in (web's `summaryOf`, counted over the
-    /// engines the page lists), and first that it is offline when it is — the machine can't take
-    /// work then, whatever its engines say.
-    public static func runnerSummary(_ runner: Runner) -> String {
-        guard let engines = runner.engines else { return "Engines not reported" }
-        let all = LoginEngine.allCases.filter { $0 != .antigravity || runner.antigravity?.googleLogin == .available }
-        let ready = all.filter { engine in engines.contains { $0.engine == engine.rawValue && $0.signedIn } }.count
-        let line = ready == all.count ? "All signed in" : "\(ready) of \(all.count) signed in"
-        return runner.online == true ? line : "Offline · \(line)"
+    /// The line under a key's name: its default model — or, for a DeepSeek Harness key, whose models
+    /// come from the runtime itself and which has no default, where it runs.
+    public static func keyLine(_ key: ConfiguredProvider) -> String? {
+        if let model = key.defaultModel, !model.isEmpty { return model }
+        return key.runtime == "dsh" ? "Runs on DeepSeek Harness" : nil
     }
 
     /// A pool of Claude keys' value: why nothing in it can run, when that is so; otherwise how many of its

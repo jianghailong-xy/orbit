@@ -21,8 +21,10 @@ import { PrismaService } from '../prisma/prisma.service';
 import type { UploadedFile } from '../attachments/attachments.media';
 import { AVATAR_MAX_BYTES, readAvatar } from './avatar';
 import { UpdatePreferencesDto, UpdateProfileDto } from './dto';
+import { SIGN_IN_METHODS_SELECT, signInMethodsOf } from './sign-in-methods';
 
-/** What every answer about one's own account reads: the account, and when its photo was set. */
+/** What every answer about one's own account reads: the account, when its photo was set, and how
+ *  it signs in. */
 const ME_SELECT = {
   id: true,
   email: true,
@@ -31,13 +33,18 @@ const ME_SELECT = {
   preferences: true,
   role: true,
   avatar: { select: { updatedAt: true } },
+  ...SIGN_IN_METHODS_SELECT,
 } satisfies Prisma.UserSelect;
 
 /** The account as `me` answers with it. `avatarUpdatedAt` is the photo's version — what a client
- *  fetches and caches it by — and null while the account has none. */
-function asMe<T extends { avatar?: { updatedAt: Date } | null }>(account: T) {
-  const { avatar, ...rest } = account;
-  return { ...rest, avatarUpdatedAt: avatar?.updatedAt ?? null };
+ *  fetches and caches it by — and null while the account has none. `signInMethods` says whether it
+ *  has a password and which Google account it is linked to (docs/google-sign-in-design.md §6); the
+ *  password hash it is read from is not answered. */
+function asMe<T extends { avatar?: { updatedAt: Date } | null; passwordHash: string | null; identities: Array<{ email: string }> }>(
+  account: T,
+) {
+  const { avatar, passwordHash, identities, ...rest } = account;
+  return { ...rest, avatarUpdatedAt: avatar?.updatedAt ?? null, signInMethods: signInMethodsOf({ passwordHash, identities }) };
 }
 
 @PatForbidden('ACCOUNT')
@@ -143,6 +150,7 @@ export class UsersController {
     if (dto.notifyAgentMessage !== undefined) merged.notifyAgentMessage = dto.notifyAgentMessage;
     if (dto.enableOrchestration !== undefined) merged.enableOrchestration = dto.enableOrchestration;
     if (dto.modelRouting !== undefined) merged.modelRouting = dto.modelRouting;
+    if (dto.promptSuggestions !== undefined) merged.promptSuggestions = dto.promptSuggestions;
     return asMe(await this.prisma.user.update({
       where: { id: user.userId },
       data: { preferences: merged as Prisma.InputJsonValue },

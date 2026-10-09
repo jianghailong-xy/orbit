@@ -83,6 +83,9 @@ export const RUNNER_ENGINE_SIGNED_OUT = 'Signed out';
 export const RUNNER_ENGINE_NOT_INSTALLED = 'Not installed';
 export const RUNNER_ENGINE_UP_TO_DATE = 'up to date';
 export const RUNNER_ENGINE_NO_QUOTA = 'No quota reported';
+/** A Kimi login whose plan carries no quota limit: its quota was read and held no window at all —
+ *  not a read that failed or never ran (RUNNER_ENGINE_NO_QUOTA). */
+export const RUNNER_ENGINE_NO_QUOTA_LIMIT = 'No quota limit';
 export const RUNNER_SIGN_IN = 'Sign In';
 export const RUNNER_UPDATE_ENGINES_NOW = 'Update Engines Now';
 export const RUNNER_REFRESH_MODEL_LISTS = 'Refresh Model Lists';
@@ -90,6 +93,20 @@ export const RUNNER_ENGINES_FOOTER =
   'Orbit keeps these CLIs updated every 30 min. Sign-ins live on this machine — a session spends ' +
   'that subscription, nothing to paste.';
 export const RUNNER_ENGINES_OFFLINE_FOOTER = 'Signing in and updating need the runner online.';
+
+/** Under a signed-in account whose login lapses within three days — when Claude Code itself starts
+ *  warning ("Your login expires in 3 days · run /login to renew") — with the button that signs it in
+ *  again before it does. */
+export const RUNNER_ENGINE_RENEW = 'Renew';
+export function runnerEngineLoginExpires(count: number, unit: string): string {
+  return `Login expires in ${count} ${unit}`;
+}
+/** Under a signed-out account: what its being signed out costs. */
+export const RUNNER_ENGINE_ACCOUNT_SIGNED_OUT_NOTE = 'Sessions can’t use this account until you sign in again.';
+/** The same, for an engine's only account on that machine. */
+export function runnerEngineSignedOutAlone(engine: string): string {
+  return `Sessions on this runner can’t use ${engine} until you sign in again.`;
+}
 
 export function runnerEnginesChecked(when: string): string {
   return `Checked ${when}`;
@@ -102,6 +119,11 @@ export function runnerEnginesReported(when: string): string {
 
 export function runnerEngineAccountsSignedIn(count: number): string {
   return `${count} accounts signed in`;
+}
+
+/** Above an engine's quota while it has several accounts: the one a new session starts on. */
+export function runnerEngineNext(account: string): string {
+  return `Next: ${account}`;
 }
 
 export function runnerEngineUpdateFailed(version: string, when: string): string {
@@ -127,12 +149,21 @@ export const RUNNER_ABOUT_RUNS_AS = 'Runs As';
 export const RUNNER_ABOUT_REPOS_FOLDER = 'Repos Folder';
 export const RUNNER_ABOUT_LAST_CHECK_IN = 'Last Check-in';
 export const RUNNER_ABOUT_REGISTERED = 'Registered';
+/** The last update the runner installed into itself: when, and from which version to which. */
+export const RUNNER_ABOUT_LAST_UPDATE = 'Last Update';
 export const RUNNER_VERSION_LATEST = 'Latest';
 /** Behind the latest release on a runner that replaces itself: it waits for an idle moment. */
 export const RUNNER_VERSION_INSTALLS_WHEN_IDLE = 'installs when no turn is running';
+/** Behind the latest release because its staged rollout hasn't reached this runner. */
+export const RUNNER_VERSION_NOT_ROLLED_OUT = 'not rolled out to it yet';
 export const RUNNER_RUNS_AS_ROOT = 'root';
 export const RUNNER_RUNS_AS_REGULAR_USER = 'regular user';
 export const RUNNER_ROOT_NO_BYPASS = 'Runs as root, so sessions here can’t use Bypass permissions.';
+
+/** Last Update's versions: `0.1.217 → 0.1.218`. */
+export function runnerUpdatedFromTo(from: string, to: string): string {
+  return `${from} → ${to}`;
+}
 
 // MARK: Rotate Token / Remove Runner
 
@@ -308,6 +339,47 @@ export const RUNNER_UPGRADE_COMMAND = 'sudo orbit upgrade';
 
 export function attentionCantUpdateItselfDetail(version: string, latest: string, command: string): string {
   return `It runs as a regular user, so it can’t replace its own binary — still on ${version}, latest is ${latest}. On that machine, run ${command}.`;
+}
+
+// MARK: Needs Attention — the runner reports why it isn't updating itself
+
+/** dirNotWritable: both the list's short line and the card's title. */
+export const ATTENTION_INSTALL_FOLDER_NOT_WRITABLE = 'Install folder isn’t writable';
+/** The folder, when the runner didn't say which. */
+export const RUNNER_INSTALL_FOLDER = 'its install folder';
+/** disabledByEnv: both the list's short line and the card's title. */
+export const ATTENTION_UPDATES_TURNED_OFF = 'Updates are turned off';
+/** disabledByEnv with no reason given. */
+export const ATTENTION_UPDATER_OFF = 'Its updater is switched off';
+/** After a disabledByEnv reason that names ORBIT_NO_SELFUPDATE, the one reason that is a switch. */
+export const ATTENTION_UPDATES_TURN_ON =
+  'To turn them back on, remove ORBIT_NO_SELFUPDATE from the runner’s environment and restart it — ' +
+  'on a Mac, opening the latest Orbit app does this.';
+/** failed: both the list's short line and the card's title. */
+export const ATTENTION_RUNNER_UPDATE_FAILED = 'Runner update failed';
+/** failed with no reason given. */
+export const ATTENTION_UPDATE_DIDNT_GO_THROUGH = 'Its last update didn’t go through';
+export const RUNNER_UPDATE_RUNNER_NOW = 'Update Runner Now';
+export const RUNNER_UPDATE_RUNNER_REQUESTED =
+  'Checking for a runner release now — a new one installs once no turn is running.';
+
+export function attentionInstallFolderNotWritableDetail(
+  folder: string,
+  version: string,
+  latest: string,
+  command: string,
+): string {
+  return `It can’t write to ${folder}, so it can’t replace its own binary — still on ${version}, latest is ${latest}. On that machine, run ${command} once; after that it updates itself.`;
+}
+
+/** `reason` is the runner's own, capitalized: `ORBIT_NO_SELFUPDATE is set`, `Development build`. */
+export function attentionUpdatesTurnedOffDetail(reason: string, version: string, latest: string): string {
+  return `${reason}, so it doesn’t update itself — still on ${version}, latest is ${latest}.`;
+}
+
+/** `reason` is the runner's own words, capitalized. */
+export function attentionRunnerUpdateFailedDetail(reason: string, version: string, latest: string): string {
+  return `${reason}. Still on ${version}, latest is ${latest}. It retries every 10 min — Update Runner Now tries again right away.`;
 }
 
 // MARK: Needs Attention — an engine CLI has stopped being kept current

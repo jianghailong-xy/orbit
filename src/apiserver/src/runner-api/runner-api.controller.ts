@@ -41,18 +41,25 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { CreatorType, Prisma, RunStatus, TaskStatus } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { PLAN_USAGE_CAS_ATTEMPTS, storeHeartbeatPlanUsage } from './codex-reset-plan-usage';
-import { accountAfterUsageLimit, accountSwitchNotice, runAccount } from '../providers/plan-usage-accounts';
-import { CLAUDE_ACCOUNT_MOVE_V1, CODEX_ACCOUNT_MOVE_V1 } from '../providers/account-move-capability';
+import { accountAfterUsageLimit, accountAfterUsageLimitAt, accountSwitchNotice, runAccount } from '../providers/plan-usage-accounts';
+import {
+  ANTIGRAVITY_ACCOUNT_LOGIN_V1,
+  CLAUDE_ACCOUNT_MOVE_V1,
+  CODEX_ACCOUNT_MOVE_V1,
+  KIMI_ACCOUNT_MOVE_V1,
+} from '../providers/account-move-capability';
 import { accountEnvVar } from '../providers/account';
-import { sessionAccountPausedUntil } from '../providers/plan-usage-accounts';
+import { sessionAccountPausedUntil, type WorkspaceAccountChoices } from '../providers/plan-usage-accounts';
 import { dispatchCodexResetCommand, receiveCodexResetResult } from './codex-reset-relay';
 import {
   INTEGRATION_RESULT_REFUSAL_STATUS,
   IntegrationJobRefused,
   IntegrationJobRelay,
 } from './integration-job-relay';
+import { WikiRepoOpRefused, WikiRepoOps, WIKI_REPO_OP_REFUSAL_STATUS } from '../wiki-worker/wiki-repo-ops';
 import {
   AgentProvider,
+  openCodeKeyOf,
   AgentExecConfig,
   ActivateTurnLeasesRequest,
   ArtifactResultRequest,
@@ -95,6 +102,7 @@ import {
   CodexAccountRemoveResult,
   InstallCommand,
   InstallResult,
+  KIMI_LOGIN_REGION_V1,
   LoginCommand,
   LoginEngine,
   LoginResult,
@@ -120,6 +128,11 @@ import {
   TurnAttachment,
   TurnCompleteRequest,
   WIKI_MAINTENANCE_RUN_V1,
+  type WikiRepoOpCommand,
+  type WikiRepoOpFragmentRequest,
+  type WikiRepoOpProgressRequest,
+  type WikiRepoOpResultRequest,
+  type WikiRepoOpResultResponse,
   WorktreesRemovableRequest,
   WorktreesRemovableResponse,
   gracefulEndStatus,
@@ -131,6 +144,9 @@ import {
   fastModeAvailable,
   type CodexRateLimitResetResultRequest,
   type RunnerModelCatalog,
+  isAccountEngine,
+  withEnginePlanUsage,
+  type AccountEngine,
 } from '@orbit/shared';
 import { lastProviderByWorkspace, withProviderSeed } from '../workspaces/workspace-provider';
 import { generateToken, generateUserCode, sha256 } from '../common/crypto.util';
@@ -201,8 +217,12 @@ import {
   postWorkNotOnBranchComment,
   reclaimStalledTask,
 } from '../tasks/reclaim-stalled-task';
-import { readDispatchRefusal, recordDispatchRefusal } from '../tasks/task-dispatch-refusal';
-import { CurrentRunner } from './current-runner.decorator';
+import {
+  raiseSourceUnresolvedBlocker,
+  readDispatchRefusal,
+  recordDispatchRefusal,
+} from '../tasks/task-dispatch-refusal';
+import { CurrentManagedRunnerInstance, CurrentRunner } from './current-runner.decorator';
 import { reclaimRuntimeIds } from './reclaim-runtime';
 import {
   RUNTIME_STARTED_EVENT_TYPES,
@@ -277,12 +297,20 @@ import {
   withSessionReplies,
   withTaskStart,
 } from './control-plane-note';
-import { accountPoolRuntime, isBuiltinProvider, resolveProviderExec } from '../providers/custom-provider';
+import {
+  accountPoolRuntime,
+  adminOnlyProviderRefusal,
+  isBuiltinProvider,
+  openCodeKeyRows,
+  resolveProviderExec,
+  usableProviderScope,
+} from '../providers/custom-provider';
 import { runtimeInitSessionId } from './runtime-init';
 import { bgLaunchConfirmed, bgLaunchKind } from './bg-launch-receipt';
 import { enginePhaseAfter, enginePhaseSinceAfter, engineTurnActiveAfter } from './engine-turn';
 import { hasSessionActivity } from './session-activity';
 import { stripNul } from './strip-nul';
+import { SessionNamingDto } from './session-naming';
 import { normalizeToolOutputEvent } from './tool-output';
 import {
   deriveTaskCompletionStatus,
@@ -303,14 +331,16 @@ import {
   NON_REPLAYABLE_EVENT_TYPES,
   replayableEventSql,
 } from '../common/system-noise';
-import { isInstallEngine, isLoginEngine, sanitizeRunnerEngines } from '../common/runner-engines';
+import { isInstallEngine, isKimiRegion, isLoginEngine, sanitizeRunnerEngines } from '../common/runner-engines';
 import { antigravityGoogleLoginRefusal, antigravitySignInUnderWay } from '../common/antigravity-readiness';
 import { RUNNER_OS_HEADER, withRunnerOs } from '../common/runner-platform';
 import { loginCodeRelay } from '../runners/login-code-relay';
 import { readRunnerRepoHealth, sanitizeRunnerRepoHealth } from '../common/runner-repo-health';
+import { sanitizeRunnerSelfUpdate } from '../common/runner-self-update';
 import { sanitizeRuntimeDefaultModels } from '../common/runtime-model';
 import { ALWAYS_ALLOWED_TOOLS, resolvePermissionMode } from '../common/permission-mode';
 import { orchestrationEnabled } from '../common/orchestration-switch';
+import { claimPromptSuggestions } from '../common/prompt-suggestions-switch';
 import {
   AUTO_ALLOWED_MESSAGE,
   dispatchAllowedTools,
@@ -323,6 +353,7 @@ import {
   retireSessionInboxGeneration,
 } from '../common/session-inbox-fence';
 import {
+  ADMIN_ONLY_PROVIDER_ERROR,
   ADVERTISED_RUNTIMES,
   DSH_RUNNER_UPGRADE_ERROR,
   PROVIDER_UNAVAILABLE_ERROR,
@@ -332,13 +363,15 @@ import {
   runnerAdvertisesProvider,
   withProviderDeclarations,
 } from './runner-provider-support';
-import { START_CARD_REVIEWS_MESSAGE, startCardReviewsCreate } from './unstarted-project-create';
+import { coordinatorCreateAllowedBy } from './unstarted-project-create';
 import {
   freezeSessionSourcePin,
   hasResolvedSource,
   sessionSourceSnapshot,
 } from '../projects/session-source';
 import { providerDispatchWhereOn, providerSlugsOn, sessionExecRuntime } from '../providers/custom-provider';
+import { refuseManagedRunnerDeletion } from '../managed-runners/managed-runner-delete';
+import { reauthorizeManagedRunnerInstance, type ManagedRunnerInstance } from '../managed-runners/managed-runner-instance';
 
 // Must stay >= the runner's own loginRelayTimeout (login.go): the runner kills its CLI at that
 // point, so anything still marked in-flight past this window has no process behind it.
@@ -440,7 +473,37 @@ export const CODEX_ACCOUNT_REMOVE_V1 = 'codex-account-remove/v1';
  *  a Claude account named by the control plane rather than the machine's one login. */
 export const CLAUDE_ACCOUNT_LOGIN_V1 = 'claude-account-login/v1';
 export const CLAUDE_ACCOUNT_REMOVE_V1 = 'claude-account-remove/v1';
-export { CLAUDE_ACCOUNT_MOVE_V1, CODEX_ACCOUNT_MOVE_V1 } from '../providers/account-move-capability';
+/** Antigravity's, the same two again: a runner that declares them signs in, and removes, a Google
+ *  account named by the control plane — its own Gemini directory — rather than its one Google sign-in. */
+export { ANTIGRAVITY_ACCOUNT_LOGIN_V1 } from '../providers/account-move-capability';
+export const ANTIGRAVITY_ACCOUNT_REMOVE_V1 = 'antigravity-account-remove/v1';
+/** Kimi Code's, the same two again: a runner that declares them signs in, and removes, a Kimi account
+ *  named by the control plane — its own KIMI_CODE_HOME, on the site the sign-in names — rather than the
+ *  machine's one Kimi login. */
+export const KIMI_ACCOUNT_LOGIN_V1 = 'kimi-account-login/v1';
+export const KIMI_ACCOUNT_REMOVE_V1 = 'kimi-account-remove/v1';
+export { CLAUDE_ACCOUNT_MOVE_V1, CODEX_ACCOUNT_MOVE_V1, KIMI_ACCOUNT_MOVE_V1 } from '../providers/account-move-capability';
+
+/** What a runner declares before it is handed a sign-in, or a removal, of a named account of each
+ *  engine that keeps accounts — and what that engine is called when it is too old to. */
+const ACCOUNT_LOGIN_CAPABILITY = {
+  codex: CODEX_ACCOUNT_LOGIN_V1,
+  claude: CLAUDE_ACCOUNT_LOGIN_V1,
+  antigravity: ANTIGRAVITY_ACCOUNT_LOGIN_V1,
+  kimi: KIMI_ACCOUNT_LOGIN_V1,
+} as const satisfies Record<AccountEngine, string>;
+const ACCOUNT_REMOVE_CAPABILITY = {
+  codex: CODEX_ACCOUNT_REMOVE_V1,
+  claude: CLAUDE_ACCOUNT_REMOVE_V1,
+  antigravity: ANTIGRAVITY_ACCOUNT_REMOVE_V1,
+  kimi: KIMI_ACCOUNT_REMOVE_V1,
+} as const satisfies Record<AccountEngine, string>;
+const ACCOUNT_ENGINE_LABEL = {
+  codex: 'Codex',
+  claude: 'Claude',
+  antigravity: 'Antigravity',
+  kimi: 'Kimi',
+} as const satisfies Record<AccountEngine, string>;
 /** Runner guarantees a durable compaction boundary before the next Claude top-level turn. */
 export const SESSION_CLAUDE_COORDINATOR_CONTEXT_V1 =
   'session-claude-coordinator-context-v1';
@@ -573,6 +636,19 @@ export function runnerSupportsCapability(
   );
 }
 
+/** The repository operations' refusal as a status (contract `repoOps`): 409 for a claim that was taken
+ *  over or a row already settled, 404 for one this runner cannot see, 400 for a body that is not a
+ *  result. Anything else is a real fault and is raised as it is, so it is logged as one. */
+function wikiRepoOpHttpError(error: unknown): unknown {
+  if (error instanceof WikiRepoOpRefused) {
+    return new HttpException(
+      { code: error.refusal, message: error.message },
+      WIKI_REPO_OP_REFUSAL_STATUS[error.refusal],
+    );
+  }
+  return error;
+}
+
 /**
  * An integration-job refusal as HTTP (contract §2.3): 409 for a claim that moved on or a job already
  * written down, 404 for one this runner cannot see, 400 for a body that is not a result. Anything
@@ -670,8 +746,8 @@ export type QuotaRetryTransaction = TransactionSurface<{ runner: ['findUnique'] 
 /** The retry plan reads the session, then hands the same transaction to the quota snapshot read. */
 export type RetryPlanTransaction = TransactionSurface<{ session: ['findUnique'] }> & QuotaRetryTransaction;
 
-/** A Codex usage limit reads the workspace too: whether it leaves the account to Orbit. */
-export type CodexUsageLimitTransaction = TransactionSurface<{ workspace: ['findUnique'] }> & QuotaRetryTransaction;
+/** A Codex or Kimi usage limit reads the workspace too: whether it leaves the account to Orbit. */
+export type UsageLimitTransaction = TransactionSurface<{ workspace: ['findUnique'] }> & QuotaRetryTransaction;
 
 @MachineProtocol()
 @Controller('runner')
@@ -760,6 +836,14 @@ export class RunnerApiController {
      * delivered after the reviewer's next completion, and its window runs out regardless.
      */
     @Optional() private readonly confirmationReviews?: OwnerConfirmationReviewService,
+    /**
+     * The heartbeat's half of the repository operations (contract `repoOps`, design §7). `@Optional()`
+     * for the same reason as everything else in this list: the specs that construct this controller
+     * directly pass none, and a required parameter would make every one of them a compile error about a
+     * queue they do not exercise. A control plane built without it simply hands no repository work out —
+     * the operations stay queued, and the space's health line says so.
+     */
+    @Optional() private readonly wikiRepoOps?: WikiRepoOps,
   ) {}
 
   /** `orbit register` — exchange a one-time enrollment token for a runner credential. */
@@ -791,8 +875,9 @@ export class RunnerApiController {
       status: 'ONLINE' as const,
       lastHeartbeatAt: new Date(),
     };
+    // Never a managed runner: its identity and credential belong to its mapping, not to a name.
     const existing = await this.prisma.runner.findFirst({
-      where: { ownerId, name: runnerName },
+      where: { ownerId, name: runnerName, managedRunner: { is: null } },
       orderBy: { enrolledAt: 'desc' },
     });
     const runner = existing
@@ -939,6 +1024,7 @@ export class RunnerApiController {
   @Post('deregister')
   @HttpCode(200)
   async deregister(@CurrentRunner() runner: { id: string }) {
+    await refuseManagedRunnerDeletion(this.prisma, runner.id);
     await this.prisma.runner.delete({ where: { id: runner.id } });
     return { ok: true };
   }
@@ -1017,6 +1103,12 @@ export class RunnerApiController {
         // ROOT_REFUSED_PERMISSION_MODES). Omitted by a runner too old to report it, which keeps
         // the stored value — NULL there means "never told us" and stays unrestricted.
         runsAsRoot: dto?.runsAsRoot ?? undefined,
+        // Where this runner's updates of itself stand. Written by every beat, and as NULL when the
+        // beat omits it: unlike `engines` or `repos`, absence is not "no news" but a binary that
+        // does not report it — an older release, or one a rollback put back — and the state a
+        // newer binary reported must not outlive it. A report this server can't read is NULL too.
+        selfUpdate:
+          (sanitizeRunnerSelfUpdate(dto?.selfUpdate) as unknown as Prisma.InputJsonValue | null) ?? Prisma.DbNull,
         // The directory this machine clones into, under which a workspace created from a git URL
         // gets its checkout. An empty string is treated as no report, exactly like the omission an
         // older runner sends: NULL here means "this machine never told us where it clones", and
@@ -1089,6 +1181,22 @@ export class RunnerApiController {
       if (claimed.length > 0) integrationJobs = claimed;
     } catch (error) {
       this.logger.warn(`runner ${runner.id}: integration jobs skipped this heartbeat (${(error as { code?: string })?.code ?? (error as Error)?.name})`);
+    }
+    // The repository operations this process has just claimed (contract `repoOps`, design §7). The
+    // same shape as the integration queue above and for the same reason — the claim is a
+    // compare-and-set on a row, so an operation named here is already RUNNING and is nobody else's —
+    // and on its own try, so a failure costs this beat's operations and not the heartbeat itself.
+    let wikiRepoOps: RunnerHeartbeatResponse['wikiRepoOps'];
+    try {
+      const claimed = (await this.wikiRepoOps?.dispatch({
+        runnerId: runner.id,
+        leaseOwner: heartbeatLeaseOwner,
+        draining: dto?.draining === true,
+        capabilities: reportedCapabilities,
+      })) ?? [];
+      if (claimed.length > 0) wikiRepoOps = claimed;
+    } catch (error) {
+      this.logger.warn(`runner ${runner.id}: repository operations skipped this heartbeat (${(error as { code?: string })?.code ?? (error as Error)?.name})`);
     }
     // An engine that was signed in and now isn't: tell the owner while it is still news, rather
     // than letting them find out from the next session that refuses to start. Only the yes -> no
@@ -1287,6 +1395,7 @@ export class RunnerApiController {
     let repoCleanupRequest: RunnerHeartbeatResponse['repoCleanupRequest'];
     let claudeHistoryRequest: RunnerHeartbeatResponse['claudeHistoryRequest'];
     let refreshModelCatalog: RunnerHeartbeatResponse['refreshModelCatalog'];
+    let checkSelfUpdate: RunnerHeartbeatResponse['checkSelfUpdate'];
     try {
       cancelSessionIds = await this.realtime.drainCancellations(runner.id);
       // Manual git mutations are fail-closed during rolling upgrades. A capable
@@ -1339,6 +1448,8 @@ export class RunnerApiController {
       // so a hiccup while draining it costs a heartbeat, where a hiccup IN it, drained earlier,
       // would have cost the directory listing behind it.
       refreshModelCatalog = await this.drainModelCatalogRefresh(runner.id);
+      // The same kind of request, kept on the row the same way, so it goes last beside it.
+      checkSelfUpdate = await this.drainSelfUpdateRequest(runner.id);
     } catch {
       // A transient DB hiccup shouldn't fail the heartbeat; all arrive next cycle.
     }
@@ -1361,6 +1472,7 @@ export class RunnerApiController {
       agentDirs,
       repoCleanupRequest,
       refreshModelCatalog,
+      checkSelfUpdate,
       // Only when a claim holds a command for this process: an older runner's response stays the shape
       // it always was, and a direct caller comparing responses sees no new key.
       ...(codexRateLimitResetRequest ? { codexRateLimitResetRequest } : {}),
@@ -1369,6 +1481,7 @@ export class RunnerApiController {
       ...(claudeHistoryRequest ? { claudeHistoryRequest } : {}),
       // Present only when this beat claimed something, for the same reason.
       ...(integrationJobs ? { integrationJobs } : {}),
+      ...(wikiRepoOps ? { wikiRepoOps } : {}),
     };
   }
 
@@ -1416,13 +1529,13 @@ export class RunnerApiController {
   @Post('integration-jobs/:jobId/result')
   @HttpCode(200)
   async integrationJobResult(
-    @CurrentRunner() runner: { id: string },
+    @CurrentRunner() runner: { id: string; ownerId?: string },
     @Param('jobId', PublicIdPipe) jobId: string,
     @Body() body: IntegrationJobResultRequest,
   ): Promise<IntegrationJobResultResponse> {
     let applied: Awaited<ReturnType<IntegrationJobRelay['applyResult']>>;
     try {
-      applied = await this.integrationQueue().applyResult(jobId, runner.id, body);
+      applied = await this.integrationQueue().applyResult(jobId, runner.id, body, runner.ownerId);
     } catch (error) {
       throw integrationJobHttpError(error);
     }
@@ -1461,6 +1574,102 @@ export class RunnerApiController {
     return applied.answer;
   }
 
+  /** The repository-operation queue, or the reason a request about one cannot be answered without it. */
+  private wikiRepoQueue(): WikiRepoOps {
+    if (!this.wikiRepoOps) {
+      throw new HttpException(
+        { code: 'WIKI_REPO_OP_QUEUE_UNAVAILABLE', message: 'this control plane runs no wiki repository queue' },
+        503,
+      );
+    }
+    return this.wikiRepoOps;
+  }
+
+  /**
+   * A claimed repository operation is still being worked on (contract `repoOps.routes.progress`): the lease
+   * renewal that keeps a long snapshot from being taken over, fenced on (leaseOwner, claimGeneration) and on
+   * the runner token. A process whose claim was taken over gets 409 STALE_CLAIM and stops, rather than
+   * renewing a row that is no longer its.
+   */
+  @UseGuards(RunnerAuthGuard)
+  @Post('wiki/repo-ops/:id/progress')
+  @HttpCode(200)
+  async wikiRepoOpProgress(
+    @CurrentRunner() runner: { id: string },
+    @Param('id', PublicIdPipe) opId: string,
+    @Body() body: WikiRepoOpProgressRequest,
+  ): Promise<{ accepted: true }> {
+    try {
+      await this.wikiRepoQueue().progress({
+        id: opId,
+        runnerId: runner.id,
+        leaseOwner: String(body?.leaseOwner ?? ''),
+        claimGeneration: Number(body?.claimGeneration ?? -1),
+      });
+    } catch (error) {
+      throw wikiRepoOpHttpError(error);
+    }
+    return { accepted: true };
+  }
+
+  /**
+   * One fragment of a snapshot too large for one request body (contract `repoOps.routes.fragments`). Fenced
+   * like the progress route; the fragments are staged on the operation and become the space's snapshot only
+   * when the result arrives and the whole payload checks out.
+   */
+  @UseGuards(RunnerAuthGuard)
+  @Post('wiki/repo-ops/:id/fragments')
+  @HttpCode(200)
+  async wikiRepoOpFragment(
+    @CurrentRunner() runner: { id: string },
+    @Param('id', PublicIdPipe) opId: string,
+    @Body() body: WikiRepoOpFragmentRequest,
+  ): Promise<{ accepted: true; received: number }> {
+    try {
+      const stored = await this.wikiRepoQueue().storeWikiRepoOpFragment({
+        id: opId,
+        runnerId: runner.id,
+        leaseOwner: String(body?.leaseOwner ?? ''),
+        claimGeneration: Number(body?.claimGeneration ?? -1),
+        index: Number(body?.index ?? -1),
+        total: Number(body?.total ?? 0),
+        sha: String(body?.sha ?? '').toLowerCase(),
+        content: typeof body?.content === 'string' ? body.content : '',
+      });
+      return { accepted: true, received: stored.received };
+    } catch (error) {
+      throw wikiRepoOpHttpError(error);
+    }
+  }
+
+  /**
+   * What one claimed repository operation came to (contract `repoOps.routes.result`).
+   *
+   * Everything a succeeded snapshot implies is written in the same transaction as the state — the payload
+   * becoming the space's snapshot, its staged fragments dropped — so a reader never sees a settled snapshot
+   * whose bytes are not all there. The notification that wakes the job waiting on it is written in that
+   * transaction too, and Postgres delivers it at COMMIT.
+   */
+  @UseGuards(RunnerAuthGuard)
+  @Post('wiki/repo-ops/:id/result')
+  @HttpCode(200)
+  async wikiRepoOpResult(
+    @CurrentRunner() runner: { id: string; ownerId?: string },
+    @Param('id', PublicIdPipe) opId: string,
+    @Body() body: WikiRepoOpResultRequest,
+  ): Promise<WikiRepoOpResultResponse> {
+    try {
+      return await this.wikiRepoQueue().applyWikiRepoOpResult({
+        id: opId,
+        runnerId: runner.id,
+        ownerId: runner.ownerId,
+        body,
+      });
+    } catch (error) {
+      throw wikiRepoOpHttpError(error);
+    }
+  }
+
   /**
    * What one claimed Codex rate-limit reset step came to (docs/codex-rate-limit-reset-contract.md §6.3,
    * §6.5): 200 with the receipt when the result was applied or restated a fact already recorded, and
@@ -1497,6 +1706,22 @@ export class RunnerApiController {
     const claimed = await this.prisma.runner.updateMany({
       where: { id: runnerId, modelCatalogRefreshAt: { not: null } },
       data: { modelCatalogRefreshAt: null },
+    });
+    return claimed.count > 0 ? true : undefined;
+  }
+
+  /**
+   * Whether this runner should check for a release of itself on this beat: the owner pressed
+   * Update Runner Now (RunnersService.requestSelfUpdate).
+   *
+   * Claimed, not redelivered, for drainModelCatalogRefresh's reason: the answer is the
+   * `selfUpdate` state later heartbeats carry — the new version, or `waitingForIdle` while a turn
+   * runs — so a redelivered request would re-run the check on every beat. The clear is the claim.
+   */
+  private async drainSelfUpdateRequest(runnerId: string): Promise<true | undefined> {
+    const claimed = await this.prisma.runner.updateMany({
+      where: { id: runnerId, selfUpdateRequestedAt: { not: null } },
+      data: { selfUpdateRequestedAt: null },
     });
     return claimed.count > 0 ? true : undefined;
   }
@@ -1745,6 +1970,7 @@ export class RunnerApiController {
         loginEngine: true,
         loginAccount: true,
         loginAccountName: true,
+        loginRegion: true,
         loginCode: true,
         loginAt: true,
       },
@@ -1779,24 +2005,28 @@ export class RunnerApiController {
     if (r.loginStatus === 'pending') {
       const account = r.loginAccount ?? undefined;
       const accountName = r.loginAccountName ?? undefined;
+      // Kimi's site, only ever stored for Kimi (RunnersService.startLogin) and handed over only for it.
+      const region = engine === 'kimi' && isKimiRegion(r.loginRegion) ? r.loginRegion : undefined;
       // A process that does not declare account sign-in for THIS engine would ignore the account
       // and sign in its machine's Default instead — replacing the very login this sign-in was meant
       // to leave alone. One engine's declaration says nothing about another's: a runner that has
       // signed in Codex accounts since the beginning has never signed in a Claude one.
-      const signsInAccounts = runnerSupportsCapability(
-        capabilities,
-        engine === 'claude' ? CLAUDE_ACCOUNT_LOGIN_V1 : CODEX_ACCOUNT_LOGIN_V1,
-      );
+      const accountEngine: AccountEngine = isAccountEngine(engine) ? engine : 'codex';
+      const signsInAccounts = runnerSupportsCapability(capabilities, ACCOUNT_LOGIN_CAPABILITY[accountEngine]);
       // Antigravity's Google sign-in is judged again on the process polling now — the relay it
       // declares and the OS it names — which the start (RunnersService.startLogin) could only
       // check against the last heartbeat's.
+      // A process that does not declare the site choice would ignore it and run a bare `kimi login`,
+      // which goes wherever the CLI decides — perhaps the very site the user just turned away from.
       const refusal =
         !signsInAccounts && (accountName || (account && account !== 'default'))
-          ? `This runner is too old to sign in another ${engine === 'claude' ? 'Claude' : 'Codex'} account — ` +
+          ? `This runner is too old to sign in another ${ACCOUNT_ENGINE_LABEL[accountEngine]} account — ` +
             'update it, then try again.'
-          : engine === 'antigravity'
-            ? antigravityGoogleLoginRefusal({ capabilities: withRunnerOs(parseRunnerCapabilities(capabilities) ?? [], osHeader) })
-            : null;
+          : region && !runnerSupportsCapability(capabilities, KIMI_LOGIN_REGION_V1)
+            ? 'This runner is too old to choose a Kimi site — update it, then try again.'
+            : engine === 'antigravity'
+              ? antigravityGoogleLoginRefusal({ capabilities: withRunnerOs(parseRunnerCapabilities(capabilities) ?? [], osHeader) })
+              : null;
       if (refusal) {
         await this.prisma.runner.update({
           where: { id: runnerId },
@@ -1811,13 +2041,18 @@ export class RunnerApiController {
         // Only when named, so a start for the runner's own login is the shape it always was.
         ...(account ? { account } : {}),
         ...(accountName ? { accountName } : {}),
+        ...(region ? { region } : {}),
       };
     }
     // Antigravity's code never touched the row: it is in this process's memory, bound to the attempt
     // it was pasted for, and this is the one heartbeat that hands it over (login-code-relay.ts).
     const heldCode =
       engine === 'antigravity' && r.loginStatus === 'awaiting_code' ? loginCodeRelay.take(runnerId, attempt) : undefined;
-    if (heldCode) return { action: 'code', engine, code: heldCode, attempt };
+    // With the account it is for, as the stored code below goes: a sign-in adding an Antigravity account
+    // runs in that account's own directory, and the runner routes the paste by account.
+    if (heldCode) {
+      return { action: 'code', engine, code: heldCode, attempt, ...(r.loginAccount ? { account: r.loginAccount } : {}) };
+    }
     if (r.loginStatus === 'awaiting_code' && r.loginCode) {
       await this.prisma.runner.update({
         where: { id: runnerId },
@@ -1883,14 +2118,14 @@ export class RunnerApiController {
     if (!account) return undefined;
     // A row written before accounts-per-engine meant Codex.
     const engine = (r.accountRemoveEngine as LoginCommand['engine']) ?? 'codex';
-    const capability = engine === 'claude' ? CLAUDE_ACCOUNT_REMOVE_V1 : CODEX_ACCOUNT_REMOVE_V1;
-    if (!runnerSupportsCapability(capabilities, capability)) {
+    const accountEngine: AccountEngine = isAccountEngine(engine) ? engine : 'codex';
+    if (!runnerSupportsCapability(capabilities, ACCOUNT_REMOVE_CAPABILITY[accountEngine])) {
       await this.prisma.runner.update({
         where: { id: runnerId },
         data: {
           codexAccountRemoveStatus: 'failed',
           codexAccountRemoveMessage:
-            `This runner is too old to remove a ${engine === 'claude' ? 'Claude' : 'Codex'} account — ` +
+            `This runner is too old to remove ${accountEngine === 'antigravity' ? 'an' : 'a'} ${ACCOUNT_ENGINE_LABEL[accountEngine]} account — ` +
             'update it, then try again.',
         },
       });
@@ -1929,7 +2164,7 @@ export class RunnerApiController {
   @HttpCode(200)
   async accountRemoveResult(@CurrentRunner() runner: { id: string }, @Body() body: AccountRemoveResult) {
     const engine = body?.engine;
-    if (engine !== 'codex' && engine !== 'claude') {
+    if (!isAccountEngine(engine)) {
       throw new BadRequestException('Unknown engine');
     }
     return this.applyAccountRemoveResult(runner.id, body, engine);
@@ -2137,6 +2372,8 @@ export class RunnerApiController {
     @Headers(RUNNER_CAPABILITIES_HEADER) capabilities?: string | string[],
     @Headers(RUNNER_PROVIDERS_HEADER) providerHeader?: string,
     @Res({ passthrough: true }) res?: Response,
+    /** A managed runner's authorized instance: the claim re-checks it where work is handed out. */
+    @CurrentManagedRunnerInstance() managedInstance?: ManagedRunnerInstance,
   ): Promise<ClaimedSession | null> {
     // The long poll outlives the request otherwise: a runner that stopped — a self-update re-exec, a
     // restart, its own claim timeout — leaves it waiting here, and the session it claims next is
@@ -2179,7 +2416,12 @@ export class RunnerApiController {
       await this.markSourceProtocolUnsupported(runner.id);
     }
     const job = await this.queue.claimSessionForRunner(
-      { id: runner.id, supportedProviders, ...(dshUnavailable ? { dshUnavailable } : {}) },
+      {
+        id: runner.id,
+        supportedProviders,
+        ...(dshUnavailable ? { dshUnavailable } : {}),
+        ...(managedInstance ? { managedInstance } : {}),
+      },
       LONG_POLL_MS,
       supportsTerminalHandoff,
       supportsSourcePin,
@@ -2362,8 +2604,9 @@ export class RunnerApiController {
       const declared = s.provider ?? null;
       // Custom provider borrows a built-in runtime — resolve the runner-facing provider, model,
       // and injected env so a resumed session keeps talking to the configured endpoint. Owner
-      // scope mirrors the claim path: a personal provider resolves only for its owner's sessions,
-      // and an account pool is rebuilt on the member the claim would choose, not the runner's login — a
+      // scope mirrors the claim path: a personal provider resolves only for its owner's sessions, a
+      // shared one only for an admin's (usableProviderScope), and an account pool is rebuilt on the
+      // member the claim would choose, not the runner's login — a
       // shared pool, or a Codex pool of the owner's own login, on the gateway with a token of its own, as
       // the claim builds it. A maintenance run, as on the claim, never through a pool.
       const declaredIsBuiltin = isBuiltinProvider(declared, s.providerBuiltin);
@@ -2372,7 +2615,7 @@ export class RunnerApiController {
         : ((await this.prisma.modelProvider.findFirst({
             where: {
               slug: declared!,
-              OR: [{ ownerId: null }, { ownerId: s.ownerId }],
+              ...(await usableProviderScope(this.prisma, s.ownerId)),
             },
           })) ??
           (maintenance
@@ -2380,17 +2623,28 @@ export class RunnerApiController {
             : ((await this.queue.resolveLoginPool(this.prisma, s, declared!)) ??
               (await this.queue.resolvePoolMember(this.prisma, s, declared!)) ??
               (await this.queue.resolveSharedPool(this.prisma, s, declared!)))));
-      if (!declaredIsBuiltin && (!customRow?.enabled
+      // As on the claim: a Claude pool of the owner's own that none of its members can run is rebuilt on
+      // the Claude default, as the line resolvePoolMember owed says; any other slug no enabled row holds
+      // is left out, unavailable.
+      const poolFallback = !declaredIsBuiltin && !customRow && !maintenance
+        && (await accountPoolRuntime(this.prisma, s.ownerId, declared!)) === AgentProvider.CLAUDE;
+      if (!declaredIsBuiltin && !poolFallback && (!customRow?.enabled
         || !['claude', 'codex', 'kimi', 'antigravity', 'dsh'].includes(customRow.runtime))) {
-        await this.markProviderUpgradeRequired(runner.id, { id: s.id }, PROVIDER_UNAVAILABLE_ERROR,
+        // The same sentence the queue holds it with (QueueService.pausedPendingSessions), or the two would
+        // take turns rewriting it.
+        const adminOnly = !customRow && await adminOnlyProviderRefusal(this.prisma, s.ownerId, declared!);
+        await this.markProviderUpgradeRequired(runner.id, { id: s.id },
+          adminOnly ? ADMIN_ONLY_PROVIDER_ERROR : PROVIDER_UNAVAILABLE_ERROR,
           s.status === RunStatus.PENDING ? [{ id: s.id, error: s.error }] : []);
         continue;
       }
+      const openCodeKeys = declared === AgentProvider.OPENCODE ? await openCodeKeyRows(this.prisma, s.ownerId) : undefined;
       const resolveExec = (sessionModel: string | null) =>
         resolveProviderExec({
-          declaredProvider: declared,
-          declaredProviderBuiltin: s.providerBuiltin,
+          declaredProvider: poolFallback ? AgentProvider.CLAUDE : declared,
+          declaredProviderBuiltin: poolFallback || s.providerBuiltin,
           customRow,
+          openCodeKeys,
           sessionModel,
           usesRuntimeDefaultModel: s.usesRuntimeDefaultModel,
           runtimeDefaultModels: s.assignedRunner?.runtimeDefaultModels,
@@ -2399,6 +2653,8 @@ export class RunnerApiController {
           workspaceEnv: workspace?.env as Record<string, string> | null,
           codexAccount: s.codexAccount ?? workspace?.codexAccount,
           claudeAccount: s.claudeAccount ?? workspace?.claudeAccount,
+          antigravityAccount: s.antigravityAccount ?? workspace?.antigravityAccount,
+          kimiAccount: s.kimiAccount ?? workspace?.kimiAccount,
           runnerEngines: s.assignedRunner?.engines,
         });
       let exec = resolveExec(s.model);
@@ -2465,6 +2721,15 @@ export class RunnerApiController {
         fastMode:
           s.fastMode &&
           fastModeAvailable(provider, exec.model, s.assignedRunner?.modelCatalog as RunnerModelCatalog | null),
+        // cf. the claim path: a reclaimed engine is spawned again, so it is asked again.
+        promptSuggestions: claimPromptSuggestions({
+          owner: s.owner,
+          provider,
+          runSource: s.runSource,
+          spawnDepth: s.spawnDepth,
+          maintenance,
+          env: exec.env,
+        }),
         // Per-session effort wins; otherwise use the workspace's effort setting.
         // Same dispatch-time variant check as the queue claim: an OpenCode variant is only
         // valid against the assigned runner's reported catalog for this model, and a configured
@@ -2549,7 +2814,11 @@ export class RunnerApiController {
    * The refusal is recorded INSIDE this transaction, on the door's own client, for the reason the
    * checkout's refusal is recorded in the finalize's: a refusal committed without its record is the
    * silent state this whole path exists to close, and the compare-and-set cannot be won twice, so
-   * nothing would ever come back to write the missing half.
+   * nothing would ever come back to write the missing half. Three halves, in fact, and all three are
+   * written here: the run itself is closed in the same transaction the refusal is frozen in
+   * (`freezeSessionSourcePin`, so a refused session never stays RUNNING with its claim held), the
+   * task records the refusal (`recordDispatchRefusal`), and the project gets the exception item that
+   * says its code line is unresolved (`raiseSourceUnresolvedBlocker`, SR50).
    */
   @UseGuards(RunnerAuthGuard)
   @Post('sessions/:id/source/pin')
@@ -2568,12 +2837,18 @@ export class RunnerApiController {
           dto,
         );
         if (frozen.refused) {
+          const at = new Date();
+          // The project's exception item FIRST, the task's record second, and the order is the lock
+          // order rather than a preference: this one writes a `project_blocker`, whose foreign key
+          // takes the project (rank 40) FOR KEY SHARE, and `recordDispatchRefusal` writes the task
+          // (rank 50). Taking 50 and then 40 is the cycle two transactions can deadlock on.
+          await raiseSourceUnresolvedBlocker(tx, frozen.refused, at);
           await recordDispatchRefusal(
             tx,
             frozen.refused.taskId,
             frozen.refused.run,
             { code: frozen.refused.code, reason: frozen.refused.reason },
-            new Date(),
+            at,
           );
         }
         return frozen;
@@ -2773,9 +3048,10 @@ export class RunnerApiController {
     // FOR UPDATE lock. A reclaim storm may call takeover-leases on the same session
     // hundreds of times per minute; each call would otherwise acquire a row lock that
     // starves the claim queue's FOR UPDATE SKIP LOCKED, preventing new PENDING
-    // sessions from ever being claimed.
-    const preflight = await this.prisma.session.findUnique({
-      where: { id: sessionId },
+    // sessions from ever being claimed. Read on this runner's sessions only, as the lock
+    // below is: a session of another runner is one this one has never heard of.
+    const preflight = await this.prisma.session.findFirst({
+      where: { id: sessionId, assignedRunnerId: runner.id },
       select: { inboxLeaseOwner: true, inboxLeaseGeneration: true, status: true, provider: true, providerBuiltin: true, ownerId: true },
     });
     const preflightRuntime = preflight ? await sessionExecRuntime(this.prisma, preflight) : undefined;
@@ -3031,11 +3307,16 @@ export class RunnerApiController {
      *  is the process that will actually execute the turn, and it may have been downgraded
      *  since. */
     @Headers(RUNNER_CAPABILITIES_HEADER) capabilities?: string | string[],
+    /** A managed runner's authorized instance, asked again before every later round of the poll. */
+    @CurrentManagedRunnerInstance() managedInstance?: ManagedRunnerInstance,
   ): Promise<RunInboxResponse> {
     const generation = parseLeaseGeneration(leaseGeneration);
     const declared = parseRunnerCapabilities(capabilities) ?? [];
     const deadline = Date.now() + INBOX_LONG_POLL_MS;
-    for (;;) {
+    for (let round = 0; ; round += 1) {
+      // The guard answered when the poll began; an instance fenced or superseded during it is
+      // refused before it is handed a turn (managed-runner-instance.ts).
+      if (managedInstance && round > 0) await reauthorizeManagedRunnerInstance(this.prisma, managedInstance);
       const turn = await this.dequeueTurn(
         sessionId,
         runner.id,
@@ -3270,7 +3551,7 @@ export class RunnerApiController {
       // The pause may have been requested after the claim but before inbox delivery. Only
       // executable work that has not started is held; control messages and the active turn stay.
       if (owned[0].status === RunStatus.RUNNING) {
-        if (owned[0].providerBuiltin && (owned[0].provider === 'codex' || owned[0].provider === 'claude')) {
+        if (owned[0].providerBuiltin && isAccountEngine(owned[0].provider)) {
           // Pause writes this same row. Hold the read until the lease commits, so a pause
           // either precedes this turn or waits for its delivery and lets that turn finish.
           await tx.$queryRaw`SELECT id FROM "runner" WHERE id = ${runnerId}::uuid FOR SHARE`;
@@ -3291,7 +3572,7 @@ export class RunnerApiController {
           const session = await tx.session.findUniqueOrThrow({
             where: { id: sessionId },
             include: {
-              workspace: { select: { env: true, codexAccount: true, claudeAccount: true } },
+              workspace: { select: { env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true } },
               assignedRunner: { select: { engines: true, accountPauses: true } },
             },
           });
@@ -3741,7 +4022,9 @@ export class RunnerApiController {
         usesRuntimeDefaultModel: true,
         codexAccount: true,
         claudeAccount: true,
-        workspace: { select: { model: true, env: true, codexAccount: true, claudeAccount: true } },
+        antigravityAccount: true,
+        kimiAccount: true,
+        workspace: { select: { model: true, env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true } },
         assignedRunner: { select: { runtimeDefaultModels: true, modelCatalog: true, engines: true } },
       },
     });
@@ -3751,16 +4034,24 @@ export class RunnerApiController {
       : ((await tx.modelProvider.findFirst({
           where: {
             slug: session.provider!,
-            OR: [{ ownerId: null }, { ownerId: session.ownerId }],
+            ...(await usableProviderScope(tx, session.ownerId)),
           },
         })) ??
         (await this.queue.resolveLoginPool(tx, session, session.provider!)) ??
         (await this.queue.resolvePoolMember(tx, session, session.provider!)) ??
         (await this.queue.resolveSharedPool(tx, session, session.provider!)));
+    // As on the claim: a Claude pool of the owner's own that none of its members can run re-spawns on
+    // the Claude default, as the line resolvePoolMember owed says; any other slug nothing holds is refused.
+    const poolFallback = !customRow && !isBuiltinProvider(session.provider, session.providerBuiltin)
+      && (await accountPoolRuntime(tx, session.ownerId, session.provider!)) === AgentProvider.CLAUDE;
     const exec = resolveProviderExec({
-      declaredProvider: session.provider,
-      declaredProviderBuiltin: session.providerBuiltin,
+      declaredProvider: poolFallback ? AgentProvider.CLAUDE : session.provider,
+      declaredProviderBuiltin: poolFallback || session.providerBuiltin,
       customRow,
+      openCodeKeys:
+        session.provider === AgentProvider.OPENCODE && openCodeKeyOf(session.model)
+          ? await openCodeKeyRows(tx, session.ownerId)
+          : undefined,
       sessionModel: session.model,
       usesRuntimeDefaultModel: session.usesRuntimeDefaultModel,
       runtimeDefaultModels: session.assignedRunner?.runtimeDefaultModels,
@@ -3769,6 +4060,8 @@ export class RunnerApiController {
       workspaceEnv: session.workspace?.env as Record<string, string> | null,
       codexAccount: session.codexAccount ?? session.workspace?.codexAccount,
       claudeAccount: session.claudeAccount ?? session.workspace?.claudeAccount,
+      antigravityAccount: session.antigravityAccount ?? session.workspace?.antigravityAccount,
+      kimiAccount: session.kimiAccount ?? session.workspace?.kimiAccount,
       runnerEngines: session.assignedRunner?.engines,
     });
     // A built-in engine authenticates itself, so moving onto one injects nothing — but the
@@ -3803,13 +4096,14 @@ export class RunnerApiController {
     // to re-answer a settled question. Recorded as a decided approval with no decider, which is
     // what makes an automatic allow tellable from a human one afterwards.
     const autoAllowed = existing ? false : await this.standingGrantCovers(session, dto);
-    // The same shape for a coordinator's task creates in a project nobody has started: the start
-    // card reviews them, so none of them is a question on its own (`unstarted-project-create.ts`).
+    // The same shape for a coordinator's task creates in its own project when nobody has started it
+    // (the start card reviews them) or its Automatic is on (the coordinator decides them): none of
+    // them is a question on its own (`unstarted-project-create.ts`).
     const allowedMessage = autoAllowed
       ? AUTO_ALLOWED_MESSAGE
-      : !existing && (await startCardReviewsCreate(this.prisma, session, dto.toolName, dto.input))
-        ? START_CARD_REVIEWS_MESSAGE
-        : null;
+      : existing
+        ? null
+        : await coordinatorCreateAllowedBy(this.prisma, session, dto.toolName, dto.input);
     // Which turn is asking. Derived here rather than sent by the runner: the MCP server knows only
     // its session, and the server already knows which turn it leased to that session — the runner
     // has been polling inside it since the dequeue. It is what makes an abandoned call provable
@@ -3934,7 +4228,7 @@ export class RunnerApiController {
     let runtime = normalizeRuntimeProvider(session.provider, session.providerBuiltin);
     if (!isBuiltinProvider(session.provider, session.providerBuiltin)) {
       const customRow = await this.prisma.modelProvider.findFirst({
-        where: { slug: session.provider!, OR: [{ ownerId: null }, { ownerId: session.ownerId }] },
+        where: { slug: session.provider!, ...(await usableProviderScope(this.prisma, session.ownerId)) },
         select: { runtime: true },
       });
       // A pool has no row of its own: a shared pool runs Codex.
@@ -4080,6 +4374,24 @@ export class RunnerApiController {
     );
   }
 
+  /**
+   * The title the engine running a session gave it, when its claim asked for one
+   * (ClaimedSession.naming, engineNamingJob). It lands only while the session still carries the title
+   * that claim did, so a rename made in the meantime stands; a miss is not an error.
+   */
+  @UseGuards(RunnerAuthGuard)
+  @Post('sessions/:id/naming')
+  @HttpCode(200)
+  async sessionNaming(
+    @CurrentRunner() runner: { id: string },
+    @Param('id', PublicIdPipe) sessionId: string,
+    @Body() dto: SessionNamingDto,
+  ): Promise<{ applied: boolean }> {
+    await this.assertSessionOwnership(sessionId, runner.id);
+    if (!this.sessions) throw new Error('SessionsService is unavailable');
+    return { applied: await this.sessions.applyEngineTitle(sessionId, stripNul(dto.replaces), stripNul(dto.title)) };
+  }
+
   /** A single interactive turn finished; retain or release its active-turn slot. */
   @UseGuards(RunnerAuthGuard)
   @Post('sessions/:id/turn-complete')
@@ -4156,10 +4468,12 @@ export class RunnerApiController {
           poolKeyId: true,
           poolCodexAccountId: true,
           model: true,
-          // Which of the runner's Codex accounts a turn its usage limit ended ran on, and whether it
-          // was picked by hand — see `codexUsageLimit` below.
+          // Which of the runner's Codex or Kimi accounts a turn its usage limit ended ran on, and
+          // whether it was picked by hand — see `usageLimit` below.
           codexAccount: true,
           codexAccountPinned: true,
+          kimiAccount: true,
+          kimiAccountPinned: true,
           // What the run still has of its own in flight, for the OWNER_CONFIRMED question below:
           // work that will report back and wake this session again, which is what makes a turn the
           // run ends not the end of the run (`runStoppedWorking`). Read with the row.
@@ -4525,18 +4839,27 @@ export class RunnerApiController {
       // codex_account_move.go); else it waits for this account's reset. A task's run too, as a Claude
       // one does (retryPlanFor): the retry this arms holds its task's failure back (retryPending
       // below), and the run goes on in its own checkout and thread rather than ending the attempt.
-      const codexUsageLimit =
+      //
+      // A built-in Kimi session the same way, on a runner that carries its conversation to another
+      // account (KIMI_ACCOUNT_MOVE_V1, runner kimi_account_move.go). Kimi's ACP answers a turn its
+      // usage limit ended as an ordinary end and says nothing of why; the runner reads the limit from
+      // the turn's own record and reports it as the turn's error, in the words this reads
+      // (kimi_acp.go kimiTurnUsageLimit).
+      const usageLimitEngine = current.provider === AgentProvider.CODEX
+        ? 'codex' as const
+        : current.provider === AgentProvider.KIMI ? 'kimi' as const : null;
+      const usageLimit =
         failSession
         && completedTurn?.kind === 'message'
         && current.retryAt == null
-        && current.provider === AgentProvider.CODEX
+        && usageLimitEngine
         && isUsageLimitErrorText(failureText)
-          ? await this.codexUsageLimitRetry(tx, runner.id, current, failureText!)
+          ? await this.usageLimitRetry(tx, runner.id, usageLimitEngine, current, failureText!)
           : null;
       const retryArmAt = keyRetryAt
         ? new Date(keyRetryAt.getTime() + Math.floor(Math.random() * QUOTA_RETRY_JITTER_MS))
-        : codexUsageLimit
-          ? codexUsageLimit.retryAt
+        : usageLimit
+          ? usageLimit.retryAt
           : unanswered && dto.numTurns === 0 && (dto.costUsd ?? 0) === 0 && current.retryAt == null
             ? nextAutoRetryAt(current.retryAttempts, new Date())
             : null;
@@ -4917,8 +5240,11 @@ export class RunnerApiController {
           ...(retryArmAt ? { retryAt: retryArmAt } : {}),
           // The account it moves to, and the line the next engine start carries into the transcript
           // (the events path attaches it, as it does a pool's).
-          ...(codexUsageLimit?.move
-            ? { codexAccount: codexUsageLimit.move.to, poolSwitchNotice: codexUsageLimit.move.notice }
+          ...(usageLimit?.move
+            ? {
+                ...(usageLimitEngine === 'kimi' ? { kimiAccount: usageLimit.move.to } : { codexAccount: usageLimit.move.to }),
+                poolSwitchNotice: usageLimit.move.notice,
+              }
             : {}),
           ...(acknowledgedCoordinatorContextKey
             ? { coordinatorContextAckKey: acknowledgedCoordinatorContextKey }
@@ -5101,7 +5427,7 @@ export class RunnerApiController {
         failSession,
         // What the STATUS below announces beside FAILED: a usage limit this turn armed is a retry
         // on its way, and the clients draw Retrying rather than Failed.
-        retryAt: codexUsageLimit?.retryAt ?? current.retryAt,
+        retryAt: usageLimit?.retryAt ?? current.retryAt,
         taskReclaimed,
         taskId: current.taskId,
         taskOwnerId: current.ownerId,
@@ -6047,7 +6373,7 @@ export class RunnerApiController {
         quotaSpent && accountEnvVar(current.provider) && current.workspaceId
           ? await tx.workspace.findUnique({
               where: { id: current.workspaceId },
-              select: { env: true, codexAccount: true, claudeAccount: true },
+              select: { env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true },
             })
           : null;
       // A pool credential that ended the run is waited out the same way, from the pool's rows rather than
@@ -6197,11 +6523,23 @@ export class RunnerApiController {
         // Genuine failure (not a user cancel): leave a note on the task explaining it. A run the
         // runner refused at its checkout never started, so its note is the refusal itself, recorded
         // on the task beside it — the generic note says to run the task again, which is the one
-        // thing that cannot help (tasks/task-dispatch-refusal.ts).
+        // thing that cannot help (tasks/task-dispatch-refusal.ts). The project's own exception item
+        // for the refusal is opened here too (SR50: a checkout refusal names an unresolved code line
+        // exactly as a resolution refusal does, and the project is where "work has stopped" is read).
         if (effectiveStatus === RunStatus.FAILED) {
           const refused = readDispatchRefusal(dto.error, current);
           if (refused) {
-            await recordDispatchRefusal(tx, current.taskId, current, refused, new Date());
+            const at = new Date();
+            // The project's item FIRST, the task's record second, and the order is the lock order
+            // rather than a preference: this one writes a `project_blocker`, whose foreign key takes
+            // the project (rank 40) FOR KEY SHARE, and `recordDispatchRefusal` writes the task
+            // (rank 50). Cf. `pinSessionSource`, whose refusal records the same two halves.
+            await raiseSourceUnresolvedBlocker(
+              tx,
+              { taskId: current.taskId, code: refused.code, run: current },
+              at,
+            );
+            await recordDispatchRefusal(tx, current.taskId, current, refused, at);
             dispatchRefused = true;
           } else {
             await postRunFailureComment(tx, current.taskId, dto.error || dto.result || 'run failed');
@@ -6364,7 +6702,7 @@ export class RunnerApiController {
   @UseGuards(RunnerAuthGuard)
   @Post('sessions/worktrees-removable')
   async worktreesRemovable(
-    @CurrentRunner() runner: { id: string },
+    @CurrentRunner() runner: { id: string; ownerId?: string },
     @Body() dto: WorktreesRemovableRequest,
   ): Promise<WorktreesRemovableResponse> {
     const ids = (dto.ids ?? []).slice(0, 1000);
@@ -6374,6 +6712,10 @@ export class RunnerApiController {
       ? await this.prisma.session.findMany({
           where: {
             id: { in: valid },
+            // Only the runner's own account's sessions are kept: a checkout no session of that
+            // account names is leftover, whatever another account's session of that id is doing —
+            // and what another account's session is doing is not this runner's to learn.
+            ...(runner.ownerId !== undefined ? { ownerId: runner.ownerId } : {}),
             completedAt: null,
             archivedAt: null,
             deletedAt: null,
@@ -6926,8 +7268,9 @@ export class RunnerApiController {
    * self-healing failures is the entire reply.
    *
    * Three outcomes:
-   *  - an exhausted quota → arm for the moment it resets (below), leaving the attempt count
-   *    alone: the sweeper counts against it while the snapshot keeps reporting the quota spent.
+   *  - an exhausted quota → arm for the moment it resets, or another account frees up first
+   *    (below), leaving the attempt count alone: the sweeper counts against it while the snapshot
+   *    keeps reporting the quota spent.
    *  - a transient provider error → arm for one backoff step out, or hand back once the steps
    *    are spent. A task's run is armed like any other. Resuming this session keeps its checkout
    *    and its conversation, where the task's own retry starts a new session from nothing — and
@@ -6970,10 +7313,12 @@ export class RunnerApiController {
         codexAccount: true,
         claudeAccount: true,
         claudeAccountPinned: true,
+        // The Kimi account the run spent, whose quota alone says when it frees up (quotaRetryAt).
+        kimiAccount: true,
         poolSwitchNotice: true,
         poolCodexAccountId: true,
         poolKeyId: true,
-        workspace: { select: { env: true, codexAccount: true, claudeAccount: true } },
+        workspace: { select: { env: true, codexAccount: true, claudeAccount: true, kimiAccount: true } },
       },
     });
     if (!session) return {};
@@ -7007,6 +7352,12 @@ export class RunnerApiController {
     // carries the conversation across (CLAUDE_ACCOUNT_MOVE_V1). A task's run too: it is armed like any
     // other session (above), and left on the spent account it waited for the reset while another had
     // room — on 2026-10-02, 36 minutes for a 5-hour window, with Default at 1%.
+    //
+    // With no other account to move to, it waits for the first account to free up, this one or another
+    // (accountAfterUsageLimitAt), and the retry's dispatch moves it there. Armed for this account's reset
+    // alone, it waited out a weekly limit beside an account whose 5 hours came back the same evening —
+    // on 2026-10-08, a coordinator was armed five days out.
+    let elsewhere: Date | null = null;
     if (session.provider === AgentProvider.CLAUDE) {
       const runner = await tx.runner.findUnique({
         where: { id: runnerId },
@@ -7030,29 +7381,43 @@ export class RunnerApiController {
           poolSwitchNotice: accountSwitchNotice('claude', move, runner),
         };
       }
+      elsewhere = runner?.capabilities.includes(CLAUDE_ACCOUNT_MOVE_V1)
+        ? accountAfterUsageLimitAt(
+            'claude',
+            { account: session.claudeAccount, pinned: session.claudeAccountPinned },
+            session.workspace,
+            runner.engines,
+            runner.planUsage,
+            new Date(),
+            runner.accountPauses,
+          )
+        : null;
     }
     if (!delivered) return {};
-    const at = await this.quotaRetryAt(tx, runnerId, session, text, session.workspace);
+    const at = await this.quotaRetryAt(tx, runnerId, session, text, session.workspace, elsewhere);
     // No defensible moment → leave any earlier arming standing rather than replacing it with
     // nothing; the card falls back to a manual retry.
     return at ? { retryAt: at } : {};
   }
 
   /**
-   * The retry a built-in Codex session's usage limit arms: at once, on another of the runner's accounts
-   * with room, when its workspace leaves the account to Orbit (codexAccountAfterUsageLimit) and its
-   * runner can carry the thread there (CODEX_ACCOUNT_MOVE_V1) — or at this account's reset
-   * (quotaRetryAt). Null when no reset can be read either: nothing says when to try again, and the
-   * session stays FAILED, one message away from resuming.
+   * The retry a built-in Codex or Kimi session's usage limit arms: at once, on another of the runner's
+   * accounts with room, when its workspace leaves the account to Orbit (accountAfterUsageLimit) and its
+   * runner can carry the conversation there (CODEX_ACCOUNT_MOVE_V1, KIMI_ACCOUNT_MOVE_V1) — or at this
+   * account's reset, or another's that comes first (quotaRetryAt). Null when no reset can be read
+   * either: nothing says when to try again, and the session stays FAILED, one message away from resuming.
    */
-  private async codexUsageLimitRetry(
-    tx: CodexUsageLimitTransaction,
+  private async usageLimitRetry(
+    tx: UsageLimitTransaction,
     runnerId: string,
+    engine: 'codex' | 'kimi',
     session: {
       ownerId: string;
       provider: string;
       codexAccount: string | null;
       codexAccountPinned: boolean;
+      kimiAccount: string | null;
+      kimiAccountPinned: boolean;
       workspaceId: string | null;
     },
     text: string,
@@ -7065,22 +7430,20 @@ export class RunnerApiController {
     const workspace = session.workspaceId
       ? await tx.workspace.findUnique({
           where: { id: session.workspaceId },
-          select: { env: true, codexAccount: true, claudeAccount: true },
+          select: { env: true, codexAccount: true, claudeAccount: true, kimiAccount: true },
         })
       : null;
-    const move = runner?.capabilities.includes(CODEX_ACCOUNT_MOVE_V1)
-      ? accountAfterUsageLimit(
-          'codex',
-          { account: session.codexAccount, pinned: session.codexAccountPinned },
-          workspace,
-          runner.engines,
-          runner.planUsage,
-          now,
-          runner.accountPauses,
-        )
+    const own = engine === 'kimi'
+      ? { account: session.kimiAccount, pinned: session.kimiAccountPinned }
+      : { account: session.codexAccount, pinned: session.codexAccountPinned };
+    const move = runner?.capabilities.includes(engine === 'kimi' ? KIMI_ACCOUNT_MOVE_V1 : CODEX_ACCOUNT_MOVE_V1)
+      ? accountAfterUsageLimit(engine, own, workspace, runner.engines, runner.planUsage, now, runner.accountPauses)
       : null;
-    if (move && runner) return { retryAt: now, move: { to: move.to, notice: accountSwitchNotice('codex', move, runner) } };
-    const at = await this.quotaRetryAt(tx, runnerId, session, text, workspace);
+    if (move && runner) return { retryAt: now, move: { to: move.to, notice: accountSwitchNotice(engine, move, runner) } };
+    const elsewhere = runner?.capabilities.includes(engine === 'kimi' ? KIMI_ACCOUNT_MOVE_V1 : CODEX_ACCOUNT_MOVE_V1)
+      ? accountAfterUsageLimitAt(engine, own, workspace, runner.engines, runner.planUsage, now, runner.accountPauses)
+      : null;
+    const at = await this.quotaRetryAt(tx, runnerId, session, text, workspace, elsewhere);
     return at ? { retryAt: at } : null;
   }
 
@@ -7106,13 +7469,19 @@ export class RunnerApiController {
    * terminal `error` of a run that never got to speak. The account picked for the session, else the
    * one its workspace picked, and the workspace's env say which of the runner's Codex or Claude
    * accounts the run spent (runAccount): the snapshot read is that account's, never another's.
+   *
+   * `elsewhere` is when another of the runner's accounts can take the session instead
+   * (accountAfterUsageLimitAt), from a caller that just found none with room to move it to. Whichever
+   * comes first, it or this account's own reset, is when the retry goes — and on another account, the
+   * retry's dispatch moves the session there (accountBeforeDispatch).
    */
   private async quotaRetryAt(
     tx: QuotaRetryTransaction,
     runnerId: string,
-    session: { ownerId: string; provider: string; providerBuiltin?: boolean; codexAccount: string | null; claudeAccount?: string | null },
+    session: { ownerId: string; provider: string; providerBuiltin?: boolean; codexAccount: string | null; claudeAccount?: string | null; antigravityAccount?: string | null; kimiAccount?: string | null },
     text: string,
-    workspace: { env: unknown; codexAccount: string | null; claudeAccount: string | null } | null | undefined,
+    workspace: ({ env: unknown } & WorkspaceAccountChoices) | null | undefined,
+    elsewhere: Date | null = null,
   ): Promise<Date | null> {
     const now = new Date();
     const runner = await tx.runner.findUnique({
@@ -7125,11 +7494,11 @@ export class RunnerApiController {
     )
       ? null
       : await this.queue.accountPoolResumesAt(session.ownerId, session.provider, now);
-    const at =
+    const own =
       pool ??
       parseQuotaResetAt(text, now) ??
       planUsageBlockedUntil(
-        runner?.planUsage as PlanUsage | null,
+        withEnginePlanUsage(runner?.planUsage as PlanUsage | null, sanitizeRunnerEngines(runner?.engines)),
         session.provider,
         now,
         runAccount(
@@ -7138,10 +7507,13 @@ export class RunnerApiController {
           {
             codexAccount: session.codexAccount ?? workspace?.codexAccount,
             claudeAccount: session.claudeAccount ?? workspace?.claudeAccount,
+            antigravityAccount: session.antigravityAccount ?? workspace?.antigravityAccount,
+            kimiAccount: session.kimiAccount ?? workspace?.kimiAccount,
           },
           runner?.engines,
         ),
       );
+    const at = elsewhere && (!own || elsewhere < own) ? elsewhere : own;
     return at ? new Date(at.getTime() + Math.floor(Math.random() * QUOTA_RETRY_JITTER_MS)) : null;
   }
 

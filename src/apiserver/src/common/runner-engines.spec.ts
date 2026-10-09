@@ -189,7 +189,7 @@ test('OpenCode is reported like any other engine, and sign-in stays a narrower q
   assert.equal(sanitizeRunnerEngines([{ engine: 'aider', installed: true, auth: 'yes' }]), null);
 });
 
-test('Antigravity retains one sign-in and existing display order when dsh is reported', () => {
+test('Antigravity keeps its display order when dsh is reported, and accounts like Claude and Codex', () => {
   const engines = sanitizeRunnerEngines([
     { engine: 'antigravity', installed: true, auth: 'unknown', version: ' 1.2.15 ' },
     { engine: 'opencode', installed: true, auth: 'unknown', version: '1.18.16' },
@@ -206,15 +206,18 @@ test('Antigravity retains one sign-in and existing display order when dsh is rep
     version: '1.2.15',
     auth: 'unknown',
   });
-  // It signs in a Google account through the relay, like Kimi: one login for the machine, so no
-  // accounts — and an install action, which every sign-in engine has.
+  // It signs in Google accounts through the relay, one Gemini directory each, the way Claude and
+  // Codex keep theirs — and has an install action, which every sign-in engine has.
   assert.equal(isLoginEngine('antigravity'), true);
-  assert.equal(engineKeepsAccounts('antigravity'), false);
+  assert.equal(engineKeepsAccounts('antigravity'), true);
   assert.equal(isInstallEngine('antigravity'), true);
   assert.equal(isReportedEngine('antigravity'), true);
   assert.deepEqual(LOGIN_ENGINES, ['claude', 'codex', 'kimi', 'antigravity']);
   assert.deepEqual(REPORTED_ENGINES, ['claude', 'codex', 'kimi', 'opencode', 'antigravity', 'dsh']);
-  assert.equal(isInstallEngine('opencode'), false);
+  // Reportable and installable, never signable-in: the install relay needs a command, the sign-in
+  // relay a flow, and OpenCode only has the former.
+  assert.equal(isInstallEngine('opencode'), true);
+  assert.equal(isLoginEngine('opencode'), false);
 });
 
 /** The `/usage` buckets as step 1's runner reports them (docs/antigravity-runtime-contract.md §16.6). */
@@ -254,6 +257,31 @@ test('Antigravity carries which credential it runs on, and its Google quota', ()
   // Neither: the runner names no source at all.
   const [neither] = sanitizeRunnerEngines([{ engine: 'antigravity', installed: true, auth: 'no' }])!;
   assert.deepEqual(neither, { engine: 'antigravity', installed: true, auth: 'no' });
+});
+
+test("Antigravity carries each added account's quota beside Default's, and Default's only while its own sign-in answers", () => {
+  const work = { provider: 'antigravity', fetchedAt: '2026-10-04T03:00:00Z', buckets: [{ id: 'gemini-5h', window: '5h', remainingFraction: 0.04 }] };
+  const accounts = [
+    { id: 'default', home: '/root/.orbit/antigravity/google', auth: 'yes' },
+    { id: '5c2e91a0', name: 'Work', home: '/root/.orbit/antigravity-accounts/5c2e91a0', auth: 'yes' },
+  ];
+  const [both] = sanitizeRunnerEngines([{
+    engine: 'antigravity', installed: true, auth: 'yes', authSource: 'google', accounts,
+    planUsage: { ...GOOGLE_USAGE, accounts: { '5c2e91a0': work, default: work, '../etc': work, 'ffffffff': { buckets: [{ id: 'x' }] } } },
+  }])!;
+  assert.deepEqual(both.accounts?.map((account) => account.id), ['default', '5c2e91a0']);
+  assert.equal(both.planUsage?.buckets?.length, 3);
+  // Only an added account's own, by its id; one with nothing readable in it is no entry at all.
+  assert.deepEqual(both.planUsage?.accounts, {
+    '5c2e91a0': { provider: 'antigravity', fetchedAt: '2026-10-04T03:00:00.000Z', buckets: [{ id: 'gemini-5h', window: '5h', remainingFraction: 0.04 }] },
+  });
+  // A runner on its GEMINI_API_KEY has no Google quota of Default's to report — but Work's still is.
+  const [envKey] = sanitizeRunnerEngines([{
+    engine: 'antigravity', installed: true, auth: 'yes', authSource: 'env_key', accounts,
+    planUsage: { ...GOOGLE_USAGE, accounts: { '5c2e91a0': work } },
+  }])!;
+  assert.equal(envKey.planUsage?.buckets, undefined);
+  assert.deepEqual(Object.keys(envKey.planUsage?.accounts ?? {}), ['5c2e91a0']);
 });
 
 test('a source or quota Antigravity cannot mean is dropped, and no other engine carries either', () => {
@@ -348,4 +376,24 @@ test('a runaway quota report is bounded', () => {
   ])!;
   assert.equal(entry.planUsage?.buckets?.length, PLAN_USAGE_BUCKETS_MAX);
   assert.equal(entry.planUsage?.fetchedAt, undefined, 'an unparseable or missing time is left out, not invented');
+});
+
+test("Kimi's site is carried for Kimi alone, and only as one of its two", () => {
+  assert.deepEqual(
+    sanitizeRunnerEngines([
+      { engine: 'kimi', installed: true, auth: 'yes', kimiRegion: 'global' },
+      { engine: 'codex', installed: true, auth: 'yes', kimiRegion: 'global' },
+    ]),
+    [
+      { engine: 'codex', installed: true, auth: 'yes' },
+      { engine: 'kimi', installed: true, auth: 'yes', kimiRegion: 'global' },
+    ],
+  );
+  for (const kimiRegion of ['mainland-cn', 'global']) {
+    assert.equal(sanitizeRunnerEngines([{ engine: 'kimi', installed: true, auth: 'no', kimiRegion }])![0].kimiRegion, kimiRegion);
+  }
+  // Anything else is no site at all, never a guess at one: the page would name it as the login's.
+  for (const kimiRegion of ['eu', 'kimi.ai', '', 1, null, { region: 'global' }]) {
+    assert.equal('kimiRegion' in sanitizeRunnerEngines([{ engine: 'kimi', installed: true, auth: 'yes', kimiRegion }])![0], false);
+  }
 });

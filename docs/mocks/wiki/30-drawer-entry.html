@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>30 drawer entry</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="phone-mock.css">
+<link rel="stylesheet" href="wiki-p2.css">
+<link rel="stylesheet" href="wiki-p3.css">
+<style>
+.note-n { position: static !important; display: inline-flex !important; vertical-align: -3px; margin-right: 6px !important; box-shadow: none !important; }
+.m-n.bad, .pb-mark.bad > .m-n { background: #E5484D; color: #fff; }
+.pb-mark.bad { outline-color: #E5484D; }
+.pb-mark.inl { display: inline-flex; align-items: center; vertical-align: middle; flex: none; }
+.pb-legend .pb-mark > .m-n { top: -9px; right: -12px; transform: scale(.85); }
+.pb-ios .pb-mark:not(.inl) > .m-n { right: 4px; }
+.pb-mark.later { outline-color: #8f959e; }
+.pb-mark.later > .m-n { background: #8f959e; color: #fff; }
+.rv-back { font-size: 13px; color: var(--brand); display: flex; align-items: center; gap: 4px; margin-bottom: 4px; }
+.rv-sub { margin-top: 2px; font-size: 13px; color: var(--text-2); }
+/* the drawer strips (06 ②) */
+.st-web { background: var(--bg-raised); padding: 10px 8px 12px; }
+.st-cap { font: 12px/1.5 "Noto Sans CJK SC", sans-serif; color: var(--text-3); padding: 10px 8px 4px; }
+.st-cap:first-child { padding-top: 2px; }
+.st-ios { background: #F9F9F9; padding: 10px 0 12px; }
+.st-ios .st-cap { padding: 10px 22px 4px; }
+.io-drow .num { font-size: 13px; font-weight: 600; color: #FF8C27; font-variant-numeric: tabular-nums; }
+/* the space name: a native select clipped at 120px (≤600px), and SwiftUI's lineLimit(1) */
+.wp-sel .clip { display: inline-block; max-width: 120px; overflow: hidden; white-space: nowrap; vertical-align: bottom; }
+.io-lt.trunc h1 { flex: none; }
+.io-lt.trunc .pb-mark { min-width: 0; flex: 0 1 auto; }
+.io-lt.trunc .io-chip { min-width: 0; max-width: 100%; box-sizing: border-box; }
+.io-chip .ct { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.io-lt .pb-mark.inl { margin-left: auto; }
+/* the home's Contents band — web */
+.wp-sech .more { margin-left: auto; font-size: 12px; color: var(--brand); white-space: nowrap; }
+.wp-cats { display: flex; flex-direction: column; }
+.wp-cat { display: flex; align-items: center; gap: 10px; min-height: 40px; border-top: 1px solid var(--border-subtle); font-size: 14px; color: var(--text-1); padding: 0 2px; }
+.wp-cats > .wp-cat:first-child { border-top: 0; }
+.wp-cat .no { min-width: 18px; font: 600 12px/1 "DejaVu Sans Mono", monospace; color: var(--text-3); }
+.wp-cat .lb { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wp-cat > .ic { font-size: 11px; color: var(--text-3); flex: none; }
+.wp-cat > .ic.rot { transform: rotate(90deg); }
+.wp-cat.open .lb { font-weight: 600; }
+.wp-cat.doc { min-height: 36px; padding-left: 30px; font-size: 13.5px; border-top-style: dashed; }
+.wp-cat.doc .no { min-width: 30px; }
+.wp-cat.todo .lb { color: var(--text-3); }
+.wp-cat .st { font-size: 12px; color: var(--text-3); white-space: nowrap; }
+.wp-cat.nav .tp-ico, .wp-cat.pr .tp-ico { width: 18px; color: var(--text-2); display: inline-flex; justify-content: center; }
+.wp-cat.pr .tdp-badge { font-size: 11px; line-height: 16px; padding: 0 6px; }
+/* the home's Contents band — iOS */
+.io-sech .more.prog { font-size: 15px; white-space: nowrap; }
+.io-tocgrp.home { background: transparent; }
+.io-tocrow .chev.rot { transform: rotate(90deg); }
+.io-tocrow .st { flex: none; font-size: 13px; color: #8A8A8D; }
+.io-tocrow.pr .gl { color: #3C3C43; }
+.io-tocrow.sec::before { left: 46px !important; }
+/* new since the last visit */
+.ndot { width: 7px; height: 7px; border-radius: 50%; background: var(--brand); flex: none; display: inline-block; }
+.io-l1 .ndot, .io-sech .ndot { background: #2E6AFF; }
+.newhint { display: inline-flex; align-items: center; gap: 6px; color: var(--brand) !important; font-weight: 600 !important; padding: 0 4px; }
+.io-sech .newhint { color: #2E6AFF !important; font-size: 13px; }
+/* skeleton (loading) */
+.sk { display: inline-block; height: 10px; border-radius: 5px; background: #ECEDF0; }
+.wp-sk { display: flex; align-items: center; gap: 10px; height: 40px; border-top: 1px solid var(--border-subtle); padding: 0 2px; }
+.wp-sk:first-child { border-top: 0; }
+.io-sk { display: flex; align-items: center; gap: 12px; height: 44px; padding: 0 16px; position: relative; }
+.io-sk + .io-sk::before { content: ""; position: absolute; top: 0; left: 16px; right: 0; height: .5px; background: #E5E5EA; }
+/* iOS space menu (a Menu of Toggles: tick column, name, the repository under it) */
+.io-menu { position: absolute; z-index: 8; right: 14px; top: 166px; width: 300px; border-radius: 16px; background: rgba(246,246,248,.98); box-shadow: 0 12px 40px rgba(0,0,0,.20), 0 0 0 .5px rgba(0,0,0,.10); overflow: hidden; }
+.io-mrow { display: flex; gap: 10px; padding: 10px 16px 11px; position: relative; }
+.io-mrow + .io-mrow::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: .5px; background: #D1D1D6; }
+.io-mrow .ck { width: 16px; flex: none; font-size: 15px; padding-top: 2px; }
+.io-mrow b { display: block; font-size: 17px; font-weight: 400; line-height: 22px; }
+.io-mrow .s { display: block; font-size: 13px; line-height: 18px; color: #8A8A8D; }
+.io-dim2 { position: absolute; inset: 0; z-index: 7; background: rgba(0,0,0,.06); }
+/* Android Chrome's picker for a native <select> */
+.ad-dim { position: absolute; inset: 0; z-index: 6; background: rgba(0,0,0,.32); }
+.ad-pick { position: absolute; z-index: 7; left: 36px; right: 36px; top: 250px; background: #fff; border-radius: 24px; padding: 10px 0 12px; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
+.ad-opt { display: flex; align-items: center; gap: 16px; padding: 13px 24px; font-size: 15px; color: #1f1f1f; }
+.ad-r { width: 18px; height: 18px; border-radius: 50%; border: 2px solid #5f6368; box-sizing: border-box; flex: none; }
+.ad-r.on { border-color: #1a73e8; background: radial-gradient(circle, #1a73e8 0 4px, #fff 5px); }
+/* an empty space: one line */
+.wp-oneline { margin-top: 16px; font-size: 13px; color: var(--text-3); }
+.io-oneline { padding: 14px 16px; font-size: 15px; line-height: 20px; color: #8A8A8D; }
+
+/* v2 · the home is the documents, drawn with the plan page's own document rows (mock 22) */
+.wp-doc > div > .q.lead { color: var(--text-2); }
+.wp-doc.more > div > .q { -webkit-line-clamp: 1; margin: 0; font-size: 12.5px; }
+.wp-doc.more { padding: 8px 2px; }
+.wp-doc .ndot, .io-docrow .ndot { flex: none; }
+.wp-doc > .no .ic { font-size: 12px; color: var(--text-3); }
+.wp-dfoot { display: flex; gap: 18px; margin-top: 18px; padding-top: 12px; border-top: 1px solid var(--border-subtle); font-size: 13px; color: var(--brand); }
+.wp-dfoot span { display: inline-flex; align-items: center; gap: 6px; }
+.io-docrow .q.lead { color: #3C3C43; font-size: 15px; line-height: 20px; }
+.io-docrow.more { padding-top: 10px; padding-bottom: 10px; }
+.io-docrow.more .q { -webkit-line-clamp: 1; margin: 0; font-size: 15px; line-height: 22px; color: #8A8A8D; }
+.io-docrow > .no .sf { font-size: 15px; color: #6C6C70; }
+.io-dfoot { display: flex; gap: 18px; padding: 16px 33px 6px; font-size: 15px; color: #2E6AFF; }
+.io-dfoot span { display: inline-flex; align-items: center; gap: 6px; }
+.io-grp-h .all { margin-left: auto; font-size: 15px; color: #2E6AFF; }
+.wp-act { position: relative; overflow: visible; }
+.wp-act .bdg { position: absolute; top: -7px; right: -7px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--warning-solid); color: #fff; font: 600 11px/18px Inter, sans-serif; text-align: center; box-shadow: 0 0 0 2px var(--bg-base); box-sizing: border-box; }
+.wp-plabel { display: inline-flex; align-items: center; height: 26px; padding: 0 10px; border-radius: 13px; background: var(--fill-muted); font-size: 12.5px; color: var(--text-2); }
+.io-dcat { padding: 18px 16px 2px; font-size: 13px; font-weight: 600; color: #8A8A8D; letter-spacing: .2px; }
+.io-doc { position: relative; padding: 10px 16px 11px; }
+.io-doc + .io-doc::before { content: ""; position: absolute; top: 0; left: 16px; right: 0; height: .5px; background: #D8D8DC; }
+.io-doc .h { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.io-doc .no { flex: none; font: 600 13px/22px "DejaVu Sans Mono", monospace; color: #8A8A8D; }
+.io-doc .t { flex: 1; min-width: 0; font-size: 17px; line-height: 22px; font-weight: 600; letter-spacing: -.2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.io-doc .lead { margin-top: 3px; font-size: 15px; line-height: 20px; color: #3C3C43; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.io-doc.more { display: flex; align-items: center; gap: 6px; padding: 9px 16px 10px; font-size: 15px; color: #8A8A8D; }
+.io-doc.more .sf { margin-left: auto; font-size: 13px; color: #C4C4C6; stroke-width: 2.4; }
+.io-doc .ndot { align-self: center; }
+.io-dfoot { display: flex; gap: 18px; padding: 16px 16px 6px; font-size: 15px; color: #2E6AFF; }
+.io-dfoot span { display: inline-flex; align-items: center; gap: 6px; }
+.io-glass.cap .slot.act { position: relative; }
+.io-glass.cap .slot .bdg { position: absolute; top: 3px; right: 1px; min-width: 17px; height: 17px; padding: 0 5px; border-radius: 9px; background: #FF8C27; color: #fff; font: 600 11px/17px Inter, sans-serif; text-align: center; box-sizing: border-box; }
+.io-empty-card { margin: 14px 16px 0; padding: 14px 16px; border-radius: 14px; background: #F2F2F7; font-size: 15px; line-height: 21px; color: #3C3C43; }
+.io-empty-card .go { display: inline-block; margin-top: 8px; color: #2E6AFF; font-weight: 600; }
+.wp-empty-card { margin-top: 16px; padding: 12px 14px; border-radius: 10px; background: var(--bg-subtle); font-size: 13px; line-height: 1.6; color: var(--text-2); }
+.wp-empty-card .go { display: inline-block; margin-top: 6px; color: var(--brand); font-weight: 600; }
+.io-sech .all { margin-left: auto; font-size: 15px; color: #2E6AFF; }
+/* the space (owner 10-06): one space is its name, a label with nothing to press; two or more are the select / the Menu */
+.io-name { display: inline-flex; align-items: center; height: 30px; padding: 0 12px; border-radius: 15px; flex: none; background: rgba(118, 118, 128, .08); font-size: 15px; color: #6C6C70; }
+.pb-stack { display: flex; flex-direction: column; min-width: 0; }
+.pb-sub { margin: 0 0 7px 2px; font: 600 12.5px/1.5 "Noto Sans CJK SC", sans-serif; color: var(--text-2); }
+.pb-stack > .pb-web + .pb-sub, .pb-stack > .pb-ios + .pb-sub { margin-top: 20px; }
+.io-mrow .mt { flex: 1; min-width: 0; }
+.io-mrow .mw { flex: none; align-self: center; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; background: #FF8C27; color: #fff; font: 600 13px/22px Inter, sans-serif; text-align: center; box-sizing: border-box; }
+.io-msep { height: 8px; margin: 0; background: rgba(0, 0, 0, .07); }
+.io-mrow.mg { align-items: center; }
+.io-mrow.mg b { flex: 1; }
+.io-mrow.mg .sf { font-size: 19px; color: #000; }
+</style>
+<script>addEventListener('load', () => { for (const f of window.__afterLoad || []) f(); });</script>
+</head>
+<body class="m">
+<script src="phone-mock-antd.js"></script>
+<script src="phone-mock.js"></script>
+<script src="wiki-p2-icons.js"></script>
+<script src="wiki-p3-icons.js"></script>
+<div class="m-sheet pb-sheet p2">
+<svg xmlns="http://www.w3.org/2000/svg" width="0" height="0" style="position:absolute" aria-hidden="true"><symbol id="sf-history" viewBox="0 0 24 24"><path d="M4.6 12.4a7.6 7.6 0 1 0 2.3-5.6"/><path d="M4.4 4.6v3.6H8"/><path d="M12 8.2v4.1l2.9 1.8"/></symbol></svg><h1 class="m-h1 zh">30 · 从抽屉进入 Wiki：第一屏（web 手机 ｜ iOS ｜ 说明）</h1>
+<p class="pb-lede zh">第一性原理：抽屉里这一行承诺的是<b>这个代码库知道什么</b>，琥珀数字是次要的那句<b>有几件事等你</b>。所以点进来第一屏是<b>能读的内容</b>；管理信息（状态、待审、plan 进度、决定日志、改动、用量）整体放二级。数据取 10-06 线上 orbit space（11,457 条、1 条待审、plan v13 已写 5/35，同图 29）。① 抽屉那一行的数，② 现状，③ 改后。红虚线 = 首屏底边。</p>
+<div class="pb-legend zh"><span class="pb-tag sys">iOS 系统</span>系统控件与习惯 <span class="pb-tag con">Orbit 一致性</span>沿用现成组件 / 用词 <span class="pb-tag co">协调性</span>同一个词、同一个数在各处口径一致 <span class="pb-tag new">新词</span>要你拍板 <span class="pb-tag done">已定</span>owner 已拍板 <span class="pb-tag later">另议</span>不在这次范围 <span class="pb-tag guess">假设</span>规格没给 / 数据拿不到，图上先这么画 <span class="pb-mark inl" style="padding:0 6px;margin:0 2px 0 8px"><span class="m-n">1</span>改动点</span> <span class="pb-mark bad inl" style="padding:0 6px;margin:0 2px 0 14px"><span class="m-n">A</span>现状的问题</span></div>
+<div class="pb-grid">
+<div class="pb-colhead">web 手机 <span>· 443 CSS px · /wiki</span></div><div class="pb-colhead">iOS <span>· 402×874pt · Wiki 分区根页</span></div><div class="pb-colhead zh">说明</div>
+<div class="pb-band zh"><span class="pb-bn">1</span>抽屉那一行 <small>· 数字 = Wiki 页头 Activity 上的数</small></div>
+<div class="pb-web" data-name="web-row"><div class="st-web">
+<div class="st-cap">今天（10-06）· orbit 1 条提议；plan 在写文档（蓝，不等你）</div>
+<div class="tp-section"><div class="tp-item"><span class="tp-ico"><svg class="ic "><use href="#i-project"/></svg></span><span class="tp-label">Projects</span></div><div class="tp-item"><span class="tp-ico"><svg class="ic "><use href="#i-check-square"/></svg></span><span class="tp-label">Tasks</span></div><div class="tp-item"><span class="tp-ico"><svg class="ic "><use href="#i-book"/></svg></span><span class="tp-label">Wiki</span><span class="tp-count needs-you">1</span></div></div>
+<div class="st-cap">提议 1 ＋ plan 草稿等你确认（假设）</div><div class="pb-mark" style="margin:2px 4px"><span class="m-n">1</span><div class="tp-item"><span class="tp-ico"><svg class="ic "><use href="#i-book"/></svg></span><span class="tp-label">Wiki</span><span class="tp-count needs-you">2</span></div></div>
+<div class="st-cap">orbit 1 条 ＋ wikova 2 条提议（假设）</div><div class="tp-item"><span class="tp-ico"><svg class="ic "><use href="#i-book"/></svg></span><span class="tp-label">Wiki</span><span class="tp-count needs-you">3</span></div>
+<div class="st-cap">什么都不等你 —— 不画数字（不变）</div><div class="tp-item"><span class="tp-ico"><svg class="ic "><use href="#i-book"/></svg></span><span class="tp-label">Wiki</span></div>
+</div></div><div class="pb-ios" data-name="ios-row" style="border-radius:14px"><div class="st-ios">
+<div class="st-cap">今天（10-06）</div>
+<div class="io-drow"><span class="gl"><svg class="sf "><use href="#sf-grid"/></svg></span><span class="lb">Projects</span></div><div class="io-drow"><span class="gl"><svg class="sf "><use href="#sf-checklist"/></svg></span><span class="lb">Tasks</span></div><div class="io-drow"><span class="gl"><svg class="sf "><use href="#sf-book"/></svg></span><span class="lb">Wiki</span><span class="sp"></span><span class="num">1</span></div>
+<div class="st-cap">提议 1 ＋ plan 草稿等你确认（假设）</div><div class="pb-mark" style="margin:2px 10px"><span class="m-n">1</span><div class="io-drow"><span class="gl"><svg class="sf "><use href="#sf-book"/></svg></span><span class="lb">Wiki</span><span class="sp"></span><span class="num">2</span></div></div>
+<div class="st-cap">orbit 1 条 ＋ wikova 2 条提议（假设）</div><div class="io-drow"><span class="gl"><svg class="sf "><use href="#sf-book"/></svg></span><span class="lb">Wiki</span><span class="sp"></span><span class="num">3</span></div>
+<div class="st-cap">什么都不等你 —— 不画数字（不变）</div><div class="io-drow"><span class="gl"><svg class="sf "><use href="#sf-book"/></svg></span><span class="lb">Wiki</span><span class="sp"></span></div>
+</div></div><div class="pb-note"><p><span class="m-n note-n">1</span><b>抽屉上的数 = Wiki 页头 Activity 按钮上的数 = Activity 页里琥珀横幅之和。</b>今天它只数各 space 的待审提议（<code>WikiLogic.proposalsToReview</code>、web <code>wikiPending</code>）；改后再加上 plan 里等你的那几种：<span class="en">Plan draft ready to confirm</span>、<span class="en">N plan changes to review</span>、<span class="en">Plan draft held</span>、<span class="en">Plan draft didn’t pass the check</span>——今天首页上它们就是琥珀横幅（图 26 ③），抽屉却一个都不数。</p><p><span class="pb-tag co">协调性</span>一句话的口径：<b>等你的每一件都算进这个数，这个数里的每一件进去都找得到。</b>蓝色的进度（起草中、写作中）不算；文档的琥珀点（<span class="en">Needs review</span>）是文档的质量状态，也不算。</p><p><span class="pb-tag done">已定</span>06 定「只数提议」是 09-25，plan 09-29 才有：这是漏算，不是当初决定不算。汉堡上不加点、不推送的边界不动。</p><p><span class="pb-tag con">Orbit 一致性</span>行的样子一点不动。iOS 无障碍标签用 Projects 行的说法 <span class="en">“2 waiting on you”</span>，web 悬停提示同一句。</p><p><span class="pb-tag guess">假设</span>服务端在 <code>GET /wiki/spaces</code> 每行多带一个 plan 待办数（今天 plan 的提议在 <code>wiki_plan_proposal</code> 表，不进 <code>pendingOps</code>）。</p></div>
+<div class="pb-band zh"><span class="pb-bn">2</span>现状 <small>· 从抽屉点 Wiki 落下的第一屏：一张管理看板</small></div>
+<div class="pb-web" data-name="web-now" data-flow="web-now" data-fold="860" data-fold-label="首屏<br>≈860"><div class="wp-topbar"><span class="wp-toggle"><svg class="ic "><use href="#i-menu"/></svg></span><span class="wp-topname">Orbit</span></div>
+<div class="wp-page">
+<div class="wp-titlerow"><h1 class="page-title">Wiki</h1><div class="pb-mark bad inl"><span class="m-n">A</span><span class="wp-btn wp-sel"><span class="clip">github-com-jianghailong-xy-orbit</span><svg class="ic caret"><use href="#i-down"/></svg></span></div><div class="pb-mark bad inl"><span class="m-n">D</span><span class="wp-btn i40 ghost"><svg class="ic "><use href="#i-unordered-list"/></svg></span></div><span class="wp-btn i40 ghost"><svg class="ic "><use href="#i-setting"/></svg></span><span class="wp-btn primary i40"><svg class="ic "><use href="#i-plus"/></svg></span></div>
+<div class="wp-meta">11,457 entries · Maintained 3h ago <span class="ok">✓</span> · 276 to catch up</div>
+<div class="wp-input"><svg class="ic "><use href="#i-search"/></svg>Search the wiki</div>
+<div class="pb-mark bad" style="margin-top:12px"><span class="m-n">B</span><div class="wp-banner"><span class="d"></span>1 proposals to review<svg class="ic "><use href="#i-right"/></svg></div></div>
+<div class="wp-banner" style="margin-top:6px;background:var(--brand-tint);border-color:var(--brand-border)"><span class="d" style="background:var(--brand)"></span>Writing documents · 5 of 35<svg class="ic "><use href="#i-right"/></svg></div>
+<div class="pb-mark bad" style="margin-top:18px"><span class="m-n">C</span><div class="wp-sec first" style="margin-top:0"><div class="wp-sech"><h3>Principles</h3><span class="wp-count">0</span></div><div class="wp-row"><div class="wp-l2" style="margin:0">Nothing has been recorded in this space yet.</div></div></div></div>
+<div class="pb-mark bad" style="margin-top:18px"><span class="m-n">E</span><div><div class="wp-sec first"><div class="wp-sech"><h3>Recent decisions</h3><span class="wp-count">4</span><span class="more">All decisions ›</span></div><div class="wp-row "><div class="wp-l1"><span class="t">移除 wiki 自动推送功能而非调整展示</span><span class="sp"></span><span class="when">10/6</span></div><div class="wp-l2"><span class="act">Active</span> · wiki auto-attach 整个功能被删除，不再在会话首轮把 &lt;orbit_wiki_context&gt; 塞进用户消息。</div></div><div class="wp-row "><div class="wp-l1"><span class="t">「有后台工作也给 Stop」是 owner 定的，不是漏判</span><span class="sp"></span><span class="when">10/6</span></div><div class="wp-l2"><span class="act">Active</span> · 在 AWAITING_INPUT 但仍有未结束后台工作时也显示 Stop，这是 owner 的明确决定，别当成 bug 改回去。</div></div><div class="wp-row "><div class="wp-l1"><span class="t">项目会话页列全部会话，行操作按各自生命周期</span><span class="sp"></span><span class="when">10/5</span></div><div class="wp-l2"><span class="act">Active</span> · owner 10-04 定：不分 Open/Completed 视图，合并去重（不含 Trash）列出全部成员会话。</div></div><div class="wp-row "><div class="wp-l1"><span class="t">升级按真实进展：在途不升级，泛聊天不续时钟</span><span class="sp"></span><span class="when">10/5</span></div><div class="wp-l2"><span class="act">Active</span> · escalatesAt 取最晚进展（投递轮被答、挂修复任务、会话末轮/结束、在途 handling）。</div></div></div><div class="wp-sec"><div class="wp-sech"><h3>Recently changed</h3></div><div class="wp-row run"><div class="wp-l1"><span class="t">Wiki maintenance</span><span class="sp"></span><span class="when">3h ago</span></div><div class="wp-l2">Applied 5 changes · <span class="act">5 Auto</span></div></div><div class="wp-row run"><div class="wp-l1"><span class="t">Wiki maintenance</span><span class="sp"></span><span class="when">3h ago</span></div><div class="wp-l2">Applied 1 change · <span class="act">1 Auto</span></div></div><div class="wp-row run"><div class="wp-l1"><span class="t">Wiki maintenance</span><span class="sp"></span><span class="when">3h ago</span></div><div class="wp-l2">Applied 1 change · 1 Unreviewed</div></div><div class="wp-row run"><div class="wp-l1"><span class="t">Wiki maintenance</span><span class="sp"></span><span class="when">3h ago</span></div><div class="wp-l2">Applied 13 changes · <span class="act">9 Auto</span> · 4 Unreviewed · 1 rejected by the check</div></div></div></div></div>
+<div class="pb-cut" style="margin-top:10px">… Agents used the wiki</div>
+</div></div><div class="pb-ios top" data-name="ios-now" data-flow="ios-now" data-fold="874" data-fold-label="首屏<br>874"><div data-ios="status"></div><div class="io-nav"><span class="io-glass l"><svg class="sf "><use href="#sf-menu"/></svg></span><span class="io-glass cap r"><div class="pb-mark bad inl" style="border-radius:22px"><span class="m-n">D</span><span class="slot"><svg class="sf "><use href="#sf-list"/></svg></span></div><span class="slot"><svg class="sf "><use href="#sf-gear"/></svg></span></span></div>
+<div class="io-lt trunc"><h1>Wiki</h1><div class="pb-mark bad inl" style="border-radius:17px"><span class="m-n">A</span><span class="io-chip"><span class="ct">github-com-jianghailong-xy-orbit</span><svg class="sf "><use href="#sf-chev-ud"/></svg></span></div></div>
+<div class="io-subt">11,457 entries · Maintained 3h ago <span class="ok">✓</span> · 276 to catch up</div>
+<div class="io-search"><svg class="sf "><use href="#sf-search"/></svg>Search the wiki</div>
+<div class="pb-mark bad" style="margin:0 4px"><span class="m-n">B</span><div class="io-banner"><span class="d"></span>1 proposals to review<svg class="sf "><use href="#sf-chev-r"/></svg></div></div>
+<div class="io-banner" style="margin-top:1px;background:rgba(46,106,255,.10);"><span class="d" style="background:#2E6AFF"></span>Writing documents · 5 of 35<svg class="sf "><use href="#sf-chev-r"/></svg></div>
+<div class="pb-mark bad" style="margin:10px 4px 0"><span class="m-n">C</span><div class="io-sech" style="padding-top:12px"><b>Principles</b><span class="n">0</span></div><div class="io-row" style="padding-top:2px"><div class="io-l2" style="margin:0">Nothing has been recorded in this space yet.</div></div></div>
+<div class="pb-mark bad" style="margin:10px 4px 0"><span class="m-n">E</span><div><div class="io-sech"><b>Recent decisions</b><span class="n">4</span></div><div class="io-row "><div class="io-l1"><span class="t">移除 wiki 自动推送功能而非调整展示</span><span class="sp"></span><span class="when">10/6</span></div><div class="io-l2"><span class="act">Active</span> · wiki auto-attach 整个功能被删除，不再在会话首轮把 &lt;orbit_wiki_context&gt; 塞进用户消息。</div></div><div class="io-row "><div class="io-l1"><span class="t">「有后台工作也给 Stop」是 owner 定的，不是漏判</span><span class="sp"></span><span class="when">10/6</span></div><div class="io-l2"><span class="act">Active</span> · 在 AWAITING_INPUT 但仍有未结束后台工作时也显示 Stop，这是 owner 的明确决定，别当成 bug 改回去。</div></div><div class="io-row "><div class="io-l1"><span class="t">项目会话页列全部会话，行操作按各自生命周期</span><span class="sp"></span><span class="when">10/5</span></div><div class="io-l2"><span class="act">Active</span> · owner 10-04 定：不分 Open/Completed 视图，合并去重（不含 Trash）列出全部成员会话。</div></div><div class="io-row "><div class="io-l1"><span class="t">升级按真实进展：在途不升级，泛聊天不续时钟</span><span class="sp"></span><span class="when">10/5</span></div><div class="io-l2"><span class="act">Active</span> · escalatesAt 取最晚进展（投递轮被答、挂修复任务、会话末轮/结束、在途 handling）。</div></div><div class="io-sech"><b>Recently changed</b></div><div class="io-row run"><div class="io-l1"><span class="t">Wiki maintenance</span><span class="sp"></span><span class="when">3h ago</span></div><div class="io-l2">Applied 5 changes · <span class="act">5 Auto</span></div></div><div class="io-row run"><div class="io-l1"><span class="t">Wiki maintenance</span><span class="sp"></span><span class="when">3h ago</span></div><div class="io-l2">Applied 1 change · <span class="act">1 Auto</span></div></div><div class="io-row run"><div class="io-l1"><span class="t">Wiki maintenance</span><span class="sp"></span><span class="when">3h ago</span></div><div class="io-l2">Applied 1 change · 1 Unreviewed</div></div><div class="io-row run"><div class="io-l1"><span class="t">Wiki maintenance</span><span class="sp"></span><span class="when">3h ago</span></div><div class="io-l2">Applied 13 changes · <span class="act">9 Auto</span> · 4 Unreviewed · 1 rejected by the check</div></div></div></div>
+<div class="pb-cut">… Agents used the wiki</div>
+</div><div class="pb-note"><p><span class="m-n note-n bad">E</span><b>首页其实是一张管理看板。</b>从上往下：状态行、待审横幅、plan 进度、Principles、Recent decisions、Recently changed、Agents used——只有 Principles 是知识（今天 0 条），其余都是「wiki 怎么样了」，没有一句是「代码库是什么样」。</p><p><b>为什么会这样：</b>首页是 09-25 阶段 1 定的（<code>c00eefef3</code>），那时 wiki 只有条目、没有文章和文档，能摆上首页的只有原则、决定、改动和用量。09-28 起文章、文档成了「主阅读视图」（<code>d075ebdf2</code>，判据 10），却只进了目录（桌面左栏、手机 Contents），首页一直没跟着重排。</p><p><span class="m-n note-n bad">A</span><b>认不出是哪个代码库。</b>显示的是机器 slug <code>github-com-jianghailong-xy-orbit</code>（<code>wiki.service.ts:913</code>）。web 手机下拉框最宽 120px（<code>index.css:20797</code>），只剩 <code>github-com-jiangl</code>；iOS 默认字号刚好放下，字号调大或换小屏就从尾部截。几个 space 都以 <code>github-com-jianghailong-xy-</code> 开头。</p><p><span class="m-n note-n bad">B</span><b>横幅和抽屉的数口径不同</b>：抽屉按所有 space，横幅按当前 space（<code>WikiModel.swift:156</code>、<code>WikiHome.tsx:68</code>），点进去的 Review 又是所有 space。另：<span class="en">“1 proposals to review”</span>，单数没处理。</p><p><span class="m-n note-n bad">C</span><b>空的 Principles 占着内容的位置</b>，还说「这个 space 没有任何记录」，同屏写着 11,457 entries。而且两端的 Principles、Recent decisions 只从<b>最新 200 条</b>里筛（<code>entries?limit=200</code>）。</p><p><span class="m-n note-n bad">D</span><b>35 篇文档只在这个按钮后面</b>：web 是左侧抽屉（和 app 抽屉同侧、同宽、同组件），iOS 是 sheet。</p></div>
+<div class="pb-band zh"><span class="pb-bn">3</span>改后 <small>· 先是内容：文档按大类，每篇两行导语；管理信息进 Activity</small></div>
+<div class="pb-web" data-name="web-new" data-flow="web-new" data-fold="860" data-fold-label="首屏<br>≈860"><div class="wp-topbar"><span class="wp-toggle"><svg class="ic "><use href="#i-menu"/></svg></span><span class="wp-topname">Orbit</span></div>
+<div class="wp-page">
+<div class="wp-titlerow"><h1 class="page-title">Wiki</h1><div class="pb-mark inl" style="border-radius:13px"><span class="m-n">2</span><span class="wp-plabel">orbit</span></div><span class="wp-btn i40 ghost"><svg class="ic "><use href="#i-unordered-list"/></svg></span><div class="pb-mark inl"><span class="m-n">1</span><span class="wp-btn i40 ghost wp-act"><svg class="ic "><use href="#i-history"/></svg><span class="bdg">1</span></span></div><span class="wp-btn i40 ghost"><svg class="ic "><use href="#i-setting"/></svg></span><span class="wp-btn primary i40"><svg class="ic "><use href="#i-plus"/></svg></span></div>
+<div class="pb-mark" style="margin-top:6px"><span class="m-n">3</span><div class="wp-meta">35 documents · 5 written</div></div>
+<div class="wp-input"><svg class="ic "><use href="#i-search"/></svg>Search the wiki</div>
+<div class="pb-mark" style="margin-top:12px"><span class="m-n">4</span><div class="wp-docs"><div class="wp-cath"><span class="no">1</span><b>产品概览与架构</b></div><div class="wp-doc"><span class="no">1.1</span><div><div class="t"><span class="tt">产品定位与核心能力</span></div><div class="q lead">Orbit 是自托管的 coding agent 控制台：agent 跑在你自己的机器上，计划、历史和控制都留在一个自托管的地方。</div></div><svg class="ic "><use href="#i-right"/></svg></div><div class="wp-doc"><span class="no">1.2</span><div><div class="t"><span class="tt">系统架构与数据流</span></div><div class="q lead">Orbit 把协调和执行分开：服务器保存意图与历史，注册的 runner 在本来就有仓库、凭据和网络权限的机器上跑 agent 进程。</div></div><svg class="ic "><use href="#i-right"/></svg></div><div class="wp-doc more"><span class="no"></span><div><div class="q">+1 not written yet</div></div><svg class="ic "><use href="#i-right"/></svg></div><div class="wp-cath"><span class="no">2</span><b>任务与项目</b></div><div class="wp-doc"><span class="no">2.1</span><div><div class="t"><span class="tt">任务生命周期与依赖</span></div><div class="q lead">任务是持久的排队工作单元：可以归进清单、依赖别的任务；合格的 runner 原子地领取它，开一个会话，再回报结果。</div></div><svg class="ic "><use href="#i-right"/></svg></div><div class="wp-doc more"><span class="no"></span><div><div class="q">+3 not written yet</div></div><svg class="ic "><use href="#i-right"/></svg></div><div class="wp-cath"><span class="no">3</span><b>会话与交互</b></div><div class="wp-doc"><span class="no">3.1</span><div><div class="t"><span class="ndot"></span><span class="tt">Session 运行与恢复</span></div><div class="q lead">session 是一个 runner 上、一个 agent runtime 的可恢复多轮会话：用户的回合先存后投，runner 长轮询领取、交给 runtime，再上传归一化事件。</div></div><svg class="ic "><use href="#i-right"/></svg></div><div class="wp-doc"><span class="no">3.2</span><div><div class="t"><span class="ndot"></span><span class="tt">实时流与推送</span></div><div class="q lead">客户端从每个会话的 SSE 流拿转录事件；用户级控制面流把各处的变化推给所有在线的客户端。</div></div><svg class="ic "><use href="#i-right"/></svg></div><div class="wp-doc more"><span class="no"></span><div><div class="q">+1 not written yet</div></div><svg class="ic "><use href="#i-right"/></svg></div><div class="wp-cath"><span class="no">4</span><b>Runner 与运行时</b></div><div class="wp-doc more"><span class="no"></span><div><div class="q">3 documents · Not written yet</div></div><svg class="ic "><use href="#i-right"/></svg></div></div></div>
+<div class="pb-cut" style="margin-top:10px">… 往下见图 31 ①</div>
+</div></div><div class="pb-ios top grouped" data-name="ios-new" data-flow="ios-new" data-fold="874" data-fold-label="首屏<br>874"><div data-ios="status"></div><div class="io-nav"><span class="io-glass l"><svg class="sf "><use href="#sf-menu"/></svg></span><span class="io-glass cap r"><span class="slot"><svg class="sf "><use href="#sf-list"/></svg></span><div class="pb-mark inl" style="border-radius:22px"><span class="m-n">1</span><span class="slot act"><svg class="sf "><use href="#sf-history"/></svg><span class="bdg">1</span></span></div><span class="slot"><svg class="sf "><use href="#sf-gear"/></svg></span></span></div>
+<div class="io-lt"><h1>Wiki</h1><div class="pb-mark inl" style="border-radius:15px"><span class="m-n">2</span><span class="io-name">orbit</span></div></div>
+<div class="pb-mark" style="margin:2px 8px 0"><span class="m-n">3</span><div class="io-subt">35 documents · 5 written</div></div>
+<div class="io-search"><svg class="sf "><use href="#sf-search"/></svg>Search the wiki</div>
+<div class="pb-mark" style="margin:0 4px 4px"><span class="m-n">4</span><div class="io-docs"><div class="io-grp-h"><span class="no">1</span><b>产品概览与架构</b></div><div class="io-card"><div class="io-docrow"><span class="no">1.1</span><div class="tx"><div class="t"><span class="tt">产品定位与核心能力</span></div><div class="q lead">Orbit 是自托管的 coding agent 控制台：agent 跑在你自己的机器上，计划、历史和控制都留在一个自托管的地方。</div></div><svg class="sf chev"><use href="#sf-chev-r"/></svg></div><div class="io-docrow"><span class="no">1.2</span><div class="tx"><div class="t"><span class="tt">系统架构与数据流</span></div><div class="q lead">Orbit 把协调和执行分开：服务器保存意图与历史，注册的 runner 在本来就有仓库、凭据和网络权限的机器上跑 agent 进程。</div></div><svg class="sf chev"><use href="#sf-chev-r"/></svg></div><div class="io-docrow more"><span class="no"></span><div class="tx"><div class="q">+1 not written yet</div></div><svg class="sf chev"><use href="#sf-chev-r"/></svg></div></div><div class="io-grp-h"><span class="no">2</span><b>任务与项目</b></div><div class="io-card"><div class="io-docrow"><span class="no">2.1</span><div class="tx"><div class="t"><span class="tt">任务生命周期与依赖</span></div><div class="q lead">任务是持久的排队工作单元：可以归进清单、依赖别的任务；合格的 runner 原子地领取它，开一个会话，再回报结果。</div></div><svg class="sf chev"><use href="#sf-chev-r"/></svg></div><div class="io-docrow more"><span class="no"></span><div class="tx"><div class="q">+3 not written yet</div></div><svg class="sf chev"><use href="#sf-chev-r"/></svg></div></div><div class="io-grp-h"><span class="no">3</span><b>会话与交互</b></div><div class="io-card"><div class="io-docrow"><span class="no">3.1</span><div class="tx"><div class="t"><span class="ndot"></span><span class="tt">Session 运行与恢复</span></div><div class="q lead">session 是一个 runner 上、一个 agent runtime 的可恢复多轮会话：用户的回合先存后投，runner 长轮询领取、交给 runtime，再上传归一化事件。</div></div><svg class="sf chev"><use href="#sf-chev-r"/></svg></div><div class="io-docrow"><span class="no">3.2</span><div class="tx"><div class="t"><span class="ndot"></span><span class="tt">实时流与推送</span></div><div class="q lead">客户端从每个会话的 SSE 流拿转录事件；用户级控制面流把各处的变化推给所有在线的客户端。</div></div><svg class="sf chev"><use href="#sf-chev-r"/></svg></div><div class="io-docrow more"><span class="no"></span><div class="tx"><div class="q">+1 not written yet</div></div><svg class="sf chev"><use href="#sf-chev-r"/></svg></div></div><div class="io-grp-h"><span class="no">4</span><b>Runner 与运行时</b></div><div class="io-card"><div class="io-docrow more"><span class="no"></span><div class="tx"><div class="q">3 documents · Not written yet</div></div><svg class="sf chev"><use href="#sf-chev-r"/></svg></div></div></div></div>
+<div class="pb-cut">… 往下见图 31 ①</div>
+</div><div class="pb-note"><p><b>Wiki 一打开就是文档。</b>从上到下：页头 → space → 一行内容状态 → 搜索 → <b>文档</b>（按大类，每篇标题 + 两行导语）→ <span class="en">Browse by category · A–Z index</span>。首页上不再有任何管理区块。</p><p><span class="m-n note-n">1</span><b>管理信息整体进 Activity 页（图 31 ②），从页头这个按钮进</b>，按钮上的琥珀数 = 抽屉的数（①）。Activity 页就是今天的首页去掉 Principles：状态行、待审横幅、plan 横幅、Recent decisions、Recently changed、Agents used，原样搬过去。<span class="pb-tag con">Orbit 一致性</span>图标带数是收起的侧栏（rail）里 Wiki 图标的画法（<code>tp-rail-badge</code>）；iOS 用抽屉同一个橙色。<span class="pb-tag new">新词</span><span class="en">Activity</span></p><p><span class="m-n note-n">2</span><b>space 叫人认得出的名字：orbit</b>（仓库地址的最后一段）。今天只有这一个 space，所以页头只有名字：没有箭头、没有菜单，web 不渲染 select；两个以上才有菜单，每行带仓库地址、文档数和等你的数（图 31 ④）。默认打开：当前所在 workspace（或项目）对应的 → 上次看的 → 文档最多的，web 与 iOS 同一条。<span class="pb-tag done">已定</span>owner 10-06。</p><p><span class="m-n note-n">3</span><b>标题下面说的是内容</b>：<span class="en">35 documents · 5 written</span>。维护状态（<span class="en">11,457 entries · Maintained 3h ago ✓ · 276 to catch up</span>）进 Activity。<span class="pb-tag co">协调性</span>「documents」「written」是 plan 卡上现成的词。</p><p><span class="m-n note-n">4</span><b>每篇文档：标题 + 两行导语</b>（文档第一节的头两句），点进文档页（图 24）；上次来之后新写的带蓝点（web 已在记「上次来」）。没写的每类折成一行 <span class="en">+3 not written yet</span>，整类没写的只剩 <span class="en">3 documents · Not written yet</span>，点开才列篇名。原则有的时候排在文档前面（图 31 ③），0 条不画。<span class="pb-tag guess">假设</span>服务端的目录读给每篇已写文档带一段导语（今天只带标题和是否已写）。</p><p><span class="pb-tag ref">备选</span>要是想让待审一进来就更显眼，可以在内容上方留一行琥珀横幅（今天的样子）。我建议只放页头的数：内容先行，数字已经说了有事等你。</p><p><span class="pb-tag guess">假设</span>导语取自仓库 README 与 <code>docs/architecture.md</code>（线上文档正文从这里读不到）；已写的 5 篇按 1.1、1.2、2.1、3.1、3.2 画；类目篇目取自图 29（列出 30 篇，plan 卡写 35 篇，以线上为准）。</p></div>
+</div>
+</div>
+</body>
+</html>

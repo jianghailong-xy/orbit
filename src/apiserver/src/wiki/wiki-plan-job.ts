@@ -1,9 +1,12 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit, Optional } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { randomUUID } from 'node:crypto';
 import {
   RunEventType,
   uuidToBase62,
+  WIKI_DOCS_BUILD_JOB,
   WIKI_PLAN_JOB_RULES,
+  WIKI_PLAN_SERVER_JOB,
   wikiMaintenanceSettings,
   type NormalizedRunEvent,
   type WikiMaintenanceSettings,
@@ -29,6 +32,7 @@ import { TASK_COMPLETION_FENCE_REVISION } from '../tasks/task-completion-criteri
 import { spaceScope } from './wiki-maintenance';
 import { WIKI_RUN_BASH_TIMEOUT, wikiRunCutOff } from './wiki-maintenance-session';
 import { ensureWikiMaintenanceList, wikiMaintenanceProviderProblem } from './wiki-maintenance-settings';
+import { currentWikiExecutorSwitch, wikiExecutorServes } from './wiki-executor-switch';
 
 /**
  * The plan's jobs (criterion 11; contracts/wiki.contract.json `plan.jobs`, migrations 0338 and 0340): a
@@ -92,6 +96,7 @@ const JOB_SELECT = {
   heldReason: true,
   heldAt: true,
   taskId: true,
+  jobId: true,
   madeAt: true,
   sessionId: true,
   startedAt: true,
@@ -207,7 +212,7 @@ export async function requestWikiPlanJob(prisma: Db, ask: WikiPlanJobAsk, now: D
 export async function requestWikiPlanBuild(prisma: Db, ask: WikiPlanBuildAsk, now: Date = new Date()): Promise<WikiPlanJobAnswer> {
   const made = await prisma.wikiPlanJob.findMany({
     where: { ownerId: ask.ownerId, spaceId: ask.spaceId, kind: 'build', state: 'made' },
-    select: { id: true, taskId: true },
+    select: { id: true, taskId: true, jobId: true, ownerId: true },
   });
   for (const job of made) await endJobWhoseTaskIsOver(prisma, job, now);
   const waiting = await waitingBuildJob(prisma, ask.ownerId, ask.spaceId);
@@ -253,6 +258,12 @@ export async function requestWikiPlanBuild(prisma: Db, ask: WikiPlanBuildAsk, no
 export async function advanceWikiPlanJob(prisma: Db, ownerId: string, jobId: string, now: Date = new Date()): Promise<string | null> {
   const job = await prisma.wikiPlanJob.findFirst({ where: { id: jobId, ownerId }, select: JOB_SELECT });
   if (!job || (job.state !== 'queued' && job.state !== 'held')) return null;
+  // The account's wiki is the server's (contract `plan.jobs.server`): the job is a wiki_job, and no task is made.
+  const server = wikiExecutorServes(currentWikiExecutorSwitch(), ownerId) ? wikiPlanServerJobOf(job) : null;
+  if (server) {
+    await makeWikiPlanJobOnServer(prisma, job, server, now);
+    return null;
+  }
   const space = await prisma.wikiSpace.findFirst({ where: { id: job.spaceId, ownerId }, select: { id: true, title: true, settings: true } });
   if (!space) return null;
   const settings = storedMaintenance(space.settings);
@@ -305,6 +316,81 @@ export async function advanceWikiPlanJob(prisma: Db, ownerId: string, jobId: str
 /** The acceptance command a job's task is made with: its run is judged by what it reported. */
 export function wikiPlanCheckCommand(spaceRef: string, jobRef: string): string {
   return `orbit wiki plan check --space ${spaceRef} --job ${jobRef}`;
+}
+
+/** What a plan job is made as when the server executes it: its wiki_job's kind, priority and input. */
+export interface WikiPlanServerJob {
+  kind: string;
+  priority: number;
+  input: Record<string, unknown>;
+}
+
+/**
+ * The wiki_job a plan job runs as when the server executes the account's wiki (contract `plan.jobs.server`): a draft
+ * as `plan_draft`, a revision as `plan_revise`, a build as `docs_build` (P7, `docs.build.server`), all at the owner's
+ * priority. Null for a kind the server does not run, which keeps the runner's path.
+ */
+function wikiPlanServerJobOf(job: Pick<WikiPlanJobRow, 'id' | 'kind'>): WikiPlanServerJob | null {
+  if (job.kind === 'draft' || job.kind === 'revise') {
+    return { kind: WIKI_PLAN_SERVER_JOB.kinds[job.kind], priority: WIKI_PLAN_SERVER_JOB.priority, input: { planJobId: job.id } };
+  }
+  if (job.kind === 'build') {
+    return { kind: WIKI_DOCS_BUILD_JOB.kind, priority: WIKI_DOCS_BUILD_JOB.priority, input: { planJobId: job.id } };
+  }
+  return null;
+}
+
+/**
+ * Make a plan job the server's (contract `plan.jobs.server`): its wiki_job enqueued in the same transaction that
+ * marks it made with it. The space's maintenance workspace is still what the job needs — the worker reads the
+ * repository through that workspace's runner — so a space without one holds the job as the runner's path does;
+ * the provider is not asked, since no session's model is, and nothing waits for the hidden list. Answers the
+ * wiki_job made, or null.
+ */
+export async function makeWikiPlanJobOnServer(
+  prisma: Db,
+  job: WikiPlanJobRow,
+  server: WikiPlanServerJob,
+  now: Date = new Date(),
+): Promise<string | null> {
+  const space = await prisma.wikiSpace.findFirst({ where: { id: job.spaceId, ownerId: job.ownerId }, select: { settings: true } });
+  if (!space) return null;
+  const settings = storedMaintenance(space.settings);
+  const workspace = settings.workspaceId
+    ? await prisma.workspace.findFirst({ where: { id: settings.workspaceId, ownerId: job.ownerId, deletedAt: null }, select: { id: true } })
+    : null;
+  if (!workspace) {
+    await holdJob(prisma, job, 'no_maintenance_workspace', now);
+    return null;
+  }
+  return new PlanJobServerWriter(prisma).makeOnServer({ ownerId: job.ownerId, spaceId: job.spaceId, planJobId: job.id, now, server });
+}
+
+/** The one writer of a server-made plan job: a class only so that its retry is labelled like every other. */
+class PlanJobServerWriter {
+  private readonly logger = new Logger('WikiPlanJobs');
+
+  constructor(private readonly prisma: PrismaService) {}
+
+  async makeOnServer(input: { ownerId: string; spaceId: string; planJobId: string; now: Date; server: WikiPlanServerJob }): Promise<string | null> {
+    return withTransactionRetry(
+      this.prisma,
+      async (tx) => {
+        const wikiJobId = randomUUID();
+        const made = await tx.$executeRaw`
+          UPDATE "wiki_plan_job"
+             SET "state" = 'made', "job_id" = ${wikiJobId}::uuid, "made_at" = ${input.now}, "held_reason" = NULL, "held_at" = NULL, "updated_at" = now()
+           WHERE "id" = ${input.planJobId}::uuid AND "owner_id" = ${input.ownerId}::uuid AND "state" IN ('queued', 'held')`;
+        if (made === 0) return null;
+        await tx.$executeRaw`
+          INSERT INTO "wiki_job" ("id", "owner_id", "space_id", "kind", "input", "priority", "state")
+          VALUES (${wikiJobId}::uuid, ${input.ownerId}::uuid, ${input.spaceId}::uuid, ${input.server.kind},
+                  ${JSON.stringify(input.server.input)}::jsonb, ${input.server.priority}, 'queued')`;
+        return wikiJobId;
+      },
+      loggedRetry(this.logger, 'wiki.planJobOnServer'),
+    );
+  }
 }
 
 /** Say on the job why it was not made; the reason it first held for keeps its time. */
@@ -478,7 +564,8 @@ export async function resumeWikiPlanJobs(
  * A made job whose task ended, or is gone, before its run said how it ended: failed, with why. Answers
  * whether the job is ended now. A job its run reported on is ended already and is left as it said.
  */
-async function endJobWhoseTaskIsOver(prisma: Db, job: Pick<WikiPlanJobRow, 'id' | 'taskId'>, now: Date): Promise<boolean> {
+async function endJobWhoseTaskIsOver(prisma: Db, job: Pick<WikiPlanJobRow, 'id' | 'taskId' | 'jobId' | 'ownerId'>, now: Date): Promise<boolean> {
+  if (job.jobId) return endJobWhoseServerJobIsOver(prisma, { id: job.id, jobId: job.jobId, ownerId: job.ownerId }, now);
   const task = job.taskId ? await prisma.task.findFirst({ where: { id: job.taskId }, select: { status: true } }) : null;
   if (task && (UNFINISHED_TASK as readonly string[]).includes(task.status)) return false;
   const why = task
@@ -488,10 +575,40 @@ async function endJobWhoseTaskIsOver(prisma: Db, job: Pick<WikiPlanJobRow, 'id' 
   return true;
 }
 
+const UNSETTLED_SERVER_JOB = ['queued', 'running', 'waiting'] as const;
+
+/**
+ * A made job of the server's (contract `plan.jobs.server`) whose wiki_job ended, or is gone, before the run said how
+ * the plan job went: failed, with why. One that never started while the server no longer executes the account's
+ * wiki (ORBIT_WIKI_EXECUTOR moved back) would wait for ever: it is cancelled, and the plan job ended with why, so the
+ * owner's next request is made on the path that runs now. Answers whether the plan job is ended now.
+ */
+async function endJobWhoseServerJobIsOver(prisma: Db, job: { id: string; jobId: string; ownerId: string }, now: Date): Promise<boolean> {
+  const run = await prisma.wikiJob.findFirst({ where: { id: job.jobId }, select: { state: true, startedAt: true } });
+  let why: string;
+  if (run && (UNSETTLED_SERVER_JOB as readonly string[]).includes(run.state)) {
+    if (run.state !== 'queued' || run.startedAt !== null || wikiExecutorServes(currentWikiExecutorSwitch(), job.ownerId)) return false;
+    const cancelled = await prisma.$executeRaw`
+      UPDATE "wiki_job"
+         SET "state" = 'cancelled', "ended_at" = now(), "updated_at" = now(),
+             "error" = 'the server no longer executes this account''s wiki (ORBIT_WIKI_EXECUTOR) and the job had not started'
+       WHERE "id" = ${job.jobId}::uuid AND "state" = 'queued' AND "started_at" IS NULL`;
+    if (cancelled === 0) return false;
+    why = "the server no longer executes this account's wiki, and its job there had not started";
+  } else {
+    why = run ? `its server job ended ${run.state} before it said how it went` : 'its server job was deleted before it said how it went';
+  }
+  await prisma.wikiPlanJob.updateMany({ where: { id: job.id, state: 'made' }, data: { state: 'ended', outcome: 'failed', endedAt: now, error: why } });
+  return true;
+}
+
 /** The made jobs of these tasks whose task has ended: failed, with why. Answers how many ended. */
 export async function settleWikiPlanJobsOfTasks(prisma: Db, ownerId: string, taskIds: readonly string[], now: Date = new Date()): Promise<number> {
   if (taskIds.length === 0) return 0;
-  const jobs = await prisma.wikiPlanJob.findMany({ where: { ownerId, state: 'made', taskId: { in: [...taskIds] } }, select: { id: true, taskId: true } });
+  const jobs = await prisma.wikiPlanJob.findMany({
+    where: { ownerId, state: 'made', taskId: { in: [...taskIds] } },
+    select: { id: true, taskId: true, jobId: true, ownerId: true },
+  });
   let ended = 0;
   for (const job of jobs) if (await endJobWhoseTaskIsOver(prisma, job, now)) ended += 1;
   return ended;
@@ -618,26 +735,36 @@ export class WikiPlanJobFacts implements OnModuleInit, OnModuleDestroy {
 
 /** The job the plan's read shows: the space's that has not ended, else the one that ended last. */
 export async function wikiPlanJobOfSpace(prisma: Db, ownerId: string, spaceId: string): Promise<WikiPlanJob | null> {
+  const row = await wikiPlanJobRowOfSpace(prisma, ownerId, spaceId);
+  return row ? wikiPlanJobView(prisma, row) : null;
+}
+
+/** That job's row, as it is stored: the spaces list counts what of the plan waits on the owner from it. */
+export async function wikiPlanJobRowOfSpace(prisma: Db, ownerId: string, spaceId: string): Promise<WikiPlanJobRow | null> {
   const open = await prisma.wikiPlanJob.findFirst({
     where: { ownerId, spaceId, state: { in: [...OPEN_STATES] } },
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     select: JOB_SELECT,
   });
-  const row = open ?? (await prisma.wikiPlanJob.findFirst({
+  return open ?? (await prisma.wikiPlanJob.findFirst({
     where: { ownerId, spaceId },
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     select: JOB_SELECT,
   }));
-  return row ? wikiPlanJobView(prisma, row) : null;
 }
 
-/** A job row as the doors answer it. */
-export async function wikiPlanJobView(prisma: Db, row: WikiPlanJobRow): Promise<WikiPlanJob> {
-  const state: WikiPlanJobState = row.state === 'made'
+/** Where a job stands as the plan's read says it (contract `plan.jobs.states`): a made one runs, an ended one says how. */
+export function wikiPlanJobStateOf(row: Pick<WikiPlanJobRow, 'state' | 'outcome'>): WikiPlanJobState {
+  return row.state === 'made'
     ? 'running'
     : row.state === 'ended'
       ? (row.outcome as WikiPlanJobOutcome)
       : (row.state as 'queued' | 'held');
+}
+
+/** A job row as the doors answer it. */
+export async function wikiPlanJobView(prisma: Db, row: WikiPlanJobRow): Promise<WikiPlanJob> {
+  const state = wikiPlanJobStateOf(row);
   let waitingFor: WikiPlanJob['waitingFor'] = null;
   if (row.state === 'queued') {
     const space = await prisma.wikiSpace.findFirst({ where: { id: row.spaceId, ownerId: row.ownerId }, select: { settings: true } });
@@ -879,6 +1006,57 @@ export async function progressWikiPlanBuild(
   return moved > 0;
 }
 
+/**
+ * How far a build the wiki worker runs has got (contract `plan.jobs.progress`): `progressWikiPlanBuild` for a run
+ * with no session, on its plan job while it is made and still the worker's job's. Answers whether it was.
+ */
+export async function progressWikiPlanBuildOfJob(
+  prisma: Db,
+  planJobId: string,
+  wikiJobId: string,
+  progress: WikiPlanBuildProgress,
+  now: Date = new Date(),
+): Promise<boolean> {
+  const value = JSON.stringify(progress);
+  const moved = await prisma.$executeRaw`
+    UPDATE "wiki_plan_job"
+       SET "progress" = ${value}::jsonb, "started_at" = coalesce("started_at", ${now}), "updated_at" = now()
+     WHERE "id" = ${planJobId}::uuid AND "state" = 'made' AND "kind" = 'build' AND "job_id" = ${wikiJobId}::uuid`;
+  return moved > 0;
+}
+
+/**
+ * A server-run job's start and the gate round it is on (contract `plan.jobs.server`): the time it first started
+ * (coalesce) and, when given, its round, on its row by id while it is made by this wiki_job. It has no session.
+ * Answers whether it was.
+ */
+export async function progressWikiPlanJobOfJob(
+  prisma: Db,
+  input: { planJobId: string; wikiJobId: string; attempt: number | null },
+  now: Date = new Date(),
+): Promise<boolean> {
+  const moved = await prisma.$executeRaw`
+    UPDATE "wiki_plan_job"
+       SET "started_at" = coalesce("started_at", ${now}), "attempt" = coalesce(${input.attempt}::int, "attempt"), "updated_at" = now()
+     WHERE "id" = ${input.planJobId}::uuid AND "state" = 'made' AND "job_id" = ${input.wikiJobId}::uuid`;
+  return moved > 0;
+}
+
+/**
+ * The materials a server-run job drafts from, kept on it at its first run (contract `plan.jobs.server.materials`):
+ * the snapshot's sha, what Orbit said of the space, and the texts the snapshot does not carry. A replay reads these
+ * instead of reading again, so it asks the model the same questions. Only while it is made by this wiki_job.
+ */
+export async function saveWikiPlanJobMaterials(
+  prisma: Db,
+  input: { planJobId: string; wikiJobId: string; materials: Record<string, unknown> },
+): Promise<boolean> {
+  const moved = await prisma.$executeRaw`
+    UPDATE "wiki_plan_job" SET "materials" = ${JSON.stringify(input.materials)}::jsonb, "updated_at" = now()
+     WHERE "id" = ${input.planJobId}::uuid AND "state" = 'made' AND "job_id" = ${input.wikiJobId}::uuid`;
+  return moved > 0;
+}
+
 /** How a run ended, as it said it, checked by the door before it is kept. */
 export interface WikiPlanJobEnd {
   outcome: WikiPlanJobOutcome;
@@ -898,21 +1076,23 @@ export interface WikiPlanJobEnd {
 export async function finishWikiPlanJob(
   prisma: Db,
   jobId: string,
-  sessionId: string,
+  sessionId: string | null,
   end: WikiPlanJobEnd,
   now: Date = new Date(),
   kind: WikiPlanJobKind = 'draft',
+  wikiJobId: string | null = null,
 ): Promise<boolean> {
   const version = kind === 'build'
     ? (end.outcome === 'succeeded' && end.version !== null ? { version: end.version } : {})
     : { version: end.outcome === 'succeeded' ? end.version : null };
   const ended = await prisma.wikiPlanJob.updateMany({
-    where: { id: jobId, state: 'made' },
+    // A server-run job (contract `plan.jobs.server`) is ended only by the wiki_job it was made with, and has no session.
+    where: { id: jobId, state: 'made', ...(wikiJobId !== null ? { jobId: wikiJobId } : {}) },
     data: {
       state: 'ended',
       outcome: end.outcome,
       endedAt: now,
-      sessionId,
+      ...(sessionId !== null ? { sessionId } : {}),
       ...version,
       errors: end.errors.length > 0 ? (end.errors as unknown as Prisma.InputJsonValue) : Prisma.DbNull,
       error: end.error,

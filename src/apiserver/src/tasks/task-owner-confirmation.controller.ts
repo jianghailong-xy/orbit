@@ -19,7 +19,7 @@ import { TaskOwnerConfirmationService } from './task-owner-confirmation.service'
 export class TaskOwnerConfirmationController {
   constructor(private readonly confirmations: TaskOwnerConfirmationService) {}
 
-  @PatScope('tasks:read')
+  @PatScope('tasks:read', { workspaceConfinable: { params: { taskId: 'task' } } })
   @Get()
   read(@CurrentUser() user: AuthUser, @Param('taskId', PublicIdPipe) taskId: string) {
     return this.confirmations.read(user.userId, taskId);

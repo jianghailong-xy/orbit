@@ -63,6 +63,10 @@ export class CreateWorkspaceDto {
   /** The Claude account this workspace's Claude sessions run on. Same rules as codexAccount: null is
    *  Automatic, `default` pins them to Default. */
   @IsOptional() @IsString() @Matches(ACCOUNT_ID_PATTERN) claudeAccount?: string | null;
+  /** The Antigravity Google account this workspace's Antigravity sessions run on. Same rules again. */
+  @IsOptional() @IsString() @Matches(ACCOUNT_ID_PATTERN) antigravityAccount?: string | null;
+  /** The Kimi Code account this workspace's Kimi sessions run on. Same rules again. */
+  @IsOptional() @IsString() @Matches(ACCOUNT_ID_PATTERN) kimiAccount?: string | null;
   @IsOptional() @IsBoolean() enabled?: boolean;
   @IsOptional() @IsBoolean() autoInitGit?: boolean;
   @IsOptional() @IsBoolean() enableWorktree?: boolean;
@@ -110,6 +114,10 @@ export class UpdateWorkspaceDto {
   @IsOptional() @IsString() @Matches(ACCOUNT_ID_PATTERN) codexAccount?: string | null;
   /** See CreateWorkspaceDto.claudeAccount. Absent leaves the choice alone; null clears it. */
   @IsOptional() @IsString() @Matches(ACCOUNT_ID_PATTERN) claudeAccount?: string | null;
+  /** See CreateWorkspaceDto.antigravityAccount. Absent leaves the choice alone; null clears it. */
+  @IsOptional() @IsString() @Matches(ACCOUNT_ID_PATTERN) antigravityAccount?: string | null;
+  /** See CreateWorkspaceDto.kimiAccount. Absent leaves the choice alone; null clears it. */
+  @IsOptional() @IsString() @Matches(ACCOUNT_ID_PATTERN) kimiAccount?: string | null;
   @IsOptional() @IsBoolean() enabled?: boolean;
   @IsOptional() @IsBoolean() autoInitGit?: boolean;
   @IsOptional() @IsBoolean() enableWorktree?: boolean;

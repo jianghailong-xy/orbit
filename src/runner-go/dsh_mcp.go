@@ -99,12 +99,15 @@ func dshOrbitMCPEnv(job *ClaimedSession) []map[string]string {
 		envMCPPermissionPrompt + "=0",
 		envSpawnDepth + "=" + strconv.Itoa(job.SpawnDepth),
 		envMCPCallTimeout + "=" + strconv.Itoa(int(dshMCPToolCallTimeout/time.Second)),
+		envRunnerChild + "=1",
 	}
 	// Where the runner's own config lives, so the server authenticates as this runner.
 	if home := machineHome(); filepath.IsAbs(home) {
 		pairs = append(pairs, "ORBIT_HOME="+home)
 	}
 	pairs = append(pairs, bgJobEnvPairs(job.SessionID)...)
+	// A managed runner's instance, which `orbit mcp` sends with the runner credential.
+	pairs = append(pairs, managedInstanceEnv()...)
 	env := make([]map[string]string, 0, len(pairs))
 	for _, pair := range pairs {
 		key, value, _ := strings.Cut(pair, "=")
