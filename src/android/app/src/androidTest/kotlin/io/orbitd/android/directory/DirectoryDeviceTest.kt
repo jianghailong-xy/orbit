@@ -83,7 +83,7 @@ class DirectoryDeviceTest {
                 awaitIme(true)
                 hit.performScrollTo()
                 tap(hit, true)
-                compose.waitUntil(10_000) { compose.onAllNodesWithText("Session options").fetchSemanticsNodes().isNotEmpty() }
+                compose.waitUntil(10_000) { compose.onAllNodes(hasContentDescription("Session actions") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
                 awaitIme(false)
                 key(KeyEvent.KEYCODE_BACK)
                 compose.waitUntil(5_000) { compose.onAllNodesWithText("Review").fetchSemanticsNodes().isNotEmpty() }

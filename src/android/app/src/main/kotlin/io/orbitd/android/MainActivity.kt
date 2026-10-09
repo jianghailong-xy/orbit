@@ -238,9 +238,6 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                         if (route.destination == Destination.WORKSPACE) IconButton(onClick = {
                             open(OrbitRoute(Destination.SETTINGS, id = "workspace", workspaceId = route.id))
                         }) { Icon(painterResource(R.drawable.ic_settings), "Workspace settings") }
-                        if (route.destination == Destination.SESSION && route.id != null) IconButton(onClick = {
-                            open(OrbitRoute(Destination.SETTINGS, id = "share", recordId = "SESSION:${route.id}"))
-                        }) { Icon(painterResource(R.drawable.ic_share), "Share session") }
                         PageBar.Actions(route, this)
                         if (navigation.canGoBack) IconButton(onClick = { scope.launch { focus.clearFocus(); drawer.open() } }) { Icon(painterResource(R.drawable.ic_menu), "Open navigation") }
                         IconButton(onClick = { app.realtime.refreshDirectory() }) { Icon(painterResource(R.drawable.ic_refresh), "Refresh directory") }
@@ -254,7 +251,9 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                                 Destination.WORKSPACES -> WorkspaceHome(data, { w -> land(w.id, OrbitRoute(Destination.WORKSPACE, w.id, w.id)) }) { app.realtime.refreshDirectory() }
                                 Destination.WORKSPACE, Destination.FOLDER -> DirectoryScreen(route, data, api, ::open) { app.realtime.refreshDirectory() }
                                 Destination.SEARCH -> SearchScreen(api, ::open)
-                                Destination.SESSION -> SessionReader(app, signedIn.handle, route, api, data, ::open)
+                                Destination.SESSION -> SessionReader(app, signedIn.handle, route, api, data, ::open) {
+                                    navigation = navigation.dropSession(route.id!!)
+                                }
                                 Destination.DRAFT -> NewSessionComposer(app, signedIn.handle, route, data, ::open)
                                 Destination.TASKS, Destination.TASK, Destination.LIST -> TasksScreen(app, signedIn.handle, route, revision, ::open) { navigation = navigation.back() }
                                 Destination.PROJECTS, Destination.PROJECT -> ProjectsScreen(app, signedIn.handle, route, revision, ::open) { navigation = navigation.back() }

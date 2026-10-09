@@ -21,8 +21,10 @@ import kotlinx.serialization.json.contentOrNull
  * menu that asked; [changed] re-reads the lists once a write went through.
  */
 internal class SessionActions(private val api: DirectoryApi, private val scope: CoroutineScope, private val changed: () -> Unit) {
-    fun complete(id: String, title: String?) = act(id, title, "Couldn't complete the session") {
+    /** [done] once it is: the session page asking takes itself away (iOS `dropIfOpen`). */
+    fun complete(id: String, title: String?, done: () -> Unit = {}) = act(id, title, "Couldn't complete the session") {
         api.complete(id)
+        done()
         OrbitToasts.show("Session completed", toastTitle(title), id, canUndo = true)
     }
 
@@ -32,9 +34,16 @@ internal class SessionActions(private val api: DirectoryApi, private val scope: 
         OrbitToasts.show("Moved to Open", toastTitle(title), id, tone = ToastTone.INFO)
     }
 
-    fun trash(id: String, title: String?) = act(id, title, "Couldn't move to Trash") {
+    fun trash(id: String, title: String?, done: () -> Unit = {}) = act(id, title, "Couldn't move to Trash") {
         api.delete(id, false)
+        done()
         OrbitToasts.show("Moved to Trash", toastTitle(title), id, tone = ToastTone.NEUTRAL, glyph = ToastGlyph.TRASH, canUndo = true)
+    }
+
+    /** Pinned or not, with no toast either way, as iOS's: the row moves, or stays where it was. */
+    fun pin(id: String, pinned: Boolean) = scope.launch {
+        try { api.pin(id, pinned) } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { return@launch }
+        changed()
     }
 
     /** No toast once it is renamed: the new name on the row and the page says so. */

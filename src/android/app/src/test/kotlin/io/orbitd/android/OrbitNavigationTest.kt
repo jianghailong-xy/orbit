@@ -76,6 +76,23 @@ class OrbitNavigationTest {
         assertFalse(project.canGoBack)
     }
 
+    /** A05-3: a session completed or moved to Trash from its own page leaves the stack, in either spelling of its id
+     * (iOS `NavState.removeConsole`); a stack it is not on stays as it is. */
+    @Test fun aSessionLeavingItsPageLeavesTheStack() {
+        val root = OrbitRoute(Destination.WORKSPACE, "w1")
+        val nav = OrbitNavigation().bindAccount("server|user").select("w1", root)
+            .push(OrbitRoute(Destination.SESSION, uuid)).push(OrbitRoute(Destination.TASK, uuid)).push(OrbitRoute(Destination.SESSION, publicId, origin = Origin.LINK))
+        assertEquals(listOf(root, OrbitRoute(Destination.TASK, uuid)), nav.dropSession(publicId).frames)
+        val other = OrbitNavigation().bindAccount("server|user").select("w1", root)
+        assertEquals(other, other.dropSession(publicId))
+    }
+
+    /** Copy Link's address names the session by its public id, as the deployment's own routes do (OrbitKit `PublicID.toPublic`). */
+    @Test fun aSessionsPublicIdIsItsUuidInBase62() {
+        assertEquals(publicId, ObjectId.toPublic(uuid))
+        assertEquals(publicId, ObjectId.toPublic(publicId))
+    }
+
     @Test fun accountAndInstanceChangesDiscardEveryOldPathAndPendingObject() {
         val nav = OrbitNavigation().bindAccount("server1|user1").push(OrbitRoute(Destination.TASK, uuid))
         listOf(null, "server2|user1", "server1|user2").forEach { scope ->

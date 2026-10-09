@@ -46,6 +46,11 @@ data class OrbitNavigation(
      * its page as it is — the tap only closes the drawer — and any other lands on its destination's root page, the
      * stack being left going with it. */
     fun select(key: String, root: OrbitRoute): OrbitNavigation = if (key == section) this else land(key, root)
+    /** A session completed or moved to Trash from its page leaves the stack it showed on (iOS `NavState.removeConsole`). */
+    fun dropSession(id: String): OrbitNavigation {
+        val kept = frames.filterNot { it.destination == Destination.SESSION && ObjectId.same(it.id, id) }
+        return if (kept.isEmpty() || kept.size == frames.size) this else copy(stacks = stacks + (section to kept))
+    }
     /** [key]'s root page whatever was showing: where a page that sends the reader to a destination lands. */
     fun land(key: String, root: OrbitRoute): OrbitNavigation = copy(section = key, stacks = mapOf(key to listOf(root)))
     fun receive(route: OrbitRoute): OrbitNavigation {
@@ -88,6 +93,15 @@ object ObjectId {
         return "${hex.take(8)}-${hex.substring(8, 12)}-${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.substring(20)}"
     }
     fun same(a: String?, b: String?): Boolean = a == b || (a != null && b != null && canonical(a) != null && canonical(a) == canonical(b))
+    /** OrbitKit `PublicID.toPublic`: a UUID's 16 bytes as Base62, the spelling the deployment's own routes use. */
+    fun toPublic(id: String): String {
+        val uuid = canonical(id) ?: return id
+        var number = BigInteger(uuid.replace("-", ""), 16)
+        if (number.signum() == 0) return "0"
+        val out = StringBuilder(); val base = BigInteger.valueOf(62)
+        while (number.signum() > 0) { val (q, r) = number.divideAndRemainder(base); out.append(alphabet[r.toInt()]); number = q }
+        return out.reverse().toString()
+    }
 }
 
 object OrbitLinks {

@@ -24,6 +24,7 @@ import io.orbitd.android.OrbitApplication
 import io.orbitd.android.composer.SessionComposer
 import io.orbitd.android.cards.SessionCards
 import io.orbitd.android.watch.SessionWatches
+import io.orbitd.android.wiki.PageBar
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.core.realtime.*
@@ -36,7 +37,7 @@ import kotlinx.serialization.json.*
 
 @Composable
 fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRoute, api: DirectoryApi,
-    data: DirectoryData, open: (OrbitRoute) -> Unit) {
+    data: DirectoryData, open: (OrbitRoute) -> Unit, leave: () -> Unit = {}) {
     var recordOpened by rememberSaveable { mutableStateOf(false) }
     val model = remember(handle, route.id, route.recordId) { SessionReaderModel(app.session, handle,
         app.realtime, route.id!!, app.processScope, route.recordId, recordOpened) }
@@ -77,6 +78,16 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     var positioning by remember { mutableStateOf(false) }
     var details by rememberSaveable { mutableStateOf(false) }
     var action by remember { mutableStateOf<DirectoryDialog?>(null) }
+    // A05-3: the session's ⋯ in the bar, where its Share button was (iOS d2858a5e8).
+    val listed = remember(state.session?.snapshot?.detail) {
+        state.session?.snapshot?.detail?.let { runCatching { Wire.json.decodeFromJsonElement(DirectorySession.serializer(), it) }.getOrNull() }
+    }
+    val actions = remember(api) { SessionActions(api, app.processScope) { app.realtime.refreshDirectory(); app.realtime.refreshSession() } }
+    val link = remember(handle, route.id) { "${handle.account.server.trimEnd('/')}/sessions/${ObjectId.toPublic(route.id!!)}" }
+    PageBar.Bind(route, title = null, actions = {
+        SessionMenu(listed.takeUnless { state.denied }, state.session?.snapshot?.detail, link, state.session?.fresh == true && data.fresh,
+            actions, open, { action = it }, leave)
+    })
     val currentRows by rememberUpdatedState(rows)
     val nested = remember { object : NestedScrollConnection {
         override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
@@ -148,10 +159,6 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                 Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     TextButton(onClick = { details = true }, enabled = detail != null) { Text(detail?.string("title") ?: "Session details") }
-                    val directorySession = remember(detail) { detail?.let { runCatching { Wire.json.decodeFromJsonElement(DirectorySession.serializer(), it) }.getOrNull() } }
-                    TextButton(enabled = session?.fresh == true && data.fresh && directorySession != null,
-                        onClick = { action = DirectoryDialog.SessionMenu(directorySession!!,
-                            SessionView.entries.firstOrNull { it.name == directorySession.lifecycleState } ?: SessionView.OPEN) }) { Text("Session options") }
                 }
                 // Connection changes must not insert/remove a banner above the reading viewport.
                 val reconnecting = session?.fresh != true && state.window.seeded
@@ -226,8 +233,10 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         }
         }
         if (details && !state.denied) SessionDetails(state.session, api, openLink) { details = false }
-        action?.let { DirectoryActionDialog(it, api, data.copy(fresh = data.fresh && state.session?.fresh == true), { action = it }) {
+        action?.let { dialog -> DirectoryActionDialog(dialog, api, data.copy(fresh = data.fresh && state.session?.fresh == true), { action = it }) {
             app.realtime.refreshDirectory(); app.realtime.refreshSession()
+            // Deleted for good from its own page: the page goes with it, as iOS's console does.
+            if (dialog is DirectoryDialog.Purge) leave()
         } }
     }
 }
