@@ -155,8 +155,8 @@ class DirectoryDeviceTest {
                 compose.onNodeWithText("Source SHA").performScrollTo().assertIsDisplayed()
                 capture("build")
                 key(KeyEvent.KEYCODE_BACK)
-                compose.waitUntil(15_000) { compose.onAllNodesWithText("Directory fixture").fetchSemanticsNodes().isNotEmpty() }
-                compose.onNodeWithText("Directory fixture").assertIsDisplayed()
+                // Back on Settings where it was left: scrolled down to the Build information it opened.
+                compose.onNodeWithText("Build information").assertIsDisplayed()
                 compose.onNodeWithContentDescription("Back").assertIsDisplayed()
                 key(KeyEvent.KEYCODE_BACK)
                 compose.onNodeWithText("Research").assertIsDisplayed()
