@@ -467,7 +467,7 @@ final class AppModel {
     /// Every personal access token the account has issued: Settings → Access tokens, and the count
     /// on its row.
     private(set) var accessTokens: AccessTokensModel?
-    /// The shared pools the account is in: Settings → Providers, and each pool's page.
+    /// The shared pools the account is in: Infrastructure's Account pools, and each pool's page.
     private(set) var sharedPools: SharedPoolsModel?
     /// The account's watches: Following, the console's Watching card, and every session's row and header.
     private(set) var watches: WatchesModel?
@@ -1185,9 +1185,13 @@ final class AppModel {
             scheduleLibraryRefresh(.agents)
             scheduleControlRefresh()
             // A shared pool's people are told of every change to it — a key going in, a rule — so a
-            // pool page that is open shows it. Read only once Providers has asked for the list.
+            // pool page that is open shows it. Read only once Infrastructure has asked for the list —
+            // and the account's own keys likewise, which only that page reads.
             if sharedPools?.loadState.hasLoaded == true {
                 Task { await sharedPools?.load() }
+            }
+            if agents?.ownKeysState.hasLoaded == true {
+                Task { await agents?.loadOwnKeys() }
             }
         case .sessionCreated, .sessionUpdated:
             if let summary = ev.payload(ControlSessionSummary.self) {
@@ -1915,7 +1919,7 @@ final class AppModel {
     /// compact shell uses this to yield the left screen edge to its drawer-open gesture only where
     /// no pushed page needs the edge for the system back-swipe. Every section that pushes reads its
     /// own stack — Tasks (a detail, then the list directory), Agents (a draft, then a console),
-    /// Runners, Following, Admin, and Settings (its runners list, then a runner's record).
+    /// Infrastructure, Following, Admin, and Settings (a page, then what that page pushes).
     var sectionAtRoot: Bool {
         switch selectedSection {
         // Nothing pushed on the Tasks stack: not a task's detail, not the list directory — one
@@ -1928,7 +1932,8 @@ final class AppModel {
         // The sections whose pages are frames of their own stack: one read covers both the
         // three-column selection and the compact push. Skills pushes nothing (always at root); Admin
         // pushes a user's record now, which is what replaced the unconditional `true` this used to
-        // answer with; Settings pushes two (its runners list, then a runner's record).
+        // answer with; Settings pushes its pages and what they push in turn (Infrastructure, then a
+        // machine's record).
         case .skills, .runners, .following, .admin, .settings: return nav.sectionAtRoot
         // A project's page over the index: the same one read.
         case .projects: return nav.sectionAtRoot
@@ -2921,6 +2926,14 @@ final class AppModel {
         }
     }
 
+    /// One engine's page on one machine, from outside the Infrastructure page — a session picker's way to
+    /// the fix for an engine that machine can't run, and a repair card's: the machine's record in the
+    /// Infrastructure section, and its engine's page over it, where signing in and installing live.
+    func openRunnerEngine(_ runnerID: String, engine: String) {
+        route(to: .runner(runnerID))
+        push(.runnerEngine(runnerID: runnerID, engine: engine))
+    }
+
     /// A task a route opened in Tasks, moved over its project's page once its row says it has one.
     ///
     /// Tasks' every-task scope is the tasks outside projects (2026-09-26), so a project's task routed
@@ -3042,7 +3055,7 @@ final class AppModel {
     }
 
     /// The one-shot launch landing: the agent you last used (persisted via `selectedAgentID`), else
-    /// the first agent, else the Runners section when the server says there are none — the native
+    /// the first agent, else the Infrastructure section when the server says there are none — the native
     /// parallel of web's runners/register onboarding. A deep link / notification that already chose
     /// an agent, a session or another section is respected. Decided only off a successful agent
     /// fetch: an offline launch leaves it unlatched, and the control plane's reconnect reload decides

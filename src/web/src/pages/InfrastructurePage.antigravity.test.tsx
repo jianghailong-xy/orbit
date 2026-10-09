@@ -6,7 +6,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api';
 import type { Runner } from '../components/TasksSidePanel';
-import { ProvidersPage } from './ProvidersPage';
+import { InfrastructurePage } from './InfrastructurePage';
 
 vi.mock('../api', async (original) => ({ ...(await original<typeof import('../api')>()), api: vi.fn() }));
 const apiMock = vi.mocked(api);
@@ -22,7 +22,7 @@ const runner = (over: Partial<Runner> = {}): Runner => ({
   ...over,
 });
 
-describe('Antigravity identity and readiness on the Providers page', () => {
+describe('Antigravity identity and readiness on the Infrastructure page', () => {
   let root: Root;
   let container: HTMLDivElement;
   let client: QueryClient;
@@ -61,13 +61,13 @@ describe('Antigravity identity and readiness on the Providers page', () => {
     client.setQueryData(['providers', 'pools'], []);
     client.setQueryData(['providers', 'shared-pools'], []);
     await act(async () => {
-      root.render(<MemoryRouter initialEntries={['/providers?runner=33zx0JhRhJo8rd25d3qAM&engine=antigravity']}>
-        <QueryClientProvider client={client}><ProvidersPage /></QueryClientProvider>
+      root.render(<MemoryRouter initialEntries={['/infrastructure?runner=33zx0JhRhJo8rd25d3qAM&engine=antigravity']}>
+        <QueryClientProvider client={client}><InfrastructurePage /></QueryClientProvider>
       </MemoryRouter>);
     });
   }
 
-  it('counts only online runners that declare support and have the CLI, and scrolls to their cards', async () => {
+  it('counts only online machines that declare support and have the CLI, and scrolls to their cards', async () => {
     await mount([
       runner(), runner({ id: 'offline', online: false }),
       runner({ id: 'old', antigravity: { supported: false, installed: true, version: '1.2.16', envKeyAvailable: false } }),
@@ -78,16 +78,17 @@ describe('Antigravity identity and readiness on the Providers page', () => {
     expect(container.querySelector('a[href="/providers/new/gemini"] .pc-name')?.textContent).toBe('Antigravity');
     expect(container.querySelector('[data-engine="antigravity"] .re-name')?.textContent).toBe('Antigravity');
     expect(key.textContent).toContain('Runs on the Antigravity CLI');
-    expect(key.textContent).toContain('Ready on 1 runner');
+    expect(key.textContent).toContain('Ready on 1 machine');
+    expect(key.querySelector('a')?.textContent).toBe('See machines ↑');
     scroll.mockClear();
     await act(async () => (key.querySelector('a') as HTMLAnchorElement).click());
     expect(scroll.mock.calls).toEqual([[{ behavior: 'smooth', block: 'start' }]]);
-    expect(scroll.mock.contexts[0]).toBe(container.querySelector('#provider-runners'));
+    expect(scroll.mock.contexts[0]).toBe(container.querySelector('#machines'));
   });
 
-  it('warns when no online runner is ready and offers installation on the focused CLI row', async () => {
+  it('warns when no online machine is ready and offers installation on the focused CLI row', async () => {
     await mount([runner({ antigravity: { supported: true, installed: false, version: null, envKeyAvailable: false } })]);
-    expect(container.querySelector('.prov-runtime')?.textContent).toContain('Not ready on any runner');
+    expect(container.querySelector('.prov-runtime')?.textContent).toContain('Not ready on any machine');
     const row = container.querySelector('[data-engine="antigravity"]')!;
     expect(row.classList.contains('focused')).toBe(true);
     expect(row.textContent).toContain('Not installed — Orbit can install it here');

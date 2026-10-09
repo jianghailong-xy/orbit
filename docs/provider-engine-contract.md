@@ -88,7 +88,7 @@
 - 写入不再产生 `dsh`：旧客户端以 `runtime: 'dsh'` 或 preset `deepseek-harness` 新建时存为 DeepSeek key（§3.6）；PATCH 把 `runtime` 改成 `dsh` 返回 `PROVIDER_RUNTIME_DSH_RETIRED`（§3.7）。
 - 读路径继续接受遗留值：T4 迁移之前，`runtime='dsh'` 的行按 DeepSeek key 对待，默认 engine 仍是 `dsh`，不改变任何旧调用的结果。
 - 给 engine 注入哪种环境变量由 engine 决定，不由 runtime 决定（§4.2）。
-- preset `deepseek-harness` 留在 `PROVIDER_PRESETS` 里，直到所有部署都跑过 T4 迁移：它还承载未迁移行的读取（`isDeepSeekKey`、模型目录）。Providers 页不再显示它（T6）。
+- preset `deepseek-harness` 留在 `PROVIDER_PRESETS` 里，直到所有部署都跑过 T4 迁移：它还承载未迁移行的读取（`isDeepSeekKey`、模型目录）。Infrastructure 页（原 Providers 页）不再显示它（T6）。
 
 ### 1.5 别名表 `provider_slug_alias`
 
@@ -358,7 +358,7 @@ export function isEngineCompatible(engine: string, credential: EngineCredential)
 | `ENGINE_UNKNOWN` | 400 | engine 不是六个值之一 | `engine "<value>" is not one of claude, codex, kimi, antigravity, opencode, dsh` | — |
 | `PROVIDER_ENGINE_INCOMPATIBLE` | 400 | engine 与 provider 不兼容（新建、切换、任务 pin、batch-pin、wiki 设置）；或只给 provider 而它没有默认 engine | 点名 engine 时：`provider "<slug>" cannot run on <CLI 名称>; it runs on <CLI 名称, …>`，可用列表为空时以 `no engine can run it` 结尾。只给 provider 时：`provider "<slug>" cannot run on any engine` | `engine`（只给 provider 时为 `null`）、`provider`、`engines` |
 | `ENGINE_IMMUTABLE` | 400 | resume、config、retry 带了不同的 engine | `this session runs on <CLI 名称>, and a session's engine never changes; start a new session to use <CLI 名称>` | `engine` |
-| `DEEPSEEK_KEY_REQUIRED` | 400 | 只给 `dsh`、内置 `dsh`，而用户没有启用的 DeepSeek key | `DeepSeek Harness runs on a DeepSeek API key; connect one in Providers first` | — |
+| `DEEPSEEK_KEY_REQUIRED` | 400 | 只给 `dsh`、内置 `dsh`，而用户没有启用的 DeepSeek key | `DeepSeek Harness runs on a DeepSeek API key; connect one, then try again` | — |
 | `SESSION_ENGINE_UNKNOWN` | 409 | engine 为空、推导未知，且已有 `runtimeSessionId` 的会话被续聊或切换 | `this session's engine was never recorded and its provider is gone, so Orbit cannot tell which engine its conversation belongs to; start a new session` | — |
 | `PROVIDER_DIALECT_IN_USE` | 409 | 改方言（或 endpoint）会让在用的 engine 不再兼容 | `provider "<label>" is in use on <CLI 名称, …> by <n> open sessions and <m> task pins; its protocol can't change while they use it` | `engines`、`sessions`、`tasks`（计数） |
 | `PROVIDER_RUNTIME_DSH_RETIRED` | 400 | PATCH 把 key 的 `runtime` 改成 `dsh`（新建时不报，见 §3.6） | `DeepSeek Harness is an engine now, not a kind of provider: keep the key as DeepSeek, then pick DeepSeek Harness as the engine` | — |
@@ -791,7 +791,7 @@ T2 的迁移只写列。回填结果的逐行报告由 T4 的迁移给出：它�
 | 统一解析（§3）、错误码、各入口 DTO、别名表与 0265 守卫扩展（§1.5）、`/providers` 与 `/runner/providers` 的 `engines`、回执 v3、路由与额度闸门（§4.4–4.5）、key 新建与编辑规则（§3.6）、`isDeepSeekAccountRow` 改用共享模块 | T3 |
 | §7.2–7.6 的应用层迁移（随启动执行）、别名数据与报告 | T4 |
 | CLI `--engine`、MCP `engine` 参数与描述（列全六个 engine）、`orbit provider list` 显示 engines、`orbit resume` 读 meta engine 并补 `dsh` 分支 | T5 |
-| Providers 页按厂商列 key、每把 key 标 engines | T6 |
+| Infrastructure 页（原 Providers 页）按厂商列 key、每把 key 标 engines | T6 |
 | Web 会话、任务、工作区先选 engine 再选 provider；effort、slash 按 engine；偏好新键 | T7 |
 | Swift 镜像共享模块；`AgentDefaults.runtime(for:)` 不再把 `opencode` 当成 `claude`；effort、slash 按 engine | T8 |
 | Kotlin 镜像；slash、权限、运行时判断补 `dsh` 并按 engine | T9 |

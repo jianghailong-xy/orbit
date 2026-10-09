@@ -5,6 +5,7 @@ import { isAbsolute } from 'node:path';
 import {
   KubeAmbiguousError,
   KubeApiError,
+  type ConfigMap,
   type KubeObject,
   type KubeResource,
   type KubeWatch,
@@ -14,6 +15,7 @@ import {
   type PersistentVolumeClaim,
   type Pod,
   type Secret,
+  type VolumeAttachment,
 } from './kube-client';
 import type { ManagedRunnerProfile } from './managed-runner-profile';
 
@@ -106,6 +108,7 @@ export class KubeHttpClient implements ManagedKubeClient {
   readonly persistentVolumeClaims: KubeResource<PersistentVolumeClaim>;
   readonly secrets: KubeResource<Secret>;
   readonly pods: KubeResource<Pod>;
+  readonly configMaps: Pick<KubeResource<ConfigMap>, 'get'>;
   private readonly server: URL;
   private readonly transport: KubeTransport;
 
@@ -119,12 +122,20 @@ export class KubeHttpClient implements ManagedKubeClient {
     this.persistentVolumeClaims = this.resource<PersistentVolumeClaim>('persistentvolumeclaims');
     this.secrets = this.resource<Secret>('secrets');
     this.pods = this.resource<Pod>('pods');
+    // Read only: the manager can be shown a fencing receipt, and cannot write one.
+    const configMaps = this.resource<ConfigMap>('configmaps');
+    this.configMaps = { get: configMaps.get };
   }
 
   async getPersistentVolume(name: string): Promise<PersistentVolume | null> {
     const response = await this.send('GET', `/api/v1/persistentvolumes/${objectName(name)}`);
     if (response.status === 404) return null;
     return this.parse<PersistentVolume>(response, `GET persistentvolume ${name}`);
+  }
+
+  async listVolumeAttachments(): Promise<VolumeAttachment[]> {
+    const response = await this.send('GET', '/apis/storage.k8s.io/v1/volumeattachments');
+    return this.parse<{ items?: VolumeAttachment[] }>(response, 'LIST volumeattachments').items ?? [];
   }
 
   private resource<T extends KubeObject>(plural: string): KubeResource<T> {
@@ -135,12 +146,12 @@ export class KubeHttpClient implements ManagedKubeClient {
         if (response.status === 404) return null;
         return this.parse<T>(response, `GET ${plural} ${name}`);
       },
-      create: async (object) => {
+      create: async (object, options) => {
         if (object.metadata.namespace && object.metadata.namespace !== this.namespace) {
           throw new Error(`refusing to create ${plural} ${object.metadata.name} outside namespace ${this.namespace}`);
         }
         objectName(object.metadata.name);
-        const response = await this.send('POST', base, JSON.stringify(object));
+        const response = await this.send('POST', `${base}${query({ dryRun: options?.dryRun ? 'All' : undefined })}`, JSON.stringify(object));
         return this.parse<T>(response, `POST ${plural} ${object.metadata.name}`);
       },
       delete: async (name, options) => {

@@ -30,6 +30,10 @@
       }
     }
   },
+  "admission": {
+    "managerUsername": "system:serviceaccount:REPLACE_ME:REPLACE_ME",
+    "webhookTokenSha256": "REPLACE_ME"
+  },
   "lifecycle": {
     "maxAttempts": null,
     "backoffBaseSeconds": null,

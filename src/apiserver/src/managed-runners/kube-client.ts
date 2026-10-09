@@ -1,7 +1,9 @@
 /**
  * The narrow Kubernetes surface the managed runner manager uses: PVCs, Secrets and Pods in the one
- * configured namespace (get, create, delete, list, watch), and a read of a PV, whose CSI volume
- * handle is part of a data volume's identity. Nothing else — no cluster-scoped writes, no exec, no
+ * configured namespace (get, create, delete, list, watch); a read of a PV, whose CSI volume handle
+ * is part of a data volume's identity; a list of VolumeAttachments, which says whether that volume
+ * is still attached to a node; and a read of a ConfigMap, the only way a fencing receipt reaches the
+ * manager (it can read one, never write one). Nothing else — no cluster-scoped writes, no exec, no
  * node or storage administration.
  *
  * Two implementations: `kube-http-client.ts`, constructed only when the feature is enabled and an
@@ -42,7 +44,8 @@ export interface PersistentVolume {
   spec: {
     storageClassName?: string;
     claimRef?: { namespace?: string; name?: string; uid?: string };
-    csi?: { driver?: string; volumeHandle?: string };
+    /** Ceph-CSI states the RBD `pool` and `imageName` in `volumeAttributes`. */
+    csi?: { driver?: string; volumeHandle?: string; volumeAttributes?: Record<string, string> };
     persistentVolumeReclaimPolicy?: string;
   };
   status?: { phase?: string };
@@ -58,19 +61,58 @@ export interface Secret {
   data?: Record<string, string>;
 }
 
+/** One container's state as the kubelet reports it: exactly one of the three is set. */
+export interface PodContainerStatus {
+  name: string;
+  state?: {
+    waiting?: { reason?: string };
+    running?: { startedAt?: string };
+    terminated?: { exitCode?: number; reason?: string; finishedAt?: string };
+  };
+}
+
+export interface PodCondition {
+  type: string;
+  status: string;
+  reason?: string;
+}
+
 export interface Pod {
   apiVersion: 'v1';
   kind: 'Pod';
   metadata: KubeObjectMeta;
   spec: {
     nodeName?: string;
-    volumes?: Array<{ name: string; persistentVolumeClaim?: { claimName: string }; [key: string]: unknown }>;
+    volumes?: Array<{ name: string; persistentVolumeClaim?: { claimName: string; readOnly?: boolean }; [key: string]: unknown }>;
     [key: string]: unknown;
   };
-  status?: { phase?: string; startTime?: string; reason?: string };
+  status?: {
+    phase?: string;
+    startTime?: string;
+    reason?: string;
+    conditions?: PodCondition[];
+    initContainerStatuses?: PodContainerStatus[];
+    containerStatuses?: PodContainerStatus[];
+  };
 }
 
-export type KubeObject = PersistentVolumeClaim | PersistentVolume | Secret | Pod;
+/** A volume attached, or being attached or detached, to a node (storage.k8s.io/v1, cluster-scoped). */
+export interface VolumeAttachment {
+  apiVersion: 'storage.k8s.io/v1';
+  kind: 'VolumeAttachment';
+  metadata: KubeObjectMeta;
+  spec: { attacher?: string; nodeName?: string; source: { persistentVolumeName?: string } };
+  status?: { attached?: boolean };
+}
+
+export interface ConfigMap {
+  apiVersion: 'v1';
+  kind: 'ConfigMap';
+  metadata: KubeObjectMeta;
+  data?: Record<string, string>;
+}
+
+export type KubeObject = PersistentVolumeClaim | PersistentVolume | Secret | Pod | ConfigMap;
 
 export interface KubeWatchEvent<T> {
   type: 'ADDED' | 'MODIFIED' | 'DELETED' | 'BOOKMARK' | 'ERROR';
@@ -88,11 +130,16 @@ export interface KubeDeleteOptions {
   uid?: string;
 }
 
+export interface KubeCreateOptions {
+  /** `dryRun=All`: admission runs and answers, nothing is stored. */
+  dryRun?: boolean;
+}
+
 /** One namespaced resource of the configured namespace. */
 export interface KubeResource<T> {
   /** The object, or null when the API answers 404. */
   get(name: string): Promise<T | null>;
-  create(object: T): Promise<T>;
+  create(object: T, options?: KubeCreateOptions): Promise<T>;
   /** Resolves once the API accepted the deletion; a 404 resolves too (already gone). */
   delete(name: string, options?: KubeDeleteOptions): Promise<void>;
   list(options?: { labelSelector?: string }): Promise<T[]>;
@@ -108,8 +155,12 @@ export interface ManagedKubeClient {
   readonly persistentVolumeClaims: KubeResource<PersistentVolumeClaim>;
   readonly secrets: KubeResource<Secret>;
   readonly pods: KubeResource<Pod>;
+  /** Read-only: where an operator leaves a fencing receipt (managed-runner-fencing.ts). */
+  readonly configMaps: Pick<KubeResource<ConfigMap>, 'get'>;
   /** Read-only and cluster-scoped: the PV a bound claim names, or null on 404. */
   getPersistentVolume(name: string): Promise<PersistentVolume | null>;
+  /** Read-only and cluster-scoped: every VolumeAttachment, whatever its node or volume. */
+  listVolumeAttachments(): Promise<VolumeAttachment[]>;
 }
 
 /**

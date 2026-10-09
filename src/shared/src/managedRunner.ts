@@ -38,6 +38,34 @@ export const MANAGED_RUNNER_NOT_ELIGIBLE = 'MANAGED_RUNNER_NOT_ELIGIBLE';
  */
 export const MODEL_UNAVAILABLE = 'MODEL_UNAVAILABLE';
 
+/**
+ * A managed runner's credential is issued for one generation and rotated by the manager when the
+ * generation advances; the owner's rotate-token refuses it (409), whether or not the feature is on.
+ */
+export const MANAGED_RUNNER_ROTATE_REFUSED = 'MANAGED_RUNNER_ROTATE_REFUSED';
+
+/**
+ * The managed runner instance protocol (docs/managed-runner-design.md, "Identity and durable
+ * mapping"). A managed runner sends, on every request it makes with its runner credential, the
+ * generation and the Pod UID of the instance it is, and declares this capability in
+ * X-Orbit-Runner-Capabilities. A credential that belongs to a managed runner is accepted only from
+ * the instance the manager authorized; a self-managed runner declares nothing and is unaffected.
+ */
+export const MANAGED_RUNNER_INSTANCE_CAPABILITY = 'managed-runner-instance-v1';
+export const MANAGED_RUNNER_GENERATION_HEADER = 'x-orbit-managed-runner-generation';
+export const MANAGED_RUNNER_POD_UID_HEADER = 'x-orbit-managed-runner-pod-uid';
+
+/** 403: a managed runner's credential sent without the instance protocol (an older runner, or a copy). */
+export const MANAGED_RUNNER_INSTANCE_REQUIRED = 'MANAGED_RUNNER_INSTANCE_REQUIRED';
+/** 403: a generation the manager has moved past. The instance must stop; it is never authorized again. */
+export const MANAGED_RUNNER_INSTANCE_SUPERSEDED = 'MANAGED_RUNNER_INSTANCE_SUPERSEDED';
+/** 403: the current generation, but not the Pod the manager recorded for it (or a generation never issued). */
+export const MANAGED_RUNNER_INSTANCE_NOT_AUTHORIZED = 'MANAGED_RUNNER_INSTANCE_NOT_AUTHORIZED';
+/** 403: the mapping is FENCING (or being deleted): no instance of it is authorized until a stop is proven. */
+export const MANAGED_RUNNER_INSTANCE_FENCED = 'MANAGED_RUNNER_INSTANCE_FENCED';
+/** 503, retryable: the manager has not recorded this generation's Pod yet. */
+export const MANAGED_RUNNER_INSTANCE_PENDING = 'MANAGED_RUNNER_INSTANCE_PENDING';
+
 /** What the owner asked of the managed runner. */
 export type ManagedRunnerDesiredState = 'RUNNING' | 'SLEEPING' | 'DELETED';
 

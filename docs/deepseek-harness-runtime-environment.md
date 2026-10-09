@@ -75,7 +75,7 @@ runner 在 `X-Orbit-Supported-Providers` 和心跳里声明 `dsh`，只表示它
 
   被拒绝的请求不写会话，也不改变已有会话。runner 没有声明 dsh 时，仍先得到 P1b 的升级提示，升级提示优先于权限模式校验；安装状态在权限模式校验之后判断。
 - 领取（`GET /runner/sessions/claim`）：runner 的声明原样保留。该 runner 上 engine 为 dsh 的会话不派发。解耦前它们是内置 `dsh` 与 runtime 为 dsh 的配置 provider；engine 为空的旧行仍按这条旧规则判断。PENDING 行写上同一条提示，机制与升级提示相同，领取成功时清除。已持久化会话的后续消息照常入队，保持 PENDING，不会被领取后失败。数据库层的 `orbit.runner_supports_dsh` 在这次领取中同样为 `0`。
-- 安装完成（Providers 的 Install，即 `POST /runners/:id/install {engine: dsh}`）后，runner 重新探测引擎，下一次心跳（30 秒以内）带上 `installed=true`。新建和恢复随即放行。等待中的会话在下一个领取长轮询（25 秒以内）派发，沿用原 runtimeSessionId 和 DSH_HOME 续聊。
+- 安装完成（Infrastructure 页上 DeepSeek Harness 的 Install，即 `POST /runners/:id/install {engine: dsh}`）后，runner 重新探测引擎，下一次心跳（30 秒以内）带上 `installed=true`。新建和恢复随即放行。等待中的会话在下一个领取长轮询（25 秒以内）派发，沿用原 runtimeSessionId 和 DSH_HOME 续聊。
 - 不受影响的部分：runner 重启后的 reclaim 和租约接管只检查声明，因为它们交还的是这台 runner 已经在运行的会话；修改会话配置不读取安装状态；其他引擎照常派发，不会被 dsh 未安装卡住。
 - 时效：门禁以最近一次报告为准，领取长轮询在开始时读取报告。已经发布的安装目录如果事后消失，在下一次探测（5 分钟以内）上报之前，以及其后一个领取长轮询内，会话仍可能被领取，并在 runner 上以 `DSH_NOT_INSTALLED` 失败。从未安装过的 runner 不存在这个窗口。
 - 运维：升级 runner 后不必赶在开放入口前先装好 dsh。未安装期间，API、CLI 和自动派发的任务都会得到上述提示，而不是一个失败的会话。

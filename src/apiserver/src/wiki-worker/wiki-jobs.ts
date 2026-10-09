@@ -3,6 +3,7 @@ import type { Prisma } from '@prisma/client';
 import { WIKI_JOB, type WikiJobFailureKind } from '@orbit/shared';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import type { PrismaService } from '../prisma/prisma.service';
+import { stripNul } from '../runner-api/strip-nul';
 import { cutRunes } from './wiki-import-extract';
 
 /**
@@ -165,6 +166,10 @@ export async function reclaimExpiredWikiJobs(prisma: PrismaService, limit: numbe
 /**
  * Where a running job's pipeline is (contract `jobs.progress`): its own step and counts, written under the
  * claim's generation so a holder whose lease was taken over writes nothing. False means a takeover holds it.
+ *
+ * A job's progress, report and error can quote what the model wrote, and each is written without any U+0000
+ * (contract `jobs.serverWrites`), as everything a runner reports is (runner-api/strip-nul.ts): a NUL in one would
+ * otherwise fail the very write that settles the job, and the job would be tried again until its retry limit.
  */
 export async function writeWikiJobProgress(
   prisma: PrismaService,
@@ -172,7 +177,7 @@ export async function writeWikiJobProgress(
 ): Promise<boolean> {
   const updated = await prisma.$executeRaw`
     UPDATE "wiki_job"
-    SET "progress" = ${JSON.stringify(input.progress)}::jsonb, "updated_at" = now()
+    SET "progress" = ${JSON.stringify(stripNul(input.progress))}::jsonb, "updated_at" = now()
     WHERE "id" = ${input.id}::uuid AND "state" = 'running' AND "lease_generation" = ${input.generation}::uuid`;
   return updated > 0;
 }
@@ -188,8 +193,8 @@ export async function succeedWikiJob(
   prisma: PrismaService,
   input: { id: string; generation: string } & WikiJobOutcomeReport,
 ): Promise<boolean> {
-  const report = input.report === undefined || input.report === null ? null : JSON.stringify(input.report);
-  const progress = input.progress === undefined || input.progress === null ? null : JSON.stringify(input.progress);
+  const report = input.report === undefined || input.report === null ? null : JSON.stringify(stripNul(input.report));
+  const progress = input.progress === undefined || input.progress === null ? null : JSON.stringify(stripNul(input.progress));
   const updated = await prisma.$executeRaw`
     UPDATE "wiki_job"
     SET "state" = 'succeeded',
@@ -224,7 +229,7 @@ export async function requeueWikiJobForInfra(
           WHEN "attempts" = 1 THEN ${WIKI_JOB.retryBackoffSeconds[1]} ELSE ${WIKI_JOB.retryBackoffSeconds[0]} END)::int
           * interval '1 second',
         "failure_kind" = 'infra',
-        "error" = ${input.error},
+        "error" = ${stripNul(input.error)},
         "lease_owner" = NULL,
         "lease_generation" = NULL,
         "lease_deadline_at" = NULL,
@@ -239,13 +244,13 @@ export async function failWikiJobAsContent(
   prisma: PrismaService,
   input: { id: string; generation: string; error: string } & WikiJobOutcomeReport,
 ): Promise<boolean> {
-  const report = input.report === undefined || input.report === null ? null : JSON.stringify(input.report);
+  const report = input.report === undefined || input.report === null ? null : JSON.stringify(stripNul(input.report));
   const updated = await prisma.$executeRaw`
     UPDATE "wiki_job"
     SET "state" = 'failed',
         "report" = ${report}::jsonb,
         "failure_kind" = 'content',
-        "error" = ${input.error},
+        "error" = ${stripNul(input.error)},
         "lease_owner" = NULL,
         "lease_generation" = NULL,
         "lease_deadline_at" = NULL,
@@ -283,7 +288,7 @@ export async function endWikiJobAtRetryLimit(
   input: { id: string; from: { state: 'running'; generation: string } | { state: 'queued' }; error: string },
   now: Date = new Date(),
 ): Promise<boolean> {
-  return new RetryLimitWriter(prisma).endAtRetryLimit(input, now);
+  return new RetryLimitWriter(prisma).endAtRetryLimit({ ...input, error: stripNul(input.error) }, now);
 }
 
 /** The one writer of an end at the retry limit: a class only so that its retry is labelled like every other's. */
@@ -358,7 +363,7 @@ export async function endWikiJobsPastRetryLimit(prisma: PrismaService, owners: r
 export async function settleWikiJobRows(tx: Prisma.TransactionClient, job: EndedWikiJob, reason: string, now: Date): Promise<void> {
   await tx.$executeRaw`
     UPDATE "wiki_model_request"
-       SET "state" = 'cancelled', "ended_at" = ${now}, "error" = NULL, "error_kind" = NULL, "partial" = NULL,
+       SET "state" = 'cancelled', "ended_at" = ${now}, "error" = NULL, "error_kind" = NULL, "partial" = NULL, "partial_encoding" = 'text',
            "not_before" = NULL, "lease_owner" = NULL, "lease_generation" = NULL, "lease_deadline_at" = NULL, "updated_at" = now()
      WHERE "job_id" = ${job.id}::uuid AND "state" IN ('queued', 'running')`;
   await tx.$executeRaw`
