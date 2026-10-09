@@ -86,6 +86,10 @@ func machineHome() string {
 func configPath() string { return filepath.Join(machineHome(), "config.json") }
 func runsDir() string    { return filepath.Join(machineHome(), "runs") }
 
+// integrationResultsDir holds the reports of finished integration jobs this machine could not hand
+// over; see integration_result_spool.go.
+func integrationResultsDir() string { return filepath.Join(machineHome(), "integration-results") }
+
 // runDir is one session's scratch dir under runsDir. The id is normalized (see uploadsDir) so the
 // directory a session writes to does not move when the server changes which id spelling it sends.
 func runDir(sessionID string) string { return filepath.Join(runsDir(), decodeSessionID(sessionID)) }

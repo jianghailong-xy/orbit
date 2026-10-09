@@ -574,6 +574,7 @@ export function buildCoordinatorDeliveryMessage(
       evidenceRevision?: unknown;
       criterion?: { key?: unknown; text?: unknown } | null;
       escalationSeconds?: unknown;
+      waited?: { submittedAt?: unknown } | null;
     };
     const taskId = uuidToBase62(fact.subjectId);
     const revision = String(detail.evidenceRevision ?? '');
@@ -583,9 +584,17 @@ export function buildCoordinatorDeliveryMessage(
     const escalation = typeof detail.escalationSeconds === 'number'
       ? `（现在是 ${detail.escalationSeconds} 秒）`
       : '';
+    // A revision that waited while this conversation was paused, handed over now that it is back
+    // (`CompletionEvidenceProducer.deliverWaiting`): said in so many words, because nothing else in
+    // the message tells the coordinator it is old and still nobody's.
+    const waited = typeof detail.waited?.submittedAt === 'string'
+      ? `This revision was submitted at ${detail.waited.submittedAt} while you were unavailable. `
+        + 'It waited for you; nobody has decided it yet.\n\n'
+      : '';
     return (
       `【项目「${projectTitle}」有一版完成证据等你判】\n\n`
       + `${describeWakeFact(fact)}\n\n`
+      + waited
       + (criterion
         ? `这版证据引用的判据（key ${String(criterion.key)}），原文：\n「${String(criterion.text)}」\n\n`
         : '')
