@@ -54,14 +54,15 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     val attachmentMetadata by rememberUpdatedState(state.window.events.flatMap { event ->
         (event.fields["attachments"] as? JsonArray).orEmpty().filterIsInstance<JsonObject>()
     }.associateBy { ObjectId.canonical(it.string("id").orEmpty()) })
+    // The session's pictures in transcript order: image attachments, and uploads linked by name in prose.
+    val galleryImages by rememberUpdatedState(remember(state.window.events) { sessionImages(state.window.events) })
     val resources = remember(handle, route.id) { ReaderResources(app.session, handle, route.id,
         available = { readable }, metadata = { source ->
             attachmentMetadata[ObjectId.canonical(source.removePrefix("orbit-attachment:"))]?.let {
                 (it.string("name") ?: it.string("fileName") ?: "Attachment") to
                     (it.string("mime") ?: it.string("mimeType") ?: "application/octet-stream")
             }
-        }, images = { attachmentMetadata.values.filter { (it.string("mime") ?: it.string("mimeType"))?.startsWith("image/") == true }
-            .mapNotNull { it.string("id")?.let { id -> "orbit-attachment:$id" } } }) }
+        }, images = { galleryImages } ) }
     val openLink = rememberReaderLinkHandler(resources) { next ->
         if (next.destination == Destination.SESSION && ObjectId.same(next.id, route.id) &&
             next.recordId != null && next.recordId == route.recordId) model.openRecord(next.recordId)
@@ -240,4 +241,17 @@ private fun LiveMessage(label: String, parent: String, text: String, open: (Stri
             if (expanded) StreamingText(text, open)
         } else StreamingText(text, open)
     }
+}
+
+/** Every picture a reader can page through: image attachments, and `[label](orbit-attachment:id "name.png")` links. */
+internal fun sessionImages(events: List<RunEvent>): List<String> {
+    val linked = Regex("""\[[^\]\n]+\]\((orbit-attachment:[^)\s]+)(?:\s+"((?:\\.|[^"\\])*)")?\)""")
+    return events.flatMap { event ->
+        val attached = (event.fields["attachments"] as? JsonArray).orEmpty().filterIsInstance<JsonObject>()
+            .filter { (it.string("mime") ?: it.string("mimeType"))?.startsWith("image/") == true }
+            .mapNotNull { it.string("id")?.let { id -> "orbit-attachment:$id" } }
+        val body = event.body()
+        attached + if ("orbit-attachment:" !in body) emptyList() else linked.findAll(body)
+            .filter { MarkdownFileRef(it.groupValues[1], "", it.groupValues[2].ifEmpty { null }).isImage }.map { it.groupValues[1] }.toList()
+    }.distinct()
 }
