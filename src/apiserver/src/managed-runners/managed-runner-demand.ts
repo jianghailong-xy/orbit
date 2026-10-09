@@ -22,7 +22,10 @@ import { recordManagedDemand } from './managed-runner-work';
  *
  * With the switch off the hook returns before it reads anything: every caller keeps the
  * self-managed behaviour it had, and no managed row is written. A runner without a mapping matches
- * no row: one UPDATE by a unique key, and nothing else changes for it.
+ * no row: one UPDATE by a unique key, and nothing else changes for it. Neither does a runner whose
+ * owner an administrator disabled: demand for it is not recorded and wakes nothing — the caller goes
+ * on as for any runner that is not coming back — and the sweep leaves it alone until the account is
+ * enabled again.
  */
 
 /** Where a piece of demand came from: for the log line, never for a decision. */

@@ -254,6 +254,22 @@ func TestManagedInstanceRevocationIsRecognised(t *testing.T) {
 	}
 }
 
+// A managed runner whose account an administrator disabled is refused 403 ACCOUNT_DISABLED at every
+// door, and the manager drains it to sleep without asking it anything (docs/managed-runner-design.md,
+// "Implementation record: disabled accounts"). It relies on this: the claim's refusal is not retried,
+// so the run loop stops claiming, drains and exits; and it is no revocation, so the exit is 0 and the
+// Pod ends Succeeded, with the kubelet's report the manager takes as the stop proof.
+func TestManagedInstanceStopsOnItsDisabledAccount(t *testing.T) {
+	withManagedInstance(t, "2", testManagedPodUID)
+	disabled := &transportHTTPError{method: "GET", path: "/runner/sessions/claim", statusCode: http.StatusForbidden, body: `{"code":"ACCOUNT_DISABLED","message":"This Orbit account is disabled. Ask an administrator to enable it again."}`}
+	if isRetryableTransportError(disabled) {
+		t.Error("a claim refused for a disabled account is retried: the runner would never stop")
+	}
+	if isManagedInstanceRevoked(disabled) {
+		t.Error("a disabled account is taken for a revoked instance: the runner would exit 3, not 0")
+	}
+}
+
 // The run loop stops a revoked instance on either of the two calls it makes all the time: a
 // heartbeat refused that way cancels the loop (draining, heartbeats kept, as any stop), and the
 // claim path stops on its non-retryable refusal as it always has. `orbit run` exits non-zero then,

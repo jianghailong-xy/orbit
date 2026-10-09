@@ -1395,7 +1395,7 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
   {
     at: 'managed-runners/managed-runner-manager.ts#fallAsleep',
     shape: 'TX_RETRIED',
-    locks: 'managed_runner by id (a compare-and-set on revision, lease holder, generation, the recorded Pod UID and DRAINING: generation + 1, SLEEPING, compute share cleared), then runner by id (its credential hash replaced), then managed_runner_capacity by id (the compute share given back). The order of advance, with the pool row last, as in admitted and commitFailed.',
+    locks: 'managed_runner by id (a compare-and-set on revision, lease holder, generation, the recorded Pod UID and DRAINING: generation + 1, SLEEPING, compute share cleared), then runner by id (its credential hash replaced), then managed_runner_capacity by id (the compute share given back). The order of advance, with the pool row last, as in admitted and commitReleasingCompute.',
     identity: 'The mapping revision, lease, generation and Pod UID the pass read and proved stopped: a second sleep of the same instance matches no row.',
     isolation: '',
     attempts: 4,
@@ -1404,15 +1404,15 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     answer: 'No request waits on it: the worker logs the exhausted conflict, and its next pass finds the Pod gone and the proof recorded and falls asleep then.',
   },
   {
-    at: 'managed-runners/managed-runner-manager.ts#commitFailed',
+    at: 'managed-runners/managed-runner-manager.ts#commitReleasingCompute',
     shape: 'TX_RETRIED',
-    locks: 'managed_runner by id (a compare-and-set on revision, lease holder and no recorded Pod: FAILED, compute share cleared), then managed_runner_capacity by id (that share given back). Taken only when no Pod of the generation is recorded or being created; otherwise FAILED is the ordinary one-row commit.',
+    locks: 'managed_runner by id (a compare-and-set on revision, lease holder and no recorded Pod: FAILED, or SLEEPING for a disabled owner\'s mapping with no instance, compute share cleared), then managed_runner_capacity by id (that share given back). Taken only when no Pod of the generation is recorded or being created; otherwise it is the ordinary one-row commit.',
     identity: 'The mapping revision and lease the pass read.',
     isolation: '',
     attempts: 4,
-    replay: 'A rolled-back attempt failed nothing and released nothing; the re-run does both from the same row, once.',
+    replay: 'A rolled-back attempt moved nothing and released nothing; the re-run does both from the same row, once.',
     effects: 'None inside.',
-    answer: 'No request waits on it: the worker logs the exhausted conflict, and its next pass fails the mapping again.',
+    answer: 'No request waits on it: the worker logs the exhausted conflict, and its next pass fails the mapping, or puts it to sleep, again.',
   },
   // ── Orbit Wiki (migration 0307, docs/wiki-design.md §4). Every unit below locks wiki rows and
   //    nothing else: 0307's header works through why the wiki's children reach their owner through
@@ -1835,7 +1835,7 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   // Managed runner capacity (migration 0413): the pool's two conditional UPDATEs, run only inside the
   // transaction that records or clears the mapping's share.
   { at: 'managed-runners/managed-runner-capacity.ts#reserveCapacity', under: 'managed-runners/managed-runner-manager.ts#admitted' },
-  { at: 'managed-runners/managed-runner-capacity.ts#releaseCapacity', under: 'managed-runners/managed-runner-manager.ts#fallAsleep and #commitFailed' },
+  { at: 'managed-runners/managed-runner-capacity.ts#releaseCapacity', under: 'managed-runners/managed-runner-manager.ts#fallAsleep and #commitReleasingCompute' },
   { at: 'wiki-worker/wiki-repo-ops.ts#settleRead', under: 'wiki-worker/wiki-repo-ops.ts#applyWikiRepoOpResult' },
   { at: 'wiki-worker/wiki-repo-ops.ts#notifyRepoOpSettled', under: 'wiki-worker/wiki-repo-ops.ts#applyWikiRepoOpResult and #failWikiRepoOp' },
   // What waits on a job that ended for good — its calls, its repository operations, its run or plan job — settled
@@ -2473,7 +2473,7 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   { at: 'managed-runners/managed-runner-manager.ts#beginDrain', class: 'ONE_ROW_CAS', statements: 1, note: 'READY to DRAINING: the mapping by id, only at the revision and demand revision the idle decision read, under this replica\'s lease. Demand that came meanwhile matches nothing and the runner stays READY.' },
   { at: 'managed-runners/managed-runner-manager.ts#abortDrain', class: 'ONE_ROW_CAS', statements: 1, note: 'DRAINING back to READY: the mapping by id at the revision the pass read, under its lease, and only while the instance has not accepted the stop. The acceptance (managedRunnerHeartbeat) is the other conditional write on that column, so exactly one of the two lands.' },
   { at: 'managed-runners/managed-runner-sleep.ts#managedRunnerHeartbeat', class: 'ONE_ROW_CAS', statements: 1, note: 'A drained instance\'s acceptance of its stop: the mapping by id, only while it is DRAINING for that generation and Pod, the same request, not yet accepted, and with no demand since the drain began. Written from the heartbeat route after its runner update, never in one transaction with it.' },
-  { at: 'managed-runners/managed-runner-work.ts#recordManagedDemand', class: 'ONE_ROW_CAS', statements: 1, note: 'Demand: the mapping by its unique runner id, unless deleted — the demand counter and time, and RUNNING desired. A runner without a mapping matches no row. It does not move the revision: the manager\'s sleep decisions compare the demand revision itself.' },
+  { at: 'managed-runners/managed-runner-work.ts#recordManagedDemand', class: 'ONE_ROW_CAS', statements: 1, note: 'Demand: the mapping by its unique runner id, unless deleted or its owner\'s account is disabled (a key read of the owner row in the same statement) — the demand counter and time, and RUNNING desired. A runner without a mapping matches no row. It does not move the revision: the manager\'s sleep decisions compare the demand revision itself.' },
   { at: 'managed-runners/managed-runner.service.ts#sleep', class: 'ONE_ROW_CAS', statements: 1, note: 'An owner\'s explicit sleep: the mapping by id and owner, only while READY and wanted running at the revision the owner read, to SLEEPING desired with the request\'s idempotency key.' },
   { at: 'managed-runners/managed-runner.service.ts#wake', class: 'ONE_ROW_BY_KEY', statements: 1, note: 'An owner\'s explicit wake records demand (recordManagedDemand) and then the request\'s idempotency key on the mapping by id and owner.' },
 ];
