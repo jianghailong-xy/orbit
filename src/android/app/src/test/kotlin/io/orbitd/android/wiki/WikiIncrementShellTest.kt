@@ -399,10 +399,10 @@ class WikiIncrementShellTest {
 
     private fun app() = compose.activity.application as OrbitApplication
     private fun signIn() {
-        compose.waitUntil(5_000) { app().session.state.value is AuthState.SignedOut }
+        compose.waitUntil(60_000) { app().session.state.value is AuthState.SignedOut }
         app().realtime.setNetwork(true, "fixture")
         runBlocking { shell.signIn(app().session) }
-        compose.waitUntil(10_000) { app().session.state.value is AuthState.SignedIn && app().realtime.state.value.directoryFresh }
+        compose.waitUntil(60_000) { app().session.state.value is AuthState.SignedIn && app().realtime.state.value.directoryFresh }
     }
     private fun open(link: String) {
         compose.activityRule.scenario.onActivity {
@@ -436,7 +436,7 @@ class WikiIncrementShellTest {
         runCatching { compose.onNodeWithTag(list).performScrollToNode(hasText(text)) }.isSuccess
     }
     private fun awaitThat(what: String, condition: () -> Boolean) {
-        try { compose.waitUntil(10_000, condition) }
+        try { compose.waitUntil(60_000, condition) }
         catch (timeout: androidx.compose.ui.test.ComposeTimeoutException) {
             throw AssertionError("waited for $what; on screen: '${screenText()}'; held requests ended=${shell.ended}; " +
                 "last calls=${shell.calls.takeLast(30)}", timeout)

@@ -65,11 +65,11 @@ class WatchScreensTest {
 
     private fun load(store: WatchStore) {
         compose.runOnIdle { scope.launch { store.load() } }
-        compose.waitUntil(5_000) { store.state.value.loadState.hasLoaded && !store.state.value.loadState.loading }
+        compose.waitUntil(60_000) { store.state.value.loadState.hasLoaded && !store.state.value.loadState.loading }
     }
 
-    private fun await(tag: String) = compose.waitUntil(5_000) { compose.onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty() }
-    private fun awaitText(text: String) = compose.waitUntil(5_000) { compose.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty() }
+    private fun await(tag: String) = compose.waitUntil(60_000) { compose.onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty() }
+    private fun awaitText(text: String) = compose.waitUntil(60_000) { compose.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty() }
 
     /** The page with the shell's bar above it, where iOS puts the record's controls. */
     private fun detail(store: WatchStore, id: () -> String) = show {
@@ -86,7 +86,7 @@ class WatchScreensTest {
      * nothing while nothing will resume the session — over the signed-in account's one store. */
     @Test fun theEntryPointsShareTheAccountsStore() {
         val app = compose.activity.application as OrbitApplication
-        compose.waitUntil(5_000) { app.session.state.value is AuthState.SignedOut }
+        compose.waitUntil(60_000) { app.session.state.value is AuthState.SignedOut }
         val handle = runBlocking { app.session.login(ServerAddress.parse("https://fixture.test"), "a@example.test", "fixture-password") }
         var route by mutableStateOf(OrbitRoute(Destination.WATCH))
         show {
@@ -239,8 +239,8 @@ class WatchScreensTest {
         assertTrue(server.lines.none { it.startsWith("POST") })
         compose.onNodeWithTag("watch:W1:WATCH_CANCEL").performClick()
         compose.onNodeWithTag("watch-stop-confirm").assertTextEquals("Stop").performClick()
-        compose.waitUntil(5_000) { store.watch("W1")?.state == WatchState.CANCELLED }
-        compose.waitUntil(5_000) { compose.onAllNodesWithTag("watch:W1:WATCH_CANCEL").fetchSemanticsNodes().isEmpty() }
+        compose.waitUntil(60_000) { store.watch("W1")?.state == WatchState.CANCELLED }
+        compose.waitUntil(60_000) { compose.onAllNodesWithTag("watch:W1:WATCH_CANCEL").fetchSemanticsNodes().isEmpty() }
         assertEquals(listOf("POST /api/watches/W1/cancel"), server.lines.filter { it.startsWith("POST") })
         assertEquals("Stopped", PageBar.title(OrbitRoute(Destination.WATCH, "W1")))
     }

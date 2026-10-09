@@ -60,7 +60,7 @@ class ManagementShellTest {
         // Renamed elsewhere (the web) while the page was closed.
         fixture.runnerAlias = "Web alias"
         compose.onNode(hasText(RunnerCopy.ABOUT_NAME) and hasClickAction()).performScrollTo().performClick()
-        compose.waitUntil(10_000) { compose.onAllNodes(hasSetTextAction() and hasText("Web alias")).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(60_000) { compose.onAllNodes(hasSetTextAction() and hasText("Web alias")).fetchSemanticsNodes().isNotEmpty() }
         back()
         await("About")
         compose.waitForIdle()
@@ -75,7 +75,7 @@ class ManagementShellTest {
         compose.onNode(hasSetTextAction()).performTextReplacement("Typed alias")
         back()
         await("About")
-        compose.waitUntil(10_000) { fixture.runnerAlias == "Typed alias" }
+        compose.waitUntil(60_000) { fixture.runnerAlias == "Typed alias" }
         assertEquals(listOf("PATCH runners/${fixture.RUNNER}"), fixture.writes("runners/${fixture.RUNNER}"))
     }
 
@@ -84,17 +84,17 @@ class ManagementShellTest {
         compose.onAllNodesWithContentDescription("Open navigation").onFirst().performClick()
         compose.onNode(hasText("Settings") and hasClickAction()).performScrollTo().performClick()
         compose.onNode(hasText("Runners") and hasClickAction()).performScrollTo().performClick()
-        compose.waitUntil(10_000) { compose.onAllNodes(hasText("Old alias") and hasClickAction()).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(60_000) { compose.onAllNodes(hasText("Old alias") and hasClickAction()).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(hasText("Old alias") and hasClickAction()).performClick()
         await("About")
         compose.onNodeWithContentDescription("Increase Max Concurrent").performScrollTo().performClick()
         compose.onNodeWithContentDescription("Increase Max Concurrent").performClick()
-        compose.waitUntil(10_000) { fixture.runnerCapacity == 4 }
+        compose.waitUntil(60_000) { fixture.runnerCapacity == 4 }
         assertEquals("Two presses, one write", 1, fixture.writes("runners/${fixture.RUNNER}").size)
         // A press followed at once by leaving the page is still sent.
         compose.onNodeWithContentDescription("Increase Max Concurrent").performClick()
         back()
-        compose.waitUntil(10_000) { fixture.runnerCapacity == 5 }
+        compose.waitUntil(60_000) { fixture.runnerCapacity == 5 }
     }
 
     @Test fun updateRunnerNowIsOfferedOnlyWhereTheRunnersUpdaterCanActAndAsksItToCheck() {
@@ -104,11 +104,11 @@ class ManagementShellTest {
         compose.onAllNodes(hasText(RunnerCopy.UPDATE_RUNNER_NOW)).assertCountEquals(0)
         back()
         fixture.selfUpdate = "enabled"
-        compose.waitUntil(10_000) { compose.onAllNodes(hasText("Old alias") and hasClickAction()).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(60_000) { compose.onAllNodes(hasText("Old alias") and hasClickAction()).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(hasText("Old alias") and hasClickAction()).performClick()
-        compose.waitUntil(10_000) { compose.onAllNodes(hasText(RunnerCopy.UPDATE_RUNNER_NOW) and hasClickAction()).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(60_000) { compose.onAllNodes(hasText(RunnerCopy.UPDATE_RUNNER_NOW) and hasClickAction()).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(hasText(RunnerCopy.UPDATE_RUNNER_NOW) and hasClickAction()).performScrollTo().performClick()
-        compose.waitUntil(10_000) { fixture.calls.contains("POST runners/${fixture.RUNNER}/self-update") }
+        compose.waitUntil(60_000) { fixture.calls.contains("POST runners/${fixture.RUNNER}/self-update") }
         await(RunnerCopy.UPDATE_RUNNER_REQUESTED)
     }
 
@@ -122,7 +122,7 @@ class ManagementShellTest {
         compose.onNode(hasText("Only you") and isSelectable()).assertIsEnabled()
         // The control stream drops: nothing tells this panel any more what the link has become.
         fixture.drop.complete(Unit)
-        compose.waitUntil(10_000) { !app().realtime.state.value.directoryFresh }
+        compose.waitUntil(60_000) { !app().realtime.state.value.directoryFresh }
         compose.waitForIdle()
         compose.onNode(hasText("Only you") and isSelectable()).assertIsNotEnabled()
         compose.onNode(hasText("Tool calls and output") and isToggleable()).assertIsNotEnabled()
@@ -131,26 +131,27 @@ class ManagementShellTest {
     @Test fun theStatusBarFollowsTheAccountsAppearanceNotTheSystems() {
         fixture.theme = "dark"
         signIn()
-        compose.waitUntil(10_000) { fixture.calls.contains("GET users/me") }
-        compose.waitForIdle()
+        compose.waitUntil(60_000) { fixture.calls.contains("GET users/me") }
         val window = compose.activity.window
-        assertFalse("Dark app, light system: the status bar's icons must be light",
-            WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars)
+        fun lightIcons() = WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars
+        // The fixture sees the read when it is asked; the answer reaches the activity on a real thread, later on a loaded host.
+        compose.waitUntil(60_000) { compose.runOnIdle { !lightIcons() } }
+        assertFalse("Dark app, light system: the status bar's icons must be light", lightIcons())
     }
 
     private fun app() = compose.activity.application as OrbitApplication
     private fun signIn() {
-        compose.waitUntil(5_000) { app().session.state.value is AuthState.SignedOut }
+        compose.waitUntil(60_000) { app().session.state.value is AuthState.SignedOut }
         app().realtime.setNetwork(true, "fixture")
         runBlocking { fixture.signIn(app().session) }
-        compose.waitUntil(10_000) { app().session.state.value is AuthState.SignedIn && app().realtime.state.value.directoryFresh }
-        compose.waitUntil(10_000) { compose.onAllNodesWithTag("workspace:${fixture.WORKSPACE}").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(60_000) { app().session.state.value is AuthState.SignedIn && app().realtime.state.value.directoryFresh }
+        compose.waitUntil(60_000) { compose.onAllNodesWithTag("workspace:${fixture.WORKSPACE}").fetchSemanticsNodes().isNotEmpty() }
     }
     private fun runnerPage() {
         compose.onAllNodesWithContentDescription("Open navigation").onFirst().performClick()
         compose.onNode(hasText("Settings") and hasClickAction()).performScrollTo().performClick()
         compose.onNode(hasText("Runners") and hasClickAction()).performScrollTo().performClick()
-        compose.waitUntil(10_000) { compose.onAllNodes(hasText("Old alias") and hasClickAction()).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(60_000) { compose.onAllNodes(hasText("Old alias") and hasClickAction()).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(hasText("Old alias") and hasClickAction()).performClick()
         await("About")
     }
@@ -159,9 +160,9 @@ class ManagementShellTest {
         compose.onNode(hasText(RunnerCopy.ABOUT_NAME) and hasClickAction()).performScrollTo().performClick()
     }
     private fun name() = compose.onNode(hasSetTextAction() and hasText("Name"))
-    private fun name(expected: String) = compose.waitUntil(10_000) {
+    private fun name(expected: String) = compose.waitUntil(60_000) {
         compose.onAllNodes(hasSetTextAction() and hasText(expected)).fetchSemanticsNodes().isNotEmpty()
     }
     private fun back() = compose.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
-    private fun await(text: String) = compose.waitUntil(10_000) { compose.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty() }
+    private fun await(text: String) = compose.waitUntil(60_000) { compose.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty() }
 }

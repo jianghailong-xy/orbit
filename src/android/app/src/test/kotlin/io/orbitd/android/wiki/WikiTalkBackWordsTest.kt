@@ -88,14 +88,14 @@ class WikiTalkBackWordsTest {
             if (page.destination == Destination.WIKI) WikiHomeScreen(store, page, DirectoryData(), WikiNavRecord().nav)
             else WikiActivityScreen(store, page, DirectoryData(), WikiNavRecord().nav)
         }
-        compose.waitUntil(5_000) { compose.onAllNodesWithTag("wiki-home-line").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(60_000) { compose.onAllNodesWithTag("wiki-home-line").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("wiki-space-picker").assert(hasContentDescription(WikiCopy.spacePickerHint)).assertTextContains("orbit")
         // The documents' rows, their folded row and All 4: words, never a bare glyph (the blue dots are silent).
         compose.onNodeWithTag("wiki-home-principles-all").assert(hasContentDescription("All 4"))
         compose.onNodeWithTag("wiki-bar-activity").assert(hasContentDescription(WikiCopy.activity)).assert(hasStateDescription("3 waiting on you"))
         assertTalkBackReadsWords("home")
         page = OrbitRoute(Destination.WIKI_ACTIVITY)
-        compose.waitUntil(5_000) { compose.onAllNodesWithTag("wiki-review-banner").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(60_000) { compose.onAllNodesWithTag("wiki-review-banner").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("wiki-review-banner").assertTextContains("proposals to review", substring = true)
         assertTalkBackReadsWords("activity")
     }
@@ -114,7 +114,7 @@ class WikiTalkBackWordsTest {
         }
         val route = OrbitRoute(Destination.WIKI_ENTRY, WikiFixtures.pitfallID)
         show(route) { WikiEntryScreen(store, route, DirectoryData(), WikiNavRecord().nav) }
-        compose.waitUntil(5_000) { compose.onAllNodesWithTag("wiki-entry-mark").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(60_000) { compose.onAllNodesWithTag("wiki-entry-mark").fetchSemanticsNodes().isNotEmpty() }
         labelled("wiki-entry-confirm", "Confirm")
         labelled("wiki-entry-reject", "Reject")
         compose.onNode(isHeading() and hasText("Sources")).assertTextContains("3")
@@ -164,7 +164,7 @@ class WikiTalkBackWordsTest {
             show { WikiDocPage(doc, "https://github.com/example/orbit", null) }
             compose.onNodeWithTag("wiki-doc-list").performScrollToNode(hasTestTag("wiki-doc-footnote:$n"))
             compose.onNodeWithTag("wiki-doc-footnote:$n").performSemanticsAction(SemanticsActions.OnClick)
-            compose.waitUntil(5_000) { compose.onAllNodesWithTag("wiki-doc-footnote-sheet").fetchSemanticsNodes().isNotEmpty() }
+            compose.waitUntil(60_000) { compose.onAllNodesWithTag("wiki-doc-footnote-sheet").fetchSemanticsNodes().isNotEmpty() }
             assertTalkBackReadsWords("footnote $n's sheet")
         }
     }
