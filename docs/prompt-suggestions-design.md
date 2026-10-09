@@ -3,7 +3,8 @@
 # Turn 结束后的建议输入
 
 **状态**：已实现（2026-10-08）。owner 同日按方案定了 §9 的五项，全部取推荐项；实现中要偏离本文，先改本文。
-2026-10-09 改了 Web 的 Tab 提示（§4.3、§9 补充）；同日在 DeepSeek 端点上测过，放开连 DeepSeek 的 Claude 会话（§1.3、§3.1）。
+2026-10-09 改了 Web 的 Tab 提示（§4.3、§9 补充）；同日在 DeepSeek 端点上测过，放开连 DeepSeek 的 Claude 会话（§1.3、§3.1）；
+同日触屏的 Use 换成拍两下（§4.1、§4.3、§9 补充二）。
 **影响面**：runner-go（Claude 适配）、shared（事件类型）、apiserver（领取载荷、账号偏好、几条读路径的排除）、web、OrbitKit + iOS/macOS、Android。
 
 ---
@@ -224,21 +225,31 @@ transcript reducer 里加三行，按 seq 顺序回放，结果天然正确：
 ## 4. 交互
 
 效果图：`docs/mocks/prompt-suggestions/01-board.png`（HTML 同目录）。Web 的 Tab 提示 2026-10-09 改过一版：
-`docs/mocks/prompt-suggestions-web-tab/01-board.png`。
+`docs/mocks/prompt-suggestions-web-tab/01-board.png`。触屏的 Use 同日换成拍两下：
+`docs/mocks/prompt-suggestion-double-tap/01-board.png`。
 
 ### 4.1 iPhone（基准）：方案甲，建议写在空输入框里
 
 - **位置**：输入卡片里文字那一行，也就是 placeholder「Message…」的位置。有建议时 placeholder 换成建议原文，
-  行尾多一个 **Use** 小胶囊。卡片高度不变（空闲 91pt），对话区一点不动。
-- **样式**：建议文字用系统 placeholder 色（`.placeholderText`），单行，尾部截断；Use 高 26、tint 10% 底、tint 字，
-  深色下 tint 18% 底。发送键保持灰色：空输入框不会因为有建议就能发。
-- **点 Use**：把文字填进输入框，光标放在末尾，弹出键盘；**不发送**。可以接着改，也可以直接点发送。
+  行尾没有按钮。卡片高度不变（空闲 91pt），对话区一点不动。
+- **样式**：建议文字用系统 placeholder 色（`.placeholderText`），单行，尾部截断。在这台设备上第一次拍两下之前，
+  灰字后面紧跟一行小字 **Double-tap to use**（`.footnote`，同一个灰），拍中过一次就不再出现（记在本机
+  `UserDefaults` 的 `composer.suggestionDoubleTapLearned`）。发送键保持灰色：空输入框不会因为有建议就能发。
+- **拍两下**：在输入框那一行拍两下，把文字填进输入框，光标放在末尾，键盘起来，轻震一下；**不发送**。
+  可以接着改，也可以直接点发送。有建议时，输入框自己的点按要等双击判定落空（约 0.3 秒）才生效：键盘若在第一下
+  就起来，会把输入卡片一起顶上去，第二下就落到键盘上了（拼音键盘上是一个候选字）。所以只点一下时键盘晚约 0.3 秒
+  起来，照旧是自己打字；输入框已经在编辑时，单点（光标、Paste 菜单）也晚这么多：想粘贴就点一下、等一下再点，
+  或者长按。两下点得太快会被当成拍两下、填进建议。效果图 ④ 画的是「第一下就起键盘」，实现时因为上面的原因改了。
+- **VoiceOver**：双击是它自己的「激活」，所以输入框读出「Suggested reply: ….」，并带一个 **Use suggestion**
+  动作（上下滑选中，再双击）。
 - **消失**：输入框一有字就不显示，删空后如果它仍是当前建议就回来，和 placeholder 一个规矩；发出任何消息后作废。
 - **不加关闭按钮**：它不挡东西，下一条消息发出去自然就没了；想彻底不要，去设置里关。
 - 实现：`ComposerView.offeredSuggestion`（`ComposerView.swift:202`）把 transcript 的 `promptSuggestion` 交给
   `ComposerLogic.offeredPromptSuggestion`（OrbitKit）判断；有建议时 placeholder 让空，`PromptSuggestionLine`
-  （`ComposerView.swift:1323`）叠在输入框第一行上：灰字单行截断，只有 Use 接收点按，其余点按落进输入框。
-  Use 走现成的 `console.composerText` + `requestFocus()`，不新开发送路径。
+  叠在输入框第一行上：灰字单行截断，整行不接收点按，点按都落进输入框。拍两下由 `GrowingTextEditor` 的
+  UITextView 上一个双击手势接：只在有建议时启用；启用时输入框自己的点按手势都要等它落空
+  （`gestureRecognizer(_:shouldBeRequiredToFailBy:)`）。填入走现成的 `console.composerText` + `requestFocus()`
+  （加 `PlatformHaptics.tap()`），不新开发送路径。
 
 ### 4.2 方案乙（备选）与为什么不选丙
 
@@ -254,15 +265,23 @@ transcript reducer 里加三行，按 seq 顺序回放，结果天然正确：
   会话页在 `composerPlaceholder` 旁边算出 `offeredSuggestion`（`WorkspaceView.tsx:8867`）。有建议时 textarea 的
   placeholder 让空，`.composer-suggestion` 叠在 `.composer-field` 第一行上：灰字单行截断，后面紧跟一个 `Tab`
   键帽（左栏 Search 的 `⌘K` 那种），没有按钮。键帽只在有鼠标的设备上（`hover: hover`）、光标在输入框里时出现：
-  光标在别处时按 Tab 是切焦点，不会填入。触屏（`hover: none`）没有 Tab 键，行尾仍是 Use 胶囊。输入框的
+  光标在别处时按 Tab 是切焦点，不会填入。触屏（`hover: none`）没有 Tab 键，和 iPhone 一样拍两下填入：灰字后面
+  跟 Double-tap to use（拍中过一次就不再出现，记在 localStorage 的 `orbit.suggestionDoubleTapLearned`），
+  textarea 上两次点按相隔 ≤ 300 ms、相距 ≤ 24 px 算拍两下，第二下 `preventDefault`。输入框还没聚焦时第一下也先
+  扣住（`preventDefault`，理由同 §4.1），300 ms 内没有第二下再交还给输入框（`focus()`：这么短的定时器还带着这次
+  点按的用户手势，键盘照样起来）；已聚焦时第一下照常。`.composer-field` 加
+  `touch-action: manipulation`，Safari 拍两下不会放大页面。Use 按钮在触屏上视觉隐藏，只留给读屏。输入框的
   `aria-describedby` 读出「Suggested reply: …. Press Tab to use it.」，触屏不读 Tab 那句。Trash、Runner offline、
-  正在回复某条这些状态本来就不提供建议，它们的 placeholder 照旧。（2026-10-09 起，见 §9 补充。）
+  正在回复某条这些状态本来就不提供建议，它们的 placeholder 照旧。（2026-10-09 起，见 §9 补充、补充二。）
 - **Tab**：输入框为空、`/ # @` 菜单没开时，Tab 填入建议。菜单开着时 Tab 仍是选菜单项，这是现有逻辑
   （`WorkspaceView.tsx:10592`），不变；没有建议时 Tab 也不变。Claude Code CLI 本身就是 Tab 接受建议。
-- **macOS / iPad**：和 iPhone 是同一个 SwiftUI `ComposerView`；macOS 的 `TextField` 另接 `.onKeyPress(keys: [.tab])`，
-  Use 胶囊里多一个 `⇥`。
-- **Android**：`SessionComposer.kt` 的 `OutlinedTextField` 用 placeholder（单行截断）+ trailingIcon 的 Use 按钮；
-  推导在 core 的 `Transcript.promptSuggestion`，判断在 `ComposerData.kt` 的 `offeredPromptSuggestion`。
+- **macOS / iPad**：和 iPhone 是同一个 SwiftUI `ComposerView`。iPad 同 iPhone（拍两下）；macOS 不变：`TextField`
+  另接 `.onKeyPress(keys: [.tab])`，行尾是 `Use ⇥` 胶囊。
+- **Android**：`SessionComposer.kt` 的 `OutlinedTextField` 用 placeholder 写灰字（单行截断，后跟提示小字，
+  SharedPreferences `orbit.composer` 记用过），没有 trailingIcon。`Modifier.doubleTapToUse` 认两下：输入框没聚焦时
+  第一下先扣住，超时没有第二下再交还（聚焦、起键盘），已聚焦时第一下照常；第二下的抬起不交给输入框（不落光标、
+  不弹工具条）。TalkBack 走 **Use suggestion** 自定义动作，
+  提示小字不读。推导在 core 的 `Transcript.promptSuggestion`，判断在 `ComposerData.kt` 的 `offeredPromptSuggestion`。
 
 ### 4.4 显示规则
 
@@ -365,3 +384,16 @@ transcript reducer 里加三行，按 seq 顺序回放，结果天然正确：
 | 2 | 键帽什么时候出现 | **光标在输入框里才出现** | 一直出现 |
 | 3 | 手机网页（触屏） | **保留 Use**，和 iPhone App 一样 | 也去掉 |
 | 4 | Mac App 的「Use ⇥」 | **这次只改 Web** | 一起改成键帽 |
+
+**补充二（owner，2026-10-09）**：「Use 修改为拍两下使用，请帮我优化，先出设计图」。看过
+`docs/mocks/prompt-suggestion-double-tap/01-board.png` 后回「按推荐」，两项都取推荐项：
+
+| # | 问题 | 定了 | 没选的 |
+| --- | --- | --- | --- |
+| 1 | 拍两下的提示 | **灰字后面紧跟小字 Double-tap to use，在这台设备上拍中一次后不再出现** | 一直显示；不显示 |
+| 2 | 范围 | **触屏一起改：iPhone、iPad、手机网页、Android** | 先只改 iPhone、iPad，手机网页和 Android 留 Use |
+
+拍两下和 Use 一样只填不发（§9-②不变）。Mac App 和桌面网页有键盘，不动（Tab）。
+
+实现时偏离效果图一处：④ 画的是第一下就起键盘。键盘一起，输入卡片跟着上移，快速的第二下会落到键盘上，
+所以有建议时第一下先等双击判定（约 0.3 秒）再起键盘（§4.1）。

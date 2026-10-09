@@ -841,6 +841,14 @@ const SESSION_COL_DEFAULT = 320;
 // Whether the session list's Pinned section is folded to its heading, persisted across reloads.
 const PINNED_COLLAPSED_KEY = 'orbit.sessionPinnedCollapsed';
 
+// Set by the first double-tap that takes a suggestion on this device: from then on a touch screen's
+// grey line is the guess alone, without "Double-tap to use" after it (prompt-suggestions-design §4.3).
+const SUGGESTION_TAP_LEARNED_KEY = 'orbit.suggestionDoubleTapLearned';
+// Two taps on the composer this close in time and place are one double-tap (the platforms' own
+// double-tap window).
+const DOUBLE_TAP_MS = 300;
+const DOUBLE_TAP_SLOP_PX = 24;
+
 // Delay the SSE (re)connect on a session switch so holding the arrow keys to scrub
 // the list doesn't open-then-immediately-close a connection per session skipped past.
 const SWITCH_DEBOUNCE_MS = 150;
@@ -7173,6 +7181,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // regex match, so the menu auto-hides).
   const taRef = useRef<any>(null);
   const suggestionHintId = useId();
+  const [suggestionTapLearned, setSuggestionTapLearned] = useState(
+    () => localStorage.getItem(SUGGESTION_TAP_LEARNED_KEY) === '1',
+  );
+  // The composer's last tap on a touch screen, to tell a double-tap from two taps; `held` is the
+  // timer that hands a held first tap on as the box's focus.
+  const lastComposerTap = useRef<{ at: number; x: number; y: number; held?: number } | null>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Manual composer height (px). null = autoSize auto-grow (up to maxRows); once the user
@@ -8999,8 +9013,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               ? 'Reply…'
               : 'Send this workspace a task…';
   // The engine's guess at the next message (lib/promptSuggestion): offered in an idle, empty
-  // composer as a grey line with Use (and Tab), where "Reply…" would be. Only the placeholders
-  // above that explain why the box cannot send outrank it — and those states never offer one.
+  // composer as a grey line where "Reply…" would be, taken with Tab (a double-tap on a touch
+  // screen). Only the placeholders above that explain why the box cannot send outrank it — and
+  // those states never offer one.
   const waitingSummary = selectedSession as { pendingApprovals?: number; waitingKind?: string | null } | null;
   const offeredSuggestion = offeredPromptSuggestion(
     eventsSessionId === selectedId ? currentPromptSuggestion(events) : null,
@@ -9033,6 +9048,43 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       ta.focus();
       ta.selectionStart = ta.selectionEnd = ta.value.length;
     }, 0);
+  };
+  // A touch screen has no Tab: two taps on the box take the suggestion, as on the iPhone. The second
+  // tap is kept from the box, so it neither zooms the page nor drops the caret into the words it just
+  // received. The first is held too while the box is not focused yet: the keyboard it would raise
+  // lifts the page, and the second tap would land on the keyboard instead. A lone tap is handed on as
+  // the box's focus once the double-tap window passes (a timer this short keeps the tap's user
+  // activation, so the keyboard still comes up). A focused box keeps its first tap.
+  const onComposerTouchEnd = (e: ReactTouchEvent<HTMLTextAreaElement>): void => {
+    const touch = e.changedTouches[0];
+    const last = lastComposerTap.current;
+    if (!offeredSuggestion || !touch) {
+      lastComposerTap.current = null;
+      return;
+    }
+    const tap = { at: e.timeStamp, x: touch.clientX, y: touch.clientY };
+    if (
+      last &&
+      tap.at - last.at <= DOUBLE_TAP_MS &&
+      Math.hypot(tap.x - last.x, tap.y - last.y) <= DOUBLE_TAP_SLOP_PX
+    ) {
+      window.clearTimeout(last.held);
+      lastComposerTap.current = null;
+      e.preventDefault();
+      acceptSuggestion();
+      if (!suggestionTapLearned) {
+        setSuggestionTapLearned(true);
+        localStorage.setItem(SUGGESTION_TAP_LEARNED_KEY, '1');
+      }
+      return;
+    }
+    const box = e.currentTarget;
+    let held: number | undefined;
+    if (document.activeElement !== box) {
+      e.preventDefault();
+      held = window.setTimeout(() => box.focus(), DOUBLE_TAP_MS);
+    }
+    lastComposerTap.current = { ...tap, held };
   };
 
   return (
@@ -10735,6 +10787,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           <Input.TextArea
             ref={taRef}
             onScroll={(e) => setComposerScroll(e.currentTarget.scrollTop)}
+            onTouchEnd={onComposerTouchEnd}
             className={shellMode ? 'composer-shell' : undefined}
             variant="borderless"
             // Auto-grow up to 12 rows, then scroll — unless the user has dragged the handle to
@@ -10926,12 +10979,20 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               <span className="composer-suggestion-text" title={offeredSuggestion} aria-hidden="true">
                 {offeredSuggestion}
               </span>
-              {/* With a keyboard the grey line itself says how to take it, and there is no button;
-                  Use is for a touch screen, which has no Tab to press. Which one shows is CSS's
-                  call. Drawn in docs/mocks/prompt-suggestions-web-tab. */}
+              {/* The grey line itself says how to take it, and there is no button to see: Tab with a
+                  keyboard, a double-tap on the box on a touch screen (the hint goes once one has
+                  worked on this device). Which shows is CSS's call. Drawn in
+                  docs/mocks/prompt-suggestions-web-tab and docs/mocks/prompt-suggestion-double-tap. */}
               <kbd className="composer-suggestion-key" aria-hidden="true">
                 Tab
               </kbd>
+              {!suggestionTapLearned && (
+                <span className="composer-suggestion-tap" aria-hidden="true">
+                  Double-tap to use
+                </span>
+              )}
+              {/* For a screen reader on a touch screen, whose own double-tap is "activate": hidden
+                  from the eye there, and gone with a keyboard, which has Tab. */}
               <button
                 type="button"
                 className="composer-suggestion-use"
