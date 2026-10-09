@@ -179,6 +179,8 @@ class ComposerStackDeviceTest {
         assertTrue("A07-10: Codex's accounts under it", at("Codex") < rows.indexOfLast { it.startsWith("Automatic") } && at("Codex") < at("Team"))
         assertEquals("A07-10: Automatic for each engine whose accounts the runner moves between", 2, rows.count { it.startsWith("Automatic") })
         assertTrue("A07-6: the key, then again under OpenCode", at("DeepSeek") < at("OpenCode") && rows.lastIndexOf("DeepSeek") > at("OpenCode"))
+        // Scrolled down to Kimi: the engines and their accounts above it fill the dialog.
+        compose.onAllNodes(hasText("Kimi") and hasAnyAncestor(isDialog())).onFirst().performScrollTo()
         capture("a07c-stack-provider-list")
         compose.onAllNodes(hasText("OpenCode") and hasAnyAncestor(isDialog())).onFirst().performScrollTo()
         capture("a07c-stack-opencode-keys")
@@ -196,6 +198,10 @@ class ComposerStackDeviceTest {
         assertNotNull("the server armed the retry from the weekly-limit sentence", armed.field("retryAt"))
         signIn(); openSession("quota")
         awaitText("Weekly limit reached"); awaitText("Auto-retry when the quota resets"); awaitText("Retry now anyway")
+        // The card is taller than the transcript's viewport here (720×1280): its head, then its switch and press.
+        reveal(hasText("Weekly limit reached"))
+        capture("a07c-stack-auto-retry-armed-head")
+        compose.onNodeWithTag("auto-retry-switch").performScrollTo()
         capture("a07c-stack-auto-retry-armed")
         val path = "/sessions/${seeded("sessions", "quota").field("id")}"
         compose.onNodeWithTag("auto-retry-switch").performScrollTo().performClick()
