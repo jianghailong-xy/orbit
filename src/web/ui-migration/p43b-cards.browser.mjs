@@ -214,12 +214,12 @@ test.describe('P4.3b session decision cards', () => {
     await attachTrace(testInfo, trace);
   });
 
-  // main d91a0dd48 (docs/mocks/start-card-web-width): in a conversation as wide as this page the card is
-  // capped at 720px; More and "Read all" are drawn only while the clamp hides words; the plan is the
+  // In a conversation the card fills the width it is given; More and "Read all" are drawn only while
+  // the clamp hides words; the plan is the
   // project's task graph while the whole of it fits the card, and otherwise by level with "Task graph"
   // opening it full screen. The coordinator's reasons run past three lines on a phone only; one
   // criterion runs past two lines everywhere (p43b-cards-fixtures.mjs).
-  test('the start card in a conversation: 720px at most, More and Read all only while cut, the plan as the task graph or by level', async ({ evidence }, testInfo) => {
+  test('the start card in a conversation: fills the transcript, More and Read all only while cut, the plan as the task graph or by level', async ({ evidence }, testInfo) => {
     const { page, capture } = evidence;
     const fixtures = await installCardFixtures(page);
     const trace = [];
@@ -274,8 +274,8 @@ test.describe('P4.3b session decision cards', () => {
       await expect.poll(async () => (await page.locator('.tdg-full-canvas').filter({ visible: true }).count()) === 0 || !(await host.isVisible())).toBe(true);
       trace.push(await observe(page, fixtures, 'escape in the task graph'));
     } else {
-      // A desktop card is capped at 720px, its reasons fit three lines, and the plan fits it as a graph.
-      expect(first.card).toBe(720);
+      // A desktop card fills the width its host has, its reasons fit three lines, and the plan fits it as a graph.
+      expect(first.card).toBe(first.room);
       await expect(more).toHaveCount(0);
       await expect(card.locator('.start-card-graph .react-flow')).toBeVisible();
     }

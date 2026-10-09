@@ -28,6 +28,9 @@
  *      it — and never one made after the merge was recorded.
  *  (8) The runner's own merge (the Merge button's result) retires it the same way.
  *  (9) Migration 0411 retires what was already standing, once, and leaves the rest alone.
+ *  (10) A receipt retires a candidate whose check is RUNNING and already timed out: the lost check is
+ *      ended as ERROR · RUNNER_LOST there and then — not asked to stop — so it stops holding the
+ *      project's check serial key, and the project's next check is claimed at once.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/projects/promotion-landed-by-receipt.pg.spec.ts
  */
@@ -473,5 +476,54 @@ test('a merge recorded outside the card ends the candidate offering the same bra
     const again: number[] = [];
     for (const statement of statements) again.push((await sql.query(statement)).rowCount ?? 0);
     assert.deepEqual(again, [0, 0, 0], 'applied twice, the repair is a no-op');
+  });
+
+  // ═══ (10) ═════════════════════════════════════════════════════════════════════════════════════
+  await t.test('(10) a receipt retires a candidate whose check is RUNNING and already timed out: the lost '
+    + 'check ends as ERROR · RUNNER_LOST and stops holding the project\'s check slot', async () => {
+    const w = await world('timed-out-check');
+    const offer = await offered(w);
+    const check = await claim(w, 'CHECK_PROMOTION');
+    // The runner then says nothing past the lease: nobody will ever take the job over (a takeover
+    // needs another process, and this workspace routes to one runner), so left RUNNING it would
+    // hold `<repo>#check:<project>` and block every later check of the project.
+    const silentSince = new Date(Date.now() - 11 * 60_000);
+    await prisma.projectIntegrationJob.update({
+      where: { id: check.jobId },
+      data: { claimedAt: silentSince, heartbeatAt: silentSince },
+    });
+
+    await mergedByHand(offer);
+
+    assert.equal((await promotion(offer.promotionId)).state, 'SUPERSEDED');
+    const ended = await prisma.projectIntegrationJob.findUniqueOrThrow({
+      where: { id: check.jobId },
+      select: {
+        state: true, errorCode: true, finishedAt: true, cancelRequestedAt: true,
+        claimGeneration: true, serialKey: true,
+      },
+    });
+    assert.equal(ended.state, 'ERROR', 'the timed-out check is ended on the spot, not asked to stop');
+    assert.equal(ended.errorCode, 'RUNNER_LOST');
+    assert.ok(ended.finishedAt, 'and finished, in the receipt\'s transaction');
+    assert.equal(ended.cancelRequestedAt, null, 'no cancel request is left standing over a dead runner');
+    assert.equal(Number(ended.claimGeneration), Number(check.claimGeneration) + 1,
+      'the lost claim is fenced off: a late result from it is refused');
+    const late = await jobs.applyResult(check.jobId, w.runnerId, {
+      claimGeneration: check.claimGeneration, leaseOwner: check.leaseOwner,
+      state: 'READY', phase: 'CHECK', checks: [GREEN_CHECK], conflicts: [],
+    });
+    assert.equal(late.answer.accepted, false, 'the late result of the ended claim is refused');
+
+    // The project's next check — a new candidate's, the same serial key — is handed out at once.
+    const next = await offered(w);
+    const nextJob = await prisma.projectIntegrationJob.findUniqueOrThrow({
+      where: { id: next.checkJobId },
+      select: { serialKey: true },
+    });
+    assert.equal(nextJob.serialKey, ended.serialKey,
+      'one repository, one project: the checks share a serial key');
+    const handed = await heartbeat(w, 'CHECK_PROMOTION');
+    assert.equal(handed?.jobId, next.checkJobId, 'the next check of the project is claimed');
   });
 });

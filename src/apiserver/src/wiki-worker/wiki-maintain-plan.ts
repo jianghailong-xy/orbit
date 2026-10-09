@@ -4,6 +4,7 @@ import {
   WIKI_SLUG_PATTERN,
   type WikiPlanVersion,
 } from '@orbit/shared';
+import { PAST_THE_READ, wikiDocCleanPath, wikiDocCodePieces, wikiDocContract, wikiDocDocSection, type WikiDocRepo } from './wiki-docs-writer';
 import { cutRunes, goTrimSpace } from './wiki-import-extract';
 import {
   emptyWikiPlanHeader,
@@ -11,7 +12,6 @@ import {
   wikiPlanDocInput,
   wikiPlanLabel,
   wikiPlanRange,
-  wikiPlanUnwrap,
   type WikiPlanCat,
   type WikiPlanDoc,
   type WikiPlanDocRead,
@@ -19,19 +19,24 @@ import {
   type WikiPlanSection,
   type WikiPlanSectionDraft,
 } from './wiki-plan-format';
-import { wikiQuote } from './wiki-plan-gate';
+import { wikiQuote, wikiUnwrap } from './wiki-plan-gate';
 
 /**
  * The one change to the plan a maintenance run may propose (contracts/wiki.contract.json `plan.proposals`,
  * `maintenance.job.run.steps`, the docs step; design §8, P8): the knowledge the confirmed plan has no place
  * for — entries, and design documents new on origin/main that no section cites — put to the model, whose
- * answer is checked here against the space's snapshot and again by the server's gate. Ported from
+ * answer is checked here on origin/main and again by the server's gate. Ported from
  * `src/runner-go/wiki_maintain_docs.go` (proposePlanChange, wikiProposalPrompt, parseWikiProposal,
  * assembleWikiProposal, wikiProposalSection), which does the same on the runner until P10 removes it.
  *
- * What is not a port is where the repository is read: the runner held a document's headings, a file's
- * symbols and the contracts inventory to its checkout, and the server holds them to the space's snapshot of
- * origin/main (`WikiPlanRepo`, the same gate the plan job uses).
+ * The repository is read as the runner reads it: the files the answer names, at the snapshot's commit, through
+ * the reader the documents step writes from (`WikiDocRepo`; the job's is wiki-docs-build-job.ts
+ * `WikiDocsSnapshotRepo`), and a document's section, a file's symbols and a contract are found by the same ports
+ * of the runner's `wikiDocRepo` that step uses (`wikiDocDocSection`, `wikiDocCodePieces`, `wikiDocContract`).
+ * Not by the snapshot's index: its headings and symbols are the plan gate's reading (`WikiPlanRepo`), which takes a
+ * heading named as the prompt lists it, `##` and all, for none (2026-10-09, run 28ea4f5c: refused three rounds
+ * for two sections its document has). src/shared/src/wiki-maintain-proposal.fixture.json holds both paths to the
+ * same answers.
  *
  * Nothing here touches the database or the model: the job asks, and this reads.
  */
@@ -62,18 +67,6 @@ export interface WikiMaintainPlanRead {
   version: number;
   categories: WikiPlanCat[];
   docs: WikiPlanDocRead[];
-}
-
-/** The repository's readings the proposal is held to, as the space's snapshot answers them. */
-export interface WikiMaintainProposalRepo {
-  /** A document of origin/main with a heading that reads as `section`. */
-  hasDocSection(path: string, section: string): boolean;
-  /** Whether a path names anything at the commit (a file, a directory, a glob). */
-  hasPath(path: string): boolean;
-  /** A source file that declares the symbol. */
-  hasSymbol(path: string, symbol: string): boolean;
-  /** A contracts/ file of origin/main. */
-  hasContract(path: string): boolean;
 }
 
 /** One piece of knowledge the plan has no place for, as the model is told it. */
@@ -301,9 +294,10 @@ export function assembleWikiMaintainProposal(
   plan: WikiMaintainPlanRead,
   answer: WikiMaintainProposalAnswer,
   items: readonly WikiMaintainProposalItem[],
-  repo: WikiMaintainProposalRepo,
+  repo: WikiDocRepo,
 ): { request: WikiMaintainProposalRequest; problems: string[] } {
   const problems: string[] = [];
+  if (goTrimSpace(answer.reason) === '') problems.push('「理由」一行缺了：写明新知识是什么、为什么放在这里');
   const byId = new Map(items.map((item) => [item.id, item]));
   const facts: Array<{ kind: string; id: string }> = [];
   const seen = new Set<string>();
@@ -319,7 +313,6 @@ export function assembleWikiMaintainProposal(
       facts.push(fact);
     }
   }
-  if (goTrimSpace(answer.reason) === '') problems.push('「理由」一行缺了：写明新知识是什么、为什么放在这里');
   if (facts.length === 0) problems.push('「覆盖」一行缺了：列出这条建议用到的新知识编号，如 K1、K2');
   if (answer.sections.length === 0) problems.push('没有要新增的节：至少写一节「### 1. <节标题> | <type> | <中文字数>」');
   const sections: WikiPlanSection[] = [];
@@ -379,16 +372,21 @@ export function assembleWikiMaintainProposal(
   };
 }
 
-/** One new section as the model wrote it, checked against the snapshot: its kind, its length, and every file, document section, symbol and contract it names. */
+/**
+ * One new section as the model wrote it, checked on origin/main as the runner checks it (`wikiProposalSection`): its
+ * kind, its length, every file, document section, symbol and contract it names — read in the files at the commit —
+ * its session condition, and its lines.
+ */
 export function wikiMaintainProposalSection(
   at: string,
   draft: WikiPlanSectionDraft,
-  repo: WikiMaintainProposalRepo,
+  read: WikiDocRepo,
 ): { section: WikiPlanSection; problems: string[] } {
+  const repo = gitShows(read);
   const problems: string[] = [];
   const section: WikiPlanSection = {
     title: draft.title,
-    kind: wikiPlanUnwrap(draft.kind),
+    kind: wikiUnwrap(draft.kind),
     covers: draft.covers,
     length: 0,
     sources: { docs: [], code: [], contracts: [], sessions: null },
@@ -405,33 +403,79 @@ export function wikiMaintainProposalSection(
   section.sources.contracts = draft.contracts.map((path) => ({ path }));
   for (const source of draft.docs) {
     const heading = source.section ?? '';
-    if (repo.hasDocSection(source.path, heading)) continue;
-    if (!repo.hasPath(source.path)) problems.push(`${at}的文档 ${wikiQuote(source.path)} 在 origin/main 上没有`);
-    else problems.push(`${at}的文档 ${source.path} 里没有章节 ${wikiQuote(heading)}：原样抄新知识里列出的章节标题，或不写 §`);
+    const found = wikiDocDocSection(repo, source.path, heading);
+    if (found.piece) continue;
+    // A heading a bounded read did not reach is missing as the documents step says it is (design §7).
+    if (!repo.show(source.path)) problems.push(`${at}的文档 ${wikiQuote(source.path)} 在 origin/main 上没有`);
+    else problems.push(`${at}的文档 ${source.path} 里没有章节 ${wikiQuote(heading)}：原样抄新知识里列出的章节标题，或不写 §${found.past ? ` ${PAST_THE_READ}` : ''}`);
   }
   for (const source of draft.code) {
-    const symbols = source.symbols ?? [];
-    const missing = symbols.length === 0
-      ? (repo.hasPath(source.path) ? [] : [`${source.path} (not at origin/main)`])
-      : symbols.filter((symbol) => !repo.hasSymbol(source.path, symbol)).map((symbol) => `${source.path}#${symbol}`);
+    const { missing } = wikiDocCodePieces(repo, source.path, source.symbols ?? [], []);
     if (missing.length > 0) problems.push(`${at}的代码在 origin/main 上找不到：${missing.join('、')}`);
   }
   for (const path of draft.contracts) {
-    if (!repo.hasContract(path)) problems.push(`${at}的契约 ${wikiQuote(path)} 在 origin/main 上没有`);
+    if (!wikiDocContract(repo, path)) problems.push(`${at}的契约 ${wikiQuote(path)} 在 origin/main 上没有`);
   }
-  if (draft.sessions) {
+  const c = draft.sessions;
+  if (c) {
     section.sources.sessions = {
-      projects: draft.sessions.projects ?? [],
-      since: draft.sessions.since || null,
-      until: draft.sessions.until || null,
-      keywords: draft.sessions.keywords ?? [],
-      anchorPaths: draft.sessions.anchorPaths ?? [],
-      entryKinds: (draft.sessions.entryKinds ?? []).map((kind) => wikiPlanUnwrap(kind)),
-      topics: draft.sessions.topics ?? [],
-      evidence: draft.sessions.evidence ?? '',
+      projects: c.projects ?? [],
+      since: c.since || null,
+      until: c.until || null,
+      keywords: c.keywords ?? [],
+      anchorPaths: c.anchorPaths ?? [],
+      entryKinds: (c.entryKinds ?? []).map((kind) => wikiUnwrap(kind)),
+      topics: (c.topics ?? []).map((topic) => wikiUnwrap(topic)),
+      evidence: c.evidence ?? '',
     };
+    for (const part of c.stray ?? []) {
+      problems.push(`${at}: ${wikiQuote(cutRunes(part, 60))} is not a part of a session condition: it has projects, dates, keywords, `
+        + 'anchors, kinds, topics and what to look for — drop it');
+    }
+  }
+  const { docs, code, contracts, sessions } = section.sources;
+  if (docs.length + code.length + contracts.length === 0 && sessions === null) {
+    problems.push(`${at} names no sources: a section on a mechanism names its design documents and code, one on pitfalls, `
+      + 'decisions or conventions the sessions to find the words in');
+  }
+  for (const line of draft.stray ?? []) {
+    problems.push(`${at}: ${wikiQuote(cutRunes(line, 60))} is not a line of a section: a section has what it covers, its documents, `
+      + 'code, contracts and sessions, and nothing else — drop it');
   }
   return { section, problems };
+}
+
+/** Every file the answer's sections name — documents, code and contracts: what the check reads before it looks. */
+export function wikiMaintainProposalPaths(answer: WikiMaintainProposalAnswer): string[] {
+  return answer.sections.flatMap((draft) => [
+    ...draft.docs.map((source) => source.path),
+    ...draft.code.map((source) => source.path),
+    ...draft.contracts,
+  ]);
+}
+
+/**
+ * The files as the runner's `git show <sha>:<path>` shows them. A path that is no file or directory of the commit
+ * but holds a wildcard — an unescaped `*`, `?` or `[` — is taken by git for a pathspec (`looks_like_pathspec`), and
+ * `git show` exits 0 printing nothing: on the runner it is a file, an empty one, so its check finds no section and
+ * no symbol in it and takes it whole. The documents step's reader answers it as no file; the proposal's check
+ * answers as the runner does.
+ */
+function gitShows(repo: WikiDocRepo): WikiDocRepo {
+  return {
+    sha: repo.sha,
+    show: (path) => repo.show(path) ?? (gitWildcard(wikiDocCleanPath(path)) ? { text: '', cut: false } : null),
+    under: (dir) => repo.under(dir),
+  };
+}
+
+/** Whether git reads a path as a pattern: a wildcard in it that no backslash escapes. */
+function gitWildcard(path: string): boolean {
+  for (let i = 0; i < path.length; i += 1) {
+    if (path[i] === '\\') i += 1;
+    else if (path[i] === '*' || path[i] === '?' || path[i] === '[') return true;
+  }
+  return false;
 }
 
 /** The numbers a run's proposal is held to, re-exported for the job: rounds at most, items at most. */

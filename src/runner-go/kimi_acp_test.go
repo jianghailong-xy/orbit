@@ -818,24 +818,113 @@ func TestHandleKimiNotificationMapsTranscriptEvents(t *testing.T) {
 	for _, update := range updates {
 		handleKimiNotification("session-1", kimiNotification(t, "session-1", update), emit, &mu, &active, gauge, nil)
 	}
-	if len(events) != 4 {
+	// Each stretch closes the moment the stream moves on: the thought is durable before the
+	// reply starts, and the reply before the tool call it preceded.
+	if len(events) != 6 {
 		t.Fatalf("events = %#v", events)
 	}
-	if events[0].typ != evThinkingDelta || events[1].typ != evTextDelta ||
-		events[2].typ != evToolUse || events[3].typ != evToolResult {
+	if events[0].typ != evThinkingDelta || events[1].typ != evThinking ||
+		events[2].typ != evTextDelta || events[3].typ != evAssistant ||
+		events[4].typ != evToolUse || events[5].typ != evToolResult {
 		t.Fatalf("event types = %#v", events)
+	}
+	if events[1].payload["text"] != "think" || events[3].payload["text"] != "hello" {
+		t.Fatalf("durable blocks = %#v, %#v", events[1].payload, events[3].payload)
 	}
 	if active.thought.String() != "think" || active.text.String() != "hello" {
 		t.Fatalf("active buffers = thought %q text %q", active.thought.String(), active.text.String())
 	}
-	if events[3].payload["content"] != "contents" || events[3].payload["isError"] != false {
-		t.Fatalf("tool result = %#v", events[3].payload)
+	if events[5].payload["content"] != "contents" || events[5].payload["isError"] != false {
+		t.Fatalf("tool result = %#v", events[5].payload)
 	}
 	// Terminal tool updates are replace-style and can be repeated by an ACP
 	// transport retry; Orbit must persist exactly one result.
 	handleKimiNotification("session-1", kimiNotification(t, "session-1", updates[3]), emit, &mu, &active, gauge, nil)
-	if len(events) != 4 {
+	if len(events) != 6 {
 		t.Fatalf("duplicate terminal update emitted another event: %#v", events)
+	}
+}
+
+// The durable record follows the order the stream produced it: a stretch of reasoning or reply
+// is closed the moment the stream moves on, so a thought that preceded a tool call reads before
+// it. Buffering the whole turn instead — what this guards against — rendered every thought
+// after every tool call and reply, whatever the true order was.
+func TestKimiTurnPersistsStretchesInStreamOrder(t *testing.T) {
+	type event struct {
+		typ     string
+		payload map[string]interface{}
+	}
+	var events []event
+	emit := func(typ string, payload map[string]interface{}) {
+		events = append(events, event{typ: typ, payload: payload})
+	}
+	active := &kimiActiveTurn{orbitTurnID: "turn-1", seenTools: map[string]bool{}, doneTools: map[string]bool{}}
+	var mu sync.Mutex
+	gauge := &kimiUsageGauge{}
+	notify := func(update map[string]interface{}) {
+		handleKimiNotification("session-1", kimiNotification(t, "session-1", update), emit, &mu, &active, gauge, nil)
+	}
+	chunk := func(kind, text string) map[string]interface{} {
+		return map[string]interface{}{
+			"sessionUpdate": kind,
+			"content":       map[string]interface{}{"type": "text", "text": text},
+		}
+	}
+	notify(chunk("agent_thought_chunk", "plan first"))
+	notify(chunk("agent_message_chunk", "I'll read it."))
+	notify(map[string]interface{}{"sessionUpdate": "tool_call", "toolCallId": "1:t", "title": "Read"})
+	notify(map[string]interface{}{"sessionUpdate": "tool_call_update", "toolCallId": "1:t", "status": "completed", "rawOutput": "x"})
+	notify(chunk("agent_thought_chunk", "now decide"))
+	notify(chunk("agent_message_chunk", "Done."))
+
+	var durable []event
+	for _, e := range events {
+		if e.typ != evThinkingDelta && e.typ != evTextDelta {
+			durable = append(durable, e)
+		}
+	}
+	want := []struct {
+		typ  string
+		text string
+	}{
+		{evThinking, "plan first"},
+		{evAssistant, "I'll read it."},
+		{evToolUse, ""},
+		{evToolResult, ""},
+		{evThinking, "now decide"},
+	}
+	if len(durable) != len(want) {
+		t.Fatalf("durable events = %#v", durable)
+	}
+	for i, w := range want {
+		if durable[i].typ != w.typ {
+			t.Fatalf("durable[%d] = %v, want %v: %#v", i, durable[i].typ, w.typ, durable)
+		}
+		if w.text != "" && durable[i].payload["text"] != w.text {
+			t.Fatalf("durable[%d] text = %v, want %q", i, durable[i].payload["text"], w.text)
+		}
+	}
+	// The stretch still open when the turn ends is the only one its end persists.
+	active.flushThought(emit)
+	active.flushText(emit)
+	last := events[len(events)-1]
+	if last.typ != evAssistant || last.payload["text"] != "Done." {
+		t.Fatalf("turn-end flush = %#v, want the open stretch", last)
+	}
+	// And nothing twice: a second end-of-turn flush finds every stretch landed.
+	flushed := len(events)
+	active.flushThought(emit)
+	active.flushText(emit)
+	if len(events) != flushed {
+		t.Fatalf("turn end re-emitted stretches: %#v", events[flushed:])
+	}
+	// A stretch resumed after a flush persists only its tail, not the turn's text again.
+	notify(chunk("agent_message_chunk", " more"))
+	active.flushThought(emit)
+	active.flushText(emit)
+	last = events[len(events)-1]
+	if last.typ != evAssistant || last.payload["text"] != "more" {
+		t.Fatalf("turn-end flush = %#v, want only the open stretch", last)
 	}
 }
 
