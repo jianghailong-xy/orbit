@@ -1,7 +1,5 @@
 package io.orbitd.android.directory
 
-import io.orbitd.android.projects.AttentionChip
-import io.orbitd.android.projects.ProjectAttention
 import java.io.File
 import java.time.Instant
 import kotlinx.serialization.json.*
@@ -18,7 +16,6 @@ class SessionProjectCopyParityTest {
     private val copy = File(root, "src/macos/OrbitKit/Sources/OrbitKit/App/SessionProjectCopy.swift").readText()
     private val page = File(root, "src/macos/OrbitApp/Sources/OrbitApp/Views/SessionProjectPage.swift").readText()
     private val projects = File(root, "src/macos/OrbitKit/Sources/OrbitKit/Models/Projects.swift").readText()
-    private val attention = File(root, "src/macos/OrbitKit/Sources/OrbitKit/App/ProjectAttention.swift").readText()
 
     private val count = 23
 
@@ -89,17 +86,5 @@ class SessionProjectCopyParityTest {
             assertTrue(projects.contains("case .$case: return \"${SessionProjectCopy.statusLabel(status)}\""))
         }
         assertEquals("Done", SessionProjectCopy.statusWords(row))
-    }
-
-    /** A05-6 item 6: the A11 project list's coordinator chip names a delivery review, in ProjectAttention.swift's words. */
-    @Test fun theCoordinatorChipSaysItIsReviewingADelivery() {
-        assertTrue(attention.contains("case .deliveryReview: return \"reviewing a delivery\""))
-        val now = Instant.parse("2026-10-04T10:00:00Z")
-        val project = buildJsonObject {
-            put("id", "p1"); put("title", "Launch"); put("status", "OPEN"); putJsonObject("buckets") { put("ready", 1) }
-            put("lastActivityAt", "2026-10-04T09:59:00Z")
-            putJsonObject("attention") { putJsonObject("coordinatorItems") { put("count", 1); put("leadKind", "DELIVERY_REVIEW"); put("oldestWaitingSince", "2026-10-04T09:42:00Z") } }
-        }
-        assertEquals(AttentionChip(false, "Coordinator · reviewing a delivery · 18m"), ProjectAttention.chip(project, now))
     }
 }

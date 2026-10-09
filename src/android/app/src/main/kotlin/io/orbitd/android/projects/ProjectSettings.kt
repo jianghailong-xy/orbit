@@ -23,6 +23,8 @@ import androidx.compose.ui.window.DialogProperties
 import io.orbitd.android.core.cards.*
 import io.orbitd.android.ui.LocalOrbitColors
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.*
 import java.time.Instant
@@ -264,6 +266,77 @@ private fun OwnerStartCard(doc: JsonObject, digest: String, state: ProjectPageSt
                 }
             }
         }, onViewTasks = viewTasks, trailing = cancel)
+}
+
+/** "Review and start" — the coordinator's request to start, over the project's sessions page (`RequestedStartProjectSheet`, A05-7):
+ * the card its conversation draws, read afresh as the sheet opens; Start answers the request at the start door, and a request that
+ * stopped standing before the sheet could draw it is said, not drawn blank. [start] answers a refusal's sentence, null when it went through. */
+@Composable
+internal fun RequestedStartSheet(api: ProjectApi, id: String, enabled: Boolean, viewTasks: () -> Unit, close: () -> Unit,
+    start: suspend (JsonObject) -> String?) {
+    var document by remember { mutableStateOf<JsonObject?>(null) }
+    var confirmation by remember { mutableStateOf<JsonObject?>(null) }
+    var openItems by remember { mutableStateOf<JsonObject?>(null) }
+    var graph by remember { mutableStateOf<JsonObject?>(null) }
+    var unread by remember { mutableStateOf(false) }
+    // The request as first drawn: a press in flight keeps its card while the reads catch up.
+    var held by remember { mutableStateOf<JsonObject?>(null) }
+    var edited by remember { mutableStateOf<StartProjectCopy.Draft?>(null) }
+    var starting by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(id) {
+        suspend fun <T> read(block: suspend () -> T): T? = try { block() } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { null }
+        coroutineScope {
+            val doc = async { read { api.document(id) } }; val items = async { read { api.openItems(id) } }
+            val plan = async { read { api.graph(id) } }; val seal = async { read { api.confirmation(id) } }
+            document = doc.await(); openItems = items.await(); graph = plan.await(); confirmation = seal.await()
+            unread = confirmation == null
+        }
+    }
+    Dialog(onDismissRequest = { if (!starting) close() }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(Modifier.fillMaxWidth(0.94f).testTag("project-start-request-sheet"), shape = MaterialTheme.shapes.large) {
+            Column(Modifier.heightIn(max = 720.dp).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                val cancel: @Composable () -> Unit = { TextButton(onClick = close, enabled = !starting, modifier = Modifier.testTag("project-start-request-cancel")) { Text("Cancel") } }
+                val doc = document
+                val row = doc?.let { StartProjectCopy.live(openItems, ProjectDoc.started(it)) } ?: held
+                val request = StartProjectCopy.request(row)
+                if (doc != null && confirmation != null && row != null && request != null) {
+                    LaunchedEffect(row) { if (held == null) held = row }
+                    val draft = edited ?: StartProjectCopy.Draft.of(request.settings)
+                    val itemId = row.text("itemId").orEmpty()
+                    val criteria = doc.objects("acceptanceCriteriaItems").sortedBy { it.number("ordinal") ?: 0 }
+                        .map { StartCriterion(it.number("ordinal") ?: 0, it.text("text").orEmpty()) }
+                    StartProjectCard(id, doc.text("title").orEmpty(), asked = true, askedAgo = ProjectTime.ago(row.text("waitingSince"), Instant.now()),
+                        request = request, criteria = criteria, plan = StartProjectCopy.planView(graph?.let(DependencyGraph::of), ProjectDoc.taskCount(doc)),
+                        hasCoordinator = true, escalationSeconds = doc.obj("integration")?.number("escalationSeconds") ?: StartProjectCopy.defaultEscalationSeconds,
+                        draft = draft, onDraft = { edited = it },
+                        standing = if (starting) StartProjectCopy.Standing.LIVE else StartProjectCopy.standing(itemId, request, openItems, confirmation, ProjectDoc.started(doc)),
+                        enabled = enabled, starting = starting, error = error, tag = "project-start-request", startTag = "project-start-request-confirm",
+                        onStart = {
+                            if (draft.complete && !starting) {
+                                starting = true; error = null
+                                scope.launch {
+                                    try { val failure = start(StartProjectCopy.body(request, draft, requestId = itemId)); if (failure == null) close() else error = failure }
+                                    finally { starting = false }
+                                }
+                            }
+                        }, onViewTasks = viewTasks, trailing = cancel)
+                } else {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("▶ ${StartProjectCopy.title}", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary)
+                        cancel()
+                    }
+                    when {
+                        doc != null && confirmation != null && openItems != null -> Note(StartProjectCopy.requestGone)
+                        unread -> Note(StartProjectCopy.unreadSeal)
+                        else -> CircularProgressIndicator(Modifier.align(Alignment.CenterHorizontally))
+                    }
+                }
+            }
+        }
+    }
 }
 
 /** "Is this project done?" over the project page — Review on the coordinator's request, or the owner's own Record as done… — the
