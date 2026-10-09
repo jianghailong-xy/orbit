@@ -22,6 +22,7 @@ import io.orbitd.android.projects.CoordinatorStartCard
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.serialization.json.*
 
 /** A04 is the only live-state owner. Reconnection/foreground/REST invalidations all feed this rail. */
@@ -62,6 +63,16 @@ fun SessionCards(open: (String) -> Unit, discuss: ((String) -> Unit)? = null) {
                 .filter { ObjectId.same(it.text("observerSessionId"), session.id) }
                 .mapNotNull { AuxiliaryCards.watch(session.id, it) }
         }
+    }
+    // A08-1: a report still with its reviewer is read again a second after its review is due (iOS `scheduleReviewDueRead`), so
+    // "Reviewing since" turns into what came of it without waiting for the next event.
+    val reviewDue = sessionCards.firstNotNullOfOrNull { card ->
+        card.source.obj("waiting")?.obj("review")?.takeIf { card.family == CardFamily.OWNER_CONFIRMATION && it.text("state") == "UNDER_REVIEW" }?.text("dueAt")
+    }
+    LaunchedEffect(reviewDue) {
+        val due = reviewDue?.let { runCatching { java.time.Instant.parse(it) }.getOrNull() } ?: return@LaunchedEffect
+        delay((java.time.Duration.between(java.time.Instant.now(), due).toMillis() + 1_000).coerceAtLeast(0))
+        app.realtime.refreshSession()
     }
     // Keep only a bounded in-memory history of cards this viewport actually saw. Absence is not success.
     var previous by remember(resources.handle, session.id) { mutableStateOf<List<InteractionCard>>(emptyList()) }

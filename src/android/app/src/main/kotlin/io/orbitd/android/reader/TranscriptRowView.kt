@@ -149,7 +149,7 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
             TextButton(onClick = { expanded = !expanded }) { Text(if (expanded) "Hide thinking" else "Show thinking") }
             if (expanded) MarkdownText(shown.body(), open = open)
         } else {
-            cards.forEach { TranscriptCardView(it, open) }
+            cards.forEach { TranscriptCardView(it, open, shown) }
             val atts = (shown.fields["attachments"] as? JsonArray).orEmpty().filterIsInstance<JsonObject>()
             val attachmentOnly = shown.type == "user" && shown.body().isBlank() && atts.isNotEmpty()
             // What delivery appended is not the person's: their bubble holds their words, the card the rest.

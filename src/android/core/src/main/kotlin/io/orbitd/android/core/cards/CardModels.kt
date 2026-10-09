@@ -54,6 +54,7 @@ enum class CardVerb(val label: String) {
     WIKI_REVERT("Revert run"), WIKI_REJECT_ENTRY("Reject entry"), PLAN_CONFIRM("Confirm plan"), PLAN_ACCEPT("Accept proposal"), PLAN_REJECT("Reject proposal"),
     WIKI_RECONFIRM("Re-confirm entry"), WIKI_AMEND("Amend entry"), WIKI_RETIRE("Retire entry"),
     WATCH_PAUSE("Pause watch"), WATCH_RESUME("Resume watch"), WATCH_CANCEL("Cancel watch"),
+    REOPEN_TASK("Reopen"),
 }
 
 /** The server address and the exact version drawn. No action is inferred from an event's prose. */
@@ -139,19 +140,32 @@ object CardCatalog {
         }
         (standing["ownerConfirmation"] as? JsonObject)?.let { view ->
             val task = view.text("taskId") ?: return@let
-            view.obj("waiting")?.takeIf { it.text("sessionId") == wireId }?.let { waiting ->
+            // Where a request stands (OrbitKit `OwnerConfirmations.standing`): answered, then returned by its reviewer, then
+            // waiting. An answer and a return are drawn where the card was — under its address — as the record it became.
+            val decisions = view.objects("decisions").filter { it.text("sessionId") == wireId }
+            val returns = OwnerReview.returnsIn(view, wireId)
+            val settled = (decisions + returns).mapNotNull { it.text("requestId") }.toSet()
+            view.obj("waiting")?.takeIf { it.text("sessionId") == wireId && it.text("requestId") !in settled }?.let { waiting ->
                 val requestId = waiting.text("requestId") ?: return@let
                 val review = waiting.obj("review")
                 val binding = "$requestId:${review?.text("state")}:${review?.obj("review")?.text("recordId")}"
                 val allowed = view.text("completionCriterion") == "OWNER_CONFIRMED" && view.text("status") in setOf("OPEN", "IN_PROGRESS", "FAILED")
-                add(InteractionCard("owner:$task:$requestId", CardFamily.OWNER_CONFIRMATION, "Confirm done?", view, id, projectId, task,
-                    binding, if (allowed) listOf(CardVerb.CONFIRM_OWNER, CardVerb.SEND_BACK) else emptyList()))
+                add(InteractionCard("owner:$task:$requestId", CardFamily.OWNER_CONFIRMATION, OwnerReview.heading, view, id, projectId, task,
+                    binding, if (allowed) listOf(CardVerb.CONFIRM_OWNER, CardVerb.SEND_BACK) else emptyList(), context = ownerContext("question", view)))
             }
-            view.objects("decisions").filter { it.text("sessionId") == wireId }.forEach {
-                add(receipt(CardFamily.OWNER_CONFIRMATION, "Owner decision recorded", it, id, task, it.text("id") ?: ""))
+            decisions.forEach { decided ->
+                val decisionId = decided.text("id") ?: return@forEach
+                // Reopen task, once the review found problems after the confirmation and the task has settled (§9 L4).
+                val reopen = OwnerReview.readable(decided["review"])?.obj("problems") != null && OwnerReview.reopenOffered(view.text("status"))
+                add(InteractionCard("owner:$task:${decided.text("requestId") ?: decisionId}", CardFamily.OWNER_CONFIRMATION,
+                    if (decided.text("decision") == "CONFIRM") OwnerReview.confirmedHeading else OwnerReview.sentBackHeading, decided, id, projectId, task,
+                    "$decisionId:${decided.obj("review")?.obj("problems")?.text("recordId")}:${view.text("status")}",
+                    if (reopen) listOf(CardVerb.REOPEN_TASK) else emptyList(), "Recorded", ownerContext("receipt", view)))
             }
-            view.objects("reviewerReturns").filter { it.text("sessionId") == wireId }.forEach {
-                add(receipt(CardFamily.REVIEW, "Returned by reviewer", it, id, task, it.text("requestId") ?: ""))
+            returns.forEach { returned ->
+                val requestId = returned.text("requestId") ?: return@forEach
+                add(InteractionCard("owner:$task:$requestId", CardFamily.OWNER_CONFIRMATION, OwnerReview.heading, returned, id, projectId, task,
+                    "$requestId:returned", status = "Recorded", context = ownerContext("returned", view)))
             }
         }
         if (projectId != null) addAll(project(id, projectId, standing))
@@ -159,6 +173,10 @@ object CardCatalog {
 
     private fun receipt(family: CardFamily, title: String, source: JsonObject, session: String, id: String, revision: String) =
         InteractionCard("receipt:$family:$id:$revision", family, title, source, session, objectId = id, binding = revision, status = "Recorded")
+
+    /** Which of the owner card's three shapes this is — the question, the receipt a decision left, the record a reviewer's return
+     * left — beside the confirmation read it was drawn from (`OwnerReview`). */
+    private fun ownerContext(kind: String, view: JsonObject) = buildJsonObject { put("ownerCard", kind); put("view", view) }
 
     fun project(session: String, project: String, standing: Map<String, JsonElement>): List<InteractionCard> = buildList {
         val document = standing["project"] as? JsonObject

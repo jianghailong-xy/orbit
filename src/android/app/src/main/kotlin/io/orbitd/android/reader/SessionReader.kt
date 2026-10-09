@@ -29,6 +29,7 @@ import io.orbitd.android.cards.SessionCards
 import io.orbitd.android.cards.SessionNeedsYouBar
 import io.orbitd.android.watch.SessionWatches
 import io.orbitd.android.core.auth.SessionHandle
+import io.orbitd.android.core.cards.OwnerReview
 import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.core.realtime.*
 import io.orbitd.android.directory.*
@@ -174,7 +175,8 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                 val reconnecting = session?.fresh != true && state.window.seeded
                 Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = 16.dp),
                     verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                    Text(if (reconnecting) "Saved messages · Reconnecting…" else sessionLabel(session),
+                    Text(if (reconnecting) "Saved messages · Reconnecting…" else sessionLabel(session,
+                            data.sessions["open"]?.firstOrNull { ObjectId.same(it.id, route.id) }),
                         Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
                     // Reserve the scaled button's height even while fresh, including 200% text.
                     TextButton(onClick = model::retry, enabled = reconnecting,
@@ -260,10 +262,12 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     }
 }
 
-private fun sessionLabel(session: SessionState?): String {
+private fun sessionLabel(session: SessionState?, row: DirectorySession? = null): String {
     val snapshot = session?.snapshot
     return when {
         snapshot?.approvals?.isNotEmpty() == true -> "Waiting for your reply"
+        // Its report is with its reviewer (A08-1; iOS `SessionHeader`), after anything waiting on the reader.
+        row != null && row.pendingApprovals == 0 && row.confirmationUnderReview != null -> OwnerReview.underReview
         session?.error != null -> "Disconnected · Retrying"
         snapshot != null -> snapshot.detail.string("runState") ?: snapshot.detail.string("status") ?: "Session"
         else -> "Connecting…"

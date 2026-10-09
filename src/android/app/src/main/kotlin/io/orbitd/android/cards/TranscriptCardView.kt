@@ -10,10 +10,16 @@ import io.orbitd.android.OrbitApplication
 import io.orbitd.android.core.cards.*
 import io.orbitd.android.text.LocalReaderResources
 import kotlinx.coroutines.CancellationException
+import io.orbitd.android.core.realtime.RunEvent
 import kotlinx.serialization.json.JsonObject
 
 @Composable
-internal fun TranscriptCardView(card: InteractionCard, open: (String) -> Unit) {
+internal fun TranscriptCardView(card: InteractionCard, open: (String) -> Unit, event: RunEvent? = null) {
+    val ts = event?.ts
+    // A review's two turns are drawn as their own cards (A08-1), not as a list of their fields.
+    if (card.family == CardFamily.REVIEW && (card.key.endsWith(":confirmationReviewRequest") || card.key.endsWith(":confirmationReturn"))) {
+        ReviewTurnCard(card, ts, open); return
+    }
     val resources = LocalReaderResources.current
     val app = LocalContext.current.applicationContext as? OrbitApplication
     val live = app?.realtime?.state?.collectAsState()?.value

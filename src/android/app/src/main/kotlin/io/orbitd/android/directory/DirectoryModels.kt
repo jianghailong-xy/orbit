@@ -7,6 +7,8 @@ import java.time.ZoneId
 import java.time.temporal.ChronoUnit
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 
 /** [position] is null until the workspace is first dragged into place (schema.prisma Workspace.position Int?). */
 @Serializable
@@ -37,7 +39,9 @@ data class DirectorySession(
     val name get() = title?.takeIf(String::isNotBlank) ?: "Untitled session"
     val stateLabel get() = when {
         pendingApprovals > 0 -> "Needs you · $pendingApprovals"
-        confirmationUnderReview != null -> "Under review"
+        // Its report is with its reviewer (A08-1; OrbitKit `underReviewLine`): drawn, not counted, and who has it.
+        confirmationUnderReview != null -> "Under review · ${(confirmationUnderReview["reviewerTitle"] as? JsonPrimitive)?.contentOrNull?.trim()
+            ?.ifEmpty { null } ?: "Reviewer"}"
         runState == "RUNNING" || status == "RUNNING" -> "Running"
         else -> (runState ?: status).lowercase().replace('_', ' ').replaceFirstChar(Char::uppercase)
     }

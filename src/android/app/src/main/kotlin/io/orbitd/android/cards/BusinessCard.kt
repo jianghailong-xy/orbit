@@ -2,6 +2,7 @@ package io.orbitd.android.cards
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.ui.draw.alpha
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -9,10 +10,11 @@ import androidx.compose.runtime.saveable.Saver
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.core.cards.*
 import io.orbitd.android.core.protocol.Wire
+import io.orbitd.android.tasks.TaskReopen
+import io.orbitd.android.tasks.TaskReopenCopy
 import io.orbitd.android.text.*
 import kotlinx.serialization.json.*
 import kotlinx.serialization.KSerializer
@@ -48,13 +50,17 @@ fun BusinessCard(card: InteractionCard, fresh: Boolean, result: CardActionState 
             put("title", editTitle.trim()); put("summary", editSummary.trim())
         }, reason = reason)
     fun send(verb: CardVerb) { submit(verb, if (verb == CardVerb.RETRY_TASK) input.copy(triggerId = UUID.randomUUID().toString()) else input) }
-    Surface(Modifier.fillMaxWidth().testTag(card.key), shape = MaterialTheme.shapes.medium,
+    // A record — a receipt, a reviewer's return — is drawn dimmed, so it does not read as something still waiting to be pressed.
+    val record = card.family == CardFamily.OWNER_CONFIRMATION && card.context.text("ownerCard") in setOf("receipt", "returned")
+    Surface(Modifier.fillMaxWidth().testTag(card.key).alpha(if (record) 0.72f else 1f), shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surfaceVariant) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(card.title, style = MaterialTheme.typography.titleMedium)
             Text("Filed by Orbit", style = MaterialTheme.typography.labelSmall)
             card.status?.let { Text(it, style = MaterialTheme.typography.labelMedium) }
-            CardBody(card, open)
+            CardBody(card, open, owner = if (card.family == CardFamily.OWNER_CONFIRMATION && CardVerb.CONFIRM_OWNER in card.actions)
+                    OwnerForm(ownerAnswers, enabled) { answer -> ownerAnswers = ownerAnswers.filterNot { it.key == answer.key } + answer } else null,
+                reopen = if (CardVerb.REOPEN_TASK in card.actions && enabled) ({ confirming = CardVerb.REOPEN_TASK }) else null)
             CardDiscussion.context(card)?.let { context ->
                 if (discuss == null) Text("Conversation discussion is not connected yet.", style = MaterialTheme.typography.bodySmall)
                 else TextButton(onClick = { discuss(context) }, enabled = fresh && !result.busy) { Text("Chat about this") }
@@ -76,30 +82,6 @@ fun BusinessCard(card: InteractionCard, fresh: Boolean, result: CardActionState 
                         custom = custom + (q.question to value)
                         if (!q.multiSelect) selections = selections - q.question
                     }, Modifier.fillMaxWidth(), enabled = enabled, label = { Text("Or type your own answer…") })
-                }
-            }
-            if (card.family == CardFamily.OWNER_CONFIRMATION && CardVerb.CONFIRM_OWNER in card.actions) {
-                val questions = CardRequests.reviewQuestions(card.source.obj("waiting")?.obj("review"))
-                questions.forEach { q ->
-                    val id = q.text("key") ?: return@forEach
-                    val choice = ownerAnswers.firstOrNull { it.key == id } ?: OwnerAnswer(id, q.number("recommendedOption"))
-                    fun choose(answer: OwnerAnswer) { ownerAnswers = ownerAnswers.filterNot { it.key == id } + answer }
-                    key(id) {
-                        Column(Modifier.testTag("owner-question:$id"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text(q.text("text") ?: "", style = MaterialTheme.typography.titleSmall)
-                            q.objects("options").forEachIndexed { index, o ->
-                                ChoiceRow(o.text("label") ?: "", o.text("description"), choice.option == index, enabled,
-                                    recommended = index == q.number("recommendedOption")) { choose(OwnerAnswer(id, index)) }
-                            }
-                            ChoiceRow("Other", null, choice.option == null, enabled) { choose(OwnerAnswer(id, text = "")) }
-                            if (choice.option == null) OutlinedTextField(choice.text.orEmpty(), { choose(OwnerAnswer(id, text = it)) },
-                                Modifier.fillMaxWidth(), enabled = enabled, label = { Text("Your answer") })
-                            val refs = q.strings("evidenceRefs")
-                            if (refs.isNotEmpty()) DetailFold("Evidence") {
-                                refs.forEach { Text(it, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace) }
-                            }
-                        }
-                    }
                 }
             }
             if (card.family == CardFamily.OWNER_QUESTION && CardVerb.OWNER_ANSWER in card.actions) {
@@ -134,13 +116,15 @@ fun BusinessCard(card: InteractionCard, fresh: Boolean, result: CardActionState 
             // A merge under way: its dead press says how far its job got, beside the Cancel it still offers (iOS `mergingActionLabel`).
             if (card.family == CardFamily.PROMOTION && PromotionCards.isMerging(card.source)) OutlinedButton(onClick = {}, enabled = false,
                 modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("${card.key}:merging")) { Text(PromotionCards.mergingActionLabel(card.source)) }
-            card.actions.forEach { verb ->
+            // Reopen task is pressed in the review's box (iOS `OwnerConfirmationReviewBarView`), not among the card's buttons.
+            card.actions.filter { it != CardVerb.REOPEN_TASK }.forEach { verb ->
                 val requiresNote = verb in setOf(CardVerb.SEND_BACK, CardVerb.CHAT, CardVerb.MARK_HANDLED)
                 val valid = runCatching { CardRequests.build(card, verb, input.copy(triggerId = "validation")) }.isSuccess
                 val label = if (verb == CardVerb.REMEMBER) {
                     val rules = ApprovalRules.remember(card.source.text("toolName") ?: "", card.source.obj("input") ?: JsonObject(emptyMap()))
                     "Allow & remember " + rules.joinToString(", ") { it.ruleContent?.removeSuffix(":*") ?: it.toolName }
-                } else if (verb == CardVerb.SEND_BACK && noteAction != verb) "Chat about this" else verb.label
+                } else if (verb == CardVerb.SEND_BACK && noteAction != verb) "Chat about this"
+                else verb.label
                 OutlinedButton(onClick = {
                     when {
                         requiresNote && noteAction != verb -> noteAction = verb
@@ -152,14 +136,18 @@ fun BusinessCard(card: InteractionCard, fresh: Boolean, result: CardActionState 
             }
         }
     }
-    confirming?.let { verb -> AlertDialog(onDismissRequest = { confirming = null }, title = { Text("${verb.label}?") },
+    confirming?.let { verb -> AlertDialog(onDismissRequest = { confirming = null },
+        title = { Text(if (verb == CardVerb.REOPEN_TASK) TaskReopenCopy.modalTitle else "${verb.label}?") },
         text = { Text(when (verb) {
+            // The task panel's own question (`TaskReopen`): a receipt's reopen is a second place to press the one door.
+            CardVerb.REOPEN_TASK -> TaskReopen.paragraphs(buildJsonObject { (card.context.obj("view")?.text("projectId"))?.let { put("projectId", it) } })
+                .joinToString("\n\n")
             CardVerb.CANCEL_TASK -> "This ends the task's attempt and closes its exceptions. Its branch and history remain."
             CardVerb.CONFIRM_MERGE -> "Merge the displayed source revision into ${card.source.text("upstreamRef")}. The server checks this exact revision again."
             CardVerb.WIKI_REVERT -> "Take back the changes shown in this run's revert plan."
             else -> "Stop this watch. It will no longer wait for its condition."
         }) }, confirmButton = { TextButton(modifier = Modifier.testTag("confirm:${verb.name}"), enabled = enabled, onClick = { confirming = null; send(verb) }) { Text(verb.label) } },
-        dismissButton = { TextButton(onClick = { confirming = null }) { Text("Back") } }) }
+        dismissButton = { TextButton(onClick = { confirming = null }) { Text(if (verb == CardVerb.REOPEN_TASK) "Cancel" else "Back") } }) }
 }
 
 private fun <T> jsonSaver(serializer: KSerializer<T>) = Saver<T, String>(

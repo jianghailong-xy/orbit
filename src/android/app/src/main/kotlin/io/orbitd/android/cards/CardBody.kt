@@ -14,8 +14,10 @@ import io.orbitd.android.text.*
 import kotlinx.serialization.json.*
 
 @Composable
-internal fun CardBody(card: InteractionCard, open: (String) -> Unit) {
+internal fun CardBody(card: InteractionCard, open: (String) -> Unit, owner: OwnerForm? = null, reopen: (() -> Unit)? = null) {
     val row = card.source
+    // The owner-confirmation card draws its question, its receipt and a reviewer's return itself (A08-1).
+    if (card.family == CardFamily.OWNER_CONFIRMATION && card.context.text("ownerCard") != null) { OwnerCardBody(card, open, owner, reopen); return }
     if (card.key.startsWith("receipt:")) {
         CardFields(row, listOf("title", "decision", "decidedAt", "decidedByType", "note", "report", "review", "answers", "reason", "problems", "resultingSeal"), open)
         return
@@ -87,19 +89,7 @@ internal fun CardBody(card: InteractionCard, open: (String) -> Unit) {
             row.obj("decidability")?.takeIf { !it.flag("decidable") }?.let { CardFields(it, listOf("refusal", "requiredAction"), open) }
             row.obj("independence")?.takeIf { !it.flag("independent") }?.let { CardFields(it, listOf("disqualification", "requiredAction"), open) }
         }
-        CardFamily.OWNER_CONFIRMATION -> {
-            Text(row.text("title") ?: "", style = MaterialTheme.typography.titleSmall)
-            Field("Done when", row["acceptanceCriteria"], open)
-            val waiting = row.obj("waiting")
-            Field("The run's report", waiting?.obj("report")?.get("text"), open)
-            waiting?.obj("review")?.let { review ->
-                Text("Review · ${review.text("state") ?: "Unavailable"}", style = MaterialTheme.typography.titleSmall)
-                CardFields(review, listOf("reviewer", "since", "dueAt", "notReviewedReason", "outdated"), open)
-                review.obj("review")?.let { CardFields(it, listOf("judgment", "reviewedSha", "checked", "notChecked", "leftOpen"), open) }
-                CardFields(review, listOf("returned", "problems"), open)
-            }
-            Field("If confirmed", row["ifConfirmed"], open)
-        }
+        CardFamily.OWNER_CONFIRMATION -> OwnerCardBody(card, open, owner, reopen)
         CardFamily.CRITERIA_CHANGE -> {
             CardFields(row, listOf("filedAt", "baselineSeal", "currentSeal"), open)
             row.obj("diff")?.objects("entries")?.forEach { entry ->
