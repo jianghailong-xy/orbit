@@ -393,7 +393,7 @@ private fun ModelChoices(model: ComposerModel, state: ComposerState, detail: Jso
             Text("Provider")
             val draft = model.target != null
             // A draft starts on any engine, in iOS's order; a session moves only between the providers of its own CLI.
-            catalog?.let { if (draft) it.choices() else it.sameRuntime(choice) }?.forEach { option ->
+            catalog?.let { val all = it.choices(it.antigravityKeyAvailable(detail)); if (draft) all else it.sameRuntime(choice, all) }?.forEach { option ->
                 val here = option.id == choice
                 fun pick(account: String? = null) {
                     val next = option.models.firstOrNull()?.text("value") ?: ""
@@ -413,10 +413,18 @@ private fun ModelChoices(model: ComposerModel, state: ComposerState, detail: Jso
                 // A draft starts on any of them; a session moves only where the runner carries it across.
                 val accounts = if (option.unavailable != null && !here) emptyList()
                     else catalog.takeIf { draft || it.movesAccounts(option.id) }?.accountChoices(option.id).orEmpty()
-                if (accounts.size < 2) TextButton(enabled = enabled && option.unavailable == null, onClick = { pick() }) {
-                    Text((if (here) "✓ " else "") + option.label + (option.unavailable?.let { " · $it" } ?: ""))
+                // A row this runner can't run stays listed with why; where an engine page fixes it, the row goes there (iOS d2737d665).
+                // The one the session is on is exempt: it is the list's own caption.
+                val blocked = option.unavailable != null && !here
+                val fix = option.fixEngine?.takeIf { blocked && openRunner != null }
+                val name = listOfNotNull(option.label, option.labelDetail).joinToString(" · ")
+                if (accounts.size < 2) TextButton(enabled = enabled && (!blocked || fix != null), onClick = {
+                    if (fix == null) pick() else catalog.runner.text("id")?.let { runner -> close(); openRunner?.invoke(runner, fix) }
+                }) {
+                    Text(if (blocked) "${option.label} — ${option.unavailable}" + (if (option.fixEngine != null) ProviderChoices.fixSuffix(option.fixEngine) else "")
+                        else (if (here) "✓ " else "") + name)
                 } else {
-                    Text(option.label, Modifier.padding(top = 8.dp).testTag("composer-engine-accounts"), style = MaterialTheme.typography.labelLarge)
+                    Text(name, Modifier.padding(top = 8.dp).testTag("composer-engine-accounts"), style = MaterialTheme.typography.labelLarge)
                     AccountRow("Automatic", "Switches to soonest reset", enabled,
                         spoken = "Automatic: starts on the ${option.label} account whose quota resets soonest, and switches when it hits its limit") { pick("automatic") }
                     accounts.forEach { account ->

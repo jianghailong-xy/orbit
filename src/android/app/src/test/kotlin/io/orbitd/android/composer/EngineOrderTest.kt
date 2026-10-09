@@ -29,7 +29,8 @@ class EngineOrderTest : ComposerShellTest() {
 
     @Test fun anEngineTheRunnerHasNotReportedIsStillListedInItsPlace() {
         signIn(); openDraft(); openModelMenu()
-        // The fixture's runner reports Claude Code and Codex only; the other engines' rows claim nothing either way, as on iOS.
-        assertEquals(listOf("Claude", "Codex", "Antigravity", "Kimi"), names())
+        // The fixture's runner reports Claude Code and Codex only: Kimi's row claims nothing either way, as on iOS, and Antigravity —
+        // with no Google account and no key on this runner — is not offered at all (A07-4).
+        assertEquals(listOf("Claude", "Codex", "Kimi"), names())
     }
 }

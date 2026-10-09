@@ -62,6 +62,21 @@ internal object ProviderChoices {
     /** A configured key runs by borrowing an engine's CLI: the binary has to be there, and no sign-in applies. */
     fun byokBlocker(health: JsonObject?) = if (health?.flag("installed") == false) "Not installed" else null
 
+    /** Antigravity's own reasons (iOS d2737d665, cd8e8a41a), from the server's `runner.antigravity`: a runner too old to run it,
+     * the CLI not installed — and, for a pick that runs on a sign-in rather than a key, a lapsed Google sign-in or the engine's
+     * own answer. */
+    fun antigravityBlocker(state: JsonObject?, health: JsonObject?, login: Boolean = false): String? {
+        if (state?.flag("supported") == false) return "Update runner"
+        if (state?.flag("installed") == false) return "Not installed"
+        if (!login) return byokBlocker(health)
+        if (state?.text("authSource") == "google" && state.flag("envKeyAvailable") == false) return "Not signed in"
+        return engineBlocker(health)
+    }
+
+    /** The arrow that closes a row's reason, where tapping the row goes: Antigravity's install-or-key row to its engine page, every
+     * other engine's to a sign-in (iOS d2737d665). */
+    fun fixSuffix(fixEngine: String?) = if (fixEngine == "antigravity") " →" else ", sign in →"
+
     /** The runtime that actually executes [provider] (the server's `execRuntime`): a key run on OpenCode is OpenCode's, a
      * configured key the CLI it borrows, and anything unknown the server's own Claude fallback. */
     fun executingRuntime(provider: String, providers: List<JsonObject>): String {

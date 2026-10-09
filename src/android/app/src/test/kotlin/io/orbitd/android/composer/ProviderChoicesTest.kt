@@ -20,8 +20,10 @@ class ProviderChoicesTest {
     @Test fun theEnginesComeInIosOrderThenPoolsThenKeysThenOpenCode() {
         val catalog = catalog("""[{"engine":"opencode","installed":true},{"engine":"kimi","installed":true,"auth":"yes"},
             {"engine":"codex","installed":true,"auth":"yes"},{"engine":"claude","installed":true,"auth":"yes"}]""")
-        assertEquals(listOf("claude", "codex", "antigravity", "kimi", "team-pool", "deepseek", "moonshot", "opencode"), catalog.choices().map { it.id })
-        assertEquals(listOf("Claude", "Codex", "Antigravity", "Kimi", "Team pool", "DeepSeek", "Moonshot", "OpenCode"), catalog.choices().map { it.label })
+        assertEquals(listOf("claude", "codex", "antigravity", "kimi", "team-pool", "deepseek", "moonshot", "opencode"),
+            catalog.choices(keyAvailable = true).map { it.id })
+        assertEquals(listOf("Claude", "Codex", "Antigravity", "Kimi", "Team pool", "DeepSeek", "Moonshot", "OpenCode"),
+            catalog.choices(keyAvailable = true).map { it.label })
     }
 
     /** Missing outranks signed out; a key or a pool needs only the CLI it borrows; OpenCode only once the runner has it. */
@@ -107,5 +109,50 @@ class ProviderChoicesTest {
         assertEquals(listOf("opencode", "opencode/deepseek"), catalog.sameRuntime("opencode/deepseek").map { it.id })
         assertFalse("no key is listed under an OpenCode the runner doesn't have",
             catalog("""[{"engine":"claude","installed":true,"auth":"yes"}]""", providers).choices().any { it.id.startsWith("opencode") })
+    }
+
+    /** A07-4 with A13-3's composer part (iOS d2737d665, cd8e8a41a; GeminiEntryParityTests): Antigravity is offered for a Google
+     * account or a key the server confirms, named by which; a runner too old says "Update runner", a missing CLI "Not installed",
+     * a lapsed Google sign-in "Not signed in" — each fixed on Antigravity's own engine page. */
+    @Test fun antigravityIsOfferedForAGoogleAccountOrAKeyAndSaysWhatItRunsOn() {
+        fun runner(state: String, health: String = """{"engine":"antigravity","installed":true,"auth":"yes"}""") =
+            ComposerCatalog(obj("""{"id":"r","engines":[$health],"antigravity":$state}"""),
+                list("""[{"slug":"gemini","label":"Gemini","runtime":"antigravity","presetSlug":"gemini"}]"""))
+        fun agy(catalog: ComposerCatalog, key: Boolean) = catalog.choices(key).firstOrNull { it.id == "antigravity" }
+        val google = runner("""{"supported":true,"installed":true,"envKeyAvailable":true,"authSource":"google","googleLogin":"available"}""")
+        assertEquals("Google account", agy(google, key = true)?.labelDetail)
+        assertNull(agy(google, key = true)?.unavailable)
+        val envKey = runner("""{"supported":true,"installed":true,"envKeyAvailable":true,"authSource":"env_key","googleLogin":"available"}""")
+        assertEquals("env key", agy(envKey, key = true)?.labelDetail)
+        assertNull("no Google account and no key: not offered", agy(envKey, key = false))
+        val lapsed = runner("""{"supported":true,"installed":true,"envKeyAvailable":false,"authSource":"google","googleLogin":"available"}""")
+        assertEquals("Not signed in", agy(lapsed, key = false)?.unavailable)
+        assertEquals("antigravity", agy(lapsed, key = false)?.fixEngine)
+        assertEquals("a lapsed sign-in where a key still runs it is the key's", "env key", agy(lapsed, key = true)?.labelDetail)
+        assertNull(agy(lapsed, key = true)?.unavailable)
+        val old = runner("""{"supported":false,"installed":null,"envKeyAvailable":false,"authSource":"google","googleLogin":"needs_update"}""")
+        assertEquals("Update runner", agy(old, key = false)?.unavailable)
+        val missing = runner("""{"supported":true,"installed":false,"envKeyAvailable":true,"authSource":"google","googleLogin":"available"}""",
+            """{"engine":"antigravity","installed":false}""")
+        assertEquals("Not installed", agy(missing, key = true)?.unavailable)
+        // A Gemini key runs on the Antigravity CLI: named for it, and blocked only by what blocks that CLI.
+        val gemini = google.choices(true).single { it.id == "gemini" }
+        assertEquals("Antigravity CLI", gemini.labelDetail)
+        assertNull(gemini.unavailable)
+        assertEquals("Not installed", missing.choices(true).single { it.id == "gemini" }.unavailable)
+        assertEquals(" →", ProviderChoices.fixSuffix("antigravity"))
+        assertEquals(", sign in →", ProviderChoices.fixSuffix("codex"))
+    }
+
+    /** Which machine's answer the picker reads: the workspace's for the session's runner (a draft's detail is its workspace), else
+     * the runner's own credential. */
+    @Test fun theKeyAnswerIsTheWorkspacesForThisRunner() {
+        val catalog = ComposerCatalog(obj("""{"id":"34A07cComposerRunner01","antigravity":{"envKeyAvailable":false}}"""), emptyList())
+        assertTrue(catalog.antigravityKeyAvailable(obj("""{"workspace":{"antigravityKeyAvailableByRunner":{"34A07cComposerRunner01":true}}}""")))
+        assertFalse(catalog.antigravityKeyAvailable(obj("""{"workspace":{"antigravityKeyAvailableByRunner":{"other":true}}}""")))
+        assertTrue("a draft's detail is its workspace",
+            catalog.antigravityKeyAvailable(obj("""{"id":"w","antigravityKeyAvailableByRunner":{"34A07cComposerRunner01":true}}""")))
+        assertFalse(catalog.antigravityKeyAvailable(obj("""{"id":"s"}""")))
+        assertTrue(ComposerCatalog(obj("""{"id":"r","antigravity":{"envKeyAvailable":true}}"""), emptyList()).antigravityKeyAvailable(obj("""{"id":"s"}""")))
     }
 }

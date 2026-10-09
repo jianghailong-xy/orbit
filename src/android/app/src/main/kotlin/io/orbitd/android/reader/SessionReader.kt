@@ -39,6 +39,7 @@ import io.orbitd.android.watch.SessionWatches
 import io.orbitd.android.wiki.PageBar
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.cards.OwnerReview
+import io.orbitd.android.core.cards.AntigravityRepair
 import io.orbitd.android.core.cards.SessionRunStart
 import io.orbitd.android.core.net.HttpMethod
 import io.orbitd.android.core.protocol.Wire
@@ -86,6 +87,10 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     }
     // The worktree bar's model: its own reads while an outcome is pending or the session is live, and the store's as they land.
     val worktree = remember(handle, route.id) { WorktreeModel(api, route.id!!, app.processScope) }
+    // What the conversation's repair cards act through: the session's freshest detail, its runner, the composer (A07-4).
+    val latestOpen by rememberUpdatedState(open)
+    val console = remember(handle, route.id) { SessionConsole(app, handle, composer, app.processScope) { runner, engine ->
+        latestOpen(OrbitRoute(Destination.RUNNER, runner, recordId = "engine:$engine")) } }
     val list = rememberLazyListState()
     var follow by rememberSaveable { mutableStateOf(route.recordId == null) }
     var placed by remember(model) { mutableStateOf(false) }
@@ -156,6 +161,14 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     } }
     val scope = rememberCoroutineScope()
     LaunchedEffect(snapshotDetail) { snapshotDetail?.let(worktree::offer) }
+    val worktreeState by worktree.state.collectAsState()
+    LaunchedEffect(worktreeState.detail, snapshotDetail) { console.detail = worktreeState.detail ?: snapshotDetail }
+    // An Antigravity failure said here is read against the runner and the providers, once, when it first appears.
+    val antigravityFailure = remember(rows, snapshotDetail) {
+        rows.any { it.event.type in setOf("error", "assistant") && AntigravityRepair.of(it.event.body().trim()) != null } ||
+            AntigravityRepair.of(snapshotDetail?.string("error")) != null
+    }
+    LaunchedEffect(antigravityFailure, console.runnerId) { if (antigravityFailure) console.reload() }
     LaunchedEffect(worktree, state.denied) {
         if (!state.denied) worktree.poll { (worktree.state.value.detail ?: snapshotDetail)?.let { it.string("runStatus") ?: it.string("status") } in
             setOf("RUNNING", "AWAITING_INPUT", "INTERRUPTED") }
@@ -197,7 +210,8 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         state.window.events.filter { it.type == "user_delivery" }
             .mapNotNull { event -> event.fields.string("turnId")?.let { turn -> event.fields.string("delivery")?.let { turn to it } } }.toMap()
     }
-    CompositionLocalProvider(LocalReaderResources provides resources, LocalTaskActivity provides taskActivity, LocalSteerDeliveries provides steerDeliveries) {
+    CompositionLocalProvider(LocalReaderResources provides resources, LocalTaskActivity provides taskActivity, LocalSteerDeliveries provides steerDeliveries,
+        LocalSessionConsole provides console) {
         SessionCardsReads(cards)
         BoxWithConstraints(Modifier.fillMaxSize()) {
         val otherInputHasKeyboard = WindowInsets.ime.getBottom(LocalDensity.current) > 0 && !composerFocused
@@ -301,6 +315,12 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     },
                     sendAgain = { composer.control("retry-message", body = JsonObject(emptyMap())) },
                     openRunner = { runner -> open(OrbitRoute(Destination.RUNNER, runner)) })
+                // A07-4: a session queued behind the runner's Antigravity gate says what to fix, above the composer (iOS
+                // `queuedAntigravityRepair`).
+                val queuedDetail = console.detail
+                AntigravityRepair.of(queuedDetail?.string("error"))?.takeIf {
+                    console.executesAntigravity && (queuedDetail?.string("runStatus") ?: queuedDetail?.string("status")) == "PENDING"
+                }?.let { Box(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) { AntigravityRepairCard(it, console) } }
                 SessionWatches(app, handle, route.id!!, open = open)
                 // The session's tasks — created here, or waited on by its watches (A08-6) — and its code output, folded with the rest
                 // of the chrome while a phone's composer is focused.

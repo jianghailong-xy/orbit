@@ -43,8 +43,10 @@ data class ComposerState(val draft: ComposerDraft = ComposerDraft(), val loaded:
     val catalogLoading: Boolean = false, val catalogError: String? = null,
     val acknowledgementPending: Boolean = false)
 
+/** One row of the Provider list (OrbitKit `ProviderChoice`): [labelDetail] says which credential it runs on ("Google account",
+ * "env key", "Antigravity CLI"); [fixEngine] is the engine whose page on the runner fixes [unavailable], null when none can. */
 data class ProviderOption(val id: String, val label: String, val runtime: String,
-    val models: List<JsonObject>, val unavailable: String? = null)
+    val models: List<JsonObject>, val unavailable: String? = null, val labelDetail: String? = null, val fixEngine: String? = null)
 
 /** One of the runner's accounts of an engine as a row of the account menu (web AccountChoice): its own quota's tightest
  * window, compactly ("5h 12%", an Antigravity bucket by what is left: "gemini-5h 4% left"), "env key" for an Antigravity
@@ -121,22 +123,46 @@ data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObjec
         }
     }
     private fun health(engine: String) = runner.objects("engines").firstOrNull { it.text("engine") == engine }
-    private fun option(slug: String, unavailable: String?) =
-        ProviderOption(slug, ProviderChoices.providerName(slug, providers), runtime(slug) ?: slug, models(slug), unavailable)
+    private fun option(slug: String, unavailable: String?, fixEngine: String? = null, labelDetail: String? = null) =
+        ProviderOption(slug, ProviderChoices.providerName(slug, providers), runtime(slug) ?: slug, models(slug), unavailable, labelDetail, fixEngine)
+    /** SessionProviderChoices.antigravityKeyAvailable: the server's answer for the machine this runs on — the workspace's, by runner
+     * (a draft's detail is its workspace) — else the runner's own credential. */
+    fun antigravityKeyAvailable(detail: JsonObject): Boolean {
+        val workspace = detail["workspace"] as? JsonObject ?: detail.takeIf { "antigravityKeyAvailableByRunner" in it }
+            ?: return (runner["antigravity"] as? JsonObject)?.flag("envKeyAvailable") == true
+        val byRunner = workspace["antigravityKeyAvailableByRunner"] as? JsonObject ?: return false
+        return byRunner.entries.any { (id, available) -> ObjectId.same(id, runner.text("id")) && (available as? JsonPrimitive)?.booleanOrNull == true }
+    }
     /** SessionProviderChoices.choices: the runner's engines in iOS's order — claude, codex, antigravity, kimi — then the account
      * pools, then the configured keys, then OpenCode once the runner has it and the keys it may spend (A07-6: each key the server
      * marks `runsOnOpenCode`, listed again under OpenCode as `opencode/<slug>`). A row this runner can't run stays listed with why. */
-    fun choices(): List<ProviderOption> {
-        val engines = ProviderChoices.engineSlugs.map { slug -> option(slug, ProviderChoices.engineBlocker(health(slug))) }
-        // A pool, like a configured key, needs the CLI it runs on and nothing signed in; what the server says it lacks follows.
+    fun choices(keyAvailable: Boolean = false): List<ProviderOption> {
+        // A07-4 (and A13-3's composer part): Antigravity is offered for a Google account or a key the server confirms, named by which
+        // one it runs on — a Google sign-in, unless that has lapsed where a key still runs it.
+        val antigravity = runner["antigravity"] as? JsonObject
+        val google = antigravity?.text("authSource") == "google"
+        val googleAccount = google && !(keyAvailable && antigravity?.flag("envKeyAvailable") == false)
+        val engines = ProviderChoices.engineSlugs.filter { it != "antigravity" || keyAvailable || google }.map { slug ->
+            val blocker = if (slug == "antigravity") ProviderChoices.antigravityBlocker(antigravity, health(slug), login = !keyAvailable || googleAccount)
+                else ProviderChoices.engineBlocker(health(slug))
+            option(slug, blocker, fixEngine = slug.takeIf { blocker != null },
+                labelDetail = if (slug != "antigravity") null else if (googleAccount) "Google account" else "env key")
+        }
+        // A pool, like a configured key, needs the CLI it runs on and nothing signed in; what the server says it lacks follows,
+        // and no runner fixes that.
         val pools = providers.filter { it.flag("pool") == true }.map { row ->
             val slug = row.text("slug").orEmpty()
-            option(slug, ProviderChoices.byokBlocker(health(runtime(slug) ?: "claude")) ?: row.text("unavailable"))
+            val engine = runtime(slug) ?: "claude"
+            val missing = ProviderChoices.byokBlocker(health(engine))
+            option(slug, missing ?: row.text("unavailable"), fixEngine = engine.takeIf { missing != null })
         }
-        // A configured row shadowing a built-in slug would dispatch the same identity as the engine above.
+        // A configured row shadowing a built-in slug would dispatch the same identity as the engine above. A key is judged through
+        // the CLI it borrows; a Gemini key on Antigravity's own terms, and named for it.
         val keys = providers.filter { it.flag("pool") != true && it.text("slug") !in ProviderChoices.engineSlugs + "opencode" }.map { row ->
             val slug = row.text("slug").orEmpty()
-            option(slug, ProviderChoices.byokBlocker(health(ProviderChoices.executingRuntime(slug, providers))))
+            val engine = ProviderChoices.executingRuntime(slug, providers)
+            val blocker = if (engine == "antigravity") ProviderChoices.antigravityBlocker(antigravity, health(engine)) else ProviderChoices.byokBlocker(health(engine))
+            option(slug, blocker, fixEngine = engine.takeIf { blocker != null }, labelDetail = "Antigravity CLI".takeIf { engine == "antigravity" })
         }
         val openCode = if (health("opencode")?.flag("installed") != true) emptyList() else listOf(option("opencode", null)) +
             providers.filter { it.flag("runsOnOpenCode") == true && it.flag("pool") != true }.map { row ->
@@ -150,7 +176,16 @@ data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObjec
     fun sameRuntime(current: String, choices: List<ProviderOption> = choices()): List<ProviderOption> {
         val runtime = ProviderChoices.executingRuntime(current, providers)
         val same = choices.filter { ProviderChoices.executingRuntime(it.id, providers) == runtime }
-        return if (same.any { it.id == current }) same else listOf(option(current, null)) + same
+        return if (same.any { it.id == current }) same else listOf(currentOption(current)) + same
+    }
+    /** SessionProviderChoices.current: a provider absent from the list still renders as what it is — an Antigravity one with its
+     * own reason and credential. */
+    private fun currentOption(slug: String): ProviderOption {
+        if (ProviderChoices.executingRuntime(slug, providers) != "antigravity") return option(slug, null)
+        val antigravity = runner["antigravity"] as? JsonObject
+        val blocker = ProviderChoices.antigravityBlocker(antigravity, null, login = slug == "antigravity" && antigravity?.flag("envKeyAvailable") != true)
+        return option(slug, blocker, fixEngine = "antigravity".takeIf { blocker != null }, labelDetail = if (slug != "antigravity") "Antigravity CLI"
+            else if (antigravity?.text("authSource") == "google") "Google account" else "env key")
     }
     fun accounts(provider: String) = if (RunnerPage.keepsAccounts(provider))
         runner.objects("engines").firstOrNull { it.text("engine") == provider }?.objects("accounts").orEmpty() else emptyList()

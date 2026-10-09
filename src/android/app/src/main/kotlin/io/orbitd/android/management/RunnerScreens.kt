@@ -1018,7 +1018,7 @@ private class SignInRelay(private val api: ManagementApi, val runnerId: String, 
  * Cancel while a sign-in is under way (cancelling it first), Close otherwise — never both. [onSignedIn]: the sign-in landed.
  */
 @Composable
-private fun RunnerSignInCard(api: ManagementApi, runner: JsonObject, engine: String, account: String? = null, accountName: String? = null,
+internal fun RunnerSignInCard(api: ManagementApi, runner: JsonObject, engine: String, account: String? = null, accountName: String? = null,
                              autoStart: Boolean = false, onClose: (() -> Unit)? = null, onSignedIn: (() -> Unit)? = null) {
     val runnerId = runner.text("id")
     val scope = rememberCoroutineScope()
