@@ -1,6 +1,6 @@
 /**
  * The provider/engine split's data migration on a real PostgreSQL (docs/provider-engine-contract.md §7.2–§7.6,
- * migration 0417, provider-engine-migration.ts): every `deepseek-harness` row folds into a DeepSeek key —
+ * migration 0419, provider-engine-migration.ts): every `deepseek-harness` row folds into a DeepSeek key —
  * merged when the same owner's enabled DeepSeek key holds the same key on the same endpoint, converted where
  * it stands otherwise, turned-off rows staying off — and leaves its slug as a retired name for the key on
  * DeepSeek Harness; whatever names it is rewritten; the old OpenCode spelling and the built-in dsh move onto

@@ -6076,7 +6076,7 @@ model ProviderSlugAlias {
   @@map("provider_slug_alias")
 }
 
-/// One execution of the provider/engine migration (migration 0417, docs/provider-engine-contract.md
+/// One execution of the provider/engine migration (migration 0419, docs/provider-engine-contract.md
 /// §7.6, providers/provider-engine-migration.ts), which the API server runs when it starts. A full scan
 /// that left nothing behind is the completion marker (`complete`; one per version, a partial unique
 /// index in the migration's SQL); a later start only folds the `deepseek-harness` rows an older replica
@@ -6095,7 +6095,7 @@ model ProviderEngineMigrationRun {
   @@map("provider_engine_migration_run")
 }
 
-/// One line of a provider/engine migration run's report (migration 0417): what a step did to one row —
+/// One line of a provider/engine migration run's report (migration 0419): what a step did to one row —
 /// its values before and after, never key material — or why it left it.
 model ProviderEngineMigrationReport {
   id        BigInt                     @id @default(autoincrement())

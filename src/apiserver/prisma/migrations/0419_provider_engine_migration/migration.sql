@@ -20,8 +20,10 @@
 --
 -- Nothing reads either table on a request path.
 --
--- 0417: the highest number on main, every project/* and pushed orbit/* branch and every session
--- worktree was 0416 (0416_task_comment_session_attempt) when this was written (2026-10-09).
+-- 0419, renumbered from 0417: written when the highest number on main, every project/* and pushed orbit/*
+-- branch and every session worktree was 0416 (0416_task_comment_session_attempt), and moved before
+-- landing (2026-10-10) because two other sessions' worktrees had since taken 0417
+-- (0417_run_event_autovacuum_analyze) and 0418 (0418_session_recap).
 BEGIN;
 
 CREATE TABLE "provider_engine_migration_run" (
