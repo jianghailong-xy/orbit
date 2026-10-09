@@ -388,6 +388,8 @@ class TasksProjectsDeviceTest {
         capture("start-asked-0-project-row")
         tap("start-request:action")
         awaitTag("interaction-cards"); awaitScrollTo("transcript-list", hasTestTag("start:start1"))
+        // A08-2: the start card is a preview in the conversation, read and answered in the review it opens.
+        tap("start:start1:preview"); awaitTag("card-review")
         compose.waitUntil(20_000) { compose.onAllNodes(hasTestTag("start:start1:START") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("start:start1-asked").assertTextContains("${StartProjectCopy.coordinatorAsked} ", substring = true)
         compose.onNodeWithText("The plan is ready.").assertExists(); compose.onNodeWithTag("start:start1-why").assertTextEquals(StartProjectCopy.more)
@@ -410,7 +412,8 @@ class TasksProjectsDeviceTest {
             put("criteriaDigest", "seal1"); put("requestId", "start1"); put("line", "PROJECT_BRANCH"); put("automatic", true); put("maxConcurrentTasks", 2)
             put("mergeCheckCommand", "./verify"); put("projectBranchName", "refs/heads/project/cards")
         }, journal().drop(before).last { it.text("path") == "/api/projects/$projectId/start" }.obj("body"))
-        awaitText("Request accepted"); capture("start-asked-4-accepted")
+        // The review says the decision was recorded, then closes itself.
+        awaitGone("card-review"); capture("start-asked-4-accepted")
     }
 
     @Test fun aDeliveryBlockerIsReviewedWithItsReasonRecorded() = journey("project-blocker") {
@@ -874,14 +877,20 @@ class TasksProjectsDeviceTest {
         login(case = "promotion"); http("/__control", """{"promotionExecution":{"state":"RUNNING","phase":"PUSH","startedAt":"2026-10-05T00:00:00.000Z"}}""")
         open("orbit-session:$sessionId"); awaitTag("interaction-cards")
         awaitScrollTo("transcript-list", hasTestTag("promotion:promotion1"))
-        awaitText("Merging project/cards into main…"); awaitText("confirmed — publishing the tested tree to main")
+        // A08-2: the merge is a preview in the conversation titled by where its job is, and its review keeps that title and the
+        // job's own status line (iOS `PromotionCards.previewTitle`, `PromotionReviewSheet`).
+        awaitText("Merging… · main"); tap("promotion:promotion1:preview"); awaitTag("card-review")
+        compose.onNodeWithTag("card-review:title").assertTextEquals("Merging… · main")
+        awaitText("confirmed — publishing the tested tree to main")
         compose.onNodeWithTag("promotion:promotion1:merging").assertTextEquals("Merging…").assertIsNotEnabled()
         compose.onNodeWithTag("promotion:promotion1:CANCEL_MERGE").assertIsNotEnabled()
         capture("a11c-merge-pushing")
         http("/__control", """{"promotionExecution":{"state":"QUEUED","startedAt":"2026-10-05T00:00:00.000Z"}}""")
+        tap("card-review:close"); awaitGone("card-review")
         compose.onNodeWithText("Check status").performScrollTo().performClick()
-        awaitText("Merge queued: project/cards into main"); awaitText("confirmed — queued to merge into main")
-        awaitScrollTo("transcript-list", hasTestTag("promotion:promotion1:CANCEL_MERGE"))
+        awaitText("Queued · main")
+        awaitScrollTo("transcript-list", hasTestTag("promotion:promotion1:preview")); tap("promotion:promotion1:preview"); awaitTag("card-review")
+        awaitText("confirmed — queued to merge into main")
         compose.waitUntil(20_000) { compose.onAllNodes(hasTestTag("promotion:promotion1:CANCEL_MERGE") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
         capture("a11c-merge-queued")
     }
