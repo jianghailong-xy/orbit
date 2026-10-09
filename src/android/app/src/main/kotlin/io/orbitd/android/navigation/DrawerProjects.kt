@@ -10,11 +10,10 @@ import io.orbitd.android.directory.directoryError
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.*
 
-/** The drawer's open projects. Each row is a destination of its own (iOS 6f5f883c8): the project's page at the root,
- * selected while that destination is showing. iOS opens the project's sessions page there, falling back to the
- * project's page without a workspace; Android has no sessions page yet (A05-7), so the row opens the page. */
+/** The drawer's open projects. Each row is a destination of its own (iOS 6f5f883c8), selected while that destination is showing:
+ * [root] is its root page — the project's sessions page, or its page without a workspace to open it over (A05-7). */
 @Composable
-fun DrawerProjects(api: DirectoryApi, revision: Long, section: String, select: (String, OrbitRoute) -> Unit) {
+fun DrawerProjects(api: DirectoryApi, revision: Long, section: String, root: (String) -> OrbitRoute, select: (String, OrbitRoute) -> Unit) {
     var projects by remember { mutableStateOf<List<JsonObject>>(emptyList()) }
     var error by remember { mutableStateOf<String?>(null) }
     var retry by remember { mutableIntStateOf(0) }
@@ -31,6 +30,6 @@ fun DrawerProjects(api: DirectoryApi, revision: Long, section: String, select: (
         val id = (project["id"] as? JsonPrimitive)?.contentOrNull
         val title = (project["title"] as? JsonPrimitive)?.contentOrNull
         if (id != null && title != null) NavigationDrawerItem(label = { Text(title) }, selected = section == projectDestination(id),
-            onClick = { select(projectDestination(id), OrbitRoute(Destination.PROJECT, id, origin = Origin.DRAWER)) })
+            onClick = { select(projectDestination(id), root(id)) })
     }
 }
