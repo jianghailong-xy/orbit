@@ -10,7 +10,7 @@
     "",
     "`states`: each case's `server` is what the apiserver stores and knows (`enabled` is the switch,",
     "`available` whether its environment profile is valid, `eligible` the eligibility answer for an owner",
-    "without a mapping; `mapping` lists the managed_runner fields that differ from a blank row, with",
+    "without a mapping, `ownerDisabled` whether an administrator disabled the account; `mapping` lists the managed_runner fields that differ from a blank row, with",
     "`lastErrorCode` naming the manager's stored reason and `capacityShort` a capacity refusal; `runner`",
     "is the runner row's heartbeat), all at `now` with `heartbeatFreshMs`. `status` is the body",
     "`GET /api/managed-runner` answers for it, public ids and their twins included: the apiserver spec",
@@ -27,7 +27,8 @@
     "",
     "A reason `code` is an open string: a server can add one (C6b adds ACCOUNT_DISABLED), so a client",
     "shows any reason's `message` and never needs to know its code. The two `failed`/`preparing` cases",
-    "with REASON_FROM_A_NEWER_SERVER hold that.",
+    "with REASON_FROM_A_NEWER_SERVER hold that, and so does ACCOUNT_DISABLED (\"asleep, its account",
+    "disabled\"): the server offers no action and no wake, so nothing is accepted for it.",
     "",
     "`newer`: answers this server cannot give but a newer one could, made from the `available` case",
     "with `patch` applied: a management state or a contract version this client does not know. Each",
@@ -1451,6 +1452,64 @@
         "reason": {
           "code": "MANAGED_RUNNER_UNAVAILABLE",
           "message": "Managed runners are switched on, but this server's managed environment is not configured correctly. An operator has to fix it.",
+          "retryable": false
+        },
+        "retryAfter": null,
+        "initialProvider": "claude",
+        "actions": {
+          "canEnsure": false,
+          "canWake": false,
+          "canSleep": false,
+          "canRetry": false,
+          "canDelete": false
+        },
+        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
+      }
+    },
+    {
+      "name": "asleep, its account disabled",
+      "server": {
+        "enabled": true,
+        "available": true,
+        "ownerDisabled": true,
+        "mapping": {
+          "managementState": "SLEEPING",
+          "desiredState": "SLEEPING",
+          "revision": 12,
+          "generation": 1,
+          "initialProvider": "claude"
+        },
+        "runner": {
+          "status": "OFFLINE",
+          "lastHeartbeatAt": "2026-10-09T06:00:00.000Z"
+        }
+      },
+      "display": {
+        "kind": "sleeping",
+        "title": "Managed runner asleep",
+        "detail": "This Orbit account is disabled, so its managed runner is not started or woken, and a running one is put to sleep with its data kept. An administrator can enable the account again.",
+        "retry": false,
+        "ensure": false,
+        "signIn": false,
+        "acceptsWork": false,
+        "startsNewSession": false,
+        "moving": false
+      },
+      "status": {
+        "contractVersion": 1,
+        "enabled": true,
+        "revision": 12,
+        "managementState": "SLEEPING",
+        "desiredState": "SLEEPING",
+        "runnerId": "2zQeDGWFFAgN2112jNTf7",
+        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "heartbeatStatus": "OFFLINE",
+        "lastHeartbeatAt": "2026-10-09T06:00:00.000Z",
+        "usable": false,
+        "reason": {
+          "code": "ACCOUNT_DISABLED",
+          "message": "This Orbit account is disabled, so its managed runner is not started or woken, and a running one is put to sleep with its data kept. An administrator can enable the account again.",
           "retryable": false
         },
         "retryAfter": null,

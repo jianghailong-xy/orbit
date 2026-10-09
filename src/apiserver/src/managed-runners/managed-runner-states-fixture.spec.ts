@@ -24,6 +24,7 @@ interface ServerInput {
   enabled: boolean;
   available: boolean;
   eligible?: boolean;
+  ownerDisabled?: boolean;
   mapping: (Partial<Record<keyof ManagedRunner, unknown>> & { lastErrorCode?: string; capacityShort?: CapacityDimension[] }) | null;
   runner: { status: RunnerStatus; lastHeartbeatAt: string | null } | null;
 }
@@ -115,6 +116,7 @@ test('every state in the fixture is the body GET /api/managed-runner answers for
       enabled: server.enabled,
       available: server.available,
       eligible: server.eligible,
+      ownerDisabled: server.ownerDisabled,
       mapping: server.mapping ? row(server.mapping) : null,
       runner: server.runner
         ? { status: server.runner.status, lastHeartbeatAt: server.runner.lastHeartbeatAt ? new Date(server.runner.lastHeartbeatAt) : null }

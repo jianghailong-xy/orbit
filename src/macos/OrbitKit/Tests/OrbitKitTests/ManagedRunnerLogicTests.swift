@@ -102,6 +102,19 @@ final class ManagedRunnerLogicTests: XCTestCase {
         }
     }
 
+    func testAnAsleepRunnerTheServerWillNotWakeTakesNoWork() throws {
+        // A disabled account's (C6b): the server says why, offers no action, and records no demand.
+        let status = try Self.state("asleep, its account disabled")
+        XCTAssertEqual(status.reason?.code, "ACCOUNT_DISABLED")
+        XCTAssertFalse(status.actions.canWake)
+        let display = try XCTUnwrap(ManagedRunnerLogic.display(status))
+        XCTAssertEqual(display.kind, .sleeping)
+        XCTAssertEqual(display.detail, status.reason?.message)
+        XCTAssertFalse(display.acceptsWork)
+        XCTAssertFalse(display.retry || display.ensure || display.signIn)
+        XCTAssertEqual(ManagedRunnerLogic.sendCapabilities(Self.offline, acceptsWork: display.acceptsWork), Self.offline)
+    }
+
     func testOnlyTheOfflineRefusalIsLifted() {
         let gone = SessionCapabilities(canSend: false, canResume: false, resumeBlockedReason: .missingContext,
                                        canComplete: true, canRestore: false)

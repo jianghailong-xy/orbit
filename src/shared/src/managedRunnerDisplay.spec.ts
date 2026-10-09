@@ -44,8 +44,9 @@ describe('managed-runner-states.fixture.json', () => {
   });
 
   it('shows any reason by its sentence, a code it has never heard of included', () => {
-    const unknown = fixture.states.filter(({ status }) => status.reason?.code === 'REASON_FROM_A_NEWER_SERVER');
-    expect(unknown.length).toBeGreaterThan(1);
+    const unknown = fixture.states.filter(({ status }) =>
+      ['REASON_FROM_A_NEWER_SERVER', 'ACCOUNT_DISABLED'].includes(status.reason?.code ?? ''));
+    expect(unknown.length).toBeGreaterThan(2);
     for (const { status, display } of unknown) expect(display?.detail).toBe(status.reason!.message);
   });
 
@@ -74,6 +75,10 @@ describe('managed-runner-states.fixture.json', () => {
       if (!display) continue;
       expect(display.startsNewSession, name).toBe(display.acceptsWork && !!status.initialProvider);
       if (['FAILED', 'FENCING', 'DELETING', 'DELETED', 'NOT_PROVISIONED'].includes(status.managementState)) {
+        expect(display.acceptsWork, name).toBe(false);
+      }
+      // Asleep, a runner the server offers no wake for takes no work: a disabled account's.
+      if (['SLEEPING', 'DRAINING'].includes(status.managementState) && !status.actions.canWake) {
         expect(display.acceptsWork, name).toBe(false);
       }
     }

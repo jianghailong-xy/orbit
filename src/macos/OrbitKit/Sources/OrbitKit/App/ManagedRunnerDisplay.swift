@@ -43,7 +43,8 @@ public struct ManagedRunnerDisplay: Equatable, Sendable {
     /// Point at the runner's runtimes: what it lacks is a runtime signed in.
     public let signIn: Bool
     /// A message or turn sent now is accepted and waits for the runner (the states the server's
-    /// demand hook queues work for), so a console does not refuse it as offline.
+    /// demand hook queues work for, and asleep only when the server offers a wake), so a console
+    /// does not refuse it as offline.
     public let acceptsWork: Bool
     /// A first session in the managed default workspace can start: the runner was found ready with
     /// `initialProvider`. Before that the server refuses it with MODEL_UNAVAILABLE.
@@ -146,6 +147,8 @@ public enum ManagedRunnerLogic {
         "REQUESTED", "WAITING_CAPACITY", "PROVISIONING", "STARTING", "READY", "DRAINING", "SLEEPING",
     ]
 
+    static let sleepStates: Set<String> = ["DRAINING", "SLEEPING"]
+
     static let movingKinds: Set<ManagedRunnerDisplayKind> = [
         .preparing, .waking, .modelUnavailable, .waitingCapacity, .unresponsive, .stopping, .removing,
     ]
@@ -196,7 +199,9 @@ public enum ManagedRunnerLogic {
         let reason = status.reason
         // Switched on without a usable environment: nothing reconciles, so nothing moves by itself.
         let frozen = reason?.code == environmentUnavailable
-        let acceptsWork = !frozen && comingBack.contains(status.managementState)
+        // Asleep, or going to sleep, it comes back only on a wake the server would perform.
+        let wakeable = !sleepStates.contains(status.managementState) || status.actions.canWake
+        let acceptsWork = !frozen && wakeable && comingBack.contains(status.managementState)
         let said = kind == .available ? nil : reason?.message
         return ManagedRunnerDisplay(
             kind: kind,

@@ -75,7 +75,9 @@ export interface ManagedRunnerDisplay {
    * Messages and turns sent now are accepted and wait for the runner: the states the server's own
    * demand hook answers as coming back by themselves (managed-runner-demand.ts). Work sent while it
    * is FAILED, FENCING or being removed would wait for an owner or an operator, so it is not offered;
-   * nor while the server reports MANAGED_RUNNER_UNAVAILABLE, when no manager runs to start it.
+   * nor while the server reports MANAGED_RUNNER_UNAVAILABLE, when no manager runs to start it; nor to
+   * a runner asleep or going to sleep that the server offers no wake for (`canWake`), as for a
+   * disabled account, whose demand it no longer records.
    */
   acceptsWork: boolean;
   /**
@@ -137,6 +139,8 @@ const COMING_BACK: ReadonlySet<ManagedRunnerReadState> = new Set<ManagedRunnerRe
   'REQUESTED', 'WAITING_CAPACITY', 'PROVISIONING', 'STARTING', 'READY', 'DRAINING', 'SLEEPING',
 ]);
 
+const SLEEP_STATES: ReadonlySet<ManagedRunnerReadState> = new Set<ManagedRunnerReadState>(['DRAINING', 'SLEEPING']);
+
 const MOVING: ReadonlySet<ManagedRunnerDisplayKind> = new Set<ManagedRunnerDisplayKind>([
   'preparing', 'waking', 'modelUnavailable', 'waitingCapacity', 'unresponsive', 'stopping', 'removing',
 ]);
@@ -183,7 +187,9 @@ export function managedRunnerDisplay(status: ManagedRunnerStatus | null | undefi
   const reason = status.reason ?? null;
   // Switched on without a usable environment: nothing reconciles, so nothing moves by itself.
   const frozen = reason?.code === MANAGED_RUNNER_UNAVAILABLE;
-  const acceptsWork = !frozen && COMING_BACK.has(status.managementState);
+  // Asleep, or going to sleep, it comes back only on a wake the server would perform.
+  const wakeable = !SLEEP_STATES.has(status.managementState) || status.actions.canWake;
+  const acceptsWork = !frozen && wakeable && COMING_BACK.has(status.managementState);
   return {
     kind,
     title: MANAGED_RUNNER_COPY.title[kind],
