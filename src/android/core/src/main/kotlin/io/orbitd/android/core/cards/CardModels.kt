@@ -103,7 +103,8 @@ object CardCatalog {
                 CardFamily.BATCH -> listOf(CardVerb.CREATE_BATCH, CardVerb.CHAT)
                 CardFamily.DAG -> listOf(CardVerb.CHANGE_DAG, CardVerb.CHAT)
                 CardFamily.BLOCKER -> listOf(CardVerb.RESOLVE_BLOCKER, CardVerb.CHAT)
-                else -> listOf(CardVerb.ALLOW, CardVerb.DENY) +
+                // One of Orbit's own asks (iOS `Approvals.isOrbitAsk`): saying no is a conversation, and there is no standing yes.
+                else -> if (approval.toolName == ApprovalRules.mergeCheckChange) listOf(CardVerb.ALLOW, CardVerb.CHAT) else listOf(CardVerb.ALLOW, CardVerb.DENY) +
                     if (ApprovalRules.remember(approval.toolName, approval.input).isEmpty()) emptyList() else listOf(CardVerb.REMEMBER)
             }
             val title = when (family) {
