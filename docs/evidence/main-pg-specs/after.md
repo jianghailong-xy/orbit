@@ -82,3 +82,16 @@ With that, the same tree was probed again — run
 394 specs, 4895 assertions, none failed, none skipped, none re-run — and the run's conclusion is `success` for the
 whole workflow, this time including the JavaScript job. That is the acceptance criterion: at the commit that lands,
 the `PostgreSQL specs` job finishes inside its 45-minute limit and passes, not cancelled and with no red spec.
+
+## Rebased over main, after the first landing conflicted
+
+The first landing attempt rebased this branch onto main and conflicted in four files, and the reason matters:
+`a937b97ff` (provider-engine T3, landed via `77db7f411`) had reached those same fixtures first, with the same
+`orbit.claim_reads_session_engine` declaration plus its own newer edits in them — `session-message`,
+`task-dispatch-refusal-visible`, `task-model-routing-account-switch` (T3's `claimWrite` helper) and
+`task-run-winner-recovery` (T3's run-receipt v4). Because the landing replays this branch's non-merge commits,
+merging main again would have met the same conflict; the branch is therefore rebased onto main `896226a23` as a
+linear series with no merge commits, and where main already carries the work it is MAIN's version that is kept.
+Those four files are now byte-identical to main's (`git diff origin/main:<file> <file>` is empty) and this
+delivery's own edit to them is dropped; the other eleven specs, the two CI files and the fuse change are
+unchanged by the rebase.
