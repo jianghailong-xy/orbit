@@ -25,6 +25,7 @@ test('a Claude session a person converses in gets suggestions', () => {
   assert.equal(claim(), true);
   assert.equal(claim({ runSource: 'PROJECT_COORDINATOR' }), true);
   assert.equal(claim({ env: { ANTHROPIC_BASE_URL: 'https://api.anthropic.com/' } }), true);
+  assert.equal(claim({ env: { ANTHROPIC_BASE_URL: 'https://api.deepseek.com/anthropic' } }), true, 'measured on DeepSeek');
 });
 
 test('everything else is left without them', () => {
@@ -34,8 +35,8 @@ test('everything else is left without them', () => {
   assert.equal(claim({ spawnDepth: 1 }), false, 'another session drives a session it spawned');
   assert.equal(claim({ maintenance: { runId: 'w' } }), false, 'a Wiki maintenance run');
   assert.equal(
-    claim({ env: { ANTHROPIC_BASE_URL: 'https://api.deepseek.com/anthropic' } }),
+    claim({ env: { ANTHROPIC_BASE_URL: 'http://127.0.0.1:8000' } }),
     false,
-    'a configured provider endpoint',
+    'a configured provider endpoint nobody measured',
   );
 });
