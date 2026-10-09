@@ -1,0 +1,200 @@
+TAP version 13
+# coordinator-pg-isolation database=pccspec_1 user=pccspec_ server=172.17.0.17/32:5432 system_identifier=7694704815237197859 version=16.15
+# Subtest: Automatic: the coordinator reruns a red landing with a reason — one new generation, the failure class and the reason kept, its item handled but still open
+ok 1 - Automatic: the coordinator reruns a red landing with a reason — one new generation, the failure class and the reason kept, its item handled but still open
+  ---
+  duration_ms: 726.859782
+  type: 'test'
+  ...
+# Subtest: in flight: a second rerun while the first is queued is refused, and two at once queue one generation
+ok 2 - in flight: a second rerun while the first is queued is refused, and two at once queue one generation
+  ---
+  duration_ms: 462.16641
+  type: 'test'
+  ...
+# Subtest: success: the rerun lands on the project branch, answers what was open, and the project branch goes on to its merge check
+ok 3 - success: the rerun lands on the project branch, answers what was open, and the project branch goes on to its merge check
+  ---
+  duration_ms: 441.987951
+  type: 'test'
+  ...
+# Subtest: failing again: the next red opens a classified item for the coordinator, naming the rerun and its reason — never the owner's
+ok 4 - failing again: the next red opens a classified item for the coordinator, naming the rerun and its reason — never the owner's
+  ---
+  duration_ms: 460.712097
+  type: 'test'
+  ...
+# Subtest: the rerun lands the branch the task's work ended on, not the one the failed generation was handed
+ok 5 - the rerun lands the branch the task's work ended on, not the one the failed generation was handed
+  ---
+  duration_ms: 419.903712
+  type: 'test'
+  ...
+# Subtest: CHECK_TIMED_OUT and ERROR are rerun, a CONFLICT is not
+ok 6 - CHECK_TIMED_OUT and ERROR are rerun, a CONFLICT is not
+  ---
+  duration_ms: 695.858243
+  type: 'test'
+  ...
+# Subtest: a MAIN_SYNC conflict is refused as well, and the refusal sends the absorb to the project line
+ok 7 - a MAIN_SYNC conflict is refused as well, and the refusal sends the absorb to the project line
+  ---
+  duration_ms: 305.725237
+  type: 'test'
+  ...
+# Subtest: the coordinator closed the item by hand: an Automatic project still reruns the landing (the state ③ was left in)
+ok 8 - the coordinator closed the item by hand: an Automatic project still reruns the landing (the state ③ was left in)
+  ---
+  duration_ms: 317.922809
+  type: 'test'
+  ...
+# Subtest: not Automatic: the failure is the owner's and the coordinator is refused — until the owner hands it back
+ok 9 - not Automatic: the failure is the owner's and the coordinator is refused — until the owner hands it back
+  ---
+  duration_ms: 437.650843
+  type: 'test'
+  ...
+# Subtest: escalated: a failure that went to the owner on the clock is theirs, and the coordinator is refused
+ok 10 - escalated: a failure that went to the owner on the clock is theirs, and the coordinator is refused
+  ---
+  duration_ms: 274.657331
+  type: 'test'
+  ...
+# Subtest: an open blocker waiting on the owner about the task refuses the rerun
+ok 11 - an open blocker waiting on the owner about the task refuses the rerun
+  ---
+  duration_ms: 284.132329
+  type: 'test'
+  ...
+# Subtest: only the project's coordinator: the task's own session, another project's coordinator and no session at all are refused
+ok 12 - only the project's coordinator: the task's own session, another project's coordinator and no session at all are refused
+  ---
+  duration_ms: 294.448413
+  type: 'test'
+  ...
+# Subtest: a reason is required: empty, blank and over-long reasons write nothing
+ok 13 - a reason is required: empty, blank and over-long reasons write nothing
+  ---
+  duration_ms: 250.965971
+  type: 'test'
+  ...
+# Subtest: owner task retry records a USER requester, creates one generation, and deduplicates concurrent presses
+ok 14 - owner task retry records a USER requester, creates one generation, and deduplicates concurrent presses
+  ---
+  duration_ms: 252.163186
+  type: 'test'
+  ...
+# Subtest: owner task retry resolves as USER, or supersedes as USER with the next item still owned by the owner
+ok 15 - owner task retry resolves as USER, or supersedes as USER with the next item still owned by the owner
+  ---
+  duration_ms: 440.053011
+  type: 'test'
+  ...
+# Subtest: owner task retry uses the shared refusal codes
+ok 16 - owner task retry uses the shared refusal codes
+  ---
+  duration_ms: 1124.27007
+  type: 'test'
+  ...
+# Subtest: owner promotion recheck records USER and a READY result is automatically merged
+ok 17 - owner promotion recheck records USER and a READY result is automatically merged
+  ---
+  duration_ms: 440.409572
+  type: 'test'
+  ...
+# Subtest: a task of another project is refused, as is one that is not DONE, one that landed, and one with no landing at all
+ok 18 - a task of another project is refused, as is one that is not DONE, one that landed, and one with no landing at all
+  ---
+  duration_ms: 629.066618
+  type: 'test'
+  ...
+# Subtest: timed out: the owner retries a landing whose runner never answered its claim — the lost generation ends ERROR · RUNNER_LOST and the next one is queued as theirs (§2.2 J-T9)
+ok 19 - timed out: the owner retries a landing whose runner never answered its claim — the lost generation ends ERROR · RUNNER_LOST and the next one is queued as theirs (§2.2 J-T9)
+  ---
+  duration_ms: 295.33557
+  type: 'test'
+  ...
+# Subtest: timed out: the coordinator's integration_retry takes a landing whose runner went silent mid-step, and refuses one that is still reporting
+ok 20 - timed out: the coordinator's integration_retry takes a landing whose runner went silent mid-step, and refuses one that is still reporting
+  ---
+  duration_ms: 268.80317
+  type: 'test'
+  ...
+# Subtest: the 2026-10-09 incident: a re-check of an owner-confirmed candidate carries no stale confirmation — the clean result is accepted and the Automatic setting confirms it
+not ok 21 - the 2026-10-09 incident: a re-check of an owner-confirmed candidate carries no stale confirmation — the clean result is accepted and the Automatic setting confirms it
+  ---
+  duration_ms: 415.424692
+  type: 'test'
+  location: '/root/.orbit/worktrees/15c9cb65-c4b2-52f3-bc76-e440833f7f73/src/apiserver/build/projects/integration-retry.pg.spec.js:1197:22'
+  failureType: 'testCodeFailure'
+  error: |-
+    the re-check cleared the stale confirmation
+    + actual - expected
+    
+    + '7911a6cf-27bf-442c-92d1-f7a17b971144'
+    - null
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: ~
+  actual: '7911a6cf-27bf-442c-92d1-f7a17b971144'
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (/root/.orbit/worktrees/15c9cb65-c4b2-52f3-bc76-e440833f7f73/src/apiserver/build/projects/integration-retry.pg.spec.js:1251:26)
+    process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    async Test.run (node:internal/test_runner/test:1409:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+  ...
+# Subtest: timed out: integration_retry (promotionId) ends a silent RUNNING check and requeues it, with the candidate readmitted from CHECKING (§2.2 J-T9)
+not ok 22 - timed out: integration_retry (promotionId) ends a silent RUNNING check and requeues it, with the candidate readmitted from CHECKING (§2.2 J-T9)
+  ---
+  duration_ms: 353.638986
+  type: 'test'
+  location: '/root/.orbit/worktrees/15c9cb65-c4b2-52f3-bc76-e440833f7f73/src/apiserver/build/projects/integration-retry.pg.spec.js:1299:22'
+  failureType: 'testCodeFailure'
+  error: "this candidate's CHECK_PROMOTION (generation 2) is already RUNNING: nothing new is queued beside it. Wait for its result — if it fails, its own item reaches you."
+  code: 'ERR_TEST_FAILURE'
+  name: 'HttpException'
+  stack: |-
+    /root/.orbit/worktrees/15c9cb65-c4b2-52f3-bc76-e440833f7f73/src/apiserver/build/projects/project-open-item.service.js:1756:23
+    process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    async Proxy._transactionWithCallback (/root/.orbit/worktrees/15c9cb65-c4b2-52f3-bc76-e440833f7f73/src/apiserver/node_modules/@prisma/client/runtime/client.js:99:4868)
+    async withTransactionRetry (/root/.orbit/worktrees/15c9cb65-c4b2-52f3-bc76-e440833f7f73/src/apiserver/build/common/transaction-retry.js:339:28)
+    async TestContext.<anonymous> (/root/.orbit/worktrees/15c9cb65-c4b2-52f3-bc76-e440833f7f73/src/apiserver/build/projects/integration-retry.pg.spec.js:1318:24)
+    async Test.run (node:internal/test_runner/test:1409:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+  ...
+# Subtest: timed out: the owner's promotion retry ends the silent check without an item of theirs, and a healthy check is refused on the owner door too
+not ok 23 - timed out: the owner's promotion retry ends the silent check without an item of theirs, and a healthy check is refused on the owner door too
+  ---
+  duration_ms: 394.486837
+  type: 'test'
+  location: '/root/.orbit/worktrees/15c9cb65-c4b2-52f3-bc76-e440833f7f73/src/apiserver/build/projects/integration-retry.pg.spec.js:1352:22'
+  failureType: 'testCodeFailure'
+  error: "this candidate's CHECK_PROMOTION (generation 2) is already RUNNING: nothing new is queued beside it. Wait for its result — if it fails, its own item reaches you."
+  code: 'ERR_TEST_FAILURE'
+  name: 'HttpException'
+  stack: |-
+    /root/.orbit/worktrees/15c9cb65-c4b2-52f3-bc76-e440833f7f73/src/apiserver/build/projects/project-open-item.service.js:1756:23
+    process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    async Proxy._transactionWithCallback (/root/.orbit/worktrees/15c9cb65-c4b2-52f3-bc76-e440833f7f73/src/apiserver/node_modules/@prisma/client/runtime/client.js:99:4868)
+    async withTransactionRetry (/root/.orbit/worktrees/15c9cb65-c4b2-52f3-bc76-e440833f7f73/src/apiserver/build/common/transaction-retry.js:339:28)
+    async TestContext.<anonymous> (/root/.orbit/worktrees/15c9cb65-c4b2-52f3-bc76-e440833f7f73/src/apiserver/build/projects/integration-retry.pg.spec.js:1370:25)
+    async Test.run (node:internal/test_runner/test:1409:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+  ...
+# Subtest: the integration-retry PostgreSQL target is explicitly disposable
+ok 24 - the integration-retry PostgreSQL target is explicitly disposable
+  ---
+  duration_ms: 0.707264
+  type: 'test'
+  ...
+1..24
+# tests 24
+# suites 0
+# pass 21
+# fail 3
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 10787.650942
