@@ -77,9 +77,17 @@ test('P1b dsh provider notices distinguish native and legacy colliding identitie
   await controller(prisma, { claimSessionForRunner: async () => null }).claim(runner, SESSION_SOURCE_PIN_V1, 'claude,codex,opencode,antigravity');
   assert.equal(marked.length, 1);
   assert.equal(marked[0].data.error, DSH_RUNNER_UPGRADE_ERROR);
+  // A session recorded on Harness is noticed whatever key it spends; one without an engine by the old
+  // identities, where a configured `dsh` keyword collision stays configured (migration 0414).
   assert.deepEqual(marked[0].where, {
     id: { in: ['native'] }, assignedRunnerId: runner.id, status: 'PENDING',
-    OR: [{ provider: 'dsh', providerBuiltin: true }, { provider: { in: ['harness-key'] }, providerBuiltin: false }],
+    OR: [
+      { engine: 'dsh' },
+      { AND: [
+        { engine: null },
+        { OR: [{ provider: 'dsh', providerBuiltin: true }, { provider: { in: ['harness-key'] }, providerBuiltin: false }] },
+      ] },
+    ],
     cancelRequestedAt: null,
   });
 });

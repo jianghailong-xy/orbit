@@ -25,6 +25,9 @@ function harness(
   pendingApprovals: string[] = [],
 ) {
   const executeCalls: unknown[][] = [];
+  // Every statement in order, the transaction-local declarations included; `executeCalls` holds the
+  // writes alone, which is what the cases below count.
+  const statements: string[] = [];
   const published: Array<{ type: string; payload: Record<string, unknown> }> = [];
   let queryCalls = 0;
   let notified: string | undefined;
@@ -53,7 +56,8 @@ function harness(
         : [];
     },
     $executeRaw: async (...args: unknown[]) => {
-      executeCalls.push(args);
+      statements.push(sql(args));
+      if (!sql(args).includes('set_config(')) executeCalls.push(args);
       return 1;
     },
   };
@@ -71,6 +75,7 @@ function harness(
   return {
     controller: new RunnerApiController(prisma, {} as never, realtime, {} as never, {} as never, {} as never, { appendFor: async (_tx: unknown, _sessionId: unknown, content?: string) => content } as never),
     executeCalls,
+    statements,
     published,
     notified: () => notified,
     queryCalls: () => queryCalls,
@@ -96,6 +101,10 @@ test('takeover CAS retires the observed process generation and installs the new 
   assert.match(sql(h.executeCalls[1]), /"inbox_lease_owner" = \?::uuid/);
   assert.deepEqual(h.executeCalls[1].slice(1), [GENERATION, NEW_OWNER, SESSION_ID]);
   assert.match(sql(h.executeCalls[2]), /UPDATE "conversation_turn"/);
+  // The owner is written in a transaction that has said it reads the session's recorded engine
+  // (migration 0414), or the database refuses the write on every session that has one.
+  const owner = h.statements.findIndex((statement) => statement.includes('"inbox_lease_owner" = ?::uuid'));
+  assert.equal(h.statements[owner - 1], "SELECT set_config('orbit.claim_reads_session_engine', '1', true)");
   assert.equal(h.notified(), SESSION_ID);
 });
 
