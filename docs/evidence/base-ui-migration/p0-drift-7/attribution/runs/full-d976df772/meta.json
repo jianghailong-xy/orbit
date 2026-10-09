@@ -1,0 +1,24 @@
+{
+ "app": "/mnt/data/tmp/34cswWfvNasFTq8kDM0Q4/trees/d976df772",
+ "commit": "d976df77261512d2b98e3e0c35b2b8c7270d4aa4",
+ "runner": "/mnt/data/tmp/34cswWfvNasFTq8kDM0Q4/runners/tip",
+ "runnerCommit": "17980cb7cec9db1e006f02f56df976505b6090f1",
+ "args": "pages.browser.mjs states.browser.mjs breakpoints.browser.mjs",
+ "started": "2026-10-09T15:40:25Z",
+ "finished": "2026-10-09T15:43:54Z",
+ "exit": 0,
+ "environment": "p0.2",
+ "stats": {
+  "expected": 76,
+  "unexpected": 0,
+  "flaky": 0,
+  "skipped": 4
+ },
+ "screenshots": 252,
+ "evidence": {
+  "tests": 80,
+  "withUnhandled": 0,
+  "unhandled": {},
+  "withPageErrors": 0
+ }
+}
