@@ -157,7 +157,8 @@ export const ENGINE_PRESET: Record<string, string> = {
   [AgentProvider.KIMI]: 'moonshot',
 };
 
-// Antigravity's environment key and configured Gemini keys share one runtime identity.
+// Antigravity, the engine, ships no preset to borrow a mark from. A Gemini key is Google Gemini's
+// and wears that preset's own.
 const ENGINE_BRAND: Record<string, { brand: ProviderBrand; glyphKey: string }> = {
   [AgentProvider.ANTIGRAVITY]: {
     brand: { mono: 'A', from: '#3186ff', to: '#00b95c' },
@@ -178,7 +179,6 @@ export function brandForProvider(
   label: string,
   presetSlug?: string | null,
 ): { brand: ProviderBrand; glyphKey?: string } {
-  if ((presetSlug ?? slug) === 'gemini') return ENGINE_BRAND[AgentProvider.ANTIGRAVITY];
   if (slug === AgentProvider.DSH && !presetSlug) presetSlug = DSH_PRESET_SLUG;
   const presetKey = presetSlug ?? ENGINE_PRESET[slug];
   const preset = presetKey ? PROVIDER_PRESETS.find((p) => p.slug === presetKey) : undefined;

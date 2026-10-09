@@ -590,13 +590,15 @@ describe('brandForProvider', () => {
     expect(brandForProvider('kimi', 'Kimi').glyphKey).toBe('moonshot');
   });
 
-  it('gives the Antigravity engine and Gemini preset the same mark', () => {
+  it('gives the Antigravity engine its own mark, and a Gemini key Google Gemini’s', () => {
     const { brand, glyphKey } = brandForProvider('antigravity', 'Antigravity');
     expect(glyphKey).toBe('antigravity');
     expect(brand).toEqual({ mono: 'A', from: '#3186ff', to: '#00b95c' });
     expect(PROVIDER_GLYPHS.antigravity).toBeTruthy();
-    expect(brandForProvider('gemini', 'Gemini', 'gemini')).toEqual({ brand, glyphKey });
-    expect(brandForProvider('gemini-2', 'Work Gemini', 'gemini')).toEqual({ brand, glyphKey });
+    const gemini = { brand: { mono: 'G', from: '#4285f4', to: '#9b72cb' }, glyphKey: 'gemini' };
+    expect(PROVIDER_GLYPHS.gemini).toBeTruthy();
+    expect(brandForProvider('gemini', 'Gemini', 'gemini')).toEqual(gemini);
+    expect(brandForProvider('gemini-2', 'Work Gemini', 'gemini')).toEqual(gemini);
   });
 
   it('resolves every glyph key it hands out to actual artwork', () => {
