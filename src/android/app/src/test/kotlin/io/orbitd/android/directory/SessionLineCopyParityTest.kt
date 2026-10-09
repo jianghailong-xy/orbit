@@ -44,10 +44,11 @@ class SessionLineCopyParityTest {
         val declared = SessionLineCopy::class.java.declaredFields.filter { it.type == String::class.java }
             .map { it.isAccessible = true; it.get(null) as String }
         assertTrue("a SessionLineCopy word is in neither Swift source: $declared", declared.all { both.contains("\"$it\"") })
-        assertEquals(11, declared.size)
+        assertEquals(12, declared.size)
     }
 
     @Test fun everyBuiltLineIsOneSwiftLiteral() {
+        assertSentence(line, "SessionLine.swift", SessionLineCopy.recapWithTime("§"), "§" to "\\(clock)")
         assertSentence(line, "SessionLine.swift", SessionLineCopy.runningTool("\\(fmtTool(t))"))
         assertSentence(line, "SessionLine.swift", SessionLineCopy.sent("\\(plainPreview(text))"))
         assertSentence(line, "SessionLine.swift", SessionLineCopy.ongoing("\\(subagentRunningLabel(n))"))

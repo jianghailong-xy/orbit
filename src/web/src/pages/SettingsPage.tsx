@@ -101,6 +101,19 @@ export function SettingsPage() {
             loading={save.isPending}
           />
         </Field>
+        {/* Absent means on, like the switch above. Read by every client's session list, so turning
+            it off holds on the phone and the Mac too — it is one account-wide answer. */}
+        <Field
+          label="Session recaps"
+          hint="Session lists show the one-line summary the server writes for each conversation, in place of its raw last reply. Off: the raw last reply."
+        >
+          <Switch
+            aria-label="Session recaps"
+            checked={prefs.recaps ?? true}
+            onCheckedChange={(v) => save.mutate({ recaps: v })}
+            loading={save.isPending}
+          />
+        </Field>
       </Card>
 
       {/* One switch for the whole account, not one per workspace: the server reads it live on
