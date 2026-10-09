@@ -47,7 +47,7 @@ var userModeActions = map[string]string{
 	"task dependency-add":    "",
 	"task dependency-remove": "",
 	"task batch-pin": "no user route re-pins tasks in bulk; re-pin them one at a time with " +
-		"`orbit task update TASK_ID --provider SLUG --model MODEL`",
+		"`orbit task update TASK_ID --engine ENGINE --provider SLUG --model MODEL`",
 	"task evidence-decide": "a decision on completion evidence is an independent session's, made from inside " +
 		"it (ORBIT_SESSION_ID), or the account owner's own in the Orbit app — never a personal access token's",
 	"task request-confirmation": "a task's own run declares its work finished, from inside its session (ORBIT_SESSION_ID)",

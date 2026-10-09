@@ -57,7 +57,9 @@ func (s DshLaunchSpec) MarshalJSON() ([]byte, error) {
 var dshConfigMu sync.Mutex
 var dshSessionIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]*$`)
 
-const dshMissingKeyMessage = "DSH_CREDENTIAL_MISSING: configure a DeepSeek Harness API key for this session; runner and workspace .env credentials are not used"
+// The key is the session's DeepSeek API key, the same one Claude Code and OpenCode sessions can run
+// on (docs/provider-engine-contract.md §4.2): there is no key of Harness's own to configure.
+const dshMissingKeyMessage = "DSH_CREDENTIAL_MISSING: DeepSeek Harness runs on a DeepSeek API key, and this session has none; connect one in Orbit (runner and workspace .env credentials are not used)"
 
 // PrepareDshSessionLaunch uses the same Agent.Env populated by encrypted provider dispatch.
 func PrepareDshSessionLaunch(ctx context.Context, job *ClaimedSession, executionDir, fileMode string) (DshLaunchSpec, error) {

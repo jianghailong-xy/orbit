@@ -1389,3 +1389,243 @@ func TestMCPInlineWaitsEndBeforeAnEngineDeadline(t *testing.T) {
 		t.Fatalf("waitSeconds sent = %v, want 120 without a deadline and 30 under 60s", waits)
 	}
 }
+
+// engineDoorCall is one MCP tool call that may carry `engine`, and the request it must turn into.
+type engineDoorCall struct {
+	tool    string
+	request string
+	args    map[string]interface{}
+	// body reads the object the engine belongs on out of the forwarded request body.
+	body func(map[string]interface{}) map[string]interface{}
+}
+
+func engineDoorCalls(pins map[string]interface{}) []engineDoorCall {
+	with := func(args map[string]interface{}) map[string]interface{} {
+		for key, value := range pins {
+			args[key] = value
+		}
+		return args
+	}
+	whole := func(body map[string]interface{}) map[string]interface{} { return body }
+	return []engineDoorCall{
+		{tool: "session_create", request: "POST /api/runner/sessions", body: whole,
+			args: with(map[string]interface{}{"prompt": "review the change"})},
+		{tool: "task_create", request: "POST /api/runner/tasks", body: whole,
+			args: with(map[string]interface{}{"title": "Pinned", "completionCriterion": "EVIDENCE_JUDGMENT"})},
+		{tool: "task_create_batch", request: "POST /api/runner/tasks/batch-create",
+			args: map[string]interface{}{"tasks": []interface{}{
+				with(map[string]interface{}{"title": "Pinned", "completionCriterion": "EVIDENCE_JUDGMENT"}),
+			}},
+			body: func(body map[string]interface{}) map[string]interface{} {
+				items, _ := body["tasks"].([]interface{})
+				if len(items) != 1 {
+					return nil
+				}
+				item, _ := items[0].(map[string]interface{})
+				return item
+			}},
+		{tool: "task_update", request: "PATCH /api/runner/tasks/task-1", body: whole,
+			args: with(map[string]interface{}{"taskId": "task-1"})},
+		{tool: "task_batch_pin", request: "POST /api/runner/tasks/batch-pin", body: whole,
+			args: with(map[string]interface{}{"projectId": "01a02d83-7c58-708c-8d7c-103d15523d70"})},
+	}
+}
+
+// callEngineDoor runs one call against a stand-in control plane and returns the request it made. The
+// task tools run headless, so no confirmation card stands between the call and its write; the session
+// tool runs from a session with orchestration on, which is the only place it exists.
+func callEngineDoor(t *testing.T, call engineDoorCall) (string, map[string]interface{}) {
+	t.Helper()
+	var requests []string
+	var gotBody map[string]interface{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests = append(requests, r.Method+" "+r.URL.Path)
+		gotBody = nil
+		_ = json.NewDecoder(r.Body).Decode(&gotBody)
+		_, _ = w.Write([]byte(`{"id":"created","changed":1}`))
+	}))
+	defer srv.Close()
+	mcp := &mcpServer{t: NewTransport(srv.URL, "runner-token"), agentID: "agent-1"}
+	if call.tool == "session_create" {
+		mcp.sessionID, mcp.orchestrationToken, mcp.allowOrchestration = "caller-session", "session-token", true
+	}
+	if res := mcp.callTool(call.tool, call.args); res["isError"] == true {
+		t.Fatalf("%s returned an error: %#v", call.tool, res["content"])
+	}
+	if len(requests) != 1 || requests[0] != call.request {
+		t.Fatalf("%s made %v, want one %s", call.tool, requests, call.request)
+	}
+	return requests[0], call.body(gotBody)
+}
+
+// T5 (docs/provider-engine-contract.md §6.1–6.2): every MCP door that writes a provider also takes
+// `engine` and hands it to the server as given — a value, and on the task pins null, which clears only
+// the engine pin.
+func TestMCPEngineReachesEveryDoorThatTakesIt(t *testing.T) {
+	for _, call := range engineDoorCalls(map[string]interface{}{"engine": "dsh", "provider": "deepseek-2"}) {
+		t.Run(call.tool, func(t *testing.T) {
+			_, body := callEngineDoor(t, call)
+			if body["engine"] != "dsh" || body["provider"] != "deepseek-2" {
+				t.Fatalf("%s forwarded %#v, want engine dsh on provider deepseek-2", call.tool, body)
+			}
+		})
+	}
+	for _, call := range engineDoorCalls(map[string]interface{}{"engine": nil}) {
+		if call.tool != "task_update" && call.tool != "task_batch_pin" {
+			continue
+		}
+		t.Run(call.tool+" clears", func(t *testing.T) {
+			_, body := callEngineDoor(t, call)
+			if engine, present := body["engine"]; !present || engine != nil {
+				t.Fatalf("%s engine = %#v (present=%v), want an explicit null", call.tool, engine, present)
+			}
+		})
+	}
+}
+
+// The calls written before engines existed name only a provider. They must reach the server exactly
+// as they did — no engine at all, not a null one and not a guess — so the server runs each on the
+// engine that provider always ran on.
+func TestMCPProviderAloneSendsNoEngine(t *testing.T) {
+	for _, call := range engineDoorCalls(map[string]interface{}{"provider": "deepseek-2"}) {
+		t.Run(call.tool, func(t *testing.T) {
+			_, body := callEngineDoor(t, call)
+			if body["provider"] != "deepseek-2" {
+				t.Fatalf("%s forwarded %#v, want provider deepseek-2", call.tool, body)
+			}
+			if engine, present := body["engine"]; present {
+				t.Fatalf("%s invented an engine: %#v", call.tool, engine)
+			}
+		})
+	}
+}
+
+// Each of the five schemas declares `engine` with all six engines, in the CLI names a person knows
+// them by; the task pins take null too, since null is how a pin is cleared.
+func TestMCPEngineSchemasNameTheSixEngines(t *testing.T) {
+	tools := toolDescriptors(false, true)
+	batchItem := func() map[string]interface{} {
+		props := mcpToolProps(tools, "task_create_batch")
+		tasks, _ := props["tasks"].(map[string]interface{})
+		items, _ := tasks["items"].(map[string]interface{})
+		itemProps, _ := items["properties"].(map[string]interface{})
+		return itemProps
+	}
+	for _, tc := range []struct {
+		tool     string
+		props    map[string]interface{}
+		nullable bool
+	}{
+		{tool: "session_create", props: mcpToolProps(tools, "session_create")},
+		{tool: "task_create", props: mcpToolProps(tools, "task_create"), nullable: true},
+		{tool: "task_create_batch item", props: batchItem(), nullable: true},
+		{tool: "task_update", props: mcpToolProps(tools, "task_update"), nullable: true},
+		{tool: "task_batch_pin", props: mcpToolProps(tools, "task_batch_pin"), nullable: true},
+	} {
+		t.Run(tc.tool, func(t *testing.T) {
+			engine, _ := tc.props["engine"].(map[string]interface{})
+			if engine == nil {
+				t.Fatalf("%s has no engine property", tc.tool)
+			}
+			var enum []string
+			hasNull := false
+			switch values := engine["enum"].(type) {
+			case []string:
+				enum = values
+			case []interface{}:
+				for _, value := range values {
+					if value == nil {
+						hasNull = true
+						continue
+					}
+					enum = append(enum, value.(string))
+				}
+			}
+			if !reflect.DeepEqual(enum, []string{"claude", "codex", "kimi", "antigravity", "opencode", "dsh"}) {
+				t.Fatalf("%s engine enum = %#v", tc.tool, engine["enum"])
+			}
+			if hasNull != tc.nullable {
+				t.Fatalf("%s engine enum null = %v, want %v", tc.tool, hasNull, tc.nullable)
+			}
+			description, _ := engine["description"].(string)
+			for _, name := range []string{"Claude Code", "Codex", "Kimi Code", "Antigravity CLI", "OpenCode", "DeepSeek Harness"} {
+				if !strings.Contains(description, name) {
+					t.Fatalf("%s engine description does not name %s: %q", tc.tool, name, description)
+				}
+			}
+		})
+	}
+}
+
+// The provider tools and the fields that name a provider describe the split: a provider is where a
+// credential comes from, the engine is the CLI, every engine is named, and deleting a key no longer
+// claims to move what used it onto the runner's Claude sign-in.
+func TestMCPProviderAndAgentDescriptionsFollowTheDecoupledModel(t *testing.T) {
+	tools := toolDescriptors(false, true)
+	description := func(name string) string {
+		for _, tool := range tools {
+			if tool["name"] == name {
+				text, _ := tool["description"].(string)
+				return text
+			}
+		}
+		t.Fatalf("no MCP tool %s", name)
+		return ""
+	}
+	propDescription := func(tool, prop string) string {
+		schema, _ := mcpToolProps(tools, tool)[prop].(map[string]interface{})
+		text, _ := schema["description"].(string)
+		return text
+	}
+
+	deletion := description("provider_delete")
+	if strings.Contains(deletion, "built-in claude") || strings.Contains(deletion, "runs on the built-in") {
+		t.Fatalf("provider_delete still says a deleted key's work moves to Claude: %q", deletion)
+	}
+	for _, want := range []string{"keep their engine", "cannot start again until it is re-pinned"} {
+		if !strings.Contains(deletion, want) {
+			t.Fatalf("provider_delete does not say %q: %q", want, deletion)
+		}
+	}
+	list := description("provider_list")
+	for _, want := range []string{"`engines`", "credential", "antigravity", "dsh", "DeepSeek Harness on the owner's first enabled DeepSeek key"} {
+		if !strings.Contains(list, want) {
+			t.Fatalf("provider_list does not say %q: %q", want, list)
+		}
+	}
+	for _, tool := range []string{"provider_create", "provider_update"} {
+		schema, _ := mcpToolProps(tools, tool)["runtime"].(map[string]interface{})
+		if !reflect.DeepEqual(schema["enum"], []string{"claude", "codex", "kimi", "antigravity"}) {
+			t.Fatalf("%s runtime enum = %#v, want the four protocols", tool, schema["enum"])
+		}
+		if text, _ := schema["description"].(string); !strings.Contains(text, "protocol") || strings.Contains(text, "coding engine that drives it") {
+			t.Fatalf("%s runtime is not described as the protocol: %q", tool, text)
+		}
+	}
+	if !strings.Contains(description("provider_update"), "refused while an open session or a task pin uses the key") {
+		t.Fatalf("provider_update does not say when a protocol change is refused: %q", description("provider_update"))
+	}
+	for _, tool := range []string{"task_create", "task_update", "task_batch_pin", "session_create"} {
+		text := propDescription(tool, "provider")
+		for _, want := range []string{"credential", "\"claude\"", "\"codex\"", "\"kimi\"", "\"antigravity\"", "\"opencode\"", "\"dsh\"", "provider_list"} {
+			if !strings.Contains(text, want) {
+				t.Fatalf("%s provider description does not say %s: %q", tool, want, text)
+			}
+		}
+	}
+	if text := propDescription("task_create", "model"); !strings.Contains(text, "engine and provider") {
+		t.Fatalf("task_create model description = %q", text)
+	}
+	if strings.Contains(taskModelHintDescription, "The engine is still specified with provider") ||
+		!strings.Contains(taskModelHintDescription, "engine and provider") {
+		t.Fatalf("taskModelHintDescription = %q", taskModelHintDescription)
+	}
+	if !strings.Contains(description("agent_list"), "lastEngine") {
+		t.Fatalf("agent_list does not name the engine the project last ran on: %q", description("agent_list"))
+	}
+	for _, tool := range []string{"agent_create", "agent_update"} {
+		if !strings.Contains(description(tool), "no engine or provider") {
+			t.Fatalf("%s does not say an agent has no engine or provider: %q", tool, description(tool))
+		}
+	}
+}

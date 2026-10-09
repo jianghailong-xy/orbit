@@ -804,3 +804,40 @@ func dshRecordSessionLogUpload(t *testing.T, upstream bool) {
 		}
 	}
 }
+
+// T5 (docs/provider-engine-contract.md §4.2, task comment 34cnVyNSU28FpzRwWsWfc): a Harness session runs
+// on a DeepSeek API key — the same key Claude Code and OpenCode sessions can run on — so the missing-key
+// failure and `orbit doctor`'s hint ask for that key, never for a "DeepSeek Harness API key". The code
+// still leads the message, which is what every client's repair card matches.
+func TestDshMissingKeyAsksForADeepSeekKey(t *testing.T) {
+	job := &ClaimedSession{SessionID: "missing-key-session", Agent: AgentExecConfig{Env: map[string]string{
+		"ORBIT_DSH_BASE_URL": "https://api.deepseek.com/anthropic",
+	}}}
+	_, err := PrepareDshSessionLaunch(context.Background(), job, t.TempDir(), "read-only")
+	if err == nil {
+		t.Fatal("a session with no key was prepared")
+	}
+	message := err.Error()
+	if !strings.HasPrefix(message, "DSH_CREDENTIAL_MISSING: ") || !strings.Contains(message, "DeepSeek API key") ||
+		strings.Contains(message, "DeepSeek Harness API key") {
+		t.Fatalf("missing-key message = %q", message)
+	}
+	if verdict, code := dshRequestValidation(err, false, ""); verdict != "invalid" || code != "DSH_CREDENTIAL_MISSING" {
+		t.Fatalf("health reads the message as %s/%s", verdict, code)
+	}
+	if turn := dshTurnError(err); turn != message {
+		t.Fatalf("turn error = %q, want the message as it is", turn)
+	}
+
+	for _, spec := range engineSpecs {
+		if spec.bin != providerDsh {
+			continue
+		}
+		hint := spec.loginHint()
+		if !strings.Contains(hint, "DeepSeek API key") || strings.Contains(hint, "DeepSeek Harness API key") {
+			t.Fatalf("orbit doctor's DeepSeek Harness hint = %q", hint)
+		}
+		return
+	}
+	t.Fatal("orbit doctor has no DeepSeek Harness entry")
+}
