@@ -204,8 +204,11 @@ test('with neither, built-in Antigravity is refused with the Google sign-in that
       assert.ok(isEngineSignedOut(error), 'the availability refusal, recognisable by type');
       // Not only an API key any more: the runner's own Google sign-in comes first.
       assert.match(error.message, /Antigravity has no Google sign-in or Gemini API key on runner "HPC"/);
-      assert.match(error.message, /Sign in with Google from the Providers page/);
-      assert.match(error.message, /connect Gemini in Providers \(\/providers\/new\/gemini\)/);
+      assert.match(error.message, /Sign in with Google from Infrastructure, or connect Gemini/);
+      assert.match(
+        error.message,
+        /connect Gemini under API keys on Infrastructure \(\/providers\/new\/gemini\) — Orbit stores the key encrypted — and start this session on Gemini\.$/,
+      );
       // The action a client turns into a button: POST /runners/:runnerId/login with `signIn`.
       assert.deepEqual(error.getResponse(), {
         code: ENGINE_SIGNED_OUT,
@@ -241,7 +244,7 @@ test('a runner that cannot relay the Google sign-in is refused without one, nami
   await assert.rejects(fixture.service.create('owner-1', { ...PROMPT, provider: 'antigravity' }), (error: unknown) => {
     assert.ok(isEngineSignedOut(error));
     assert.match(error.message, /needs a newer Orbit runner there/);
-    assert.match(error.message, /connect Gemini in Providers \(\/providers\/new\/gemini\)/);
+    assert.match(error.message, /connect Gemini under API keys on Infrastructure \(\/providers\/new\/gemini\)/);
     const body = error.getResponse() as EngineSignedOutRefusal;
     assert.equal(body.code, ENGINE_SIGNED_OUT);
     assert.equal(body.signIn, undefined, 'no button for a sign-in this runner cannot do');
@@ -258,11 +261,38 @@ test('a macOS runner is refused without the Google sign-in it does not support y
     assert.ok(isEngineSignedOut(error));
     assert.match(error.message, /Antigravity has no Google sign-in or Gemini API key on runner "MacBook"/);
     assert.match(error.message, /works on Linux runners only for now/);
-    assert.match(error.message, /connect Gemini in Providers \(\/providers\/new\/gemini\)/);
+    assert.match(error.message, /connect Gemini under API keys on Infrastructure \(\/providers\/new\/gemini\)/);
     assert.equal((error.getResponse() as EngineSignedOutRefusal).signIn, undefined);
     return true;
   });
   assert.deepEqual(fixture.creates, []);
+});
+
+test('an added Antigravity account that is signed out is refused by its name, with no Gemini key way out', () => {
+  const message = signedOutEngineRefusal({
+    runtime: 'antigravity',
+    bringsOwnCredentials: false,
+    accounts: { antigravityAccount: '5e1f0a2b' },
+    runner: {
+      name: 'build-box',
+      displayName: 'HPC',
+      status: 'ONLINE',
+      lastHeartbeatAt: new Date(),
+      engines: [
+        {
+          engine: 'antigravity',
+          installed: true,
+          auth: 'yes',
+          accounts: [{ id: '5e1f0a2b', name: 'Research', home: '/home/dev/.orbit/antigravity-accounts/5e1f0a2b', auth: 'no' }],
+        },
+      ],
+    },
+  });
+  assert.equal(
+    message,
+    'Antigravity account "Research" is signed out on runner "HPC" — every session run on that account fails immediately. ' +
+      'Sign it in from Infrastructure, then start this session again.',
+  );
 });
 
 test('the other engines refuse as they did, now naming the engine and runner as fields too', async () => {

@@ -98,7 +98,7 @@ const REASONS: Record<string, { message: string; retryable: boolean }> = {
   RETRY_EXHAUSTED: { message: 'Provisioning kept failing on transient infrastructure errors and stopped. It can be retried.', retryable: true },
   STARTUP_TIMEOUT: { message: 'The runner did not report in before its startup deadline. It can be retried.', retryable: true },
   [MODEL_UNAVAILABLE]: {
-    message: 'The runner is up, but none of its runtimes is installed and signed in, so it cannot start a session. Sign one in from Providers; a runner that has stopped waiting for it can then be retried.',
+    message: 'The runner is up, but none of its runtimes is installed and signed in, so it cannot start a session. Sign one in from Infrastructure; a runner that has stopped waiting for it can then be retried.',
     retryable: true,
   },
   POD_TERMINATED: { message: 'The runner instance stopped. A retry releases it and keeps the data volume.', retryable: true },
