@@ -1322,6 +1322,8 @@ struct NewSessionView: View {
                 ManagedRunnerBanner(display: managed.display, runnerID: managed.runnerID)
                     .padding(.horizontal, 24)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    // The same room above the band as the hero it stands in for.
+                    .padding(.bottom, .composerBandFade)
             } else if draft.localStatusCards.isEmpty {
                 VStack(spacing: 18) {
                     // Which engine runs this session is the hero — the native port of web's
