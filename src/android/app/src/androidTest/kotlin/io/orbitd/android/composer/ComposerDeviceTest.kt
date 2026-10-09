@@ -435,10 +435,13 @@ class ComposerDeviceTest {
         compose.onNodeWithTag("composer-input").performTextInput("账户草稿")
         // Claude's accounts come first and Codex's second (A07-3, A07-10): the last of a label is Codex's, the first Claude's.
         // Rows of the Provider section only: the Effort section above it has a "Default" of its own, drawn before the
-        // runner's accounts arrive.
+        // runner's accounts arrive. Read in the menu's own order: a row scrolled out of the dialog has no bounds to compare.
         fun inSection(label:String):List<Int> {
-            val provider=compose.onAllNodesWithText("Provider").fetchSemanticsNodes().firstOrNull()?.boundsInRoot?.top ?: return emptyList()
-            return compose.onAllNodesWithText(label).fetchSemanticsNodes().withIndex().filter { it.value.boundsInRoot.top>provider }.map { it.index }
+            val all=compose.onAllNodes(hasAnyAncestor(isDialog()) and hasText("",substring=true)).fetchSemanticsNodes()
+            val heading=all.indexOfFirst { node -> node.config.getOrNull(SemanticsProperties.Text)?.any { it.text=="Provider" }==true }
+            if (heading<0) return emptyList()
+            val below=all.drop(heading+1).map { it.id }.toSet()
+            return compose.onAllNodesWithText(label).fetchSemanticsNodes().withIndex().filter { it.value.id in below }.map { it.index }
         }
         fun choose(label:String, current:String="fixture-model", first:Boolean=false) {
             appClick(current); compose.waitUntil(15000) { inSection(label).isNotEmpty() }
