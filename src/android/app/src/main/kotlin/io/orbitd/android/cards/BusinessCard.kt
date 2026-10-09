@@ -1,7 +1,9 @@
 package io.orbitd.android.cards
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.draw.alpha
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -21,10 +23,12 @@ import kotlinx.serialization.KSerializer
 import kotlinx.serialization.builtins.*
 import java.util.UUID
 
-/** The same component and commands can be embedded in Tasks/Projects and Wiki when routed there. */
+/** The same component and commands can be embedded in Tasks/Projects and Wiki when routed there. [review] draws it as a review's
+ * page (A08-2; iOS `ApprovalReviewLayout`'s review path): its words scroll, its buttons stay pinned under them, and its heading is
+ * the review's own title rather than a line of the card. */
 @Composable
 fun BusinessCard(card: InteractionCard, fresh: Boolean, result: CardActionState = CardActionState(),
-    open: (String) -> Unit, discuss: ((String) -> Unit)? = null, submit: (CardVerb, CardInput) -> Unit) {
+    open: (String) -> Unit, discuss: ((String) -> Unit)? = null, submit: (CardVerb, CardInput) -> Unit, review: Boolean = false) {
     var note by rememberSaveable(card.key, card.binding) { mutableStateOf("") }
     var noteAction by rememberSaveable(card.key, card.binding) { mutableStateOf<CardVerb?>(null) }
     var selections by rememberSaveable(card.key, card.binding, stateSaver = jsonSaver(MapSerializer(String.serializer(), ListSerializer(String.serializer())))) { mutableStateOf<Map<String, List<String>>>(emptyMap()) }
@@ -54,8 +58,8 @@ fun BusinessCard(card: InteractionCard, fresh: Boolean, result: CardActionState 
         }, reason = reason)
     fun send(verb: CardVerb) { submit(verb, if (verb == CardVerb.RETRY_TASK) input.copy(triggerId = UUID.randomUUID().toString()) else input) }
     val body: @Composable ColumnScope.() -> Unit = {
-        Text(card.title, style = MaterialTheme.typography.titleMedium)
-        Text("Filed by Orbit", style = MaterialTheme.typography.labelSmall)
+        if (!review) Text(card.title, style = MaterialTheme.typography.titleMedium)
+        Text("From Orbit", style = MaterialTheme.typography.labelSmall)
         card.status?.let { Text(it, style = MaterialTheme.typography.labelMedium) }
         if (batchPreview != null) BatchReviewBody(card, open, batchPage) { batchPage = it }
         else CardBody(card, open, owner = if (card.family == CardFamily.OWNER_CONFIRMATION && CardVerb.CONFIRM_OWNER in card.actions)
@@ -142,7 +146,12 @@ fun BusinessCard(card: InteractionCard, fresh: Boolean, result: CardActionState 
     }
     // A record — a receipt, a reviewer's return — is drawn dimmed, so it does not read as something still waiting to be pressed.
     val record = card.family == CardFamily.OWNER_CONFIRMATION && card.context.text("ownerCard") in setOf("receipt", "returned")
-    Surface(Modifier.fillMaxWidth().testTag(card.key).alpha(if (record) 0.72f else 1f), shape = MaterialTheme.shapes.medium,
+    if (review) Column(Modifier.fillMaxSize().testTag(card.key)) {
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp), content = body)
+        HorizontalDivider()
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp), content = doors)
+    } else Surface(Modifier.fillMaxWidth().testTag(card.key).alpha(if (record) 0.72f else 1f), shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surfaceVariant) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { body(); doors() }
     }

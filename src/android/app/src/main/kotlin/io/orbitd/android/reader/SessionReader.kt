@@ -8,6 +8,7 @@ import androidx.compose.foundation.lazy.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clipToBounds
@@ -23,7 +24,10 @@ import androidx.compose.ui.unit.dp
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.composer.SessionComposer
 import io.orbitd.android.cards.CardFocus
+import io.orbitd.android.cards.CardReviewSheet
 import io.orbitd.android.cards.NeedsYouLogic
+import io.orbitd.android.cards.SessionCardsReads
+import io.orbitd.android.cards.rememberSessionCards
 import io.orbitd.android.cards.ReaderSide
 import io.orbitd.android.cards.SessionCards
 import io.orbitd.android.cards.SessionNeedsYouBar
@@ -151,7 +155,18 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     val taskActivity = remember(transcript?.taskProgress, state.window.events, background) {
         TaskActivity.of(transcript?.taskProgress, state.window.events, background.orEmpty())
     }
+    // The conversation's cards, and the review a preview opens (A08-2), held outside the transcript's recyclable rows.
+    val cards = rememberSessionCards(app, handle, route.id!!)
+    val reviewStates = rememberSaveableStateHolder()
+    val discussCard: ((String) -> Unit)? = if (!composerState.loaded) null else { context ->
+        val prior = composer.state.value.draft.text
+        val text = prior + (if (prior.isBlank()) "" else "\n\n") + context
+        composer.edit(text, text.length, text.length)
+        composerFocused = true
+        composeFocus++
+    }
     CompositionLocalProvider(LocalReaderResources provides resources, LocalTaskActivity provides taskActivity) {
+        SessionCardsReads(cards)
         BoxWithConstraints(Modifier.fillMaxSize()) {
         val otherInputHasKeyboard = WindowInsets.ime.getBottom(LocalDensity.current) > 0 && !composerFocused
         val composerHeight = if (otherInputHasKeyboard) 0.dp else if (maxHeight < 320.dp) maxHeight else maxHeight * 0.65f
@@ -228,13 +243,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                         }
                     }
                     item(key = "newer") { if (displayedWindow.newerAfter != null) TextButton(enabled = !displayedLoading, onClick = model::newer) { Text("Load newer messages") } }
-                    item(key = "interaction-cards") { SessionCards(openLink, discuss = if (!composerState.loaded) null else { context ->
-                        val prior = composer.state.value.draft.text
-                        val text = prior + (if (prior.isBlank()) "" else "\n\n") + context
-                        composer.edit(text, text.length, text.length)
-                        composerFocused = true
-                        composeFocus++
-                    }) }
+                    item(key = "interaction-cards") { SessionCards(cards, openLink, discuss = discussCard) }
                     item(key = "tail") { Spacer(Modifier.height(1.dp).testTag("transcript-tail")) }
                 }
                 if (!follow || state.window.newerAfter != null) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
@@ -255,6 +264,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
             }
         }
         }
+        if (!state.denied) CardReviewSheet(cards, reviewStates, openLink, discussCard)
         if (details && !state.denied) SessionDetails(state.session, api, openLink) { details = false }
         action?.let { DirectoryActionDialog(it, api, data.copy(fresh = data.fresh && state.session?.fresh == true), { action = it }) {
             app.realtime.refreshDirectory(); app.realtime.refreshSession()
