@@ -73,3 +73,7 @@ internal fun backgroundWake(note: String): JsonObject? {
  * rather than repeating the blocks the line already draws (iOS `BackgroundWake.rest`). */
 fun withoutWakeBlocks(note: String): String =
     Regex("<(background-job-wake|scheduled-wakeup)>\\n[\\s\\S]*?\\n</\\1>").replace(note, "").trim()
+
+/** A queued wake's own content is its blocks (the note it will be delivered with), read as the line it will be (A08-4). */
+fun queuedWake(content: String): JsonObject? =
+    if ("<background-job-wake>" in content || "<scheduled-wakeup>" in content) backgroundWake(content) else null

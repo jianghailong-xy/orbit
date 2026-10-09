@@ -36,6 +36,7 @@ import io.orbitd.android.cards.SessionNeedsYouBar
 import io.orbitd.android.watch.SessionWatches
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.cards.OwnerReview
+import io.orbitd.android.core.net.HttpMethod
 import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.core.realtime.*
 import io.orbitd.android.directory.*
@@ -127,11 +128,16 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     val belowRows = remember(state.session?.snapshot) {
         state.session?.snapshot?.let { NeedsYouLogic.belowRows(state.session!!.id, it) }.orEmpty()
     }
+    // A08-4: the queue's turns drawn at the transcript's end, the ones the window has not seen delivered yet.
+    val queued = remember(state.session?.snapshot?.queuedTurns, state.window.events) {
+        queuedTail(state.session?.snapshot?.queuedTurns.orEmpty(), state.window.events)
+    }
+    val queuedShown = if (transcript != null && state.window.newerAfter == null) queued.size else 0
     val readerSide by remember(list) { derivedStateOf {
         when (val top = topLineItem(list.layoutInfo.visibleItemsInfo, list.layoutInfo.viewportStartOffset)) {
             null -> null
             "tail" -> ReaderSide.ABOVE
-            else -> ReaderSide.BELOW
+            else -> if (top.startsWith("queued:")) ReaderSide.ABOVE else ReaderSide.BELOW
         }
     } }
     val scope = rememberCoroutineScope()
@@ -144,7 +150,8 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     // header) asks for the tail again; nothing else re-anchors the bottom of a list that shrank.
     val viewport = remember(model) { TranscriptViewport() }
     var repin by remember(model) { mutableIntStateOf(0) }
-    LaunchedEffect(state.window.events, transcript?.textDrafts, transcript?.thinkingDrafts, transcript?.toolOutputs, follow, placed, repin) {
+    LaunchedEffect(state.window.events, transcript?.textDrafts, transcript?.thinkingDrafts, transcript?.toolOutputs, follow, placed, repin,
+        state.session?.snapshot?.queuedTurns) {
         if (placed && follow && !dragging && state.window.newerAfter == null && !state.loading) {
             withFrameNanos { }
             positioning = true
@@ -214,8 +221,8 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     below = NeedsYouLogic.below(belowRows, readerSide), open = open, onBelow = { row ->
                         follow = false
                         scope.launch {
-                            // The rail is the item before the tail; a card in it is brought into view once it is drawn.
-                            list.scrollToItem((list.layoutInfo.totalItemsCount - 2).coerceAtLeast(0))
+                            // The rail is the item before the queue and the tail; a card in it is brought into view once it is drawn.
+                            list.scrollToItem((list.layoutInfo.totalItemsCount - 2 - queuedShown).coerceAtLeast(0))
                             CardFocus.request(route.id!!, row)
                             // A08-3: a card answered in a review opens it, over the card it scrolled to (iOS 419fa780b). Evidence and
                             // exceptions are answered in place, so the press only shows them.
@@ -257,6 +264,12 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     }
                     item(key = "newer") { if (displayedWindow.newerAfter != null) TextButton(enabled = !displayedLoading, onClick = model::newer) { Text("Load newer messages") } }
                     item(key = "interaction-cards") { SessionCards(cards, openLink, discuss = discussCard) }
+                    // A08-4: what is still waiting in the queue, as the turns it will be — after the decisions, before the tail.
+                    if (live != null) items(queued, key = { it.key }) { turn ->
+                        QueuedTurnRow(turn, openLink, cancelEnabled = state.session?.fresh == true && !composerState.busy) { turnId ->
+                            composer.control("turns/$turnId", HttpMethod.DELETE)
+                        }
+                    }
                     item(key = "tail") { Spacer(Modifier.height(1.dp).testTag("transcript-tail")) }
                 }
                 if (!follow || state.window.newerAfter != null) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
