@@ -322,9 +322,10 @@ public enum SessionProviderChoices {
                     unavailable: blocker,
                     fixEngine: blocker == nil ? nil : runtime,
                     inPool: pooled.contains(provider.slug),
-                    // DeepSeek's key runs on either agent; say which one this row is.
+                    // DeepSeek's key runs on either agent; say which one this row is, by the engine's
+                    // name in the shared table (ENGINE_CLI_NAMES).
                     labelDetail: runtime == "antigravity" ? "Antigravity CLI"
-                        : runtime == "dsh" ? "Harness"
+                        : runtime == "dsh" ? "DeepSeek Harness"
                         : provider.presetSlug == "deepseek" ? "Claude Code" : nil)
             }
         // No Harness key yet, on a runner that could run one: offer the connection rather than
@@ -333,7 +334,7 @@ public enum SessionProviderChoices {
             dshState != nil && dshState != .updateRunner
                 && !configured.contains(where: { $0.runtime == "dsh" })
             ? [ProviderChoice(slug: "\(DshRuntime.presetSlug):connect", label: "DeepSeek Harness", kind: .byok,
-                              brandKey: DshRuntime.presetSlug, modelLabel: "", unavailable: "Add API key",
+                              brandKey: DshRuntime.presetSlug, modelLabel: "", unavailable: "Connect a DeepSeek key",
                               fixEngine: DshRuntime.connectFix, setup: true)]
             : []
         // OpenCode, installed or not: Orbit installs it, so a machine without it is a row the picker
