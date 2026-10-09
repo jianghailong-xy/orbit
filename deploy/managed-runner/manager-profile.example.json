@@ -34,6 +34,20 @@
     "managerUsername": "system:serviceaccount:REPLACE_ME:REPLACE_ME",
     "webhookTokenSha256": "REPLACE_ME"
   },
+  "capacity": {
+    "compute": {
+      "cpu": "REPLACE_ME",
+      "memory": "REPLACE_ME",
+      "ephemeralStorage": "REPLACE_ME",
+      "pods": null,
+      "attachments": null
+    },
+    "storage": {
+      "usable": "REPLACE_ME",
+      "headroom": "REPLACE_ME"
+    },
+    "maxActiveUsers": null
+  },
   "lifecycle": {
     "maxAttempts": null,
     "backoffBaseSeconds": null,
@@ -42,6 +56,9 @@
     "requestTimeoutSeconds": null,
     "leaseSeconds": null,
     "pollIntervalSeconds": null,
-    "heartbeatFreshSeconds": null
+    "heartbeatFreshSeconds": null,
+    "idleSeconds": null,
+    "capacityRetrySeconds": null,
+    "drainSeconds": null
   }
 }

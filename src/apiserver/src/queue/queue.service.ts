@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { BadRequestException, ConflictException, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, ConflictException, Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { Prisma, type ManagedRunnerManagementState } from '@prisma/client';
 import { EventEmitter } from 'events';
 import {
@@ -103,6 +103,7 @@ import {
   withWikiMaintenanceRun,
 } from '../wiki/wiki-maintenance-session';
 import { managedRunnerInstanceClaimable, type ManagedRunnerInstance } from '../managed-runners/managed-runner-instance';
+import { MANAGED_RUNNER_GATE, type ManagedRunnerGate } from '../managed-runners/managed-runner-gate';
 
 /** The runner asking for work, as the claim route knows it. */
 export interface ClaimingRunner {
@@ -134,6 +135,8 @@ export class QueueService {
      * directly, none of whose sessions names a pool.
      */
     private readonly planUsage?: ProviderPlanUsageService,
+    /** The managed runner switch: while it is off a managed runner's drain does not hold its claims back. */
+    @Optional() @Inject(MANAGED_RUNNER_GATE) private readonly managedGate?: ManagedRunnerGate,
   ) {
     this.signal.setMaxListeners(0);
   }
@@ -316,7 +319,9 @@ export class QueueService {
       managementState: ManagedRunnerManagementState;
     }>>`SELECT id::text AS id, generation, pod_uid AS "podUid", management_state::text AS "managementState"
         FROM managed_runner WHERE id = ${instance.mappingId}::uuid FOR SHARE`;
-    return managedRunnerInstanceClaimable(mapping ?? null, instance);
+    // The switch decides only whether a drain holds claims back; a service built without the gate
+    // (specs that construct it by hand) holds them back, as before management could be off.
+    return managedRunnerInstanceClaimable(mapping ?? null, instance, this.managedGate?.enabled ?? true);
   }
 
   private async trySessionClaim(

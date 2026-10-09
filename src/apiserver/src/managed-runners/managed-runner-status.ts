@@ -88,6 +88,13 @@ export function managedRunnerStatus(input: ManagedRunnerStatusInput): ManagedRun
     reason: !enabled ? switchReason : (reason ?? switchReason),
     retryAfter: mapping.nextAttemptAt && mapping.nextAttemptAt > now ? mapping.nextAttemptAt.toISOString() : null,
     initialProvider: mapping.initialProvider,
-    actions: { ...actions, canRetry: operable && mapping.managementState === 'FAILED' && reason?.retryable === true },
+    actions: {
+      ...actions,
+      canRetry: operable && mapping.managementState === 'FAILED' && reason?.retryable === true,
+      // Asleep, or on its way there: demand from the owner starts it again.
+      canWake: operable && (mapping.managementState === 'SLEEPING' || mapping.managementState === 'DRAINING'),
+      // READY and wanted running: the request itself is refused while the runner has work.
+      canSleep: operable && mapping.managementState === 'READY' && mapping.desiredState === 'RUNNING',
+    },
   };
 }
