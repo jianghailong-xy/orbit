@@ -73,6 +73,10 @@ describe('credentialEngines', () => {
     expect(credentialEngines(key('claude', 'anthropic', 'https://api.anthropic.com', true))).toEqual(['claude']);
     expect(credentialEngines(key('claude', 'deepseek', 'https://api.deepseek.com/anthropic', true))).toEqual(['claude']);
     expect(credentialEngines(key('codex', 'openai', 'https://api.openai.com/v1', true))).toEqual([]);
+    // The token rule outranks a legacy Harness row's default: Harness cannot spend a subscription.
+    const legacyToken = key('dsh', 'deepseek-harness', 'https://api.deepseek.com/anthropic', true);
+    expect(credentialEngines(legacyToken)).toEqual(['claude']);
+    expect(defaultEngineOf(legacyToken)).toBe('claude');
   });
 
   it('runs a key on a protocol no engine speaks nowhere', () => {

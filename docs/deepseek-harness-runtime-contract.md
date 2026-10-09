@@ -5,7 +5,7 @@
 **【约定，2026-10-09 起，取代原「现有 `deepseek` provider 继续属于 Claude runtime」】** provider 与 engine 已解耦，见 [provider-engine-contract.md](provider-engine-contract.md)：
 
 - `dsh` 只是 engine，不再是一类 provider，也不再是 key 的 runtime。
-- DeepSeek API key（preset `deepseek`，或自定义且主机为 `api.deepseek.com`）同一把同时用于 Claude Code、OpenCode 和 DeepSeek Harness。会话用哪个 engine 记录在 `Session.engine`，终身不变。
+- DeepSeek API key（preset `deepseek`，或自定义且主机为 `api.deepseek.com`；Anthropic 方言，不是 Claude 订阅 token）同一把同时用于 Claude Code、OpenCode 和 DeepSeek Harness。会话用哪个 engine 记录在 `Session.engine`，终身不变。
 - DeepSeek Harness 会话可以在多把 DeepSeek key 之间切换，切换后在原 ACP 会话上续聊。
 - 原来的 `deepseek-harness` 配置（runtime `dsh`）由存量迁移并入 DeepSeek key，旧 slug 仍解析为该 key + DeepSeek Harness。
 

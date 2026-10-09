@@ -7,6 +7,7 @@
 - DeepSeek key 不属于某个 engine：同一把 key 同时用于 Claude Code、OpenCode 和 DeepSeek Harness。
 - dsh 会话用的是会话所选的那把 DeepSeek key，可以在多把之间切换。
 - 停用或删除一把 key，会同时影响它在所有 engine 上的会话。
+- dsh 会把 key 从它跑的命令的环境里去掉（见下文「凭据」）；同一把 key 交给 Claude Code、OpenCode 时，agent 跑的命令能在环境里直接读到它（[解耦契约](provider-engine-contract.md) §4.6）。
 
 ## 固定版本安装
 

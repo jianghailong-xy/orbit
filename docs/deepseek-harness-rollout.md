@@ -20,7 +20,7 @@
 | runner | 由最终候选构建，心跳声明 `provider:dsh`（`X-Orbit-Supported-Providers: claude,codex,opencode,antigravity,dsh`），并上报 `engines[dsh]` | ≤ 0.1.211（D1 修复之前的发布版，不声明 dsh）：服务端不派发 dsh，dsh 工作停在 PENDING 并提示升级 |
 | DeepSeek Harness CLI | `@deepseek-ai/dsh@0.2.0-rc.2`（官方标签 dsh-v0.2.0-rc.2），`lib/bin.js` sha256 `1a03dee18683483ff6a1b27b2a1e650230da6bcca9a0f55f7d81b3308c3f307f`，安装在 `${ORBIT_HOME}/engines/dsh/0.2.0-rc.2` | 用户 PATH 上的 dsh、npm latest 以及其他版本都不会被使用 |
 | 平台 | Linux x64，服务 PATH 中为 Node 26（实测 v26.10.0） | macOS、Windows、arm64 及其他 Node 主版本：runner 返回 `DSH_PLATFORM_UNSUPPORTED` / `DSH_NODE_UNSUPPORTED`（未在真实 macOS runner 上实测，见第 6 节） |
-| 凭据【解耦后】 | DeepSeek API key：preset `deepseek`，或自定义且主机为 `api.deepseek.com`（Web 表单、`POST /api/providers/mine`；CLI/MCP 建的自定义 key 只要主机是它也算）。同一把 key 同时用于 Claude Code、OpenCode 和 DeepSeek Harness；DeepSeek Harness 会话可以在多把 DeepSeek key 之间选择和切换。原 preset `deepseek-harness`、runtime `dsh` 的配置由存量迁移并入 DeepSeek key，旧 slug 仍解析为该 key + DeepSeek Harness | DeepSeek 账号登录（第三阶段） |
+| 凭据【解耦后】 | DeepSeek API key：preset `deepseek`，或自定义且主机为 `api.deepseek.com`；Anthropic 方言，不是 Claude 订阅 token（Web 表单、`POST /api/providers/mine`；CLI/MCP 建的自定义 key 只要主机是它也算）。同一把 key 同时用于 Claude Code、OpenCode 和 DeepSeek Harness；DeepSeek Harness 会话可以在多把 DeepSeek key 之间选择和切换。原 preset `deepseek-harness`、runtime `dsh` 的配置由存量迁移并入 DeepSeek key，旧 slug 仍解析为该 key + DeepSeek Harness | DeepSeek 账号登录（第三阶段） |
 | 模型 | 运行时目录实测返回 deepseek-v4-flash（默认） | — |
 | 任务判据 | EXECUTABLE（验收命令由 runner 在工作区执行，不经过 dsh 和模型）、EVIDENCE_JUDGMENT、OWNER_CONFIRMED | 用户手动输入的 `!` shell 在 dsh 上仍被拒绝 |
 | 客户端 | Web 已实测；macOS/iOS 只通过了 CI 构建和测试 | macOS/iOS 未在真实 Harness 会话上操作，也没有实机测试 |
@@ -39,7 +39,7 @@
 **批次 0：先部署服务端，所有 runner 保持旧版。**
 - 核对：`GET /api/runners` 中所有 runner 的 capabilities 都没有 `provider:dsh`。
 - 核对旧引擎：新建并续聊一个 Claude 会话，续聊一个 DeepSeek key 上的 Claude Code 会话，两者都成功，`runtimeSessionId` 不变。
-- 预期：任何 dsh 会话创建都返回 409 `DeepSeek Harness requires a newer Orbit runner with dsh support; update this runner first`。
+- 预期：任何 dsh 会话创建都返回 409 `DeepSeek Harness requires a newer Orbit runner with dsh support; update this runner first`。【解耦后】用户没有启用的 DeepSeek key 时，先得到 400 `DeepSeek Harness runs on a DeepSeek API key; connect one in Providers first`。
 - 【解耦后】如果所选 DeepSeek key 已停用，则返回 400 `provider not available`。这同样挡住这把 key 在其它 engine 上的新建。
 
 **批次 1：金丝雀 runner。**
@@ -70,9 +70,11 @@
 ### 卸载 dsh（只停这台 runner 的 dsh，runner 版本不变）
 
 1. 等这台 runner 上没有进行中的 dsh 回合，与批次 1 第 1 步相同。重启时 reclaim 会把进行中的会话交还给这台 runner，而它已经启动不了 dsh。
-2. 把 `${ORBIT_HOME}/engines/dsh/0.2.0-rc.2` 移到 `engines/dsh/` 之外保存（不要删除），然后重启 runner 服务。
-   - runner 重新探测后上报 `engines[dsh]` 未安装。
-   - 这一步与 `scripts/test-dsh-install-gate.sh` 演练的「移除版本目录、重启同一个 runner」相同。
+2. 停止 runner 服务，用 `ps` 确认没有 dsh 进程还在运行。
+3. 把 `${ORBIT_HOME}/engines/dsh/0.2.0-rc.2` 移到 `engines/dsh/` 之外保存（不要删除）。
+4. 启动 runner 服务。runner 重新探测后上报 `engines[dsh]` 未安装。
+
+第 2–4 步的顺序与 `scripts/test-dsh-install-gate.mjs` 演练的相同：先停 runner 并等 dsh 进程退出，再移走版本目录，然后启动。恢复之前不要在 Providers 点 Install，也不要运行 `orbit doctor`，它们会把 dsh 重新装上（第 2 节第 3 条）。
 
 预期：
 
@@ -94,8 +96,17 @@
 1. 依次检查：capabilities 中 `provider:dsh` 的有无；`engines[dsh]`；对一个已有 dsh 会话发消息后的 PENDING 状态和错误文字。
 2. 运行 `ps -eo args | grep <dsh ACP 会话 id>`，预期没有任何进程（尤其是 `claude --resume` / `--session-id`）。
 3. 在 DB 中核对：engine 不是 dsh 的会话，其 init 事件里的 sessionId 都不等于任何 dsh 会话的 `runtime_session_id`，预期计数为 0。
-   - SQL 见 [audit.sql](evidence/deepseek-harness/p7-drill/stack/audit.sql)。
-   - audit.sql 按解耦前的 key runtime 判断 dsh 会话；解耦后改用 `session.engine`。
+   - 演练用的 [audit.sql](evidence/deepseek-harness/p7-drill/stack/audit.sql) 按解耦前 key 行的 `runtime = 'dsh'` 找 dsh 会话。迁移后没有这样的行，它总是返回 0，不能再用。
+   - 【解耦后】改按 `session.engine` 查：
+
+     ```sql
+     select count(*) from run_event e join session s on s.id = e.session_id
+     where e.type = 'system' and e.payload->>'subtype' = 'init'
+       and s.engine is distinct from 'dsh'
+       and e.payload->>'sessionId' in (
+         select runtime_session_id from session where engine = 'dsh' and runtime_session_id is not null);
+     ```
+
 4. Claude 新建、Claude 续聊、DeepSeek key 上 Claude Code 会话的续聊三项都成功。
 
 ### 恢复（回退之后再启用）
@@ -110,8 +121,8 @@
 | 创建返回 409 `DSH_NOT_INSTALLED: DeepSeek Harness is not installed on this runner, or the runner has not reported it yet…`；已有会话 PENDING 并显示同一文字 | runner 已声明 dsh，但心跳上报未安装（或还没上报） | 安装（第 2 节第 3 条）；30 秒内心跳带上 installed，PENDING 会话在下一个领取长轮询（25 秒内）派发，沿用原 ACP id |
 | 会话 FAILED，错误为 `DSH_NOT_INSTALLED`（被领取后才失败） | 已发布的安装目录事后被删除，且下一次探测尚未上报（第 6 节限制 1） | 重新安装；之后新开会话或续聊 |
 | 创建返回 400 `provider not available: "<slug>"` | 所选 DeepSeek key 已停用或已删除，这同样挡住它在其它 engine 上的新建 | 重新启用这把 key，或改选另一把 DeepSeek key。不要用停用 key 的方式回退 dsh（第 4 节） |
-| 创建返回 400 `DeepSeek Harness runs on a DeepSeek API key; connect one in Providers first` | 只选了 DeepSeek Harness，用户没有启用的 DeepSeek key | 连接或启用一把 DeepSeek key |
-| 创建或切换返回 400 `provider "<slug>" cannot run on DeepSeek Harness; …` | 选的 key 不是 DeepSeek key | 改选一把 DeepSeek key |
+| 【解耦后】创建返回 400 `DeepSeek Harness runs on a DeepSeek API key; connect one in Providers first` | 只选了 DeepSeek Harness，用户没有启用的 DeepSeek key | 连接或启用一把 DeepSeek key |
+| 【解耦后】创建或切换返回 400 `provider "<slug>" cannot run on DeepSeek Harness; …` | 选的 key 不是 DeepSeek key | 改选一把 DeepSeek key |
 | 会话 PENDING，错误为 `Provider is unavailable; check its configuration` | 会话所用的 DeepSeek key 在停用或删除期间收到了新消息 | 重新启用后自动执行；也可以把会话切到另一把 DeepSeek key，engine 不变，在原 ACP 会话上续聊 |
 | `DSH_PLATFORM_UNSUPPORTED` / `DSH_NODE_UNSUPPORTED` | 非 Linux x64，或 Node 不是 26 | 不要在这台 runner 上启用 dsh |
 | `DSH_INSTALL_FAILED` / `DSH_VERSION_INCOMPATIBLE` | npm 安装失败，或已有目录的版本不对 | 查看 runner 日志；不要手动覆盖已发布的目录（`DSH_VERSION_INCOMPATIBLE` 没有客户端修复卡，见第 6 节） |

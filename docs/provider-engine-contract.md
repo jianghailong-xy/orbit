@@ -33,7 +33,10 @@
 - 不可改：`BEFORE UPDATE OF "engine"` 触发器 `session_engine_immutable` 在 `OLD.engine IS NOT NULL AND NEW.engine IS DISTINCT FROM OLD.engine` 时报 `check_violation`（约束名 `session_engine_immutable`）。从 NULL 写成某个值是允许的（回填、首次领取补写）。
 - 可空期间 NULL 只有两种来源：旧 API 副本写入的行（它不认识这一列），以及回填无法确定的行（§7.1 的 `UNRESOLVED`）。
   - 读到 NULL 时按旧规则推导（§5.4），结果只用于本次判断。
-  - 新副本领取 NULL 行时写回推导结果：`SET "engine" = COALESCE("engine", $derived)`。所以一个会话最晚在其 runtime 第一次运行时就有了记录的 engine。
+  - 新副本领取 NULL 行时写回推导结果。领取语句选行时还算不出它，所以在同一事务里紧接一条 `UPDATE "session" SET "engine" = $derived WHERE "id" = $id AND "engine" IS NULL`，`$derived` 由 `legacySessionEngine`（§5.4）算出。这样一个会话最晚在其 runtime 第一次运行时就有了记录的 engine。
+  - 会改变推导依据的写入，要先把推导结果写下，否则下一次推导会按新凭据算，把会话换到另一个 engine：
+    - 改一个 NULL 行会话的 `provider` 或 `providerBuiltin` 时，在同一事务里先用旧凭据推导并写入 engine，再改 provider。推导为未知时按 §3.5。
+    - 改 key 的方言或 baseUrl、换 key 时，先给引用这把 key、engine 为 NULL 的会话补上 engine（§3.6）。
   - 推导结果为「未知」（凭据已不存在）时不写回；这类会话的处理见 §3.5。
 - 何时改成 NOT NULL：所有副本都是新版本、T4 的应用层迁移已执行、`UNRESOLVED` 行已处理之后，另起迁移。不在本项目内。
 - 接口读出的 `engine`：列有值时给列值，列为 NULL 时给推导值，推导为未知时为 `null`。
@@ -47,11 +50,11 @@
 | --- | --- | --- |
 | 有 | 有 | 固定 (engine, provider)，写入时已校验兼容 |
 | 有 | 空 | 只固定 engine：派发时按「只给 engine」解析凭据（§3.2） |
-| 空 | 有 | 按「只给 provider」取默认 engine（§3.2）。只出现在旧副本写入、回填未解决的行 |
+| 空 | 有 | 按「只给 provider」取默认 engine（§3.2）。来源：旧副本写入、回填未解决，或用户只清了 engine pin（§3.5） |
 | 空 | 空 | 不固定：用工作区种子（§3.4） |
 
 - 新代码写入 provider pin 时总把 engine 一起写入。只给 provider 的写入把默认 engine 写进 `Task.engine`（§3.5）。
-- 改 engine pin 或 provider pin，都让下一次运行开新会话，与现在改 provider pin 的规则相同（`TasksService.runAgentOnTask`）。
+- 改 engine pin 或 provider pin，效果与现在改 provider pin 相同。`planWorkspaceRun`（`tasks.service.ts`）按 pin 判断能否续用持有执行权的会话，改为比较 (engine, provider) 对（§3.5 的占用冲突）。
 - Task 没有 `providerBuiltin` 列。派发时按 §3.1 的顺序判定 slug 的类别，与会话新建一致。
 
 ### 1.3 `Session.provider`：四类凭据来源
@@ -66,7 +69,9 @@
 - 旧编码只在读取时兼容，新写入不再产生：
   - `provider='dsh' AND providerBuiltin`：engine `dsh` + 该用户的默认 DeepSeek key（§3.3）。今天这类会话派发时服务端不注入 key，只有工作区 env 里手写了 `ORBIT_DSH_API_KEY` 才能运行，否则在 runner 上以 `DSH_CREDENTIAL_MISSING` 失败；解耦后由默认 key 补上。
   - `provider='opencode'` 且 `model='orbit-<slug>/<model>'`：engine `opencode` + key `<slug>` + 模型 `<model>`。
-- `providerBuiltin` 保持现有含义：区分同名冲突 `kimi`、`dsh`。0077 和 0377 都保留了同名的配置行和池。
+- `providerBuiltin` 保持现有含义：区分内置的 `kimi`、`dsh` 与同名的配置身份。
+  - 0077 把旧的 `kimi` 配置行改了名，并禁止再用这个 slug；但旧副本的陈旧写入仍可能带着它。
+  - 0377 保留了已经叫 `dsh` 的配置行和池。
 - 池的成员列（`poolMemberProviderId`、`poolKeyId`、`poolCodexAccountId`）不变。
 
 ### 1.4 `ModelProvider.runtime` 只表示协议方言
@@ -148,6 +153,7 @@ CREATE INDEX "provider_slug_alias_provider_id_idx" ON "provider_slug_alias" ("pr
   - 自定义行看 `baseUrl` 主机名是否为 `api.deepseek.com`，不分大小写；URL 解析失败即否。
   - T2/T3 把 `isDeepSeekAccountRow` 改为调用共享的 `isDeepSeekKey`，余额和兼容表从此用同一规则。
 - 订阅 token 的判定需要解密 key（`trim()` 后以 `sk-ant-oat` 开头），只能在服务端做。共享模块接收调用方给的布尔值；客户端从接口的 `engines` 字段读取结果（§6.3）。
+- 订阅 token 的规则优先于遗留行的默认：持有订阅 token 的遗留 `runtime='dsh'` 行只能跑 `claude`，默认 engine 也是 `claude`。
 - 停用不影响兼容性：停用的 key 仍然「兼容」，只是不可用（§3.6）。
 
 共享模块 `src/shared/src/providerEngines.ts` 从包入口导出：
@@ -220,7 +226,8 @@ export function isEngineCompatible(engine: string, credential: EngineCredential)
 1. `claude`、`codex`、`kimi`、`antigravity`：runner 登录。`opencode`：OpenCode 自身配置。都是 `providerBuiltin = true`。
    - 与现在一致：明确传入的 `kimi` 不查同名配置行。
 2. 用户可用（`usableProviderScope`）的同 slug key 行：
-   - 停用的行拒绝，沿用该入口现在的文案：会话新建为 `provider not available: "<slug>"`，任务与切换目标为 `provider not available`，切换时当前 provider 已停用为 `provider is disabled`。
+   - 停用的行不能被选用，沿用该入口现在的文案：会话新建为 `provider not available: "<slug>"`，任务 pin 与切换目标为 `provider not available`。
+   - 续聊或改配置时留在已停用的当前 provider 上，返回 `provider is disabled`。从它切到别的 provider 是允许的：key 停用或删除后，会话就靠这条路恢复（§3.6）。
    - 共享行而用户不是管理员时，返回 `adminOnlyProviderRefusal`。
 3. 同 slug 的账号池（`accountPoolRuntime` 的范围），并检查 `assertUsablePool`。
 4. 别名表中目标 key 可用的同 slug 别名：解析到目标 key，并带出别名的 engine。
@@ -232,11 +239,11 @@ export function isEngineCompatible(engine: string, credential: EngineCredential)
 | 给了什么 | 结果 |
 | --- | --- |
 | engine + provider | 校验 `isEngineCompatible`，不兼容返回 `PROVIDER_ENGINE_INCOMPATIBLE`，并列出该 provider 可用的 engines。别名只提供 key；显式 engine 优先于别名的 engine |
-| 只有 provider | 用默认 engine：登录取同名 engine；key 取方言原生 engine；遗留 `runtime='dsh'` 行取 `dsh`；池取池的 engine；别名取别名的 engine（`dsh`）；遗留内置 `dsh` 取 `dsh`。默认 engine 为空（方言未知、订阅 token 配非 Anthropic 方言）时返回 `PROVIDER_ENGINE_INCOMPATIBLE` |
+| 只有 provider | 用默认 engine：登录取同名 engine；key 取方言原生 engine；遗留 `runtime='dsh'` 行取 `dsh`；池取池的 engine；别名取别名的 engine（`dsh`）；遗留内置 `dsh` 取 `dsh`。默认 engine 为空（方言未知、订阅 token 配非 Anthropic 方言）时返回 `PROVIDER_ENGINE_INCOMPATIBLE`，用不点名 engine 的文案（§3.7） |
 | 只有 engine | 登录类 engine 用 runner 登录（provider = engine 名）；`opencode` 用自身配置；`dsh` 用默认 DeepSeek key（§3.3），没有则返回 `DEEPSEEK_KEY_REQUIRED` |
 | 都没有 | 工作区种子（§3.4） |
 
-- engine 不在六个值内时返回 `ENGINE_UNKNOWN`。
+- engine 不在六个值内时，由解析函数返回 `ENGINE_UNKNOWN`；DTO 只校验它是字符串（§6.2）。
 - 「只有 provider」保证所有旧调用（API、CLI、MCP、旧版 App）得到解耦前的 engine。别名使旧 DSH slug 继续得到 `dsh`。
 
 ### 3.3 旧编码、内置 dsh 与别名
@@ -245,8 +252,8 @@ export function isEngineCompatible(engine: string, credential: EngineCredential)
   - 其中 `<slug>` 再按 §3.1 解析，允许是别名。
   - 写入时规范化成新形态。读取（领取、回执、偏好）继续兼容旧编码。
   - 规范化后，key 不可用于 OpenCode（订阅 token）时返回 `PROVIDER_ENGINE_INCOMPATIBLE`。key 不存在或已停用时，保留旧文案 `provider not available on OpenCode: "<slug>"`。
-- **默认 DeepSeek key**：该用户可用（`usableProviderScope`）、`enabled`、`isDeepSeekKey` 为真的 key 中排第一的一把。
-  - 顺序与 `/providers` 列表相同：`position` 升序（空值在后）、`createdAt`、`id`。
+- **默认 DeepSeek key**：该用户可用（`usableProviderScope`）、`enabled`，且 `isEngineCompatible('dsh', …)` 为真（DeepSeek key、Anthropic 方言、不是订阅 token）的 key 中排第一的一把。
+  - 顺序：`position` 升序（空值在后）、`createdAt`，再按 `id` 打破平局。`/providers` 今天只按前两项排，T3 让它也加上 `id`，两处一致。
   - 遗留 `runtime='dsh'` 行也算，因为它的 preset 是 `deepseek-harness`。
 - **内置 `dsh`**（`provider='dsh'`，§3.1 第 5 步）：
   - 新写入一律换成 (engine `dsh`, provider = 默认 DeepSeek key 的 slug, `providerBuiltin = false`)；没有这样的 key 时返回 `DEEPSEEK_KEY_REQUIRED`。
@@ -280,6 +287,7 @@ export function isEngineCompatible(engine: string, credential: EngineCredential)
   - 只带 provider（包括旧客户端）就是切换凭据：按 §3.1 解析目标后，校验与会话 engine 兼容；不兼容返回 `PROVIDER_ENGINE_INCOMPATIBLE`。现在的 `a ${from} session cannot switch to a provider that runs on ${to}` 随之退役。
   - 别名目标只取它的 key，不取别名的 engine。旧编码同 §3.3。
   - 账号部分（`accountOnProviderSwitch`）只在目标是 runner 登录时适用，文案不变。
+- 会话 engine 为 NULL 而能推导时，切换在同一事务里先把推导结果写入 `engine`（§1.1），再写新的 provider，然后照上面校验。
 - engine 为 NULL 且推导为未知的会话（凭据已不存在）：
   - 没有 `runtimeSessionId`（从未运行）：当作新会话，engine 取切换目标的默认 engine，与这次写入一起记录。
   - 有 `runtimeSessionId`：返回 `SESSION_ENGINE_UNKNOWN`（409），不猜 engine。
@@ -294,7 +302,10 @@ export function isEngineCompatible(engine: string, credential: EngineCredential)
   - 只有 provider：写入 provider 和它的默认 engine。旧客户端改 provider pin，得到的 engine 与解耦前相同。
   - 只有 engine：写 engine，provider 保持（update）或为空（create）。provider 保持非空时要校验兼容。
   - `provider: null` 只清 provider pin。`engine: null` 只清 engine pin，provider pin 留着时按「空 + 有」处理。
-- batch-pin（`TasksService.pinMany`）今天不校验 provider，改为逐个任务调用同一个解析函数，有一个不兼容就整批拒绝。拒绝的 body 带出不兼容的 `taskIds`。
+- batch-pin（`TasksService.pinMany`）今天不校验 provider。它分块 UPDATE，一次可能多达十万行，所以不逐行调解析函数：
+  - engine + provider，或只给 provider：结果与各任务现有的 pin 无关，写入前校验一次。
+  - 只给 engine（provider 保持）：先扫一遍选中任务现有的 provider 并去重，逐个校验兼容。有一个不兼容就整批拒绝，body 带出不兼容的 provider 和对应的任务数。
+  - 每个分块的 UPDATE 再带上「provider 属于已校验集合」的条件，挡住扫描之后被并发改掉的行。
 - 文案 `provider not available` 保持不带 slug（`assertUsableProvider` 现状）。
 - model 的处理不变：写入时只做旧编码规范化，派发时按 (engine, 凭据) 的模型空间校正（§2.2）。
 
@@ -307,7 +318,10 @@ export function isEngineCompatible(engine: string, credential: EngineCredential)
 
 #### 偏好
 
-- 服务端不读 `defaultModels`，只按 `UpdatePreferencesDto` 校验值是字符串、逐键合并。键的格式由客户端遵守（§6.5）。
+- 服务端不按 `defaultModels` 选模型，但 PATCH 的每个键都经解析函数规范化（§6.5）：
+  - 新格式键 `<engine>:<provider>`：校验 engine 与 provider 兼容。
+  - 旧客户端写来的旧格式键（裸 slug、`opencode/<slug>`、旧 DSH slug）：照原样存，同时写一份对应的新键。旧客户端仍读得回自己的键。
+  - 解析不了的旧键照原样存，不拒绝旧客户端。
 
 #### 提及投递（`tasks.service.ts` 复核种子）
 
@@ -317,10 +331,11 @@ export function isEngineCompatible(engine: string, credential: EngineCredential)
 
 - **旧客户端新建 DSH 配置**（`runtime: 'dsh'` 或 preset `deepseek-harness`）：存为 DeepSeek key。
   - 写入 `preset_slug = 'deepseek'`、`runtime = 'claude'`，模型跟随 preset，忽略请求里的模型（DSH 配置本来就不带）。
-  - 标签为 `DeepSeek Harness` 时按 §7.2 的规则改名；slug 从 `deepseek` 取。
+  - 标签为 `DeepSeek Harness` 时按 §7.2 的规则改名（例如已有 `DeepSeek` 时叫 `DeepSeek 2`）；slug 从 `deepseek` 取。
   - 不与已有的同一把 key 合并，用户可以有多把相同的 key，与普通新建一致。
   - 响应就是这一行：旧客户端把它显示成 Claude 方言的 key。在它上面只传 provider 新建，得到的是 `claude`（§8）。
 - **改方言**（PATCH `runtime`）：若有未结束会话（`completed_at IS NULL AND deleted_at IS NULL`）或任务 pin 以新方言不支持的 engine 使用这把 key，返回 `PROVIDER_DIALECT_IN_USE`（409）。
+  - 计数时 engine 为 NULL 的会话按推导出的 engine 算。允许修改时，先在同一事务里给引用这把 key、engine 为 NULL 的会话补上 engine（§1.1），再改 key。改 baseUrl、换 key 同样如此。
   - 都兼容时允许。例如两种方言都支持 `opencode` 的会话。
   - 现有的 `provider runtime cannot change into or out of dsh; create a separate provider` 退役：改成 `dsh` 被 `PROVIDER_RUNTIME_DSH_RETIRED` 拒绝；从遗留 `dsh` 改走，按本条判定。
   - 已结束的会话不阻止改方言。之后若被恢复，会在写入或领取时按兼容表拒绝或暂留，不会换 engine。
@@ -341,7 +356,7 @@ export function isEngineCompatible(engine: string, credential: EngineCredential)
 | code | HTTP | 何时 | message | body 附加字段 |
 | --- | --- | --- | --- | --- |
 | `ENGINE_UNKNOWN` | 400 | engine 不是六个值之一 | `engine "<value>" is not one of claude, codex, kimi, antigravity, opencode, dsh` | — |
-| `PROVIDER_ENGINE_INCOMPATIBLE` | 400 | engine 与 provider 不兼容（新建、切换、任务 pin、batch-pin、wiki 设置） | `provider "<slug>" cannot run on <CLI 名称>; it runs on <CLI 名称, …>`。可用列表为空时以 `no engine can run it` 结尾 | `engine`、`provider`、`engines` |
+| `PROVIDER_ENGINE_INCOMPATIBLE` | 400 | engine 与 provider 不兼容（新建、切换、任务 pin、batch-pin、wiki 设置）；或只给 provider 而它没有默认 engine | 点名 engine 时：`provider "<slug>" cannot run on <CLI 名称>; it runs on <CLI 名称, …>`，可用列表为空时以 `no engine can run it` 结尾。只给 provider 时：`provider "<slug>" cannot run on any engine` | `engine`（只给 provider 时为 `null`）、`provider`、`engines` |
 | `ENGINE_IMMUTABLE` | 400 | resume、config、retry 带了不同的 engine | `this session runs on <CLI 名称>, and a session's engine never changes; start a new session to use <CLI 名称>` | `engine` |
 | `DEEPSEEK_KEY_REQUIRED` | 400 | 只给 `dsh`、内置 `dsh`，而用户没有启用的 DeepSeek key | `DeepSeek Harness runs on a DeepSeek API key; connect one in Providers first` | — |
 | `SESSION_ENGINE_UNKNOWN` | 409 | engine 为空、推导未知，且已有 `runtimeSessionId` 的会话被续聊或切换 | `this session's engine was never recorded and its provider is gone, so Orbit cannot tell which engine its conversation belongs to; start a new session` | — |
@@ -378,8 +393,8 @@ export function isEngineCompatible(engine: string, credential: EngineCredential)
   - key：按 engine 注入（§4.2）。
   - 别名：解析到 key。
   - 遗留内置 `dsh`：有默认 DeepSeek key 时注入它；没有时照今天的方式派发（不注入 key，工作区 env 里手写的 `ORBIT_DSH_API_KEY` 仍然生效，没有就在 runner 上以 `DSH_CREDENTIAL_MISSING` 失败）。已经能跑的旧会话不会因为解耦而停。
-- 领取时再校验一次兼容。旧副本或并发写入可能留下不兼容的组合，这类组合不派发：`pausedPendingSessions` 把 PENDING 行写上 `PROVIDER_ENGINE_INCOMPATIBLE` 的 message 并跳过。DSH 没有 key 时写 `DEEPSEEK_KEY_REQUIRED` 的 message。领取成功时清除，与现有暂留机制相同。
-- engine 为 NULL 的行按旧规则推导，并在领取的同一语句里写回（§1.1）。
+- 领取时再校验一次兼容。旧副本或并发写入可能留下不兼容的组合，这类组合不派发：`pausedPendingSessions` 把 PENDING 行写上 `PROVIDER_ENGINE_INCOMPATIBLE` 的 message 并跳过，领取成功时清除，与现有暂留机制相同。领取时不会遇到「dsh 没有 key」：只给 engine 的 dsh 在写入时已解析到一把 key，遗留内置 `dsh` 按上一条派发。
+- engine 为 NULL 的行按旧规则推导，领取成功后在同一事务里另用一条 UPDATE 写回（§1.1）。
 - 交给 runner 的负载形状不变：
   - `provider` 与 `agent.provider` 携带 engine（runner 的 `session.go` 已按 engine 读取）。
   - `agent.model` 是模型 id。OpenCode 用 key 时为 `orbit-<slug>/<model>`。
@@ -426,6 +441,29 @@ export function isEngineCompatible(engine: string, credential: EngineCredential)
 - 账号池走池自己的规则（`accountPoolResumesAt`）。
 - key 永远不被 runner 的额度拦，也不再记为 blind。今天 key 的 slug 永远对不上 plan usage，于是每次都被当作 blind 退避。
 
+### 4.6 agent 跑的命令能不能读到 key
+
+Orbit 把 key 写进 engine 进程的环境（§4.2）。agent 跑的命令是 engine 的 shell 工具起的子进程，能不能在自己的环境里直接读到 key，取决于这个 engine 传不传这些变量。
+
+**测法**：2026-10-09 在 HPC 上用真 CLI 测。key 是带标记的假值，按 Orbit 的方式注入（同样的变量、参数和隔离目录），模型端点是本机的 mock。mock 让 agent 的 shell 工具跑一条只查它自己环境的命令：数 `env` 里有几处标记，列出带标记的变量名。
+
+| engine（版本） | key 所在的变量 | agent 命令的环境里有没有 | 依据 |
+| --- | --- | --- | --- |
+| Claude Code（2.1.295） | `ANTHROPIC_AUTH_TOKEN` | 有 | 实测（`Bash` 工具）。源码与文档：只有设了 `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB` 才会从子进程去掉凭据，Orbit 不设 |
+| OpenCode（1.18.35） | `OPENCODE_CONFIG_CONTENT`：整份配置，含 `apiKey` | 有 | 实测（`bash` 工具）。源码：shell 工具的环境是 `process.env` 原样，不过滤 |
+| DeepSeek Harness（0.2.0-rc.2） | `ORBIT_DSH_API_KEY` | 没有 | 实测：复跑 `TestDshRealSessionLogUpload`，bash 跑 `env \| sort`，两个变体都是 `bashSawKey=false`。源码：`dsh-subprocess` 的 `scrubbedParentEnv` 去掉名字含 KEY、PASSWORD、SECRET、TOKEN 的变量和全部 `DSH_*` |
+| Codex（0.162.0） | `OPENAI_API_KEY` | 有 | 实测：`codex exec`，以及照 runner 参数起的 `codex app-server`，后者测了 Auto（`on-request`，workspace-write 沙箱）和 `never`（Bypass、Don't Ask）两组设置，都看得到。Default、Accept Edits、Plan 用 `untrusted`，命令获批后跑在同样的环境里，未单独测。对照组加 `shell_environment_policy.ignore_default_excludes=false` 后看不到。源码：0.162 的 `ignore_default_excludes` 默认为 true，不过滤 KEY、SECRET、TOKEN |
+| Kimi Code（2.1.1） | `KIMI_MODEL_API_KEY` | 有 | 实测：print 模式的 `Bash` 工具。Orbit 用 ACP 驱动，initialize 不声明 terminal 能力，命令同样由 Kimi 自己的 `Bash` 工具在 kimi 进程下运行，按源码推断相同 |
+| Antigravity CLI（1.3.2） | `GEMINI_API_KEY` | 有 | 实测（`run_command`），与 1.2.16 的记录一致（`docs/antigravity-runtime-contract.md` §3.2） |
+
+- **「没有」只指命令自己的环境，不是安全边界。** engine 进程自己的环境里有 key；runner、engine 和 agent 的命令是同一个系统用户，同用户的进程一般能读 `/proc/<pid>/environ`。这是 Linux 的规则（proc(5)），未实测。DSH 环境文档已有同样的说明。
+- 按 Claude Code 与 agy 的文档，MCP 服务器和 hook 也继承同样的环境，未逐一实测。
+- 账号池的会话 token 也经 `OPENAI_API_KEY` 交给 Codex，按源码同样可见。
+- 让命令看不到 key 的开关（Claude Code 的 `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB`、Codex 的 `ignore_default_excludes=false`）各有副作用，不在本项目范围：前者要求 runner 装 bubblewrap，并把权限模式强制为 Default；后者会去掉所有名字含 KEY、SECRET、TOKEN 的变量。
+- 给 T6：DeepSeek 连接表单的「Who gets this key」可以写：
+
+  > Sessions on Claude Code and OpenCode hand this key to the CLI in its environment, where commands the agent runs can read it. DeepSeek Harness keeps it out of the commands it runs, but any program running as the runner's user can still read it from the Harness process.
+
 ## 5. 混合版本规则
 
 整个项目经项目分支一次落 main。部署窗口里可能有旧 API 副本同时在跑（多副本部署），它们不认识 `Session.engine`、`Task.engine`、别名表和回执 v3。
@@ -444,12 +482,16 @@ export function isEngineCompatible(engine: string, credential: EngineCredential)
 
 - 何时算「领取」：沿用 0377 `guard_dsh_runner_acquisition` 的判定，即 PENDING→RUNNING，或获得新的 lease owner、generation。服务端终态 revive（owner 第 15 位为 `5`）除外。
 - 拒绝条件：`NEW.engine IS NOT NULL AND COALESCE(current_setting('orbit.claim_reads_session_engine', true), '0') <> '1'`。
-- 拒绝时 `RETURN NULL`：静默跳过，与 0080、0377 相同。
+- 拒绝方式按写入分两种：
+  - PENDING→RUNNING（领取）：`RETURN NULL`，静默跳过，与 0080、0377 相同。旧副本的领取语句 `RETURNING` 不到行，就当作没有可领的会话。
+  - 获得 lease owner 或 generation（takeover-leases、activate-leases 等续租写入）：`RAISE EXCEPTION`，例如 `USING ERRCODE = 'object_not_in_prerequisite_state'`，文案说明这个 API 版本不读会话 engine。报错让整个事务回滚，runner 收到 5xx 后重试，直到落到新副本。
+- 续租不能静默跳过。旧代码只在 dsh 会话上检查续租写入是否生效（`runner-api.controller.ts` 的 `if (onDsh && acquired !== 1) throw`）。若静默跳过，它会照常提交同一事务里的其余写入：让当前 generation 退役、让 IN_FLIGHT 回合的租约过期、收走审批，而会话行仍是旧的 owner 和 generation。runner 下一次调用拿到 409，认为失去所有权就脱手，会话卡住。
+- 新代码在所有 engine 上都检查续租写入是否生效（`acquired !== 1` 即报错），不只 dsh。
 
 ### 5.3 新形态会话
 
 - 一律以「已记录 engine」为准，不去判断旧规则会不会恰好算对。在触发器里判断，要复刻整套旧规则。
-- T2 回填后几乎所有会话都有 engine，所以旧副本此后基本不再领取。runner 连到新副本后照常。这就是 0377 的做法：未声明就当作不支持。
+- T2 回填后几乎所有会话都有 engine，所以旧副本此后基本不再领取；续租打到旧副本时报错，runner 重试（§5.2）。runner 连到新副本后照常。这就是 0377 的做法：未声明就当作不支持。
 - 旧副本仍能领取它自己新建、engine 为 NULL 的会话。它按旧规则执行，与这个会话的记录一致；新副本领取时再把推导结果写回（§1.1）。
 
 ### 5.4 engine 为空时的推导
@@ -479,7 +521,9 @@ export function isEngineCompatible(engine: string, credential: EngineCredential)
 
 ### 5.6 领取 SQL 与辅助函数
 
-- `trySessionClaim` 的 runner 能力门禁：engine 非空的行按 `s.engine` 判定，NULL 行沿用现有的 (ii)、(iii) 两段（直接比较 slug 和 `mp.runtime`）。
+- `trySessionClaim` 的 runner 能力门禁：engine 非空的行按 `s.engine` 判定。NULL 行沿用现有的两组谓词：
+  - dsh 的那组：`s.provider = 'dsh' AND s.provider_builtin`，或 runtime 为 `dsh` 的配置行，再要求持久化的 `provider:dsh` 能力。
+  - opencode、antigravity 的那组：直接比较 slug 和 `mp.runtime`。
 - 凭据可用性判定：
   - 登录：`provider` 为 engine 名且 `provider_builtin`。
   - OpenCode 自身配置：`provider = 'opencode'`。
@@ -494,11 +538,20 @@ export function isEngineCompatible(engine: string, credential: EngineCredential)
 
 旧副本建会话不写 engine，列为 NULL，按 §5.4 推导。它执行的就是推导出的 engine，会话自身一致。
 
-唯一会违背用户意图的情况：旧副本的任务扫描替带 engine pin 的任务建了运行。为此加 `BEFORE INSERT ON "session"` 触发器 `session_engine_from_task_pin`：`NEW.engine IS NULL AND NEW.task_id IS NOT NULL` 且任务的 `engine` 非空时，`NEW.engine := task.engine`。
+会违背用户意图的，是旧副本替带 engine pin 的任务建了运行。分两处处理：
 
-- 这样旧副本领不到这个会话（§5.2），新副本按 pin 的 engine 执行。
-- 若旧副本用的种子凭据与 pin 不兼容，会话停在 PENDING，错误为 `PROVIDER_ENGINE_INCOMPATIBLE`，不会派到错误的 engine。
-- 旧副本按新形态工作区种子新建的普通会话，仍按旧规则得到 key 的原生 engine。这是混合窗口内可以接受的限制，会话的记录与执行一致。
+- 旧副本自己建的运行：加 `BEFORE INSERT ON "session"` 触发器 `session_engine_from_task_pin`，满足以下全部条件时 `NEW.engine := task.engine`：
+  - `NEW.engine IS NULL`、`NEW.task_id IS NOT NULL`；
+  - `NEW.starts_task_work` 为真：只管任务运行，不管从任务页打开的对话；
+  - 任务的 `engine` 非空，且任务的 `provider` 等于 `NEW.provider`：旧副本照 pin 选了凭据，而 pin 写入时已校验兼容。
+
+  这样旧副本领不到这个会话（§5.2），新副本按 pin 的 engine 执行。
+- 旧副本绑定的 v1/v2 回执由新副本执行：按 §6.4 的读法用任务的 engine pin。
+
+混合窗口内接受以下限制，两种情况下会话的记录与执行都一致，只是没照用户的选择走：
+
+- 只 pin 了 engine 的任务（provider 为空）由旧副本派发时，它用工作区种子的凭据，触发器不补 engine，这次运行按旧规则得到种子凭据的 engine。
+- 旧副本按新形态工作区种子新建的普通会话，仍按旧规则得到 key 的原生 engine。
 
 ### 5.8 回执 v3 作为栅栏
 
@@ -509,6 +562,12 @@ export function isEngineCompatible(engine: string, credential: EngineCredential)
 1. 部署携带 T2–T5 的服务端。T2 的迁移加列、加触发器、回填；T3 的迁移建别名表。
 2. T4 的应用层迁移随服务端启动自动执行一次（§7.6）。§5.2 的守卫保证此时仍在跑的旧副本不会执行改写后的会话。
 3. 客户端发版按届时授权，建议服务端上线后尽快发。
+
+这一版只能前滚：
+
+- 回填之后，更早的 apiserver 镜像不设置 `orbit.claim_reads_session_engine`。回退镜像会让所有已有会话都领不到、续不了租。
+- 确需回退时，先执行降级 SQL，删除 `guard_session_engine_acquisition` 的触发器。T2 把这段 SQL 写在迁移目录的说明里。
+- T4 改写的数据也不自动回退（§7.6）。
 
 ## 6. API 字段
 
@@ -526,7 +585,7 @@ export function isEngineCompatible(engine: string, credential: EngineCredential)
 
 - 任务的读出增加 `engine: string | null`（pin），保留 `provider`、`model`。
 - `POST /tasks`、`PATCH /tasks/:id`、批量创建、runner 门 `POST /runner/tasks/batch-pin` 增加 `engine`，三态语义见 §3.5。
-- DTO 用 `@IsOptional() @IsString() @IsIn(ALL_ENGINES)`，值不在其中时给 `ENGINE_UNKNOWN`。
+- DTO 只用 `@IsOptional() @IsString()`。全局 ValidationPipe 没有 exceptionFactory，`@IsIn` 只会给通用的 400，所以取值由解析函数检查，不在六个值内时给 `ENGINE_UNKNOWN`。
 
 ### 6.3 /providers、/runner/providers 与 meta
 
@@ -566,6 +625,7 @@ interface TaskRunExecuteTargetV3 extends Omit<TaskRunExecuteTarget, 'v' | 'route
 - 读取（`readExecuteTarget`、`readBatchPlan`）：
   - v3 原样读出。
   - v1、v2 读成 `engine: null`，`provider`（包括 v2 `route.provider`）按「只给 provider」解析。v2 路由写进 `provider` 的是 engine 名或基线 slug，按这个规则得到的正是它被写下时的执行。旧 DSH slug 经别名解析。
+  - 例外：回执的 `provider` 等于任务当前的 provider pin、而任务又有 engine pin 时，用这个 engine pin。这类回执是旧副本在混合窗口里为新形态 pin 绑定的。
   - v4 及未知版本返回 `TASK_RUN_REQUEST_UNREADABLE`。
 - `task-model-routing-shadow.pg.spec.ts:383` 现在钉住「v3 is refused」，T3 改为 v4。
 - 历史回执不改写。0367 那种对 BOUND 回执做文本替换的方式在本项目不用，别名已经覆盖。
@@ -573,7 +633,7 @@ interface TaskRunExecuteTargetV3 extends Omit<TaskRunExecuteTarget, 'v' | 'route
 ### 6.5 `User.preferences.defaultModels`
 
 - 新键：`<engine>:<provider>`，值为裸模型 id。例如 `dsh:deepseek-2`、`claude:deepseek-2`、`opencode:deepseek-2`、`codex:codex`。
-- 新客户端只写新键。服务端 DTO 不变，仍接受任意字符串键、逐键合并。
+- 新客户端只写新键。服务端 DTO 不变，仍接受任意字符串键、逐键合并；PATCH 时按 §3.5 规范化：校验新键，旧格式键照存并镜像一份新键。
 - 读取 (engine, provider) 的记忆模型，依次取：
   1. `<engine>:<provider>`；
   2. engine 为 `opencode`、provider 是 key：旧键 `opencode/<provider>`，值经 `openCodeKeyOf` 取 `model`（值名的 slug 须等于 provider）；
@@ -591,6 +651,8 @@ interface TaskRunExecuteTargetV3 extends Omit<TaskRunExecuteTarget, 'v' | 'route
 
 1. 内置：`provider` 为 `claude`、`codex`、`opencode`、`antigravity`，或为 `kimi`、`dsh` 且 `provider_builtin` → 该值。
 2. 同 slug、属于该 owner 或共享的 `model_provider` 行，不论是否停用、调用者能否用 → 行的 runtime。
+   - 例外：会话有 `runtime_session_id`，且第 4 步所说的 init 事件存在时，以事件为准。key 的 runtime 今天允许在 claude、codex、kimi、antigravity 之间改，行上的值不一定是产生这个 id 的 engine。
+   - 两者不一致的会话由 T4 的报告列出。
 3. 同 slug 的池 → 池 engine。
 4. slug 什么都对不上（key 已删除）→ 会话的 init 事件：`run_event` 中 `type = 'system'`、`payload->>'subtype'` 为 `init` 或 `resumed`、`payload->>'sessionId' = runtime_session_id` 的 `seq` 最大的一条，取 `payload->>'provider'`。
    - 缺省为 `claude`：Claude Code 的 init 不带 provider（`src/runner-go/claude.go`），其它 engine 都带。
@@ -618,14 +680,17 @@ T2 的迁移只写列。回填结果的逐行报告由 T4 的迁移给出：它�
 - 多个候选时，取 §3.3 的顺序中第一个。
 - 动作：
   1. 改写 S 的引用为 (T, `dsh`)（§7.3）；
-  2. 插入别名 (S.slug → T, `dsh`, `MERGED`)；
-  3. 删除 S。
+  2. 删除 S；
+  3. 插入别名 (S.slug → T, `dsh`, `MERGED`)。S 还占着这个 slug 时，插入会被 0265 守卫拒绝（§1.5），所以必须先删后插，在同一事务内完成。
 - DSH 行不会是账号池成员（池只接受 Claude 订阅或 Codex），删除不牵涉成员关系。
 
 #### 原地转换（不满足合并条件，包括任一方停用）
 
 - 改写字段：`preset_slug = 'deepseek'`，`runtime = 'claude'`，`follows_preset = true`，`models` 为 preset 目录快照，`default_model` 为 preset 默认（与 `ProvidersService.create` 相同）。
-- `label` 仍是 `DeepSeek Harness` 时，改为该用户其它 key 都没用过的 DeepSeek 名称：`DeepSeek`，被占用时依次试 `DeepSeek 2`、`DeepSeek 3`……。用户改过的保留。
+- `label` 仍是 `DeepSeek Harness` 时改名，规则同 Web 的 `suggestProviderName`（`src/web/src/lib/providerAdmin.ts`），T4 在服务端照写：
+  - 基名 `DeepSeek`，与该 owner 其它 preset 为 `deepseek` 的行（同厂商的兄弟行，与连接页的 `siblingsOf` 相同，含本次迁移里已转换的行）的标签比较，去掉首尾空格、不分大小写。
+  - 没被占用就用 `DeepSeek`，被占用就依次试 `DeepSeek 2`、`DeepSeek 3`……，取第一个空闲的。用户已有一把 `DeepSeek` 时，转换来的这把就叫 `DeepSeek 2`。
+  - 用户自己起的标签不动。
 - `slug` 改为从 `deepseek` 取的空闲 slug（三张表，`pickFreeSlug`）。
 - `enabled`、`base_url`、`api_key_enc`、`position`、`owner_id` 不变。
 - 然后插入别名 (旧 slug → 本行, `dsh`, `RENAMED`)，改写引用。
@@ -673,7 +738,8 @@ T2 的迁移只写列。回填结果的逐行报告由 T4 的迁移给出：它�
 
 - **入口**：在应用层执行，因为要解密 key；解密沿用 `provider-crypto.ts`，不新建凭据存储。
   - 随服务端启动自动执行一次：Prisma 迁移之后，由启动挂钩运行。
-  - 完成后写完成标记，例如一张标记表里带版本号的一行。之后的启动看到标记就跳过。
+  - 完成后写完成标记，例如一张标记表里带版本号的一行。之后的启动看到标记就跳过整体扫描。
+  - 但每次启动都先查一次还有没有 `runtime = 'dsh'` 的行，有就按 §7.2 处理。混合窗口里，旧副本可能在标记写下之后又建出这样的行。
   - 同一段代码也能以演练模式运行（不写库，只出报告），供 T10 在生产形态数据的副本上演练。
 - **幂等**：
   - 每一步以当前状态为条件。例如合并只处理仍为 `runtime = 'dsh'` 的行；改写用 `WHERE provider = S`。
@@ -688,11 +754,10 @@ T2 的迁移只写列。回填结果的逐行报告由 T4 的迁移给出：它�
   - `action` 取 `MERGED`、`CONVERTED`、`ALIASED`、`REWRITTEN`、`NOOP`、`SKIPPED_CHANGED`、`UNRESOLVED`、`LEGACY_DSH_NO_KEY`。
   - 报告不含任何 key 材料，合并行只写 `sameKey: true`。
   - 报告末尾汇总各 action 的计数，并对每个会话列出迁移前后的解析结果（engine、凭据 slug、endpoint、模型、`runtimeSessionId`）是否相同，作为第 3 条验收的比对依据。
-- **回滚**：
-  - 迁移不删除会话数据。
-  - 被合并而删除的 DSH 行可由报告的 `before` 重建，key 仍在目标行里。
-  - 原地转换的行可按 `before` 改回。
-  - 别名在回滚时删除。
+- **只能前滚**：迁移不删除会话数据，但改写不自动回退。报告逐行保留 `before`，需要时据此手工修复：
+  - 被合并而删除的 DSH 行可以重建：先删别名，再建行，key 仍在目标行里。
+  - 原地转换的行可以改回。
+  - 会话、任务、偏好、wiki 设置与 fallback 的引用可以改回。
 
 ## 8. 旧版 App 的兼容边界与服务端校验
 

@@ -1,6 +1,6 @@
 /**
  * Which engines a credential runs on: the compatibility table of the provider/engine split
- * (docs/provider-engine-contract.md §3).
+ * (docs/provider-engine-contract.md §2.1).
  *
  * A session has two axes. Its engine is the CLI on the runner that produced its runtimeSessionId,
  * fixed for the session's life. Its provider is only where the credential comes from: the engine's
