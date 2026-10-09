@@ -741,3 +741,32 @@ The local evidence is `managed-runner-capacity.pg.spec.ts`, `managed-runner-slee
 `managed-runner-wake.pg.spec.ts` and `managed-runner-existing.pg.spec.ts`, each run with
 `scripts/run-pg-spec.sh <spec>`; the profile and status specs in the unit suite; and
 `src/runner-go/managed_sleep_test.go`.
+
+## Implementation record: client status
+
+Recorded 2026-10-09 for the code-track client task. It was verified with the shared state fixture
+below, jsdom renders of the web app with a stubbed API, OrbitKit's tests on Linux (`swift:6.1`) and
+source checks of the SwiftUI shell, which does not build on Linux. No server ran with the switch on
+for a client, and no cluster, simulator or device was used. Nothing here is evidence that a real
+managed runner was shown, woken or retried in a real client.
+
+| Area | As implemented |
+| --- | --- |
+| One reading | `managedRunnersOffered` and `managedRunnerDisplay` (`src/shared/src/managedRunnerDisplay.ts`), mirrored by OrbitKit's `ManagedRunnerLogic`. Only the capability and the status fields are read. Kinds: setup and not offered (no mapping), preparing, waking, model unavailable, waiting for capacity, available, unresponsive (READY, not usable), stopping (DRAINING), sleeping, waiting for an operator (FENCING), failed, removing and removed, each with fixed words; the detail is the server's reason sentence whenever there is one, for any code. Waking is SLEEPING with RUNNING desired, or REQUESTED/PROVISIONING/STARTING once `initialProvider` is recorded. Retry is offered for FAILED with `canRetry`, Set up for `canEnsure`. Work is accepted in the demand hook's coming-back states, not while the server reports `MANAGED_RUNNER_UNAVAILABLE`; a first session in the default workspace only once `initialProvider` is known. Moving states are read again every 5 s, the rest every 30 s. An unknown management state or contract version shows no managed UI. |
+| Fixture | `src/shared/src/managed-runner-states.fixture.json`: six capability answers (404, missing member, off, unknown contract, malformed, on), 25 server states with the display each gets, and two answers of a newer server. An apiserver spec derives every status from stored inputs with `managedRunnerStatus` and the public id mapping, and checks the two switch answers against the capability route; @orbit/shared, the web and OrbitKit are all held to the same file. |
+| Web | `WorkspaceConsole` hands the managed runner's state to `WorkspaceView` only for the managed runner's console; it stands above the composer unless READY. While it accepts work, a message to a live session is sent, an ended session is resumed rather than refused as offline (the server queues the resume), and the status is read again at once, so it shows waking. The default workspace's draft offers no engine and sends nothing until `initialProvider` is known. The default landing of an account with no runner and no workspace shows the managed runner (Set up, or why there is none) with the registration guide one link away; first-run setup lands there instead of the guide while the capability is on. |
+| macOS and iOS | `ManagedRunnerModel`, owned by `AppModel` and read by its polling task, reads the capability (every 5 minutes) and, only when offered, the status. Each console gets it from `ConsoleRegistry`: the same banner above the composer, the same sending rules (`ManagedRunnerLogic.sendCapabilities`, the draft block) and an immediate read after work is sent. The draft shows the state where the engine would be when it cannot start. Infrastructure shows the managed runner above the machines only for an account with no runner, which is where an account without workspaces lands. |
+| Off | Missing or unknown capability, `enabled: false`, or a status with `enabled: false`: no status read (web) or no status shown (native), and every landing, workspace choice, deep link, offline refusal and registration path is what it was. Covered for every capability answer in the fixture. |
+
+Left for the authorized test environment (T07): a real server with the switch on answering these
+clients — sign-in of a new account landing in its preparing workspace, a real wake by a message and the
+time it takes, a real failure and Retry, model-unavailable while a runtime is signed in from
+Infrastructure, capacity waiting against real admission; the SwiftUI shell built and run on macOS and
+iOS (only its source wiring is checked here); realtime revision notices, which no server sends yet, so
+clients poll; and the session capabilities, which still report an ended session on a sleeping managed
+runner as `RUNNER_OFFLINE` — the clients lift that from the managed status, as the server's resume does.
+
+The local evidence is `managedRunnerDisplay.spec.ts`, `managed-runner-states-fixture.spec.ts`, the web's
+`ManagedRunnerNotice.test.tsx`, `App.managedRunner.test.tsx`, `WorkspaceView.managedRunner.test.tsx`
+and `SetupPage.test.tsx`, and OrbitKit's `ManagedRunnerFixtureTests`, `ManagedRunnerLogicTests`,
+`ManagedRunnerAPIClientTests` and `ManagedRunnerWiringTests`.

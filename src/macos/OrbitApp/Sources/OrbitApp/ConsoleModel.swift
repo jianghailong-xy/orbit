@@ -1658,8 +1658,31 @@ final class ConsoleModel {
     var sessionStatus: RunStatus { ComposerLogic.reconcileStatus(stream: state.status, server: serverStatus) }
 
     var availability: SendAvailability {
-        isDraft ? .sendNow
-                : ComposerLogic.availability(status: sessionStatus, capabilities: serverCapabilities)
+        isDraft ? (managed?.blocksNewSession == true ? .blocked : .sendNow)
+                : ComposerLogic.availability(status: sessionStatus, capabilities: sendCapabilities)
+    }
+
+    /// The account's managed runner, handed in by the registry (`ConsoleRegistry.managedRunner`).
+    @ObservationIgnored weak var managedRunner: ManagedRunnerModel?
+
+    /// The managed runner as this console sees it (docs/managed-runner-design.md): nil unless its
+    /// runner is the managed one, and always nil without the capability (`ManagedRunnerLogic.console`).
+    var managed: ManagedRunnerConsole? {
+        managedRunner?.console(runnerID: runnerID ?? draftAgent?.runnerId,
+                               agentID: draftAgent?.id ?? agentID, isDraft: isDraft)
+    }
+
+    /// The session's capabilities as sending acts on them: a managed runner that is asleep or on its
+    /// way up has a resume queued for it rather than refused as offline (`ManagedRunnerLogic.sendCapabilities`).
+    private var sendCapabilities: SessionCapabilities? {
+        ManagedRunnerLogic.sendCapabilities(serverCapabilities, acceptsWork: managed?.display.acceptsWork == true)
+    }
+
+    /// Work for a managed runner that is not up asks it to wake: read its state now rather than at
+    /// the next poll, so the console says it is waking.
+    private func managedWorkSent() {
+        guard managed != nil, runnerOnline != true, let managedRunner else { return }
+        Task { await managedRunner.load() }
     }
 
     /// Explanation shown at the composer when a newer server says this session cannot accept a
@@ -1667,7 +1690,7 @@ final class ConsoleModel {
     /// available while a run is ending.
     var sendBlockedMessage: String? {
         guard !isDraft, replyContext == nil else { return nil }
-        return ComposerLogic.blockedMessage(status: sessionStatus, capabilities: serverCapabilities)
+        return ComposerLogic.blockedMessage(status: sessionStatus, capabilities: sendCapabilities)
     }
 
     /// Heartbeat-derived denials can change without the transcript changing. The composer exposes
@@ -2486,7 +2509,7 @@ final class ConsoleModel {
             }
         }
         if let message = ComposerLogic.blockedMessage(status: sessionStatus,
-                                                      capabilities: serverCapabilities) {
+                                                      capabilities: sendCapabilities) {
             statusMessage = message
             return
         }
@@ -2541,12 +2564,13 @@ final class ConsoleModel {
         handedOverSessionID = nil
         // Decide the endpoint once, before any retry: a replay has to be the same request, and the
         // status it reads can move underneath a retry that's waiting out a gateway blip.
-        let resuming = ComposerLogic.shouldResume(status: sessionStatus, capabilities: serverCapabilities)
+        let resuming = ComposerLogic.shouldResume(status: sessionStatus, capabilities: sendCapabilities)
         do {
             let accepted = try await postTurn(resuming: resuming, clientTurnId: clientTurnId,
                                               text: text, shell: shell, attachmentIds: attachmentIds)
             // An earlier send's "Couldn't send" is not true any more.
             statusMessage = ComposerLogic.statusAfterAcceptedSend(statusMessage)
+            managedWorkSent()
             if resuming {
                 // The session is revived (back to PENDING/RUNNING); drop the stale terminal
                 // snapshot so the stream drives status again and a quick follow-up doesn't
@@ -2993,6 +3017,7 @@ final class ConsoleModel {
             // the ACCOUNT default server-side. Web parity, and best-effort: a failed write costs a
             // remembered default, never a wrong dispatch.
             if permissionModeWasEdited { rememberDefaultPermissionMode(permissionMode.rawValue) }
+            managedWorkSent()
             onSessionCreated?(session)
         } catch {
             statusMessage = "Couldn't start the session — \(APIClient.failureReason(error))."
