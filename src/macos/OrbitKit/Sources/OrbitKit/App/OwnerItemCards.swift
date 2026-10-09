@@ -22,8 +22,12 @@ public enum CoordinatorQuestionStanding: Equatable, Sendable {
     case unread
     /// The question, as the owner's own read publishes it.
     case open(ProjectOpenItemRow)
-    /// The read came back and this question is not in it: answered here, answered elsewhere, or
-    /// withdrawn. The card stays on screen saying so — it is the only thing that can explain it.
+    /// It has ended — answered, here or elsewhere, or withdrawn — and the read says how: the card
+    /// is drawn as that record (`closedQuestions`, §5.2 R10, R12).
+    case closed(ProjectClosedQuestion)
+    /// The read came back and this question is in neither group: a server that predates the
+    /// records, or one too old for the read's 50. The card stays on screen saying so — it is the
+    /// only thing that can explain it.
     case gone
 }
 
@@ -46,8 +50,8 @@ public enum CoordinatorQuestions {
     public static let sendAnswer = "Send answer"
     public static let recommended = "Recommended"
     public static let answeredHeading = "Answered"
-    public static let deliveredToCoordinator = "delivered to the current coordinator"
-    public static let waitingForCoordinator = "waiting for this project’s next coordinator"
+    public static let deliveredToCoordinator = "Delivered to the current coordinator"
+    public static let waitingForCoordinator = "Waiting for this project’s next coordinator"
     /// What a card whose question the read no longer carries says about itself.
     public static let gone = "This question is no longer open."
     public static let unreadable = "Couldn’t read this question — pull to retry."
@@ -67,8 +71,9 @@ public enum CoordinatorQuestions {
     /// Where one question stands, by the address the card was delivered under.
     public static func standing(items: ProjectOpenItemsView?, itemId: String) -> CoordinatorQuestionStanding {
         guard let items else { return .unread }
-        guard let row = open(items).first(where: { $0.itemId == itemId }) else { return .gone }
-        return .open(row)
+        if let row = open(items).first(where: { $0.itemId == itemId }) { return .open(row) }
+        if let record = items.closedQuestions.first(where: { $0.itemId == itemId }) { return .closed(record) }
+        return .gone
     }
 
     /// Whether this card is still a question waiting on the reader — what the "open questions
@@ -117,22 +122,164 @@ public enum CoordinatorQuestions {
         return OwnerAnswerRequest(option: optionIndex(chosen), text: trimmed.isEmpty ? nil : trimmed)
     }
 
-    /// What the owner chose, in the words the card showed it in — the receipt's own line.
-    public static func answerInWords(question: CoordinatorQuestion, option: Int?, text: String) -> String {
-        let chosen = option.flatMap { question.options.indices.contains($0) ? question.options[$0].label : nil }
-        let typed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        let parts = [chosen, typed.isEmpty ? nil : typed].compactMap { $0 }
-        return parts.isEmpty ? "(no answer given)" : parts.joined(separator: " — ")
-    }
-
     /// `asked 2h ago`, the card's footnote — the web's `ago`, so the two agree on the rounding.
     public static func askedLine(since: String, now: Date = Date()) -> String {
         "asked \(RelativeTime.ago(since, now: now) ?? "just now")"
     }
 
-    /// The receipt's second line: who answered, and whether anybody has been told yet (R11).
-    public static func receiptLine(delivered: Bool) -> String {
-        "by you · \(delivered ? deliveredToCoordinator : waitingForCoordinator)"
+    // MARK: the record a question becomes (§5.2 R10, R12; `docs/mocks/coordinator-question-answered/`)
+
+    public static let withdrawnHeading = "Withdrawn"
+    /// The record's sheet footer, first line, before its time.
+    public static let answeredByYou = "Answered by you"
+    public static let withdrawnByCoordinator = "Withdrawn by the coordinator"
+    public static let withdrawnByYou = "Withdrawn by you"
+    /// The withdrawn card's line above its reason.
+    public static let coordinatorWithdrew = "The coordinator withdrew it"
+    public static let youWithdrew = "You withdrew it"
+    /// Over the words the owner wrote beside the option they chose.
+    public static let yourNote = "Your note"
+    /// The card's last row.
+    public static let viewDetails = "View details"
+
+    /// The records the read carries, as the conversation draws them: each at the moment it ended.
+    public struct Receipt: Equatable, Sendable, Identifiable {
+        public let record: ProjectClosedQuestion
+
+        public init(record: ProjectClosedQuestion) {
+            self.record = record
+        }
+
+        /// The moment it was answered or withdrawn — where the record is drawn
+        /// (`ReceiptAnchor.place`), the same rule as every other record in the conversation.
+        public var moment: String { record.resolvedAt }
+
+        /// Beside the question card's id rather than equal to it (`question-<itemId>`): while the
+        /// question is being let go of both rows can be on screen, and a duplicate id costs the List
+        /// its diff.
+        public var id: String { "question-record-\(record.itemId)" }
+    }
+
+    public static func receipts(_ items: ProjectOpenItemsView?) -> [Receipt] {
+        (items?.closedQuestions ?? []).map(Receipt.init(record:))
+    }
+
+    /// The answer THIS device just sent, as the record the read will publish: what was asked, what
+    /// was chosen and written, and where the door says it went — drawn from the press until the read
+    /// comes back, so the card never stands empty in between.
+    public static func answeredHere(row: ProjectOpenItemRow, question: CoordinatorQuestion,
+                                    request: OwnerAnswerRequest, receipt: OwnerAnswerReceipt,
+                                    at: Date = Date()) -> ProjectClosedQuestion {
+        let moment = ISO8601DateFormatter().string(from: at)
+        return ProjectClosedQuestion(
+            itemId: row.itemId, question: question, askedAt: row.waitingSince,
+            resolution: "ANSWERED", resolvedBy: "USER", resolvedAt: moment,
+            answer: .init(option: request.option, text: request.text),
+            delivery: receipt.delivery.map { .init(sessionId: $0.sessionId, at: moment) })
+    }
+
+    /// The record's heading.
+    public static func recordHeading(_ record: ProjectClosedQuestion) -> String {
+        record.withdrawn ? withdrawnHeading : answeredHeading
+    }
+
+    /// The question's opening as one run of plain text — the Markdown's marks gone, its lines
+    /// joined — which the card cuts at two lines. The browser's `markdownToPlainText`.
+    public static func lead(_ question: CoordinatorQuestion) -> String {
+        OwnerConfirmations.plainText(question.question)
+            .replacingOccurrences(of: "(?m)^[ \\t]*(?:•|[0-9]{1,9}[.)])[ \\t]+", with: "",
+                                  options: .regularExpression)
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// The option the owner chose, when it is one the question offered.
+    public static func chosenOption(_ record: ProjectClosedQuestion) -> Int? {
+        guard let option = record.answer?.option, record.question.options.indices.contains(option)
+        else { return nil }
+        return option
+    }
+
+    /// What the owner wrote, trimmed; nil when they wrote nothing.
+    static func words(_ record: ProjectClosedQuestion) -> String? {
+        guard let text = record.answer?.text?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !text.isEmpty else { return nil }
+        return text
+    }
+
+    /// The card's answer line: the option's label — or, when no option was chosen (the Other row,
+    /// or a question asked without options), the owner's own words in quotes. Nil when withdrawn.
+    public static func answerLine(_ record: ProjectClosedQuestion) -> String? {
+        if record.withdrawn { return nil }
+        if let option = chosenOption(record) { return record.question.options[option].label }
+        return words(record).map { "“\($0)”" }
+    }
+
+    /// The note under the answer line, in quotes: what the owner wrote beside the option they chose.
+    public static func noteLine(_ record: ProjectClosedQuestion) -> String? {
+        guard !record.withdrawn, chosenOption(record) != nil, let note = words(record) else { return nil }
+        return "“\(note)”"
+    }
+
+    /// The orange line an answer carries while no coordinator has had it (R11).
+    public static func waitingLine(_ record: ProjectClosedQuestion) -> String? {
+        record.withdrawn || record.delivery != nil ? nil : waitingForCoordinator
+    }
+
+    /// The withdrawn card's line above its reason: who took the question back.
+    public static func withdrewLine(_ record: ProjectClosedQuestion) -> String? {
+        guard record.withdrawn else { return nil }
+        return record.resolvedBy == "USER" ? youWithdrew : coordinatorWithdrew
+    }
+
+    /// The reason a question was withdrawn with, in quotes.
+    public static func withdrawReasonLine(_ record: ProjectClosedQuestion) -> String? {
+        guard record.withdrawn,
+              let reason = record.withdrawReason?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !reason.isEmpty else { return nil }
+        return "“\(reason)”"
+    }
+
+    /// When it ended, on the card's heading row: the clock on the day, the date as well after — the
+    /// receipts' own rule (`OwnerConfirmations.receiptTime`).
+    public static func time(_ record: ProjectClosedQuestion, now: Date = Date()) -> String? {
+        OwnerConfirmations.receiptTime(record.resolvedAt, now: now)
+    }
+
+    /// The sheet's line beside FROM COORDINATOR: `asked 08:10`.
+    public static func askedAtLine(_ record: ProjectClosedQuestion, now: Date = Date()) -> String? {
+        OwnerConfirmations.receiptTime(record.askedAt, now: now).map { "asked \($0)" }
+    }
+
+    /// Whether the sheet ticks the Other row: words alone, on a question that offered options.
+    public static func choseOther(_ record: ProjectClosedQuestion) -> Bool {
+        !record.withdrawn && !record.question.options.isEmpty && chosenOption(record) == nil
+            && words(record) != nil
+    }
+
+    /// The note the sheet puts inside the chosen option, under `Your note`.
+    public static func note(_ record: ProjectClosedQuestion) -> String? {
+        chosenOption(record) != nil && !record.withdrawn ? words(record) : nil
+    }
+
+    /// The words the sheet puts under the ticked Other row, or in the read-only `Your answer` box of
+    /// a question asked without options.
+    public static func ownWords(_ record: ProjectClosedQuestion) -> String? {
+        chosenOption(record) == nil && !record.withdrawn ? words(record) : nil
+    }
+
+    /// The sheet footer's first line, where Send answer was: who ended it, and when.
+    public static func footerLine(_ record: ProjectClosedQuestion, now: Date = Date()) -> String {
+        let who = record.withdrawn
+            ? (record.resolvedBy == "USER" ? withdrawnByYou : withdrawnByCoordinator)
+            : answeredByYou
+        return time(record, now: now).map { "\(who) · \($0)" } ?? who
+    }
+
+    /// The footer's second line: where the answer went, or the reason it was withdrawn with.
+    public static func footerDetail(_ record: ProjectClosedQuestion) -> String? {
+        if record.withdrawn { return withdrawReasonLine(record) }
+        return record.delivery != nil ? deliveredToCoordinator : waitingForCoordinator
     }
 }
 
