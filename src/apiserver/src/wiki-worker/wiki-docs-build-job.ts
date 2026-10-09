@@ -2,8 +2,9 @@ import { HttpException, NotFoundException } from '@nestjs/common';
 import { WIKI_DOCS_BUILD_JOB, type WikiPlanBuildProgress, type WikiPlanBuildReport, type WikiRepoFileRead } from '@orbit/shared';
 import type { PrismaService } from '../prisma/prisma.service';
 import { wikiDocsBuildJobPrincipal, type WikiDocs } from '../wiki/wiki-docs';
-import { gatherDocMaterial, type StoredSessionCondition } from '../wiki/wiki-docs-material';
+import { gatherDocMaterial, storedSessionCondition, type StoredSessionCondition } from '../wiki/wiki-docs-material';
 import { ownerEnvLiterals } from '../wiki/wiki-dossier';
+import { wikiPlanProjectIds } from '../wiki/wiki-plan';
 import { finishWikiPlanJob, progressWikiPlanBuildOfJob, type WikiPlanJobEnd } from '../wiki/wiki-plan-job';
 import { WikiRefusalError, type WikiService } from '../wiki/wiki.service';
 import {
@@ -263,10 +264,10 @@ async function readConfirmedPlan(
         docs?: Array<{ path: string; section?: string | null }> | null;
         code?: Array<{ path: string; symbols?: string[] | null }> | null;
         contracts?: Array<{ path: string }> | null;
-        sessions?: StoredSessionCondition | null;
+        sessions?: (Omit<StoredSessionCondition, 'projects'> & { projects?: unknown }) | null;
       };
       const key = section.key ?? '';
-      conditions.set(`${doc.slug}#${key}`, stored.sessions ?? null);
+      conditions.set(`${doc.slug}#${key}`, storedSessionCondition(stored.sessions));
       const sessions = stored.sessions ?? null;
       return {
         key,
@@ -279,7 +280,7 @@ async function readConfirmedPlan(
           code: stored.code == null ? null : stored.code.map((source) => ({ path: source.path, symbols: source.symbols ?? null })),
           contracts: stored.contracts == null ? null : stored.contracts.map((source) => ({ path: source.path })),
           sessions: sessions === null ? null : {
-            projects: (sessions.projects ?? []).map((id) => ({ id })),
+            projects: wikiPlanProjectIds(sessions.projects).map((id) => ({ id })),
             since: sessions.since ?? null,
             until: sessions.until ?? null,
             keywords: sessions.keywords ?? null,
@@ -374,20 +375,28 @@ export class WikiDocsSnapshotRepo implements WikiDocRepo {
     return this.files.filter((file) => file.startsWith(prefix));
   }
 
-  /** Read the files among these paths not held yet, served from the cache where it can be; a few at a time. */
+  /**
+   * Read the files among these paths not held yet, served from the cache where it can be; a few at a time. It
+   * returns once every one of them is held, including one another section's read has in flight: the sections
+   * of a document are built `docs.build.rules.parallel` at a time, and two of them often name one file. The
+   * second used to start no read of its own and show the file before the first read landed (v27, 2026-10-09:
+   * docs/article-durable-agent-work.md, named by several sections of one document). The runner's writer has no
+   * such window, since it reads each file with `git show` when it shows it.
+   */
   async prepare(paths: readonly string[]): Promise<void> {
     const wanted = [...new Set(paths.map((path) => wikiDocCleanPath(path)))].filter((path) => this.sizes.has(path));
     const fresh = wanted.filter((path) => !this.texts.has(path) && !this.reading.has(path));
-    if (fresh.length === 0) return;
-    const done = this.slot(async () => {
-      const files = await this.read(fresh);
-      for (const path of fresh) {
-        const file = files.get(path) ?? null;
-        this.texts.set(path, file == null ? null : wikiDocsShownOf(file, this.sizes.get(path) ?? 0));
-      }
-    });
-    for (const path of fresh) this.reading.set(path, done);
-    await Promise.all(fresh.map((path) => this.reading.get(path)));
+    if (fresh.length > 0) {
+      const done = this.slot(async () => {
+        const files = await this.read(fresh);
+        for (const path of fresh) {
+          const file = files.get(path) ?? null;
+          this.texts.set(path, file == null ? null : wikiDocsShownOf(file, this.sizes.get(path) ?? 0));
+        }
+      });
+      for (const path of fresh) this.reading.set(path, done);
+    }
+    await Promise.all(wanted.map((path) => this.reading.get(path)));
   }
 
   /** At most WIKI_DOCS_BUILD_JOB.readsInFlight reads at once: each is a fetch in the same checkout on the runner. */

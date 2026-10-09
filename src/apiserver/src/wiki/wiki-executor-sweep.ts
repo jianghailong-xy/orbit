@@ -3,6 +3,7 @@ import type { WikiExecutorMode } from '@orbit/shared';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
+import { settleWikiJobRows } from '../wiki-worker/wiki-jobs';
 import { currentWikiExecutorSwitch, wikiExecutorServes } from './wiki-executor-switch';
 
 const sweepLog = new Logger('WikiExecutorSweep');
@@ -128,38 +129,9 @@ class UnservedJobSettler {
                  "lease_owner" = NULL, "lease_generation" = NULL, "lease_deadline_at" = NULL, "updated_at" = now()
            WHERE "id" = ${job.id}::uuid AND "state" IN ('queued', 'running', 'waiting')`;
         if (cancelled === 0) return false;
-        // The model calls it had out, queued or running: cancelled with the clears the 0401 constraints
-        // ask of a row that is no longer queued or running — no error, no kind, no partial, no lease —
-        // so a replayed job re-issues them from nothing rather than meeting a row it cannot use.
-        await tx.$executeRaw`
-          UPDATE "wiki_model_request"
-             SET "state" = 'cancelled', "ended_at" = ${now}, "error" = NULL, "error_kind" = NULL, "partial" = NULL,
-                 "not_before" = NULL, "lease_owner" = NULL, "lease_generation" = NULL, "lease_deadline_at" = NULL, "updated_at" = now()
-           WHERE "job_id" = ${job.id}::uuid AND "state" IN ('queued', 'running')`;
-        // Its repository operations, which a runner would otherwise still take: cancelled the same way,
-        // the claim and the heartbeat cleared with the state that made them mean something.
-        await tx.$executeRaw`
-          UPDATE "wiki_repo_op"
-             SET "state" = 'cancelled', "ended_at" = ${now}, "error" = ${reason},
-                 "lease_owner" = NULL, "claimed_at" = NULL, "heartbeat_at" = NULL, "runner_id" = NULL, "updated_at" = now()
-           WHERE "job_id" = ${job.id}::uuid AND "state" IN ('queued', 'running')`;
-        const input = (job.input ?? {}) as { runId?: unknown; planJobId?: unknown };
-        if (job.kind === 'maintain' && typeof input.runId === 'string') {
-          // The run the job executes: failed, and the platform's failure — the rollback, not the pipeline
-          // — so the space's streak is not touched and the next run re-reads what this one never took in.
-          await tx.$executeRaw`
-            UPDATE "wiki_maintenance_run"
-               SET "outcome" = 'failed', "failure_kind" = 'infra', "error" = ${reason}, "ended_at" = ${now}, "updated_at" = now()
-             WHERE "id" = ${input.runId}::uuid AND "outcome" IS NULL`;
-        }
-        if ((job.kind === 'plan_draft' || job.kind === 'plan_revise' || job.kind === 'docs_build') && typeof input.planJobId === 'string') {
-          // The plan job it runs: ended failed with why, still naming its wiki_job — a made or ended plan
-          // job must name its maker (0405) — so the owner's next request is made on the path that runs now.
-          await tx.wikiPlanJob.updateMany({
-            where: { id: input.planJobId, state: 'made' },
-            data: { state: 'ended', outcome: 'failed', endedAt: now, error: reason },
-          });
-        }
+        // Its calls and repository operations cancelled, and its run or plan job ended failed: the rows
+        // the retry limit settles the same way (`settleWikiJobRows`, wiki-worker/wiki-jobs.ts).
+        await settleWikiJobRows(tx, job, reason, now);
         return true;
       },
       loggedRetry(this.logger, 'wiki.executorSweep'),
