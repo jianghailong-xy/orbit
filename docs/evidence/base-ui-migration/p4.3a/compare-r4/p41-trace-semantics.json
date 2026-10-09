@@ -1,0 +1,88 @@
+{
+ "tests": 96,
+ "steps": 488,
+ "semantic": [],
+ "presentation": {
+  "focus": 6,
+  "dialogs": 2
+ },
+ "examples": {
+  "focus": [
+   {
+    "test": "chromium-dark-desktop :: P4.1 access tokens › an administrator: a user's tokens in the users page dialog",
+    "step": "escape closes the dialog",
+    "ref": {
+     "role": "button",
+     "name": "Access tokens"
+    },
+    "del": {
+     "role": "dialog",
+     "name": "Access tokens"
+    }
+   },
+   {
+    "test": "chromium-light-phone :: P4.1 settings › every control: mode, switches while saving, theme and the way to tokens",
+    "step": "manage access tokens",
+    "ref": "body",
+    "del": {
+     "role": "button",
+     "name": "Manage"
+    }
+   },
+   {
+    "test": "webkit-dark-desktop :: P4.1 orbit login approval › warnings, a refused approval, deny and a dead code",
+    "step": "approval refused",
+    "ref": {
+     "role": "button",
+     "name": "Approve"
+    },
+    "del": "body"
+   },
+   {
+    "test": "webkit-dark-phone :: P4.1 access tokens › an administrator: a user's tokens in the users page dialog",
+    "step": "escape closes the dialog",
+    "ref": "body",
+    "del": {
+     "role": "button",
+     "name": "Access tokens"
+    }
+   },
+   {
+    "test": "webkit-light-desktop :: P4.1 orbit login approval › warnings, a refused approval, deny and a dead code",
+    "step": "approval refused",
+    "ref": {
+     "role": "button",
+     "name": "Approve"
+    },
+    "del": "body"
+   },
+   {
+    "test": "webkit-light-phone :: P4.1 access tokens › an administrator: a user's tokens in the users page dialog",
+    "step": "revoked",
+    "ref": "body",
+    "del": {
+     "role": "button",
+     "name": "Access tokens"
+    }
+   }
+  ],
+  "dialogs": [
+   {
+    "test": "chromium-dark-desktop :: P4.1 access tokens › an administrator: a user's tokens in the users page dialog",
+    "step": "escape closes the dialog",
+    "ref": [],
+    "del": [
+     "Access tokens"
+    ]
+   },
+   {
+    "test": "webkit-dark-phone :: P4.1 access tokens › an administrator: a user's tokens in the users page dialog",
+    "step": "escape closes the dialog",
+    "ref": [
+     "Access tokens"
+    ],
+    "del": []
+   }
+  ]
+ }
+}
