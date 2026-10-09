@@ -15,12 +15,14 @@ enum class ProjectLane(val title: String, val note: String) {
     val defaultCollapsed get() = this == COMPLETED
 }
 
-/** OrbitKit `ProjectAttentionReason`; `rank` is the one tier the four owner items and a start request share. */
+/** OrbitKit `ProjectAttentionReason`; `rank` is the one tier the four owner items and a coordinator's request to start the project
+ * or to record it done share. DONE_REQUEST is that request ("Needs you · Ready to close"); READY_TO_CLOSE a project whose tasks all
+ * settled and that nobody asked about. */
 enum class AttentionReason(val rank: Int, val ownerItem: Boolean = false) {
     APPROVE_MERGE_TO_MAIN(1, true), COORDINATOR_QUESTION(1, true), ESCALATED_TO_YOU(1, true), FUSE_PAUSED(1, true),
-    READY_TO_START(1), NEEDS_USER(2), AUTO_REMEDIATION(3), NO_ACTIVITY_RUNNING(4), NO_ACTIVITY_READY(5),
+    READY_TO_START(1), DONE_REQUEST(1), NEEDS_USER(2), AUTO_REMEDIATION(3), NO_ACTIVITY_RUNNING(4), NO_ACTIVITY_READY(5),
     READY_TO_CLOSE(6), COORDINATOR_HANDLING(7);
-    val needsYou get() = ownerItem || this == READY_TO_START
+    val needsYou get() = ownerItem || this == READY_TO_START || this == DONE_REQUEST
 }
 
 /** The chip beside a row's title: `warning` is something a person should look at, else the brand tone. */
@@ -35,6 +37,8 @@ object ProjectAttention {
     private const val DAY = 86_400.0
     private val ownerItemOrder = listOf("PROMOTION_APPROVAL", "COORDINATOR_QUESTION", "ESCALATED", "FUSE_PAUSED")
     const val readyToStartSays = "Needs you · ${StartProjectCopy.readyToStart}"
+    /** The sixth, in the words the coordinator's session row and the project page say it: its coordinator asked to record it done. */
+    const val readyToCloseSays = "Needs you · ${ProjectDone.readyToClose}"
 
     private fun at(iso: String?): Double = ProjectTime.parse(iso)?.let { it.toEpochMilli() / 1000.0 } ?: Double.NEGATIVE_INFINITY
     private fun seconds(now: Instant) = now.toEpochMilli() / 1000.0
@@ -99,13 +103,27 @@ object ProjectAttention {
         return lead
     }
     private fun startRequest(project: JsonObject) = project.obj("attention")?.obj("startRequest")?.takeIf { it.text("waitingSince") != null }
+    /** The coordinator's open request to record this project done; the server sends it only while the project is OPEN. */
+    private fun doneRequest(project: JsonObject) = project.obj("attention")?.obj("doneRequest")?.takeIf { it.text("waitingSince") != null }
+    /** The start request leads when it has waited longest — the four first on a tie — unless a request to close waited longer still. */
     private fun startRequestLeads(project: JsonObject): Boolean {
         val start = startRequest(project) ?: return false
+        doneRequest(project)?.let { done -> if (byInstantAsc(done.text("waitingSince"), start.text("waitingSince")) < 0) return false }
         val lead = leadOwnerItem(project) ?: return true
         return byInstantAsc(start.text("waitingSince"), lead.text("oldestWaitingSince")) < 0
     }
-    private fun needsYouSince(project: JsonObject) =
-        if (startRequestLeads(project)) startRequest(project)?.text("waitingSince") else leadOwnerItem(project)?.text("oldestWaitingSince")
+    /** The request to record the project done leads when it has waited longest — after the four and after a start on a tie. */
+    private fun doneRequestLeads(project: JsonObject): Boolean {
+        val done = doneRequest(project) ?: return false
+        startRequest(project)?.let { start -> if (byInstantAsc(start.text("waitingSince"), done.text("waitingSince")) <= 0) return false }
+        val lead = leadOwnerItem(project) ?: return true
+        return byInstantAsc(done.text("waitingSince"), lead.text("oldestWaitingSince")) < 0
+    }
+    private fun needsYouSince(project: JsonObject) = when {
+        startRequestLeads(project) -> startRequest(project)?.text("waitingSince")
+        doneRequestLeads(project) -> doneRequest(project)?.text("waitingSince")
+        else -> leadOwnerItem(project)?.text("oldestWaitingSince")
+    }
     private fun reasonFor(kind: String?) = when (kind) {
         "PROMOTION_APPROVAL" -> AttentionReason.APPROVE_MERGE_TO_MAIN
         "COORDINATOR_QUESTION" -> AttentionReason.COORDINATOR_QUESTION
@@ -118,6 +136,7 @@ object ProjectAttention {
     fun reason(project: JsonObject, now: Instant): AttentionReason? {
         if (!open(project)) return null
         if (startRequestLeads(project)) return AttentionReason.READY_TO_START
+        if (doneRequestLeads(project)) return AttentionReason.DONE_REQUEST
         leadOwnerItem(project)?.let { lead -> reasonFor(lead.text("kind"))?.let { return it } }
         if (autoRemediationBlockers(project) > 0) return AttentionReason.AUTO_REMEDIATION
         if ((project.obj("attention")?.number("userBlockers") ?: 0) > 0) return AttentionReason.NEEDS_USER
@@ -218,6 +237,7 @@ object ProjectAttention {
         val attention = project.obj("attention")
         return when (reason) {
             AttentionReason.READY_TO_START -> AttentionChip(true, joined(readyToStartSays, elapsedLabel(startRequest(project)?.text("waitingSince"), now)))
+            AttentionReason.DONE_REQUEST -> AttentionChip(true, joined(readyToCloseSays, elapsedLabel(doneRequest(project)?.text("waitingSince"), now)))
             AttentionReason.APPROVE_MERGE_TO_MAIN, AttentionReason.COORDINATOR_QUESTION, AttentionReason.ESCALATED_TO_YOU, AttentionReason.FUSE_PAUSED -> {
                 val item = leadOwnerItem(project) ?: return null
                 val says = ownerItemSays(item) ?: return null
