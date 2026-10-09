@@ -133,11 +133,24 @@ describe('a session with no SOURCE refusal', () => {
   it('names a key problem and sends the reader to the page that holds it', () => {
     const card = facts(
       { status: 'RUNNING', numTurns: 0, engineStartedAt: null, error: 'DSH_CREDENTIAL_INVALID: DeepSeek rejected the key' },
-      { runtime: 'dsh' },
+      { runtime: 'dsh', keyName: 'the DeepSeek key “DeepSeek 2”' },
     );
     expect(card.cause).toBe('ENGINE_SIGNED_OUT');
     expect(card.why).toBe('DeepSeek rejected this API key');
+    // Which of the DeepSeek keys, by its own name (board 8).
+    expect(card.body).toBe('Update the DeepSeek key “DeepSeek 2” in Infrastructure, then send your message again.');
     expect(card.actions).toEqual(['open-providers', 'send-again']);
+  });
+
+  it('calls the missing credential a DeepSeek key, not a key of the engine', () => {
+    const card = facts(
+      { status: 'QUEUED', numTurns: 0, engineStartedAt: null, error: 'DSH_CREDENTIAL_MISSING: configure a DeepSeek Harness API key for this session' },
+      { runtime: 'dsh' },
+    );
+    expect(card.why).toBe('DeepSeek Harness needs a DeepSeek key');
+    expect(card.body).toBe(
+      'This session has no DeepSeek key to run on. Add or re-enable a DeepSeek key in Infrastructure, then send your message again.',
+    );
   });
 
   it('reads a vanished runner off the reaper’s own sentence', () => {

@@ -2,9 +2,10 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { AuthErrorCtx, type AuthErrorHelp, Transcript } from './Transcript';
 
-// What WorkspaceView hands a Harness session's transcript (runtime resolved from its key's row).
+// What WorkspaceView hands a Harness session's transcript: its engine, and the DeepSeek key it runs on.
 const help: AuthErrorHelp = {
-  provider: 'deepseek-harness',
+  provider: 'deepseek-2',
+  keyName: 'the DeepSeek key “DeepSeek 2”',
   runtime: 'dsh',
   runnerName: 'HPC',
   runnerVersion: '0.1.209',
@@ -48,19 +49,29 @@ describe('DeepSeek Harness transcript', () => {
     expect(html).toContain('ls');
   });
 
-  it('turns a missing or rejected key into a fix on the key, with the retry', () => {
+  it('turns a missing or rejected key into a fix on the key, with the retry — and calls it a DeepSeek key (board 8)', () => {
     const missing = render([
       { seq: 1, type: 'error', payload: { message: 'DSH_CREDENTIAL_MISSING: configure a DeepSeek Harness API key for this session; runner and workspace .env credentials are not used' } },
     ]);
     expect(missing).toContain('data-dsh-repair="needsKey"');
-    expect(missing).toContain('DeepSeek Harness needs an API key');
+    expect(missing).toContain('DeepSeek Harness needs a DeepSeek key');
+    expect(missing).toContain(
+      'This session has no DeepSeek key to run on. Add or re-enable a DeepSeek key in Infrastructure, then send your message again.',
+    );
+    expect(missing).not.toContain('DeepSeek Harness key');
     expect(missing).toContain('Update the API key</button>');
     expect(missing).toContain('Retry — re-send my last message</button>');
 
     const invalid = render([{ seq: 1, type: 'error', payload: { message: 'dsh session/prompt (-32603): Invalid API key' } }]);
     expect(invalid).toContain('DeepSeek rejected this API key');
-    expect(invalid).toContain('Connecting a key does not check it');
+    // Which of the DeepSeek keys, by its own name; and no longer the claim that connecting checks nothing.
+    expect(invalid).toContain('Update the DeepSeek key “DeepSeek 2” in Infrastructure, then send your message again.');
+    expect(invalid).not.toContain('Connecting a key does not check it');
     expect(invalid).toContain('Update the API key</button>');
+
+    // A key that is gone has no name to give.
+    const unnamed = render([{ seq: 1, type: 'error', payload: { message: 'dsh session/prompt (-32603): Invalid API key' } }], { ...help, keyName: undefined });
+    expect(unnamed).toContain('Update the DeepSeek key in Infrastructure, then send your message again.');
   });
 
   it('names the machine for an old runner, a missing CLI and an unsupported platform', () => {

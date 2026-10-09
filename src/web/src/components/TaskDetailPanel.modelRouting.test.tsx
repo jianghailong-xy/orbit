@@ -273,7 +273,7 @@ afterEach(async () => {
 describe('the Suggested tier in Details', { timeout: 60_000 }, () => {
   it('sits under Assignee and shows the tier with its model and effort, the coordinator’s reason under it', async () => {
     await mount(detail());
-    expect(labels().slice(0, 4)).toEqual(['Assignee', 'Suggested', 'Provider', 'Model']);
+    expect(labels().slice(0, 5)).toEqual(['Assignee', 'Suggested', 'Engine', 'Provider', 'Model']);
     const value = field('Suggested').querySelector('.tdp-hint-value');
     expect(value?.textContent).toBe('M · Sonnet 5.5 · medium');
     expect(value?.querySelector('.tdp-hint-dot')?.classList.contains('is-m')).toBe(true);
@@ -359,33 +359,121 @@ describe('the Suggested tier in Details', { timeout: 60_000 }, () => {
   });
 });
 
-describe('Gemini task provider pins', () => {
-  const gemini: ConfiguredProvider = { slug: 'gemini', label: 'Gemini', runtime: 'antigravity', presetSlug: 'gemini', models: [] };
+describe('the task pin: an engine, then a credential it runs (board 6)', { timeout: 60_000 }, () => {
+  const key = (slug: string, label: string, over: Partial<ConfiguredProvider> = {}): ConfiguredProvider => ({
+    slug,
+    label,
+    runtime: 'claude',
+    presetSlug: 'deepseek',
+    models: [{ value: 'deepseek-v4-pro', label: 'DeepSeek V4 Pro' }],
+    defaultModel: 'deepseek-v4-pro',
+    engines: ['claude', 'opencode', 'dsh'],
+    ...over,
+  });
+  const keys = [key('deepseek', 'DeepSeek'), key('deepseek-2', 'DeepSeek 2'), key('glm', 'Z.AI (GLM)', { presetSlug: 'glm', engines: ['claude', 'opencode'] })];
+  /** A runner that can run DeepSeek Harness. */
+  const dshRunner = { capabilities: ['provider:dsh'] };
 
-  it.each([false, true])('uses the workspace server key boolean %s and links unsupported Gemini to Infrastructure', async (keyAvailable) => {
-    await mount(detail(), { antigravityKeyAvailableByRunner: { [RUNNER]: keyAvailable } }, {
-      antigravity: { supported: false, installed: true, version: '1.2.16', envKeyAvailable: true },
-    }, [gemini]);
-    await press(field('Provider').querySelector('[role="combobox"]'), 'the Provider picker');
-    await vi.waitFor(() => expect(document.body.querySelectorAll('[role="listbox"] [role="option"]').length).toBe(keyAvailable ? 6 : 5));
-    const options = [...document.body.querySelectorAll<HTMLElement>('[role="listbox"] [role="option"]')];
-    const builtin = options.find((option) => option.textContent?.includes('env key'));
-    expect(!!builtin).toBe(keyAvailable);
-    if (builtin) expect(builtin.textContent).toContain('env key');
-    expect(options.some((option) => option.textContent === 'OpenCode')).toBe(true);
-    const provider = options.find((option) => option.textContent?.includes('API key'))!;
-    expect(provider.textContent).toContain('Antigravity');
-    expect(provider.textContent).toContain('Update runner');
-    await press(provider, 'Gemini needing a runner update');
-    expect(where).toBe('/infrastructure');
-    expect(patches()).toEqual([]);
+  /** An option's words, without the mark drawn before an engine's or a key's name. */
+  const words = (option: Element) => {
+    const copy = option.cloneNode(true) as HTMLElement;
+    copy.querySelectorAll('.np-mark').forEach((mark) => mark.remove());
+    return copy.textContent ?? '';
+  };
+  const openField = async (label: string): Promise<HTMLElement[]> => {
+    await press(field(label).querySelector('[role="combobox"]'), `the ${label} picker`);
+    await vi.waitFor(() => expect(document.body.querySelectorAll('[role="listbox"] [role="option"]').length).toBeGreaterThan(0));
+    return [...document.body.querySelectorAll<HTMLElement>('[role="listbox"] [role="option"]')];
+  };
+  const groupLabels = () => [...document.body.querySelectorAll('[role="listbox"] .orbit-select-group-label')].map((el) => el.textContent);
+
+  it("reads the assignee's engine while nothing is pinned, and offers it and the six engines by their CLI names", async () => {
+    await mount(detail(), { lastEngine: 'claude', lastProvider: 'claude' });
+    expect(placeholderOf('Engine')).toBe("Assignee's · Claude Code");
+    expect((await openField('Engine')).map(words)).toEqual([
+      "Assignee'sClaude Code",
+      'Claude Code',
+      'Codex',
+      'Kimi Code',
+      'Antigravity CLI',
+      'OpenCode',
+      'DeepSeek Harness',
+    ]);
   });
 
-  it('keeps a pinned Antigravity provider visible with its environment key label', async () => {
+  it('pins an engine, keeping a credential it runs and dropping one it does not — and the model either way', async () => {
+    await mount(detail({ engine: 'claude', provider: 'deepseek', model: 'deepseek-v4-pro' }), {}, dshRunner, keys);
+    let options = await openField('Engine');
+    await press(options.find((option) => words(option) === 'DeepSeek Harness'), 'DeepSeek Harness');
+    // The DeepSeek key runs on DeepSeek Harness too: it stays pinned; the model space moved.
+    await vi.waitFor(() => expect(patches()).toEqual([{ engine: 'dsh', model: null }]));
+
+    options = await openField('Engine');
+    await press(options.find((option) => words(option) === 'Codex'), 'Codex');
+    // Codex does not run it: the pin gives way to Codex's own default.
+    await vi.waitFor(() => expect(patches()[1]).toEqual({ engine: 'codex', provider: null, model: null }));
+
+    options = await openField('Engine');
+    await press(options.find((option) => words(option).startsWith("Assignee's")), "Assignee's");
+    // Back on the assignee's: nothing stays pinned.
+    await vi.waitFor(() => expect(patches()[2]).toEqual({ engine: null, provider: null, model: null }));
+  });
+
+  it('lists Engine default and only what the engine runs: every DeepSeek key under DeepSeek Harness', async () => {
+    await mount(detail({ engine: 'dsh' }), {}, dshRunner, keys);
+    expect(placeholderOf('Provider')).toBe('Engine default · DeepSeek');
+    expect((await openField('Provider')).map(words)).toEqual(['Engine defaultfirst DeepSeek key', 'DeepSeek', 'DeepSeek 2']);
+    expect(groupLabels()).toEqual(['Your DeepSeek keys']);
+  });
+
+  it('lists the runner sign-in as Claude Code’s default, then its pools and keys', async () => {
+    await mount(detail({ engine: 'claude' }), {}, dshRunner, keys);
+    expect(placeholderOf('Provider')).toBe('Engine default · sign-in on wikova');
+    expect((await openField('Provider')).map(words)).toEqual(['Engine defaultrunner sign-in', 'DeepSeek', 'DeepSeek 2', 'Z.AI (GLM)']);
+    expect(groupLabels()).toEqual(['Your keys']);
+  });
+
+  it('pins a credential together with the engine it runs on', async () => {
+    await mount(detail(), { lastEngine: 'claude', lastProvider: 'claude' }, dshRunner, keys);
+    const options = await openField('Provider');
+    await press(options.find((option) => words(option) === 'DeepSeek 2'), 'DeepSeek 2');
+    await vi.waitFor(() => expect(patches()).toEqual([{ engine: 'claude', provider: 'deepseek-2', model: null }]));
+  });
+
+  it('shows a pin the migration carried over as DeepSeek Harness on its DeepSeek key, with its models', async () => {
+    await mount(
+      detail({ engine: 'dsh', provider: 'deepseek' }),
+      {},
+      { ...dshRunner, modelCatalog: { dsh: [{ value: 'acp-pro', label: 'DeepSeek V4 Pro' }, { value: 'acp-flash', label: 'DeepSeek V4 Flash' }] } },
+      keys,
+    );
+    expect(words(field('Engine'))).toContain('DeepSeek Harness');
+    expect(words(field('Provider'))).toContain('DeepSeek');
+    expect((await openField('Model')).map(words)).toEqual(['DeepSeek V4 Pro', 'DeepSeek V4 Flash']);
+  });
+
+  it('reads an older provider-only pin on the engine that provider runs on', async () => {
     await mount(detail({ provider: 'antigravity' }), { antigravityKeyAvailableByRunner: { [RUNNER]: false } }, {
       antigravity: { supported: true, installed: true, version: '1.2.16', envKeyAvailable: false },
+    });
+    expect(placeholderOf('Engine')).toBe('Antigravity CLI');
+    expect(words(field('Provider'))).toContain('Sign-in on wikova');
+    expect(words(field('Provider'))).toContain('env key');
+  });
+
+  it('links a Gemini key that needs a runner update to Infrastructure rather than pinning it', async () => {
+    const gemini: ConfiguredProvider = {
+      slug: 'gemini', label: 'Gemini', runtime: 'antigravity', presetSlug: 'gemini', models: [], engines: ['antigravity', 'opencode'],
+    };
+    await mount(detail({ engine: 'antigravity' }), {}, {
+      antigravity: { supported: false, installed: true, version: '1.2.16', envKeyAvailable: true },
     }, [gemini]);
-    expect(field('Provider').textContent).toContain('Antigravityenv key');
+    const options = await openField('Provider');
+    const row = options.find((option) => words(option).startsWith('Gemini'))!;
+    expect(words(row)).toContain('Update runner');
+    await press(row, 'Gemini needing a runner update');
+    expect(where).toBe('/infrastructure');
+    expect(patches()).toEqual([]);
   });
 });
 
@@ -542,7 +630,7 @@ describe('with the account switch off', { timeout: 60_000 }, () => {
       );
 
       // Details: no Suggested, and Model's placeholder is the one it always had.
-      expect(labels().slice(0, 3)).toEqual(['Assignee', 'Provider', 'Model']);
+      expect(labels().slice(0, 4)).toEqual(['Assignee', 'Engine', 'Provider', 'Model']);
       expect(labels()).not.toContain('Suggested');
       expect(panel().querySelector('.tdp-hint-value')).toBeNull();
       expect(panel().textContent).not.toContain(`Coordinator: ${REASON}`);

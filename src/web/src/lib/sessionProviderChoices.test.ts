@@ -1,20 +1,30 @@
 import { describe, expect, it } from 'vitest';
+import { AgentProvider } from '@orbit/shared';
 import {
   brandForProvider,
+  currentEngineChoice,
   currentProviderChoice,
   defaultModelLabel,
   engineChoices,
+  engineProviders,
   engineTitleFor,
-  providerChoices,
+  engineVia,
+  keyName,
+  providerNameOn,
   runtimeSummary,
-  sameRuntimeChoices,
+  type ChoiceSources,
+  type EngineChoice,
+  type ProviderChoice,
 } from './sessionProviderChoices';
-import { runtimeForProvider, type ConfiguredProvider } from './workspaceDefaults';
+import type { ConfiguredProvider } from './workspaceDefaults';
 import { PROVIDER_GLYPHS } from './providerGlyphs';
 import { encodeId } from './idCodec';
 import type { CodexLogin } from './codexLogin';
 import { sharedPoolAsProviderPool, type SharedPool, type SharedPoolKey, type SharedPoolPerson } from './sharedPools';
 
+const { CLAUDE, CODEX, KIMI, ANTIGRAVITY, OPENCODE, DSH } = AgentProvider;
+
+// Keys as GET /providers serves them: each with the engines it runs on, its default first (§6.3).
 const deepseek: ConfiguredProvider = {
   slug: 'deepseek',
   label: 'DeepSeek',
@@ -22,7 +32,10 @@ const deepseek: ConfiguredProvider = {
   models: [{ value: 'deepseek-v4-pro', label: 'DeepSeek V4 Pro' }],
   defaultModel: 'deepseek-v4-pro',
   presetSlug: 'deepseek',
+  runsOnOpenCode: true,
+  engines: ['claude', 'opencode', 'dsh'],
 };
+const deepseek2: ConfiguredProvider = { ...deepseek, slug: 'deepseek-2', label: 'DeepSeek 2' };
 
 const custom: ConfiguredProvider = {
   slug: 'my-endpoint',
@@ -31,6 +44,8 @@ const custom: ConfiguredProvider = {
   models: [{ value: 'x-1', label: 'X 1' }],
   defaultModel: 'x-1',
   presetSlug: null,
+  runsOnOpenCode: true,
+  engines: ['claude', 'opencode'],
 };
 
 const moonshot: ConfiguredProvider = {
@@ -40,6 +55,8 @@ const moonshot: ConfiguredProvider = {
   models: [{ value: 'kimi-k3', label: 'Kimi K3' }],
   defaultModel: 'kimi-k3',
   presetSlug: 'moonshot',
+  runsOnOpenCode: true,
+  engines: ['kimi', 'opencode'],
 };
 
 // A key connected from the Gemini preset, as GET /providers serves it.
@@ -51,6 +68,19 @@ const gemini: ConfiguredProvider = {
   defaultModel: 'gemini-3.8-flash',
   presetSlug: 'gemini',
   modelsFromRuntime: true,
+  runsOnOpenCode: true,
+  engines: ['antigravity', 'opencode'],
+};
+
+// A Claude subscription token: the server says it runs on Claude Code alone.
+const claudeMax: ConfiguredProvider = {
+  slug: 'claude-max',
+  label: 'Claude Max',
+  runtime: 'claude',
+  models: [],
+  presetSlug: 'anthropic',
+  modelsFromRuntime: true,
+  engines: ['claude'],
 };
 
 const catalog = {
@@ -58,41 +88,233 @@ const catalog = {
   codex: [{ value: 'gpt-5.6-sol', label: 'GPT-5.6 Sol' }],
 } as never;
 
-describe('providerChoices', () => {
-  it('offers the engines and hides Antigravity without a server-confirmed environment key', () => {
-    const choices = providerChoices([], catalog);
-    expect(choices.map((c) => c.slug)).toEqual(['claude', 'codex', 'kimi', 'opencode']);
-    expect(choices.every((c) => c.kind === 'engine')).toBe(true);
-  });
+/** A runner that can run DeepSeek Harness: it declares the capability and reports the CLI. */
+const dshReady = { capabilities: ['provider:dsh'], engines: [{ engine: 'dsh' as const, installed: true, auth: 'unknown' as const, version: '0.2.0-rc.2', platformSupported: true }] };
 
-  it('appends configured providers after the engines', () => {
-    const choices = providerChoices([deepseek, custom], catalog);
-    expect(choices.map((c) => c.slug)).toEqual([
-      'claude',
-      'codex',
-      'kimi',
-      'deepseek',
-      'my-endpoint',
-      'opencode',
+const sources = (over: Partial<ChoiceSources> = {}): ChoiceSources => ({ configured: [], modelCatalog: catalog, ...over });
+const slugs = (rows: readonly { slug: string }[]) => rows.map((row) => row.slug);
+const engineOf = (engines: EngineChoice[], engine: AgentProvider) => engines.find((row) => row.slug === engine);
+const loginOf = (rows: ProviderChoice[]) => rows.find((row) => row.kind === 'login');
+
+describe('engineChoices: the engines a new session can pick', () => {
+  it('lists the engines by their CLI names, in ALL_ENGINES order', () => {
+    const engines = engineChoices(sources({ configured: [deepseek, moonshot, gemini] }));
+    expect(slugs(engines)).toEqual(['claude', 'codex', 'kimi', 'antigravity', 'opencode', 'dsh']);
+    expect(engines.map((engine) => engine.label)).toEqual([
+      'Claude Code',
+      'Codex',
+      'Kimi Code',
+      'Antigravity CLI',
+      'OpenCode',
+      'DeepSeek Harness',
     ]);
-    expect(choices.filter((c) => c.kind === 'byok').map((c) => c.slug)).toEqual(['deepseek', 'my-endpoint']);
+    // A DeepSeek key lists DeepSeek Harness; on a runner that has said nothing of it, it waits for one.
+    expect(engineOf(engines, DSH)).toMatchObject({ unavailable: 'Update runner', fixEngine: 'dsh' });
   });
 
-  it('keeps opencode listed, with its reason, until the runner reports it installed', () => {
-    // Orbit installs it, so a machine without it is a row the picker can send somewhere — the same
-    // rule DSH and the login engines are listed under. It has no sign-in to relay, so the row is
-    // never a pick before the CLI is there, and it must not read as one.
-    for (const engines of [null, [{ engine: 'opencode' as const, installed: false, auth: 'unknown' as const }]]) {
-      const choices = providerChoices([], catalog, undefined, engines);
-      const row = choices.find((c) => c.slug === 'opencode');
-      expect(row).toMatchObject({ kind: 'engine', label: 'OpenCode', unavailable: 'Not installed', fixEngine: 'opencode' });
-      // An engine board row for it too, landing on that choice.
-      const board = engineChoices(choices, []).find((e) => e.slug === 'opencode');
-      expect(board).toMatchObject({ label: 'OpenCode', unavailable: 'Not installed', fixEngine: 'opencode' });
+  it('lists an engine once, with every credential it runs on — one key under several engines', () => {
+    const engines = engineChoices(sources({ configured: [deepseek, moonshot, gemini] }));
+    expect(slugs(engineOf(engines, CLAUDE)!.providers)).toEqual(['claude', 'deepseek']);
+    expect(slugs(engineOf(engines, KIMI)!.providers)).toEqual(['kimi', 'moonshot']);
+    expect(slugs(engineOf(engines, ANTIGRAVITY)!.providers)).toEqual(['gemini']);
+    // OpenCode: its own configuration, and every key it runs.
+    expect(slugs(engineOf(engines, OPENCODE)!.providers)).toEqual(['opencode', 'deepseek', 'moonshot', 'gemini']);
+  });
+
+  it('leaves out Antigravity with neither a confirmed environment key, a Google account nor a Gemini key', () => {
+    expect(slugs(engineChoices(sources()))).toEqual(['claude', 'codex', 'kimi', 'opencode']);
+    expect(slugs(engineChoices(sources({ antigravityKeyAvailable: true })))).toContain('antigravity');
+  });
+
+  it("lands on the engine's own sign-in, unless a preferred provider of it can run", () => {
+    const configured = [deepseek, moonshot, gemini];
+    const landing = (preferred: { engine: string; provider: string }[]) =>
+      engineChoices(sources({ configured, antigravityKeyAvailable: true }), preferred).map((engine) => engine.provider?.slug);
+    expect(landing([])).toEqual(['claude', 'codex', 'kimi', 'antigravity', 'opencode', 'deepseek']);
+    // The draft's pick first, then what the workspace last ran: each only on its own engine.
+    expect(landing([{ engine: 'claude', provider: 'deepseek' }, { engine: 'kimi', provider: 'moonshot' }])).toEqual([
+      'deepseek',
+      'codex',
+      'moonshot',
+      'antigravity',
+      'opencode',
+      'deepseek',
+    ]);
+    expect(landing([{ engine: 'opencode', provider: 'deepseek' }])).toEqual(['claude', 'codex', 'kimi', 'antigravity', 'deepseek', 'deepseek']);
+  });
+
+  it('skips a preferred provider that cannot run, and a signed-out sign-in, for one that can', () => {
+    const engines = engineChoices(
+      sources({ configured: [deepseek], engineHealth: [{ engine: 'claude', installed: true, auth: 'no' }] }),
+    );
+    const claude = engineOf(engines, CLAUDE)!;
+    expect(claude.provider?.slug).toBe('deepseek');
+    expect(claude.unavailable).toBeUndefined();
+  });
+
+  it('carries the reason when no credential of the engine can run', () => {
+    const engines = engineChoices(
+      sources({ configured: [moonshot], engineHealth: [{ engine: 'kimi', installed: false, auth: 'unknown' }] }),
+      [{ engine: 'kimi', provider: 'moonshot' }],
+    );
+    const kimi = engineOf(engines, KIMI)!;
+    expect(kimi.provider?.slug).toBe('kimi');
+    expect(kimi).toMatchObject({ unavailable: 'Not installed', fixEngine: 'kimi' });
+  });
+
+  it('keeps OpenCode listed, with its reason, until the runner reports it installed', () => {
+    // Orbit installs it, so a machine without it is a row the picker can send somewhere. It has no
+    // sign-in to relay, so the row is never a pick before the CLI is there.
+    const engines = engineChoices(sources({ engineHealth: [{ engine: 'opencode', installed: false, auth: 'unknown' }] }));
+    expect(engineOf(engines, OPENCODE)).toMatchObject({ label: 'OpenCode', unavailable: 'Not installed', fixEngine: 'opencode' });
+    // A runner that reports its engines but not OpenCode has not got it either.
+    expect(engineOf(engineChoices(sources({ engineHealth: [{ engine: 'claude', installed: true, auth: 'yes' }] })), OPENCODE)?.unavailable).toBe(
+      'Not installed',
+    );
+    // A runner that has reported nothing claims nothing.
+    expect(engineOf(engineChoices(sources()), OPENCODE)?.unavailable).toBeUndefined();
+  });
+
+  it('previews each engine’s model by where it lands', () => {
+    const engines = engineChoices(sources({ configured: [deepseek] }), [{ engine: 'claude', provider: 'deepseek' }]);
+    expect(engineOf(engines, CLAUDE)?.provider?.modelLabel).toBe('DeepSeek V4 Pro');
+    expect(engineOf(engines, CODEX)?.provider?.modelLabel).toBe('GPT-5.6 Sol');
+    expect(engineOf(engines, OPENCODE)?.provider?.modelLabel).toBe('Managed by OpenCode');
+  });
+});
+
+describe('DeepSeek Harness, on the DeepSeek keys', () => {
+  const dshCatalog = { ...(catalog as object), dsh: [{ value: 'acp-pro', label: 'DeepSeek V4 Pro' }] } as never;
+
+  it('lists every DeepSeek key under it, and lands on the first', () => {
+    const engines = engineChoices(sources({ configured: [deepseek, deepseek2, moonshot], modelCatalog: dshCatalog, dshRunner: dshReady }));
+    const dsh = engineOf(engines, DSH)!;
+    expect(dsh.label).toBe('DeepSeek Harness');
+    expect(slugs(dsh.providers)).toEqual(['deepseek', 'deepseek-2']);
+    expect(dsh.providers.every((row) => row.kind === 'key')).toBe(true);
+    expect(dsh.provider?.slug).toBe('deepseek');
+    expect(dsh.provider?.modelLabel).toBe('DeepSeek V4 Pro');
+    // A key with no DeepSeek Harness among its engines is not one of them.
+    expect(slugs(dsh.providers)).not.toContain('moonshot');
+  });
+
+  it('offers to connect a DeepSeek key when there is none, at the DeepSeek connect page', () => {
+    const dsh = engineOf(engineChoices(sources({ configured: [moonshot], dshRunner: dshReady })), DSH)!;
+    expect(dsh).toMatchObject({ slug: 'dsh', label: 'DeepSeek Harness', provider: null, unavailable: 'Connect a DeepSeek key' });
+    expect(dsh.fixHref).toBe('/providers/new/deepseek');
+    expect(dsh.providers).toEqual([]);
+  });
+
+  it('offers no connection on a runner too old for it, and none at all where there is a key', () => {
+    expect(engineOf(engineChoices(sources({ dshRunner: { capabilities: [], engines: [] } })), DSH)).toBeUndefined();
+    expect(engineOf(engineChoices(sources({ configured: [deepseek], dshRunner: dshReady })), DSH)?.unavailable).toBeUndefined();
+  });
+
+  it('keeps its keys listed where Harness cannot run, with the reason and the engine row that fixes it', () => {
+    for (const [runner, reason] of [
+      [{ capabilities: [], engines: dshReady.engines }, 'Update runner'],
+      [{ capabilities: ['provider:dsh'], engines: [{ ...dshReady.engines[0], installed: false }] }, 'Not installed'],
+    ] as const) {
+      const rows = engineProviders(DSH, sources({ configured: [deepseek], dshRunner: runner as never }));
+      expect(rows[0]).toMatchObject({ slug: 'deepseek', unavailable: reason, fixEngine: 'dsh' });
     }
   });
 
-  it('offers Antigravity as an engine, with the model the runner reports first', () => {
+  it('runs the same key on Claude Code and OpenCode too, never naming the engine on the key', () => {
+    const engines = engineChoices(sources({ configured: [deepseek], dshRunner: dshReady }));
+    for (const engine of [CLAUDE, OPENCODE, DSH]) {
+      const row = engineOf(engines, engine)!.providers.find((choice) => choice.slug === 'deepseek')!;
+      expect(row).toMatchObject({ label: 'DeepSeek', kind: 'key' });
+      expect(row.labelDetail).toBeUndefined();
+    }
+  });
+});
+
+describe('engineProviders: the credentials an engine runs on, in the Provider menu’s order', () => {
+  it('lists the sign-in, then the pools, then the keys — only those the engine runs', () => {
+    const pool = { id: 'pool', slug: 'claude-accounts', label: 'Claude accounts', members: [{ slug: 'claude-max' }] };
+    const configured = [
+      deepseek,
+      claudeMax,
+      moonshot,
+      { slug: pool.slug, label: pool.label, runtime: 'claude', models: [], presetSlug: 'anthropic', modelsFromRuntime: true },
+    ];
+    const rows = engineProviders(CLAUDE, sources({ configured, pools: [pool] }));
+    expect(rows.map((row) => [row.slug, row.kind])).toEqual([
+      ['claude', 'login'],
+      ['claude-accounts', 'pool'],
+      ['deepseek', 'key'],
+      ['claude-max', 'key'],
+    ]);
+  });
+
+  it('keeps a subscription token, which Anthropic serves to Claude Code alone, off OpenCode', () => {
+    const configured = [deepseek, claudeMax];
+    expect(slugs(engineProviders(OPENCODE, sources({ configured })))).toEqual(['opencode', 'deepseek']);
+    expect(slugs(engineProviders(CLAUDE, sources({ configured })))).toContain('claude-max');
+  });
+
+  it('reads a row from a payload without `engines` by its protocol, and OpenCode where it says so', () => {
+    const older = { slug: 'gw', label: 'Gateway', runtime: 'codex', models: [] };
+    expect(slugs(engineProviders(CODEX, sources({ configured: [older] })))).toEqual(['codex', 'gw']);
+    expect(slugs(engineProviders(OPENCODE, sources({ configured: [older] })))).toEqual(['opencode']);
+    expect(slugs(engineProviders(OPENCODE, sources({ configured: [{ ...older, runsOnOpenCode: true }] })))).toEqual(['opencode', 'gw']);
+  });
+
+  it('drops a configured row that shadows a built-in engine slug', () => {
+    const shadow: ConfiguredProvider = { ...deepseek, slug: 'kimi', label: 'Kimi (custom)', engines: ['kimi'] };
+    const rows = engineProviders(KIMI, sources({ configured: [shadow] }));
+    expect(rows.filter((row) => row.slug === 'kimi')).toHaveLength(1);
+    expect(rows[0].kind).toBe('login');
+  });
+
+  it('carries each credential’s resolved default model on this engine, so a switch previews its model', () => {
+    expect(loginOf(engineProviders(CLAUDE, sources({ configured: [deepseek] })))?.modelLabel).toBe('Claude Opus 5');
+    expect(engineProviders(CLAUDE, sources({ configured: [deepseek] })).find((row) => row.slug === 'deepseek')?.modelLabel).toBe(
+      'DeepSeek V4 Pro',
+    );
+  });
+
+  it('keeps a sign-in the runner does not have installed, with the reason, fixed on its own engine row', () => {
+    const health = [
+      { engine: 'claude' as const, installed: true, auth: 'yes' as const },
+      { engine: 'codex' as const, installed: false, auth: 'unknown' as const },
+      { engine: 'kimi' as const, installed: false, auth: 'unknown' as const },
+    ];
+    // Hiding it would leave "why is Kimi missing?" with no answer anywhere in the product.
+    expect(loginOf(engineProviders(KIMI, sources({ engineHealth: health })))).toMatchObject({ unavailable: 'Not installed', fixEngine: 'kimi' });
+    expect(loginOf(engineProviders(CODEX, sources({ engineHealth: health })))?.unavailable).toBe('Not installed');
+    expect(loginOf(engineProviders(CLAUDE, sources({ engineHealth: health })))?.unavailable).toBeUndefined();
+  });
+
+  it('says not installed, not signed out, for a missing CLI that never answered', () => {
+    expect(loginOf(engineProviders(KIMI, sources({ engineHealth: [{ engine: 'kimi', installed: false, auth: 'no' }] })))?.unavailable).toBe(
+      'Not installed',
+    );
+  });
+
+  it('keeps an installed-but-signed-out sign-in, with the reason — and `unknown` pickable', () => {
+    const health = [
+      { engine: 'codex' as const, installed: true, auth: 'no' as const },
+      { engine: 'kimi' as const, installed: true, auth: 'unknown' as const },
+    ];
+    expect(loginOf(engineProviders(CODEX, sources({ engineHealth: health })))?.unavailable).toBe('Not signed in');
+    expect(loginOf(engineProviders(KIMI, sources({ engineHealth: health })))?.unavailable).toBeUndefined();
+  });
+
+  it('blocks a key whose engine’s CLI is not installed, and keeps it on a signed-out one — the key is the credential', () => {
+    const missing = engineProviders(KIMI, sources({ configured: [moonshot], engineHealth: [{ engine: 'kimi', installed: false, auth: 'unknown' }] }));
+    expect(missing.find((row) => row.slug === 'moonshot')).toMatchObject({ unavailable: 'Not installed', fixEngine: 'kimi' });
+    const signedOut = engineProviders(KIMI, sources({ configured: [moonshot], engineHealth: [{ engine: 'kimi', installed: true, auth: 'no' }] }));
+    expect(loginOf(signedOut)?.unavailable).toBe('Not signed in');
+    expect(signedOut.find((row) => row.slug === 'moonshot')?.unavailable).toBeUndefined();
+    // Nothing reported about the CLI: nothing claimed.
+    expect(engineProviders(KIMI, sources({ configured: [moonshot], engineHealth: null })).find((row) => row.slug === 'moonshot')?.unavailable).toBeUndefined();
+  });
+});
+
+describe('Antigravity’s sign-in and Gemini keys', () => {
+  it('offers the sign-in with the model the runner reports first, and says how it signs in', () => {
     const withAgy = {
       ...(catalog as object),
       antigravity: [
@@ -100,25 +322,23 @@ describe('providerChoices', () => {
         { value: 'gemini-3.1-pro', label: 'Gemini 3.1 Pro', reasoningLevels: ['low', 'high'] },
       ],
     } as never;
-    const choices = providerChoices([], withAgy, undefined, undefined, [], undefined, undefined, true);
-    expect(choices.map((choice) => choice.slug)).toEqual(['claude', 'codex', 'antigravity', 'kimi', 'opencode']);
-    const row = choices.find((c) => c.slug === 'antigravity');
-    expect(row).toMatchObject({ kind: 'engine', label: 'Antigravity', labelDetail: 'env key', glyphKey: 'antigravity' });
-    expect(row?.modelLabel).toBe('Gemini 3.8 Flash');
-    expect(defaultModelLabel('antigravity', catalog)).toBe('Gemini 3.8 Flash');
-    expect(defaultModelLabel('opencode', catalog)).toBe('Managed by the provider');
+    const row = loginOf(engineProviders(ANTIGRAVITY, sources({ modelCatalog: withAgy, antigravityKeyAvailable: true })));
+    expect(row).toMatchObject({ kind: 'login', labelDetail: 'env key', glyphKey: 'antigravity', modelLabel: 'Gemini 3.8 Flash' });
+    expect(defaultModelLabel(ANTIGRAVITY, 'antigravity', catalog)).toBe('Gemini 3.8 Flash');
   });
 
   it('uses the server key boolean instead of inferring availability from runner auth', () => {
     const ready = { supported: true, installed: true, version: 'agy 1.2.16', envKeyAvailable: true };
     const health = [{ engine: 'antigravity' as const, installed: true, auth: 'yes' as const }];
-    expect(providerChoices([gemini], catalog, undefined, health).map((c) => c.slug)).toEqual(['claude', 'codex', 'gemini', 'kimi', 'opencode']);
-    expect(providerChoices([gemini], catalog, undefined, health, [], undefined, ready, false).some((c) => c.slug === 'antigravity')).toBe(false);
-    expect(providerChoices([gemini], catalog, undefined, undefined, [], undefined, ready, true).find((c) => c.slug === 'antigravity')).toMatchObject({ labelDetail: 'env key' });
-    expect(providerChoices([gemini], catalog).find((c) => c.slug === 'gemini')).toMatchObject({
-      label: 'Antigravity', labelDetail: 'API key', glyphKey: 'antigravity', modelLabel: 'Gemini 3.8 Flash',
+    expect(slugs(engineProviders(ANTIGRAVITY, sources({ configured: [gemini], engineHealth: health })))).toEqual(['gemini']);
+    expect(slugs(engineProviders(ANTIGRAVITY, sources({ configured: [gemini], antigravity: ready, antigravityKeyAvailable: false })))).toEqual([
+      'gemini',
+    ]);
+    expect(loginOf(engineProviders(ANTIGRAVITY, sources({ antigravity: ready, antigravityKeyAvailable: true })))).toMatchObject({
+      labelDetail: 'env key',
     });
-    expect(providerChoices([{ ...gemini, label: 'Work Gemini' }], catalog).find((c) => c.slug === 'gemini')?.label).toBe('Work Gemini');
+    // A Gemini key keeps the name its owner gave it.
+    expect(engineProviders(ANTIGRAVITY, sources({ configured: [{ ...gemini, label: 'Work Gemini' }] }))[0].label).toBe('Work Gemini');
   });
 
   it('allows a workspace key to run Antigravity after the runner Google sign-in expires', () => {
@@ -127,14 +347,12 @@ describe('providerChoices', () => {
       authSource: 'google' as const, googleLogin: 'available' as const,
     };
     const health = [{ engine: 'antigravity' as const, installed: true, auth: 'no' as const, authSource: 'google' as const }];
-    const choice = (keyAvailable?: boolean) => providerChoices([gemini], catalog, undefined, health, [], undefined, expired, keyAvailable)
-      .find((c) => c.slug === 'antigravity');
-    expect(choice()).toMatchObject({ labelDetail: 'Google account', unavailable: 'Not signed in', fixEngine: 'antigravity' });
-    expect(choice(true)).toMatchObject({ kind: 'engine', labelDetail: 'env key' });
-    expect(choice(true)?.unavailable).toBeUndefined();
-    expect(choice(true)?.fixEngine).toBeUndefined();
-    const withoutCli = providerChoices([], catalog, undefined, health, [], undefined, { ...expired, installed: false }, true)
-      .find((c) => c.slug === 'antigravity');
+    const login = (keyAvailable?: boolean) =>
+      loginOf(engineProviders(ANTIGRAVITY, sources({ configured: [gemini], engineHealth: health, antigravity: expired, antigravityKeyAvailable: keyAvailable })));
+    expect(login()).toMatchObject({ labelDetail: 'Google account', unavailable: 'Not signed in', fixEngine: 'antigravity' });
+    expect(login(true)).toMatchObject({ kind: 'login', labelDetail: 'env key' });
+    expect(login(true)?.unavailable).toBeUndefined();
+    const withoutCli = loginOf(engineProviders(ANTIGRAVITY, sources({ engineHealth: health, antigravity: { ...expired, installed: false }, antigravityKeyAvailable: true })));
     expect(withoutCli).toMatchObject({ unavailable: 'Not installed', fixEngine: 'antigravity' });
   });
 
@@ -142,118 +360,21 @@ describe('providerChoices', () => {
     [{ supported: false, installed: true, version: '1.2.16', envKeyAvailable: true }, 'Update runner'],
     [{ supported: true, installed: false, version: null, envKeyAvailable: true }, 'Not installed'],
   ] as const)('blocks both Gemini entrances with the server readiness %j', (state, unavailable) => {
-    const rows = providerChoices([gemini], catalog, undefined, undefined, [], undefined, state);
+    const rows = engineProviders(ANTIGRAVITY, sources({ configured: [gemini], antigravity: state }));
     for (const slug of ['antigravity', 'gemini']) {
-      expect(rows.find((c) => c.slug === slug)).toMatchObject({ unavailable, fixEngine: 'antigravity' });
+      expect(rows.find((row) => row.slug === slug)).toMatchObject({ unavailable, fixEngine: 'antigravity' });
     }
-    const hiddenCurrent = currentProviderChoice('antigravity', providerChoices([gemini], catalog), catalog, [gemini], undefined, state);
-    expect(hiddenCurrent).toMatchObject({ labelDetail: 'env key', modelLabel: 'Gemini 3.8 Flash', unavailable, fixEngine: 'antigravity' });
-    expect(sameRuntimeChoices('antigravity', providerChoices([gemini], catalog), [gemini], catalog, undefined, state)[0]).toEqual(hiddenCurrent);
   });
 
-  it('drops a configured row that shadows a built-in engine slug', () => {
-    const shadow: ConfiguredProvider = { ...deepseek, slug: 'kimi', label: 'Kimi (custom)' };
-    const choices = providerChoices([shadow], catalog);
-    expect(choices.filter((c) => c.slug === 'kimi')).toHaveLength(1);
-    expect(choices.find((c) => c.slug === 'kimi')?.kind).toBe('engine');
-  });
-
-  it('carries each choice’s resolved default model, so a switch previews its model', () => {
-    const choices = providerChoices([deepseek], catalog);
-    expect(choices.find((c) => c.slug === 'claude')?.modelLabel).toBe('Claude Opus 5');
-    expect(choices.find((c) => c.slug === 'deepseek')?.modelLabel).toBe('DeepSeek V4 Pro');
-  });
-
-  it('keeps an engine the runner does not have installed, with the reason', () => {
-    const choices = providerChoices([deepseek], catalog, undefined, [
-      { engine: 'claude', installed: true, auth: 'yes' },
-      { engine: 'codex', installed: false, auth: 'unknown' },
-      { engine: 'kimi', installed: false, auth: 'unknown' },
-    ]);
-    expect(choices.map((c) => c.slug)).toEqual(['claude', 'codex', 'kimi', 'deepseek', 'opencode']);
-    // Hiding it would leave "why is Kimi missing?" with no answer anywhere in the product.
-    expect(choices.find((c) => c.slug === 'kimi')?.unavailable).toBe('Not installed');
-    expect(choices.find((c) => c.slug === 'codex')?.unavailable).toBe('Not installed');
-    expect(choices.find((c) => c.slug === 'claude')?.unavailable).toBeUndefined();
-    // An engine is fixed on its own row.
-    expect(choices.find((c) => c.slug === 'kimi')?.fixEngine).toBe('kimi');
-  });
-
-  it('says not installed, not signed out, for a missing CLI that never answered', () => {
-    // Both are true of the report; only one of them has a fix the user can act on first.
-    const choices = providerChoices([], catalog, undefined, [
-      { engine: 'kimi', installed: false, auth: 'no' },
-    ]);
-    expect(choices.find((c) => c.slug === 'kimi')?.unavailable).toBe('Not installed');
-  });
-
-  it('keeps an installed-but-signed-out engine, disabled with the reason', () => {
-    const choices = providerChoices([], catalog, undefined, [
-      { engine: 'claude', installed: true, auth: 'yes' },
-      { engine: 'codex', installed: true, auth: 'no' },
-      { engine: 'kimi', installed: true, auth: 'unknown' },
-    ]);
-    expect(choices.map((c) => c.slug)).toEqual(['claude', 'codex', 'kimi', 'opencode']);
-    expect(choices.find((c) => c.slug === 'codex')?.unavailable).toBe('Not signed in');
-    // `unknown` is a CLI that wouldn't answer, not a "no" — it stays pickable.
-    expect(choices.find((c) => c.slug === 'kimi')?.unavailable).toBeUndefined();
-    expect(choices.find((c) => c.slug === 'claude')?.unavailable).toBeUndefined();
-  });
-
-  it('blocks a configured provider whose borrowed CLI is not installed', () => {
-    // The Moonshot row spawns the Kimi CLI with its key in the environment: no CLI, no session.
-    const choices = providerChoices([moonshot, deepseek], catalog, undefined, [
-      { engine: 'claude', installed: true, auth: 'yes' },
-      { engine: 'kimi', installed: false, auth: 'unknown' },
-    ]);
-    const row = choices.find((c) => c.slug === 'moonshot');
-    expect(row?.unavailable).toBe('Not installed');
-    // Its own slug has no row on the Providers page; the install lives on the engine it borrows.
-    expect(row?.fixEngine).toBe('kimi');
-    // A provider on a CLI that is there stays pickable.
-    expect(choices.find((c) => c.slug === 'deepseek')?.unavailable).toBeUndefined();
-  });
-
-  it('keeps a configured provider on a signed-out CLI pickable — its key is the credential', () => {
-    const choices = providerChoices([moonshot], catalog, undefined, [
-      { engine: 'kimi', installed: true, auth: 'no' },
-    ]);
-    expect(choices.find((c) => c.slug === 'kimi')?.unavailable).toBe('Not signed in');
-    expect(choices.find((c) => c.slug === 'moonshot')?.unavailable).toBeUndefined();
-  });
-
-  it('offers a configured provider whose CLI the runner has claimed nothing about', () => {
-    expect(
-      providerChoices([moonshot], catalog, undefined, [
-        { engine: 'claude', installed: false, auth: 'no' },
-      ]).find((c) => c.slug === 'moonshot')?.unavailable,
-    ).toBeUndefined();
-    expect(
-      providerChoices([moonshot], catalog, undefined, null).find((c) => c.slug === 'moonshot')
-        ?.unavailable,
-    ).toBeUndefined();
-  });
-
-  it('offers every engine a runner has claimed nothing about', () => {
-    // Never reported (older runner / first heartbeat still pending), and a partial report.
-    // OpenCode is the one exception: Orbit installs it, so a runner that has said nothing about it
-    // is a runner that hasn't got it, and the row says so.
-    expect(providerChoices([], catalog, undefined, null).map((c) => c.slug)).toEqual([
-      'claude',
-      'codex',
-      'kimi',
-      'opencode',
-    ]);
-    const partial = providerChoices([], catalog, undefined, [
-      { engine: 'claude', installed: false, auth: 'no' },
-    ]);
-    expect(partial.map((c) => c.slug)).toEqual(['claude', 'codex', 'kimi', 'opencode']);
-    // The engine the runner actually spoke about, and OpenCode, which it didn't and hasn't got.
-    expect(partial.filter((c) => c.unavailable).map((c) => c.slug)).toEqual(['claude', 'opencode']);
+  it('blocks a Gemini key where agy is missing, and keeps it where agy is signed out — the key is the sign-in', () => {
+    const missing = engineProviders(ANTIGRAVITY, sources({ configured: [gemini], engineHealth: [{ engine: 'antigravity', installed: false, auth: 'unknown' }] }));
+    expect(missing.find((row) => row.slug === 'gemini')).toMatchObject({ unavailable: 'Not installed', fixEngine: 'antigravity' });
+    const ready = engineProviders(ANTIGRAVITY, sources({ configured: [gemini], engineHealth: [{ engine: 'antigravity', installed: true, auth: 'no' }] }));
+    expect(ready.find((row) => row.slug === 'gemini')?.unavailable).toBeUndefined();
   });
 });
 
-describe('the runner’s Codex accounts, under the Codex choice', () => {
+describe('the runner’s Codex accounts, on Codex’s own sign-in', () => {
   const home = (id: string) => `/root/.orbit/codex-accounts/${id}`;
   const codex = (accounts: Array<{ id: string; name?: string; auth: 'yes' | 'no' | 'unknown' }>) => [
     { engine: 'claude' as const, installed: true, auth: 'yes' as const },
@@ -273,50 +394,40 @@ describe('the runner’s Codex accounts, under the Codex choice', () => {
       },
     },
   } as never;
-  const accountsOf = (choices: ReturnType<typeof providerChoices>, slug = 'codex') =>
-    choices.find((choice) => choice.slug === slug)?.accounts;
+  const accountsOf = (engineHealth: ChoiceSources['engineHealth'], engine: AgentProvider = CODEX, planUsage = usage) =>
+    loginOf(engineProviders(engine, sources({ engineHealth, planUsage })))?.accounts;
 
   it('lists each account with its own quota once the runner has signed in two', () => {
-    const choices = providerChoices(
-      [],
-      catalog,
-      undefined,
-      codex([{ id: 'default', auth: 'yes' }, { id: '3fa91c2e', name: 'Work', auth: 'yes' }, { id: 'c0ffee42', auth: 'no' }]),
-      [],
-      usage,
-    );
-    expect(accountsOf(choices)).toEqual([
+    expect(
+      accountsOf(codex([{ id: 'default', auth: 'yes' }, { id: '3fa91c2e', name: 'Work', auth: 'yes' }, { id: 'c0ffee42', auth: 'no' }])),
+    ).toEqual([
       { id: 'default', label: 'Default', quota: '5h 100%', nearLimit: true },
       { id: '3fa91c2e', label: 'Work', quota: 'Weekly 0%' },
       // Unnamed, unread, and signed out: it is listed, and says why it can't take a session.
       { id: 'c0ffee42', label: 'Account c0ffee42', unavailable: 'Not signed in' },
     ]);
-    expect(accountsOf(choices, 'claude')).toBeUndefined();
+    expect(accountsOf(codex([{ id: 'default', auth: 'yes' }, { id: '3fa91c2e', auth: 'yes' }]), CLAUDE)).toBeUndefined();
   });
 
   it('lists an account by what it was renamed to in Orbit, Default included', () => {
-    const choices = providerChoices(
-      [],
-      catalog,
-      undefined,
-      codex([{ id: 'default', name: 'jianghailong.main', auth: 'yes' }, { id: '3fa91c2e', name: 'Research', auth: 'yes' }]),
-      [],
-      usage,
-    );
-    expect(accountsOf(choices)?.map((account) => account.label)).toEqual(['jianghailong.main', 'Research']);
+    expect(
+      accountsOf(codex([{ id: 'default', name: 'jianghailong.main', auth: 'yes' }, { id: '3fa91c2e', name: 'Research', auth: 'yes' }]))?.map(
+        (account) => account.label,
+      ),
+    ).toEqual(['jianghailong.main', 'Research']);
   });
 
-  it('lists none for a single account, or for an engine that cannot run', () => {
-    expect(accountsOf(providerChoices([], catalog, undefined, codex([{ id: 'default', auth: 'yes' }]), [], usage)))
-      .toBeUndefined();
+  it('lists none for a single account — which names the sign-in instead — or for a sign-in that cannot run', () => {
+    expect(accountsOf(codex([{ id: 'default', auth: 'yes' }]))).toBeUndefined();
+    expect(loginOf(engineProviders(CODEX, sources({ engineHealth: codex([{ id: 'default', name: 'Personal', auth: 'yes' }]) })))?.label).toBe('Personal');
+    expect(loginOf(engineProviders(CODEX, sources()))?.label).toBe('Default');
     const signedOut = codex([{ id: 'default', auth: 'no' }, { id: '3fa91c2e', auth: 'yes' }]);
     signedOut[1].auth = 'no' as never;
-    const blocked = providerChoices([], catalog, undefined, signedOut, [], usage);
-    expect(blocked.find((choice) => choice.slug === 'codex')?.unavailable).toBe('Not signed in');
-    expect(accountsOf(blocked)).toBeUndefined();
+    expect(loginOf(engineProviders(CODEX, sources({ engineHealth: signedOut, planUsage: usage })))?.unavailable).toBe('Not signed in');
+    expect(accountsOf(signedOut)).toBeUndefined();
   });
 
-  it("lists a Claude login's accounts under Claude too, each by the window that stops it", () => {
+  it("lists a Claude login's accounts on Claude Code's sign-in, each by the window that stops it", () => {
     const claudeHome = (id: string) => `/root/.orbit/claude-accounts/${id}`;
     const engines = [
       {
@@ -337,15 +448,20 @@ describe('the runner’s Codex accounts, under the Codex choice', () => {
         accounts: { fad98727: { provider: 'claude', fiveHour: { utilization: 19 }, sevenDay: { utilization: 28 } } },
       },
     } as never;
-    expect(accountsOf(providerChoices([], catalog, undefined, engines, [], claudeUsage), 'claude')).toEqual([
+    expect(accountsOf(engines, CLAUDE, claudeUsage)).toEqual([
       // Its 5-hour window reads 0% but its weekly one is spent: the row says what stops it.
       { id: 'default', label: 'Default', quota: 'Weekly 100%', nearLimit: true },
       { id: 'fad98727', label: 'jianghailong.rd', quota: 'Weekly 28%' },
     ]);
   });
+
+  it('gives a key no accounts: accounts are the sign-in’s alone', () => {
+    const rows = engineProviders(CODEX, sources({ configured: [{ slug: 'gw', label: 'Gateway', runtime: 'codex', models: [], engines: ['codex'] }], engineHealth: codex([{ id: 'default', auth: 'yes' }, { id: '3fa91c2e', auth: 'yes' }]), planUsage: usage }));
+    expect(rows.find((row) => row.slug === 'gw')?.accounts).toBeUndefined();
+  });
 });
 
-describe('the runner’s Antigravity (Google) accounts, under the Antigravity choice', () => {
+describe('the runner’s Antigravity (Google) accounts, on Antigravity’s own sign-in', () => {
   const google = {
     supported: true,
     installed: true,
@@ -382,64 +498,45 @@ describe('the runner’s Antigravity (Google) accounts, under the Antigravity ch
       ...over,
     },
   ];
-  const accountsOf = (choices: ReturnType<typeof providerChoices>) =>
-    choices.find((choice) => choice.slug === 'antigravity')?.accounts;
+  const login = (engineHealth: ChoiceSources['engineHealth'], antigravity: ChoiceSources['antigravity'], planUsage: ChoiceSources['planUsage'] = null) =>
+    loginOf(engineProviders(ANTIGRAVITY, sources({ engineHealth, antigravity, planUsage })));
 
   it('lists each account by the bucket with the least left, in what is left, read from the engine’s health', () => {
-    const choices = providerChoices(
-      [],
-      catalog,
-      undefined,
+    const row = login(
       engines([{ id: 'default', auth: 'yes' }, { id: '5c2e91a0', name: 'Work', auth: 'yes' }, { id: 'c0ffee42', auth: 'no' }]),
-      [],
+      google,
       // The heartbeat's own report holds nothing of Antigravity's.
       { claude: { provider: 'claude', fiveHour: { utilization: 3 } } } as never,
-      google,
     );
-    expect(accountsOf(choices)).toEqual([
+    expect(row?.accounts).toEqual([
       { id: 'default', label: 'Default', quota: '3p-weekly 98% left' },
       { id: '5c2e91a0', label: 'Work', quota: 'gemini-5h 4% left', nearLimit: true },
       { id: 'c0ffee42', label: 'Account c0ffee42', unavailable: 'Not signed in' },
     ]);
     // The Provider menu may still say how the engine signs in.
-    expect(choices.find((choice) => choice.slug === 'antigravity')?.labelDetail).toBe('Google account');
+    expect(row?.labelDetail).toBe('Google account');
   });
 
-  it('lists none for one account, or for an engine that cannot run', () => {
-    expect(accountsOf(providerChoices([], catalog, undefined, engines([{ id: 'default', auth: 'yes' }]), [], null, google))).toBeUndefined();
-    const lapsed = { ...google, envKeyAvailable: false };
-    const blocked = providerChoices(
-      [],
-      catalog,
-      undefined,
-      engines([{ id: 'default', auth: 'no' }, { id: '5c2e91a0', auth: 'no' }], { auth: 'no' }),
-      [],
-      null,
-      lapsed,
-    );
-    expect(blocked.find((choice) => choice.slug === 'antigravity')?.unavailable).toBe('Not signed in');
-    expect(accountsOf(blocked)).toBeUndefined();
+  it('lists none for one account, or for a sign-in that cannot run', () => {
+    expect(login(engines([{ id: 'default', auth: 'yes' }]), google)?.accounts).toBeUndefined();
+    const blocked = login(engines([{ id: 'default', auth: 'no' }, { id: '5c2e91a0', auth: 'no' }], { auth: 'no' }), { ...google, envKeyAvailable: false });
+    expect(blocked?.unavailable).toBe('Not signed in');
+    expect(blocked?.accounts).toBeUndefined();
   });
 
   it('offers Default on the runner’s Gemini key as the key it runs on, never as signed out', () => {
-    const onKey = { ...google, authSource: 'env_key' as const };
-    const choices = providerChoices(
-      [],
-      catalog,
-      undefined,
+    const row = login(
       engines([{ id: 'default', auth: 'no' }, { id: '5c2e91a0', name: 'Work', auth: 'yes' }], { authSource: 'env_key' }),
-      [],
-      null,
-      onKey,
+      { ...google, authSource: 'env_key' as const },
     );
-    expect(accountsOf(choices)).toEqual([
+    expect(row?.accounts).toEqual([
       { id: 'default', label: 'Default', quota: 'env key' },
       { id: '5c2e91a0', label: 'Work', quota: 'gemini-5h 4% left', nearLimit: true },
     ]);
   });
 });
 
-describe('the runner’s Kimi Code accounts, under the Kimi choice', () => {
+describe('the runner’s Kimi Code accounts, on Kimi Code’s own sign-in', () => {
   const home = (id: string) => (id === 'default' ? '/root/.kimi-code' : `/root/.orbit/kimi-accounts/${id}`);
   const kimi = (accounts: Array<{ id: string; name?: string; auth: 'yes' | 'no' | 'unknown' }>, auth: 'yes' | 'no' = 'yes') => [
     { engine: 'claude' as const, installed: true, auth: 'yes' as const },
@@ -466,18 +563,10 @@ describe('the runner’s Kimi Code accounts, under the Kimi choice', () => {
       },
     },
   } as never;
-  const accountsOf = (choices: ReturnType<typeof providerChoices>) => choices.find((choice) => choice.slug === 'kimi')?.accounts;
+  const login = (engineHealth: ChoiceSources['engineHealth']) => loginOf(engineProviders(KIMI, sources({ engineHealth, planUsage: usage })));
 
   it('lists each account by the window that stops it, the month by its total', () => {
-    const choices = providerChoices(
-      [],
-      catalog,
-      undefined,
-      kimi([{ id: 'default', auth: 'yes' }, { id: '5c2e91a0', name: 'Work', auth: 'yes' }, { id: 'c0ffee42', auth: 'no' }]),
-      [],
-      usage,
-    );
-    expect(accountsOf(choices)).toEqual([
+    expect(login(kimi([{ id: 'default', auth: 'yes' }, { id: '5c2e91a0', name: 'Work', auth: 'yes' }, { id: 'c0ffee42', auth: 'no' }]))?.accounts).toEqual([
       // Its month is the fullest of the windows drawn, though its 5-hour one has room; its coding share
       // is never one of them.
       { id: 'default', label: 'Default', quota: 'Monthly 41%' },
@@ -486,11 +575,11 @@ describe('the runner’s Kimi Code accounts, under the Kimi choice', () => {
     ]);
   });
 
-  it('lists none for one account, or for an engine that cannot run', () => {
-    expect(accountsOf(providerChoices([], catalog, undefined, kimi([{ id: 'default', auth: 'yes' }]), [], usage))).toBeUndefined();
-    const blocked = providerChoices([], catalog, undefined, kimi([{ id: 'default', auth: 'no' }, { id: '5c2e91a0', auth: 'no' }], 'no'), [], usage);
-    expect(blocked.find((choice) => choice.slug === 'kimi')?.unavailable).toBe('Not signed in');
-    expect(accountsOf(blocked)).toBeUndefined();
+  it('lists none for one account, or for a sign-in that cannot run', () => {
+    expect(login(kimi([{ id: 'default', auth: 'yes' }]))?.accounts).toBeUndefined();
+    const blocked = login(kimi([{ id: 'default', auth: 'no' }, { id: '5c2e91a0', auth: 'no' }], 'no'));
+    expect(blocked?.unavailable).toBe('Not signed in');
+    expect(blocked?.accounts).toBeUndefined();
   });
 });
 
@@ -512,8 +601,9 @@ describe('brandForProvider', () => {
 
   it('resolves every glyph key it hands out to actual artwork', () => {
     // A key with no entry silently degrades to a blank tile, which reads as a rendering bug.
-    for (const choice of providerChoices([deepseek, custom], catalog)) {
-      if (choice.glyphKey) expect(PROVIDER_GLYPHS[choice.glyphKey]).toBeTruthy();
+    for (const engine of engineChoices(sources({ configured: [deepseek, custom], dshRunner: dshReady }))) {
+      if (engine.glyphKey) expect(PROVIDER_GLYPHS[engine.glyphKey]).toBeTruthy();
+      for (const choice of engine.providers) if (choice.glyphKey) expect(PROVIDER_GLYPHS[choice.glyphKey]).toBeTruthy();
     }
   });
 
@@ -528,40 +618,54 @@ describe('brandForProvider', () => {
   });
 });
 
-describe('currentProviderChoice', () => {
-  it('resolves the pick from the offered choices', () => {
-    const choices = providerChoices([deepseek], catalog);
-    expect(currentProviderChoice('deepseek', choices, catalog, [deepseek]).label).toBe('DeepSeek');
+describe('currentProviderChoice: a session’s provider its engine’s menu does not list', () => {
+  it('resolves the pick from the listed credentials', () => {
+    const rows = engineProviders(CLAUDE, sources({ configured: [deepseek] }));
+    expect(currentProviderChoice(CLAUDE, 'deepseek', rows, sources({ configured: [deepseek] })).label).toBe('DeepSeek');
   });
 
-  it('synthesizes an entry for opencode rather than reading as Claude', () => {
-    const choices = providerChoices([], catalog);
-    const current = currentProviderChoice('opencode', choices, catalog, []);
-    expect(current.slug).toBe('opencode');
-    expect(current.label).toBe('OpenCode');
-    expect(current.kind).toBe('engine');
+  it('names OpenCode’s own configuration as itself', () => {
+    const current = currentProviderChoice(OPENCODE, 'opencode', [], sources());
+    expect(current).toMatchObject({ slug: 'opencode', kind: 'opencode', label: "OpenCode's own sign-in" });
   });
 
-  it('synthesizes an entry for a provider that has since been removed', () => {
-    const choices = providerChoices([], catalog);
-    const current = currentProviderChoice('gone-away', choices, catalog, []);
-    expect(current.slug).toBe('gone-away');
-    expect(current.kind).toBe('byok');
+  it('synthesizes an entry for a key that has since been removed, by its slug, without moving the engine', () => {
+    const current = currentProviderChoice(DSH, 'gone-away', [], sources());
+    expect(current).toMatchObject({ slug: 'gone-away', label: 'gone-away', kind: 'key' });
     expect(current.brand.mono).toBe('G');
+  });
+
+  it('keeps a configured key’s own name where its engine does not list it', () => {
+    expect(currentProviderChoice(DSH, 'moonshot', [], sources({ configured: [moonshot] })).label).toBe('Kimi (Moonshot)');
+  });
+
+  it('names the legacy built-in `dsh` as the key its workspace’s environment holds', () => {
+    expect(currentProviderChoice(DSH, 'dsh', [], sources())).toMatchObject({ slug: 'dsh', label: 'Workspace key', labelDetail: 'ORBIT_DSH_API_KEY' });
+  });
+
+  it('lands the hero’s current engine on the pick even where its engine does not list it', () => {
+    const engines = engineChoices(sources({ configured: [deepseek] }));
+    const current = currentEngineChoice(CLAUDE, 'gone-away', engines, sources({ configured: [deepseek] }));
+    expect(current).toMatchObject({ slug: 'claude', label: 'Claude Code' });
+    expect(current.provider?.slug).toBe('gone-away');
+    expect(slugs(current.providers)).toEqual(['claude', 'deepseek']);
   });
 });
 
 describe('defaultModelLabel', () => {
-  it('says who picks when the provider manages the model itself', () => {
-    expect(defaultModelLabel('opencode', catalog, [])).toBe('Managed by the provider');
+  it('says who picks when the engine manages the model itself', () => {
+    expect(defaultModelLabel(OPENCODE, 'opencode', catalog, [])).toBe('Managed by OpenCode');
+    expect(defaultModelLabel(DSH, 'deepseek', catalog, [deepseek])).toBe('Managed by the provider');
   });
 
-  it('falls back to the raw id when the catalogue does not name it', () => {
-    expect(defaultModelLabel('kimi', catalog, [])).toBe('Kimi for Coding');
+  it('names a model by its catalogue label, per engine and credential', () => {
+    expect(defaultModelLabel(KIMI, 'kimi', catalog, [])).toBe('Kimi for Coding');
+    expect(defaultModelLabel(CLAUDE, 'deepseek', catalog, [deepseek])).toBe('DeepSeek V4 Pro');
+    expect(defaultModelLabel(OPENCODE, 'deepseek', catalog, [deepseek])).toBe('DeepSeek V4 Pro');
   });
 });
 
-describe('sameRuntimeChoices', () => {
+describe('the Provider menu of a session, by its engine (board 5)', () => {
   const anthropic: ConfiguredProvider = {
     slug: 'anthropic',
     label: 'Anthropic (Claude)',
@@ -570,103 +674,47 @@ describe('sameRuntimeChoices', () => {
     defaultModel: 'claude-opus-5',
     presetSlug: 'anthropic',
     modelsFromRuntime: true,
+    engines: ['claude', 'opencode'],
   };
   const anthropic2: ConfiguredProvider = { ...anthropic, slug: 'anthropic-2', label: 'Work account' };
   const configured = [anthropic, anthropic2, deepseek, moonshot];
 
-  it('offers the second Anthropic account, and the engine, to a claude session', () => {
-    const choices = sameRuntimeChoices(
-      'anthropic',
-      providerChoices(configured, catalog),
-      configured,
-    );
-    expect(choices.map((c) => c.slug)).toEqual(['claude', 'anthropic', 'anthropic-2', 'deepseek']);
+  it('offers the engine’s own sign-in and every key it runs, in one order whichever is running', () => {
+    expect(slugs(engineProviders(CLAUDE, sources({ configured })))).toEqual(['claude', 'anthropic', 'anthropic-2', 'deepseek']);
   });
 
-  it('orders the same way whichever provider is running', () => {
-    // The menu is the same short list every time it opens; rotating the running one to the top
-    // moved every other row under the cursor depending on which session you were in.
-    const all = providerChoices(configured, catalog);
-    const order = ['claude', 'anthropic', 'anthropic-2', 'deepseek'];
-    for (const from of order) {
-      expect(sameRuntimeChoices(from, all, configured).map((c) => c.slug)).toEqual(order);
-    }
+  it('never offers another engine’s credentials — Codex and Kimi are a different session', () => {
+    const rows = slugs(engineProviders(CLAUDE, sources({ configured })));
+    expect(rows).not.toContain('codex');
+    expect(rows).not.toContain('kimi');
+    expect(rows).not.toContain('moonshot');
   });
 
-  it('never offers another runtime — codex and kimi are a different session', () => {
-    const choices = sameRuntimeChoices('claude', providerChoices(configured, catalog), configured);
-    expect(choices.map((c) => c.slug)).not.toContain('codex');
-    expect(choices.map((c) => c.slug)).not.toContain('kimi');
-    expect(choices.map((c) => c.slug)).not.toContain('moonshot');
+  it('leaves a lone credential alone, so the composer can leave the Provider row out', () => {
+    expect(engineProviders(KIMI, sources())).toHaveLength(1);
+    expect(engineProviders(CODEX, sources())).toHaveLength(1);
   });
 
-  it('leaves a lone provider alone, so the composer can hide the pill', () => {
-    expect(sameRuntimeChoices('kimi', providerChoices([], catalog), [])).toHaveLength(1);
-    expect(sameRuntimeChoices('opencode', providerChoices([], catalog), [])).toHaveLength(1);
+  it('keeps a target this machine cannot run, with its reason — the keys stay pickable', () => {
+    const rows = engineProviders(CLAUDE, sources({ configured: [anthropic, anthropic2], engineHealth: [{ engine: 'claude', installed: true, auth: 'no' }] }));
+    expect(slugs(rows)).toEqual(['claude', 'anthropic', 'anthropic-2']);
+    expect(rows[0]).toMatchObject({ unavailable: 'Not signed in', fixEngine: 'claude' });
+    expect(rows.find((row) => row.slug === 'anthropic-2')?.unavailable).toBeUndefined();
   });
 
-  it('keeps a target this machine cannot run, with its reason', () => {
-    // The engine is installed but signed out, so it cannot host a session; the BYOK rows on the
-    // same CLI can, because the key they carry is the credential. Every runner in production
-    // reports exactly this pair, and hiding the engine read as "Orbit lost my Claude".
-    const rows = [anthropic, anthropic2];
-    const choices = sameRuntimeChoices(
-      'anthropic',
-      providerChoices(rows, catalog, undefined, [{ engine: 'claude', installed: true, auth: 'no' }]),
-      rows,
-    );
-    expect(choices.map((c) => c.slug)).toEqual(['claude', 'anthropic', 'anthropic-2']);
-    expect(choices.find((c) => c.slug === 'claude')?.unavailable).toBe('Not signed in');
-    expect(choices.find((c) => c.slug === 'anthropic-2')?.unavailable).toBeUndefined();
-    // The composer links this row at the engine that fixes it, so the slug has to survive.
-    expect(choices.find((c) => c.slug === 'claude')?.fixEngine).toBe('claude');
+  it('still names every option when nothing on that CLI can run', () => {
+    const rows = engineProviders(CLAUDE, sources({ configured: [anthropic, anthropic2], engineHealth: [{ engine: 'claude', installed: false, auth: 'unknown' }] }));
+    expect(rows.every((row) => row.unavailable === 'Not installed')).toBe(true);
   });
 
-  it('still names every same-runtime option when nothing on that CLI can run', () => {
-    const rows = [anthropic, anthropic2];
-    const choices = sameRuntimeChoices(
-      'anthropic',
-      providerChoices(rows, catalog, undefined, [
-        { engine: 'claude', installed: false, auth: 'unknown' },
-      ]),
-      rows,
-    );
-    expect(choices.map((c) => c.slug)).toEqual(['claude', 'anthropic', 'anthropic-2']);
-    expect(choices.every((c) => c.unavailable === 'Not installed')).toBe(true);
-  });
-
-  it('puts a Gemini key with the Antigravity engine it runs on, and nowhere else', () => {
-    const rows = [gemini, deepseek];
-    const all = providerChoices(rows, catalog);
-    expect(sameRuntimeChoices('antigravity', all, rows).map((c) => c.slug)).toEqual(['antigravity', 'gemini']);
-    expect(sameRuntimeChoices('gemini', all, rows).map((c) => c.slug)).toEqual(['gemini']);
-    expect(sameRuntimeChoices('claude', all, rows).map((c) => c.slug)).not.toContain('gemini');
-  });
-
-  it('blocks a Gemini key where agy is missing, and points the fix at the Antigravity engine', () => {
-    const health = [{ engine: 'antigravity' as const, installed: false, auth: 'unknown' as const }];
-    const row = providerChoices([gemini], catalog, undefined, health).find((c) => c.slug === 'gemini');
-    expect(row?.unavailable).toBe('Not installed');
-    expect(row?.fixEngine).toBe('antigravity');
-    // Installed is all it needs: the key it carries is the whole sign-in.
-    const ready = providerChoices([gemini], catalog, undefined, [
-      { engine: 'antigravity', installed: true, auth: 'no' },
-    ]).find((c) => c.slug === 'gemini');
-    expect(ready?.unavailable).toBeUndefined();
-  });
-
-  it('still shows a session whose provider was removed as its current entry', () => {
-    const choices = sameRuntimeChoices(
-      'gone-away',
-      providerChoices([anthropic], catalog),
-      [anthropic],
-    );
-    expect(choices[0].slug).toBe('gone-away');
-    expect(choices.map((c) => c.slug)).toContain('anthropic');
+  it('names an engine’s own sign-in by the engine where its engine is not beside it', () => {
+    const [login, key] = engineProviders(CLAUDE, sources({ configured: [deepseek] }));
+    expect(providerNameOn(CLAUDE, login)).toBe('Claude Code');
+    expect(providerNameOn(CLAUDE, key)).toBe('DeepSeek');
   });
 });
 
-describe('account pools among the choices', () => {
+describe('account pools among the credentials', () => {
   const work: ConfiguredProvider = {
     slug: 'anthropic',
     label: 'Work',
@@ -674,9 +722,10 @@ describe('account pools among the choices', () => {
     models: [],
     presetSlug: 'anthropic',
     modelsFromRuntime: true,
+    engines: ['claude', 'opencode'],
   };
   const home: ConfiguredProvider = { ...work, slug: 'anthropic-2', label: 'Home' };
-  const pool = { slug: 'claude-accounts', label: 'Claude accounts', members: [{ slug: 'anthropic' }, { slug: 'anthropic-2' }] };
+  const pool = { id: 'p1', slug: 'claude-accounts', label: 'Claude accounts', members: [{ slug: 'anthropic' }, { slug: 'anthropic-2' }] };
   // What WorkspaceView hands in: the catalogue with the pools appended (poolsAsProviders).
   const configured: ConfiguredProvider[] = [
     work,
@@ -685,44 +734,30 @@ describe('account pools among the choices', () => {
     { slug: pool.slug, label: pool.label, runtime: 'claude', models: [], presetSlug: 'anthropic', modelsFromRuntime: true },
   ];
 
-  it('offers a pool once, after the engines, as its own kind with its account count', () => {
-    const choices = providerChoices(configured, catalog, undefined, undefined, [pool]);
-    expect(choices.map((c) => c.slug)).toEqual([
-      'claude',
-      'codex',
-      'kimi',
-      'claude-accounts',
-      'anthropic',
-      'anthropic-2',
-      'deepseek',
-      'opencode',
-    ]);
-    const tile = choices.find((c) => c.slug === 'claude-accounts')!;
+  it('offers a pool once, after the sign-in, as its own kind with its account count', () => {
+    const rows = engineProviders(CLAUDE, sources({ configured, pools: [pool] }));
+    expect(slugs(rows)).toEqual(['claude', 'claude-accounts', 'anthropic', 'anthropic-2', 'deepseek']);
+    const tile = rows.find((row) => row.slug === 'claude-accounts')!;
     expect(tile).toMatchObject({ kind: 'pool', label: 'Claude accounts', poolSize: 2, glyphKey: 'anthropic' });
     // Its model is the Claude CLI's own, named as the catalogue names it.
     expect(tile.modelLabel).toBe('Claude Opus 5');
+    // A pool runs on its own engine alone: not under OpenCode.
+    expect(slugs(engineProviders(OPENCODE, sources({ configured, pools: [pool] })))).not.toContain('claude-accounts');
   });
 
-  it("keeps the pool's accounts pickable on their own, marked for the picker to fold away", () => {
-    const choices = providerChoices(configured, catalog, undefined, undefined, [pool]);
-    const inPool = choices.filter((c) => c.inPool).map((c) => c.slug);
-    expect(inPool).toEqual(['anthropic', 'anthropic-2']);
-    expect(choices.find((c) => c.slug === 'deepseek')?.inPool).toBeUndefined();
+  it("keeps the pool's accounts pickable on their own, marked for a pick to land on the pool first", () => {
+    const rows = engineProviders(CLAUDE, sources({ configured, pools: [pool] }));
+    expect(rows.filter((row) => row.inPool).map((row) => row.slug)).toEqual(['anthropic', 'anthropic-2']);
+    expect(rows.find((row) => row.slug === 'deepseek')?.inPool).toBeUndefined();
   });
 
-  it('holds a pool to the Claude CLI being there, as a configured provider is', () => {
-    const choices = providerChoices(configured, catalog, undefined, [{ engine: 'claude', installed: false, auth: 'unknown' }], [pool]);
-    expect(choices.find((c) => c.slug === 'claude-accounts')).toMatchObject({ unavailable: 'Not installed', fixEngine: 'claude' });
-  });
-
-  it('lets a claude session move onto the pool and back, since it runs on the same CLI', () => {
-    const choices = providerChoices(configured, catalog, undefined, undefined, [pool]);
-    const moves = sameRuntimeChoices('claude-accounts', choices, configured, catalog).map((c) => c.slug);
-    expect(moves).toEqual(['claude', 'claude-accounts', 'anthropic', 'anthropic-2', 'deepseek']);
+  it('holds a pool to the Claude CLI being there, as a key is', () => {
+    const rows = engineProviders(CLAUDE, sources({ configured, pools: [pool], engineHealth: [{ engine: 'claude', installed: false, auth: 'unknown' }] }));
+    expect(rows.find((row) => row.slug === 'claude-accounts')).toMatchObject({ unavailable: 'Not installed', fixEngine: 'claude' });
   });
 });
 
-describe('shared pools among the choices', () => {
+describe('shared pools among the credentials', () => {
   // A shared pool of OpenAI keys as WorkspaceView hands it in: its keys as members
   // (sharedPoolAsProviderPool), and a Codex entry in the catalogue (poolsAsProviders).
   const team = {
@@ -730,33 +765,27 @@ describe('shared pools among the choices', () => {
     slug: 'team-codex',
     label: 'Team Codex',
     members: [{ slug: 'k1' }, { slug: 'k2' }, { slug: 'k3' }],
-    shared: {},
+    shared: {} as never,
   };
   const configured: ConfiguredProvider[] = [
     deepseek,
     { slug: team.slug, label: team.label, runtime: 'codex', models: [], presetSlug: 'openai', modelsFromRuntime: true },
   ];
 
-  it('offers one after the engines, wearing the Codex mark and counting its keys', () => {
-    const choices = providerChoices(configured, catalog, undefined, undefined, [team]);
-    expect(choices.map((c) => c.slug)).toEqual(['claude', 'codex', 'kimi', 'team-codex', 'deepseek', 'opencode']);
-    const tile = choices.find((c) => c.slug === 'team-codex')!;
-    expect(tile).toMatchObject({ kind: 'pool', label: 'Team Codex', poolSize: 3, poolUnit: 'key', glyphKey: 'openai' });
+  it('offers one under Codex, wearing the Codex mark and counting its keys', () => {
+    const rows = engineProviders(CODEX, sources({ configured, pools: [team] }));
+    expect(slugs(rows)).toEqual(['codex', 'team-codex']);
+    expect(rows[1]).toMatchObject({ kind: 'pool', label: 'Team Codex', poolSize: 3, poolUnit: 'key', glyphKey: 'openai' });
     // Its model is the Codex CLI's own.
-    expect(tile.modelLabel).toBe('GPT-5.6 Sol');
+    expect(rows[1].modelLabel).toBe('GPT-5.6 Sol');
+    expect(slugs(engineProviders(CLAUDE, sources({ configured, pools: [team] })))).not.toContain('team-codex');
   });
 
   it('holds it to the Codex CLI being there, not the Claude one', () => {
-    const noCodex = providerChoices(configured, catalog, undefined, [{ engine: 'codex', installed: false, auth: 'unknown' }], [team]);
-    expect(noCodex.find((c) => c.slug === 'team-codex')).toMatchObject({ unavailable: 'Not installed', fixEngine: 'codex' });
-    const noClaude = providerChoices(configured, catalog, undefined, [{ engine: 'claude', installed: false, auth: 'unknown' }], [team]);
-    expect(noClaude.find((c) => c.slug === 'team-codex')?.unavailable).toBeUndefined();
-  });
-
-  it('lets a codex session move onto it, and not a claude one', () => {
-    const choices = providerChoices(configured, catalog, undefined, undefined, [team]);
-    expect(sameRuntimeChoices('codex', choices, configured, catalog).map((c) => c.slug)).toEqual(['codex', 'team-codex']);
-    expect(sameRuntimeChoices('claude', choices, configured, catalog).map((c) => c.slug)).not.toContain('team-codex');
+    const noCodex = engineProviders(CODEX, sources({ configured, pools: [team], engineHealth: [{ engine: 'codex', installed: false, auth: 'unknown' }] }));
+    expect(noCodex.find((row) => row.slug === 'team-codex')).toMatchObject({ unavailable: 'Not installed', fixEngine: 'codex' });
+    const noClaude = engineProviders(CODEX, sources({ configured, pools: [team], engineHealth: [{ engine: 'claude', installed: false, auth: 'unknown' }] }));
+    expect(noClaude.find((row) => row.slug === 'team-codex')?.unavailable).toBeUndefined();
   });
 });
 
@@ -833,8 +862,8 @@ describe('a Codex pool somebody was added to, in their picker', () => {
   const configured: ConfiguredProvider[] = [
     { slug: 'codex-pool', label: 'Codex Pool', runtime: 'codex', models: [], presetSlug: 'openai', modelsFromRuntime: true },
   ];
-  const tileOf = (pool: SharedPool, engineHealth?: Parameters<typeof providerChoices>[3]) =>
-    providerChoices(configured, catalog, undefined, engineHealth, [sharedPoolAsProviderPool(pool)]).find(
+  const tileOf = (pool: SharedPool, engineHealth?: ChoiceSources['engineHealth']) =>
+    engineProviders(CODEX, { configured, modelCatalog: catalog, engineHealth, pools: [sharedPoolAsProviderPool(pool)] }).find(
       (c) => c.slug === 'codex-pool',
     )!;
 
@@ -903,127 +932,33 @@ describe('runtimeSummary', () => {
   });
 });
 
-describe('engineChoices', () => {
-  const configured = [deepseek, moonshot, gemini];
-  const all = providerChoices(configured, catalog, undefined, undefined, [], undefined, undefined, true);
-
-  it('lists each engine once, its keys folded into the engine that runs them', () => {
-    expect(engineChoices(all, configured).map((engine) => engine.slug)).toEqual(['claude', 'codex', 'antigravity', 'kimi', 'opencode']);
-  });
-
-  it("lands on the engine's own sign-in, unless a preferred provider of it can run", () => {
-    const landing = (preferred: string[]) =>
-      engineChoices(all, configured, preferred).map((engine) => engine.provider.slug);
-    expect(landing([])).toEqual(['claude', 'codex', 'antigravity', 'kimi', 'opencode']);
-    // The draft's pick first, then what the workspace last ran: each only where it runs.
-    expect(landing(['deepseek', 'moonshot'])).toEqual(['deepseek', 'codex', 'antigravity', 'moonshot', 'opencode']);
-  });
-
-  it('skips a preferred provider that cannot run, and a signed-out engine, for one that can', () => {
-    const choices = providerChoices(configured, catalog, undefined, [{ engine: 'claude', installed: true, auth: 'no' }]);
-    const claude = engineChoices(choices, configured, [])[0];
-    expect(claude.provider.slug).toBe('deepseek');
-    expect(claude.unavailable).toBeUndefined();
-  });
-
-  it('carries the reason when no provider of the engine can run', () => {
-    const choices = providerChoices(configured, catalog, undefined, [{ engine: 'kimi', installed: false, auth: 'unknown' }]);
-    const kimi = engineChoices(choices, configured, ['moonshot']).find((engine) => engine.slug === 'kimi')!;
-    expect(kimi.provider.slug).toBe('kimi');
-    expect(kimi.unavailable).toBe('Not installed');
-    expect(kimi.provider.fixEngine).toBe('kimi');
-  });
-
-});
-
-describe('OpenCode and the keys it may spend', () => {
-  const anthropicKey: ConfiguredProvider = {
-    slug: 'anthropic',
-    label: 'Anthropic (Claude)',
-    runtime: 'claude',
-    models: [],
-    defaultModel: 'claude-opus-5',
-    presetSlug: 'anthropic',
-    modelsFromRuntime: true,
-    runsOnOpenCode: true,
-  };
-  const configured: ConfiguredProvider[] = [
-    { ...deepseek, runsOnOpenCode: true },
-    { ...moonshot, runsOnOpenCode: true },
-    anthropicKey,
-    // A Claude subscription token: the server says no.
-    { ...anthropicKey, slug: 'anthropic-sub', label: 'Subscription', runsOnOpenCode: false },
-  ];
-  const installed = [{ engine: 'opencode' as const, installed: true, auth: 'unknown' as const }];
-
-  it('offers its own row without the keys until the runner reports it installed', () => {
-    // The engine row is there either way — Orbit installs it — while the keys it would spend are
-    // each a session that would run on a CLI this machine hasn't got.
-    for (const engines of [null, [{ engine: 'opencode' as const, installed: false, auth: 'unknown' as const }]]) {
-      const rows = providerChoices(configured, catalog, undefined, engines)
-        .filter((c) => runtimeForProvider(c.slug, configured) === 'opencode');
-      expect(rows.map((c) => c.slug)).toEqual(['opencode']);
-      expect(rows[0]).toMatchObject({ unavailable: 'Not installed', fixEngine: 'opencode' });
-    }
-  });
-
-  it('lists its own config, then every key it may spend — each key under its own engine as well', () => {
-    const choices = providerChoices(configured, catalog, undefined, installed);
-    const openCode = choices.filter((c) => runtimeForProvider(c.slug, configured) === 'opencode');
-    expect(openCode.map((c) => c.slug)).toEqual(['opencode', 'opencode/deepseek', 'opencode/moonshot', 'opencode/anthropic']);
-    expect(openCode.map((c) => c.label)).toEqual(['OpenCode', 'DeepSeek', 'Kimi (Moonshot)', 'Anthropic (Claude)']);
-    expect(openCode[1].modelLabel).toBe('DeepSeek V4 Pro');
-    expect(choices.some((c) => c.slug === 'deepseek')).toBe(true);
-  });
-
-  it('picks OpenCode engine by engine, and says which key it would spend', () => {
-    const choices = providerChoices(configured, catalog, undefined, installed);
-    const openCode = engineChoices(choices, configured, ['opencode/deepseek']).find((e) => e.slug === 'opencode')!;
-    expect(openCode.label).toBe('OpenCode');
-    expect(openCode.provider.slug).toBe('opencode/deepseek');
-    expect(sameRuntimeChoices('opencode/deepseek', choices, configured).map((c) => c.slug)).toEqual([
-      'opencode',
-      'opencode/deepseek',
-      'opencode/moonshot',
-      'opencode/anthropic',
-    ]);
-  });
-});
-
 describe('engineTitleFor', () => {
-  it('names the CLI that executes, not the vendor whose models it writes', () => {
-    // The composer menu's title answers "which engine runs this session". A BYOK provider writes
-    // its own models while Claude Code executes them, so the name is the CLI's.
-    expect(engineTitleFor('claude', [])).toMatchObject({ slug: 'claude', name: 'Claude Code', glyphKey: 'anthropic' });
-    expect(engineTitleFor('deepseek', [deepseek])).toMatchObject({
-      slug: 'claude',
-      name: 'Claude Code',
-      glyphKey: 'anthropic',
-    });
-    expect(engineTitleFor('my-endpoint', [custom]).name).toBe('Claude Code');
+  it('names the CLI that executes — the session’s own engine — not the vendor whose models it writes', () => {
+    expect(engineTitleFor(CLAUDE)).toMatchObject({ slug: 'claude', name: 'Claude Code', glyphKey: 'anthropic' });
+    expect(engineTitleFor(CODEX)).toMatchObject({ name: 'Codex', glyphKey: 'openai' });
+    expect(engineTitleFor(KIMI)).toMatchObject({ name: 'Kimi Code', glyphKey: 'moonshot' });
+    expect(engineTitleFor(OPENCODE).name).toBe('OpenCode');
+    expect(engineTitleFor(ANTIGRAVITY)).toMatchObject({ name: 'Antigravity CLI', glyphKey: 'antigravity' });
+    // DeepSeek Harness is DeepSeek's own agent, and wears DeepSeek's mark.
+    expect(engineTitleFor(DSH)).toMatchObject({ name: 'DeepSeek Harness', glyphKey: 'deepseek-harness' });
+  });
+});
+
+describe('what the cards and settings call a key and an engine', () => {
+  it('names a key by its vendor and its own name, never its slug or an engine (board 8)', () => {
+    expect(keyName(deepseek2)).toBe('the DeepSeek key “DeepSeek 2”');
+    expect(keyName(moonshot)).toBe('the Moonshot key “Kimi (Moonshot)”');
+    expect(keyName({ label: 'DeepSeek Harness', presetSlug: 'deepseek-harness' })).toBe('the DeepSeek key “DeepSeek Harness”');
+    // A custom endpoint is DeepSeek's when DeepSeek Harness runs it — the server's answer, not a guess.
+    expect(keyName({ label: 'Proxy', presetSlug: null, engines: ['claude', 'opencode', 'dsh'] })).toBe('the DeepSeek key “Proxy”');
+    expect(keyName(custom)).toBe('the key “my endpoint”');
   });
 
-  it('gives every other engine its own product name and mark', () => {
-    expect(engineTitleFor('codex', [])).toMatchObject({ name: 'Codex', glyphKey: 'openai' });
-    expect(engineTitleFor('kimi', [])).toMatchObject({ name: 'Kimi Code', glyphKey: 'moonshot' });
-    expect(engineTitleFor('opencode', []).name).toBe('OpenCode');
-    expect(engineTitleFor('antigravity', [])).toMatchObject({ name: 'Antigravity CLI', glyphKey: 'antigravity' });
-    expect(engineTitleFor('dsh', []).name).toBe('DeepSeek Harness');
-  });
-
-  it('takes the safe Claude fallback for a provider it cannot place', () => {
-    expect(engineTitleFor('nonsense', []).name).toBe('Claude Code');
-    expect(engineTitleFor(null, []).name).toBe('Claude Code');
-  });
-
-  it('says where a standing pick goes only when it changes the engine', () => {
-    // A pick that crosses CLIs is a transition worth printing.
-    expect(engineTitleFor('claude', [], 'codex')).toMatchObject({ name: 'Claude Code', nextName: 'Codex' });
-    expect(engineTitleFor('opencode', [], 'claude')).toMatchObject({ name: 'OpenCode', nextName: 'Claude Code' });
-    // Two providers of one CLI are the same engine — the title stays one name, and the Provider
-    // row below is where that pick is read.
-    expect(engineTitleFor('deepseek', [deepseek], 'claude').nextName).toBeNull();
-    expect(engineTitleFor('claude', [], 'deepseek').nextName).toBeNull();
-    expect(engineTitleFor('claude', [], null).nextName).toBeNull();
+  it('says a workspace’s next session as its engine, via its credential (board 7)', () => {
+    expect(engineVia(CLAUDE, 'deepseek', [deepseek])).toBe('Claude Code via DeepSeek');
+    expect(engineVia(DSH, 'deepseek-2', [deepseek2])).toBe('DeepSeek Harness via DeepSeek 2');
+    expect(engineVia(CLAUDE, 'claude')).toBe('Claude Code');
+    expect(engineVia(OPENCODE, 'opencode')).toBe('OpenCode');
+    expect(engineVia(CODEX, 'gone', [])).toBe('Codex via gone');
   });
 });

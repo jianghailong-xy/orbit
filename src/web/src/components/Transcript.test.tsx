@@ -1955,6 +1955,21 @@ describe('runtime authentication help', () => {
     expect(html).not.toContain('opencode auth login');
   });
 
+  it('names the rejected key by its vendor and its own name, never its slug (board 8)', () => {
+    const html = renderToStaticMarkup(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <AuthErrorCtx.Provider value={{ provider: 'deepseek', keyName: 'the DeepSeek key “DeepSeek”', runtime: 'claude', runnerName: 'box' }}>
+          <Transcript events={[errorEvent(1, AUTH_FAILED)]} />
+        </AuthErrorCtx.Provider>
+      </QueryClientProvider>,
+    );
+    expect(html).toContain('The DeepSeek key “DeepSeek” was rejected. Update it in Infrastructure, then send your message again.');
+    expect(html).not.toContain('<code>deepseek</code>');
+    // A key this account no longer has: still no slug.
+    expect(card('deepseek')).toContain('The API key was rejected.');
+    expect(card('deepseek')).not.toContain('<code>deepseek</code>');
+  });
+
   it('takes Antigravity to the encrypted Gemini key in Providers', () => {
     const html = card('antigravity');
 
