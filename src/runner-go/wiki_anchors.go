@@ -369,15 +369,11 @@ func wikiAnchorsCheckout(flagValue string, listed *wikiAnchorRepo) (string, erro
 
 // fetchWikiAnchorsRef fetches origin's main and answers the commit origin/main names after it: every
 // anchor of the run is checked on that one commit, and the report says which.
-//
-// --no-auto-maintenance: the run starts no maintenance in a checkout it only reads. Git's own after a
-// fetch is a detached process that holds the fetch's output for a moment after the fetch has exited —
-// a moment as long as a loaded machine makes it (wikiAnchorGit).
 func fetchWikiAnchorsRef(repo string) (string, error) {
-	if _, code, stderr, err := wikiAnchorGit(repo, wikiAnchorFetchTimeout, "fetch", "--quiet", "--no-tags", "--no-auto-maintenance", "origin", wikiAnchorsVerifyRefspec); err != nil || code != 0 {
+	if err := fetchWikiOriginMain(repo); err != nil {
 		return "", fmt.Errorf("orbit wiki anchors verify: git fetch origin main failed in %s, so nothing was checked and "+
-			"nothing reported — a check against an origin/main that was not just fetched says nothing about main: %s",
-			repo, firstNonEmpty(strings.TrimSpace(stderr), errString(err)))
+			"nothing reported — a check against an origin/main that was not just fetched says nothing about main: %v",
+			repo, err)
 	}
 	out, code, stderr, err := wikiAnchorGit(repo, wikiAnchorGitTimeout, "rev-parse", "--verify", "--quiet", "refs/remotes/origin/main^{commit}")
 	ref := strings.TrimSpace(string(out))
@@ -386,6 +382,62 @@ func fetchWikiAnchorsRef(repo string) (string, error) {
 			repo, firstNonEmpty(strings.TrimSpace(stderr), errString(err), ref))
 	}
 	return ref, nil
+}
+
+// The wiki fetch lock (fetchWikiOriginMain): a file in the repository's git directory, and how often a
+// fetch waiting for it looks again.
+const (
+	wikiFetchLockName = "orbit-wiki-fetch.lock"
+	wikiFetchLockPoll = 50 * time.Millisecond
+)
+
+// wikiFetchLockWait is the longest a fetch waits for another wiki fetch of the same checkout. A fetch
+// takes seconds, so a minute is one that is stuck, and the server waits five for the whole operation
+// (repoWaitSeconds). A variable only so a test can outwait a held lock in less than a minute.
+var wikiFetchLockWait = time.Minute
+
+// fetchWikiOriginMain fetches origin's main into refs/remotes/origin/main — the one fetch every wiki
+// reader of a checkout makes: the runner's repository operations, `orbit wiki anchors verify`, and a
+// maintenance run's checkout in a session. An error is git's own words; each caller says what it means.
+//
+// THE FAILURE THIS EXISTS FOR (2026-10-09, the canary's docs build 79620f23). A fetch updates
+// refs/remotes/origin/main only from the value it read when it began. Two fetches of one checkout that
+// both began before main moved both read the old value, the first writes the new one, and the second is
+// refused —
+//
+//	error: cannot lock ref 'refs/remotes/origin/main': is at 6c9cebd4d… but expected 8fcd5b3c7…
+//
+// — a read lost over a race that says nothing about the repository. Two answers, one for each kind of
+// fetch that can be in the way:
+//
+//   - The wiki's own fetches of a checkout take turns: an flock on wikiFetchLockName in the repository's
+//     git directory, which the runner's goroutines and a CLI process in a session take alike. It is
+//     waited for at most wikiFetchLockWait; past that this fetch goes ahead without it, because a fetch
+//     stuck on the network holds it until its own timeout, and every operation queued behind it would
+//     spend the server's whole wait there.
+//   - Every other fetch of the checkout — a session starting, an integration job, the person at the
+//     keyboard — takes no such lock, and is waited out the way integrationFetch waits it out: git refused
+//     the ref's lock, so the same fetch is tried again.
+//
+// --no-auto-maintenance: the run starts no maintenance in a checkout it only reads. Git's own after a
+// fetch is a detached process that holds the fetch's output for a moment after the fetch has exited —
+// a moment as long as a loaded machine makes it (wikiAnchorGit).
+func fetchWikiOriginMain(repo string) error {
+	if common := gitCommonDir(repo); common != "" {
+		if release, held := acquireWikiFetchLock(filepath.Join(common, wikiFetchLockName), wikiFetchLockWait); held {
+			defer release()
+		}
+	}
+	for attempt := 1; ; attempt++ {
+		_, code, stderr, err := wikiAnchorGit(repo, wikiAnchorFetchTimeout, "fetch", "--quiet", "--no-tags", "--no-auto-maintenance", "origin", wikiAnchorsVerifyRefspec)
+		if err == nil && code == 0 {
+			return nil
+		}
+		if err != nil || !strings.Contains(stderr, "cannot lock ref") || attempt == integrationFetchLockAttempts {
+			return errors.New(firstNonEmpty(strings.TrimSpace(stderr), errString(err), fmt.Sprintf("git fetch exited %d", code)))
+		}
+		integrationFetchLockPause(integrationFetchLockWait << (attempt - 1))
+	}
 }
 
 // ── The three checks ────────────────────────────────────────────────────────────────────────────

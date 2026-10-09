@@ -22,7 +22,9 @@ import { cutRunes } from './wiki-import-extract';
  * holds that both ways), and every settle clears them. A lease that runs out is not lost work: the sweep
  * puts the row back to queued with the lost attempt counted and a backoff, and the next claim — this
  * process's or another's — takes it from the start, where the request rows it already made answer the
- * replay (see wiki-model-queue.ts).
+ * replay (see wiki-model-queue.ts). A worker that is stopped hands its jobs back itself instead
+ * (`releaseWikiJobLease`): queued at once and nothing counted, so a deploy costs a job no attempt (the owner's
+ * decision of 2026-10-09), and the sweep only ever meets a lease nobody handed back — a worker that died.
  *
  * WHO RUNS
  * `owners` is the claim's account filter: null for every account (`server`), the canary list under `canary`,
@@ -137,6 +139,8 @@ export async function renewWikiJobLease(
  * The lease-expiry sweep: running jobs whose lease ran out go back to queued, the lost attempt counted and
  * the next try on the backoff (WIKI_JOB.retryBackoffSeconds, spelled in the CASE below). A job taken over
  * this way starts from the beginning; the requests it already made answer its replay (wiki-model-queue.ts).
+ * These are the leases nobody handed back: the worker crashed, was killed, or died before its hand-back was
+ * written. A worker that is stopped hands its jobs back itself (`releaseWikiJobLease`), and none reaches here.
  */
 export async function reclaimExpiredWikiJobs(prisma: PrismaService, limit: number): Promise<string[]> {
   const reclaimed = await prisma.$queryRaw<Array<{ id: string }>>`
@@ -387,14 +391,33 @@ export async function settleWikiJobRows(tx: Prisma.TransactionClient, job: Ended
 }
 
 /**
- * Let go of a running job at shutdown (design §5.4, the owner's plan A): the lease deadline becomes now, so
- * the next process's sweep takes the row over at once instead of waiting out the rest of the lease. The
- * job's requests are let go the same way (wiki-model-queue.ts), and whatever the job had written stands.
+ * What a job the worker's stop handed back says on its row (contract `jobs.lease.handBack`). It is no failure, so
+ * the row's failure_kind is cleared with it, and it is not the sweep's LEASE_EXPIRED, which a lease nobody handed
+ * back gets.
+ */
+export const WIKI_JOB_HANDED_BACK =
+  'WORKER_STOPPED: the worker was stopped and handed this job back; the next one takes it over at once, without counting an attempt';
+
+/**
+ * Hand a running job back at shutdown (design §5.4, the owner's plan A; contract `jobs.lease.handBack`): back to
+ * queued in this one write, its lease cleared, nothing scheduled and its attempts as they were — a deploy costs a job
+ * no attempt (the owner's decision of 2026-10-09) — with why on its row. The next claim, the next process's first pass
+ * or another worker's, takes it at once, in its space's own order: priority, then the longest-waiting. Its requests
+ * are let go the queue's way (wiki-model-queue.ts) and met again by its replay; whatever the job had written stands.
+ * A compare-and-set on the claim's generation, so only the attempt the stop cut short can be handed back: a job taken
+ * over is not touched, and a worker that dies before this write leaves its lease to run out, which the sweep counts.
  */
 export async function releaseWikiJobLease(prisma: PrismaService, input: { id: string; generation: string }): Promise<boolean> {
   const updated = await prisma.$executeRaw`
     UPDATE "wiki_job"
-    SET "lease_deadline_at" = now(), "updated_at" = now()
+    SET "state" = 'queued',
+        "lease_owner" = NULL,
+        "lease_generation" = NULL,
+        "lease_deadline_at" = NULL,
+        "next_attempt_at" = NULL,
+        "failure_kind" = NULL,
+        "error" = ${WIKI_JOB_HANDED_BACK},
+        "updated_at" = now()
     WHERE "id" = ${input.id}::uuid AND "state" = 'running' AND "lease_generation" = ${input.generation}::uuid`;
   return updated > 0;
 }
