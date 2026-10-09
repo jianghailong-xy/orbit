@@ -29,6 +29,7 @@ export const migrationPgNames = [
   'T4 every fixture session resolves to the same engine, key, endpoint, model and runtime id before and after, and dispatch agrees',
   'T4 running it again changes nothing, and a start after the marker folds only the rows an older replica made',
   'T4 two replicas starting together: one migrates, the other waits for it and finds nothing left',
+  'T4 a row whose key cannot be read is left as it is, and the run stays incomplete until a start can read it',
   'T4 a rehearsal reports what a run would do and writes nothing',
   'T4 the report lists every row it touched, in its table and in the log, and holds no key material',
 ];
@@ -53,7 +54,7 @@ export const regressionPgSources = [
 
 /** Each acceptance criterion of the task, and the named scenarios that prove it. */
 export const criteria = {
-  'merged only when the same key is on the same endpoint and both are enabled': [migrationPgNames[1], migrationPgNames[2], apiCases['providers/provider-engine-migration'][0]],
+  'merged only when the same key is on the same endpoint and both are enabled': [migrationPgNames[1], migrationPgNames[2], migrationPgNames[12], apiCases['providers/provider-engine-migration'][0]],
   'every other row converts where it stands, and a turned-off one stays off': [migrationPgNames[2]],
   'several DeepSeek Harness rows of one owner': [migrationPgNames[3]],
   'sessions, task pins, preferences and Wiki settings are rewritten': [migrationPgNames[4]],
@@ -63,7 +64,7 @@ export const criteria = {
   'every fixture session resolves the same before and after (engine, key fingerprint, endpoint, model, runtime id)': [
     migrationPgNames[9], apiCases['providers/provider-engine-migration'][1], apiCases['providers/provider-engine-migration'][2],
   ],
-  'a per-row report': [migrationPgNames[13], migrationPgNames[8], migrationPgNames[12]],
+  'a per-row report': [migrationPgNames[14], migrationPgNames[8], migrationPgNames[13]],
 };
 
 export const guardNames = [

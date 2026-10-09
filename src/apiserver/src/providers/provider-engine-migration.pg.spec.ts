@@ -793,6 +793,42 @@ test('T4 provider-engine migration on PostgreSQL', { timeout: 900_000 }, async (
     assert.deepEqual(comparable(after), comparable(was));
   });
 
+  await t.test('T4 a row whose key cannot be read is left as it is, and the run stays incomplete until a start can read it', async () => {
+    const owner = await account('unreadable');
+    const at = await machine(owner);
+    const apiKey = `sk-${randomUUID()}`;
+    const target = await deepSeekKey(owner, { apiKey });
+    const row = await harnessRow(owner, { apiKey });
+    // Its key under another secret: what a missing or rotated PROVIDER_SECRET_KEY leaves the server with.
+    const secret = process.env.PROVIDER_SECRET_KEY;
+    process.env.PROVIDER_SECRET_KEY = 'a-secret-this-server-does-not-hold';
+    const foreign = encryptSecret(apiKey);
+    process.env.PROVIDER_SECRET_KEY = secret;
+    await db.modelProvider.update({ where: { id: row.id }, data: { apiKeyEnc: foreign } });
+    const onRow = await session(at, row.slug, { label: 'unreadable: on a row whose key cannot be read', engine: AgentProvider.DSH });
+    await db.providerEngineMigrationRun.updateMany({ where: { complete: true }, data: { complete: false } });
+    const was = await sessionResolution(db, onRow);
+    const result = await migration().run();
+    runs.push(result);
+    assert.deepEqual([result.summary?.complete, result.summary?.legacyRowsLeft], [false, 1], 'no completion marker while a row is left');
+    const line = linesOf(result, owner).find((l) => l.rowId === row.id)!;
+    assert.equal(line.action, 'UNRESOLVED');
+    assert.match(line.note ?? '', /cannot be decrypted/);
+    const kept = (await keyRow(row.id))!;
+    assert.deepEqual([kept.runtime, kept.slug, kept.presetSlug], [AgentProvider.DSH, row.slug, 'deepseek-harness'], 'neither merged nor converted');
+    assert.equal(await alias(row.slug), null);
+    assert.equal((await stored(onRow)).provider, row.slug);
+    const now = await sessionResolution(db, onRow);
+    compared.set(onRow, [{ before: was, after: now }]);
+    assert.deepEqual(comparable(now), comparable(was));
+    // A start that can read it — its key entered again — folds it.
+    await db.modelProvider.update({ where: { id: row.id }, data: { apiKeyEnc: encryptSecret(apiKey) } });
+    await migrate();
+    assert.equal(await keyRow(row.id), null);
+    assert.deepEqual(await alias(row.slug), { providerId: target.id, engine: AgentProvider.DSH, reason: 'MERGED' });
+    assert.equal((await stored(onRow)).provider, target.slug);
+  });
+
   await t.test('T4 a rehearsal reports what a run would do and writes nothing', async () => {
     const owner = await account('rehearsal');
     const at = await machine(owner);

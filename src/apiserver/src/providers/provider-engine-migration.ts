@@ -524,19 +524,24 @@ function heldKey(row: ModelProvider): string | null {
   }
 }
 
-/** Why `row` is not merged, or the key it is merged into (§7.2): the first of the owner's enabled
- *  DeepSeek keys that DeepSeek Harness can run, holding the same key on the same endpoint. */
+/**
+ * The key `row` is merged into (§7.2) — the first of the owner's enabled DeepSeek keys that DeepSeek
+ * Harness can run, holding the same key on the same endpoint — or why it converts where it stands, or why
+ * it is left as it is: an enabled row whose key cannot be decrypted (a PROVIDER_SECRET_KEY missing or
+ * rotated) cannot be told apart from a key the owner already has, and neither fold can be taken back, so
+ * it waits for a start that can read it, and keeps the completion marker from being written until then.
+ */
 async function mergeTarget(
   tx: Prisma.TransactionClient,
   row: ModelProvider,
   keys: ModelProvider[],
-): Promise<{ target: ModelProvider } | { why: string }> {
+): Promise<{ target: ModelProvider } | { why: string } | { kept: string }> {
   if (!row.enabled) return { why: 'it is turned off, so it is not merged; it stays off' };
   if (await tx.providerPoolMember.count({ where: { providerId: row.id } })) {
     return { why: 'it is a member of an account pool, which a merge would take it out of' };
   }
   const key = heldKey(row);
-  if (key === null) return { why: 'its key cannot be decrypted, so no other key can be shown to be the same' };
+  if (key === null) return { kept: 'its key cannot be decrypted, so whether a DeepSeek key of its owner holds the same one cannot be told; left for a start that can read it' };
   const endpoint = normalizedEndpoint(row.baseUrl);
   const target = keys.find((candidate) =>
     candidate.id !== row.id
@@ -572,7 +577,7 @@ async function freeDeepSeekSlug(tx: Prisma.TransactionClient): Promise<string> {
 /**
  * Merge or convert one `deepseek-harness` row (§7.2), and retire its slug: deleted before its name is
  * taken as an alias (or renamed first), since 0265's guard refuses a name a row still holds. Answers the
- * slug its references move to, and the owner's keys as they now are.
+ * slug its references move to — its own, for a row left as it is — and the owner's keys as they now are.
  */
 async function foldLegacyRow(
   tx: Prisma.TransactionClient,
@@ -581,6 +586,10 @@ async function foldLegacyRow(
 ): Promise<{ slug: string; keys: ModelProvider[]; lines: ReportLine[] }> {
   const lines: ReportLine[] = [];
   const merge = await mergeTarget(tx, row, keys);
+  if ('kept' in merge) {
+    lines.push({ step: 'dsh-row', table: 'model_provider', rowId: row.id, ownerId: row.ownerId, action: 'UNRESOLVED', before: rowView(row), note: merge.kept });
+    return { slug: row.slug, keys, lines };
+  }
   if ('target' in merge) {
     const { target } = merge;
     await tx.modelProvider.delete({ where: { id: row.id } });
