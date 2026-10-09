@@ -47,6 +47,7 @@ fun SettingsScreen(api: ManagementApi, route: OrbitRoute, revision: Long, open: 
         "workspace" -> WorkspaceSettings(api, route.workspaceId, revision, back, workspaceDeleted, changed)
         "runners" -> RunnersList(api, revision, runner)
         "sharing" -> SharingSettings(api, revision)
+        "access-tokens" -> AccessTokensSettings(api, revision)
         "share" -> route.recordId?.split(':', limit = 2)?.takeIf { it.size == 2 }?.let { (kind, id) -> ShareResourceSettings(api, revision, kind, id) }
         "admin" -> AdminSettings(api, revision, route.recordId, open, back)
         "notifications" -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
@@ -63,7 +64,7 @@ fun SettingsScreen(api: ManagementApi, route: OrbitRoute, revision: Long, open: 
 fun settingsTitle(page: String?, record: String? = null): String = when (page) {
     "share" -> ShareCopy.title(record?.substringBefore(':') ?: "SESSION")
     "profile" -> "Edit profile"; "password" -> "Change password"; "providers" -> "Providers"
-    "workspace" -> "Workspace settings"; "runners" -> "Runners"; "sharing" -> "Shared links"
+    "workspace" -> "Workspace settings"; "runners" -> "Runners"; "sharing" -> "Shared links"; "access-tokens" -> AccessTokens.TITLE
     "admin" -> "Admin"; "notifications" -> "Notifications"; "about" -> "About"; else -> "Settings"
 }
 
@@ -72,6 +73,9 @@ internal fun settingsRunnersValue(runners: List<JsonObject>): String =
     if (runners.isEmpty()) "None" else "${runners.count { it.flag("online") }} of ${runners.size} online"
 
 internal fun settingsSharedLinksValue(active: Int): String = if (active > 0) "$active active" else "None"
+
+/** SettingsHome.accessTokensValue: "3 active" — the tokens that still work. */
+internal fun settingsAccessTokensValue(active: Int): String = if (active > 0) "$active active" else "None"
 
 /** The server as the sign-in screen asked for it: the host, and the port when it is not the scheme's own. */
 internal fun settingsInstanceName(server: String): String? = server.toHttpUrlOrNull()?.let {
@@ -95,6 +99,7 @@ private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) 
     val instance = remember(api) { settingsInstanceName(api.handle.account.server) }
     var runners by remember(api) { mutableStateOf<String?>(null) }
     var sharedLinks by remember(api) { mutableStateOf<String?>(null) }
+    var accessTokens by remember(api) { mutableStateOf<String?>(null) }
     var alerts by remember { mutableStateOf(deviceAlerts()) }
     var signingOut by remember { mutableStateOf(false) }
     var resumed by remember { mutableIntStateOf(0) }
@@ -113,6 +118,10 @@ private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) 
         }
         launch {
             try { sharedLinks = settingsSharedLinksValue(sharingList(api.get("share-links")).list("links").count { it.text("state") == "ACTIVE" }) }
+            catch (e: CancellationException) { throw e } catch (_: Exception) { }
+        }
+        launch {
+            try { accessTokens = settingsAccessTokensValue(AccessTokens.tokens(accessTokenList(api.get("access-tokens")), AccessTokens.Tab.ACTIVE).size) }
             catch (e: CancellationException) { throw e } catch (_: Exception) { }
         }
     }
@@ -171,6 +180,7 @@ private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) 
             SettingsValue("Email", R.drawable.ic_mail, user?.text("email").orEmpty())
             SettingsValue("Instance", R.drawable.ic_globe, instance.orEmpty())
             SettingsLink("Shared links", R.drawable.ic_link, sharedLinks) { page("sharing") }
+            SettingsLink(AccessTokens.TITLE, R.drawable.ic_key, accessTokens) { page("access-tokens") }
             SettingsLink("Change password", R.drawable.ic_password) { page("password") }
             if (user?.text("role") == "ADMIN") SettingsLink("Admin", R.drawable.ic_admin) { page("admin") }
         }
