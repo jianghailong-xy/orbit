@@ -2,15 +2,24 @@ package io.orbitd.android.reader
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -19,6 +28,7 @@ import io.orbitd.android.core.cards.transcriptCards
 import io.orbitd.android.cards.TranscriptCardView
 import io.orbitd.android.cards.DetailFold
 import io.orbitd.android.text.*
+import io.orbitd.android.ui.LocalOrbitColors
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.*
@@ -61,7 +71,8 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
         "tool_result" -> "Tool output"
         "interrupt" -> "Interrupted"
         "error", "auth_error" -> "Error"
-        "auto_retry" -> "Retrying"
+        "notice" -> "Notice"
+        "auto_retry" -> EngineErrors.autoRetryTitle(shown.fields.string("variant") == "quota", shown.body())
         "background_task" -> "Background work"
         else -> event.type.replace('_', ' ').replaceFirstChar(Char::uppercase)
     }
@@ -96,6 +107,9 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
                     if (row.children.size > 4) TextButton(onClick = { childrenOpen = true }) { Text("Open subagent transcript") }
                 }
             } else liveOutput?.let { Text(it.takeLast(240), maxLines = 3, style = MaterialTheme.typography.bodySmall) }
+        } else if (event.type in setOf("error", "notice", "auto_retry")) {
+            EngineLine(shown)
+            if (shown.truncated) TextButton(enabled = !loading, onClick = { loadFull() }) { Text(if (error) "Couldn't load full message · Retry" else "Read full message") }
         } else if (event.type == "thinking") {
             TextButton(onClick = { expanded = !expanded }) { Text(if (expanded) "Hide thinking" else "Show thinking") }
             if (expanded) MarkdownText(shown.body(), open = open)
@@ -126,3 +140,49 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
         } }
     }
 }
+
+/** A failure or heads-up the engine reported, drawn as iOS's label: red for an error, the warning tone at label size for a notice. */
+@Composable
+private fun EngineLine(event: RunEvent) {
+    val text = event.body()
+    when (event.type) {
+        "error" -> ToolFailureSummary.parse(text)?.let { ToolFailureCard(text, it) }
+            ?: GlyphLine("⚠", text, MaterialTheme.colorScheme.error, MaterialTheme.typography.bodyLarge)
+        "notice" -> GlyphLine("⚠", text, LocalOrbitColors.current.needsYou, MaterialTheme.typography.labelLarge)
+        // The self-healing failure's sentence; the card around it (countdown, Retry) is the auto-retry card's.
+        else -> GlyphLine("◷", text, MaterialTheme.colorScheme.onSurfaceVariant, MaterialTheme.typography.bodyMedium)
+    }
+}
+
+@Composable
+private fun GlyphLine(glyph: String, text: String, color: Color, style: TextStyle) {
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(glyph, color = color, style = style, modifier = Modifier.clearAndSetSemantics { })
+        SelectionContainer { Text(text, color = color, style = style) }
+    }
+}
+
+/** A tool's failure folded to the call, its path and a stable reason, with the engine's whole log one tap away (iOS `ToolFailureCardView`). */
+@Composable
+private fun ToolFailureCard(message: String, summary: ToolFailureSummary) {
+    var expanded by rememberSaveable(message) { mutableStateOf(false) }
+    val error = MaterialTheme.colorScheme.error
+    Column(Modifier.fillMaxWidth().drawBehind { drawRect(error, size = size.copy(width = 3.dp.toPx())) }.padding(start = 11.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(summary.tool ?: "Tool call", Modifier.weight(1f, fill = false), fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text("Failed", color = error, style = MaterialTheme.typography.labelLarge, maxLines = 1)
+        }
+        summary.path?.let { Text(it, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.StartEllipsis) }
+        Text(summary.reason, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 2, overflow = TextOverflow.Ellipsis)
+        TextButton(onClick = { expanded = !expanded }) { Text(if (expanded) "Hide full log" else "Show full log") }
+        if (expanded) SelectionContainer {
+            Text(message, Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant).padding(8.dp),
+                fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
