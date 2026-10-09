@@ -255,9 +255,11 @@ transcript reducer 里加三行，按 seq 顺序回放，结果天然正确：
 - **macOS / iPad**：和 iPhone 是同一个 SwiftUI `ComposerView`。iPad 同 iPhone（拍两下）；macOS 不变：`TextField`
   另接 `.onKeyPress(keys: [.tab])`，行尾是 `Use ⇥` 胶囊。
 - **Android**：`SessionComposer.kt` 的 `OutlinedTextField` 用 placeholder 写灰字（单行截断，后跟提示小字，
-  SharedPreferences `orbit.composer` 记用过），没有 trailingIcon。`Modifier.doubleTapToUse` 认两下：输入框没聚焦时
-  第一下先扣住，超时没有第二下再交还（聚焦、起键盘），已聚焦时第一下照常；第二下的抬起不交给输入框（不落光标、
-  不弹工具条）。TalkBack 走 **Use suggestion** 自定义动作，
+  SharedPreferences `orbit.composer` 记用过），没有 trailingIcon。输入框没聚焦时，上面盖一层只收点按的透明层
+  （`SuggestionTaps`，Compose 自己的 `detectTapGestures`）：拍两下填入，单点（或长按）等双击超时才交还为聚焦、
+  起键盘，理由同 §4.1。没用 Initial 阶段扣住第一下的办法，是因为输入框自己的选字手势不看 consume，第二下的按下
+  就会让它聚焦。已聚焦时去掉这层，第一下照常交给输入框，第二下的抬起不交给它（`Modifier.doubleTapToUse`：
+  不落光标、不弹工具条）。TalkBack 走 **Use suggestion** 自定义动作，
   提示小字不读。推导在 core 的 `Transcript.promptSuggestion`，判断在 `ComposerData.kt` 的 `offeredPromptSuggestion`。
 
 ### 4.4 显示规则
@@ -318,12 +320,12 @@ transcript reducer 里加三行，按 seq 顺序回放，结果天然正确：
 | apiserver | `common/prompt-suggestions-switch.ts`（新）、`queue/queue.service.ts`、`runner-api/runner-api.controller.ts` | §3.1 的规则；领取与重领的 agent 配置 |
 | apiserver | `users/dto.ts`、`users/users.controller.ts` | 账号偏好 `promptSuggestions` |
 | apiserver | `runner-api/session-activity.ts` 及 spec、`common/prompt-suggestions-switch.spec.ts`（新） | 不推进 `lastTurnAt`；规则单测 |
-| web | `lib/promptSuggestion.ts`（新）、`components/WorkspaceView.tsx`、`index.css`、`lib/queries.ts`、`pages/SettingsPage.tsx` | 推导与判断；灰字 + Tab 键帽（触屏 Use）；设置页开关 |
-| web | `lib/promptSuggestion.test.ts`、`components/WorkspaceView.promptSuggestion.test.tsx`（新） | 推导与判断；会话页出现、Use、Tab、打字让位、新消息作废、卡片在等时不出 |
+| web | `lib/promptSuggestion.ts`（新）、`components/WorkspaceView.tsx`、`index.css`、`lib/queries.ts`、`pages/SettingsPage.tsx` | 推导与判断；灰字 + Tab 键帽（触屏拍两下，2026-10-09 前是 Use）；设置页开关 |
+| web | `lib/promptSuggestion.test.ts`、`components/WorkspaceView.promptSuggestion.test.tsx`（新） | 推导与判断；会话页出现、Use（读屏）、拍两下、Tab、打字让位、新消息作废、卡片在等时不出 |
 | OrbitKit | `Models/Enums.swift`、`Transcript/TranscriptReducer.swift`、`App/Composer.swift`、`Models/Preferences.swift`、`App/SettingsHome.swift` | 新事件类型；`TranscriptState.promptSuggestion`（快照兼容）；`ComposerLogic.offeredPromptSuggestion`；偏好与设置行 |
 | OrbitKit | `PromptSuggestionTests.swift`（新）、`SettingsHomeTests.swift`、`SettingsStackWiringTests.swift` | reducer、判断、偏好、ComposerView 接线；设置行 |
-| OrbitApp | `Views/ComposerView.swift`、`Views/SettingsSheet.swift`、`Views/SettingsAdminView.swift` | 灰字 + Use；macOS Tab；iOS 与 macOS 设置开关 |
-| Android | core `Transcript.kt`、app `ComposerData.kt`、`SessionComposer.kt`、`SettingsScreen.kt` + `ic_suggestion.xml`，及两个新测试 | 推导；判断；placeholder + Use；设置开关 |
+| OrbitApp | `Views/ComposerView.swift`、`Views/SettingsSheet.swift`、`Views/SettingsAdminView.swift` | 灰字 + 拍两下（iOS，2026-10-09 前是 Use）；macOS Use ⇥ + Tab；iOS 与 macOS 设置开关 |
+| Android | core `Transcript.kt`、app `ComposerData.kt`、`SessionComposer.kt`、`SettingsScreen.kt` + `ic_suggestion.xml`，及两个新测试 | 推导；判断；placeholder + 拍两下（2026-10-09 前是 Use，新测试 `SuggestionDoubleTapTest`）；设置开关 |
 
 ---
 
