@@ -9,9 +9,9 @@ import type { Runner } from './TasksSidePanel';
 
 /**
  * The engine's guess at the next message, as the composer offers it (lib/promptSuggestion,
- * docs/prompt-suggestions-design.md §4): a grey line in the empty box, taken with Tab (Use on a
- * touch screen), which fills the box and sends nothing, and which goes the moment anything newer
- * is said.
+ * docs/prompt-suggestions-design.md §4): a grey line in the empty box, taken with Tab (a double-tap
+ * on a touch screen, Use for a screen reader), which fills the box and sends nothing, and which goes
+ * the moment anything newer is said.
  */
 
 vi.mock('../api', async (importOriginal) => {
@@ -62,6 +62,7 @@ const PARKED = {
   updatedAt: '2026-10-08T03:05:00Z',
 };
 let session: Record<string, unknown> = PARKED;
+let stored: Record<string, string> = {};
 
 const SEED = [
   { seq: 10, type: 'user', payload: { text: 'fix the flaky socket test' }, turnId: 'turn-1', ts: '2026-10-08T03:04:00Z' },
@@ -116,6 +117,19 @@ const type = async (value: string): Promise<void> => {
   });
 };
 
+// A finger lifting off the box at (x, y), `at` ms into the page's life — the event the composer
+// counts double-taps on.
+const lift = async (x: number, y: number, at: number): Promise<TouchEvent> => {
+  const ev = new Event('touchend', { bubbles: true, cancelable: true }) as TouchEvent;
+  Object.defineProperty(ev, 'changedTouches', { value: [{ identifier: 0, clientX: x, clientY: y }] });
+  Object.defineProperty(ev, 'timeStamp', { value: at });
+  await act(async () => {
+    box().dispatchEvent(ev);
+  });
+  return ev;
+};
+const tapHint = (): string | null => mounted().querySelector('.composer-suggestion-tap')?.textContent ?? null;
+
 const posted = (): unknown[] =>
   apiMock.mock.calls.filter(([, init]) => (init as { method?: string } | undefined)?.method === 'POST');
 
@@ -123,7 +137,16 @@ beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   FakeEventSource.open = [];
   session = PARKED;
-  vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => {}, removeItem: () => {} });
+  stored = {};
+  vi.stubGlobal('localStorage', {
+    getItem: (key: string) => stored[key] ?? null,
+    setItem: (key: string, value: string) => {
+      stored[key] = value;
+    },
+    removeItem: (key: string) => {
+      delete stored[key];
+    },
+  });
   vi.stubGlobal('EventSource', FakeEventSource);
   apiMock.mockReset();
   seedMock.mockReset();
@@ -218,7 +241,7 @@ async function publish(events: ReadonlyArray<Record<string, unknown>>): Promise<
 }
 
 describe('the composer offers the engine’s suggested next message', () => {
-  it('shows it where the placeholder would be, and Use fills the box without sending', async () => {
+  it('shows it where the placeholder would be, and Use (a screen reader’s) fills the box without sending', async () => {
     await mount();
     await waitForUi(() => expect(offered()).toBe(SUGGESTION));
     expect(box().placeholder, 'the suggestion takes the placeholder’s place').toBe('');
@@ -253,6 +276,59 @@ describe('the composer offers the engine’s suggested next message', () => {
     );
     await type('no — check the docs first');
     await waitForUi(() => expect(box().getAttribute('aria-describedby')).toBeNull());
+  });
+
+  it('takes it on a double-tap on a touch screen, holding the idle box’s first tap', async () => {
+    await mount();
+    await waitForUi(() => expect(offered()).toBe(SUGGESTION));
+    expect(tapHint(), 'the hint follows the words').toBe('Double-tap to use');
+    expect(mounted().querySelector('.composer-suggestion-tap')?.getAttribute('aria-hidden')).toBe('true');
+
+    const first = await lift(120, 30, 1_000);
+    expect(first.defaultPrevented, 'held: a keyboard raised now would lift the box from under the second tap').toBe(true);
+    expect(document.activeElement).not.toBe(box());
+    expect(box().value, 'one tap fills nothing').toBe('');
+    expect(offered()).toBe(SUGGESTION);
+
+    const second = await lift(126, 33, 1_220);
+    expect(second.defaultPrevented, 'the second is kept from the page: no zoom, no caret in the words').toBe(true);
+    await waitForUi(() => expect(box().value).toBe(SUGGESTION));
+    expect(offered()).toBeNull();
+    expect(posted(), 'a double-tap only fills the box').toEqual([]);
+    expect(stored['orbit.suggestionDoubleTapLearned'], 'learned on this device').toBe('1');
+
+    await type('');
+    await waitForUi(() => expect(offered()).toBe(SUGGESTION));
+    expect(tapHint(), 'and the hint is gone for good').toBeNull();
+  });
+
+  it('hands a lone tap on the idle box on as its focus once the double-tap window passes', async () => {
+    await mount();
+    await waitForUi(() => expect(offered()).toBe(SUGGESTION));
+    expect((await lift(120, 30, 1_000)).defaultPrevented).toBe(true);
+    expect(document.activeElement).not.toBe(box());
+    await waitForUi(() => expect(document.activeElement).toBe(box()));
+    expect(box().value).toBe('');
+    expect(offered(), 'a tap to type something else leaves the guess where it was').toBe(SUGGESTION);
+  });
+
+  it('leaves a focused box its taps, and counts two apart in time or place as two', async () => {
+    stored['orbit.suggestionDoubleTapLearned'] = '1';
+    await mount();
+    await waitForUi(() => expect(offered()).toBe(SUGGESTION));
+    expect(tapHint(), 'learned before: the words alone').toBeNull();
+    box().focus();
+
+    expect((await lift(120, 30, 1_000)).defaultPrevented, 'a focused box keeps its first tap').toBe(false);
+    expect((await lift(122, 31, 1_400)).defaultPrevented, 'too slow').toBe(false);
+    expect((await lift(200, 31, 1_550)).defaultPrevented, 'too far').toBe(false);
+    expect(box().value).toBe('');
+
+    await type('no — check the docs first');
+    await waitForUi(() => expect(offered()).toBeNull());
+    await lift(120, 30, 3_000);
+    expect((await lift(121, 30, 3_150)).defaultPrevented, 'with words in the box a double-tap is the box’s').toBe(false);
+    expect(box().value).toBe('no — check the docs first');
   });
 
   it('takes it on Tab in the empty box', async () => {
