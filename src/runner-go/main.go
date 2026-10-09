@@ -624,7 +624,17 @@ func cmdRun() {
 		fmt.Fprintln(os.Stderr, "no runner config found — run `orbit register` first")
 		os.Exit(1)
 	}
+	// A managed runner's Pod says which instance it is (managed_instance.go); one that said so
+	// unreadably does not start as though it had said nothing.
+	if err := checkManagedRunnerInstance(); err != nil {
+		fmt.Fprintln(os.Stderr, "managed runner instance:", err)
+		os.Exit(1)
+	}
 	runWithSelfUpdates(cfg, selfUpdate, func() (bool, func()) { return runLoop(cfg) })
+	// Its Pod ends Failed, not Succeeded: the instance did not finish, it was retired or fenced.
+	if managedInstanceRevokedSeen.Load() {
+		os.Exit(3)
+	}
 }
 
 // clearInheritedSessionContext removes a legacy/stale session identity inherited

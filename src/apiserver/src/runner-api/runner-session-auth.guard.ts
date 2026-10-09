@@ -6,6 +6,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { sha256 } from '../common/crypto.util';
+import { authorizeManagedRunnerInstance } from '../managed-runners/managed-runner-instance';
 import { PrismaService } from '../prisma/prisma.service';
 import { ServiceTokenAuthorizer, ServiceTokenGrant } from './service-token.authorizer';
 
@@ -36,6 +37,9 @@ export class RunnerSessionAuthGuard implements CanActivate {
 
     const runner = await this.prisma.runner.findFirst({ where: { tokenHash: sha256(token) } });
     if (runner) {
+      // The machine credential of a managed runner is bound to its authorized instance, exactly as
+      // on RunnerAuthGuard's routes.
+      req.managedRunnerInstance = await authorizeManagedRunnerInstance(this.prisma, runner.id, req.headers);
       req.runner = runner;
       return true;
     }

@@ -46,6 +46,17 @@ export interface ManagedRunnerProfile {
     tmpSizeLimit: string;
     resources: { runner: ManagedRunnerResourceAmounts; init: ManagedRunnerResourceAmounts };
   };
+  /**
+   * The single-Pod admission guard (managed-runner-admission.ts). The manager creates nothing until a
+   * dry run shows the guard refusing a Pod it must refuse.
+   */
+  admission: {
+    /** The username the API server gives the manager's credential (request.userInfo.username):
+     *  the only identity allowed to create a Pod that uses a managed runner volume. */
+    managerUsername: string;
+    /** SHA-256 (hex) of the bearer token the API server presents to the webhook. Never the token. */
+    webhookTokenSha256: string;
+  };
   lifecycle: {
     /** Attempts a transient failure may spend before the mapping is FAILED. */
     maxAttempts: number;
@@ -69,6 +80,7 @@ const DNS_LABEL = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/;
 const DNS_SUBDOMAIN = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$/;
 const QUANTITY = /^[0-9]+(\.[0-9]+)?(m|k|M|G|T|P|E|Ki|Mi|Gi|Ti|Pi|Ei)?$/;
 const PINNED_IMAGE = /^[^\s@]+@sha256:[0-9a-f]{64}$/;
+const SHA256_HEX = /^[0-9a-f]{64}$/;
 /** What the example files and templates use for a value nobody has supplied yet. */
 const PLACEHOLDER = /REPLACE_ME|__[A-Z0-9_]+__|\$\{/;
 
@@ -149,6 +161,10 @@ export function parseManagedRunnerProfile(value: unknown): ManagedRunnerProfileR
       maxConcurrent: count('runner.maxConcurrent', 1, 64),
       tmpSizeLimit: text('runner.tmpSizeLimit', QUANTITY, 'is not a quantity'),
       resources: { runner: amounts('runner.resources.runner'), init: amounts('runner.resources.init') },
+    },
+    admission: {
+      managerUsername: text('admission.managerUsername'),
+      webhookTokenSha256: text('admission.webhookTokenSha256', SHA256_HEX, 'must be the 64 lowercase hex digits of a SHA-256'),
     },
     lifecycle: {
       maxAttempts: count('lifecycle.maxAttempts', 1, 100),

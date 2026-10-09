@@ -246,3 +246,25 @@ test('a watch streams JSON lines, a line split across chunks included, and a ref
   assert.equal(sent[0].timeoutMs, 0, 'a watch has no request deadline');
   await assert.rejects(kube.pods.watch({}, () => undefined).done, (e: unknown) => e instanceof KubeApiError && e.status === 403);
 });
+
+test('the single-writer reads and the admission probe: receipts read-only, attachments listed, a create dry-run', async () => {
+  const pod = { apiVersion: 'v1', kind: 'Pod', metadata: { name: 'mr-probe', namespace: 'orbit-managed-test' }, spec: {} } as Pod;
+  const { sent, kube } = client(
+    json(200, { apiVersion: 'v1', kind: 'ConfigMap', metadata: { name: 'mr-fence-x', uid: 'cm-1' }, data: { 'receipt.json': '{}' } }),
+    json(404, { kind: 'Status', reason: 'NotFound' }),
+    json(200, { items: [{ apiVersion: 'storage.k8s.io/v1', kind: 'VolumeAttachment', metadata: { name: 'csi-1' }, spec: { source: { persistentVolumeName: 'pv-1' }, nodeName: 'node-a' } }] }),
+    json(400, { kind: 'Status', reason: 'BadRequest', message: 'admission webhook "pods.managed-runner.orbit.dev" denied the request: orbit-managed-runner-admission: NOT_THE_FIXED_NAME: no' }),
+  );
+  assert.equal((await kube.configMaps.get('mr-fence-x'))?.data?.['receipt.json'], '{}');
+  assert.equal(await kube.configMaps.get('mr-fence-y'), null);
+  assert.deepEqual(Object.keys(kube.configMaps), ['get'], 'a receipt can be read, never written');
+  const attachments = await kube.listVolumeAttachments();
+  assert.equal(attachments[0].spec.source.persistentVolumeName, 'pv-1');
+  await assert.rejects(kube.pods.create(pod, { dryRun: true }), (e: KubeApiError) => e.status === 400 && /orbit-managed-runner-admission/.test(e.message));
+  assert.deepEqual(sent.map((r) => `${r.method} ${r.url.pathname}${r.url.search}`), [
+    'GET /api/v1/namespaces/orbit-managed-test/configmaps/mr-fence-x',
+    'GET /api/v1/namespaces/orbit-managed-test/configmaps/mr-fence-y',
+    'GET /apis/storage.k8s.io/v1/volumeattachments',
+    'POST /api/v1/namespaces/orbit-managed-test/pods?dryRun=All',
+  ]);
+});
