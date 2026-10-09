@@ -111,16 +111,16 @@ class BackgroundWakeCardTest {
         assertNull(BackgroundWakeCard.steerState(false, null, false))
     }
 
-    /** The card keeps the delivery's words and says only the confirmed receipt in Chinese — on this card alone. */
+    /** The card keeps the delivery's own words, the confirmed receipt included, and says its details and output tail as iOS and the web do. */
     @Test fun theCardSaysItsReceiptAndItsDetailsInTheWordsIosDraws() {
-        assertEquals("已送达当前轮次", BackgroundWakeCard.steerReceipt("Sent into this turn"))
+        assertEquals("Sent into this turn", BackgroundWakeCard.steerReceipt("Sent into this turn"))
         assertEquals("Delivering…", BackgroundWakeCard.steerReceipt("Delivering…"))
         assertNull(BackgroundWakeCard.steerReceipt(null))
-        assertEquals("任务详情", BackgroundWakeCard.detailsLabel(wake(enDone)))
-        assertEquals("详情", BackgroundWakeCard.detailsLabel(wake(enScheduled)))
-        assertEquals("输出末尾", BackgroundWakeCard.outputTail)
-        assertEquals("展开输出", BackgroundWakeCard.expandOutput)
-        assertEquals("收起输出", BackgroundWakeCard.collapseOutput)
+        assertEquals("Job details", BackgroundWakeCard.detailsLabel(wake(enDone)))
+        assertEquals("Details", BackgroundWakeCard.detailsLabel(wake(enScheduled)))
+        assertEquals("Output tail", BackgroundWakeCard.outputTail)
+        assertEquals("Show full output", BackgroundWakeCard.expandOutput)
+        assertEquals("Show less", BackgroundWakeCard.collapseOutput)
     }
 
     @Test fun theWakeupRowSaysHowFarOutItWasAskedFor() {

@@ -5869,6 +5869,12 @@ model TaskComment {
   /// 1 files a `TaskCommentMentionDelivery` row per mentioned agent in the same transaction. The
   /// column exists so a rolling deploy cannot deliver one comment twice or lose one entirely.
   mentionDeliveryVersion Int    @default(0) @map("mention_delivery_version") @db.SmallInt
+  /// The run an agent wrote this from (migration 0416): its session, and the `TaskAttempt` that
+  /// session is when it is one of THIS task's. Snapshots rather than relations, like
+  /// `TaskCompletionEvidence`'s source ids: purging the session cascades to its attempt, and the
+  /// comment keeps naming the run. Null from the app, outside a session, and from the platform.
+  sessionId  String?     @map("session_id") @db.Uuid
+  attemptId  String?     @map("attempt_id") @db.Uuid
   createdAt  DateTime    @default(now()) @map("created_at")
 
   deliveries TaskCommentMentionDelivery[]
