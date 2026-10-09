@@ -2497,7 +2497,7 @@ JSON 里是 `repoOps` 一节；设计见 `docs/wiki-server-execution-design.md` 
 JSON 里是 `maintenance.job.server` 和 `jobs.kindRuns.maintain`；迁移 `0407_wiki_maintain_job`；设计见
 `docs/wiki-server-execution-design.md` §5、§5.5 和 §8。服务端实现在 `src/apiserver/src/wiki-worker/`：
 `wiki-maintain.ts`（抽取的提示词、离题判定、逐条检查、引文定位、重问、分批与熔断的算术）、
-`wiki-maintain-plan.ts`（一次 plan 修改建议：提示词、解析、按快照检查）、`wiki-maintain-job.ts`（整条流水线）；
+`wiki-maintain-plan.ts`（一次 plan 修改建议：提示词、解析、在快照那个提交的原文里按 runner 的判法检查）、`wiki-maintain-job.ts`（整条流水线）；
 触发与运行行的收尾在 `src/apiserver/src/wiki/wiki-maintenance-run.ts`；runner 侧同一套逻辑在 `wiki_maintain.go` 与
 `wiki_maintain_docs.go`，P10 之前两条路并存。
 
@@ -2550,7 +2550,12 @@ JSON 里是 `maintenance.job.server` 和 `jobs.kindRuns.maintain`；迁移 `0407
 9. **文档**（追赶期整步跳过）：`wikiDocsAffected` 拿服务端那一半；仓库那一半用 `diff` 仓库操作按节自己的 `repoSha`
    比到 head（消失的路径先撤回，`withdrawPaths`），只重写受影响的节（P7 的 `runWikiDocsBuild`，`only` 传入本次要写的节）；
    新增的设计文档（`--diff-filter=AR -- docs/`，去掉 `docs/mocks/` 与 `docs/evidence/`、已被引用或已被建议的）算出标题、
-   章节与开头；最后提一次 plan 修改建议，用 P6 的门（`proposeServer`）检查，最多三轮把门报的错回给模型。
+   章节与开头；最后提一次 plan 修改建议：先过运行自己的检查，和 runner 一样在原文里查——它引用的文件、契约按快照那个提交读出
+   原文（`read`，有缓存先用缓存），docs 章节、代码符号、契约用文档构建同一套读法（`wikiDocRepo` 的 `docSection` / `codePieces` /
+   `contract`）判：章节按规整后的标题、编号、包含关系找，代码块里的标题不算，`##` 写不写都一样；文件没有和章节没有分开报。不查快照
+   索引里的标题和符号——2026-10-09 canary 的运行 28ea4f5c 就是这样，把提示词原样列出的「## 4. wiki 怎么跟上」三轮都判成没有。
+   两条路对同一个回答的结论由 `src/shared/src/wiki-maintain-proposal.fixture.json` 对齐（服务端有三条报错用英文写，结论一样）。
+   再用 P6 的门（`proposeServer`）检查，最多三轮把两道检查报的错回给模型。
 10. **结束**：写报告与 token 合计，`finishWikiMaintenanceJob` 推进游标、写运行行、按 owner 2026-10-08 的决定调用
     `queueWikiArticlesAfterRun`——只有成功、记下了 op、且不在追赶期才排文章作业（§24）。
 
