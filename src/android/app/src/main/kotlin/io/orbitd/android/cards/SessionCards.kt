@@ -206,21 +206,7 @@ fun SessionCards(cards: SessionCardsModel, open: (String) -> Unit, discuss: ((St
                 }
             }
         }
-        cards.created?.takeIf { (it.number("total") ?: 0) > 0 }?.let { tasks ->
-            Text("Tasks created here", style = MaterialTheme.typography.titleSmall)
-            if (tasks.number("total") == 1) Text(tasks.objects("items").firstOrNull()?.text("title") ?: createdTasksCountLine(tasks))
-            else Text(createdTasksCountLine(tasks))
-            // A11 hook: a created task's row opens its task page (iOS `CreatedTasksCard` row → task detail).
-            DetailFold("tasks") { tasks.objects("items").forEach { task ->
-                val taskId = task.text("id")
-                // A column, as the fields were laid out in the card's own column before the row became pressable.
-                Column(Modifier.fillMaxWidth().then(if (taskId == null) Modifier
-                    else Modifier.clickable(role = Role.Button) { open("orbit-task:$taskId") }.testTag("created-task:$taskId")),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    CardFields(task, listOf("title", "status", "running", "replaces"), open)
-                }
-            } }
-        }
+        // A08-6: what this conversation created is the Tasks card above the composer (`SessionTasksCard`), with what its watches wait on.
         session.snapshot?.background?.forEach { job ->
             DetailFold("Background work · ${job.text("description") ?: job.text("taskId") ?: job.text("id") ?: ""}") {
                 CardFields(job, listOf("status", "command", "description", "latestOutput", "output", "outputTail", "exitCode", "killReason"), open)

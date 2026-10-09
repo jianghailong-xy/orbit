@@ -558,19 +558,14 @@ class TasksProjectsDeviceTest {
         finally { capture("focus-item-card") }
     }
 
-    /** Point 5: a created task's row in the conversation opens the task, and Back returns to the conversation. */
+    /** Point 5: a created task's row in the conversation opens the task, and Back returns to the conversation. Since A08-6 the row
+     * is the Tasks card's, above the composer (iOS `CreatedTasksCard`), rather than a fold of fields in the transcript. */
     @Test fun regressionCreatedTaskRow_opensTheTask() = journey("created-task-row") {
         login(); http("/__control", """{"createdTasks":true}""")
         open("orbit-session:$sessionId"); awaitTag("composer-input")
-        awaitScrollTo("transcript-list", hasText("Tasks created here"))
-        awaitScrollTo("transcript-list", hasText("Show tasks")); compose.onNodeWithText("Show tasks").performClick()
-        awaitScrollTo("transcript-list", hasTestTag("created-task:$taskId")); capture("created-task-row")
-        // The row's fields stay one under another once the row is pressable (they were drawn over each other in a Box).
-        fun label(text: String) = compose.onNode(hasText(text) and hasAnyAncestor(hasTestTag("created-task:$taskId")), useUnmergedTree = true)
-            .fetchSemanticsNode().boundsInRoot
-        val title = label("Title"); val status = label("Status")
-        assertTrue("the Status field ($status) starts below the Title field's label ($title)", status.top >= title.bottom)
-        compose.onNodeWithTag("created-task:$taskId").performClick()
+        awaitTag("session-tasks"); tap("session-tasks:line")
+        awaitTag("created-task:$taskId"); capture("created-task-row")
+        tap("created-task:$taskId")
         awaitIn("task-detail", "A11 task checklist")
         back(); awaitTag("composer-input")
     }

@@ -33,6 +33,7 @@ import io.orbitd.android.core.cards.CardPreviews
 import io.orbitd.android.cards.ReaderSide
 import io.orbitd.android.cards.SessionCards
 import io.orbitd.android.cards.SessionNeedsYouBar
+import io.orbitd.android.cards.SessionTasksCard
 import io.orbitd.android.watch.SessionWatches
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.cards.OwnerReview
@@ -281,7 +282,9 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                 }
                 }
                 SessionWatches(app, handle, route.id!!, open = open)
-                // The session's code output, folded with the rest of the chrome while a phone's composer is focused.
+                // The session's tasks — created here, or waited on by its watches (A08-6) — and its code output, folded with the rest
+                // of the chrome while a phone's composer is focused.
+                if (!(composerFocused && compact)) SessionTasksCard(app, handle, route.id!!, cards, openLink)
                 if (!(composerFocused && compact)) Box(Modifier.padding(horizontal = 16.dp)) { WorktreeBar(worktree, openLink) }
                 // Keep the composer and its activity-result launchers alive while card forms use the IME.
                 // The chip's Open task › pushes the task over this run, so Back returns to it.
