@@ -9,16 +9,16 @@ import type { CodexLogin } from '../lib/codexLogin';
 import { encodeId } from '../lib/idCodec';
 import type { ProviderPool } from '../lib/providerPools';
 import type { SharedPool, SharedPoolKey, SharedPoolPerson } from '../lib/sharedPools';
+import { InfrastructurePage } from './InfrastructurePage';
 import { ProviderPoolPage } from './ProviderPoolPage';
-import { ProvidersPage } from './ProvidersPage';
 
 /**
- * One Codex pool (scheme A, docs/mocks/account-pool-access/) on its own page and on /providers, mounted
+ * One Codex pool (scheme A, docs/mocks/account-pool-access/) on its own page and on /infrastructure, mounted
  * for real against a fake API, as its owner and as somebody they added read it: the owner's ChatGPT
  * accounts — "Everyone here" once the pool is shared, read the same way by everybody it runs the
  * sessions of (2026-10-03) — its API keys (also "Everyone here"), "Who can use it" with its two settings
  * and each person's row, what "Add account" asks first, what sharing and going back to "Just me" say
- * before they happen, and the pool's card on the Providers page. The pool and its people are the boards'
+ * before they happen, and the pool's card on the Infrastructure page. The pool and its people are the boards'
  * own: jianghailong's Codex Pool, shared with Zhang Min and Lin Wei.
  */
 
@@ -197,7 +197,7 @@ describe('a Codex pool, as its owner and as somebody they added read it', { time
         <QueryClientProvider client={client}>
           <MemoryRouter initialEntries={[at]}>
             <Routes>
-              <Route path="/providers" element={<ProvidersPage />} />
+              <Route path="/infrastructure" element={<InfrastructurePage />} />
               <Route path="/providers/pools/:id" element={<ProviderPoolPage />} />
             </Routes>
           </MemoryRouter>
@@ -366,7 +366,7 @@ describe('a Codex pool, as its owner and as somebody they added read it', { time
     expect(button('Add people', who())).not.toBeNull();
     expect(setting()).toBe('Me and people I add');
     expect(text(who().querySelector('.who-mode-h'))).toBe(
-      'They see Codex Pool on their Providers page and in the session picker.',
+      'They see Codex Pool on their Infrastructure page and in the session picker.',
     );
     expect(
       ['jianghailong', 'Zhang Min', 'Lin Wei'].map((name) => [
@@ -490,7 +490,7 @@ describe('a Codex pool, as its owner and as somebody they added read it', { time
     expect(nameOf(modal)).toBe('Share Codex Pool');
     expect(text(modal.querySelector('.np-field-l'))).toBe('Emails of their Orbit accounts');
     expect(Array.from(modal.querySelectorAll('.pa-facts li')).map((li) => li.textContent)).toEqual([
-      'They see Codex Pool on their Providers page and in the session picker, and can start sessions on it.',
+      'They see Codex Pool on their Infrastructure page and in the session picker, and can start sessions on it.',
       'Their sessions start on your ChatGPT accounts, and fall to the pool’s API keys — orbit-org-1 — when none of them can run.',
       'They can sign in ChatGPT accounts of their own, which then run everyone’s sessions here too — theirs and yours — until they take them out again.',
       'Everyone sees each person’s share of this month’s API key use.',
@@ -520,7 +520,7 @@ describe('a Codex pool, as its owner and as somebody they added read it', { time
     expect(nameOf(modal)).toBe('Share Codex Pool');
     expect(modal.querySelector('.pa-risk')).toBeNull();
     expect(Array.from(modal.querySelectorAll('.pa-facts li')).map((li) => li.textContent)).toEqual([
-      'They see Codex Pool on their Providers page and in the session picker, and can start sessions on it.',
+      'They see Codex Pool on their Infrastructure page and in the session picker, and can start sessions on it.',
       'Their sessions start on your ChatGPT accounts, and wait when none of them can run — the pool has no API key to fall to yet.',
       'They can sign in ChatGPT accounts of their own, which then run everyone’s sessions here too — theirs and yours — until they take them out again.',
       'Everyone sees each person’s share of this month’s API key use.',
@@ -573,10 +573,10 @@ describe('a Codex pool, as its owner and as somebody they added read it', { time
     ]);
   });
 
-  it('heads the pool’s card on the Providers page by who reads it (03-6)', async () => {
+  it('heads the pool’s card on the Infrastructure page by who reads it (03-6)', async () => {
     const head = () => container.querySelector<HTMLElement>('.pool-sec .pool-card .re-head')!;
     asOwner([], []);
-    await mount('/providers');
+    await mount('/infrastructure');
     expect(head().querySelector('.pool-shared-chip')).toBeNull();
     expect(text(head().querySelector('.re-summary'))).toBe('Just me · 2 of 2 accounts available');
     expect(head().querySelector('.pool-people')).toBeNull();
@@ -585,7 +585,7 @@ describe('a Codex pool, as its owner and as somebody they added read it', { time
     container.remove();
 
     asOwner([ZHANG, LIN]);
-    await mount('/providers');
+    await mount('/infrastructure');
     expect(text(head().querySelector('.pool-shared-chip'))).toBe('SHARED');
     expect(text(head().querySelector('.re-summary'))).toBe('4 of 4 accounts available');
     expect(Array.from(head().querySelectorAll('.pool-people .pool-av')).map((el) => el.textContent)).toEqual([
@@ -598,7 +598,7 @@ describe('a Codex pool, as its owner and as somebody they added read it', { time
     container.remove();
 
     asZhang();
-    await mount('/providers');
+    await mount('/infrastructure');
     expect(text(head().querySelector('.pool-shared-chip'))).toBe('SHARED');
     expect(text(head().querySelector('.re-summary'))).toBe(
       'jianghailong’s · 4 accounts and keys you can run on',

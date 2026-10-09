@@ -305,8 +305,10 @@ final class SessionProjectPageWiringTests: XCTestCase {
         XCTAssertTrue(load.contains("api.listSessions(view: .open, projectId: address.projectID)"))
         XCTAssertTrue(load.contains("api.listSessions(view: .completed, projectId: address.projectID)"))
         XCTAssertTrue(load.contains("let rows = try await openRead.value + completedRead.value"))
-        XCTAssertTrue(load.contains("projectSessions = SessionProjectMembers.members(of: address.projectID, in: rows)"),
-                      "one rule — this project's, never Trash, each once, newest first (SessionProjectMembersTests)")
+        XCTAssertTrue(load.contains("let kept = SessionFilter.removing(trashingSessions, from: rows)\n"
+                                    + "            projectSessions = SessionProjectMembers.members(of: address.projectID, in: kept)"),
+                      "one rule — this project's, never Trash, each once, newest first (SessionProjectMembersTests) — "
+                        + "over the read less the rows on their way to Trash")
         XCTAssertFalse(load.contains("view: address.view"))
         XCTAssertFalse(load.contains("view: .trash"))
         XCTAssertFalse(load.contains("agentID:"))
@@ -536,6 +538,26 @@ final class SessionProjectPageWiringTests: XCTestCase {
                                 to: "\n    }\n")
         XCTAssertTrue(blocked.contains("PromotionCards.blockedByLabel"),
                       "and it draws only when there is something to name")
+    }
+
+    /// A blocked candidate nobody holds draws no "Coordinator is resolving it": the press is read off
+    /// the project's items as a holder — unread, the item, or nobody — and drawn only when there is
+    /// somebody to name (2026-10-09, a card that said the coordinator was resolving work already on
+    /// main). The card opens its whole review from Details, as the web strip's blocked card does.
+    func testTheBlockedCardNamesNobodyWhenNobodyHoldsIt() throws {
+        let page = code(try appSource("Views/SessionProjectPage.swift"))
+        let blocked = try slice(page, from: "@ViewBuilder private func blocked(_ view: ProjectPromotionView) -> some View {",
+                                to: "\n    }\n")
+        XCTAssertTrue(blocked.contains("PromotionCards.holder(of: view.promotionId, in: merge.openItems)"))
+        XCTAssertTrue(blocked.contains("if let resolving = PromotionCards.resolvingLine(holder, now: now) {"),
+                      "the press is drawn only when somebody holds the candidate")
+        XCTAssertTrue(blocked.contains("onDetails(view.promotionId)"), "and the whole card is a press away")
+
+        let cards = code(try appSource("Views/ApprovalCards.swift"))
+        let sheet = try slice(cards, from: "struct PromotionReviewSheet: View {", to: "\n}\n")
+        XCTAssertTrue(sheet.contains("PromotionCards.holder(of: promotionID, in: source.promotionOpenItems)"))
+        XCTAssertTrue(sheet.contains("if let resolving = PromotionCards.resolvingLine(holder) {"),
+                      "the review's press says nobody's name either")
     }
 
     /// A read that failed with no rows in hand says why in one sentence, with Retry, and stays up

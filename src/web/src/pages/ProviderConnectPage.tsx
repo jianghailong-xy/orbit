@@ -42,8 +42,8 @@ type Runtime = NonNullable<ProviderPreset['runtime']>;
 export function ProviderPickPage() {
   return (
     <div style={{ maxWidth: 900, margin: '0 auto' }}>
-      <Link className="provider-back" to="/providers">
-        ‹ All providers
+      <Link className="provider-back" to="/infrastructure#keys">
+        ‹ Infrastructure
       </Link>
       <h1 className="page-title" style={{ marginTop: 8 }}>
         Add a provider
@@ -64,13 +64,13 @@ export function ProviderPickPage() {
  * key, optionally probe it, and save.
  *
  * Editing needs the row, and the management API only lists — so the page reads the same cached
- * list the providers page fills and picks its id out of it.
+ * list Infrastructure fills and picks its id out of it.
  */
 export function ProviderConnectPage() {
   const { slug, id } = useParams();
 
   // Read on both paths: editing needs the row itself, and connecting needs to know which vendors
-  // are already set up — the form seeds its name from that. Same cached list the providers page
+  // are already set up — the form seeds its name from that. Same cached list Infrastructure
   // fills, so arriving from there costs nothing.
   const providers = useQuery({
     queryKey: PROVIDERS_LIST_KEY,
@@ -101,8 +101,8 @@ export function ProviderConnectPage() {
     if (!row) {
       return (
         <div className="provider-form">
-          <Link className="provider-back" to="/providers">
-            ‹ All providers
+          <Link className="provider-back" to="/infrastructure#keys">
+            ‹ Infrastructure
           </Link>
           <div style={{ marginTop: 16, color: 'var(--text-3)' }}>That provider no longer exists.</div>
         </div>
@@ -284,7 +284,7 @@ function ProviderForm({
       void qc.invalidateQueries({ queryKey: PROVIDERS_LIST_KEY });
       void qc.invalidateQueries({ queryKey: providersQuery().queryKey });
       message.success(editing ? 'Provider updated' : 'Provider created');
-      navigate('/providers');
+      navigate('/infrastructure#keys');
     },
     onError: (e: Error) =>
       message.error(editing ? "Couldn't save the provider" : "Couldn't connect the provider", e.message),
@@ -374,8 +374,8 @@ function ProviderForm({
 
   return (
     <div className="provider-form">
-      <Link className="provider-back" to={editing ? '/providers' : '/providers/new'}>
-        ‹ All providers
+      <Link className="provider-back" to={editing ? '/infrastructure#keys' : '/providers/new'}>
+        {editing ? '‹ Infrastructure' : '‹ All providers'}
       </Link>
       <h1 className="page-title" style={{ marginTop: 8 }}>
         {title}
@@ -690,7 +690,7 @@ function ProviderForm({
               Save anyway
             </Button>
           )}
-          <Button onClick={() => navigate('/providers')}>Cancel</Button>
+          <Button onClick={() => navigate('/infrastructure#keys')}>Cancel</Button>
           <Button
             variant="primary"
             disabled={!canSave}

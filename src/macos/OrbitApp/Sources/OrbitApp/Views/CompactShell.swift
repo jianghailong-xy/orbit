@@ -388,11 +388,12 @@ private struct CompactSections: View {
                     }
             }
 
-        // RUNNERS — runner list → detail → an engine's or its name's page. Same single stack as
-        // Agents: the rows carry their own destination and push it, so a deep link (`.runner(id)`)
-        // and a row tap are one navigation.
-        // Runners isn't in the drawer rail, so this section is only ever entered by that deep link
-        // or from Settings' own list — neither of which is a `List` selection in this shell.
+        // RUNNERS — the Infrastructure page → a machine's record → an engine's or its name's page, a
+        // pool's page, and a DeepSeek key's. Same single stack as Agents: the rows carry their own destination and push it, so a
+        // deep link (`.runner(id)`) and a row tap are one navigation.
+        // The section isn't in the drawer rail, so it is only ever entered by that deep link or an
+        // engine's way to its fix (`AppModel.openRunnerEngine`) — neither of which is a `List`
+        // selection in this shell. Settings › Infrastructure is the same page on Settings' own stack.
         case .runners:
             NavigationStack(path: $model.nav.path) {
                 RunnersListView(rowNavigation: .push)
@@ -403,6 +404,9 @@ private struct CompactSections: View {
                         case .runnerDetail(let runnerID): RunnerDetailView(runnerID: runnerID)
                         case .runnerEngine(let runnerID, let engine): RunnerEnginePage(runnerID: runnerID, engine: engine)
                         case .runnerName(let runnerID):   RunnerNamePage(runnerID: runnerID)
+                        case .accountPool(let poolID):    AccountPoolSettingsPage(poolID: poolID)
+                        case .sharedPool(let poolID):     SharedPoolSettingsPage(poolID: poolID)
+                        case .providerDetail(let providerID): ProviderDetailSettingsPage(providerID: providerID)
                         default:                          EmptyView()
                         }
                     }
@@ -736,7 +740,7 @@ struct NavigationDrawer: View {
             List {
                 // The work leads the rail — projects and tasks — ABOVE the Workspaces and set apart
                 // from them by a rule; the open projects themselves close it, where the task lists
-                // and Recents used to be. Runners lives under Settings, Settings is the action bar's
+                // and Recents used to be. Infrastructure lives under Settings, Settings is the action bar's
                 // gear below, Admin sits inside Settings, and Following has no row (see its section).
                 ForEach(AppSection.workSections) { section in
                     if section == .projects {

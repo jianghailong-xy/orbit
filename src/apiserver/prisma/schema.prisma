@@ -7470,6 +7470,10 @@ model WikiModelRequest {
   answer    String?
   /// What had arrived when the call was interrupted; kept across a requeue.
   partial      String?
+  /// How `answer` and `partial` read back (0412, contract `modelQueue.answerEncoding`): `text` as they are, or
+  /// `base64` — the text's UTF-8 bytes, for one with a U+0000 in it, which Postgres cannot keep in text.
+  answerEncoding  String @default("text") @map("answer_encoding")
+  partialEncoding String @default("text") @map("partial_encoding")
   inputTokens  Int?    @map("input_tokens")
   outputTokens Int?    @map("output_tokens")
   httpStatus   Int?    @map("http_status")
@@ -7597,6 +7601,9 @@ model WikiRepoFile {
   state String
   /// The text, for `found` and `cut`; empty otherwise. At most the file cap, so one row is one file.
   content String @default("")
+  /// How `content` reads back (0412, contract `repoOps.storedText`): `text` as it is, or `base64` — the text's
+  /// UTF-8 bytes, for a file with a U+0000 in it, which Postgres cannot keep in text.
+  contentEncoding String @default("text") @map("content_encoding")
   /// The file's size in bytes at the sha: the whole file's, even when only its head was answered.
   sizeBytes BigInt @default(0) @map("size_bytes")
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)

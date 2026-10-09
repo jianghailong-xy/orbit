@@ -14,6 +14,7 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.*
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -53,19 +54,22 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     val attachmentMetadata by rememberUpdatedState(state.window.events.flatMap { event ->
         (event.fields["attachments"] as? JsonArray).orEmpty().filterIsInstance<JsonObject>()
     }.associateBy { ObjectId.canonical(it.string("id").orEmpty()) })
+    // The session's pictures in transcript order: image attachments, and uploads linked by name in prose.
+    val galleryImages by rememberUpdatedState(remember(state.window.events) { sessionImages(state.window.events) })
     val resources = remember(handle, route.id) { ReaderResources(app.session, handle, route.id,
         available = { readable }, metadata = { source ->
             attachmentMetadata[ObjectId.canonical(source.removePrefix("orbit-attachment:"))]?.let {
                 (it.string("name") ?: it.string("fileName") ?: "Attachment") to
                     (it.string("mime") ?: it.string("mimeType") ?: "application/octet-stream")
             }
-        }, images = { attachmentMetadata.values.filter { (it.string("mime") ?: it.string("mimeType"))?.startsWith("image/") == true }
-            .mapNotNull { it.string("id")?.let { id -> "orbit-attachment:$id" } } }) }
+        }, images = { galleryImages } ) }
     val openLink = rememberReaderLinkHandler(resources) { next ->
         if (next.destination == Destination.SESSION && ObjectId.same(next.id, route.id) &&
             next.recordId != null && next.recordId == route.recordId) model.openRecord(next.recordId)
         else open(next)
     }
+    // The worktree bar's model: its own reads while an outcome is pending or the session is live, and the store's as they land.
+    val worktree = remember(handle, route.id) { WorktreeModel(api, route.id!!, app.processScope) }
     val list = rememberLazyListState()
     var follow by rememberSaveable { mutableStateOf(route.recordId == null) }
     var placed by remember(model) { mutableStateOf(false) }
@@ -106,7 +110,17 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
             }
     }
     val transcript = state.session?.transcript
-    LaunchedEffect(state.window.events, transcript?.textDrafts, transcript?.thinkingDrafts, transcript?.toolOutputs, follow, placed) {
+    val snapshotDetail = state.session?.snapshot?.detail
+    LaunchedEffect(snapshotDetail) { snapshotDetail?.let(worktree::offer) }
+    LaunchedEffect(worktree, state.denied) {
+        if (!state.denied) worktree.poll { (worktree.state.value.detail ?: snapshotDetail)?.let { it.string("runStatus") ?: it.string("status") } in
+            setOf("RUNNING", "AWAITING_INPUT", "INTERRUPTED") }
+    }
+    // A06-5: the viewport changing size under a pinned reader (keyboard, a taller composer, the sticky
+    // header) asks for the tail again; nothing else re-anchors the bottom of a list that shrank.
+    val viewport = remember(model) { TranscriptViewport() }
+    var repin by remember(model) { mutableIntStateOf(0) }
+    LaunchedEffect(state.window.events, transcript?.textDrafts, transcript?.thinkingDrafts, transcript?.toolOutputs, follow, placed, repin) {
         if (placed && follow && !dragging && state.window.newerAfter == null && !state.loading) {
             withFrameNanos { }
             positioning = true
@@ -114,10 +128,16 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
             positioning = false
         }
     }
-    CompositionLocalProvider(LocalReaderResources provides resources) {
+    // Background agents' and workflows' progress, as their cards and the background list read it.
+    val background = state.session?.snapshot?.background
+    val taskActivity = remember(transcript?.taskProgress, state.window.events, background) {
+        TaskActivity.of(transcript?.taskProgress, state.window.events, background.orEmpty())
+    }
+    CompositionLocalProvider(LocalReaderResources provides resources, LocalTaskActivity provides taskActivity) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
         val otherInputHasKeyboard = WindowInsets.ime.getBottom(LocalDensity.current) > 0 && !composerFocused
         val composerHeight = if (otherInputHasKeyboard) 0.dp else if (maxHeight < 320.dp) maxHeight else maxHeight * 0.65f
+        val compact = maxWidth < 600.dp
         Column(Modifier.fillMaxSize()) {
             val session = state.session
             val detail = session?.snapshot?.detail
@@ -151,7 +171,11 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                 val live = transcript.takeIf { displayedWindow.newerAfter == null }
                 val displayedLoading = state.loading
                 val targetSeq = state.targetSeq
-                LazyColumn(Modifier.weight(1f).fillMaxWidth().nestedScroll(nested).pointerInput(model) {
+                // Folds away while a phone's composer holds the keyboard, with the rest of the chrome.
+                StickyQuestion(displayedRows, list, hidden = composerFocused && compact) { row -> model.show(row.event.seq) }
+                LazyColumn(Modifier.weight(1f).fillMaxWidth().onSizeChanged {
+                    if (viewport.resized(it.height, placed && follow && state.window.newerAfter == null)) repin++
+                }.nestedScroll(nested).pointerInput(model) {
                     // Do not consume the gesture: native selection/links still receive it.
                     // A touch pauses following so a live update cannot move text under a selection.
                     awaitEachGesture { awaitFirstDown(requireUnconsumed = false); follow = false }
@@ -192,6 +216,8 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                 }
                 }
                 SessionWatches(app, handle, route.id!!, open = open)
+                // The session's code output, folded with the rest of the chrome while a phone's composer is focused.
+                if (!(composerFocused && compact)) Box(Modifier.padding(horizontal = 16.dp)) { WorktreeBar(worktree, openLink) }
                 // Keep the composer and its activity-result launchers alive while card forms use the IME.
                 // The chip's Open task › pushes the task over this run, so Back returns to it.
                 Box(Modifier.heightIn(max = composerHeight).clipToBounds()) { SessionComposer(app, handle, route.id!!, state.session,
@@ -225,4 +251,17 @@ private fun LiveMessage(label: String, parent: String, text: String, open: (Stri
             if (expanded) StreamingText(text, open)
         } else StreamingText(text, open)
     }
+}
+
+/** Every picture a reader can page through: image attachments, and `[label](orbit-attachment:id "name.png")` links. */
+internal fun sessionImages(events: List<RunEvent>): List<String> {
+    val linked = Regex("""\[[^\]\n]+\]\((orbit-attachment:[^)\s]+)(?:\s+"((?:\\.|[^"\\])*)")?\)""")
+    return events.flatMap { event ->
+        val attached = (event.fields["attachments"] as? JsonArray).orEmpty().filterIsInstance<JsonObject>()
+            .filter { (it.string("mime") ?: it.string("mimeType"))?.startsWith("image/") == true }
+            .mapNotNull { it.string("id")?.let { id -> "orbit-attachment:$id" } }
+        val body = event.body()
+        attached + if ("orbit-attachment:" !in body) emptyList() else linked.findAll(body)
+            .filter { MarkdownFileRef(it.groupValues[1], "", it.groupValues[2].ifEmpty { null }).isImage }.map { it.groupValues[1] }.toList()
+    }.distinct()
 }

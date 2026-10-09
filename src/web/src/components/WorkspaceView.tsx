@@ -323,6 +323,7 @@ import {
   ProjectPromotionReceipt,
   promotionChatBanner,
   promotionChatContext,
+  promotionItem,
   promotionRecordMoment,
 } from './ProjectPromotionCard';
 import { ProjectMergeStrip, ProjectMergeTimelineRow } from './ProjectMergeStrip';
@@ -5335,7 +5336,6 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     if (blockedAt === null) return [];
     const anchor = decisionReceiptAnchor(transcriptEvents, blockedAt);
     if (anchor === null) return [];
-    const rows = [...(openItems.data?.needsYou ?? []), ...(openItems.data?.withCoordinator ?? [])];
     return [{
       anchor,
       moment: blockedAt,
@@ -5344,7 +5344,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         <ProjectPromotionCard
           projectId={coordinatedProjectId}
           promotion={current}
-          item={rows.find((row) => row.promotionId === current.promotionId) ?? null}
+          item={promotionItem(openItems.data, current.promotionId)}
           project={null}
           now={Date.now()}
           onChat={chatAboutThis}
@@ -8303,7 +8303,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const pickAccount = (account: string, signedOut: boolean): void => {
     if (!shownAccountEngine) return;
     if (signedOut) {
-      navigate(`/providers?runner=${encodeId(runner.id)}&engine=${shownAccountEngine}`);
+      navigate(`/infrastructure?runner=${encodeId(runner.id)}&engine=${shownAccountEngine}`);
       return;
     }
     // A draft starts on it: nothing on the server yet, so the pick rides on the create.
@@ -8329,14 +8329,14 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       return;
     }
     // A provider this runner can't run isn't a switch — it's a request for the sign-in (or
-    // install) that would make it one. Go straight to that engine's row on the Providers page, as
+    // install) that would make it one. Go straight to that engine's row on Infrastructure, as
     // the New Session hero's row does — or, for a choice that names its own fix (an account
     // pool), to that page. The chip keeps showing the provider still in use.
     const picked = providerSwitchChoices.find((c) => c.slug === v);
     if (picked?.unavailable) {
       navigate(
         picked.fixHref ??
-          `/providers?runner=${encodeId(runner.id)}&engine=${picked.fixEngine ?? picked.slug}`,
+          `/infrastructure?runner=${encodeId(runner.id)}&engine=${picked.fixEngine ?? picked.slug}`,
       );
       return;
     }
@@ -8418,10 +8418,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       onSwitchToGemini: geminiChoice && !geminiChoice.unavailable && !selectedTrashed && !selectedMissing
         ? () => pickProvider(geminiChoice.slug)
         : undefined,
-      onOpenProviders: () => navigate(`/providers?runner=${encodeId(runner.id)}&engine=antigravity`),
+      onOpenProviders: () => navigate(`/infrastructure?runner=${encodeId(runner.id)}&engine=antigravity`),
       onInstall: runner.online && runner.antigravity?.supported ? () => installAntigravity.mutate() : undefined,
       installDisabled: installAntigravity.isPending || installDsh.isPending || runner.install?.status === 'installing' || runner.install?.status === 'pending',
-      onEditDshKey: () => navigate(dshProviderRow ? `/providers/${encodeId(dshProviderRow.id)}` : '/providers'),
+      onEditDshKey: () => navigate(dshProviderRow ? `/providers/${encodeId(dshProviderRow.id)}` : '/infrastructure#keys'),
       onInstallDsh: runner.online && runner.capabilities?.includes(DSH_RUNNER_CAPABILITY) ? () => installDsh.mutate() : undefined,
       onRetry:
         authRetryText && !selectedTrashed && !selectedMissing
@@ -8449,7 +8449,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       onNeedRetryText: selectedId ? () => setRetryMessageAskedFor(selectedId) : undefined,
       // The provider gallery, not a preset vendor: the engine narrows it to a runtime, not to
       // whose key the user actually holds.
-      onUseApiKey: () => navigate('/providers'),
+      onUseApiKey: () => navigate('/infrastructure#keys'),
     }),
     // `send.mutate` is referentially stable; `send` itself is not, and depending on it would
     // rebuild this every render and re-render the card through the context.
@@ -8719,7 +8719,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               const pick = (account: string, signedOut: boolean) => {
                 if (here) return pickAccount(account, signedOut);
                 if (signedOut) {
-                  navigate(`/providers?runner=${encodeId(runner.id)}&engine=${engine}`);
+                  navigate(`/infrastructure?runner=${encodeId(runner.id)}&engine=${engine}`);
                   return;
                 }
                 pickProvider(engine!, account);

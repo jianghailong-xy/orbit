@@ -1,7 +1,7 @@
 import Foundation
 
-/// The DeepSeek account balance behind one of the account's own DeepSeek keys, as Settings → Providers
-/// and the key's page draw it (web's `DeepSeekBalance.tsx` and `lib/deepseekBalance.ts`). The server
+/// The DeepSeek account balance behind one of the account's own DeepSeek keys, as Infrastructure's API
+/// keys and the key's page draw it (web's `DeepSeekBalance.tsx` and `lib/deepseekBalance.ts`). The server
 /// asks DeepSeek with the stored key — which never reaches this client — and answers with the balance
 /// of the whole account, not what Orbit or a session spent: DeepSeek has no spend API to ask.
 ///
@@ -25,7 +25,7 @@ public enum DeepSeekBalance {
     public static let balance = "Balance"
     public static let unknown = "Unknown"
     public static let checking = "Checking balance…"
-    /// A DeepSeek key's row on Settings → Providers when there is no balance to put at its end.
+    /// A DeepSeek key's row on Infrastructure's API keys when there is no balance to put at its end.
     public static let unavailable = "Unavailable"
     public static let failedTitle = "Couldn't get the balance"
     public static let lowTitle = "Balance too low — DeepSeek calls will fail"
@@ -58,10 +58,10 @@ public enum DeepSeekBalance {
         return host.lowercased() == "api.deepseek.com"
     }
 
-    /// The account's own DeepSeek key a row of Settings → Providers stands for — the row that opens the
-    /// key's page and ends with its balance. The key list is the pickers' catalogue (GET /providers),
-    /// which carries no id or endpoint, so the row is matched by slug among the account's own providers
-    /// (GET /providers/mine). Nil for any other row.
+    /// The account's own DeepSeek key a row of Infrastructure's API keys stands for — the row that opens
+    /// the key's page and ends with its balance. A row of the pickers' catalogue (GET /providers) carries
+    /// no id or endpoint, so a row is matched by slug among the account's own providers (GET
+    /// /providers/mine), which the page's own list is. Nil for any other row.
     public static func key(for row: ConfiguredProvider, mine: [ConfiguredProvider]) -> ConfiguredProvider? {
         mine.first { $0.slug == row.slug && $0.providerID != nil && applies(to: $0) }
     }
@@ -118,7 +118,7 @@ public enum DeepSeekBalance {
         failure == .keyRejected ? "\(message) \(changeKeyOnWeb)" : message
     }
 
-    /// What a DeepSeek key's row says at its end on Settings → Providers: the total — every currency,
+    /// What a DeepSeek key's row says at its end on Infrastructure's API keys: the total — every currency,
     /// red once the account can't pay — or "Unavailable", orange, when there is no balance to show.
     /// Nothing while it loads.
     public static func rowValue(_ state: State) -> PoolStatus? {

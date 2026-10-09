@@ -80,10 +80,10 @@ describe('the sidebar’s Wiki entry', () => {
     // collapsed rail carries the same words only in `title` attributes).
     const projects = html.indexOf('>Projects<');
     const wiki = html.indexOf('>Wiki<');
-    const runners = html.indexOf('>Runners<');
+    const infrastructure = html.indexOf('>Infrastructure<');
     expect(projects).toBeGreaterThan(-1);
     expect(wiki).toBeGreaterThan(projects);
-    expect(runners).toBeGreaterThan(wiki);
+    expect(infrastructure).toBeGreaterThan(wiki);
     expect(html).toContain('sidebar-nav-icon-wiki');
     // Reachable and activatable by keyboard, which is what the row's `role="link"` promises.
     expect(html).toContain('role="link" tabindex="0" title="Wiki"');
@@ -133,7 +133,7 @@ describe('the sidebar, for an account the server has not switched the wiki on fo
     expect(html).not.toContain('title="Wiki"');
     expect(html).not.toContain('sidebar-nav-icon-wiki');
     expect(html).toContain('>Projects<');
-    expect(html).toContain('>Runners<');
+    expect(html).toContain('>Infrastructure<');
   });
 
   it('offers no Wiki row before the server has answered, either', () => {

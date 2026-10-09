@@ -4,15 +4,14 @@ import CoreGraphics   // CGSize/CGRect's Swift members on Apple platforms; Found
 #endif
 
 /// A page Settings opens from its list, each one a frame of Settings' own stack
-/// (`NavNode.settingsPage`). The runners list is the one page that predates these and keeps its own
-/// frame (`NavNode.settingsRunners`).
+/// (`NavNode.settingsPage`).
 public enum SettingsPage: String, Hashable, Sendable, CaseIterable {
-    case providers, notifications, sharedLinks, accessTokens, changePassword, admin
+    case infrastructure, notifications, sharedLinks, accessTokens, changePassword, admin
 
     /// The page's navigation title — the same words as the row that opens it.
     public var title: String {
         switch self {
-        case .providers:      return SettingsHome.title(.providers)
+        case .infrastructure: return SettingsHome.title(.infrastructure)
         case .notifications:  return SettingsHome.title(.notifications)
         case .sharedLinks:    return SettingsHome.title(.sharedLinks)
         case .accessTokens:   return SettingsHome.title(.accessTokens)
@@ -28,9 +27,10 @@ public enum SettingsPage: String, Hashable, Sendable, CaseIterable {
 /// and nothing of its own — the ChatGPT-style sheet the owner picked from the mockups.
 ///
 /// The rows are the web's Settings and Profile pages, regrouped for a phone: Session defaults and
-/// Session orchestration under Sessions, the Runners and Providers pages under Machines & models,
-/// Notifications and Appearance under Preferences, Profile's email and password under Account with
-/// Shared links and Access tokens beside them. The words are the web's wherever it has one.
+/// Session orchestration under Sessions, the Infrastructure page — the web's Runners and Providers
+/// pages, made one — under Machines & models, Notifications and Appearance under Preferences,
+/// Profile's email and password under Account with Shared links and Access tokens beside them. The
+/// words are the web's wherever it has one.
 public enum SettingsHome {
     public enum Group: String, CaseIterable, Sendable {
         case sessions, machines, preferences, account
@@ -38,7 +38,7 @@ public enum SettingsHome {
 
     public enum Row: String, CaseIterable, Sendable {
         case defaultPermission, orchestration, modelRouting, promptSuggestions
-        case runners, providers
+        case infrastructure
         case notifications, appearance
         case email, instance, sharedLinks, accessTokens, changePassword, admin
     }
@@ -56,7 +56,7 @@ public enum SettingsHome {
     public static func rows(_ group: Group, isAdmin: Bool) -> [Row] {
         switch group {
         case .sessions:    return [.defaultPermission, .orchestration, .modelRouting, .promptSuggestions]
-        case .machines:    return [.runners, .providers]
+        case .machines:    return [.infrastructure]
         case .preferences: return [.notifications, .appearance]
         case .account:
             let rows: [Row] = [.email, .instance, .sharedLinks, .accessTokens, .changePassword]
@@ -70,8 +70,7 @@ public enum SettingsHome {
         case .orchestration:     return "Session orchestration"
         case .modelRouting:      return SettingsCopy.smartModelSelection
         case .promptSuggestions: return SettingsCopy.suggestedReplies
-        case .runners:           return AppSection.runners.title
-        case .providers:         return "Providers"
+        case .infrastructure:    return AppSection.runners.title
         case .notifications:     return "Notifications"
         case .appearance:        return "Appearance"
         case .email:             return "Email"
@@ -83,15 +82,14 @@ public enum SettingsHome {
         }
     }
 
-    /// SF Symbol for the row's leading glyph. Runners and Admin keep the glyph their sections have.
+    /// SF Symbol for the row's leading glyph. Infrastructure and Admin keep the glyph their sections have.
     public static func systemImage(_ row: Row) -> String {
         switch row {
         case .defaultPermission: return "hand.raised"
         case .orchestration:     return "point.3.connected.trianglepath.dotted"
         case .modelRouting:      return "sparkles"
         case .promptSuggestions: return "text.bubble"
-        case .runners:           return AppSection.runners.systemImage
-        case .providers:         return "powerplug"
+        case .infrastructure:    return AppSection.runners.systemImage
         case .notifications:     return "bell"
         case .appearance:        return "circle.lefthalf.filled"
         case .email:             return "envelope"
@@ -109,19 +107,31 @@ public enum SettingsHome {
     /// only say something.
     public static func page(_ row: Row) -> SettingsPage? {
         switch row {
-        case .providers:      return .providers
+        case .infrastructure: return .infrastructure
         case .notifications:  return .notifications
         case .sharedLinks:    return .sharedLinks
         case .accessTokens:   return .accessTokens
         case .changePassword: return .changePassword
         case .admin:          return .admin
-        case .runners, .defaultPermission, .orchestration, .modelRouting, .promptSuggestions, .appearance, .email,
+        case .defaultPermission, .orchestration, .modelRouting, .promptSuggestions, .appearance, .email,
              .instance:
             return nil
         }
     }
 
+    /// The line under a group: the Infrastructure page's own, under the one row that opens it.
+    public static func footer(_ group: Group) -> String? {
+        group == .machines ? Infrastructure.subtitle : nil
+    }
+
     // MARK: - What a row says
+
+    /// "1 needs you" — how many lines the Infrastructure page's Needs you holds; with none, how many of
+    /// the account's machines can take work right now.
+    public static func infrastructureValue(needsYou: Int, runners: [Runner]) -> String {
+        if needsYou > 0 { return needsYou == 1 ? "1 needs you" : "\(needsYou) need you" }
+        return runnersValue(runners)
+    }
 
     /// "3 of 4 online" — how many of the account's machines can take work right now.
     public static func runnersValue(_ runners: [Runner]) -> String {

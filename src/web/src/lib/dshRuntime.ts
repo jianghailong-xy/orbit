@@ -63,8 +63,8 @@ export const DSH_STATE_LABEL: Record<Exclude<DshRunnerState, 'ready'>, string> =
 export const DSH_STATE_HINT: Record<Exclude<DshRunnerState, 'ready'>, string> = {
   updateRunner: 'This runner predates DeepSeek Harness. It updates itself when no session is running on it.',
   unsupportedPlatform: 'DeepSeek Harness 0.2.0-rc.2 runs on Linux x64 runners with Node 26 only.',
-  notInstalled: 'Install DeepSeek Harness on this runner from Providers.',
-  unsupportedVersion: 'This runner has a DeepSeek Harness version Orbit does not support. Reinstall it from Providers.',
+  notInstalled: 'Install DeepSeek Harness on this runner from Infrastructure.',
+  unsupportedVersion: 'This runner has a DeepSeek Harness version Orbit does not support. Reinstall it from Infrastructure.',
 };
 
 /**
