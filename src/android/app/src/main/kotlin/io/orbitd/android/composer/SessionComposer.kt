@@ -40,6 +40,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.content.edit
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.attachments.*
 import io.orbitd.android.core.auth.SessionHandle
@@ -114,7 +115,7 @@ fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: Str
         }
         if (!suggestionTapLearned) {
             suggestionTapLearned = true
-            composerPrefs.edit().putBoolean(SUGGESTION_TAP_LEARNED, true).apply()
+            composerPrefs.edit { putBoolean(SUGGESTION_TAP_LEARNED, true) }
         }
     }
     Surface(tonalElevation = 2.dp) {
