@@ -736,8 +736,12 @@ suite('(q) the core tables keep every trigger that predates this project', async
   // records on the confirmation reviews still waiting on a session that their reviewer ended, and
   // writes only `task_owner_confirmation_review`; 16 since 0377 added
   // `session_dsh_runner_acquisition_guard`, which reads the provider and locks the runner
-  // FOR SHARE NOWAIT to enforce DeepSeek Harness admission without writing another relation.
-  assert.deepEqual(counts, { run_event: 1, session: 16, task: 30 });
+  // FOR SHARE NOWAIT to enforce DeepSeek Harness admission without writing another relation; 19
+  // since 0414 added `session_acquisition_engine_guard`, `session_engine_from_task_pin` and
+  // `session_engine_immutable`, which keep a recorded session engine claimed only by a control
+  // plane that reads it, give an older one's task run the task's engine pin, and refuse any change
+  // of a recorded engine — reading `task` at most, and writing no other relation.
+  assert.deepEqual(counts, { run_event: 1, session: 19, task: 30 });
 
   // And every one that went is named, so a reader can tell a removal from an accident.
   for (const trigger of [

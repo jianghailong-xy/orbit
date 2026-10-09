@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { ConflictException, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, ConflictException, Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { Prisma, type ManagedRunnerManagementState } from '@prisma/client';
 import { EventEmitter } from 'events';
 import {
@@ -7,6 +7,7 @@ import {
   isAccountEngine,
   ClaimedSession,
   PermissionMode,
+  credentialEngines,
   fastModeAvailable,
   openCodeKeyOf,
   type PlanUsageSnapshot,
@@ -19,7 +20,12 @@ import { choosePoolCredential } from '../providers/pool-credential-select';
 import {
   accountPoolRuntime,
   adminOnlyProviderRefusal,
+  builtinSessionEngine,
+  ENGINE_INCOMPATIBLE_ERROR_LIKE,
+  engineIncompatibleMessage,
   isBuiltinProvider,
+  keyCredential,
+  keyRowEngine,
   openCodeKeyRows,
   resolveProviderExec,
   runsOnOpenCode,
@@ -27,6 +33,7 @@ import {
   usableProviderSql,
   type ModelProviderRow,
 } from '../providers/custom-provider';
+import { legacySessionEngine, recordedEngine } from '../providers/session-engine';
 import { ProviderPlanUsageService } from '../providers/plan-usage.service';
 import { isPoolCandidate, poolUnavailableReason } from '../providers/pool-admission';
 import { keyCanRun, keyRunsAgainAt, poolKeysResumeAt } from '../providers/pool-key-select';
@@ -96,6 +103,7 @@ import {
   withWikiMaintenanceRun,
 } from '../wiki/wiki-maintenance-session';
 import { managedRunnerInstanceClaimable, type ManagedRunnerInstance } from '../managed-runners/managed-runner-instance';
+import { MANAGED_RUNNER_GATE, type ManagedRunnerGate } from '../managed-runners/managed-runner-gate';
 
 /** The runner asking for work, as the claim route knows it. */
 export interface ClaimingRunner {
@@ -127,6 +135,8 @@ export class QueueService {
      * directly, none of whose sessions names a pool.
      */
     private readonly planUsage?: ProviderPlanUsageService,
+    /** The managed runner switch: while it is off a managed runner's drain does not hold its claims back. */
+    @Optional() @Inject(MANAGED_RUNNER_GATE) private readonly managedGate?: ManagedRunnerGate,
   ) {
     this.signal.setMaxListeners(0);
   }
@@ -179,7 +189,13 @@ export class QueueService {
   /** Evaluate pauses before the short global claim lock. The inbox rechecks after claim,
    * so a concurrent pause cannot leak a new turn; paused rows never occupy runner capacity.
    * `dshUnavailable` is why a runner that declares dsh cannot start it (dshRuntimeUnavailable):
-   * its dsh rows are held with that notice too, until a heartbeat reports the CLI ready. */
+   * its dsh rows are held with that notice too, until a heartbeat reports the CLI ready.
+   *
+   * A session runs on its own engine (Session.engine, or the old rules for a row without one), and a
+   * credential that engine cannot run — a key whose protocol was changed under it, a key that is not a
+   * DeepSeek key under a DeepSeek Harness session, a Claude subscription token under OpenCode — holds
+   * it here with PROVIDER_ENGINE_INCOMPATIBLE's message rather than letting the claim hand the runner
+   * another CLI's job (docs/provider-engine-contract.md §4.1). The claim clears it like every hold. */
   private async pausedPendingSessions(
     runnerId: string, supportsWikiMaintenance: boolean, dshUnavailable?: string | null,
   ): Promise<string[]> {
@@ -190,13 +206,15 @@ export class QueueService {
         OR: [
           { providerBuiltin: false },
           { assignedRunner: { accountPauses: { not: Prisma.DbNull } } },
-          ...(dshUnavailable ? [{ provider: AgentProvider.DSH, providerBuiltin: true }] : []),
+          ...(dshUnavailable
+            ? [{ provider: AgentProvider.DSH, providerBuiltin: true }, { engine: AgentProvider.DSH }]
+            : []),
           // An OpenCode session on one of the owner's configured keys (shared `openCodeKeys`).
           { provider: AgentProvider.OPENCODE, model: { startsWith: 'orbit-' } },
         ],
       },
       select: {
-        id: true, ownerId: true, provider: true, providerBuiltin: true, error: true, model: true,
+        id: true, ownerId: true, provider: true, providerBuiltin: true, engine: true, error: true, model: true,
         codexAccount: true, codexAccountPinned: true, claudeAccount: true, claudeAccountPinned: true,
         antigravityAccount: true, antigravityAccountPinned: true, kimiAccount: true, kimiAccountPinned: true,
         workspace: { select: { env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true } },
@@ -208,48 +226,63 @@ export class QueueService {
     for (const session of pending) {
       const runner = session.assignedRunner;
       let until = runner ? sessionAccountPausedUntil(session, session.workspace, runner, now) : null;
-      const engine = session.provider;
+      const slug = session.provider;
+      // The engine it runs on: its own, else — for a row an older replica wrote — the old rules'.
+      let engine = recordedEngine(session.engine);
       let unavailable = false;
+      // Why its credential cannot run on that engine, when it cannot.
+      let incompatible: string | null = null;
       // What an unavailable session waits with: a member's session on a shared provider is told who can
       // run it (ADMIN_ONLY_PROVIDER_ERROR) rather than to check a configuration that is not theirs.
       let unavailableError = PROVIDER_UNAVAILABLE_ERROR;
-      let dshHeld = !!dshUnavailable && session.providerBuiltin && engine === AgentProvider.DSH;
-      if (until && runner && isAccountEngine(engine)) {
-        const canMove = runner.capabilities.includes(ACCOUNT_MOVE_CAPABILITY[engine]);
-        const move = canMove && accountBeforeDispatch(engine, {
-          account: session[ACCOUNT_CHOICE[engine]],
-          pinned: session[ACCOUNT_PINNED[engine]],
+      if (until && runner && isAccountEngine(slug)) {
+        const canMove = runner.capabilities.includes(ACCOUNT_MOVE_CAPABILITY[slug]);
+        const move = canMove && accountBeforeDispatch(slug, {
+          account: session[ACCOUNT_CHOICE[slug]],
+          pinned: session[ACCOUNT_PINNED[slug]],
         }, session.workspace, runner.engines, runner.planUsage, now, runner.accountPauses);
         if (move) until = null;
       }
-      if (!isBuiltinProvider(engine, session.providerBuiltin) && engine) {
+      if (!isBuiltinProvider(slug, session.providerBuiltin) && slug) {
         const provider = await this.prisma.modelProvider.findFirst({
-          where: { slug: engine, ...(await usableProviderScope(this.prisma, session.ownerId)) },
-          select: { enabled: true, runtime: true },
+          where: { slug, ...(await usableProviderScope(this.prisma, session.ownerId)) },
+          select: { slug: true, enabled: true, runtime: true, presetSlug: true, baseUrl: true, apiKeyEnc: true },
         });
-        unavailable = provider
-          ? !provider.enabled || !['claude', 'codex', 'kimi', 'antigravity', 'dsh'].includes(provider.runtime)
-          : !await accountPoolRuntime(this.prisma, session.ownerId, engine);
-        if (unavailable && !provider && await adminOnlyProviderRefusal(this.prisma, session.ownerId, engine)) {
+        const poolEngine = provider ? null : await accountPoolRuntime(this.prisma, session.ownerId, slug);
+        engine ??= provider ? keyRowEngine(provider.runtime) : poolEngine;
+        unavailable = provider ? !provider.enabled || !keyRowEngine(provider.runtime) : !poolEngine;
+        if (unavailable && !provider && await adminOnlyProviderRefusal(this.prisma, session.ownerId, slug)) {
           unavailableError = ADMIN_ONLY_PROVIDER_ERROR;
         }
-        dshHeld = !!dshUnavailable && provider?.runtime === AgentProvider.DSH;
+        if (!unavailable && engine) {
+          const engines = provider ? credentialEngines(keyCredential(provider)) : [poolEngine!];
+          if (!engines.includes(engine)) incompatible = engineIncompatibleMessage(slug, engine, engines);
+        }
         // A Wiki maintenance session is not held for it by a runner that declares wiki-maintenance-run/v1: the
         // claim hands it over with its refusal (wiki/wiki-maintenance-session.ts), which that runner ends FAILED
         // without starting any engine. Held here, it would wait PENDING for good, and its space's maintenance with it.
-        if (unavailable && supportsWikiMaintenance) {
+        if ((unavailable || incompatible) && supportsWikiMaintenance) {
           const maintained = await this.prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
             SELECT s.id FROM "session" s WHERE s.id = ${session.id}::uuid AND ${wikiMaintenanceSessionSql('s')}`);
-          if (maintained.length > 0) unavailable = false;
+          if (maintained.length > 0) {
+            unavailable = false;
+            incompatible = null;
+          }
         }
-        const key = `${session.ownerId}:${engine}`;
-        if (!poolPauses.has(key)) poolPauses.set(key, await this.accountPoolPausedUntil(session.ownerId, engine, now));
+        const key = `${session.ownerId}:${slug}`;
+        if (!poolPauses.has(key)) poolPauses.set(key, await this.accountPoolPausedUntil(session.ownerId, slug, now));
         until = poolPauses.get(key) ?? null;
+      } else {
+        // A built-in credential runs its own engine only.
+        const builtin = builtinSessionEngine(slug, session.providerBuiltin);
+        engine ??= builtin;
+        if (engine && builtin && engine !== builtin) incompatible = engineIncompatibleMessage(slug, engine, [builtin]);
       }
+      const dshHeld = !!dshUnavailable && engine === AgentProvider.DSH;
       // The key an OpenCode model names has to be there to run it on: gone, disabled or not one
       // OpenCode may spend, the session waits with the same reason a configured provider's does,
       // rather than being claimed and refused by resolveProviderExec.
-      const openCodeKey = engine === AgentProvider.OPENCODE ? openCodeKeyOf(session.model) : null;
+      const openCodeKey = slug === AgentProvider.OPENCODE ? openCodeKeyOf(session.model) : null;
       if (openCodeKey) {
         const row = await this.prisma.modelProvider.findFirst({
           where: { slug: openCodeKey.slug, ...(await usableProviderScope(this.prisma, session.ownerId)) },
@@ -260,11 +293,13 @@ export class QueueService {
           unavailableError = ADMIN_ONLY_PROVIDER_ERROR;
         }
       }
-      if (!until && !unavailable && !dshHeld) continue;
+      if (!until && !unavailable && !incompatible && !dshHeld) continue;
       blocked.push(session.id);
       const error = unavailable
         ? unavailableError
-        : until ? `Account paused until ${until.toISOString()}` : dshUnavailable!;
+        : incompatible
+          ? incompatible
+          : until ? `Account paused until ${until.toISOString()}` : dshUnavailable!;
       if (session.error !== error) {
         const updated = await this.prisma.session.updateMany({
           where: { id: session.id, status: 'PENDING' }, data: { error },
@@ -284,7 +319,9 @@ export class QueueService {
       managementState: ManagedRunnerManagementState;
     }>>`SELECT id::text AS id, generation, pod_uid AS "podUid", management_state::text AS "managementState"
         FROM managed_runner WHERE id = ${instance.mappingId}::uuid FOR SHARE`;
-    return managedRunnerInstanceClaimable(mapping ?? null, instance);
+    // The switch decides only whether a drain holds claims back; a service built without the gate
+    // (specs that construct it by hand) holds them back, as before management could be off.
+    return managedRunnerInstanceClaimable(mapping ?? null, instance, this.managedGate?.enabled ?? true);
   }
 
   private async trySessionClaim(
@@ -327,7 +364,11 @@ export class QueueService {
         // widened the Antigravity one to the configured rows that borrow it). These
         // transaction-local capabilities are the positive signal that lets only the new, capable
         // path pass. One statement sets all three inside the global claim lock above.
-        await tx.$executeRaw`SELECT set_config('orbit.runner_supports_opencode', ${supportsOpenCode ? '1' : '0'}, true), set_config('orbit.runner_supports_antigravity', ${supportsAntigravity ? '1' : '0'}, true), set_config('orbit.runner_supports_dsh', ${supportsDsh ? '1' : '0'}, true)`;
+        //
+        // The fourth (migration 0414) says this claim reads the session's recorded engine: without it
+        // the database refuses to let a transaction claim a session that has one, which is what keeps an
+        // older replica — which would derive the engine from the slug — off them (§5.2).
+        await tx.$executeRaw`SELECT set_config('orbit.runner_supports_opencode', ${supportsOpenCode ? '1' : '0'}, true), set_config('orbit.runner_supports_antigravity', ${supportsAntigravity ? '1' : '0'}, true), set_config('orbit.runner_supports_dsh', ${supportsDsh ? '1' : '0'}, true), set_config('orbit.claim_reads_session_engine', '1', true)`;
         // Asked again here, after the waits for a connection and for the lock above (up to 20s
         // under a busy pool): the runner may have hung up during them.
         if (hungUp?.aborted) return [];
@@ -340,7 +381,9 @@ export class QueueService {
         // SAME SQL the session list uses to explain a queued row. Written twice they drift,
         // and a UI that names the wrong gate is worse than one that names none.
         const runnerId = Prisma.sql`${runner.id}::uuid`;
-        return tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+        const claimed = await tx.$queryRaw<Array<{
+          id: string; engine: string | null; provider: string; providerBuiltin: boolean; ownerId: string;
+        }>>(Prisma.sql`
         UPDATE "session" SET
           status = 'RUNNING',
           -- A stall this claim just disproved. Both markers are written by a preflight that saw a
@@ -358,7 +401,7 @@ export class QueueService {
               ${PROVIDER_UNAVAILABLE_ERROR},
               ${ADMIN_ONLY_PROVIDER_ERROR},
               ${SOURCE_PROTOCOL_UNSUPPORTED_ERROR}
-            ) OR error LIKE 'Account paused until %' THEN NULL
+            ) OR error LIKE 'Account paused until %' OR error LIKE ${ENGINE_INCOMPATIBLE_ERROR_LIKE} THEN NULL
             ELSE error
           END,
           "started_at" = COALESCE("started_at", now()),
@@ -389,36 +432,78 @@ export class QueueService {
             -- session does not become one: a runner that declares wiki-maintenance-run/v1 is handed it with its
             -- refusal and no provider (buildSession), and ends it FAILED without starting any engine. A shared
             -- provider resolves for an admin's session only (usableProviderScope): a member's is never claimed.
+            --
+            -- A session with a recorded engine is claimed on a credential that engine can spend
+            -- (docs/provider-engine-contract.md §5.6): its own sign-in on the runner (or OpenCode's own
+            -- configuration), the built-in dsh, an enabled key on a protocol the engine may speak, or an
+            -- account pool made on it. Whether a key is DeepSeek's, or a Claude subscription token, is the
+            -- application's to judge (pausedPendingSessions holds those). One without is judged by the
+            -- rule that wrote it.
             AND (
-              COALESCE(s.provider, 'claude') IN ('claude', 'codex', 'opencode', 'antigravity')
-              OR (s."provider_builtin" AND s.provider IN ('kimi', 'dsh'))
-              OR (NOT s."provider_builtin" AND (
-                EXISTS (
-                  SELECT 1 FROM "model_provider" mp
-                  WHERE mp.slug = s.provider AND mp.enabled
-                    AND mp.runtime IN ('claude', 'codex', 'kimi', 'antigravity', 'dsh')
-                    AND ${usableProviderSql('mp', Prisma.raw('s.owner_id'))}
-                ) OR EXISTS (
-                  SELECT 1 FROM "provider_pool" pp
-                  WHERE pp.slug = s.provider AND (
-                    (pp.owner_id = s.owner_id AND NOT pp.shared)
-                    OR (pp.engine = 'codex' AND EXISTS (
-                      SELECT 1 FROM "provider_pool_person" person
-                      WHERE person.pool_id = pp.id AND person.user_id = s.owner_id
-                    ))
+              (s."engine" IS NOT NULL AND (
+                (s.provider = s."engine" AND (
+                  s.provider IN ('claude', 'codex', 'opencode', 'antigravity')
+                  OR (s."provider_builtin" AND s.provider = 'kimi')
+                ))
+                OR (s."engine" = 'dsh' AND s.provider = 'dsh' AND s."provider_builtin")
+                OR (NOT s."provider_builtin" AND (
+                  EXISTS (
+                    SELECT 1 FROM "model_provider" mp
+                    WHERE mp.slug = s.provider AND mp.enabled
+                      AND mp.runtime = ANY(CASE s."engine"
+                        WHEN 'claude' THEN ARRAY['claude', 'dsh']
+                        WHEN 'dsh' THEN ARRAY['claude', 'dsh']
+                        WHEN 'opencode' THEN ARRAY['claude', 'codex', 'kimi', 'antigravity', 'dsh']
+                        ELSE ARRAY[s."engine"]
+                      END)
+                      AND ${usableProviderSql('mp', Prisma.raw('s.owner_id'))}
+                  ) OR EXISTS (
+                    SELECT 1 FROM "provider_pool" pp
+                    WHERE pp.slug = s.provider AND pp.engine = s."engine" AND (
+                      (pp.owner_id = s.owner_id AND NOT pp.shared)
+                      OR (pp.engine = 'codex' AND EXISTS (
+                        SELECT 1 FROM "provider_pool_person" person
+                        WHERE person.pool_id = pp.id AND person.user_id = s.owner_id
+                      ))
+                    )
                   )
-                )
+                ))
+              ))
+              OR (s."engine" IS NULL AND (
+                COALESCE(s.provider, 'claude') IN ('claude', 'codex', 'opencode', 'antigravity')
+                OR (s."provider_builtin" AND s.provider IN ('kimi', 'dsh'))
+                OR (NOT s."provider_builtin" AND (
+                  EXISTS (
+                    SELECT 1 FROM "model_provider" mp
+                    WHERE mp.slug = s.provider AND mp.enabled
+                      AND mp.runtime IN ('claude', 'codex', 'kimi', 'antigravity', 'dsh')
+                      AND ${usableProviderSql('mp', Prisma.raw('s.owner_id'))}
+                  ) OR EXISTS (
+                    SELECT 1 FROM "provider_pool" pp
+                    WHERE pp.slug = s.provider AND (
+                      (pp.owner_id = s.owner_id AND NOT pp.shared)
+                      OR (pp.engine = 'codex' AND EXISTS (
+                        SELECT 1 FROM "provider_pool_person" person
+                        WHERE person.pool_id = pp.id AND person.user_id = s.owner_id
+                      ))
+                    )
+                  )
+                ))
               ))
               OR (${supportsWikiMaintenance}::boolean AND ${wikiMaintenanceSessionSql('s')})
             )
-            -- Both the request and the heartbeat must declare Harness. The database trigger
-            -- repeats this so a legacy API transaction cannot bypass the capability gate.
+            -- Both the request and the heartbeat must declare Harness, for a session recorded on it
+            -- whatever key it spends, and for one without an engine by the old rule. The database
+            -- trigger repeats this so a legacy API transaction cannot bypass the capability gate.
             AND (
-              NOT ((s.provider = 'dsh' AND s."provider_builtin") OR EXISTS (
-                SELECT 1 FROM "model_provider" mp
-                WHERE NOT s."provider_builtin" AND mp.slug = s.provider AND mp.runtime = 'dsh'
-                  AND ${usableProviderSql('mp', Prisma.raw('s.owner_id'))}
-              )) OR (${supportsDsh} AND EXISTS (
+              NOT (
+                (s."engine" IS NOT NULL AND s."engine" = 'dsh')
+                OR (s."engine" IS NULL AND ((s.provider = 'dsh' AND s."provider_builtin") OR EXISTS (
+                  SELECT 1 FROM "model_provider" mp
+                  WHERE NOT s."provider_builtin" AND mp.slug = s.provider AND mp.runtime = 'dsh'
+                    AND ${usableProviderSql('mp', Prisma.raw('s.owner_id'))}
+                )))
+              ) OR (${supportsDsh} AND EXISTS (
                 SELECT 1 FROM "runner" r WHERE r.id = ${runnerId}
                   AND r."capabilities_reported_at" IS NOT NULL
                   AND 'provider:dsh' = ANY(r.capabilities)
@@ -426,24 +511,26 @@ export class QueueService {
             )
             -- Legacy runners treat an unknown provider as Claude. Require a positive OpenCode
             -- capability advertisement so an upgraded server can never dispatch one of these
-            -- rows to a pre-0.1.82 process during a rolling release.
+            -- rows to a pre-0.1.82 process during a rolling release: a session recorded on
+            -- OpenCode, whatever key it spends, or one without an engine named opencode.
             AND (
               ${supportsOpenCode}
-              OR COALESCE(s.provider, 'claude') <> 'opencode'
+              OR COALESCE(s."engine", s.provider, 'claude') <> 'opencode'
             )
             -- The same gate for Antigravity (migration 0367): every runner shipped before one
             -- that advertises it reads the slug as Claude.
             AND (
               ${supportsAntigravity}
-              OR COALESCE(s.provider, 'claude') <> 'antigravity'
+              OR COALESCE(s."engine", s.provider, 'claude') <> 'antigravity'
             )
-            -- …and for a configured provider that borrows Antigravity (a Gemini key): the slug is
-            -- the row's own, but the runner is handed an antigravity job all the same. The rows
-            -- dispatch resolves, an enabled one the session's owner may use (providerSlugsOn);
-            -- migration 0372's trigger still counts every shared row, which can only refuse a
-            -- claim this statement never makes.
+            -- …and, for a session without an engine, a configured provider that borrows Antigravity
+            -- (a Gemini key): the slug is the row's own, but the runner is handed an antigravity job
+            -- all the same. The rows dispatch resolves, an enabled one the session's owner may use
+            -- (providerSlugsOn); migration 0372's trigger still counts every shared row, which can
+            -- only refuse a claim this statement never makes. A recorded engine answered above.
             AND (
               ${supportsAntigravity}
+              OR s."engine" IS NOT NULL
               OR NOT EXISTS (
                 SELECT 1 FROM "model_provider" mp
                 WHERE mp."slug" = s.provider
@@ -529,8 +616,19 @@ export class QueueService {
           FOR UPDATE NOWAIT
           LIMIT 1
         )
-        RETURNING id
+        RETURNING id, engine, provider, provider_builtin AS "providerBuiltin", owner_id::text AS "ownerId"
       `);
+        // A row an older replica wrote has no engine: record the one it is about to run on, derived by
+        // the rules that replica follows, in this same transaction (§1.1). From here on nothing derives
+        // it again — a later edit of its key cannot move it onto another CLI.
+        const row = claimed[0];
+        if (row && row.engine == null) {
+          const derived = await legacySessionEngine(tx, row);
+          if (derived) {
+            await tx.$executeRaw`UPDATE "session" SET "engine" = ${derived} WHERE "id" = ${row.id}::uuid AND "engine" IS NULL`;
+          }
+        }
+        return claimed;
       }, loggedRetry(this.logger, 'queue.trySessionClaim', {
         // The claim is a long poll too (claimSessionForRunner's deadline), so it queues behind a
         // busy pool rather than failing into the runner's immediate retry — see
@@ -546,10 +644,15 @@ export class QueueService {
         return await this.buildSession(rows[0].id);
       } catch (error: any) {
         const refusal = error?.getResponse?.();
-        if (refusal?.code !== 'POOL_ACCOUNT_PAUSED') throw error;
+        if (refusal?.code !== 'POOL_ACCOUNT_PAUSED' && refusal?.code !== 'PROVIDER_ENGINE_INCOMPATIBLE') throw error;
+        // A credential that stopped being one the session's engine can run between the hold above and
+        // this build — a key edited in that window — puts it back to wait, as a pause does.
         await this.prisma.session.updateMany({
           where: { id: rows[0].id, status: 'RUNNING' },
-          data: { status: 'PENDING', error: `Account paused until ${refusal.pausedUntil}` },
+          data: {
+            status: 'PENDING',
+            error: refusal.code === 'POOL_ACCOUNT_PAUSED' ? `Account paused until ${refusal.pausedUntil}` : refusal.message,
+          },
         });
         this.realtime.publishSessionUpdated(rows[0].id);
         return null;
@@ -773,6 +876,14 @@ export class QueueService {
     const refused = maintenance?.refusal !== undefined;
     const declared = refused ? AgentProvider.CLAUDE : session.provider ?? null;
     const declaredProviderBuiltin = refused || session.providerBuiltin;
+    // The engine it runs on is its own (the claim recorded one for a row that had none), never one
+    // read off its credential: the credential is resolved below only for where that engine sends its
+    // requests. A session nobody can place — its key gone before it ever recorded an engine — is
+    // refused as a slug nothing holds always was.
+    const engine = refused
+      ? AgentProvider.CLAUDE
+      : recordedEngine(session.engine) ?? (await legacySessionEngine(this.prisma, session));
+    if (!engine) throw new BadRequestException(`provider not available: "${declared}"`);
     // A configured (custom) provider borrows a built-in runtime: resolve the runner-facing
     // built-in provider, model, and process env (baseUrl + decrypted key injected)
     // here, so the runner receives a plain claude/codex job and needs no changes. Ownership
@@ -807,6 +918,7 @@ export class QueueService {
     const openCodeKeys = declared === AgentProvider.OPENCODE ? await openCodeKeyRows(this.prisma, session.ownerId) : undefined;
     const resolveExec = (sessionModel: string | null) =>
       resolveProviderExec({
+        engine,
         declaredProvider: poolFallback ? AgentProvider.CLAUDE : declared,
         declaredProviderBuiltin: poolFallback || declaredProviderBuiltin,
         customRow,
@@ -852,6 +964,9 @@ export class QueueService {
       }
     }
     const provider = exec.provider;
+    // What the runner is handed as the model: the session's own id, except an OpenCode session on a
+    // key, which names it the way OpenCode selects it (resolveProviderExec `runnerModel`).
+    const runnerModel = exec.runnerModel ?? exec.model;
     const permissionMode = resolvePermissionMode(session.permissionMode, session.owner);
     // Claude spawns with a pre-generated --session-id, so a Claude row without one has no
     // conversation the runtime could resume — it was created before the column existed, or
@@ -950,7 +1065,7 @@ export class QueueService {
         provider,
         // Resolved above: a per-session override, Runtime default/catalog value (coerced for
         // built-ins so the runner never execs `codex -m claude-*`), or ModelProvider default.
-        model: exec.model,
+        model: runnerModel,
         appendSystemPrompt: workspace?.appendSystemPrompt ?? undefined,
         systemPrompt: workspace?.systemPrompt ?? undefined,
         allowedTools: dispatchAllowedTools(
@@ -966,7 +1081,7 @@ export class QueueService {
         // runner is a session that exits during startup, and this is the last place before it does.
         permissionMode: normalizeBuiltinPermissionMode(
           provider,
-          exec.model,
+          runnerModel,
           permissionMode,
           customRow?.enabled === true,
           session.assignedRunner?.runsAsRoot,
@@ -982,7 +1097,7 @@ export class QueueService {
         // drew the pill from.
         fastMode:
           session.fastMode &&
-          fastModeAvailable(provider, exec.model, session.assignedRunner?.modelCatalog as RunnerModelCatalog | null),
+          fastModeAvailable(provider, runnerModel, session.assignedRunner?.modelCatalog as RunnerModelCatalog | null),
         // The engine's guess at the person's next message after each turn — decided here, on the
         // endpoint this claim actually resolved (common/prompt-suggestions-switch.ts).
         promptSuggestions: claimPromptSuggestions({
@@ -1001,7 +1116,7 @@ export class QueueService {
         effort: normalizeEffortForRuntimeModel(
           provider,
           session.effort ?? workspace?.effort,
-          exec.model,
+          runnerModel,
           session.assignedRunner?.modelCatalog,
           exec.reasoningLevels,
         ),

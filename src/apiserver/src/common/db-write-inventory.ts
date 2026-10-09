@@ -1376,6 +1376,44 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     effects: 'None inside. The proof, the Pod\'s absence and the detached volume were observed before the closure; the next generation\'s Secret and Pod are created by later steps.',
     answer: 'No request waits on it: the worker logs the exhausted conflict, and its next pass re-observes the proof and advances then.',
   },
+  // ── Managed runner capacity, wake and sleep (migration 0413). Three more units own a transaction;
+  //    each takes the mapping row first, by a compare-and-set on its revision under the lease, and
+  //    only then the runner row or the capacity pool row — the order fence, advance and
+  //    adoptCredential already keep. Nothing takes the pool row and then a mapping, and the claim
+  //    takes the mapping only FOR SHARE, so no cycle. Kubernetes is never called inside a closure.
+  {
+    at: 'managed-runners/managed-runner-manager.ts#admitted',
+    shape: 'TX_RETRIED',
+    locks: 'managed_runner by id (a compare-and-set on revision and lease holder: the share recorded, PROVISIONING), then managed_runner_capacity by id (one conditional UPDATE adding the share only while every dimension still fits). Two admissions racing for the last slot meet on the pool row: the second waits for the first to commit, re-evaluates its WHERE against the new figures and matches nothing. Neither UPDATE changes a key.',
+    identity: 'The mapping revision and lease the pass read: a superseded pass matches no row and stops, so one admission is recorded once. The pool takes exactly the share written on the mapping in the same transaction.',
+    isolation: '',
+    attempts: 4,
+    replay: 'A rolled-back attempt reserved nothing and moved nothing; the re-run re-evaluates the pool from its committed figures. A pool with no room ends the transaction (CapacityRefused) and the mapping is moved to WAITING_CAPACITY by a separate compare-and-set.',
+    effects: 'None inside. The PVC, Secret and Pod are created by later steps of the manager, outside any transaction.',
+    answer: 'No request waits on it: the worker logs the exhausted conflict and its next pass admits again.',
+  },
+  {
+    at: 'managed-runners/managed-runner-manager.ts#fallAsleep',
+    shape: 'TX_RETRIED',
+    locks: 'managed_runner by id (a compare-and-set on revision, lease holder, generation, the recorded Pod UID and DRAINING: generation + 1, SLEEPING, compute share cleared), then runner by id (its credential hash replaced), then managed_runner_capacity by id (the compute share given back). The order of advance, with the pool row last, as in admitted and commitFailed.',
+    identity: 'The mapping revision, lease, generation and Pod UID the pass read and proved stopped: a second sleep of the same instance matches no row.',
+    isolation: '',
+    attempts: 4,
+    replay: 'A rolled-back attempt released and advanced nothing; the re-run gives back the same share from the same row. The CHECK on the pool keeps a share from ever being given back twice.',
+    effects: 'None inside. The stop was proven, the Pod object removed and the volume seen detached before the closure.',
+    answer: 'No request waits on it: the worker logs the exhausted conflict, and its next pass finds the Pod gone and the proof recorded and falls asleep then.',
+  },
+  {
+    at: 'managed-runners/managed-runner-manager.ts#commitFailed',
+    shape: 'TX_RETRIED',
+    locks: 'managed_runner by id (a compare-and-set on revision, lease holder and no recorded Pod: FAILED, compute share cleared), then managed_runner_capacity by id (that share given back). Taken only when no Pod of the generation is recorded or being created; otherwise FAILED is the ordinary one-row commit.',
+    identity: 'The mapping revision and lease the pass read.',
+    isolation: '',
+    attempts: 4,
+    replay: 'A rolled-back attempt failed nothing and released nothing; the re-run does both from the same row, once.',
+    effects: 'None inside.',
+    answer: 'No request waits on it: the worker logs the exhausted conflict, and its next pass fails the mapping again.',
+  },
   // ── Orbit Wiki (migration 0307, docs/wiki-design.md §4). Every unit below locks wiki rows and
   //    nothing else: 0307's header works through why the wiki's children reach their owner through
   //    the space rather than the user row, so a propose or a decide takes no rank-10 key lock and
@@ -1794,6 +1832,10 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   // announcement of a settled operation. None opens a transaction of its own; each is re-run exactly when its
   // caller is, under the claim the caller took.
   { at: 'wiki-worker/wiki-repo-ops.ts#settleSnapshot', under: 'wiki-worker/wiki-repo-ops.ts#applyWikiRepoOpResult' },
+  // Managed runner capacity (migration 0413): the pool's two conditional UPDATEs, run only inside the
+  // transaction that records or clears the mapping's share.
+  { at: 'managed-runners/managed-runner-capacity.ts#reserveCapacity', under: 'managed-runners/managed-runner-manager.ts#admitted' },
+  { at: 'managed-runners/managed-runner-capacity.ts#releaseCapacity', under: 'managed-runners/managed-runner-manager.ts#fallAsleep and #commitFailed' },
   { at: 'wiki-worker/wiki-repo-ops.ts#settleRead', under: 'wiki-worker/wiki-repo-ops.ts#applyWikiRepoOpResult' },
   { at: 'wiki-worker/wiki-repo-ops.ts#notifyRepoOpSettled', under: 'wiki-worker/wiki-repo-ops.ts#applyWikiRepoOpResult and #failWikiRepoOp' },
   // What waits on a job that ended for good — its calls, its repository operations, its run or plan job — settled
@@ -2234,6 +2276,7 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   { at: "providers/providers.service.ts#addPoolMember", class: "INSERT", statements: 1, note: "One INSERT ... ON CONFLICT DO NOTHING (createMany with skipDuplicates) on the member's primary key, so adding a member twice leaves one row. Both of the row's foreign keys carry owner_id (migration 0265), so a pool or provider of another owner, or a shared provider, fails the insert itself." },
   { at: "providers/providers.service.ts#create", class: "INSERT", statements: 1, note: "Migration 0265's BEFORE trigger also takes a transaction-scoped advisory lock on the slug and reads provider_pool; a slug a pool took first is a P2002, which withFreeSlug answers by re-picking, exactly as it answers another provider taking it first." },
   { at: "providers/providers.service.ts#createPool", class: "INSERT", statements: 1, note: "One nested create: the pool row and its member rows — and, for a Codex pool, its owner's ADMIN provider_pool_person row (migration 0358) — go in as one Prisma write, atomic with each other. The slug guard and the P2002 re-pick are the ones create's entry describes." },
+  { at: "providers/providers.service.ts#recordSessionEngines", class: "MANY_ROWS", statements: 1, note: "Writes only session.engine, and only where it is NULL (migration 0414's immutability trigger admits NULL to a value), on the sessions that name the key by its slug: run by update and remove before they change or delete the key, so a session an older replica wrote keeps the engine it ran on." },
   { at: "providers/providers.service.ts#remove", class: "ONE_ROW_BY_KEY", statements: 1 },
   { at: "providers/providers.service.ts#removePool", class: "ONE_ROW_BY_KEY", statements: 1, note: "The pool's member rows go with it by CASCADE; no provider row is written." },
   { at: "providers/providers.service.ts#removePoolMember", class: "ONE_ROW_BY_KEY", statements: 1 },
@@ -2425,6 +2468,14 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   { at: 'managed-runners/managed-runner-manager.ts#releaseLease', class: 'ONE_ROW_CAS', statements: 1, note: 'Give the lease back after a pass: its row by id, only while this replica holds it. A lease taken over meanwhile is not matched; one that is not released expires.' },
   { at: 'managed-runners/managed-runner-manager.ts#commit', class: 'ONE_ROW_CAS', statements: 1, note: 'Every manager step: the mapping row by id, only at the revision the pass read and only under this replica\'s lease, bumping the revision. A miss ends the pass (Superseded); the next pass starts from what is stored and observed. Kubernetes calls happen between these statements, never inside one.' },
   { at: 'managed-runners/managed-runner.service.ts#retry', class: 'ONE_ROW_CAS', statements: 1, note: 'An owner\'s explicit retry: the mapping by id and owner, only while it is FAILED at the revision the owner read, back to REQUESTED with a fresh attempt budget and the request\'s idempotency key. A miss is answered 409 with the current revision.' },
+  // Managed runner capacity, wake and sleep (migration 0413).
+  { at: 'managed-runners/managed-runner-capacity.ts#syncCapacityPool', class: 'ONE_ROW_BY_KEY', statements: 1, note: 'The environment\'s budget row by its key (cluster key, namespace): created, or brought to the profile\'s totals when they differ, in one INSERT … ON CONFLICT. The reserved figures are never written here.' },
+  { at: 'managed-runners/managed-runner-manager.ts#beginDrain', class: 'ONE_ROW_CAS', statements: 1, note: 'READY to DRAINING: the mapping by id, only at the revision and demand revision the idle decision read, under this replica\'s lease. Demand that came meanwhile matches nothing and the runner stays READY.' },
+  { at: 'managed-runners/managed-runner-manager.ts#abortDrain', class: 'ONE_ROW_CAS', statements: 1, note: 'DRAINING back to READY: the mapping by id at the revision the pass read, under its lease, and only while the instance has not accepted the stop. The acceptance (managedRunnerHeartbeat) is the other conditional write on that column, so exactly one of the two lands.' },
+  { at: 'managed-runners/managed-runner-sleep.ts#managedRunnerHeartbeat', class: 'ONE_ROW_CAS', statements: 1, note: 'A drained instance\'s acceptance of its stop: the mapping by id, only while it is DRAINING for that generation and Pod, the same request, not yet accepted, and with no demand since the drain began. Written from the heartbeat route after its runner update, never in one transaction with it.' },
+  { at: 'managed-runners/managed-runner-work.ts#recordManagedDemand', class: 'ONE_ROW_CAS', statements: 1, note: 'Demand: the mapping by its unique runner id, unless deleted — the demand counter and time, and RUNNING desired. A runner without a mapping matches no row. It does not move the revision: the manager\'s sleep decisions compare the demand revision itself.' },
+  { at: 'managed-runners/managed-runner.service.ts#sleep', class: 'ONE_ROW_CAS', statements: 1, note: 'An owner\'s explicit sleep: the mapping by id and owner, only while READY and wanted running at the revision the owner read, to SLEEPING desired with the request\'s idempotency key.' },
+  { at: 'managed-runners/managed-runner.service.ts#wake', class: 'ONE_ROW_BY_KEY', statements: 1, note: 'An owner\'s explicit wake records demand (recordManagedDemand) and then the request\'s idempotency key on the mapping by id and owner.' },
 ];
 
 export interface TriggerWriteSource {
@@ -2503,12 +2554,15 @@ export const TRIGGER_WRITE_SOURCES: readonly TriggerWriteSource[] = [
   {"table":"project_ratified_action_intent","trigger":"project_ratified_action_intent_immutable","event":"BEFORE UPDATE OR DELETE","kind":"ROW/STATEMENT","since":"0195_project_owner_ratification","takes":[]},
   {"table":"provider_pool","trigger":"provider_pool_dispatch_slug_guard","event":"BEFORE INSERT OR UPDATE OF \"slug\"","kind":"ROW/STATEMENT","since":"0265_provider_pool","takes":[]},
   {"table":"run_event","trigger":"run_event_ingestion_provenance_guard","event":"BEFORE INSERT OR UPDATE OF ingested_at, ingested_by_runner_id, ingested_under_lease_generation","kind":"ROW/STATEMENT","since":"0220_completion_ack_removal","takes":[]},
+  {"table":"session","trigger":"session_acquisition_engine_guard","event":"BEFORE UPDATE OF \"status\", \"inbox_lease_owner\", \"inbox_lease_generation\"","kind":"ROW/STATEMENT","since":"0414_session_engine","takes":[]},
   {"table":"session","trigger":"session_admission_lock_order_insert_delete","event":"BEFORE INSERT OR DELETE","kind":"ROW/STATEMENT","since":"0130_task_supersession_dispatch_guard","takes":["project LOCK","scope_before LOCK","task LOCK"]},
   {"table":"session","trigger":"session_admission_lock_order_update","event":"BEFORE UPDATE OF \"status\", \"task_id\", \"deleted_at\", \"starts_task_work\"","kind":"ROW/STATEMENT","since":"0134_task_aggregate_parent_dispatch_guard","takes":["project LOCK","scope_before LOCK","task LOCK"]},
   {"table":"session","trigger":"session_antigravity_runner_claim_guard","event":"BEFORE UPDATE OF \"status\"","kind":"ROW/STATEMENT","since":"0367_antigravity_runtime","takes":[]},
   {"table":"session","trigger":"session_completed_at_compat","event":"BEFORE INSERT OR UPDATE OF \"completed_at\", \"archived_at\"","kind":"ROW/STATEMENT","since":"0076_session_completed_semantics","takes":[]},
   {"table":"session","trigger":"session_dispatch_dependency_check","event":"AFTER INSERT","kind":"CONSTRAINT","since":"0200_executable_acceptance_runtime_contract","takes":[]},
   {"table":"session","trigger":"session_dsh_runner_acquisition_guard","event":"BEFORE UPDATE OF \"status\", \"inbox_lease_owner\", \"inbox_lease_generation\"","kind":"ROW/STATEMENT","since":"0377_dsh_runner_gate","takes":["runner LOCK"]},
+  {"table":"session","trigger":"session_engine_from_task_pin","event":"BEFORE INSERT","kind":"ROW/STATEMENT","since":"0414_session_engine","takes":[]},
+  {"table":"session","trigger":"session_engine_immutable","event":"BEFORE UPDATE OF \"engine\"","kind":"ROW/STATEMENT","since":"0414_session_engine","takes":[]},
   {"table":"session","trigger":"session_merge_projection_checkpoint_authority_trg","event":"BEFORE UPDATE OF \"merge_status\", \"merged_source_sha\", \"branch_merged\"","kind":"ROW/STATEMENT","since":"0152_task_checkpoint","takes":[]},
   {"table":"session","trigger":"session_opencode_runner_claim_guard","event":"BEFORE UPDATE OF \"status\"","kind":"ROW/STATEMENT","since":"0080_opencode_runtime","takes":[]},
   {"table":"session","trigger":"session_project_capacity_serialize_insert_delete","event":"BEFORE INSERT OR DELETE","kind":"ROW/STATEMENT","since":"0122_project_dispatch_boundary","takes":["project WRITE"]},
@@ -2608,6 +2662,10 @@ export const EXCLUDED_SOURCES: readonly ExcludedSource[] = [
   {
     path: 'projects/project-contract-test-helper.ts',
     why: 'A PostgreSQL-spec fixture helper. It seeds a goal and one acceptance criterion so a fixture has a real completion contract, and is not reachable from an application module or HTTP route.',
+  },
+  {
+    path: 'test-support/managed-runner-world.ts',
+    why: 'A PostgreSQL-spec fixture helper for the managed runner capacity, wake and sleep specs. It writes what a managed runner\'s heartbeat route would record — the beat, a signed-in runtime, the managed capabilities and the instance\'s workload — onto the runner row of a mapping those specs created, and is imported by those specs alone, never by an application module or reachable from an HTTP route.',
   },
   {
     path: 'auth/tenant-isolation-fixtures.ts',

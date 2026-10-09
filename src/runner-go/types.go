@@ -104,6 +104,10 @@ type HeartbeatRequest struct {
 	// beat once the startup update has looked, so the control plane can tell a runner too old to
 	// report it — which omits it — from one that reports.
 	SelfUpdate *SelfUpdateReport `json:"selfUpdate,omitempty"`
+	// ManagedWorkload is what a managed instance is doing (managed_sleep.go). Only a managed instance
+	// sends it; the control plane stores it only from the instance its manager authorized, and puts
+	// nothing to sleep without a fresh one.
+	ManagedWorkload *ManagedWorkload `json:"managedWorkload,omitempty"`
 }
 
 // SelfUpdateReport mirrors @orbit/shared RunnerSelfUpdate: whether this runner can replace itself
@@ -409,6 +413,10 @@ type HeartbeatResponse struct {
 	// planes and whenever this beat claimed nothing; nothing acts on it until this binary declares
 	// wiki-repo-op/v1.
 	WikiRepoOps []WikiRepoOpCommand `json:"wikiRepoOps,omitempty"`
+	// ManagedSleep: the manager is draining this managed instance to sleep (managed_sleep.go). Nil
+	// from older control planes and for every other runner; nothing acts on it unless this process is
+	// a managed instance.
+	ManagedSleep *ManagedSleepRequest `json:"managedSleep,omitempty"`
 }
 
 // WikiRepoOpCommand mirrors @orbit/shared: one claimed repository operation — what to read, at which

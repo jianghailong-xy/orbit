@@ -16,9 +16,20 @@ const RUNNER = {
  *  include the shared ones. A member's is shared-provider-admin-only.pg.spec.ts's. */
 const admin = { findUnique: async () => ({ role: 'ADMIN' }) };
 
+/**
+ * The two halves of a "sessions on this runtime" query (providerDispatchWhereOn, migration 0414): the
+ * sessions whose recorded engine it is, and — for a row an older replica wrote, with none — the slugs
+ * that ran on it before the split.
+ */
+function onRuntime(where: Record<string, unknown>): { engine: unknown; provider: unknown } {
+  const [recorded, unrecorded] = (where.OR as Array<Record<string, unknown>> | undefined) ?? [];
+  const legacy = (unrecorded?.AND as Array<Record<string, unknown>> | undefined)?.[1];
+  return { engine: recorded?.engine, provider: legacy?.provider };
+}
+
 /** Whether a session query asks for `slug`'s rows: the preflights name every slug on a runtime. */
 const asksFor = (where: Record<string, unknown>, slug: string) =>
-  (where.provider as { in?: string[] } | undefined)?.in?.includes(slug) ?? false;
+  (onRuntime(where).provider as { in?: string[] } | undefined)?.in?.includes(slug) ?? false;
 
 test('legacy claim explains the pending OpenCode stall without stranding other work', async () => {
   let claimedFor: { supportedProviders?: readonly AgentProvider[] } | undefined;
@@ -67,7 +78,7 @@ test('an OpenCode-capable runner that does not name Antigravity has its Antigrav
   const prisma = {
     session: {
       findMany: async ({ where }: { where: Record<string, unknown> }) => {
-        asked.push(where.provider);
+        asked.push(onRuntime(where).provider);
         return asksFor(where, AgentProvider.ANTIGRAVITY) ? [{ id: 'agy-1', error: null }] : [];
       },
       updateMany: async (args: { where: Record<string, unknown>; data: { error: string } }) => {
@@ -97,11 +108,16 @@ test('an OpenCode-capable runner that does not name Antigravity has its Antigrav
   assert.equal(marked[0].data.error, ANTIGRAVITY_RUNNER_UPGRADE_ERROR);
   // Conditional on the row still being a pending, uncancelled Antigravity row of this runner, so
   // a claim or cancel racing the preflight cannot be stamped with a stale notice.
+  // The sessions recorded on Antigravity, whatever credential they spend, and — for a row without an
+  // engine — the slugs that ran on it.
   assert.deepEqual(marked[0].where, {
     id: { in: ['agy-1'] },
     assignedRunnerId: RUNNER.id,
     status: 'PENDING',
-    provider: { in: [AgentProvider.ANTIGRAVITY] },
+    OR: [
+      { engine: AgentProvider.ANTIGRAVITY },
+      { AND: [{ engine: null }, { provider: { in: [AgentProvider.ANTIGRAVITY] } }] },
+    ],
     cancelRequestedAt: null,
   });
   assert.deepEqual(published, ['agy-1']);
@@ -158,7 +174,10 @@ test('a Gemini key borrows Antigravity, so a runner that does not name it has th
   ]);
   assert.equal(marked.length, 1);
   assert.equal(marked[0].data.error, ANTIGRAVITY_RUNNER_UPGRADE_ERROR);
-  assert.deepEqual(marked[0].where.provider, { in: [AgentProvider.ANTIGRAVITY, 'gemini'] });
+  assert.deepEqual(onRuntime(marked[0].where), {
+    engine: AgentProvider.ANTIGRAVITY,
+    provider: { in: [AgentProvider.ANTIGRAVITY, 'gemini'] },
+  });
 });
 
 test('a row already carrying the notice is not written again on every long poll', async () => {
@@ -217,12 +236,14 @@ test('current claim advertises OpenCode and Antigravity directly to the atomic q
   ]);
 });
 
-/** Enough of a Session row for reclaim to build one ReclaimSession payload. */
+/** Enough of a Session row for reclaim to build one ReclaimSession payload. A built-in session records
+ *  the engine its slug names (Session.engine, migration 0414). */
 function reclaimRow(id: string, provider: AgentProvider, status: string) {
   return {
     id,
     provider,
     providerBuiltin: true,
+    engine: provider as string | null,
     status,
     cancelRequestedAt: null,
     error: null,
@@ -258,11 +279,14 @@ function reclaimPrisma(
     },
     user: { findUnique: async () => null },
     modelProvider: {
-      findFirst: async () => null,
+      // The engine a row without one recorded ran on is its key's runtime (session-engine.ts).
+      findFirst: async ({ where }: { where: { slug?: string } }) =>
+        configured.find((row) => row.slug === where.slug) ?? null,
       // providerSlugsOn: the configured rows that borrow the runtime asked about.
       findMany: async ({ where }: { where: { runtime: string } }) =>
         configured.filter((row) => row.runtime === where.runtime).map(({ slug }) => ({ slug })),
     },
+    providerPool: { findFirst: async () => null },
     runEvent: { aggregate: async () => ({ _max: { seq: 0 } }) },
     $executeRaw: async () => 0,
   } as never;
@@ -340,11 +364,16 @@ test('a reclaim that does not name Antigravity omits its rows and explains the p
 
 test('a reclaim that does not name Antigravity omits a Gemini key\'s rows too', async () => {
   const marked: UpgradeMark[] = [];
-  const geminiRow = { ...reclaimRow('gemini-pending', AgentProvider.CLAUDE, 'PENDING'), provider: 'gemini', providerBuiltin: false };
+  // A Gemini key's sessions run on Antigravity, and say so: their engine is recorded, whatever the
+  // key's slug — and the one an older replica wrote without it reads the key's runtime, as before.
+  const geminiRow = {
+    ...reclaimRow('gemini-pending', AgentProvider.CLAUDE, 'PENDING'),
+    provider: 'gemini', providerBuiltin: false, engine: AgentProvider.ANTIGRAVITY,
+  };
   const prisma = reclaimPrisma(
     [
       geminiRow,
-      { ...reclaimRow('gemini-idle', AgentProvider.CLAUDE, 'AWAITING_INPUT'), provider: 'gemini', providerBuiltin: false },
+      { ...reclaimRow('gemini-idle', AgentProvider.CLAUDE, 'AWAITING_INPUT'), provider: 'gemini', providerBuiltin: false, engine: null },
       reclaimRow('claude-1', AgentProvider.CLAUDE, 'AWAITING_INPUT'),
     ],
     (mark) => marked.push(mark),
