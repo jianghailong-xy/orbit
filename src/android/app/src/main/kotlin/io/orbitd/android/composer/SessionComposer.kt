@@ -7,9 +7,11 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -19,6 +21,9 @@ import androidx.compose.ui.input.key.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
@@ -29,12 +34,14 @@ import io.orbitd.android.attachments.*
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.net.HttpMethod
 import io.orbitd.android.core.realtime.SessionState
+import io.orbitd.android.management.LocalSmartSelection
+import io.orbitd.android.tasks.TaskDetailCopy
 import io.orbitd.android.ui.LocalOrbitColors
 import kotlinx.serialization.json.*
 
 @Composable
 fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: String, session: SessionState?, target: DraftTarget? = null, focusRequest: Int = 0,
-    inputFocusChanged: (Boolean) -> Unit = {}) {
+    inputFocusChanged: (Boolean) -> Unit = {}, openTask: ((String) -> Unit)? = null) {
     val model = remember(app, handle, sessionId) { app.composer(handle, sessionId, target) }
     val state by model.state.collectAsState()
     val context = LocalContext.current
@@ -70,6 +77,8 @@ fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: Str
     val detail = session?.snapshot?.detail ?: JsonObject(emptyMap())
     val effective = JsonObject(detail + draft.resumeConfig)
     val running = detail.text("runState") == "RUNNING" || detail.text("status") == "RUNNING"
+    // The decision behind this task run, while the chip still shows the model it picked (A11-1).
+    val smart = smartRoute(detail.text("taskId"), detail["route"] as? JsonObject, effective.text("model").orEmpty(), LocalSmartSelection.current)
     // The engine's guess at the next message, offered in the empty box with Use, which fills the box
     // and sends nothing (docs/prompt-suggestions-design.md §4). A message just sent answers it before its
     // `user` event arrives, so the one standing at the send is held back until the transcript moves on.
@@ -162,9 +171,9 @@ fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: Str
                             onClick = { menu = false; model.control("auto-retry", HttpMethod.DELETE) })
                     }
                 }
-                TextButton(enabled = usable && !state.busy && draft.pending == null && draft.createdSessionId == null, modifier = Modifier.weight(1f),
-                    onClick = { models = true; model.loadCatalog() }) {
-                    Text(effective.text("model")?.ifBlank { "Runtime default" } ?: "Model", maxLines = 1)
+                ModelChip(effective.text("model")?.ifBlank { "Runtime default" } ?: "Model", effortLabel(effective.text("effort")), smart != null,
+                    enabled = usable && !state.busy && draft.pending == null && draft.createdSessionId == null, modifier = Modifier.weight(1f)) {
+                    models = true; model.loadCatalog()
                 }
                 val hasDraft = draft.text.isNotBlank() || draft.attachments.isNotEmpty()
                 Button(enabled = usable && !state.busy && !state.waiting && draft.createdSessionId == null && (if (running && !hasDraft) true else hasDraft && draft.pending == null),
@@ -198,7 +207,7 @@ fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: Str
             }
         }, confirmButton = { TextButton(onClick = { slashScope = null }) { Text("Close") } })
     }
-    if (models && session?.accessDenied != true) ModelChoices(model, state, effective, usable) { models = false }
+    if (models && session?.accessDenied != true) ModelChoices(model, state, effective, usable, smart, detail.text("taskId"), openTask) { models = false }
     if (queued) AlertDialog(onDismissRequest = { queued = false }, title = { Text("Queued messages") }, text = {
         Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
             if (session?.fresh != true) Text("Reconnect to check the queue.")
@@ -214,8 +223,36 @@ fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: Str
     }, confirmButton = { TextButton(onClick = { queued = false }) { Text("Close") } })
 }
 
+/** The model chip (iOS `modelChipLabel`): the model's name, and — on a task run still on the model smart selection picked — a ✦ before
+ * it on a light tint of the accent. Named aloud "Model X, effort Y", and ", picked by smart selection" while it carries the ✦. */
 @Composable
-private fun ModelChoices(model: ComposerModel, state: ComposerState, detail: JsonObject, usable: Boolean, close: () -> Unit) {
+internal fun ModelChip(name: String, effort: String, smart: Boolean, enabled: Boolean, modifier: Modifier = Modifier, open: () -> Unit) {
+    val accent = MaterialTheme.colorScheme.primary
+    val spoken = "Model $name, effort $effort" + if (smart) TaskDetailCopy.chipPickedBySmartSelection else ""
+    TextButton(enabled = enabled, modifier = modifier.testTag("composer-model").semantics { contentDescription = spoken }, onClick = open) {
+        Row(if (smart) Modifier.background(accent.copy(alpha = 0.12f), RoundedCornerShape(50)).padding(horizontal = 7.dp, vertical = 2.dp) else Modifier,
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+            // Said by the chip's spoken name rather than read out as a symbol.
+            if (smart) Text("✦", Modifier.testTag("composer-model-smart"), color = accent)
+            Text(name, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
+/** What the chip's menu opens on for a task run on smart selection's pick (iOS 6826eed7e, 7c49be60a): the tier it picked, its first
+ * reason, and the note — a sentence an item, as a phone's menu cuts an item at its third line. */
+@Composable
+internal fun SmartRouteNote(route: JsonObject) = Column(Modifier.testTag("composer-smart-route"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Text("✦ " + TaskDetailCopy.pickedBySmartSelection(route.text("level").orEmpty()), fontWeight = FontWeight.SemiBold)
+    route.strings("reasons").firstOrNull()?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+    sentences(TaskDetailCopy.modelChangeAppliesToThisRun).forEach {
+        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun ModelChoices(model: ComposerModel, state: ComposerState, detail: JsonObject, usable: Boolean, smart: JsonObject?, taskId: String?,
+    openTask: ((String) -> Unit)?, close: () -> Unit) {
     val catalog = state.catalog
     val provider = detail.text("provider") ?: ""
     val chosen = detail.text("model") ?: ""
@@ -223,6 +260,8 @@ private fun ModelChoices(model: ComposerModel, state: ComposerState, detail: Jso
     fun change(key: String, value: String) { model.config(buildJsonObject { put(key, value) }) }
     AlertDialog(onDismissRequest = close, title = { Text("Model and account") }, text = {
         Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+            // A task run on smart selection's pick opens on why it is this model, and on where to fix the model for every run.
+            smart?.let { SmartRouteNote(it); HorizontalDivider(Modifier.padding(vertical = 8.dp)) }
             if (state.catalogLoading) CircularProgressIndicator()
             state.catalogError?.let { Text(it); TextButton(onClick = model::loadCatalog) { Text("Retry model catalog") } }
             Text("Current: $provider · $chosen")
@@ -272,6 +311,11 @@ private fun ModelChoices(model: ComposerModel, state: ComposerState, detail: Jso
                     // Its own quota beside it: "5h 12%", or what an Antigravity bucket has left, "gemini-5h 4% left".
                     account.quota?.let { Text(" · $it", color = if (account.nearLimit) LocalOrbitColors.current.needsYou else Color.Unspecified) }
                 } }
+            }
+            // …and ends on the task, pushed over this run, so Back returns to it.
+            if (smart != null && taskId != null && openTask != null) {
+                HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                TextButton(onClick = { close(); openTask(taskId) }, modifier = Modifier.testTag("composer-open-task")) { Text(TaskDetailCopy.openTask) }
             }
         }
     }, confirmButton = { TextButton(onClick = close) { Text("Close") } })

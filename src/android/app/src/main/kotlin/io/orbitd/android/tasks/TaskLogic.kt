@@ -439,6 +439,12 @@ object TaskDetailCopy {
     fun wouldHavePicked(pick: String, level: String) = "✦ Smart selection would have picked $pick ($level)"
     fun why(pick: String) = "Why $pick"
     const val usageLimitNote = "a failure from a usage limit would not have moved the tier"
+    // The composer's chip on a task run smart selection routed (iOS 6826eed7e, 4622c6a60): its menu's head, its note, and the way to
+    // the task; what the chip's spoken name ends on while it carries the ✦.
+    fun pickedBySmartSelection(tier: String) = "Picked by smart selection · tier $tier"
+    const val chipPickedBySmartSelection = ", picked by smart selection"
+    const val modelChangeAppliesToThisRun = "Changing the model here applies to this run only. To fix the model for every run, set it on the task."
+    const val openTask = "Open task ›"
     // TasksView.swift's own words beside the copy file's.
     const val loadFailed = "Task couldn't be loaded"
     const val runDisabledBlockedFailed = "A prerequisite failed or was cancelled — resolve it first."
