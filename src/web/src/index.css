@@ -17184,8 +17184,9 @@ button.chat-jump-start:hover {
 }
 .provider-works-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 0 8px;
   padding: 11px 14px;
   border-bottom: 1px solid var(--border-subtle);
   font-size: 13.5px;
