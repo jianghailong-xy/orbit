@@ -88,6 +88,10 @@ internal object ProviderChoices {
         return if (provider in setOf("codex", "kimi", "opencode", "antigravity", "dsh")) provider else "claude"
     }
 
+    /** The CLI a session (or a draft) runs on: the server's own `engine` where it records one (provider/engine contract §6.1), else the
+     * one its provider borrows, as before the server said. */
+    fun engine(detail: JsonObject, providers: List<JsonObject>) = detail.text("engine") ?: executingRuntime(detail.text("provider").orEmpty(), providers)
+
     /** The model menu's title (OrbitKit `engineTitle`, web `engineTitleFor`): the CLI running this session — `Claude Code` for a
      * key it writes DeepSeek's models through — and, while a held pick takes the next turn to another engine, that one after an
      * arrow. Two providers of one CLI read as one title. */
