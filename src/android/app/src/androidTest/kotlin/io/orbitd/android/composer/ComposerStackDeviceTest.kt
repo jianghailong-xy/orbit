@@ -89,10 +89,18 @@ class ComposerStackDeviceTest {
     private fun has(matcher: SemanticsMatcher) = compose.onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty()
     private fun awaitText(text: String, timeout: Long = 60_000) =
         compose.waitUntil(timeout) { compose.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty() }
+    /** Press the first node offering [label]. A list the server's answer recomposes between the lookup and the touch (the model
+     * menu as its catalog arrives) loses the node, and nothing was pressed: look it up again. */
     private fun appClick(label: String) {
-        val node = compose.onAllNodes((hasText(label) or hasContentDescription(label)) and hasClickAction()).onFirst()
-        try { node.performScrollTo() } catch (_: AssertionError) { }
-        node.performClick(); compose.waitForIdle()
+        val matcher = (hasText(label) or hasContentDescription(label)) and hasClickAction()
+        compose.waitUntil(30_000) { has(matcher) }
+        for (attempt in 1..3) {
+            try {
+                val node = compose.onAllNodes(matcher).onFirst()
+                try { node.performScrollTo() } catch (_: AssertionError) { }
+                node.performClick(); compose.waitForIdle(); return
+            } catch (error: AssertionError) { if (attempt == 3) throw error; compose.waitForIdle() }
+        }
     }
     private fun dialogTexts() = compose.onAllNodes(hasAnyAncestor(isDialog()) and hasText("", substring = true)).fetchSemanticsNodes()
         .mapNotNull { it.config.getOrNull(SemanticsProperties.Text)?.joinToString(" | ") { t -> t.text } }
@@ -123,11 +131,14 @@ class ComposerStackDeviceTest {
         }
         compose.waitUntil(60_000) { has(hasTestTag("composer-model")) }
     }
-    /** The transcript is a lazy list that opens on its latest row: bring a row further up into view before reading it. */
+    /** The transcript is a lazy list that opens on its latest row and stays pinned there until the reader drags it: a row below is
+     * scrolled to, a row above is dragged down to, as a reader would. */
     private fun reveal(matcher: SemanticsMatcher) {
         val list = compose.onNodeWithTag("transcript-list")
-        // The search moves on from where the list stands: from its first row when the row is above.
-        try { list.performScrollToNode(matcher) } catch (_: AssertionError) { list.performScrollToIndex(0); list.performScrollToNode(matcher) }
+        try { list.performScrollToNode(matcher) } catch (_: AssertionError) {
+            for (drag in 1..30) { if (has(matcher)) break; list.performTouchInput { swipeDown() }; compose.waitForIdle() }
+            compose.onAllNodes(matcher).onFirst().performScrollTo()
+        }
         compose.waitForIdle()
     }
     private fun openModelMenu() {
@@ -215,7 +226,9 @@ class ComposerStackDeviceTest {
         val moved = awaitServer(path, "re-sent and answered") { d -> d.jsonObject["retryAt"] in listOf(null, JsonNull) &&
             d.jsonObject.field("status") == "AWAITING_INPUT" && (d.jsonObject["numTurns"] as? JsonPrimitive)?.intOrNull?.let { it >= 2 } == true }
         keep("a07c-stack-quota-session", moved)
-        compose.waitUntil(60_000) { runCatching { reveal(hasText("a11-stack fake engine", substring = true)) }.isSuccess }
+        // The answer is the newest row: scrolled to once the app has it.
+        val answer = hasText("a11-stack fake engine", substring = true)
+        compose.waitUntil(60_000) { runCatching { compose.onNodeWithTag("transcript-list").performScrollToNode(answer) }.isSuccess }
         capture("a07c-stack-auto-retry-answered")
         // The card the session moved past is history: still there, and nothing on it to press.
         reveal(hasTestTag("auto-retry-card"))
