@@ -63,6 +63,9 @@ internal object DeepSeekBalance {
     const val NO_AMOUNT_YET = "No amount is shown until DeepSeek answers."
     /** What to do about a rejected key from a phone, which can't change one. */
     const val CHANGE_KEY_ON_WEB = "Change the key on the web, then retry."
+    /** A key's page lists the engines it works with, a row each; a Claude subscription token's line says it is one (iOS T6). */
+    const val WORKS_WITH = "Works with"
+    const val SUBSCRIPTION_TOKEN = "subscription token"
     const val DEFAULT_MODEL = "Default model"
     const val ENDPOINT = "Endpoint"
     /** ProvidersOverview's: the key page's footer, and the page when the key has gone. */
@@ -264,7 +267,7 @@ internal fun DeepSeekKeyPage(api: ManagementApi, revision: Long, providerId: Str
         }
         // Every engine the key runs on, then the key itself (board 2): one key, one page, whichever engine a session spends it on.
         val engines = KeyEngines.engines(provider).map(ProviderEngines::cliName)
-        if (engines.isNotEmpty()) FormSection(KeyEngines.WORKS_WITH, footer = KeyEngines.WORKS_WITH_FOOTER) {
+        if (engines.isNotEmpty()) FormSection(DeepSeekBalance.WORKS_WITH, footer = KeyEngines.WORKS_WITH_FOOTER) {
             engines.forEachIndexed { index, name ->
                 if (index > 0) HorizontalDivider()
                 Text(name, Modifier.padding(vertical = 10.dp))

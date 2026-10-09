@@ -188,11 +188,9 @@ private fun ProvidersOverview(api: ManagementApi, revision: Long, open: (OrbitRo
  * subscription token, which runs on Claude Code alone. A key is never named after one of its engines.
  */
 internal object KeyEngines {
-    const val WORKS_WITH = "Works with"
     const val WORKS_WITH_FOOTER = "Pick it for a session on any of these in the composer's model menu → Provider."
     const val KEY = "Key"
     const val PROTOCOL = "Protocol"
-    const val SUBSCRIPTION_TOKEN = "subscription token"
 
     /** The engines [key] runs on, its default first. */
     fun engines(key: JsonObject): List<String> = ProviderEngines.providerEngines(key.str("slug"), listOf(key))
@@ -204,7 +202,7 @@ internal object KeyEngines {
 
     /** The line under a key's default model: `Claude Code · OpenCode · DeepSeek Harness`, `Claude Code · subscription token`. */
     fun line(key: JsonObject): String? = engines(key).takeIf { it.isNotEmpty() }
-        ?.let { engines -> engines.map(ProviderEngines::cliName) + listOfNotNull(SUBSCRIPTION_TOKEN.takeIf { subscriptionToken(key) }) }
+        ?.let { engines -> engines.map(ProviderEngines::cliName) + listOfNotNull(DeepSeekBalance.SUBSCRIPTION_TOKEN.takeIf { subscriptionToken(key) }) }
         ?.joinToString(RunnerCopy.SEP)
 
     /** The protocol a key's endpoint speaks, its row's `runtime` (web `runtimeSummary`) — not an engine: a key runs on several. */
