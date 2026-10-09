@@ -1,6 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { isAbsolute } from 'node:path';
 
+import { capacityBudget, computeShare, quantityUnits, storageShare } from './managed-runner-capacity';
+
 /**
  * The environment a managed runner manager may act in: one authorized test environment, named in a
  * JSON file whose path is ORBIT_MANAGED_RUNNERS_PROFILE (docs/managed-runner-design.md, "Optional
@@ -57,6 +59,33 @@ export interface ManagedRunnerProfile {
     /** SHA-256 (hex) of the bearer token the API server presents to the webhook. Never the token. */
     webhookTokenSha256: string;
   };
+  /**
+   * The fixed budget of this environment (managed-runner-capacity.ts): what every managed runner
+   * holding compute may reserve together, and the storage pool every data volume is reserved from.
+   * Supplied by the test owner; never derived from what the cluster reports or from session limits.
+   */
+  capacity: {
+    compute: {
+      /** CPU requests, summed over every runner Pod admitted at once. */
+      cpu: string;
+      /** Memory requests, likewise. */
+      memory: string;
+      /** Ephemeral storage: each Pod reserves its `/tmp` bound (`runner.tmpSizeLimit`). */
+      ephemeralStorage: string;
+      /** Runner Pods admitted at once. */
+      pods: number;
+      /** Data volumes attached at once: one per admitted Pod. */
+      attachments: number;
+    };
+    storage: {
+      /** The pool's safe usable capacity: after replication and near-full thresholds, not raw disk. */
+      usable: string;
+      /** Kept free of data volumes: snapshots, backups and recovery. */
+      headroom: string;
+    };
+    /** Managed users whose runner holds compute at once. */
+    maxActiveUsers: number;
+  };
   lifecycle: {
     /** Attempts a transient failure may spend before the mapping is FAILED. */
     maxAttempts: number;
@@ -69,6 +98,13 @@ export interface ManagedRunnerProfile {
     pollIntervalSeconds: number;
     /** A heartbeat older than this does not make or keep a runner usable. */
     heartbeatFreshSeconds: number;
+    /** How long a READY runner with no work and no demand stays up before it drains to sleep. */
+    idleSeconds: number;
+    /** How often an intent waiting for capacity tries again when no release told it to. */
+    capacityRetrySeconds: number;
+    /** How long a runner asked to stop for sleep may take before the delay is reported. It is
+     *  never forced: only its own exit, as the kubelet reports it, ends the instance. */
+    drainSeconds: number;
   };
 }
 
@@ -166,6 +202,20 @@ export function parseManagedRunnerProfile(value: unknown): ManagedRunnerProfileR
       managerUsername: text('admission.managerUsername'),
       webhookTokenSha256: text('admission.webhookTokenSha256', SHA256_HEX, 'must be the 64 lowercase hex digits of a SHA-256'),
     },
+    capacity: {
+      compute: {
+        cpu: text('capacity.compute.cpu', QUANTITY, 'is not a quantity'),
+        memory: text('capacity.compute.memory', QUANTITY, 'is not a quantity'),
+        ephemeralStorage: text('capacity.compute.ephemeralStorage', QUANTITY, 'is not a quantity'),
+        pods: count('capacity.compute.pods', 1, 100_000),
+        attachments: count('capacity.compute.attachments', 1, 100_000),
+      },
+      storage: {
+        usable: text('capacity.storage.usable', QUANTITY, 'is not a quantity'),
+        headroom: text('capacity.storage.headroom', QUANTITY, 'is not a quantity'),
+      },
+      maxActiveUsers: count('capacity.maxActiveUsers', 1, 100_000),
+    },
     lifecycle: {
       maxAttempts: count('lifecycle.maxAttempts', 1, 100),
       backoffBaseSeconds,
@@ -175,9 +225,56 @@ export function parseManagedRunnerProfile(value: unknown): ManagedRunnerProfileR
       leaseSeconds: count('lifecycle.leaseSeconds', 5, 3600),
       pollIntervalSeconds: count('lifecycle.pollIntervalSeconds', 1, 3600),
       heartbeatFreshSeconds: count('lifecycle.heartbeatFreshSeconds', 30, 3600),
+      idleSeconds: count('lifecycle.idleSeconds', 60, 604_800),
+      capacityRetrySeconds: count('lifecycle.capacityRetrySeconds', 5, 3600),
+      drainSeconds: count('lifecycle.drainSeconds', 60, 86_400),
     },
   };
+  if (!problems.length) problems.push(...capacityProblems(profile));
   return problems.length ? { ok: false, problems } : { ok: true, profile };
+}
+
+/**
+ * A budget no runner fits in admits nobody, and a headroom as large as the pool leaves no room for
+ * any volume: both are configuration errors, reported rather than discovered as an endless wait.
+ */
+function capacityProblems(profile: ManagedRunnerProfile): string[] {
+  const problems: string[] = [];
+  for (const [path, quantity] of [
+    ['capacity.compute.cpu', profile.capacity.compute.cpu],
+    ['capacity.compute.memory', profile.capacity.compute.memory],
+    ['capacity.compute.ephemeralStorage', profile.capacity.compute.ephemeralStorage],
+    ['capacity.storage.usable', profile.capacity.storage.usable],
+    ['capacity.storage.headroom', profile.capacity.storage.headroom],
+    ['storage.capacity', profile.storage.capacity],
+    ['runner.tmpSizeLimit', profile.runner.tmpSizeLimit],
+  ] as const) {
+    if (quantityUnits(quantity, path === 'capacity.compute.cpu' ? 'milli' : 'unit') === null) problems.push(`${path} is too large to count exactly`);
+  }
+  for (const [path, quantity] of [
+    ['runner.resources.runner.requests.cpu', profile.runner.resources.runner.requests.cpu],
+    ['runner.resources.init.requests.cpu', profile.runner.resources.init.requests.cpu],
+  ] as const) {
+    if (quantityUnits(quantity, 'milli') === null) problems.push(`${path} is too large to count exactly`);
+  }
+  for (const [path, quantity] of [
+    ['runner.resources.runner.requests.memory', profile.runner.resources.runner.requests.memory],
+    ['runner.resources.init.requests.memory', profile.runner.resources.init.requests.memory],
+  ] as const) {
+    if (quantityUnits(quantity) === null) problems.push(`${path} is too large to count exactly`);
+  }
+  if (problems.length) return problems;
+  const budget = capacityBudget(profile);
+  const compute = computeShare(profile);
+  const storage = storageShare(profile);
+  if (budget.storageHeadroomBytes >= budget.storageUsableBytes) problems.push('capacity.storage.headroom must be below capacity.storage.usable');
+  if (compute.cpuMillis > budget.cpuMillis) problems.push('capacity.compute.cpu is below one runner Pod\'s CPU request');
+  if (compute.memoryBytes > budget.memoryBytes) problems.push('capacity.compute.memory is below one runner Pod\'s memory request');
+  if (compute.ephemeralBytes > budget.ephemeralBytes) problems.push('capacity.compute.ephemeralStorage is below one runner Pod\'s runner.tmpSizeLimit');
+  if (storage.durableBytes > budget.storageUsableBytes - budget.storageHeadroomBytes) {
+    problems.push('capacity.storage.usable less capacity.storage.headroom is below one data volume (storage.capacity)');
+  }
+  return problems;
 }
 
 /** Read and validate the profile at `path`. Nothing is read when no path is configured. */

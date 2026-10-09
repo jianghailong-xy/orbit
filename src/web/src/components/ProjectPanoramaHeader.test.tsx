@@ -758,7 +758,11 @@ describe('the landing row, from a server that lists its jobs', () => {
     expect(renderListed(listing([job(), merge()]))).toMatch(
       /<button type="button" class="project-landing-press" aria-haspopup="dialog"><div class="project-landing project-landing-timed-out">/,
     );
-    const older = renderListed(integration());
+    // The older server's own report, claimed 80 seconds before NOW. `integration()`'s instants are
+    // UTC and NOW is local, so at NOW they are fresh only where the clock is 8+ hours ahead of UTC.
+    const older = renderListed(integration({ inFlight: {
+      ...integration().inFlight!, startedAt: instant(NOW - 80_000), heartbeatAt: instant(NOW - 80_000),
+    } }));
     expect(older).toContain('class="project-landing project-landing-running"');
     expect(older).not.toContain('project-landing-press');
   });

@@ -1,5 +1,6 @@
 import {
   ConflictException,
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
@@ -30,6 +31,7 @@ import {
 } from '../projects/task-aggregation';
 import { RealtimeService } from '../realtime/realtime.service';
 import { deriveSessionCapabilities } from './session-state';
+import { MANAGED_RUNNER_DEMAND, type ManagedRunnerDemand } from '../managed-runners/managed-runner-demand';
 import { SessionsService, type SessionResumeAnswer } from './sessions.service';
 import { isBackgroundWakeTurn } from '../runner-api/background-job-wake';
 import { readSessionMessageCard } from './session-message';
@@ -260,6 +262,12 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
      * Nest always has one.
      */
     @Optional() private readonly queue?: QueueService,
+    /**
+     * Demand for a managed runner (managed-runners/managed-runner-demand.ts): a retry waiting on a
+     * managed runner asks it to wake. Answers `managed: false` without reading anything while the
+     * switch is off, and for every self-managed runner; absent in the specs that build this service.
+     */
+    @Optional() @Inject(MANAGED_RUNNER_DEMAND) private readonly managedDemand?: ManagedRunnerDemand,
   ) {}
 
   onModuleInit(): void {
@@ -469,6 +477,21 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
         // re-armed for the next sweep with the attempt count untouched, which is what turns
         // this into "waiting for the runner" instead of five backoffs and a give-up.
         const capabilities = deriveSessionCapabilities(session, now.getTime());
+        // A managed runner that is not READY — asleep, draining, starting, waiting for capacity — is
+        // asked to wake, and waited for with nothing spent: no attempt (the run did not fail again),
+        // and no give-up clock (it comes back by itself; the mapping's own state and reason say what it
+        // waits for). Asked of the mapping rather than read off the heartbeat, which still looks fresh
+        // for a while after the runner went to sleep; and before the offline branch below, whose 30
+        // minutes are for a machine that may never return. A parked session too, which would otherwise
+        // spend an attempt on a re-send that only waits in the queue. With the switch off, or for any
+        // other runner, the answer is `managed: false` and nothing here changes.
+        if (this.managedDemand) {
+          const managed = await this.managedDemand.requested(session.assignedRunnerId, 'auto-retry');
+          if (managed.comingBack && managed.state !== 'READY') {
+            await this.rearm(session.id, session.status, new Date(now.getTime() + SWEEP_INTERVAL_MS), attempts, observed);
+            continue;
+          }
+        }
         if (capabilities.resumeBlockedReason === 'RUNNER_OFFLINE') {
           const waited = session.finishedAt ? now.getTime() - session.finishedAt.getTime() : 0;
           if (waited > MAX_OFFLINE_WAIT_MS) {

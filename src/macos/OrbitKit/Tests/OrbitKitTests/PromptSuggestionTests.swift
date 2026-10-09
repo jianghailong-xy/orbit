@@ -121,15 +121,19 @@ final class PromptSuggestionTests: XCTestCase {
     // MARK: - The composer is wired to it
 
     private func composerSource() throws -> String {
+        try repoSource("src/macos/OrbitApp/Sources/OrbitApp/Views/ComposerView.swift")
+    }
+
+    private func repoSource(_ path: String) throws -> String {
         var dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
         for _ in 0..<12 {
-            let candidate = dir.appendingPathComponent("src/macos/OrbitApp/Sources/OrbitApp/Views/ComposerView.swift")
+            let candidate = dir.appendingPathComponent(path)
             if FileManager.default.fileExists(atPath: candidate.path) {
                 return try String(contentsOf: candidate, encoding: .utf8)
             }
             dir = dir.deletingLastPathComponent()
         }
-        throw XCTSkip("ComposerView.swift is not beside this checkout")
+        throw XCTSkip("\(path) is not beside this checkout")
     }
 
     func testTheComposerOffersItFillsTheBoxAndSendsNothing() throws {
@@ -137,7 +141,7 @@ final class PromptSuggestionTests: XCTestCase {
         XCTAssertTrue(composer.contains("ComposerLogic.offeredPromptSuggestion(\n            console.state.promptSuggestion,"),
                       "the offer is the transcript's suggestion, held to ComposerLogic's rule")
         XCTAssertTrue(composer.contains("PromptSuggestionLine(text: suggestion, accept: acceptSuggestion)"),
-                      "the empty field draws it, with Use")
+                      "the empty field draws it, on a Mac with Use")
         XCTAssertTrue(composer.contains("if offeredSuggestion != nil { return \"\" }"),
                       "and gives it the placeholder's line")
         XCTAssertTrue(composer.contains("console.sending || console.awaitingReply"),
@@ -148,5 +152,55 @@ final class PromptSuggestionTests: XCTestCase {
         XCTAssertTrue(body.contains("requestFocus()"), "and focuses it")
         XCTAssertFalse(body.contains("send("), "Use never sends")
         XCTAssertTrue(composer.contains(".onKeyPress(keys: [.tab]) { press in"), "Tab takes it on the Mac")
+    }
+
+    /// A touch screen has no Use (design §4.1, §9 补充二): a double-tap on the field takes the guess,
+    /// the field's own taps wait to see whether a second one follows (the keyboard a first tap raised
+    /// would lift the field out from under the second), and "Double-tap to use" follows the words until
+    /// the first double-tap on the device. VoiceOver, whose double-tap is "activate", gets an action.
+    func testATouchScreenTakesItWithADoubleTapOnTheField() throws {
+        let composer = try composerSource()
+        XCTAssertTrue(composer.contains("PromptSuggestionLine(text: suggestion, showsDoubleTapHint: !suggestionDoubleTapLearned)"),
+                      "the iPhone line has no Use, and the hint until it has been learned")
+        XCTAssertTrue(composer.contains("@AppStorage(\"composer.suggestionDoubleTapLearned\") private var suggestionDoubleTapLearned = false"),
+                      "learned once per device")
+        XCTAssertTrue(composer.contains("suggestion: offeredSuggestion, useSuggestion: useSuggestionByTouch)"),
+                      "the field takes the double-tap only while a guess is on offer")
+
+        let byTouch = try XCTUnwrap(composer.range(of: "private func useSuggestionByTouch() {"))
+        let touchBody = String(composer[byTouch.upperBound...].prefix(220))
+        XCTAssertTrue(touchBody.contains("PlatformHaptics.tap()"), "a light tap says it landed")
+        XCTAssertTrue(touchBody.contains("acceptSuggestion()"), "the same fill as Use and Tab")
+        XCTAssertTrue(touchBody.contains("suggestionDoubleTapLearned = true"), "and the hint has done its job")
+        XCTAssertFalse(touchBody.contains("send("), "a double-tap never sends")
+
+        let editor = try XCTUnwrap(composer.range(of: "private struct GrowingTextEditor: UIViewRepresentable {"))
+        let field = String(composer[editor.lowerBound...])
+        XCTAssertTrue(field.contains("doubleTap.numberOfTapsRequired = 2"))
+        XCTAssertTrue(field.contains("doubleTap.delaysTouchesEnded = false"), "touches reach the field as ever")
+        XCTAssertTrue(field.contains("context.coordinator.doubleTap?.isEnabled = suggestion != nil"),
+                      "no guess, no double-tap: the field's taps are its own, with no wait")
+        XCTAssertTrue(field.contains("return other is UITapGestureRecognizer || NSStringFromClass(type(of: other)).contains(\"Tap\")"),
+                      "with one, the field's taps wait on the double-tap, UIKit's multi-tap text gesture included")
+        XCTAssertTrue(field.contains("shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {\n            gestureRecognizer === doubleTap"),
+                      "and nothing of the field's that begins stops it")
+        XCTAssertTrue(field.contains("UIAccessibilityCustomAction(name: \"Use suggestion\")"), "VoiceOver's way to take it")
+        XCTAssertTrue(field.contains("view.accessibilityHint = suggestion.map { \"Suggested reply: \\($0).\" }"))
+
+        let line = try XCTUnwrap(composer.range(of: "private struct PromptSuggestionLine: View {"))
+        let lineBody = String(composer[line.lowerBound...].prefix(3_000))
+        XCTAssertTrue(lineBody.contains("Text(\"Double-tap to use\")"))
+        XCTAssertTrue(lineBody.contains(".accessibilityHidden(true)"), "VoiceOver hears it from the field")
+        XCTAssertTrue(lineBody.contains("Text(\"⇥\")"), "the Mac keeps Use ⇥")
+    }
+
+    /// Every touch client says it the same way and offers the same action to a screen reader.
+    func testTheTouchClientsShareTheHintAndTheAction() throws {
+        let web = try repoSource("src/web/src/components/WorkspaceView.tsx")
+        XCTAssertTrue(web.contains("Double-tap to use"), "the phone web's hint")
+        XCTAssertTrue(web.contains("Use suggestion: ${offeredSuggestion}"), "and its screen-reader button")
+        let android = try repoSource("src/android/app/src/main/kotlin/io/orbitd/android/composer/SessionComposer.kt")
+        XCTAssertTrue(android.contains("\"Double-tap to use\""), "Android's hint")
+        XCTAssertTrue(android.contains("\"Use suggestion\""), "and its TalkBack action")
     }
 }

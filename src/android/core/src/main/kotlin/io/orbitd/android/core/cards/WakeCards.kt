@@ -22,8 +22,11 @@ internal fun watchWake(text: String): JsonObject? {
 internal fun backgroundWake(note: String): JsonObject? {
     val jobs = mutableListOf<JsonElement>(); val wakeups = mutableListOf<JsonElement>()
     val trigger = Regex("^ {6}(ended|已结束|new output|有新输出)(?:｜(.*))?$")
+    val output = Regex("^ {6}(?:output|输出) (.+?)｜(?:this covers bytes|这次说到的是第) (\\d+)[–-](\\d+)(?: 字节)?$")
+    val blocks = mutableListOf<String>()
     val timing = Regex("^ {4}(\\S+) (?:scheduled (\\d+) seconds out, due (\\S+)|约在 (\\d+) 秒后，(\\S+) 到点)$")
     Regex("<(background-job-wake|scheduled-wakeup)>\\n([\\s\\S]*?)\\n</\\1>").findAll(note).forEach { block ->
+        blocks += block.value
         val lines = block.groupValues[2].lines()
         val isJob = block.groupValues[1] == "background-job-wake"
         val heads = lines.indices.filter { if (isJob) Regex("^ {4}bgj_[^｜\\s]*｜").containsMatchIn(lines[it]) else timing.matches(lines[it]) }
@@ -44,6 +47,10 @@ internal fun backgroundWake(note: String): JsonObject? {
                     if (exit != null) put("exitCode", exit)
                     Regex("^(?:reason|原因)\\s*(.+)$").matchEntire(facts.getOrElse(1) { "" })?.groupValues?.get(1)?.let { put("killReason", it.replace(Regex("\\s*[(（].*[)）]\\s*$"), "")) }
                     if (tailAt >= 0) put("outputTail", section.drop(tailAt + 1).takeWhile { it.startsWith("        ") || it.isBlank() }.joinToString("\n") { it.drop(8) }.trimEnd())
+                    // Where its output is and which bytes of it this turn covered: the fold's "16.2 KB of output" (A08-11).
+                    section.firstNotNullOfOrNull { output.matchEntire(it) }?.let { range ->
+                        put("outputPath", range.groupValues[1]); put("outputFrom", range.groupValues[2].toInt()); put("outputTo", range.groupValues[3].toInt())
+                    }
                 }
             } else {
                 val time = timing.matchEntire(section.first())!!.groupValues
@@ -58,5 +65,15 @@ internal fun backgroundWake(note: String): JsonObject? {
         }
     }
     if (jobs.isEmpty() && wakeups.isEmpty()) return null
-    return buildJsonObject { put("jobs", JsonArray(jobs)); put("wakeups", JsonArray(wakeups)) }
+    // The blocks themselves, exactly as the agent received them: the fold's "What the agent received".
+    return buildJsonObject { put("jobs", JsonArray(jobs)); put("wakeups", JsonArray(wakeups)); put("text", blocks.joinToString("\n")) }
 }
+
+/** A note without its wake blocks: whatever else the same note carried, which stays an attached entry beside the wake's line
+ * rather than repeating the blocks the line already draws (iOS `BackgroundWake.rest`). */
+fun withoutWakeBlocks(note: String): String =
+    Regex("<(background-job-wake|scheduled-wakeup)>\\n[\\s\\S]*?\\n</\\1>").replace(note, "").trim()
+
+/** A queued wake's own content is its blocks (the note it will be delivered with), read as the line it will be (A08-4). */
+fun queuedWake(content: String): JsonObject? =
+    if ("<background-job-wake>" in content || "<scheduled-wakeup>" in content) backgroundWake(content) else null

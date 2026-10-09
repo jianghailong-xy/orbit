@@ -4261,6 +4261,29 @@ html[data-theme='dark'] .session-tag-chip {
      wherever they were reading. Ours is the one that can tell a prepend from a fold, so it wins. */
   overflow-anchor: none;
 }
+/* The conversation ends in a fade, not a rule: the composer card has its own edge, and a message
+   cut off at the bottom dissolves into the card instead of being sliced through above it. The
+   padding is the fade's room, so at the live tail nothing sits in it. Only the conversation's
+   scroller: the session list and an exported transcript share the class. */
+.workspace-scroll-wrap > .workspace-sessions {
+  padding-bottom: 20px;
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 20px), transparent);
+}
+/* Where the scrollbar takes its 8px gutter (the ::-webkit-scrollbar rules at the top), the fade
+   stops short of it: a thumb resting at the bottom keeps its rounded end instead of dissolving
+   with the text. Touch screens draw an overlay indicator and no gutter, so the fade spans them. */
+@media (hover: hover) and (pointer: fine) {
+  @supports selector(::-webkit-scrollbar) {
+    .workspace-scroll-wrap > .workspace-sessions {
+      mask-image:
+        linear-gradient(to bottom, #000 calc(100% - 20px), transparent),
+        linear-gradient(#000, #000);
+      mask-size: calc(100% - 8px) 100%, 8px 100%;
+      mask-position: left top, right top;
+      mask-repeat: no-repeat;
+    }
+  }
+}
 /* Canonical completion-repair obligations sit outside the transcript scroller: the command has
    already finished, so burying this behind a stale Running transcript would recreate the product
    failure the obligation exists to explain. Read-only by design — repair actions belong to the
@@ -4478,10 +4501,11 @@ html[data-theme='dark'] .session-tag-chip {
     box-shadow: 0 0 0 2px transparent;
   }
 }
-/* The newer page a window opened at a record is pulling in, over the bottom it arrives under. */
+/* The newer page a window opened at a record is pulling in, over the bottom it arrives under: 60px
+   above the transcript's 20px fade room, which ends at the composer. */
 .chat-newer-bottom {
   position: absolute;
-  bottom: 60px;
+  bottom: 80px;
   left: 0;
   right: 0;
   z-index: 4;
@@ -4492,10 +4516,11 @@ html[data-theme='dark'] .session-tag-chip {
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
 }
 /* ChatGPT-style snap-to-latest button; only mounted while the tail is out of view — scrolled up
-   off it, or stranded below a transcript still pinned to it (WorkspaceView's `stranded`). */
+   off it, or stranded below a transcript still pinned to it (WorkspaceView's `stranded`). 16px
+   above the transcript's 20px fade room, which ends at the composer. */
 .scroll-to-bottom {
   position: absolute;
-  bottom: 16px;
+  bottom: 36px;
   left: 50%;
   transform: translateX(-50%);
   width: 36px;
@@ -5897,9 +5922,6 @@ html[data-theme='dark'] .session-tag-chip {
 }
 .workspace-composer {
   flex: none;
-  border-top: 1px solid var(--border-subtle);
-  padding-top: 12px;
-  margin-top: 8px;
 }
 /* Where this task's current run is — the composer's answer to "you are not the run that has
    this task any more", and the transcript card's. One rule set for both, because a reader meeting
@@ -6217,8 +6239,8 @@ html[data-theme='dark'] .session-tag-chip {
 }
 /* The engine's guess at the next message, offered in the empty box (lib/promptSuggestion). It sits
    on the first line exactly where the placeholder would — same inset, same 24px line — so nothing
-   moves when it arrives a second after the turn ends. Only Use takes the pointer: a click anywhere
-   else on the line still lands in the textarea, to type something else instead. */
+   moves when it arrives a second after the turn ends. Nothing on the line takes the pointer (Use is
+   for a screen reader): a click on it lands in the textarea, to type something else instead. */
 .composer-suggestion {
   position: absolute;
   top: 12px;
@@ -6281,10 +6303,35 @@ html[data-theme='dark'] .session-tag-chip {
     display: inline-block;
   }
 }
-/* No keyboard to press Tab on: Use instead of the key, and the box's description leaves Tab out. */
+/* A touch screen's way to say it: right after the words, as the key is on a keyboard, until the
+   first double-tap on this device takes a suggestion. */
+.composer-suggestion-tap {
+  display: none;
+  flex: none;
+  font-size: 12px;
+  color: var(--text-4);
+  white-space: nowrap;
+}
+/* No keyboard to press Tab on: a double-tap on the box takes it (WorkspaceView's
+   onComposerTouchEnd), the hint says so, and the box's description leaves Tab out. Use stays for a
+   screen reader, whose own double-tap is "activate" — there, hidden from the eye as .sr-only is.
+   `manipulation` keeps a double-tap on the box from zooming the page. */
 @media (hover: none) {
+  .composer-field {
+    touch-action: manipulation;
+  }
+  .composer-suggestion-tap {
+    display: inline;
+  }
   .composer-suggestion-use {
     display: inline-flex;
+    position: absolute;
+    overflow: hidden;
+    clip-path: inset(50%);
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    white-space: nowrap;
   }
   .composer-suggestion-tab-hint {
     display: none;

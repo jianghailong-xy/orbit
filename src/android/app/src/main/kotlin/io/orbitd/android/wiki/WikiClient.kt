@@ -6,6 +6,7 @@ import io.orbitd.android.core.net.ApiError
 import io.orbitd.android.core.net.ApiRequest
 import io.orbitd.android.core.net.HttpMethod
 import io.orbitd.android.core.protocol.Wire
+import io.orbitd.android.projects.failureReason
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.*
@@ -110,9 +111,10 @@ internal class WikiClient(private val api: OrbitApi, private val handle: Session
     suspend fun providers(): JsonArray = json(listOf("providers")) as? JsonArray ?: JsonArray(emptyList())
 }
 
-/** What the server said when it refused a write — its own sentence — or the web's fallback (`WikiModel.refusal`). */
+/** What the server said when it refused a write — its own sentence — or, when it said none, what kind of failure it was
+ * (`WikiModel.refusal`, d625d9809: `APIClient.failureReason`). */
 internal fun wikiRefusal(error: Throwable): String =
-    (error as? ApiError)?.let { (it.body as? JsonObject)?.get("message").text()?.takeIf { m -> m.isNotEmpty() } } ?: WikiCopy.refused
+    (error as? ApiError)?.let { (it.body as? JsonObject)?.get("message").text()?.takeIf { m -> m.isNotEmpty() } } ?: failureReason(error)
 
 /** A plan write the gate refused (`WIKI_PLAN_GATE`), with every error it found (`WikiPlanLogic.gateErrors`). */
 internal fun wikiGateErrors(error: Throwable): List<WikiPlanGateError>? {

@@ -98,9 +98,15 @@ class CardActions(private val auth: AuthSession, private val store: RealtimeStor
                 catch (cancel: CancellationException) { throw cancel }
                 catch (_: Exception) { /* Uncertain session access remains stale until A04 re-reads. */ }
             }
+            val reason = (error as? ApiError)?.let { it.messages.joinToString("\n").ifBlank { null } ?: "the server returned ${it.status}" }
             val message = when {
                 unknown -> uncertainMessage
                 error is ApiError && error.status == 403 -> "Permission denied. Refresh to check your access."
+                // The confirmation door's refusals in its own words (OrbitKit `OwnerConfirmations.refusalTitle`): an out-of-date
+                // card says so, whatever else refused it says "Not recorded".
+                error is ApiError && card.family == CardFamily.OWNER_CONFIRMATION && verb in setOf(CardVerb.CONFIRM_OWNER, CardVerb.SEND_BACK) ->
+                    "${OwnerReview.refusalTitle(error.code)} — $reason."
+                error is ApiError && verb == CardVerb.REOPEN_TASK -> "Task status was not changed — $reason."
                 error is ApiError && error.status in setOf(404, 409, 410) -> listOfNotNull("This card changed, expired, or was handled elsewhere.", error.code,
                     (error.body as? JsonObject)?.text("requiredAction")).joinToString("\n")
                 error is ApiError -> (error.messages.firstOrNull() ?: "The request was refused.") + (error.code?.let { "\n$it" } ?: "")

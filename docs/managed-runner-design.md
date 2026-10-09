@@ -707,3 +707,78 @@ The local evidence is `managed-runner-instance.spec.ts`, `managed-runner-admissi
 `managed-runner-fencing.pg.spec.ts` with the manager, boot, existing and sign-in pg specs, each run
 with `scripts/run-pg-spec.sh <spec>`; `src/runner-go/managed_instance_test.go`; and
 `scripts/managed-runner/entrypoint_test.py` with `deployment_boundary_test.py`.
+
+## Implementation record: capacity, wake and sleep
+
+Recorded 2026-10-09 for the code-track capacity, wake and sleep task. It was verified with the
+in-memory Kubernetes namespace of `test-support/fake-kube-client.ts` (admission guard installed),
+disposable PostgreSQL databases, the whole application in-process with the switch on, the production
+server with the switch absent and `false`, and the Go runner's unit tests. No cluster, kubeconfig,
+Ceph or model credential was used. Nothing here is evidence of a real scale to zero, a real wake time
+or real capacity exhaustion. It supersedes the manager core record's "admits everything" admission
+hook and its 409 answer to `/wake` and `/sleep`.
+
+| Area | As implemented |
+| --- | --- |
+| Budget | Profile `capacity`: `compute` (`cpu`, `memory`, `ephemeralStorage`, `pods`, `attachments`), `storage` (`usable`, `headroom`) and `maxActiveUsers`; lifecycle `idleSeconds`, `capacityRetrySeconds` and `drainSeconds`. None has a default, and a budget smaller than one runner is refused. One runner's compute share is the larger of its two containers' requests, `runner.tmpSizeLimit` as ephemeral storage, one Pod, one attachment and one active user; its storage share is `storage.capacity`. |
+| Reservation | Migration 0413 adds `managed_runner_capacity`: one row per cluster key and namespace, with totals and reserved figures (CHECKs keep them at zero or above). A mapping records its share in `reservation`: storage from its first admission for as long as the volume exists, compute from admission until its instance is proven stopped. Admission, at REQUESTED and WAITING_CAPACITY, is one transaction: the mapping's compare-and-set, then one conditional UPDATE of the pool that adds the share only while every dimension still fits. Refused, it rolls back whole and the mapping waits as WAITING_CAPACITY with `MANAGED_RUNNER_CAPACITY_UNAVAILABLE`, the short dimensions, a retry time (`retryAfter`) and the pool revision it was refused at. Every reservation, release and change of totals moves that revision, and waiting intents refused at an older one are due at once, oldest first. Compute is released in the transaction that puts a runner to sleep, after the stop proof, and by a FAILED that has no Pod recorded or being created; never by FENCING. Nothing is deleted, evicted or resized, and neither `maxConcurrent` nor observed usage is read. |
+| Demand | The hook `MANAGED_RUNNER_DEMAND` (`managed-runner-demand.ts`) is one UPDATE by runner id: demand revision + 1, demand time, RUNNING desired; it kicks the reconcile loop. `SessionsService.create` and `importSession` call it for a session queued (task runs, delegations, coordinators), `createTurn` for a session left PENDING (messages, scheduled wakeups, watch deliveries, task resumes, open-item deliveries), `resume` before its offline gate — a managed runner that comes back by itself is queued for instead of refused — and after a revive, and `AutoRetryService` for every due retry. Off, it returns before reading anything. Each manager pass also sweeps: a sleeping mapping whose runner has queued turns, pending merges or commits, due wakeups or retries, landings, repository operations, rate-limit resets or relays is woken (`managed-runner-work.ts`). |
+| Auto retry | A due retry on a managed runner that is not READY (asleep, draining, waking or waiting for capacity) asks it to wake and is re-armed for the next sweep: no attempt spent and no 30-minute give-up. On a READY runner it proceeds as before. |
+| Sleep | A READY runner drains when, for `idleSeconds` since it became READY and since the last demand, the records show no work and its authorized instance's fresh report says none. The records: turns running or queued; background jobs, engine turns and subagents of open sessions; merges and commits; due wakeups and retries; landings queued for or running on it; repository operations; rate-limit resets; sign-in, install, clean-up, removal, history, catalog and release relays. The report: heartbeat `managedWorkload`, stored on `runner.managed_workload` with the generation and Pod that sent it — turns, background jobs, operations and unflushed events, and how long all were zero. A missing, stale or other instance's report prevents sleep, and a runner that does not declare `managed-runner-sleep-v1` never sleeps. An owner's `/sleep` (READY, the read revision; 409 `MANAGED_RUNNER_BUSY` with work) skips only the idle interval. DRAINING refuses claims, withholds heartbeat work (landings, repository operations, merges, commits, resets) and answers heartbeats with `managedSleep`. The instance accepts with `sleepReady` while still idle; the route records the acceptance only while the drain stands, the request matches, no demand came since the drain began and the records show nothing, and answers `confirmed`. Only then does the runner stop claiming, drain and exit 0. Until acceptance the manager calls the drain off — READY — on demand, recorded work, a busy or missing report, or an unaccepted request past `drainSeconds`; that write and the acceptance exclude each other. After acceptance nothing is forced (`SLEEP_STOP_OVERDUE` after `drainSeconds` is only said): the kubelet's report of the stop is recorded as the stop proof, the Pod object is deleted by UID, and once the volume detaches one transaction retires the generation (credential replaced), clears the Pod and releases compute: SLEEPING. A Pod gone, replaced or made terminal without the kubelet's report fences, as anywhere else. |
+| Wake | SLEEPING with RUNNING desired — demand that came during an accepted drain included — goes to REQUESTED, is admitted for compute, adopts its recorded PVC and replaces the retired Secret in PROVISIONING, and starts the next generation's Pod on the same PVC: the same runner row, workspace, PVC and volume handle. The owner's `/wake` is demand. |
+| Switch off | The hooks return before reading; the heartbeat stores no report and asks nothing; the claim does not hold back an instance whose mapping was left DRAINING (management is frozen); no manager exists. |
+| Runner | A managed instance (`managed_sleep.go`) reports turns in flight (engine-driven ones included), background jobs (hosted watches and services included), heartbeat-delivered operations counted beside the WaitGroup that joins them — landings, repository operations, merges, commits, uploads, history scans, reset steps — with sign-in and install relays, and events buffered or being posted per supervisor. It declares `managed-runner-sleep-v1`, accepts a sleep request only while all of these are zero, and stops only on confirmation: drain, exit 0. A revocation still exits 3. |
+
+Left for the authorized test environment (T06): a real scale to zero — the runner's exit and the
+kubelet's terminal report on a real node, Pod deletion, VolumeAttachment removal and the CSI detach of
+the RBD image, with their timing; the real wake latency (scheduling, image pull, attach, runtime start)
+against `startupDeadlineSeconds`; real capacity exhaustion against the scheduler, ResourceQuota and
+LimitRange, and the pool's headroom against the test pool's actual safe usable capacity; the concrete
+budget values the test owner supplies; drain timing with real long landings; and managers on several
+replicas sharing one pool.
+
+The local evidence is `managed-runner-capacity.pg.spec.ts`, `managed-runner-sleep.pg.spec.ts`,
+`managed-runner-wake.pg.spec.ts` and `managed-runner-existing.pg.spec.ts`, each run with
+`scripts/run-pg-spec.sh <spec>`; the profile and status specs in the unit suite; and
+`src/runner-go/managed_sleep_test.go`.
+
+## Implementation record: disabled accounts
+
+Recorded 2026-10-09 for the code-track disabled-accounts task. It was verified with the in-memory
+Kubernetes namespace of `test-support/fake-kube-client.ts` (admission guard installed), disposable
+PostgreSQL databases, the whole application in-process with the switch on, and the production server
+with the switch absent and `false`. No cluster, kubeconfig, Ceph or model credential was used. Nothing
+here is evidence that a real runner exits when its account is disabled, or of a real Pod deletion or
+detach. It narrows the sign-in record's eligibility row: a disabled account is not eligible.
+
+An administrator disables an account by setting `User.disabledAt` (migration 0396,
+docs/google-sign-in-design.md §5.5); its runner credential is then refused 403 `ACCOUNT_DISABLED` at
+every runner door before any instance is considered (single-writer record above). This record makes
+the managed runner follow the account. The disable itself and that refusal are unchanged.
+
+| Area | As implemented |
+| --- | --- |
+| Manager | Each step reads the owner's `disabledAt` (one key read). A disabled owner's mapping is driven to sleep and never towards READY: no PVC, Secret or Pod is created, and no admission dry run or capacity admission is made. A mapping with an instance — a recorded Pod, or one found under its fixed name — goes DRAINING at once, without the idle interval or an instance report, and that drain is never called off. It ends as an idle sleep ends: the kubelet's report of the stop is recorded as the stop proof, the Pod object is deleted by UID, and once it is gone and the volume detached one transaction retires the generation (credential replaced) and releases compute: SLEEPING, desired SLEEPING. A mapping with no instance (REQUESTED, WAITING_CAPACITY, PROVISIONING, or STARTING before its Pod) goes straight to SLEEPING and gives back the compute it held, in the transaction a FAILED with no Pod uses. A Pod create whose answer was lost keeps the share and the mapping where it is and is not tried again; a Pod it committed late is recorded and drained. A sleeping mapping stays asleep, and a wake desired before the disable is dropped. A disabled owner's FENCING mapping is looked at for its proof whatever it desires, and once proven is put to sleep. FAILED, DELETING and DELETED are left as they are. `dueMappings` lists a disabled owner's mappings first, whatever their retry time. A disable that lands while a step is creating an object is seen by the next step, which drains or releases what was made. The PVC with its storage share, the runner row and the default workspace stay. |
+| Runner's exit | Nothing stops the instance. The runner treats the claim's 403 as a permanent failure: it stops claiming, drains its sessions (whose event posts are refused too) and exits 0, so its Pod ends `Succeeded` with the kubelet's report. An instance that stopped before the manager looked sleeps the same way; an enabled owner's unrequested stop is still FAILED `POD_TERMINATED`. A Pod gone or made terminal without the kubelet's report fences, as anywhere. No runner code changed; a runner test pins the two answers this relies on. |
+| Demand | `recordManagedDemand` matches no row for a disabled owner, so the hook every session path calls (messages, task runs, scheduled wakeups, watch deliveries, revives, auto retry) records nothing and answers `managed: false`. The caller goes on as for a runner that is not coming back: a revive of an offline runner is refused as offline, and an auto retry takes the ordinary offline path with its 30-minute give-up. The sweep passes over disabled owners. |
+| Owner writes | Ensure, retry, wake, sleep and delete answer 403 `ACCOUNT_DISABLED` after the switch check, before the mapping is read or anything written. The owner's row is read afresh: JwtAuthGuard's view of disabled accounts can be 30 seconds old on another replica. |
+| Eligibility | The service asks its rule (`EVERY_ACCOUNT`, unless another is provided under the token) through `enabledAccountsOnly`: a disabled account is not eligible, at sign-in or on ensure, whatever the rule says. |
+| Status | With the switch on, a disabled owner's status reason is `ACCOUNT_DISABLED` (shared code; `ManagedRunnerReason.code` stays an open string), ahead of any stored cause; `usable` is false and no action is offered. The reason is derived, never stored, so an enabled account reads its mapping's own status again. |
+| Enabled again | An ordinary sleeping mapping: demand — the sweep finding work that waited, a message, the owner's wake — admits it and starts its reserved generation on the same PVC, runner row and workspace. A sign-in does not wake it. |
+| Switch off | None of this runs: the hooks return before reading, no manager exists, the status read reads nothing more, and no Kubernetes client is constructed. The runner door's `ACCOUNT_DISABLED` refusal belongs to the account work and holds whatever the switch says. |
+
+Left for the authorized test environment (T06): that a real managed runner of a disabled account exits
+on its own — the refused claim, the drain with its sessions' event posts refused, exit 0 — including a
+runner whose session slots are all busy, and how long that takes; the kubelet's terminal report, the
+Pod deletion by UID, the VolumeAttachment removal and the CSI detach of that stop, with their timing;
+the delay from an administrator's disable to the drain (the disable does not kick the manager, so the
+worker's poll interval bounds it); a re-enabled account's wake on a real cluster with the original
+PVC; and a disabled account's Pod that never started (Pending: unschedulable or image pull), which
+nothing stops — it stays DRAINING with its compute reserved until an operator acts, as a Pod that hit
+`STARTUP_TIMEOUT` stays FAILED.
+
+The local evidence is `managed-runner-account-disabled.pg.spec.ts`, case (8) of
+`managed-runner-wake.pg.spec.ts` and the disabled accounts seeded in
+`managed-runner-existing.pg.spec.ts`, each run with `scripts/run-pg-spec.sh <spec>`;
+`managed-runner-status.spec.ts` and `managed-runner-eligibility.spec.ts` in the unit suite; and
+`TestManagedInstanceStopsOnItsDisabledAccount` in `src/runner-go/managed_instance_test.go`.

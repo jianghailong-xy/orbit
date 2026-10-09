@@ -166,7 +166,12 @@ An apiserver with `ORBIT_MANAGED_RUNNERS_ENABLED=true` reconciles only in the en
 [manager-profile.example.json](manager-profile.example.json). The example is refused as it stands
 (`valueKind: example`, placeholders). An actual profile names the JSON kubeconfig file, context,
 expected API server and namespace, the storage class and capacity, a digest-pinned image, the runner's
-Orbit URL, the resource amounts of this Pod template and every lifecycle budget. Without a valid
+Orbit URL, the resource amounts of this Pod template and every lifecycle budget. Its `capacity`
+section is the environment's fixed budget — CPU and memory requests, ephemeral storage, Pod and attach
+slots, managed users active at once, and the storage pool's safe usable bytes and headroom — which
+admission reserves from; the lifecycle budgets include the idle interval before a runner drains to
+sleep, how often an intent waiting for capacity looks again, and how long a stop for sleep may take
+before the delay is reported. The test owner supplies every value. Without a valid
 profile the feature reports itself unavailable and nothing is reconciled. Only the authorized isolated
 test apiserver may set these variables; no default entry point does.
 

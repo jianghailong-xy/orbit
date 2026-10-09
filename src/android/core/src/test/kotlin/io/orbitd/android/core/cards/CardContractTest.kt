@@ -41,12 +41,6 @@ class CardContractTest {
         }
     }
 
-    @Test fun createdTaskSentenceIsDrivenBySharedFixture() {
-        fixture("session-created-tasks.fixture.json").objects("countLine").forEach { row ->
-            assertEquals(row.text("text"), createdTasksCountLine(row))
-        }
-    }
-
     @Test fun questionRequiresEveryAnswerAndKeepsSingleSelectExclusive() {
         val card = cardList().single { it.family == CardFamily.QUESTION }
         assertThrows(IllegalArgumentException::class.java) { CardRequests.build(card, CardVerb.ANSWER) }

@@ -2166,6 +2166,15 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // other column, and no function, trigger, type or index, is created, replaced or dropped; `task`, `project`
       // and the six preserved objects are named nowhere.
       '0412_wiki_stored_text_encoding',
+      // Managed runner capacity, wake and sleep (0413): one new table, `managed_runner_capacity`,
+      // with its unique pool key and three CHECKs (totals and reserved figures never below zero, a
+      // named location); four nullable columns with no default on `managed_runner` (0399's table) and
+      // one nullable JSONB column with no default on `runner` — catalog-only. No existing column,
+      // constraint, index, function, trigger or type is altered or dropped; no `task`, `project` or
+      // `project_acceptance_*` object nor any of the six preserved triggers/functions is named, so
+      // it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE: the manager writes
+      // the pool row on first use, and every stored mapping and runner reads NULL.
+      '0413_managed_runner_capacity',
       // A session's engine, recorded (0414, docs/provider-engine-contract.md §1, §5, §7.1): one nullable TEXT
       // with no default on `session` and one on `task` (`engine`), each held by a CHECK to the six engines,
       // which every stored row satisfies because the column reads NULL in it; then a backfill that writes
@@ -2187,7 +2196,14 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // it; and 0414's `guard_dsh_runner_acquisition` replaced by the same body plus one clause that
       // follows an alias to its key. No row is written; `task`, `project`, every `project_acceptance_*`
       // object and the six preserved triggers/functions are named nowhere, and no type is altered.
-      '0415_provider_slug_alias'],
+      '0415_provider_slug_alias',
+      // Which run wrote a comment (0416): two nullable UUID columns with no default and no constraint
+      // on `task_comment` (`session_id`, `attempt_id`), snapshots with no foreign key — catalog-only.
+      // Only that table is altered: no `task`, `session`, `project` or `project_acceptance_*` object
+      // nor any of the six preserved triggers/functions is named, and no function, trigger, type,
+      // index or constraint is created, replaced or dropped, so it is not another writer of the DONE
+      // fence. No INSERT, UPDATE or DELETE: every stored comment reads NULL.
+      '0416_task_comment_session_attempt'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
