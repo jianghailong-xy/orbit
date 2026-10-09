@@ -111,6 +111,16 @@ class ManagementPanelTest {
         compose.onNode(hasText("Leave pool") and hasClickAction()).performScrollTo().assertIsNotEnabled()
     }
 
+    /** Settings → Providers' two footers say what the web's redesigned page says (iOS d3441c702, A13-13). */
+    @Test fun theProvidersFootersSayWhatTheWebSaysNow() {
+        val api = api()
+        compose.setContent { ProviderManagement(api, revision, null, {}, {}) }
+        await("Account pools")
+        compose.onNodeWithText("Use subscriptions signed in on your machines.").assertExists()
+        compose.onNodeWithText("Several accounts under one name.").assertExists()
+        compose.onAllNodesWithText("nothing to paste", substring = true).assertCountEquals(0)
+    }
+
     @Test fun editModeMovesARunnerByDraggingItsHandleAndSendsTheOrderOnce() {
         fixture.secondRunner = true
         val api = api()

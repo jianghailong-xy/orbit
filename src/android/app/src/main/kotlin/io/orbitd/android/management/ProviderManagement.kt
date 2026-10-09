@@ -95,7 +95,7 @@ private fun ProvidersOverview(api: ManagementApi, revision: Long, open: (OrbitRo
             TextButton(onClick = { scope.launch { model.load() } }) { Text("Retry") }
         }
         if (!model.loaded) { if (model.error == null) Text("Loading…", Modifier.padding(16.dp), color = Ink.muted); return@Column }
-        FormSection("On your runners", footer = "Signed in on the machine itself — a session spends that subscription, nothing to paste.") {
+        FormSection("On your runners", footer = "Use subscriptions signed in on your machines.") {
             model.runners.forEachIndexed { index, runner ->
                 if (index > 0) HorizontalDivider()
                 Row(Modifier.fillMaxWidth().clickable(role = Role.Button) { open(OrbitRoute(Destination.RUNNER, runner.text("id"))) }.padding(vertical = 8.dp),
@@ -108,8 +108,7 @@ private fun ProvidersOverview(api: ManagementApi, revision: Long, open: (OrbitRo
                 }
             }
         }
-        if (model.own.isNotEmpty() || model.shared.isNotEmpty()) FormSection("Account pools",
-            footer = "Several keys under one name — each session starts on one with room, and moves on when it runs out.") {
+        if (model.own.isNotEmpty() || model.shared.isNotEmpty()) FormSection("Account pools", footer = "Several accounts under one name.") {
             val rows = model.shared.map { "shared:${it.text("id")}" to ProviderPools.shared(it, now) } +
                 model.own.filter { own -> model.shared.none { ObjectId.same(it.text("id"), own.text("id")) } }.map { json ->
                     val pool = ProviderPools.own(json, now)
