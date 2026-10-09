@@ -1,0 +1,8 @@
+providers-light: Settings row 9 label="Providers" value="" frame=(16.0, 713.0, 370.0, 52.0) hittable=true
+providers-light: rows ending with a balance: ["DeepSeek, deepseek-v4-pro, ¥110.00", "DeepSeek Harness, Runs on DeepSeek Harness, ¥110.00"]
+deepseek-light: row 9 label="DeepSeek, deepseek-v4-pro, ¥110.00" value="" frame=(16.0, 383.0, 370.0, 70.33333333333331) hittable=true
+harness-light: row 9 label="DeepSeek Harness, Runs on DeepSeek Harness, ¥110.00" value="" frame=(16.0, 453.3333333333333, 370.0, 70.33333333333331) hittable=true
+providers-dark: Settings row 9 label="Providers" value="" frame=(16.0, 713.0, 370.0, 52.0) hittable=true
+providers-dark: rows ending with a balance: ["DeepSeek, deepseek-v4-pro, ¥110.00", "DeepSeek Harness, Runs on DeepSeek Harness, ¥110.00"]
+deepseek-dark: row 9 label="DeepSeek, deepseek-v4-pro, ¥110.00" value="" frame=(16.0, 383.0, 370.0, 70.33333333333331) hittable=true
+harness-dark: row 9 label="DeepSeek Harness, Runs on DeepSeek Harness, ¥110.00" value="" frame=(16.0, 453.3333333333333, 370.0, 70.33333333333331) hittable=true

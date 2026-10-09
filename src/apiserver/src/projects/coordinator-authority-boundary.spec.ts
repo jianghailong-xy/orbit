@@ -100,9 +100,11 @@ async function runnerFromAgentCredential(): Promise<Runner> {
     runner: {
       findFirst: async ({ where }: { where: { tokenHash: string } }) => {
         assert.equal(where.tokenHash, expectedHash);
-        return { id: RUN, ownerId: OWNER };
+        return { id: RUN, ownerId: OWNER, owner: { disabledAt: null } };
       },
     },
+    // A self-managed runner: no managed runner mapping binds its credential to an instance.
+    managedRunner: { findUnique: async () => null },
   } as never);
   const request: Record<string, unknown> = {
     headers: { authorization: `Bearer ${credential}` },

@@ -34,6 +34,7 @@ import { Fragment, createContext, isValidElement, memo, useContext, useEffect, u
 import type { ComponentProps, ReactNode } from 'react';
 import {
   apiErrorRetryAt,
+  CONTINUE_MESSAGE,
   isApiErrorText,
   isAuthErrorText,
   isBenignEngineStderr,
@@ -171,7 +172,7 @@ export const EventFullCtx = createContext<((seq: number) => Promise<any>) | null
  * What a sign-in failure card should tell this session's viewer, and how to act on it. The
  * remedy depends on where the credentials live, which the transcript can't know: a built-in
  * provider runs on the runner's own runtime login (fix it on that machine), any
- * other slug is a configured API key (fix it in Providers). WorkspaceView supplies this; the
+ * other slug is a configured API key (fix it in Infrastructure). WorkspaceView supplies this; the
  * shared/public page and the static export leave it null, so the card there degrades to the
  * diagnosis alone — a logged-out viewer can neither sign that runner in nor retry.
  */
@@ -200,7 +201,16 @@ export interface AuthErrorHelp {
   retryDisabled?: boolean;
   /** What that re-send would say, so the card can show it rather than make the user trust it. */
   retryText?: string;
-  /** Open Providers — the other way back in, and the only one when the rejected credential is
+  /**
+   * Go and find out what it would say, when what the card holds is not the reader's own to send.
+   * Another session's words are re-sent by the server's own chooser — see `AutoRetryHelp`'s, whose
+   * rule and reason this is a second instance of — and only its answer can promise what the press
+   * carries, or that it carries anything at all.
+   */
+  onNeedRetryText?: () => void;
+  /** Whether the window holds words of the reader's to send, like `AutoRetryHelp`'s. */
+  retryWordsAreTheReaders?: boolean;
+  /** Open Infrastructure — the other way back in, and the only one when the rejected credential is
    *  a configured key rather than a login on the runner. */
   onUseApiKey?: () => void;
 }
@@ -234,13 +244,13 @@ export function DshRepairCard({ repair, help, seq }: { repair: DshRepair; help: 
       </div>
       <div className="chat-authfix-desc">
         {repair === 'needsKey'
-          ? 'This session has no DeepSeek Harness key to run on. Add or re-enable the key in Providers, then send your message again.'
+          ? 'This session has no DeepSeek Harness key to run on. Add or re-enable the key in Infrastructure, then send your message again.'
           : repair === 'invalidKey'
-            ? 'Update the key in Providers, then send your message again. Connecting a key does not check it — the first request does.'
+            ? 'Update the key in Infrastructure, then send your message again. Connecting a key does not check it — the first request does.'
             : repair === 'updateRunner'
               ? `${machine} runs Orbit runner ${help.runnerVersion || 'an unknown version'}, which predates DeepSeek Harness. The runner updates itself when no session is running on it.`
               : repair === 'notInstalled'
-                ? 'Install it from Providers, then send your message again.'
+                ? 'Install it from Infrastructure, then send your message again.'
                 : 'DeepSeek Harness 0.2.0-rc.2 runs on Linux x64 runners with Node 26 only. Move this work to a runner that can.'}
       </div>
       <div className="chat-authfix-actions">
@@ -289,10 +299,10 @@ export function AntigravityRepairCard({ repair, help, seq }: {
       </div>
       <div className="chat-authfix-desc">
         {repair === 'needsKey'
-          ? 'Sign in with Google on this runner, or connect a Gemini API key in Providers.'
+          ? 'Sign in with Google on this runner, or connect a Gemini API key in Infrastructure.'
           : repair === 'updateRunner'
             ? `${machine} runs Orbit runner ${help.runnerVersion || 'an unknown version'}; Antigravity needs 0.1.209 or newer. The runner updates itself when no session is running on it, and this session starts then.`
-            : 'Install it from Providers, then send your message again.'}
+            : 'Install it from Infrastructure, then send your message again.'}
       </div>
       {repair === 'needsKey' && help.provider === 'antigravity' && (
         help.googleLogin === 'available' && help.runnerId
@@ -308,7 +318,7 @@ export function AntigravityRepairCard({ repair, help, seq }: {
         ) : (
           <>
             {repair === 'notInstalled' && help.onInstall && <button className="chat-authfix-go" type="button" onClick={help.onInstall} disabled={help.installDisabled}>Install</button>}
-            {help.onOpenProviders && <button className="chat-authfix-retry" type="button" onClick={help.onOpenProviders}>Open in Providers</button>}
+            {help.onOpenProviders && <button className="chat-authfix-retry" type="button" onClick={help.onOpenProviders}>Open in Infrastructure</button>}
           </>
         )}
       </div>
@@ -436,8 +446,8 @@ type TextNode = {
   seq: number;
   text: string;
   // Thinking only: how long the stretch took, and how many adjacent blocks were folded into this
-  // one row. Both are known only while it streams (see lib/thinkingDraft) — a reload has neither,
-  // so the row states its size alone.
+  // one row. The duration is the one the runner stored on each block (see lib/thinkingDraft); a
+  // block an older runner stored has none, and its row states its size alone.
   thinkingMs?: number;
   blocks?: number;
   // Wall-clock of the source event — carried for user turns to show a relative
@@ -1889,7 +1899,7 @@ function ToolFailureCard({
 
 /**
  * The providers whose credentials live on the runner itself (the engines in doctor.go), so the
- * remedy is a sign-in on that machine rather than a key to fix in Providers.
+ * remedy is a sign-in on that machine rather than a key to fix in Infrastructure.
  */
 const LOCAL_LOGIN = new Set(['claude', 'codex', 'kimi', 'opencode', 'antigravity']);
 
@@ -1918,6 +1928,15 @@ const RELAY_LOGIN = new Set(['claude', 'codex', 'kimi', 'antigravity']);
  */
 function AuthErrorCard({ message, seq }: { message: string; seq?: number }) {
   const help = useContext(AuthErrorCtx);
+  // A press that would be the server's own re-send is a promise only the server makes, and the
+  // window's last bubble can be somebody else's — so this card asks for the answer rather than
+  // quoting the bubble (the same rule, and the same hook, as the quota card's). Above the branches
+  // below, which return early.
+  const retryIsTheServers = !!help?.onNeedRetryText && help?.retryWordsAreTheReaders === false;
+  const onNeedRetryText = help?.onNeedRetryText;
+  useEffect(() => {
+    if (retryIsTheServers) onNeedRetryText?.();
+  }, [retryIsTheServers, onNeedRetryText]);
   const provider = help?.provider;
   const local = !!provider && LOCAL_LOGIN.has(provider);
   const relayable = !!provider && RELAY_LOGIN.has(provider);
@@ -1956,7 +1975,7 @@ function AuthErrorCard({ message, seq }: { message: string; seq?: number }) {
       ) : help ? (
         <>
           <div className="chat-authfix-desc">
-            The API key for <code>{help.provider}</code> was rejected. Update it in Providers, then
+            The API key for <code>{help.provider}</code> was rejected. Update it in Infrastructure, then
             send your message again.
           </div>
           {help.onUseApiKey && (
@@ -2022,6 +2041,20 @@ export interface AutoRetryHelp {
    * which chooses with the same code the automatic retry re-sends with.
    */
   onNeedRetryText?: () => void;
+  /**
+   * Whether the window holds words of the reader's to send — the only ones a press may promise
+   * from the window. False when it holds another session's message (whose press is the server's
+   * own re-send, so the card asks for that answer instead) or none at all — the same condition
+   * `onNeedRetryText` exists for.
+   */
+  retryWordsAreTheReaders?: boolean;
+  /**
+   * Nothing of anybody's waits to go out — not the person's words, and not a reply or confirmation
+   * turn the sweep re-sends on its own (`getSessionRetryMessage.nothingToResend`). The card swaps
+   * its verb for the platform's continue (`CONTINUE_MESSAGE`): sent by hand now, or by the server
+   * at the reset through the switch, which is the arm that owns the sentence.
+   */
+  nothingToResend?: boolean;
   /** Turn the pending auto-retry off. */
   onCancelAuto?: () => void;
   /** Put it back, at the instant the card re-derived from the failing reply. */
@@ -2120,9 +2153,12 @@ function AutoRetryCard({
     return () => clearInterval(t);
   }, [retryAt?.getTime()]);
 
-  // Asked once, and only by a card that has a button to offer and no words for it — a stale card
-  // and the share page's contextless one need nothing (see `onNeedRetryText`).
-  const needsRetryText = live && !help?.retryText && !!help?.onNeedRetryText;
+  // Asked once, and only by a card that cannot promise alone: the window has no words of the
+  // reader's — none at all, or another session's. Only the server's chooser says what such a press
+  // carries, and it may say "nothing at all" (which is what the Continue card is for). A stale
+  // card and the share page's contextless one need nothing.
+  const needsRetryText = live && !!help?.onNeedRetryText
+    && help?.retryWordsAreTheReaders === false;
   useEffect(() => {
     if (needsRetryText) help?.onNeedRetryText?.();
   }, [needsRetryText]);
@@ -2135,6 +2171,11 @@ function AutoRetryCard({
   // card (the session went on) and a share-page one (no context) are history, not an alarm.
   const needsYou = live && !armed && !firing;
   const quota = variant === 'quota';
+  // Nothing for a re-send to carry: the failure landed on a turn nobody sent (a background job's
+  // wake, a turn the runtime started for itself) and the person's own message was answered long
+  // before it. The card says that, and every verb it offers is Continue — by hand, or at the reset
+  // through the switch. Read once: the body, the countdown and the two controls all branch on it.
+  const continues = live && !!help?.nothingToResend;
   const window = quotaWindow(message);
   // The instant a re-armed retry would fire, re-derived from the same two things the server used
   // when it armed the first one: the reply's own "resets 8:20pm" (quota) or the next step of the
@@ -2170,9 +2211,13 @@ function AutoRetryCard({
           : quota
             ? `${window.what} for ${help?.provider ?? 'this provider'}${
                 help?.runnerName ? ` on “${help.runnerName}”` : ''
-              } is used up.${needsYou ? ' Auto-retry is off.' : ''}`
+              } is used up.${continues
+                ? ` Nothing to re-send — the limit landed on a turn that wasn’t yours.`
+                : needsYou ? ' Auto-retry is off.' : ''}`
             : `The ${help?.provider ?? 'provider'} API could not answer — nothing about your
-               message caused it.${needsYou ? ' Auto-retry is off.' : ''}`}
+               message caused it.${continues
+                 ? ` Nothing to re-send — the failure landed on a turn that wasn’t yours.`
+                 : needsYou ? ' Auto-retry is off.' : ''}`}
       </div>
       {/* The error verbatim. Which one it was is the only actionable detail if it keeps
           recurring, and unlike a quota's sentence it is not restated by anything above. */}
@@ -2181,12 +2226,12 @@ function AutoRetryCard({
         <div className="chat-quota-when">
           {quota ? (
             <>
-              Resets <b>{formatResetAt(retryAt!)}</b>{' '}
+              {continues ? 'Continues' : 'Resets'} <b>{formatResetAt(retryAt!)}</b>{' '}
               <span className="chat-quota-in">· {formatCountdown(msLeft)}</span>
             </>
           ) : (
             <>
-              Retrying <b>{formatCountdown(msLeft)}</b>
+              {continues ? 'Continuing' : 'Retrying'} <b>{formatCountdown(msLeft)}</b>
             </>
           )}
         </div>
@@ -2195,12 +2240,16 @@ function AutoRetryCard({
         <div className="chat-quota-auto">
           <div className="chat-quota-auto-txt">
             <div className="chat-quota-auto-l">
-              {quota ? 'Auto-retry when the quota resets' : 'Auto-retry — this usually clears'}
+              {continues
+                ? quota ? 'Continue when the quota resets' : 'Continue — this usually clears'
+                : quota ? 'Auto-retry when the quota resets' : 'Auto-retry — this usually clears'}
             </div>
             <div className="chat-quota-auto-d">
               {armed
                 ? 'Runs on the server — you can close this tab.'
-                : 'Off — nothing will re-send until you do.'}
+                : continues
+                  ? 'Off — nothing will continue until you do.'
+                  : 'Off — nothing will re-send until you do.'}
             </div>
           </div>
           {/* A real two-state switch: off is rendered, not just implied by the row disappearing,
@@ -2225,7 +2274,9 @@ function AutoRetryCard({
       )}
       {firing && !takenOver && (
         <div className="chat-quota-run">
-          <span className="spin" /> Retrying — re-sending your message…
+          <span className="spin" /> {continues
+            ? 'Continuing — picking up where it left off…'
+            : 'Retrying — re-sending your message…'}
         </div>
       )}
       {/* Once the task has moved on, the card stops offering to re-send and says what happened
@@ -2233,12 +2284,13 @@ function AutoRetryCard({
       {takenOver ? (
         <TaskRunHandoffNotice className="chat-quota-handoff" conflict={takenOver} />
       ) : null}
-      {!takenOver && live && !firing && help?.onRetry && help.retryText && (
+      {!takenOver && live && !firing && help?.onRetry && (help.retryText || continues) && (
         <>
           {/* Quoted for the same reason as the sign-in card's: by now it has scrolled away,
               and on a first-turn limit it was never in the transcript at all. When the bubble
-              is the line directly above, it is neither — see `afterUserMsg`. */}
-          {!afterUserMsg && (
+              is the line directly above, it is neither — see `afterUserMsg`. Never for a
+              continue: the platform's sentence is not something the reader wrote. */}
+          {!afterUserMsg && !!help.retryText && (
             <>
               <div className="chat-quota-lastl">Will re-send:</div>
               <div className="chat-quota-last">{help.retryText}</div>
@@ -2252,15 +2304,21 @@ function AutoRetryCard({
               disabled={help.retryDisabled}
               type="button"
             >
-              {armed ? 'Retry now anyway' : 'Retry now'}
+              {armed
+                ? continues ? 'Continue now anyway' : 'Retry now anyway'
+                : continues ? 'Continue' : 'Retry now'}
             </button>
-            {armed && (
+            {armed ? (
               <span className="chat-quota-note">
                 {quota
                   ? 'The quota hasn’t reset yet — this will likely fail again.'
                   : 'The API may still be failing — this could fail again.'}
               </span>
-            )}
+            ) : continues ? (
+              // Said here rather than left to the transcript: the sentence is the platform's, and
+              // this is the one place the reader is told which words the press sends in their name.
+              <span className="chat-quota-note">Sends “{CONTINUE_MESSAGE}”</span>
+            ) : null}
           </div>
         </>
       )}
@@ -3146,8 +3204,9 @@ function ControlPlaneNote({ kind, text }: { kind: string; text: string }) {
 /**
  * A settled stretch of reasoning, folded. What the row says while shut is the whole question: a
  * bare "Thinking" told a reader nothing about whether opening it was worth it, and a turn stacks
- * ten of them. The duration comes from having watched it stream (lib/thinkingDraft); a reloaded
- * block has only its size, and states that rather than nothing.
+ * ten of them. The duration is the one the runner stored on the block (lib/thinkingDraft), so a
+ * reload states it too; a block an older runner stored has only its size, and states that rather
+ * than nothing.
  */
 function Thinking({ text, seq, ms, blocks }: { text: string; seq?: number; ms?: number; blocks?: number }) {
   const exp = useContext(ExportCtx);

@@ -191,6 +191,7 @@ export const WIKI_REFUSAL_CODES = [
   'WIKI_CURSOR_BEHIND',
   'WIKI_CURSOR_INVALID',
   'WIKI_ARTICLE_STALE',
+  'WIKI_SERVER_EXECUTES',
   'WIKI_PLAN_GATE',
   'WIKI_PLAN_STALE',
   'WIKI_PLAN_UNCONFIRMED',
@@ -1265,13 +1266,22 @@ export interface WikiAnchorList {
   next: string | null;
 }
 
-/** One anchor's check, as the runner reports it. */
+/**
+ * One anchor's check, as the runner reports it. `path` / `symbol` / `sha` are the identity of the
+ * anchor the reporter says it checked — the fields its type names. A report may leave them out (the
+ * runner's own CLI does), and then the server checks the type at the index alone; when they are
+ * there, the server applies the check only to the anchor they name (`anchorRules.verify.identity`).
+ */
 export interface WikiAnchorCheckInput {
   index: number;
   type: WikiGitAnchorType;
   state: 'verified' | 'changed' | 'missing';
   /** A symbol found: the sha256 of its region on the checked ref. */
   regionSha256?: string;
+  /** The identity a check may carry, per its type: a path anchor's path; a symbol's path and symbol; a commit's sha. */
+  path?: string;
+  symbol?: string;
+  sha?: string;
 }
 
 /** `POST /api/runner/wiki/spaces/:id/anchor-checks`. */
@@ -1310,6 +1320,14 @@ export interface WikiSpace {
   settings: WikiSpaceSettings;
   createdAt: string;
   updatedAt: string;
+  // The list read's (`GET /wiki/spaces`, contract `space.list`), absent from the one-space read and from a
+  // server older than them.
+  /** The things of its plan that wait on the owner, counted as the plan's own amber count beside Plan counts them. */
+  planWaiting?: number;
+  /** The workspaces bound to it, in the order they were bound. */
+  workspaceIds?: string[];
+  /** Its confirmed plan's documents, written of how many: null while it has no confirmed plan. */
+  docs?: { written: number; total: number } | null;
 }
 
 export interface WikiTopic {
@@ -1406,6 +1424,9 @@ export interface WikiChangesetOp {
   /** The trail of every earlier verdict of an op that was reopened, oldest first; empty for every
    *  other op (contract `reviewModes.verification.reopen`). */
   verificationHistory?: WikiOpVerificationHistory[];
+  /** The current title of the entry `entryId` names, null when it names none — added by Review's
+   *  read (`GET /api/wiki/review`) so a card can name an entry no other read of the page holds. */
+  entryTitle?: string | null;
 }
 
 /** One op's verification trail, as the op reads it back. */
@@ -1484,6 +1505,15 @@ export interface WikiVerificationList {
   items: WikiVerificationItem[];
   /** Pass as `after` for the next page; null when this page is the last. */
   next: string | null;
+  /**
+   * Who verifies the ops this list would carry (contract `reviewModes.verification.servedBy`): `server`
+   * where the executor switch says the server runs for this account, in which case `items` is empty
+   * because the server's own job (`jobs.kindRuns.verify`) is the verifier and a session must not ask a
+   * model of its provider about them. Absent under the default `runner` mode, where the caller verifies.
+   */
+  servedBy?: 'server';
+  /** With `servedBy`: how many of the caller's ops are waiting, so a caller can wait for it to reach zero. */
+  waiting?: number;
 }
 
 /** One verdict, as `POST /api/runner/wiki/spaces/:id/verifications` takes it. */

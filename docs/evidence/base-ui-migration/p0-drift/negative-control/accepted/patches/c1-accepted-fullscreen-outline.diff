@@ -1,0 +1,15 @@
+diff --git a/src/web/src/index.css b/src/web/src/index.css
+index b492f4d82..dab5e2490 100755
+--- a/src/web/src/index.css
++++ b/src/web/src/index.css
+@@ -12060,6 +12060,10 @@ button.chat-jump-start:hover {
+   border-radius: 8px;
+   background: var(--bg-sunken);
+ }
++.tdg-modal .tdg-full-canvas {
++  outline: 2px solid #d4380d;
++  outline-offset: -2px;
++}
+ .tdg-canvas {
+   height: clamp(300px, 46vh, 420px);
+ }

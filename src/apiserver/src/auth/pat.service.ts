@@ -3,11 +3,13 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { randomBytes } from 'node:crypto';
 import { sha256 } from '../common/crypto.util';
 import { PrismaService } from '../prisma/prisma.service';
+import { DisabledAccounts, accountDisabled } from './disabled-accounts';
 
 /**
  * What every personal access token starts with. Secret scanners (GitHub, gitleaks) recognise a
@@ -37,6 +39,17 @@ export const PAT_SCOPES = [
 ] as const;
 export type PatScopeName = (typeof PAT_SCOPES)[number];
 
+/**
+ * The presets `orbit login --scopes` names (§4, §7.3), as the settings dialog offers them: every read
+ * scope, or every scope. Expanded here, from PAT_SCOPES, so a CLI built before a scope was added still
+ * asks for all of them.
+ */
+export const PAT_SCOPE_PRESETS = {
+  'read-only': PAT_SCOPES.filter((scope) => scope.endsWith(':read')),
+  'read-write': [...PAT_SCOPES],
+} as const satisfies Record<string, readonly PatScopeName[]>;
+export type PatScopePreset = keyof typeof PAT_SCOPE_PRESETS;
+
 export type PatCreatedVia = 'WEB' | 'CLI_DEVICE';
 export type PatRevokedReason = 'USER' | 'EXPIRED' | 'PASSWORD_CHANGED' | 'USER_DELETED' | 'ADMIN';
 
@@ -44,12 +57,36 @@ export type PatRevokedReason = 'USER' | 'EXPIRED' | 'PASSWORD_CHANGED' | 'USER_D
 export const PAT_MAX_ACTIVE_PER_USER = 50;
 /** The longest finite lifetime; anything longer is a token that never expires, chosen as such (§11.1). */
 export const PAT_MAX_EXPIRES_IN_DAYS = 365;
+/** The lifetimes `POST /access-tokens` offers (§6.5, §11.1); null, never expiring, is the fourth. */
+export const PAT_EXPIRY_CHOICES = [30, 90, 365] as const;
+/** The lifetime a token is issued with when none is chosen (§11.1). */
+export const PAT_DEFAULT_EXPIRES_IN_DAYS = 90;
 const PAT_NAME_MAX_LENGTH = 100;
 /** `last_used_*` is written at most this often per token (§3). */
 const LAST_USED_THROTTLE_MS = 60_000;
 const USER_AGENT_MAX_LENGTH = 512;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Where a token stands: it works, it ran past its expiry, or somebody revoked it. */
+export type PatState = 'ACTIVE' | 'EXPIRED' | 'REVOKED';
+
+/** What a token list shows of each token: everything but its hash. */
+const LISTED = {
+  id: true,
+  name: true,
+  tokenHint: true,
+  scopes: true,
+  workspaceIds: true,
+  expiresAt: true,
+  createdVia: true,
+  lastUsedAt: true,
+  lastUsedIp: true,
+  lastUsedUserAgent: true,
+  revokedAt: true,
+  revokedReason: true,
+  createdAt: true,
+} satisfies Prisma.PersonalAccessTokenSelect;
 
 /** Who a verified token acts as, and what it was granted. */
 export interface PatGrant {
@@ -69,7 +106,11 @@ export interface PatGrant {
  */
 @Injectable()
 export class PatService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    // AuthModule provides it. Without it (a test harness) no account is disabled.
+    @Optional() private readonly disabled?: DisabledAccounts,
+  ) {}
 
   /**
    * Issue a token to `ownerId`. The answer is the only place the token ever appears: a caller that
@@ -87,11 +128,7 @@ export class PatService {
       createdVia: PatCreatedVia;
     },
   ) {
-    const name = input.name.trim();
-    if (!name) throw new BadRequestException('a token needs a name');
-    if (name.length > PAT_NAME_MAX_LENGTH) {
-      throw new BadRequestException(`a token name is at most ${PAT_NAME_MAX_LENGTH} characters`);
-    }
+    const name = patNameOf(input.name);
     const scopes = parseScopes(input.scopes);
     const workspaceIds = await this.ownedWorkspaces(ownerId, input.workspaceIds ?? []);
     const now = new Date();
@@ -101,12 +138,7 @@ export class PatService {
     // A soft cap: two issues racing at the last place can both land. It exists to stop a runaway
     // loop, and every issue after the cap is crossed is refused.
     const active = await this.prisma.personalAccessToken.count({ where: { ownerId, revokedAt: null } });
-    if (active >= PAT_MAX_ACTIVE_PER_USER) {
-      throw new ConflictException({
-        code: 'PAT_LIMIT_REACHED',
-        message: `You already have ${PAT_MAX_ACTIVE_PER_USER} access tokens — revoke one before issuing another`,
-      });
-    }
+    if (active >= PAT_MAX_ACTIVE_PER_USER) throw limitReached();
 
     const token = PAT_PREFIX + randomBytes(32).toString('base64url');
     try {
@@ -135,20 +167,36 @@ export class PatService {
       };
     } catch (error) {
       // The name's partial unique index (0383); a token_hash collision would need 2^128 tokens.
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-        throw new ConflictException({
-          code: 'PAT_NAME_IN_USE',
-          message: `You already have an access token named "${name}" — revoke it or pick another name`,
-        });
-      }
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') throw nameInUse(name);
       throw error;
     }
+  }
+
+  /**
+   * Refuse, with the 409 `issue` would answer, a token `ownerId` could not be issued under `name`
+   * now: the name is held by one of their live tokens, or they hold PAT_MAX_ACTIVE_PER_USER of them.
+   * Read only — a token past its expiry holds nothing, as `issue` settles it first — so an approval
+   * can say so before the token is issued, which checks it again.
+   */
+  async assertIssuable(ownerId: string, name: string): Promise<void> {
+    if (await this.nameHeld(ownerId, name)) throw nameInUse(name);
+    if ((await this.prisma.personalAccessToken.count({ where: liveTokensOf(ownerId) })) >= PAT_MAX_ACTIVE_PER_USER) {
+      throw limitReached();
+    }
+  }
+
+  /** Whether one of `ownerId`'s live tokens is named `name`. */
+  async nameHeld(ownerId: string, name: string): Promise<boolean> {
+    return (await this.prisma.personalAccessToken.count({ where: { ...liveTokensOf(ownerId), name } })) > 0;
   }
 
   /**
    * Resolve a presented token to its grant, or null. Null alike for a token that does not exist,
    * was revoked or has expired (`expires_at` NULL never does): which one it was is not the caller's
    * to learn (§6.1). The user is there whenever the row is — the row cascades away with its user.
+   * A live token of an account an administrator disabled is refused 403 ACCOUNT_DISABLED
+   * (docs/google-sign-in-design.md §5.5), as JwtAuthGuard's view of the disabled accounts has it, and
+   * its use is not recorded: the token is kept, and works again once the account is enabled.
    *
    * Recording the use is not awaited: it must never make a valid request fail or wait on a write.
    */
@@ -161,6 +209,7 @@ export class PatService {
     const now = new Date();
     if (!row || row.revokedAt) return null;
     if (row.expiresAt && row.expiresAt.getTime() <= now.getTime()) return null;
+    if (this.disabled?.has(row.ownerId)) throw accountDisabled();
     if (!row.lastUsedAt || now.getTime() - row.lastUsedAt.getTime() >= LAST_USED_THROTTLE_MS) {
       void this.recordUse(row.id, now, seen).catch(() => undefined);
     }
@@ -171,6 +220,67 @@ export class PatService {
       scopes: row.scopes,
       workspaceIds: row.workspaceIds,
     };
+  }
+
+  /**
+   * The workspace each of these tasks (the one it is assigned to) or sessions sits in, null for none.
+   * Only the user's own: an id they do not have is absent. JwtAuthGuard asks it of every task and
+   * session a token confined to workspaces names (§6.3).
+   */
+  async workspacesOf(ownerId: string, kind: 'task' | 'session', ids: readonly string[]): Promise<Map<string, string | null>> {
+    if (kind === 'task') {
+      const tasks = await this.prisma.task.findMany({
+        where: { id: { in: [...ids] }, ownerId },
+        select: { id: true, assigneeId: true },
+      });
+      return new Map(tasks.map((task) => [task.id, task.assigneeId]));
+    }
+    const sessions = await this.prisma.session.findMany({
+      where: { id: { in: [...ids] }, ownerId },
+      select: { id: true, workspaceId: true },
+    });
+    return new Map(sessions.map((session) => [session.id, session.workspaceId]));
+  }
+
+  /**
+   * Every token `ownerId` has issued, newest first, as their own list shows them and an
+   * administrator's does (§9, §11.4): everything but the hash — the token itself is never kept —
+   * where each stands, and the names of the workspaces a confined one reaches, which an
+   * administrator could not look up. A token past its expiry is EXPIRED whether or not it has been
+   * settled; a workspace that no longer exists is missing from `workspaces`.
+   */
+  async list(ownerId: string) {
+    const rows = await this.prisma.personalAccessToken.findMany({
+      where: { ownerId },
+      select: LISTED,
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    });
+    const confinedTo = [...new Set(rows.flatMap((row) => row.workspaceIds))];
+    const names = new Map(
+      confinedTo.length === 0
+        ? []
+        : (await this.prisma.workspace.findMany({
+            where: { id: { in: confinedTo }, ownerId },
+            select: { id: true, name: true },
+          })).map((workspace) => [workspace.id, workspace.name]),
+    );
+    const now = Date.now();
+    return rows.map((row) => ({
+      ...row,
+      workspaces: row.workspaceIds.flatMap((id) => (names.has(id) ? [{ id, name: names.get(id)! }] : [])),
+      state: stateOf(row, now),
+    }));
+  }
+
+  /**
+   * The token a request was verified against, as `GET /pat/self` describes it (§6.5): its name and
+   * what it was granted. Null when the row is gone — its user deleted since the guard read it.
+   */
+  self(ownerId: string, tokenId: string) {
+    return this.prisma.personalAccessToken.findFirst({
+      where: { id: tokenId, ownerId },
+      select: { id: true, name: true, scopes: true, workspaceIds: true, expiresAt: true },
+    });
   }
 
   /** Revoke at once. Idempotent: revoking a revoked token answers it as it already is. */
@@ -185,6 +295,21 @@ export class PatService {
     });
     if (!row) throw new NotFoundException('access token not found');
     return row;
+  }
+
+  /**
+   * Revoke every token of `ownerId` that still works, for `reason` — a password change that asked
+   * for it (§11.3). Those already past their expiry are settled EXPIRED first, so the reason a token
+   * stopped working stays true. Answers how many this revoked.
+   */
+  async revokeAll(ownerId: string, reason: PatRevokedReason): Promise<number> {
+    const now = new Date();
+    await this.settleExpired(ownerId, now);
+    const revoked = await this.prisma.personalAccessToken.updateMany({
+      where: { ownerId, revokedAt: null },
+      data: { revokedAt: now, revokedReason: reason },
+    });
+    return revoked.count;
   }
 
   /**
@@ -229,7 +354,33 @@ export class PatService {
   }
 }
 
-function parseScopes(scopes: string[]): PatScopeName[] {
+/** A token's name as it is kept: trimmed, not blank, at most PAT_NAME_MAX_LENGTH characters. */
+export function patNameOf(name: string): string {
+  const trimmed = name.trim();
+  if (!trimmed) throw new BadRequestException('a token needs a name');
+  if (trimmed.length > PAT_NAME_MAX_LENGTH) {
+    throw new BadRequestException(`a token name is at most ${PAT_NAME_MAX_LENGTH} characters`);
+  }
+  return trimmed;
+}
+
+/** A user's tokens that still work: not revoked, and not past their expiry. */
+const liveTokensOf = (ownerId: string) =>
+  ({ ownerId, revokedAt: null, OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] }) satisfies Prisma.PersonalAccessTokenWhereInput;
+
+const nameInUse = (name: string) =>
+  new ConflictException({
+    code: 'PAT_NAME_IN_USE',
+    message: `You already have an access token named "${name}" — revoke it or pick another name`,
+  });
+
+const limitReached = () =>
+  new ConflictException({
+    code: 'PAT_LIMIT_REACHED',
+    message: `You already have ${PAT_MAX_ACTIVE_PER_USER} access tokens — revoke one before issuing another`,
+  });
+
+export function parseScopes(scopes: string[]): PatScopeName[] {
   const requested = [...new Set(scopes.map((scope) => scope.trim()).filter(Boolean))];
   if (requested.length === 0) throw new BadRequestException('at least one scope is required');
   const allowed = new Set<string>(PAT_SCOPES);
@@ -240,6 +391,12 @@ function parseScopes(scopes: string[]): PatScopeName[] {
     );
   }
   return requested as PatScopeName[];
+}
+
+function stateOf(row: { expiresAt: Date | null; revokedAt: Date | null; revokedReason: string | null }, now: number): PatState {
+  if (row.revokedReason === 'EXPIRED') return 'EXPIRED';
+  if (row.revokedAt) return 'REVOKED';
+  return row.expiresAt && row.expiresAt.getTime() <= now ? 'EXPIRED' : 'ACTIVE';
 }
 
 function expiryFrom(days: number | null, now: Date): Date | null {

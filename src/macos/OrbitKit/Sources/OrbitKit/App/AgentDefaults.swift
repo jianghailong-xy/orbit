@@ -172,6 +172,11 @@ public enum AgentDefaults {
     /// plane) wins for its slug. Mirrors web's modelOptionsForProvider.
     public static func models(for provider: String, catalog: RunnerModelCatalog?,
                               configured: [ConfiguredProvider]?) -> [ModelOption] {
+        // A key run on OpenCode offers the key's own models, under the OpenCode ids that name the key.
+        if let key = OpenCodeKeys.choiceKey(provider) {
+            return models(for: key, catalog: catalog, configured: configured)
+                .map { ModelOption(id: OpenCodeKeys.model(key, $0.id), name: $0.name) }
+        }
         if let custom = configuredProvider(provider, in: configured) {
             // …except when the vendor IS the runtime CLI's own endpoint (Anthropic for claude,
             // OpenAI for codex): the runner's probe of the installed CLI is more current than any
@@ -217,6 +222,10 @@ public enum AgentDefaults {
     /// defaultModelForProvider.
     public static func defaultModel(for provider: String, catalog: RunnerModelCatalog?,
                                     configured: [ConfiguredProvider]?) -> String {
+        // A key run on OpenCode starts on the key's own default, named for OpenCode.
+        if let key = OpenCodeKeys.choiceKey(provider) {
+            return OpenCodeKeys.model(key, defaultModel(for: key, catalog: catalog, configured: configured))
+        }
         if let custom = configuredProvider(provider, in: configured) {
             // For a vendor the runtime CLI speaks to natively, what that CLI reports as its first
             // model beats the id we shipped in the preset — same precedence as the option list.
@@ -239,6 +248,10 @@ public enum AgentDefaults {
     public static func effectiveDefaultModel(for provider: String, catalog: RunnerModelCatalog?,
                                              configured: [ConfiguredProvider]?,
                                              runtimeDefaults: [String: String]?) -> String {
+        if let key = OpenCodeKeys.choiceKey(provider) {
+            return OpenCodeKeys.model(key, effectiveDefaultModel(for: key, catalog: catalog, configured: configured,
+                                                                 runtimeDefaults: runtimeDefaults))
+        }
         if let custom = configuredProvider(provider, in: configured) {
             // A vendor on the runtime CLI's own endpoint follows what that CLI reports as its
             // default — the same value the built-in engine seeds: the heartbeat-reported default
@@ -269,6 +282,8 @@ public enum AgentDefaults {
                                configured: [ConfiguredProvider]?,
                                runtimeDefaults: [String: String]?) -> String? {
         guard let model else { return nil }
+        // A key's model on OpenCode is OpenCode's selection, which dispatch leaves alone.
+        if OpenCodeKeys.choiceKey(provider) != nil { return model }
         let custom = configuredProvider(provider, in: configured)
         // OpenCode's "you pick" sentinel is a choice, not a stale value. Antigravity's "" is not a
         // pick that outlives anything: it stood in for a catalogue not reported yet, and dispatch
@@ -300,6 +315,8 @@ public enum AgentDefaults {
     /// name, and read under "claude" a Gemini pin would be judged against Claude's models.
     public static func runtime(for provider: String,
                                configured: [ConfiguredProvider]? = nil) -> String {
+        // A key run on OpenCode is run by OpenCode, whichever CLI the key itself borrows.
+        if OpenCodeKeys.choiceKey(provider) != nil { return "opencode" }
         if let custom = configuredProvider(provider, in: configured) {
             return borrowedRuntime(custom)
         }

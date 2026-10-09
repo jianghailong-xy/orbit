@@ -35,13 +35,27 @@ final class AgentsModel {
     /// keys: a new-session draft is what offers pools, and the draft seed resolves a workspace that
     /// runs on one through them.
     private(set) var providerPools: [ProviderPool] = []
+    /// How the pool reads have gone: the Infrastructure page waits for an answer before it says what an
+    /// engine can run on.
+    private(set) var poolsState = ListLoadState()
+    /// The account's own keys (GET /providers/mine), disabled ones included: the Infrastructure page's API
+    /// keys, and what each engine can run on. Read when that page asks, unlike the catalogue above.
+    private(set) var ownKeys: [ConfiguredProvider] = []
+    private(set) var ownKeysState = ListLoadState()
     /// The shared Codex pools this account is in (GET /providers/shared-pools), read into their own
     /// model. A new-session draft offers them beside the account pools (`allPools`), and the
-    /// Providers page lists them on their own — which is why the two are kept apart here.
+    /// Infrastructure page lists them on their own — which is why the two are kept apart here.
     private(set) var sharedPools: [SharedPool] = []
     /// Every pool a new-session draft may offer, in web's order: the shared ones drawn as account
     /// pools whose members are their keys (`SharedPools.asProviderPool`), then this account's own.
     var allPools: [ProviderPool] { SharedPools.asProviderPools(sharedPools) + providerPools }
+    /// The account's own providers as its key list reads them (GET /providers/mine), with the ids and
+    /// endpoints the catalogue above leaves out: what tells a DeepSeek key, and what its balance is
+    /// asked by. Read for Infrastructure's API keys (`loadDeepSeekBalances`).
+    private(set) var personalProviders: [ConfiguredProvider] = []
+    /// Each DeepSeek key's account balance by provider id, as the server last answered — or why it
+    /// didn't. Absent until asked, which a page reads as loading.
+    private(set) var deepSeekBalances: [String: ProviderBalanceReading] = [:]
     /// How the workspace-list fetches have gone: tells a failed fetch from an empty list, and holds
     /// the launch landing open until one succeeds (`LoadFailureLogic`).
     private(set) var loadState = ListLoadState()
@@ -117,11 +131,58 @@ final class AgentsModel {
 
     func agent(_ id: String) -> Agent? { items.first { $0.id == id } }
 
+    // MARK: a DeepSeek key's account balance
+
+    /// The account's own keys read again, and the balance of each DeepSeek key among them: the server's
+    /// last read of it, which the providers holding one key share. Read side by side, so a key whose
+    /// read is slow holds up no other key's.
+    func loadDeepSeekBalances() async {
+        guard let mine = try? await api.personalProviders() else { return }
+        personalProviders = mine
+        let ids = mine.filter(DeepSeekBalance.applies(to:)).compactMap(\.providerID)
+        await withTaskGroup(of: Void.self) { group in
+            for id in ids { group.addTask { await self.readBalance(id, refresh: false) } }
+        }
+    }
+
+    /// One key's balance asked of DeepSeek again (the server lets that through once per 10 s for a key),
+    /// and read again for the other providers holding the same key, which share it.
+    func refreshDeepSeekBalance(_ id: String) async {
+        await readBalance(id, refresh: true)
+        guard case .answered(let answer)? = deepSeekBalances[id] else { return }
+        for sibling in answer.sharedWith ?? [] { await readBalance(sibling.id, refresh: false) }
+    }
+
+    private func readBalance(_ id: String, refresh: Bool) async {
+        do {
+            deepSeekBalances[id] = .answered(try await api.providerBalance(id, refresh: refresh))
+        } catch {
+            deepSeekBalances[id] = .unreachable(APIClient.failureReason(error))
+        }
+    }
+
     // MARK: a Codex pool of one's own — its ChatGPT account (migration 0323)
 
     /// The pools read again: an account went in or out, or a pool went.
     func reloadPools() async {
-        if let pools = try? await api.providerPools() { providerPools = pools }
+        poolsState.begin()
+        do {
+            providerPools = try await api.providerPools()
+            poolsState.succeed()
+        } catch {
+            poolsState.fail()
+        }
+    }
+
+    /// Best-effort like the pools: a failed read keeps the last good list.
+    func loadOwnKeys() async {
+        ownKeysState.begin()
+        do {
+            ownKeys = try await api.personalProviders()
+            ownKeysState.succeed()
+        } catch {
+            ownKeysState.fail()
+        }
     }
 
     func pausePoolMember(_ pool: ProviderPool, member: PoolMember, durationMinutes: Int?) async -> String? {
@@ -183,7 +244,7 @@ final class AgentsModel {
                 configuredProviders = providers
                 configuredProvidersLoaded = true
             }
-            if let pools = try? await api.providerPools() { providerPools = pools }
+            await reloadPools()
             if let shared = try? await api.sharedPools() { sharedPools = shared }
             loadState.succeed()
         } catch {
@@ -192,15 +253,16 @@ final class AgentsModel {
         }
     }
 
-    /// Take what a cold launch restores (`AppModel.restoreLaunchSnapshot`): the workspace list and
-    /// its runner labels as the previous run had them, with the list pointed at the Open sessions of
-    /// the workspace the launch lands on — the app's Open snapshot then fills its rows before the
-    /// first frame. `loadState` is left alone: none of this is an answer from the server, and
-    /// `load()` replaces it all.
-    func adoptLaunchSnapshot(_ snapshot: LaunchSnapshot, showing agentID: String?) {
-        items = snapshot.agents
-        runnerNames = snapshot.runnerNames
-        runnerOrder = snapshot.runnerOrder
+    /// Take what a cold launch restores (`AppModel.adoptLaunchSnapshot`): the workspace list and its
+    /// runner labels as the previous run had them, with the list pointed at the Open sessions of the
+    /// workspace the launch lands on — the app's Open snapshot then fills its rows before the first
+    /// frame. `loadState` is left alone: none of this is an answer from the server, and `load()`
+    /// replaces it all. It arrives as the snapshot's fill-in, which is empty of workspaces once this
+    /// model's own fetch has answered (`LaunchSnapshot.fillIn`) — so this is never the older list.
+    func adoptLaunchSnapshot(_ workspaces: LaunchSnapshotFillIn.Workspaces, showing agentID: String?) {
+        items = workspaces.items
+        runnerNames = workspaces.runnerNames
+        runnerOrder = workspaces.runnerOrder
         if let agentID { lastSessionQuery = (agentID, .open) }
     }
 

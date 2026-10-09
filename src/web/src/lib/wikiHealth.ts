@@ -1,4 +1,4 @@
-import type { WikiMaintenanceHealth } from '@orbit/shared';
+import type { WikiMaintenanceHealth, WikiSpaceHealth } from '@orbit/shared';
 import { wikiCount } from './wikiArticles';
 import { WIKI_VIEW_RUN } from './wikiReviewMode';
 
@@ -27,6 +27,19 @@ export const wikiLastSuccess = (ago: string): string => `last success ${ago}`;
 export const wikiMaintenanceFailed = (count: number): string =>
   count === 1 ? 'Maintenance failed' : `Maintenance failed ${count} times`;
 
+/**
+ * Why the server's runs do not move, said after the maintenance part while the server executes the account's
+ * wiki (design §2.2, mock 35 ⑥; contract `maintenance.health.serverReasons`): one of them, the first that holds in
+ * this order — the worker, the model's configuration, its key, its reachability, then the runner the repository is
+ * read through. Amber is what comes back by itself; red is what somebody has to set right.
+ */
+export const WIKI_REASON_WORKER = 'wiki worker not running';
+export const WIKI_REASON_UNCONFIGURED = 'System model not configured';
+export const WIKI_REASON_KEY_REFUSED = 'System model refused the key';
+export const WIKI_REASON_UNREACHABLE = 'System model unreachable';
+export const WIKI_REASON_RUNNER_OFFLINE = 'Waiting for the runner to come online';
+export const WIKI_REASON_RUNNER_UPGRADE = 'Upgrade the runner to read the repository';
+
 /** One part of the line: its words, how it is coloured and marked, and where it leads when it is a link. */
 export interface WikiStatusPart {
   text: string;
@@ -34,7 +47,7 @@ export interface WikiStatusPart {
   tone: 'plain' | 'muted' | 'warn' | 'error';
   /** check: a green ✓ after it; dot: a coloured dot before it; spin: a spinner before it. */
   mark: 'none' | 'check' | 'dot' | 'spin';
-  /** settings: the space's Wiki settings; run: the session of the run that ended last. */
+  /** settings: the space's Wiki settings; run: the run that ended last — its session, or its row on Activity. */
   link: 'none' | 'settings' | 'run';
   strong: boolean;
 }
@@ -98,7 +111,7 @@ export function wikiMaintenanceParts(health: WikiMaintenanceHealth, now: number)
       const parts = [part(wikiMaintenanceFailed(health.consecutiveFailures), { tone: 'error', mark: 'dot', strong: true })];
       if (health.lastOkAt) parts.push(part(wikiLastSuccess(wikiAgo(health.lastOkAt, now))));
       parts.push(catchUp);
-      if (health.lastRun?.sessionId) parts.push(part(WIKI_VIEW_RUN, { link: 'run' }));
+      if (health.lastRun?.sessionId || health.lastRun?.jobId) parts.push(part(WIKI_VIEW_RUN, { link: 'run' }));
       return parts;
     }
     case 'ok':
@@ -108,6 +121,39 @@ export function wikiMaintenanceParts(health: WikiMaintenanceHealth, now: number)
         catchUp,
       ];
   }
+}
+
+/** The server's reason, when there is one to say (see `WIKI_REASON_*`); null under runner and while nothing holds. */
+export function wikiServerReason(health: Pick<WikiSpaceHealth, 'executor' | 'systemModel' | 'repo' | 'maintenance'>): WikiStatusPart | null {
+  if (!health.executor?.serverExecutes) return null;
+  const reason = (text: string, tone: 'warn' | 'error') => part(text, { tone, mark: 'dot', strong: true });
+  switch (health.systemModel?.state) {
+    case 'worker_not_running':
+      return reason(WIKI_REASON_WORKER, 'error');
+    case 'unconfigured':
+      return reason(WIKI_REASON_UNCONFIGURED, 'error');
+    case 'auth_failed':
+      return reason(WIKI_REASON_KEY_REFUSED, 'error');
+    case 'down':
+      return reason(WIKI_REASON_UNREACHABLE, 'warn');
+    default:
+      break;
+  }
+  // The runner matters to a space whose maintenance reads the repository, or that has a read of it waiting.
+  const repo = health.repo;
+  if (!repo || !(health.maintenance.enabled || repo.pending > 0)) return null;
+  if (repo.look === 'runner_offline') return reason(WIKI_REASON_RUNNER_OFFLINE, 'warn');
+  if (repo.look === 'runner_upgrade') return reason(WIKI_REASON_RUNNER_UPGRADE, 'warn');
+  return null;
+}
+
+/** The status line's whole maintenance part: the look's parts, and the server's reason before their links. */
+export function wikiStatusParts(health: WikiSpaceHealth, now: number): WikiStatusPart[] {
+  const parts = wikiMaintenanceParts(health.maintenance, now);
+  const reason = wikiServerReason(health);
+  if (!reason) return parts;
+  const link = parts.findIndex((one) => one.link !== 'none');
+  return link < 0 ? [...parts, reason] : [...parts.slice(0, link), reason, ...parts.slice(link)];
 }
 
 /** The parts as one line of text: `●` before a dot, `✓` after a check, ` · ` between. */

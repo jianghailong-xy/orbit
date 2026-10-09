@@ -20,9 +20,10 @@ var antigravityGoogleURLRe = regexp.MustCompile(`\x1b\]8;[^;\x07\x1b]*;(https://
 const antigravityGoogleInvalidCodeMarker = `oauth2: "invalid_grant" "Malformed auth code."`
 
 // A fresh OAuth flow must not reuse the old token. Preserve it privately so a cancelled or failed
-// replacement leaves the previous login intact; commit only after the new token passes /usage.
-func preserveAntigravityGoogleLogin() (func(bool), error) {
-	path := antigravityGoogleTokenPath()
+// replacement leaves the previous login intact; commit only after the new token passes /usage. dir is
+// the Gemini directory the sign-in writes: Default's, or an added account's.
+func preserveAntigravityGoogleLogin(dir string) (func(bool), error) {
+	path := antigravityTokenFile(dir)
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		return func(bool) {}, nil
 	} else if err != nil {
@@ -194,9 +195,9 @@ func (r *loginRelay) pumpAntigravityGoogle(run *loginRun, cmd *exec.Cmd, report 
 			return
 		}
 		if submitted && ready {
-			if stat, err := os.Stat(antigravityGoogleTokenPath()); err == nil && stat.Mode().IsRegular() {
+			if stat, err := os.Stat(antigravityTokenFile(run.googleDir)); err == nil && stat.Mode().IsRegular() {
 				ctx, cancel := context.WithTimeout(run.ctx, 10*time.Second)
-				probe := probeAntigravityGoogle(ctx, run.binPath, nil)
+				probe := probeAntigravityGoogle(ctx, run.binPath, envWithValue(os.Environ(), antigravityAccountDirVar, run.googleDir))
 				cancel()
 				if probe.auth == authYes && run.ctx.Err() == nil {
 					run.signedIn = true
@@ -215,6 +216,13 @@ func (r *loginRelay) pumpAntigravityGoogle(run *loginRun, cmd *exec.Cmd, report 
 		select {
 		case <-waited:
 			exited = true
+			// agy's exit can be seen before its last output has come through the PTY. Decide on all
+			// of it, but don't wait long for a child of agy that still holds the terminal open.
+			select {
+			case <-run.googleCopied:
+			case <-run.ctx.Done():
+			case <-time.After(2 * time.Second):
+			}
 		case <-run.ctx.Done():
 		case <-tick.C:
 		}

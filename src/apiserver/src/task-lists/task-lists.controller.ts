@@ -28,13 +28,13 @@ import { TaskListsService } from './task-lists.service';
 export class TaskListsController {
   constructor(private readonly taskLists: TaskListsService) {}
 
-  @PatScope('tasks:write')
+  @PatScope('tasks:write', { workspaceConfinable: false })
   @Post()
   create(@CurrentUser() user: AuthUser, @Body() dto: CreateTaskListDto) {
     return this.taskLists.create(user.userId, dto);
   }
 
-  @PatScope('tasks:read')
+  @PatScope('tasks:read', { workspaceConfinable: false })
   @Get()
   list(@CurrentUser() user: AuthUser) {
     return this.taskLists.list(user.userId);
@@ -44,7 +44,7 @@ export class TaskListsController {
    * One list. `?tasks=none` drops the embedded tasks — see `getHeader`, and use
    * `GET /tasks/page?listId=…` to read the contents a page at a time.
    */
-  @PatScope('tasks:read')
+  @PatScope('tasks:read', { workspaceConfinable: false })
   @Get(':id')
   get(
     @CurrentUser() user: AuthUser,
@@ -60,7 +60,7 @@ export class TaskListsController {
       : this.taskLists.get(user.userId, id);
   }
 
-  @PatScope('tasks:write')
+  @PatScope('tasks:write', { workspaceConfinable: false })
   @Patch(':id')
   update(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string, @Body() dto: UpdateTaskListDto) {
     return this.taskLists.update(user.userId, id, dto);
@@ -72,7 +72,7 @@ export class TaskListsController {
    * POST because it may create a session, and idempotent in the way that matters: calling it
    * twice returns the same conversation rather than opening a second one.
    */
-  @PatScope('tasks:write')
+  @PatScope('tasks:write', { workspaceConfinable: false })
   @Post(':id/console')
   openConsole(
     @CurrentUser() user: AuthUser,
@@ -83,7 +83,7 @@ export class TaskListsController {
   }
 
   /** This list's dispatch-policy history, newest first. */
-  @PatScope('tasks:read')
+  @PatScope('tasks:read', { workspaceConfinable: false })
   @Get(':id/revisions')
   revisions(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.taskLists.revisions(user.userId, id);
@@ -93,7 +93,7 @@ export class TaskListsController {
    * Put the policy back to a recorded revision. POST rather than PUT because the restore is
    * itself recorded as a new revision — it appends to the history, it does not rewind it.
    */
-  @PatScope('tasks:write')
+  @PatScope('tasks:write', { workspaceConfinable: false })
   @Post(':id/revisions/:version/restore')
   restoreRevision(
     @CurrentUser() user: AuthUser,
@@ -104,7 +104,7 @@ export class TaskListsController {
     return this.taskLists.restoreRevision(user.userId, id, version, dto?.note);
   }
 
-  @PatScope('tasks:write')
+  @PatScope('tasks:write', { workspaceConfinable: false })
   @Delete(':id')
   remove(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.taskLists.remove(user.userId, id);

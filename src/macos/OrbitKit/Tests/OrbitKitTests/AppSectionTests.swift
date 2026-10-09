@@ -15,13 +15,23 @@ final class AppSectionTests: XCTestCase {
     }
 
     func testNavOrder() {
-        // Runners first, then Agents, then Projects just before the Tasks they are for (where Skills
-        // used to sit), then the Wiki — what the work learned — then Following (watches), then
+        // Infrastructure first, then Agents, then Projects just before the Tasks they are for (where
+        // Skills used to sit), then the Wiki — what the work learned — then Following (watches), then
         // Settings; Admin last for admins.
         XCTAssertEqual(AppSection.visible(isAdmin: false),
                        [.runners, .agents, .projects, .tasks, .wiki, .following, .settings])
         XCTAssertEqual(AppSection.visible(isAdmin: true),
                        [.runners, .agents, .projects, .tasks, .wiki, .following, .settings, .admin])
+    }
+
+    /// macOS's source list draws no Wiki row for an account the server has the wiki off for
+    /// (WIKI_DISABLED), as the drawer and the web sidebar draw none; the rest keep their places.
+    func testTheWikiRowFollowsWhetherTheAccountHasTheWiki() {
+        XCTAssertEqual(AppSection.visible(isAdmin: false, wiki: false),
+                       [.runners, .agents, .projects, .tasks, .following, .settings])
+        XCTAssertEqual(AppSection.visible(isAdmin: true, wiki: false),
+                       [.runners, .agents, .projects, .tasks, .following, .settings, .admin])
+        XCTAssertEqual(AppSection.visible(isAdmin: true, wiki: true), AppSection.visible(isAdmin: true))
     }
 
     /// The drawer — on iPhone, and as the iPad's sidebar — leads with the work — projects and
@@ -37,6 +47,17 @@ final class AppSectionTests: XCTestCase {
         XCTAssertEqual(AppSection.wiki.title, "Wiki")
         XCTAssertEqual(AppSection.wiki.systemImage, "book.closed")
         XCTAssertFalse(AppSection.wiki.adminOnly)
+    }
+
+    /// The machines, the account pools and the API keys are one page, as the web's /infrastructure is
+    /// since its Runners and Providers merged: macOS's sidebar row says so, and so does Settings' row on
+    /// a phone, which opens the same page.
+    func testTheRunnersSectionIsInfrastructure() {
+        XCTAssertEqual(AppSection.runners.title, "Infrastructure")
+        XCTAssertEqual(AppSection.runners.systemImage, "desktopcomputer")
+        XCTAssertEqual(SettingsHome.title(.infrastructure), AppSection.runners.title)
+        XCTAssertFalse(AppSection.allCases.map(\.title).contains("Runners"))
+        XCTAssertFalse(AppSection.allCases.map(\.title).contains("Providers"))
     }
 
     func testEverySectionHasTitleAndIcon() {

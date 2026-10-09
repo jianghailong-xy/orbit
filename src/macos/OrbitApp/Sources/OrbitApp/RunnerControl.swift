@@ -126,6 +126,30 @@ final class RunnerControl {
         }
     }
 
+    /// Launch-time upkeep for a Mac an older app enrolled. That app bundled the runner, so its
+    /// LaunchAgent set ORBIT_NO_SELFUPDATE and the app put its own runner back whenever the
+    /// versions differed. This rewrites the plist from today's template, keeping its binary,
+    /// ORBIT_HOME, HOME, PATH and log (`LaunchdPlist.migrated`), and reloads the service if it's
+    /// loaded. The binary isn't replaced: the runner updates it at its next check. No-op when no
+    /// service is installed, once rewritten, and for the CLI's plist. A stopped service picks the
+    /// new plist up at its next start.
+    func migrateLaunchAgent() async {
+        let installed = try? String(contentsOf: paths.plistFile, encoding: .utf8)   // nil: no service
+        guard let plist = LaunchdPlist.migrated(from: installed) else { return }
+        do { try Data(plist.utf8).write(to: paths.plistFile) } catch { return }
+        let list = await Self.launchctl(Launchctl.list())
+        guard Launchctl.parseList(list.output).loaded else { return }
+        let plistPath = paths.plistFile.path
+        _ = await Self.launchctl(Launchctl.bootout(uid: uid, plistPath: plistPath))
+        // bootout can return while the runner is still draining, and bootstrap fails until it has
+        // exited (launchd SIGKILLs it after 20s by default), so keep trying a little longer.
+        for _ in 0..<30 {
+            if await Self.launchctl(Launchctl.bootstrap(uid: uid, plistPath: plistPath)).status == 0 { break }
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+        }
+        await refresh()
+    }
+
     /// One-app enrollment: start the device flow, self-approve (we're the signed-in user), poll
     /// for the credential, write config.json, then download, install + start the runner service —
     /// the whole "set up a runner on this Mac" with no Terminal.

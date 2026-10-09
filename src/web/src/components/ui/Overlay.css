@@ -1,7 +1,10 @@
 .orbit-overlay-backdrop { position: fixed; inset: 0; width: 100vw; background: rgba(0, 0, 0, .45); }
 .orbit-overlay[hidden], .orbit-overlay-viewport[hidden], .orbit-overlay-backdrop[hidden] { display: none; }
 .orbit-overlay-viewport { position: fixed; inset: 0; width: 100vw; overflow: auto; overscroll-behavior: contain; }
-.orbit-dialog-viewport, .orbit-confirm-viewport { padding: 100px 16px 24px; }
+/* As the replaced dialog: 100px down, at most 100vw less 16px a side, centred in the viewport's box;
+   the scroll ends at the dialog's bottom edge (its margin on a narrow screen). */
+.orbit-dialog-viewport, .orbit-confirm-viewport { padding: 100px 0 0; }
+.orbit-dialog, .orbit-confirm { max-width: calc(100vw - 32px); }
 .orbit-overlay {
   position: relative; box-sizing: border-box; margin: 0 auto;
   max-width: 100%; color: var(--text-1); background: var(--orbit-bg-elevated);
@@ -37,9 +40,13 @@
 .orbit-drawer > .orbit-overlay-footer { display: block; flex: none; margin: 0; padding: 8px 16px; border-top: 1px solid var(--orbit-border-split); }
 .orbit-confirm > .orbit-overlay-header, .orbit-confirm > .orbit-overlay-body { padding-left: 34px; }
 .orbit-confirm-icon { position: absolute; left: 24px; top: 21px; font-size: 22px; color: var(--orbit-badge-warning); }
+.orbit-confirm-icon-success { color: var(--orbit-badge-success); }
 .orbit-confirm-error { margin-top: 8px; color: var(--error); }
+/* On a narrow screen 8px a side and 8px more above: the widths are viewport widths, so when the
+   viewport's box scrolls (a dialog taller than the screen, where scrollbars take room) the dialog keeps
+   its width and the scrollbar takes half of each side's 8px. */
 @media (max-width: 767px) {
-  .orbit-dialog-viewport, .orbit-confirm-viewport { padding: 108px 8px 32px; }
+  .orbit-dialog, .orbit-confirm { max-width: calc(100vw - 16px); margin: 8px auto 0; }
 }
 @media (prefers-reduced-motion: no-preference) {
   .orbit-overlay-backdrop { transition: opacity .2s; }

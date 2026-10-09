@@ -26,6 +26,14 @@ import type { Runner } from './TasksSidePanel';
  * the same door (§8 criterion 22): a re-send that then failed before its echo is re-sent by the next
  * press, and a press whose response was lost is answered with the turn it already queued — both the
  * server's to tell apart, by the failure the session is stopped on.
+ *
+ * A card that would press into that door may not promise from its own window. The window cannot see
+ * turn attribution, or whether a message was already answered, so on 2026-10-07 a card quoting the
+ * window's bubble answered its press with "this session has no message for a retry to re-send"
+ * (session 34b78GE7Ud2aXWq8H1JsU: a weekly limit had killed a turn nobody sent, and the chooser
+ * refuses to walk past it to the message before). So whenever the words are not the reader's own —
+ * or there are none — the card asks the server first, and renders the server's answer: its words, or
+ * nothing, or `nothingToResend`, which is the Continue card.
  */
 
 vi.mock('../api', async (importOriginal) => {
@@ -173,6 +181,11 @@ describe('the failure card’s Retry, for another session’s message', { timeou
   /** What this page sent through the owner's own doors: a turn, or a revive. */
   const ownersSends = () => [...vi.mocked(sendTurn).mock.calls, ...vi.mocked(resumeSession).mock.calls];
 
+  /** The server's answer for a window whose last bubble is the worker's: the same words, and the
+   *  card that says whose they are. The card asks for this instead of quoting the bubble. */
+  const serverAnswersWithTheirs = () =>
+    vi.mocked(getSessionRetryMessage).mockResolvedValue({ text: WORDS, sessionMessage: FROM_WORKER });
+
   beforeEach(() => {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
     vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => {}, removeItem: () => {} });
@@ -247,6 +260,7 @@ describe('the failure card’s Retry, for another session’s message', { timeou
   });
 
   it('the provider-failure card asks the server to re-send it, not the owner’s send', async () => {
+    serverAnswersWithTheirs();
     await mount(theirs(RATE_LIMITED), '.chat-quota');
     await press('.chat-quota-retry');
 
@@ -258,12 +272,42 @@ describe('the failure card’s Retry, for another session’s message', { timeou
   });
 
   it('the sign-in card does the same', async () => {
+    serverAnswersWithTheirs();
     await mount(theirs(SIGNED_OUT), '.chat-authfix');
     await press('.chat-authfix-retry');
 
     await vi.waitFor(() => expect(vi.mocked(resendSessionRetryMessage)).toHaveBeenCalledTimes(1));
     expect(vi.mocked(resendSessionRetryMessage).mock.calls[0][0]).toBe(SESSION_PUBLIC);
     expect(ownersSends()).toEqual([]);
+    // And it asked before it promised: the bubble it holds is the worker's, so the press is the
+    // server's own re-send, and the card renders the server's answer rather than the bubble.
+    expect(vi.mocked(getSessionRetryMessage)).toHaveBeenCalled();
+  });
+
+  // What the window cannot know, and the read that made a press into a toast: the chooser refuses to
+  // walk past a turn nobody sent to the message before it, and the window has no way to see that —
+  // it just finds the last message with words. So a card whose words are somebody else's asks first,
+  // and when the answer is "nothing to re-send" it offers the continue instead of a dead Retry.
+  it('asks before promising, and continues instead when the server says there is nothing to re-send', async () => {
+    vi.mocked(getSessionRetryMessage).mockResolvedValue({ text: '', nothingToResend: true });
+    await mount(theirs(RATE_LIMITED), '.chat-quota');
+
+    await act(async () => {
+      await vi.waitFor(() => expect(vi.mocked(getSessionRetryMessage)).toHaveBeenCalled(),
+        { timeout: 20_000, interval: 20 });
+    });
+    await act(async () => {
+      await vi.waitFor(() => expect(button('.chat-quota-retry')).not.toBeNull(),
+        { timeout: 20_000, interval: 20 });
+    });
+    expect(button('.chat-quota-retry')!.textContent).toBe('Continue');
+    expect(mounted().textContent).toContain('Nothing to re-send');
+    expect(mounted().textContent).toContain('Sends “Continue where you left off.”');
+
+    await press('.chat-quota-retry');
+    await vi.waitFor(() => expect(ownersSends().length).toBeGreaterThan(0));
+    expect(vi.mocked(resendSessionRetryMessage),
+      'the page asked the server to re-send what the server had just said it could not').not.toHaveBeenCalled();
   });
 
   it('a window that holds no message learns whose words they are from the server’s answer', async () => {
@@ -283,6 +327,7 @@ describe('the failure card’s Retry, for another session’s message', { timeou
     // Never settles: this is the state the criterion is about — the button's request is out and no
     // answer has come back, so a second press must not make a second one (§2.1, criterion 19).
     vi.mocked(resendSessionRetryMessage).mockImplementation(() => new Promise(() => {}));
+    serverAnswersWithTheirs();
     await mount(theirs(RATE_LIMITED), '.chat-quota');
     await press('.chat-quota-retry');
     await vi.waitFor(() => expect(vi.mocked(resendSessionRetryMessage)).toHaveBeenCalledTimes(1));
@@ -309,6 +354,7 @@ describe('the failure card’s Retry, for another session’s message', { timeou
 
   it('a re-send that failed before its echo is offered again, and the next press asks the server again', async () => {
     vi.mocked(resendSessionRetryMessage).mockResolvedValueOnce({ turnId: 'resent-turn', placement: 'accepted' });
+    serverAnswersWithTheirs();
     await mount(theirs(RATE_LIMITED), '.chat-quota');
     await press('.chat-quota-retry');
     await vi.waitFor(() => expect(vi.mocked(resendSessionRetryMessage)).toHaveBeenCalledTimes(1));
@@ -341,6 +387,7 @@ describe('the failure card’s Retry, for another session’s message', { timeou
     // The re-send went out, and its response never came back — what the server keys on is the failure,
     // so asking again is safe, and it answers with the turn the first press queued.
     vi.mocked(resendSessionRetryMessage).mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    serverAnswersWithTheirs();
     await mount(theirs(RATE_LIMITED), '.chat-quota');
     await press('.chat-quota-retry');
     await vi.waitFor(() => expect(vi.mocked(resendSessionRetryMessage)).toHaveBeenCalledTimes(1));

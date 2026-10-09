@@ -3,7 +3,7 @@ import { Popover } from 'antd';
 import { Link } from 'react-router-dom';
 import { encodeId } from '../lib/idCodec';
 import { PROVIDER_GLYPHS } from '../lib/providerGlyphs';
-import { engineProviderDetail, type EngineChoice, type ProviderChoice } from '../lib/sessionProviderChoices';
+import type { EngineChoice, ProviderChoice } from '../lib/sessionProviderChoices';
 
 /** The brand mark. Same artwork and tile as /providers, sized up: at hero size it carries a soft
  *  shadow in its own brand colour, which a 20px row chip can't. */
@@ -52,7 +52,7 @@ function hexAlpha(hex: string, alpha: number): string {
  * opens on click, and the pick is remembered on the workspace, so the common path is: read it, ignore
  * it, start typing. Which provider of the engine the session spends — its own sign-in, an account
  * pool, a key that borrows it, and which account — is picked in the composer's Provider menu, as it
- * is on a session that is already running; the card only says it ("via DeepSeek").
+ * is on a session that is already running, and only there: the card names the engine alone.
  */
 export function NewSessionProviderHero({
   current,
@@ -69,8 +69,8 @@ export function NewSessionProviderHero({
   engines: EngineChoice[];
   /** An engine was picked: the provider of it to start on (`EngineChoice.provider`). */
   onPick: (provider: string) => void;
-  /** The machine these engines live on — the sign-in link has to name it, since the Providers
-   *  page lists every runner and only this one's row is the answer. */
+  /** The machine these engines live on — the sign-in link has to name it, since Infrastructure
+   *  lists every machine and only this one's row is the answer. */
   runnerId: string;
   /** A live/locked session has no choice to make; the hero then reads as a label. */
   disabled?: boolean;
@@ -84,16 +84,14 @@ export function NewSessionProviderHero({
   const [open, setOpen] = useState(false);
   const displayed = engines.some((engine) => engine.slug === current.slug) ? engines : [current, ...engines];
 
-  // Naming the runner and the engine, so the Providers page can unfold that machine's card and
+  // Naming the runner and the engine, so Infrastructure can unfold that machine's card and
   // point at the row — where its Install and Sign in buttons are — instead of leaving the user to
   // find it among every runner they own. A problem that is not this machine's (an account pool none
   // of whose accounts can run) names its own page instead.
   const fixLink = (choice: Pick<ProviderChoice, 'slug' | 'fixEngine' | 'fixHref'>) =>
-    choice.fixHref ?? `/providers?runner=${encodeId(runnerId)}&engine=${choice.fixEngine ?? choice.slug}`;
+    choice.fixHref ?? `/infrastructure?runner=${encodeId(runnerId)}&engine=${choice.fixEngine ?? choice.slug}`;
   const onRunner = (choice: Pick<ProviderChoice, 'fixHref'>) => (choice.fixHref ? '' : ' on this runner');
   const modelLabel = currentModelLabel ?? current.provider.modelLabel;
-  const currentDetail = engineProviderDetail(current);
-  const detail = (text?: string) => text && <small className="np-label-detail">{text}</small>;
 
   // An engine none of whose providers this runner can run can't start a session, so the row doesn't
   // pick it — it goes where the fix lives instead. The identity greys out (it isn't usable yet) while
@@ -105,7 +103,7 @@ export function NewSessionProviderHero({
         key={engine.slug}
         to={fixLink(engine.provider)}
         className="np-row np-unavailable"
-        title={`${engine.label}: ${engine.unavailable}${onRunner(engine.provider)} — fix it on the Providers page`}
+        title={`${engine.label}: ${engine.unavailable}${onRunner(engine.provider)} — fix it in Infrastructure`}
         onClick={() => setOpen(false)}
       >
         <BrandMark choice={engine} size={20} />
@@ -123,16 +121,16 @@ export function NewSessionProviderHero({
         }}
       >
         <BrandMark choice={engine} size={20} />
-        <span className="np-row-name">{engine.label}{detail(engineProviderDetail(engine))}</span>
+        <span className="np-row-name">{engine.label}</span>
         <span className="np-row-model">{engine.provider.modelLabel}</span>
       </button>
     );
 
   const list = (
-    <div className={`np-list${displayed.some((engine) => engineProviderDetail(engine)) ? ' with-details' : ''}`}>
+    <div className="np-list">
       {displayed.map(row)}
       <div className="np-sep" />
-      <Link to="/providers" className="np-row np-connect" onClick={() => setOpen(false)}>
+      <Link to="/infrastructure" className="np-row np-connect" onClick={() => setOpen(false)}>
         <span className="np-plus">+</span>
         <span className="np-row-name">Connect a provider…</span>
       </Link>
@@ -146,12 +144,11 @@ export function NewSessionProviderHero({
       disabled={disabled}
       aria-haspopup="menu"
       aria-expanded={open}
-      aria-label={`Engine: ${current.label}${currentDetail ? ` ${currentDetail}` : ''}`}
+      aria-label={`Engine: ${current.label}`}
     >
       <BrandMark choice={current} size={56} />
       <span className="np-name">
         {current.label}
-        {detail(currentDetail)}
         {!disabled && <span className="np-chev">▾</span>}
       </span>
     </button>
@@ -203,7 +200,7 @@ export function NewSessionProviderHero({
             <span className="np-dot">·</span>
             {modelLabel}
             <span className="np-dot">·</span>
-            <Link to="/providers">Manage</Link>
+            <Link to="/infrastructure">Manage</Link>
           </div>
         ) : (
           <>

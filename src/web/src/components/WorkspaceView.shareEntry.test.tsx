@@ -300,6 +300,7 @@ describe('a shared session in the session list and its conversation', { timeout:
     const rows = drawn(menu);
     expect(rows.slice(rows.indexOf('Complete'))).toEqual([
       'Complete',
+      'Rename…',
       'Move…',
       '─',
       'Copy link',
@@ -346,13 +347,14 @@ describe('a shared session in the session list and its conversation', { timeout:
     const menu = await openHeaderMenu();
     await click(item(menu, 'Share…'), 'Share…');
     await act(async () => {
-      await vi.waitFor(() => expect(document.querySelector('.ant-modal.share-dialog')).not.toBeNull());
+      await vi.waitFor(() => expect(document.querySelector('[role="dialog"].share-dialog')).not.toBeNull());
     });
-    expect(document.querySelector('.ant-modal.share-dialog .ant-modal-title')?.textContent).toBe('Share session');
+    const shareDialog = document.querySelector('[role="dialog"].share-dialog')!;
+    expect(document.getElementById(shareDialog.getAttribute('aria-labelledby') ?? '')?.textContent).toBe('Share session');
     expect(getShareLink).toHaveBeenCalledWith('SESSION', PLAIN_PUBLIC);
     await act(async () => {
       await vi.waitFor(() =>
-        expect(document.querySelector('.ant-modal.share-dialog .share-access-select')?.textContent?.trim()).toBe('Only you'),
+        expect(document.querySelector('[role="dialog"].share-dialog .share-access-select')?.textContent?.trim()).toBe('Only you'),
       );
     });
   });

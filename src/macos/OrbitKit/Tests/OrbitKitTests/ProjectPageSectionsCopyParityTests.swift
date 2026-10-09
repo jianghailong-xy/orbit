@@ -59,7 +59,8 @@ final class ProjectPageSectionsCopyParityTests: XCTestCase {
 
     /// The landing row's words, and the two decisions its clock makes: minutes AND seconds at every
     /// length, and the count in the name slot when more than one job is in flight. The row is the
-    /// one the owner approved on 2026-09-25; both clients draw it from the same three facts.
+    /// one the owner approved on 2026-09-25; both clients draw it from the same three facts. The
+    /// list a press on it opens (docs/mocks/landing-jobs-sheet) says its words the same way.
     func testTheLandingRowsWords() throws {
         let web = try source(Self.panorama)
         for (kind, word) in ProjectPage.integrationJobWords {
@@ -70,11 +71,37 @@ final class ProjectPageSectionsCopyParityTests: XCTestCase {
         }
         // The clock: the same expression on both sides, unit for unit.
         assertSays(web, "return `${Math.floor(whole / 60)}m ${whole % 60}s`;", in: Self.panorama)
-        // The name slot's second answer, so one task's title cannot stand in for several jobs.
-        assertSays(web, "what: jobs > 1 ? `${jobs} jobs` : inFlight.taskTitle,", in: Self.panorama)
+        // The name slot's second answer, so one task's title cannot stand in for several jobs — and
+        // how many of those timed out.
+        assertSays(web, "what: jobs > 1 ? landingJobsCount(jobs, timedOutJobs) : inFlight.taskTitle,",
+                   in: Self.panorama)
+        assertSays(web, "return timedOut > 0 ? `${jobs} jobs · ${timedOut} timed out` : `${jobs} jobs`;",
+                   in: Self.panorama)
+        // A timed-out job's limit, and the list's title.
+        assertSays(web, "return `limit ${Math.round(seconds / 60)}m`;", in: Self.panorama)
+        assertSays(web, "return `${jobs} ${jobs === 1 ? 'job' : 'jobs'} in flight`;", in: Self.panorama)
         for word in ["Elapsed", "Queued for", "Updated just now", "Update unavailable"] {
             assertSays(web, "'\(word)'", in: Self.panorama)
         }
+        for (key, word) in [("TIMED_OUT", ProjectPage.landingTimedOut),
+                            ("NO_REPORT_FOR", ProjectPage.landingNoReportFor),
+                            ("RETRY", ProjectPage.landingRetry),
+                            ("RETRY_FAILED", ProjectPage.landingRetryFailed),
+                            ("NO_PUSH_RECORDED", ProjectPage.landingNoPushRecorded),
+                            ("MAY_HAVE_BEEN_PUSHED", ProjectPage.landingMayHaveBeenPushed),
+                            ("RETRIED_BY_OWNER", ProjectPage.landingRetriedByOwner),
+                            ("RETRIED_BY_COORDINATOR", ProjectPage.landingRetriedByCoordinator)] {
+            assertSays(web, "\(key): '\(word)'", in: Self.panorama)
+        }
+        // A runner that stopped reporting says so — a fact about the REPORTS, worded apart from
+        // `Update unavailable` (the app failing to read the server) and from any timeout (the job's
+        // own verdict, which only the server's `blockingReason` words).
+        assertSays(web, "export const LANDING_NO_REPORT = '\(ProjectPage.landingNoReport)';", in: Self.panorama)
+        assertSays(web, "export const landingNoReportFor = (minutes: number): string => `No report for ${minutes}m`;",
+                   in: Self.panorama)
+        assertSays(web, "export const LANDING_NO_REPORT_YET = '\(ProjectPage.landingNoReportYet)';", in: Self.panorama)
+        assertSays(web, ">\(ProjectPage.landingWaitLabel) <span className=\"project-landing-wait\">", in: Self.panorama)
+        XCTAssertEqual(ProjectPage.landingNoReportFor(11), "No report for 11m")
     }
 
     func testTheCoordinatorCardsWords() throws {
@@ -236,7 +263,8 @@ final class ProjectPageSectionsCopyParityTests: XCTestCase {
         let order = ["<ProjectOpenItems", "<ProjectPanoramaHeader", "<ProjectCoordinatorSection",
                      "<ProjectRunSettings", "<ProjectGoalCard",
                      "<ProjectTasksGraph", "<ProjectBlockersCard", "<ProjectReadyToRun",
-                     "<ProjectAcceptanceCard", "<Field label=\"Instructions\"", "<ProjectTasks projectId"]
+                     "<ProjectAcceptanceCard", "<Field label=\"Instructions\"", "<ProjectTasks projectId",
+                     "<ProjectCrossingsCard projectId"]
         let positions = order.map { web.range(of: $0)?.lowerBound }
         XCTAssertFalse(positions.contains(nil), "the web page lost one of \(order)")
         XCTAssertEqual(positions.compactMap { $0 }, positions.compactMap { $0 }.sorted())

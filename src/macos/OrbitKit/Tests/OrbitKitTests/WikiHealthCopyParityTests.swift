@@ -115,7 +115,11 @@ final class WikiHealthCopyParityTests: XCTestCase {
         let space = WikiSpace(id: shared.space.id, slug: shared.space.slug, title: shared.space.title,
                               rootCommitSha: shared.space.rootCommitSha, pendingOps: shared.space.pendingOps)
         for one in shared.cases {
-            let parts = WikiHealthLogic.parts(one.health.maintenance, now: now)
+            // The whole maintenance part: the look's parts, and — while the server runs the wiki — its reason (P9).
+            let parts = WikiHealthLogic.parts(one.health, now: now)
+            if !one.health.serverExecutes {
+                XCTAssertEqual(parts, WikiHealthLogic.parts(one.health.maintenance, now: now), "\(one.name): runner says the look alone")
+            }
             XCTAssertEqual(parts.map(\.text), one.parts.map(\.text), one.name)
             XCTAssertEqual(parts.map(\.tone.rawValue), one.parts.map(\.tone), "\(one.name): tones")
             XCTAssertEqual(parts.map(\.mark.rawValue), one.parts.map(\.mark), "\(one.name): marks")
@@ -124,8 +128,7 @@ final class WikiHealthCopyParityTests: XCTestCase {
             XCTAssertEqual(WikiHealthLogic.text(parts), one.text, one.name)
             // The whole line under the title: every active entry the read counts — not the entries the
             // home read, which stop at 200 — the anchors, then the maintenance part.
-            let home = WikiHomeContent(space: space, spaces: [space], entries: [], timeline: [],
-                                       proposals: shared.space.pendingOps, health: one.health)
+            let home = WikiHomeContent(space: space, spaces: [space], entries: [], timeline: [], health: one.health)
             XCTAssertEqual(home.statusLine(now: now), one.line, "\(one.name): the line under the title")
             XCTAssertEqual(one.health.entries, shared.entries)
         }
@@ -143,14 +146,14 @@ final class WikiHealthCopyParityTests: XCTestCase {
         let shared = try fixture()
         let now = try now(shared)
         let space = WikiSpace(id: shared.space.id, slug: shared.space.slug, rootCommitSha: shared.space.rootCommitSha)
-        let bare = WikiHomeContent(space: space, spaces: [space], entries: [], timeline: [], proposals: 0)
+        let bare = WikiHomeContent(space: space, spaces: [space], entries: [], timeline: [])
         XCTAssertEqual(bare.statusLine(now: now), "0 entries · Anchors verified at 1588c3b")
         let data = Data(#"{"spaceId":"s","entries":3,"maintenance":{"look":"paused","enabled":true}}"#.utf8)
         let later = try JSONDecoder().decode(WikiSpaceHealth.self, from: data)
         XCTAssertEqual(later.maintenance.look, .unknown)
         XCTAssertEqual(later.maintenance.backlog, 0, "a key a server one release apart left out reads as its default")
         XCTAssertEqual(WikiHealthLogic.parts(later.maintenance, now: now), [])
-        let home = WikiHomeContent(space: space, spaces: [space], entries: [], timeline: [], proposals: 0, health: later)
+        let home = WikiHomeContent(space: space, spaces: [space], entries: [], timeline: [], health: later)
         XCTAssertEqual(home.statusLine(now: now), "3 entries · Anchors verified at 1588c3b")
     }
 
@@ -254,32 +257,38 @@ final class WikiHealthCopyParityTests: XCTestCase {
     // MARK: the pages
 
     /// The web's row and the native line put the same parts in the same order, and lead Set up and View run
-    /// to the same places: the space's Wiki settings, and the session of the run that ended last.
+    /// to the same places: the space's Wiki settings, and the session of the run that ended last — or, for a
+    /// run the server's job made, which has no session, that run's call log on Activity.
     func testBothPagesDrawTheLineInOneOrderWithTheSameLinks() throws {
         let page = try web(Self.page)
         let row = try slice(page, from: "className=\"project-integration wk-status-row\"", to: "</div> </div> )}")
         assertOrder(row, ["WIKI_ENTRY_NOUN(count)", "wk-status-review", "wikiAnchorsVerified(",
-                          "<WikiMaintenanceStatus health={health.data.maintenance}"], "the web's status row")
+                          "<WikiMaintenanceStatus health={health.data}"], "the web's status row")
         XCTAssertTrue(page.contains("const count = health.data?.entries ?? entries.data?.length ?? 0;"),
                       "the web counts what the health read counts")
         let status = try web(Self.status)
-        XCTAssertTrue(status.contains("wikiMaintenanceParts(health, now)"))
+        XCTAssertTrue(status.contains("wikiStatusParts(health, now)"))
         XCTAssertTrue(status.contains("to={wikiSettingsPath(spaceSlug)}"), "Set up opens the space's Wiki settings")
-        XCTAssertTrue(status.contains("to={`/sessions/${encodeURIComponent(health.lastRun.sessionId)}`}"),
-                      "View run opens the run's session")
+        assertOrder(status, ["if (part.link === 'run' && lastRun?.jobId) {", "to={wikiActivityRunPath(spaceSlug, lastRun.jobId)}",
+                             "if (part.link === 'run' && lastRun?.sessionId) {",
+                             "to={`/sessions/${encodeURIComponent(lastRun.sessionId)}`}"],
+                    "View run opens a server run's log, else the run's session")
 
         let logic = try swift(Self.kit + "App/WikiLogic.swift")
         let parts = try slice(logic, from: "public func statusParts(now: Date) -> [WikiStatusPart] {", to: "return parts")
         assertOrder(parts, ["let count = health?.entries ?? entries.count", "WikiCopy.entryNoun(count)",
-                            "WikiCopy.anchorsVerified(", "WikiHealthLogic.parts(health.maintenance, now: now)"],
+                            "WikiCopy.anchorsVerified(", "WikiHealthLogic.parts(health, now: now)"],
                     "the native line's parts")
 
-        let view = try swift(Self.app + "Views/WikiView.swift")
-        let header = try slice(view, from: "private var header: some View {", to: "private var spacePicker: some View {")
-        XCTAssertTrue(header.contains("Text(wikiStatusText(content.statusParts(now: now)))"))
-        assertOrder(header, ["case wikiStatusSettingsURL:", "actions.openSettings()", "case wikiStatusRunURL:",
-                             "content.health?.maintenance.lastRun?.sessionId", "actions.openSession(session)"],
+        // The line is Activity's now (design §12.3.2): the home says what the space holds instead.
+        let activity = try swift(Self.app + "Views/WikiActivityView.swift")
+        let line = try slice(activity, from: "private var statusLine: some View {", to: "private struct WikiActivityBannerRow: View {")
+        XCTAssertTrue(line.contains("Text(wikiStatusText(content.statusParts(now: now)))"))
+        assertOrder(line, ["case wikiStatusSettingsURL:", "actions.openSettings()", "case wikiStatusRunURL:",
+                           "content.health?.maintenance.lastRun?.jobId", "actions.openJob(job)",
+                           "content.health?.maintenance.lastRun?.sessionId", "actions.openSession(session)"],
                     "the native line's links")
+        let view = try swift(Self.app + "Views/WikiView.swift")
         let text = try slice(view, from: "func wikiStatusText(_ parts: [WikiStatusPart]) -> AttributedString {",
                              to: "private func wikiStatusColour(")
         for piece in ["AttributedString(\" · \")", "AttributedString(\"●\\u{00A0}\")", "AttributedString(\"\\u{00A0}✓\")",
@@ -290,10 +299,10 @@ final class WikiHealthCopyParityTests: XCTestCase {
         XCTAssertTrue(colours.contains("case .warn: return Color.orange"), "amber while a run waits")
         XCTAssertTrue(colours.contains("case .error: return Color.red"), "red when it broke")
 
-        let screens = try swift(Self.app + "Views/WikiScreens.swift")
-        XCTAssertTrue(screens.contains("openSession: { id in model.openFromConversation(.session(PublicID.toPublic(id)), overConsole: false) }"))
+        XCTAssertTrue(activity.contains("openSession: { id in model.openFromConversation(.session(PublicID.toPublic(id)), overConsole: false) }"))
+        XCTAssertTrue(activity.contains("openJob: { id in model.push(.wikiJob(jobID: id)) }"), "a server run opens its own page")
         let model = try swift(Self.app + "WikiModel.swift")
-        XCTAssertTrue(model.contains("async let healthRead = api.wikiHealth(spaceID: space.id)"))
-        XCTAssertTrue(model.contains("health: health)"), "the home is drawn with the health it read")
+        XCTAssertTrue(model.contains("let healthRead = Task { try await api.wikiHealth(spaceID: space.id) }"))
+        XCTAssertTrue(model.contains("health: health)"), "Activity is drawn with the health it read")
     }
 }

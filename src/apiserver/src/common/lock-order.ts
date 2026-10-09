@@ -149,8 +149,15 @@ export const LOCK_ORDER = [
       'Child rows whose FK parents are already held by this point, so they add no wait edge of their '
       + 'own. `project_integration_job` is here rather than at a rank of its own for that reason: '
       + 'enqueue runs in the transaction that wrote a Task DONE (50) and locked the codebase row '
-      + '(55), and inserts here last; the claim path is an autocommit statement that takes this '
-      + 'table alone (FOR UPDATE SKIP LOCKED over one candidate) and reaches for nothing below. '
+      + '(55), and inserts here last. The claim path (`integration-job-relay.ts#claimOne`) is one '
+      + 'autocommit statement whose candidate CTE joins the job to its source `session` and that '
+      + 'session\'s `workspace` and takes FOR UPDATE SKIP LOCKED without `OF`, so it row-locks one '
+      + 'job (60), its session (30) and its workspace (15); SKIP LOCKED never waits — a candidate '
+      + 'any of whose rows is held is skipped, not waited for — so the statement adds no wait edge. '
+      + 'Contract revision 12 (§2.9 LS2) puts two requirements on code not written yet: no job gate '
+      + 'waits on a session lock, and the landing-session ensure runs in its own transaction after '
+      + 'the claim statement has committed, never inside it. Whether the claim narrows to '
+      + '`FOR UPDATE OF c` is left to the cancel-and-takeover task, with a race spec. '
       + '`project_task_status_count` (0282) is the same shape one trigger over: the three '
       + '`project_task_status_count_sync` triggers fire on a Task write (50) and UPSERT it here, '
       + 'having already taken the project (40) through `task_project_id_fkey`. It is here rather '
@@ -303,13 +310,17 @@ export async function lockOwnerTaskGraph(
  */
 export async function lockCreatorSessions(
   tx: Prisma.TransactionClient,
+  ownerId: string,
   sessionIds: ReadonlyArray<string | null | undefined>,
 ): Promise<void> {
   const ids = orderedIds(sessionIds);
   if (ids.length === 0) return;
+  // The writer's own Sessions only. A Task of this owner can only name a creator Session of this
+  // owner, so nothing a write needs is left out — and an id a caller sent from another account
+  // (a session header, a predecessor's creator) takes no lock on that account's row.
   await tx.$queryRaw`
     SELECT "id" FROM "session"
-    WHERE "id" = ANY(${ids}::uuid[])
+    WHERE "id" = ANY(${ids}::uuid[]) AND "owner_id" = ${ownerId}::uuid
     ORDER BY "id"
     FOR KEY SHARE`;
 }
@@ -342,13 +353,15 @@ export async function lockTaskLists(
  */
 export async function creatorSessionsOf(
   tx: Prisma.TransactionClient,
+  ownerId: string,
   taskIds: ReadonlyArray<string | null | undefined>,
 ): Promise<string[]> {
   const ids = orderedIds(taskIds);
   if (ids.length === 0) return [];
+  // The owner's own Tasks: a Task id named from another account reads as no Task at all.
   const rows = await tx.$queryRaw<Array<{ creatorSessionId: string | null }>>`
     SELECT "creator_session_id" AS "creatorSessionId"
     FROM "task"
-    WHERE "id" = ANY(${ids}::uuid[]) AND "creator_session_id" IS NOT NULL`;
+    WHERE "id" = ANY(${ids}::uuid[]) AND "owner_id" = ${ownerId}::uuid AND "creator_session_id" IS NOT NULL`;
   return orderedIds(rows.map((r) => r.creatorSessionId));
 }

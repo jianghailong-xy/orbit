@@ -364,3 +364,73 @@ kick 是纯多余的。
 每轮只放行一个；重试前用条件写（conditional update）抢占那一行，所以并发的用户消息或第二次
 sweep 会输掉竞争而不是发出第二条 turn；退避仍是 2/5/10/20/30 分钟、上限 5 次。单副本前提与
 reaper 相同。另加一条实现细节：每轮最多取 50 条（`MAX_PER_SWEEP`），积压跨轮消化。
+
+---
+
+## 9. 没有可重发的 → Continue（v1.2，2026-10-07）
+
+**事故**：会话 `4RCRjiAOnDyy4XbUpYok1B`（任务 `34bSOKy8zXTOQFwmcTmgY`，两个 pg spec 的
+修复 run）。CI watch 的后台任务结束时把空闲的会话唤醒成一新轮，那一轮刚起就撞上 Claude 的
+5 小时窗口。§8 的规则在这里是对的：选择器不跨过后台唤醒去重发上面那条早已被回答的消息，所以
+卡片没有 Retry。但两张卡都停在了那里——手动 Retry 没有（没好重发的），自动重试开关**也是空转
+的**（§8.5 删掉 re-arm 之后的残留：武装了，到点 sweep 也是 `disarm('nothing to re-send')`）。
+结果：run 停在原地，任务侧只剩"窗口重置后重跑成一个新 session"——405k 上下文、已推的分支和
+$33 全部丢掉，只因为一句"继续"没人替它说（2026-08-03 那次事故里，这四个字是用户自己打的）。
+
+**设计（B，2026-10-07 拍板：默认开）**：没有可重发的，卡片换动词，一切照旧只有"发什么"变了。
+
+| | 行为 |
+|---|---|
+| 到点 | 服务端发 `Continue where you left off.`（`CONTINUE_MESSAGE`，@orbit/shared）——§3.4 给"回合中途撞限"定过的句子，v1 因缺判定状态没做，这里落地 |
+| 现在 | 按 **Continue** = 同一句话，作为读者自己的消息从**正常 send** 走：gate、排队、失败处理、以及 composer 上的 provider pick 全跟着走 |
+| 开关 | 默认**开**，标签 `Continue when the quota resets`，文案 `Off — nothing will continue until you do.`，按钮下明写 `Sends “Continue where you left off.”` ——**关掉就是全部 opt-out** |
+| 文案 | 正文说清原因：`Nothing to re-send — the limit landed on a turn that wasn’t yours.`；倒计时行 `Continues 6:20 PM · in 3 hr`；firing 行 `Continuing — picking up where it left off…` |
+| provider | 卡片命名的改为**会话自己的** provider，不再是 composer 的待定 pick ——这次事故里卡片写着 "for deepseek"，撞的其实是 claude（人为了绕开配额把下一轮切到 deepseek，pick 一改卡片就跟着改口） |
+| 收紧 | 只有 `message.sessionReplies`/`confirmationReviewTurn` 的那两种空（平台自己有 turn 但没 hold 住）仍旧 disarm；其余空一律 continue |
+
+**为什么不违反"平台不替用户说话"**：这句只在**读者看得见、能关掉**的 arm 上发——卡片把要发的
+句子原样写在按钮下面，开关默认开且可关；这正是用户在 2026-08-03 事故里自己会打的四个字。选
+"默认关、必须手点"会让不打开 App 的人继续丢 run，因此拍板默认开。
+
+**实现落点**（都在既有机制里，没有新表、没有新定时器）：
+
+- `GET /sessions/:id/retry-message` 多回一个 `nothingToResend`（要区分"没有可重发的"和"有
+  reply/confirmation turn 要发"这两种空——后者由 sweep 自己发，卡片不该换动词）。
+- sweep 的空分支不再 disarm，改 `content = CONTINUE_MESSAGE` 进既有 resume 路径：claim 抢行、
+  每发一次算一次 attempt、退避 2/5/10/20/30 分钟、上限 5 次、`auto-retry:` key 空间全不变；
+  因此"按下 Continue"与"到点自动发"天然不会变成两条 turn（createTurn 也会把 arm 关掉）。
+- ingest（`retryPlanFor`）**不动**：撞限照旧武装，和任何一次撞限一样；也因此 arm 会 hold 住
+  任务侧的重跑（`RUN_RETRY_ARMED`），一次事故不会变成两个 run。
+- 客户端：web `Transcript.tsx` + `WorkspaceView.tsx`（`CONTINUE_MESSAGE` 从 shared 进，两个
+  pin 测试盯的就是这里的字），Swift `AutoRetryLogic.swift` + `AutoRetryCard.swift` +
+  `ConsoleModel.swift`（`serverNothingToResend` 进 `AutoRetryLogic.state`）。设计图：
+  `docs/mocks/quota-nothing-to-resend.html`。
+
+**遗留**：gaveUp 的标题仍是 `Auto-retry gave up`（continue 模式没有单独命名）；`auto-retry:` 下
+的 turn 在 transcript 里仍画成普通 user bubble（§8.5 的 "Resumed automatically at …" 分隔线还是
+没做）；API-error 变体共用同一套（同一选择器、同一形态，文案不同：`Continue — this usually
+clears` / `Nothing to re-send — the failure landed on a turn that wasn’t yours.`）。
+
+### 9.1 追问：卡片不许替服务端承诺（同日补丁）
+
+上线当天就被真实会话打中：`34b78GE7Ud2aXWq8H1JsU`（一个项目协调会话，weekly 窗口用尽）里按下
+Retry，弹的是 **"Couldn't re-send the message / this session has no message for a retry to
+re-send"** —— 409。根因是两端判据不同：**卡片按自己窗口最后一条"有字的消息"承诺**（那是一条别的
+会话发来的报告，带 `sessionMessage`，于是按钮正确地走服务端门），而**服务端按 turn 的归属与是否已
+被回答**回答（这次失败落在"没人发的那一轮"上，选择器拒绝跨过它去重发上面那条已答的消息）。窗口看
+不见 turn 归属，也看不见"已答"，所以它做出的承诺可以是服务端必然拒绝的。
+
+修法：**凡是按下去要走服务端门的 retry，客户端先问 `GET /sessions/:id/retry-message`，并且只渲染
+服务端的答案**——它的词、它的 `sessionMessage`（决定路由）、或 `nothingToResend`（渲染成 §9 的
+Continue 卡）。触发条件只看**窗口自己**：窗口里没有"读者本人写的字"（没有消息，或最后一条是别的会
+话的）→ 先问；读者自己的字仍走客户端的 `send`，不产生额外请求（"不许在每个人打开的会话上都发一个
+请求"这条约束没有破）。两条卡（配额卡、登录卡）共用这一条规则；Swift 两个卡本来就走同一条
+`retryLastMessage`，改一处。附件同源：只有读者自己那条 bubble 的字才带它的文件，服务端答案来的字
+不带任何文件（`retryIsTheReaders ? retry.attachmentIds : []`）。
+
+用例：web `WorkspaceView.retrySessionMessage.test.tsx`（"asks before promising, and continues
+instead…" + 登录卡"要先问"），Swift `RetrySendWiringTests.testTheCardAsksTheServerUnlessTheWindowHoldsTheReadersOwnWords`。
+
+**残留的一条缝**：问到的答案是**卡片出现那一刻**的快照。页面长开着、会话又自己往前走（不是用户
+消息，所以卡片不 stale）时，那份承诺可能过期，按下去仍会拿到 409 —— 差别是现在这是少见情形，而
+不是必然。要彻底关掉，得让"按下"本身先 re-ask 再发（两步），暂不做。

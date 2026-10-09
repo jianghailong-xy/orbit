@@ -72,6 +72,40 @@ final class AgentsStackWiringTests: XCTestCase {
                        "no boolean push left on the Agents stack")
     }
 
+    /// A surface this stack keeps mounted under another is not on screen then, so its rows' animated
+    /// cues — one 30Hz `TimelineView` per running row — are held back until it is the surface
+    /// showing again. Three surfaces get covered, and the shell answers for all three: the list at
+    /// the root (nothing pushed — `sectionAtRoot`), a page of its own (only while it is the top of
+    /// the stack: a conversation pushed over a project's or a folder's sessions covers it), and both
+    /// of them again under Settings' sheet. Every answer is read by the two glyphs themselves, so
+    /// every row that draws one — a session's, a project's, a folder's — follows without threading a
+    /// flag through each. The drawer's cues are held back the same way by its own `live:`.
+    func testTheCoveredListHoldsItsAnimatedRowCuesBack() throws {
+        let agents = code(try slice(try appSource("Views/CompactShell.swift"),
+                                    from: "case .agents:", to: "// RUNNERS"))
+        XCTAssertTrue(agents.contains(".environment(\\.liveRowCues, model.sectionAtRoot && !model.settingsPresented)"),
+                      "nothing pushed and no sheet is exactly when the list is the page showing")
+        XCTAssertTrue(agents.contains("AgentsStackPage(node: node)"),
+                      "a pushed page goes through the wrapper that asks whether it is the top")
+        let page = code(try slice(try appSource("Views/CompactShell.swift"),
+                                  from: "private struct AgentsStackPage<Content: View>: View {", to: "\n}\n"))
+        XCTAssertTrue(page.contains(
+            "content.environment(\\.liveRowCues, model.nav.path.last == node && !model.settingsPresented)"),
+                      "the top of the stack is the page showing; Settings' sheet covers it too")
+
+        let views = code(try appSource("Views/AgentsView.swift"))
+        let spinner = try slice(views, from: "struct SpinnerGlyph: View {", to: "\n}\n")
+        XCTAssertTrue(spinner.contains("@Environment(\\.liveRowCues) private var liveRowCues"),
+                      "the spinner reads the switch itself, so every row that draws one is covered")
+        XCTAssertTrue(spinner.contains("if liveRowCues {"),
+                      "a covered row draws the arc still, with no display link behind it")
+        let breathing = try slice(views, from: "struct BreathingGlyph: View {", to: "\n}\n")
+        XCTAssertTrue(breathing.contains("@Environment(\\.liveRowCues) private var liveRowCues"),
+                      "and so does the breathing glyph")
+        XCTAssertTrue(breathing.contains("if reduceMotion || !liveRowCues {"),
+                      "still, like reduced motion already drew it")
+    }
+
     /// One row, two containers. The row view is built once — what differs is who moves the screen:
     /// the three-column `List`'s selection, or the compact row's own destination value. Neither
     /// shape draws a highlight it cannot open, because both read the same stack.

@@ -1,0 +1,318 @@
+<!doctype html>
+<!-- Design mock: signing an account back in from the engine page (RunnerEnginePage.accountRow →
+     RunnerSignInView / PasteBackForm), after the owner asked to look at how other products do it.
+     ① collects those references, redrawn as sketches from their public docs (sources at the foot of
+     ①); ② and ③ are the proposal, drawn with antigravity-accounts/kit.js in the light appearance with
+     sample accounts. Not shipped code. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Signing an account back in · references and proposal (iOS)</title>
+<link rel="stylesheet" href="../../src/web/src/index.css">
+<link rel="stylesheet" href="project-progress/mock.css">
+<link rel="stylesheet" href="antigravity-accounts/kit.css">
+<style>
+  .m-sheet { width: 1760px; }
+  .m-cap { font-size: 12.5px; line-height: 1.7; color: var(--text-2); margin: 6px 4px 0; }
+  .m-cap b { color: var(--text-1); }
+
+  /* ① reference cards: a sketch redrawn from the product's docs, what it does, what we take */
+  .rf-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 22px; }
+  .rf { display: flex; flex-direction: column; gap: 10px; padding: 16px 18px 14px; border-radius: 12px; background: #fff;
+        border: 1px solid #e3e6eb; }
+  .rf-h { display: flex; align-items: baseline; gap: 8px; font-size: 15px; font-weight: 650; color: var(--text-1); }
+  .rf-h span { font-size: 12px; font-weight: 500; color: var(--text-3); }
+  .rf-sk { border-radius: 10px; background: #f5f6f8; padding: 14px; min-height: 120px; display: flex; flex-direction: column;
+           justify-content: center; gap: 8px; }
+  .rf-term { background: #1e1f22; color: #d9dbe0; border-radius: 8px; padding: 12px 14px; font: 12.5px/1.65 "DejaVu Sans Mono", monospace; }
+  .rf-term .tw { color: #f0b54b; }
+  .rf-term .td { color: #8b8f98; }
+  .rf-term .tg { color: #6cc070; }
+  .rf-p { font-size: 12.5px; line-height: 1.7; color: #3f4652; margin: 0; }
+  .rf-us { font-size: 12.5px; line-height: 1.7; color: var(--brand-strong); margin: 0; font-weight: 600; }
+  .rf-src { font-size: 11px; color: var(--text-3); word-break: break-all; margin: 0; }
+  /* the sketches' own pieces */
+  .sk-row { display: flex; align-items: center; gap: 10px; background: #fff; border-radius: 12px; padding: 10px 12px; }
+  .sk-av { width: 34px; height: 34px; border-radius: 50%; background: linear-gradient(160deg, #c9ccd3, #a9adb6); flex: none; }
+  .sk-t { flex: 1; font-size: 14px; }
+  .sk-badge { min-width: 20px; height: 20px; border-radius: 10px; background: #ff3b30; color: #fff; font-size: 12px; font-weight: 700;
+              display: inline-flex; align-items: center; justify-content: center; }
+  .sk-note { font-size: 12px; line-height: 1.5; color: #6c6f76; }
+  .sk-btn { display: inline-flex; align-items: center; gap: 5px; padding: 5px 12px; border-radius: 6px; font-size: 12.5px;
+            border: 1px solid #d0d4da; background: #fff; color: #1f2329; white-space: nowrap; }
+  .sk-btn.pri { background: #ff4f00; border-color: #ff4f00; color: #fff; }
+  .sk-btn.vs { background: #0e639c; border-color: #0e639c; color: #fff; border-radius: 2px; }
+  .sk-exp { color: #c4320a; font-size: 12.5px; display: inline-flex; align-items: center; gap: 4px; }
+  .sk-dlg { background: #fff; border-radius: 8px; padding: 12px 14px; box-shadow: 0 2px 8px rgba(0, 0, 0, .12); font-size: 12.5px; }
+  .sk-code { font: 600 18px/1.3 "DejaVu Sans Mono", monospace; letter-spacing: .06em; margin: 4px 0 8px; }
+  .sk-paste { align-self: center; display: inline-flex; align-items: center; gap: 6px; padding: 9px 18px; border-radius: 99px;
+              background: #3e69f6; color: #fff; font-size: 15px; font-weight: 600; }
+  .sk-paste svg { width: 15px; height: 15px; fill: #fff; }
+  .rf-sum { background: #f3f6ff; border-color: #d9e2ff; }
+  .rf-sum ol { margin: 0; padding-left: 20px; font-size: 13px; line-height: 1.8; color: #3f4652; }
+  .rf-sum b { color: var(--text-1); }
+  .rf-foot { margin: 16px 2px 0; font-size: 11.5px; line-height: 1.7; color: var(--text-3); }
+
+  /* ② ③ phones and row cuts */
+  .row2 { display: grid; grid-template-columns: 431px 431px minmax(0, 1fr); gap: 36px; align-items: start; }
+  .ph-batt.low { background: #1c1c1e; color: #fff; }
+  .ph-nav { backdrop-filter: blur(7px); }
+  .ph .bb, .cut .bb { background: rgba(120, 120, 128, .12); color: #3e69f6; }
+  .ph .bb.prom, .cut .bb.prom { background: #3e69f6; color: #fff; align-self: flex-start; }
+  .cut .bl { align-self: flex-start; display: inline-flex; align-items: center; gap: 5px; }
+  .cut .bl svg { width: 13px; height: 13px; fill: currentColor; }
+  .cut.light { position: relative; background: #f2f2f6; color: #000; box-shadow: 0 0 0 1px #dde0e6; overflow: visible; }
+  .cut.light .s-card { background: #fff; }
+  .flow { display: grid; grid-template-columns: repeat(4, 393px); gap: 26px; align-items: start; }
+  .step-l { font-size: 12.5px; font-weight: 600; color: var(--text-2); margin: 0 0 6px 4px; }
+  .flow-l { display: flex; align-items: baseline; gap: 10px; margin: 0 0 10px; font-size: 14px; font-weight: 650; color: var(--text-1); }
+  .flow-l .taps { font-size: 12.5px; font-weight: 400; color: var(--text-2); }
+  .flow-l .taps b { color: var(--text-1); }
+
+  /* the two new lines in a row: a login about to lapse, and what a signed-out account costs */
+  .ex-line { display: flex; align-items: center; gap: 8px; }
+  .ex-l { flex: 1; display: inline-flex; align-items: center; gap: 5px; font-size: 13px; line-height: 17px; font-weight: 600; color: #b35a00; }
+  .ex-l svg { width: 13px; height: 13px; fill: currentColor; flex: none; }
+  .conseq { font-size: 13px; line-height: 18px; color: #8a8a8e; }
+  .dcode { font: 600 24px/1.2 "DejaVu Sans Mono", monospace; letter-spacing: .08em; }
+  .dcode-c { display: inline-flex; align-items: center; gap: 6px; font: 15px/1.3 "DejaVu Sans Mono", monospace; color: #000; }
+  .dcode-c svg { width: 13px; height: 13px; fill: #8a8a8e; }
+
+  .split { display: grid; grid-template-columns: 393px 393px minmax(0, 1fr); gap: 26px; align-items: start; margin-top: 30px; }
+  .cost { flex: none; align-self: flex-start; margin-top: 2px; padding: 0 6px; border-radius: 4px; font-size: 11px; font-weight: 700;
+          line-height: 18px; background: #e8f5e9; color: #2e7d32; }
+  .cost.m { background: #fff4e0; color: #b35a00; }
+  .cost.no { background: #eceef1; color: #5b6270; }
+  .q { margin: 0 0 8px; font-size: 15px; font-weight: 650; color: var(--text-1); }
+</style>
+</head>
+<body class="m">
+
+<section class="board m-sheet" id="part-1">
+  <h1 class="m-h1 zh">账号掉线、重新登录：网上其他产品怎么做</h1>
+  <p class="m-sub zh">查了五类做法，都是按它们公开的文档重画的示意图，不是截图，来源附在本图最下面。最有用的是 Claude Code 自己：登录到期前 3 天就会提醒续期，读的是登录文件里的到期时间，这个时间 runner 能读到。</p>
+  <div class="m-stage">
+    <div class="rf-grid">
+      <div class="rf">
+        <div class="rf-h">Claude Code<span>官方文档 + 2.1.292 本体</span></div>
+        <div class="rf-sk"><div class="rf-term">
+          <div class="tw">⚠ Your login expires in 3 days <span class="td">· run /login to renew</span></div>
+          <div class="td">───────────── /status</div>
+          <div>Login&nbsp;&nbsp;&nbsp;<span class="tw">Expired — log in again</span></div>
+          <div class="td">───────────── /login</div>
+          <div>Paste code here if prompted <span class="tg">&gt;</span></div>
+        </div></div>
+        <p class="rf-p zh">登录到期前 3 天，启动时提醒续期，但不拦着你用。过期以后 /status 写「Expired — log in again」。浏览器跳不回本机时（SSH、容器里常见），让你把网页上的码贴回来。</p>
+        <p class="rf-us zh">→ 我们：快过期就提前提醒（①）。贴码这一步省不掉，那就做成点一下（⑤）。</p>
+      </div>
+      <div class="rf">
+        <div class="rf-h">iPhone 设置<span>Apple ID 要重新登录时</span></div>
+        <div class="rf-sk">
+          <div class="sk-row"><span class="sk-av"></span><span class="sk-t">Update Apple ID Settings</span><span class="sk-badge">1</span></div>
+          <div class="sk-note">Some account services will not be available until you sign in again.</div>
+        </div>
+        <p class="rf-p zh">问题顶在设置页最上面，带红色角标。用一句话说后果：重新登录之前，有些服务用不了。点进去就开始登录。</p>
+        <p class="rf-us zh">→ 我们：掉线的账号也用一句话说后果：会话用不了这个账号（②）。</p>
+      </div>
+      <div class="rf">
+        <div class="rf-h">Zapier<span>App Connections</span></div>
+        <div class="rf-sk">
+          <div class="sk-row"><span class="sk-t">Notion · alex@example.com</span><span class="sk-exp">⚠ Expired</span><span class="sk-btn pri">Reconnect</span></div>
+          <div class="sk-note">Expired connections: 1 — the number of connections that require reauthorization</div>
+        </div>
+        <p class="rf-p zh">过期的连接，Reconnect 按钮就在过期标记旁边。重连的还是原来那个连接，用到它的流程全部恢复，不会多出一个新连接。</p>
+        <p class="rf-us zh">→ 我们：按钮挨着状态，只在要处理时出现。登回的是同一个账号目录，我们本来就是这样（③）。</p>
+      </div>
+      <div class="rf">
+        <div class="rf-h">VS Code / GitHub CLI<span>设备码登录</span></div>
+        <div class="rf-sk">
+          <div class="sk-dlg">Your code<div class="sk-code">1A2B-3C4D</div><span class="sk-btn vs">Copy &amp; Continue to GitHub</span></div>
+          <div class="rf-term" style="padding:8px 12px"><span class="tw">!</span> First copy your one-time code: 1A2B-3C4D<br><span class="td">Press Enter to open github.com in your browser...</span></div>
+        </div>
+        <p class="rf-p zh">先把一次性码亮出来；一个按钮同时复制码、打开登录页，到网页上直接粘贴。</p>
+        <p class="rf-us zh">→ 我们：Codex / Kimi 的设备码登录照这个做（⑧）。</p>
+      </div>
+      <div class="rf">
+        <div class="rf-h">苹果的粘贴按钮<span>UIPasteControl / SwiftUI PasteButton</span></div>
+        <div class="rf-sk"><span class="sk-paste"><svg viewBox="0 0 16 16"><path d="M5.6 1h4.8v1.4h2.2c.5 0 .9.4.9.9v10.8c0 .5-.4.9-.9.9H3.4a.9.9 0 0 1-.9-.9V3.3c0-.5.4-.9.9-.9h2.2zm.9.9v1.6h3V1.9zM3.9 3.8v10.3h8.2V3.8h-1.7v1.1H5.6V3.8z"/></svg>Paste</span>
+          <div class="sk-note" style="text-align:center">iOS 16 起，程序去读剪贴板会弹「允许粘贴」；用这个系统按钮不会弹。</div></div>
+        <p class="rf-p zh">系统自带的粘贴按钮，用户点一下就把剪贴板里的内容交给 App，不经过权限弹框。</p>
+        <p class="rf-us zh">→ 我们：贴码那一步换成它，粘贴完直接提交（⑤）。</p>
+      </div>
+      <div class="rf rf-sum">
+        <div class="rf-h">拿来的五件事</div>
+        <ol class="zh">
+          <li><b>快过期先提醒</b>，别等会话失败才发现（Claude Code）</li>
+          <li><b>掉线时说后果</b>，一句话就够（iPhone 设置）</li>
+          <li><b>按钮挨着状态</b>，只在要处理时出现（Zapier）</li>
+          <li><b>复制码和打开网页合成一下</b>（VS Code / GitHub CLI）</li>
+          <li><b>粘贴一下就提交</b>（苹果的粘贴按钮）</li>
+        </ol>
+        <p class="rf-p zh" style="margin-top:6px">另外考虑过在 App 里直接打开登录页，没采用。原因见第 3 张图。</p>
+      </div>
+    </div>
+    <p class="rf-foot">来源：code.claude.com/docs/en/authentication（另在本机 Claude Code 2.1.292 里核对了它读的是 refreshTokenExpiresAt）· discussions.apple.com/thread/252991788 · help.zapier.com/hc/en-us/articles/8496290788109 · docs.dominodatalab.com/en/6.0/user_guide/a6a562/use-github-copilot-with-vs-code · cli.github.com/manual/gh_auth_login · developer.apple.com/documentation/uikit/uipastecontrol</p>
+  </div>
+</section>
+
+<section class="board m-sheet" id="part-2">
+  <h1 class="m-h1 zh">改后 · 引擎页：快过期先提醒，掉线时说后果</h1>
+  <p class="m-sub zh">左边是上一版（两个按钮已经去掉、暂停改成左滑），右边在它的基础上加了两行。第二个账号的登录还剩 3 天，第三个已经掉线。</p>
+  <div class="m-stage">
+    <div class="row2">
+      <div class="ph-wrap">
+        <div class="ph-l zh"><span class="m-k">上一版</span>按钮去掉以后</div>
+        <div id="p1"></div>
+        <p class="m-cap zh">快过期的账号看不出任何异样，等过期了、会话失败了才知道。掉线的只写 Signed out，看不出影响多大。</p>
+      </div>
+      <div class="ph-wrap">
+        <div class="ph-l zh"><span class="m-k new">这一版</span>加两行</div>
+        <div id="p2"></div>
+        <p class="m-cap zh">两行都只在出事时出现，平时的账号行还是那么短。</p>
+      </div>
+      <div>
+        <ul class="m-notes zh" style="margin-top:38px">
+          <li><span class="m-n">1</span><span><b>快过期先提醒</b>：登录剩 3 天以内，这一行多一行橙字「Login expires in 3 days」，右边一个 Renew。点了走和 Sign In 一样的登录，登回同一个账号，到期时间续上。不点也照常能用，和 Claude Code 自己的提醒一样。Orbit 上的会话大多没人盯着，等它过期再发现，会话已经停了。</span></li>
+          <li><span class="m-n">2</span><span><b>掉线时说后果</b>：Signed out 下面一句「Sessions can’t use this account until you sign in again.」。如果这个引擎只有这一个账号，就改成「Sessions on this runner can’t use Claude Code until you sign in again.」。</span></li>
+          <li><span class="m-n">3</span><span><b>按钮挨着状态</b>：Renew 和 Sign In 只在要处理时出现，平时的账号行没有按钮，和上一版去掉按钮的方向一致。</span></li>
+          <li><span class="m-n" style="background:#5b6270">i</span><span><b>只有 Claude Code 有到期时间</b>：runner 已经在读每个账号的 <code>.credentials.json</code>，里面的 <code>refreshTokenExpiresAt</code> 就是 Claude Code 自己用来提醒的那个字段。这台机器上三个登录都有这个字段，还剩 23 到 24 天。Codex 和 Antigravity 没有这个日期，只做 ②③。</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="board m-sheet" id="part-3">
+  <h1 class="m-h1 zh">改后 · 点 Sign In 或 Renew 之后</h1>
+  <p class="m-sub zh">登录卡片的样子和现有文案都不变，改的是：哪一下开始、哪个按钮关、怎么贴、主按钮跟着下一步走、什么时候收起。Claude Code 要把码贴回来，从现在约 10 下减到 6 下（都算上 Safari 里的两下和切回 Orbit）。</p>
+  <div class="m-stage">
+    <div class="flow-l zh"><span class="m-k new">Claude Code</span>要把码贴回来<span class="taps zh"><b>6 下</b>：Sign In → Open → Safari 里同意、复制 → 切回 Orbit → Paste</span></div>
+    <div class="flow">
+      <div><div class="step-l zh">④ 点了就开始</div><div class="cut light" id="c1"></div></div>
+      <div><div class="step-l zh">⑤ 链接到了</div><div class="cut light" id="c2"></div></div>
+      <div><div class="step-l zh">⑥ 从网页回来</div><div class="cut light" id="c3"></div></div>
+      <div><div class="step-l zh">⑦ 登好了，自己收起</div><div class="cut light" id="c4"></div></div>
+    </div>
+    <div class="split">
+      <div><div class="step-l zh">Codex · 现在</div><div class="cut light" id="d0"></div></div>
+      <div><div class="step-l zh">⑧ Codex · 改后（Kimi 一样）</div><div class="cut light" id="d1"></div></div>
+      <div>
+        <p class="q zh">每一处在做什么</p>
+        <ul class="m-notes zh" style="margin-top:0">
+          <li><span class="m-n">4</span><span><b>点了就开始，只留 Cancel</b>：不再先出一张只有「Sign in to Claude Code」的卡片，Add Account 早就是这样。进行中只有 Cancel，点了取消这次登录，卡片收起。现在的 Close 只把卡片藏起来，登录还挂在 runner 上，和 Cancel 放一起分不清。</span></li>
+          <li><span class="m-n">5</span><span><b>粘贴一下就提交</b>：框空着的时候，Submit 换成系统的 Paste 按钮，不弹「允许粘贴」，贴进来就提交。手打的话，框里有字时变回 Submit。贴错了 runner 会拒，橙字提示，再贴一次就行。</span></li>
+          <li><span class="m-n">6</span><span><b>主按钮跟着下一步走</b>：去网页之前，Open the sign-in page 是蓝色主按钮。从网页回到 Orbit 后，Paste 变成蓝色，Open 退成一行链接，以防要重开。</span></li>
+          <li><span class="m-n">7</span><span><b>登好了自己收起</b>：「Signed in — this runner is ready.」停一两秒，卡片收起，这一行变回 Signed in 和额度。</span></li>
+          <li><span class="m-n">8</span><span><b>设备码先亮出来</b>：码放大放在最上面，一个按钮「Copy Code &amp; Open Sign-In Page」同时复制码、打开网页，到网页上直接粘贴（VS Code 的做法）。</span></li>
+        </ul>
+      </div>
+    </div>
+    <div class="split" style="grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 34px">
+      <div>
+        <p class="q zh">落地（按代价排）</p>
+        <ul class="m-notes zh" style="margin-top:0">
+          <li><span class="cost">小</span><span><b>④</b> 开卡片传 <code>autoStart: true</code>（Add Account 现成的参数）；<code>RunnerSignInView</code> 加 <code>onCancel</code>（web 的 Add Account 卡片就是这么接的）。</span></li>
+          <li><span class="cost">小</span><span><b>⑤⑥</b> <code>PasteBackForm</code>：框空时用 <code>PasteButton</code>，拿到字直接 <code>submitCode()</code>。点过 Open、App 回到前台时，把 Paste 换成主按钮。</span></li>
+          <li><span class="cost">小</span><span><b>⑦</b> 页面看到这个账号变成 Signed in，等一两秒收起卡片。</span></li>
+          <li><span class="cost">小</span><span><b>②</b> 掉线那一行加一句后果，是新文案，web 的同一行也加上。</span></li>
+          <li><span class="cost">小</span><span><b>⑧</b> 设备码卡片换顺序、换按钮文案。web 的同一张卡要一起改，两边有文案对照测试。</span></li>
+          <li><span class="cost m">中</span><span><b>①</b> runner 从 <code>.credentials.json</code> 读出 <code>refreshTokenExpiresAt</code>，随账号状态一起上报；服务端带过去，客户端在剩 3 天内显示。只有 Claude Code 有。</span></li>
+        </ul>
+      </div>
+      <div>
+        <p class="q zh">考虑过、没采用</p>
+        <ul class="m-notes zh" style="margin-top:0">
+          <li><span class="cost no">否</span><span><b>在 App 里直接打开登录页</b>（ASWebAuthenticationSession）：看上去能省掉切回 Orbit 那一下。但 Anthropic 的回调页不会跳回 Orbit，看完码只能点左上角 Cancel 关掉，意思是反的；而且打开前还要多点一个系统确认框，算下来一步没省。</span></li>
+          <li><span class="cost no">否</span><span><b>自动读剪贴板</b>：回到 App 时直接读剪贴板，iOS 会弹「允许粘贴」，比点一下 Paste 更烦。</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script src="antigravity-accounts/glyphs.js"></script>
+<script src="antigravity-accounts/kit.js"></script>
+<script>
+  const STATUS = { time: `2:01 ${ICON.bell}`, net: '5G', batt: '49' };
+  const OK = { text: 'Signed in', tone: 'ok' };
+  const OUT = { text: 'Signed out', tone: 'warn' };
+  const WARN = '<svg viewBox="0 0 16 16"><path d="M8 1.4c.4 0 .8.2 1 .6l6.3 11c.4.7-.1 1.6-1 1.6H1.7c-.9 0-1.4-.9-1-1.6L7 2c.2-.4.6-.6 1-.6zm-.8 4.4v4.4h1.6V5.8zm0 5.6V13h1.6v-1.6z"/></svg>';
+  const CLIP = '<svg viewBox="0 0 16 16"><path d="M5.6 1h4.8v1.4h2.2c.5 0 .9.4.9.9v10.8c0 .5-.4.9-.9.9H3.4a.9.9 0 0 1-.9-.9V3.3c0-.5.4-.9.9-.9h2.2zm.9.9v1.6h3V1.9zM3.9 3.8v10.3h8.2V3.8h-1.7v1.1H5.6V3.8z"/></svg>';
+  const COPY = '<svg viewBox="0 0 16 16"><path d="M5 1.5h7.5c.6 0 1 .4 1 1V11c0 .6-.4 1-1 1H5c-.6 0-1-.4-1-1V2.5c0-.6.4-1 1-1zm.6 1.6v7.3h6.3V3.1zM2 4.5h1.4v8.9h7.2v1.4H2.6c-.4 0-.6-.3-.6-.6z"/></svg>';
+
+  // The three accounts the earlier boards use, under sample names.
+  const A1 = { id: 'a1', name: 'alex@example.com', sub: '~/.claude · Default', status: OK, windows: [
+    { label: '5-hour limit', pct: 0, resets: 'Resets 5:29 PM' },
+    { label: 'Weekly · all models', pct: 96, resets: 'Resets Fri, Oct 9 at 11:59 AM', warn: true } ] };
+  const A2 = { id: 'a2', name: 'alex.rd@example.com', sub: '~/.orbit/claude-accounts/7c41e0b2', status: OK, windows: [
+    { label: '5-hour limit', pct: 100, resets: 'Resets 4:09 PM', warn: true },
+    { label: 'Weekly · all models', pct: 74, resets: 'Resets Mon, Oct 12 at 6:59 PM' } ] };
+  const A3 = { id: 'a3', name: 'alex.lab@example.com', sub: '~/.orbit/claude-accounts/b93d5a17' };
+
+  const expiring = `<div class="ex-line" id="exp"><span class="ex-l">${WARN}Login expires in 3 days</span><span class="bb" id="renew">Renew</span></div>`;
+  const conseq = '<div class="conseq" id="conseq">Sessions can’t use this account until you sign in again.</div>';
+  const signIn = '<span class="bb" id="signin">Sign In</span>';
+
+  const head = `<div class="hd">${mark('claude', 30)}<div><div class="n">Claude Code</div><div class="s">2.1.292 · checked 3m ago</div></div></div>`;
+  const update = section({ rows: [btnRow('Update Engines Now')],
+    footer: '<p>Orbit keeps these CLIs updated every 30 min. Sign-ins live on this machine — a session spends that subscription, nothing to paste.</p>' });
+  const page = (rows) => head + section({ header: '<span id="acc-h">Accounts</span>', rows: [...rows, btnRow('Add Account')] }) + update;
+  const shot = (body) => phone({ title: 'Claude Code', body, status: STATUS });
+
+  document.getElementById('p1').outerHTML = shot(page([accountRow(A1), accountRow(A2),
+    accountRow({ ...A3, status: OUT, buttons: [signIn] })]));
+  document.getElementById('p2').outerHTML = shot(page([accountRow(A1), accountRow({ ...A2, body: expiring }),
+    accountRow({ ...A3, status: OUT, body: conseq, buttons: [signIn] })]));
+
+  // ③ the card, from the press that opened it to the row folding back
+  const cut = (id, row) => {
+    document.getElementById(id).innerHTML = section({ rows: [row] }).replace('<div class="s-gap"></div>', '');
+  };
+  const who = { name: A3.name, sub: A3.sub };
+  const codeForm = (open, paste) => `<div class="sig" style="gap:6px">${open}
+    <div class="sig-h">Approve it there, then paste the code the page gives you:</div>
+    <div class="code-row"><div class="fld ph-t">Paste the code</div>${paste}</div>
+    <span class="bl" id="cancel">Cancel</span></div>`;
+  cut('c1', accountRow({ ...who, status: OUT, body: `<div class="sig" style="gap:6px"><div class="sig-row">${ICON.spin}Starting sign-in on the runner…</div>
+    <div class="sig-h">The runner picks it up on its next check-in, so the link can take up to a minute to show here.</div>
+    <span class="bl" id="cancel">Cancel</span></div>` }));
+  cut('c2', accountRow({ ...who, status: OUT, body: codeForm(`<span class="bb prom" id="open">${ICON.open}Open the sign-in page</span>`,
+    `<span class="bb" id="paste">${CLIP}Paste</span>`) }));
+  cut('c3', accountRow({ ...who, status: OUT, body: codeForm(`<span class="bl" id="open">${ICON.open}Open the sign-in page</span>`,
+    `<span class="bb prom" id="paste">${CLIP}Paste</span>`) }));
+  cut('c4', accountRow({ ...who, status: OK, windows: [
+    { label: '5-hour limit', pct: 0, resets: 'Resets 7:03 PM' },
+    { label: 'Weekly · all models', pct: 31, resets: 'Resets Wed, Oct 14 at 5:59 AM' } ] }));
+
+  // Codex's device flow, today (RunnerSignInView.deviceFlow) and with the code first
+  const cx = { name: 'alex@example.com', sub: '~/.codex · Default', status: OUT };
+  cut('d0', accountRow({ ...cx, body: `<div class="sig" style="gap:6px">
+    <span class="bb prom">${ICON.open}Open the sign-in page</span>
+    <div class="sig-h">Sign in there, then enter this one-time code:</div>
+    <span class="dcode-c">K7QX-29PM ${COPY}</span>
+    <div class="sig-row">${ICON.spin}Waiting for you to approve it…</div>
+    <span class="bl">Cancel</span></div>` }));
+  cut('d1', accountRow({ ...cx, body: `<div class="sig" style="gap:8px">
+    <div class="sig-h">Enter this one-time code on the sign-in page:</div>
+    <div class="dcode">K7QX-29PM</div>
+    <span class="bb prom" id="copyopen">${COPY}Copy Code &amp; Open Sign-In Page</span>
+    <div class="sig-row">${ICON.spin}Waiting for you to approve it…</div>
+    <span class="bl">Cancel</span></div>` }));
+
+  window.drawMarks = () => {
+    const [p1, p2] = document.querySelectorAll('.ph');
+    for (const ph of [p1, p2]) scrollTo(ph, '#acc-h', 88);
+    ringMark(p2, '#exp', '1', 5, 14, 16);
+    ringMark(p2, '#conseq', '2', 5, 14, 16);
+    ringMark(p2, '#signin', '3', 5, 14, 16);
+    const box = (id) => document.getElementById(id);
+    ringMark(box('c1'), '#cancel', '4', 5, 14, 16);
+    ringMark(box('c2'), '#paste', '5', 5, 14, 16);
+    ringMark(box('c3'), '#paste', '6', 5, 14, 16);
+    const r = at(box('c4'), '.r');
+    box('c4').insertAdjacentHTML('beforeend', marks([{ x: r.x + 4, y: r.y + 4, w: r.w - 8, h: r.h - 8 }, { n: '7', x: r.x + r.w - 18, y: r.y - 6 }]));
+    ringMark(box('d1'), '#copyopen', '8', 5, 14, 16);
+  };
+</script>
+</body>
+</html>

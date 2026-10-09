@@ -1,4 +1,12 @@
-import type { PlanUsage, PlanUsageSnapshot, PlanUsageWindow, RunnerEngineAccount } from './dto';
+import type {
+  PlanUsage,
+  PlanUsageBucket,
+  PlanUsageSnapshot,
+  PlanUsageWindow,
+  RunnerEngineAccount,
+  RunnerEngineHealth,
+} from './dto';
+import { AgentProvider } from './enums';
 
 /** A window counts as exhausted at 100% consumed — the provider stops accepting work. */
 const EXHAUSTED_UTILIZATION = 100;
@@ -8,8 +16,9 @@ const EXHAUSTED_UTILIZATION = 100;
 export const CODEX_DEFAULT_ACCOUNT = 'default';
 
 /**
- * Every rate-limit window in one snapshot: the named Claude windows, the Codex
- * primary/secondary pair, and the per-bucket windows Codex reports under `rateLimits`.
+ * Every rate-limit window in one snapshot: the named Claude windows, Kimi Code's monthly pair, the
+ * Codex primary/secondary pair, the per-bucket windows Codex reports under `rateLimits`, and
+ * Antigravity's buckets read as the windows they are (bucketWindow).
  */
 function windowsOf(snapshot: PlanUsageSnapshot): PlanUsageWindow[] {
   const windows = [
@@ -17,11 +26,31 @@ function windowsOf(snapshot: PlanUsageSnapshot): PlanUsageWindow[] {
     snapshot.sevenDay,
     snapshot.sevenDayOpus,
     snapshot.sevenDaySonnet,
+    snapshot.month,
+    snapshot.monthCode,
     snapshot.primary,
     snapshot.secondary,
     ...(snapshot.rateLimits ?? []).flatMap((bucket) => [bucket.primary, bucket.secondary]),
+    ...(snapshot.buckets ?? []).map(bucketWindow),
   ];
   return windows.filter((w): w is PlanUsageWindow => !!w);
+}
+
+/** How long an Antigravity bucket's window is, from agy's own name for it: null for one it names
+ *  otherwise. */
+const BUCKET_WINDOW_MINS: Record<string, number> = { '5h': 5 * 60, weekly: 7 * 24 * 60 };
+
+/**
+ * One Antigravity bucket as a window: what agy says is left, turned into the share consumed every
+ * other window speaks in, with its reset. Only for weighing quota against quota — what a page shows
+ * stays agy's own remaining fraction.
+ */
+function bucketWindow(bucket: PlanUsageBucket): PlanUsageWindow {
+  return {
+    utilization: (1 - bucket.remainingFraction) * 100,
+    ...(bucket.resetTime ? { resetsAt: bucket.resetTime } : {}),
+    ...(BUCKET_WINDOW_MINS[bucket.window] ? { windowDurationMins: BUCKET_WINDOW_MINS[bucket.window] } : {}),
+  };
 }
 
 /** At or over this share consumed, a window is nearly spent: an account there is used last, since a
@@ -38,19 +67,26 @@ const NEAR_LIMIT_UTILIZATION = 90;
 const SHORT_WINDOW_NEAR_LIMIT_UTILIZATION = 80;
 const SHORT_WINDOW_MINS = 5 * 60;
 
-/** Every window of one snapshot with its length in minutes: Claude's named windows by their names,
- *  Codex's as they report it (null when one does not). */
+/** How long a monthly window is, for weighing it against the others: longer than any week, which is
+ *  all its length decides here (quotaExpiresAt takes the longest window, quotaNearLimit a short one). */
+const MONTH_MINS = 30 * 24 * 60;
+
+/** Every window of one snapshot with its length in minutes: Claude's and Kimi Code's named windows by
+ *  their names, Codex's as they report it (null when one does not). */
 function windowsWithLength(snapshot: PlanUsageSnapshot): Array<{ window: PlanUsageWindow; mins: number | null }> {
   const named: Array<[PlanUsageWindow | undefined, number]> = [
     [snapshot.fiveHour, 5 * 60],
     [snapshot.sevenDay, 7 * 24 * 60],
     [snapshot.sevenDayOpus, 7 * 24 * 60],
     [snapshot.sevenDaySonnet, 7 * 24 * 60],
+    [snapshot.month, MONTH_MINS],
+    [snapshot.monthCode, MONTH_MINS],
   ];
   const reported = [
     snapshot.primary,
     snapshot.secondary,
     ...(snapshot.rateLimits ?? []).flatMap((bucket) => [bucket.primary, bucket.secondary]),
+    ...(snapshot.buckets ?? []).map(bucketWindow),
   ];
   return [
     ...named.flatMap(([window, mins]) => (window ? [{ window, mins: window.windowDurationMins ?? mins }] : [])),
@@ -134,7 +170,7 @@ function spentSnapshot(
   account: string | null | undefined,
 ): PlanUsageSnapshot | undefined {
   const snapshot = snapshotFor(usage, provider);
-  if (!snapshot || (provider !== 'codex' && provider !== 'claude')) return snapshot;
+  if (!snapshot || !isAccountEngine(provider)) return snapshot;
   return account === null ? undefined : codexAccountSnapshot(snapshot, account ?? CODEX_DEFAULT_ACCOUNT);
 }
 
@@ -171,18 +207,48 @@ export function accountDir(account: RunnerEngineAccount): string {
 
 /** The variables that mean a run brings a credential of its own rather than spending a login the
  *  machine holds, per engine. Read where the run is judged: such a run spends no account's
- *  subscription, so no account's quota holds it back. */
+ *  subscription, so no account's quota holds it back. Any one of them set is enough, except for an
+ *  engine in OWN_CREDENTIAL_NEEDS_ALL. */
 const OWN_CREDENTIAL_KEYS: Partial<Record<string, readonly string[]>> = {
   codex: ['CODEX_API_KEY', 'OPENAI_API_KEY', 'OPENAI_BASE_URL'],
   claude: ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_BASE_URL', 'CLAUDE_CODE_OAUTH_TOKEN'],
+  antigravity: ['GEMINI_API_KEY'],
+  kimi: ['KIMI_MODEL_NAME', 'KIMI_MODEL_API_KEY'],
 };
 
+/** The engines whose variables above count only all together. Kimi Code runs on a model of the
+ *  session's own only when the session names both the model and its key (src/runner-go
+ *  kimiUsesEnvModel, which hasInjectedCredentials reads): either one alone still runs on the
+ *  account's login. */
+const OWN_CREDENTIAL_NEEDS_ALL: ReadonlySet<string> = new Set(['kimi']);
+
 /** The directory an engine's own login lives in when the run names none: what its CLI resolves
- *  (CODEX_HOME else ~/.codex; CLAUDE_CONFIG_DIR else ~/.claude). */
+ *  (CODEX_HOME else ~/.codex; CLAUDE_CONFIG_DIR else ~/.claude; KIMI_CODE_HOME else ~/.kimi-code).
+ *  Antigravity's Default is the runner's own Google sign-in, which no variable or HOME moves: a run
+ *  that names no directory is on it. */
 const ENGINE_DEFAULT_DIR: Partial<Record<string, (home: string | undefined) => string | undefined>> = {
   codex: (home) => (home === undefined ? undefined : `${home}/.codex`),
   claude: (home) => (home === undefined ? undefined : `${home}/.claude`),
+  antigravity: () => undefined,
+  kimi: (home) => (home === undefined ? undefined : `${home}/.kimi-code`),
 };
+
+/** The variable that hands one account's directory to each engine that keeps accounts: the CLI's own
+ *  for Codex, Claude Code and Kimi Code; for Antigravity, whose agy takes a flag instead, the runner's
+ *  (it picks the sign-in a session's copy is made from, src/runner-go/antigravity_account_slot.go). */
+export const ACCOUNT_DIR_VAR: Readonly<Record<AccountEngine, string>> = {
+  codex: 'CODEX_HOME',
+  claude: 'CLAUDE_CONFIG_DIR',
+  antigravity: 'ORBIT_ANTIGRAVITY_GOOGLE_DIR',
+  kimi: 'KIMI_CODE_HOME',
+};
+
+/** The engines that keep a login per directory, so that one runner holds several accounts of them. */
+export const ACCOUNT_ENGINES: readonly AccountEngine[] = ['claude', 'codex', 'antigravity', 'kimi'];
+
+export function isAccountEngine(engine: string | null | undefined): engine is AccountEngine {
+  return !!engine && (ACCOUNT_ENGINES as readonly string[]).includes(engine);
+}
 
 /**
  * Which of a runner's accounts a session spends, from the env it runs with (the workspace env
@@ -208,9 +274,12 @@ export function accountOfEnv(
   const own = OWN_CREDENTIAL_KEYS[provider ?? ''];
   const defaultDir = ENGINE_DEFAULT_DIR[provider ?? ''];
   if (!own || !defaultDir) return null;
-  if (Object.keys(vars).some((key) => own.includes(key) && set(key))) return null;
-  const varName = provider === 'claude' ? 'CLAUDE_CONFIG_DIR' : 'CODEX_HOME';
-  const dir = set(varName) ?? defaultDir(set('HOME'));
+  const ownCredential = OWN_CREDENTIAL_NEEDS_ALL.has(provider ?? '')
+    ? own.every((key) => set(key))
+    : Object.keys(vars).some((key) => own.includes(key) && set(key));
+  if (ownCredential) return null;
+  if (!isAccountEngine(provider)) return null;
+  const dir = set(ACCOUNT_DIR_VAR[provider]) ?? defaultDir(set('HOME'));
   if (dir === undefined) return CODEX_DEFAULT_ACCOUNT;
   const where = cleanAbsolutePath(dir);
   if (where === null) return null;
@@ -291,9 +360,28 @@ export function planUsageBlockedUntil(
   return latest === null ? null : new Date(latest);
 }
 
-/** The engines whose CLI keeps a login per directory — a CODEX_HOME, a CLAUDE_CONFIG_DIR — so that a
- *  runner can hold several accounts of them, each with its own quota. */
-export type AccountEngine = 'codex' | 'claude';
+/** The engines whose CLI keeps a login per directory — a CODEX_HOME, a CLAUDE_CONFIG_DIR, an
+ *  Antigravity Google sign-in's Gemini directory, a KIMI_CODE_HOME — so that a runner can hold several
+ *  accounts of them, each with its own quota. */
+export type AccountEngine = 'codex' | 'claude' | 'antigravity' | 'kimi';
+
+/**
+ * `usage` (a runner's heartbeat planUsage) with Antigravity's quota folded in from the engine health it
+ * travels with (RunnerEngineHealth.planUsage, Default's buckets and every other account's under
+ * `accounts`), so that one reader weighs every engine's accounts the same way: snapshotFor, the
+ * account ranking and the quota gates find it under `antigravity`. The same object when there is none.
+ */
+export function withEnginePlanUsage(
+  usage: PlanUsage | null | undefined,
+  engines: readonly RunnerEngineHealth[] | null | undefined,
+): PlanUsage | null {
+  const reported = engines?.find((engine) => engine.engine === 'antigravity')?.planUsage;
+  if (!reported) return usage ?? null;
+  const antigravity: PlanUsageSnapshot = { ...reported, provider: AgentProvider.ANTIGRAVITY };
+  // Alone it is the payload itself, naming its provider, as an older runner's lone Codex snapshot is:
+  // a payload with no provider at all would read as a Claude snapshot to a reader that takes one so.
+  return usage ? { ...usage, antigravity } : antigravity;
+}
 
 /**
  * Which of a runner's accounts of `engine` a new session starts on when neither it nor its workspace
@@ -346,8 +434,8 @@ export function codexAccountToStartOn(
  * Which of a runner's accounts of `engine` a session whose own account (`from`) just hit its usage
  * limit can move to, between turns: another account that can run now — not signed out, no spent
  * window — ranked as {@link accountToStartOn} ranks. Never a spent one: when no other account has
- * room, moving gains nothing, and the session waits for its own account's reset. Null then, and for a
- * runner with no second account.
+ * room, moving gains nothing, and the session waits for the first account to free up, its own or
+ * another ({@link accountToMoveToAt}). Null then, and for a runner with no second account.
  */
 export function accountToMoveTo(
   engine: AccountEngine,
@@ -370,6 +458,27 @@ export function codexAccountToMoveTo(
   from: string,
 ): string | null {
   return accountToMoveTo('codex', accounts, usage, now, from);
+}
+
+/**
+ * When a session whose own account (`from`) is spent can go again on another of a runner's accounts
+ * of `engine`, for what holds its retry rather than choosing where it goes ({@link accountToMoveTo}):
+ * `now` while one has room, else the first moment another frees up — the reset of its spent windows,
+ * or the end of its pause. Null when no other account names such a moment: a runner with no second
+ * account, every other one signed out, or spent with no reset to go by.
+ */
+export function accountToMoveToAt(
+  engine: AccountEngine,
+  accounts: readonly RunnerEngineAccount[] | null | undefined,
+  usage: PlanUsage | null | undefined,
+  now: Date,
+  from: string,
+): Date | null {
+  if (!accounts || accounts.length < 2) return null;
+  const others = rankAccounts(engine, accounts, usage, now).filter((c) => c.id !== from);
+  if (others.some((c) => c.spentUntil === null)) return now;
+  const first = Math.min(...others.map((c) => c.spentUntil ?? Number.POSITIVE_INFINITY));
+  return Number.isFinite(first) ? new Date(first) : null;
 }
 
 /** Ties go to Default, then to the lower id, so no answer depends on the order of the report. */

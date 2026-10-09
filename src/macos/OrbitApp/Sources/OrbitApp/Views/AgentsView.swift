@@ -422,7 +422,7 @@ struct AgentPanes: View {
                     Section {
                         ForEach(section.sessions) { sessionRow($0) }
                     } header: {
-                        tagSectionHeader(section.tag)
+                        sectionHeaderBand { tagSectionHeader(section.tag) }
                     }
                 }
             } else {
@@ -475,13 +475,13 @@ struct AgentPanes: View {
                                 ForEach(section.sessions) { listRow($0, projects: projectRows) }
                             }
                         } header: {
-                            pinnedSectionHeader(section.title)
+                            sectionHeaderBand { pinnedSectionHeader(section.title) }
                         }
                     } else {
                         Section {
                             ForEach(section.sessions) { listRow($0, projects: projectRows) }
                         } header: {
-                            Text(section.title).textCase(nil)
+                            sectionHeaderBand { Text(section.title).textCase(nil) }
                         }
                     }
                 }
@@ -962,10 +962,12 @@ struct AgentPanes: View {
             // Doubles as the short-query notice the palette keeps in its footer: below the
             // server's content threshold only names are matched, which is worth saying before
             // "no matches" reads as "this doesn't exist".
-            Text(contentSearched
-                 ? "All sessions"
-                 : "Matching names only — type more to search message text.")
-                .textCase(nil)
+            sectionHeaderBand {
+                Text(contentSearched
+                     ? "All sessions"
+                     : "Matching names only — type more to search message text.")
+                    .textCase(nil)
+            }
         }
     }
 
@@ -1073,6 +1075,34 @@ struct AgentPanes: View {
         .buttonStyle(.plain)
         .accessibilityAddTraits(.isHeader)
         .accessibilityHint(pinnedCollapsed ? "Shows the pinned sessions" : "Hides the pinned sessions")
+    }
+
+    /// A section header's band: its title drawn over the list's own surface, so that the header
+    /// *pins* with something behind it. SwiftUI's plain list floats a section's header over the rows
+    /// as they scroll under it but paints nothing behind a custom header — so a row on its way up
+    /// read straight through "Yesterday" / "2–7 days ago", its title overlapping the header's glyph
+    /// for glyph (every appearance, light and dark).
+    ///
+    /// The list's own header insets sit *outside* the header's view, so a bare `.background` on the
+    /// title would cover its line and leave the strips above and below it see-through. The surface
+    /// is therefore grown past the title's own frame by the insets that surround it — measured off
+    /// the header this replaces on the simulator (iOS 26.5: the title sits 33pt below the band's
+    /// top, which ends 9pt below the title's line). Nothing here is layout: a background lays out
+    /// nothing, so the header keeps the system's own metrics, the band stays the height it was (a
+    /// header that added its own padding instead measured 2pt short per section), and the Pinned
+    /// header's tap target — the button, not this — is exactly the size it was.
+    ///
+    /// The fill is `systemBackground`, what the list itself draws in each appearance — the same fill
+    /// the rows and their chips sit on (see `TagChipColor`). A row sliding under a pinned header now
+    /// disappears behind it instead of reading through it.
+    private func sectionHeaderBand<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        content()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background {
+                Color(uiColor: .systemBackground)
+                    .padding(.top, -33)
+                    .padding(.bottom, -9)
+            }
     }
     #endif
 }
@@ -1287,9 +1317,8 @@ struct NewSessionView: View {
                 VStack(spacing: 18) {
                     // Which engine runs this session is the hero — the native port of web's
                     // `NewSessionProviderHero`: the vendor's own mark, then the engine's name as the
-                    // one tappable identity, with the provider it spends when that is not its own
-                    // sign-in ("via DeepSeek") — picked in the composer's Provider menu. The
-                    // workspace name sits in the iOS navigation bar; macOS keeps its workspace
+                    // one tappable identity. Which provider of it the session spends is the
+                    // composer's Provider menu's to pick and to say. The workspace name sits in the iOS navigation bar; macOS keeps its workspace
                     // switcher below the hero.
                     VStack(spacing: 14) {
                         ProviderMark(provider: currentEngine.slug, size: 68,
@@ -1299,16 +1328,13 @@ struct NewSessionView: View {
                             HStack(spacing: 7) {
                                 Text(currentEngine.label)
                                     .font(.title.weight(.bold)).foregroundStyle(.primary).lineLimit(1)
-                                if let detail = currentEngine.providerDetail {
-                                    Text(detail).font(.footnote).foregroundStyle(.secondary)
-                                }
                                 Image(systemName: "chevron.down").font(.subheadline.weight(.semibold))
                                     .foregroundStyle(.secondary)
                             }
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
-                        .accessibilityLabel("Engine: \(currentEngine.label)\(currentEngine.providerDetail.map { " \($0)" } ?? ""). Switch")
+                        .accessibilityLabel("Engine: \(currentEngine.label). Switch")
                     }
                     VStack(spacing: 5) {
                         // The pick is sticky, so it can point at an engine this machine can no
@@ -1318,8 +1344,9 @@ struct NewSessionView: View {
                            currentProviderChoice.fixEngine != nil {
                             Button {
                                 if let rid = agent.runnerId {
-                                    if let url = draft.webFixURL(engine: currentProviderChoice.fixEngine ?? "", runnerID: rid) { openURL(url) }
-                                    else { app.route(to: .runner(rid)) }
+                                    let engine = currentProviderChoice.fixEngine ?? ""
+                                    if let url = draft.webFixURL(engine: engine) { openURL(url) }
+                                    else { app.openRunnerEngine(rid, engine: engine) }
                                 }
                             } label: {
                                 Text("\(blocker) on this runner · Fix it")
@@ -1432,13 +1459,13 @@ struct NewSessionView: View {
         #endif
         .sheet(isPresented: $showEnginePicker) {
             // The draft's own runnerID is only set for a live session, so take the agent's — it is
-            // the machine this draft would run on, and the one whose Engines section fixes a row.
+            // the machine this draft would run on, and the one whose engine page fixes a row.
             EngineSwitchSheet(
                 engines: engines, current: currentEngine, agentName: agent.name,
                 onSelect: { slug in draft.pickDraftProvider(slug) },
                 onFixRunner: agent.runnerId.map { rid in { engine in
-                    if let url = draft.webFixURL(engine: engine, runnerID: rid) { openURL(url) }
-                    else { app.route(to: .runner(rid)) }
+                    if let url = draft.webFixURL(engine: engine) { openURL(url) }
+                    else { app.openRunnerEngine(rid, engine: engine) }
                 } })
         }
     }
@@ -1468,18 +1495,18 @@ struct NewSessionView: View {
     /// this workspace last ran there (web parity).
     private var engines: [EngineChoice] {
         SessionProviderChoices.engines(providerChoices, configured: draft.configuredProviders,
-                                       preferred: [draft.provider, agent.defaultProvider])
+                                       preferred: [draft.providerChoice, agent.defaultProvider])
     }
 
     /// The engine of the draft's pick — synthesized when no group holds it (`opencode`, a removed
     /// provider) or holds it but cannot run it, so the hero still names what it would run.
     private var currentEngine: EngineChoice {
-        engines.first { $0.provider.slug == draft.provider }
+        engines.first { $0.provider.slug == draft.providerChoice }
             ?? SessionProviderChoices.engine(for: currentProviderChoice, configured: draft.configuredProviders)
     }
 
     private var currentProviderChoice: ProviderChoice {
-        SessionProviderChoices.current(draft.provider, in: providerChoices,
+        SessionProviderChoices.current(draft.providerChoice, in: providerChoices,
                                        configured: draft.configuredProviders,
                                        catalog: draft.modelCatalog,
                                        antigravity: draft.runnerAntigravity)
@@ -1492,7 +1519,7 @@ struct NewSessionView: View {
     /// No account either (web parity): the composer's quota gauge names it in its detail.
     private var heroSubtitle: String {
         draft.providerCapabilitiesResolved
-            ? AgentDefaults.friendlyName(draft.modelID, for: draft.provider,
+            ? AgentDefaults.friendlyName(draft.modelID, for: draft.providerChoice,
                                          catalog: draft.modelCatalog,
                                          configured: draft.configuredProviders)
             : "Runtime default"
@@ -1752,6 +1779,25 @@ struct SessionLiveIndicator: View {
     }
 }
 
+/// Whether the animated row cues in this subtree — `SpinnerGlyph` and `BreathingGlyph` — are on
+/// screen, and so may redraw. True everywhere by default; the compact shell's agents stack sets it
+/// false for the session list a page has been pushed over.
+///
+/// That list is not torn down by the push — keeping it mounted is what keeps its rows and scroll
+/// position for the pop back — but not one pixel of it is on screen. One
+/// `TimelineView(.animation)` per running row went on redrawing at the display's cadence anyway, so
+/// the cost of the list scaled with how many sessions were running even while the list was behind a
+/// conversation. The drawer's own cues are held back the same way by its `live:` parameter; this is
+/// that switch, for the rows themselves.
+private struct LiveRowCuesKey: EnvironmentKey { static let defaultValue = true }
+
+extension EnvironmentValues {
+    var liveRowCues: Bool {
+        get { self[LiveRowCuesKey.self] }
+        set { self[LiveRowCuesKey.self] = newValue }
+    }
+}
+
 /// A symbol that breathes — a slow opacity pulse, the web's `status-glyph-active`. It is the one
 /// motion in this vocabulary that is neither rotation nor a dot, and it means one thing: there is
 /// work happening here, without the agent generating. Drawn in the neutral tone, which is the tone
@@ -1764,10 +1810,12 @@ struct BreathingGlyph: View {
     private let trough: Double = 0.42  // the web's 50% keyframe
     private let frameInterval: Double = 1.0 / 30.0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.liveRowCues) private var liveRowCues
     var body: some View {
-        if reduceMotion {
+        if reduceMotion || !liveRowCues {
             // The words are the state; the motion is only emphasis, and this is the ambient loop
-            // that reduced-motion exists to switch off.
+            // that reduced-motion exists to switch off — or one drawn for a list that is not on
+            // screen at all (see `liveRowCues`).
             symbol
         } else {
             TimelineView(.animation(minimumInterval: frameInterval)) { context in
@@ -1805,16 +1853,26 @@ struct SpinnerGlyph: View {
     /// quarter of the redraws. The angle stays a pure function of wall-clock time, so the rate has no
     /// effect on how fast it appears to spin.
     private let frameInterval: Double = 1.0 / 30.0
+    @Environment(\.liveRowCues) private var liveRowCues
     var body: some View {
-        TimelineView(.animation(minimumInterval: frameInterval)) { context in
-            let angle = context.date.timeIntervalSinceReferenceDate
-                .truncatingRemainder(dividingBy: period) / period * 360
-            Circle()
-                .trim(from: 0, to: 0.7)
-                .stroke(color, style: StrokeStyle(lineWidth: 2, lineCap: .round))
-                .frame(width: 13, height: 13)
-                .rotationEffect(.degrees(angle))
+        if liveRowCues {
+            TimelineView(.animation(minimumInterval: frameInterval)) { context in
+                arc(angle: context.date.timeIntervalSinceReferenceDate
+                    .truncatingRemainder(dividingBy: period) / period * 360)
+            }
+        } else {
+            // A list that is not on screen (see `liveRowCues`): the arc is drawn once, still. Nobody
+            // can see it — what matters is that no display link runs for it, and that the angle is a
+            // pure function of the clock again the moment the list is the page showing.
+            arc(angle: 0)
         }
+    }
+    private func arc(angle: Double) -> some View {
+        Circle()
+            .trim(from: 0, to: 0.7)
+            .stroke(color, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+            .frame(width: 13, height: 13)
+            .rotationEffect(.degrees(angle))
     }
 }
 
@@ -1919,6 +1977,20 @@ struct AgentFormContent: View {
 
             Section {
                 Button("Delete agent", role: .destructive) { confirmingDelete = true }
+                    // Delete is destructive and drops the agent from the list, so gate it behind an
+                    // explicit confirmation — on the button that asks, so the panel opens against it
+                    // rather than at the top of the form. The server soft-deletes (its sessions are
+                    // kept and stay linked); close the sheet afterward since the agent is gone from
+                    // here.
+                    .orbitConfirmation("Delete \(agent.name)?", isPresented: $confirmingDelete) {
+                        Button("Delete agent", role: .destructive) {
+                            dismiss()
+                            Task { await agents.delete(agent.id) }
+                        }
+                        Button("Cancel", role: .cancel) { }
+                    } message: {
+                        Text("This removes the workspace from your Workspaces list. Its sessions are kept.")
+                    }
             }
         }
         .formStyle(.grouped)
@@ -1935,19 +2007,6 @@ struct AgentFormContent: View {
             ToolbarItem(placement: .confirmationAction) {
                 Button("Done") { commitAndDismiss() }
             }
-        }
-        // Delete is destructive and drops the agent from the list, so gate it behind an explicit
-        // confirmation. The server soft-deletes (its sessions are kept and stay linked); close the
-        // sheet afterward since the agent is gone from here.
-        .confirmationDialog("Delete \(agent.name)?", isPresented: $confirmingDelete,
-                            titleVisibility: .visible) {
-            Button("Delete agent", role: .destructive) {
-                dismiss()
-                Task { await agents.delete(agent.id) }
-            }
-            Button("Cancel", role: .cancel) { }
-        } message: {
-            Text("This removes the workspace from your Workspaces list. Its sessions are kept.")
         }
     }
 

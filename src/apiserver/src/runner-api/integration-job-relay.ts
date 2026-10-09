@@ -11,7 +11,6 @@ import {
 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import {
-  DEFAULT_CHECK_TIMEOUT_SECONDS,
   INTEGRATION_CLAIM_STALE_MS,
   INTEGRATION_JOBS_PER_HEARTBEAT,
   INTEGRATION_JOB_CLAIM,
@@ -21,20 +20,25 @@ import {
   MAX_CHECK_OUTPUT_TAIL,
   PROMOTION_AUTOMATIC_LAND,
   checkSawTheFinishedBranch,
+  checksFor,
   integrationDedupeKey,
   integrationItemTitle,
   isTerminalJobState,
   jobLanded,
   landingFailureClass,
+  skippedMergeCheck,
+  type SkippedMergeCheckRecord,
   landingJudgedTooEarly,
   landingLeftWorkBehind,
   openItemKindForJobState,
   queueLandingBehindTheWork,
   shortBranchName,
+  workBranchEndedOn,
 } from '../projects/project-integration-job';
 import {
   ownerHoldOnHandledItems,
   recordIntegrationFailure,
+  rearmItemFixedBy,
   recordPromotionApproval,
   resolveHandledItems,
   resolveIntegrationItemsOnLanding,
@@ -111,10 +115,11 @@ export class IntegrationJobRelay {
     jobId: string,
     runnerId: string,
     body: IntegrationJobResultRequest,
+    ownerId?: string,
   ): Promise<{ answer: IntegrationJobResultResponse; after: IntegrationResultAftermath | null }> {
     return applyIntegrationJobResult(
       this.prisma,
-      { jobId, runnerId, body },
+      { jobId, runnerId, ownerId, body },
       loggedRetry(this.logger, 'integrationJob.applyResult'),
     );
   }
@@ -150,6 +155,8 @@ interface ClaimedRow {
   mergeCheckCommand: string | null;
   mergeCheckTimeoutSeconds: number | null;
   cancelRequestedAt: Date | null;
+  /** This generation runs no merge check (0393): the account owner approved skipping it. */
+  skipMergeCheck: boolean;
   /** A promotion job's frozen source, and the two facts M-S3 compares before it lands. */
   jobSourceSha: string | null;
   promotionId: string | null;
@@ -251,44 +258,6 @@ export async function dispatchIntegrationJobs(
     });
   }
   return commands;
-}
-
-/**
- * The commands to run on the combined tree (§2.4 J-S5), in the order a person would run them: the
- * task's own acceptance first, because a task that cannot pass its own criterion on the merged tree
- * is the narrower failure and the one whose owner is obvious.
- *
- * A task with no acceptance command contributes none. That is not a gap: an EVIDENCE_JUDGMENT or
- * OWNER_CONFIRMED task was settled by somebody looking at it, and there is no command to re-run.
- */
-function checksFor(row: ClaimedRow): IntegrationCheckSpec[] {
-  const checks: IntegrationCheckSpec[] = [];
-  // Which checks a job runs is decided by WHAT IT IS PUTTING WHERE (§3.4 M-S3). A landing on the
-  // project branch runs the task's own acceptance on the combined tree, and so does a `TASK_BRANCH`
-  // promotion — it is one task's work arriving on the upstream, and the task's acceptance command is
-  // the criterion the whole thing was judged by. A `PROJECT_BRANCH` promotion runs the project's
-  // merge check and nothing else: every task it carries already passed its own acceptance on the
-  // line, and the session the job names belongs to one of those tasks only so the queue can find a
-  // checkout to work in — the job itself names no task, which is why `row.acceptanceCommand` here is
-  // that session's task's and not the promotion's.
-  const taskAcceptanceApplies = row.kind === 'LAND_TASK' || row.promotionSourceKind === 'TASK_BRANCH';
-  if (taskAcceptanceApplies && row.acceptanceCommand && row.acceptanceExpectedExitCode != null) {
-    checks.push({
-      name: 'TASK_ACCEPTANCE',
-      command: row.acceptanceCommand,
-      expectedExitCode: row.acceptanceExpectedExitCode,
-      timeoutSeconds: row.acceptanceTimeoutSeconds ?? DEFAULT_CHECK_TIMEOUT_SECONDS,
-    });
-  }
-  if (row.mergeCheckCommand) {
-    checks.push({
-      name: 'MERGE_CHECK',
-      command: row.mergeCheckCommand,
-      expectedExitCode: 0,
-      timeoutSeconds: row.mergeCheckTimeoutSeconds ?? DEFAULT_CHECK_TIMEOUT_SECONDS,
-    });
-  }
-  return checks;
 }
 
 /**
@@ -419,6 +388,9 @@ async function claimOne(
       cb."merge_check_command" AS "mergeCheckCommand",
       cb."merge_check_timeout_seconds" AS "mergeCheckTimeoutSeconds",
       j."cancel_requested_at" AS "cancelRequestedAt",
+      -- §2.4 J-S5 / 0393: a generation whose merge check was approved away. It travels with the
+      -- claim because the command this beat builds is where the check would have been handed over.
+      j."skip_merge_check" AS "skipMergeCheck",
       j."source_sha" AS "jobSourceSha",
       j."promotion_id" AS "promotionId",
       j."confirmed_automatically" AS "confirmedAutomatically",
@@ -599,9 +571,10 @@ export interface IntegrationResultAftermath {
   projectId: string;
   landedTaskId: string | null;
   /**
-   * The exception items this result opened, by id, for the door that delivered the result to hand
-   * over. By item rather than by task because a promotion job names no task (§3.4): the caller is
-   * the only thing holding that row's id, and no read finds it by a task it does not have.
+   * The exception items this result opened — and, for a fix task's landing, the item it fixes,
+   * re-keyed for its coordinator (§4.4 X-D4 5) — by id, for the door that delivered the result to
+   * hand over. By item rather than by task because a promotion job names no task (§3.4): the caller
+   * is the only thing holding that row's id, and no read finds it by a task it does not have.
    */
   openItemIds: string[];
   /**
@@ -625,7 +598,8 @@ export interface IntegrationResultAftermath {
  */
 export async function applyIntegrationJobResult(
   prisma: PrismaService,
-  input: { jobId: string; runnerId?: string; body: IntegrationJobResultRequest },
+  /** `ownerId`, the reporting runner's owner: another account's job is answered as one that does not exist. */
+  input: { jobId: string; runnerId?: string; ownerId?: string; body: IntegrationJobResultRequest },
   onRetry?: Parameters<typeof withTransactionRetry>[2],
 ): Promise<{ answer: IntegrationJobResultResponse; after: IntegrationResultAftermath | null }> {
   const body = input.body;
@@ -642,8 +616,12 @@ export async function applyIntegrationJobResult(
   }
 
   return withTransactionRetry(prisma, async (tx) => {
-    const job = await tx.projectIntegrationJob.findUnique({
-      where: { id: input.jobId },
+    // Found among the reporting runner's owner's jobs only, before anything about it is answered: a
+    // runner of another account is told neither that the job exists, nor the state it ended in, nor
+    // that it is still live — an id that names nothing is what it gets (T2 of the tenant isolation
+    // census). A runner of the same owner meets the claim fence below, as J-T3 has it.
+    const job = await tx.projectIntegrationJob.findFirst({
+      where: { id: input.jobId, ...(input.ownerId != null ? { ownerId: input.ownerId } : {}) },
       select: {
         id: true, projectId: true, ownerId: true, kind: true, state: true,
         taskId: true, sessionId: true, promotionId: true, targetRef: true, sourceRef: true,
@@ -651,6 +629,10 @@ export async function applyIntegrationJobResult(
         generation: true, retryOfJobId: true, retryFailureClass: true, retryReason: true,
         retryRequestedBySessionId: true,
         retryRequestedByUserId: true,
+        // 0393: what this generation ran instead of its merge check, so the failure it goes on to
+        // open can say so — a red reported by a landing whose check never ran must not read as a
+        // check that failed.
+        skipMergeCheck: true, skipReason: true, skipApprovedByUserId: true, skipApprovalId: true,
         session: { select: { baseSha: true } },
         task: { select: { title: true, assigneeId: true, creatorType: true, creatorId: true } },
       },
@@ -680,8 +662,18 @@ export async function applyIntegrationJobResult(
       ? await readLandingWorkSessions(tx, job.taskId)
       : [];
 
+    // J-S4's NOTHING_TO_LAND about a branch that DID carry commits of the task's own, every one of
+    // which the target already had (`sourceFullyApplied`, 0410). It pushed nothing, like every
+    // NOTHING_TO_LAND. Unlike the empty branch's, it says the task's work IS on the target: the
+    // positive answer ALREADY_LANDED gives, measured on the commits' changes rather than on the tip.
+    // So it is held to the same two rules: an answer taken before the work stopped moving is not
+    // written down (J-T1e), and an answer about a branch the work did not end on lands nothing of it
+    // (§2.6). When it speaks for the task's work, it is followed by what follows a landing.
+    const fullyApplied = job.kind === 'LAND_TASK' && state === 'NOTHING_TO_LAND'
+      && body.sourceFullyApplied === true;
+
     if (job.kind === 'LAND_TASK' && job.taskId
-        && state === 'ALREADY_LANDED' && landingJudgedTooEarly(job.claimedAt, work)) {
+        && (state === 'ALREADY_LANDED' || fullyApplied) && landingJudgedTooEarly(job.claimedAt, work)) {
       // Not written down as final, and NOT without a trace: the row goes back to the queue it came
       // from, clearing the claim, and the line will be handed it again — which, by the claim guard
       // above, is the first heartbeat after this task's work has stopped moving. Nothing follows
@@ -733,17 +725,27 @@ export async function applyIntegrationJobResult(
     const ownWork = wroteNothingOfItsOwn && job.taskId
       ? await workSessionsReportingWork(tx, job.taskId)
       : [];
+    // A positive answer about a branch the task's work did not end on (§2.6): it says nothing about
+    // that work, which is owed a landing of its own (queued below, once this job is written).
+    const leftWorkBehind = job.kind === 'LAND_TASK' && (state === 'ALREADY_LANDED' || fullyApplied)
+      && landingLeftWorkBehind(job, work);
+    // A fully applied branch holds its own session's reported work, and that work is the work the
+    // line measured on the target: only work reported on ANOTHER branch keeps its receipt back.
+    const workElsewhere = ownWork.filter((branch) => branch !== shortBranchName(job.sourceRef));
     // The states a receipt is written for: a landing, whose receipt says the work is on the target,
     // and a no-commit answer where the task has no work of its own anywhere — where that is exactly
-    // what the receipt has to say for the dependents waiting on it.
+    // what the receipt has to say for the dependents waiting on it. A fully applied answer says the
+    // first in the second's spelling: the work is on the target, and nothing moved, when the branch
+    // it measured is where all of the task's work is and where it ended.
     //
     // Read off `effectiveState` and not off what the runner called it: an answer downgraded above is
     // NOT a landing, however it was spelled — and the incident's own row is exactly the downgraded
     // one, so a receipt written there is the false claim all of this exists to stop.
     const receiptState: 'LANDED' | 'ALREADY_LANDED' | 'NOTHING_TO_LAND' | null =
       jobLanded(effectiveState) ? effectiveState
-        : wroteNothingOfItsOwn && ownWork.length === 0 ? 'NOTHING_TO_LAND'
-          : null;
+        : fullyApplied ? (workElsewhere.length === 0 && !leftWorkBehind ? 'NOTHING_TO_LAND' : null)
+          : wroteNothingOfItsOwn && ownWork.length === 0 ? 'NOTHING_TO_LAND'
+            : null;
     // §3.4, J-T1e one level up: a candidate's subject is a BRANCH, so the task it is about is the one
     // its session belongs to — and the same two questions are asked of that task's work before the
     // check may freeze the tip it resolved as the commit the owner will be shown. A `TASK_BRANCH`
@@ -817,11 +819,18 @@ export async function applyIntegrationJobResult(
           taskId: job.taskId,
           authorType: job.task.assigneeId ? CreatorType.AGENT : job.task.creatorType,
           authorId: job.task.assigneeId ?? job.task.creatorId,
-          body: nothingToLandComment({
-            branch: shortBranchName(job.sourceRef),
-            targetBranch: shortBranchName(job.targetRef),
-            branchesWithWork: ownWork,
-          }),
+          body: fullyApplied
+            ? fullyAppliedComment({
+              branch: shortBranchName(job.sourceRef),
+              targetBranch: shortBranchName(job.targetRef),
+              branchesWithWork: workElsewhere,
+              endedOn: leftWorkBehind ? workBranchEndedOn(work)?.branch ?? null : null,
+            })
+            : nothingToLandComment({
+              branch: shortBranchName(job.sourceRef),
+              targetBranch: shortBranchName(job.targetRef),
+              branchesWithWork: ownWork,
+            }),
         },
       });
     }
@@ -884,6 +893,8 @@ export async function applyIntegrationJobResult(
         // The runner's measurement and nothing else (0346): only a boolean it sent is written, so a
         // row an older runner answered keeps NULL — "not measured" — which §1.4 withholds on.
         sourceOnUpstream: typeof body.sourceOnUpstream === 'boolean' ? body.sourceOnUpstream : undefined,
+        // The same for the other measurement a NOTHING_TO_LAND carries (0410).
+        sourceFullyApplied: typeof body.sourceFullyApplied === 'boolean' ? body.sourceFullyApplied : undefined,
         checks: checks as unknown as Prisma.InputJsonValue,
         conflicts: (body.conflicts ?? []).slice(0, 200),
         errorCode: body.errorCode ?? undefined,
@@ -900,8 +911,6 @@ export async function applyIntegrationJobResult(
     // branch the work ended on, and it is written here, after that state (J3's one-inflight-landing
     // index only has room for it once this row has stopped being the live one) and in the same
     // transaction (a landing owed and not recorded is the bug this whole rule is about).
-    const leftWorkBehind = job.kind === 'LAND_TASK' && state === 'ALREADY_LANDED'
-      && landingLeftWorkBehind(job, work);
     if (leftWorkBehind && job.taskId) {
       await queueLandingBehindTheWork(tx, {
         ownerId: job.ownerId,
@@ -990,6 +999,7 @@ export async function applyIntegrationJobResult(
                 requestedByUserId: job.retryRequestedByUserId,
               }
             : null,
+          skippedCheck: skippedMergeCheck(job),
         }),
       });
       openItemId = opened?.itemId ?? openItemId;
@@ -1004,14 +1014,22 @@ export async function applyIntegrationJobResult(
     // generation's item, and this landing is what closes it. An answer about a branch the work did
     // NOT end on is not that landing: it says nothing about the work, and the item it would close can
     // be the only record that the work has not reached the line — the landing owed for it failed, and
-    // a generation of the work is owed only one (§2.3 J-T1e, `landingBehindTheWorkKey`).
-    if (jobLanded(effectiveState) && job.taskId && !leftWorkBehind) {
+    // a generation of the work is owed only one (§2.3 J-T1e, `landingBehindTheWorkKey`). A fully
+    // applied answer that speaks for the work (its receipt state is set) is that landing too: the work
+    // is on the target, and nothing was pushed because nothing was missing.
+    if ((jobLanded(effectiveState) || (fullyApplied && receiptState !== null)) && job.taskId && !leftWorkBehind) {
       // §4.7 H2 first: the items the coordinator's rerun was handling are HANDLED in its name, and
       // only then does the landing answer whatever else is open about the task (LANDED, by the
       // platform) — including an item the clock gave the owner while the rerun ran.
       await resolveHandledItems(tx, job.id);
       await resolveIntegrationItemsOnLanding(tx, job.taskId);
     }
+    // §4.4 X-D4 (5): this task was filed to fix an exception, and its landing is in — receipted, and
+    // not the answer about a branch the work did not end on. Whether the work that exception is
+    // about went in with it is the coordinator's to check, so the item goes back in front of it.
+    const rearmedItemId = job.kind === 'LAND_TASK' && job.taskId && receiptState !== null && !leftWorkBehind
+      ? await rearmItemFixedBy(tx, job.taskId)
+      : null;
 
     return {
       answer: {
@@ -1029,7 +1047,7 @@ export async function applyIntegrationJobResult(
         landedTaskId: (jobLanded(effectiveState) || receiptIds.length > 0) && !job.promotionId
           ? job.taskId
           : null,
-        openItemIds: openItemId ? [openItemId] : [],
+        openItemIds: [openItemId, rearmedItemId].filter((id): id is string => id !== null),
         // M-F1 for a landing, M-F4 for a promotion that ended: both are the queue getting shorter.
         considerPromotionProjectId:
           job.kind === 'LAND_TASK' || job.kind === 'LAND_PROMOTION' ? job.projectId : null,
@@ -1091,6 +1109,32 @@ function nothingToLandComment(input: {
     + where;
 }
 
+/**
+ * What the task is told when the line found every commit of the branch it was handed already on the
+ * target (0410). This is the same visible signal, because nothing was pushed here either. The branch
+ * DID carry the task's work, so the empty branch's words would be false. This says where the work is:
+ * on the target, or, when the receipt was kept back, what kept it back.
+ */
+function fullyAppliedComment(input: {
+  branch: string;
+  targetBranch: string;
+  branchesWithWork: string[];
+  /** The branch the task's work ended on, when that is not the one the line was handed. */
+  endedOn: string | null;
+}): string {
+  const where = input.endedOn !== null
+    ? `本任务的工作最后结束在分支 \`${input.endedOn}\` 上，不是集成线拿到的这一条；这次没有写回执。`
+    : input.branchesWithWork.length > 0
+      ? `本任务另有工作在分支 \`${input.branchesWithWork.join('`、`')}\` 上，集成线没有拿到；`
+        + `那部分交付目前不在 \`${input.targetBranch}\` 上，因此没有写回执。`
+      : `本任务的工作已经在 \`${input.targetBranch}\` 上。`;
+  return `**集成线：分支上的提交已在目标上（系统自动记录）**\n\n`
+    + `集成线拿到本任务的分支 \`${input.branch}\`，它带着本任务自己的提交，`
+    + `但这些改动 \`${input.targetBranch}\` 上都已经有了（rebase 时每个提交都因为补丁内容已在上游而被跳过）。`
+    + `落地作业没有写成「已落地」，也没有推送任何东西。\n\n`
+    + where;
+}
+
 /** What a person is shown about a failure (§4.2's payload column). */function failurePayload(
   state: string,
   detail: {
@@ -1112,6 +1156,13 @@ function nothingToLandComment(input: {
       requestedBySessionId: string | null;
       requestedByUserId: string | null;
     } | null;
+    /**
+     * The merge check this generation did NOT run, when the account owner approved skipping it
+     * (§2.4 J-S5, 0393). A failure of such a generation is about the rest of its work, and the item
+     * has to say so: without it, a tree that came back red on the TASK_ACCEPTANCE alone would read
+     * as the very check the owner had just taken off it.
+     */
+    skippedCheck: SkippedMergeCheckRecord | null;
   },
 ): Record<string, unknown> {
   // What every failure says about itself beside its own facts: the class its next step turns on
@@ -1121,6 +1172,7 @@ function nothingToLandComment(input: {
     failureClass: landingFailureClass({ state, checks: detail.checks }),
     generation: detail.generation,
     ...(detail.retry ? { retry: detail.retry } : {}),
+    ...(detail.skippedCheck ? { skippedCheck: detail.skippedCheck } : {}),
   };
   if (state === 'CONFLICT') {
     return {

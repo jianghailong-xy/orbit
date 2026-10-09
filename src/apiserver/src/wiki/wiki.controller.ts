@@ -55,7 +55,7 @@ export class WikiController {
    * another account's space is the same 404 every other route here answers with; leave it out and
    * the search spans every space this owner has.
    */
-  @PatScope('wiki:read')
+  @PatScope('wiki:read', { workspaceConfinable: false })
   @Get('search')
   async search(
     @CurrentUser() user: AuthUser,
@@ -87,21 +87,21 @@ export class WikiController {
   }
 
   /** The owner's spaces, each with the pending count the sidebar shows. */
-  @PatScope('wiki:read')
+  @PatScope('wiki:read', { workspaceConfinable: false })
   @Get('spaces')
   listSpaces(@CurrentUser() user: AuthUser) {
     return this.wiki.listSpaces(user.userId);
   }
 
   /** A space the owner creates outright: a codebase, or a wiki with no repository behind it. */
-  @PatScope('wiki:write')
+  @PatScope('wiki:write', { workspaceConfinable: false })
   @Post('spaces')
   createSpace(
     @CurrentUser() user: AuthUser,
     @Body() dto: CreateWikiSpaceDto,
     @Req() request: { headers: Record<string, string | string[] | undefined> },
   ) {
-    return this.wiki.createSpace(user.userId, dto, actingSession(request.headers));
+    return this.wiki.createSpace(user.userId, dto, actingSession(request.headers), user.credential);
   }
 
   /**
@@ -109,7 +109,7 @@ export class WikiController {
    * reads — the four aggregates over `wiki_exposure` that no other read of the document pays for
    * (see `WikiService.getSpaceView`).
    */
-  @PatScope('wiki:read')
+  @PatScope('wiki:read', { workspaceConfinable: false })
   @Get('spaces/:id')
   getSpace(
     @CurrentUser() user: AuthUser,
@@ -124,9 +124,10 @@ export class WikiController {
   /**
    * What the space does on its own: whether it pushes, whether a reinforce applies at once, and its
    * review mode — the last the owner channel's alone, refused WIKI_OWNER_CHANNEL_ONLY to a request
-   * that carries a session header, as a decide is.
+   * that carries a session header, as a decide is, and refused to a personal access token with
+   * maintenance and spot checks (see `WikiService.updateSpace`).
    */
-  @PatScope('wiki:write')
+  @PatScope('wiki:write', { workspaceConfinable: false })
   @Patch('spaces/:id')
   updateSpace(
     @CurrentUser() user: AuthUser,
@@ -134,18 +135,18 @@ export class WikiController {
     @Body() dto: UpdateWikiSpaceDto,
     @Req() request: { headers: Record<string, string | string[] | undefined> },
   ) {
-    return this.wiki.updateSpace(user.userId, id, dto, actingSession(request.headers));
+    return this.wiki.updateSpace(user.userId, id, dto, actingSession(request.headers), user.credential);
   }
 
   /** Bind a workspace this space's sessions read and propose through (§2.1's manual binding). */
-  @PatScope('wiki:write')
+  @PatScope('wiki:write', { workspaceConfinable: false })
   @Post('spaces/:id/workspaces')
   @HttpCode(HttpStatus.OK)
   bindWorkspace(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string, @Body() dto: BindWikiWorkspaceDto) {
     return this.wiki.bindWorkspace(user.userId, id, dto.workspaceId);
   }
 
-  @PatScope('wiki:read')
+  @PatScope('wiki:read', { workspaceConfinable: false })
   @Get('spaces/:id/entries')
   listEntries(
     @CurrentUser() user: AuthUser,
@@ -164,7 +165,7 @@ export class WikiController {
    * A `:slug`, not a `PublicIdPipe`: a topic is named by the same slug pattern a space is
    * (`WIKI_SLUG_PATTERN`), and it is not a row this door could hand back an id for.
    */
-  @PatScope('wiki:read')
+  @PatScope('wiki:read', { workspaceConfinable: false })
   @Get('spaces/:id/topics/:slug')
   getTopic(
     @CurrentUser() user: AuthUser,
@@ -175,7 +176,7 @@ export class WikiController {
   }
 
   /** What changed in this space lately, newest first — the home page's timeline. */
-  @PatScope('wiki:read')
+  @PatScope('wiki:read', { workspaceConfinable: false })
   @Get('spaces/:id/timeline')
   timeline(
     @CurrentUser() user: AuthUser,
@@ -191,7 +192,7 @@ export class WikiController {
    * this door always, where its current revision came from: the changeset, the review mode that
    * applied it and the verdict it was applied on (contract `reviewModes.run.entry`).
    */
-  @PatScope('wiki:read')
+  @PatScope('wiki:read', { workspaceConfinable: false })
   @Get('entries/:id')
   getEntry(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string, @Query('include') include?: string) {
     const asked = askedFor(include);
@@ -236,7 +237,7 @@ export class WikiController {
   }
 
   /** What waits for the owner, newest first, across every space or one of them. */
-  @PatScope('wiki:read')
+  @PatScope('wiki:read', { workspaceConfinable: false })
   @Get('review')
   review(@CurrentUser() user: AuthUser, @Query('space', PublicIdPipe) space?: string) {
     return this.wiki.listReview(user.userId, space);
@@ -246,7 +247,7 @@ export class WikiController {
    * The owner's own write, which applies at once (contract `effectPolicy.origins.owner`) — what Add to
    * Wiki and the Review page's Edit both call, and the same entry point an agent's proposal takes.
    */
-  @PatScope('wiki:write')
+  @PatScope('wiki:write', { workspaceConfinable: false })
   @Post('spaces/:id/changesets')
   @HttpCode(HttpStatus.OK)
   async propose(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string, @Body() dto: WikiProposeDto) {

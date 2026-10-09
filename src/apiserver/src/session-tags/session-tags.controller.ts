@@ -12,27 +12,27 @@ export class SessionTagsController {
   constructor(private readonly tags: SessionTagsService) {}
 
   /** The caller's tag library (system tags seeded + always included). */
-  @PatScope('sessions:read')
+  @PatScope('sessions:read', { workspaceConfinable: false })
   @Get()
   list(@CurrentUser() user: AuthUser) {
     return this.tags.list(user.userId);
   }
 
-  @PatScope('sessions:write')
+  @PatScope('sessions:write', { workspaceConfinable: false })
   @Post()
   create(@CurrentUser() user: AuthUser, @Body() dto: CreateSessionTagDto) {
     return this.tags.create(user.userId, dto);
   }
 
   /** Rename or recolor a custom tag (system tags are rejected). */
-  @PatScope('sessions:write')
+  @PatScope('sessions:write', { workspaceConfinable: false })
   @Patch(':id')
   update(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string, @Body() dto: UpdateSessionTagDto) {
     return this.tags.update(user.userId, id, dto);
   }
 
   /** Delete a custom tag (system tags are rejected); its links cascade away. */
-  @PatScope('sessions:write')
+  @PatScope('sessions:write', { workspaceConfinable: false })
   @Delete(':id')
   remove(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.tags.remove(user.userId, id);

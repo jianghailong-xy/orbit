@@ -1,0 +1,1189 @@
+{
+ "decision": {
+  "taskId": "34Za39ACSBoCkYKc80Md8",
+  "evidenceRevision": 2,
+  "evidenceDigest": "302ca1f5051c1f3fd04abf89c1dff51c86cfbdcb9326fc3f7abf70e9ee9809bc",
+  "verdict": "CONFIRM",
+  "document": "p3.2/README.md"
+ },
+ "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+ "commits": {
+  "before": "fffcdb532ef380d7b43ee87cbbd4e3316c5c24b8",
+  "after": "2925958aed739d386ac4c79d3bd766ac7e221999",
+  "p32Merge": "066d3dd30ef2ca137f3084345503396239c929c1",
+  "p32MergeFirstParent": "fffcdb532ef380d7b43ee87cbbd4e3316c5c24b8",
+  "p32MergeSecondParent": "1877de918e1c4d1aea8bc6c972b11895dd11e57f",
+  "head": "5ba7bb2b94fd12288427a46d82fc8296458102aa"
+ },
+ "runs": {
+  "before": {
+   "commit": "fffcdb532ef380d7b43ee87cbbd4e3316c5c24b8",
+   "environmentSha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "screenshots": 232,
+   "exit": 1,
+   "stats": {
+    "expected": 68,
+    "unexpected": 8,
+    "flaky": 0,
+    "skipped": 4
+   }
+  },
+  "after": {
+   "commit": "2925958aed739d386ac4c79d3bd766ac7e221999",
+   "environmentSha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+   "screenshots": 252,
+   "exit": 0,
+   "stats": {
+    "expected": 76,
+    "unexpected": 0,
+    "flaky": 0,
+    "skipped": 4
+   }
+  }
+ },
+ "entries": 12,
+ "problems": [],
+ "registry": [
+  {
+   "screenshot": "chromium-dark-desktop/task-share-dialog.png",
+   "decision": {
+    "taskId": "34Za39ACSBoCkYKc80Md8",
+    "evidenceRevision": 2,
+    "evidenceDigest": "302ca1f5051c1f3fd04abf89c1dff51c86cfbdcb9326fc3f7abf70e9ee9809bc",
+    "verdict": "CONFIRM",
+    "document": "p3.2/README.md"
+   },
+   "replaces": {
+    "layer": "p0-drift",
+    "sha256": "31621a609fbd9d82fdfe83bcacf5506a7c1efdf48b1419aaf77a9e3274fc53f3"
+   },
+   "mainCommits": [
+    "4088d37e6d26243196161355e658d3e303939bf3"
+   ],
+   "sha256": "2dbf515d731728a7ee9fcccc8f37c31c5725b315b0dea0e0f330face2612c3ce",
+   "sameCommit": {
+    "before": {
+     "commit": "fffcdb532ef380d7b43ee87cbbd4e3316c5c24b8",
+     "sha256": "31621a609fbd9d82fdfe83bcacf5506a7c1efdf48b1419aaf77a9e3274fc53f3"
+    },
+    "after": {
+     "commit": "2925958aed739d386ac4c79d3bd766ac7e221999",
+     "sha256": "2dbf515d731728a7ee9fcccc8f37c31c5725b315b0dea0e0f330face2612c3ce"
+    },
+    "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
+   },
+   "hashes": {
+    "acceptedBefore": "31621a609fbd9d82fdfe83bcacf5506a7c1efdf48b1419aaf77a9e3274fc53f3",
+    "runBefore": "31621a609fbd9d82fdfe83bcacf5506a7c1efdf48b1419aaf77a9e3274fc53f3",
+    "acceptedAfter": "2dbf515d731728a7ee9fcccc8f37c31c5725b315b0dea0e0f330face2612c3ce",
+    "runAfter": "2dbf515d731728a7ee9fcccc8f37c31c5725b315b0dea0e0f330face2612c3ce"
+   },
+   "beforeMatchesReplaced": true,
+   "afterDiffersFromBefore": true,
+   "beforeToAfter": {
+    "differentPixels": 1618,
+    "maxChannelDelta": 186
+   },
+   "p32Revision2": {
+    "pixels": 1618,
+    "maxChannelDiff": 186
+   },
+   "tipCaptureMatchesRegistered": true
+  },
+  {
+   "screenshot": "chromium-dark-phone/task-share-dialog.png",
+   "decision": {
+    "taskId": "34Za39ACSBoCkYKc80Md8",
+    "evidenceRevision": 2,
+    "evidenceDigest": "302ca1f5051c1f3fd04abf89c1dff51c86cfbdcb9326fc3f7abf70e9ee9809bc",
+    "verdict": "CONFIRM",
+    "document": "p3.2/README.md"
+   },
+   "replaces": {
+    "layer": "p0-drift",
+    "sha256": "6d1ce3bffeb87baeb167a332d61a134932b1e9960a9a67ca313763b527c50e27"
+   },
+   "mainCommits": [
+    "4088d37e6d26243196161355e658d3e303939bf3"
+   ],
+   "sha256": "c017cc3caa5ff1a215de2998d9e52f413ed92cb2d8168393a060dbf7b5dfba37",
+   "sameCommit": {
+    "before": {
+     "commit": "fffcdb532ef380d7b43ee87cbbd4e3316c5c24b8",
+     "sha256": "6d1ce3bffeb87baeb167a332d61a134932b1e9960a9a67ca313763b527c50e27"
+    },
+    "after": {
+     "commit": "2925958aed739d386ac4c79d3bd766ac7e221999",
+     "sha256": "c017cc3caa5ff1a215de2998d9e52f413ed92cb2d8168393a060dbf7b5dfba37"
+    },
+    "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
+   },
+   "hashes": {
+    "acceptedBefore": "6d1ce3bffeb87baeb167a332d61a134932b1e9960a9a67ca313763b527c50e27",
+    "runBefore": "6d1ce3bffeb87baeb167a332d61a134932b1e9960a9a67ca313763b527c50e27",
+    "acceptedAfter": "c017cc3caa5ff1a215de2998d9e52f413ed92cb2d8168393a060dbf7b5dfba37",
+    "runAfter": "c017cc3caa5ff1a215de2998d9e52f413ed92cb2d8168393a060dbf7b5dfba37"
+   },
+   "beforeMatchesReplaced": true,
+   "afterDiffersFromBefore": true,
+   "beforeToAfter": {
+    "differentPixels": 21183,
+    "maxChannelDelta": 186
+   },
+   "p32Revision2": {
+    "pixels": 21183,
+    "maxChannelDiff": 186
+   },
+   "tipCaptureMatchesRegistered": true
+  },
+  {
+   "screenshot": "chromium-light-desktop/task-action-menu.png",
+   "decision": {
+    "taskId": "34Za39ACSBoCkYKc80Md8",
+    "evidenceRevision": 2,
+    "evidenceDigest": "302ca1f5051c1f3fd04abf89c1dff51c86cfbdcb9326fc3f7abf70e9ee9809bc",
+    "verdict": "CONFIRM",
+    "document": "p3.2/README.md"
+   },
+   "replaces": {
+    "layer": "p0-drift",
+    "sha256": "a96c90d797da2516fed17d9a236df05942ccdeb16752a73aaa36de00f87de355"
+   },
+   "mainCommits": [
+    "4088d37e6d26243196161355e658d3e303939bf3"
+   ],
+   "sha256": "82e929f91db530ce8dafc4f688a479a1942236725558465dc2df26456fa89a9a",
+   "sameCommit": {
+    "before": {
+     "commit": "fffcdb532ef380d7b43ee87cbbd4e3316c5c24b8",
+     "sha256": "a96c90d797da2516fed17d9a236df05942ccdeb16752a73aaa36de00f87de355"
+    },
+    "after": {
+     "commit": "2925958aed739d386ac4c79d3bd766ac7e221999",
+     "sha256": "82e929f91db530ce8dafc4f688a479a1942236725558465dc2df26456fa89a9a"
+    },
+    "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
+   },
+   "hashes": {
+    "acceptedBefore": "a96c90d797da2516fed17d9a236df05942ccdeb16752a73aaa36de00f87de355",
+    "runBefore": "a96c90d797da2516fed17d9a236df05942ccdeb16752a73aaa36de00f87de355",
+    "acceptedAfter": "82e929f91db530ce8dafc4f688a479a1942236725558465dc2df26456fa89a9a",
+    "runAfter": "82e929f91db530ce8dafc4f688a479a1942236725558465dc2df26456fa89a9a"
+   },
+   "beforeMatchesReplaced": true,
+   "afterDiffersFromBefore": true,
+   "beforeToAfter": {
+    "differentPixels": 466,
+    "maxChannelDelta": 82
+   },
+   "p32Revision2": {
+    "pixels": 466,
+    "maxChannelDiff": 82
+   },
+   "tipCaptureMatchesRegistered": true
+  },
+  {
+   "screenshot": "chromium-light-desktop/task-share-dialog.png",
+   "decision": {
+    "taskId": "34Za39ACSBoCkYKc80Md8",
+    "evidenceRevision": 2,
+    "evidenceDigest": "302ca1f5051c1f3fd04abf89c1dff51c86cfbdcb9326fc3f7abf70e9ee9809bc",
+    "verdict": "CONFIRM",
+    "document": "p3.2/README.md"
+   },
+   "replaces": {
+    "layer": "p0-drift",
+    "sha256": "4e17a8be17426fb9f30176b813a601723dc34dea6fe0608c5c83c322ccc49fc8"
+   },
+   "mainCommits": [
+    "4088d37e6d26243196161355e658d3e303939bf3"
+   ],
+   "sha256": "1a695d12ea388d8085d9c122eb2113603be3b9fb2e5a6fd0728a2c56aa8e9f3f",
+   "sameCommit": {
+    "before": {
+     "commit": "fffcdb532ef380d7b43ee87cbbd4e3316c5c24b8",
+     "sha256": "4e17a8be17426fb9f30176b813a601723dc34dea6fe0608c5c83c322ccc49fc8"
+    },
+    "after": {
+     "commit": "2925958aed739d386ac4c79d3bd766ac7e221999",
+     "sha256": "1a695d12ea388d8085d9c122eb2113603be3b9fb2e5a6fd0728a2c56aa8e9f3f"
+    },
+    "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
+   },
+   "hashes": {
+    "acceptedBefore": "4e17a8be17426fb9f30176b813a601723dc34dea6fe0608c5c83c322ccc49fc8",
+    "runBefore": "4e17a8be17426fb9f30176b813a601723dc34dea6fe0608c5c83c322ccc49fc8",
+    "acceptedAfter": "1a695d12ea388d8085d9c122eb2113603be3b9fb2e5a6fd0728a2c56aa8e9f3f",
+    "runAfter": "1a695d12ea388d8085d9c122eb2113603be3b9fb2e5a6fd0728a2c56aa8e9f3f"
+   },
+   "beforeMatchesReplaced": true,
+   "afterDiffersFromBefore": true,
+   "beforeToAfter": {
+    "differentPixels": 1228,
+    "maxChannelDelta": 239
+   },
+   "p32Revision2": {
+    "pixels": 1228,
+    "maxChannelDiff": 239
+   },
+   "tipCaptureMatchesRegistered": true
+  },
+  {
+   "screenshot": "chromium-light-phone/task-action-menu.png",
+   "decision": {
+    "taskId": "34Za39ACSBoCkYKc80Md8",
+    "evidenceRevision": 2,
+    "evidenceDigest": "302ca1f5051c1f3fd04abf89c1dff51c86cfbdcb9326fc3f7abf70e9ee9809bc",
+    "verdict": "CONFIRM",
+    "document": "p3.2/README.md"
+   },
+   "replaces": {
+    "layer": "p0-drift",
+    "sha256": "0c3321ffc316ed378af8ec6a533bc9d0b654e920010d035d4fe1f457a8c5bc34"
+   },
+   "mainCommits": [
+    "4088d37e6d26243196161355e658d3e303939bf3"
+   ],
+   "sha256": "e56a4013d7ca61276147b755cd38afdb2109d0f7711b553982e096cb599e906b",
+   "sameCommit": {
+    "before": {
+     "commit": "fffcdb532ef380d7b43ee87cbbd4e3316c5c24b8",
+     "sha256": "0c3321ffc316ed378af8ec6a533bc9d0b654e920010d035d4fe1f457a8c5bc34"
+    },
+    "after": {
+     "commit": "2925958aed739d386ac4c79d3bd766ac7e221999",
+     "sha256": "e56a4013d7ca61276147b755cd38afdb2109d0f7711b553982e096cb599e906b"
+    },
+    "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
+   },
+   "hashes": {
+    "acceptedBefore": "0c3321ffc316ed378af8ec6a533bc9d0b654e920010d035d4fe1f457a8c5bc34",
+    "runBefore": "0c3321ffc316ed378af8ec6a533bc9d0b654e920010d035d4fe1f457a8c5bc34",
+    "acceptedAfter": "e56a4013d7ca61276147b755cd38afdb2109d0f7711b553982e096cb599e906b",
+    "runAfter": "e56a4013d7ca61276147b755cd38afdb2109d0f7711b553982e096cb599e906b"
+   },
+   "beforeMatchesReplaced": true,
+   "afterDiffersFromBefore": true,
+   "beforeToAfter": {
+    "differentPixels": 557,
+    "maxChannelDelta": 82
+   },
+   "p32Revision2": {
+    "pixels": 557,
+    "maxChannelDiff": 82
+   },
+   "tipCaptureMatchesRegistered": true
+  },
+  {
+   "screenshot": "chromium-light-phone/task-share-dialog.png",
+   "decision": {
+    "taskId": "34Za39ACSBoCkYKc80Md8",
+    "evidenceRevision": 2,
+    "evidenceDigest": "302ca1f5051c1f3fd04abf89c1dff51c86cfbdcb9326fc3f7abf70e9ee9809bc",
+    "verdict": "CONFIRM",
+    "document": "p3.2/README.md"
+   },
+   "replaces": {
+    "layer": "p0-drift",
+    "sha256": "0febd9470f9fca3ebaa95dad6964afd57e7c2309186de562935b3cff39aa96bf"
+   },
+   "mainCommits": [
+    "4088d37e6d26243196161355e658d3e303939bf3"
+   ],
+   "sha256": "cef516ca7e9386056eaf81eef87ce712a73e7e50e749c42459bc5fdad3fb245b",
+   "sameCommit": {
+    "before": {
+     "commit": "fffcdb532ef380d7b43ee87cbbd4e3316c5c24b8",
+     "sha256": "0febd9470f9fca3ebaa95dad6964afd57e7c2309186de562935b3cff39aa96bf"
+    },
+    "after": {
+     "commit": "2925958aed739d386ac4c79d3bd766ac7e221999",
+     "sha256": "cef516ca7e9386056eaf81eef87ce712a73e7e50e749c42459bc5fdad3fb245b"
+    },
+    "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
+   },
+   "hashes": {
+    "acceptedBefore": "0febd9470f9fca3ebaa95dad6964afd57e7c2309186de562935b3cff39aa96bf",
+    "runBefore": "0febd9470f9fca3ebaa95dad6964afd57e7c2309186de562935b3cff39aa96bf",
+    "acceptedAfter": "cef516ca7e9386056eaf81eef87ce712a73e7e50e749c42459bc5fdad3fb245b",
+    "runAfter": "cef516ca7e9386056eaf81eef87ce712a73e7e50e749c42459bc5fdad3fb245b"
+   },
+   "beforeMatchesReplaced": true,
+   "afterDiffersFromBefore": true,
+   "beforeToAfter": {
+    "differentPixels": 31309,
+    "maxChannelDelta": 239
+   },
+   "p32Revision2": {
+    "pixels": 31309,
+    "maxChannelDiff": 239
+   },
+   "tipCaptureMatchesRegistered": true
+  },
+  {
+   "screenshot": "webkit-dark-desktop/task-share-dialog.png",
+   "decision": {
+    "taskId": "34Za39ACSBoCkYKc80Md8",
+    "evidenceRevision": 2,
+    "evidenceDigest": "302ca1f5051c1f3fd04abf89c1dff51c86cfbdcb9326fc3f7abf70e9ee9809bc",
+    "verdict": "CONFIRM",
+    "document": "p3.2/README.md"
+   },
+   "replaces": {
+    "layer": "p0-drift",
+    "sha256": "16239de70c56fda957b05d03c3b0dd762972620680e5c601bedf25e3220086e4"
+   },
+   "mainCommits": [
+    "4088d37e6d26243196161355e658d3e303939bf3"
+   ],
+   "sha256": "1ac55c143850623b7f6c0c2091978bd9a97c26a26af64828bd9c1bc8c2397907",
+   "sameCommit": {
+    "before": {
+     "commit": "fffcdb532ef380d7b43ee87cbbd4e3316c5c24b8",
+     "sha256": "16239de70c56fda957b05d03c3b0dd762972620680e5c601bedf25e3220086e4"
+    },
+    "after": {
+     "commit": "2925958aed739d386ac4c79d3bd766ac7e221999",
+     "sha256": "1ac55c143850623b7f6c0c2091978bd9a97c26a26af64828bd9c1bc8c2397907"
+    },
+    "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
+   },
+   "hashes": {
+    "acceptedBefore": "16239de70c56fda957b05d03c3b0dd762972620680e5c601bedf25e3220086e4",
+    "runBefore": "16239de70c56fda957b05d03c3b0dd762972620680e5c601bedf25e3220086e4",
+    "acceptedAfter": "1ac55c143850623b7f6c0c2091978bd9a97c26a26af64828bd9c1bc8c2397907",
+    "runAfter": "1ac55c143850623b7f6c0c2091978bd9a97c26a26af64828bd9c1bc8c2397907"
+   },
+   "beforeMatchesReplaced": true,
+   "afterDiffersFromBefore": true,
+   "beforeToAfter": {
+    "differentPixels": 1260,
+    "maxChannelDelta": 138
+   },
+   "p32Revision2": {
+    "pixels": 1260,
+    "maxChannelDiff": 138
+   },
+   "tipCaptureMatchesRegistered": true
+  },
+  {
+   "screenshot": "webkit-dark-phone/task-share-dialog.png",
+   "decision": {
+    "taskId": "34Za39ACSBoCkYKc80Md8",
+    "evidenceRevision": 2,
+    "evidenceDigest": "302ca1f5051c1f3fd04abf89c1dff51c86cfbdcb9326fc3f7abf70e9ee9809bc",
+    "verdict": "CONFIRM",
+    "document": "p3.2/README.md"
+   },
+   "replaces": {
+    "layer": "p0-drift",
+    "sha256": "aadbd69e2cc9ddbd99231921ee84895dc912510ab63446e6541b9ef20f6a9a38"
+   },
+   "mainCommits": [
+    "4088d37e6d26243196161355e658d3e303939bf3"
+   ],
+   "sha256": "aca1f92577e858e3dc309c07c0a4748aa568fe2ca059376d6cad0995e3676478",
+   "sameCommit": {
+    "before": {
+     "commit": "fffcdb532ef380d7b43ee87cbbd4e3316c5c24b8",
+     "sha256": "aadbd69e2cc9ddbd99231921ee84895dc912510ab63446e6541b9ef20f6a9a38"
+    },
+    "after": {
+     "commit": "2925958aed739d386ac4c79d3bd766ac7e221999",
+     "sha256": "aca1f92577e858e3dc309c07c0a4748aa568fe2ca059376d6cad0995e3676478"
+    },
+    "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
+   },
+   "hashes": {
+    "acceptedBefore": "aadbd69e2cc9ddbd99231921ee84895dc912510ab63446e6541b9ef20f6a9a38",
+    "runBefore": "aadbd69e2cc9ddbd99231921ee84895dc912510ab63446e6541b9ef20f6a9a38",
+    "acceptedAfter": "aca1f92577e858e3dc309c07c0a4748aa568fe2ca059376d6cad0995e3676478",
+    "runAfter": "aca1f92577e858e3dc309c07c0a4748aa568fe2ca059376d6cad0995e3676478"
+   },
+   "beforeMatchesReplaced": true,
+   "afterDiffersFromBefore": true,
+   "beforeToAfter": {
+    "differentPixels": 1257,
+    "maxChannelDelta": 138
+   },
+   "p32Revision2": {
+    "pixels": 1257,
+    "maxChannelDiff": 138
+   },
+   "tipCaptureMatchesRegistered": true
+  },
+  {
+   "screenshot": "webkit-light-desktop/task-action-menu.png",
+   "decision": {
+    "taskId": "34Za39ACSBoCkYKc80Md8",
+    "evidenceRevision": 2,
+    "evidenceDigest": "302ca1f5051c1f3fd04abf89c1dff51c86cfbdcb9326fc3f7abf70e9ee9809bc",
+    "verdict": "CONFIRM",
+    "document": "p3.2/README.md"
+   },
+   "replaces": {
+    "layer": "p0-drift",
+    "sha256": "36b9d7ee7bff653f16c5f96e7c2e2efaf68edf659eec5761d4578f71fb4c7194"
+   },
+   "mainCommits": [
+    "4088d37e6d26243196161355e658d3e303939bf3"
+   ],
+   "sha256": "8379a8c00abae3054fe3891bd6ef8c46d50e4e634a29d7ae451c883681d8f679",
+   "sameCommit": {
+    "before": {
+     "commit": "fffcdb532ef380d7b43ee87cbbd4e3316c5c24b8",
+     "sha256": "36b9d7ee7bff653f16c5f96e7c2e2efaf68edf659eec5761d4578f71fb4c7194"
+    },
+    "after": {
+     "commit": "2925958aed739d386ac4c79d3bd766ac7e221999",
+     "sha256": "8379a8c00abae3054fe3891bd6ef8c46d50e4e634a29d7ae451c883681d8f679"
+    },
+    "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
+   },
+   "hashes": {
+    "acceptedBefore": "36b9d7ee7bff653f16c5f96e7c2e2efaf68edf659eec5761d4578f71fb4c7194",
+    "runBefore": "36b9d7ee7bff653f16c5f96e7c2e2efaf68edf659eec5761d4578f71fb4c7194",
+    "acceptedAfter": "8379a8c00abae3054fe3891bd6ef8c46d50e4e634a29d7ae451c883681d8f679",
+    "runAfter": "8379a8c00abae3054fe3891bd6ef8c46d50e4e634a29d7ae451c883681d8f679"
+   },
+   "beforeMatchesReplaced": true,
+   "afterDiffersFromBefore": true,
+   "beforeToAfter": {
+    "differentPixels": 489,
+    "maxChannelDelta": 82
+   },
+   "p32Revision2": {
+    "pixels": 489,
+    "maxChannelDiff": 82
+   },
+   "tipCaptureMatchesRegistered": true
+  },
+  {
+   "screenshot": "webkit-light-desktop/task-share-dialog.png",
+   "decision": {
+    "taskId": "34Za39ACSBoCkYKc80Md8",
+    "evidenceRevision": 2,
+    "evidenceDigest": "302ca1f5051c1f3fd04abf89c1dff51c86cfbdcb9326fc3f7abf70e9ee9809bc",
+    "verdict": "CONFIRM",
+    "document": "p3.2/README.md"
+   },
+   "replaces": {
+    "layer": "p0-drift",
+    "sha256": "f5e3fec75e233fb1e63a765a39c08e6be9d40ccbae2e58c181e66b4d6a2645a9"
+   },
+   "mainCommits": [
+    "4088d37e6d26243196161355e658d3e303939bf3"
+   ],
+   "sha256": "4634e7383d149329a3e04748bdfead764ba32fe269f8b31f7fd0c688d9730f21",
+   "sameCommit": {
+    "before": {
+     "commit": "fffcdb532ef380d7b43ee87cbbd4e3316c5c24b8",
+     "sha256": "f5e3fec75e233fb1e63a765a39c08e6be9d40ccbae2e58c181e66b4d6a2645a9"
+    },
+    "after": {
+     "commit": "2925958aed739d386ac4c79d3bd766ac7e221999",
+     "sha256": "4634e7383d149329a3e04748bdfead764ba32fe269f8b31f7fd0c688d9730f21"
+    },
+    "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
+   },
+   "hashes": {
+    "acceptedBefore": "f5e3fec75e233fb1e63a765a39c08e6be9d40ccbae2e58c181e66b4d6a2645a9",
+    "runBefore": "f5e3fec75e233fb1e63a765a39c08e6be9d40ccbae2e58c181e66b4d6a2645a9",
+    "acceptedAfter": "4634e7383d149329a3e04748bdfead764ba32fe269f8b31f7fd0c688d9730f21",
+    "runAfter": "4634e7383d149329a3e04748bdfead764ba32fe269f8b31f7fd0c688d9730f21"
+   },
+   "beforeMatchesReplaced": true,
+   "afterDiffersFromBefore": true,
+   "beforeToAfter": {
+    "differentPixels": 1254,
+    "maxChannelDelta": 163
+   },
+   "p32Revision2": {
+    "pixels": 1254,
+    "maxChannelDiff": 163
+   },
+   "tipCaptureMatchesRegistered": true
+  },
+  {
+   "screenshot": "webkit-light-phone/task-action-menu.png",
+   "decision": {
+    "taskId": "34Za39ACSBoCkYKc80Md8",
+    "evidenceRevision": 2,
+    "evidenceDigest": "302ca1f5051c1f3fd04abf89c1dff51c86cfbdcb9326fc3f7abf70e9ee9809bc",
+    "verdict": "CONFIRM",
+    "document": "p3.2/README.md"
+   },
+   "replaces": {
+    "layer": "p0-drift",
+    "sha256": "2d9968586ceced3ebd162925c124857952d3d86e4cd579dae2af860aef79085e"
+   },
+   "mainCommits": [
+    "4088d37e6d26243196161355e658d3e303939bf3"
+   ],
+   "sha256": "b76ada09c93876dbafd24922c0925821413b2fc37381795c68889bbe7e31e802",
+   "sameCommit": {
+    "before": {
+     "commit": "fffcdb532ef380d7b43ee87cbbd4e3316c5c24b8",
+     "sha256": "2d9968586ceced3ebd162925c124857952d3d86e4cd579dae2af860aef79085e"
+    },
+    "after": {
+     "commit": "2925958aed739d386ac4c79d3bd766ac7e221999",
+     "sha256": "b76ada09c93876dbafd24922c0925821413b2fc37381795c68889bbe7e31e802"
+    },
+    "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
+   },
+   "hashes": {
+    "acceptedBefore": "2d9968586ceced3ebd162925c124857952d3d86e4cd579dae2af860aef79085e",
+    "runBefore": "2d9968586ceced3ebd162925c124857952d3d86e4cd579dae2af860aef79085e",
+    "acceptedAfter": "b76ada09c93876dbafd24922c0925821413b2fc37381795c68889bbe7e31e802",
+    "runAfter": "b76ada09c93876dbafd24922c0925821413b2fc37381795c68889bbe7e31e802"
+   },
+   "beforeMatchesReplaced": true,
+   "afterDiffersFromBefore": true,
+   "beforeToAfter": {
+    "differentPixels": 586,
+    "maxChannelDelta": 82
+   },
+   "p32Revision2": {
+    "pixels": 586,
+    "maxChannelDiff": 82
+   },
+   "tipCaptureMatchesRegistered": true
+  },
+  {
+   "screenshot": "webkit-light-phone/task-share-dialog.png",
+   "decision": {
+    "taskId": "34Za39ACSBoCkYKc80Md8",
+    "evidenceRevision": 2,
+    "evidenceDigest": "302ca1f5051c1f3fd04abf89c1dff51c86cfbdcb9326fc3f7abf70e9ee9809bc",
+    "verdict": "CONFIRM",
+    "document": "p3.2/README.md"
+   },
+   "replaces": {
+    "layer": "p0-drift",
+    "sha256": "eb49983c732ff7fe8048bd72c9d0633b4196463e0495d9ba139a8db525c4f6a3"
+   },
+   "mainCommits": [
+    "4088d37e6d26243196161355e658d3e303939bf3"
+   ],
+   "sha256": "292b5453d2281d6cadbd81af4661ca8108ff209320bb0f1111a2495908fe06b5",
+   "sameCommit": {
+    "before": {
+     "commit": "fffcdb532ef380d7b43ee87cbbd4e3316c5c24b8",
+     "sha256": "eb49983c732ff7fe8048bd72c9d0633b4196463e0495d9ba139a8db525c4f6a3"
+    },
+    "after": {
+     "commit": "2925958aed739d386ac4c79d3bd766ac7e221999",
+     "sha256": "292b5453d2281d6cadbd81af4661ca8108ff209320bb0f1111a2495908fe06b5"
+    },
+    "environment": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf"
+   },
+   "hashes": {
+    "acceptedBefore": "eb49983c732ff7fe8048bd72c9d0633b4196463e0495d9ba139a8db525c4f6a3",
+    "runBefore": "eb49983c732ff7fe8048bd72c9d0633b4196463e0495d9ba139a8db525c4f6a3",
+    "acceptedAfter": "292b5453d2281d6cadbd81af4661ca8108ff209320bb0f1111a2495908fe06b5",
+    "runAfter": "292b5453d2281d6cadbd81af4661ca8108ff209320bb0f1111a2495908fe06b5"
+   },
+   "beforeMatchesReplaced": true,
+   "afterDiffersFromBefore": true,
+   "beforeToAfter": {
+    "differentPixels": 1254,
+    "maxChannelDelta": 163
+   },
+   "p32Revision2": {
+    "pixels": 1254,
+    "maxChannelDiff": 163
+   },
+   "tipCaptureMatchesRegistered": true
+  }
+ ],
+ "completeness": [
+  {
+   "screenshot": "chromium-light-desktop/task-detail.png",
+   "expectationLayer": "p0-drift",
+   "afterFailsComparator": false,
+   "registered": false,
+   "beforeToAfter": {
+    "differentPixels": 0,
+    "maxChannelDelta": 0
+   }
+  },
+  {
+   "screenshot": "chromium-light-desktop/task-action-hover.png",
+   "expectationLayer": "p0-drift",
+   "afterFailsComparator": false,
+   "registered": false,
+   "beforeToAfter": {
+    "differentPixels": 0,
+    "maxChannelDelta": 0
+   }
+  },
+  {
+   "screenshot": "chromium-light-desktop/task-action-focus.png",
+   "expectationLayer": "p0-drift",
+   "afterFailsComparator": false,
+   "registered": false,
+   "beforeToAfter": {
+    "differentPixels": 0,
+    "maxChannelDelta": 0
+   }
+  },
+  {
+   "screenshot": "chromium-light-desktop/task-action-menu.png",
+   "expectationLayer": "p0-drift",
+   "afterFailsComparator": true,
+   "registered": true,
+   "beforeToAfter": {
+    "differentPixels": 466,
+    "maxChannelDelta": 82
+   }
+  },
+  {
+   "screenshot": "chromium-light-desktop/task-share-dialog.png",
+   "expectationLayer": "p0-drift",
+   "afterFailsComparator": true,
+   "registered": true,
+   "beforeToAfter": {
+    "differentPixels": 1228,
+    "maxChannelDelta": 239
+   }
+  },
+  {
+   "screenshot": "chromium-light-phone/task-detail.png",
+   "expectationLayer": "p0-drift",
+   "afterFailsComparator": false,
+   "registered": false,
+   "beforeToAfter": {
+    "differentPixels": 0,
+    "maxChannelDelta": 0
+   }
+  },
+  {
+   "screenshot": "chromium-light-phone/task-action-hover.png",
+   "expectationLayer": "p0-drift",
+   "afterFailsComparator": false,
+   "registered": false,
+   "beforeToAfter": {
+    "differentPixels": 0,
+    "maxChannelDelta": 0
+   }
+  },
+  {
+   "screenshot": "chromium-light-phone/task-action-focus.png",
+   "expectationLayer": "p0-drift",
+   "afterFailsComparator": false,
+   "registered": false,
+   "beforeToAfter": {
+    "differentPixels": 0,
+    "maxChannelDelta": 0
+   }
+  },
+  {
+   "screenshot": "chromium-light-phone/task-action-menu.png",
+   "expectationLayer": "p0-drift",
+   "afterFailsComparator": true,
+   "registered": true,
+   "beforeToAfter": {
+    "differentPixels": 557,
+    "maxChannelDelta": 82
+   }
+  },
+  {
+   "screenshot": "chromium-light-phone/task-share-dialog.png",
+   "expectationLayer": "p0-drift",
+   "afterFailsComparator": true,
+   "registered": true,
+   "beforeToAfter": {
+    "differentPixels": 31309,
+    "maxChannelDelta": 239
+   }
+  },
+  {
+   "screenshot": "chromium-dark-desktop/task-detail.png",
+   "expectationLayer": "p0-drift",
+   "afterFailsComparator": false,
+   "registered": false,
+   "beforeToAfter": {
+    "differentPixels": 0,
+    "maxChannelDelta": 0
+   }
+  },
+  {
+   "screenshot": "chromium-dark-desktop/task-action-hover.png",
+   "expectationLayer": "p0-drift",
+   "afterFailsComparator": false,
+   "registered": false,
+   "beforeToAfter": {
+    "differentPixels": 0,
+    "maxChannelDelta": 0
+   }
+  },
+  {
+   "screenshot": "chromium-dark-desktop/task-action-focus.png",
+   "expectationLayer": "p0-drift",
+   "afterFailsComparator": false,
+   "registered": false,
+   "beforeToAfter": {
+    "differentPixels": 0,
+    "maxChannelDelta": 0
+   }
+  },
+  {
+   "screenshot": "chromium-dark-desktop/task-action-menu.png",
+   "expectationLayer": "p0-drift",
+   "afterFailsComparator": false,
+   "registered": false,
+   "beforeToAfter": {
+    "differentPixels": 466,
+    "maxChannelDelta": 45
+   }
+  },
+  {
+   "screenshot": "chromium-dark-desktop/task-share-dialog.png",
+   "expectationLayer": "p0-drift",
+   "afterFailsComparator": true,
+   "registered": true,
+   "beforeToAfter": {
+    "differentPixels": 1618,
+    "maxChannelDelta": 186
+   }
+  },
+  {
+   "screenshot": "chromium-dark-phone/task-detail.png",
+   "expectationLayer": "p0-drift",
+   "afterFailsComparator": false,
+   "registered": false,
+   "beforeToAfter": {
+    "differentPixels": 68,
+    "maxChannelDelta": 2
+   }
+  },
+  {
+   "screenshot": "chromium-dark-phone/task-action-hover.png",
+   "expectationLayer": "p0-drift",
+   "afterFailsComparator": false,
+   "registered": false,
+   "beforeToAfter": {
+    "differentPixels": 68,
+    "maxChannelDelta": 2
+   }
+  },
+  {
+   "screenshot": "chromium-dark-phone/task-action-focus.png",
+   "expectationLayer": "p0-drift",
+   "afterFailsComparator": false,
+   "registered": false,
+   "beforeToAfter": {
+    "differentPixels": 68,
+    "maxChannelDelta": 2
+   }
+  },
+  {
+   "screenshot": "chromium-dark-phone/task-action-menu.png",
+   "expectationLayer": "p0-drift",
+   "afterFailsComparator": false,
+   "registered": false,
+   "beforeToAfter": {
+    "differentPixels": 627,
+    "maxChannelDelta": 45
+   }
+  },
+  {
+   "screenshot": "chromium-dark-phone/task-share-dialog.png",
+   "expectationLayer": "p0-drift",
+   "afterFailsComparator": true,
+   "registered": true,
+   "beforeToAfter": {
+    "differentPixels": 21183,
+    "maxChannelDelta": 186
+   }
+  },
+  {
+   "screenshot": "webkit-light-desktop/task-detail.png",
+   "expectationLayer": "p0-drift",
+   "afterFailsComparator": false,
+   "registered": false,
+   "beforeToAfter": {
+    "differentPixels": 0,
+    "maxChannelDelta": 0
+   }
+  },
+  {
+   "screenshot": "webkit-light-desktop/task-action-hover.png",
+   "expectationLayer": "p0-drift",
+   "afterFailsComparator": false,
+   "registered": false,
+   "beforeToAfter": {
+    "differentPixels": 0,
+    "maxChannelDelta": 0
+   }
+  },
+  {
+   "screenshot": "webkit-light-desktop/task-action-focus.png",
+   "expectationLayer": "p0-drift",
+   "afterFailsComparator": false,
+   "registered": false,
+   "beforeToAfter": {
+    "differentPixels": 0,
+    "maxChannelDelta": 0
+   }
+  },
+  {
+   "screenshot": "webkit-light-desktop/task-action-menu.png",
+   "expectationLayer": "p0-drift",
+   "afterFailsComparator": true,
+   "registered": true,
+   "beforeToAfter": {
+    "differentPixels": 489,
+    "maxChannelDelta": 82
+   }
+  },
+  {
+   "screenshot": "webkit-light-desktop/task-share-dialog.png",
+   "expectationLayer": "p0-drift",
+   "afterFailsComparator": true,
+   "registered": true,
+   "beforeToAfter": {
+    "differentPixels": 1254,
+    "maxChannelDelta": 163
+   }
+  },
+  {
+   "screenshot": "webkit-light-phone/task-detail.png",
+   "expectationLayer": "p0-drift",
+   "afterFailsComparator": false,
+   "registered": false,
+   "beforeToAfter": {
+    "differentPixels": 0,
+    "maxChannelDelta": 0
+   }
+  },
+  {
+   "screenshot": "webkit-light-phone/task-action-hover.png",
+   "expectationLayer": "p0-drift",
+   "afterFailsComparator": false,
+   "registered": false,
+   "beforeToAfter": {
+    "differentPixels": 0,
+    "maxChannelDelta": 0
+   }
+  },
+  {
+   "screenshot": "webkit-light-phone/task-action-focus.png",
+   "expectationLayer": "p0-drift",
+   "afterFailsComparator": false,
+   "registered": false,
+   "beforeToAfter": {
+    "differentPixels": 0,
+    "maxChannelDelta": 0
+   }
+  },
+  {
+   "screenshot": "webkit-light-phone/task-action-menu.png",
+   "expectationLayer": "p0-drift",
+   "afterFailsComparator": true,
+   "registered": true,
+   "beforeToAfter": {
+    "differentPixels": 586,
+    "maxChannelDelta": 82
+   }
+  },
+  {
+   "screenshot": "webkit-light-phone/task-share-dialog.png",
+   "expectationLayer": "p0-drift",
+   "afterFailsComparator": true,
+   "registered": true,
+   "beforeToAfter": {
+    "differentPixels": 1254,
+    "maxChannelDelta": 163
+   }
+  },
+  {
+   "screenshot": "webkit-dark-desktop/task-detail.png",
+   "expectationLayer": "p0-drift",
+   "afterFailsComparator": false,
+   "registered": false,
+   "beforeToAfter": {
+    "differentPixels": 0,
+    "maxChannelDelta": 0
+   }
+  },
+  {
+   "screenshot": "webkit-dark-desktop/task-action-hover.png",
+   "expectationLayer": "p0-drift",
+   "afterFailsComparator": false,
+   "registered": false,
+   "beforeToAfter": {
+    "differentPixels": 0,
+    "maxChannelDelta": 0
+   }
+  },
+  {
+   "screenshot": "webkit-dark-desktop/task-action-focus.png",
+   "expectationLayer": "p0-drift",
+   "afterFailsComparator": false,
+   "registered": false,
+   "beforeToAfter": {
+    "differentPixels": 0,
+    "maxChannelDelta": 0
+   }
+  },
+  {
+   "screenshot": "webkit-dark-desktop/task-action-menu.png",
+   "expectationLayer": "p0-drift",
+   "afterFailsComparator": false,
+   "registered": false,
+   "beforeToAfter": {
+    "differentPixels": 489,
+    "maxChannelDelta": 45
+   }
+  },
+  {
+   "screenshot": "webkit-dark-desktop/task-share-dialog.png",
+   "expectationLayer": "p0-drift",
+   "afterFailsComparator": true,
+   "registered": true,
+   "beforeToAfter": {
+    "differentPixels": 1260,
+    "maxChannelDelta": 138
+   }
+  },
+  {
+   "screenshot": "webkit-dark-phone/task-detail.png",
+   "expectationLayer": "p0-drift",
+   "afterFailsComparator": false,
+   "registered": false,
+   "beforeToAfter": {
+    "differentPixels": 66,
+    "maxChannelDelta": 1
+   }
+  },
+  {
+   "screenshot": "webkit-dark-phone/task-action-hover.png",
+   "expectationLayer": "p0-drift",
+   "afterFailsComparator": false,
+   "registered": false,
+   "beforeToAfter": {
+    "differentPixels": 66,
+    "maxChannelDelta": 1
+   }
+  },
+  {
+   "screenshot": "webkit-dark-phone/task-action-focus.png",
+   "expectationLayer": "p0-drift",
+   "afterFailsComparator": false,
+   "registered": false,
+   "beforeToAfter": {
+    "differentPixels": 66,
+    "maxChannelDelta": 1
+   }
+  },
+  {
+   "screenshot": "webkit-dark-phone/task-action-menu.png",
+   "expectationLayer": "p0-drift",
+   "afterFailsComparator": false,
+   "registered": false,
+   "beforeToAfter": {
+    "differentPixels": 655,
+    "maxChannelDelta": 45
+   }
+  },
+  {
+   "screenshot": "webkit-dark-phone/task-share-dialog.png",
+   "expectationLayer": "p0-drift",
+   "afterFailsComparator": true,
+   "registered": true,
+   "beforeToAfter": {
+    "differentPixels": 1257,
+    "maxChannelDelta": 138
+   }
+  }
+ ],
+ "control": {
+  "commit": "fc58e5713a4d4ffdb12f2f74fd887943893d4a0b",
+  "environmentSha256": "fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf",
+  "exit": 0,
+  "stats": {
+   "expected": 76,
+   "unexpected": 0,
+   "flaky": 0,
+   "skipped": 4
+  },
+  "screenshots": 252,
+  "bytesEqual": 228,
+  "comparatorFails": [
+   "webkit-dark-phone/profile-validation.png"
+  ],
+  "missing": [],
+  "different": [
+   {
+    "screenshot": "chromium-dark-desktop/breakpoint-959-wiki.png",
+    "bytesEqual": false,
+    "comparatorMatch": true,
+    "differentPixels": 12,
+    "maxChannelDelta": 2
+   },
+   {
+    "screenshot": "chromium-dark-desktop/breakpoint-961-session.png",
+    "bytesEqual": false,
+    "comparatorMatch": true,
+    "differentPixels": 3,
+    "maxChannelDelta": 2
+   },
+   {
+    "screenshot": "chromium-dark-desktop/profile-validation.png",
+    "bytesEqual": false,
+    "comparatorMatch": true,
+    "differentPixels": 4,
+    "maxChannelDelta": 1
+   },
+   {
+    "screenshot": "chromium-dark-desktop/project-overview.png",
+    "bytesEqual": false,
+    "comparatorMatch": true,
+    "differentPixels": 9,
+    "maxChannelDelta": 1
+   },
+   {
+    "screenshot": "chromium-dark-desktop/session-attachment-staged.png",
+    "bytesEqual": false,
+    "comparatorMatch": true,
+    "differentPixels": 3,
+    "maxChannelDelta": 2
+   },
+   {
+    "screenshot": "chromium-dark-desktop/task-action-focus.png",
+    "bytesEqual": false,
+    "comparatorMatch": true,
+    "differentPixels": 3,
+    "maxChannelDelta": 1
+   },
+   {
+    "screenshot": "chromium-dark-desktop/task-action-hover.png",
+    "bytesEqual": false,
+    "comparatorMatch": true,
+    "differentPixels": 3,
+    "maxChannelDelta": 1
+   },
+   {
+    "screenshot": "chromium-dark-desktop/task-detail.png",
+    "bytesEqual": false,
+    "comparatorMatch": true,
+    "differentPixels": 3,
+    "maxChannelDelta": 1
+   },
+   {
+    "screenshot": "chromium-dark-phone/profile-validation.png",
+    "bytesEqual": false,
+    "comparatorMatch": true,
+    "differentPixels": 9,
+    "maxChannelDelta": 1
+   },
+   {
+    "screenshot": "chromium-dark-phone/projects-list.png",
+    "bytesEqual": false,
+    "comparatorMatch": true,
+    "differentPixels": 7,
+    "maxChannelDelta": 4
+   },
+   {
+    "screenshot": "chromium-dark-phone/session-attachment-menu.png",
+    "bytesEqual": false,
+    "comparatorMatch": true,
+    "differentPixels": 4,
+    "maxChannelDelta": 1
+   },
+   {
+    "screenshot": "chromium-dark-phone/task-action-focus.png",
+    "bytesEqual": false,
+    "comparatorMatch": true,
+    "differentPixels": 1,
+    "maxChannelDelta": 1
+   },
+   {
+    "screenshot": "chromium-dark-phone/wiki-home.png",
+    "bytesEqual": false,
+    "comparatorMatch": true,
+    "differentPixels": 30,
+    "maxChannelDelta": 2
+   },
+   {
+    "screenshot": "chromium-light-desktop/breakpoint-639-graph.png",
+    "bytesEqual": false,
+    "comparatorMatch": true,
+    "differentPixels": 12,
+    "maxChannelDelta": 1
+   },
+   {
+    "screenshot": "chromium-light-desktop/breakpoint-639-projects.png",
+    "bytesEqual": false,
+    "comparatorMatch": true,
+    "differentPixels": 7,
+    "maxChannelDelta": 2
+   },
+   {
+    "screenshot": "chromium-light-desktop/breakpoint-959-wiki.png",
+    "bytesEqual": false,
+    "comparatorMatch": true,
+    "differentPixels": 14,
+    "maxChannelDelta": 2
+   },
+   {
+    "screenshot": "chromium-light-desktop/profile-validation.png",
+    "bytesEqual": false,
+    "comparatorMatch": true,
+    "differentPixels": 9,
+    "maxChannelDelta": 1
+   },
+   {
+    "screenshot": "chromium-light-desktop/project-overview.png",
+    "bytesEqual": false,
+    "comparatorMatch": true,
+    "differentPixels": 13,
+    "maxChannelDelta": 1
+   },
+   {
+    "screenshot": "chromium-light-desktop/task-action-focus.png",
+    "bytesEqual": false,
+    "comparatorMatch": true,
+    "differentPixels": 5,
+    "maxChannelDelta": 1
+   },
+   {
+    "screenshot": "chromium-light-desktop/task-action-hover.png",
+    "bytesEqual": false,
+    "comparatorMatch": true,
+    "differentPixels": 5,
+    "maxChannelDelta": 1
+   },
+   {
+    "screenshot": "chromium-light-desktop/task-detail.png",
+    "bytesEqual": false,
+    "comparatorMatch": true,
+    "differentPixels": 5,
+    "maxChannelDelta": 1
+   },
+   {
+    "screenshot": "chromium-light-phone/profile-validation.png",
+    "bytesEqual": false,
+    "comparatorMatch": true,
+    "differentPixels": 87,
+    "maxChannelDelta": 2
+   },
+   {
+    "screenshot": "chromium-light-phone/task-action-focus.png",
+    "bytesEqual": false,
+    "comparatorMatch": true,
+    "differentPixels": 2,
+    "maxChannelDelta": 3
+   },
+   {
+    "screenshot": "webkit-dark-phone/profile-validation.png",
+    "bytesEqual": false,
+    "comparatorMatch": false,
+    "differentPixels": 8489,
+    "maxChannelDelta": 167
+   }
+  ]
+ }
+}

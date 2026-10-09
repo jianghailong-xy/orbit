@@ -104,12 +104,17 @@ export function describeWakeFact(fact: WakeFact): string {
     }
     case 'COMPLETION_EVIDENCE_REVISED':
       // The title is there when the fact is delivered to be decided (`CompletionEvidenceProducer`);
-      // a fact that was only recorded carries the id alone.
+      // a fact that was only recorded carries the id alone. A revision a confirmed move handed over
+      // names the project it came from (`completionEvidenceRevisedFact`'s `movedFromProjectId`).
       return (
         (typeof detail.title === 'string'
           ? `任务「${detail.title}」（${uuidToBase62(fact.subjectId)}）`
           : `任务 ${uuidToBase62(fact.subjectId)} `)
-        + `提交了第 ${String(detail.evidenceRevision ?? '未知')} 版完成证据。`
+        + (typeof detail.movedFromProjectId === 'string'
+          ? `带着还没判定的第 ${String(detail.evidenceRevision ?? '未知')} 版完成证据，经账号所有者确认`
+            + `从项目 ${uuidToBase62(detail.movedFromProjectId)} 移进了这个项目：这一版现在由这个项目判，`
+            + '原项目不能再判它。'
+          : `提交了第 ${String(detail.evidenceRevision ?? '未知')} 版完成证据。`)
       );
     case 'COMPLETION_ACK_STALE':
       {
@@ -589,7 +594,8 @@ export function buildCoordinatorDeliveryMessage(
       + '（claim）、引用了哪些检查（checks）、自己承认没证明什么（gaps）；需要时用 task_get '
       + `（taskId 传 ${taskId}）看任务描述和评论。然后用 task_evidence_decide（taskId 传 ${taskId}，`
       + `evidenceRevision 传 "${revision}"）判：证据足以证明上面那条判据，判 CONFIRM，任务随之 DONE；`
-      + '不足，判 SEND_BACK，note 里写清下一版证据要证明什么——任务保持 OPEN，等下一版。\n\n'
+      + '不足，判 SEND_BACK，note 里写清下一版证据要证明什么——note 会作为平台消息直接投给提交这版的执行会话，'
+      + '它改完交下一版；任务保持 OPEN。\n\n'
       + `你不判的话，投递之后过了这个项目的 exceptionEscalationSeconds${escalation}，这一版会交给`
       + '账号所有者在 app 里判；账号所有者任何时候也都可以直接判。真正要账号所有者拍板的题另用 '
       + 'ask_owner 问（每题带推荐默认）；「想让账号所有者看一眼」不是不判的理由。\n\n'

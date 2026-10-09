@@ -5,6 +5,7 @@ import { renderDbConflictMetrics } from '../common/db-conflict-metrics';
 import { PrismaService } from '../prisma/prisma.service';
 import { renderCodexResetMetrics } from '../runners/codex-reset-metrics';
 import { renderWatchMetrics } from '../watches/watch-metrics';
+import { renderWikiModelMetrics } from '../wiki/wiki-model-metrics';
 
 /**
  * Where the database-conflict counters are read from.
@@ -37,7 +38,9 @@ export class MetricsController {
   @Header('Content-Type', 'text/plain; version=0.0.4')
   @Header('Cache-Control', 'no-store')
   async read(): Promise<string> {
-    // The Watch gauges are the one part read from the database, on every scrape (watches/watch-metrics.ts).
-    return renderDbConflictMetrics() + renderCodexResetMetrics() + (await renderWatchMetrics(this.prisma));
+    // The Watch gauges and the wiki's System model are the parts read from the database, on every scrape
+    // (watches/watch-metrics.ts, wiki/wiki-model-metrics.ts).
+    return renderDbConflictMetrics() + renderCodexResetMetrics() + (await renderWatchMetrics(this.prisma))
+      + (await renderWikiModelMetrics(this.prisma));
   }
 }

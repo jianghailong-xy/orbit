@@ -1,0 +1,83 @@
+{
+  "baseline": {
+    "commit": "1d3cd4c70f7cf5d9f3fff1882d526c5b5086f5c6",
+    "scopeHash": "81d469769b6b04ea94d7fd7f7adb5881b211c304745ca6c01d1aa958e8366356"
+  },
+  "records": [
+    "2026-10-07.json",
+    "2026-10-07b.json",
+    "2026-10-07d.json"
+  ],
+  "unowned": [
+    {
+      "path": "src/web/src/components/DeepSeekBalance.tsx",
+      "reason": "no owner"
+    },
+    {
+      "path": "src/web/src/components/ProjectDoneConversation.test.tsx",
+      "reason": "no owner"
+    },
+    {
+      "path": "src/web/src/components/RunnerEngines.accountFold.test.tsx",
+      "reason": "no owner"
+    },
+    {
+      "path": "src/web/src/components/StartProjectCard.test.tsx",
+      "reason": "new since P0.1, not in a delta record: antd-reference, ant-selector, ant-class"
+    },
+    {
+      "path": "src/web/src/components/WikiReviewPage.decided.test.tsx",
+      "reason": "no owner"
+    },
+    {
+      "path": "src/web/src/components/WikiShareButton.tsx",
+      "reason": "no owner"
+    },
+    {
+      "path": "src/web/src/components/WorkspaceView.neverStarted.test.tsx",
+      "reason": "no owner"
+    },
+    {
+      "path": "src/web/src/index.css",
+      "line": 6624,
+      "kind": "ant-class",
+      "text": ".ant-dropdown-menu-item.composer-engine-title,",
+      "reason": "no owner"
+    },
+    {
+      "path": "src/web/src/index.css",
+      "line": 6625,
+      "kind": "ant-class",
+      "text": ".ant-dropdown-menu-item.composer-engine-title:hover {",
+      "reason": "no owner"
+    },
+    {
+      "path": "src/web/src/index.css",
+      "line": 10626,
+      "kind": "ant-class",
+      "text": "`.ant-radio-group` / `.ant-radio-wrapper` ones, which would otherwise win on order. */",
+      "reason": "no owner"
+    },
+    {
+      "path": "src/web/src/pages/SharedWikiPage.test.tsx",
+      "reason": "no owner"
+    },
+    {
+      "path": "src/web/src/pages/SharedWikiPage.tsx",
+      "reason": "no owner"
+    }
+  ],
+  "pending": [],
+  "owners": {
+    "KEEP": 1,
+    "P4.2": 81,
+    "P4.3a": 82,
+    "P4.3b": 30,
+    "P4.4": 50,
+    "P5.1": 28,
+    "P5.2": 11,
+    "P5.3": 90,
+    "P6": 36
+  }
+}
+Ownership gaps: 12 use points have no owner. Migrate them in this batch if in scope, otherwise report them to the coordinator.

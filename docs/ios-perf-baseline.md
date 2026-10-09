@@ -235,6 +235,42 @@ gzip 572,612 B。
 > 同日稍早还有一轮(模拟器被另一个会话交替使用,数据有干扰),次数与时序结论相同:改前 / `7c186a662` 每次 3 发并发,
 > `c0a5cac54` / `56881d2f5` 每次 1 发 + 1 发尾随。
 
+### 2.4 改后:冷启动快照的读取与解码移出主线程(2026-10-06)—— `实测(模拟器)`
+
+**环境**:与 §2.3 同一台 iPhone 17 Pro 模拟器 / iOS 26.5,Debug 构建,生产账号。快照文件 **765,923 B / 615 行 Open**,
+两次测量用的是**同一个文件**(装新构建不会换 data container 里的快照文件;只有 app 真进一次后台才会重写它,
+本轮测量全程用 `terminate` 杀进程,所以谁都没重写)。**方法**:§9.1 的临时打点(`ORBIT_PERF=1`:fork 用 `sysctl`
+读 `kinfo_proc.kp_proc.p_starttime`,首帧用根视图 `CADisplayLink` 的第一次回调,`LaunchSnapshotStore.load()` 前后各记一行),
+外加 `sample <pid> 5`(1 ms 间隔)数**主线程落在解码里的样本**。打点测完已撤。
+
+| 构建 | 主线程里落在 `load()` 内的样本(1 ms × 5 s 窗口) | fork → 首帧(不挂采样器) |
+| --- | --- | --- |
+| 改前(`a89149bfa`) | **20 / 22 / 22 / 23**(5 次里 4 次采到,另一次的窗口没盖住解码) | 中位 **1,770 ms**(n=10) |
+| **改后** | **0 / 0 / 0 / 0 / 0** | 中位 **1,116 ms**(n=10) |
+
+- 那一次同步解码本身是 **26.0–38.2 ms**(打点直接量的 `load()`),落在 `AppModel.init` 里、首帧之前 —— 样本数 20–23 与它吻合。
+- 改后解码只出现在后台线程(后台线程的 `load()` 样本 23 / 21 / 41 / – / 2,后两次是采样窗口没盖住它)。
+  **主线程那 5 次都是 0。**
+- **fork → 首帧**:改前 1653 / 1664 / 1705 / 1706 / 1711 / 1828 / 1861 / 1872 / 1952 / 2003;改后 1033 / 1052 / 1081 / 1085 /
+  1116 / 1116 / 1132 / 1194 / 1558 / 1975。其中各 4 次是**交替**测的(改前→改后→改前→改后,每腿 2 次,每次装回对应构建),
+  交替那一轮:改前中位 1,866 ms、改后 1,155 ms —— 排除了两轮之间机器状态漂移这个解释。
+- **降幅(≈650 ms)比解码本身(26–38 ms)大一个量级**,所以移走的不是"那 30 毫秒",而是**首帧之前那段同步路径**:
+  改前 `AppModel.init` 在首帧前同步做完"读 + 解码 + adopt(615 行的分组与派生)",改后整段都发生在首帧前后。
+  这次没有单独测"只把 `adopt` 挪走"的变体,所以解码与 adopt 各占这 650 ms 多少没有分开 —— 只能说**这一段整体**离开了首帧前。
+- **行为没变**(任务要求的三条):
+  - 先画上一轮的列表:改后一次实测的顺序是 快照列表 1,104.5 ms 上屏(rows=615)→ 首帧 1,116.0 ms →
+    服务器列表 3,419.7 ms(rows=621);缓存列表比网络答案早约 **2.3 s**。1.6 s 的截图里已经是缓存列表
+    (`Pinned` / `Today` 分区),此刻 `?view=open` 还没回来。
+  - 不出现空列表闪烁:首帧那一刻工作区列表还没进 model,`AgentsView` 走的是 loading 分支(`launchLandingPending`),
+    不是 "No sessions"。
+  - 旧快照不覆盖新网络数据:快照的三块(账号 / 工作区列表 / Open 行)只要被本轮 fetch 答过就不再采用
+    (`LaunchSnapshot.fillIn`);单测 `LaunchSnapshotTests.testFetchedOpenListIsNeverOverwrittenByASnapshotThatArrivesLater`。
+- `persistLaunchSnapshot()`(进后台时的同步编码写盘)**没动**:那一次编码花在离开前台的路上,不在冷启动路径上;
+  异步写反而会在 iOS 挂起进程时被截断(见该函数的注释)。
+
+> 与 §2.0 的 fork → 首帧(572 ms)**不可直接比**:那是 2026-08-21 的构建(当时还没有启动快照)、另一台机器状态。
+> 本节只做同一天、同一模拟器、同一账号、同一快照文件的一次 A/B。
+
 ---
 
 ## 3. 内存
@@ -869,6 +905,7 @@ docker run --rm -e ORBIT_PERF=1 -v "$PWD:/src" -w /src/src/macos/OrbitKit swift:
 | 进程 fork 时刻 | 任意 | `sysctl` 读 `kinfo_proc.kp_proc.p_starttime`(**别用 `main()` 起点**,会漏掉 dyld) |
 | 首帧 | `OrbitiOSApp` 根视图 `.onAppear` | `CADisplayLink` 的**第一次**回调。`CATransaction.setCompletionBlock` 会被 SwiftUI 在同一次 commit 里覆盖掉,实测拿不到 |
 | 列表有内容 | `AppModel.applySessionSnapshot` 首次 `!list.isEmpty` | 同上,再挂一次 `CADisplayLink` |
+| 快照的读取与解码 | `LaunchSnapshotStore.load()` 前后(冷启动时由 `AppModel.restoreLaunchSnapshot` 调起) | 两行的时间戳之差;要看它落在哪个线程,同时跑 `sample <pid> 5` 数样本(§2.4) |
 | 每个请求的解压字节 | `APIClient.rawSend` 的完成回调 | `data.count`(URLSession 已经解过 gzip 了) |
 | 每个请求的线上字节 | 给 `URLSession.orbitREST` 装一个 `URLSessionTaskDelegate` | `URLSessionTaskMetrics` 的 `countOfResponseBodyBytesReceived` vs `…AfterDecoding` |
 | `?view=open` 的调用来源 | `AppModel.swift:453` / `:505` / `:660`、`AgentsModel.swift:187` 各打一行 | 直接看打点顺序 |
@@ -920,6 +957,7 @@ done
 | 图片缩略图降采样 | 源图 p50 1179×962 / 180 KB 文件;一次真实下载 1.17 MB;**实测:即使只显示 300×360,常驻的仍是全分辨率位图**(1179×2556 的截屏每张 12 MB) | §3.2、**§3.2.1** |
 | ~~收紧常驻 console 数 / items 上限~~ | **已做(2026-08-24)**:`trimOlder` 上限 1,000 items(slack 200)。快照 6.90 → 1.53 MB、rows 重建 4.59 → 1.00 ms,两者**不再随会话长度增长**;模拟器实测裁剪→翻回来 `holes=0 dup=0`。**capacity 保持 12 未改**,理由见 §3.3.2 | §3.3.2、**§6.1**、**§7.1** |
 | session 列表冷启动本地缓存 | **首帧后还有 2,225 ms 空列表(中位,模拟器);进程 fork → 列表有内容 2,790 ms**;冷启前 3 s 拉 3 次 `?view=open` = 线上 1.13 MB / **解压 13.16 MiB**,占 98% | **§2.0**、§2.1 |
+| ~~快照在主线程同步解码~~ | **已做(2026-10-06)**:`LaunchSnapshotStore.load()` 从 `AppModel.init` 的同步调用改成后台读、主线程 adopt;主线程解码样本 **20–23 → 0**,fork → 首帧中位 **1,770 → 1,116 ms**(n=10,其中各 4 次交替测);缓存列表仍比网络答案早 ~2.3 s | **§2.4** |
 | ~~去掉冷启动重复的 2 次 `?view=open`~~ | **已做(`c0a5cac54` 单飞 + `56881d2f5` 条件请求,2026-10-06 模拟器实测)**:首份列表落地前从 **3 发并发 → 1 发**,之后串行 1 发尾随(带 `If-None-Match`,账号静时回 304 / 0 B,实测 1/3 命中)。首份落地时刻没有改善,那要靠冷启动本地缓存。改前:三个调用方并发各拉一次且无在途去重(§2.2) | **§2.3**、§2.2 |
 | 后台暂停轮询 | `.background` 只 persist,不停任何循环;`UIBackgroundModes` 只有 remote-notification。**实测:后台 2 分钟 0 请求,但那是系统把进程冻住了(1 Hz 心跳线程也停了),不是代码停了 —— 回前台瞬间 pollTick 早于 `.active` 就开跑,并立刻拉 2 次 `?view=open` = 9.2 MiB** | **§5.0–5.1** |
 | 降低 4 s 全量列表轮询成本 | **部分已做(2026-10-06)**:`56881d2f5` 让轮询带 `If-None-Match`,没变时 304 / 0 B 且跳过 adopt/diff —— 但忙账号上实测只命中 3/19(§4.4);列表 body 的主线程成本已由 `7c186a662` / `c0a5cac54` 降下来(见下一行)。改前:单次 **线上 377 KB / 解压 4.39 MiB(×12.2)**、0/427 命中 304、2 分钟 26–35 次 = 9–13 MB 线上;静置 2 分钟 footprint 因此从 44.5 MB 漂到 52.3 MB | **§4.4**、§4、§1.3、§3.1 |

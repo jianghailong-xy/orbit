@@ -1,13 +1,14 @@
 import { CheckCircleFilled, CheckOutlined, CopyOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
-import { Segmented } from 'antd';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { copyText } from '../lib/clipboard';
 import { encodeId } from '../lib/idCodec';
+import { Segmented } from './ui/Segmented';
 
 type OS = 'macOS' | 'Linux' | 'Windows';
+const OS_OPTIONS = (['macOS', 'Linux', 'Windows'] as const).map((value) => ({ value, label: value }));
 
 // install.sh, the runner binaries (/dl) and the API are all served from the deployment's own
 // origin, and both the binary's defaultServer and install.sh's BASE_URL are baked to that
@@ -97,14 +98,15 @@ export function RunnerRegisterGuide() {
         <p className="runner-sub">
           A runner is a machine that runs Claude Code, Codex, or Kimi tasks for you. Run this one command on the
           machine you want to add — it installs the orbit CLI, then opens your browser to confirm
-          the machine belongs to you. It appears in the list on the left once it comes online.
+          the machine belongs to you. It appears under Machines on Infrastructure once it comes online.
         </p>
 
-        <Segmented
+        <Segmented<OS>
           className="runner-os"
+          aria-label="Operating system"
           value={os}
-          onChange={(v) => setOs(v as OS)}
-          options={['macOS', 'Linux', 'Windows']}
+          onValueChange={setOs}
+          options={OS_OPTIONS}
         />
 
         <CommandBox cmd={installCmd[os]} copied={copied} onCopy={() => copy(installCmd[os])} />
@@ -115,7 +117,7 @@ export function RunnerRegisterGuide() {
             <div className="runner-status-text">
               <div className="runner-status-title">Runner online — “{connected.name}” is ready</div>
               <div className="runner-status-sub">
-                It's now in the sidebar under Runners. Next, give it a workspace — the repo and
+                It's now on Infrastructure, under Machines. Next, give it a workspace — the repo and
                 working directory it runs tasks in.
               </div>
             </div>

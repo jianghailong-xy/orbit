@@ -70,7 +70,7 @@ export async function readTurnCards(
   for (const turn of turns) {
     const itemId = openItemIdOfTurn(turn.clientTurnId);
     if (!itemId) continue;
-    const openItemDelivery = await readOpenItemDeliveryCard(db, itemId);
+    const openItemDelivery = await readOpenItemDeliveryCard(db, itemId, session.ownerId);
     if (openItemDelivery) add(turn.id, { openItemDelivery });
   }
   // The turn that hands a task's run its brief, and the task it was built from (tasks/task-start-card.ts).

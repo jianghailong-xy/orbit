@@ -115,7 +115,7 @@ describe('Admin, for an admin', () => {
   it('is a row of the account menu right under Settings, not a top-nav entry', async () => {
     serve('ADMIN');
     await visit('/projects');
-    expect(topEntries()).toEqual(['Projects', 'Tasks', 'Wiki', 'Runners', 'Providers']);
+    expect(topEntries()).toEqual(['Projects', 'Tasks', 'Wiki', 'Infrastructure']);
 
     await openAccountMenu();
     expect(menuRows()).toEqual(['Settings', 'Admin', 'Log out']);
@@ -146,7 +146,7 @@ describe('Admin, for a member', () => {
   it('is nowhere: the account menu is the one it always was', async () => {
     serve('MEMBER');
     await visit('/projects');
-    expect(topEntries()).toEqual(['Projects', 'Tasks', 'Wiki', 'Runners', 'Providers']);
+    expect(topEntries()).toEqual(['Projects', 'Tasks', 'Wiki', 'Infrastructure']);
 
     await openAccountMenu();
     expect(menuRows()).toEqual(['Settings', 'Log out']);

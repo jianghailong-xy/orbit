@@ -1,11 +1,11 @@
 import { useRef, useState, type Ref } from 'react';
 import { Combobox as BaseCombobox } from '@base-ui/react/combobox';
-import { CheckOutlined, CloseCircleFilled, CloseOutlined, DownOutlined } from '@ant-design/icons';
+import { CheckOutlined, CloseCircleFilled, CloseOutlined, DownOutlined, SearchOutlined } from '@ant-design/icons';
 import { flattenOptions, type SelectOption, type SelectProps } from './Select';
 import { SelectEmpty } from './SelectEmpty';
 import { ComboboxOption } from './ComboboxOption';
 import { Spinner } from './Spinner';
-import { useFloating } from './Floating';
+import { useDropdownPlacement, useFloating } from './Floating';
 
 export interface MultiSelectProps extends Omit<SelectProps, 'value' | 'onValueChange' | 'ref' | 'renderValue'> {
   value: string[];
@@ -30,6 +30,7 @@ export function MultiSelect({ options, value, onValueChange, mode = 'multiple', 
   const anchor = useRef<HTMLDivElement>(null);
   const updateQuery = (next: string) => { setLocalQuery(next); onSearch?.(next); };
   const layer = useFloating({ open, onOpenChange: (next) => { if (!next) updateQuery(''); onOpenChange?.(next); } });
+  const { positioner, ...placement } = useDropdownPlacement(layer.open, anchor, 4, align);
   const flat = flattenOptions(options);
   const selected = value.map((entry) => flat.find((option) => option.value === entry) ?? { value: entry, label: entry });
   const visible = maxTagCount === undefined ? selected : selected.slice(0, maxTagCount);
@@ -57,12 +58,13 @@ export function MultiSelect({ options, value, onValueChange, mode = 'multiple', 
     }} inputValue={query} onInputValueChange={(next, details) => {
       if (details.reason === 'input-change' || details.reason === 'input-clear') inputQuery(next);
     }} filter={(option: SelectOption, search) => option.label.toLocaleLowerCase().includes(search.toLocaleLowerCase())}
-    autoHighlight name={name} disabled={disabled} open={layer.open} onOpenChange={(next, details) => {
+    // As the replaced multiple select: opening highlights the first option (Enter picks it); free tags don't.
+    autoHighlight={(mode === 'tags' ? true : 'always') as boolean} name={name} disabled={disabled} open={layer.open} onOpenChange={(next, details) => {
       // AntD keeps a multiple picker open after selecting a search result.
       if (!next && details.reason === 'item-press') { details.cancel(); return; }
       layer.setOpen(next);
     }} modal={false}>
-    <div ref={anchor} className={`orbit-choice orbit-multi${className ? ` ${className}` : ''}`} data-size={size} data-variant={variant} data-disabled={disabled || undefined} style={style}>
+    <div ref={anchor} className={`orbit-select orbit-multi${className ? ` ${className}` : ''}`} data-size={size} data-variant={variant} data-disabled={disabled || undefined} style={style}>
       <BaseCombobox.Chips className="orbit-multi-chips">
         {visible.map((option) => <BaseCombobox.Chip key={option.value} className="orbit-multi-chip">
           <span className="orbit-multi-chip-label">{option.label}</span>
@@ -86,11 +88,12 @@ export function MultiSelect({ options, value, onValueChange, mode = 'multiple', 
         </span>
         {value.length === 0 && !query && <span className="orbit-multi-placeholder">{placeholder}</span>}
       </BaseCombobox.Chips>
-      {loading ? <Spinner size="small" aria-hidden /> : showArrow && <BaseCombobox.Trigger className="orbit-combobox-toggle" tabIndex={-1} aria-label="Show options"><DownOutlined aria-hidden /></BaseCombobox.Trigger>}
+      {/* As the replaced searchable select: a magnifier while open. */}
+      {loading ? <Spinner size="small" aria-hidden /> : showArrow && <BaseCombobox.Trigger className="orbit-combobox-toggle" tabIndex={-1} aria-label="Show options">{layer.open && mode === 'multiple' ? <SearchOutlined aria-hidden /> : <DownOutlined aria-hidden />}</BaseCombobox.Trigger>}
       {clearable && value.length > 0 && !disabled && <BaseCombobox.Clear className="orbit-choice-clear" tabIndex={0} aria-label={clearLabel}><CloseCircleFilled aria-hidden /></BaseCombobox.Clear>}
     </div>
     <BaseCombobox.Portal container={layer.container()}>
-      <BaseCombobox.Positioner anchor={anchor} side={side} align={align} sideOffset={4} collisionPadding={8}
+      <BaseCombobox.Positioner ref={positioner} anchor={anchor} side={side} align={align} {...placement} positionMethod={layer.positionMethod}
         className="orbit-floating-positioner orbit-choice-positioner" data-match-width={matchTriggerWidth} style={{ zIndex: layer.zIndex }}>
         <BaseCombobox.Popup className={`orbit-select-popup${popupClassName ? ` ${popupClassName}` : ''}`} style={popupStyle} finalFocus={returnFocus}>
           <BaseCombobox.Empty className="orbit-select-empty" role="status">{emptyContent}</BaseCombobox.Empty>

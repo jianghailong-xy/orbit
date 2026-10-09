@@ -60,6 +60,16 @@ public struct DeliveredDecisionCard: Identifiable, Equatable, Sendable {
         /// request to start it (`START_REQUEST`), whose open item is the address: a new request is a
         /// new question, with its own suggestions, and replaces the card drawn for the old one.
         case startProject(itemID: String)
+        /// "Is this project done?" — the coordinator asked its owner to record the project done
+        /// (`DONE_REQUEST`), or its row says Record as done… — and, once the project is recorded
+        /// done, that card's receipt. One per project, re-derived from the reads on every render
+        /// (`ProjectDone.swift`): a request the coordinator filed again is this same card with the
+        /// new request in it, as the browser's single card is.
+        case projectDone
+        /// "Why is this project not done?" — an OPEN project the projection does not call done, and
+        /// nobody has asked to record it. One per project; it gives way to `projectDone` once a
+        /// request arrives, the way the browser's card does.
+        case projectNotDone
         /// "Confirm the new criteria?" — a started project whose criteria moved since the owner
         /// confirmed them. One per project, like the confirmation it re-asks, and re-derived from the
         /// confirmation read on every render: it lists what moved in the version standing NOW.
@@ -104,6 +114,12 @@ public struct DeliveredDecisionCard: Identifiable, Equatable, Sendable {
         /// One question the project's coordinator put to its owner (§5.2 R7), by the item the
         /// answer door takes — the same address the push payload and the Needs-you bar carry.
         case coordinatorQuestion(itemID: String)
+        /// The record such a question became once it ended — answered, here or at another end, or
+        /// withdrawn (§5.2 R10, R12; `CoordinatorQuestions.receipts`): drawn where it ended, in
+        /// place of the question's card. Carries the record itself, for `criteriaDecisionReceipt`'s
+        /// reason: the read serves the newest fifty, and one falling out of that window is not a
+        /// reason to take it out of the conversation it was asked in.
+        case coordinatorQuestionRecord(record: ProjectClosedQuestion)
         /// One exception that became the owner's without anybody asking, by the item the
         /// hand-back door takes (§7.5, mock 5's right column). The same address the push payload
         /// and the Needs-you banner carry, so a press that names the item lands on this row.
@@ -158,6 +174,8 @@ public struct DeliveredDecisionCard: Identifiable, Equatable, Sendable {
             return "criteria-decision-receipt-\(settled.intentId)"
         case .acceptanceConfirmation:         return "acceptance-confirmation"
         case .startProject(let itemID):       return "start-project-\(itemID)"
+        case .projectDone:                    return "project-done"
+        case .projectNotDone:                 return "project-not-done"
         case .criteriaChange:                 return "criteria-change"
         // Beside the question's id rather than equal to it for `criteriaDecisionReceipt`'s reason:
         // for one confirmation both rows can be on screen at once — the record of the version that
@@ -187,6 +205,8 @@ public struct DeliveredDecisionCard: Identifiable, Equatable, Sendable {
         case .promotionReceipt(let promotion):
             return "promotion-receipt-\(promotion.promotionId)"
         case .coordinatorQuestion(let itemID):    return "question-\(itemID)"
+        case .coordinatorQuestionRecord(let record):
+            return CoordinatorQuestions.Receipt(record: record).id
         // The exception cards' ids, in the web's own spelling too: `open-item-<itemId>` is what
         // `ProjectProgressStatus.tsx` gives the two exception cards, and `fuse-<itemId>` is what
         // the pause card gives itself.
@@ -337,23 +357,28 @@ public enum DeliveryAnchor {
         // arrival, kept because these two are questions still waiting on the reader: dropping one
         // for a bad stamp would take away the only thing on screen that can be pressed.
         //
-        // All FIVE receipts are placed by the door's own clock rather than here —
+        // All the receipts are placed by the door's own clock rather than here —
         // `CriteriaDecisions.receipts`, `EvidenceDecisions.receipts`,
-        // `AcceptanceConfirmations.receipt`, `OwnerConfirmations.receipts` and
-        // `PromotionCards.receipts`: a record has no arrival of its own on a device that was not
-        // there. They answer the same question this switch asks — where a row delivered RIGHT NOW
+        // `AcceptanceConfirmations.receipt`, `OwnerConfirmations.receipts`,
+        // `PromotionCards.receipts` and `CoordinatorQuestions.receipts`: a record has no arrival of
+        // its own on a device that was not there. They answer the same question this switch asks — where a row delivered RIGHT NOW
         // would go — and none of them is delivered that way. The last of them arrived here first,
         // and the owner's iOS screenshot of 2026-09-20 is what that cost: three records stacked
         // under the newest row.
         //
         // The start card and the change card anchor where they arrived too: both are delivered by
         // the read that follows the coordinator's turn, and what they ask about — the plan it asked
-        // to start, the criteria it changed — is in that turn, above them.
+        // to start, the criteria it changed — is in that turn, above them. So do the two closing
+        // cards: the request is in the coordinator's turn above the done card, and the card that
+        // explains why the project is not done stays where the reader first saw it. (A project
+        // already recorded done is placed by its record's moment instead — the console's
+        // `donePlacement`.)
         case .criteriaDecision, .criteriaDecisionReceipt, .acceptanceConfirmation,
-             .startProject, .criteriaChange, .acceptanceConfirmationReceipt,
+             .startProject, .projectDone, .projectNotDone, .criteriaChange,
+             .acceptanceConfirmationReceipt,
              .evidenceDecision, .ownerDecisionReceipt, .evidenceDecisionReceipt,
-             .promotionApproval, .promotionReceipt, .coordinatorQuestion, .escalatedItem,
-             .fusePause:
+             .promotionApproval, .promotionReceipt, .coordinatorQuestion,
+             .coordinatorQuestionRecord, .escalatedItem, .fusePause:
             return items.last?.id
         }
     }

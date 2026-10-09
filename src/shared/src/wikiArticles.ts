@@ -48,6 +48,25 @@ export const WIKI_ARTICLE_RULES = {
  */
 export const WIKI_ARTICLE_ENTRIES_LISTED = 200;
 
+/**
+ * The server's `articles` job (contract `articles.job`, `jobs.kindRuns.articles`): the articles written by
+ * the wiki worker with the System model, for an account the executor switch gives the server.
+ */
+export const WIKI_ARTICLES_JOB = {
+  /** The step every model call of the job is filed under: the queue's default wait limit and call budget. */
+  step: 'articles',
+  /** Background work (`jobs.priority`): it is made after a maintenance run, and waits behind what the owner asked for. */
+  priority: 0,
+  /** max_tokens of one article, overview or subtopic call: far above the 900 characters the server keeps. */
+  articleMaxTokens: 4096,
+  /** max_tokens of one group's name: a short title, with room for a model that says a sentence first. */
+  nameMaxTokens: 512,
+  /** Calls of one topic in flight at once: the queue's own cap for one job (modelQueue.concurrency.perJob). */
+  parallel: 4,
+  /** How long a job with no snapshot to name waits for the one it asked for, before it writes without a ref. */
+  snapshotWaitSeconds: 900,
+} as const;
+
 /** A topic a space is given when it has none (contract `articles.defaultTopics`). */
 export interface WikiDefaultTopic {
   slug: string;

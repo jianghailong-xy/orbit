@@ -54,7 +54,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
-import { Module, RequestMethod, ValidationPipe } from '@nestjs/common';
+import { BadRequestException, Module, RequestMethod, ValidationPipe } from '@nestjs/common';
 import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
 import { HttpAdapterHost, NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
@@ -80,11 +80,14 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { RunnerAuthGuard } from '../runner-api/runner-auth.guard';
 import { RunnerProvidersController } from '../runner-api/runner-providers.controller';
+import { PROVIDER_UNAVAILABLE_ERROR } from '../runner-api/runner-provider-support';
 import { SessionsService } from '../sessions/sessions.service';
 import { TasksService } from '../tasks/tasks.service';
 import { AdminRoleGuard } from '../users/admin-role.guard';
 import { AdminProvidersController } from './admin-providers.controller';
 import { accountPoolRuntime } from './custom-provider';
+import { DEEPSEEK_BALANCE_URL } from './deepseek-balance';
+import { DeepSeekBalanceService } from './deepseek-balance.service';
 import { OAUTH_USAGE_URL } from './plan-usage';
 import { ProviderPlanUsageService } from './plan-usage.service';
 import { outsideThePoolGateway, PoolGatewayController } from './pool-gateway.controller';
@@ -119,10 +122,17 @@ function fiveHour(utilization: number) {
   return { five_hour: { utilization, resets_at: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString() } };
 }
 
-/** The network the server calls out on: the usage endpoint, and nothing else that answers. */
+/** What DeepSeek's balance endpoint answers, for any key. */
+const DEEPSEEK_BALANCE = {
+  is_available: true,
+  balance_infos: [{ currency: 'CNY', total_balance: '110.00', granted_balance: '10.00', topped_up_balance: '100.00' }],
+};
+
+/** The network the server calls out on: the usage endpoint and DeepSeek's balance, and nothing else that answers. */
 const serverNetwork = (async (input: unknown, init?: { headers?: Record<string, string> }) => {
   const key = String(init?.headers?.authorization ?? '').replace(/^Bearer /, '');
-  const body = String(input) === OAUTH_USAGE_URL ? usageAnswers.get(key) : undefined;
+  const body =
+    String(input) === OAUTH_USAGE_URL ? usageAnswers.get(key) : String(input) === DEEPSEEK_BALANCE_URL ? DEEPSEEK_BALANCE : undefined;
   return body === undefined
     ? new Response('unavailable', { status: 500 })
     : new Response(JSON.stringify(body), { status: 200 });
@@ -317,11 +327,13 @@ const doorsOver: {
   providers: ProvidersService | null;
   login: CodexLoginService | null;
   pools: SharedPoolsService | null;
+  balances: DeepSeekBalanceService | null;
   prisma: unknown;
 } = {
   providers: null,
   login: null,
   pools: null,
+  balances: null,
   prisma: null,
 };
 
@@ -336,6 +348,8 @@ const doorsOver: {
     // The pool page's doors (migrations 0321, 0358), which the people an owner adds to a pool read it
     // through — the REAL service, for the same reason.
     { provide: SharedPoolsService, useFactory: () => doorsOver.pools },
+    // A DeepSeek key's account balance, read with the stored key — the REAL service, for the same reason.
+    { provide: DeepSeekBalanceService, useFactory: () => doorsOver.balances },
     { provide: PrismaService, useFactory: () => doorsOver.prisma },
     JwtAuthGuard,
     AdminRoleGuard,
@@ -489,6 +503,7 @@ suite("account pools' security boundary, on real PostgreSQL", { timeout: 600_000
   doorsOver.providers = providers;
   doorsOver.login = new CodexLoginService(prisma, realtime);
   doorsOver.pools = new SharedPoolsService(prisma, realtime, providers);
+  doorsOver.balances = new DeepSeekBalanceService(prisma);
   doorsOver.prisma = db;
   const doors = await openDoors();
   t.after(async () => {
@@ -747,22 +762,22 @@ suite("account pools' security boundary, on real PostgreSQL", { timeout: 600_000
     const own = await queued(db, bob, ownAt, bobPool.slug);
     assert.equal(token((await claim(ownAt.runnerId, own)).agent.env), theirs.key);
 
-    const poolAt = await machine(db, bob, 'bob-claims-her-pool');
-    const onPool = await queued(db, bob, poolAt, alicePool.slug);
-    const claimed = await claim(poolAt.runnerId, onPool);
-    assert.deepEqual(herKeysIn(claimed), [], 'her key is in what his runner was handed');
-    // Exactly the agent's own env: the Claude default, with nothing resolved for the slug.
-    assert.deepEqual(claimed.agent.env, configuredEnv.get(poolAt.workspaceId));
-    assert.equal((await recorded(onPool)).poolMemberProviderId, null);
-
-    const memberAt = await machine(db, bob, 'bob-claims-her-member');
-    const onMember = await queued(db, bob, memberAt, personal.row.slug);
-    const direct = await claim(memberAt.runnerId, onMember);
-    assert.deepEqual(herKeysIn(direct), [], 'her key is in what his runner was handed');
-    assert.deepEqual(direct.agent.env, configuredEnv.get(memberAt.workspaceId));
+    // A slug that resolves to nothing of his is not dispatched at all, not even on the Claude default: his
+    // runner is handed nothing, and the session waits where it was, saying why.
+    for (const [label, slug] of [['bob-claims-her-pool', alicePool.slug], ['bob-claims-her-member', personal.row.slug]]) {
+      const at = await machine(db, bob, label);
+      const session = await queued(db, bob, at, slug);
+      const offered = await queue.claimSessionForRunner({ id: at.runnerId }, 0, false, false);
+      assert.deepEqual(herKeysIn(offered), [], 'her key is in what his runner was handed');
+      assert.equal(offered, null, `his runner was handed his session on ${label}`);
+      assert.deepEqual(
+        await db.session.findUniqueOrThrow({ where: { id: session }, select: { status: true, error: true, poolMemberProviderId: true } }),
+        { status: RunStatus.PENDING, error: PROVIDER_UNAVAILABLE_ERROR, poolMemberProviderId: null },
+      );
+    }
   });
 
-  await t.test("(A3) a restarted runner's reclaim rebuilds another owner's session with none of the pool's tokens", async () => {
+  await t.test("(A3) a restarted runner's reclaim rebuilds none of another owner's pool into his session", async () => {
     const at = await machine(db, bob, 'bob-reclaims');
     const own = await live(db, bob, at, bobPool.slug);
     const onHers = await live(db, bob, at, alicePool.slug);
@@ -770,13 +785,14 @@ suite("account pools' security boundary, on real PostgreSQL", { timeout: 600_000
     const rebuilt = (id: string) => reclaimed.find((s) => s.sessionId === id);
 
     assert.equal(token(rebuilt(own)?.agent.env), theirs.key, 'his own pool session was not rebuilt on his key');
-    assert.ok(rebuilt(onHers), 'the session on her pool was left out of the reclaim, so it says nothing');
-    assert.deepEqual(herKeysIn(rebuilt(onHers)), [], 'her key is in what his runner was handed');
-    assert.deepEqual(rebuilt(onHers)?.agent.env, configuredEnv.get(at.workspaceId));
+    // Her pool resolves to nothing of his, and a slug nothing holds is not rebuilt on the Claude default
+    // either: the session is left out, and nothing his runner was handed carries her key.
+    assert.equal(rebuilt(onHers), undefined, 'the session on her pool was rebuilt');
+    assert.deepEqual(herKeysIn(reclaimed), [], 'her key is in what his runner was handed');
     assert.equal((await recorded(onHers)).poolMemberProviderId, null);
   });
 
-  await t.test("(A3) a provider-switch reload re-spawns another owner's session with none of the pool's tokens", async () => {
+  await t.test("(A3) a provider-switch reload hands another owner's session none of the pool's tokens", async () => {
     // Positive control: a switch onto his own pool re-spawns on his own key.
     const ownAt = await machine(db, bob, 'bob-reloads-own');
     const own = await live(db, bob, ownAt, 'claude');
@@ -786,7 +802,7 @@ suite("account pools' security boundary, on real PostgreSQL", { timeout: 600_000
     // Past the door — the row and the queued reload written by hand, as nothing in the product can.
     const at = await machine(db, bob, 'bob-reloads-hers');
     const onHers = await live(db, bob, at, alicePool.slug);
-    await db.conversationTurn.create({
+    const queuedReload = await db.conversationTurn.create({
       data: {
         sessionId: onHers,
         seq: 1,
@@ -796,10 +812,13 @@ suite("account pools' security boundary, on real PostgreSQL", { timeout: 600_000
         status: 'PENDING',
       },
     });
-    const reload = await dequeueReload(onHers, at.runnerId);
-    assert.deepEqual(herKeysIn(reload), [], 'her key is in what his runner was handed');
-    // Exactly the agent's own env: nothing was resolved for the slug at all.
-    assert.deepEqual(reload.env, configuredEnv.get(at.workspaceId));
+    // Nothing of his holds the slug, so the reload is refused rather than re-spawned on the Claude default:
+    // his runner is handed nothing, and the reload is not given out.
+    await assert.rejects(dequeueReload(onHers, at.runnerId), (e: unknown) => e instanceof BadRequestException);
+    assert.deepEqual(
+      await db.conversationTurn.findUniqueOrThrow({ where: { id: queuedReload.id }, select: { status: true, deliveredAt: true } }),
+      { status: 'PENDING', deliveredAt: null },
+    );
     assert.equal((await recorded(onHers)).poolMemberProviderId, null);
   });
 
@@ -967,6 +986,27 @@ suite("account pools' security boundary, on real PostgreSQL", { timeout: 600_000
     await ask(bob, 'GET', 'providers/mine/:id/key', { id: pub(personal) }, undefined, 404);
     await ask(alice, 'GET', 'providers/mine/:id/key', { id: uuidToBase62(alicePool.id) }, undefined, 404);
     await ask(alice, 'GET', 'providers/mine/:id/key', { id: sharedId }, undefined, 404);
+    // A DeepSeek key's account balance: the server asks DeepSeek with the key, and answers with the
+    // balance alone — to her, about her own DeepSeek key; nobody else's, and no other kind of key.
+    const deepseek = await ask(
+      alice,
+      'POST',
+      'providers/mine',
+      {},
+      { label: 'DeepSeek', presetSlug: 'deepseek', baseUrl: 'https://api.deepseek.com/anthropic', apiKey: subscription() },
+      201,
+    );
+    const deepseekId = String(deepseek.json.id);
+    const balance = await ask(alice, 'GET', 'providers/mine/:id/balance', { id: deepseekId }, undefined, 200);
+    await ask(bob, 'GET', 'providers/mine/:id/balance', { id: deepseekId }, undefined, 404);
+    await ask(alice, 'GET', 'providers/mine/:id/balance', { id: pub(personal) }, undefined, 400);
+    await ask(alice, 'GET', 'providers/mine/:id/balance', { id: sharedId }, undefined, 404);
+    assert.deepEqual(
+      { ok: balance.json.ok, total: balance.json.balances?.[0]?.totalBalance },
+      { ok: true, total: '110.00' },
+      'the balance body checked below carries a balance',
+    );
+    await ask(alice, 'DELETE', 'providers/mine/:id', { id: deepseekId }, undefined, 200);
     // A key typed into the connect form is probed with, not echoed.
     await ask(alice, 'POST', 'providers/test', {}, { baseUrl: ANTHROPIC, apiKey: subscription(), model: 'claude-opus-5', runtime: 'claude' }, 201);
     // One of her own connected, its key rotated, then deleted.
@@ -981,6 +1021,11 @@ suite("account pools' security boundary, on real PostgreSQL", { timeout: 600_000
     await ask(alice, 'POST', 'providers/pools/:id/members', { id: scratchId }, { providerId: pub(work) }, 201);
     await ask(alice, 'POST', 'providers/pools/:id/members', { id: scratchId }, { providerId: pub(meteredRow) }, 400);
     await ask(bob, 'POST', 'providers/pools/:id/members', { id: scratchId }, { providerId: pub(theirs) }, 404);
+    // A member paused and resumed by her (migration 0374); another owner finds no pool to pause it in.
+    const scratchMember = { id: scratchId, memberId: pub(work) };
+    await ask(alice, 'POST', 'providers/pools/:id/members/:memberId/pause', scratchMember, { durationMinutes: 60 }, 201);
+    await ask(alice, 'POST', 'providers/pools/:id/members/:memberId/pause', scratchMember, { durationMinutes: null }, 201);
+    await ask(bob, 'POST', 'providers/pools/:id/members/:memberId/pause', scratchMember, { durationMinutes: 60 }, 404);
     await ask(alice, 'DELETE', 'providers/pools/:id/members/:providerId', { id: scratchId, providerId: pub(work) }, undefined, 200);
     await ask(alice, 'DELETE', 'providers/pools/:id', { id: scratchId }, undefined, 200);
     // A pool of hers on Codex, which runs on one ChatGPT login this server holds and signs in itself
@@ -1216,6 +1261,7 @@ exec sleep 300
       // Her pool where a provider's id or slug goes — a pool is no provider, to either of them — and its
       // members, which a Codex pool has none of.
       await ask(bearer, 'GET', 'providers/mine/:id/key', at, undefined, 404);
+      await ask(bearer, 'GET', 'providers/mine/:id/balance', at, undefined, 404);
       await ask(bearer, 'PATCH', 'providers/mine/:id', at, { label: 'Renamed' }, 404);
       await ask(bearer, 'DELETE', 'providers/mine/:id', at, undefined, 404);
       await ask(bearer, 'POST', 'providers/pools/:id/members', at, { providerId: at.id }, 404);
@@ -1254,6 +1300,12 @@ exec sleep 300
       await ask(bearer, 'PATCH', 'providers/shared-pools/:id/keys/:keyId', key, { label: `${label}, renamed` }, 200);
       await ask(bearer, 'PUT', 'providers/shared-pools/:id/keys/:keyId/secret', key, { apiKey: openaiKey() }, 200);
       await ask(bearer, 'DELETE', 'providers/shared-pools/:id/keys/:keyId', key, undefined, 200);
+      // Her running account paused and resumed (migration 0374), addressed by its `…AB12` as her page names
+      // it: hers to pause, as the one who signed it in and the pool's admin; the person, who signed none of
+      // hers in, is refused.
+      const running = { ...at, memberId: encodeURIComponent(`login:…${accounts[0].accountId.slice(-4)}`) };
+      await ask(bearer, 'POST', 'providers/pools/:id/members/:memberId/pause', running, { durationMinutes: 60 }, by(403, 201));
+      await ask(bearer, 'POST', 'providers/pools/:id/members/:memberId/pause', running, { durationMinutes: null }, by(403, 201));
 
       // Last, what takes something out of her pool: an account — an admin's alone, so the person, who
       // signed none of hers in, is refused rather than not found (migration 0371) — the person, and the

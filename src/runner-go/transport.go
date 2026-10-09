@@ -86,8 +86,16 @@ func init() {
 		claudeAccountLoginCapabilityV1,
 		claudeAccountRemoveCapabilityV1,
 		claudeAccountMoveCapabilityV1,
+		antigravityAccountLoginCapabilityV1,
+		antigravityAccountRemoveCapabilityV1,
+		kimiLoginRegionCapabilityV1,
+		kimiAccountLoginCapabilityV1,
+		kimiAccountRemoveCapabilityV1,
+		kimiAccountMoveCapabilityV1,
 		sessionMoveCapabilityV1,
 		wikiMaintenanceRunV1,
+		wikiRepoOpCapabilityV1,
+		wikiRepoOpReadCapabilityV1,
 	}, declaredSteerCapabilities()...), ",")
 }
 
@@ -98,9 +106,15 @@ type transportHTTPError struct {
 	body       string
 	// retryAfter is the answer's Retry-After header, as sent: when a 429 says to come back (wiki_retry.go).
 	retryAfter string
+	// explained is what the answer means and what to do about it, said in place of the raw answer: a
+	// personal access token's 401, which every command acting as the person words the same way.
+	explained string
 }
 
 func (e *transportHTTPError) Error() string {
+	if e.explained != "" {
+		return e.explained
+	}
 	// Unit L7: a refusal that carries a stable code and an executable next step says both of them
 	// FIRST, on their own lines, and keeps the raw body underneath.
 	//
@@ -285,6 +299,8 @@ func (t *Transport) doVia(ctx context.Context, client *http.Client, method, path
 	req.Header.Set(runnerCLIVersionHeader, version)
 	if t.token != "" {
 		req.Header.Set("authorization", "Bearer "+t.token)
+		// A managed runner's credential is accepted only from the instance it was issued to.
+		setManagedInstanceHeaders(req.Header)
 	}
 	for k, v := range headers {
 		req.Header.Set(k, v)
@@ -649,6 +665,32 @@ func (t *Transport) integrationJobResult(jobID string, b IntegrationJobResultReq
 	return &out, nil
 }
 
+// wikiRepoOpProgress renews a claimed repository operation's lease. A 409 means this process's claim
+// had already moved on and it must stop working on the operation.
+func (t *Transport) wikiRepoOpProgress(opID string, b WikiRepoOpProgressRequest) error {
+	return t.do(nil, "POST", "/runner/wiki/repo-ops/"+opID+"/progress", b, nil, 15*time.Second)
+}
+
+// wikiRepoOpFragment uploads one piece of a snapshot too large for one request body. Idempotent by its
+// ordinal, so a piece that has to be sent again is the same piece.
+func (t *Transport) wikiRepoOpFragment(opID string, b WikiRepoOpFragmentRequest) (*WikiRepoOpFragmentResponse, error) {
+	var out WikiRepoOpFragmentResponse
+	if err := t.do(nil, "POST", "/runner/wiki/repo-ops/"+opID+"/fragments", b, &out, 60*time.Second); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// wikiRepoOpResult reports what a claimed repository operation came to. The answer says whether the
+// control plane took it; a 409 means this process's claim had already moved on.
+func (t *Transport) wikiRepoOpResult(opID string, b WikiRepoOpResultRequest) (*WikiRepoOpResultResponse, error) {
+	var out WikiRepoOpResultResponse
+	if err := t.do(nil, "POST", "/runner/wiki/repo-ops/"+opID+"/result", b, &out, wikiRepoOpResultTimeout); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // importResult settles a session's pending transcript import; the receipt says whether the
 // ok applied (a retried ok after a lost reply applies nothing) or the session went to Trash.
 func (t *Transport) importResult(sessionID string, b ImportResultRequest) (*ImportResultResponse, error) {
@@ -658,6 +700,12 @@ func (t *Transport) importResult(sessionID string, b ImportResultRequest) (*Impo
 		return nil, err
 	}
 	return &out, nil
+}
+
+// sessionNaming reports the title an engine gave its session. Cosmetic and one-shot: a failure is
+// the caller's to log, and the session keeps the title it has.
+func (t *Transport) sessionNaming(sessionID string, b SessionNamingRequest) error {
+	return t.do(nil, "POST", "/runner/sessions/"+sessionID+"/naming", b, nil, 15*time.Second)
 }
 
 // claudeHistoryResult answers a heartbeat-delivered ClaudeHistoryCommand: what Claude Code
@@ -754,6 +802,7 @@ func (t *Transport) fetchAttachment(ctx context.Context, sessionID, attID string
 	}
 	if t.token != "" {
 		req.Header.Set("authorization", "Bearer "+t.token)
+		setManagedInstanceHeaders(req.Header)
 	}
 	resp, err := t.client.Do(req)
 	if err != nil {
@@ -837,6 +886,7 @@ func (t *Transport) uploadSessionAttachmentFile(ctx context.Context, sessionID s
 	req.Header.Set("content-type", writer.FormDataContentType())
 	if t.token != "" {
 		req.Header.Set("authorization", "Bearer "+t.token)
+		setManagedInstanceHeaders(req.Header)
 	}
 	resp, err := t.client.Do(req)
 	if err != nil {
@@ -964,28 +1014,7 @@ func (t *Transport) sessionEvents(ctx context.Context, sessionID string, after, 
 // the owner's whole task history — descriptions included — on each call, which is slow enough to
 // time out mid-body on a large account and lands in an agent's context as tens of megabytes.
 func (t *Transport) listTasks(status, listID, projectID string, labels []string, limit int, minPriority *int) (json.RawMessage, error) {
-	q := url.Values{}
-	if status != "" {
-		q.Set("status", status)
-	}
-	if listID != "" {
-		q.Set("listId", listID)
-	}
-	if projectID != "" {
-		q.Set("projectId", projectID)
-	}
-	// Repeated rather than comma-joined: a label may legitimately contain a comma, and the
-	// server accepts both forms.
-	for _, label := range labels {
-		q.Add("labels", label)
-	}
-	if limit > 0 {
-		q.Set("limit", strconv.Itoa(limit))
-	}
-	// A pointer because 0 is a floor a caller can mean; nil is "no floor", and sends nothing.
-	if minPriority != nil {
-		q.Set("minPriority", strconv.Itoa(*minPriority))
-	}
+	q := taskListQuery(status, listID, projectID, labels, limit, "", minPriority)
 	path := "/runner/tasks"
 	if len(q) > 0 {
 		path += "?" + q.Encode()
@@ -1093,6 +1122,36 @@ func (t *Transport) scheduleWakeup(sessionID string, body map[string]interface{}
 // means this was the last page. listTasks above can only ever answer with the newest `limit`
 // rows, so this is what makes walking an entire account possible.
 func (t *Transport) listTaskPage(status, listID, projectID string, labels []string, limit int, cursor string, minPriority *int) (json.RawMessage, string, error) {
+	q := taskListQuery(status, listID, projectID, labels, limit, cursor, minPriority)
+	path := "/runner/tasks/page"
+	if len(q) > 0 {
+		path += "?" + q.Encode()
+	}
+	var out taskPage
+	if err := t.do(nil, "GET", path, nil, &out, taskOpTimeout); err != nil {
+		return nil, "", err
+	}
+	items, next := out.parts()
+	return items, next, nil
+}
+
+// taskPage is one page of tasks as the task page routes answer it, runner's and user's alike.
+type taskPage struct {
+	Items      json.RawMessage `json:"items"`
+	NextCursor *string         `json:"nextCursor"`
+}
+
+// parts is the page's rows and the cursor that continues it — "" on the last page.
+func (p taskPage) parts() (json.RawMessage, string) {
+	if p.NextCursor == nil {
+		return p.Items, ""
+	}
+	return p.Items, *p.NextCursor
+}
+
+// taskListQuery is the filters a task list asks with — one page or every page of a walk, through the
+// runner's routes or the person's.
+func taskListQuery(status, listID, projectID string, labels []string, limit int, cursor string, minPriority *int) url.Values {
 	q := url.Values{}
 	if status != "" {
 		q.Set("status", status)
@@ -1105,9 +1164,12 @@ func (t *Transport) listTaskPage(status, listID, projectID string, labels []stri
 	if projectID != "" {
 		q.Set("projectId", projectID)
 	}
+	// Repeated rather than comma-joined: a label may legitimately contain a comma, and the
+	// server accepts both forms.
 	for _, label := range labels {
 		q.Add("labels", label)
 	}
+	// A pointer because 0 is a floor a caller can mean; nil is "no floor", and sends nothing.
 	if minPriority != nil {
 		q.Set("minPriority", strconv.Itoa(*minPriority))
 	}
@@ -1117,22 +1179,7 @@ func (t *Transport) listTaskPage(status, listID, projectID string, labels []stri
 	if cursor != "" {
 		q.Set("cursor", cursor)
 	}
-	path := "/runner/tasks/page"
-	if len(q) > 0 {
-		path += "?" + q.Encode()
-	}
-	var out struct {
-		Items      json.RawMessage `json:"items"`
-		NextCursor *string         `json:"nextCursor"`
-	}
-	if err := t.do(nil, "GET", path, nil, &out, taskOpTimeout); err != nil {
-		return nil, "", err
-	}
-	next := ""
-	if out.NextCursor != nil {
-		next = *out.NextCursor
-	}
-	return out.Items, next, nil
+	return q
 }
 
 func validatePathSegmentID(id string) error {
@@ -1536,6 +1583,32 @@ func (t *Transport) retryIntegration(sessionID, id, taskID, reason string) (json
 	return out, err
 }
 
+// skipIntegrationMergeCheck queues one of a DONE task's landings again with the project's merge
+// check NOT RUN (contract §2.4 J-S5), as the acting session — which the server checks against the
+// project's coordinator pointer exactly as it does for a rerun.
+//
+// The approval id travels with it and is the whole reason this door is not the retry door: the
+// server reads that card back, and queues nothing unless it is an ALLOWED one raised by this same
+// conversation about this same landing. Empty means the caller had no card, which the server refuses
+// on this channel — the account owner's own channel is the user route, which takes none.
+func (t *Transport) skipIntegrationMergeCheck(sessionID, id, taskID, reason, approvalID string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	if err := validatePathSegmentID(taskID); err != nil {
+		return nil, err
+	}
+	body := map[string]interface{}{"reason": reason}
+	if approvalID != "" {
+		body["approvalId"] = approvalID
+	}
+	var out json.RawMessage
+	err := t.doHeaders(nil, "POST",
+		"/runner/projects/"+url.PathEscape(id)+"/tasks/"+url.PathEscape(taskID)+"/integration/skip-merge-check",
+		body, &out, taskOpTimeout, sessionHeader(sessionID))
+	return out, err
+}
+
 // retryPromotionCheck asks for a blocked candidate's check to run again, as the acting session
 // (contract §4.7 H1) — retryIntegration's door for an item that names no task. The session header is
 // the authority the server checks against the project's coordinator pointer; the reason travels as
@@ -1669,13 +1742,22 @@ var runRequestEntropy io.Reader = rand.Reader
 // is a different thing: it silently gives up the idempotency this exists for, at exactly the moment
 // something is already wrong with the machine. A refusal the caller can see is the honest answer.
 func newRunRequestToken() (string, error) {
+	id, err := randomUUID()
+	if err != nil {
+		return "", fmt.Errorf("cannot name this run request (no entropy): %w", err)
+	}
+	return publicID(id), nil
+}
+
+// randomUUID is a version 4 UUID drawn from runRequestEntropy.
+func randomUUID() (string, error) {
 	var id [16]byte
 	if _, err := io.ReadFull(runRequestEntropy, id[:]); err != nil {
-		return "", fmt.Errorf("cannot name this run request (no entropy): %w", err)
+		return "", err
 	}
 	id[6] = (id[6] & 0x0f) | 0x40 // UUID v4
 	id[8] = (id[8] & 0x3f) | 0x80 // RFC 4122 variant
-	return publicID(fmt.Sprintf("%x-%x-%x-%x-%x", id[0:4], id[4:6], id[6:8], id[8:10], id[10:16])), nil
+	return fmt.Sprintf("%x-%x-%x-%x-%x", id[0:4], id[4:6], id[6:8], id[8:10], id[10:16]), nil
 }
 
 // How far a named run request is resent, and how long it waits between attempts: three resends
@@ -1733,7 +1815,9 @@ func crossProjectCrossingGuidance(err error) string {
 		return "\n  where:   this names one row of project_crossings " +
 			"(orbit project crossings PROJECT_ID) — read it to see whether the crossing has been " +
 			"asked, is still waiting, or was already answered. Only the ACCOUNT OWNER can answer " +
-			"it: no tool does, by design, so point them at the project page."
+			"it: no tool does, by design, so point them at the project page. A request to MOVE a " +
+			"task that already exists is done by their confirmation: once they confirm it, the " +
+			"task is in the target project and nothing has to be sent again."
 	case projectScopeMismatch:
 		// Only when the server itself named asking as the remedy. The code alone would decorate
 		// refusals whose answer is something else entirely.
@@ -1744,9 +1828,11 @@ func crossProjectCrossingGuidance(err error) string {
 			"declaration beside the projectId it names — {\"handoff\":{\"reason\":\"why this " +
 			"belongs over there\"}} over MCP, --handoff-reason TEXT at a terminal. The declaration " +
 			"carries no authority: it files the crossing as a question the ACCOUNT OWNER answers, " +
-			"which orbit project crossings PROJECT_ID reads back. It reaches that question from " +
-			"task_create and task_create_batch; MOVING a task that already exists is refused here " +
-			"declared or not, so take that one to the owner yourself."
+			"which orbit project crossings PROJECT_ID reads back. New work (task_create, " +
+			"task_create_batch) is filed by sending the write again once that says APPROVED. A " +
+			"move of a task that already exists (task_update) can be asked for when this " +
+			"session's own project is the move's source or its target, and the owner's " +
+			"confirmation moves the task: nothing has to be sent again."
 	}
 	return ""
 }
@@ -1797,13 +1883,22 @@ func (t *Transport) startTask(id, triggerID string) (json.RawMessage, error) {
 	// by two encoders agreeing.
 	body := map[string]string{"triggerId": triggerID}
 	path := "/runner/tasks/" + url.PathEscape(id) + "/execute"
+	return deliverRunRequest(func() (json.RawMessage, error) {
+		var out json.RawMessage
+		err := t.do(nil, "POST", path, body, &out, taskOpTimeout)
+		return out, err
+	})
+}
+
+// deliverRunRequest sends one named run request until it is answered, resending only what
+// `isResendableRunFailure` says left it unanswered — the runner's door and the person's alike.
+func deliverRunRequest(send func() (json.RawMessage, error)) (json.RawMessage, error) {
 	var lastErr error
 	for attempt := range runRequestResendAttempts {
 		if attempt > 0 {
 			time.Sleep(runRequestResendDelay << (attempt - 1))
 		}
-		var out json.RawMessage
-		err := t.do(nil, "POST", path, body, &out, taskOpTimeout)
+		out, err := send()
 		if err == nil {
 			return out, nil
 		}
@@ -2247,6 +2342,22 @@ func (t *Transport) listWikiVerifications(route, sessionID, spaceID, after strin
 	var out json.RawMessage
 	path := "/runner/wiki/spaces/" + url.PathEscape(spaceID) + "/" + route + "?" + values.Encode()
 	_, err := t.doWiki(http.MethodGet, path, nil, &out, taskOpTimeout, sessionHeader(sessionID), true)
+	return out, err
+}
+
+// requestWikiVerification asks the server to verify the ops the calling session proposed in a space
+// (contract `reviewModes.verification.routes.request`, `servedBy`): what `orbit wiki verify` calls where
+// the list answered that this deployment verifies on the server, so the command waits for the verdict
+// instead of asking a model of the session's provider about it. One queued job per session and space, so
+// asking twice while one is queued is one job; the answer names it, and answers `servedBy: runner` with
+// no job where the server does not run for the account.
+func (t *Transport) requestWikiVerification(sessionID, spaceID string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(spaceID); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	path := "/runner/wiki/spaces/" + url.PathEscape(spaceID) + "/verifications/request"
+	_, err := t.doWiki(http.MethodPost, path, nil, &out, taskOpTimeout, sessionHeader(sessionID), true)
 	return out, err
 }
 

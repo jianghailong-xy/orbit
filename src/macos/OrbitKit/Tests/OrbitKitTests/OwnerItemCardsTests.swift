@@ -83,6 +83,16 @@ final class OwnerItemCardsTests: XCTestCase {
             ("NOTE_PROMPT", CoordinatorQuestions.notePrompt),
             ("OWN_ANSWER_PROMPT", CoordinatorQuestions.ownAnswerPrompt),
             ("OTHER_OPTION", CoordinatorQuestions.otherOption),
+            ("YOUR_ANSWER", CoordinatorQuestions.freeAnswerPrompt),
+            // The record a question becomes once it has ended (§5.2 R10, R12).
+            ("WITHDRAWN_HEADING", CoordinatorQuestions.withdrawnHeading),
+            ("ANSWERED_BY_YOU", CoordinatorQuestions.answeredByYou),
+            ("WITHDRAWN_BY_COORDINATOR", CoordinatorQuestions.withdrawnByCoordinator),
+            ("WITHDRAWN_BY_YOU", CoordinatorQuestions.withdrawnByYou),
+            ("COORDINATOR_WITHDREW", CoordinatorQuestions.coordinatorWithdrew),
+            ("YOU_WITHDREW", CoordinatorQuestions.youWithdrew),
+            ("YOUR_NOTE", CoordinatorQuestions.yourNote),
+            ("VIEW_DETAILS", CoordinatorQuestions.viewDetails),
         ]
         for (name, mine) in pairs {
             XCTAssertEqual(mine, try declaration(web, name),
@@ -143,6 +153,15 @@ final class OwnerItemCardsTests: XCTestCase {
     /// away because a request was in flight.
     func testAQuestionGoesStaleInPlaceRatherThanVanishing() {
         let items = ProjectOpenItemsView(needsYou: [questionRow(question())])
+        // A question that has ended is read as the record it became — and not counted.
+        let ended = ProjectClosedQuestion(itemId: "answered", question: question(),
+                                          askedAt: "2026-09-13T10:00:00Z",
+                                          resolvedAt: "2026-09-13T10:05:00Z",
+                                          answer: .init(option: nil, text: "t4 first"))
+        let read = ProjectOpenItemsView(needsYou: [questionRow(question())], closedQuestions: [ended])
+        XCTAssertEqual(CoordinatorQuestions.standing(items: read, itemId: "answered"), .closed(ended))
+        XCTAssertFalse(CoordinatorQuestions.isOpen(.closed(ended)),
+                       "a question that has ended is not one the bar points at")
         XCTAssertEqual(CoordinatorQuestions.standing(items: nil, itemId: "item-1"), .unread)
         XCTAssertFalse(CoordinatorQuestions.isOpen(.unread), "an unreadable standing is not a question to point at")
 
@@ -212,22 +231,6 @@ final class OwnerItemCardsTests: XCTestCase {
         XCTAssertEqual(CoordinatorQuestions.optionIndex(.option(2)), 2)
         XCTAssertNil(CoordinatorQuestions.optionIndex(.other))
         XCTAssertNil(CoordinatorQuestions.optionIndex(nil))
-    }
-
-    /// The receipt says what was answered in the words the card showed, and whether anybody has
-    /// been told yet — an answer with no coordinator bound waits for the next one (R11).
-    func testTheReceiptSaysWhatWasAnsweredAndWhoWasTold() {
-        let choice = question(options: [.init(label: "t4 first"), .init(label: "both")])
-        XCTAssertEqual(CoordinatorQuestions.answerInWords(question: choice, option: 0, text: ""),
-                       "t4 first")
-        XCTAssertEqual(CoordinatorQuestions.answerInWords(question: choice, option: 1, text: "share a runner"),
-                       "both — share a runner")
-        XCTAssertEqual(CoordinatorQuestions.answerInWords(question: choice, option: nil, text: " "),
-                       "(no answer given)")
-        XCTAssertEqual(CoordinatorQuestions.receiptLine(delivered: true),
-                       "by you · delivered to the current coordinator")
-        XCTAssertEqual(CoordinatorQuestions.receiptLine(delivered: false),
-                       "by you · waiting for this project’s next coordinator")
     }
 
     /// The footnote rounds the way the browser's `ago` does, because both cards write it.
@@ -370,24 +373,67 @@ final class OwnerItemCardsTests: XCTestCase {
         let now = RelativeTime.parse("2026-09-13T12:12:00Z")!
         let theirs = ProjectOpenItemRow(itemId: "item-1", kind: .integrationConflict,
                                         title: "Merge conflict", waitingSince: "2026-09-13T12:00:00Z",
-                                        assignee: .coordinator)
-        XCTAssertEqual(PromotionCards.resolvingLine(theirs, now: now),
-                       "Coordinator is resolving it · 12m")
-        XCTAssertTrue(PromotionCards.resolvingSpins(theirs))
+                                        assignee: .coordinator, promotionId: "pr-1")
+        let held = PromotionCards.holder(of: "pr-1", in: ProjectOpenItemsView(withCoordinator: [theirs]))
+        XCTAssertEqual(held, .open(theirs))
+        XCTAssertEqual(PromotionCards.resolvingLine(held, now: now), "Coordinator is resolving it · 12m")
+        XCTAssertTrue(PromotionCards.resolvingSpins(held))
+        XCTAssertFalse(PromotionCards.resolvingIsYours(held))
         // The clock handed it over: the same press, the other holder, and nothing turning over
         // work that is waiting on the reader.
         let mine = ProjectOpenItemRow(itemId: "item-1", kind: .integrationConflict,
                                       title: "Merge conflict", waitingSince: "2026-09-13T12:00:00Z",
-                                      assignee: .owner, escalatedAt: "2026-09-13T12:10:00Z")
-        XCTAssertEqual(PromotionCards.resolvingLine(mine, now: now), "It is yours · waiting 12m")
-        XCTAssertFalse(PromotionCards.resolvingSpins(mine))
-        // No item read, or no readable instant on it: the sentence, and no clock under it.
-        XCTAssertEqual(PromotionCards.resolvingLine(nil, now: now), "Coordinator is resolving it")
+                                      assignee: .owner, escalatedAt: "2026-09-13T12:10:00Z",
+                                      promotionId: "pr-1")
+        let handed = PromotionCards.holder(of: "pr-1", in: ProjectOpenItemsView(needsYou: [mine]))
+        XCTAssertEqual(PromotionCards.resolvingLine(handed, now: now), "It is yours · waiting 12m")
+        XCTAssertFalse(PromotionCards.resolvingSpins(handed))
+        XCTAssertTrue(PromotionCards.resolvingIsYours(handed))
+        // No item read yet, or no readable instant on it: the sentence, and no clock under it.
+        XCTAssertEqual(PromotionCards.holder(of: "pr-1", in: nil), .unread)
+        XCTAssertEqual(PromotionCards.resolvingLine(.unread, now: now), "Coordinator is resolving it")
         let unreadable = ProjectOpenItemRow(itemId: "item-1", kind: .integrationConflict,
                                             title: "Merge conflict", waitingSince: "",
                                             assignee: .coordinator)
-        XCTAssertEqual(PromotionCards.resolvingLine(unreadable, now: now),
+        XCTAssertEqual(PromotionCards.resolvingLine(.open(unreadable), now: now),
                        "Coordinator is resolving it")
+    }
+
+    /// A blocked candidate nobody holds — its exception closed, as the coordinator closed it on
+    /// 2026-10-09 because the work was already on main — has no press: the card does not name the
+    /// coordinator as resolving it, and nothing turns.
+    func testABlockedCandidateNobodyHoldsHasNoPress() {
+        let otherCandidates = ProjectOpenItemRow(itemId: "item-2", kind: .integrationError,
+                                                 title: "Integration error", waitingSince: "2026-09-13T12:00:00Z",
+                                                 assignee: .coordinator, promotionId: "pr-older")
+        let nobody = PromotionCards.holder(of: "pr-1", in: ProjectOpenItemsView(withCoordinator: [otherCandidates]))
+        XCTAssertEqual(nobody, .gone)
+        XCTAssertNil(PromotionCards.resolvingLine(nobody))
+        XCTAssertFalse(PromotionCards.resolvingSpins(nobody))
+        XCTAssertFalse(PromotionCards.resolvingIsYours(nobody))
+        XCTAssertEqual(PromotionCards.holder(of: "pr-1", in: ProjectOpenItemsView()), .gone)
+    }
+
+    /// D's reason is the job's own answer when the server recorded it (0409): a branch already on
+    /// main has nothing to merge, and a job that stopped on an error reached no check — neither is
+    /// "the checks did not pass". A block from before the reason is read off the arrays as before.
+    func testTheBlockedReasonIsTheJobsAnswer() {
+        func blocked(_ reason: String?, conflicts: [String] = []) -> ProjectPromotionView {
+            ProjectPromotionView(promotionId: "pr-1", state: .blocked,
+                                 sourceRef: "refs/heads/orbit/docs-evidence-33cf64", sourceSha: "",
+                                 upstreamRef: "refs/heads/main", conflicts: conflicts, blockedReason: reason)
+        }
+        XCTAssertEqual(PromotionCards.blockedLine(blocked("ALREADY_LANDED")),
+                       "nothing to merge — orbit/docs-evidence-33cf64 is already on main")
+        XCTAssertEqual(PromotionCards.blockedReason(blocked("ALREADY_LANDED")), "nothing to merge")
+        XCTAssertEqual(PromotionCards.blockedLine(blocked("ERROR")), "the merge stopped on an error — no check failed")
+        XCTAssertEqual(PromotionCards.blockedReason(blocked("ERROR")), "check errored")
+        XCTAssertEqual(PromotionCards.eventLine(blocked("ERROR")).text, "Can’t merge into main yet · check errored")
+        XCTAssertEqual(PromotionCards.blockedLine(blocked("CHECK_FAILED")), "the checks on the combined tree did not pass")
+        XCTAssertEqual(PromotionCards.blockedLine(blocked(nil)), "the checks on the combined tree did not pass")
+        XCTAssertEqual(PromotionCards.blockedReason(blocked(nil)), "checks failed")
+        XCTAssertEqual(PromotionCards.blockedLine(blocked("CONFLICT", conflicts: ["a.go"])), "1 file conflict with main: a.go")
+        XCTAssertEqual(PromotionCards.blockedReason(blocked(nil, conflicts: ["a.go"])), "1 file conflict")
     }
 
     func testConfirmationDoesNotInventARunningMerge() {

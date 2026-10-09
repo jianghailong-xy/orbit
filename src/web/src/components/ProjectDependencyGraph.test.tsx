@@ -5,11 +5,13 @@ import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
 import {
   buildProjectFlowElements,
+  EMBEDDED_STRIP_CEILING,
   GraphProjectCtx,
   highlightThrough,
   NODE_TYPES,
   planProjectGraphViewport,
   planStripHeight,
+  startPlanGraphFits,
   type ProjectFlowNode,
 } from './ProjectDependencyGraph';
 import { EDGE_COLORS } from './TaskDependencyGraph';
@@ -561,6 +563,66 @@ describe('planStripHeight', () => {
   it('has no answer before the strip has been measured', () => {
     expect(planStripHeight({ width: 2000, height: 96 }, 0)).toBeUndefined();
     expect(planStripHeight({ width: 0, height: 0 }, 1100)).toBeUndefined();
+  });
+
+  it('lets the start card’s picture grow taller, since nothing sits under it to push away', () => {
+    expect(planStripHeight({ width: 560, height: 640 }, 688)).toBe(520);
+    expect(planStripHeight({ width: 560, height: 640 }, 688, EMBEDDED_STRIP_CEILING)).toBe(688);
+    expect(planStripHeight({ width: 800, height: 2000 }, 1100, EMBEDDED_STRIP_CEILING)).toBe(EMBEDDED_STRIP_CEILING);
+  });
+});
+
+/**
+ * The start card's plan (docs/mocks/start-card-web-width, board 02): drawn as this graph only while
+ * the whole of it fits the card legibly, top to bottom — the line between fitting and opening on the
+ * frontier that the project page draws for its own strip.
+ */
+describe('the start card’s plan as a graph', () => {
+  /** The plan of the wiki-comment project the board was drawn from: 10 tasks, 15 edges, 6 levels. */
+  const wikiPlan = (): ProjectDependencyGraphResponse => {
+    const edges = [
+      ['w1', 'w2'], ['w1', 'w3'], ['w3', 'w4'], ['w4', 'w5'], ['w2', 'w6'], ['w4', 'w6'], ['w2', 'w7'],
+      ['w3', 'w7'], ['w2', 'w8'], ['w3', 'w8'], ['w6', 'w9'], ['w5', 'w9'], ['w7', 'w9'], ['w9', 'w10'],
+      ['w8', 'w10'],
+    ];
+    return {
+      marks: Array.from({ length: 10 }, (_, i) => ({
+        kind: 'TASK' as const,
+        id: `w${i + 1}`,
+        taskId: `w${i + 1}`,
+        title: `W${i + 1} · a task with a title long enough to wrap`,
+        status: 'OPEN',
+        parentTaskId: null,
+      })),
+      edges: edges.map(([sourceMarkId, targetMarkId]) => ({ sourceMarkId: sourceMarkId!, targetMarkId: targetMarkId! })),
+      taskCount: 10,
+      folded: false,
+      truncated: false,
+      limits: { maxTasks: 500, maxMarks: 500 },
+    };
+  };
+
+  it('draws a plan that fits the 720px card, and lists one squeezed into a phone’s sheet', () => {
+    // The card's canvas inside its 720px cap; the review sheet on a 390pt phone.
+    expect(startPlanGraphFits(wikiPlan(), 688)).toBe(true);
+    expect(startPlanGraphFits(wikiPlan(), 358)).toBe(false);
+  });
+
+  it('lists a plan the server folded or cut short, and has no answer before the card is measured', () => {
+    expect(startPlanGraphFits({ ...wikiPlan(), folded: true }, 688)).toBe(false);
+    expect(startPlanGraphFits({ ...wikiPlan(), truncated: true }, 688)).toBe(false);
+    expect(startPlanGraphFits(wikiPlan(), 0)).toBe(false);
+    expect(startPlanGraphFits({ ...chain(0, 0) }, 688)).toBe(false);
+  });
+
+  it('decides by the same fit the canvas then draws, so a drawn plan is never the frontier reading', () => {
+    // A long chain fits no card legibly: the card lists it rather than drawing a dashed line.
+    expect(startPlanGraphFits(chain(30, 0), 688)).toBe(false);
+    // And the canvas the card does draw always fits its plan whole, whatever the zoom.
+    const overview = overviewOf(chain(30, 0), 'TB');
+    const canvas = { width: 688, height: EMBEDDED_STRIP_CEILING };
+    expect(planProjectGraphViewport(overview, canvas, 0.12)!.fitted).toBe(false);
+    expect(planProjectGraphViewport(overview, canvas, 0.12, true)!.fitted).toBe(true);
   });
 });
 

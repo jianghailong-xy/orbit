@@ -1,0 +1,479 @@
+{
+ "summaryOf": "Per-test JSON attachments of this directory, removed by the evidence slimming (docs/evidence/base-ui-migration/evidence-slimming/README.md). Each entry gives the file name, size, SHA-256 and its top-level scalar fields; the test results are in summary.json / report.summary.json and the numbers the conclusions use are in the README.",
+ "originals": "7732f14f82d4e6b4406d7d164c4b672f63aa0f56",
+ "retrieve": "git show 7732f14f82d4e6b4406d7d164c4b672f63aa0f56:docs/evidence/base-ui-migration/p1.1/foundation-run/<name>",
+ "files": [
+  {
+   "name": "chromium-dark-desktop--account-adoption-preference-writes-and-live-system-changes-share-the-foundation-theme--theme-browser-evidence.json",
+   "bytes": 3494,
+   "sha256": "9f19e83cc04e1acc9891ac006840f5ad5f56bf027f71d66a94761b69fe81f838",
+   "fields": {
+    "cached": "dark",
+    "account": "light",
+    "setupPatch": "synthetic account preparation before app execution",
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--body-and-nested-portals-inherit-theme-and-preserve-focus-ownership--portal-surface.json",
+   "bytes": 696,
+   "sha256": "a9df89df22d93375452aad4943c8a5fc59b3c7689cc952ffd8859915f29799c2",
+   "fields": {
+    "theme": "dark",
+    "focusRestored": true
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--foundation-states-match-current-AntD-and-the-frozen-P0-palette--computed-states.json",
+   "bytes": 3518,
+   "sha256": "1d20054dd9f5228c3edff08f521eb6a463553485376a7e0ffecb69547a0beab9",
+   "fields": {
+    "theme": "dark",
+    "errors": []
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--production-boot-and-hydration-preserve-cached-dark--theme-browser-evidence.json",
+   "bytes": 2342,
+   "sha256": "4c5088bd9c92c6edd45655c5564c088e53b800095c375d74e86f78c7a2b3bf59",
+   "fields": {
+    "cachedMode": "dark",
+    "resolved": "dark",
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--production-boot-and-hydration-preserve-cached-light--theme-browser-evidence.json",
+   "bytes": 2349,
+   "sha256": "9f465e5a084daeff82c61dd2f972e05d5ab3a733f73bb2d53db2c6b25689f324",
+   "fields": {
+    "cachedMode": "light",
+    "resolved": "light",
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--production-boot-and-hydration-preserve-cached-system--theme-browser-evidence.json",
+   "bytes": 2344,
+   "sha256": "fac458549f34182c08df15a166c47f7e398c36d5b0960ffe790c19cfac8c9d5d",
+   "fields": {
+    "cachedMode": "system",
+    "resolved": "dark",
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "chromium-dark-phone--account-adoption-preference-writes-and-live-system-changes-share-the-foundation-theme--theme-browser-evidence.json",
+   "bytes": 3494,
+   "sha256": "9f19e83cc04e1acc9891ac006840f5ad5f56bf027f71d66a94761b69fe81f838",
+   "fields": {
+    "cached": "dark",
+    "account": "light",
+    "setupPatch": "synthetic account preparation before app execution",
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "chromium-dark-phone--body-and-nested-portals-inherit-theme-and-preserve-focus-ownership--portal-surface.json",
+   "bytes": 696,
+   "sha256": "097c8630c449b7fdf344307521d86a1e477ee04ede42400a65bc8a0ba60dd51d",
+   "fields": {
+    "theme": "dark",
+    "focusRestored": true
+   }
+  },
+  {
+   "name": "chromium-dark-phone--foundation-states-match-current-AntD-and-the-frozen-P0-palette--computed-states.json",
+   "bytes": 3518,
+   "sha256": "1d20054dd9f5228c3edff08f521eb6a463553485376a7e0ffecb69547a0beab9",
+   "fields": {
+    "theme": "dark",
+    "errors": []
+   }
+  },
+  {
+   "name": "chromium-dark-phone--production-boot-and-hydration-preserve-cached-dark--theme-browser-evidence.json",
+   "bytes": 2342,
+   "sha256": "4c5088bd9c92c6edd45655c5564c088e53b800095c375d74e86f78c7a2b3bf59",
+   "fields": {
+    "cachedMode": "dark",
+    "resolved": "dark",
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "chromium-dark-phone--production-boot-and-hydration-preserve-cached-light--theme-browser-evidence.json",
+   "bytes": 2349,
+   "sha256": "9f465e5a084daeff82c61dd2f972e05d5ab3a733f73bb2d53db2c6b25689f324",
+   "fields": {
+    "cachedMode": "light",
+    "resolved": "light",
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "chromium-dark-phone--production-boot-and-hydration-preserve-cached-system--theme-browser-evidence.json",
+   "bytes": 2344,
+   "sha256": "fac458549f34182c08df15a166c47f7e398c36d5b0960ffe790c19cfac8c9d5d",
+   "fields": {
+    "cachedMode": "system",
+    "resolved": "dark",
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "chromium-light-desktop--account-adoption-preference-writes-and-live-system-changes-share-the-foundation-theme--theme-browser-evidence.json",
+   "bytes": 3558,
+   "sha256": "1648c404cb7d9901866d6753bd5cbdcd8a877a12dd9ed58eba55ffc62f3e6d56",
+   "fields": {
+    "cached": "light",
+    "account": "dark",
+    "setupPatch": "synthetic account preparation before app execution",
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "chromium-light-desktop--body-and-nested-portals-inherit-theme-and-preserve-focus-ownership--portal-surface.json",
+   "bytes": 674,
+   "sha256": "08309cb598027f0dc93d450f9ee55bf9cea2306cb5c214711ba7b42dfa2ecf2b",
+   "fields": {
+    "theme": "light",
+    "focusRestored": true
+   }
+  },
+  {
+   "name": "chromium-light-desktop--foundation-states-match-current-AntD-and-the-frozen-P0-palette--computed-states.json",
+   "bytes": 3502,
+   "sha256": "ac972f615a55bccd13efccf79b2c79c96f279fe01f64776c96172e782c4da183",
+   "fields": {
+    "theme": "light",
+    "errors": []
+   }
+  },
+  {
+   "name": "chromium-light-desktop--production-boot-and-hydration-preserve-cached-dark--theme-browser-evidence.json",
+   "bytes": 2342,
+   "sha256": "4c5088bd9c92c6edd45655c5564c088e53b800095c375d74e86f78c7a2b3bf59",
+   "fields": {
+    "cachedMode": "dark",
+    "resolved": "dark",
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "chromium-light-desktop--production-boot-and-hydration-preserve-cached-light--theme-browser-evidence.json",
+   "bytes": 2349,
+   "sha256": "9f465e5a084daeff82c61dd2f972e05d5ab3a733f73bb2d53db2c6b25689f324",
+   "fields": {
+    "cachedMode": "light",
+    "resolved": "light",
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "chromium-light-desktop--production-boot-and-hydration-preserve-cached-system--theme-browser-evidence.json",
+   "bytes": 2350,
+   "sha256": "be4de47013151d0f78c7309ae3c960fb0e292792675dcbbab26e7292b9ade7ed",
+   "fields": {
+    "cachedMode": "system",
+    "resolved": "light",
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "chromium-light-phone--account-adoption-preference-writes-and-live-system-changes-share-the-foundation-theme--theme-browser-evidence.json",
+   "bytes": 3558,
+   "sha256": "1648c404cb7d9901866d6753bd5cbdcd8a877a12dd9ed58eba55ffc62f3e6d56",
+   "fields": {
+    "cached": "light",
+    "account": "dark",
+    "setupPatch": "synthetic account preparation before app execution",
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "chromium-light-phone--body-and-nested-portals-inherit-theme-and-preserve-focus-ownership--portal-surface.json",
+   "bytes": 674,
+   "sha256": "4d5bf20afed969291242f3d1906cf5a573688eaf2b355ac48c175f53de33dc0f",
+   "fields": {
+    "theme": "light",
+    "focusRestored": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--foundation-states-match-current-AntD-and-the-frozen-P0-palette--computed-states.json",
+   "bytes": 3502,
+   "sha256": "ac972f615a55bccd13efccf79b2c79c96f279fe01f64776c96172e782c4da183",
+   "fields": {
+    "theme": "light",
+    "errors": []
+   }
+  },
+  {
+   "name": "chromium-light-phone--production-boot-and-hydration-preserve-cached-dark--theme-browser-evidence.json",
+   "bytes": 2342,
+   "sha256": "4c5088bd9c92c6edd45655c5564c088e53b800095c375d74e86f78c7a2b3bf59",
+   "fields": {
+    "cachedMode": "dark",
+    "resolved": "dark",
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "chromium-light-phone--production-boot-and-hydration-preserve-cached-light--theme-browser-evidence.json",
+   "bytes": 2349,
+   "sha256": "9f465e5a084daeff82c61dd2f972e05d5ab3a733f73bb2d53db2c6b25689f324",
+   "fields": {
+    "cachedMode": "light",
+    "resolved": "light",
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "chromium-light-phone--production-boot-and-hydration-preserve-cached-system--theme-browser-evidence.json",
+   "bytes": 2350,
+   "sha256": "be4de47013151d0f78c7309ae3c960fb0e292792675dcbbab26e7292b9ade7ed",
+   "fields": {
+    "cachedMode": "system",
+    "resolved": "light",
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--account-adoption-preference-writes-and-live-system-changes-share-the-foundation-theme--theme-browser-evidence.json",
+   "bytes": 3494,
+   "sha256": "9f19e83cc04e1acc9891ac006840f5ad5f56bf027f71d66a94761b69fe81f838",
+   "fields": {
+    "cached": "dark",
+    "account": "light",
+    "setupPatch": "synthetic account preparation before app execution",
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--body-and-nested-portals-inherit-theme-and-preserve-focus-ownership--portal-surface.json",
+   "bytes": 680,
+   "sha256": "aed14f3fb5d2c8ed44f9a169b9d57a1bb23648b6a16dc0e254c6c849e523ddbf",
+   "fields": {
+    "theme": "dark",
+    "focusRestored": true
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--foundation-states-match-current-AntD-and-the-frozen-P0-palette--computed-states.json",
+   "bytes": 3422,
+   "sha256": "fee69a8fe976bac2b3c67b486cb7d6f3762ba1ade6dbc6c1c8614caec1e92f59",
+   "fields": {
+    "theme": "dark",
+    "errors": []
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--production-boot-and-hydration-preserve-cached-dark--theme-browser-evidence.json",
+   "bytes": 2342,
+   "sha256": "4c5088bd9c92c6edd45655c5564c088e53b800095c375d74e86f78c7a2b3bf59",
+   "fields": {
+    "cachedMode": "dark",
+    "resolved": "dark",
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--production-boot-and-hydration-preserve-cached-light--theme-browser-evidence.json",
+   "bytes": 2349,
+   "sha256": "9f465e5a084daeff82c61dd2f972e05d5ab3a733f73bb2d53db2c6b25689f324",
+   "fields": {
+    "cachedMode": "light",
+    "resolved": "light",
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--production-boot-and-hydration-preserve-cached-system--theme-browser-evidence.json",
+   "bytes": 2344,
+   "sha256": "fac458549f34182c08df15a166c47f7e398c36d5b0960ffe790c19cfac8c9d5d",
+   "fields": {
+    "cachedMode": "system",
+    "resolved": "dark",
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-dark-phone--account-adoption-preference-writes-and-live-system-changes-share-the-foundation-theme--theme-browser-evidence.json",
+   "bytes": 3494,
+   "sha256": "9f19e83cc04e1acc9891ac006840f5ad5f56bf027f71d66a94761b69fe81f838",
+   "fields": {
+    "cached": "dark",
+    "account": "light",
+    "setupPatch": "synthetic account preparation before app execution",
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-dark-phone--body-and-nested-portals-inherit-theme-and-preserve-focus-ownership--portal-surface.json",
+   "bytes": 680,
+   "sha256": "de2f55c40ce69ff1bc31ab502fa7b0edf72665940151bf57e905903f0ef06c7e",
+   "fields": {
+    "theme": "dark",
+    "focusRestored": true
+   }
+  },
+  {
+   "name": "webkit-dark-phone--foundation-states-match-current-AntD-and-the-frozen-P0-palette--computed-states.json",
+   "bytes": 3422,
+   "sha256": "fee69a8fe976bac2b3c67b486cb7d6f3762ba1ade6dbc6c1c8614caec1e92f59",
+   "fields": {
+    "theme": "dark",
+    "errors": []
+   }
+  },
+  {
+   "name": "webkit-dark-phone--production-boot-and-hydration-preserve-cached-dark--theme-browser-evidence.json",
+   "bytes": 2342,
+   "sha256": "4c5088bd9c92c6edd45655c5564c088e53b800095c375d74e86f78c7a2b3bf59",
+   "fields": {
+    "cachedMode": "dark",
+    "resolved": "dark",
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-dark-phone--production-boot-and-hydration-preserve-cached-light--theme-browser-evidence.json",
+   "bytes": 2349,
+   "sha256": "9f465e5a084daeff82c61dd2f972e05d5ab3a733f73bb2d53db2c6b25689f324",
+   "fields": {
+    "cachedMode": "light",
+    "resolved": "light",
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-dark-phone--production-boot-and-hydration-preserve-cached-system--theme-browser-evidence.json",
+   "bytes": 2344,
+   "sha256": "fac458549f34182c08df15a166c47f7e398c36d5b0960ffe790c19cfac8c9d5d",
+   "fields": {
+    "cachedMode": "system",
+    "resolved": "dark",
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-light-desktop--account-adoption-preference-writes-and-live-system-changes-share-the-foundation-theme--theme-browser-evidence.json",
+   "bytes": 3558,
+   "sha256": "1648c404cb7d9901866d6753bd5cbdcd8a877a12dd9ed58eba55ffc62f3e6d56",
+   "fields": {
+    "cached": "light",
+    "account": "dark",
+    "setupPatch": "synthetic account preparation before app execution",
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-light-desktop--body-and-nested-portals-inherit-theme-and-preserve-focus-ownership--portal-surface.json",
+   "bytes": 658,
+   "sha256": "9a318d01cd869c59c18d9716322d0dea4a007ae59d3c99fbaf25c3a9ca69ce79",
+   "fields": {
+    "theme": "light",
+    "focusRestored": true
+   }
+  },
+  {
+   "name": "webkit-light-desktop--foundation-states-match-current-AntD-and-the-frozen-P0-palette--computed-states.json",
+   "bytes": 3406,
+   "sha256": "eddd12ad68d59093ba6e39dc3a28b3d23d2cf1c77b1f11aae619f4e11bf5d8f1",
+   "fields": {
+    "theme": "light",
+    "errors": []
+   }
+  },
+  {
+   "name": "webkit-light-desktop--production-boot-and-hydration-preserve-cached-dark--theme-browser-evidence.json",
+   "bytes": 2342,
+   "sha256": "4c5088bd9c92c6edd45655c5564c088e53b800095c375d74e86f78c7a2b3bf59",
+   "fields": {
+    "cachedMode": "dark",
+    "resolved": "dark",
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-light-desktop--production-boot-and-hydration-preserve-cached-light--theme-browser-evidence.json",
+   "bytes": 2349,
+   "sha256": "9f465e5a084daeff82c61dd2f972e05d5ab3a733f73bb2d53db2c6b25689f324",
+   "fields": {
+    "cachedMode": "light",
+    "resolved": "light",
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-light-desktop--production-boot-and-hydration-preserve-cached-system--theme-browser-evidence.json",
+   "bytes": 2350,
+   "sha256": "be4de47013151d0f78c7309ae3c960fb0e292792675dcbbab26e7292b9ade7ed",
+   "fields": {
+    "cachedMode": "system",
+    "resolved": "light",
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-light-phone--account-adoption-preference-writes-and-live-system-changes-share-the-foundation-theme--theme-browser-evidence.json",
+   "bytes": 3558,
+   "sha256": "1648c404cb7d9901866d6753bd5cbdcd8a877a12dd9ed58eba55ffc62f3e6d56",
+   "fields": {
+    "cached": "light",
+    "account": "dark",
+    "setupPatch": "synthetic account preparation before app execution",
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-light-phone--body-and-nested-portals-inherit-theme-and-preserve-focus-ownership--portal-surface.json",
+   "bytes": 658,
+   "sha256": "1d6afd1b5ac0b20ce3065b390261b201e7fc5a51999458e57b441d12804fc0fe",
+   "fields": {
+    "theme": "light",
+    "focusRestored": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--foundation-states-match-current-AntD-and-the-frozen-P0-palette--computed-states.json",
+   "bytes": 3406,
+   "sha256": "eddd12ad68d59093ba6e39dc3a28b3d23d2cf1c77b1f11aae619f4e11bf5d8f1",
+   "fields": {
+    "theme": "light",
+    "errors": []
+   }
+  },
+  {
+   "name": "webkit-light-phone--production-boot-and-hydration-preserve-cached-dark--theme-browser-evidence.json",
+   "bytes": 2342,
+   "sha256": "4c5088bd9c92c6edd45655c5564c088e53b800095c375d74e86f78c7a2b3bf59",
+   "fields": {
+    "cachedMode": "dark",
+    "resolved": "dark",
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-light-phone--production-boot-and-hydration-preserve-cached-light--theme-browser-evidence.json",
+   "bytes": 2349,
+   "sha256": "9f465e5a084daeff82c61dd2f972e05d5ab3a733f73bb2d53db2c6b25689f324",
+   "fields": {
+    "cachedMode": "light",
+    "resolved": "light",
+    "pageErrors": []
+   }
+  },
+  {
+   "name": "webkit-light-phone--production-boot-and-hydration-preserve-cached-system--theme-browser-evidence.json",
+   "bytes": 2350,
+   "sha256": "be4de47013151d0f78c7309ae3c960fb0e292792675dcbbab26e7292b9ade7ed",
+   "fields": {
+    "cachedMode": "system",
+    "resolved": "light",
+    "pageErrors": []
+   }
+  }
+ ]
+}

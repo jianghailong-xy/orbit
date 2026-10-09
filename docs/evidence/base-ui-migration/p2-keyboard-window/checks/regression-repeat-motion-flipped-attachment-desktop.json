@@ -1,0 +1,13 @@
+{
+ "command": "cd /root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec && npm run test:ui-choices -w @orbit/web -- --grep 'normal flipped entrance and exit motion matches attachment' --project webkit-light-desktop --repeat-each 10",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_af9a30e27e81",
+ "cwd": "/root/.orbit/worktrees/df736682-e1f7-5c09-a8ee-d8b9c92ce3ec",
+ "commit": "f7932f8c11004a763a9970f92b0016e6e4d137f5",
+ "webTree": "7709bb72da4dd0ddb22b6563a62715821318a913",
+ "outputLastWritten": "2026-10-06T23:52:50.045013+00:00",
+ "exitCode": 0,
+ "outputSha256": "dc0c5e63d0cfe1b1222a5d9e810f422a0c560ee8e7ec573e771bdd2263ed54b2",
+ "outputBytes": 1923,
+ "note": "10 passed on the delivered tree: the motion case that timed out in the second delivered full run, alone in its environment, ten times (single runs took 3.4-32.2s under host load); unchanged test, timeout and retries."
+}

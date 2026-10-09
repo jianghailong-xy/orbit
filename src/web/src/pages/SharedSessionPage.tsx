@@ -8,8 +8,10 @@ import {
   fetchSharedAttachmentObjectUrl,
   getSharedEventFull,
   getSharedEventPage,
+  getSharedEventsAfter,
   getSharedSession,
   type SharedEvent,
+  type SharedSessionNow,
 } from '../api';
 import { PublicShell } from '../components/PublicShell';
 import {
@@ -24,12 +26,16 @@ import { memoizeEventFull } from '../lib/eventFull';
 import { routeId } from '../lib/idCodec';
 import { projectLinkResolver, taskLinkResolver } from '../lib/publicLinks';
 import {
+  isSessionBusy,
+  isSessionLive,
   sessionLifecycleStateOf,
   sessionRunStateOf,
   sessionStateWord,
   type SessionRunState,
+  type SessionStateSource,
 } from '../lib/sessionState';
 import { shortDate } from '../lib/shareLinks';
+import { NEAR_BOTTOM, sampleTail } from '../lib/tailPinning';
 import { titleFirstLine } from '../lib/title';
 
 // Tail-first, like the app's own transcript (WorkspaceView): the page opens on the newest page and
@@ -39,6 +45,20 @@ const OLDER_PAGE = 200;
 const LOAD_OLDER_AT = 400;
 // Download HTML reads the transcript whole, in the largest pages the share serves.
 const EXPORT_PAGE = 500;
+// A live conversation is followed: asked what it has added since the newest event on the page,
+// NEWER_PAGE at a time — every WORKING_POLL_MS while it works or has just moved, and every
+// WAITING_POLL_MS while it waits on its owner, who may answer at any moment.
+const NEWER_PAGE = 200;
+const WORKING_POLL_MS = 4_000;
+const WAITING_POLL_MS = 30_000;
+
+/** How long until a followed conversation is asked again, after an answer that did or did not bring
+ *  anything new (`moved`); null once it has stopped and gone quiet — over, or filed Completed. */
+function followDelay(state: SessionStateSource, moved: boolean): number | null {
+  if (moved || isSessionBusy(state)) return WORKING_POLL_MS;
+  if (isSessionLive(state) && sessionLifecycleStateOf(state) !== 'COMPLETED') return WAITING_POLL_MS;
+  return null;
+}
 
 /**
  * The read of a link's root page — `/s/<token>`, whatever it opens. The page that decides what to
@@ -180,8 +200,16 @@ function SharedConversation() {
   // Set just before a page is prepended, so the reader's place holds while it grows above them.
   const anchorRef = useRef<{ prevHeight: number; prevTop: number } | null>(null);
   const landedRef = useRef(false);
+  // What the conversation has added since the page opened, oldest first, and its header as the
+  // newest answer gave it — both from following it while it is live.
+  const [newer, setNewer] = useState<SharedEvent[]>([]);
+  const [now, setNow] = useState<SharedSessionNow | null>(null);
+  // Set when newer events land under a reader who is at the end, so the end stays in view.
+  const followRef = useRef(false);
 
-  const events = useMemo(() => [...older, ...(data?.events ?? [])], [older, data]);
+  const events = useMemo(() => [...older, ...(data?.events ?? []), ...newer], [older, data, newer]);
+  // The header as it stands now.
+  const head = now ?? data;
 
   const loadOlder = useCallback(() => {
     const cursor =
@@ -224,6 +252,14 @@ function SharedConversation() {
     anchorRef.current = null;
     el.scrollTop = el.scrollHeight - anchor.prevHeight + anchor.prevTop;
   }, [events]);
+  // Keep a reader who was at the end at the end when newer events land below; one who scrolled up
+  // stays where they are.
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (!el || !followRef.current) return;
+    followRef.current = false;
+    el.scrollTop = el.scrollHeight;
+  }, [events]);
   // What is loaded may not reach LOAD_OLDER_AT above the viewport, and then there is nothing to
   // scroll up through: pull the next page in without waiting for a scroll that cannot happen.
   // (No layout at all, as in jsdom, is not a short page.)
@@ -232,24 +268,81 @@ function SharedConversation() {
     if (el && el.clientHeight > 0 && el.scrollTop < LOAD_OLDER_AT) loadOlder();
   }, [events, loadOlder]);
 
+  // Follow a live conversation: ask what it has added since the newest event on the page, put it
+  // below, and redraw the header from the same answer — at once while more are waiting, else on
+  // followDelay's clock. A tab nobody is looking at asks nothing; it catches up when looked at.
+  useEffect(() => {
+    if (!data) return;
+    let after = data.events.at(-1)?.seq ?? 0;
+    let state: SessionStateSource = data;
+    let delay = followDelay(data, false);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let parked = false;
+    let stopped = false;
+    const read = () => {
+      if (document.hidden) {
+        parked = true;
+        return;
+      }
+      getSharedEventsAfter(token, { after, limit: NEWER_PAGE, sessionId })
+        .then((answer) => {
+          if (stopped) return;
+          const added = answer.events.filter((e) => e.seq > after);
+          if (added.length) {
+            after = added[added.length - 1].seq;
+            const el = scrollRef.current;
+            followRef.current = !!el && sampleTail(el).bottomGap <= NEAR_BOTTOM;
+            setNewer((prev) => [...prev, ...added]);
+          }
+          // A server from before `after` answers with its tail page alone; the header stands.
+          if (answer.status !== undefined) {
+            state = answer;
+            setNow(answer);
+          }
+          delay = answer.after != null ? 0 : followDelay(state, added.length > 0);
+        })
+        .catch(() => {
+          // Asked again on the same clock, but never at once: a refusal is not more to catch up on.
+          delay = Math.max(delay ?? 0, WORKING_POLL_MS);
+        })
+        .finally(() => {
+          if (stopped || delay === null) return;
+          if (delay === 0) read();
+          else timer = setTimeout(read, delay);
+        });
+    };
+    const onVisibility = () => {
+      if (document.hidden || !parked) return;
+      parked = false;
+      read();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    if (delay !== null) timer = setTimeout(read, delay);
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [token, sessionId, data]);
+
   // Reflect the session title in the browser tab (and thus the shared-link preview). The
   // static index.html ships <title>Orbit</title>, so without this a shared link's tab just
   // reads "Orbit". Use the first line only — a fallback title can be a multi-line prompt —
   // and restore the previous title on unmount so leaving the page doesn't strand it.
   useEffect(() => {
-    if (!data?.title) return;
+    if (!head?.title) return;
     const prev = document.title;
-    document.title = `${titleFirstLine(data.title)} — Orbit`;
+    document.title = `${titleFirstLine(head.title)} — Orbit`;
     return () => {
       document.title = prev;
     };
-  }, [data?.title]);
+  }, [head?.title]);
 
   // Build the same self-contained HTML the app's export produces, from the whole transcript rather
   // than the pages scrolled in so far, with images embedded through the public share route so a
   // logged-out viewer's saved file still shows them.
   const download = async () => {
-    if (!data || downloading) return;
+    if (!head || downloading) return;
     setDownloading(true);
     try {
       const [whole, { exportSessionHtml }] = await Promise.all([
@@ -259,10 +352,10 @@ function SharedConversation() {
       await exportSessionHtml(
         {
           id: token,
-          title: data.title,
-          status: sessionRunStateOf(data),
-          createdAt: data.createdAt,
-          workspace: { name: data.workspaceName },
+          title: head.title,
+          status: sessionRunStateOf(head),
+          createdAt: head.createdAt,
+          workspace: { name: head.workspaceName },
         },
         whole,
         (id) => fetchSharedAttachmentDataUrl(token, id),
@@ -276,9 +369,9 @@ function SharedConversation() {
   };
 
   if (isLoading) return <SharedLoading />;
-  if (isError || !data) return <SharedUnavailable />;
+  if (isError || !head) return <SharedUnavailable />;
   const tone =
-    sessionLifecycleStateOf(data) === 'COMPLETED' ? 'done' : RUN_TONE[sessionRunStateOf(data)];
+    sessionLifecycleStateOf(head) === 'COMPLETED' ? 'done' : RUN_TONE[sessionRunStateOf(head)];
   return (
     <PublicShell
       crumbs={
@@ -292,28 +385,28 @@ function SharedConversation() {
                       label: titleFirstLine(task.title),
                       to: scope({ kind: 'task', id: task.id }) ?? undefined,
                     },
-                    { label: `Run · ${shortDate(data.createdAt)}` },
+                    { label: `Run · ${shortDate(head.createdAt)}` },
                   ]
                 : [{ label: 'Coordinator' }]),
             ]
           : task
             ? [
                 { label: titleFirstLine(task.title), to: `/s/${encodeURIComponent(token)}` },
-                { label: `Run · ${shortDate(data.createdAt)}` },
+                { label: `Run · ${shortDate(head.createdAt)}` },
               ]
-            : [{ label: titleFirstLine(data.title) }]
+            : [{ label: titleFirstLine(head.title) }]
       }
       status={
         <span className={`status-pill ${tone}`}>
           {tone === 'running' ? <LoadingOutlined spin /> : <span className="status-dot" />}
-          {sessionStateWord(data)}
+          {sessionStateWord(head)}
         </span>
       }
       actions={
         <button
           className="share-download"
           onClick={download}
-          disabled={downloading || data.events.length === 0}
+          disabled={downloading || events.length === 0}
           aria-label="Download this conversation as a self-contained HTML file"
           title="Download this conversation as a self-contained HTML file"
         >

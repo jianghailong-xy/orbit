@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&display=swap">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { background:#0B0B0D; font-family:'Noto Sans SC',-apple-system,sans-serif; }
+  .page { width:1120px; margin:0 auto; padding:44px 0 48px; }
+  h1 { color:#F5F5F7; font-size:22px; font-weight:700; text-align:center; }
+  .sub { color:#8E8E93; font-size:14px; text-align:center; margin-top:8px; }
+  .row { display:flex; gap:56px; justify-content:center; margin-top:34px; align-items:flex-start; }
+
+  .col label { display:block; text-align:center; font-size:15px; font-weight:700; margin-bottom:14px; }
+  .col.before label { color:#EB8F8F; }
+  .col.after  label { color:#7ED491; }
+  .col label span { display:block; font-weight:400; font-size:12.5px; color:#8E8E93; margin-top:4px; }
+
+  .phone { width:421px; background:#000; border-radius:60px; padding:14px;
+           box-shadow:0 0 0 2px #2A2A2E, 0 24px 60px rgba(0,0,0,.6); }
+  .screen { background:#000; border-radius:46px; overflow:hidden; }
+
+  .statusbar { height:54px; display:flex; align-items:center; justify-content:space-between;
+               padding:0 32px; color:#fff; font-size:15px; font-weight:600; }
+  .statusbar .icons { display:flex; gap:6px; align-items:center; }
+  .sig { width:17px; height:11px; display:flex; gap:1.5px; align-items:flex-end; }
+  .sig i { width:3px; background:#fff; border-radius:1px; }
+  .sig i:nth-child(1){height:4px}.sig i:nth-child(2){height:6px}.sig i:nth-child(3){height:8px}.sig i:nth-child(4){height:10px}
+  .bat { width:25px; height:12px; border:1.5px solid rgba(255,255,255,.5); border-radius:3.5px; position:relative; }
+  .bat::after { content:''; position:absolute; left:1.5px; top:1.5px; bottom:1.5px; width:30%; background:#FF453A; border-radius:1.5px; }
+  .bat b { position:absolute; right:-8px; top:1px; font-size:10px; color:#fff; font-weight:600; }
+
+  .sheet { position:relative; background:#1C1C1E; border-radius:16px 16px 0 0; min-height:600px;
+           padding-bottom:22px; }
+  .grabber { width:36px; height:5px; background:#4A4A4C; border-radius:2.5px; margin:8px auto 0; }
+  .close { position:absolute; right:12px; top:10px; width:30px; height:30px; border-radius:15px;
+           background:#2E2E30; color:#C7C7CC; font-size:13px; display:flex; align-items:center;
+           justify-content:center; }
+  .title { color:#fff; font-size:17px; font-weight:700; text-align:center; margin-top:6px; }
+  .content { padding:20px 20px 0; }
+
+  .prov { color:#8E8E93; font-size:13px; margin-bottom:10px; }
+  .q    { color:#F5F5F7; font-size:17px; }
+
+  .opts { margin-top:16px; }
+  .opt  { display:flex; gap:10px; padding:9px 0; }
+  .radio { flex:none; width:20px; height:20px; border-radius:10px; border:1.5px solid #636366; margin-top:2px; position:relative; }
+  .opt.sel .radio { border-color:#0A84FF; }
+  .opt.sel .radio::after { content:''; position:absolute; inset:4px; border-radius:5px; background:#0A84FF; }
+  .opt .txt { flex:1; }
+  .opt .lab { color:#F5F5F7; font-size:17px; }
+  .opt .lab .rec { color:#0A84FF; font-size:13px; margin-left:6px; }
+  .opt .desc { color:#8E8E93; font-size:13px; margin-top:3px; }
+
+  .note { margin-top:16px; background:rgba(10,132,255,.12); border-radius:10px;
+          padding:11px 12px; color:#7A7A80; font-size:17px; }
+  .footer { color:#8E8E93; font-size:13px; margin-top:16px; }
+  .btn { margin-top:20px; height:50px; border-radius:25px; background:#0A84FF; color:#fff;
+         font-size:17px; font-weight:600; display:flex; align-items:center; justify-content:center; }
+  .asked { color:#636366; font-size:13px; text-align:center; margin-top:14px; }
+
+  /* ——— 行距:现状(默认) ——— */
+  .before .q          { line-height:1.30; }
+  .before .opt .lab   { line-height:1.30; }
+  .before .opt .desc  { line-height:1.30; }
+  .before .footer     { line-height:1.30; }
+  .before .prov       { line-height:1.30; }
+
+  /* ——— 行距:方案 ——— */
+  .after .q           { line-height:1.72; }
+  .after .opt .lab    { line-height:1.72; }
+  .after .opt .desc   { line-height:1.60; }
+  .after .footer      { line-height:1.60; }
+  .after .prov        { line-height:1.60; }
+
+  .spec { margin:38px auto 0; width:920px; background:#161618; border:1px solid #2A2A2E;
+          border-radius:14px; padding:20px 26px; color:#C7C7CC; font-size:14px; line-height:2; }
+  .spec b { color:#F5F5F7; }
+  .spec .k { display:inline-block; width:210px; color:#8E8E93; }
+  .arrow { color:#7ED491; font-weight:700; }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>Coordinator 提问卡片 · 行距优化</h1>
+  <div class="sub">深色模式 · iPhone 393pt · 同一内容,仅行高(line-height)不同</div>
+
+  <div class="row">
+
+    <div class="col before">
+      <label>现状<span>默认行距 ≈ 1.3 · 中文行与行几乎相贴</span></label>
+      <div class="phone"><div class="screen">
+        <div class="statusbar"><span>5:43</span><span class="icons"><span class="sig"><i></i><i></i><i></i><i></i></span><span class="bat"><b>10</b></span></span></div>
+        <div class="sheet">
+          <div class="grabber"></div><div class="close">✕</div>
+          <div class="title">The coordinator has a question</div>
+          <div class="content">
+            <div class="prov">FROM COORDINATOR</div>
+            <div class="q">你把「联调与兼容」的第 2 版判定为退回,但退回的理由执行会话和协调会话都看不到(平台的退回不会自动转达理由)。我核对过那版证据:六个场景一次干净运行全 PASS、兼容场景的日志与截图都齐,判据 8 我认为满足。请告诉我怎么处理——需要改什么,或者只是误点?</div>
+            <div class="opts">
+              <div class="opt sel"><div class="radio"></div><div class="txt">
+                <div class="lab">有具体问题,我写清楚<span class="rec">Recommended</span></div>
+                <div class="desc">在下面或随后的消息里写一句(比如「某个场景不算过」「缺某某验证」),我原样转给执行会话(orbit/kimi-7bebbf),它改完交第 3 版我再判。</div>
+              </div></div>
+              <div class="opt"><div class="radio"></div><div class="txt">
+                <div class="lab">误点/没有具体意见</div>
+                <div class="desc">我让执行会话原样补交第 3 版(无改动,重跑一次联调确认现状),我判通过后落地。</div>
+              </div></div>
+              <div class="opt"><div class="radio"></div><div class="txt">
+                <div class="lab">先搁置,不急</div>
+                <div class="desc">任务留在 OPEN 等你,其余项目部分照常。</div>
+              </div></div>
+              <div class="opt"><div class="radio"></div><div class="txt">
+                <div class="lab">Other — say it in my own words</div>
+              </div></div>
+            </div>
+            <div class="note">Add a note (optional)</div>
+            <div class="footer">Blocks 1 task · If you don't answer: 我不动它:任务留在 OPEN 等你的答复,项目其余部分(含你的 HPC 实测)不受影响。</div>
+            <div class="btn">Send answer</div>
+            <div class="asked">asked just now</div>
+          </div>
+        </div>
+      </div></div>
+    </div>
+
+    <div class="col after">
+      <label>优化后<span>正文 1.72 (+7pt) · 辅助说明 1.60 (+4pt)</span></label>
+      <div class="phone"><div class="screen">
+        <div class="statusbar"><span>5:43</span><span class="icons"><span class="sig"><i></i><i></i><i></i><i></i></span><span class="bat"><b>10</b></span></span></div>
+        <div class="sheet">
+          <div class="grabber"></div><div class="close">✕</div>
+          <div class="title">The coordinator has a question</div>
+          <div class="content">
+            <div class="prov">FROM COORDINATOR</div>
+            <div class="q">你把「联调与兼容」的第 2 版判定为退回,但退回的理由执行会话和协调会话都看不到(平台的退回不会自动转达理由)。我核对过那版证据:六个场景一次干净运行全 PASS、兼容场景的日志与截图都齐,判据 8 我认为满足。请告诉我怎么处理——需要改什么,或者只是误点?</div>
+            <div class="opts">
+              <div class="opt sel"><div class="radio"></div><div class="txt">
+                <div class="lab">有具体问题,我写清楚<span class="rec">Recommended</span></div>
+                <div class="desc">在下面或随后的消息里写一句(比如「某个场景不算过」「缺某某验证」),我原样转给执行会话(orbit/kimi-7bebbf),它改完交第 3 版我再判。</div>
+              </div></div>
+              <div class="opt"><div class="radio"></div><div class="txt">
+                <div class="lab">误点/没有具体意见</div>
+                <div class="desc">我让执行会话原样补交第 3 版(无改动,重跑一次联调确认现状),我判通过后落地。</div>
+              </div></div>
+              <div class="opt"><div class="radio"></div><div class="txt">
+                <div class="lab">先搁置,不急</div>
+                <div class="desc">任务留在 OPEN 等你,其余项目部分照常。</div>
+              </div></div>
+              <div class="opt"><div class="radio"></div><div class="txt">
+                <div class="lab">Other — say it in my own words</div>
+              </div></div>
+            </div>
+            <div class="note">Add a note (optional)</div>
+            <div class="footer">Blocks 1 task · If you don't answer: 我不动它:任务留在 OPEN 等你的答复,项目其余部分(含你的 HPC 实测)不受影响。</div>
+            <div class="btn">Send answer</div>
+            <div class="asked">asked just now</div>
+          </div>
+        </div>
+      </div></div>
+    </div>
+
+  </div>
+
+  <div class="spec">
+    <div><span class="k">问题正文 / 选项标题(17pt)</span>行距 1.30 <span class="arrow">→</span> <b>1.72</b>,即 SwiftUI <b>.lineSpacing(+7)</b> — 直接复用消息流正文已有的 <b>ProseLayout.lineSpacing</b>,全 App 中文长文手感一致</div>
+    <div><span class="k">选项说明 / 底部说明(13pt)</span>行距 1.30 <span class="arrow">→</span> <b>1.60</b>,即 <b>.lineSpacing(+4)</b> — 新增一个小文本行距 token</div>
+    <div><span class="k">字号、字重、颜色、间距</span><b>不动</b> — 只改行高,版式与 web 端副本不受影响;代价是卡片整体变高约 15%,超出部分在 sheet 内滚动</div>
+  </div>
+</div>
+</body>
+</html>

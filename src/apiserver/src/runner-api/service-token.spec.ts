@@ -198,8 +198,10 @@ test('the session guard accepts a runner credential or a service token, and noth
     {
       runner: {
         findFirst: async ({ where }: { where: { tokenHash: string } }) =>
-          where.tokenHash === sha256('runner-secret') ? runnerRow : null,
+          where.tokenHash === sha256('runner-secret') ? { ...runnerRow, owner: { disabledAt: null } } : null,
       },
+      // A self-managed runner: no managed runner mapping binds its credential to an instance.
+      managedRunner: { findUnique: async () => null },
     } as never,
     { verify: async (token: string) => (token === 'service' ? grant : null) } as never,
   );
@@ -213,7 +215,7 @@ test('the session guard accepts a runner credential or a service token, and noth
 
   const runnerCall = context('runner-secret');
   assert.equal(await guard.canActivate(runnerCall as never), true);
-  assert.equal(runnerCall.req.runner, runnerRow);
+  assert.deepEqual(runnerCall.req.runner, runnerRow);
   assert.equal(runnerCall.req.serviceGrant, undefined, 'a runner credential must carry no grant');
 
   const serviceCall = context('service');
@@ -404,6 +406,12 @@ test('a service token can never act through the session-bound orchestration path
     () => controller.deleteSession(RUNNER, grant, undefined, undefined, TARGET_SESSION_ID),
     () => controller.mergeSession(RUNNER, grant, undefined, undefined, TARGET_SESSION_ID, {}),
     () => controller.searchSessions(RUNNER, grant, undefined, undefined, 'q', '5'),
+    // A merge receipt is in no token's vocabulary, and the receipt routes read a session by owner
+    // alone — a pinned token would reach every session of its account through them.
+    () => controller.recordMergeReceipt(RUNNER, grant, TARGET_SESSION_ID, {
+      result: 'MERGED', sourceSha: 'a'.repeat(40), targetBranch: 'main',
+    } as never),
+    () => controller.listMergeReceipts(RUNNER, grant, TARGET_SESSION_ID),
   ]) {
     await assert.rejects(invoke, (error: unknown) => error instanceof ForbiddenException);
   }

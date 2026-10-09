@@ -1,9 +1,10 @@
 import { useEffect, useState, type JSX } from 'react';
-import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ProjectPromotionView } from '@orbit/shared';
+import { api } from '../api';
 import { Dialog } from './ui/Dialog';
-import { LandingRow, landingLine } from './ProjectPanoramaHeader';
+import { LandingJobsSheet } from './LandingJobsSheet';
+import { LandingRow, LandingRowButton, landingLine } from './ProjectPanoramaHeader';
 import {
   CANCEL_MERGE,
   MERGE_TO_MAIN,
@@ -12,8 +13,11 @@ import {
   ProjectPromotion,
   ProjectPromotionReceipt,
   decidePromotion,
+  promotionCriteriaLine,
   promotionHeading,
+  promotionItem,
   resolvingPress,
+  type PromotionProjectView,
 } from './ProjectPromotionCard';
 import {
   DETAILS,
@@ -22,6 +26,7 @@ import {
   isMergeJob,
   mergeCardShape,
   moreTasks,
+  promotionBlockedBy,
   promotionBlockedLine,
   promotionBranchLine,
   promotionChecksSummary,
@@ -32,7 +37,6 @@ import {
   promotionTimelineDetail,
   promotionTimelineTitle,
 } from '../lib/projectMerge';
-import { encodeId } from '../lib/idCodec';
 import { projectIntegrationQuery, projectOpenItemsQuery, projectPromotionQuery } from '../lib/queries';
 import { ago } from '../lib/watches';
 
@@ -42,11 +46,25 @@ function asPromotion(value: unknown): ProjectPromotionView | null {
   return value && typeof value === 'object' && 'promotionId' in value ? (value as ProjectPromotionView) : null;
 }
 
+/** The merge into main's mark (iOS `arrow.triangle.merge`), on the asking card and the timeline. */
+function MergeGlyph({ size = 14 }: { size?: number }): JSX.Element {
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth={2.2}
+      strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M8 7l4-4 4 4" />
+      <path d="M12 3v8" />
+      <path d="M12 11c0 3.5-5 4.5-5 9.5" />
+      <path d="M12 11c0 3.5 5 4.5 5 9.5" />
+    </svg>
+  );
+}
+
 /**
- * The merge into main on the project's sessions view, under the progress strip (owner decision
- * 2026-10-06; mocks in docs/mocks/project-merge-sessions-page). One card at four moments: the merge
- * check running, the candidate asking, merging, or blocked — and nothing at all otherwise; a merge
- * already made is a row on the view's timeline instead (`ProjectMergeTimelineRow`).
+ * The merge into main on the project's sessions view, in the list under the progress card (owner
+ * decisions 2026-10-06; mocks in docs/mocks/project-merge-sessions-page and
+ * docs/mocks/project-sessions-page-web). One card at four moments: the merge check running, the
+ * candidate asking, merging, or blocked — and nothing at all otherwise; a merge already made is a
+ * row on the view's timeline instead (`ProjectMergeTimelineRow`).
  *
  * Its presses are the card's own doors (`decidePromotion`), and Details opens the whole card — the
  * one the project page draws — for anyone who wants every row before pressing. It claims no
@@ -54,11 +72,12 @@ function asPromotion(value: unknown): ProjectPromotionView | null {
  */
 export function ProjectMergeStrip({
   projectId,
-  coordinatorSessionId,
+  onOpenCoordinator,
 }: {
   projectId: string;
-  /** Where a blocked candidate's handling is: the project's coordinator conversation, when listed. */
-  coordinatorSessionId: string | null;
+  /** Where a blocked candidate's handling is: the project's coordinator conversation, opened over
+   *  this page the way its row opens it. Null when the page lists no coordinator. */
+  onOpenCoordinator: (() => void) | null;
 }): JSX.Element | null {
   const qc = useQueryClient();
   const promotion = useQuery({ ...projectPromotionQuery(projectId), refetchInterval: 15_000 });
@@ -71,8 +90,18 @@ export function ProjectMergeStrip({
     enabled: shape === 'blocked',
     refetchInterval: 20_000,
   });
+  // How far the criteria have got, for the asking card's line — the project document's own words.
+  const project = useQuery({
+    queryKey: ['project', projectId],
+    queryFn: () => api<PromotionProjectView>(`/projects/${encodeURIComponent(projectId)}`),
+    enabled: shape === 'asking',
+  });
+  const criteriaLine = project.isError ? null : promotionCriteriaLine(project.data ?? null);
   const [now, setNow] = useState(() => Date.now());
   const [detailsOpen, setDetailsOpen] = useState(false);
+  // A server that lists the jobs in flight is one whose landing row opens that list.
+  const listed = integration.data && typeof integration.data === 'object' && integration.data.inFlightJobs !== undefined;
+  const [jobsOpen, setJobsOpen] = useState(false);
   // The clocks move while a job runs, once a second and only then.
   const ticking = shape === 'checking' || shape === 'merging';
   useEffect(() => {
@@ -93,31 +122,45 @@ export function ProjectMergeStrip({
       ]),
   });
 
-  if (shape === null) return null;
+  // Kept while open even when the card goes, so a list being read does not vanish under the reader
+  // when the merge job it was opened from finishes — and in the same place either way, beside the
+  // card, so going does not remount it.
+  const jobs = listed || jobsOpen
+    ? <LandingJobsSheet projectId={projectId} open={jobsOpen} onClose={() => setJobsOpen(false)} />
+    : null;
+  if (shape === null) return <>{null}{jobs}</>;
   const line = integration.data && isMergeJob(inFlight)
     ? landingLine(integration.data, now, { updatedAt: integration.dataUpdatedAt, failed: integration.isError })
     : null;
-  const rows = [...(items.data?.needsYou ?? []), ...(items.data?.withCoordinator ?? [])];
-  const item = current ? rows.find((row) => row.promotionId === current.promotionId) ?? null : null;
+  const landing = line
+    ? listed ? <LandingRowButton line={line} onPress={() => setJobsOpen(true)} /> : <LandingRow line={line} />
+    : null;
+  const item = current ? promotionItem(items.data, current.promotionId) : undefined;
+  // Who has it, or null when the read came back and nobody does — then there is no press to draw.
+  const resolving = resolvingPress(item, now);
+  const inFront = current ? promotionBlockedBy(current, integration.data?.landTasks ?? null) : null;
   const press = (door: 'confirm' | 'decline' | 'cancel'): void => {
     if (current) decide.mutate({ door, candidate: current });
   };
 
   return (
     <div className={`session-project-merge is-${shape}`} data-shape={shape}>
-      {shape === 'checking' && line ? <LandingRow line={line} /> : null}
+      {shape === 'checking' ? landing : null}
       {shape === 'asking' && current ? (
         <>
           <div className="session-project-merge-head">
+            <span className="session-project-merge-tile"><MergeGlyph /></span>
             <span className="session-project-merge-title">{promotionPageTitle(current)}</span>
             <span className="session-project-merge-badge">{NEEDS_YOU}</span>
           </div>
           <div className="session-project-merge-ref" title={current.sourceRef}>{promotionBranchLine(current)}</div>
+          <div className="session-project-merge-rule" />
           <div className="session-project-merge-counts">{promotionPageCounts(current)}</div>
           <TaskTitles promotion={current} />
           <div className={`session-project-merge-checks${promotionChecksSummary(current).clean ? ' is-ok' : ''}`}>
             {promotionChecksSummary(current).text}
           </div>
+          {criteriaLine ? <div className="session-project-merge-criteria">{criteriaLine}</div> : null}
           <div className="session-project-merge-actions">
             <button type="button" className="session-project-merge-primary" disabled={decide.isPending}
               onClick={() => press('confirm')}>{MERGE_TO_MAIN}</button>
@@ -134,11 +177,11 @@ export function ProjectMergeStrip({
       {shape === 'merging' && current ? (
         <>
           <div className="session-project-merge-head">
-            <span className="promotion-spin" aria-hidden="true" />
+            <span className="session-project-merge-tile"><MergeGlyph /></span>
             <span className="session-project-merge-title">{promotionPageTitle(current)}</span>
           </div>
           <div className="session-project-merge-status">{promotionMergingStatus(current)}</div>
-          {line ? <LandingRow line={line} /> : null}
+          {landing}
           <div className="session-project-merge-note">{PAGE_NOTHING_TO_DO}</div>
           <div className="session-project-merge-foot">
             <button type="button" className="session-project-merge-link" onClick={() => setDetailsOpen(true)}>
@@ -155,18 +198,22 @@ export function ProjectMergeStrip({
             <span className="session-project-merge-title">{promotionPageTitle(current)}</span>
           </div>
           <div className="session-project-merge-status">{promotionBlockedLine(current)}</div>
-          <div className={`session-project-merge-press${item && item.assignee !== 'COORDINATOR' ? ' is-yours' : ''}`}>
-            {resolvingPress(item, now).spinning ? <span className="promotion-spin" aria-hidden="true" /> : null}
-            {resolvingPress(item, now).label}
-          </div>
+          {/* Who is in front of it, off the same project read this strip already holds. */}
+          {inFront ? <div className="session-project-merge-blocked-by">{inFront}</div> : null}
+          {resolving ? (
+            <div className={`session-project-merge-press${item && item.assignee !== 'COORDINATOR' ? ' is-yours' : ''}`}>
+              {resolving.spinning ? <span className="promotion-spin" aria-hidden="true" /> : null}
+              {resolving.label}
+            </div>
+          ) : null}
           <div className="session-project-merge-foot">
             <button type="button" className="session-project-merge-link" onClick={() => setDetailsOpen(true)}>
               {`${DETAILS} ›`}
             </button>
-            {coordinatorSessionId ? (
-              <Link className="session-project-merge-link" to={`/sessions/${encodeURIComponent(encodeId(coordinatorSessionId))}`}>
+            {onOpenCoordinator ? (
+              <button type="button" className="session-project-merge-link" onClick={onOpenCoordinator}>
                 {`${OPEN_COORDINATOR} ›`}
-              </Link>
+              </button>
             ) : null}
           </div>
         </>
@@ -187,6 +234,7 @@ export function ProjectMergeStrip({
           ) : null}
         </Dialog>
       ) : null}
+      {jobs}
     </div>
   );
 }
@@ -224,7 +272,7 @@ export function ProjectMergeTimelineRow({
     <>
       <button type="button" className="session-row session-project-merge-row" data-promotion={promotion.promotionId}
         onClick={() => setOpen(true)}>
-        <span className="session-project-merge-row-mark" aria-hidden="true" />
+        <span className="session-project-merge-row-mark" aria-hidden="true"><MergeGlyph size={15} /></span>
         <span className="session-project-merge-row-body">
           <span className="session-project-merge-row-head">
             <span className="session-project-merge-row-title">{promotionTimelineTitle(promotion)}</span>

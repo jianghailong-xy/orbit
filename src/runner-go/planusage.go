@@ -96,11 +96,15 @@ type PlanUsage struct {
 	// Antigravity Google account buckets from the independent /usage command.
 	Buckets []PlanUsageBucket `json:"buckets,omitempty"`
 
-	// Claude windows.
+	// Claude windows; Kimi Code's 5-hour and 7-day limits land in the first two too.
 	FiveHour       *PlanUsageWindow `json:"fiveHour,omitempty"`
 	SevenDay       *PlanUsageWindow `json:"sevenDay,omitempty"`
 	SevenDayOpus   *PlanUsageWindow `json:"sevenDayOpus,omitempty"`
 	SevenDaySonnet *PlanUsageWindow `json:"sevenDaySonnet,omitempty"`
+
+	// Kimi Code's monthly limits: everything the account spends, and its coding use (kimi_usage.go).
+	Month     *PlanUsageWindow `json:"month,omitempty"`
+	MonthCode *PlanUsageWindow `json:"monthCode,omitempty"`
 
 	// Codex windows, from app-server account/rateLimits/read.
 	Primary              *PlanUsageWindow     `json:"primary,omitempty"`
@@ -114,13 +118,15 @@ type PlanUsage struct {
 	// Earned rate-limit reset state of the default Codex account
 	// (docs/codex-rate-limit-reset-contract.md). Nil until a reader fills it; omitted on the wire.
 	RateLimitReset *PlanUsageRateLimitReset `json:"rateLimitReset,omitempty"`
-	// Codex only: every other account slot's own snapshot, by slot id (codex_account_usage.go). The
-	// windows beside it are Default's. Omitted while no other account has been read.
+	// Every other account slot's own snapshot, by slot id (codex_account_usage.go,
+	// claude_account_usage.go, kimi_account_usage.go). The windows beside it are Default's. Omitted
+	// while no other account has been read.
 	Accounts map[string]*PlanUsage `json:"accounts,omitempty"`
 
-	// Nested snapshots when more than one provider is available.
+	// Nested snapshots when more than one provider is available, and Kimi Code's always.
 	Claude *PlanUsage `json:"claude,omitempty"`
 	Codex  *PlanUsage `json:"codex,omitempty"`
+	Kimi   *PlanUsage `json:"kimi,omitempty"`
 
 	FetchedAt string `json:"fetchedAt,omitempty"`
 }
@@ -198,10 +204,11 @@ func (p *planUsageProbe) mergeCodexRateLimits(raw map[string]interface{}) {
 // run keeps the usage snapshot fresh without blocking heartbeats: it refreshes on
 // the idle→busy edge (fresh when work starts), periodically while sessions run, once
 // more on the busy→idle edge (capture just-finished usage), and at a slower idle
-// cadence when this runner has an agent for the provider. activeCount reports how
-// many sessions are currently running for that provider; idleEnabled reports whether
-// it is worth polling the provider while no sessions are active. Failures are soft:
-// the last good value is kept and a repeated error is logged only once.
+// cadence when this runner has an agent for the provider or the engine is signed in
+// here (idleUsage). activeCount reports how many sessions are currently running for
+// that provider; idleEnabled reports whether it is worth polling the provider while
+// no sessions are active. Failures are soft: the last good value is kept and a
+// repeated error is logged only once.
 func (p *planUsageProbe) run(ctx context.Context, activeCount func() int, idleEnabled func() bool) {
 	p.runWithIntervals(ctx, activeCount, idleEnabled, planUsageCheckInterval, planUsageActiveInterval, planUsageIdleInterval)
 }
@@ -291,6 +298,8 @@ func nextPlanUsageResetAfter(usage *PlanUsage, after time.Time) (time.Time, bool
 		add(u.SevenDay)
 		add(u.SevenDayOpus)
 		add(u.SevenDaySonnet)
+		add(u.Month)
+		add(u.MonthCode)
 		add(u.Primary)
 		add(u.Secondary)
 		for _, limit := range u.RateLimits {
@@ -299,6 +308,7 @@ func nextPlanUsageResetAfter(usage *PlanUsage, after time.Time) (time.Time, bool
 		}
 		visit(u.Claude)
 		visit(u.Codex)
+		visit(u.Kimi)
 	}
 	visit(usage)
 	return best, !best.IsZero()
@@ -321,13 +331,17 @@ func claudeCredentialsPathIn(configDir string) string {
 func claudeCredentialsPath() string { return claudeCredentialsPathIn("") }
 
 // claudeOAuthLogin is what the runner takes from one login's stored credentials: the access token a
-// usage read sends, when that token expires (zero when the CLI recorded no time), and whether a
-// refresh token is stored beside it — never the refresh token itself, which is the CLI's alone
-// (claudeUsageRead).
+// usage read sends, when that token expires (zero when the CLI recorded no time), whether a refresh
+// token is stored beside it — never the refresh token itself, which is the CLI's alone
+// (claudeUsageRead) — and when that refresh token expires, which is when the login itself does.
 type claudeOAuthLogin struct {
 	accessToken string
 	expiresAt   time.Time
 	refreshable bool
+	// loginExpiresAt is the CLI's refreshTokenExpiresAt: past it no refresh is taken and the login is
+	// signed out. Claude Code warns three days ahead of it ("Your login expires in 3 days · run /login
+	// to renew", 2.1.292). Zero when the CLI recorded none.
+	loginExpiresAt time.Time
 }
 
 // expiresWithin is a token at most lead from its expiry, or past it — with no lead, one the endpoint
@@ -346,6 +360,8 @@ func parseClaudeOAuthLogin(b []byte) (claudeOAuthLogin, error) {
 			// Milliseconds since the epoch, as the CLI writes it. Read loosely: an expiry in a shape
 			// this runner does not know reads as none, rather than costing the login its reading.
 			ExpiresAt interface{} `json:"expiresAt"`
+			// The refresh token's expiry, in the same milliseconds and read as loosely.
+			RefreshTokenExpiresAt interface{} `json:"refreshTokenExpiresAt"`
 		} `json:"claudeAiOauth"`
 	}
 	if err := json.Unmarshal(b, &c); err != nil {
@@ -354,6 +370,9 @@ func parseClaudeOAuthLogin(b []byte) (claudeOAuthLogin, error) {
 	login := claudeOAuthLogin{accessToken: c.ClaudeAiOauth.AccessToken, refreshable: c.ClaudeAiOauth.RefreshToken != ""}
 	if ms, ok := int64Value(c.ClaudeAiOauth.ExpiresAt); ok && ms > 0 {
 		login.expiresAt = time.UnixMilli(ms)
+	}
+	if ms, ok := int64Value(c.ClaudeAiOauth.RefreshTokenExpiresAt); ok && ms > 0 {
+		login.loginExpiresAt = time.UnixMilli(ms)
 	}
 	return login, nil
 }
@@ -583,7 +602,12 @@ func refreshClaudeToken(ctx context.Context, configDir string) error {
 	// login holding a spent one, so a runner shutting down or an account being removed lets it end.
 	cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), claudeTokenRefreshTimeout)
 	defer cancel()
+	dir, err := privateProbeDir(claudeProbeDirName)
+	if err != nil {
+		return err
+	}
 	cmd := exec.CommandContext(cctx, "claude", claudeTokenRefreshArgs...)
+	cmd.Dir = dir
 	cmd.Env = envWithAgent(nil)
 	if configDir != "" {
 		cmd.Env = envWithValue(cmd.Env, "CLAUDE_CONFIG_DIR", configDir)
@@ -907,18 +931,25 @@ func codexCreditsSnapshot(raw map[string]interface{}) *CreditsSnapshot {
 	}
 }
 
-func combinePlanUsage(claude, codex *PlanUsage) *PlanUsage {
-	if claude == nil {
-		return codex
+// combinePlanUsage is the heartbeat's planUsage. A lone Claude or Codex snapshot is the payload itself,
+// as it was before runners nested them; Kimi Code's is only ever nested, under kimi, where the control
+// plane keeps its accounts (@orbit/shared PlanUsage.kimi).
+func combinePlanUsage(claude, codex, kimi *PlanUsage) *PlanUsage {
+	if kimi == nil {
+		if claude == nil {
+			return codex
+		}
+		if codex == nil {
+			return claude
+		}
 	}
-	if codex == nil {
-		return claude
+	out := &PlanUsage{Claude: claude, Codex: codex, Kimi: kimi}
+	for _, u := range []*PlanUsage{claude, codex, kimi} {
+		if u != nil && u.FetchedAt > out.FetchedAt {
+			out.FetchedAt = u.FetchedAt
+		}
 	}
-	fetchedAt := claude.FetchedAt
-	if codex.FetchedAt > fetchedAt {
-		fetchedAt = codex.FetchedAt
-	}
-	return &PlanUsage{Claude: claude, Codex: codex, FetchedAt: fetchedAt}
+	return out
 }
 
 func numberValue(v interface{}) (float64, bool) {

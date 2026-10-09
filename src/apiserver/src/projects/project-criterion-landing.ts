@@ -204,9 +204,14 @@ export interface LandingJobFacts {
   /** With NOTHING_TO_LAND: whether the runner measured the source tip an ancestor of that upstream
    *  tip (0346). Null when it measured nothing — every older row, and every older runner. */
   sourceOnUpstream: boolean | null;
+  /** With NOTHING_TO_LAND: whether the runner measured that the branch carried commits of its own and
+   *  the base already had every one of them (0410) — true, or false for a branch that carried none.
+   *  Null when it measured nothing, as above. */
+  sourceFullyApplied: boolean | null;
   /** The receipts the answer wrote. A NOTHING_TO_LAND writes one only when no work session of the
-   *  task had reported work of its own anywhere (J8), so an empty list there is the line saying the
-   *  task's work is on a branch it was not handed (`jobAnsweredForTheWholeTask`). */
+   *  task had reported work of its own anywhere (J8) — or, for a branch whose commits the target
+   *  already had, anywhere but on that branch — so an empty list there is the line saying the task's
+   *  work is on a branch it was not handed (`jobAnsweredForTheWholeTask`). */
   receiptIds: readonly string[];
   /** The branch the line was handed: `refs/heads/<session branch>`, frozen at enqueue (J-T1a). */
   sourceRef: string;
@@ -421,6 +426,39 @@ export function jobSawTipOnUpstream(job: LandingJobFacts): boolean {
 }
 
 /**
+ * Whether this job is the line saying that every commit the branch carried was already on the
+ * UPSTREAM: the branch had commits of its own, and the upstream had all of their changes.
+ *
+ * This is not `jobSawTipOnUpstream`. That predicate is about a tip; here the tip is NOT on the
+ * upstream, and the runner says so (`source_on_upstream` false). What is on the upstream is the work:
+ * the rebase of the branch onto the base dropped every commit it carried as "patch contents already
+ * upstream", so the replay came back at the base and nothing was pushed (`source_fully_applied`,
+ * 0410). On 2026-10-09 a line was rebuilt from main's tip after main had taken a project's work in
+ * by another route (project 34PBlWiEZytRLTcPufJht). Every task's branch was then handed to the line
+ * and answered exactly this, as LANDED with a receipt, before the runner learned to say it.
+ *
+ * The measurement is about the BASE, and it says "the upstream" only where the base was the upstream.
+ * That takes the two conditions `jobSawTipOnUpstream` reads an ALREADY_LANDED by: no merge of the
+ * upstream into the target ran, and the target tip was the upstream tip, read by the same fetch. On a
+ * line ahead of main the same answer says the work is on the LINE, which its receipt records. Main
+ * may not have it, so the task stays in the roll-up as ON_INTEGRATION_LINE, the shape any landing on
+ * the line has. A line a main sync ran on, where the base was the line plus the upstream, is read the
+ * same cautious way: the answer cannot say which of the two held the commits.
+ *
+ * `sourceFullyApplied` is the measurement, and nothing stands in for it: a NOTHING_TO_LAND that did
+ * not measure it (every older row and runner) and the empty branch's (false) are read exactly as
+ * before. Like every answer this lane reads, it is about one branch at one moment, which is what
+ * `jobSawTheFinishedBranch` and `jobAnsweredForTheWholeTask` are asked beside it for.
+ */
+export function jobSawWorkOnUpstream(job: LandingJobFacts): boolean {
+  return job.state === 'NOTHING_TO_LAND'
+    && job.sourceFullyApplied === true
+    && job.mainSyncSha === null
+    && job.targetShaBefore !== null
+    && job.targetShaBefore === job.upstreamSha;
+}
+
+/**
  * Whether the branch the line looked at is the one this task's work ENDED on, looked at after it
  * ended — the condition under which `jobSawTipOnUpstream` speaks for everything the session left,
  * and not for a branch that went on growing after the line looked.
@@ -476,6 +514,11 @@ export function jobSawTheFinishedBranch(job: LandingJobFacts): boolean {
  * and this lane reads the same fact the same way: that task has commits of its own, and the empty tip
  * being on the upstream says nothing about them.
  *
+ * A branch whose commits the target already had (`sourceFullyApplied`, 0410) is not empty: its own
+ * session reported that work, and the line measured it. So its receipt is withheld only for work
+ * reported on ANOTHER branch, or for work that ended on another branch. The question asked here is
+ * the same.
+ *
  * An ALREADY_LANDED is not asked: it writes its receipt whenever it is written down, and it is read by
  * the conditions `jobSawTipOnUpstream` already gives it.
  */
@@ -485,12 +528,14 @@ export function jobAnsweredForTheWholeTask(job: LandingJobFacts): boolean {
 
 /**
  * One job's answer that the task's work carried nothing the upstream did not already have: the tip on
- * the upstream (`jobSawTipOnUpstream`), of the branch the work ended on, after it ended
+ * the upstream (`jobSawTipOnUpstream`), or every commit of the branch already there
+ * (`jobSawWorkOnUpstream`), of the branch the work ended on, after it ended
  * (`jobSawTheFinishedBranch`), with no work of the task's reported anywhere else
  * (`jobAnsweredForTheWholeTask`).
  */
 export function jobFoundNothingOfItsOwn(job: LandingJobFacts): boolean {
-  return jobSawTipOnUpstream(job) && jobSawTheFinishedBranch(job) && jobAnsweredForTheWholeTask(job);
+  return (jobSawTipOnUpstream(job) || jobSawWorkOnUpstream(job))
+    && jobSawTheFinishedBranch(job) && jobAnsweredForTheWholeTask(job);
 }
 
 /**
@@ -700,6 +745,7 @@ export const LANDING_SERVING_WORK_SELECT = {
       targetShaBefore: true,
       upstreamSha: true,
       sourceOnUpstream: true,
+      sourceFullyApplied: true,
       receiptIds: true,
       sourceRef: true,
       startedAt: true,

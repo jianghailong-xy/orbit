@@ -4,7 +4,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PatScope } from '../auth/pat-scope.decorator';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { PublicIdPipe } from '../common/public-id';
-import { RetryIntegrationDto } from './dto';
+import { RetryIntegrationDto, SkipMergeCheckAsOwnerDto } from './dto';
 import { ProjectOpenItemService } from './project-open-item.service';
 
 /**
@@ -21,7 +21,7 @@ export class ProjectIntegrationRetryController {
   constructor(private readonly openItems: ProjectOpenItemService) {}
 
   /** Rerun the next LAND_TASK generation for a failed task landing. */
-  @PatScope('projects:write')
+  @PatScope('projects:write', { workspaceConfinable: false })
   @Post(':id/tasks/:taskId/integration/retry')
   @HttpCode(200)
   retryIntegration(
@@ -33,8 +33,43 @@ export class ProjectIntegrationRetryController {
     return this.openItems.retryIntegrationAsOwner(user.userId, projectId, taskId, dto);
   }
 
+  /**
+   * Queue one landing again with its merge check NOT RUN (§2.4 J-S5).
+   *
+   * The account owner's own act, and the reason it needs no card: a skip is approved by them, and
+   * asking them to answer their own question is not a gate. Every other rule of the door is the
+   * service's own and is the same one the coordinator's card-gated route meets.
+   */
+  @PatScope('projects:write', { workspaceConfinable: false })
+  @Post(':id/tasks/:taskId/integration/skip-merge-check')
+  @HttpCode(200)
+  skipIntegrationMergeCheck(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) projectId: string,
+    @Param('taskId', PublicIdPipe) taskId: string,
+    @Body() dto: SkipMergeCheckAsOwnerDto,
+  ) {
+    return this.openItems.skipIntegrationMergeCheckAsOwner(user.userId, projectId, taskId, dto);
+  }
+
+  /**
+   * Retry a job the integration view calls timed out — the Retry on the landing row's job list
+   * (§2.2 J-T9). No body: the job's own facts are the reason, and the server writes it. Answers with
+   * the integration view, read after the retry.
+   */
+  @PatScope('projects:write', { workspaceConfinable: false })
+  @Post(':id/integration/jobs/:jobId/retry')
+  @HttpCode(200)
+  retryTimedOutJob(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) projectId: string,
+    @Param('jobId', PublicIdPipe) jobId: string,
+  ) {
+    return this.openItems.retryTimedOutJobAsOwner(user.userId, projectId, jobId);
+  }
+
   /** Rerun a blocked candidate's failed check, leaving its merge decision untouched. */
-  @PatScope('projects:write')
+  @PatScope('projects:write', { workspaceConfinable: false })
   @Post(':id/promotions/:promotionId/integration/retry')
   @HttpCode(200)
   retryPromotionCheck(

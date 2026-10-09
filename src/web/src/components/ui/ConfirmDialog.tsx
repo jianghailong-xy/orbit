@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
-import { ExclamationCircleFilled } from '@ant-design/icons';
+import { CheckCircleFilled, ExclamationCircleFilled } from '@ant-design/icons';
 import { Button } from './Button';
 import { OverlaySurface } from './Overlay';
 
 export interface ConfirmOptions {
+  /** `success`: a notice to acknowledge, under the success mark, with its one button. */
+  kind?: 'confirm' | 'success';
   title: ReactNode;
   description?: ReactNode;
   confirmText?: string;
@@ -23,13 +25,15 @@ export function ConfirmDialog({ open, ...props }: ConfirmDialogProps) {
   return open ? <Confirmation {...props} /> : null;
 }
 
-function Confirmation({ title, description, confirmText = 'OK', cancelText = 'Cancel', danger = false,
+function Confirmation({ kind = 'confirm', title, description, confirmText = 'OK', cancelText = 'Cancel', danger = false,
   onConfirm, onClose, returnFocus }: Omit<ConfirmDialogProps, 'open'>) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const submitting = useRef(false);
   const mounted = useRef(true);
   const cancel = useRef<HTMLButtonElement>(null);
+  const acknowledge = useRef<HTMLButtonElement>(null);
+  const success = kind === 'success';
   useEffect(() => {
     mounted.current = true;
     return () => { mounted.current = false; };
@@ -49,12 +53,15 @@ function Confirmation({ title, description, confirmText = 'OK', cancelText = 'Ca
       if (mounted.current) setPending(false);
     }
   };
-  return <OverlaySurface kind="confirm" open title={<><ExclamationCircleFilled className="orbit-confirm-icon" aria-hidden />{title}</>}
+  const icon = success
+    ? <CheckCircleFilled className="orbit-confirm-icon orbit-confirm-icon-success" aria-hidden />
+    : <ExclamationCircleFilled className="orbit-confirm-icon" aria-hidden />;
+  return <OverlaySurface kind="confirm" open title={<>{icon}{title}</>}
     description={description} width={416} busy={pending} closable={false} closeOnOutsideClick={false}
-    initialFocus={cancel} returnFocus={returnFocus} onClose={() => { if (!submitting.current) onClose(false); }}
+    initialFocus={success ? acknowledge : cancel} returnFocus={returnFocus} onClose={() => { if (!submitting.current) onClose(false); }}
     footer={<>
-      <Button ref={cancel} disabled={pending} onClick={() => { if (!submitting.current) onClose(false); }}>{cancelText}</Button>
-      <Button variant="primary" danger={danger} loading={pending} onClick={() => void submit()}>{confirmText}</Button>
+      {!success && <Button ref={cancel} disabled={pending} onClick={() => { if (!submitting.current) onClose(false); }}>{cancelText}</Button>}
+      <Button ref={acknowledge} variant="primary" danger={danger} loading={pending} onClick={() => void submit()}>{confirmText}</Button>
     </>}>
     {error && <div className="orbit-confirm-error" role="alert">{error}</div>}
   </OverlaySurface>;

@@ -649,6 +649,8 @@ export interface SidebarProject {
   title: string;
   status: 'OPEN' | 'DONE' | 'CANCELLED';
   createdAt: string;
+  /** Null for a project nobody has started; absent from a server that predates it. */
+  startedAt?: string | null;
   lastActivityAt: string | null;
   buckets: Pick<ProjectPanoramaBuckets, 'running'>;
   /** Absent on a server that predates sidebar task progress. */

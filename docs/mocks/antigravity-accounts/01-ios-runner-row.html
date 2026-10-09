@@ -1,0 +1,109 @@
+<!doctype html>
+<!-- Design mock: Antigravity's row on a runner's page (iOS/macOS), written the way Claude Code's and
+     Codex's are. ① is the owner's own iPhone screenshot of the HPC runner (2026-10-06); ②–④ are drawn
+     with kit.js to the same measurements. Not shipped code. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Antigravity accounts · runner page row (iOS)</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="kit.css">
+<style>
+  .m-sheet { width: 1900px; }
+  .row4 { display: grid; grid-template-columns: repeat(4, 431px); gap: 34px; align-items: start; }
+  .shot { width: 393px; height: 852px; display: block; }
+  .m-cap { font-size: 12.5px; line-height: 1.7; color: var(--text-2); margin: 6px 4px 0; }
+  .m-cap b { color: var(--text-1); }
+</style>
+</head>
+<body class="m">
+<section class="board m-sheet">
+  <h1 class="m-h1 zh">Antigravity 账号 · 运行器页上的引擎行，和 Claude Code / Codex 一个写法</h1>
+  <p class="m-sub zh">现在 Antigravity 这一行自成一套：状态写「Google account」，行上直接摆着 Re-sign in 按钮和 Google 条款，四条额度全铺开。Claude Code / Codex 的行只说登录状态，点进去才是账号、额度和登录。改后 Antigravity 用同一套：<b>一个 Google 账号时像 Codex</b>（Signed in + 额度），<b>多个时像 Claude Code</b>（N accounts signed in，额度到账号里看）。macOS 是同一套 SwiftUI 页面，改法相同。</p>
+
+  <div class="m-stage">
+    <div class="row4">
+      <div class="ph-wrap">
+        <div class="ph-l zh"><span class="m-k">现在</span>真机截图（HPC）</div>
+        <div class="ph" id="p1"><img class="shot" src="00-today-ios.png" alt=""></div>
+        <p class="m-cap zh"><b>A</b> 状态写 Google account，别的引擎写 Signed in。<b>B</b> Re-sign in 直接在行上。<b>C</b> Google 条款也在行上。<b>D</b> 四条额度铺开，行占了大半屏。</p>
+      </div>
+      <div class="ph-wrap">
+        <div class="ph-l zh"><span class="m-k new">改后</span>一个 Google 账号</div>
+        <div id="p2"></div>
+        <p class="m-cap zh"><b>①</b> 写 Signed in，和 Codex 一样。<b>②</b> 行上没有按钮和条款了，重新登录、条款都在引擎页（图 2）。额度照旧留在行上——只有一个账号，它就是这台机器的额度。</p>
+      </div>
+      <div class="ph-wrap">
+        <div class="ph-l zh"><span class="m-k new">改后</span>两个 Google 账号</div>
+        <div id="p3"></div>
+        <p class="m-cap zh"><b>③</b> 写 2 accounts signed in，和 Claude Code 一样，行上不放额度：每个账号的额度各是各的，放在一行里会被读成整台机器的。点进去看每个账号。</p>
+      </div>
+      <div class="ph-wrap">
+        <div class="ph-l zh"><span class="m-k new">改后</span>有账号掉线</div>
+        <div id="p4"></div>
+        <p class="m-cap zh"><b>④</b> 任何一个账号掉线：写 Signed out（橙色），行上出现 Sign In 胶囊——和 Claude Code / Codex 掉线时一模一样。点胶囊或整行都进引擎页，在掉线那个账号上登录。</p>
+      </div>
+    </div>
+    <ul class="m-notes zh">
+      <li><span class="m-n">1</span><span><b>状态词统一</b>：Google 登录写 Signed in / N accounts signed in / Signed out，和 Claude Code、Codex 同一组词。机器上没有 Google 账号、靠 GEMINI_API_KEY 跑的，照旧写 env key。</span></li>
+      <li><span class="m-n">2</span><span><b>行上不放按钮</b>：Re-sign in 和 Google 条款挪进引擎页。行上只在掉线时出现 Sign In，和另外两个引擎一样。</span></li>
+      <li><span class="m-n">3</span><span><b>额度</b>：一个账号时留在行上（Codex 的做法）；两个以上时只在引擎页的账号里出现（Claude Code 的做法）。四条额度本身（gemini-weekly / gemini-5h / 3p-weekly / 3p-5h）这次不改。</span></li>
+    </ul>
+  </div>
+</section>
+
+<script src="glyphs.js"></script>
+<script src="kit.js"></script>
+<script>
+  const footer = '<p>Orbit keeps these CLIs updated every 30 min. Sign-ins live on this machine — a session spends that subscription, nothing to paste.</p>';
+  const workspaces = section({ header: 'Workspaces', rows: [
+    `<div class="r eng" style="--sep:56px"><div class="e"><div class="e-l"><span class="mk" style="width:28px;height:28px;background:rgba(0,0,0,.06)"><svg viewBox="0 0 20 16" width="15" height="13"><path d="M1.5 3a1.5 1.5 0 0 1 1.5-1.5h4.2l1.6 1.8H17a1.5 1.5 0 0 1 1.5 1.5v8.2a1.5 1.5 0 0 1-1.5 1.5H3a1.5 1.5 0 0 1-1.5-1.5z" fill="none" stroke="#8a8a8e" stroke-width="1.5"/></svg></span><div class="e-m"><div class="e-n">orbit-develop</div><div class="e-s">/root/orbit</div></div></div><span style="color:#3e69f6;font-size:15px;font-weight:500">3 running</span>${ICON.chev}</div></div>`,
+  ] });
+  const engines = (ag) => section({ header: 'Engines', trailing: 'Checked 17m ago', rows: [...otherEngines(), ag,
+    btnRow('Update Engines Now'), btnRow('Refresh Model Lists')], footer }) + workspaces;
+
+  const one = engineRow({ id: 'ag', engine: 'antigravity', name: 'Antigravity', version: '1.3.0',
+    status: { text: 'Signed in', tone: 'ok' }, windows: agWindows() });
+  const two = engineRow({ id: 'ag', engine: 'antigravity', name: 'Antigravity', version: '1.3.0',
+    status: { text: '2 accounts signed in', tone: 'ok' } });
+  const out = engineRow({ id: 'ag', engine: 'antigravity', name: 'Antigravity', version: '1.3.0',
+    status: { text: 'Signed out', tone: 'warn' }, capsule: 'Sign In' });
+
+  document.getElementById('p2').outerHTML = phone({ title: 'HPC', body: engines(one), scroll: 60 });
+  document.getElementById('p3').outerHTML = phone({ title: 'HPC', body: engines(two), scroll: 60 });
+  document.getElementById('p4').outerHTML = phone({ title: 'HPC', body: engines(out), scroll: 60 });
+
+  // Marks: placed after layout, from where the drawn pieces actually are.
+  window.drawMarks = () => {
+    const at = (ph, el, dx = 0, dy = 0) => {
+      const a = ph.getBoundingClientRect(), b = el.getBoundingClientRect();
+      return { x: b.left - a.left + dx, y: b.top - a.top + dy, w: b.width, h: b.height };
+    };
+    const phones = document.querySelectorAll('.ph');
+    // ① the screenshot: A status word, B Re-sign in, C terms, D windows (measured on the 393-pt image)
+    phones[0].insertAdjacentHTML('beforeend', marks([
+      { x: 112, y: 525, w: 116, h: 26 }, { n: 'A', x: 218, y: 513 },
+      { x: 68, y: 551, w: 108, h: 38 }, { n: 'B', x: 166, y: 539 },
+      { x: 68, y: 590, w: 262, h: 70 }, { n: 'C', x: 320, y: 580 },
+      { x: 68, y: 664, w: 262, h: 186 }, { n: 'D', x: 320, y: 654 },
+    ]).replace(/class="mk-n" style="([^"]*)">([A-D])/g, 'class="mk-n" style="$1;background:#5b6270">$2'));
+    for (const [i, n] of [[1, '1'], [2, '3'], [3, '4']]) {
+      const ph = phones[i];
+      const row = ph.querySelector('#ag');
+      const st = row.querySelector('.e-s span');
+      const p = at(ph, st);
+      ph.insertAdjacentHTML('beforeend', marks([{ x: p.x - 5, y: p.y - 3, w: p.w + 10, h: p.h + 6 }, { n, x: p.x + p.w + 2, y: p.y - 14 }]));
+      if (i === 1) {
+        const r = at(ph, row);
+        ph.insertAdjacentHTML('beforeend', marks([{ n: '2', x: r.x + 318, y: r.y + 34 }]));
+      }
+      if (i === 3) {
+        const c = at(ph, row.querySelector('.cap'));
+        ph.insertAdjacentHTML('beforeend', marks([{ x: c.x - 5, y: c.y - 4, w: c.w + 10, h: c.h + 8 }]));
+      }
+    }
+  };
+</script>
+</body>
+</html>

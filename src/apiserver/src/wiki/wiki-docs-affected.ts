@@ -7,7 +7,7 @@ import {
   type WikiDocsUnplacedEntry,
 } from '@orbit/shared';
 import type { PrismaService } from '../prisma/prisma.service';
-import { anchorPathsOf, entryProjects, sectionFit, type FitCandidate, type StoredSessionCondition } from './wiki-docs-material';
+import { anchorPathsOf, entryProjects, sectionFit, storedSessionCondition, type FitCandidate, type StoredSessionCondition } from './wiki-docs-material';
 
 /**
  * What a maintenance run writes again, and what it may propose (criterion 3, revision 3; contracts/
@@ -59,10 +59,9 @@ interface ChangedEntry {
   changedAt: Date;
 }
 
-/** A section's session condition as the plan stores it, or null. */
+/** A section's session condition as the plan stores it, its projects as ids (`storedSessionCondition`), or null. */
 function conditionOf(sources: unknown): StoredSessionCondition | null {
-  const raw = sources && typeof sources === 'object' ? (sources as { sessions?: unknown }).sessions : null;
-  return raw && typeof raw === 'object' ? (raw as StoredSessionCondition) : null;
+  return storedSessionCondition(sources && typeof sources === 'object' ? (sources as { sessions?: unknown }).sessions : null);
 }
 
 /** The design documents a plan's sections and a proposal's document cite: `sources.docs[].path`. */

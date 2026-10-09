@@ -11,6 +11,7 @@ import {
   type AttributionProjectRef,
   type TaskAttribution,
 } from '../lib/attribution';
+import { MOVE_TASK_STATE_MEANING } from './ProjectCrossingsCard';
 
 /**
  * Unit L7: where this task's work counts, and everything that follows from that.
@@ -124,8 +125,15 @@ export function TaskAttributionBody({ view }: { view: TaskAttribution }) {
               {labelFor(CROSSING_STATE_LABEL, view.crossing.state)}
             </Typography.Text>
             <div>
+              {/* A request to MOVE a task that already exists is read as a move: the task stays
+                  in its project until the owner answers, and confirming moves it, so a filing's
+                  "not filed anywhere" would be false of it. The crossings card's own words, so
+                  the two places that show the same request say the same thing. */}
               <Typography.Text type="secondary">
-                {labelFor(CROSSING_STATE_MEANING, view.crossing.state)}
+                {labelFor(
+                  view.crossing.kind === 'MOVE_TASK' ? MOVE_TASK_STATE_MEANING : CROSSING_STATE_MEANING,
+                  view.crossing.state,
+                )}
               </Typography.Text>
             </div>
             {view.crossing.from && view.crossing.to ? (

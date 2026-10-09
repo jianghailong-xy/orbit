@@ -1,0 +1,3 @@
+negative-control-1px/failures/pages.browser.mjs-profile-chromium-light-desktop/profile-diff.png
+negative-control-1px/failures/pages.browser.mjs-profile-webkit-light-phone/profile-diff.png
+tip-start/profile-evidence/pages.browser.mjs-profile-chromium-light-desktop.json

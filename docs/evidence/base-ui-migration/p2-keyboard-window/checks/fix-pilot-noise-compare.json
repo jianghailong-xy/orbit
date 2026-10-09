@@ -1,0 +1,13 @@
+{
+ "command": "cd /root/.orbit/worktrees/8a4a92fa-ce2f-5986-9131-9119c512dfc6 && C=docs/evidence/base-ui-migration/p3.2/compare_runs.py; O=docs/evidence/base-ui-migration/p2-keyboard-window; T=/var/tmp/p2kw-c2604b; python3 $C $T/pilot-before-shots $T/pilot-before-again-shots $T/pilot-before/report.json $T/pilot-before-again/report.json $O/fix-pilot-noise-before.json && python3 $C $T/pilot-after-shots $T/pilot-after-again-shots $T/pilot-after/report.json $T/pilot-after-again/report.json $O/fix-pilot-noise-after.json && python3 $C $T/pilot-before-again-shots $T/pilot-after-again-shots $T/pilot-before-again/report.json $T/pilot-after-again/report.json $O/fix-pilot-compare-again.json && python3 $O/summarize-pilot.py",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_ced05d108641",
+ "cwd": "/root/.orbit/worktrees/8a4a92fa-ce2f-5986-9131-9119c512dfc6",
+ "commit": "0d0bd2c8a",
+ "webTree": "df7414507c6ffa7fa51b7cd6e3e2b8f70e13e816",
+ "outputLastWritten": "2026-10-07T04:46:39.379134+00:00",
+ "exitCode": 0,
+ "outputSha256": "1a71acaba273e3c39f55216a50200e431689b2bc27aa9e2cc565583f5c7428ec",
+ "outputBytes": 1331,
+ "note": "Each tree's pilot run 1 against its own run 2 (noise), and the two simultaneous runs 2 against each other; then summarize-pilot.py. Every screenshot beyond anti-aliasing level in the before/after comparison is also beyond it within one tree (noise-after has the same 12); requests are identical in every trace of all four comparisons; 0 computed-style differences."
+}

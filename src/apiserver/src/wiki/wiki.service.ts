@@ -57,10 +57,13 @@ import {
   type WikiVerificationOutcome,
   type WikiVerificationVerdict,
 } from '@orbit/shared';
+import { refuseOwnerFieldsToToken } from '../auth/pat-scope.decorator';
+import type { AuthCredential } from '../common/current-user.decorator';
 import { sha256 } from '../common/crypto.util';
 import { redactSecrets } from '../common/secret-redaction';
 import {
   anchorChallengeReason,
+  anchorIdentityMatches,
   anchorReportEntry,
   anchorReportShape,
   anchorsChecked,
@@ -82,8 +85,9 @@ import {
   type NeighbourLookups,
   type NeighbourRow,
 } from './wiki-neighbours';
-import { checkWikiMaintenanceInput, setWikiMaintenance, type WikiMaintenanceInput } from './wiki-maintenance-settings';
+import { checkWikiMaintenanceInput, isWikiMaintenanceSession, setWikiMaintenance, type WikiMaintenanceInput } from './wiki-maintenance-settings';
 import { requestWikiPlanJob, resumeWikiPlanJobs } from './wiki-plan-job';
+import { wikiPlanWaitingOfSpaces } from './wiki-plan-waiting';
 import { isOrbitAuthoredTurn } from '../sessions/orbit-authored-turn';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { canonicalRepoUrl } from '../projects/project-integration-line';
@@ -91,6 +95,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from '../push/push.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { approvalText, evidenceOf, readBeforeRevision4, runEventText, toolCallText, verifierText } from './wiki-verify-evidence';
+import { enqueueWikiVerifyJob, wikiVerifyJobNeeded } from './wiki-verify-jobs';
+import { currentWikiExecutorSwitch, wikiExecutorServes } from './wiki-executor-switch';
 import { entryAppliedBy } from './wiki-run-reads';
 
 /** `Prisma.TransactionClient`, named once: every write below takes one, never the unmanaged client. */
@@ -142,6 +148,12 @@ export interface WikiPrincipal {
   userId: string | null;
   /** The calling session a runner hosts; null headless (and always null on the owner door). */
   sessionId: string | null;
+  /**
+   * The wiki_job whose pipeline this write is the server's own (P8, migration 0407): a maintenance run the
+   * worker executes has no session, and the changesets of one run are one run to the circuit breaker and one
+   * proposer to the verification list — this is what names it. Null for every session's write and the owner's.
+   */
+  jobId?: string | null;
   /** The tool call this proposal came from, when the door knows it. */
   toolCallId: string | null;
   /**
@@ -205,6 +217,7 @@ const WIKI_HTTP_STATUS: Readonly<Record<WikiRefusalCode, number>> = {
   WIKI_CURSOR_BEHIND: 409,
   WIKI_CURSOR_INVALID: 400,
   WIKI_ARTICLE_STALE: 409,
+  WIKI_SERVER_EXECUTES: 409,
   WIKI_PLAN_GATE: 422,
   WIKI_PLAN_STALE: 409,
   WIKI_PLAN_UNCONFIRMED: 409,
@@ -687,8 +700,11 @@ export function entryView(row: EntryRow): Record<string, unknown> {
   };
 }
 
-/** A changeset as the wire describes it (`WikiChangeset`). */
-export function changesetView(row: ChangesetRow): Record<string, unknown> {
+/**
+ * A changeset as the wire describes it (`WikiChangeset`). Given `entryTitles`, every op also carries
+ * the title of the entry it names (`entryTitle`, null for an op that names none) — Review's read.
+ */
+export function changesetView(row: ChangesetRow, entryTitles?: ReadonlyMap<string, string>): Record<string, unknown> {
   return {
     id: row.id,
     spaceId: row.spaceId,
@@ -720,6 +736,7 @@ export function changesetView(row: ChangesetRow): Record<string, unknown> {
       spotCheck: op.spotCheck,
       verification: verificationView(op),
       verificationHistory: op.verificationHistory,
+      ...(entryTitles ? { entryTitle: op.entryId ? (entryTitles.get(op.entryId) ?? null) : null } : {}),
     })),
   };
 }
@@ -931,7 +948,13 @@ export class WikiService {
     return created.id;
   }
 
-  /** The owner's spaces, each with the pending-op count the sidebar shows (design §12.1). */
+  /**
+   * The owner's spaces, each with what the contract's `space.list` adds to a row: the ops waiting in
+   * Review (`pendingOps`) and the things of its plan that wait on the owner (`planWaiting`) — the two the
+   * drawer's and the sidebar's number adds up over the spaces (design §12.3.3) — the live workspaces bound
+   * to it (`workspaceIds`), and its confirmed plan's documents, written of how many — the directory's
+   * `docs`, null while it has no confirmed plan.
+   */
   async listSpaces(ownerId: string): Promise<Array<Record<string, unknown>>> {
     const spaces = await this.prisma.wikiSpace.findMany({
       where: { ownerId },
@@ -955,12 +978,37 @@ export class WikiService {
     for (const op of pending) {
       counts.set(op.changeset.spaceId, (counts.get(op.changeset.spaceId) ?? 0) + 1);
     }
+    const ids = spaces.map((space) => space.id);
+    const [waiting, bindings, plans] = await Promise.all([
+      wikiPlanWaitingOfSpaces(this.prisma, ownerId, spaces),
+      this.prisma.wikiSpaceWorkspace.findMany({
+        where: { ownerId, spaceId: { in: ids }, workspace: { deletedAt: null } },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        select: { spaceId: true, workspaceId: true },
+      }),
+      this.prisma.wikiPlan.findMany({
+        where: { ownerId, spaceId: { in: ids }, status: 'confirmed' },
+        select: { spaceId: true, docs: { select: { slug: true } } },
+      }),
+    ]);
+    // Written as the directory counts it (WikiDocs.directory): a stored document the confirmed plan names.
+    const stored = plans.length === 0
+      ? []
+      : await this.prisma.wikiDoc.findMany({ where: { ownerId, spaceId: { in: plans.map((plan) => plan.spaceId) } }, select: { spaceId: true, slug: true } });
+    const docs = new Map(plans.map((plan) => {
+      const slugs = new Set(plan.docs.map((doc) => doc.slug));
+      const written = stored.filter((doc) => doc.spaceId === plan.spaceId && slugs.has(doc.slug)).length;
+      return [plan.spaceId, { written, total: plan.docs.length }];
+    }));
     return spaces.map((space) => ({
       ...space,
       settings: wikiSpaceSettings(space.settings),
       createdAt: space.createdAt.toISOString(),
       updatedAt: space.updatedAt.toISOString(),
       pendingOps: counts.get(space.id) ?? 0,
+      planWaiting: waiting.get(space.id) ?? 0,
+      workspaceIds: bindings.filter((binding) => binding.spaceId === space.id).map((binding) => binding.workspaceId),
+      docs: docs.get(space.id) ?? null,
     }));
   }
 
@@ -969,11 +1017,13 @@ export class WikiService {
    * maintenance from the start when the request names it, which is the owner channel's alone, as the
    * PATCH that sets it later is. The maintenance a request names is checked before the space is made
    * (the workspace is the owner's, the provider one a run could start on), so a refused one makes nothing.
+   * A personal access token is refused it the same way, by `credential` (docs/personal-access-token-design.md §5).
    */
   async createSpace(
     ownerId: string,
     input: { title: string; repoUrl?: string; slug?: string; maintenance?: WikiMaintenanceInput },
     actingSessionId: string | null = null,
+    credential?: AuthCredential,
   ) {
     if (input.maintenance !== undefined && actingSessionId) {
       return refuse(
@@ -982,6 +1032,7 @@ export class WikiService {
           + 'create the space without it, and let a person set it.',
       );
     }
+    refuseOwnerFieldsToToken(credential, { maintenance: input.maintenance });
     const normalized = input.repoUrl ? normalizeRepoUrl(input.repoUrl) : null;
     if (input.repoUrl && normalized === null) {
       return refuse('WIKI_SCHEMA', 'repoUrl says nothing a repository identity can be read from');
@@ -1032,6 +1083,9 @@ export class WikiService {
    * spot checks' window (which counts from the last change) is not restarted by it. Whether an
    * Automatic space sends the owner spot checks at all (`automaticSpotChecks`) is the owner's in the
    * same way: it decides how much of what the machine applied a person ever looks at.
+   *
+   * The three owner-channel fields are refused to a personal access token as well, by `credential`,
+   * and the whole request with them (docs/personal-access-token-design.md §5); the rest are a token's.
    */
   async updateSpace(
     ownerId: string,
@@ -1045,6 +1099,7 @@ export class WikiService {
       title?: string;
     },
     actingSessionId: string | null = null,
+    credential?: AuthCredential,
   ) {
     if (input.maintenance !== undefined && actingSessionId) {
       return refuse(
@@ -1067,6 +1122,11 @@ export class WikiService {
           + 'channel with no acting session: report what should change, and let a person change it.',
       );
     }
+    refuseOwnerFieldsToToken(credential, {
+      reviewMode: input.reviewMode,
+      maintenance: input.maintenance,
+      automaticSpotChecks: input.automaticSpotChecks,
+    });
     const current = await this.requireSpace(ownerId, spaceId);
     // Maintenance is written by its own unit, under the space row's lock and with the hidden list it
     // may need (`setWikiMaintenance`); every other key below is merged over the row as it stands, so
@@ -1169,7 +1229,73 @@ export class WikiService {
     if (answer.replayed !== true && typeof answer.changesetId === 'string') {
       this.realtime?.publishWikiChanged(principal.ownerId, space.id);
     }
-    return answer;
+    await this.queueVerification(principal, space.id, answer);
+    // Who verifies the ops this answer left waiting, told to the caller (contract
+    // `reviewModes.verification.servedBy`): the runner's own verifier where it is the one that runs, the
+    // server's worker otherwise. A caller that reads it does not ask a model of its own.
+    return (await this.serverVerifiesOps(principal, space.id)) ? { ...answer, servedBy: 'server' } : answer;
+  }
+
+  /**
+   * The verification a submission owes (contract `jobs.kindRuns.verify`, design §2.2): an op an Automatic
+   * space recorded `verifying` is verified by the server's own worker, when the executor switch says the
+   * server runs for this account — and there the session does not run `orbit wiki verify` at all, because
+   * the verdict comes to it.
+   *
+   * WHO IS EXEMPT. Nothing is queued for a maintenance run: the pipeline that proposed its ops is the one
+   * that verifies them, in its own process, and on the runner until P8 moves it (contract
+   * `reviewModes.verification.cli`); under the default `runner` mode nothing is queued for anyone, which is
+   * the behaviour every deployment has had. A headless call (no session) has no identity to report a verdict
+   * under, and the owner's own writes apply at once.
+   *
+   * AFTER THE COMMIT, never inside it: a job row is a fact about a write that has landed, and a transaction
+   * that retried would queue the verification once per attempt. A failure here is logged and swallowed — the
+   * ops are recorded either way, and another submission (or P8's pass over what waits) asks again — so a
+   * database hiccup cannot turn a recorded changeset into an error the caller would retry.
+   */
+  private async queueVerification(principal: WikiPrincipal, spaceId: string, answer: Record<string, unknown>): Promise<void> {
+    if (principal.sessionId === null) return;
+    if (typeof answer.changesetId !== 'string' || !wikiVerifyJobNeeded((answer.ops ?? []) as WikiOpOutcome[])) return;
+    if (!(await this.serverVerifiesOps(principal, spaceId))) return;
+    await this.queueVerificationsFor(principal.ownerId, spaceId, [principal.sessionId]);
+  }
+
+  /**
+   * Whether the server's own worker verifies about to be recorded/waiting ops of this caller in this space
+   * (contract `reviewModes.verification.servedBy`, P3): true where the executor switch says the server runs
+   * for the account, and the caller is not a maintenance run — a run verifies its own ops in its own process
+   * until P8 moves it (`reviewModes.verification.cli`), so nothing about its path changes.
+   *
+   * WHAT THIS IS THE ONLY SOURCE OF: the `servedBy` a submission's answer and the runner door's
+   * verification list carry, and whether a submission queues a job. The door does not verify for itself
+   * (the runner's own verifier and the server's job must not both ask a model about one op) and the CLI
+   * that ships with the next runner release waits for the verdict this says is coming.
+   */
+  async serverVerifiesOps(principal: WikiPrincipal, spaceId: string): Promise<boolean> {
+    if (principal.origin === 'maintenance') return false;
+    if (!wikiExecutorServes(currentWikiExecutorSwitch(), principal.ownerId)) return false;
+    if (principal.sessionId === null) return true;
+    return !(await isWikiMaintenanceSession(this.prisma, {
+      ownerId: principal.ownerId, sessionId: principal.sessionId, spaceId,
+    }));
+  }
+
+  /**
+   * One verify job per session whose ops wait for their verdict (contract `jobs.make`): the submission that
+   * recorded them, and the owner reopening what a verdict should not have decided. Nothing is queued where
+   * the executor switch says the server does not run for this account — under the default `runner` the
+   * session's own verifier answers this, exactly as it always has.
+   */
+  private async queueVerificationsFor(ownerId: string, spaceId: string, sessionIds: Iterable<string>): Promise<void> {
+    if (!wikiExecutorServes(currentWikiExecutorSwitch(), ownerId)) return;
+    for (const sessionId of sessionIds) {
+      try {
+        await enqueueWikiVerifyJob(this.prisma, { ownerId, spaceId, sessionId });
+      } catch (error) {
+        const why = error instanceof Error ? error.message : String(error);
+        this.logger.warn(`the verification of ${sessionId}'s waiting ops in space ${spaceId} could not be queued: ${why}`);
+      }
+    }
   }
 
   /** The recorded answer to an earlier request under the same key; or the refusal for a key reused. */
@@ -1247,9 +1373,10 @@ export class WikiService {
     const settings = wikiSpaceSettings(space.settings);
     const mode = settings.reviewMode;
     // A Wiki maintenance run's changesets are one run to the circuit breaker: what its earlier ones
-    // changed through the mode is spent, and the space is counted as it stood when the run began.
-    const run = principal.origin === 'maintenance' && principal.sessionId && mode !== 'manual'
-      ? await wikiMaintenanceRunChanges(tx, principal.ownerId, space.id, principal.sessionId)
+    // changed through the mode is spent, and the space is counted as it stood when the run began. The run
+    // is its session — or, for a run the server's worker executes, the wiki job that runs it (P8, 0407).
+    const run = principal.origin === 'maintenance' && (principal.sessionId || principal.jobId) && mode !== 'manual'
+      ? await wikiMaintenanceRunChanges(tx, principal.ownerId, space.id, { sessionId: principal.sessionId, jobId: principal.jobId ?? null })
       : null;
     const budget: ChangesetBudget = {
       mode,
@@ -1263,11 +1390,13 @@ export class WikiService {
       // What waited for the owner is what the effect policy held back: every op a session recorded
       // that was not applied at once — by the policy (`auto_applied`) or by the mode — and that no
       // verification took: an op that waits for, or was decided by, its verdict never waited on them.
-      waitingInSession: principal.sessionId
+      waitingInSession: principal.sessionId || principal.jobId
         ? await tx.wikiChangesetOp.count({
             where: {
               ownerId: principal.ownerId,
-              changeset: { sessionId: principal.sessionId },
+              changeset: principal.sessionId
+                ? { sessionId: principal.sessionId }
+                : { sessionId: null, jobId: principal.jobId ?? null },
               appliedByMode: null,
               verificationVerdict: null,
               decision: { notIn: ['auto_applied', 'verifying'] },
@@ -1303,6 +1432,7 @@ export class WikiService {
               spaceId: space.id,
               origin: principal.origin,
               sessionId: principal.sessionId,
+              jobId: principal.jobId ?? null,
               toolCallId: principal.toolCallId,
               rationale: input.rationale as string,
               idempotencyKey: input.idempotencyKey ?? null,
@@ -2233,6 +2363,25 @@ export class WikiService {
   }
 
   /**
+   * How many of this caller's ops wait for their verification in the space — the count alone, no material.
+   *
+   * WHAT THE SERVER'S OWN VERIFICATION HANDS BACK (contract `reviewModes.verification.servedBy`): a session
+   * the server verifies for is given an empty list and this number, so a caller that waits for the verdict
+   * (the command that ships with the next runner release) can see what it is waiting for and is done when
+   * the count reaches zero. Counted over the same scope the list would read (`proposerScope`), so the two
+   * cannot disagree about whose ops they are.
+   */
+  async countWaitingVerifications(principal: WikiPrincipal, spaceId: string): Promise<number> {
+    return this.prisma.wikiChangesetOp.count({
+      where: {
+        ownerId: principal.ownerId,
+        decision: 'verifying',
+        changeset: { spaceId: (await this.requireSpace(principal.ownerId, spaceId)).id, ...proposerScope(principal) },
+      },
+    });
+  }
+
+  /**
    * The sessions whose waiting ops a maintenance run of the space adopts (contract
    * `reviewModes.verification.adoption.who`): each session with an op still verifying there whose run
    * has ended ({@link ENDED_SESSION}), so that it will verify nothing of its own again — never the caller.
@@ -2654,7 +2803,7 @@ export class WikiService {
    * it counts against no session's quota. A Tiered pitfall the check leaves verified may become Auto.
    */
   async recordAnchorChecks(
-    caller: { ownerId: string; sessionId: string },
+    caller: { ownerId: string; sessionId: string | null; jobId?: string | null },
     spaceId: string,
     report: unknown,
   ): Promise<WikiAnchorReportResult> {
@@ -2694,7 +2843,7 @@ export class WikiService {
   /** One entry's report, inside its own transaction: see {@link recordAnchorChecks}. */
   private async applyAnchorCheck(
     tx: Tx,
-    caller: { ownerId: string; sessionId: string },
+    caller: { ownerId: string; sessionId: string | null; jobId?: string | null },
     space: { id: string; settings: unknown },
     ref: string,
     at: string,
@@ -2714,6 +2863,21 @@ export class WikiService {
     const anchors = storedAnchors(entry.anchors);
     const moved = item.checks.find((check) => anchors[check.index]?.type !== check.type);
     if (moved) return stale(`the entry has no ${moved.type} anchor at ${moved.index}: read the anchors list again`);
+    // A check carrying an identity (the path, the symbol, the commit it says it checked) is written
+    // only on the anchor that identity names — whatever the index alone would say. A check naming
+    // another anchor is a report against a list that has moved: nothing of the entry is written,
+    // the run is told, and it fails the job rather than record a verdict on the wrong anchor
+    // (contract `anchorRules.verify.identity`).
+    const alien = item.checks.find((check) => !anchorIdentityMatches(anchors[check.index], check));
+    if (alien) {
+      const held = anchors[alien.index]!;
+      const named = alien.type === 'commit'
+        ? `commit ${String(alien.sha ?? '')}`
+        : alien.type === 'symbol'
+          ? `symbol ${String(alien.symbol ?? '')} in ${String(alien.path ?? '')}`
+          : `path ${String(alien.path ?? '')}`;
+      return stale(`the check at ${alien.index} names ${named}, and the entry holds ${held.type} there: read the anchors list again`);
+    }
     const checked = anchorsChecked(anchors, item.checks, ref, at);
     const state = entryAnchorState(checked);
     const auto = state === 'verified' && (await this.tieredPitfallQualifies(tx, ownerId, entry));
@@ -2736,8 +2900,12 @@ export class WikiService {
       if (open === 0) {
         const system: WikiPrincipal = { origin: 'maintenance', ownerId, userId: null, sessionId: null, toolCallId: null, authorKind: 'system' };
         const ops = [{ op: 'challenge', entryId: entry.id, reason: anchorChallengeReason(checked, ref) }];
-        const rationale = `Anchor re-verification on origin/main at ${ref.slice(0, 12)}, reported by maintenance session `
-          + `${uuidToBase62(caller.sessionId)}: this entry's anchors no longer hold as recorded.`;
+        // Whose run checked it: a session's, or the server's wiki job (P8) — the challenge names the one.
+        const who = caller.sessionId
+          ? `maintenance session ${uuidToBase62(caller.sessionId)}`
+          : `the server's maintenance run${caller.jobId ? ` (job ${uuidToBase62(caller.jobId)})` : ''}`;
+        const rationale = `Anchor re-verification on origin/main at ${ref.slice(0, 12)}, reported by ${who}: `
+          + "this entry's anchors no longer hold as recorded.";
         const recorded = await this.recordChangeset(tx, system, space, ops, { ops, rationale }, null, literals);
         const outcome = (recorded.ops as WikiOpOutcome[])[0];
         if (outcome?.status === 'refused') throw new WikiRefusalError(outcome.reasons[0]);
@@ -2826,6 +2994,9 @@ export class WikiService {
     const literals = await this.envLiterals(this.prisma, ownerId);
     const reader = this.prisma as unknown as Tx;
     const result: WikiReopenResult = { spaceId: space.id, mode: space.settings.reviewMode, reopened: [], toVerification: [], skipped: [] };
+    // The sessions whose ops this call leaves waiting: each is queued a verification where the server runs
+    // for this account, since a session that ended long ago is nobody's to verify on the runner (jobs.make).
+    const waiting = new Set<string>();
     const move = async (step: (tx: Tx) => Promise<string | null>): Promise<string | null> => {
       try {
         return await withTransactionRetry(this.prisma, step, loggedRetry(this.logger, 'wiki.reopenVerifications'));
@@ -2860,14 +3031,16 @@ export class WikiService {
             .evidenceBeforeRevision4 === 'unreadable';
         if (!unreadable) continue;
         const skipped = await move((tx) => this.reopenRejectedOp(tx, ownerId, space.id, row.id));
-        if (skipped === null) result.reopened.push(row.id);
-        else result.skipped.push({ opId: row.id, reason: skipped });
+        if (skipped === null) {
+          result.reopened.push(row.id);
+          if (row.changeset.sessionId) waiting.add(row.changeset.sessionId);
+        } else result.skipped.push({ opId: row.id, reason: skipped });
       }
     }
 
     if (space.settings.reviewMode === 'automatic') {
       for (let after: string | null = null; ;) {
-        const page: Array<{ id: string }> = await this.prisma.wikiChangesetOp.findMany({
+        const page: Array<{ id: string; changeset: { sessionId: string | null } }> = await this.prisma.wikiChangesetOp.findMany({
           where: {
             ownerId,
             op: { in: ['add', 'amend'] },
@@ -2879,19 +3052,22 @@ export class WikiService {
           },
           orderBy: { id: 'asc' },
           take: 100,
-          select: { id: true },
+          select: { id: true, changeset: { select: { sessionId: true } } },
         });
         if (page.length === 0) break;
         after = page[page.length - 1].id;
         for (const row of page) {
           const skipped = await move((tx) => this.verifyTaintedOp(tx, ownerId, space.id, row.id));
-          if (skipped === null) result.toVerification.push(row.id);
-          else result.skipped.push({ opId: row.id, reason: skipped });
+          if (skipped === null) {
+            result.toVerification.push(row.id);
+            if (row.changeset.sessionId) waiting.add(row.changeset.sessionId);
+          } else result.skipped.push({ opId: row.id, reason: skipped });
         }
       }
     }
 
     if (result.reopened.length > 0 || result.toVerification.length > 0) this.realtime?.publishWikiChanged(ownerId, space.id);
+    await this.queueVerificationsFor(ownerId, space.id, waiting);
     const now = await this.requireSpace(ownerId, space.id);
     return { ...result, mode: now.settings.reviewMode };
   }
@@ -4362,6 +4538,10 @@ export class WikiService {
    * while any op of it waits for its verification too, and one that waits for nothing else is no
    * card of the owner's (contract `states.changeset.note`), so only a changeset holding an op that
    * waits for the owner is listed.
+   *
+   * EVERY OP CARRIES ITS ENTRY'S TITLE (`entryTitle`). An op names its entry by id alone, and the
+   * pages' own entry reads are windows — the home's is the 200 newest — so a challenge or a retire of
+   * an entry older than that window was a card that said "An entry".
    */
   async listReview(ownerId: string, spaceId?: string): Promise<Array<Record<string, unknown>>> {
     const rows = await this.prisma.wikiChangeset.findMany({
@@ -4370,7 +4550,12 @@ export class WikiService {
       take: 100,
       select: CHANGESET_SELECT,
     });
-    return rows.map(changesetView);
+    const named = [...new Set(rows.flatMap((row) => row.ops.flatMap((op) => (op.entryId ? [op.entryId] : []))))];
+    const entries = named.length === 0
+      ? []
+      : await this.prisma.wikiEntry.findMany({ where: { ownerId, id: { in: named } }, select: { id: true, title: true } });
+    const titles = new Map(entries.map((entry) => [entry.id, entry.title]));
+    return rows.map((row) => changesetView(row, titles));
   }
 
   // ── The three reads the pages ask for (contract `agentSurface.doors.user.routes`) ─────────────
@@ -4764,13 +4949,14 @@ function rawOpSources(op: Record<string, unknown>): unknown[] {
 
 /**
  * The changesets a verification caller proposed (contract `reviewModes.verification.who`): a
- * session's own, or — for the one-off import, which has no session — the ones of its origin that
- * name none. Nothing else is found, so another caller's op is the same 404 as one that does not exist.
+ * session's own, the ones the server's maintenance run recorded (its wiki job), or — for the one-off
+ * import, which has no session — the ones of its origin that name none. Nothing else is found, so
+ * another caller's op is the same 404 as one that does not exist.
  */
 function proposerScope(principal: WikiPrincipal): Prisma.WikiChangesetWhereInput {
-  return principal.sessionId !== null
-    ? { sessionId: principal.sessionId }
-    : { sessionId: null, origin: principal.origin };
+  if (principal.sessionId !== null) return { sessionId: principal.sessionId };
+  if (principal.jobId) return { sessionId: null, jobId: principal.jobId };
+  return { sessionId: null, origin: principal.origin };
 }
 
 /**

@@ -1,16 +1,22 @@
 import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
+import http from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { test } from 'node:test';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { type ExecutionContext, HttpException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import type { AuthUser } from '../common/current-user.decorator';
+import type { PrismaService } from '../prisma/prisma.service';
 import { ProjectsController } from '../projects/projects.controller';
 import { TaskOwnerConfirmationController } from '../tasks/task-owner-confirmation.controller';
 import { TasksController } from '../tasks/tasks.controller';
 import { AdminController } from '../users/admin.controller';
+import { AccessTokensController, PatSelfController } from './access-tokens.controller';
 import { JwtAuthGuard } from './jwt-auth.guard';
-import { PAT_FORBIDDEN_REASONS, PatForbidden, PatScope, type PatForbiddenReason } from './pat-scope.decorator';
+import { PatRequestAudit } from './pat-request-audit';
+import { PAT_FORBIDDEN_REASONS, PatForbidden, PatScope, PatSelf, type PatForbiddenReason } from './pat-scope.decorator';
 import { PAT_PREFIX, PAT_SCOPES, type PatGrant, type PatService } from './pat.service';
 
 // What JwtAuthGuard does with a personal access token once PatService has verified it
@@ -23,10 +29,10 @@ const EMAIL = 'pat-scope@example.test';
 
 /** A route of each kind the guard tells apart. */
 class Routes {
-  @PatScope('tasks:read')
+  @PatScope('tasks:read', { workspaceConfinable: false })
   read(): void {}
 
-  @PatScope('tasks:write')
+  @PatScope('tasks:write', { workspaceConfinable: false })
   write(): void {}
 
   undeclared(): void {}
@@ -36,13 +42,19 @@ class Routes {
 
   @PatForbidden('TOKEN_MANAGEMENT')
   tokens(): void {}
+
+  @PatSelf()
+  self(): void {}
 }
 
-/** A controller that refuses tokens, around a handler that declares a scope: the refusal wins. */
+/** A controller that refuses tokens, around handlers that declare a scope or @PatSelf: the refusal wins. */
 @PatForbidden('ADMIN')
 class Closed {
-  @PatScope('tasks:read')
+  @PatScope('tasks:read', { workspaceConfinable: false })
   read(): void {}
+
+  @PatSelf()
+  self(): void {}
 }
 
 const grants = new Map<string, PatGrant>();
@@ -50,9 +62,9 @@ const pats = { verify: async (token: string) => grants.get(token) ?? null } as u
 const jwt = new JwtService({ secret: `pat-scope-${randomUUID()}`, signOptions: { expiresIn: '1h' } });
 const guard = new JwtAuthGuard(jwt, new Reflector(), pats);
 
-function tokenWith(scopes: readonly string[]): string {
+function tokenWith(scopes: readonly string[], workspaceIds: readonly string[] = []): string {
   const token = PAT_PREFIX + randomBytes(32).toString('base64url');
-  grants.set(token, { tokenId: randomUUID(), userId: USER, email: EMAIL, scopes: [...scopes], workspaceIds: [] });
+  grants.set(token, { tokenId: randomUUID(), userId: USER, email: EMAIL, scopes: [...scopes], workspaceIds: [...workspaceIds] });
   return token;
 }
 const login = () => jwt.signAsync({ sub: USER, email: EMAIL });
@@ -146,6 +158,95 @@ test('@PatForbidden refuses every token with its reason, and a refusal on the co
   }
 });
 
+test('@PatSelf: every token reaches the route whatever it holds and wherever it is confined, and a refusal on the controller still wins', async () => {
+  for (const scopes of [['tasks:read'], ['events:read'], PAT_SCOPES]) {
+    const answer = await present(tokenWith(scopes), Routes, 'self');
+    assert.equal(answer.status, 200, `${scopes.join(' ')}: ${JSON.stringify(answer.body)}`);
+    assert.equal(answer.user?.credential?.kind, 'PAT');
+  }
+  // Confined to a workspace, the same token is refused a route that cannot be confined, and reaches
+  // this one: nothing in its request is judged — the stand-in PatService could not say where anything sits.
+  const confined = tokenWith(['tasks:read'], [randomUUID()]);
+  assert.equal((await present(confined, Routes, 'read')).body?.code, 'PAT_ROUTE_NOT_WORKSPACE_CONFINABLE');
+  const self = await present(confined, Routes, 'self');
+  assert.equal(self.status, 200, JSON.stringify(self.body));
+  assert.deepEqual(self.user?.credential, {
+    kind: 'PAT',
+    tokenId: grants.get(confined)!.tokenId,
+    scopes: ['tasks:read'],
+    workspaceIds: grants.get(confined)!.workspaceIds,
+  });
+  const closed = await present(tokenWith(PAT_SCOPES), Closed, 'self');
+  assert.equal(closed.status, 403);
+  assert.deepEqual([closed.body.code, closed.body.reason], ['PAT_FORBIDDEN', 'ADMIN']);
+});
+
+test('@PatSelf goes through the request audit as every route does: GET /pat/self, a read, is not recorded, and DELETE /pat/self, a write, is pat.request', async () => {
+  const records: unknown[] = [];
+  const prisma = { activity: { create: async ({ data }: { data: unknown }) => void records.push(data) } };
+  const audited = new JwtAuthGuard(jwt, new Reflector(), pats, new PatRequestAudit(prisma as unknown as PrismaService));
+  // A real node:http server, so the audit sees each answer go out: GET reaches the real reading
+  // handler, and DELETE the real revoking one.
+  const server = http.createServer(async (req, res) => {
+    const routed = Object.assign(req, { route: { path: '/api/pat/self' }, params: {} });
+    const context = {
+      switchToHttp: () => ({ getRequest: () => routed, getResponse: () => res }),
+      getHandler: () => (req.method === 'GET' ? PatSelfController.prototype.self : PatSelfController.prototype.revokeSelf),
+      getClass: () => PatSelfController,
+    } as unknown as ExecutionContext;
+    res.statusCode = await audited.canActivate(context).then(() => 200, (error) => (error instanceof HttpException ? error.getStatus() : 500));
+    res.end();
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const token = tokenWith(['wiki:read']);
+    const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api/pat/self`;
+    const send = async (method: string) => (await fetch(url, { method, headers: { authorization: `Bearer ${token}` } })).status;
+    assert.equal(await send('GET'), 200);
+    await sleep(200);
+    assert.deepEqual(records, [], 'a read is not recorded');
+    assert.equal(await send('DELETE'), 200);
+    for (const deadline = Date.now() + 5_000; records.length === 0 && Date.now() < deadline;) await sleep(10);
+    await sleep(100);
+    assert.deepEqual(records, [{
+      actorId: USER,
+      type: 'pat.request',
+      payload: { method: 'DELETE', route: '/pat/self', status: 200, params: {} },
+      credentialKind: 'PAT',
+      credentialId: grants.get(token)!.tokenId,
+    }]);
+  } finally {
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test('the real routes: GET and DELETE /pat/self take any token; issuing, listing and revoking tokens, and an administrator\'s token routes, refuse every token', async () => {
+  for (const scopes of [['wiki:read'], PAT_SCOPES]) {
+    for (const handler of ['self', 'revokeSelf']) {
+      assert.equal((await present(tokenWith(scopes), PatSelfController, handler)).status, 200, `${handler} ${scopes.join(' ')}`);
+    }
+  }
+  const everything = tokenWith(PAT_SCOPES);
+  const refused: Array<[new (...args: never[]) => unknown, string, PatForbiddenReason]> = [
+    [AccessTokensController, 'issue', 'TOKEN_MANAGEMENT'],
+    [AccessTokensController, 'list', 'TOKEN_MANAGEMENT'],
+    [AccessTokensController, 'revoke', 'TOKEN_MANAGEMENT'],
+    [AdminController, 'listAccessTokens', 'ADMIN'],
+    [AdminController, 'revokeAccessToken', 'ADMIN'],
+  ];
+  for (const [controller, handler, reason] of refused) {
+    const answer = await present(everything, controller, handler);
+    assert.equal(answer.status, 403, `${controller.name}.${handler}: ${JSON.stringify(answer.body)}`);
+    assert.deepEqual(answer.body, {
+      code: 'PAT_FORBIDDEN',
+      reason,
+      requiredAction: 'OPEN_ORBIT',
+      message: PAT_FORBIDDEN_REASONS[reason],
+    });
+  }
+});
+
 test('the real routes: listing tasks takes tasks:read, creating one tasks:write; an owner decision and admin refuse every token', async () => {
   const reader = tokenWith(['tasks:read']);
   assert.equal((await present(reader, TasksController, 'list')).status, 200);
@@ -179,8 +280,13 @@ test('a login JWT is let through every one of these routes as before — credent
     [Routes, 'undeclared'],
     [Routes, 'decide'],
     [Routes, 'tokens'],
+    [Routes, 'self'],
     [Closed, 'read'],
+    [Closed, 'self'],
     [TasksController, 'create'],
+    [AccessTokensController, 'issue'],
+    [PatSelfController, 'self'],
+    [PatSelfController, 'revokeSelf'],
     [TaskOwnerConfirmationController, 'decide'],
     [AdminController, 'listUsers'],
   ];

@@ -455,8 +455,18 @@ func runOpenCodeTurn(ctx context.Context, job *ClaimedSession, execDir, scratchD
 	}
 	cmd := exec.CommandContext(ctx, providerOpenCode, openCodeCommandArgs(job, execDir, filePaths, agentName)...)
 	cmd.Dir = execDir
+	// A session's configuration directory is its own. OpenCode always merges the machine's global
+	// configuration (~/.config/opencode/opencode.json…), which can carry mcp servers, plugins
+	// (npm modules — arbitrary code), instructions and agents: capability that belongs to whoever
+	// set the machine up, not to the session, and the same session would offer different tools on
+	// another machine. OPENCODE_CONFIG_DIR is not the lever — 1.18.35 ignores it (`opencode debug
+	// paths` keeps reporting the global directory) — and OPENCODE_CONFIG only adds a layer.
+	// XDG_CONFIG_HOME moves the configuration directory; the data directory, where the sign-in
+	// lives, is a different variable and stays put.
+	_ = os.MkdirAll(openCodeConfigDir(scratchDir), machineHomePerm)
 	cmd.Env = replaceEnv(envWithAgent(job.Agent.Env), map[string]string{
 		"PWD":                         execDir,
+		"XDG_CONFIG_HOME":             openCodeConfigDir(scratchDir),
 		"OPENCODE_CONFIG_CONTENT":     configContent,
 		"OPENCODE_CLIENT":             "orbit",
 		"OPENCODE_DISABLE_AUTOUPDATE": "1",
@@ -815,6 +825,15 @@ func newOpenCodeAgentName() (string, error) {
 	return "orbit" + hex.EncodeToString(entropy[:]), nil
 }
 
+// openCodeConfigDir is the configuration directory a session's OpenCode runs with (XDG_CONFIG_HOME):
+// a directory of the session's own, so the machine's global opencode.json(c) never reaches it.
+// Measured on 1.18.35: with a global config naming an MCP server, `opencode debug config` lists the
+// server before this and not after, while `opencode debug paths` shows `data` — where the sign-in
+// lives — unchanged.
+func openCodeConfigDir(scratchDir string) string {
+	return filepath.Join(scratchDir, "opencode-config")
+}
+
 func openCodeConfigContent(job *ClaimedSession, scratchDir, agentName string, escapingPaths []string) (string, error) {
 	base := strings.TrimSpace(job.Agent.Env["OPENCODE_CONFIG_CONTENT"])
 	if base == "" {
@@ -897,11 +916,17 @@ func openCodeConfigContent(job *ClaimedSession, scratchDir, agentName string, es
 			envWiki:                     wikiEnv(job.WikiDisabled),
 			envOrchestrationToken:       job.OrchestrationToken,
 			envMCPPermissionPrompt:      "0",
+			envRunnerChild:              "1",
 		}
 		// Where `orbit mcp` reaches the runner to start a background job the runner
 		// owns. Written here as well as into the OpenCode process env, because this
 		// block is what OpenCode hands its local MCP servers.
 		for name, value := range bgJobEnv(job.SessionID) {
+			environment[name] = value
+		}
+		// A managed runner's instance, which `orbit mcp` sends with the runner credential.
+		for _, pair := range managedInstanceEnv() {
+			name, value, _ := strings.Cut(pair, "=")
 			environment[name] = value
 		}
 		mcp["orbit"] = map[string]interface{}{

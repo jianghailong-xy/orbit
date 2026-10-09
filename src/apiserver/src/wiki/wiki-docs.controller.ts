@@ -23,21 +23,21 @@ export class WikiDocsController {
   constructor(private readonly docs: WikiDocs) {}
 
   /** The confirmed plan's categories, each with its documents and their sections, as written so far. */
-  @PatScope('wiki:read')
+  @PatScope('wiki:read', { workspaceConfinable: false })
   @Get('spaces/:id/docs')
   directory(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.docs.directory(user.userId, id);
   }
 
   /** Every document of the plan, and every section title no other document shares, A to Z. */
-  @PatScope('wiki:read')
+  @PatScope('wiki:read', { workspaceConfinable: false })
   @Get('spaces/:id/doc-index')
   index(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.docs.index(user.userId, id);
   }
 
   /** One document: `slug` is the plan document's, matched as text. */
-  @PatScope('wiki:read')
+  @PatScope('wiki:read', { workspaceConfinable: false })
   @Get('spaces/:id/docs/:slug')
   doc(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string, @Param('slug') slug: string) {
     return this.docs.doc(user.userId, id, slug);

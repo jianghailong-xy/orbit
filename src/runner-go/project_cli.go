@@ -39,14 +39,21 @@ Usage:
   orbit project ensure-coordinator PROJECT_ID [--json]
   orbit project send PROJECT_ID (--message TEXT | --message-file -) [--client-turn-id ID] [--expect-reply [--reply-options JSON] [--reply-within-seconds N]] [--json]
   orbit project resolve-blocker PROJECT_ID --blocker-id ID --reason TEXT [--json]
-  orbit project request-start PROJECT_ID --line LINE --automatic[=BOOL] --max-concurrent-tasks N --why TEXT [options]
+  orbit project request-start PROJECT_ID --line LINE [--automatic[=BOOL]] --max-concurrent-tasks N --why TEXT [options]
   orbit project request-done PROJECT_ID --judgment TEXT (--gaps JSON | --gaps-file -) [--json]
   orbit project merge-evidence PROJECT_ID --requirement-id ID --target-branch REF --content-hash SHA256 [options]
+  orbit project skip-merge-check PROJECT_ID TASK_ID --reason TEXT [--json]
   orbit project create --title TITLE [options]
   orbit project update PROJECT_ID [options]
   orbit project delete PROJECT_ID [--json]
 
 Run 'orbit project <command> --help' for options.
+
+Logged in as yourself ('orbit login', or ORBIT_USER_TOKEN), these commands call the
+REST API with your personal access token and print what they print as the runner.
+The ones that act for an Orbit session are refused rather than sent with the runner's
+credential: 'orbit api' calls any user route, and 'orbit capabilities --json' marks
+which commands run as you.
 `
 
 var projectActionHelp = map[string]string{
@@ -165,7 +172,7 @@ Options:
 	"request-start": `orbit project request-start — ask the account owner to start the project this session coordinates
 
 Usage:
-  orbit project request-start PROJECT_ID --line PROJECT_BRANCH|MAIN --automatic[=BOOL]
+  orbit project request-start PROJECT_ID --line PROJECT_BRANCH|MAIN [--automatic[=BOOL]]
       --max-concurrent-tasks N --why TEXT [--project-branch-name REF] [--merge-check-command CMD] [--json]
 
 Until the owner starts the project, task_start is refused for its tasks; this puts the start in front
@@ -177,7 +184,8 @@ is filed, with every reason listed at once and what to do about each: no criteri
 criterion no task serves, a task whose assignee is not on a runner, a project branch asked for with
 no repository to hold it. A plan that is ready is filed and the command returns at once with the
 request's itemId and any warnings — tasks set to start by hand, Automatic on a project branch with no
-merge check. The owner sees a "Start this project?" card with these settings as suggestions and
+merge check. The warnings are the coordinator's: the owner's card does not show them. The owner sees a
+"Start this project?" card with these settings as suggestions — Automatic on whatever is sent — and
 presses Start; the coordinator is told when the project starts.
 
 Asking again replaces the open request, and changing the plan before the start — tasks, dependencies
@@ -187,8 +195,8 @@ or criteria — voids it. Only the conversation the project is coordinated from 
 Options:
   --line PROJECT_BRANCH|MAIN     where finished tasks land (required)
   --project-branch-name REF      with PROJECT_BRANCH: the branch as a full ref (refs/heads/...)
-  --automatic[=BOOL]             whether the coordinator runs the project for the owner (required;
-                                 --automatic=false to suggest it off)
+  --automatic[=BOOL]             whether the coordinator runs the project for the owner (default on;
+                                 --automatic=false to suggest it off, and say why in --why)
   --max-concurrent-tasks N       how many of its tasks may run at once, 1-100 (required)
   --merge-check-command CMD      the check run on the combined tree before anything lands
   --why TEXT                     one sentence, shown to the owner on the card (required)
@@ -245,6 +253,33 @@ The reason stays on the row as its resolution note, and a resolution is final: a
 blocker is refused rather than resolved twice. A condition that comes back raises a new episode
 rather than reopening this one.
 `,
+	"skip-merge-check": `orbit project skip-merge-check — queue one landing with the merge check NOT run
+
+Usage:
+  orbit project skip-merge-check PROJECT_ID TASK_ID --reason TEXT [--json]
+
+For the red that is about the CHECK rather than the delivery: a merge check command that cannot pass
+where the runner runs it — a shell without GNU timeout or bash 4, a tool the machine does not have.
+The check does not run on the one landing this queues, and nothing anywhere records it as having
+passed.
+
+This is the account owner's decision, and it is taken once:
+
+  * inside a session (ORBIT_SESSION_ID), the confirmation card comes first and the call is the
+    coordinating conversation's: nothing is queued unless the owner answers yes, and a decline is
+    an answer — the landing stands as it failed;
+  * at a terminal as yourself (` + "`orbit login`" + `), there is no card because you are the person it would
+    ask, and the row records you as the one who approved it.
+
+Options:
+  --reason TEXT   why this check should not hold up this landing (required)
+
+Only a landing that stopped on a check qualifies (CHECK_FAILED). A conflict is the branch's and an
+integration error is the machinery's — run those again with integration_retry. Nothing about the
+project's own merge check command changes: the next landing and every merge into main are checked
+exactly as before, and the generation this queues carries the skipped check, your reason and who
+approved it.
+`,
 	"merge-evidence": `orbit project merge-evidence — record what a target branch was observed to contain
 
 Usage:
@@ -292,10 +327,14 @@ Options:
   --escalate-after-seconds N       how long an exception waits on the coordinator (300–604800)
   --json                           emit compact JSON
 
-The integration line says where this project's finished tasks land, and is the account owner's
-to choose — accepted at a terminal, refused from inside an agent session. Choosing it here is
-the one cheap moment: unchosen, it is decided at the first integration (code tasks that depend
-on one another go through a project branch) and locked from then on.
+The whole integration object is the account owner's at creation — the line AND the merge check —
+accepted at a terminal and refused from inside an agent session, which is refused here before
+anyone is asked. A card for a merge check names the project it changes and that project does not
+exist yet; and the line is decided at the first integration anyway (code tasks that depend on one
+another go through a project branch) and locked from then on, so choosing it HERE is the one cheap
+moment — which is why it is the owner's to take. A session that wants either sets it afterwards:
+the line from the owner's own doors, the merge check with ` + "`orbit project update --merge-check-command`" + `,
+which puts it on the owner's confirmation card.
 
 The project is created under this runner's owner and starts OPEN. It holds no tasks yet —
 file them with ` + "`orbit task create --project-id <id>`" + ` once it exists.
@@ -381,6 +420,17 @@ refused for any agent session. A project nobody chose for is decided at its firs
 tasks that depend on one another go through a project branch, anything else straight to main. After
 that the line is locked and a request to move it is refused; the merge check stays changeable.
 
+The merge check — --merge-check-command, --merge-check-timeout-seconds — is the other half, and it
+is answered differently. It is the check run on the combined tree before a landing, and the session
+holding a failing one is often the one that knows what the command should be. So inside a session
+the change is a PROPOSAL: this command first puts the project, the check as it stands and the check
+you are asking for on a confirmation card and waits for the account owner, and the change takes
+effect only once they approve it. Nothing is written if they decline, and a second change is a
+second question — an approval covers the exact command and timeout it named, so an old card cannot
+carry a later edit. Typed at a terminal there is nobody to ask and the write goes straight through.
+Passing --merge-check-command with an empty value removes the check, and that too is a change the
+owner is asked about.
+
 --expected-config-revision is a compare-and-swap. Pass the configRevision you read from
 'orbit project get' and the write commits only if the project is still at it; otherwise
 it is refused with STALE_CONFIG_REVISION and nothing is written. Use it when you read the
@@ -409,11 +459,12 @@ var projectCLICapabilities = []cliCapabilitySpec{
 	{Tool: "project_ensure_coordinator", Argv: []string{"orbit", "project", "ensure-coordinator"}, Usage: "orbit project ensure-coordinator PROJECT_ID [--json]", Arguments: []string{"[project-id] (required)", "--json"}, Description: "The session that coordinates this project, opening a replacement ONLY when the conversation the project points at can no longer be handed a message — no runner, an offline runner, a run that never started, a row in Trash, or a run that was replaced (§13.6 SU6) — and never displacing a conversation that can still receive one: alive, or ended in a way its runner can still revive, comes back as created:false with that same sessionId and not one row written. So created:false means that session is the one to send to (`orbit session send --resume-if-ended`), and created:true carries replacedSessionId and replaceReason saying what the replacement left behind. The refusal that stays is COORDINATOR_UNAVAILABLE (owner: USER, requiredAction: rebind): the project's coordination workspace is disabled, trashed or no longer recorded, and where a project's coordination lives is the account owner's decision (§8.2) — so that refusal is theirs to act on, and a retry answers the same thing. The acting session is never the one replaced, and a project with no coordinator at all gets its FIRST one, freely landed where its work already runs. This command acts for the session it runs in, and it is advertised only where the orchestration grant it spends exists.", Mutates: true, RequiresOrchestration: true},
 	{Tool: "project_send", Argv: []string{"orbit", "project", "send"}, Usage: "orbit project send PROJECT_ID (--message TEXT | --message-file -) [--client-turn-id ID] [--json]", Arguments: []string{"[project-id] (required)", "--message <text> | --message-file - (required)", "--client-turn-id <id> (idempotency key: repeat it on a retry to get the same turn back)", "--expect-reply", "--reply-options <json array of {label, description}>", "--reply-within-seconds <n> (60-2592000)", "--json"}, Description: "Hand one message to this project's coordinator, addressed by the PROJECT rather than by a session id: the conversation is resolved at the moment the message is DELIVERED, which is the whole of what this adds to project_ensure_coordinator — the id that call answers with is invalidated by a rotation the caller cannot see, and a message sent to it then reaches a reader instead of the project. A conversation that can be handed the message is delivered to and NOT displaced, an ended one whose runner can still revive it included: that case is a REVIVE (what `orbit session send --resume-if-ended` does) rather than a replacement. Only a conversation that cannot take a message at all is replaced — by the same rotation ensure-coordinator performs — and the message goes to the replacement in the same call. The response says what happened rather than what was asked for: created and sessionId name the conversation the message is on, and replacedSessionId/replaceReason are present only when this call rotated to get there. The refusal that stays is COORDINATOR_UNAVAILABLE (409, owner: USER, requiredAction: rebind) — where a project's coordination lives is the account owner's decision, so that one is theirs to act on and a retry answers the same thing — while a write refused after a coordinator WAS found comes back as COORDINATOR_MESSAGE_UNDELIVERED with the sentence that refused it inside. --client-turn-id is the key the message is written under and what makes a retry safe: repeat a call whose answer you never saw with the same key and the same message, and you get that same turn back instead of a second copy; omitted, the server mints one and every call is a new message. The acting session is the authority and there is no headless form: an agent delivers from a session this runner is running, and this command is advertised only where the orchestration grant it spends exists. --expect-reply makes it a request to the coordinator it is delivered to: the call returns at once with requestId and replyBy, and the outcome comes back to this session as a turn.", Mutates: true, RequiresOrchestration: true},
 	{Tool: "project_blocker_resolve", Argv: []string{"orbit", "project", "resolve-blocker"}, Usage: "orbit project resolve-blocker PROJECT_ID --blocker-id ID --reason TEXT [--json]", Arguments: []string{"[project-id] (required)", "--blocker-id <id> (required; as 'orbit project get' spells it in blockers.open[].id)", "--reason <text> (required; why this no longer blocks)", "--json"}, Description: "End one of a project's open blockers, saying why it no longer blocks — the write half of what `orbit project get` shows in blockers.open. Run from inside a session it first puts the blocker and your reason on a confirmation card and waits for the account owner's answer: nothing is written if they decline, and the reason they give says what they want instead. Typed at a terminal outside a session there is nobody to ask and the resolution is written straight away, because that caller is the owner. Resolve one when you can say what changed — the work landed, the question was answered elsewhere, the condition no longer holds — and not to get past a wait you disagree with: a HUMAN_DECISION_REQUIRED blocker is the project asking for a judgment, and the card is where you argue for it rather than a formality around it. An agent's resolution records resolved_by = COORDINATOR with the reason it gave; a resolution is final, so an already-resolved blocker is refused rather than restated, and a condition that returns raises a new episode.", Mutates: true},
-	{Tool: "project_request_start", Argv: []string{"orbit", "project", "request-start"}, Usage: "orbit project request-start PROJECT_ID --line LINE --automatic[=BOOL] --max-concurrent-tasks N --why TEXT [options]", Arguments: []string{"[project-id] (required)", "--line <PROJECT_BRANCH|MAIN> (required)", "--project-branch-name <ref> (PROJECT_BRANCH only; a full refs/heads/... ref)", "--automatic[=BOOL] (required)", "--max-concurrent-tasks <n> (required, 1-100)", "--merge-check-command <text>", "--why <text> (required; shown to the owner on the card)", "--json"}, Description: "Ask the account owner to start the project this session coordinates. Until they start it, task_start is refused for its tasks; run this once the plan is written — the criteria stated, the work filed as tasks under the project, and every acceptance criterion served by at least one task. Orbit checks the plan first: a plan that is not ready is refused (START_REQUEST_NOT_READY) with every reason at once and what to do about each — no criteria or no tasks, a criterion no task serves, a task whose assignee is not on a runner, a project branch with no repository — and nothing is filed. A ready plan is filed and the command returns at once with the request's itemId and any warnings (a criterion served only by work that looks like it produces no code and does not declare codeless, tasks set to start by hand, Automatic on a project branch with no merge check); the owner sees a \"Start this project?\" card with the settings as suggestions, and the coordinator is told when the project starts. Asking again replaces the open request; changing the plan before the start voids it. Acts for the session it runs in: only the project's coordinating conversation may ask.", Mutates: true, SessionOnly: true},
+	{Tool: "integration_skip_merge_check", Argv: []string{"orbit", "project", "skip-merge-check"}, Usage: "orbit project skip-merge-check PROJECT_ID TASK_ID --reason TEXT [--json]", Arguments: []string{"[project-id] (required)", "[task-id] (required; the DONE task whose failed landing should go on without the project's merge check)", "--reason <text> (required; why this check should not hold up this landing)", "--json"}, Description: "Queue ONE landing of a DONE task again with the project's merge check NOT RUN — skipped, never passed — and only with the account owner's yes. For the red that is about the check rather than the delivery: a command that cannot pass where the runner runs it. Every other door is wrong for that red: integration_retry runs the same command against the same machine and is red again by construction, task_reopen sends back work that is not at fault, and the check COMMAND is the owner's to change. Inside a session it first puts the project, the task, the check command and your reason on a confirmation card and waits for the owner's answer: a decline queues nothing and the landing stands as it failed. Typed at a terminal as yourself (`orbit login`) there is no card, because you are the person it would ask, and the row records you as the one who approved it. Only a landing that stopped on a check qualifies; a conflict is the branch's and an integration error is the machinery's (integration_retry answers those). The project's mergeCheckCommand setting is untouched: the next landing and every merge into main are checked as before, and the generation this queues records the skipped check, the reason and who approved it. Only the conversation the project is coordinated from may ask, and only where the failure is still the coordinator's to decide.", Mutates: true},
+	{Tool: "project_request_start", Argv: []string{"orbit", "project", "request-start"}, Usage: "orbit project request-start PROJECT_ID --line LINE [--automatic[=BOOL]] --max-concurrent-tasks N --why TEXT [options]", Arguments: []string{"[project-id] (required)", "--line <PROJECT_BRANCH|MAIN> (required)", "--project-branch-name <ref> (PROJECT_BRANCH only; a full refs/heads/... ref)", "--automatic[=BOOL] (default on)", "--max-concurrent-tasks <n> (required, 1-100)", "--merge-check-command <text>", "--why <text> (required; shown to the owner on the card)", "--json"}, Description: "Ask the account owner to start the project this session coordinates. Until they start it, task_start is refused for its tasks; run this once the plan is written — the criteria stated, the work filed as tasks under the project, and every acceptance criterion served by at least one task. Orbit checks the plan first: a plan that is not ready is refused (START_REQUEST_NOT_READY) with every reason at once and what to do about each — no criteria or no tasks, a criterion no task serves, a task whose assignee is not on a runner, a project branch with no repository — and nothing is filed. A ready plan is filed and the command returns at once with the request's itemId and any warnings (a criterion served only by work that looks like it produces no code and does not declare codeless, tasks set to start by hand, Automatic on a project branch with no merge check) — the coordinator's to act on, which the owner's card does not show; the owner sees a \"Start this project?\" card with the settings as suggestions and Automatic on, and the coordinator is told when the project starts. Asking again replaces the open request; changing the plan before the start voids it. Acts for the session it runs in: only the project's coordinating conversation may ask.", Mutates: true, SessionOnly: true},
 	{Tool: "project_request_done", Argv: []string{"orbit", "project", "request-done"}, Usage: "orbit project request-done PROJECT_ID --judgment TEXT (--gaps JSON | --gaps-file -) [--json]", Arguments: []string{"[project-id] (required)", "--judgment <text> (required; your call, shown first on the card)", "--gaps <json array> | --gaps-file - (required; one {criterionKey, title, whyNotProven, coordinatorChecked, evidenceRefs} per thing Orbit cannot prove, [] for none)", "--json"}, Description: "Ask the account owner to record the project this session coordinates done. Orbit records a project done by itself when it can prove every criterion; run this when it cannot and you have checked the project is done anyway, with your call in a sentence or two and one gap per thing Orbit cannot prove — the criterion's key, why Orbit cannot prove it, what you checked instead, and where that evidence is. Orbit checks the project first: one that is not ready is refused (DONE_REQUEST_NOT_READY) with every reason at once and what to do about each — a criterion its work has not met, a task running, queued or IN_PROGRESS, an item waiting on the owner, a landing or a merge into main in flight — and nothing is filed. A ready project is filed and the command returns at once with the request's itemId and a warning for every criterion not landed on main, with why; the owner sees an \"Is this project done?\" card and records the project done on it. Asking again replaces the open request; the project moving before the owner answers voids it. Acts for the session it runs in: only the project's coordinating conversation may ask.", Mutates: true, SessionOnly: true},
 	{Tool: "project_merge_evidence", Argv: []string{"orbit", "project", "merge-evidence"}, Usage: "orbit project merge-evidence PROJECT_ID --requirement-id ID --target-branch REF --content-hash SHA256 [options]", Arguments: []string{"[project-id] (required)", "--requirement-id <text> (required)", "--target-branch <ref> (required)", "--content-hash <sha256> (required, 64 hex characters)", "--source <text>", "--detail <json>", "--json"}, Description: "Record what a target branch was observed to CONTAIN — the merge half of a project's acceptance evidence. Hash the content you actually read (a normalized `git grep` result, a blob or tree digest, a rendered diff), never `git branch --contains`: after a squash merge that answer is a guaranteed false negative while the content is plainly there. Same content as the last observation and only the observation time moves; different content writes a new row one refGeneration up and advances the evidence version automatically. Nothing judges the observation: migration 0229 removed the project acceptance judgment, so this records what was seen and stops there.", Mutates: true},
-	{Tool: "project_create", Argv: []string{"orbit", "project", "create"}, Usage: "orbit project create --title TITLE [options]", Arguments: []string{"--title <text> (required)", "--goal <text> | --goal-file - (what the work is trying to achieve; max 4,000 characters)", "--acceptance-criteria-items <json array> | --acceptance-criteria-items-file - (every item requires text + verificationMethod)", "--instructions <text> | --instructions-file - (how the work is to be done; max 10,000 characters)", "--workspace-id <id> (open the coordinator in this workspace instead of in the calling session; needs orchestration enabled)", "--integration-line <MAIN|PROJECT_BRANCH>", "--project-branch <ref>", "--upstream-ref <ref>", "--merge-check-command <text>", "--merge-check-timeout-seconds <n>", "--escalate-after-seconds <n>", "--json"}, Description: "Create a project under this runner's owner — the durable context a body of work is carried out from, as opposed to a task, which is one piece of that work. Use --acceptance-criteria-items for project outcomes; each item requires assertion text and a reader-facing verificationMethod. Nothing in Orbit evaluates them: migration 0229 removed the project acceptance judgment, so a criterion is a stated condition and no more. Inside a session it first puts a confirmation card in front of the user and waits for the answer: nothing is created if they decline. The project starts OPEN and holds no tasks; file them with `orbit task create --project-id <id>` afterwards. Inside a session the project is also bound to that session as its coordinator, and to the workspace it runs in, in the same write that creates it — so opening the coordinator later returns to this conversation rather than starting another; one session coordinates at most one project — record a second from the same conversation and the server opens THAT project its own coordinator in the same workspace and says so — and headless there is no session and so no such binding. --workspace-id says the coordinator belongs elsewhere: it OPENS the conversation there, since a project that names a coordination workspace has a coordinator, and it needs orchestration enabled because it names a workspace rather than inheriting one. The integration line — where this project's finished tasks land, with the project branch and upstream as full refs, the check run on the combined tree before a landing, and the window an exception waits on the coordinator — is the account owner's to choose, so it is accepted at a terminal and refused for an agent session; unchosen, it is decided at the first integration and locked from then on.", Mutates: true},
-	{Tool: "project_update", Argv: []string{"orbit", "project", "update"}, Usage: "orbit project update PROJECT_ID [options]", Arguments: []string{"[project-id] (required)", "--title <text>", "--goal <text> | --goal-file - | --clear-goal", "--acceptance-criteria-items <json array> | --acceptance-criteria-items-file - (structured whole replacement; text + verificationMethod required; only a tightening lands immediately, and [] drops every criterion, which is held)", "--instructions <text> | --instructions-file - | --clear-instructions", "--status <OPEN|DONE|CANCELLED>", "--integration-line <MAIN|PROJECT_BRANCH>", "--project-branch <ref>", "--upstream-ref <ref>", "--merge-check-command <text>", "--merge-check-timeout-seconds <n>", "--expected-config-revision <n>", "--json"}, Description: "Update a project you own. The integration line — where this project's finished tasks land, MAIN or PROJECT_BRANCH, with the project branch and upstream as full refs and the check run on the combined tree before a landing — is the account owner's to choose, so it is accepted at a terminal and refused for an agent session; unchosen, it is decided at the first integration (code tasks that depend on one another go through a project branch), and locked from then on. Structured acceptance items are a whole-collection replacement, and only a tightening edit lands immediately — adding an item, reordering, or stepping an item's verificationMethod up the HUMAN → VERIFICATION → EXECUTABLE ladder. Any other edit (dropping an item, rewriting an item's text, or rewording verificationMethod any other way) is held as a proposal for the account owner to decide, reported as acceptanceCriteriaHold with the criteria left as they were; so [] drops every criterion rather than clearing the collection, and is held whenever there is one to drop. Every item requires text and verificationMethod; preserve ids from project_get to retain identity, omit id to add. Nothing evaluates them. At least one flag is required, and --expected-config-revision does not count as one. Only one --*-file flag per invocation, since they all read the same stdin.", Mutates: true},
+	{Tool: "project_create", Argv: []string{"orbit", "project", "create"}, Usage: "orbit project create --title TITLE [options]", Arguments: []string{"--title <text> (required)", "--goal <text> | --goal-file - (what the work is trying to achieve; max 4,000 characters)", "--acceptance-criteria-items <json array> | --acceptance-criteria-items-file - (every item requires text + verificationMethod)", "--instructions <text> | --instructions-file - (how the work is to be done; max 10,000 characters)", "--workspace-id <id> (open the coordinator in this workspace instead of in the calling session; needs orchestration enabled)", "--integration-line <MAIN|PROJECT_BRANCH>", "--project-branch <ref>", "--upstream-ref <ref>", "--merge-check-command <text>", "--merge-check-timeout-seconds <n>", "--escalate-after-seconds <n>", "--json"}, Description: "Create a project under this runner's owner — the durable context a body of work is carried out from, as opposed to a task, which is one piece of that work. Use --acceptance-criteria-items for project outcomes; each item requires assertion text and a reader-facing verificationMethod. Nothing in Orbit evaluates them: migration 0229 removed the project acceptance judgment, so a criterion is a stated condition and no more. Inside a session it first puts a confirmation card in front of the user and waits for the answer: nothing is created if they decline. The project starts OPEN and holds no tasks; file them with `orbit task create --project-id <id>` afterwards. Inside a session the project is also bound to that session as its coordinator, and to the workspace it runs in, in the same write that creates it — so opening the coordinator later returns to this conversation rather than starting another; one session coordinates at most one project — record a second from the same conversation and the server opens THAT project its own coordinator in the same workspace and says so — and headless there is no session and so no such binding. --workspace-id says the coordinator belongs elsewhere: it OPENS the conversation there, since a project that names a coordination workspace has a coordinator, and it needs orchestration enabled because it names a workspace rather than inheriting one. The whole integration object — the line (where this project's finished tasks land, with the project branch and upstream as full refs), the merge check run on the combined tree before a landing, and the window an exception waits on the coordinator — is the account owner's at creation, so it is accepted at a terminal and refused for an agent session: a merge-check card names the project it changes and this one does not exist yet, and the line is decided at the first integration and locked from then on. A session sets the merge check afterwards with `orbit project update --merge-check-command`, which asks the owner first.", Mutates: true},
+	{Tool: "project_update", Argv: []string{"orbit", "project", "update"}, Usage: "orbit project update PROJECT_ID [options]", Arguments: []string{"[project-id] (required)", "--title <text>", "--goal <text> | --goal-file - | --clear-goal", "--acceptance-criteria-items <json array> | --acceptance-criteria-items-file - (structured whole replacement; text + verificationMethod required; only a tightening lands immediately, and [] drops every criterion, which is held)", "--instructions <text> | --instructions-file - | --clear-instructions", "--status <OPEN|DONE|CANCELLED>", "--integration-line <MAIN|PROJECT_BRANCH>", "--project-branch <ref>", "--upstream-ref <ref>", "--merge-check-command <text>", "--merge-check-timeout-seconds <n>", "--expected-config-revision <n>", "--json"}, Description: "Update a project you own. The integration settings are two decisions in one object. THE LINE — --integration-line, --project-branch, --upstream-ref — is where this project's finished tasks land (MAIN, or a project branch that reaches main later), and it is the account owner's to choose: accepted at a terminal, refused for an agent session. Unchosen, it is decided at the first integration (code tasks that depend on one another go through a project branch) and locked from then on. THE MERGE CHECK — --merge-check-command, --merge-check-timeout-seconds — is what runs on the combined tree before a landing, and inside a session it is yours to PROPOSE: this command first puts the project, the check as it stands and the check you are asking for on a confirmation card and waits for the account owner, and the change takes effect only if they approve it; nothing is written if they decline, and a second change is a second question, because an approval covers the exact command and timeout it named. At a terminal there is nobody to ask and the write goes straight through. Structured acceptance items are a whole-collection replacement, and only a tightening edit lands immediately — adding an item, reordering, or stepping an item's verificationMethod up the HUMAN → VERIFICATION → EXECUTABLE ladder. Any other edit (dropping an item, rewriting an item's text, or rewording verificationMethod any other way) is held as a proposal for the account owner to decide, reported as acceptanceCriteriaHold with the criteria left as they were; so [] drops every criterion rather than clearing the collection, and is held whenever there is one to drop. Every item requires text and verificationMethod; preserve ids from project_get to retain identity, omit id to add. Nothing evaluates them. At least one flag is required, and --expected-config-revision does not count as one. Only one --*-file flag per invocation, since they all read the same stdin.", Mutates: true},
 	{Tool: "project_delete", Argv: []string{"orbit", "project", "delete"}, Usage: "orbit project delete PROJECT_ID [--json]", Arguments: []string{"[project-id] (required)", "--json"}, Description: "Permanently delete an empty project in the account this runner belongs to. This cannot be undone. A project that still holds tasks is refused without deleting or detaching any of them, because a task's project records what that task is for; move those tasks to another project or delete them first.", Mutates: true},
 }
 
@@ -443,6 +494,9 @@ func cmdProjectCLI(args []string, in io.Reader, out io.Writer) error {
 		_, err := fmt.Fprint(out, h)
 		return err
 	}
+	if _, err := userModeGate("project " + action); err != nil {
+		return err
+	}
 	switch action {
 	case "get":
 		return cliProjectGet(args[1:], out)
@@ -466,6 +520,8 @@ func cmdProjectCLI(args []string, in io.Reader, out io.Writer) error {
 		return cliProjectRequestDone(args[1:], in, out)
 	case "merge-evidence":
 		return cliProjectMergeEvidence(args[1:], in, out)
+	case "skip-merge-check":
+		return cliProjectSkipMergeCheck(args[1:], out)
 	default:
 		return fmt.Errorf("project command %q has help but no dispatcher", action)
 	}
@@ -486,7 +542,7 @@ func cliProjectGet(args []string, out io.Writer) error {
 	if id == "" {
 		return fmt.Errorf("project id is required")
 	}
-	t, err := cliTransport()
+	t, err := cliProjectTransport()
 	if err != nil {
 		return err
 	}
@@ -517,7 +573,7 @@ func cliProjectCrossings(args []string, out io.Writer) error {
 	if *state != "" && !isHandoffState(*state) {
 		return fmt.Errorf("--state must be one of PENDING, APPROVED, DENIED, APPLIED")
 	}
-	t, err := cliTransport()
+	t, err := cliProjectTransport()
 	if err != nil {
 		return err
 	}
@@ -684,22 +740,107 @@ func cliProjectResolveBlocker(args []string, out io.Writer) error {
 	if strings.TrimSpace(*reason) == "" {
 		return fmt.Errorf("--reason is required: say why this blocker is no longer blocking")
 	}
-	t, err := cliTransport()
+	t, err := cliProjectTransport()
 	if err != nil {
 		return err
 	}
-	raw, declined, err := resolveBlockerWithApproval(
-		t,
-		strings.TrimSpace(os.Getenv("ORBIT_SESSION_ID")),
-		id,
-		strings.TrimSpace(*blockerID),
-		strings.TrimSpace(*reason),
-	)
+	var raw json.RawMessage
+	var declined string
+	if runner, ok := t.(*Transport); ok {
+		raw, declined, err = resolveBlockerWithApproval(
+			runner,
+			strings.TrimSpace(os.Getenv("ORBIT_SESSION_ID")),
+			id,
+			strings.TrimSpace(*blockerID),
+			strings.TrimSpace(*reason),
+		)
+	} else {
+		// As the person: they are the account owner the card would ask, so the write goes straight
+		// through, as it does headless.
+		raw, err = t.resolveProjectBlocker(id, strings.TrimSpace(*blockerID),
+			map[string]interface{}{"reason": strings.TrimSpace(*reason)})
+	}
 	if err != nil {
 		return fmt.Errorf("resolve blocker: %w", err)
 	}
 	if declined != "" {
 		return fmt.Errorf("resolve blocker: the human left this blocker open: %s", declined)
+	}
+	return writeCLIRawJSON(out, raw, *jsonOut)
+}
+
+// cliProjectSkipMergeCheck queues one landing with the project's merge check not run.
+//
+// The same two sides of one door the MCP tool has, and the same card through the same helper: an
+// agent that shells out instead of calling the tool meets the identical question, because a gate one
+// door wide is not a gate. Which side this is is decided by the identity, not by a flag: inside a
+// session (ORBIT_SESSION_ID) the CLI acts as that conversation and the owner must answer a card,
+// while as the person at a terminal (`orbit login`) there is nobody to ask and the write goes
+// straight through — the caller is the account owner whose yes the card would be.
+func cliProjectSkipMergeCheck(args []string, out io.Writer) error {
+	// Two ids, both peeled before the flags are parsed: `flag` stops at the first non-flag argument,
+	// so one left in front of them would silently swallow every option behind it.
+	id, rest := peelLeadingID(args)
+	taskID, rest := peelLeadingID(rest)
+	fs := newCLIFlagSet("orbit project skip-merge-check")
+	reason := fs.String("reason", "", "why this check should not hold up this landing")
+	jsonOut := fs.Bool("json", false, "emit compact JSON")
+	if err := fs.Parse(rest); err != nil {
+		return err
+	}
+	if err := rejectTrailing(fs); err != nil {
+		return err
+	}
+	if id == "" {
+		return fmt.Errorf("project id is required")
+	}
+	if taskID == "" {
+		return fmt.Errorf("task id is required: the DONE task whose failed landing should go on " +
+			"without the check (orbit project skip-merge-check PROJECT_ID TASK_ID --reason TEXT)")
+	}
+	if strings.TrimSpace(*reason) == "" {
+		return fmt.Errorf("--reason is required: say why this check should not hold up this landing. " +
+			"It is what the account owner decides on, and it stays on the generation it queues")
+	}
+	t, err := cliProjectTransport()
+	if err != nil {
+		return err
+	}
+	var raw json.RawMessage
+	if runner, ok := t.(*Transport); ok {
+		sessionID := strings.TrimSpace(os.Getenv("ORBIT_SESSION_ID"))
+		if sessionID == "" {
+			return fmt.Errorf("orbit project skip-merge-check is either the coordinating " +
+				"conversation's, with the account owner's card, or the owner's own at a terminal " +
+				"(`orbit login`), and this is neither: no session is running it and no login is " +
+				"saved. Run it from inside the session that coordinates the project, or log in as " +
+				"the account owner and run it again")
+		}
+		// The facts first, then the card: the owner reads what is being skipped, not the word "skip".
+		facts, err := skipMergeCheckFacts(runner, id, taskID, strings.TrimSpace(*reason))
+		if err != nil {
+			return fmt.Errorf("skip merge check: %w", err)
+		}
+		approvalID, declined, err := askForSkipMergeCheck(runner, sessionID, facts)
+		if err != nil {
+			return fmt.Errorf("skip merge check: %w", err)
+		}
+		if declined != "" {
+			return fmt.Errorf("skip merge check: the human did not approve skipping this check, and "+
+				"nothing was queued: %s", declined)
+		}
+		raw, err = runner.skipIntegrationMergeCheck(sessionID, id, taskID, strings.TrimSpace(*reason), approvalID)
+		if err != nil {
+			return fmt.Errorf("skip merge check: %w", err)
+		}
+	} else {
+		// As the person: they are the account owner the card would ask, so the write goes straight
+		// through, as it does headless, and the row records them as the one who approved it. No
+		// session to act as and no card to name — this identity is the answer to both.
+		raw, err = t.skipIntegrationMergeCheck("", id, taskID, strings.TrimSpace(*reason), "")
+		if err != nil {
+			return fmt.Errorf("skip merge check: %w", err)
+		}
 	}
 	return writeCLIRawJSON(out, raw, *jsonOut)
 }
@@ -716,7 +857,7 @@ func cliProjectRequestStart(args []string, out io.Writer) error {
 	fs := newCLIFlagSet("orbit project request-start")
 	line := fs.String("line", "", "where finished tasks land: PROJECT_BRANCH or MAIN")
 	branch := fs.String("project-branch-name", "", "with PROJECT_BRANCH: the branch as a full ref")
-	automatic := fs.Bool("automatic", false, "whether the coordinator runs the project for the owner")
+	automatic := fs.Bool("automatic", true, "whether the coordinator runs the project for the owner (default on)")
 	maxConcurrent := fs.Int("max-concurrent-tasks", 0, "how many of its tasks may run at once")
 	mergeCheck := fs.String("merge-check-command", "", "the check run on the combined tree")
 	why := fs.String("why", "", "one sentence, shown to the owner on the card")
@@ -729,10 +870,6 @@ func cliProjectRequestStart(args []string, out io.Writer) error {
 	}
 	if id == "" {
 		return fmt.Errorf("project id is required")
-	}
-	if !flagWasSet(fs, "automatic") {
-		return fmt.Errorf("--automatic is required: --automatic to suggest the coordinator runs the " +
-			"project for the owner, --automatic=false to suggest they decide")
 	}
 	sessionID := strings.TrimSpace(os.Getenv("ORBIT_SESSION_ID"))
 	if sessionID == "" {
@@ -875,7 +1012,7 @@ func cliProjectMergeEvidence(args []string, in io.Reader, out io.Writer) error {
 		}
 		body["detail"] = parsed
 	}
-	t, err := cliTransport()
+	t, err := cliProjectTransport()
 	if err != nil {
 		return err
 	}
@@ -1186,7 +1323,7 @@ func cliProjectCreate(args []string, in io.Reader, out io.Writer) error {
 	if len(integration) > 0 {
 		body["integration"] = integration
 	}
-	t, err := cliTransport()
+	t, err := cliProjectTransport()
 	if err != nil {
 		return err
 	}
@@ -1202,11 +1339,28 @@ func cliProjectCreate(args []string, in io.Reader, out io.Writer) error {
 	// session's grant. Headless it is empty, and naming a workspace is refused there rather than
 	// authorized by a machine credential alone.
 	sessionID := strings.TrimSpace(os.Getenv("ORBIT_SESSION_ID"))
-	// The same card project_create raises over MCP; headless there is no session and nobody to ask.
-	if declined, err := askBeforeCreate(t, sessionID, projectCreateApprovalToolName, body); err != nil {
-		return fmt.Errorf("create project: %w", err)
-	} else if declined != "" {
-		return fmt.Errorf("create project: the human rejected this project: %s", declined)
+	// The same card project_create raises over MCP; headless there is no session and nobody to ask,
+	// and as the person there is none either (`orbit task create` says why).
+	if runner, ok := t.(*Transport); ok {
+		// A session sets no integration setting here, and is told so BEFORE anybody is asked. The
+		// server refuses the object whole at creation — a merge-check card has to name the project
+		// it changes, and this request is what would create one — so a card filed for it would be an
+		// interruption whose only possible answer is "that was refused anyway". The MCP
+		// `project_create` tool takes no integration at all, so this door is the one that had to say
+		// it; create the project, then propose the check with `orbit project update`.
+		if sessionID != "" {
+			if _, carries := body["integration"]; carries {
+				return fmt.Errorf("create project: the integration settings are the account owner's " +
+					"to set at creation, and this is a session — a merge check is set afterwards with " +
+					"`orbit project update --merge-check-command`, which asks them first, and the line " +
+					"from the web app, the user API or a terminal")
+			}
+		}
+		if declined, err := askBeforeCreate(runner, sessionID, projectCreateApprovalToolName, body); err != nil {
+			return fmt.Errorf("create project: %w", err)
+		} else if declined != "" {
+			return fmt.Errorf("create project: the human rejected this project: %s", declined)
+		}
 	}
 	raw, err := t.createProject(
 		sessionID,
@@ -1343,15 +1497,39 @@ func cliProjectUpdate(args []string, in io.Reader, out io.Writer) error {
 		}
 		body["expectedConfigRevision"] = *expectedConfigRevision
 	}
-	t, err := cliTransport()
+	t, err := cliProjectTransport()
 	if err != nil {
 		return err
 	}
-	// No session: this is the headless owner-operated path, and the server reads the absence as
-	// the owner-authenticated channel rather than as an unattributed agent.
-	raw, err := t.updateProject("", id, body)
+	// The same card the MCP tool raises, through the same helper: an agent that shells out instead
+	// of calling the tool meets the identical question, because a gate one door wide is not a gate.
+	// What differs is only where the session comes from — the env var the runner injects, rather
+	// than the server object.
+	//
+	// The session rides with the WRITE only when there is a card to match it to, and that is not
+	// tidiness: `orbit project update` has never sent one — a revision is not a "where am I"
+	// question, and `project_cli_test.go` holds it that way. A merge check is the exception, and it
+	// is forced rather than chosen: the server matches the card the owner answered to the session
+	// that asks, so a write resting on a card has to say which session it is. Nothing else here is
+	// gated on who is asking, so nothing else needs it.
+	var raw json.RawMessage
+	var declined string
+	if runner, ok := t.(*Transport); ok {
+		sessionID := ""
+		if mergeCheckCardRequired(body) {
+			sessionID = strings.TrimSpace(os.Getenv("ORBIT_SESSION_ID"))
+		}
+		raw, declined, err = updateProjectWithApproval(runner, sessionID, id, body)
+	} else {
+		// As the person: they are the account owner the card would ask, so the write goes straight
+		// through, as it does headless.
+		raw, err = t.updateProject("", id, body)
+	}
 	if err != nil {
 		return fmt.Errorf("update project: %w", err)
+	}
+	if declined != "" {
+		return fmt.Errorf("update project: the owner did not approve this merge-check change: %s", declined)
 	}
 	return writeCLIRawJSON(out, raw, *jsonOut)
 }
@@ -1369,7 +1547,7 @@ func cliProjectDelete(args []string, out io.Writer) error {
 	if id == "" {
 		return fmt.Errorf("project id is required")
 	}
-	t, err := cliTransport()
+	t, err := cliProjectTransport()
 	if err != nil {
 		return err
 	}

@@ -126,14 +126,15 @@ struct ComposerView: View {
                 id: console.modelID,
                 name: console.isDraft ? "Runtime default" : console.modelID)]
         }
-        var models = AgentDefaults.models(for: console.provider, catalog: console.modelCatalog,
+        // `providerChoice`: on OpenCode with a configured key, that key's models (`OpenCodeKeys`).
+        var models = AgentDefaults.models(for: console.providerChoice, catalog: console.modelCatalog,
                                           configured: console.configuredProviders)
         // A Runtime may report a valid default that has not appeared in its catalog yet. Preserve
         // it as a selectable row so choosing another model does not make the original unreachable.
         if !models.contains(where: { $0.id == console.modelID }) {
             models.insert(ModelOption(
                 id: console.modelID,
-                name: AgentDefaults.friendlyName(console.modelID, for: console.provider,
+                name: AgentDefaults.friendlyName(console.modelID, for: console.providerChoice,
                                                   catalog: console.modelCatalog,
                                                   configured: console.configuredProviders)), at: 0)
         }
@@ -182,7 +183,9 @@ struct ComposerView: View {
     }
 
     private var placeholder: String {
-        console.replyContext?.placeholder ?? "Message…"
+        // An offered suggestion takes the placeholder's line (`PromptSuggestionLine`).
+        if offeredSuggestion != nil { return "" }
+        return console.replyContext?.placeholder ?? "Message…"
     }
 
     private var showsCompletedResumeNotice: Bool {
@@ -191,6 +194,36 @@ struct ComposerView: View {
             lifecycleState: session.effectiveLifecycleState,
             capabilities: session.capabilities
         )
+    }
+
+    /// The engine's guess at the next message, when the empty box offers it (`ComposerLogic`,
+    /// docs/prompt-suggestions-design.md §4): the transcript's own `promptSuggestion`, held to the
+    /// same authoritative record the Stop morph reads.
+    private var offeredSuggestion: String? {
+        guard !console.isDraft else { return nil }
+        let session = app.session(id: console.sessionID)
+        return ComposerLogic.offeredPromptSuggestion(
+            console.state.promptSuggestion,
+            session: session?.effectiveRunState,
+            // A message on its way is a turn in flight before the record or the stream says so: the
+            // suggestion it answered must not come back into the box it just left.
+            generating: (session?.isGenerating ?? false) || console.sending || console.awaitingReply,
+            stream: console.state.status,
+            hasText: !console.composerText.isEmpty,
+            hasAttachments: !console.pendingAttachments.isEmpty,
+            replying: console.replyContext != nil,
+            waitingOnReader: !console.state.pendingApprovals.isEmpty
+                || (session?.pendingApprovals ?? 0) > 0 || session?.waitingKind != nil,
+            sendable: console.sendBlockedMessage == nil && console.runnerOnline != false
+                && session?.effectiveLifecycleState == .open)
+    }
+
+    /// Into the box, and the box focused: a guess is where the message starts, not a message sent.
+    /// The person reads it, edits it if they like, and sends it themselves.
+    private func acceptSuggestion() {
+        guard let suggestion = offeredSuggestion else { return }
+        console.composerText = suggestion
+        requestFocus()
     }
 
     // Whether the composer box should draw its focused ring/shadow. macOS keys off the field's
@@ -262,6 +295,12 @@ struct ComposerView: View {
                 ComposerAttachmentsView(console: console)
 
                 inputField
+                    // The guess sits on the empty field's first line, where the placeholder would.
+                    .overlay(alignment: .topLeading) {
+                        if let suggestion = offeredSuggestion {
+                            PromptSuggestionLine(text: suggestion, accept: acceptSuggestion)
+                        }
+                    }
                     .onChange(of: console.slashToken) { _, new in
                         slashIndex = 0
                         if new == nil { console.slashScope = nil }
@@ -384,6 +423,13 @@ struct ComposerView: View {
             .onSubmit { onReturn() }
             .onKeyPress(.upArrow) { moveSlash(-1) }
             .onKeyPress(.downArrow) { moveSlash(1) }
+            // Tab takes the offered suggestion, as on the web; with none on offer it moves focus as
+            // it always has. The box is empty whenever one is offered, so no `/` menu is open.
+            .onKeyPress(keys: [.tab]) { press in
+                guard press.modifiers.isEmpty, offeredSuggestion != nil else { return .ignored }
+                acceptSuggestion()
+                return .handled
+            }
             .onKeyPress(.escape) {
                 if showSlash {
                     slashDismissed = console.slashToken
@@ -566,6 +612,17 @@ struct ComposerView: View {
         .layoutPriority(2)
     }
 
+    /// The model menu's title: the engine running this session, and — while a held pick stands on a
+    /// different engine — where the next turn goes (`SessionProviderChoices.engineTitle`, web
+    /// `engineTitleFor`). The held pick has already replaced `provider`, so the stored half comes
+    /// from `pendingResumeFrom`.
+    private var engineTitleLabel: String {
+        SessionProviderChoices.engineTitle(
+            provider: console.pendingResumeFrom ?? console.provider,
+            configured: console.configuredProviders,
+            nextProvider: console.pendingResumeProvider).label
+    }
+
     /// Provider, model and effort are one control, written the way the reference composer writes
     /// "model · effort": "Opus 5.5 Max" (web parity: `.composer-model-chip` and `modelMenuItems`).
     /// The menu lists the current provider's models, and puts the rarer choices — the provider and
@@ -576,6 +633,14 @@ struct ComposerView: View {
     /// menu does, whichever way the system opens it.
     private var modelMenu: some View {
         Menu {
+            // The menu's own title: the engine this session runs on (web parity:
+            // `.composer-engine-title`). A bare `Text` picks nothing, and the Section's own rule is
+            // what the web draws as the title's border — `→ Codex` appears only while a held pick
+            // will carry the next turn to another engine.
+            Section {
+                Text(engineTitleLabel)
+                    .lineLimit(1)
+            }
             // A task run on smart selection's pick opens on why it is this model, and on where to fix
             // the model for every run (model routing §9; web parity: the `smart-route` group).
             if let route = smartRoute {
@@ -611,7 +676,7 @@ struct ComposerView: View {
                         // (web parity): hiding it turns "not signed in on this machine" into
                         // "Orbit lost my provider". The running one is exempt — it is the row's
                         // own caption, and a parenthetical there would sit under every turn.
-                        let blocked = choice.unavailable != nil && choice.slug != console.provider
+                        let blocked = choice.unavailable != nil && choice.slug != console.providerChoice
                         // Each built-in engine's accounts under it (web parity): on the engine the
                         // session (or draft) is on, the ones it moves
                         // between; under another, the ones a switch onto that engine lands on.
@@ -624,25 +689,26 @@ struct ComposerView: View {
                         // that, so it is greyed out with its reason instead.
                         let fixable = blocked && choice.fixEngine != nil
                         let reason = choice.unavailable ?? ""
-                        let fix = fixable ? (["antigravity", "dsh", DshRuntime.connectFix].contains(choice.fixEngine ?? "") ? " →" : ", sign in →") : ""
+                        let fix = fixable ? SessionProviderChoices.fixSuffix(choice.fixEngine) : ""
                         // On iOS the engine names a section of its accounts instead of a row above
                         // them (`accountsUnderHeader`).
                         let headsSection = Self.accountsUnderHeader && listsAccounts
                         if !headsSection {
                             Button {
                                 // Picking a blocked row isn't a switch — it's a request for the
-                                // sign-in that would make it one, so go to that runner's Engines
-                                // section rather than doing nothing.
+                                // sign-in that would make it one, so go to that engine's page on the
+                                // runner rather than doing nothing.
                                 if fixable {
-                                    if let rid = console.runnerID, let url = console.webFixURL(engine: choice.fixEngine ?? "", runnerID: rid) { openURL(url) }
-                                    else if let rid = console.runnerID { app.route(to: .runner(rid)) }
+                                    let engine = choice.fixEngine ?? ""
+                                    if let url = console.webFixURL(engine: engine) { openURL(url) }
+                                    else if let rid = console.runnerID { app.openRunnerEngine(rid, engine: engine) }
                                 } else if !blocked {
                                     Task { await console.selectProvider(choice.slug) }
                                 }
                             } label: {
                                 menuItemLabel(
                                     blocked ? "\(choice.label) — \(reason)\(fix)" : [choice.label, choice.labelDetail].compactMap { $0 }.joined(separator: " · "),
-                                    selected: choice.slug == console.provider && !listsAccounts)
+                                    selected: choice.slug == console.providerChoice && !listsAccounts)
                             }
                             .disabled(blocked && !fixable)
                         }
@@ -657,9 +723,8 @@ struct ComposerView: View {
                 } label: {
                     menuSubmenuLabel(
                         "Provider",
-                        value: AgentDefaults.providerName(
-                            console.provider,
-                            configured: console.configuredProviders))
+                        value: console.providerSwitchChoices.first { $0.slug == console.providerChoice }?.label
+                            ?? AgentDefaults.providerName(console.provider, configured: console.configuredProviders))
                 }
                 Divider()
             }
@@ -672,7 +737,7 @@ struct ComposerView: View {
                         catalog: console.modelCatalog, configured: console.configuredProviders)
                     let resetEffort = nextEffort != console.effort
                     let clampedPermissionMode = console.selectModel(m.id)
-                    app.rememberDefaultModel(m.id, for: console.provider)
+                    app.rememberDefaultModel(m.id, for: console.providerChoice)
                     let permissionMode = clampedPermissionMode
                         ? console.permissionMode.rawValue
                         : nil
@@ -769,7 +834,7 @@ struct ComposerView: View {
         !console.providerCapabilitiesResolved && console.isDraft
             ? "Runtime default"
             : AgentDefaults.friendlyName(
-                console.modelID, for: console.provider,
+                console.modelID, for: console.providerChoice,
                 catalog: console.modelCatalog,
                 configured: console.configuredProviders)
     }
@@ -1250,6 +1315,55 @@ struct ComposerView: View {
     #endif
 }
 
+/// The engine's guess at the next message, drawn on the empty field's first line where the
+/// placeholder would be, with Use at its end (docs/prompt-suggestions-design.md §4.1). Only Use takes
+/// the touch: a tap anywhere else on the line still lands in the field, to type something else.
+private struct PromptSuggestionLine: View {
+    let text: String
+    let accept: () -> Void
+
+    var body: some View {
+        Text(text)
+            .font(.orbitControl)
+            .foregroundStyle(Self.placeholderColor)
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            // Room for Use, which hangs over the line's end instead of setting its height: the line
+            // keeps the field's own line height, so the words sit exactly where typed ones would.
+            .padding(.trailing, 64)
+            .allowsHitTesting(false)
+            .overlay(alignment: .trailing) {
+                Button(action: accept) {
+                    HStack(spacing: 5) {
+                        Text("Use")
+                        #if os(macOS)
+                        Text("⇥").foregroundStyle(.secondary)
+                        #endif
+                    }
+                    .font(.orbitLabel.weight(.semibold))
+                    .padding(.horizontal, 11)
+                    .frame(height: 26)
+                    .background(Color.accentColor.opacity(0.12), in: Capsule())
+                    .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Color.accentColor)
+                .accessibilityLabel("Use suggestion: \(text)")
+                .help("Use this suggestion")
+            }
+    }
+
+    /// The field's own placeholder colour, so the guess reads as the box's grey line and not as text.
+    private static var placeholderColor: Color {
+        #if os(iOS)
+        Color(uiColor: .placeholderText)
+        #else
+        Color(nsColor: .placeholderTextColor)
+        #endif
+    }
+}
+
 /// The staged attachments a message is about to carry: 48² thumbnails for images, name + size
 /// chips for other files. It sits at the top of the composer card, above the text it goes out with
 /// (web parity: `.composer-attachments` is the first row of `.composer-box`), so a screenshot you
@@ -1481,7 +1595,8 @@ private struct PlanUsageAccount {
 }
 
 /// Compact plan-usage pill for the composer footer. Limit items mirror Codex TUI,
-/// while percentages retain Orbit's percent-consumed semantics.
+/// while percentages retain Orbit's percent-consumed semantics — but for an Antigravity
+/// bucket's, which says what is left, as agy does, and says so ("4% left").
 private struct PlanUsageIndicator: View {
     let usage: PlanUsageSnapshot
     var account: PlanUsageAccount?
@@ -1501,21 +1616,26 @@ private struct PlanUsageIndicator: View {
     }
 
     var body: some View {
-        if let pct = usage.bindingRow()?.percent {
+        if let row = usage.bindingRow() {
+            let pct = row.percent
+            // An Antigravity bucket counts what is left, as agy does: said so, or 100% would read spent
+            // (web parity).
+            let left = row.remaining ? " left" : ""
             Button { showDetail.toggle() } label: {
                 HStack(spacing: 5) {
-                    UsageBar(percent: pct).frame(width: gaugeShowsNumber ? 26 : 20, height: 4)
+                    UsageBar(percent: pct, warn: row.remaining ? row.nearLimit : nil)
+                        .frame(width: gaugeShowsNumber ? 26 : 20, height: 4)
                     if gaugeShowsNumber {
                         // fixedSize keeps the pill at its ideal width: an unbounded Text is the most
                         // flexible view in the toolbar, so without this a tight row wraps "12%" onto
                         // two lines instead of truncating the (lineLimit-1) model name.
-                        Text("\(pct)%").foregroundStyle(.secondary).fixedSize()
+                        Text(verbatim: "\(pct)%\(left)").foregroundStyle(.secondary).fixedSize()
                     }
                 }
             }
             .buttonStyle(.plain)
-            .help("Plan usage \(pct)%")
-            .accessibilityLabel("Plan usage \(pct)%")
+            .help("Plan usage \(pct)%\(left)")
+            .accessibilityLabel("Plan usage \(pct)%\(left)")
             .modifier(PlanUsageDetailPresentation(isPresented: $showDetail, usage: usage,
                                                    account: account, resetConsole: resetConsole))
         }
@@ -1844,10 +1964,11 @@ private struct PlanUsageDetailRows: View {
                     HStack {
                         Text(row.label)
                         Spacer()
-                        Text("\(row.percent)%").foregroundStyle(.secondary)
+                        Text(verbatim: "\(row.percent)%\(row.remaining ? " remaining" : "")").foregroundStyle(.secondary)
                     }
                     .font(compact ? .caption : .subheadline)
-                    UsageBar(percent: row.percent).frame(height: compact ? 5 : 8)
+                    UsageBar(percent: row.percent, warn: row.remaining ? row.nearLimit : nil)
+                        .frame(height: compact ? 5 : 8)
                     if let reset = row.window.resetsAt.flatMap(formatReset) {
                         Text("Resets \(reset)")
                             .font(compact ? .caption2 : .caption)
@@ -1862,13 +1983,16 @@ private struct PlanUsageDetailRows: View {
 /// A horizontal utilization gauge that fills its frame; turns amber past 90%.
 private struct UsageBar: View {
     let percent: Int
+    /// Whether it is amber, for a reading that counts what is left (an Antigravity bucket), whose
+    /// percent says nothing of how near its limit it is. Nil judges `percent` as the share used.
+    var warn: Bool? = nil
     private var fraction: CGFloat { CGFloat(min(100, max(0, percent))) / 100 }
 
     var body: some View {
         GeometryReader { geo in
             ZStack(alignment: .leading) {
                 Capsule().fill(.quaternary)
-                Capsule().fill(percent >= 90 ? Color.orange : Color.accentColor)
+                Capsule().fill((warn ?? (percent >= 90)) ? Color.orange : Color.accentColor)
                     .frame(width: geo.size.width * fraction)
             }
         }

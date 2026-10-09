@@ -192,13 +192,13 @@ final class ProjectsWiringTests: XCTestCase {
         let agents = try slice(shell, from: "case .agents:", to: "case .projects:")
         XCTAssertTrue(agents.contains(
             "case .sessionProject(let address, asDestination: false): SessionProjectPage(address: address)\n"
-            + "                        case .sessionProject(let address, asDestination: true): SessionProjectPage(address: address)\n"),
+            + "                            case .sessionProject(let address, asDestination: true): SessionProjectPage(address: address)\n"),
                       "a list row's sessions page keeps the system back button and back-swipe")
         XCTAssertTrue(agents.contains(
-            "SessionProjectPage(address: address)\n                            .background { SwipeBackGestureToggle(enabled: !model.atDestinationRoot) }"),
+            "SessionProjectPage(address: address)\n                                .background { SwipeBackGestureToggle(enabled: !model.atDestinationRoot) }"),
                       "and the system back-swipe is off on the sessions page while it is on top")
         XCTAssertTrue(agents.contains(
-            ".background { SwipeBackGestureToggle(enabled: !model.atDestinationRoot) }\n                            .navigationBarBackButtonHidden()\n                            .drawerToggle(open: openDrawer)"),
+            ".background { SwipeBackGestureToggle(enabled: !model.atDestinationRoot) }\n                                .navigationBarBackButtonHidden()\n                                .drawerToggle(open: openDrawer)"),
                       "and it leads with the drawer's hamburger, as the session list does, not a back button")
         XCTAssertEqual(shell.components(separatedBy: "SwipeBackGestureToggle(enabled:").count - 1, 1,
                        "no other page turns the system back-swipe off")
@@ -245,7 +245,7 @@ final class ProjectsWiringTests: XCTestCase {
         let page = try slice(view, from: "private func page(", to: ".projectPageListStyle()")
         let order = ["openItemsAttention(", "overviewSection(", "coordinatorSection(", "runSettingsSection(",
                      "goalSection(", "graphSection(", "blockersSection(", "runQueueSection(", "criteriaSection(",
-                     "instructionsSection(", "tasksSection("]
+                     "instructionsSection(", "tasksSection(", "crossingsSection("]
         let positions = order.map { page.range(of: $0)?.lowerBound }
         XCTAssertFalse(positions.contains(nil), "the page lost one of \(order)")
         XCTAssertEqual(positions.compactMap { $0 }, positions.compactMap { $0 }.sorted(),
@@ -320,7 +320,7 @@ final class ProjectsWiringTests: XCTestCase {
         XCTAssertTrue(spend.contains("requestScroll(to: card.id)"))
 
         // Start… opens the same card, set by the default rule, saying nothing a coordinator said.
-        let sheet = try slice(view, from: "private struct OwnerStartProjectSheet: View {",
+        let sheet = try slice(view, from: "struct OwnerStartProjectSheet: View {",
                               to: "private struct MergeCheckEditor: View {")
         XCTAssertTrue(sheet.contains("StartProjectCard("))
         XCTAssertTrue(sheet.contains("askedAt: nil,"))
@@ -328,12 +328,18 @@ final class ProjectsWiringTests: XCTestCase {
         XCTAssertTrue(sheet.contains("StartProject.ownerRequest(settings: settings,"))
         XCTAssertTrue(sheet.contains("StartProject.body(request: request, draft: draft,"))
         XCTAssertTrue(sheet.contains("requestId: nil"))
+        XCTAssertTrue(sheet.contains("hasCoordinator: document.coordinatorSessionId != nil,"),
+                      "a project nobody coordinates yet is told a start with Automatic on opens one")
         XCTAssertFalse(sheet.contains("onChatAbout"), "there is no conversation to talk in over the page")
         let cards = code(try appSource("Views/ApprovalCards.swift"))
         let card = try slice(cards, from: "struct StartProjectCard: View {",
                              to: "private struct CriteriaChangeCardView: View")
-        XCTAssertTrue(card.contains("aside: asked ? StartProject.suggestedByCoordinator : nil)"))
-        XCTAssertTrue(card.contains("if asked {"), "Orbit checked the plan only where a ready check ran")
+        XCTAssertTrue(card.contains("Text(StartProject.howItRunsNote(asked: asked, suggestedOff: asked && !request.settings.automatic))"),
+                      "whose settings these are: the coordinator's suggestion, or the default rule's")
+        XCTAssertTrue(card.contains(": StartProject.nobodyAskedLine(hasCoordinator: hasCoordinator))"),
+                      "a card nobody asked for quotes nobody")
+        XCTAssertFalse(card.contains("checkedLine"),
+                       "and no card says Orbit checked the plan (the owner, 2026-10-07)")
         XCTAssertTrue(card.contains("if let onChatAbout { chatButton(onChatAbout) }"))
         let conversation = try slice(cards, from: "private struct StartProjectCardView: View {",
                                      to: "struct StartProjectCard: View {")
@@ -432,5 +438,69 @@ final class ProjectsWiringTests: XCTestCase {
         XCTAssertFalse(load.contains("async let"), "project detail reads must avoid async-let teardown")
         XCTAssertTrue(load.contains("let documentRead = Task"),
                       "project detail reads remain concurrent")
+    }
+
+    /// The Work overview's landing row opens the jobs it counts (docs/mocks/landing-jobs-sheet) on a
+    /// server that lists them, through the page's own sheet rather than one its clock would redraw,
+    /// and stays a row on an older server. A task opens over the page once the sheet is down, as the
+    /// page's rows open theirs, and a Retry goes through the page's store, which reads it again.
+    func testTheLandingRowOpensTheJobsInFlightOverTheProjectPage() throws {
+        let view = code(try appSource("Views/ProjectsView.swift"))
+        let row = try slice(view, from: "private func landingRow(_ store: ProjectDetailModel) -> some View {",
+                            to: "\n    }\n")
+        XCTAssertTrue(row.contains("if integration.inFlightJobs != nil {"))
+        XCTAssertTrue(row.contains("Button { pageSheet = .landingJobs } label: {"))
+        XCTAssertTrue(row.contains("} else {\n                        ProjectLandingRow(line: line)"),
+                      "an older server's row stays a row")
+        XCTAssertFalse(row.contains(".sheet("), "the row redraws every second; the sheet is the page's")
+        let kinds = try slice(view, from: "private enum ProjectPageSheet: String, Identifiable {", to: "\n}\n")
+        XCTAssertTrue(kinds.contains("case landingJobs"))
+        let sheet = try slice(view, from: "case .landingJobs:", to: "\n                }\n")
+        for part in ["ProjectLandingJobsSheet(",
+                     "ProjectPage.landingJobLines($0, now: now, updatedAt: store.integrationReadAt,",
+                     "refreshFailed: store.integrationReadFailed)",
+                     "retry: { jobID in try await store.retryIntegrationJob(jobID) },",
+                     "openTask(taskID)"] {
+            XCTAssertTrue(sheet.contains(part), "the jobs sheet keeps `\(part)`")
+        }
+        let close = try XCTUnwrap(sheet.range(of: "pageSheet = nil"))
+        let open = try XCTUnwrap(sheet.range(of: "openTask(taskID)"))
+        XCTAssertLessThan(close.lowerBound, open.lowerBound, "the sheet goes down before the task opens")
+
+        let model = code(try appSource("ProjectsModel.swift"))
+        let retry = try slice(model, from: "func retryIntegrationJob(_ jobID: String) async throws {", to: "\n    }")
+        let write = try XCTUnwrap(retry.range(of: "integration = try await api.retryIntegrationJob(projectID, jobID: jobID)"))
+        let reload = try XCTUnwrap(retry.range(of: "await load()"))
+        XCTAssertLessThan(write.lowerBound, reload.lowerBound, "the page reads again once the Retry went through")
+        XCTAssertFalse(retry.contains("busy"), "a Retry is the job row's press, not one that stops the page's")
+
+        // The sheet: the row itself per job, its own one-second clock, Retry where the server
+        // offers it, and a refusal said under its row.
+        let jobs = code(try appSource("Views/ProjectLandingJobsSheet.swift"))
+        for part in ["TimelineView(.periodic(from: .now, by: 1)) { context in", "let rows = lines(context.date)",
+                     "ProjectPage.landingJobsTitle(", ".keyboardShortcut(.cancelAction)",
+                     "ProjectLandingRow(line: row.line)", "if let taskID = row.taskId {",
+                     "Button { openTask(taskID) } label: {", "if row.retryable {",
+                     "Text(ProjectPage.landingRetry)", ".font(.orbitLabel.weight(.semibold))",
+                     ".buttonStyle(.bordered)", ".buttonBorderShape(.capsule)", ".controlSize(.small)",
+                     ".disabled(retrying.contains(row.jobId))", "PlatformHaptics.tap()",
+                     "var reason = APIClient.failureReason(error)",
+                     "while reason.hasSuffix(\".\") { reason.removeLast() }",
+                     "failures[jobID] = \"\\(ProjectPage.landingRetryFailed) — \\(reason).\"",
+                     ".foregroundStyle(.red)"] {
+            XCTAssertTrue(jobs.contains(part), "the jobs sheet keeps `\(part)`")
+        }
+        let shared = try XCTUnwrap(jobs.range(of: "struct ProjectLandingJobsSheet: View {"))
+        let iOS = try XCTUnwrap(jobs.range(of: "#if os(iOS)\n        .presentationDetents([.medium, .large])"))
+        XCTAssertLessThan(shared.lowerBound, iOS.lowerBound, "the sheet is the Mac's project page's too")
+        XCTAssertTrue(jobs.contains("#else\n        .frame(minWidth: 420, idealWidth: 520, minHeight: 420, idealHeight: 560)"))
+
+        // A job the server judged timed out trades the ring for the warning mark, which never spins.
+        let landingRow = code(try appSource("Views/ProjectLandingRow.swift"))
+        for part in ["let ink = line.timedOut ? ProjectPalette.warningInk", "if line.timedOut {",
+                     "Image(systemName: \"exclamationmark.triangle.fill\")", "LandingRing(running: line.running)",
+                     ".foregroundStyle(line.timedOut ? ink : Color.secondary)"] {
+            XCTAssertTrue(landingRow.contains(part), "the landing row keeps `\(part)`")
+        }
     }
 }

@@ -75,7 +75,8 @@ final class SharePanelWiringTests: XCTestCase {
     }
 
     private static let appFiles = ["Views/Console/ConsoleView.swift", "Views/TasksView.swift",
-                                   "Views/ProjectsView.swift", "Views/AgentsView.swift", "Views/ShareSheet.swift"]
+                                   "Views/ProjectsView.swift", "Views/AgentsView.swift", "Views/WikiScreens.swift",
+                                   "Views/ShareSheet.swift"]
 
     // MARK: one panel
 
@@ -92,6 +93,9 @@ final class SharePanelWiringTests: XCTestCase {
              "ShareSheet(kind: .task, rootID: taskID, baseURL: baseURL, tokenStore: model.tokenStore)", []),
             ("Views/ProjectsView.swift", ".sheet(isPresented: $sharing)",
              "ShareSheet(kind: .project, rootID: projectID, baseURL: baseURL, tokenStore: model.tokenStore)", []),
+            // A wiki's opens from its home's bar (share-links §10).
+            ("Views/WikiScreens.swift", ".sheet(isPresented: $sharing)",
+             "ShareSheet(kind: .wiki, rootID: space.id, baseURL: baseURL, tokenStore: model.tokenStore)", []),
         ]
         var built = 0
         for file in Self.appFiles {
@@ -118,7 +122,7 @@ final class SharePanelWiringTests: XCTestCase {
         let sheet = code(try appSource("Views/ShareSheet.swift"))
         for part in ["struct ShareSheet: View", "private var accessSection: some View",
                      "private func linkSection(_ url: URL) -> some View", "private var includesSection: some View",
-                     "private var updatesSection: some View", ".confirmationDialog(SharePanelCopy.turnOffTitle",
+                     "private var updatesSection: some View", ".orbitConfirmation(SharePanelCopy.turnOffTitle",
                      "api.shareLink(kind, rootID)", "api.putShareLink(kind, rootID, request)",
                      "api.turnOffShareLink(kind, rootID)"] {
             XCTAssertEqual(try branches(of: part, in: sheet), [], "`\(part)` is on both platforms")
@@ -177,7 +181,7 @@ final class SharePanelWiringTests: XCTestCase {
                       "choosing Only you asks; it does not turn the link off")
         XCTAssertFalse(choose.contains("turnOff()"))
         XCTAssertEqual(sheet.components(separatedBy: "await turnOff()").count - 1, 1, "one way to turn it off")
-        let question = try slice(sheet, from: ".confirmationDialog(SharePanelCopy.turnOffTitle",
+        let question = try slice(sheet, from: ".orbitConfirmation(SharePanelCopy.turnOffTitle",
                                  to: "Text(SharePanelCopy.turnOffDetail)")
         XCTAssertTrue(question.contains("Button(SharePanelCopy.turnOff, role: .destructive) { Task { await turnOff() } }"),
                       "and that way is the question's yes")
@@ -192,7 +196,7 @@ final class SharePanelWiringTests: XCTestCase {
     func testThePanelSaysNoWordsOfItsOwn() throws {
         let sheet = code(try appSource("Views/ShareSheet.swift"))
         for literal in ["Text(\"", "Button(\"", "Label(\"", "Picker(\"", "Toggle(\"", ".navigationTitle(\"",
-                        ".confirmationDialog(\""] {
+                        ".orbitConfirmation(\"", ".confirmationDialog(\""] {
             XCTAssertFalse(sheet.contains(literal), "ShareSheet spells a word itself: \(literal)…")
         }
     }

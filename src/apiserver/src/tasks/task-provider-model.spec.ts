@@ -196,6 +196,8 @@ test('a provider the caller cannot dispatch with is rejected on the write, not a
     // Every run door opens its receipt (0137) before anything else.
     ...fakeReceiptStore(),
     task: { update: async () => ({ id: TASK_ID }) },
+    // A member: their own rows only (usableProviderScope).
+    user: { findUnique: async () => ({ role: 'MEMBER' }) },
     // No configured row matches, and the slug isn't a built-in engine either.
     modelProvider: { findFirst: async () => null },
     // Nor one of the caller's account pools.
@@ -221,6 +223,7 @@ test("one of the caller's own account pools is a provider a task may pin", async
         return { id: TASK_ID };
       },
     },
+    user: { findUnique: async () => ({ role: 'MEMBER' }) },
     // A pool has no provider row of its own.
     modelProvider: { findFirst: async () => null },
     providerPool: {

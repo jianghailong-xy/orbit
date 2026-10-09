@@ -843,11 +843,13 @@ func TestRunOpenCodeTurnUsesStdinAndNormalizesOutput(t *testing.T) {
 	argsPath, stdinPath, pwdPath := filepath.Join(dir, "args"), filepath.Join(dir, "stdin"), filepath.Join(dir, "pwd")
 	projectConfigPath := filepath.Join(dir, "project-config-disabled")
 	sharePath := filepath.Join(dir, "share-disabled")
+	configDirPath := filepath.Join(dir, "config-dir")
 	script := `printf '%s\n' "$@" > "$CAPTURE_ARGS"
 cat > "$CAPTURE_STDIN"
 pwd > "$CAPTURE_PWD"
 printf '%s' "$OPENCODE_DISABLE_PROJECT_CONFIG" > "$CAPTURE_PROJECT_CONFIG"
 printf '%s:%s' "$OPENCODE_DISABLE_SHARE" "$OPENCODE_AUTO_SHARE" > "$CAPTURE_SHARE"
+printf '%s' "$XDG_CONFIG_HOME" > "$CAPTURE_CONFIG_DIR"
 printf '%s\n' '{"type":"step_start","timestamp":1,"sessionID":"ses_fake","part":{"type":"step-start"}}'
 printf '%s\n' '{"type":"text","timestamp":2,"sessionID":"ses_fake","part":{"type":"text","text":"hello"}}'
 printf '%s\n' '{"type":"step_finish","timestamp":3,"sessionID":"ses_fake","part":{"type":"step-finish","cost":0,"tokens":{"total":2,"input":1,"output":1,"reasoning":0,"cache":{"read":0,"write":0}}}}'`
@@ -856,6 +858,7 @@ printf '%s\n' '{"type":"step_finish","timestamp":3,"sessionID":"ses_fake","part"
 	job := &ClaimedSession{SessionID: "orbit-1", Title: "Example", Agent: AgentExecConfig{Env: map[string]string{
 		"CAPTURE_ARGS": argsPath, "CAPTURE_STDIN": stdinPath, "CAPTURE_PWD": pwdPath,
 		"CAPTURE_PROJECT_CONFIG": projectConfigPath, "CAPTURE_SHARE": sharePath,
+		"CAPTURE_CONFIG_DIR":     configDirPath,
 		"OPENCODE_DISABLE_SHARE": "0", "OPENCODE_AUTO_SHARE": "1",
 	}}}
 	var events []emittedEvent
@@ -880,6 +883,12 @@ printf '%s\n' '{"type":"step_finish","timestamp":3,"sessionID":"ses_fake","part"
 	share, _ := os.ReadFile(sharePath)
 	if string(share) != "1:0" {
 		t.Fatalf("OpenCode share env = %q, want 1:0", share)
+	}
+	// The machine's global opencode.json(c) must not reach a session: its configuration
+	// directory is the session's own.
+	configDir, _ := os.ReadFile(configDirPath)
+	if got := strings.TrimSpace(string(configDir)); got != openCodeConfigDir(dir) {
+		t.Fatalf("XDG_CONFIG_HOME = %q, want the session's own %q", got, openCodeConfigDir(dir))
 	}
 	args, _ := os.ReadFile(argsPath)
 	if !strings.Contains(string(args), "--dir="+dir) || !strings.Contains(string(args), "--title=Example") {

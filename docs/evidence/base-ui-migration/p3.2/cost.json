@@ -1,0 +1,220 @@
+{
+ "base": "da13423d3",
+ "head": "abb4c29e7",
+ "kinds": {
+  "business-files": {
+   "added": 242,
+   "removed": 194,
+   "files": {
+    "src/web/src/components/AccountSelect.tsx": [
+     8,
+     6
+    ],
+    "src/web/src/components/ShareModal.tsx": [
+     81,
+     60
+    ],
+    "src/web/src/components/TaskDetailPanel.tsx": [
+     121,
+     111
+    ],
+    "src/web/src/components/TaskInputs.tsx": [
+     32,
+     17
+    ]
+   }
+  },
+  "unit-tests": {
+   "added": 157,
+   "removed": 85,
+   "files": {
+    "src/web/src/components/ProjectShareControls.test.tsx": [
+     8,
+     5
+    ],
+    "src/web/src/components/ShareModal.test.tsx": [
+     38,
+     22
+    ],
+    "src/web/src/components/TaskDetailPanel.modelRouting.test.tsx": [
+     53,
+     20
+    ],
+    "src/web/src/components/TaskDetailPanel.share.test.tsx": [
+     11,
+     9
+    ],
+    "src/web/src/components/TaskDetailPanel.test.tsx": [
+     4,
+     4
+    ],
+    "src/web/src/components/WorkspaceView.shareEntry.test.tsx": [
+     4,
+     3
+    ],
+    "src/web/src/pages/RunnerDetailPage.codexAccount.test.tsx": [
+     27,
+     16
+    ],
+    "src/web/src/pages/SharedLinksPage.test.tsx": [
+     12,
+     6
+    ]
+   }
+  },
+  "new-components": {
+   "added": 240,
+   "removed": 0,
+   "files": {
+    "src/web/src/components/ui/Alert.css": [
+     14,
+     0
+    ],
+    "src/web/src/components/ui/Alert.tsx": [
+     24,
+     0
+    ],
+    "src/web/src/components/ui/Avatar.css": [
+     8,
+     0
+    ],
+    "src/web/src/components/ui/Avatar.tsx": [
+     16,
+     0
+    ],
+    "src/web/src/components/ui/Popconfirm.tsx": [
+     74,
+     0
+    ],
+    "src/web/src/components/ui/Segmented.css": [
+     35,
+     0
+    ],
+    "src/web/src/components/ui/Segmented.tsx": [
+     69,
+     0
+    ]
+   }
+  },
+  "shared-component-changes": {
+   "added": 249,
+   "removed": 63,
+   "files": {
+    "src/web/src/components/ui/ChoiceControls.css": [
+     2,
+     1
+    ],
+    "src/web/src/components/ui/Combobox.tsx": [
+     28,
+     13
+    ],
+    "src/web/src/components/ui/Floating.css": [
+     15,
+     1
+    ],
+    "src/web/src/components/ui/Floating.ts": [
+     111,
+     2
+    ],
+    "src/web/src/components/ui/Menu.tsx": [
+     5,
+     4
+    ],
+    "src/web/src/components/ui/MultiSelect.tsx": [
+     4,
+     3
+    ],
+    "src/web/src/components/ui/Popover.tsx": [
+     5,
+     3
+    ],
+    "src/web/src/components/ui/README.md": [
+     13,
+     0
+    ],
+    "src/web/src/components/ui/Select.css": [
+     36,
+     24
+    ],
+    "src/web/src/components/ui/Select.tsx": [
+     12,
+     8
+    ],
+    "src/web/src/components/ui/Tooltip.tsx": [
+     6,
+     4
+    ],
+    "src/web/src/components/ui/foundation.css": [
+     12,
+     0
+    ]
+   }
+  },
+  "shared-component-fixtures": {
+   "added": 9,
+   "removed": 1,
+   "files": {
+    "src/web/src/components/ui/__fixtures__/ChoicesFixture.css": [
+     3,
+     1
+    ],
+    "src/web/src/components/ui/__fixtures__/ComposerFixture.css": [
+     6,
+     0
+    ]
+   }
+  },
+  "business-stylesheet": {
+   "added": 52,
+   "removed": 22,
+   "files": {
+    "src/web/src/index.css": [
+     52,
+     22
+    ]
+   }
+  },
+  "browser-comparison-tooling": {
+   "added": 807,
+   "removed": 8,
+   "files": {
+    "src/web/ui-migration/known-failures.browser.mjs": [
+     6,
+     5
+    ],
+    "src/web/ui-migration/page-scenarios.mjs": [
+     2,
+     2
+    ],
+    "src/web/ui-migration/pilot-fixtures.mjs": [
+     204,
+     0
+    ],
+    "src/web/ui-migration/pilot-performance.browser.mjs": [
+     147,
+     0
+    ],
+    "src/web/ui-migration/pilot.browser.mjs": [
+     411,
+     0
+    ],
+    "src/web/ui-migration/pilot.config.mjs": [
+     21,
+     0
+    ],
+    "src/web/ui-migration/playwright.config.mjs": [
+     1,
+     1
+    ],
+    "src/web/ui-migration/port.config.mjs": [
+     15,
+     0
+    ]
+   }
+  }
+ },
+ "indexCssAntSelectorMentions": {
+  "base": 188,
+  "head": 170
+ }
+}

@@ -160,4 +160,52 @@ final class SessionLifecycleAPIClientTests: XCTestCase {
             "/api/sessions?view=archived",
         ])
     }
+
+    /// The workspace list's Completed and Trash tabs and the Move sheet ask with no project. An
+    /// empty scope is an answer for them too: asked once, not again under the legacy spelling.
+    func testAnEmptyCompletedOrTrashListIsAnAnswerAskedOnce() async throws {
+        for view in [SessionView.completed, .trash] {
+            let recorder = RequestPathRecorder()
+            SessionLifecycleURLProtocol.handler = { request in
+                recorder.append(request)
+                return (200, Data("[]".utf8))
+            }
+
+            let sessions = try await client().listSessions(view: view)
+
+            XCTAssertTrue(sessions.isEmpty, "\(view)")
+            XCTAssertEqual(recorder.paths, ["/api/sessions?view=\(view.queryValue)"], "\(view)")
+        }
+    }
+
+    /// The legacy spelling is asked only of a server that turned the canonical one down — 400, 404
+    /// or 422 — or answered it with another scope's rows (above). Any other failure is the answer.
+    func testOnlyARejectedViewIsAskedAgainUnderTheLegacySpelling() async throws {
+        for status in [400, 404, 422] {
+            let recorder = RequestPathRecorder()
+            SessionLifecycleURLProtocol.handler = { request in
+                recorder.append(request)
+                if request.url?.query == "view=trash" { return (status, Data()) }
+                return (200, Data(#"[{"id":"gone","status":"SUCCEEDED","deletedAt":"2026-08-01T00:00:00Z"}]"#.utf8))
+            }
+
+            let sessions = try await client().listSessions(view: .trash)
+
+            XCTAssertEqual(sessions.map(\.id), ["gone"], "\(status)")
+            XCTAssertEqual(recorder.paths, ["/api/sessions?view=trash", "/api/sessions?view=deleted"], "\(status)")
+        }
+
+        let recorder = RequestPathRecorder()
+        SessionLifecycleURLProtocol.handler = { request in
+            recorder.append(request)
+            return (500, Data())
+        }
+        do {
+            _ = try await client().listSessions(view: .completed)
+            XCTFail("a server error is the answer, not a reason to ask again")
+        } catch APIError.http(let status, _) {
+            XCTAssertEqual(status, 500)
+        }
+        XCTAssertEqual(recorder.paths, ["/api/sessions?view=completed"])
+    }
 }

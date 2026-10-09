@@ -6,8 +6,11 @@ import { PublicIdPipe } from '../common/public-id';
 import { PrismaService } from '../prisma/prisma.service';
 import { WikiProposeDto, WikiVerificationReportDto } from '../wiki/dto';
 import { registerWikiNote, wikiImportPrincipal, WikiNoteDto } from '../wiki/wiki-import';
+import { createWikiImportJob, readWikiImportJob, wikiImportExecutor, WikiImportJobDto } from '../wiki/wiki-import-jobs';
+import { currentWikiExecutorSwitch, wikiExecutorServes } from '../wiki/wiki-executor-switch';
 import { flagParam, listParam, WikiRetrieval } from '../wiki/wiki-retrieval';
 import { WikiRolloutGuard } from '../wiki/wiki-rollout';
+import { enqueueWikiVerifyJob } from '../wiki/wiki-verify-jobs';
 import { answerFor, answerForVerifications, WikiService, WikiRefusalError, type WikiPrincipal } from '../wiki/wiki.service';
 import { CurrentRunner } from './current-runner.decorator';
 import { RunnerAuthGuard } from './runner-auth.guard';
@@ -138,10 +141,58 @@ export class RunnerWikiController {
     @Query('limit') limit?: string,
   ) {
     const principal = await this.proposer(runner, callingSessionId);
+    // THE SERVER'S OWN VERIFICATION (contract `reviewModes.verification.servedBy`, P3): where the
+    // executor switch says the server runs for this account, the ops this session proposed are verified
+    // by the server's worker (`jobs.kindRuns.verify`), and this list is EMPTY — `servedBy` says who
+    // verifies. So a runner's verifier asks a model of the session's provider about nothing, which is
+    // what the mode exists for (`jobs.executor.rules`); the CLI and the runner that ship next wait for
+    // the verdict instead, and one that predates this reads the empty list and stops.
+    // A maintenance run of the space is exempt twice over: it is not this account's pipeline to move
+    // until P8, and it verifies its own ops in its own process (`reviewModes.verification.cli`).
+    if (await this.wiki.serverVerifiesOps(principal, id)) {
+      const space = await this.wiki.requireSpace(runner.ownerId, id);
+      return {
+        spaceId: space.id, mode: space.settings.reviewMode, items: [], next: null, servedBy: 'server',
+        // How many of the session's ops are waiting, so a caller that waits for the verdict — the command
+        // the next runner release ships — knows what it is waiting for and is done when it reaches zero.
+        waiting: await this.wiki.countWaitingVerifications(principal, space.id),
+      };
+    }
     return this.wiki.listVerifications(principal, id, {
       after: after?.trim() || null,
       limit: limit === undefined ? undefined : Number(limit),
     });
+  }
+
+  /**
+   * Ask the server to verify the ops this session proposed, and answer which job is doing it (contract
+   * `reviewModes.verification.routes.request`, P3): what `orbit wiki verify` calls when the list answered
+   * `servedBy: "server"` — the command waits for the verdict rather than asking a model itself
+   * (`agentSurface.verify.serverExecution`).
+   *
+   * ONE JOB PER SESSION AND SPACE, the same identity a submission's own trigger makes, so asking twice
+   * while one is queued is one job; and where the server does not serve this account — the default
+   * `runner` mode, an account no canary list names — nothing is queued and the answer says `runner`, so
+   * a caller that raced a switch change falls back to being its own verifier.
+   */
+  @Post('spaces/:id/verifications/request')
+  @HttpCode(HttpStatus.OK)
+  async requestVerification(
+    @CurrentRunner() runner: Runner,
+    @Headers('x-orbit-session-id') callingSessionId: string | undefined,
+    @Param('id', PublicIdPipe) id: string,
+  ) {
+    const principal = await this.proposer(runner, callingSessionId);
+    // The space is the caller's own, first: another owner's is the same 404 as one that does not exist, and
+    // nothing of it is written (the job's foreign key names both the space and the account).
+    const space = await this.wiki.requireSpace(runner.ownerId, id);
+    if (principal.sessionId === null || !(await this.wiki.serverVerifiesOps(principal, space.id))) {
+      return { spaceId: space.id, servedBy: 'runner', jobId: null };
+    }
+    const jobId = await enqueueWikiVerifyJob(this.prisma, {
+      ownerId: runner.ownerId, spaceId: space.id, sessionId: principal.sessionId,
+    });
+    return { spaceId: space.id, servedBy: 'server', jobId };
   }
 
   /**
@@ -159,6 +210,21 @@ export class RunnerWikiController {
     @Body() dto: WikiVerificationReportDto,
   ) {
     const principal = await this.proposer(runner, callingSessionId);
+    // NO VERDICTS FOR WHAT THE SERVER VERIFIES (`WIKI_SERVER_EXECUTES`, contract
+    // `reviewModes.verification.servedBy`): this door accepts no verdicts for an account the server runs
+    // for. The list above is empty for such a session, so a runner that reads it has nothing to report;
+    // one that reports anyway — a stale client, a hand-made call — is answered the refusal rather than
+    // racing the server's own job for the op, and its verdict would be the session's provider's, which is
+    // what the mode exists to stop spending. A maintenance run of the space and the default runner mode
+    // are untouched.
+    if (await this.wiki.serverVerifiesOps(principal, id)) {
+      throw new WikiRefusalError({
+        code: 'WIKI_SERVER_EXECUTES',
+        message: 'this space\'s verification is run by the server for this account (ORBIT_WIKI_EXECUTOR), '
+          + 'so no verdict is accepted here: the verdicts come from the server\'s own job, and the verification '
+          + 'list answers empty for this session',
+      });
+    }
     return answerForVerifications(await this.wiki.recordVerifications(principal, id, dto.verdicts));
   }
 
@@ -166,6 +232,11 @@ export class RunnerWikiController {
    * `orbit wiki import`, first step (contract `import.note`): one file registered as the `note` its
    * entries will cite — redacted before it is hashed or kept, and the note the space already holds when
    * the text is one it has. The answer carries the stored text, which is what the importer's model reads.
+   *
+   * WHEN THE SERVER READS (contract `import.server`), the text is the server's to hand to its own model and
+   * no session's: a runner that says the server reads it (`readBy: server`) is answered without it, and one
+   * that does not — an `orbit wiki import` that predates the server's import, and would read the text with
+   * the session's own provider — is refused WIKI_SERVER_EXECUTES before anything is registered.
    */
   @Post('spaces/:id/notes')
   @HttpCode(HttpStatus.OK)
@@ -176,7 +247,16 @@ export class RunnerWikiController {
     @Body() dto: WikiNoteDto,
   ) {
     await this.importer(runner, callingSessionId);
-    return registerWikiNote(this.prisma, this.wiki, runner.ownerId, id, dto);
+    if (!wikiExecutorServes(currentWikiExecutorSwitch(), runner.ownerId)) {
+      return registerWikiNote(this.prisma, this.wiki, runner.ownerId, id, dto);
+    }
+    if (dto.readBy !== 'server') {
+      throw serverExecutes('this account\'s wiki import runs on the Orbit server (ORBIT_WIKI_EXECUTOR): the server reads '
+        + 'each note with its System model, and this orbit wiki import predates that — it would read the note with the '
+        + 'session\'s own model. Nothing was registered or read: upgrade the runner, then run the import again.');
+    }
+    const { text: _text, ...registered } = await registerWikiNote(this.prisma, this.wiki, runner.ownerId, id, dto);
+    return registered;
   }
 
   /**
@@ -193,7 +273,63 @@ export class RunnerWikiController {
     @Body() dto: WikiProposeDto,
   ) {
     const principal = await this.importer(runner, callingSessionId);
+    if (wikiExecutorServes(currentWikiExecutorSwitch(), runner.ownerId)) {
+      // What a session's own model found is not what the server's import proposes (contract `import.server`).
+      throw serverExecutes('this account\'s wiki import runs on the Orbit server (ORBIT_WIKI_EXECUTOR): its import job '
+        + 'proposes what the System model found, and the door takes no entries a session\'s own model wrote. Nothing '
+        + 'was proposed: upgrade the runner, then run the import again.');
+    }
     return answerFor(await this.wiki.submitChangeset(principal, id, dto));
+  }
+
+  /**
+   * `orbit wiki import`, before it reads anything (contract `import.server.executor`): which path this space's
+   * import takes — the server's import job, when the executor switch gives the account to the server, or the
+   * session's own model as it always has — and the System model the server would read with.
+   */
+  @Get('spaces/:id/import')
+  async importExecutor(
+    @CurrentRunner() runner: Runner,
+    @Headers('x-orbit-session-id') callingSessionId: string | undefined,
+    @Param('id', PublicIdPipe) id: string,
+  ) {
+    await this.importer(runner, callingSessionId);
+    await this.wiki.requireSpace(runner.ownerId, id);
+    return wikiImportExecutor(this.prisma, runner.ownerId);
+  }
+
+  /**
+   * `orbit wiki import` on the server (contract `import.server.create`): the notes the command registered, as
+   * one import job of the space, recorded against the calling session. The command names the job's id, so the
+   * same request sent again after a lost answer is answered with the job it already made.
+   */
+  @Post('spaces/:id/import-jobs')
+  @HttpCode(HttpStatus.OK)
+  async createImportJob(
+    @CurrentRunner() runner: Runner,
+    @Headers('x-orbit-session-id') callingSessionId: string | undefined,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: WikiImportJobDto,
+  ) {
+    const principal = await this.importer(runner, callingSessionId);
+    return createWikiImportJob(this.prisma, this.wiki, {
+      ownerId: runner.ownerId,
+      spaceId: id,
+      sessionId: principal.sessionId as string,
+      body: dto,
+    });
+  }
+
+  /** The import job the command waits on (contract `import.server.read`): where it is, and its report. */
+  @Get('spaces/:id/import-jobs/:jobId')
+  async readImportJob(
+    @CurrentRunner() runner: Runner,
+    @Headers('x-orbit-session-id') callingSessionId: string | undefined,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('jobId', PublicIdPipe) jobId: string,
+  ) {
+    await this.importer(runner, callingSessionId);
+    return readWikiImportJob(this.prisma, { ownerId: runner.ownerId, spaceId: id, jobId });
   }
 
   /** One entry, as the calling session's space shares it. */
@@ -297,4 +433,9 @@ export class RunnerWikiController {
       });
     }
   }
+}
+
+/** The refusal a runner door route answers when the account's pipeline is the server's (contract `refusals`). */
+function serverExecutes(message: string): WikiRefusalError {
+  return new WikiRefusalError({ code: 'WIKI_SERVER_EXECUTES', message });
 }

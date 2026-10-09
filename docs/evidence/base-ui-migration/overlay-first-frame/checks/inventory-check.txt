@@ -1,0 +1,43 @@
+HEAD 31b737924e91c288a6ad5ee2b814d5effbfce7ce, record scan a663d19ca9b77a3736a472eddf0da5cc697078ed, import introduced by f24f01f88a0e36d1fab6ff2cf845f7e2c6e7f778
+$ git diff --quiet a663d19ca9b77a3736a472eddf0da5cc697078ed HEAD -- src/web/src src/web/package.json package-lock.json
+exit 0
+scan audit 458637178da6d4ce374b6f5e6e46aeb9bcd1364b63181a67118c45bef8f4fcc9
+$ bash -c python3 -B '/root/.orbit/worktrees/99d0ce19-f5db-5601-9902-ce52eaa1f17a/docs/evidence/base-ui-migration/overlay-first-frame/build-inventory-record.py' '/mnt/data/tmp/overlay-first-frame-34brok/scratch/inv-check-audit.json' docs/evidence/base-ui-migration/inventory-delta/2026-10-07d.json f24f01f88a0e36d1fab6ff2cf845f7e2c6e7f778 | cmp - docs/evidence/base-ui-migration/inventory-delta/2026-10-08.json
+exit 0
+$ node docs/evidence/base-ui-migration/inventory-delta/verify-record.mjs /mnt/data/tmp/overlay-first-frame-34brok/scratch/inv-check-audit.json 2026-10-08.json
+Record 2026-10-08.json verified: 1 file entries and 0 index.css entries match the audit; read after 4 earlier record(s), 0 points need its new/changed entries and 0 change standing without its reassignments; it leaves 0 points pending (0 questions); with all 5 records: 0 unowned, 0 pending; P0.1 baseline clean.
+exit 0
+$ node src/web/scripts/audit-antd.mjs --check-owners
+{
+  "baseline": {
+    "commit": "31b737924e91c288a6ad5ee2b814d5effbfce7ce",
+    "scopeHash": "7fc54456c2ce36182735a30f0fc8ed1bd41f0c3600f4e1c5780799bc51da1a80"
+  },
+  "records": [
+    "2026-10-07.json",
+    "2026-10-07b.json",
+    "2026-10-07c.json",
+    "2026-10-07d.json",
+    "2026-10-08.json"
+  ],
+  "unowned": [],
+  "pending": [],
+  "owners": {
+    "KEEP": 1,
+    "P4.3a": 83,
+    "P4.3b": 31,
+    "P4.4": 54,
+    "P5.1": 28,
+    "P5.2": 11,
+    "P5.3": 94,
+    "P6": 37
+  }
+}
+exit 0
+$ node src/web/scripts/audit-antd-selfcheck.mjs
+audit-antd self-check passed: imports, aliases, types, mocks, selectors, refs, deterministic output and icon-safe retirement gate.
+audit-antd owner self-check passed: P0.1 owners, growth since P0.1, delta records, pending and inactive owners, index.css by text.
+exit 0
+$ node src/web/scripts/verify-antd-inventory.mjs
+Inventory coverage passed: 149 source owners, 37 import contracts, 287 tests, 187 CSS hits on 182 lines; source reproduction not requested.
+exit 0

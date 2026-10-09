@@ -1,7 +1,6 @@
 import { CheckOutlined, CopyOutlined, DownOutlined, GlobalOutlined, LinkOutlined, LockOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient, type QueryKey } from '@tanstack/react-query';
-import { Button, Checkbox, Dropdown, Modal, Popconfirm, Select, Spin } from 'antd';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
 import {
   getShareLink,
   putShareLink,
@@ -15,6 +14,13 @@ import { copyText } from '../lib/clipboard';
 import { encodeId } from '../lib/idCodec';
 import { countOf, EXPIRY_CHOICES, previewUrl, publicLinkUrl, shortDate, viewsLine } from '../lib/shareLinks';
 import { useToast } from '../lib/toast';
+import { Button, LinkButton } from './ui/Button';
+import { Checkbox } from './ui/Checkbox';
+import { Dialog } from './ui/Dialog';
+import { Menu } from './ui/Menu';
+import { Popconfirm } from './ui/Popconfirm';
+import { Select } from './ui/Select';
+import { Spinner } from './ui/Spinner';
 
 /** One row of Includes. `layer: null` is the root's own content, which a link always includes.
  *  `warn` marks the row whose detail is a risk, said in amber once the layer is on. `under` names
@@ -138,6 +144,32 @@ const ROOT_KINDS: { readonly [K in ShareRootKind]?: RootKindSpec } = {
     // updates.
     shows: [],
   },
+  WIKI: {
+    title: 'Share wiki',
+    publicDetail: 'Anyone with the link can view — no sign-in. They can’t change anything.',
+    layers: [
+      {
+        layer: null,
+        name: 'Documents',
+        detail: 'The wiki’s home and every document written so far',
+        count: (counts) => countOf(counts.documents ?? 0, 'document'),
+      },
+      {
+        layer: 'footnotes',
+        name: 'Footnotes',
+        // What a footnote shows, then the fixed risk sentence (§8).
+        detail: `The quotes and code each sentence cites, with file paths and lines. ${CONVERSATIONS_RISK}`,
+        count: (counts) => countOf(counts.footnotes ?? 0, 'footnote'),
+        warn: true,
+      },
+    ],
+    // A space is addressed by its slug, which the id alone does not give: whoever opens the dialog
+    // passes `appPath`, and the Wiki's own route stands in for it otherwise.
+    appPath: () => '/wiki',
+    // The wiki header's pill reads the link under this dialog's own key, which every write here
+    // updates.
+    shows: [],
+  },
 };
 
 /** Whether this dialog can be opened for a root of `kind`. */
@@ -161,11 +193,17 @@ export function ShareModal({
   onClose,
   kind,
   rootId,
+  returnFocus,
+  appPath,
 }: {
   open: boolean;
   onClose: () => void;
   kind: ShareRootKind;
   rootId: string;
+  /** Where focus goes when the dialog closes, for an opener that does not outlive it (a menu item). */
+  returnFocus?: RefObject<HTMLElement | null>;
+  /** The root's signed-in address, when its id alone does not make it: a wiki space's is its slug's. */
+  appPath?: string;
 }) {
   const spec = ROOT_KINDS[kind];
   const message = useToast();
@@ -176,6 +214,9 @@ export function ShareModal({
   const [copied, setCopied] = useState(false);
   // The duration picked in this sitting, so Expires can say "7 days" rather than only the date.
   const [expiryChoice, setExpiryChoice] = useState<string | null>(null);
+  // The turn-off question points at the Access row and gives focus back to its button.
+  const accessRow = useRef<HTMLDivElement>(null);
+  const accessButton = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!open) {
@@ -239,59 +280,49 @@ export function ShareModal({
   };
 
   const access = (
-    <Popconfirm
-      open={confirmOff}
-      onOpenChange={(next) => {
-        if (!next) setConfirmOff(false);
-      }}
-      title={TURN_OFF_TITLE}
-      description={TURN_OFF_DETAIL}
-      okText="Turn off"
-      okButtonProps={{ danger: true, loading: offMut.isPending }}
-      cancelText="Cancel"
-      placement="bottomLeft"
-      onConfirm={() => offMut.mutate()}
-      onCancel={() => setConfirmOff(false)}
-    >
-      <div className="share-access">
+    <>
+      <div className="share-access" ref={accessRow}>
         <span className={`share-access-icon${link ? ' is-public' : ''}`} aria-hidden>
           {link ? <GlobalOutlined /> : <LockOutlined />}
         </span>
         <div className="share-access-main">
-          <Dropdown
-            trigger={['click']}
+          <Menu
             disabled={busy}
-            menu={{
-              className: 'share-access-menu',
-              selectedKeys: [link ? 'public' : 'private'],
-              items: [
-                {
-                  key: 'private',
-                  icon: <LockOutlined />,
-                  label: (
-                    <AccessOption
-                      title="Only you"
-                      detail="Turns the link off. Turning it on again makes a new link."
-                      chosen={!link}
-                    />
-                  ),
+            popupClassName="share-access-menu"
+            items={[
+              {
+                key: 'private',
+                icon: <LockOutlined />,
+                textValue: 'Only you',
+                selected: !link,
+                label: (
+                  <AccessOption
+                    title="Only you"
+                    detail="Turns the link off. Turning it on again makes a new link."
+                    chosen={!link}
+                  />
+                ),
+                onSelect: () => {
+                  if (link) setConfirmOff(true);
                 },
-                {
-                  key: 'public',
-                  icon: <GlobalOutlined />,
-                  label: <AccessOption title="Anyone with the link" detail="No sign-in needed to view." chosen={!!link} />,
-                },
-              ],
-              onClick: ({ key: choice }) => {
-                if (choice === 'public' && !link) putMut.mutate({});
-                if (choice === 'private' && link) setConfirmOff(true);
               },
-            }}
-          >
-            <button type="button" className="share-access-select" aria-label="Access">
-              {link ? 'Anyone with the link' : 'Only you'} <DownOutlined className="share-access-caret" />
-            </button>
-          </Dropdown>
+              {
+                key: 'public',
+                icon: <GlobalOutlined />,
+                textValue: 'Anyone with the link',
+                selected: !!link,
+                label: <AccessOption title="Anyone with the link" detail="No sign-in needed to view." chosen={!!link} />,
+                onSelect: () => {
+                  if (!link) putMut.mutate({});
+                },
+              },
+            ]}
+            trigger={
+              <button ref={accessButton} type="button" className="share-access-select" aria-label="Access">
+                {link ? 'Anyone with the link' : 'Only you'} <DownOutlined className="share-access-caret" />
+              </button>
+            }
+          />
           <div className="share-access-detail">
             {link
               ? spec.publicDetail
@@ -299,17 +330,35 @@ export function ShareModal({
           </div>
         </div>
       </div>
-    </Popconfirm>
+      <Popconfirm
+        anchor={accessRow}
+        open={confirmOff}
+        onOpenChange={(next) => {
+          if (!next) setConfirmOff(false);
+        }}
+        title={TURN_OFF_TITLE}
+        description={TURN_OFF_DETAIL}
+        confirmText="Turn off"
+        cancelText="Cancel"
+        danger
+        confirmLoading={offMut.isPending}
+        side="bottom"
+        align="start"
+        returnFocus={accessButton}
+        onConfirm={() => offMut.mutate()}
+        onCancel={() => setConfirmOff(false)}
+      />
+    </>
   );
 
   const expiry = link?.expiresAt ?? null;
   const expiryValue = expiryChoice ?? (expiry ? 'until' : 'never');
 
   return (
-    <Modal open={open} onCancel={onClose} title={spec.title} footer={null} width={520} className="share-dialog">
+    <Dialog open={open} onClose={onClose} title={spec.title} width={520} className="share-dialog" returnFocus={returnFocus}>
       {shareQ.isPending ? (
         <div className="share-dialog-state">
-          <Spin />
+          <Spinner />
         </div>
       ) : shareQ.isError ? (
         <div className="share-dialog-state">
@@ -327,7 +376,7 @@ export function ShareModal({
             </span>
             <Button
               icon={<LinkOutlined />}
-              onClick={() => copy(`${window.location.origin}${spec.appPath(rootId)}`, 'Link copied')}
+              onClick={() => copy(`${window.location.origin}${appPath ?? spec.appPath(rootId)}`, 'Link copied')}
             >
               Copy link
             </Button>
@@ -345,7 +394,7 @@ export function ShareModal({
               onFocus={(e) => e.target.select()}
             />
             <Button
-              type="primary"
+              variant="primary"
               icon={copied ? <CheckOutlined /> : <CopyOutlined />}
               onClick={() => copy(publicLinkUrl(link.token), 'Link copied')}
             >
@@ -370,9 +419,9 @@ export function ShareModal({
                     className="share-layer-check"
                     checked={on}
                     disabled={row.layer === null || busy || idle}
-                    onChange={(e) => {
+                    onCheckedChange={(checked) => {
                       const layer = row.layer;
-                      if (layer) putMut.mutate({ include: { [layer]: e.target.checked } });
+                      if (layer) putMut.mutate({ include: { [layer]: checked } });
                     }}
                   >
                     <span className="share-layer-name">{row.name}</span>
@@ -397,13 +446,14 @@ export function ShareModal({
               size="small"
               aria-label="Expires"
               className="share-dialog-expiry"
-              popupMatchSelectWidth={false}
+              matchTriggerWidth={false}
               disabled={busy}
               value={expiryValue}
               options={EXPIRY_CHOICES.map(({ value, label }) => ({ value, label }))}
               // A link reopened with an expiry has no duration any more, only the day it stops.
-              labelRender={({ value, label }) => (value === 'until' && expiry ? `Until ${shortDate(expiry)}` : label)}
-              onChange={(value: string) => {
+              renderValue={(value, option) => (value === 'until' && expiry ? `Until ${shortDate(expiry)}` : option?.label ?? value)}
+              onValueChange={(value) => {
+                if (value === null) return;
                 const days = EXPIRY_CHOICES.find((choice) => choice.value === value)?.days ?? null;
                 setExpiryChoice(value);
                 putMut.mutate({
@@ -419,16 +469,16 @@ export function ShareModal({
           <div className="share-dialog-foot">
             <span className="share-dialog-stat">{viewsLine(link, Date.now())}</span>
             {/* The owner looking at their own link before handing it out is not a visit (?preview=1). */}
-            <Button href={previewUrl(link.token)} target="_blank" rel="noopener noreferrer">
+            <LinkButton href={previewUrl(link.token)} target="_blank" rel="noopener noreferrer">
               Preview ↗
-            </Button>
-            <Button type="primary" onClick={onClose}>
+            </LinkButton>
+            <Button variant="primary" onClick={onClose}>
               Done
             </Button>
           </div>
         </>
       )}
-    </Modal>
+    </Dialog>
   );
 }
 

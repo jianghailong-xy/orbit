@@ -382,6 +382,8 @@ test('the refusals, limits and effect policy this door answers with are the cont
       ['WIKI_REVIEW_QUEUE_FULL', 429],
       ['WIKI_REVISION_CONFLICT', 409],
       ['WIKI_SCHEMA', 400],
+      // The pipelines the server runs for an account (contract `jobs.executor`): the runner door's half is closed.
+      ['WIKI_SERVER_EXECUTES', 409],
       ['WIKI_SESSION_EXCLUDED', 403],
       ['WIKI_SOURCE_UNRESOLVED', 422],
       ['WIKI_SPACE_UNBOUND', 409],
@@ -1534,5 +1536,45 @@ test('0307 · a space reads back what it holds', { skip, concurrency: 1, timeout
     assert.equal(listed.body.length, 2);
     const filtered = await call(h, { bearer: owner.bearer }, 'GET', `/wiki/spaces/${spaces.body[0].id}/entries?kind=principle`);
     assert.equal(filtered.body.length, 0);
+  });
+
+  await t.test('a waiting op carries the title of the entry it names, which no window of entries has to hold', async () => {
+    const owner = await account(h, 'titles');
+    const machine = await runner(h, owner.id);
+    const ws = await workspace(h, owner.id, { repoUrl: 'github.com/orbit/titles.git' });
+    const mine = await session(h, owner.id, { workspaceId: ws, runnerId: machine.id });
+    const tool = await toolCall(h, mine, 'Bash', 'one thing to add');
+    const propose = (body: Record<string, unknown>) =>
+      call(h, { runner: machine.token, headers: { 'x-orbit-session-id': mine } }, 'POST', '/runner/wiki/changesets', body);
+
+    const spaces = await call(h, { bearer: owner.bearer }, 'GET', '/wiki/spaces');
+    expectStatus(spaces, 200, 'the owner lists their spaces');
+    const owned = await call(h, { bearer: owner.bearer }, 'POST', `/wiki/spaces/${spaces.body[0].id}/changesets`, {
+      rationale: 'the owner records an entry',
+      ops: [{ op: 'add', entry: draftOf({ title: 'A pitfall the owner wrote long ago' }) }],
+    });
+    expectStatus(owned, 200, 'the owner writes');
+    const entryId = owned.body.ops[0].entryId as string;
+
+    const added = await propose({
+      rationale: 'a new one',
+      ops: [addOp({ title: 'A proposal that names no entry yet' }, [{ kind: 'tool_call', ref: tool, quote: 'one thing' }])],
+    });
+    expectStatus(added, 200, 'an add waits for the owner');
+    const retired = await propose({
+      rationale: 'it no longer holds',
+      ops: [{ op: 'retire', entryId, baseRevision: 1, reason: 'the fix landed' }],
+    });
+    expectStatus(retired, 200, 'a retire waits for the owner');
+    assert.equal(retired.body.ops[0].status, 'pending');
+
+    const review = await call(h, { bearer: owner.bearer }, 'GET', '/wiki/review');
+    expectStatus(review, 200, 'the review queue');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const ops = (review.body as Array<{ ops: any[] }>).flatMap((changeset) => changeset.ops);
+    const retire = ops.find((op) => op.op === 'retire');
+    assert.equal(retire.entryId, entryId);
+    assert.equal(retire.entryTitle, 'A pitfall the owner wrote long ago', 'a retire names the entry it would retire');
+    assert.equal(ops.find((op) => op.op === 'add').entryTitle, null, 'an add names no entry');
   });
 });

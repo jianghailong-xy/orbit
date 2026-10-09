@@ -1,0 +1,602 @@
+{
+ "totals": {
+  "screenshots": 240,
+  "identical": 192,
+  "antialias": 37,
+  "tests": {
+   "passed/passed": 64
+  },
+  "traces": 56,
+  "tracesEqual": 42,
+  "capturesWithStyleDeltas": 0,
+  "captures": 240,
+  "beyondAntialias": 11
+ },
+ "screenshots": {
+  "pilot-account-open": {
+   "environments": 8,
+   "identical": 6,
+   "antialias": 2,
+   "beyond": {}
+  },
+  "pilot-account": {
+   "environments": 8,
+   "identical": 6,
+   "antialias": 2,
+   "beyond": {}
+  },
+  "pilot-assignee-open": {
+   "environments": 8,
+   "identical": 5,
+   "antialias": 2,
+   "beyond": {
+    "webkit-dark-phone": {
+     "pixels": 177,
+     "pixelsAtMost2": 131,
+     "maxChannelDiff": 7
+    }
+   }
+  },
+  "pilot-comment-mention": {
+   "environments": 8,
+   "identical": 8,
+   "antialias": 0,
+   "beyond": {}
+  },
+  "pilot-delete-confirm": {
+   "environments": 8,
+   "identical": 5,
+   "antialias": 1,
+   "beyond": {
+    "chromium-dark-desktop": {
+     "pixels": 21,
+     "pixelsAtMost2": 16,
+     "maxChannelDiff": 15
+    },
+    "webkit-dark-phone": {
+     "pixels": 358,
+     "pixelsAtMost2": 264,
+     "maxChannelDiff": 7
+    }
+   }
+  },
+  "pilot-dependencies": {
+   "environments": 8,
+   "identical": 6,
+   "antialias": 2,
+   "beyond": {}
+  },
+  "pilot-dependency-list": {
+   "environments": 8,
+   "identical": 6,
+   "antialias": 2,
+   "beyond": {}
+  },
+  "pilot-dependency-view-hover": {
+   "environments": 8,
+   "identical": 6,
+   "antialias": 2,
+   "beyond": {}
+  },
+  "pilot-detail": {
+   "environments": 8,
+   "identical": 5,
+   "antialias": 2,
+   "beyond": {
+    "webkit-dark-phone": {
+     "pixels": 177,
+     "pixelsAtMost2": 131,
+     "maxChannelDiff": 7
+    }
+   }
+  },
+  "pilot-field-hover": {
+   "environments": 8,
+   "identical": 5,
+   "antialias": 2,
+   "beyond": {
+    "webkit-dark-phone": {
+     "pixels": 177,
+     "pixelsAtMost2": 131,
+     "maxChannelDiff": 7
+    }
+   }
+  },
+  "pilot-inputs": {
+   "environments": 8,
+   "identical": 7,
+   "antialias": 1,
+   "beyond": {}
+  },
+  "pilot-list-open": {
+   "environments": 8,
+   "identical": 5,
+   "antialias": 2,
+   "beyond": {
+    "webkit-dark-phone": {
+     "pixels": 177,
+     "pixelsAtMost2": 131,
+     "maxChannelDiff": 7
+    }
+   }
+  },
+  "pilot-list-search": {
+   "environments": 8,
+   "identical": 5,
+   "antialias": 2,
+   "beyond": {
+    "webkit-dark-phone": {
+     "pixels": 177,
+     "pixelsAtMost2": 131,
+     "maxChannelDiff": 7
+    }
+   }
+  },
+  "pilot-model-open": {
+   "environments": 8,
+   "identical": 5,
+   "antialias": 2,
+   "beyond": {
+    "webkit-dark-phone": {
+     "pixels": 177,
+     "pixelsAtMost2": 131,
+     "maxChannelDiff": 7
+    }
+   }
+  },
+  "pilot-p0-share-focused": {
+   "environments": 8,
+   "identical": 8,
+   "antialias": 0,
+   "beyond": {}
+  },
+  "pilot-prerequisite-open": {
+   "environments": 8,
+   "identical": 7,
+   "antialias": 1,
+   "beyond": {}
+  },
+  "pilot-provider-open": {
+   "environments": 8,
+   "identical": 5,
+   "antialias": 2,
+   "beyond": {
+    "webkit-dark-phone": {
+     "pixels": 177,
+     "pixelsAtMost2": 131,
+     "maxChannelDiff": 7
+    }
+   }
+  },
+  "pilot-remove-confirm": {
+   "environments": 8,
+   "identical": 7,
+   "antialias": 1,
+   "beyond": {}
+  },
+  "pilot-reopen-refused": {
+   "environments": 8,
+   "identical": 7,
+   "antialias": 1,
+   "beyond": {}
+  },
+  "pilot-reopen": {
+   "environments": 8,
+   "identical": 8,
+   "antialias": 0,
+   "beyond": {}
+  },
+  "pilot-run-hint": {
+   "environments": 8,
+   "identical": 4,
+   "antialias": 3,
+   "beyond": {
+    "webkit-dark-phone": {
+     "pixels": 358,
+     "pixelsAtMost2": 264,
+     "maxChannelDiff": 7
+    }
+   }
+  },
+  "pilot-share-access-menu": {
+   "environments": 8,
+   "identical": 7,
+   "antialias": 1,
+   "beyond": {}
+  },
+  "pilot-share-conversations": {
+   "environments": 8,
+   "identical": 8,
+   "antialias": 0,
+   "beyond": {}
+  },
+  "pilot-share-error": {
+   "environments": 8,
+   "identical": 8,
+   "antialias": 0,
+   "beyond": {}
+  },
+  "pilot-share-expiry-open": {
+   "environments": 8,
+   "identical": 7,
+   "antialias": 1,
+   "beyond": {}
+  },
+  "pilot-share-loading": {
+   "environments": 8,
+   "identical": 8,
+   "antialias": 0,
+   "beyond": {}
+  },
+  "pilot-share-private": {
+   "environments": 8,
+   "identical": 8,
+   "antialias": 0,
+   "beyond": {}
+  },
+  "pilot-share-public": {
+   "environments": 8,
+   "identical": 8,
+   "antialias": 0,
+   "beyond": {}
+  },
+  "pilot-share-turn-off": {
+   "environments": 8,
+   "identical": 7,
+   "antialias": 1,
+   "beyond": {}
+  },
+  "pilot-suggested-open": {
+   "environments": 8,
+   "identical": 5,
+   "antialias": 2,
+   "beyond": {
+    "webkit-dark-phone": {
+     "pixels": 177,
+     "pixelsAtMost2": 131,
+     "maxChannelDiff": 7
+    }
+   }
+  }
+ },
+ "traces": {
+  "chromium-dark-desktop :: share dialog pilot › from Only you to a public link and back": {
+   "equal": true,
+   "steps": []
+  },
+  "chromium-dark-desktop :: share dialog pilot › loading and a read that failed": {
+   "equal": true,
+   "steps": []
+  },
+  "chromium-dark-desktop :: task detail pilot › a failed upload says so and leaves the list as it was": {
+   "equal": true,
+   "steps": []
+  },
+  "chromium-dark-desktop :: task detail pilot › dependencies, inputs and comments": {
+   "equal": false,
+   "steps": [
+    {
+     "step": "input removed",
+     "fields": [
+      "dialogs",
+      "focus"
+     ]
+    }
+   ]
+  },
+  "chromium-dark-desktop :: task detail pilot › fields, pickers and the panel header": {
+   "equal": false,
+   "steps": [
+    {
+     "step": "list pick Later",
+     "fields": [
+      "focus"
+     ]
+    },
+    {
+     "step": "suggested pick L",
+     "fields": [
+      "focus"
+     ]
+    }
+   ]
+  },
+  "chromium-dark-desktop :: task detail pilot › reopening a stopped task, refused and then backed out of": {
+   "equal": true,
+   "steps": []
+  },
+  "chromium-dark-desktop :: workspace account pilot › the Claude account picker of a new workspace": {
+   "equal": true,
+   "steps": []
+  },
+  "chromium-dark-phone :: share dialog pilot › from Only you to a public link and back": {
+   "equal": true,
+   "steps": []
+  },
+  "chromium-dark-phone :: share dialog pilot › loading and a read that failed": {
+   "equal": true,
+   "steps": []
+  },
+  "chromium-dark-phone :: task detail pilot › a failed upload says so and leaves the list as it was": {
+   "equal": true,
+   "steps": []
+  },
+  "chromium-dark-phone :: task detail pilot › dependencies, inputs and comments": {
+   "equal": true,
+   "steps": []
+  },
+  "chromium-dark-phone :: task detail pilot › fields, pickers and the panel header": {
+   "equal": false,
+   "steps": [
+    {
+     "step": "suggested pick L",
+     "fields": [
+      "focus"
+     ]
+    }
+   ]
+  },
+  "chromium-dark-phone :: task detail pilot › reopening a stopped task, refused and then backed out of": {
+   "equal": false,
+   "steps": [
+    {
+     "step": "reopen asked again",
+     "fields": [
+      "focus"
+     ]
+    }
+   ]
+  },
+  "chromium-dark-phone :: workspace account pilot › the Claude account picker of a new workspace": {
+   "equal": true,
+   "steps": []
+  },
+  "chromium-light-desktop :: share dialog pilot › from Only you to a public link and back": {
+   "equal": true,
+   "steps": []
+  },
+  "chromium-light-desktop :: share dialog pilot › loading and a read that failed": {
+   "equal": true,
+   "steps": []
+  },
+  "chromium-light-desktop :: task detail pilot › a failed upload says so and leaves the list as it was": {
+   "equal": true,
+   "steps": []
+  },
+  "chromium-light-desktop :: task detail pilot › dependencies, inputs and comments": {
+   "equal": true,
+   "steps": []
+  },
+  "chromium-light-desktop :: task detail pilot › fields, pickers and the panel header": {
+   "equal": false,
+   "steps": [
+    {
+     "step": "suggested pick L",
+     "fields": [
+      "focus"
+     ]
+    },
+    {
+     "step": "model pick Sonnet",
+     "fields": [
+      "listbox"
+     ]
+    }
+   ]
+  },
+  "chromium-light-desktop :: task detail pilot › reopening a stopped task, refused and then backed out of": {
+   "equal": true,
+   "steps": []
+  },
+  "chromium-light-desktop :: workspace account pilot › the Claude account picker of a new workspace": {
+   "equal": false,
+   "steps": [
+    {
+     "step": "account Work",
+     "fields": [
+      "focus",
+      "listbox"
+     ]
+    }
+   ]
+  },
+  "chromium-light-phone :: share dialog pilot › from Only you to a public link and back": {
+   "equal": true,
+   "steps": []
+  },
+  "chromium-light-phone :: share dialog pilot › loading and a read that failed": {
+   "equal": true,
+   "steps": []
+  },
+  "chromium-light-phone :: task detail pilot › a failed upload says so and leaves the list as it was": {
+   "equal": true,
+   "steps": []
+  },
+  "chromium-light-phone :: task detail pilot › dependencies, inputs and comments": {
+   "equal": true,
+   "steps": []
+  },
+  "chromium-light-phone :: task detail pilot › fields, pickers and the panel header": {
+   "equal": false,
+   "steps": [
+    {
+     "step": "list pick Later",
+     "fields": [
+      "focus"
+     ]
+    }
+   ]
+  },
+  "chromium-light-phone :: task detail pilot › reopening a stopped task, refused and then backed out of": {
+   "equal": false,
+   "steps": [
+    {
+     "step": "reopen asked again",
+     "fields": [
+      "focus"
+     ]
+    }
+   ]
+  },
+  "chromium-light-phone :: workspace account pilot › the Claude account picker of a new workspace": {
+   "equal": true,
+   "steps": []
+  },
+  "webkit-dark-desktop :: share dialog pilot › from Only you to a public link and back": {
+   "equal": false,
+   "steps": [
+    {
+     "step": "expiry 30 days",
+     "fields": [
+      "focus"
+     ]
+    }
+   ]
+  },
+  "webkit-dark-desktop :: share dialog pilot › loading and a read that failed": {
+   "equal": true,
+   "steps": []
+  },
+  "webkit-dark-desktop :: task detail pilot › a failed upload says so and leaves the list as it was": {
+   "equal": true,
+   "steps": []
+  },
+  "webkit-dark-desktop :: task detail pilot › dependencies, inputs and comments": {
+   "equal": true,
+   "steps": []
+  },
+  "webkit-dark-desktop :: task detail pilot › fields, pickers and the panel header": {
+   "equal": true,
+   "steps": []
+  },
+  "webkit-dark-desktop :: task detail pilot › reopening a stopped task, refused and then backed out of": {
+   "equal": true,
+   "steps": []
+  },
+  "webkit-dark-desktop :: workspace account pilot › the Claude account picker of a new workspace": {
+   "equal": true,
+   "steps": []
+  },
+  "webkit-dark-phone :: share dialog pilot › from Only you to a public link and back": {
+   "equal": false,
+   "steps": [
+    {
+     "step": "expiry 30 days",
+     "fields": [
+      "focus"
+     ]
+    }
+   ]
+  },
+  "webkit-dark-phone :: share dialog pilot › loading and a read that failed": {
+   "equal": true,
+   "steps": []
+  },
+  "webkit-dark-phone :: task detail pilot › a failed upload says so and leaves the list as it was": {
+   "equal": true,
+   "steps": []
+  },
+  "webkit-dark-phone :: task detail pilot › dependencies, inputs and comments": {
+   "equal": false,
+   "steps": [
+    {
+     "step": "input removed",
+     "fields": [
+      "dialogs",
+      "focus"
+     ]
+    }
+   ]
+  },
+  "webkit-dark-phone :: task detail pilot › fields, pickers and the panel header": {
+   "equal": true,
+   "steps": []
+  },
+  "webkit-dark-phone :: task detail pilot › reopening a stopped task, refused and then backed out of": {
+   "equal": true,
+   "steps": []
+  },
+  "webkit-dark-phone :: workspace account pilot › the Claude account picker of a new workspace": {
+   "equal": true,
+   "steps": []
+  },
+  "webkit-light-desktop :: share dialog pilot › from Only you to a public link and back": {
+   "equal": false,
+   "steps": [
+    {
+     "step": "turned off",
+     "fields": [
+      "focus"
+     ]
+    }
+   ]
+  },
+  "webkit-light-desktop :: share dialog pilot › loading and a read that failed": {
+   "equal": true,
+   "steps": []
+  },
+  "webkit-light-desktop :: task detail pilot › a failed upload says so and leaves the list as it was": {
+   "equal": true,
+   "steps": []
+  },
+  "webkit-light-desktop :: task detail pilot › dependencies, inputs and comments": {
+   "equal": true,
+   "steps": []
+  },
+  "webkit-light-desktop :: task detail pilot › fields, pickers and the panel header": {
+   "equal": false,
+   "steps": [
+    {
+     "step": "suggested pick L",
+     "fields": [
+      "focus"
+     ]
+    }
+   ]
+  },
+  "webkit-light-desktop :: task detail pilot › reopening a stopped task, refused and then backed out of": {
+   "equal": true,
+   "steps": []
+  },
+  "webkit-light-desktop :: workspace account pilot › the Claude account picker of a new workspace": {
+   "equal": true,
+   "steps": []
+  },
+  "webkit-light-phone :: share dialog pilot › from Only you to a public link and back": {
+   "equal": false,
+   "steps": [
+    {
+     "step": "expiry 30 days",
+     "fields": [
+      "focus"
+     ]
+    }
+   ]
+  },
+  "webkit-light-phone :: share dialog pilot › loading and a read that failed": {
+   "equal": true,
+   "steps": []
+  },
+  "webkit-light-phone :: task detail pilot › a failed upload says so and leaves the list as it was": {
+   "equal": true,
+   "steps": []
+  },
+  "webkit-light-phone :: task detail pilot › dependencies, inputs and comments": {
+   "equal": true,
+   "steps": []
+  },
+  "webkit-light-phone :: task detail pilot › fields, pickers and the panel header": {
+   "equal": true,
+   "steps": []
+  },
+  "webkit-light-phone :: task detail pilot › reopening a stopped task, refused and then backed out of": {
+   "equal": true,
+   "steps": []
+  },
+  "webkit-light-phone :: workspace account pilot › the Claude account picker of a new workspace": {
+   "equal": true,
+   "steps": []
+  }
+ },
+ "styles": {}
+}

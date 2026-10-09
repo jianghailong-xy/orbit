@@ -5,39 +5,85 @@ import OrbitKit
 // what it read, and decides where a press goes — pushed onto the section's stack on a phone, selected
 // into the detail pane on the three-column shells. The pages themselves know neither.
 
-/// The Wiki section's root: the home page of the space the owner last picked.
+/// The Wiki section's home (design §12.3.1): the content of the space the reader opened — on a phone the
+/// section's root, on the three-column shells the detail pane's whenever nothing is opened over it, beside the
+/// directory column. Its head is drawn at once from the spaces list the drawer has read; its line and documents
+/// once the home's own reads are in, the plan's read beside them.
 struct WikiHomeView: View {
     @Environment(AppModel.self) private var model
     /// How rows navigate: the three-column shells select, the compact stack pushes.
     var rowNavigation: SessionRowNavigation = .selection
 
     @State private var contentsShown = false
+    /// When the reader last looked, read as the home opens, before its look moves it: what the dots mark.
+    @State private var seen: Double?
+    /// The Share panel, and the space's public link as last read or saved — what the bar's globe says.
+    @State private var sharing = false
+    @State private var shareRead: ShareLinkRead?
 
     var body: some View {
         if let wiki = model.wiki {
-            TimelineView(.periodic(from: .now, by: 60)) { context in
-                if let home = wiki.home {
-                    WikiHomePage(content: home, now: context.date, actions: actions(wiki),
-                                 planBanner: planBanner(wiki, now: context.date))
+            Group {
+                if let space = wiki.currentSpace {
+                    // Until the home's first read for this space is in, the line and the documents are grey bars.
+                    let loading = wiki.homeLoading
+                    WikiHomePage(space: space, spaces: wiki.spaces, principles: WikiLogic.principles(wiki.principles),
+                                 line: WikiLogic.homeLine(docs: wiki.docsDirectory, articles: wiki.directory, loading: loading),
+                                 documents: WikiLogic.homeDocuments(docs: wiki.docsDirectory, articles: wiki.directory,
+                                                                    loading: loading,
+                                                                    maintenance: space.settings?.maintenance?.enabled == true,
+                                                                    seen: seen),
+                                 seen: seen, failed: loading && wiki.homeState.lastLoadFailed, waiting: wiki.waiting,
+                                 shareLive: shareRead?.link.map { $0.state != .ended } ?? false,
+                                 besideContents: rowNavigation == .selection, actions: actions(wiki))
                 } else {
-                    WikiHomePlaceholder(wiki: wiki)
+                    WikiHomePlaceholder(wiki: wiki, state: wiki.spacesState) { await wiki.loadSpaces() }
                 }
             }
-            .task {
-                await wiki.loadHome()
-                await wiki.loadPlan()
-                await wiki.loadDocsDirectory()
+            // The space on screen, read and looked at: as the home opens, and again when another is picked.
+            .task(id: wiki.currentSpace?.slug) {
+                guard let slug = wiki.currentSpace?.slug else {
+                    // Opened before the drawer read the spaces: the head waits for them, then this runs again.
+                    await wiki.loadSpaces()
+                    return
+                }
+                // What came after the reader's last look is new, and this look moves the stamp (design §12.3.2,
+                // the web home's `readWikiSeen`, then `moveWikiSeen`).
+                seen = wiki.seen(slug)
+                wiki.moveSeen(slug)
+                await load(wiki)
             }
-            .refreshable {
-                await wiki.loadHome()
-                await wiki.loadPlan()
-            }
+            .refreshable { await load(wiki) }
             .sheet(isPresented: $contentsShown) {
                 WikiContentsScreen(at: .home) { pick in go(pick) }
+            }
+            // The space's public link: read as each space opens, so the globe says whether it has one.
+            .task(id: wiki.currentSpace?.id) { shareRead = await readShareLink(wiki.currentSpace?.id) }
+            .sheet(isPresented: $sharing) {
+                if let baseURL = model.baseURL, let space = wiki.currentSpace {
+                    ShareSheet(kind: .wiki, rootID: space.id, baseURL: baseURL, tokenStore: model.tokenStore) {
+                        shareRead = $0
+                    }
+                }
             }
         } else {
             ProgressView()
         }
+    }
+
+    /// The space's public link, if it could be read: nil leaves the globe as it is when there is none.
+    private func readShareLink(_ spaceID: String?) async -> ShareLinkRead? {
+        guard let spaceID, let baseURL = model.baseURL else { return nil }
+        return try? await APIClient(baseURL: baseURL, tokenStore: model.tokenStore).shareLink(.wiki, spaceID)
+    }
+
+    /// The home's reads, and the plan's beside them — the count on the Contents' Plan row — through a task
+    /// handle, not `async let` (d22b276cc).
+    private func load(_ wiki: WikiModel) async {
+        let planRead = Task { await wiki.loadPlan() }
+        defer { planRead.cancel() }
+        await wiki.loadHome()
+        await planRead.value
     }
 
     /// Where a Contents row goes: the home is where the reader already is; the rest open as pages.
@@ -52,32 +98,24 @@ struct WikiHomeView: View {
         }
     }
 
-    /// The plan's banner, the phone's second (owner's call 2026-09-29): what the plan has to say, if anything.
-    private func planBanner(_ wiki: WikiModel, now: Date) -> WikiPlanLogic.Banner? {
-        guard let plan = wiki.plan else { return nil }
-        let online = model.wikiMaintenanceRunnerOnline
-        guard let look = WikiPlanLogic.look(plan, runnerOnline: online) else { return nil }
-        let written = wiki.docsDirectory.flatMap { directory in directory.plan != nil ? directory.docs.map { (written: $0.written, total: $0.total) } : nil }
-        return WikiPlanLogic.banner(look, state: plan, now: now, docs: written, runnerOnline: online)
-    }
-
     private func actions(_ wiki: WikiModel) -> WikiHomeActions {
         WikiHomeActions(
             openEntry: { id in open(.wikiEntry(entryID: id)) },
-            openReview: { open(.wikiReview) },
-            pickSpace: { slug in
-                wiki.selectedSlug = slug
-                Task { await wiki.loadHome() }
-            },
+            // The home reads the space picked as its task's id changes.
+            pickSpace: { slug in wiki.selectedSlug = slug },
             search: { query in await wiki.search(query) },
             openSettings: { open(.wikiSettings) },
-            openRun: { id in open(.wikiRun(changesetID: id)) },
             openContents: { contentsShown = true },
-            openSession: { id in model.openFromConversation(.session(PublicID.toPublic(id)), overConsole: false) },
-            openPlan: { to in open(to == .settings ? .wikiSettings : .wikiPlan(version: nil)) })
+            openActivity: { open(.wikiActivity) },
+            openShare: { sharing = true },
+            openDoc: { slug in go(.doc(slug: slug, section: nil)) },
+            openArticle: { topic in go(.article(topic: topic, part: 0)) },
+            openBrowse: { go(.browse) },
+            openIndex: { go(.index) },
+            retry: { Task { await load(wiki) } })
     }
 
-    /// A phone pushes the page; the three-column shells put it in the detail pane beside the list.
+    /// A phone pushes the page; the three-column shells put it in the detail pane beside the directory.
     private func open(_ node: NavNode) {
         switch rowNavigation {
         case .push:      model.push(node)
@@ -86,21 +124,27 @@ struct WikiHomeView: View {
     }
 }
 
-/// What stands where the home page would be: a spinner, the reason it could not be read, or — only
-/// after a read that succeeded — that there is no space yet.
-private struct WikiHomePlaceholder: View {
+/// What stands where the home page — or Activity — would be: a spinner, the reason it could not be read,
+/// or — only after a read that succeeded — that there is no space yet, or that the wiki is off for this
+/// account.
+struct WikiHomePlaceholder: View {
     let wiki: WikiModel
+    /// The read the page waits on: the spaces list, for the home's head; Activity's own.
+    let state: ListLoadState
+    let retry: () async -> Void
 
     var body: some View {
-        if wiki.homeState.lastLoadFailed {
+        if wiki.disabled {
+            WikiDisabledNote()
+        } else if state.lastLoadFailed {
             ContentUnavailableView {
                 Label("The wiki couldn't be loaded", systemImage: AppSection.wiki.systemImage)
             } description: {
                 Text("Check the connection, then try again.")
             } actions: {
-                Button("Retry") { Task { await wiki.loadHome() } }
+                Button("Retry") { Task { await retry() } }
             }
-        } else if wiki.homeState.hasLoaded && wiki.spaces.isEmpty {
+        } else if wiki.spacesState.hasLoaded && wiki.spaces.isEmpty {
             ContentUnavailableView(WikiCopy.title, systemImage: AppSection.wiki.systemImage,
                                    description: Text(WikiCopy.noSpaces))
         } else {
@@ -109,7 +153,8 @@ private struct WikiHomePlaceholder: View {
     }
 }
 
-/// The Wiki section's detail on the three-column shells: whichever page is on top of its stack.
+/// The Wiki section's detail on the three-column shells: whichever page is on top of its stack, and with
+/// nothing opened over it the space's home — Home lit in the directory column beside it (mock 32).
 struct WikiDetailPane: View {
     @Environment(AppModel.self) private var model
 
@@ -118,10 +163,14 @@ struct WikiDetailPane: View {
             WikiEntryView(entryID: id).id(id)
         } else if model.nav.wikiReviewOnTop {
             WikiReviewView()
+        } else if model.nav.wikiActivityOnTop {
+            WikiActivityView()
         } else if model.nav.wikiSettingsOnTop {
             WikiSettingsView()
         } else if let run = model.nav.selectedWikiRunID {
             WikiRunView(changesetID: run).id(run)
+        } else if let job = model.nav.selectedWikiJobID {
+            WikiJobView(jobID: job).id(job)
         } else if let article = model.nav.selectedWikiArticle {
             WikiArticleScreen(address: article).id(article)
         } else if model.nav.wikiBrowseOnTop {
@@ -132,10 +181,20 @@ struct WikiDetailPane: View {
             WikiDocScreen(address: doc).id(doc)
         } else if let plan = model.nav.selectedWikiPlan {
             WikiPlanScreen(address: plan).id(plan)
+        } else if model.wiki?.disabled == true {
+            WikiDisabledNote()
         } else {
-            ContentUnavailableView(WikiCopy.title, systemImage: AppSection.wiki.systemImage,
-                                   description: Text("Pick an entry, or open Review."))
+            WikiHomeView(rowNavigation: .selection)
         }
+    }
+}
+
+/// The Wiki section reached on an account the server has not switched the wiki on for — a link, or a
+/// section kept from before: the web page's own sentence, not a failure to retry.
+struct WikiDisabledNote: View {
+    var body: some View {
+        ContentUnavailableView(WikiCopy.title, systemImage: AppSection.wiki.systemImage,
+                               description: Text(WikiCopy.disabledNote))
     }
 }
 
@@ -385,7 +444,9 @@ struct WikiEntryView: View {
     var body: some View {
         if let wiki = model.wiki {
             TimelineView(.periodic(from: .now, by: 60)) { context in
-                if let detail = wiki.detail(entryID) {
+                if wiki.disabled {
+                    WikiDisabledNote()
+                } else if let detail = wiki.detail(entryID) {
                     WikiEntryPage(detail: detail, now: context.date,
                                   sessionTitle: { id in
                                       Self.card(.session, id).flatMap(title(of:))
@@ -619,19 +680,21 @@ struct WikiReviewView: View {
             // queue changes, not only when the page first appears.
             .task(id: wiki.review.map(\.id)) { await wiki.loadEntriesNamed(by: wiki.reviewCards) }
             .refreshable { await wiki.loadReview() }
+            // A form's refusal stays in the form, beside the words it is about; the page's alert is
+            // under the sheet.
             .sheet(item: $editing) { card in
                 WikiProposalForm(card: card, entry: card.op.entryId.flatMap { wiki.detail($0)?.entry }) { edited in
                     let answer = await wiki.decide(card, .edit, edited: edited)
-                    finish(answer, card: card, action: .edit, renamed: edited.title)
-                    return answer == nil
+                    if answer == nil { landed(card, action: .edit, renamed: edited.title) }
+                    return answer
                 }
             }
             .sheet(item: $amending) { card in
                 if let entry = card.op.entryId.flatMap({ wiki.detail($0)?.entry }) {
                     WikiChallengeAmendForm(entry: entry) { edited in
                         let answer = await wiki.decide(card, .amend, edited: edited)
-                        finish(answer, card: card, action: .amend, renamed: edited.title)
-                        return answer == nil
+                        if answer == nil { landed(card, action: .amend, renamed: edited.title) }
+                        return answer
                     }
                 }
             }
@@ -659,19 +722,22 @@ struct WikiReviewView: View {
             amend: { card in amending = card })
     }
 
-    /// A refusal opens the alert with the server's reason. An answer that landed floats its outcome
-    /// in the answer's own words, with the entry it was about under it — by then the pager has moved
-    /// on to the next card, so a bare "Decided" named neither. An edit names the entry by the title
-    /// the owner gave it.
-    private func finish(_ answer: String?, card: WikiLogic.ReviewCard, action: WikiDecideAction,
-                        renamed: String? = nil) {
+    /// A refusal opens the alert with the server's reason; an answer that landed is floated.
+    private func finish(_ answer: String?, card: WikiLogic.ReviewCard, action: WikiDecideAction) {
         if let answer {
             notice = answer
         } else {
-            let entry = card.op.entryId.flatMap { model.wiki?.detail($0)?.entry }
-            model.showToast(WikiLogic.decidedToast(op: card.op.op, action: action),
-                            subtitle: renamed ?? WikiLogic.knownTitle(card, entry: entry))
+            landed(card, action: action)
         }
+    }
+
+    /// An answer that landed floats its outcome in the answer's own words, with the entry it was about
+    /// under it — by then the pager has moved on to the next card, so a bare "Decided" named neither.
+    /// An edit names the entry by the title the owner gave it.
+    private func landed(_ card: WikiLogic.ReviewCard, action: WikiDecideAction, renamed: String? = nil) {
+        let entry = card.op.entryId.flatMap { model.wiki?.detail($0)?.entry }
+        model.showToast(WikiLogic.decidedToast(op: card.op.op, action: action),
+                        subtitle: renamed ?? WikiLogic.knownTitle(card, entry: entry))
     }
 }
 
@@ -681,14 +747,16 @@ struct WikiReviewView: View {
 /// is a Re-confirm.
 private struct WikiChallengeAmendForm: View {
     let entry: WikiEntry
-    let submit: (WikiEntryChanges) async -> Bool
+    /// The answer: nil once it landed and the form can close, else the refusal, which stays here.
+    let submit: (WikiEntryChanges) async -> String?
 
     @Environment(\.dismiss) private var dismiss
     @State private var title: String
     @State private var summary: String
     @State private var saving = false
+    @State private var refusal: String?
 
-    init(entry: WikiEntry, submit: @escaping (WikiEntryChanges) async -> Bool) {
+    init(entry: WikiEntry, submit: @escaping (WikiEntryChanges) async -> String?) {
         self.entry = entry
         self.submit = submit
         _title = State(initialValue: entry.title ?? "")
@@ -713,6 +781,9 @@ private struct WikiChallengeAmendForm: View {
                 } footer: {
                     Text(WikiModeCopy.amendNote)
                 }
+                if let refusal {
+                    Section { Text(refusal).foregroundStyle(.red) }
+                }
             }
             .navigationTitle(WikiModeCopy.amend)
             #if os(iOS)
@@ -727,9 +798,9 @@ private struct WikiChallengeAmendForm: View {
                         saving = true
                         let edited = changes
                         Task {
-                            let landed = await submit(edited)
+                            refusal = await submit(edited)
                             saving = false
-                            if landed { dismiss() }
+                            if refusal == nil { dismiss() }
                         }
                     }
                     .disabled(saving || (changes.title == nil && changes.summary == nil)
@@ -745,14 +816,16 @@ private struct WikiChallengeAmendForm: View {
 private struct WikiProposalForm: View {
     let card: WikiLogic.ReviewCard
     let entry: WikiEntry?
-    let submit: (WikiEntryChanges) async -> Bool
+    /// The answer: nil once it landed and the form can close, else the refusal, which stays here.
+    let submit: (WikiEntryChanges) async -> String?
 
     @Environment(\.dismiss) private var dismiss
     @State private var title: String
     @State private var summary: String
     @State private var saving = false
+    @State private var refusal: String?
 
-    init(card: WikiLogic.ReviewCard, entry: WikiEntry?, submit: @escaping (WikiEntryChanges) async -> Bool) {
+    init(card: WikiLogic.ReviewCard, entry: WikiEntry?, submit: @escaping (WikiEntryChanges) async -> String?) {
         self.card = card
         self.entry = entry
         self.submit = submit
@@ -787,6 +860,9 @@ private struct WikiProposalForm: View {
                 } footer: {
                     Text(WikiCopy.acceptNote)
                 }
+                if let refusal {
+                    Section { Text(refusal).foregroundStyle(.red) }
+                }
             }
             .navigationTitle(WikiCopy.reviewEdit)
             #if os(iOS)
@@ -801,9 +877,9 @@ private struct WikiProposalForm: View {
                         saving = true
                         let version = edited
                         Task {
-                            let landed = await submit(version)
+                            refusal = await submit(version)
                             saving = false
-                            if landed { dismiss() }
+                            if refusal == nil { dismiss() }
                         }
                     }
                     .disabled(saving || title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)

@@ -11,7 +11,8 @@ import {
 } from '@orbit/shared';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import type { PrismaService } from '../prisma/prisma.service';
-import { execRuntime, isBuiltinProvider } from '../providers/custom-provider';
+import { adminOnlyProviderRefusal, execRuntime, isBuiltinProvider, usableProviderScope } from '../providers/custom-provider';
+import { currentWikiExecutorSwitch, wikiExecutorServes } from './wiki-executor-switch';
 import type { FactPosition } from './wiki-maintenance';
 
 /**
@@ -76,7 +77,7 @@ export interface WikiMaintenanceProviderProblem {
 
 /** Why `slug` cannot carry a maintenance run of `ownerId`'s, or null when it can. */
 export async function wikiMaintenanceProviderProblem(
-  db: Pick<Prisma.TransactionClient, 'modelProvider' | 'providerPool'>,
+  db: Pick<Prisma.TransactionClient, 'modelProvider' | 'providerPool' | 'user'>,
   ownerId: string,
   slug: string,
 ): Promise<WikiMaintenanceProviderProblem | null> {
@@ -95,7 +96,7 @@ export async function wikiMaintenanceProviderProblem(
     };
   }
   const row = await db.modelProvider.findFirst({
-    where: { slug, OR: [{ ownerId: null }, { ownerId }] },
+    where: { slug, ...(await usableProviderScope(db, ownerId)) },
     select: { runtime: true, baseUrl: true, apiKeyEnc: true, defaultModel: true, enabled: true },
   });
   if (row) {
@@ -112,6 +113,9 @@ export async function wikiMaintenanceProviderProblem(
       unavailable: false,
     };
   }
+  // A shared provider is there, and runs an admin's sessions only (usableProviderScope): refused where it is named.
+  const adminOnly = await adminOnlyProviderRefusal(db, ownerId, slug);
+  if (adminOnly) return { why: adminOnly, unavailable: false };
   return { why: `no provider of this account is called '${slug}', and a Wiki maintenance run falls back to no other`, unavailable: true };
 }
 
@@ -122,13 +126,13 @@ export async function wikiMaintenanceProviderProblem(
  * or a name no provider has is not.
  */
 export async function wikiMaintenanceProviderIsLocal(
-  db: Pick<Prisma.TransactionClient, 'modelProvider'>,
+  db: Pick<Prisma.TransactionClient, 'modelProvider' | 'user'>,
   ownerId: string,
   slug: string,
 ): Promise<boolean> {
   if (isBuiltinProvider(slug)) return false;
   const row = await db.modelProvider.findFirst({
-    where: { slug, OR: [{ ownerId: null }, { ownerId }] },
+    where: { slug, ...(await usableProviderScope(db, ownerId)) },
     select: { baseUrl: true, presetSlug: true },
   });
   return row !== null && row.presetSlug === null && wikiMaintenanceEndpointIsLocal(row.baseUrl);
@@ -195,6 +199,11 @@ export function setWikiMaintenance(
  * What a request names of a space's maintenance, checked before a space is made with it (contract
  * `space.settings.maintenance.channel`): a workspace of the owner's, and — named or turned on — a
  * provider a maintenance run could start on. The same refusals `setWikiMaintenance` answers.
+ *
+ * NO PROVIDER IS ASKED OF AN ACCOUNT THE SERVER EXECUTES (contract `maintenance.job.server`, P8): the
+ * server's run calls the deployment's System model, so the provider a space pins is not consulted, and a
+ * space whose account holds no provider row at all can be turned on. Under `runner` the check is what it
+ * always was, word for word.
  */
 export async function checkWikiMaintenanceInput(prisma: PrismaService, ownerId: string, input: WikiMaintenanceInput): Promise<void> {
   if (input.workspaceId) {
@@ -205,10 +214,15 @@ export async function checkWikiMaintenanceInput(prisma: PrismaService, ownerId: 
   if (asked.enabled && !asked.workspaceId) {
     throw new BadRequestException('maintenance.workspaceId is required to turn maintenance on: the workspace its runs take place in');
   }
-  if (input.provider !== undefined || asked.enabled) {
+  if (wikiMaintenanceAsksProvider(ownerId) && (input.provider !== undefined || asked.enabled)) {
     const problem = await wikiMaintenanceProviderProblem(prisma, ownerId, asked.provider);
     if (problem && !problem.unavailable) throw new BadRequestException(`maintenance.provider: ${problem.why}`);
   }
+}
+
+/** Whether a space's maintenance settings are still a provider's to keep: false where the server runs its wiki. */
+function wikiMaintenanceAsksProvider(ownerId: string): boolean {
+  return !wikiExecutorServes(currentWikiExecutorSwitch(), ownerId);
 }
 
 /**
@@ -248,8 +262,9 @@ class MaintenanceSettingsWriter {
     const asked = merged(storedMaintenance(before.settings), input);
     needsWorkspace(asked);
     // A provider no maintenance run could start on is refused here, where the owner names it. One that is
-    // merely not there (yet) is taken: the claim refuses the run that finds it still missing.
-    if (input.provider !== undefined || asked.enabled) {
+    // merely not there (yet) is taken: the claim refuses the run that finds it still missing. An account the
+    // server executes asks no provider at all (P8): its runs call the System model.
+    if (wikiMaintenanceAsksProvider(ownerId) && (input.provider !== undefined || asked.enabled)) {
       const problem = await wikiMaintenanceProviderProblem(this.prisma, ownerId, asked.provider);
       if (problem && !problem.unavailable) throw new BadRequestException(`maintenance.provider: ${problem.why}`);
     }

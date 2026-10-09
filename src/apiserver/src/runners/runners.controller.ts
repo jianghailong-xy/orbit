@@ -32,7 +32,7 @@ import { RunnersService } from './runners.service';
 export class RunnersController {
   constructor(private readonly runners: RunnersService) {}
 
-  @PatScope('runners:read')
+  @PatScope('runners:read', { workspaceConfinable: false })
   @Get()
   list(@CurrentUser() user: AuthUser) {
     return this.runners.listRunners(user.userId);
@@ -68,6 +68,14 @@ export class RunnersController {
   @Post('device/:userCode/approve')
   approveDevice(@CurrentUser() user: AuthUser, @Param('userCode') userCode: string) {
     return this.runners.approveDeviceEnrollment(user.userId, userCode);
+  }
+
+  // One runner, the same shape as its entry in the list. After every static GET above, for the
+  // reason `reorder` is: Nest matches in declaration order. Owner-scoped: anyone else's is a 404.
+  @PatScope('runners:read', { workspaceConfinable: false })
+  @Get(':id')
+  get(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.runners.getRunner(user.userId, id);
   }
 
   @PatForbidden('RUNNER_CONTROL')
@@ -166,7 +174,7 @@ export class RunnersController {
 
   // Engine-install relay for one runner, owner-scoped like the sign-in above: it runs an
   // installer on that machine, so only the owner may start one.
-  @PatScope('runners:read')
+  @PatScope('runners:read', { workspaceConfinable: false })
   @Get(':id/install')
   installState(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.runners.getInstallState(user.userId, id);
@@ -202,6 +210,14 @@ export class RunnersController {
   @Post(':id/refresh-models')
   refreshModels(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.runners.requestModelCatalogRefresh(user.userId, id);
+  }
+
+  // Update Runner Now: check for a runner release at once rather than at the runner's next
+  // periodic check. Owner-scoped like the controls above: it can restart that machine's runner.
+  @PatForbidden('RUNNER_CONTROL')
+  @Post(':id/self-update')
+  requestSelfUpdate(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.runners.requestSelfUpdate(user.userId, id);
   }
 
   // What Claude Code history already sits under a directory on this machine, asked while someone
