@@ -66,3 +66,19 @@ completion. The 90-second fuse was therefore measuring the runner machine as muc
 raises it to 180 s — still a hang detector, and still inside the matrix's 600 s per-spec budget for a red first run
 plus its second. The flake itself is not this task's to fix: the supervision path it exercises is `src/runner-go`,
 which the task excludes, and it is not new — the spec is green in most runs, including run 37942654032.
+
+## The run that settles it
+
+With that, the same tree was probed again — run
+[37950506980](https://github.com/jianghailong-xy/orbit/actions/runs/37950506980) at `521cee637`:
+
+| job | wall clock | its own summary |
+| --- | --- | --- |
+| PostgreSQL specs 1/3 | 16:14 (15:16:40–15:32:54Z) | `131 of 394 specs` · `tests=1894 pass=1894 fail=0 skipped=0 spec-level-red=0 not-reproduced=0` |
+| PostgreSQL specs 2/3 | 22:33 | `132 of 394 specs` · `tests=1894 pass=1894 fail=0 skipped=0 spec-level-red=0 not-reproduced=0` |
+| PostgreSQL specs 3/3 | 14:23 | `131 of 394 specs` · `tests=1107 pass=1107 fail=0 skipped=0 spec-level-red=0 not-reproduced=0` |
+| PostgreSQL specs (the required check) | 3s | `needs.postgres-shards.result = success` |
+
+394 specs, 4895 assertions, none failed, none skipped, none re-run — and the run's conclusion is `success` for the
+whole workflow, this time including the JavaScript job. That is the acceptance criterion: at the commit that lands,
+the `PostgreSQL specs` job finishes inside its 45-minute limit and passes, not cancelled and with no red spec.
