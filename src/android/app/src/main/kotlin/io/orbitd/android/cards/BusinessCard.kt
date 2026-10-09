@@ -126,9 +126,6 @@ fun BusinessCard(card: InteractionCard, fresh: Boolean, result: CardActionState 
         result.response?.takeIf { it.text("code") in setOf("TASK_ALREADY_RUNNING", "TASK_RUN_PIN_CONFLICT", "TASK_RUN_PROVIDER_SWITCH_CONFIRMATION_REQUIRED") }
             ?.text("conflictingSessionId")?.takeIf { it.isNotBlank() }?.let { LinkButton("Open the run", "orbit-session:$it", open) }
         if (result.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
-        // A merge under way: its dead press says how far its job got, beside the Cancel it still offers (iOS `mergingActionLabel`).
-        if (card.family == CardFamily.PROMOTION && PromotionCards.isMerging(card.source)) OutlinedButton(onClick = {}, enabled = false,
-            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("${card.key}:merging")) { Text(PromotionCards.mergingActionLabel(card.source)) }
         // Reopen task is pressed in the review's box (iOS `OwnerConfirmationReviewBarView`), not among the card's buttons.
         card.actions.filter { it != CardVerb.REOPEN_TASK }.forEach { verb ->
             val requiresNote = verb in setOf(CardVerb.SEND_BACK, CardVerb.CHAT, CardVerb.MARK_HANDLED)

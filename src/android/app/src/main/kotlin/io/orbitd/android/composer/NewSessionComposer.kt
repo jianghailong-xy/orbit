@@ -46,7 +46,10 @@ fun NewSessionComposer(app: OrbitApplication, handle: SessionHandle, route: Orbi
         val current = detail
         val fresh = data.fresh && current != null && current.flag("enabled") != false
         val session = current?.let { SessionState(target.key, snapshot = SessionSnapshot(it, emptyList(), emptyList(), emptyList(), emptyMap()), fresh = fresh) }
-        Box(Modifier.heightIn(max = composerHeight)) { SessionComposer(app, handle, target.key, session, target) }
+        Box(Modifier.heightIn(max = composerHeight)) {
+            SessionComposer(app, handle, target.key, session, target,
+                openRunner = { runner, engine -> open(OrbitRoute(Destination.RUNNER, runner, recordId = "engine:$engine")) })
+        }
       }
     }
 }
