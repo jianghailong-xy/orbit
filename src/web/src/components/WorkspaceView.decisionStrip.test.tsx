@@ -62,3 +62,18 @@ describe('the strip is handed the exception cards the owner presses', () => {
     expect(SOURCE).toContain("querySelectorAll<HTMLElement>('[data-open-item]')");
   });
 });
+
+describe('the strip is handed the questions, never the versions waiting for the coordinator', () => {
+  it('builds the cards it points at from the evidence card’s questions alone', () => {
+    // The versions a paused coordinator is owed are drawn beside the questions, folded, and the
+    // owner may open one to decide it — but it is nobody's question yet, so the set the strip
+    // counts and points at is the questions' and nothing else (`coordinatorQueueRows` stays out).
+    const at = SOURCE.indexOf('const decisionCards = new Set(');
+    expect(at, 'the set the strip is handed was renamed; this scan is reading the wrong thing')
+      .toBeGreaterThan(-1);
+    const built = SOURCE.slice(at, SOURCE.indexOf('\n  );', at));
+    expect(built).toContain('evidenceDecisionCardRows(');
+    expect(built).not.toContain('coordinatorQueueRows');
+    expect(SOURCE).toContain('cards={decisionCards}');
+  });
+});
