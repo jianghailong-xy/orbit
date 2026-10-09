@@ -157,12 +157,20 @@ async function receiptRow(
 const TERMINAL = [RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED];
 
 async function moveTo(db: PrismaClient, sessionId: string, status: RunStatus) {
-  await db.session.update({
-    where: { id: sessionId },
-    data: {
-      status,
-      finishedAt: (TERMINAL as RunStatus[]).includes(status) ? new Date() : null,
-    },
+  const data = {
+    status,
+    finishedAt: (TERMINAL as RunStatus[]).includes(status) ? new Date() : null,
+  };
+  if (status !== RunStatus.RUNNING) {
+    await db.session.update({ where: { id: sessionId }, data });
+    return;
+  }
+  // PENDING -> RUNNING is the runner's claim, and migration 0414 drops it in silence for a session
+  // that has a recorded engine unless the same transaction declares it reads that engine
+  // (`common/session-scheduling.ts`). A move to a terminal state is nobody's claim and stays as it was.
+  await db.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`;
+    await tx.session.update({ where: { id: sessionId }, data });
   });
 }
 

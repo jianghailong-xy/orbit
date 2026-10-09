@@ -55,6 +55,9 @@ before(async () => {
   await client.query(`SET search_path TO steer_dequeue_test, public`);
   // Only the columns the predicate reads. Deliberately not the application schema: this is a
   // test of one WHERE clause, and pulling in migrations would make it a test of those too.
+  // `engine` is the recorded engine (migration 0414): the claim reads it to decide whether this
+  // poller may be handed a steer, and a NULL one is derived from the provider slug exactly as
+  // before the split (providers/session-engine.ts) — which is what every case below sets.
   await client.query(`
     DROP TABLE IF EXISTS steer_dequeue_test."conversation_turn";
     DROP TABLE IF EXISTS steer_dequeue_test."session";
@@ -66,6 +69,7 @@ before(async () => {
       inbox_lease_owner uuid,
       provider text NOT NULL DEFAULT 'claude',
       provider_builtin boolean NOT NULL DEFAULT true,
+      engine text,
       task_id uuid,
       status text NOT NULL,
       cancel_requested_at timestamptz

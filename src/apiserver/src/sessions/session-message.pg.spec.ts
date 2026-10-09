@@ -344,9 +344,21 @@ test('one session’s message to another is signed, delivered as such, and bound
     return { status: response.status, text, json };
   }
 
+  /**
+   * The claim's own write, as the runner's lease routes make it: PENDING -> RUNNING is dropped in
+   * silence for a session that has a recorded engine unless the same transaction declares it reads
+   * that engine (migration 0414, `common/session-scheduling.ts`).
+   */
+  async function claimSession(sessionId: string): Promise<void> {
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`;
+      await tx.session.update({ where: { id: sessionId }, data: { status: RunStatus.RUNNING } });
+    });
+  }
+
   /** What the runner's claim does to a queued session, then the inbox poll that follows it. */
   async function claimAndPoll(sessionId: string): Promise<Answer> {
-    await prisma.session.update({ where: { id: sessionId }, data: { status: RunStatus.RUNNING } });
+    await claimSession(sessionId);
     const delivered = await http('GET', `/runner/sessions/${uuidToBase62(sessionId)}/inbox`);
     assert.equal(delivered.status, 200, `inbox answered ${delivered.status}: ${delivered.text}`);
     return delivered;

@@ -396,12 +396,24 @@ async function start(stack: Stack, f: Fixture, taskId: string): Promise<string> 
  * which is what `mentionsMissingRef` turns into BASE_REF_NOT_FOUND (src/runner-go/source.go). No
  * repository is needed: the refusal is the runner's answer, and the door is what is under test.
  */
+/**
+ * The runner's claim of a session, as the lease routes make it: PENDING -> RUNNING is dropped in
+ * silence for a session that has a recorded engine unless the same transaction declares it reads
+ * that engine (migration 0414, `common/session-scheduling.ts`). Every claim in this file says so.
+ */
+async function claimSession(db: PrismaClient, sessionId: string): Promise<void> {
+  await db.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`;
+    await tx.session.update({ where: { id: sessionId }, data: { status: RunStatus.RUNNING } });
+  });
+}
+
 async function refuseAtResolution(
   stack: Stack,
   f: Fixture,
   sessionId: string,
 ): Promise<{ ref: string; stderr: string; response: Awaited<ReturnType<RunnerApiController['pinSessionSource']>> }> {
-  await stack.db.session.update({ where: { id: sessionId }, data: { status: RunStatus.RUNNING } });
+  await claimSession(stack.db, sessionId);
   const selected = await stack.db.session.findUniqueOrThrow({
     where: { id: sessionId }, select: { sourceState: true, sourceRef: true },
   });
@@ -442,7 +454,7 @@ interface RunnerOutcome {
  */
 async function runnerTakes(stack: Stack, f: Fixture, sessionId: string): Promise<RunnerOutcome> {
   // The claim's own write: the run is this runner's now.
-  await stack.db.session.update({ where: { id: sessionId }, data: { status: RunStatus.RUNNING } });
+  await claimSession(stack.db, sessionId);
   const selected = await stack.db.session.findUniqueOrThrow({
     where: { id: sessionId },
     select: { sourceState: true, sourceKind: true, sourceRef: true, sourceRequiredContains: true },
@@ -980,7 +992,7 @@ test('a start refused at its checkout opens the project\'s SOURCE_UNRESOLVED ite
       const gone = 'b'.repeat(40);
       const missingObject = await dependentOf(stack, f, 'refused-object-missing', p.taskId);
       const objectSession = await start(stack, f, missingObject);
-      await stack.db.session.update({ where: { id: objectSession }, data: { status: RunStatus.RUNNING } });
+      await claimSession(stack.db, objectSession);
       const frozen = await freezeSessionSourcePin(
         stack.prisma,
         { sessionId: objectSession, runnerId: f.runnerId, ownerId: f.ownerId },

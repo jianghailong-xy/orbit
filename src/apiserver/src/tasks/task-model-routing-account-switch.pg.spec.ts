@@ -539,10 +539,16 @@ interface Engine { sessionId: string; leaseOwner: string; generation: string }
 async function startEngine(services: Services, target: Fixture, sessionId: string): Promise<Engine> {
   const { db, api } = services;
   const engine = { sessionId, leaseOwner: randomUUID(), generation: randomUUID() };
-  const session = await db.session.update({
-    where: { id: sessionId },
-    data: { assignedRunnerId: target.runnerId, status: RunStatus.RUNNING, inboxLeaseOwner: engine.leaseOwner },
-    select: { prompt: true, provider: true },
+  // The claim and the lease in one write, in a transaction that declares it reads the session's
+  // recorded engine: migration 0414 drops a PENDING -> RUNNING write in silence and REFUSES a lease
+  // write for a session with one, unless the transaction says so (`common/session-scheduling.ts`).
+  const session = await db.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`;
+    return tx.session.update({
+      where: { id: sessionId },
+      data: { assignedRunnerId: target.runnerId, status: RunStatus.RUNNING, inboxLeaseOwner: engine.leaseOwner },
+      select: { prompt: true, provider: true },
+    });
   });
   assert.equal(session.provider, 'claude', 'a claude engine: the runtime the declared capability is for');
   await queueTurn(db, sessionId, session.prompt, `initial-${sessionId}`);
@@ -566,8 +572,13 @@ async function queueTurn(db: PrismaClient, sessionId: string, content: string, c
  */
 async function turn(services: Services, target: Fixture, engine: Engine): Promise<string> {
   const { db, api } = services;
-  // The claim's part: the session is running again.
-  await db.session.update({ where: { id: engine.sessionId }, data: { status: RunStatus.RUNNING } });
+  // The claim's part: the session is running again — in a transaction that declares it reads the
+  // session's recorded engine, which migration 0414 requires of every PENDING -> RUNNING write
+  // (`common/session-scheduling.ts`).
+  await db.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`;
+    await tx.session.update({ where: { id: engine.sessionId }, data: { status: RunStatus.RUNNING } });
+  });
   const handed = await (api as unknown as {
     dequeueTurn(
       sessionId: string, runnerId: string, leaseGeneration: string, acceptsSteer: boolean, declared: string[],
