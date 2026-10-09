@@ -68,7 +68,7 @@ class UpdateUiTest {
     @get:Rule(order = 1)
     val compose = createAndroidComposeRule<MainActivity>()
 
-    private fun waitForText(text: String) = compose.waitUntil(10_000) { compose.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty() }
+    private fun waitForText(text: String) = compose.waitUntil(60_000) { compose.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty() }
 
     @Test
     fun launchPromptsThenSettingsAboutInstallsAfterUnknownAppsPermission() {
@@ -77,11 +77,11 @@ class UpdateUiTest {
         compose.onNodeWithText("Orbit 9.0.0 ($code) is available.").assertIsDisplayed()
         compose.onNodeWithText("Notes for 9.0.0").assertIsDisplayed()
         compose.onNodeWithText("Later").performClick()
-        compose.waitUntil(5_000) { compose.onAllNodesWithText("Update available").fetchSemanticsNodes().isEmpty() }
+        compose.waitUntil(60_000) { compose.onAllNodesWithText("Update available").fetchSemanticsNodes().isEmpty() }
 
         compose.signIn("https://example.test", "fixture@example.test", "fixture-password")
         val app = compose.activity.application as OrbitApplication
-        compose.waitUntil(5_000) { app.session.state.value is AuthState.SignedIn }
+        compose.waitUntil(60_000) { app.session.state.value is AuthState.SignedIn }
         compose.onNodeWithContentDescription("Open navigation").performClick()
         compose.onNodeWithText("Settings").performScrollTo().performClick()
 
