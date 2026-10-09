@@ -501,6 +501,7 @@ index.css：
 | P4.1 用例 | 起点、交付 | 各 96 通过 | [runs/f-p41-start.txt](runs/f-p41-start.txt)、[f-p41-del.txt](runs/f-p41-del.txt) |
 | P4.2 用例 | 起点、交付 | 各 140 通过、40 失败、4 跳过：两树相同，5 个用例在每个环境失败，都是 main 的 Infrastructure 页（见[起点对照](#起点对照p41-与-p42-用例)） | [runs/f-p42-start.txt](runs/f-p42-start.txt)、[f-p42-del.txt](runs/f-p42-del.txt) |
 | 探针 | 参照、交付 | 9 个探针两树都跑完 | [probes/](probes/) |
+| apiserver 非 pg 单测（含扫全仓库的删除检查，它们会读提交进来的证据） | 提交了本目录的树（`e39358ba4`） | 5054 个全部通过。第一次 3 个失败（`managed-runner-instance.spec`，`declare undefined`）：工作树里 `@orbit/shared` 的 `dist` 是 rebase 之前构建的，apiserver 运行时读它（Web 经 Vite 别名读源码，不受影响）；重新构建后全部通过 | /mnt/data 的 `checks/apiserver-npm-test-2.txt` |
 | 清单复扫 | 交付、参照 | `--check-owners` 0 未归属、0 待定，本批 0 个点（交付 `2fefd4747`）；关闭记录：antd 生产文件 59 → 42，读 `.ant-*` 选择器与类名的测试各少 2 个 | [checks/](checks/)、[inventory-closure.json](inventory-closure.json) |
 
 比较（截图逐张分类、计算样式、trace）：
