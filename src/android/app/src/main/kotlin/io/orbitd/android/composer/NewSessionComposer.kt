@@ -25,6 +25,8 @@ fun NewSessionComposer(app: OrbitApplication, handle: SessionHandle, route: Orbi
     var detail by remember { mutableStateOf<JsonObject?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var retry by remember { mutableIntStateOf(0) }
+    // Held outside the workspace's read, which a directory refresh briefly clears: the engine list stays open across one.
+    var choosingEngine by remember(target) { mutableStateOf(false) }
     LaunchedEffect(handle, target, data.fresh, retry) {
         detail = null
         if (!data.fresh) return@LaunchedEffect
@@ -49,15 +51,14 @@ fun NewSessionComposer(app: OrbitApplication, handle: SessionHandle, route: Orbi
             val effective = JsonObject(workspace + state.draft.resumeConfig)
             val engine = state.catalog?.engineOf(effective)
                 ?: ProviderEngines.sessionEngine(effective.text("engine") ?: effective.text("lastEngine"), effective.text("provider"), emptyList())
-            var choosing by remember { mutableStateOf(false) }
             Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(EngineCopy.ENGINE, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 TextButton(enabled = state.loaded && !state.busy && state.draft.pending == null && state.draft.createdSessionId == null,
-                    onClick = { choosing = true; model.loadCatalog() }, modifier = Modifier.testTag("new-session-engine")) {
+                    onClick = { choosingEngine = true; model.loadCatalog() }, modifier = Modifier.testTag("new-session-engine")) {
                     Text("${ProviderEngines.cliName(engine)} ⌄", style = MaterialTheme.typography.titleMedium)
                 }
             }
-            if (choosing) EngineChoices(model, state, effective, handle.account.server) { choosing = false }
+            if (choosingEngine) EngineChoices(model, state, effective, handle.account.server) { choosingEngine = false }
         }
         Spacer(Modifier.weight(1f))
         val current = detail
