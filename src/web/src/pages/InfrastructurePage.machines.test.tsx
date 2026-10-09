@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { existsSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -256,6 +258,24 @@ describe('a machine card’s head on /infrastructure', () => {
     expect(card(alone.runner.name).querySelector('.runner-attention')).toBeNull();
   });
 
+  it('folds open and shut from the chevron that leads it', async () => {
+    await mount([WIKOVA]);
+    const toggle = () => card('wikova').querySelector<HTMLButtonElement>('.re-toggle')!;
+    const rows = () => card('wikova').querySelectorAll('.re-row[data-engine]');
+    // The chevron is the toggle's first mark: the column the engine rows below put their icon in.
+    expect(toggle().firstElementChild?.className).toBe('re-chev');
+    expect(toggle().getAttribute('aria-expanded')).toBe('false');
+    expect(rows()).toHaveLength(0);
+    await click(toggle());
+    expect(toggle().getAttribute('aria-expanded')).toBe('true');
+    expect(toggle().getAttribute('aria-label')).toBe('Collapse wikova');
+    expect(toggle().firstElementChild?.className).toBe('re-chev open');
+    expect(rows().length).toBeGreaterThan(0);
+    await click(toggle());
+    expect(toggle().getAttribute('aria-expanded')).toBe('false');
+    expect(rows()).toHaveLength(0);
+  });
+
   it('opens the machine’s page from Details', async () => {
     await mount([WIKOVA]);
     const details = card('wikova').querySelector<HTMLAnchorElement>('.re-manage');
@@ -277,6 +297,7 @@ describe('a machine card’s handle and ⋯ on /infrastructure', () => {
     const handle = card('wikova').querySelector<HTMLButtonElement>('button.re-drag')!;
     expect(handle.getAttribute('aria-label')).toBe('Reorder wikova');
     handle.focus();
+    expect(document.activeElement).toBe(handle);
     await key(handle, 'Space', ' ');
     // The sensor takes the keys from the next tick on.
     await settle();
@@ -290,6 +311,30 @@ describe('a machine card’s handle and ⋯ on /infrastructure', () => {
         body: { ids: [WORKSTATION.runner.id, WIKOVA.runner.id, MAC_MINI.runner.id] },
       },
     ]);
+  });
+
+  it('heads the card with its handle, first to the keyboard, and folds nothing by it', async () => {
+    await mount([WIKOVA, WORKSTATION]);
+    const head = card('wikova').querySelector<HTMLElement>('.re-head')!;
+    const handle = head.querySelector<HTMLButtonElement>('button.re-drag')!;
+    // Where Tab stops on the head, in order.
+    const stops = [...head.querySelectorAll<HTMLElement>('button, a[href]')].filter(
+      (el) => el.tabIndex >= 0 && !(el as HTMLButtonElement).disabled,
+    );
+    expect(stops.map((el) => el.getAttribute('aria-label'))).toEqual([
+      'Reorder wikova',
+      'Expand wikova',
+      'Details of wikova',
+      'More actions for wikova',
+    ]);
+    expect(handle.getAttribute('aria-roledescription')).toBe('sortable');
+    expect(handle.title).toBe('Drag to reorder');
+    handle.focus();
+    expect(document.activeElement).toBe(handle);
+    // A press on it is the handle's own: the head around it does not take it for a fold.
+    await click(handle);
+    expect(card('wikova').querySelector('.re-toggle')?.getAttribute('aria-expanded')).toBe('false');
+    expect(card('wikova').querySelector('.re-row[data-engine]')).toBeNull();
   });
 
   it('renames a machine from its ⋯, empty meaning the machine’s own name', async () => {
@@ -327,5 +372,59 @@ describe('a machine card’s handle and ⋯ on /infrastructure', () => {
     expect(sent).toEqual([]);
     await click(button('Delete', confirm));
     expect(sent).toEqual([{ method: 'DELETE', path: `/runners/${WORKSTATION.runner.id}` }]);
+  });
+});
+
+/**
+ * index.css's rules for one selector, each with the at-rules it sits in, outermost first. jsdom lays
+ * nothing out, so where the handle stands is read out of the stylesheet; comments come off first, so
+ * that a sentence about a rule is never taken for the rule. Both path spellings, because the web
+ * suite runs from `src/web` and a runner may start at the repository root.
+ */
+function rulesFor(selector: string): Array<{ within: string[]; body: string }> {
+  const file = ['src/index.css', 'src/web/src/index.css'].map((each) => resolve(process.cwd(), each)).find(existsSync);
+  if (file === undefined) throw new Error(`no index.css from ${process.cwd()}`);
+  const css = readFileSync(file, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const found: Array<{ within: string[]; body: string }> = [];
+  const within: string[] = [];
+  let from = 0;
+  for (let i = 0; i < css.length; i++) {
+    if (css[i] === ';') from = i + 1;
+    else if (css[i] === '}') {
+      within.pop();
+      from = i + 1;
+    } else if (css[i] === '{') {
+      const prelude = css.slice(from, i).trim().replace(/\s+/g, ' ');
+      from = i + 1;
+      if (prelude.startsWith('@')) {
+        within.push(prelude);
+        continue;
+      }
+      const end = css.indexOf('}', i);
+      if (prelude === selector) found.push({ within: [...within], body: css.slice(i + 1, end).trim() });
+      i = end;
+      from = end + 1;
+    }
+  }
+  return found;
+}
+
+describe('where a machine card’s handle stands', () => {
+  it('stays out of a wide head’s flow, so the chevron leads it in the engine icons’ column', () => {
+    const handle = rulesFor('.re-runner-card .re-drag');
+    // In the card's own left margin: nothing in the head's flow comes before the chevron.
+    const wide = handle.find((rule) => rule.within.length === 0)?.body;
+    expect(wide).toMatch(/position: absolute;/);
+    expect(wide).toMatch(/left: 0;/);
+    // A narrow card gives it a column of its own again, beside the name rather than over it.
+    const narrow = handle.find((rule) => rule.within.join(' ') === '@container re-card (max-width: 600px)')?.body;
+    expect(narrow).toMatch(/position: static;/);
+    expect(narrow).toMatch(/grid-column: 1;/);
+    // Out of sight only where a pointer can bring it back, and never from the keyboard: by its opacity,
+    // which keeps it in the tab order, and not while it has focus.
+    const hidden = rulesFor('.re-runner-card:not(:hover, .dragging) .re-drag:not(:focus-visible)');
+    expect(hidden).toEqual([
+      { within: ['@media (hover: hover)', '@container re-card (width > 600px)'], body: 'opacity: 0;' },
+    ]);
   });
 });
