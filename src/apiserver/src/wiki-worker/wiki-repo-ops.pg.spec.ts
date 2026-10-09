@@ -336,14 +336,21 @@ test('a snapshot uploaded in fragments is reassembled to the byte, and replaces 
     }),
     (error: unknown) => error instanceof WikiRepoOpRefused && error.refusal === 'INVALID_RESULT',
   );
+  // The refusal is final for the runner, so it ends the operation, the reason on its row (repoOps.unsettled).
+  const refused = await h.prisma.wikiRepoOp.findUnique({ where: { id: thirdOp }, select: { state: true, error: true } });
+  assert.equal(refused?.state, 'failed');
+  assert.match(refused?.error ?? '', /no snapshot of f{40} is held for this space/u);
+  const { jobId: fourthJob, opId: fourthOp } = await queued(h, 'snapshot', {});
+  const fourthLease = randomUUID();
+  const fourthGeneration = await claim(h, fourthOp, fourthLease);
   const skipped = await h.ops.applyWikiRepoOpResult({
-    id: thirdOp,
+    id: fourthOp,
     runnerId: h.owner.runnerId,
-    body: { claimGeneration: thirdGeneration, leaseOwner: thirdLease, state: 'succeeded', result: { sha: 'e'.repeat(40), skipped: true } },
+    body: { claimGeneration: fourthGeneration, leaseOwner: fourthLease, state: 'succeeded', result: { sha: 'e'.repeat(40), skipped: true } },
   });
   assert.deepEqual(skipped, { accepted: true, state: 'succeeded' });
 
-  await h.prisma.wikiJob.deleteMany({ where: { id: { in: [jobId, secondJob, thirdJob] } } });
+  await h.prisma.wikiJob.deleteMany({ where: { id: { in: [jobId, secondJob, thirdJob, fourthJob] } } });
 });
 
 test('a job parked on an operation is woken by the NOTIFY, and is back in the queue afterwards', { skip, timeout: 60_000 }, async () => {

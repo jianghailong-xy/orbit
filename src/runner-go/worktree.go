@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -1003,8 +1004,18 @@ func (ops worktreeGitOps) stagedLiveDiff(wt *Worktree, withPatch bool) ([]Change
 	// phantom deletion vs base. Conversely, a path removed from HEAD is deliberately absent
 	// from this index, so an ignored copy left on disk cannot erase that committed deletion.
 	// `add -A` then layers the worktree's real uncommitted changes on top of committed HEAD.
-	if _, err := ops.runEnv(wt.Path, env, "read-tree", "HEAD"); err != nil {
-		return nil, nil
+	//
+	// HEAD is read over a copy of the checkout's own index rather than into an empty one. The
+	// entries come out the same, but each one HEAD still matches keeps the stat data git cached
+	// for it, so `add -A` re-hashes only what changed on disk. From an empty index it re-hashed
+	// every tracked file: 1.5–14 s per call on Orbit's own 18k-file checkout under load
+	// (2026-10-09), and a turn's completion — the session leaving Running after a Stop — waited
+	// on it.
+	if !ops.seedIndexFromCheckout(wt.Path, idx, env) {
+		_ = os.Remove(idx)
+		if _, err := ops.runEnv(wt.Path, env, "read-tree", "HEAD"); err != nil {
+			return nil, nil
+		}
 	}
 	if _, err := ops.runEnv(wt.Path, env, "add", "-A"); err != nil {
 		return nil, nil
@@ -1032,6 +1043,56 @@ func (ops worktreeGitOps) stagedLiveDiff(wt *Worktree, withPatch bool) ([]Change
 	// failure just leaves the file list without diffs, the status bar still works.
 	patchOut, _ := ops.runEnv(wt.Path, env, "diff", "--cached", baseSha)
 	return files, buildFilePatches(files, splitPatch(patchOut))
+}
+
+// seedIndexFromCheckout fills the temp index at idx with HEAD's tree, as `read-tree HEAD` into an
+// empty index would, but starting from a copy of the checkout's own index: `read-tree -m` with one
+// tree keeps the stat data of every entry whose content HEAD still has. The copy carries the
+// original's mtime too. Git re-checks the content of an entry written in the same instant as the
+// index ("racily clean") by comparing the two times, and a copy stamped now would trust an entry
+// the real index still re-checks. False when it can't be done — no index yet, or unmerged entries
+// mid-conflict, which `read-tree -m` refuses — and idx is then the caller's to discard.
+func (ops worktreeGitOps) seedIndexFromCheckout(dir, idx string, env []string) bool {
+	own, err := ops.run(dir, "rev-parse", "--git-path", "index")
+	if err != nil || own == "" {
+		return false
+	}
+	// Relative to dir in a main checkout; a linked worktree's lives under the repo's .git.
+	if !filepath.IsAbs(own) {
+		own = filepath.Join(dir, own)
+	}
+	if copyIndexFile(own, idx) != nil {
+		return false
+	}
+	_, err = ops.runEnv(dir, env, "read-tree", "-m", "HEAD")
+	return err == nil
+}
+
+// copyIndexFile copies a git index to dst, mtime included. The mtime is read from the open file,
+// not the path: git replaces an index by renaming a new one over it, and the time has to be the
+// one these bytes were written at.
+func copyIndexFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	info, err := in.Stat()
+	if err != nil {
+		return err
+	}
+	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		_ = out.Close()
+		return err
+	}
+	if err := out.Close(); err != nil {
+		return err
+	}
+	return os.Chtimes(dst, info.ModTime(), info.ModTime())
 }
 
 // worktreeIsDirty reports whether the worktree has uncommitted changes right now — tracked

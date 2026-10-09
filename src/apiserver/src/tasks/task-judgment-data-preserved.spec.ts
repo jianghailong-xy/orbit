@@ -2158,7 +2158,14 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // preserved pair, the criterion labels and the receipts a criterion lands on cannot move. The
       // last write is the only one that changes what the predicate sees, so re-applying the file is a
       // no-op.
-      '0411_retire_candidates_landed_by_receipt'],
+      '0411_retire_candidates_landed_by_receipt',
+      // A text with a U+0000 in it is kept as its bytes (0412): one TEXT NOT NULL DEFAULT 'text' on `wiki_repo_file`
+      // (`content_encoding`) and two on `wiki_model_request` (`answer_encoding`, `partial_encoding`), each `text` or
+      // `base64`, catalog-only as a constant default is, and one CHECK per table holding them to the two — `base64`
+      // only on a file row with a text — each added only when absent. No row is written, backfilled or deleted; no
+      // other column, and no function, trigger, type or index, is created, replaced or dropped; `task`, `project`
+      // and the six preserved objects are named nowhere.
+      '0412_wiki_stored_text_encoding'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

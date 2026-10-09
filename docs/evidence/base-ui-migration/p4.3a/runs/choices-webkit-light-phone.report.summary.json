@@ -1,0 +1,4186 @@
+{
+ "config": {
+  "argv": [
+   "/usr/local/bin/node",
+   "/mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/del/node_modules/.bin/playwright",
+   "test",
+   "--config",
+   "ui-migration/choices.config.mjs",
+   "--project",
+   "webkit-light-phone"
+  ],
+  "configFile": "/mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/del/src/web/ui-migration/choices.config.mjs",
+  "rootDir": "/mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/del/src/web/ui-migration",
+  "failOnFlakyTests": false,
+  "forbidOnly": false,
+  "fullyParallel": false,
+  "globalSetup": "/mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/del/src/web/ui-migration/environment.mjs",
+  "globalTeardown": null,
+  "globalTimeout": 0,
+  "grep": {},
+  "grepInvert": null,
+  "maxFailures": 0,
+  "metadata": {
+   "actualWorkers": 1
+  },
+  "preserveOutput": "always",
+  "projects": [
+   {
+    "outputDir": "/mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/del/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-desktop",
+    "name": "chromium-light-desktop",
+    "testDir": "/mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/del/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-phone",
+    "name": "chromium-light-phone",
+    "testDir": "/mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/del/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-desktop",
+    "name": "chromium-dark-desktop",
+    "testDir": "/mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/del/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-phone",
+    "name": "chromium-dark-phone",
+    "testDir": "/mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/del/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-desktop",
+    "name": "webkit-light-desktop",
+    "testDir": "/mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/del/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-phone",
+    "name": "webkit-light-phone",
+    "testDir": "/mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/del/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-desktop",
+    "name": "webkit-dark-desktop",
+    "testDir": "/mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/del/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-phone",
+    "name": "webkit-dark-phone",
+    "testDir": "/mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   }
+  ],
+  "quiet": false,
+  "reporter": [
+   [
+    "list",
+    null
+   ],
+   [
+    "json",
+    {
+     "outputFile": "/mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/del/src/web/.choices-results/report.json"
+    }
+   ]
+  ],
+  "reportSlowTests": {
+   "max": 5,
+   "threshold": 300000
+  },
+  "shard": null,
+  "tags": [],
+  "updateSnapshots": "none",
+  "updateSourceMethod": "patch",
+  "version": "1.63.0",
+  "workers": 1,
+  "webServer": {
+   "command": "npm run dev -- --host 127.0.0.1 --port 4177 --strictPort",
+   "cwd": "/mnt/data/tmp/34Za39GvWRQ08ZmKOpFNe/v1/del/src/web/",
+   "url": "http://127.0.0.1:4177",
+   "reuseExistingServer": false,
+   "timeout": 30000
+  }
+ },
+ "suites": [
+  {
+   "title": "choices-first-frame.browser.mjs",
+   "file": "choices-first-frame.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "menu is drawn where it settles from its first frame, at the replaced popup's place",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [
+        {
+         "type": "not compared with AntD",
+         "description": "page, pointer: visual viewport 382,390 / 382,390"
+        },
+        {
+         "type": "not compared with AntD",
+         "description": "page, flipped above, pointer: visual viewport 382,390 / 382,390"
+        },
+        {
+         "type": "not compared with AntD",
+         "description": "page, right edge, pointer: visual viewport 382,390 / 382,390"
+        },
+        {
+         "type": "not compared with AntD",
+         "description": "page, scrolled, pointer: visual viewport 382,390 / 382,390"
+        }
+       ],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 18838,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T06:56:20.657Z",
+         "annotations": [
+          {
+           "type": "not compared with AntD",
+           "description": "page, pointer: visual viewport 382,390 / 382,390"
+          },
+          {
+           "type": "not compared with AntD",
+           "description": "page, flipped above, pointer: visual viewport 382,390 / 382,390"
+          },
+          {
+           "type": "not compared with AntD",
+           "description": "page, right edge, pointer: visual viewport 382,390 / 382,390"
+          },
+          {
+           "type": "not compared with AntD",
+           "description": "page, scrolled, pointer: visual viewport 382,390 / 382,390"
+          }
+         ],
+         "attachments": [
+          {
+           "name": "first-frames",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "0109f8812f52f1c26549-f7225e949837fd974e4e",
+     "file": "choices-first-frame.browser.mjs",
+     "line": 177,
+     "column": 3
+    },
+    {
+     "title": "menu keeps its place through the normal entrance motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4088,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T06:56:39.576Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion-frames",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "0109f8812f52f1c26549-2978720b8a5156ff5174",
+     "file": "choices-first-frame.browser.mjs",
+     "line": 210,
+     "column": 3
+    },
+    {
+     "title": "submenu is drawn where it settles from its first frame, at the replaced popup's place",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [
+        {
+         "type": "not compared with AntD",
+         "description": "page, pointer: visual viewport 382,390 / 382,390"
+        },
+        {
+         "type": "not compared with AntD",
+         "description": "page, flipped above, pointer: visual viewport 382,390 / 382,390"
+        },
+        {
+         "type": "not compared with AntD",
+         "description": "page, right edge, pointer: visual viewport 382,390 / 382,390"
+        },
+        {
+         "type": "not compared with AntD",
+         "description": "page, scrolled, pointer: visual viewport 382,390 / 382,390"
+        }
+       ],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 16893,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T06:56:43.669Z",
+         "annotations": [
+          {
+           "type": "not compared with AntD",
+           "description": "page, pointer: visual viewport 382,390 / 382,390"
+          },
+          {
+           "type": "not compared with AntD",
+           "description": "page, flipped above, pointer: visual viewport 382,390 / 382,390"
+          },
+          {
+           "type": "not compared with AntD",
+           "description": "page, right edge, pointer: visual viewport 382,390 / 382,390"
+          },
+          {
+           "type": "not compared with AntD",
+           "description": "page, scrolled, pointer: visual viewport 382,390 / 382,390"
+          }
+         ],
+         "attachments": [
+          {
+           "name": "first-frames",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "0109f8812f52f1c26549-6d0c9b498b07ad4849dd",
+     "file": "choices-first-frame.browser.mjs",
+     "line": 177,
+     "column": 3
+    },
+    {
+     "title": "submenu keeps its place through the normal entrance motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3938,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T06:57:00.569Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion-frames",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "0109f8812f52f1c26549-aa15db103ac66e06d13d",
+     "file": "choices-first-frame.browser.mjs",
+     "line": 210,
+     "column": 3
+    },
+    {
+     "title": "select is drawn where it settles from its first frame, at the replaced popup's place",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [
+        {
+         "type": "not compared with AntD",
+         "description": "page, pointer: visual viewport 382,390 / 382,390"
+        },
+        {
+         "type": "not compared with AntD",
+         "description": "page, flipped above, pointer: visual viewport 382,390 / 382,390"
+        },
+        {
+         "type": "not compared with AntD",
+         "description": "page, right edge, pointer: visual viewport 382,390 / 382,390"
+        },
+        {
+         "type": "not compared with AntD",
+         "description": "page, scrolled, pointer: visual viewport 382,390 / 382,390"
+        }
+       ],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 11868,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T06:57:04.512Z",
+         "annotations": [
+          {
+           "type": "not compared with AntD",
+           "description": "page, pointer: visual viewport 382,390 / 382,390"
+          },
+          {
+           "type": "not compared with AntD",
+           "description": "page, flipped above, pointer: visual viewport 382,390 / 382,390"
+          },
+          {
+           "type": "not compared with AntD",
+           "description": "page, right edge, pointer: visual viewport 382,390 / 382,390"
+          },
+          {
+           "type": "not compared with AntD",
+           "description": "page, scrolled, pointer: visual viewport 382,390 / 382,390"
+          }
+         ],
+         "attachments": [
+          {
+           "name": "first-frames",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "0109f8812f52f1c26549-9d71f8c6374934b7fb7f",
+     "file": "choices-first-frame.browser.mjs",
+     "line": 177,
+     "column": 3
+    },
+    {
+     "title": "select keeps its place through the normal entrance motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2215,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T06:57:16.384Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion-frames",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "0109f8812f52f1c26549-efded0c14c6ece5cfd18",
+     "file": "choices-first-frame.browser.mjs",
+     "line": 210,
+     "column": 3
+    },
+    {
+     "title": "combobox is drawn where it settles from its first frame, at the replaced popup's place",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [
+        {
+         "type": "not compared with AntD",
+         "description": "page, pointer: visual viewport 382,390 / 382,390"
+        },
+        {
+         "type": "not compared with AntD",
+         "description": "page, flipped above, pointer: visual viewport 382,390 / 382,390"
+        },
+        {
+         "type": "not compared with AntD",
+         "description": "page, right edge, pointer: visual viewport 382,390 / 382,390"
+        },
+        {
+         "type": "not compared with AntD",
+         "description": "page, scrolled, pointer: visual viewport 382,390 / 382,390"
+        }
+       ],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 13500,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T06:57:18.603Z",
+         "annotations": [
+          {
+           "type": "not compared with AntD",
+           "description": "page, pointer: visual viewport 382,390 / 382,390"
+          },
+          {
+           "type": "not compared with AntD",
+           "description": "page, flipped above, pointer: visual viewport 382,390 / 382,390"
+          },
+          {
+           "type": "not compared with AntD",
+           "description": "page, right edge, pointer: visual viewport 382,390 / 382,390"
+          },
+          {
+           "type": "not compared with AntD",
+           "description": "page, scrolled, pointer: visual viewport 382,390 / 382,390"
+          }
+         ],
+         "attachments": [
+          {
+           "name": "first-frames",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "0109f8812f52f1c26549-313271d4fe61cd6811b9",
+     "file": "choices-first-frame.browser.mjs",
+     "line": 177,
+     "column": 3
+    },
+    {
+     "title": "combobox keeps its place through the normal entrance motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2897,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T06:57:32.107Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion-frames",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "0109f8812f52f1c26549-05d85af1d9d4544a2bad",
+     "file": "choices-first-frame.browser.mjs",
+     "line": 210,
+     "column": 3
+    },
+    {
+     "title": "multiselect is drawn where it settles from its first frame, at the replaced popup's place",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [
+        {
+         "type": "not compared with AntD",
+         "description": "page, pointer: visual viewport 382,390 / 382,390"
+        },
+        {
+         "type": "not compared with AntD",
+         "description": "page, flipped above, pointer: visual viewport 382,390 / 382,390"
+        },
+        {
+         "type": "not compared with AntD",
+         "description": "page, right edge, pointer: visual viewport 382,390 / 382,390"
+        },
+        {
+         "type": "not compared with AntD",
+         "description": "page, scrolled, pointer: visual viewport 382,390 / 382,390"
+        }
+       ],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 14749,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T06:57:35.010Z",
+         "annotations": [
+          {
+           "type": "not compared with AntD",
+           "description": "page, pointer: visual viewport 382,390 / 382,390"
+          },
+          {
+           "type": "not compared with AntD",
+           "description": "page, flipped above, pointer: visual viewport 382,390 / 382,390"
+          },
+          {
+           "type": "not compared with AntD",
+           "description": "page, right edge, pointer: visual viewport 382,390 / 382,390"
+          },
+          {
+           "type": "not compared with AntD",
+           "description": "page, scrolled, pointer: visual viewport 382,390 / 382,390"
+          }
+         ],
+         "attachments": [
+          {
+           "name": "first-frames",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "0109f8812f52f1c26549-a57037e1f313c91c6233",
+     "file": "choices-first-frame.browser.mjs",
+     "line": 177,
+     "column": 3
+    },
+    {
+     "title": "multiselect keeps its place through the normal entrance motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2976,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T06:57:49.765Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion-frames",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "0109f8812f52f1c26549-bcad3850c994f1788599",
+     "file": "choices-first-frame.browser.mjs",
+     "line": 210,
+     "column": 3
+    },
+    {
+     "title": "popover is drawn where it settles from its first frame, at the replaced popup's place",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [
+        {
+         "type": "not compared with AntD",
+         "description": "page, pointer: visual viewport 382,390 / 382,390"
+        },
+        {
+         "type": "not compared with AntD",
+         "description": "page, flipped above, pointer: visual viewport 382,390 / 382,390"
+        },
+        {
+         "type": "not compared with AntD",
+         "description": "page, right edge, pointer: visual viewport 382,390 / 382,390"
+        },
+        {
+         "type": "not compared with AntD",
+         "description": "page, scrolled, pointer: visual viewport 382,390 / 382,390"
+        }
+       ],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 14357,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T06:57:52.749Z",
+         "annotations": [
+          {
+           "type": "not compared with AntD",
+           "description": "page, pointer: visual viewport 382,390 / 382,390"
+          },
+          {
+           "type": "not compared with AntD",
+           "description": "page, flipped above, pointer: visual viewport 382,390 / 382,390"
+          },
+          {
+           "type": "not compared with AntD",
+           "description": "page, right edge, pointer: visual viewport 382,390 / 382,390"
+          },
+          {
+           "type": "not compared with AntD",
+           "description": "page, scrolled, pointer: visual viewport 382,390 / 382,390"
+          }
+         ],
+         "attachments": [
+          {
+           "name": "first-frames",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "0109f8812f52f1c26549-70b8828c8db5611c3797",
+     "file": "choices-first-frame.browser.mjs",
+     "line": 177,
+     "column": 3
+    },
+    {
+     "title": "popover keeps its place through the normal entrance motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3027,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T06:58:07.110Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion-frames",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "0109f8812f52f1c26549-871276d000751474b377",
+     "file": "choices-first-frame.browser.mjs",
+     "line": 210,
+     "column": 3
+    },
+    {
+     "title": "tooltip is drawn where it settles from its first frame, at the replaced popup's place",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [
+        {
+         "type": "not compared with AntD",
+         "description": "page, pointer: visual viewport 382,390 / 382,390"
+        },
+        {
+         "type": "not compared with AntD",
+         "description": "page, flipped above, pointer: visual viewport 382,390 / 382,390"
+        },
+        {
+         "type": "not compared with AntD",
+         "description": "page, right edge, pointer: visual viewport 382,390 / 382,390"
+        },
+        {
+         "type": "not compared with AntD",
+         "description": "page, scrolled, pointer: visual viewport 382,390 / 382,390"
+        }
+       ],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 14482,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T06:58:10.142Z",
+         "annotations": [
+          {
+           "type": "not compared with AntD",
+           "description": "page, pointer: visual viewport 382,390 / 382,390"
+          },
+          {
+           "type": "not compared with AntD",
+           "description": "page, flipped above, pointer: visual viewport 382,390 / 382,390"
+          },
+          {
+           "type": "not compared with AntD",
+           "description": "page, right edge, pointer: visual viewport 382,390 / 382,390"
+          },
+          {
+           "type": "not compared with AntD",
+           "description": "page, scrolled, pointer: visual viewport 382,390 / 382,390"
+          }
+         ],
+         "attachments": [
+          {
+           "name": "first-frames",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "0109f8812f52f1c26549-16f5609182f809f14777",
+     "file": "choices-first-frame.browser.mjs",
+     "line": 177,
+     "column": 3
+    },
+    {
+     "title": "tooltip keeps its place through the normal entrance motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2948,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T06:58:24.629Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion-frames",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "0109f8812f52f1c26549-3bcae91e2c85063e582e",
+     "file": "choices-first-frame.browser.mjs",
+     "line": 210,
+     "column": 3
+    },
+    {
+     "title": "popconfirm is drawn where it settles from its first frame, at the replaced popup's place",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [
+        {
+         "type": "not compared with AntD",
+         "description": "page, pointer: visual viewport 382,390 / 382,390"
+        },
+        {
+         "type": "not compared with AntD",
+         "description": "page, flipped above, pointer: visual viewport 382,390 / 382,390"
+        },
+        {
+         "type": "not compared with AntD",
+         "description": "page, right edge, pointer: visual viewport 382,390 / 382,390"
+        },
+        {
+         "type": "not compared with AntD",
+         "description": "page, scrolled, pointer: visual viewport 382,390 / 382,390"
+        }
+       ],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 12032,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T06:58:27.580Z",
+         "annotations": [
+          {
+           "type": "not compared with AntD",
+           "description": "page, pointer: visual viewport 382,390 / 382,390"
+          },
+          {
+           "type": "not compared with AntD",
+           "description": "page, flipped above, pointer: visual viewport 382,390 / 382,390"
+          },
+          {
+           "type": "not compared with AntD",
+           "description": "page, right edge, pointer: visual viewport 382,390 / 382,390"
+          },
+          {
+           "type": "not compared with AntD",
+           "description": "page, scrolled, pointer: visual viewport 382,390 / 382,390"
+          }
+         ],
+         "attachments": [
+          {
+           "name": "first-frames",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "0109f8812f52f1c26549-d9bb99c785aa0aed3aed",
+     "file": "choices-first-frame.browser.mjs",
+     "line": 177,
+     "column": 3
+    },
+    {
+     "title": "popconfirm keeps its place through the normal entrance motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2489,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T06:58:39.617Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion-frames",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "0109f8812f52f1c26549-3ca0e6c11b143433ba2c",
+     "file": "choices-first-frame.browser.mjs",
+     "line": 210,
+     "column": 3
+    }
+   ]
+  },
+  {
+   "title": "choices-lifecycle.browser.mjs",
+   "file": "choices-lifecycle.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "no-preference Dialog Popover Select exits restore one layer at a time",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2851,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T06:59:31.415Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "nested-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "scroll-unlock",
+           "contentType": "application/json"
+          },
+          {
+           "name": "page-scroll",
+           "contentType": "application/json"
+          },
+          {
+           "name": "nested-lifecycle",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "fc9bd5f4bdcc690b6239-7f2a94e000081cf7a239",
+     "file": "choices-lifecycle.browser.mjs",
+     "line": 51,
+     "column": 51
+    },
+    {
+     "title": "reduce Dialog Popover Select exits restore one layer at a time",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1421,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T06:59:34.384Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "nested-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "scroll-unlock",
+           "contentType": "application/json"
+          },
+          {
+           "name": "page-scroll",
+           "contentType": "application/json"
+          },
+          {
+           "name": "nested-lifecycle",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "fc9bd5f4bdcc690b6239-40160357c0076c573039",
+     "file": "choices-lifecycle.browser.mjs",
+     "line": 51,
+     "column": 51
+    },
+    {
+     "title": "reduced motion attachment has no transition and dismisses cleanly",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 804,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T06:59:35.811Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "reduced-motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "fc9bd5f4bdcc690b6239-8b8804d22cdcb6597f53",
+     "file": "choices-lifecycle.browser.mjs",
+     "line": 115,
+     "column": 90
+    },
+    {
+     "title": "reduced motion expiry has no transition and dismisses cleanly",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 764,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T06:59:36.622Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "reduced-motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "fc9bd5f4bdcc690b6239-1fc80713ec8f824842e0",
+     "file": "choices-lifecycle.browser.mjs",
+     "line": 115,
+     "column": 90
+    },
+    {
+     "title": "reduced motion search has no transition and dismisses cleanly",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 903,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T06:59:37.391Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "reduced-motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "fc9bd5f4bdcc690b6239-5ec9e2602aa95f78b502",
+     "file": "choices-lifecycle.browser.mjs",
+     "line": 115,
+     "column": 90
+    },
+    {
+     "title": "reduced motion multiple has no transition and dismisses cleanly",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 885,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T06:59:38.298Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "reduced-motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "fc9bd5f4bdcc690b6239-f16623becaf786175896",
+     "file": "choices-lifecycle.browser.mjs",
+     "line": 115,
+     "column": 90
+    },
+    {
+     "title": "reduced motion popover has no transition and dismisses cleanly",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 777,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T06:59:39.188Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "reduced-motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "fc9bd5f4bdcc690b6239-33181158b9abbf1e2873",
+     "file": "choices-lifecycle.browser.mjs",
+     "line": 115,
+     "column": 90
+    },
+    {
+     "title": "reduced motion tooltip has no transition and dismisses cleanly",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 764,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T06:59:39.972Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "reduced-motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "fc9bd5f4bdcc690b6239-2aa9514abef106e3a182",
+     "file": "choices-lifecycle.browser.mjs",
+     "line": 115,
+     "column": 90
+    },
+    {
+     "title": "normal attachment can reopen during exit without stale unmount",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1447,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T06:59:40.743Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "reopen",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "fc9bd5f4bdcc690b6239-5c82c065d9dd26307f18",
+     "file": "choices-lifecycle.browser.mjs",
+     "line": 132,
+     "column": 67
+    },
+    {
+     "title": "normal expiry can reopen during exit without stale unmount",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1471,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T06:59:42.194Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "reopen",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "fc9bd5f4bdcc690b6239-e3d7204aa942ddb94f51",
+     "file": "choices-lifecycle.browser.mjs",
+     "line": 132,
+     "column": 67
+    },
+    {
+     "title": "normal search can reopen during exit without stale unmount",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1709,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T06:59:43.670Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "reopen",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "fc9bd5f4bdcc690b6239-b7d79a92608ecd7618d6",
+     "file": "choices-lifecycle.browser.mjs",
+     "line": 132,
+     "column": 67
+    },
+    {
+     "title": "normal popover can reopen during exit without stale unmount",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1506,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T06:59:45.382Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "reopen",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "fc9bd5f4bdcc690b6239-af876e8625084889acbf",
+     "file": "choices-lifecycle.browser.mjs",
+     "line": 132,
+     "column": 67
+    }
+   ]
+  },
+  {
+   "title": "choices-motion.browser.mjs",
+   "file": "choices-motion.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "normal bottom entrance and exit motion matches attachment",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1849,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T06:59:46.937Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-3b18c2f605fd55c7d81e",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal top entrance and exit motion matches attachment",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2184,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T06:59:48.790Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-c33056b1e6d9e4dadced",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal flipped entrance and exit motion matches attachment",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2168,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T06:59:50.979Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-17c1ab2ab5590eb63372",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal bottom entrance and exit motion matches expiry",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1749,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T06:59:53.150Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-e8de47c09063cea36262",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal top entrance and exit motion matches expiry",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2265,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T06:59:54.903Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-d038c6b0d7587581329b",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal flipped entrance and exit motion matches expiry",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2238,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T06:59:57.173Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-7b364804b64f739a0e67",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal bottom entrance and exit motion matches search",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1788,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T06:59:59.415Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-4304acec32080e28b043",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal top entrance and exit motion matches search",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2141,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:00:01.208Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-aace03f830acd5b30d0f",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal flipped entrance and exit motion matches search",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2068,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:00:03.354Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-f1b23f80f364aeb8ea69",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal bottom entrance and exit motion matches multiple",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1785,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:00:05.427Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-a493efd34893c5930b67",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal top entrance and exit motion matches multiple",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2161,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:00:07.215Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-0b7a0efda99a81be5455",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal flipped entrance and exit motion matches multiple",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2120,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:00:09.381Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-b75cf68e5fc2574381b2",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal bottom entrance and exit motion matches popover",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1662,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:00:11.505Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-2f4afba213b54ffa2774",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal top entrance and exit motion matches popover",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2053,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:00:13.172Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-0a2d5a8fe751eab3b70e",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal flipped entrance and exit motion matches popover",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2027,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:00:15.229Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-cff591997fc3df27c10c",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal bottom entrance and exit motion matches tooltip",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1971,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:00:17.260Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-99f9864b984cc0b8f123",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal top entrance and exit motion matches tooltip",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2201,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:00:19.235Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-9156a1747dd2016215c5",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal flipped entrance and exit motion matches tooltip",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2094,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:00:21.440Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-108f47f75a63715fbd75",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "popover center zoom origin matches",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2131,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:00:23.538Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-a7304083c7e0d541cf63",
+     "file": "choices-motion.browser.mjs",
+     "line": 141,
+     "column": 83
+    },
+    {
+     "title": "popover end zoom origin matches",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2209,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:00:25.673Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-39a89aa6af2a7aee0c2a",
+     "file": "choices-motion.browser.mjs",
+     "line": 141,
+     "column": 83
+    },
+    {
+     "title": "tooltip center zoom origin matches",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2116,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:00:27.886Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-70a5e3213785f61a5d04",
+     "file": "choices-motion.browser.mjs",
+     "line": 141,
+     "column": 83
+    },
+    {
+     "title": "tooltip end zoom origin matches",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2147,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:00:30.007Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-f3ae04278a2972aadfa9",
+     "file": "choices-motion.browser.mjs",
+     "line": 141,
+     "column": 83
+    },
+    {
+     "title": "submenu left edge zoom matches and stays in view",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2908,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:00:32.159Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-15a47c007a2aa67e7798",
+     "file": "choices-motion.browser.mjs",
+     "line": 160,
+     "column": 41
+    },
+    {
+     "title": "submenu right edge zoom matches and stays in view",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2939,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:00:35.071Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-bfecfba6775753ff04bf",
+     "file": "choices-motion.browser.mjs",
+     "line": 160,
+     "column": 41
+    }
+   ]
+  },
+  {
+   "title": "choices-open-value.browser.mjs",
+   "file": "choices-open-value.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "expiry dims the current value while open and restores it on Escape",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2044,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:00:38.078Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-expiry-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "open-value",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "eeddbfef8f2db5cd42c9-eb898f8949c0620952db",
+     "file": "choices-open-value.browser.mjs",
+     "line": 31,
+     "column": 53
+    },
+    {
+     "title": "account dims the current value while open and restores it on Escape",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2013,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:00:40.126Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-account-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-account-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "open-value",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "eeddbfef8f2db5cd42c9-f7f74ac2c9dcab165914",
+     "file": "choices-open-value.browser.mjs",
+     "line": 31,
+     "column": 53
+    },
+    {
+     "title": "search dims the current value while open and restores it on Escape",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1985,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:00:42.143Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-search-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "open-value",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "eeddbfef8f2db5cd42c9-cd661039ad34fc282f6e",
+     "file": "choices-open-value.browser.mjs",
+     "line": 31,
+     "column": 53
+    }
+   ]
+  },
+  {
+   "title": "choices-submenu-geometry.browser.mjs",
+   "file": "choices-submenu-geometry.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "submenu at the left of the page settles where the replaced submenu does",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 10410,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T06:58:42.241Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "submenu-geometry",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "868cb2351927fbf39c3e-271d46e55854ad881694",
+     "file": "choices-submenu-geometry.browser.mjs",
+     "line": 84,
+     "column": 29
+    },
+    {
+     "title": "submenu at the middle of the page settles where the replaced submenu does",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 14750,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T06:58:52.655Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "submenu-geometry",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "868cb2351927fbf39c3e-e0588757fbdf5b5126ab",
+     "file": "choices-submenu-geometry.browser.mjs",
+     "line": 84,
+     "column": 29
+    },
+    {
+     "title": "submenu at the right edge settles where the replaced submenu does",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 11104,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T06:59:07.411Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "submenu-geometry",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "868cb2351927fbf39c3e-d7950dca8911e7815c80",
+     "file": "choices-submenu-geometry.browser.mjs",
+     "line": 84,
+     "column": 29
+    },
+    {
+     "title": "submenu at the right edge of a dialog settles where the replaced submenu does",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 12409,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T06:59:18.523Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "submenu-geometry",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "868cb2351927fbf39c3e-4164f5415679f3946408",
+     "file": "choices-submenu-geometry.browser.mjs",
+     "line": 84,
+     "column": 29
+    }
+   ]
+  },
+  {
+   "title": "choices.browser.mjs",
+   "file": "choices.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "attachment matches the current surface, density and option states",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2346,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:00:44.168Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-attachment-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-attachment-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "menu-glyphs",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-00c7e99edaf4fb1dacd8",
+     "file": "choices.browser.mjs",
+     "line": 83,
+     "column": 3
+    },
+    {
+     "title": "access matches the current surface, density and option states",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2345,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:00:46.518Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-access-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-access-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "menu-glyphs",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-d48585b625ea34d44d95",
+     "file": "choices.browser.mjs",
+     "line": 83,
+     "column": 3
+    },
+    {
+     "title": "expiry matches the current surface, density and option states",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2934,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:00:48.867Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-expiry-closed",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-expiry-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-closed",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-06741497847dca3f7183",
+     "file": "choices.browser.mjs",
+     "line": 83,
+     "column": 3
+    },
+    {
+     "title": "account matches the current surface, density and option states",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3102,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:00:51.807Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-account-closed",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-account-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-account-closed",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-account-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-2b6cbff9c8fed58ec9ed",
+     "file": "choices.browser.mjs",
+     "line": 83,
+     "column": 3
+    },
+    {
+     "title": "search matches the current surface, density and option states",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3071,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:00:54.913Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-search-closed",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-search-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-closed",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-7922f5facae71ffb6cee",
+     "file": "choices.browser.mjs",
+     "line": 83,
+     "column": 3
+    },
+    {
+     "title": "popover matches the current surface, density and option states",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2785,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:00:57.989Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-popover-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-popover-context",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-popover-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-popover-context",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-f922261e30d89994d10c",
+     "file": "choices.browser.mjs",
+     "line": 83,
+     "column": 3
+    },
+    {
+     "title": "tooltip matches the current surface, density and option states",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2777,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:01:00.779Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-tooltip-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-tooltip-context",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-tooltip-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-tooltip-context",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-f2ec37234954bbf68b4b",
+     "file": "choices.browser.mjs",
+     "line": 83,
+     "column": 3
+    },
+    {
+     "title": "empty, disabled, hover and focus choice surfaces match the existing states",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 12461,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:01:03.562Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-expiry-disabled",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-disabled",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-expiry-empty",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-empty",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-expiry-focus",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-focus",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-search-disabled",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-disabled",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-search-empty",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-empty",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-search-focus",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-focus",
+           "contentType": "image/png"
+          },
+          {
+           "name": "choice-states",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-bc29b86d7f68238548e5",
+     "file": "choices.browser.mjs",
+     "line": 158,
+     "column": 1
+    },
+    {
+     "title": "menu arrows, disabled items, submenu, checkbox and focus return work",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1427,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:01:16.028Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-menu",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-3e38503bc2ce6ee10f97",
+     "file": "choices.browser.mjs",
+     "line": 198,
+     "column": 1
+    },
+    {
+     "title": "touch or pointer menus dismiss outside, fit viewport and open a dialog with stable return focus",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1877,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:01:17.460Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "pointer-menu",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-0f67538217332879bc41",
+     "file": "choices.browser.mjs",
+     "line": 231,
+     "column": 1
+    },
+    {
+     "title": "select supports arrows, Enter, clear, empty, disabled and empty-string account values",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2666,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:01:19.341Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-d032c91cccd421ff3053",
+     "file": "choices.browser.mjs",
+     "line": 263,
+     "column": 1
+    },
+    {
+     "title": "search preserves selection, filters groups, handles no results, composition and explicit clear",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1710,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:01:22.011Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "search",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-f4bb5398e507a90d192a",
+     "file": "choices.browser.mjs",
+     "line": 292,
+     "column": 1
+    },
+    {
+     "title": "remote search accepts server labels and resets an action picker without local filtering",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1123,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:01:23.727Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "remote-search",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-d5b49649ae79d8236f0d",
+     "file": "choices.browser.mjs",
+     "line": 323,
+     "column": 1
+    },
+    {
+     "title": "Dialog owns choices, top-layer Escape, Tab and theme",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2707,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:01:24.854Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "choices-in-dialog",
+           "contentType": "image/png"
+          },
+          {
+           "name": "nested-choices",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-a02723d141b513eb2e25",
+     "file": "choices.browser.mjs",
+     "line": 343,
+     "column": 37
+    },
+    {
+     "title": "legacy Modal owns choices, top-layer Escape, Tab and theme",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2679,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:01:27.566Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "choices-in-dialog",
+           "contentType": "image/png"
+          },
+          {
+           "name": "nested-choices",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-6a35e55b52ca16ca92bd",
+     "file": "choices.browser.mjs",
+     "line": 343,
+     "column": 37
+    },
+    {
+     "title": "legacy host final Tab matches the AntD-only baseline, including its browser-focus boundary",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4175,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:01:30.250Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "legacy-tab-baseline",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-a86f8c0f1b7620c5a382",
+     "file": "choices.browser.mjs",
+     "line": 381,
+     "column": 1
+    },
+    {
+     "title": "popover owns a select and restores focus one layer at a time; tooltip responds to focus and hover",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1934,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:01:34.429Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "popover-tooltip",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-b586f1140afcd4b6f7ed",
+     "file": "choices.browser.mjs",
+     "line": 400,
+     "column": 1
+    },
+    {
+     "title": "open choices follow the live system theme without losing selection",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1313,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:01:36.369Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "live-theme",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-b8e03faf3a4f6b4a8381",
+     "file": "choices.browser.mjs",
+     "line": 435,
+     "column": 1
+    },
+    {
+     "title": "Dialog keeps composition, outside dismissal, submenu Escape and keyboard clear within its owner",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1731,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:01:37.694Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "dialog-boundaries",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-aa01560f768850e661b4",
+     "file": "choices.browser.mjs",
+     "line": 453,
+     "column": 1
+    },
+    {
+     "title": "multiple chip appearance matches current labels and email fields",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 5459,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:01:39.429Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-multiple-default",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-multiple-options",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-multiple-default",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-multiple-options",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-multiple-disabled",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-multiple-disabled",
+           "contentType": "image/png"
+          },
+          {
+           "name": "multi-appearance",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-ae4d3b109cbc95b3fa28",
+     "file": "choices.browser.mjs",
+     "line": 486,
+     "column": 42
+    },
+    {
+     "title": "tags chip appearance matches current labels and email fields",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3213,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:01:44.892Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-tags-default",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-tags-default",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-tags-disabled",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-tags-disabled",
+           "contentType": "image/png"
+          },
+          {
+           "name": "multi-appearance",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-b2d75d5e8cc8373686f7",
+     "file": "choices.browser.mjs",
+     "line": 486,
+     "column": 42
+    },
+    {
+     "title": "multiple labels search, toggle, collapse, remove and clear without losing the remaining values",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1447,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:01:48.110Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "multiple-labels",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-8360a0b0740205f1758e",
+     "file": "choices.browser.mjs",
+     "line": 515,
+     "column": 1
+    },
+    {
+     "title": "email tags support controlled typing, separators, composition, Enter, blur and deletion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1294,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:01:49.561Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "email-tags",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-11231e5e06c9af93d1d2",
+     "file": "choices.browser.mjs",
+     "line": 552,
+     "column": 1
+    },
+    {
+     "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1759,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:01:50.860Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "multi-dialog-and-row",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-c82145c680b3e18c8694",
+     "file": "choices.browser.mjs",
+     "line": 592,
+     "column": 1
+    },
+    {
+     "title": "search option touch selects once and preserves input focus",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1094,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:01:52.627Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "search-touch",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-d25c956c9546c6a8cf51",
+     "file": "choices.browser.mjs",
+     "line": 631,
+     "column": 1
+    },
+    {
+     "title": "disabled-button and long tooltips remain accessible; a plan-usage-sized popover fits the screen",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1551,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T07:01:53.731Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "long-tooltip",
+           "contentType": "image/png"
+          },
+          {
+           "name": "plan-usage-sized-popover",
+           "contentType": "image/png"
+          },
+          {
+           "name": "tooltip-and-popover-edges",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-1d13b420d3dde85b431d",
+     "file": "choices.browser.mjs",
+     "line": 642,
+     "column": 1
+    }
+   ]
+  }
+ ],
+ "errors": [],
+ "stats": {
+  "startTime": "2026-10-09T06:56:17.337Z",
+  "duration": 338403.603,
+  "expected": 85,
+  "skipped": 0,
+  "unexpected": 0,
+  "flaky": 0
+ }
+}

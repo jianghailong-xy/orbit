@@ -32,7 +32,42 @@ RICH = ('# Reading fixture\n\nSelect these words and copy a portion of this para
         '![Fixed 1440 × 2560 image](orbit-attachment:' + ATTACHMENT + ')\n\n'
         '[Earlier record](orbit-session:' + SESSION + '?at=' + RECORD + ')\n\nEnd of rich message.')
 
+# A06C: the reader's increments over one short session — the sticky question, engine stderr and notices, a
+# transient provider error, a workflow's progress, the Orbit context card, an image file link and the worktree bar.
+SHOT = '/root/.orbit/worktrees/' + SESSION + '/shots/runner.png'
+NOTE = '\n\n<referenced-task id="' + TASK + '">\n  标题   Related reading task\n</referenced-task>'
+PROGRESS = {'toolUseId': 'wf-1', 'taskType': 'local_workflow', 'usage': {'totalTokens': 0, 'toolUses': 12, 'durationMs': 1020000},
+            'phases': [{'index': 0, 'title': 'Design'}, {'index': 1, 'title': 'Judge'}],
+            'agents': [{'index': 0, 'label': 'design:sticky-header', 'phaseIndex': 0, 'state': 'done', 'toolCalls': 7,
+                        'model': 'claude-opus-5-5', 'transcriptKey': 'agent-1'},
+                       {'index': 1, 'label': 'judge:product', 'phaseIndex': 1, 'state': 'error', 'error': 'rate limited'}]}
+def a06c_events():
+    rows = []
+    def add(kind, payload): rows.append({'seq': len(rows) + 1, 'type': kind, 'payload': payload, 'ts': '2026-10-09T00:00:00.000Z'})
+    add('user', {'text': 'First question: plan the reader increments'})
+    for i in range(8): add('assistant', {'text': f'Plan step {i + 1}: ' + ('long reading text. ' * 40)})
+    add('user', {'text': 'Second question: ship the reader' + NOTE, 'controlPlaneNote': NOTE})
+    add('system', {'stderr': '--dangerously-skip-permissions cannot be used with root/sudo privileges\n'})
+    add('system', {'stderr': '2026-10-03T15:27:44.249024Z ERROR codex_models_manager::manager: failed to refresh available models: unexpected status 401 Unauthorized',
+                   'diagnostic': {'component': 'model_catalog', 'phase': 'startup', 'severity': 'WARN', 'impact': 'degraded', 'recoverable': True, 'code': 'codex_model_catalog_auth'}})
+    add('system', {'subtype': 'init', 'notice': 'Switched to Wikova · Pro — the 5-hour window on Zhang Min · Plus is spent', 'noticeKind': 'pool-member-switched'})
+    add('error', {'message': 'exceeded retry limit, last status: 429 Too Many Requests, request id: 95e00d6c-68cc-4d64-b4da-01a6252260c2'})
+    add('tool_use', {'id': 'wf-1', 'name': 'Workflow', 'input': {'script': "export const meta = {\n  name: 'a06c-review',\n  description: 'Review the reader increments',\n}\n"}})
+    add('tool_result', {'toolUseId': 'wf-1', 'content': 'Workflow launched in background. Task ID: w2f3yv1s8\nSummary: Review the reader increments\nTranscript dir: /x'})
+    add('tool_use', {'id': 'agent-1', 'name': 'Agent', 'parentToolUseId': 'wf-1', 'input': {'prompt': 'Design the sticky header'}})
+    add('tool_use', {'id': 'read-1', 'name': 'Read', 'parentToolUseId': 'agent-1', 'input': {'file_path': 'src/reader/StickyQuestions.kt'}})
+    add('tool_result', {'toolUseId': 'read-1', 'parentToolUseId': 'agent-1', 'content': 'package io.orbitd.android.reader'})
+    add('background_task', {'toolUseId': 'wf-1', 'shellId': 'w2f3yv1s8', 'status': 'completed',
+                            'summary': 'Dynamic workflow "Review the reader increments" completed', 'progress': PROGRESS})
+    add('assistant', {'text': 'Saved the screenshot: [runner.png](' + SHOT + ').'})
+    for i in range(6): add('assistant', {'text': f'Follow-up {i + 1}: ' + ('closing notes. ' * 30)})
+    add('assistant', {'text': 'Latest answer A06C. Select these words.'})
+    return rows
+A06C = a06c_events()
+
 def event(seq, mode='DS3', full=False):
+    if mode == 'A06C':
+        return A06C[seq - 1]
     if mode == 'REVIEW':
         kind, payload = 'assistant', {'text': f'Protected record {seq}'}
         if seq == 414: kind, payload = 'turn_end', {'subtype': 'completed'}
@@ -87,9 +122,15 @@ class State:
     delta_count = 0
     epoch = 0
     requests = []
+    posts = []
     extra = []
+    merge = None
+    merge_at = 0.
+    merge_target = 'main'
     @property
-    def count(self): return (420 if self.mode == 'REVIEW' else 10000 if self.mode == 'DS3' else 100000) + len(self.extra)
+    def base(self): return len(A06C) if self.mode == 'A06C' else 420 if self.mode == 'REVIEW' else 10000 if self.mode == 'DS3' else 100000
+    @property
+    def count(self): return self.base + len(self.extra)
 state = State()
 
 class Handler(BaseHTTPRequestHandler):
@@ -108,6 +149,7 @@ class Handler(BaseHTTPRequestHandler):
                 if body.get('reset'):
                     state.mode = body.get('mode', 'DS3'); state.extra = []; state.denial = 0; state.stream = False; state.delta_count = 0; state.epoch += 1
                     state.page_denial = 0; state.record_denial = 0; state.snapshot_status = 0
+                    state.merge = None; state.merge_target = 'main'; state.posts = []
                 if 'denial' in body: state.denial = body['denial']
                 for key in ('page_denial', 'record_denial', 'snapshot_status'):
                     if key in body: setattr(state, key, body[key])
@@ -120,10 +162,18 @@ class Handler(BaseHTTPRequestHandler):
         if path in ('/api/auth/login', '/api/auth/refresh'):
             return self.reply({'accessToken':'a06-fixture-access','refreshToken':'a06-fixture-refresh','user':{'id':'a06-user','email':'a06@example.test','name':'A06'}})
         if path == '/api/auth/logout': return self.reply({})
+        if path.startswith('/api/sessions/' + SESSION + '/'):
+            # The worktree bar's requests: recorded, and a merge answered by the "runner" a second later.
+            action = path[len('/api/sessions/' + SESSION + '/'):]
+            with state.lock:
+                state.posts.append({'path': action, 'body': body})
+                if action == 'merge':
+                    state.merge = 'pending'; state.merge_at = time.monotonic(); state.merge_target = body.get('targetBranch') or 'main'
+            return self.reply({})
         self.reply({}, 404)
     def do_GET(self):
         url = urlparse(self.path); path = url.path; query = parse_qs(url.query)
-        if path == '/__stats': return self.reply({'mode': state.mode, 'deltaCount': state.delta_count, 'count': state.count, 'requests': state.requests})
+        if path == '/__stats': return self.reply({'mode': state.mode, 'deltaCount': state.delta_count, 'count': state.count, 'requests': state.requests, 'posts': state.posts})
         if self.headers.get('Authorization') != 'Bearer a06-fixture-access': return self.reply({}, 401)
         with state.lock:
             state.requests.append({'at':time.monotonic(), 'path':self.path})
@@ -135,6 +185,24 @@ class Handler(BaseHTTPRequestHandler):
         session = {'id':SESSION,'title':'Long conversation','workspaceId':WORKSPACE,'status':'RUNNING','runState':'RUNNING','lifecycleState':'OPEN',
                    'branch':'orbit/a06-reading','baseSha':'a'*40,'isolationStatus':'isolated','worktreeDirty':True,
                    'changedFiles':[{'path':'reader.kt','additions':12,'deletions':3}], 'taskId':TASK, 'capabilities':{'canComplete':True}}
+        if state.mode == 'A06C':
+            if state.merge == 'pending' and time.monotonic() - state.merge_at > 1.0: state.merge = 'merged'
+            session.update({'status': 'AWAITING_INPUT', 'runState': 'AWAITING_INPUT', 'isolationStatus': 'worktree', 'branch': 'orbit/a06c-reader-85cfd1', 'worktreeDirty': False,
+                            'mergeTargets': ['main', 'develop'], 'mergeStatus': state.merge,
+                            'changedFiles': [{'path': 'src/reader/WorktreeBar.kt', 'additions': 12, 'deletions': 3, 'status': 'M'},
+                                             {'path': 'docs/shots/new.png', 'additions': -1, 'deletions': -1, 'status': 'A'},
+                                             {'path': 'dist/app.zip', 'additions': -1, 'deletions': -1, 'status': 'A'}]})
+            if state.merge: session['mergeTarget'] = state.merge_target
+            if path.endswith('/diff'): return self.reply({'patches': [{'path': 'src/reader/WorktreeBar.kt',
+                'patch': 'diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1,2 +1,2 @@\n-old bar\n+new bar\n context'}]})
+            if path.endswith('/worktree-file'):
+                wanted = query.get('path', [''])[0]
+                if wanted == 'docs/shots/new.png': return self.reply(IMAGE, mime='image/png')
+                if wanted == 'dist/app.zip': return self.reply(b'PK\x03\x04a06c', mime='application/zip')
+                return self.reply({'message': 'Not found'}, 404)
+            if path.endswith('/artifacts') and query.get('path', [''])[0] == SHOT: return self.reply(IMAGE, mime='image/png')
+            if path.endswith('/background'): return self.reply([{'shellId': 'w2f3yv1s8', 'toolUseId': 'wf-1', 'kind': 'workflow', 'command': '',
+                'description': 'Review the reader increments', 'status': 'done', 'progress': PROGRESS}])
         if path == '/api/sessions': return self.reply([session] if query.get('view',['open'])[0] == 'open' else [])
         if path == '/api/workspaces': return self.reply([{'id':WORKSPACE,'name':'Reader fixture','enabled':True}])
         if path == '/api/sessions/' + SESSION: return self.reply(session)
@@ -155,7 +223,7 @@ class Handler(BaseHTTPRequestHandler):
             elif 'before' in query: end = int(query['before'][0])-1; start=max(1,end-199)
             elif 'after' in query: start=int(query['after'][0])+1; end=min(total,start+199)
             else: end=total; start=max(1,end-int(query.get('tail',['200'])[0])+1)
-            base = 420 if state.mode == 'REVIEW' else 10000 if state.mode == 'DS3' else 100000
+            base = state.base
             rows = [event(i,state.mode) if i<=base else state.extra[i-base-1] for i in range(start,end+1)]
             value = {'events':rows,'hasMore':start>1,'before':start if start>1 else None,'after':end if end<total else None}
             if 'around' in query: value['anchor']={'kind':'event','id':query['around'][0],'seq':anchor}

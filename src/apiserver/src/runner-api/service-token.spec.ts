@@ -200,6 +200,8 @@ test('the session guard accepts a runner credential or a service token, and noth
         findFirst: async ({ where }: { where: { tokenHash: string } }) =>
           where.tokenHash === sha256('runner-secret') ? { ...runnerRow, owner: { disabledAt: null } } : null,
       },
+      // A self-managed runner: no managed runner mapping binds its credential to an instance.
+      managedRunner: { findUnique: async () => null },
     } as never,
     { verify: async (token: string) => (token === 'service' ? grant : null) } as never,
   );

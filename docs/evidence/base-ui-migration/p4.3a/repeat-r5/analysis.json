@@ -1,0 +1,221 @@
+{
+ "shots": {
+  "webkit-light-desktop/p43a-tasks-keys-space": {
+   "ref": {
+    "formal": "c359d83f22d4",
+    "repeat 1": "c359d83f22d4",
+    "repeat 2": "c359d83f22d4",
+    "repeat 3": "c359d83f22d4"
+   },
+   "del": {
+    "formal": "c359d83f22d4",
+    "repeat 1": "c359d83f22d4",
+    "repeat 2": "c359d83f22d4",
+    "repeat 3": "c359d83f22d4"
+   }
+  },
+  "webkit-dark-desktop/p43a-tasks-keys-space": {
+   "ref": {
+    "formal": "3c40a8644a4f",
+    "repeat 1": "3c40a8644a4f",
+    "repeat 2": "c3aecffd938c",
+    "repeat 3": "3c40a8644a4f"
+   },
+   "del": {
+    "formal": "c3aecffd938c",
+    "repeat 1": "c3aecffd938c",
+    "repeat 2": "3c40a8644a4f",
+    "repeat 3": "c3aecffd938c"
+   }
+  },
+  "webkit-light-phone/p43a-tasks-keys-space": {
+   "ref": {
+    "formal": "ed55c892268c",
+    "repeat 1": "ed55c892268c",
+    "repeat 2": "ed55c892268c",
+    "repeat 3": "ed55c892268c"
+   },
+   "del": {
+    "formal": "ed55c892268c",
+    "repeat 1": "ed55c892268c",
+    "repeat 2": "ed55c892268c",
+    "repeat 3": "ed55c892268c"
+   }
+  },
+  "webkit-dark-phone/p43a-tasks-keys-space": {
+   "ref": {
+    "formal": "094f5c5ee9eb",
+    "repeat 1": "094f5c5ee9eb",
+    "repeat 2": "094f5c5ee9eb",
+    "repeat 3": "094f5c5ee9eb"
+   },
+   "del": {
+    "formal": "094f5c5ee9eb",
+    "repeat 1": "094f5c5ee9eb",
+    "repeat 2": "094f5c5ee9eb",
+    "repeat 3": "094f5c5ee9eb"
+   }
+  },
+  "webkit-light-phone/p43a-delete-refused": {
+   "ref": {
+    "formal": "ecaa1425dd6c",
+    "repeat 1": "97f54c5c64b6",
+    "repeat 2": "ecaa1425dd6c",
+    "repeat 3": "97f54c5c64b6"
+   },
+   "del": {
+    "formal": "ecaa1425dd6c",
+    "repeat 1": "ecaa1425dd6c",
+    "repeat 2": "ecaa1425dd6c",
+    "repeat 3": "ecaa1425dd6c"
+   }
+  },
+  "webkit-light-phone/p43a-delete": {
+   "ref": {
+    "formal": "f7e2868db333",
+    "repeat 1": "f7e2868db333",
+    "repeat 2": "f7e2868db333",
+    "repeat 3": "f7e2868db333"
+   },
+   "del": {
+    "formal": "f7e2868db333",
+    "repeat 1": "f7e2868db333",
+    "repeat 2": "f7e2868db333",
+    "repeat 3": "f7e2868db333"
+   }
+  },
+  "webkit-light-desktop/p43a-header-live": {
+   "ref": {
+    "formal": "ba49c524d414",
+    "repeat 1": "ba49c524d414",
+    "repeat 2": "ba49c524d414",
+    "repeat 3": "ba49c524d414"
+   },
+   "del": {
+    "formal": "7851624cff2f",
+    "repeat 1": "7851624cff2f",
+    "repeat 2": "7851624cff2f",
+    "repeat 3": "7851624cff2f"
+   }
+  },
+  "webkit-light-desktop/p43a-delete-refused": {
+   "ref": {
+    "formal": "46a2b0461202",
+    "repeat 1": "46a2b0461202",
+    "repeat 2": "46a2b0461202",
+    "repeat 3": "46a2b0461202"
+   },
+   "del": {
+    "formal": "46a2b0461202",
+    "repeat 1": "46a2b0461202",
+    "repeat 2": "46a2b0461202",
+    "repeat 3": "46a2b0461202"
+   }
+  }
+ },
+ "runs": {
+  "ref formal": {
+   "stats": {
+    "expected": 110,
+    "unexpected": 2,
+    "flaky": 0,
+    "skipped": 0
+   },
+   "pageErrors": [
+    {
+     "project": "webkit-dark-phone",
+     "test": "keys with a task open: Space checks it whichever checkbox ha",
+     "pageErrors": [
+      "ResizeObserver loop completed with undelivered notifications."
+     ]
+    },
+    {
+     "project": "webkit-light-phone",
+     "test": "keys with a task open: Space checks it whichever checkbox ha",
+     "pageErrors": [
+      "ResizeObserver loop completed with undelivered notifications."
+     ]
+    }
+   ]
+  },
+  "ref repeat 1": {
+   "stats": {
+    "expected": 8,
+    "unexpected": 0,
+    "flaky": 0,
+    "skipped": 0
+   },
+   "pageErrors": []
+  },
+  "ref repeat 2": {
+   "stats": {
+    "expected": 8,
+    "unexpected": 0,
+    "flaky": 0,
+    "skipped": 0
+   },
+   "pageErrors": []
+  },
+  "ref repeat 3": {
+   "stats": {
+    "expected": 6,
+    "unexpected": 2,
+    "flaky": 0,
+    "skipped": 0
+   },
+   "pageErrors": [
+    {
+     "project": "webkit-light-phone",
+     "test": "keys with a task open: Space checks it whichever checkbox ha",
+     "pageErrors": [
+      "ResizeObserver loop completed with undelivered notifications."
+     ]
+    }
+   ]
+  },
+  "del formal": {
+   "stats": {
+    "expected": 111,
+    "unexpected": 1,
+    "flaky": 0,
+    "skipped": 0
+   },
+   "pageErrors": [
+    {
+     "project": "webkit-light-desktop",
+     "test": "keys with a task open: Space checks it whichever checkbox ha",
+     "pageErrors": [
+      "ResizeObserver loop completed with undelivered notifications."
+     ]
+    }
+   ]
+  },
+  "del repeat 1": {
+   "stats": {
+    "expected": 8,
+    "unexpected": 0,
+    "flaky": 0,
+    "skipped": 0
+   },
+   "pageErrors": []
+  },
+  "del repeat 2": {
+   "stats": {
+    "expected": 8,
+    "unexpected": 0,
+    "flaky": 0,
+    "skipped": 0
+   },
+   "pageErrors": []
+  },
+  "del repeat 3": {
+   "stats": {
+    "expected": 8,
+    "unexpected": 0,
+    "flaky": 0,
+    "skipped": 0
+   },
+   "pageErrors": []
+  }
+ }
+}

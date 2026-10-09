@@ -2,6 +2,8 @@ import { createHash } from 'crypto';
 import { Prisma } from '@prisma/client';
 import { WIKI_MODEL_QUEUE, type WikiSystemModelErrorKind } from '@orbit/shared';
 import type { PrismaService } from '../prisma/prisma.service';
+import { stripNul } from '../runner-api/strip-nul';
+import { wikiStoredModelText, wikiTextBase64, wikiTextFromStored, wikiTextIsStorable } from './wiki-stored-text';
 
 /**
  * The `wiki_model_request` table: the queue every wiki model call goes through (migration 0401, contract
@@ -55,6 +57,31 @@ export function wikiModelRequestSha256(call: WikiModelRequestCall): string {
   return createHash('sha256')
     .update(JSON.stringify({ system: call.system, prompt: call.prompt, maxTokens: call.maxTokens }))
     .digest('hex');
+}
+
+/**
+ * The call as the `request` column keeps it (contract `modelQueue.requestEncoding`): as it is, or — when its
+ * system or its prompt has a U+0000, which jsonb cannot hold — both as their UTF-8 bytes in base64, with
+ * `encoding: 'base64'` saying so. A prompt carries the repository's text (a code piece is a file's lines), and a
+ * source file can have a NUL: the call the model is sent is the one the pipeline made, byte for byte, as the
+ * runner path's is. The digest is the call's, not the column's.
+ */
+export function wikiModelRequestStored(call: WikiModelRequestCall): Record<string, unknown> {
+  if (wikiTextIsStorable(call.system) && wikiTextIsStorable(call.prompt)) {
+    return { system: call.system, prompt: call.prompt, maxTokens: call.maxTokens };
+  }
+  return { system: wikiTextBase64(call.system), prompt: wikiTextBase64(call.prompt), maxTokens: call.maxTokens, encoding: 'base64' };
+}
+
+/** The call a `request` column keeps, read back to what the pipeline made. */
+export function wikiModelRequestCallOf(stored: unknown): WikiModelRequestCall {
+  const row = (stored ?? {}) as { system?: unknown; prompt?: unknown; maxTokens?: unknown; encoding?: unknown };
+  const encoding = typeof row.encoding === 'string' ? row.encoding : 'text';
+  return {
+    system: wikiTextFromStored(String(row.system ?? ''), encoding),
+    prompt: wikiTextFromStored(String(row.prompt ?? ''), encoding),
+    maxTokens: Number(row.maxTokens),
+  };
 }
 
 /**
@@ -118,7 +145,7 @@ export async function claimWikiModelRequests(
       WHERE "state" = 'running' AND "lease_deadline_at" > now()`;
     const room = Math.min(input.limit ?? input.concurrency, input.concurrency) - counted.running;
     if (room <= 0) return [];
-    const claimed = await tx.$queryRaw<Array<Omit<ClaimedWikiModelRequest, 'request'> & { request: unknown }>>`
+    const claimed = await tx.$queryRaw<Array<Omit<ClaimedWikiModelRequest, 'request'> & { request: unknown; partialEncoding: string }>>`
       UPDATE "wiki_model_request" AS r
       SET "state" = 'running',
           "lease_owner" = ${input.workerId}::uuid,
@@ -149,8 +176,13 @@ export async function claimWikiModelRequests(
       WHERE r."id" = due."id"
       RETURNING r."id", r."job_id" AS "jobId", r."owner_id" AS "ownerId", r."space_id" AS "spaceId",
                 r."step", r."unit", r."attempt", r."attempts", r."priority", r."request",
-                r."request_sha256" AS "requestSha256", r."partial", r."lease_generation" AS "leaseGeneration"`;
-    return claimed.map((row) => ({ ...row, request: row.request as unknown as WikiModelRequestCall }));
+                r."request_sha256" AS "requestSha256", r."partial", r."partial_encoding" AS "partialEncoding",
+                r."lease_generation" AS "leaseGeneration"`;
+    return claimed.map(({ partialEncoding, ...row }) => ({
+      ...row,
+      request: wikiModelRequestCallOf(row.request),
+      partial: row.partial === null ? null : wikiTextFromStored(row.partial, partialEncoding),
+    }));
   });
 }
 
@@ -164,9 +196,12 @@ export async function writeWikiModelRequestPartial(
   input: { id: string; generation: string; partial: string; leaseMs?: number },
 ): Promise<boolean> {
   const lease = input.leaseMs ?? WIKI_MODEL_QUEUE.leaseSeconds * 1000;
+  // Kept as the model sent it: a NUL copied out of a code piece makes it the text's bytes (answerEncoding).
+  const partial = wikiStoredModelText(input.partial);
   const updated = await prisma.$executeRaw`
     UPDATE "wiki_model_request"
-    SET "partial" = ${input.partial},
+    SET "partial" = ${partial.content},
+        "partial_encoding" = ${partial.encoding},
         "lease_deadline_at" = now() + ${lease}::int * interval '1 millisecond',
         "updated_at" = now()
     WHERE "id" = ${input.id}::uuid AND "state" = 'running' AND "lease_generation" = ${input.generation}::uuid`;
@@ -186,7 +221,7 @@ export async function renewWikiModelRequestLease(
   return updated > 0;
 }
 
-/** What a settled call leaves on its row, beside the state itself. */
+/** What a settled call leaves on its row, beside the state itself; its error is a message, kept without any U+0000. */
 export interface WikiModelRequestSettlement {
   answer?: string;
   inputTokens?: number | null;
@@ -201,10 +236,13 @@ export async function succeedWikiModelRequest(
   prisma: PrismaService,
   input: { id: string; generation: string; answer: string; inputTokens?: number | null; outputTokens?: number | null; httpStatus?: number | null },
 ): Promise<boolean> {
+  // The answer as the model sent it, a NUL and all (answerEncoding): the job parses what the runner path's would.
+  const answer = wikiStoredModelText(input.answer);
   const updated = await prisma.$executeRaw`
     UPDATE "wiki_model_request"
     SET "state" = 'succeeded',
-        "answer" = ${input.answer},
+        "answer" = ${answer.content},
+        "answer_encoding" = ${answer.encoding},
         "input_tokens" = ${input.inputTokens ?? null},
         "output_tokens" = ${input.outputTokens ?? null},
         "http_status" = ${input.httpStatus ?? null},
@@ -239,7 +277,7 @@ export async function retryWikiModelRequest(
           WHEN "attempts" = 1 THEN ${WIKI_MODEL_QUEUE.retryBackoffSeconds[1]}
           ELSE ${WIKI_MODEL_QUEUE.retryBackoffSeconds[0]} END)::int * interval '1 second',
         "http_status" = ${input.httpStatus ?? null},
-        "error" = ${input.error ?? null},
+        "error" = ${input.error == null ? null : stripNul(input.error)},
         "error_kind" = ${input.errorKind ?? null},
         "lease_owner" = NULL,
         "lease_generation" = NULL,
@@ -258,7 +296,7 @@ export async function failWikiModelRequest(
     UPDATE "wiki_model_request"
     SET "state" = 'failed',
         "http_status" = ${input.httpStatus ?? null},
-        "error" = ${input.error ?? 'the call failed'},
+        "error" = ${stripNul(input.error ?? 'the call failed')},
         "error_kind" = ${input.errorKind ?? 'other'},
         "lease_owner" = NULL,
         "lease_generation" = NULL,
@@ -356,9 +394,11 @@ export async function releaseWikiModelRequestLease(
   prisma: PrismaService,
   input: { id: string; generation: string; partial?: string | null },
 ): Promise<boolean> {
+  const partial = input.partial == null ? null : wikiStoredModelText(input.partial);
   const updated = await prisma.$executeRaw`
     UPDATE "wiki_model_request"
-    SET "partial" = COALESCE(${input.partial ?? null}, "partial"),
+    SET "partial" = COALESCE(${partial?.content ?? null}, "partial"),
+        "partial_encoding" = COALESCE(${partial?.encoding ?? null}, "partial_encoding"),
         "lease_deadline_at" = now(),
         "updated_at" = now()
     WHERE "id" = ${input.id}::uuid AND "state" = 'running' AND "lease_generation" = ${input.generation}::uuid`;
@@ -405,7 +445,7 @@ export async function enqueueWikiModelRequest(
                                       "request", "request_sha256", "state")
     VALUES (${input.id}::uuid, ${input.jobId}::uuid, ${input.ownerId}::uuid, ${input.spaceId}::uuid,
             ${input.step}, ${input.unit}, ${input.attempt ?? 1}, ${input.priority ?? 0},
-            ${JSON.stringify(input.request)}::jsonb, ${sha}, 'queued')
+            ${JSON.stringify(wikiModelRequestStored(input.request))}::jsonb, ${sha}, 'queued')
     ON CONFLICT ("job_id", "step", "unit", "attempt") DO NOTHING
     RETURNING "id"`;
   if (inserted.length > 0) return { id: inserted[0].id, inserted: true };
@@ -441,13 +481,22 @@ export interface WikiModelRequestRead {
 
 /** One request by its id, as its waiter re-reads it when the queue says something changed. */
 export async function wikiModelRequestById(prisma: PrismaService, id: string): Promise<WikiModelRequestRead | null> {
-  const rows = await prisma.$queryRaw<WikiModelRequestRead[]>`
+  const rows = await prisma.$queryRaw<Array<WikiModelRequestRead & { answerEncoding: string; partialEncoding: string }>>`
     SELECT "id", "job_id" AS "jobId", "step", "unit", "attempt", "attempts", "state", "answer", "partial",
+           "answer_encoding" AS "answerEncoding", "partial_encoding" AS "partialEncoding",
            "input_tokens" AS "inputTokens", "output_tokens" AS "outputTokens", "http_status" AS "httpStatus",
            "error", "error_kind" AS "errorKind", "request_sha256" AS "requestSha256",
            "enqueued_at" AS "enqueuedAt", "not_before" AS "notBefore", "started_at" AS "startedAt", "ended_at" AS "endedAt"
     FROM "wiki_model_request" WHERE "id" = ${id}::uuid`;
-  return rows[0] ?? null;
+  const row = rows[0];
+  if (!row) return null;
+  // The answer and the partial read back to the text the model sent (answerEncoding).
+  const { answerEncoding, partialEncoding, ...read } = row;
+  return {
+    ...read,
+    answer: read.answer === null ? null : wikiTextFromStored(read.answer, answerEncoding),
+    partial: read.partial === null ? null : wikiTextFromStored(read.partial, partialEncoding),
+  };
 }
 
 /** The channel a settled request announces itself on; the worker LISTENs on it and polls as the fallback. */

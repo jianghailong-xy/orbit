@@ -8,6 +8,7 @@ import {
   type WikiPlanMaterials,
 } from '@orbit/shared';
 import type { PrismaService } from '../prisma/prisma.service';
+import { stripNul } from '../runner-api/strip-nul';
 import type { WikiPlans } from '../wiki/wiki-plan';
 import { progressWikiPlanJobOfJob, saveWikiPlanJobMaterials, wikiPlanMaterials } from '../wiki/wiki-plan-job';
 import { WikiRefusalError } from '../wiki/wiki.service';
@@ -265,7 +266,8 @@ class WikiPlanDraftRun implements WikiPlanRunState {
       if (report.attempts.length > 0) finish.attempt = report.attempts.length;
       if (this.lastErrors.length > 0) finish.errors = this.lastErrors.slice(0, WIKI_PLAN_RULES.errorsMax);
       if (this.lastDraft && Buffer.byteLength(JSON.stringify(this.lastDraft), 'utf8') <= WIKI_PLAN_JOB_RULES.draftMaxBytes) finish.draft = this.lastDraft;
-      await this.deps.plans.finishServerJob({ ownerId: job.ownerId, spaceId: job.spaceId, planJobId: planJob.id, wikiJobId: job.id }, finish);
+      // Its last draft and errors are the model's words: without any U+0000 (contract `jobs.serverWrites`).
+      await this.deps.plans.finishServerJob({ ownerId: job.ownerId, spaceId: job.spaceId, planJobId: planJob.id, wikiJobId: job.id }, stripNul(finish));
       throw new WikiJobContentError(`plan ${this.kind}: ${error.message}`, this.wikiJobReport('failed', null, error.message, report));
     }
     const report = await this.close();
@@ -800,7 +802,9 @@ class WikiPlanDraftRun implements WikiPlanRunState {
     if (this.deps.model) request.model = this.deps.model;
     request.idempotencyKey = wikiPlanServerDraftKey(this.planJobId, job.id, request);
     try {
-      const stored = await this.deps.plans.submitServerDraft({ ownerId: job.ownerId, spaceId: job.spaceId, wikiJobId: job.id }, request);
+      // What the model wrote goes to the shared writer without any U+0000 (contract `jobs.serverWrites`): Postgres keeps
+      // none, and a model may copy one out of the code it was shown — the runner gate drops it from a report the same way.
+      const stored = await this.deps.plans.submitServerDraft({ ownerId: job.ownerId, spaceId: job.spaceId, wikiJobId: job.id }, stripNul(request));
       if (stored.replayed) this.say(`The server had stored this draft already, as version ${stored.version}: a replay submitted it again.`);
       return { version: stored.version, refused: null };
     } catch (error) {

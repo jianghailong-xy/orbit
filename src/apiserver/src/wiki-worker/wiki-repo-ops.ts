@@ -18,8 +18,11 @@ import {
 // parameter metadata out of the emitted JavaScript — a type-only import leaves that slot `Object` and the
 // process refuses to boot (checked in the e2e stack, 2026-10-08).
 import { PrismaService } from '../prisma/prisma.service';
-import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
+import { classifyTransactionFault, loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { notifyRunnerWakeOnCommit } from '../realtime/runner-wake';
+import { stripNul } from '../runner-api/strip-nul';
+import { postgresSqlState } from '../tasks/task-supersession';
+import { wikiJsonIsStorable, wikiStoredText, wikiTextFromStored, wikiTextIsStorable, wikiTextIsWellFormed } from './wiki-stored-text';
 
 /**
  * The `wiki_repo_op` table and the space's snapshot cache (migration 0402, contract `repoOps`,
@@ -51,22 +54,38 @@ import { notifyRunnerWakeOnCommit } from '../realtime/runner-wake';
  * served, and only the rest is asked of the runner — the same text is never read twice. A `cut` row (the
  * bounded window an older runner answers with) satisfies an older runner's read and not a whole-file one.
  *
- * WHAT IS A SERVICE AND WHAT IS NOT. The three writes that own a transaction are methods of `WikiRepoOps`
- * below, so each retry is labelled the way every other retry in this tree is (db-write-inventory.ts). The
- * claim, the renewals and the waits are plain functions: they are single statements or read loops, they
- * open no transaction, and nothing about them is a service's.
+ * A FILE IS KEPT BYTE FOR BYTE (contract `repoOps.storedText`). Postgres holds no U+0000 in `text` or `jsonb`,
+ * and a source file can have one: such a file's text is kept as its UTF-8 bytes in base64, its row says so, and
+ * the cache reads it back to the text `git show` printed (wiki-stored-text.ts). The raw answer — the files'
+ * text, the index — is never written into the operation's own row: the row keeps what the settle made of it.
+ *
+ * NOTHING THE RUNNER IS TOLD IS FINAL IS LEFT RUNNING. A result or a fragment the server refuses, or cannot
+ * store, settles the operation failed with the reason before the refusal is answered (`closeUnsettled`): the
+ * runner stops on a 4xx, and the job waiting on the operation is woken now rather than at its limit. What a
+ * runner gave up on in some other way — its job ended without it, or its claim went quiet long ago — is
+ * settled failed by the worker's sweep (`failAbandonedWikiRepoOps`).
+ *
+ * WHAT IS A SERVICE AND WHAT IS NOT. The writes that own a transaction are methods of `WikiRepoOps` below,
+ * so each retry is labelled the way every other retry in this tree is (db-write-inventory.ts). The claim,
+ * the renewals, the waits and the sweep are plain functions: they are single statements or read loops,
+ * they open no transaction, and nothing about them is a service's.
  */
 
 /** The channel a settled operation announces itself on; a waiting job LISTENs on it and polls as the fallback. */
 export const WIKI_REPO_OP_CHANNEL = 'wiki_repo_op';
 
-/** Why a repository operation could not be written. Each is a status code at the route. */
-export type WikiRepoOpRefusal = 'STALE_CLAIM' | 'NOT_FOUND' | 'INVALID_RESULT';
+/**
+ * Why a repository operation could not be written. Each is a status code at the route. UNSTORABLE_RESULT is a
+ * result or a fragment the database refused to store (a value it cannot hold, a constraint): the operation is
+ * settled failed with the reason (`closeUnsettled`), and the 4xx tells the runner not to send it again.
+ */
+export type WikiRepoOpRefusal = 'STALE_CLAIM' | 'NOT_FOUND' | 'INVALID_RESULT' | 'UNSTORABLE_RESULT';
 
 export const WIKI_REPO_OP_REFUSAL_STATUS: Record<WikiRepoOpRefusal, number> = {
   STALE_CLAIM: 409,
   NOT_FOUND: 404,
   INVALID_RESULT: 400,
+  UNSTORABLE_RESULT: 422,
 };
 
 export class WikiRepoOpRefused extends Error {
@@ -75,6 +94,18 @@ export class WikiRepoOpRefused extends Error {
     this.name = 'WikiRepoOpRefused';
   }
 }
+
+/** The claim a fragment or a result was written under, as the runner sent it: what closing the operation fences on. */
+interface WikiRepoOpWrittenUnder {
+  id: string;
+  runnerId?: string;
+  ownerId?: string;
+  leaseOwner: string;
+  claimGeneration: number;
+}
+
+/** A lease owner as the claim mints it. */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** The workspace whose checkout an operation reads, as the enqueue resolved it. */
 export interface WikiRepoOpTarget {
@@ -162,9 +193,10 @@ export function wikiRepoStepsCanRun(readiness: WikiRepoReadiness): boolean {
 /**
  * The repository operations' writes, as the door and the worker call them (contract `repoOps`, design §7).
  *
- * Three of them own a transaction — enqueuing an operation, staging a fragment, settling a result — and
- * each names itself at the retry (db-write-inventory.ts); the rest of the table's statements are the plain
- * functions below, which the door and the worker call directly. A class rather than three module functions
+ * Four of them own a transaction — enqueuing an operation, staging a fragment, settling a result, and failing
+ * the operation a fragment or a result could not be written for — and each names itself at the retry
+ * (db-write-inventory.ts); the rest of the table's statements are the plain functions below, which the door
+ * and the worker call directly. A class rather than module functions
  * for exactly the reason `IntegrationJobRelay` is one: a retry is labelled at its call site through
  * `loggedRetry` with this class's own logger and a written-out operation name — which is what the metrics
  * and the runbook aggregate on, and what `db-conflict-metrics.spec.ts` reads out of this file.
@@ -245,7 +277,8 @@ export class WikiRepoOps {
    * The fence is the claim's, and the staging row is an upsert keyed by (operation, ordinal), so a fragment
    * that was sent twice is one fragment — which is what makes the upload safe to retry. `total` travels
    * with every fragment so a count that disagrees with the reassembly is refused at the fragment rather
-   * than at the end.
+   * than at the end. A fragment that is refused, or that the database will not store, fails the operation
+   * (`closeUnsettled`): the runner abandons an upload on a 4xx, and the job waiting on it is told now.
    */
   async storeWikiRepoOpFragment(input: {
     id: string;
@@ -257,40 +290,49 @@ export class WikiRepoOps {
     sha: string;
     content: string;
   }): Promise<{ received: number }> {
-    if (!Number.isInteger(input.index) || input.index < 0
-      || !Number.isInteger(input.total) || input.total < 1 || input.index >= input.total) {
-      throw new WikiRepoOpRefused('INVALID_RESULT', `fragment ${input.index} of ${input.total}`);
+    try {
+      if (!Number.isInteger(input.index) || input.index < 0
+        || !Number.isInteger(input.total) || input.total < 1 || input.index >= input.total) {
+        throw new WikiRepoOpRefused('INVALID_RESULT', `fragment ${input.index} of ${input.total}`);
+      }
+      if (typeof input.content !== 'string' || input.content === '') {
+        throw new WikiRepoOpRefused('INVALID_RESULT', 'an empty fragment');
+      }
+      if (Buffer.byteLength(input.content, 'utf8') > WIKI_REPO_OPS.fragmentBytes) {
+        throw new WikiRepoOpRefused('INVALID_RESULT', `a fragment of more than ${WIKI_REPO_OPS.fragmentBytes} bytes`);
+      }
+      if (input.total > Math.ceil(WIKI_REPO_OPS.maxSnapshotBytes / WIKI_REPO_OPS.fragmentBytes) + 1) {
+        throw new WikiRepoOpRefused('INVALID_RESULT', `${input.total} fragments is more than a snapshot can be`);
+      }
+      if (!/^[0-9a-f]{40}$/.test(input.sha)) {
+        throw new WikiRepoOpRefused('INVALID_RESULT', `${input.sha} is not a commit`);
+      }
+      // A fragment is a piece of JSON text, where a NUL is written `\u0000` and a character is never half a pair:
+      // a raw one is not part of any payload that parses, and the staging column could not hold the first.
+      if (!wikiTextIsStorable(input.content)) {
+        throw new WikiRepoOpRefused('INVALID_RESULT', 'a fragment with a raw U+0000 or a lone surrogate in it, which JSON text never has');
+      }
+      return await withTransactionRetry(this.prisma, async (tx) => {
+        const fenced = await tx.$executeRaw`
+          UPDATE "wiki_repo_op"
+             SET "heartbeat_at" = now(), "updated_at" = now()
+           WHERE "id" = ${input.id}::uuid
+             AND "runner_id" = ${input.runnerId}::uuid
+             AND "state" = 'running'
+             AND "lease_owner" = ${input.leaseOwner}::uuid
+             AND "claim_generation" = ${input.claimGeneration}`;
+        if (fenced === 0) throw new WikiRepoOpRefused('STALE_CLAIM');
+        await tx.$executeRaw`
+          INSERT INTO "wiki_repo_op_fragment" ("op_id", "ordinal", "content")
+          VALUES (${input.id}::uuid, ${input.index}, ${input.content})
+          ON CONFLICT ("op_id", "ordinal") DO UPDATE SET "content" = EXCLUDED."content"`;
+        const [counted] = await tx.$queryRaw<Array<{ received: bigint }>>`
+          SELECT count(*) AS "received" FROM "wiki_repo_op_fragment" WHERE "op_id" = ${input.id}::uuid`;
+        return { received: Number(counted?.received ?? 0) };
+      }, loggedRetry(this.logger, 'wikiRepoOp.storeFragment'));
+    } catch (error) {
+      throw await this.closeUnsettled(input, 'fragment', error);
     }
-    if (typeof input.content !== 'string' || input.content === '') {
-      throw new WikiRepoOpRefused('INVALID_RESULT', 'an empty fragment');
-    }
-    if (Buffer.byteLength(input.content, 'utf8') > WIKI_REPO_OPS.fragmentBytes) {
-      throw new WikiRepoOpRefused('INVALID_RESULT', `a fragment of more than ${WIKI_REPO_OPS.fragmentBytes} bytes`);
-    }
-    if (input.total > Math.ceil(WIKI_REPO_OPS.maxSnapshotBytes / WIKI_REPO_OPS.fragmentBytes) + 1) {
-      throw new WikiRepoOpRefused('INVALID_RESULT', `${input.total} fragments is more than a snapshot can be`);
-    }
-    if (!/^[0-9a-f]{40}$/.test(input.sha)) {
-      throw new WikiRepoOpRefused('INVALID_RESULT', `${input.sha} is not a commit`);
-    }
-    return withTransactionRetry(this.prisma, async (tx) => {
-      const fenced = await tx.$executeRaw`
-        UPDATE "wiki_repo_op"
-           SET "heartbeat_at" = now(), "updated_at" = now()
-         WHERE "id" = ${input.id}::uuid
-           AND "runner_id" = ${input.runnerId}::uuid
-           AND "state" = 'running'
-           AND "lease_owner" = ${input.leaseOwner}::uuid
-           AND "claim_generation" = ${input.claimGeneration}`;
-      if (fenced === 0) throw new WikiRepoOpRefused('STALE_CLAIM');
-      await tx.$executeRaw`
-        INSERT INTO "wiki_repo_op_fragment" ("op_id", "ordinal", "content")
-        VALUES (${input.id}::uuid, ${input.index}, ${input.content})
-        ON CONFLICT ("op_id", "ordinal") DO UPDATE SET "content" = EXCLUDED."content"`;
-      const [counted] = await tx.$queryRaw<Array<{ received: bigint }>>`
-        SELECT count(*) AS "received" FROM "wiki_repo_op_fragment" WHERE "op_id" = ${input.id}::uuid`;
-      return { received: Number(counted?.received ?? 0) };
-    }, loggedRetry(this.logger, 'wikiRepoOp.storeFragment'));
   }
 
   /**
@@ -299,7 +341,8 @@ export class WikiRepoOps {
    *
    * Everything is decided under the claim's generation. A result that arrives twice (a lost response) is
    * answered with the state the row already holds rather than refused, and a result from a claim that was
-   * taken over meets STALE_CLAIM.
+   * taken over meets STALE_CLAIM. A result that is refused, or that the database will not store, fails the
+   * operation with the reason before the refusal is answered (`closeUnsettled`).
    */
   async applyWikiRepoOpResult(input: {
     id: string;
@@ -314,84 +357,197 @@ export class WikiRepoOps {
       error?: unknown;
     };
   }): Promise<{ accepted: boolean; state: WikiRepoOpState }> {
-    const state = String(input.body?.state ?? '');
-    if (!WIKI_REPO_OP_RESULT_STATES.includes(state as never)) {
-      throw new WikiRepoOpRefused('INVALID_RESULT', `${state} is not a result`);
-    }
-    const error = typeof input.body?.error === 'string' ? input.body.error.trim() : '';
-    if (state === 'failed' && error === '') {
-      throw new WikiRepoOpRefused('INVALID_RESULT', 'a failed operation has to say why');
-    }
-    const result = input.body?.result;
-    if (result != null && (typeof result !== 'object' || Array.isArray(result))) {
-      throw new WikiRepoOpRefused('INVALID_RESULT', 'a result is an object');
-    }
+    try {
+      const state = String(input.body?.state ?? '');
+      if (!WIKI_REPO_OP_RESULT_STATES.includes(state as never)) {
+        throw new WikiRepoOpRefused('INVALID_RESULT', `${state} is not a result`);
+      }
+      // A failure's reason is a message — the job's error, the Activity line — so a NUL in it is dropped, as it is
+      // from everything else a runner says (runner-api/strip-nul.ts), rather than failing the write that carries it.
+      const error = typeof input.body?.error === 'string' ? stripNul(input.body.error).trim() : '';
+      if (state === 'failed' && error === '') {
+        throw new WikiRepoOpRefused('INVALID_RESULT', 'a failed operation has to say why');
+      }
+      const result = input.body?.result;
+      if (result != null && (typeof result !== 'object' || Array.isArray(result))) {
+        throw new WikiRepoOpRefused('INVALID_RESULT', 'a result is an object');
+      }
 
+      return await withTransactionRetry(this.prisma, async (tx) => {
+        const row = await tx.wikiRepoOp.findFirst({
+          where: { id: input.id, ...(input.ownerId != null ? { ownerId: input.ownerId } : {}) },
+          select: {
+            id: true, jobId: true, ownerId: true, spaceId: true, kind: true, state: true,
+            runnerId: true, leaseOwner: true, claimGeneration: true,
+          },
+        });
+        if (!row) throw new WikiRepoOpRefused('NOT_FOUND');
+        if (row.state !== 'queued' && row.state !== 'running') {
+          // Not a mistake the runner has to undo: a response that was lost is sent again, and the second copy
+          // finds the operation already written down.
+          return { accepted: false, state: row.state as WikiRepoOpState };
+        }
+        if (
+          row.leaseOwner !== String(input.body?.leaseOwner ?? '')
+          || row.claimGeneration !== Number(input.body?.claimGeneration ?? -1)
+          || (input.runnerId != null && row.runnerId !== input.runnerId)
+        ) {
+          throw new WikiRepoOpRefused('STALE_CLAIM');
+        }
+
+        // What the row keeps of the answer. A succeeded snapshot's and read's are written below, once the settle
+        // has made them — the shape, what became of each item — and never the raw answer: that is the index or
+        // the files' text, which the caches hold, and a file with a NUL in it is a text jsonb cannot hold at all
+        // (22P05, 2026-10-09). A diff's paths and an anchor's states are the answer itself, and none of them has
+        // a NUL or a lone surrogate: one that does is not an answer.
+        const kept = state === 'succeeded' && (row.kind === 'snapshot' || row.kind === 'read') ? null : result;
+        if (kept != null && !wikiJsonIsStorable(kept)) {
+          throw new WikiRepoOpRefused('INVALID_RESULT', `the ${row.kind} result has a U+0000 or a lone surrogate in it, which no ${row.kind} answer has`);
+        }
+
+        // The claim, as a compare-and-set rather than the read above: the read decided WHAT to write, this
+        // statement decides whether this process may still write it. A takeover between the two flips zero
+        // rows, and the whole transaction — including anything the snapshot below writes — is rolled back
+        // with it.
+        const settled = await tx.wikiRepoOp.updateMany({
+          where: {
+            id: row.id,
+            state: 'running',
+            leaseOwner: row.leaseOwner,
+            claimGeneration: row.claimGeneration,
+            ...(input.runnerId != null ? { runnerId: input.runnerId } : {}),
+          },
+          data: {
+            state,
+            // No result is SQL NULL, never JSON null, which `wiki_repo_op_result_chk` refuses: the runner leaves
+            // `result` out of a failure (`omitempty`), so a JSON null here would make every failure unsettleable.
+            result: kept == null ? Prisma.DbNull : (kept as Prisma.InputJsonValue),
+            error: state === 'failed' ? error : null,
+            leaseOwner: null,
+            claimedAt: null,
+            heartbeatAt: null,
+            endedAt: new Date(),
+          },
+        });
+        if (settled.count === 0) throw new WikiRepoOpRefused('STALE_CLAIM');
+
+        if (state === 'succeeded') {
+          const answer = await settleSnapshot(tx, row, result as Record<string, unknown> | null)
+            ?? await settleRead(tx, row, result as Record<string, unknown> | null);
+          // A snapshot answers with its shape, never the payload: the payload is the cache's, and echoing a
+          // megabyte of it into the row would double the bytes for a reader that has to be told where it is
+          // anyway. A read answers with what became of each item, its text being the cache's too.
+          if (answer) {
+            await tx.wikiRepoOp.update({ where: { id: row.id }, data: { result: answer as Prisma.InputJsonValue } });
+          }
+        }
+        // The staging is the operation's: whatever it staged has either just become the space's snapshot or
+        // is of no further use.
+        await tx.wikiRepoOpFragment.deleteMany({ where: { opId: row.id } });
+        await notifyRepoOpSettled(tx, row.id);
+        return { accepted: true, state: state as WikiRepoOpState };
+      }, loggedRetry(this.logger, 'wikiRepoOp.applyResult'));
+    } catch (error) {
+      const claim = {
+        id: input.id,
+        runnerId: input.runnerId,
+        ownerId: input.ownerId,
+        leaseOwner: String(input.body?.leaseOwner ?? ''),
+        claimGeneration: Number(input.body?.claimGeneration ?? -1),
+      };
+      throw await this.closeUnsettled(claim, 'result', error);
+    }
+  }
+
+  /**
+   * The answer to a result or a fragment that was not written (contract `repoOps.unsettled`): unless the miss is
+   * one the runner must not, or should, try again, the operation is settled failed with the reason — under the
+   * claim the runner wrote with — and the refusal the route gives is final.
+   *
+   * Until 2026-10-09 a result the database refused was a 500: the runner sent it five more times, gave up, and the
+   * operation stayed running under a claim nothing would ever settle, while the job waiting on it waited out
+   * 300 seconds per read, three reads in a row. Now:
+   *   - STALE_CLAIM and NOT_FOUND pass through: the operation is another claim's or nobody's, and nothing of it is
+   *     this runner's to settle;
+   *   - a conflict the database rolled back, or the database itself failing (`classifyTransactionFault`'s
+   *     TRANSIENT and RESOURCE), passes through too: the write did not happen rather than being refused, the
+   *     route answers 503 / 500, and the runner sends it again — which is what its retry is for;
+   *   - anything else is the result's: the operation is failed with the reason (`failWikiRepoOp`), its waiter is
+   *     woken by the settle's NOTIFY, and the route answers 400 INVALID_RESULT for a refusal, 422
+   *     UNSTORABLE_RESULT for a write the database refused — the SQLSTATE in the reason.
+   * A close that itself fails leaves the original error standing, and the runner's retry comes back to it.
+   */
+  private async closeUnsettled(claim: WikiRepoOpWrittenUnder, what: 'result' | 'fragment', error: unknown): Promise<unknown> {
+    const refusal = error instanceof WikiRepoOpRefused ? error : null;
+    if (refusal?.refusal === 'STALE_CLAIM' || refusal?.refusal === 'NOT_FOUND') return error;
+    if (!refusal) {
+      const fault = classifyTransactionFault(error);
+      if (fault.retryable || fault.family === 'RESOURCE') return error;
+    }
+    const reason = refusal
+      ? `the server refused the runner's ${what}: ${refusal.message}`
+      : `the server could not store the runner's ${what}: ${storageFault(error)}`;
+    let closed: boolean;
+    try {
+      closed = await this.failWikiRepoOp(claim, reason);
+    } catch (closing) {
+      this.logger.warn(`the repository operation ${claim.id} was not failed after its ${what} was not written: ${(closing as Error)?.message ?? String(closing)}`);
+      return error;
+    }
+    const ended = closed ? '; the operation is failed' : '';
+    return refusal
+      ? new WikiRepoOpRefused(refusal.refusal, `${refusal.message}${ended}`)
+      : new WikiRepoOpRefused('UNSTORABLE_RESULT', `${reason}${ended}`);
+  }
+
+  /**
+   * Settle a running operation failed, with the reason, under the claim that holds it: the same compare-and-set
+   * a result is written under, the staging dropped, and the NOTIFY that wakes the job waiting on it. False when
+   * the claim no longer holds the row — another claim's, or settled already — and then nothing is written.
+   */
+  private async failWikiRepoOp(claim: WikiRepoOpWrittenUnder, reason: string): Promise<boolean> {
+    // A claim that names no lease is no claim: there is nothing to compare, so nothing is settled.
+    if (!UUID.test(claim.leaseOwner) || !Number.isInteger(claim.claimGeneration)) return false;
     return withTransactionRetry(this.prisma, async (tx) => {
-      const row = await tx.wikiRepoOp.findFirst({
-        where: { id: input.id, ...(input.ownerId != null ? { ownerId: input.ownerId } : {}) },
-        select: {
-          id: true, jobId: true, ownerId: true, spaceId: true, kind: true, state: true,
-          runnerId: true, leaseOwner: true, claimGeneration: true,
-        },
-      });
-      if (!row) throw new WikiRepoOpRefused('NOT_FOUND');
-      if (row.state !== 'queued' && row.state !== 'running') {
-        // Not a mistake the runner has to undo: a response that was lost is sent again, and the second copy
-        // finds the operation already written down.
-        return { accepted: false, state: row.state as WikiRepoOpState };
-      }
-      if (
-        row.leaseOwner !== String(input.body?.leaseOwner ?? '')
-        || row.claimGeneration !== Number(input.body?.claimGeneration ?? -1)
-        || (input.runnerId != null && row.runnerId !== input.runnerId)
-      ) {
-        throw new WikiRepoOpRefused('STALE_CLAIM');
-      }
-
-      // The claim, as a compare-and-set rather than the read above: the read decided WHAT to write, this
-      // statement decides whether this process may still write it. A takeover between the two flips zero
-      // rows, and the whole transaction — including anything the snapshot below writes — is rolled back
-      // with it.
-      const settled = await tx.wikiRepoOp.updateMany({
+      const failed = await tx.wikiRepoOp.updateMany({
         where: {
-          id: row.id,
+          id: claim.id,
           state: 'running',
-          leaseOwner: row.leaseOwner,
-          claimGeneration: row.claimGeneration,
-          ...(input.runnerId != null ? { runnerId: input.runnerId } : {}),
+          leaseOwner: claim.leaseOwner,
+          claimGeneration: claim.claimGeneration,
+          ...(claim.runnerId != null ? { runnerId: claim.runnerId } : {}),
+          ...(claim.ownerId != null ? { ownerId: claim.ownerId } : {}),
         },
         data: {
-          state,
-          // No result is SQL NULL, never JSON null, which `wiki_repo_op_result_chk` refuses: the runner leaves
-          // `result` out of a failure (`omitempty`), so a JSON null here would make every failure unsettleable.
-          result: result == null ? Prisma.DbNull : (result as Prisma.InputJsonValue),
-          error: state === 'failed' ? error : null,
+          state: 'failed',
+          result: Prisma.DbNull,
+          error: reason,
           leaseOwner: null,
           claimedAt: null,
           heartbeatAt: null,
           endedAt: new Date(),
         },
       });
-      if (settled.count === 0) throw new WikiRepoOpRefused('STALE_CLAIM');
-
-      if (state === 'succeeded') {
-        const answer = await settleSnapshot(tx, row, result as Record<string, unknown> | null)
-          ?? await settleRead(tx, row, result as Record<string, unknown> | null);
-        // A snapshot answers with its shape, never the payload: the payload is the cache's, and echoing a
-        // megabyte of it into the row would double the bytes for a reader that has to be told where it is
-        // anyway. A read answers with what became of each item, its text being the cache's too.
-        if (answer) {
-          await tx.wikiRepoOp.update({ where: { id: row.id }, data: { result: answer as Prisma.InputJsonValue } });
-        }
-      }
-      // The staging is the operation's: whatever it staged has either just become the space's snapshot or
-      // is of no further use.
-      await tx.wikiRepoOpFragment.deleteMany({ where: { opId: row.id } });
-      await notifyRepoOpSettled(tx, row.id);
-      return { accepted: true, state: state as WikiRepoOpState };
-    }, loggedRetry(this.logger, 'wikiRepoOp.applyResult'));
+      if (failed.count === 0) return false;
+      await tx.wikiRepoOpFragment.deleteMany({ where: { opId: claim.id } });
+      await notifyRepoOpSettled(tx, claim.id);
+      return true;
+    }, loggedRetry(this.logger, 'wikiRepoOp.failUnsettled'));
   }
+}
+
+/**
+ * A write the database refused, as the operation's error says it: the SQLSTATE and the database's own words — the
+ * driver's message when Prisma kept it, else the last line of the error's — with any NUL dropped, cut to one line.
+ */
+function storageFault(error: unknown): string {
+  const node = error as { message?: unknown; meta?: { driverAdapterError?: { cause?: { originalMessage?: unknown } } } } | null;
+  const said = node?.meta?.driverAdapterError?.cause?.originalMessage;
+  const text = typeof said === 'string' && said.trim() !== ''
+    ? said
+    : String(node?.message ?? error).split('\n').map((line) => line.trim()).filter((line) => line !== '').pop() ?? 'no reason given';
+  const code = postgresSqlState(error);
+  return `${code ? `${code} ` : ''}${stripNul(text)}`.slice(0, 400);
 }
 
 // ── claim ───────────────────────────────────────────────────────────────────────────────────────
@@ -506,6 +662,48 @@ export async function renewWikiRepoOp(
   if (moved === 0) throw new WikiRepoOpRefused('STALE_CLAIM');
 }
 
+/**
+ * The sweep (contract `repoOps.abandoned`): running operations nothing will ever settle, settled failed with the
+ * reason. Two kinds, each quiet for at least the takeover window so a result about to arrive is not raced:
+ *   - the job it was run for has ended — it went on without the answer, failed, or was cancelled — and nobody
+ *     waits for one;
+ *   - its claim has been silent for WIKI_REPO_OPS.abandonedSeconds: the runner gave up on it, or is gone.
+ * The reads of 2026-10-09 are the first kind: their results were refused with 22P05 and given up on, and they
+ * stayed running under their claims long after their maintain job ended. One statement, `FOR UPDATE SKIP LOCKED`
+ * so a settle in flight keeps its row, and every operation it ends is announced on the channel a settle uses.
+ * Answers how many it ended. The worker runs it on every pass (wiki-job-executor.ts).
+ */
+export async function failAbandonedWikiRepoOps(prisma: PrismaService, limit = 50): Promise<number> {
+  return prisma.$executeRaw`
+    WITH abandoned AS (
+      SELECT o."id",
+             CASE WHEN j."state" IN ('succeeded', 'failed', 'cancelled')
+               THEN 'the job (' || j."kind" || ' ' || j."id" || ') ended ' || j."state" || ' with this ' || o."kind"
+                    || ' still running: nobody waits for its answer, so it is closed'
+               ELSE 'the runner''s claim has been silent since '
+                    || to_char(o."heartbeat_at" AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
+                    || ' and no answer came: the runner gave up on it or is gone, so it is closed'
+             END AS "reason"
+        FROM "wiki_repo_op" o
+        JOIN "wiki_job" j ON j."id" = o."job_id"
+       WHERE o."state" = 'running'
+         AND o."heartbeat_at" < now() - ${WIKI_REPO_OPS.staleSeconds}::int * interval '1 second'
+         AND (j."state" IN ('succeeded', 'failed', 'cancelled')
+              OR o."heartbeat_at" < now() - ${WIKI_REPO_OPS.abandonedSeconds}::int * interval '1 second')
+       ORDER BY o."heartbeat_at", o."id"
+       LIMIT ${limit}
+       FOR UPDATE OF o SKIP LOCKED
+    ), failed AS (
+      UPDATE "wiki_repo_op" o
+         SET "state" = 'failed', "result" = NULL, "error" = a."reason", "lease_owner" = NULL,
+             "claimed_at" = NULL, "heartbeat_at" = NULL, "ended_at" = now(), "updated_at" = now()
+        FROM abandoned a
+       WHERE o."id" = a."id" AND o."state" = 'running'
+      RETURNING o."id"
+    )
+    SELECT pg_notify(${WIKI_REPO_OP_CHANNEL}, f."id"::text) FROM failed f`;
+}
+
 /** A succeeded snapshot: the payload becomes the space's snapshot, or the answer says the space already
  *  held this commit and nothing was built.
  *
@@ -566,6 +764,11 @@ async function settleSnapshot(
   if (bytes > WIKI_REPO_OPS.maxSnapshotBytes) {
     throw new WikiRepoOpRefused('INVALID_RESULT', `a snapshot of ${bytes} bytes is more than one may be`);
   }
+  // The index is JSON text, where a NUL in a heading or a path is written `\u0000`: a raw one is not an index that
+  // parses, and the snapshot's fragments could not hold it.
+  if (!wikiTextIsStorable(payload)) {
+    throw new WikiRepoOpRefused('INVALID_RESULT', 'the snapshot has a raw U+0000 or a lone surrogate in it, which its JSON never has');
+  }
   const digest = createHash('sha256').update(payload, 'utf8').digest('hex');
   if (result?.digest != null && String(result.digest) !== digest) {
     throw new WikiRepoOpRefused('INVALID_RESULT', 'the snapshot does not hash as the result says it does');
@@ -606,6 +809,10 @@ async function settleSnapshot(
  * (space, sha, path) — the whole file for `found`, the bounded window for `cut`, and the reason for
  * `missing` and `too_large` — and the row's result is written with what became of each item. The texts
  * themselves are the cache's, never echoed into the result: a reader that wants one reads it there.
+ *
+ * A text is kept byte for byte (`repoOps.storedText`): one with a U+0000 in it — a source file can have one —
+ * as its UTF-8 bytes in base64, `content_encoding` saying so. A path or a text with a lone surrogate is not
+ * something `git show` printed (the runner writes an invalid byte as U+FFFD), and is refused.
  */
 async function settleRead(
   tx: Prisma.TransactionClient,
@@ -633,6 +840,9 @@ async function settleRead(
     const piece = raw as Record<string, unknown>;
     const path = typeof piece.path === 'string' ? piece.path.trim() : '';
     if (path === '') throw new WikiRepoOpRefused('INVALID_RESULT', 'a read item names a path');
+    if (!wikiTextIsStorable(path)) {
+      throw new WikiRepoOpRefused('INVALID_RESULT', 'a read item\'s path has a U+0000 or a lone surrogate in it, which no path in a tree has');
+    }
     const found = piece.found === true;
     const reason = typeof piece.reason === 'string' ? piece.reason : '';
     const truncated = piece.truncated === true;
@@ -645,15 +855,22 @@ async function settleRead(
     if (Buffer.byteLength(text, 'utf8') > WIKI_REPO_OPS.wholeFileBytes) {
       throw new WikiRepoOpRefused('INVALID_RESULT', `${path} answers with more than a whole file may be`);
     }
+    if (!wikiTextIsWellFormed(text)) {
+      throw new WikiRepoOpRefused('INVALID_RESULT', `${path} answers with a lone surrogate, which no file's bytes decode to`);
+    }
     // What the runner answered: the whole file, or part of it — one section, or the old window's cut, which
     // a whole-file reader treats as a miss and this cache keeps for the bounded reader that asked.
     const state: WikiRepoFileState = !found
       ? (reason === 'too_large' ? 'too_large' : 'missing')
       : (truncated || section !== '' ? 'cut' : 'found');
+    const stored = wikiStoredText(text);
     await tx.wikiRepoFile.upsert({
       where: { spaceId_sha_path: { spaceId: row.spaceId, sha, path } },
-      create: { ownerId: row.ownerId, spaceId: row.spaceId, sha, path, state, content: text, sizeBytes: BigInt(size) },
-      update: { state, content: text, sizeBytes: BigInt(size) },
+      create: {
+        ownerId: row.ownerId, spaceId: row.spaceId, sha, path, state,
+        content: stored.content, contentEncoding: stored.encoding, sizeBytes: BigInt(size),
+      },
+      update: { state, content: stored.content, contentEncoding: stored.encoding, sizeBytes: BigInt(size) },
     });
     items.push({
       path,
@@ -821,12 +1038,15 @@ export async function readCachedWikiRepoFiles(
   if (input.paths.length === 0) return out;
   const rows = await prisma.wikiRepoFile.findMany({
     where: { ownerId: input.ownerId, spaceId: input.spaceId, sha: input.sha, path: { in: [...new Set(input.paths)] } },
-    select: { path: true, state: true, content: true, sizeBytes: true },
+    select: { path: true, state: true, content: true, contentEncoding: true, sizeBytes: true },
   });
   for (const row of rows) {
     const state = row.state as WikiRepoFileState;
     if (input.wholeFile && state === 'cut') continue;
-    out.set(row.path, { path: row.path, state, text: row.content, sizeBytes: Number(row.sizeBytes) });
+    // The text as the runner read it: a file kept as its bytes (it has a U+0000) is turned back into its text here,
+    // so every reader — the documents' build, the plan's symbol fallback, maintenance — reads what `git show` printed.
+    const text = wikiTextFromStored(row.content, row.contentEncoding);
+    out.set(row.path, { path: row.path, state, text, sizeBytes: Number(row.sizeBytes) });
   }
   return out;
 }

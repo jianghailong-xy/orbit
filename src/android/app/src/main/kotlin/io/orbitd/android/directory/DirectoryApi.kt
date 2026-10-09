@@ -19,6 +19,9 @@ class DirectoryApi(private val api: OrbitApi, private val handle: SessionHandle)
         listOf("q" to query, "limit" to "100"))
     suspend fun moveTargets(id: String): MoveTargets = read(listOf("sessions", id, "move-targets"), MoveTargets.serializer())
     suspend fun objectRead(path: List<String>): JsonObject = read(path, JsonObject.serializer())
+    /** A file's bytes, bounded by the server's 25 MiB upload limit. */
+    suspend fun bytes(path: List<String>, query: List<Pair<String, String>> = emptyList()): ByteArray =
+        api.request(handle, ApiRequest(path, query = query, maxResponseBytes = 25L * 1024 * 1024)).body
 
     suspend fun mutate(path: List<String>, method: HttpMethod = HttpMethod.POST, body: JsonObject? = null): ByteArray =
         api.request(handle, ApiRequest(path, method, body = body?.toString()?.encodeToByteArray())).body

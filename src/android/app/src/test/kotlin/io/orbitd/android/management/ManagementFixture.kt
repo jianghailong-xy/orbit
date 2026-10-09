@@ -6,6 +6,7 @@ import io.orbitd.android.core.net.*
 import io.orbitd.android.core.realtime.EventTransport
 import io.orbitd.android.core.realtime.SseFrame
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.serialization.json.*
 import java.io.IOException
@@ -21,8 +22,27 @@ object ManagementFixture {
     const val ME = "0198f3a2-5555-7000-8000-000000000005"
     const val OTHER = "0198f3a2-6666-7000-8000-000000000006"
     const val RUNNER_TWO = "0198f3a2-7777-7000-8000-000000000007"
+    const val TASK = "0198f3a2-8888-7000-8000-000000000008"
+    const val KEY_DEEPSEEK = "0198f3a2-9999-7000-8000-000000000009"
+    const val KEY_HARNESS = "0198f3a2-aaaa-7000-8000-00000000000a"
+    const val KEY_OPENAI = "0198f3a2-bbbb-7000-8000-00000000000b"
 
     val calls = CopyOnWriteArrayList<String>()
+    /** The calls that carried a query, with it: "GET providers/mine/<id>/balance?refresh=1". */
+    val queries = CopyOnWriteArrayList<String>()
+    /** The account's switch for smart model selection as users/me's preferences carry it; null leaves it out, as before it was written. */
+    @Volatile var modelRouting: Boolean? = null
+    /** GET access-tokens' tokens, newest first; DELETE access-tokens/:id revokes one (REVOKED, by its USER). */
+    @Volatile var accessTokens: List<JsonObject> = emptyList()
+    @Volatile var accessTokensFail = false
+    /** GET providers (the pickers' catalogue, no ids) and GET providers/mine (the account's own, with ids, endpoints and hasApiKey). */
+    @Volatile var providerCatalog = "[]"
+    @Volatile var providersMine = "[]"
+    /** Each DeepSeek key's balance answer by provider id, and a gate that holds a key's read until it completes. */
+    val balances = java.util.concurrent.ConcurrentHashMap<String, String>()
+    val balanceGates = java.util.concurrent.ConcurrentHashMap<String, CompletableDeferred<Unit>>()
+    /** GET tasks/:id for [TASK]. */
+    @Volatile var task = "{}"
     @Volatile var workspaceName = "Alpha"
     @Volatile var runnerAlias = "Old alias"
     @Volatile var runnerCapacity = 2
@@ -64,10 +84,14 @@ object ManagementFixture {
         runnerEngines = "[]"; runnerExtra = ""; loginRelay = """{"status":null}"""; loginStarted = """{"status":"pending"}"""
         codeSent = """{"status":"done"}"""; onCode = {}; loginBodies.clear(); pauseBodies.clear()
         drop = CompletableDeferred(); opened = 0
+        queries.clear(); modelRouting = null; accessTokens = emptyList(); accessTokensFail = false; providerCatalog = "[]"; providersMine = "[]"
+        balances.clear(); balanceGates.clear(); task = "{}"
     }
 
     fun writes(path: String) = calls.filter { it.endsWith(" $path") && !it.startsWith("GET ") }
 
+    /** Requests answer on the caller's thread, as WatchFixture's do. On IO a page's load resumed on the IO worker under the Compose
+     *  rule's unconfined effects and wrote its state there, racing the first composition (an NPE in addPendingInvalidationsLocked). */
     fun session() = AuthSession(transport, object : CredentialStore {
         private var value: StoredSession? = null
         override suspend fun load() = value
@@ -80,13 +104,13 @@ object ManagementFixture {
         override suspend fun read(account: AccountKey, kind: DataKind, key: String): ByteArray? = null
         override suspend fun write(account: AccountKey, kind: DataKind, key: String, bytes: ByteArray) = Unit
         override suspend fun clearAll() = Unit
-    }, "a13-test", eventTransport = events)
+    }, "a13-test", dispatcher = Dispatchers.Unconfined, eventTransport = events)
 
     suspend fun signIn(session: AuthSession) = session.login(ServerAddress.parse("https://example.test"), "a13@example.test", "fixture")
 
     private val now get() = Instant.now()
     private fun user() = """{"id":"$ME","email":"a13@example.test","name":"Fixture","role":"MEMBER","avatarUpdatedAt":null,
-        "preferences":{"theme":"$theme","defaultPermissionMode":"auto","enableOrchestration":true}}"""
+        "preferences":{"theme":"$theme","defaultPermissionMode":"auto","enableOrchestration":true${modelRouting?.let { ",\"modelRouting\":$it" }.orEmpty()}}}"""
     private fun workspace() = """{"id":"$WORKSPACE","name":"$workspaceName","runnerId":"$RUNNER","enabled":true,"workDir":"/srv/alpha",
         "lastProvider":"claude","effort":"","modelRouting":false,"env":{},"position":0,"createdAt":"2026-09-01T00:00:00Z"}"""
     private fun runners() = runnerOrder.filter { (it == RUNNER || secondRunner) && it !in removedRunners }.joinToString(",", "[", "]") { if (it == RUNNER) runner() else runnerTwo() }
@@ -115,12 +139,21 @@ object ManagementFixture {
         val api = request.api
         val path = api.path.joinToString("/")
         calls += "${api.method} $path"
+        if (api.query.isNotEmpty()) queries += "${api.method} $path?" + api.query.joinToString("&") { (k, v) -> "$k=$v" }
         fun body() = Json.parseToJsonElement(api.body!!.decodeToString()).jsonObject
         when (path) {
             "auth/login" -> ok("""{"accessToken":"fixture-access","refreshToken":"fixture-refresh","user":${user()}}""")
             "auth/logout" -> ok("{}")
             "users/me" -> ok(user())
-            "users/me/preferences" -> { body()["theme"]?.let { theme = it.jsonPrimitive.content }; ok(user()) }
+            "users/me/preferences" -> {
+                body()["theme"]?.let { theme = it.jsonPrimitive.content }
+                body()["modelRouting"]?.let { modelRouting = it.jsonPrimitive.boolean }
+                ok(user())
+            }
+            "access-tokens" -> if (accessTokensFail) fail(503, "token list failed") else ok("""{"tokens":${JsonArray(accessTokens)}}""")
+            "providers" -> ok(providerCatalog)
+            "providers/mine" -> ok(providersMine)
+            "tasks/$TASK" -> ok(task)
             "users/me/avatar" -> fail(404, "no avatar")
             "workspaces" -> ok("[${workspace()}]")
             "workspaces/$WORKSPACE" -> { if (api.method == HttpMethod.PATCH) workspaceName = body()["name"]!!.jsonPrimitive.content; ok(workspace()) }
@@ -153,8 +186,21 @@ object ManagementFixture {
             "share-links" -> ok("""{"links":[${link()}]}""")
             "providers/shared-pools" -> ok("[]")
             "providers/shared-pools/$POOL" -> if (accessFails) fail(503, "pool read failed") else ok(access())
-            else -> if (path.startsWith("runners/$RUNNER/accounts/") && path.endsWith("/pause")) { pauseBodies += "$path ${api.body!!.decodeToString()}"; ok("{}") }
-                else ok("[]")
+            else -> when {
+                path.startsWith("runners/$RUNNER/accounts/") && path.endsWith("/pause") -> { pauseBodies += "$path ${api.body!!.decodeToString()}"; ok("{}") }
+                path.startsWith("access-tokens/") && api.method == HttpMethod.DELETE -> {
+                    val id = path.removePrefix("access-tokens/")
+                    accessTokens = accessTokens.map { if (it["id"]?.jsonPrimitive?.content == id) JsonObject(it + mapOf("state" to JsonPrimitive("REVOKED"),
+                        "revokedAt" to JsonPrimitive(now.toString()), "revokedReason" to JsonPrimitive("USER"))) else it }
+                    ok("""{"id":"$id","revokedAt":"$now","revokedReason":"USER"}""")
+                }
+                path.startsWith("providers/mine/") && path.endsWith("/balance") -> {
+                    val id = path.removePrefix("providers/mine/").removeSuffix("/balance")
+                    balanceGates[id]?.await()
+                    balances[id]?.let(::ok) ?: fail(404, "Not Found")
+                }
+                else -> ok("[]")
+            }
         }
     }
 

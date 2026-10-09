@@ -1,5 +1,6 @@
 /* The replaced alert as measured: 8px/12px padding and a 14px icon centred on the text; with a
-   description 20px/24px padding, a 24px icon at the top and a 16px title. 8px radius. */
+   description 20px/24px padding, a 24px icon at the top and a 16px title. 8px radius. An action
+   follows the text 8px after it. */
 .orbit-alert {
   position: relative; display: flex; align-items: center; box-sizing: border-box; margin: 0; padding: 8px 12px;
   border: 1px solid transparent; border-radius: var(--orbit-radius-popup); color: var(--text-1);
@@ -12,6 +13,7 @@
 .orbit-alert-warning { background: var(--orbit-badge-warning-bg); border-color: var(--orbit-alert-warning-border); }
 .orbit-alert-warning .orbit-alert-icon { color: var(--orbit-badge-warning); }
 .orbit-alert-section { flex: 1; min-width: 0; }
+.orbit-alert-actions { margin-inline-start: 8px; }
 .orbit-alert-with-description { align-items: flex-start; padding: 20px 24px; }
 .orbit-alert-with-description .orbit-alert-icon { margin-inline-end: 12px; font-size: 24px; }
 .orbit-alert-with-description .orbit-alert-title { margin-bottom: 8px; font-size: 16px; line-height: 1.5714285714285714; }

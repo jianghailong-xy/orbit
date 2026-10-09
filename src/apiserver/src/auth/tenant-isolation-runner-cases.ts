@@ -1399,8 +1399,8 @@ export const RUNNER_OPAQUE_BODIES: Readonly<Record<string, { reads: readonly str
   'POST /runner/wiki/repo-ops/:id/result body result.*': {
     reads: [],
     reading: 'the runner\'s own answer — a snapshot\'s index, a read\'s text, a diff\'s paths, an anchor\'s states — '
-      + 'stored as it is on the operation it holds and never dereferenced (wiki-worker/wiki-repo-ops.ts:436, the row '
-      + 'the result is written to)',
+      + 'kept on the operation it holds or in that operation\'s space\'s caches, and never dereferenced '
+      + '(wiki-worker/wiki-repo-ops.ts:412, the row the result is written to)',
   },
   'POST /runner/integration-jobs/:jobId/result body errorDetail.*': {
     reads: [],
@@ -1623,4 +1623,10 @@ export const PUBLIC_ROUTES: Readonly<Record<string, string>> = {
   'POST /runner/device/poll':
     'the device code is the credential, found by its hash; it hands over only the runner the request\'s own '
     + 'approver made — runner-api.controller.ts:865',
+  'POST /managed-runner/admission':
+    'the managed runner admission webhook, called by the Kubernetes API server: its credential is the bearer token '
+    + 'whose SHA-256 the managed runner profile holds (404 with the feature off) — managed-runner-admission.controller.ts:56; '
+    + 'its body is an AdmissionReview whose ids are Kubernetes UIDs and names, and it reads only the managed_runner '
+    + 'rows owning the claims the reviewed Pod names, in the configured cluster and namespace, answering allowed or '
+    + 'not — managed-runner-admission.controller.ts:97',
 };

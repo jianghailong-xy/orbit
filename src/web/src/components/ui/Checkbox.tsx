@@ -4,7 +4,8 @@ import './ChoiceControls.css';
 
 export interface CheckboxProps extends Omit<HTMLAttributes<HTMLSpanElement>, 'onChange' | 'defaultChecked'> {
   checked: boolean;
-  onCheckedChange?: (checked: boolean) => void;
+  /** `event` is the press or key that changed it, for a caller that reads its modifiers (Shift). */
+  onCheckedChange?: (checked: boolean, event: Event) => void;
   indeterminate?: boolean;
   disabled?: boolean;
   invalid?: boolean;
@@ -16,7 +17,7 @@ export interface CheckboxProps extends Omit<HTMLAttributes<HTMLSpanElement>, 'on
 }
 
 export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(function Checkbox(
-  { children, className, style, invalid, ...props },
+  { children, className, style, invalid, onCheckedChange, ...props },
   ref,
 ) {
   const hasLabel = children != null && typeof children !== 'boolean' && children !== '';
@@ -25,6 +26,7 @@ export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(function Che
     <Wrapper className={`orbit-choice${className ? ` ${className}` : ''}`} style={style}>
       <BaseCheckbox.Root
         {...props}
+        onCheckedChange={onCheckedChange && ((checked, details) => onCheckedChange(checked, details.event))}
         inputRef={ref}
         className="orbit-checkbox"
         aria-invalid={invalid || props['aria-invalid'] || undefined}
