@@ -290,13 +290,26 @@ test('a session asks another for a reply, and every request comes to exactly one
   }
 
   /**
+   * The claim's own write, as the runner's lease routes make it: PENDING -> RUNNING is dropped in
+   * silence for a session that has a recorded engine unless the same transaction declares it reads
+   * that engine (migration 0414, `common/session-scheduling.ts`). A fixture that claims a session
+   * the way the runner does therefore says so, in the transaction that moves the row.
+   */
+  async function claimSession(sessionId: string): Promise<void> {
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`;
+      await tx.session.update({ where: { id: sessionId }, data: { status: RunStatus.RUNNING } });
+    });
+  }
+
+  /**
    * What the runner's claim does to a queued session, then the polls that follow it until a message
    * comes out — a control turn (an interrupt) is handed out first and answered on the spot. The poll
    * declares no steer support, so a steer stays queued until its turn ends and is re-filed. `on` is
    * the machine polling: this file's own, unless the session runs on another.
    */
   async function deliver(sessionId: string, on = runnerId): Promise<{ turnId: string; content: string; clientTurnId: string }> {
-    await prisma.session.update({ where: { id: sessionId }, data: { status: RunStatus.RUNNING } });
+    await claimSession(sessionId);
     for (;;) {
       const handed = await (api as unknown as {
         dequeueTurn: (sessionId: string, runnerId: string, leaseGeneration: string | null) => Promise<Record<string, unknown> | null>;
@@ -2473,7 +2486,7 @@ test('a session asks another for a reply, and every request comes to exactly one
       await lostHeartbeat();
       await sessions.resume(ownerId, recipient, { clientTurnId: randomUUID(), content: 'git status', kind: 'shell' });
       assert.equal((await requestRow(request.id)).state, 'UNDELIVERED', 'the shell took the retry’s place and left the request OPEN');
-      await prisma.session.update({ where: { id: recipient }, data: { status: RunStatus.RUNNING } });
+      await claimSession(recipient);
       const handed = await (api as unknown as {
         dequeueTurn: (sessionId: string, runnerId: string, leaseGeneration: string | null) => Promise<Record<string, unknown> | null>;
       }).dequeueTurn.call(api, recipient, lostRunnerId, null);

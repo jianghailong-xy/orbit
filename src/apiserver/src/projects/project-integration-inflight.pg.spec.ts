@@ -394,7 +394,10 @@ test('the landing line describes running work before the queue, on real PostgreS
           });
           assert.deepEqual(
             { taskTitle: jobs[0].taskTitle, kind: jobs[0].kind, phase: jobs[0].phase, state: jobs[0].state,
-              startedAt: jobs[0].startedAt, heartbeatAt: jobs[0].heartbeatAt },
+              startedAt: jobs[0].startedAt, heartbeatAt: jobs[0].heartbeatAt,
+              // The line's own "Waited …", derived from the two instants the row above carries: a
+              // claimed job's wait is its claim minus its enqueue (project-integration-line.ts).
+              waitMs: jobs[0].startedAt.getTime() - jobs[0].queuedAt.getTime() },
             view.inFlight,
             'the first job is the one inFlight describes');
           assert.deepEqual(
