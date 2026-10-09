@@ -1,0 +1,58 @@
+tree del e21fad172 run 1 2026-10-09T11:29:20Z load 24.72 27.78 28.47
+cgroup: 0::/system.slice/run-p3179442-i53479830.scope oom_score_adj 500
+
+ RUN  v5.0.2 /root/.orbit/worktrees/ba9b2bbb-b78b-5991-855c-183de0d5d9e3/src/web
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the start card in WorkspaceView > starts the project with the settings on the card and leaves its record (narrow: false)
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the start card in WorkspaceView > starts the project with the settings on the card and leaves its record (narrow: false)
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the start card in WorkspaceView > starts the project with the settings on the card and leaves its record (narrow: false)
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+ ❯ src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx (19 tests | 1 failed) 2890ms
+   ❯ the start card in WorkspaceView (6)
+     × starts the project with the settings on the card and leaves its record (narrow: false) 98ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx > the start card in WorkspaceView > starts the project with the settings on the card and leaves its record (narrow: false)
+AssertionError: expected [] to deeply equal [ '1Athe sealNow', '2Bthe card' ]
+
+- Expected
++ Received
+
+- [
+-   "1Athe sealNow",
+-   "2Bthe card",
+- ]
++ []
+
+ ❯ src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx:623:8
+    621|     // The plan by level, off the dependency graph: A starts with the …
+    622|     expect([...card().querySelectorAll('.start-card-level')].map((leve…
+    623|       .toEqual(['1Athe sealNow', '2Bthe card']);
+       |        ^
+    624|     // One setting changed on the card before the press: at most 5 tas…
+    625|     const count5 = card().querySelector<HTMLInputElement>('.start-card…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 18 passed (19)
+   Start at  19:29:25
+   Duration  7.97s (tests 37%, transform 34%, import 22%, environment 7%)
+
+  Transform  transforming modules took 2.68s · 34% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+exit=1

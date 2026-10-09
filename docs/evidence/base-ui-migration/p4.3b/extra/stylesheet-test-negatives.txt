@@ -1,0 +1,102 @@
+tree e21fad17277ffe30d40e76097191ca77e5b7f884, 2026-10-09T14:12:15Z
+
+== as delivered
+cgroup: 0::/system.slice/run-p4032414-i54332572.scope oom_score_adj 500
+ ✓ src/firstPageStylesheet.test.ts (1 test) 1284ms
+   ✓ the first page stylesheet (1)
+     ✓ is one file: the overlays, review cards and highlight theme, the reset, index.css, then the components 1283ms
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  22:12:15
+   Duration  1.43s (tests 94%, import 5%, transform 1%)
+vitest exit 0
+
+== control A: vite.config.ts without the first-page stylesheet group
+diff --git a/src/web/vite.config.ts b/src/web/vite.config.ts
+index 39300cab9..a9d5c9c07 100644
+--- a/src/web/vite.config.ts
++++ b/src/web/vite.config.ts
+@@ -48,7 +48,6 @@ export default defineConfig({
+   build: {
+     rolldownOptions: {
+       output: {
+-        codeSplitting: { groups: [{ name: 'app', test: /\.css$/, tags: ['$initial'] }] },
+       },
+     },
+   },
+cgroup: 0::/system.slice/run-p4032617-i54332775.scope oom_score_adj 500
+ ❯ src/firstPageStylesheet.test.ts (1 test | 1 failed) 1006ms
+   ❯ the first page stylesheet (1)
+     × is one file: the overlays, review cards and highlight theme, the reset, index.css, then the components 1005ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/firstPageStylesheet.test.ts > the first page stylesheet > is one file: the overlays, review cards and highlight theme, the reset, index.css, then the components
+AssertionError: expected [ Array(4) ] to have a length of 1 but got 4
+- Expected
++ Received
+- 1
++ 4
+ ❯ src/firstPageStylesheet.test.ts:58:19
+     56|   it('is one file: the overlays, review cards and highlight theme, the…
+     57|     const { links, cssOf } = await productionBuild();
+     58|     expect(links).toHaveLength(1);
+       |                   ^
+     59|     const sheet = cssOf.get(links[0]) ?? [];
+     60|     expect(sheet.slice(0, 6)).toEqual([
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  22:12:19
+   Duration  1.16s (tests 92%, import 6%, transform 1%)
+vitest exit 1
+
+== control B: main.tsx without the three stylesheets ahead of the reset
+diff --git a/src/web/src/main.tsx b/src/web/src/main.tsx
+index d07fd7cb6..b4a06da71 100644
+--- a/src/web/src/main.tsx
++++ b/src/web/src/main.tsx
+@@ -4,9 +4,6 @@ import { App as AntApp, ConfigProvider } from 'antd';
+ // production builds have linked them so far (a chunk the entry shared with the lazy session export), so
+ // the page rules keep the same-weight ties with them that they have been winning. Every other Orbit
+ // component's CSS follows index.css.
+-import './components/ui/Overlay.css';
+-import './components/ReviewCard.css';
+-import 'highlight.js/styles/github.css';
+ import 'antd/dist/reset.css';
+ import './index.css';
+ import './components/ui/foundation.css';
+cgroup: 0::/system.slice/run-p4032858-i54333016.scope oom_score_adj 500
+ ❯ src/firstPageStylesheet.test.ts (1 test | 1 failed) 1016ms
+   ❯ the first page stylesheet (1)
+     × is one file: the overlays, review cards and highlight theme, the reset, index.css, then the components 1015ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/firstPageStylesheet.test.ts > the first page stylesheet > is one file: the overlays, review cards and highlight theme, the reset, index.css, then the components
+AssertionError: expected [ 'antd/dist/reset.css', …(5) ] to deeply equal [ 'components/ui/Overlay.css', …(5) ]
+- Expected
++ Received
+  [
+-   "components/ui/Overlay.css",
+-   "components/ReviewCard.css",
+-   "highlight.js/styles/github.css",
+    "antd/dist/reset.css",
+    "index.css",
+    "components/ui/foundation.css",
++   "components/ui/Button.css",
++   "components/ui/Overlay.css",
++   "components/ui/Alert.css",
+  ]
+ ❯ src/firstPageStylesheet.test.ts:60:31
+     58|     expect(links).toHaveLength(1);
+     59|     const sheet = cssOf.get(links[0]) ?? [];
+     60|     expect(sheet.slice(0, 6)).toEqual([
+       |                               ^
+     61|       'components/ui/Overlay.css',
+     62|       'components/ReviewCard.css',
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  22:12:22
+   Duration  1.16s (tests 92%, import 6%, transform 1%)
+vitest exit 1
+
+== put back
+(clean when empty)

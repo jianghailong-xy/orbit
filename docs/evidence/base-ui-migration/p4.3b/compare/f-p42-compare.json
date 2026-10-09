@@ -1,0 +1,4870 @@
+{
+ "screenshots": {
+  "chromium-dark-desktop/p42-account-pause-custom.png": {
+   "equal": true,
+   "sha256": "7103db41a307487fb56687ed17768a49f73585e141d1df697c3b19b10d0a1986"
+  },
+  "chromium-dark-desktop/p42-account-pause.png": {
+   "equal": true,
+   "sha256": "9d561b49a1edb3917f04f3874fcd9555b7110b91343d10c49ae729735392911b"
+  },
+  "chromium-dark-desktop/p42-capacity.png": {
+   "equal": true,
+   "sha256": "c08cf1d4cde4c6337e21ede6219b860f47069e14455e8190ef531fc7ad160ea3"
+  },
+  "chromium-dark-desktop/p42-codex-signin-code.png": {
+   "equal": true,
+   "sha256": "c45c4a03c6110cbc6476afaf20b1c5989b012b2904874fec26dd47dc0f71ce3c"
+  },
+  "chromium-dark-desktop/p42-codex-signin.png": {
+   "equal": true,
+   "sha256": "25dc888bafd20d564f2e7d3c476eb0ca490a4ef665312310ba70990b44fec8dc"
+  },
+  "chromium-dark-desktop/p42-connect-advanced.png": {
+   "equal": true,
+   "sha256": "8b4561617697e9d1b96edce597ab7350808e2ae49118b0df0b62599f9687fc8f"
+  },
+  "chromium-dark-desktop/p42-connect-custom.png": {
+   "equal": true,
+   "sha256": "7ebc8aaeaf2d41aa36fc758735dc3044a3d14b8dd72ce622ec1f4d610661a157"
+  },
+  "chromium-dark-desktop/p42-connect-dialect-open.png": {
+   "equal": true,
+   "sha256": "b6e9808bb3d2a86bd241cd2558c4ed6b54d3ca1c9b1ceb368a7ed0ab1f271975"
+  },
+  "chromium-dark-desktop/p42-connect-edit-shown.png": {
+   "equal": true,
+   "sha256": "a356c7ae37c638f2f5eaa123569f153639e8ee8d551df3323f75a40febca262b"
+  },
+  "chromium-dark-desktop/p42-connect-edit.png": {
+   "equal": true,
+   "sha256": "9020d6b10ff401cb8aad0483804298a1605bca5ff455778d52abcbe5cc933774"
+  },
+  "chromium-dark-desktop/p42-connect-models.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 5,
+     "x": [
+      442,
+      445
+     ],
+     "y": [
+      251,
+      253
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 5,
+     "x": [
+      954,
+      957
+     ],
+     "y": [
+      749,
+      751
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 10,
+   "pixelsAtMost2": 10,
+   "sha256Del": "c049ad25cd281f6a63b8b2b8e9363e49b7862e8f7d1b739861896ce2dd140124",
+   "sha256Ref": "6718a72c5110175f69d2450f27acaa9b6c0e0e7352d51a4e83ef69203e7f849f"
+  },
+  "chromium-dark-desktop/p42-connect-probe-error.png": {
+   "equal": true,
+   "sha256": "34126ab5478858515a0e3a761d68886fb5b52b23ec2f163cd0db006cc0229286"
+  },
+  "chromium-dark-desktop/p42-connect.png": {
+   "equal": true,
+   "sha256": "fef45eea790230b57df1ea84383d9ad25443d8fff1fa14386728fe017a6289d6"
+  },
+  "chromium-dark-desktop/p42-deepseek-lines.png": {
+   "equal": true,
+   "sha256": "0652b7b3b161b7a81009d3220a0ae6535b2ec2a072e547b95802129e4253f09c"
+  },
+  "chromium-dark-desktop/p42-deepseek-loading.png": {
+   "equal": true,
+   "sha256": "59db4f7270803beb1b4f705fa144d51d4d95664109851a0ec1578e1608c260e2"
+  },
+  "chromium-dark-desktop/p42-deepseek-low.png": {
+   "equal": true,
+   "sha256": "95297e0210d029741553f5ce159e1e17799260d37b3ba9b26358190db667eb32"
+  },
+  "chromium-dark-desktop/p42-deepseek-read.png": {
+   "equal": true,
+   "sha256": "e93b7f885ce97851b886c4edc5eafa391faa6a3f71c1798f8f0383d12cc9385a"
+  },
+  "chromium-dark-desktop/p42-deepseek-refreshing.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 2,
+     "pixels": 6,
+     "x": [
+      440,
+      441
+     ],
+     "y": [
+      340,
+      343
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 8,
+     "x": [
+      440,
+      441
+     ],
+     "y": [
+      427,
+      431
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 2,
+   "pixels": 14,
+   "pixelsAtMost2": 14,
+   "sha256Del": "338c66d825a101682991d4761fb64679037ee143cc649efb7f6560be3e35e215",
+   "sha256Ref": "b6a9fb8ff23eed93db05c2086ba3cb6e8dff2998f6ab150d91b082a08adb6a22"
+  },
+  "chromium-dark-desktop/p42-deepseek-refused.png": {
+   "equal": true,
+   "sha256": "7499360a8c525124716a1d8d2b663d5abb2895c346cd4df5bb0208efde7ba83b"
+  },
+  "chromium-dark-desktop/p42-engine-menu.png": {
+   "equal": true,
+   "sha256": "525d33b19fd3535aec571d9a68ee653de7f290554ef3b46155105d6165c27ade"
+  },
+  "chromium-dark-desktop/p42-engine-remove.png": {
+   "equal": true,
+   "sha256": "a7e3e52dfab839478bb4a62be1894609859cf9d5ec68bbae0d5dd4421181ee85"
+  },
+  "chromium-dark-desktop/p42-enroll-approved.png": {
+   "equal": true,
+   "sha256": "77e72a930166330273ed53c1ade6163eb9e80df1513ae203798698bbb53de2ba"
+  },
+  "chromium-dark-desktop/p42-enroll-conflict.png": {
+   "equal": true,
+   "sha256": "744e5af8110ce032584210a8a740465973f5572b91899cd7ea151bb6f5e1bc62"
+  },
+  "chromium-dark-desktop/p42-enroll-error.png": {
+   "equal": true,
+   "sha256": "965633957a9cfaf7e4837f702b32e0972f1c21fc244a972b5ef7eb14bb19cf51"
+  },
+  "chromium-dark-desktop/p42-enroll-loading.png": {
+   "equal": true,
+   "sha256": "579e95c84b4c2711fde31591719b51e8e15b46c7f2bcbe574b3a3592a3545510"
+  },
+  "chromium-dark-desktop/p42-enroll.png": {
+   "equal": true,
+   "sha256": "f1473121bdb5c297e8250f990c45694264b3e6db0b3191c9e9b0d273163bc7cd"
+  },
+  "chromium-dark-desktop/p42-keep-free-open.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      1238,
+      1239
+     ],
+     "y": [
+      42,
+      44
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 4,
+   "pixelsAtMost2": 4,
+   "sha256Del": "a075fd9de70285044825672e7cb8d51d270dd522730724f5d73311936b84cc18",
+   "sha256Ref": "323892e6df6a106b62c857152ac65fa51d4c8e1d5a4861d4f5b667e9267036af"
+  },
+  "chromium-dark-desktop/p42-new-pool-claude.png": {
+   "equal": true,
+   "sha256": "c85ee2d2d728339373886ffd4e89d249a53431ea19c9efb1a960b6554b9b8d02"
+  },
+  "chromium-dark-desktop/p42-new-pool-people.png": {
+   "equal": true,
+   "sha256": "03788a1dc0ce1443e73c8b3926e276684837c5f864609c42681b3989371e2e15"
+  },
+  "chromium-dark-desktop/p42-new-pool.png": {
+   "equal": true,
+   "sha256": "e32d0aed0480a569a88d3de06cbe234e8e3b5d055502f05bb74838ce5dd8423e"
+  },
+  "chromium-dark-desktop/p42-pool-add-account.png": {
+   "equal": true,
+   "sha256": "943633b3f113d5965b382eb3b4195362030b862806acf55d975ccbe7666ebab6"
+  },
+  "chromium-dark-desktop/p42-pool-add-key-form.png": {
+   "equal": true,
+   "sha256": "8fe1dca39ade6feb8c4a339fc1f5be3601804b9573867ed646b89c305357d693"
+  },
+  "chromium-dark-desktop/p42-pool-add-key.png": {
+   "equal": true,
+   "sha256": "782e512fdaaf2891562e056dd86a29531a58ed215885cca83cc0854e868f5b12"
+  },
+  "chromium-dark-desktop/p42-pool-add-kind.png": {
+   "equal": true,
+   "sha256": "1a3392b7e9fa160a5cf46d2b25b197dd3b0b20e47af58ea103b249807c7a54bc"
+  },
+  "chromium-dark-desktop/p42-pool-claude.png": {
+   "equal": true,
+   "sha256": "e3dd76ecd1b5a6b252033ff8f2a26269a87b118e6ed333507e6ca50a98a15cde"
+  },
+  "chromium-dark-desktop/p42-pool-codex.png": {
+   "equal": true,
+   "sha256": "41f22c2a6b5e7b8d38992074adfc2786ed72341be8a8b33b51878cec3f3bc9f3"
+  },
+  "chromium-dark-desktop/p42-pool-delete.png": {
+   "equal": true,
+   "sha256": "b489ec0233e65b7e517a9f57c3b2081e89d1a756c1362da4db8a7f049b7a9eeb"
+  },
+  "chromium-dark-desktop/p42-pool-just-mine.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 3,
+     "x": [
+      330,
+      331
+     ],
+     "y": [
+      77,
+      79
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 3,
+   "pixelsAtMost2": 3,
+   "sha256Del": "8f78ab85487547635c4485dcd90965aa8f62d8ff12586cd63eedc1f1bcde89ee",
+   "sha256Ref": "b1d002920120efee927997c428d972ae60416c45478a8935f1cf5099bcc43f85"
+  },
+  "chromium-dark-desktop/p42-pool-leave.png": {
+   "equal": true,
+   "sha256": "5cc8a9c8fd6a368a0a6a593cebb52436e92c3c50db73be0fab2b53c8afab6df1"
+  },
+  "chromium-dark-desktop/p42-pool-member.png": {
+   "equal": true,
+   "sha256": "4a731591208c0e72f1c40a289f42614544b223dfa79f8d6d9a4bf36cd484f06b"
+  },
+  "chromium-dark-desktop/p42-pool-person-menu.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 7,
+     "x": [
+      330,
+      331
+     ],
+     "y": [
+      77,
+      81
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 7,
+   "pixelsAtMost2": 7,
+   "sha256Del": "3035db034b8c8312db34d88108ad5a850c3da080ea5fd5e857d99bca20b6fdfc",
+   "sha256Ref": "d12008e47ecf304e301b6c3d98d5d1d093a496b144ee20ddc3aaaa13966e7f35"
+  },
+  "chromium-dark-desktop/p42-pool-replace-key.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 3,
+     "x": [
+      330,
+      331
+     ],
+     "y": [
+      77,
+      79
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 3,
+   "pixelsAtMost2": 3,
+   "sha256Del": "5bcf8ed37e70dff6566e79c74ceec5b14f8f57e273c6a4daa4c52a89f7c898b1",
+   "sha256Ref": "4ce5bbe888d9725b0ccb75106055776bafd5409df03586f6eb844ac5d955c4fc"
+  },
+  "chromium-dark-desktop/p42-pool-share.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 3,
+     "x": [
+      330,
+      331
+     ],
+     "y": [
+      77,
+      79
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 3,
+   "pixelsAtMost2": 3,
+   "sha256Del": "de9362b979d31ef6c586d72087fec829825bbbd3b6b6fdd6fb4af4d5a373da5c",
+   "sha256Ref": "2d708fcbb6b7ee0b09a2de26de4c1fd8f51dedc08ee6a56f650b9276d6b1bd56"
+  },
+  "chromium-dark-desktop/p42-pool-signout.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 7,
+     "x": [
+      330,
+      331
+     ],
+     "y": [
+      77,
+      81
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 7,
+   "pixelsAtMost2": 7,
+   "sha256Del": "b8c31aee4cff274c290e1ea9207d71b22d162e4159f2d5417faa4968aa5545d7",
+   "sha256Ref": "c1bf95158a57f188c3adcd8852b227b8495e5b82924e29415c501a2521cd331d"
+  },
+  "chromium-dark-desktop/p42-pool-tooltip.png": {
+   "equal": true,
+   "sha256": "872e2479b11728ba882ab1f41a72eb3862faf7a5176556a5086f64125d976ed2"
+  },
+  "chromium-dark-desktop/p42-pool-who.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 7,
+     "x": [
+      330,
+      331
+     ],
+     "y": [
+      77,
+      81
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 7,
+   "pixelsAtMost2": 7,
+   "sha256Del": "2e66fee6f09fa81b7580a66ae924794c3986ae162e82c1859615e345b8d06ac1",
+   "sha256Ref": "7df5448962fcaff7a6f5bc3e1c14adbcea9394367b6bf70b893121e298da5098"
+  },
+  "chromium-dark-desktop/p42-pools.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      1228,
+      1229
+     ],
+     "y": [
+      864,
+      868
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 4,
+   "pixelsAtMost2": 4,
+   "sha256Del": "b83b64f4944a3fa91d639c5ea1f715812cd4e248fc264f93cf9d36b1c70885f9",
+   "sha256Ref": "911a3c7750e8775dc0bf925dcc2518ea70a574affadadf804863109a22ccb2c7"
+  },
+  "chromium-dark-desktop/p42-providers.png": {
+   "equal": true,
+   "sha256": "3a5c84acfe5de9707f9da7505bc420d8ab8f780f14c4be043d7120c6a3df5422"
+  },
+  "chromium-dark-desktop/p42-register-windows.png": {
+   "equal": true,
+   "sha256": "e51186bf0858027a9636afd6ea2b2267fe41629818d03c5c078ff255c2c79b09"
+  },
+  "chromium-dark-desktop/p42-register.png": {
+   "equal": true,
+   "sha256": "fd359eb3e4f572c006678b09523d9af7fcda58ae57ea50aad3dd5c95bd4a26d5"
+  },
+  "chromium-dark-desktop/p42-runner-actions.png": {
+   "equal": true,
+   "sha256": "538cd458a18b4f13320c4d51c1ac39c442c49f3ea6e41068eec163268e5c8096"
+  },
+  "chromium-dark-desktop/p42-runner-detail.png": {
+   "equal": true,
+   "sha256": "cc62271ed8234628d8bef744e5f294d8b8d48f5b44e0928f7d49bf998502f0ca"
+  },
+  "chromium-dark-desktop/p42-runner-offline.png": {
+   "equal": true,
+   "sha256": "a52e11a1f25c1caa1dec1733da997cc8bcd0056e703cbc05ec182fafb499e125"
+  },
+  "chromium-dark-desktop/p42-users-add-google.png": {
+   "equal": true,
+   "sha256": "06b6e984ae2a01b78437227d083e8f57a56808790af4e9e986645c08a6df48de"
+  },
+  "chromium-dark-desktop/p42-users-add.png": {
+   "equal": true,
+   "sha256": "ff775065a0e8ff47c692ac7ad5608798ccbf5f6b9eb32845d3c5d1b411a0c473"
+  },
+  "chromium-dark-desktop/p42-users-delete.png": {
+   "equal": true,
+   "sha256": "5c02fc1a313e0eeea8e7f101864957f663bad1a4020ba77482509db829635ea5"
+  },
+  "chromium-dark-desktop/p42-users-disable-refused.png": {
+   "equal": true,
+   "sha256": "f9a59a65fe37c5d859f9a8183d830e7caa2731de195123222f2f71e03e90b89a"
+  },
+  "chromium-dark-desktop/p42-users-disable.png": {
+   "equal": true,
+   "sha256": "b5b945c74164bfcf62c1d35fba32d30b1b136a53ceafa1129c560f8bc6e34ea6"
+  },
+  "chromium-dark-desktop/p42-users-disabled.png": {
+   "equal": true,
+   "sha256": "bd297b079e845f163895c98fdcf83769d5830fc30224485b1c6c6d9c7bedf26e"
+  },
+  "chromium-dark-desktop/p42-users-empty.png": {
+   "equal": true,
+   "sha256": "dce3213c2774659ea6576eb3b413e716b324b567575ceea84e86bdda741fcff1"
+  },
+  "chromium-dark-desktop/p42-users-loading.png": {
+   "equal": true,
+   "sha256": "19822b3e4c17c342cdd69192b56888eeb2a103082a2831a527ad49a44064576d"
+  },
+  "chromium-dark-desktop/p42-users-password.png": {
+   "equal": true,
+   "sha256": "ccc05099c30c456c252ef58cb970a8260b37e631ef229f09ad8605dc6fcef306"
+  },
+  "chromium-dark-desktop/p42-users-reset.png": {
+   "equal": true,
+   "sha256": "f0f8f280ea7a46e2097bf77524e1d6336b4bfa92118a965c95cd9f4dcef8e6f2"
+  },
+  "chromium-dark-desktop/p42-users.png": {
+   "equal": true,
+   "sha256": "7af1390c52bfadf20726bbfc65eca286f061f2903c5d37a0d36273951f178a2f"
+  },
+  "chromium-dark-desktop/p42-workspace-advanced.png": {
+   "equal": true,
+   "sha256": "cbcdd38d42b3ae833a577e6fe57b514310904d53387e42626e89a27f17c4e43e"
+  },
+  "chromium-dark-desktop/p42-workspace-discard.png": {
+   "equal": true,
+   "sha256": "be5c98737e964f9d0753442c93cefad9f08f538993e27b93f042c7506afac367"
+  },
+  "chromium-dark-desktop/p42-workspace-edit.png": {
+   "equal": true,
+   "sha256": "1adf81126b2fb02ac7821808475ad74c3a510e88f1a6db39b6422a28ddb7b6fb"
+  },
+  "chromium-dark-desktop/p42-workspace-history.png": {
+   "equal": true,
+   "sha256": "87f071c92a312fd5a2f7a90b7ffbe9fdacab8457d8b8a622cc1f982e2182d4ed"
+  },
+  "chromium-dark-desktop/p42-workspace-menu.png": {
+   "equal": true,
+   "sha256": "ff3c4aa451c00fe28b4cb442ba31dc1be5c6d6854d6ae01a17ae9d2e41b19e8d"
+  },
+  "chromium-dark-phone/p42-account-pause-custom.png": {
+   "equal": true,
+   "sha256": "b38242a101622e464cf7e30c367b9e58f66f2feb258fa5ca405d945ebb3bfdda"
+  },
+  "chromium-dark-phone/p42-account-pause.png": {
+   "equal": true,
+   "sha256": "c06ac0fb0acdc8fc0d54d3054fcb86b49fc6aea55321bdc59a0b8dfed44d23af"
+  },
+  "chromium-dark-phone/p42-capacity.png": {
+   "equal": true,
+   "sha256": "4e965ec44c60583962878caa367386ba170eb5f09dd0d8839ad9bffff570852b"
+  },
+  "chromium-dark-phone/p42-codex-signin-code.png": {
+   "equal": true,
+   "sha256": "af7ff70fc8e4db81fd8e25195527958bfeda4e3b3727ffce3b7d95feae028f08"
+  },
+  "chromium-dark-phone/p42-codex-signin.png": {
+   "equal": true,
+   "sha256": "99fb206332f39a5e4a6cbbd6b11b577d7529d1bfb8027bdeb5462e4dfbb2c66f"
+  },
+  "chromium-dark-phone/p42-connect-advanced.png": {
+   "equal": true,
+   "sha256": "7b4053e73f1cd060a4e2b8c65aeca3cf29d0176a6710a1990d1db8121e7804a4"
+  },
+  "chromium-dark-phone/p42-connect-custom.png": {
+   "equal": true,
+   "sha256": "0b69afdd4005838ccc5e6e8c2cef8c1e7f303748130e0eda117321c7cd09d980"
+  },
+  "chromium-dark-phone/p42-connect-dialect-open.png": {
+   "equal": true,
+   "sha256": "1be0094825ab2003327151fa870c23fedb6adec10c2d7905cc55de493f07db0d"
+  },
+  "chromium-dark-phone/p42-connect-edit-shown.png": {
+   "equal": true,
+   "sha256": "ace48e21c2261dba8116877993da47875a17e69fdbf1c6055895eb0546a06c33"
+  },
+  "chromium-dark-phone/p42-connect-edit.png": {
+   "equal": true,
+   "sha256": "d75840678dbc397a1f0a08f0bd190e99c62ea96e0bb94d2c34fe77314faa3738"
+  },
+  "chromium-dark-phone/p42-connect-models.png": {
+   "equal": true,
+   "sha256": "cc8b46e8cadc077996e6ffed739213c9c8675c1f5361735dbe3f871875953cf7"
+  },
+  "chromium-dark-phone/p42-connect-probe-error.png": {
+   "equal": true,
+   "sha256": "d340f6fad2436772be3b2c58b49a97f2f9c0c73441708428833278ad4963171a"
+  },
+  "chromium-dark-phone/p42-connect.png": {
+   "equal": true,
+   "sha256": "34e4f3aac5f4d033780080c735d5ae4ae9cdeffcac85b5f46013f1e38fdc29a6"
+  },
+  "chromium-dark-phone/p42-deepseek-lines.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 6,
+     "x": [
+      16,
+      17
+     ],
+     "y": [
+      645,
+      648
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 5,
+     "x": [
+      372,
+      373
+     ],
+     "y": [
+      645,
+      648
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 7,
+     "x": [
+      16,
+      17
+     ],
+     "y": [
+      697,
+      701
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 5,
+     "x": [
+      372,
+      373
+     ],
+     "y": [
+      697,
+      701
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 23,
+   "pixelsAtMost2": 23,
+   "sha256Del": "80772216f3da3fc171778f28b6e8fb2a09f232bf02ceed4bc4b6e73e2c9d7356",
+   "sha256Ref": "21b46e121a366e82be51ea8b7bb5c812429260b559d74fab61f9279474998025"
+  },
+  "chromium-dark-phone/p42-deepseek-loading.png": {
+   "equal": true,
+   "sha256": "368c27b81bbe6a7ba2148ab9ce434be40ca50a8b2c5ec85bc6e6da466cb4053d"
+  },
+  "chromium-dark-phone/p42-deepseek-low.png": {
+   "equal": true,
+   "sha256": "19cd2d4f718b5a3712185a620dcadd0254815c9b160a09d52349665179b1d144"
+  },
+  "chromium-dark-phone/p42-deepseek-read.png": {
+   "equal": true,
+   "sha256": "8e55d647d159dc5f37b22be51993edc9453da1735eb87d92739a41e5cc1a7527"
+  },
+  "chromium-dark-phone/p42-deepseek-refreshing.png": {
+   "equal": true,
+   "sha256": "ae692984327d07cb48cf7d05ff8559d1c258e91cb59a20b585fc4a1339e085eb"
+  },
+  "chromium-dark-phone/p42-deepseek-refused.png": {
+   "equal": true,
+   "sha256": "de7e6f91e67b62db638b4bdd7cf02f47c2782c6ec55082c7e579d478d4cad756"
+  },
+  "chromium-dark-phone/p42-engine-menu.png": {
+   "equal": true,
+   "sha256": "3d56bb745d46996c4ddbeb3d583f18eb8736bdab54d278209ff93325e61b08d8"
+  },
+  "chromium-dark-phone/p42-engine-remove.png": {
+   "equal": true,
+   "sha256": "03a843228ca7bd2ba1ac08cbfaa64f083c4cb6c2514ee56a5ae90277b19cc767"
+  },
+  "chromium-dark-phone/p42-enroll-approved.png": {
+   "equal": true,
+   "sha256": "a87701c914328ae057fe5ae070a9ff6a5a9a5fbbc0ce14f403d63685e3518362"
+  },
+  "chromium-dark-phone/p42-enroll-conflict.png": {
+   "equal": true,
+   "sha256": "5f374ef205548e2d3f068476c3900aeea2bb4de1b28299b3d6b2546fa61a9e11"
+  },
+  "chromium-dark-phone/p42-enroll-error.png": {
+   "equal": true,
+   "sha256": "597e959878aa4693f30902f5ee67ebaa1e3e1e7446ad856b6bb4886fb9388467"
+  },
+  "chromium-dark-phone/p42-enroll-loading.png": {
+   "equal": true,
+   "sha256": "fdb2cad674c89e12f5241b1901d439d648128c099c706b118ce79a039e6f5baa"
+  },
+  "chromium-dark-phone/p42-enroll.png": {
+   "equal": true,
+   "sha256": "d6138cc63adad239555621f28b74b36ca88489ffbadf1e0acb536a935803d97c"
+  },
+  "chromium-dark-phone/p42-keep-free-open.png": {
+   "equal": true,
+   "sha256": "8fdb1a274e6ced09508a2c28ef8b411aae4575da3cc36ca21fb4105738bd351c"
+  },
+  "chromium-dark-phone/p42-new-pool-claude.png": {
+   "equal": true,
+   "sha256": "b4ce5947102262dc5d42523a0b8958a82c63edfb4aa4ce070a536ffeae430e66"
+  },
+  "chromium-dark-phone/p42-new-pool-people.png": {
+   "equal": true,
+   "sha256": "91d42fc3b917dd7364613c01bc2e34f42f5e3517c72b982245faaab44b3ed16b"
+  },
+  "chromium-dark-phone/p42-new-pool.png": {
+   "equal": true,
+   "sha256": "5cc9acafe0ee224ca45594ecb6536eef41b182e8cebb08093cc9de40e2d88a59"
+  },
+  "chromium-dark-phone/p42-pool-add-account.png": {
+   "equal": true,
+   "sha256": "6a0d68cb4d9dce71c50904fcef89664fd97fc0cce798d251aba4676cc0b0bd04"
+  },
+  "chromium-dark-phone/p42-pool-add-key-form.png": {
+   "equal": true,
+   "sha256": "0fd339dcf57dddb2ea5319bef0f70ace88ed2f2380b385ba332e89aa0860a590"
+  },
+  "chromium-dark-phone/p42-pool-add-key.png": {
+   "equal": true,
+   "sha256": "d2c8a845b0df8aa2f1b291fc8555855c7e4136ddd1803ccf0530c3c44b86bcf8"
+  },
+  "chromium-dark-phone/p42-pool-add-kind.png": {
+   "equal": true,
+   "sha256": "5b43fce74c183e2fda645b9a496afc822397ce8982c4b5ec1a9bb7a78d823ee4"
+  },
+  "chromium-dark-phone/p42-pool-claude.png": {
+   "equal": true,
+   "sha256": "de8889a5946434ce2f0e053154ada216ef1ff88a3fdb1d9f503cb211b6b65b98"
+  },
+  "chromium-dark-phone/p42-pool-codex.png": {
+   "equal": true,
+   "sha256": "bb0f6ffab92254984df18e4ce7b86eaed9f2f3afaad1338089773fdc172d42b8"
+  },
+  "chromium-dark-phone/p42-pool-delete.png": {
+   "equal": true,
+   "sha256": "b7ab1242e01dd8709417a6c14da44304cffb36495806f59d24507fef81a6b7cf"
+  },
+  "chromium-dark-phone/p42-pool-just-mine.png": {
+   "equal": true,
+   "sha256": "38dc241137f68141c373ce5df3b751ffcb73a274d30e174804355762ad421813"
+  },
+  "chromium-dark-phone/p42-pool-leave.png": {
+   "equal": true,
+   "sha256": "e614076f5c10568f19368134001cb8d1491db14a3e547dcc58908b6b4ec29a42"
+  },
+  "chromium-dark-phone/p42-pool-member.png": {
+   "equal": true,
+   "sha256": "a8e53311b5073bbbdfe0a83b43c90dc530276b839e17ba9fe7620f618502acce"
+  },
+  "chromium-dark-phone/p42-pool-person-menu.png": {
+   "equal": true,
+   "sha256": "42facdba48a7f47cc2e798b1b26319666f8fbab81350c80dc7934d4ba704baa0"
+  },
+  "chromium-dark-phone/p42-pool-replace-key.png": {
+   "equal": true,
+   "sha256": "7600fb5bb654f555419bb52a1cf6891ec269d501ca7f8ae63dcfea0290fe39d6"
+  },
+  "chromium-dark-phone/p42-pool-share.png": {
+   "equal": true,
+   "sha256": "a2e9ab68cc55408e01d43705968abef3dd2a6f32205ce4511f216c06d01813c0"
+  },
+  "chromium-dark-phone/p42-pool-signout.png": {
+   "equal": true,
+   "sha256": "5b60377b6deff10df62363a3c8506d4c544add768e0f7ced247e25234a3ebad0"
+  },
+  "chromium-dark-phone/p42-pool-who.png": {
+   "equal": true,
+   "sha256": "1833d02e878035ca77740efb8436a06353d21056b7f5b473f7170dc26ab6c9da"
+  },
+  "chromium-dark-phone/p42-pools.png": {
+   "equal": true,
+   "sha256": "eef3b68d5f2c193a6c53b1aaf5f588b70cd4d5e1d99863a6e84a708110866078"
+  },
+  "chromium-dark-phone/p42-providers.png": {
+   "equal": true,
+   "sha256": "f7d209a945c86a67e841b4dedfdb1a45b7b2b5664586fc9a968fd63c9016b202"
+  },
+  "chromium-dark-phone/p42-register-windows.png": {
+   "equal": true,
+   "sha256": "72dfe72601b5191e5832c185e3ebff899536c229e191ac2b269e13c5d7bfa4de"
+  },
+  "chromium-dark-phone/p42-register.png": {
+   "equal": true,
+   "sha256": "aff054759837225fd6f8dbfddf56476c7c0f82a0ccefe63fbb9aa95038e01dd7"
+  },
+  "chromium-dark-phone/p42-runner-actions.png": {
+   "equal": true,
+   "sha256": "472b313dc2dcccbd244068f6452fc5f2de928b2ed091afeda79a646ee15aaef5"
+  },
+  "chromium-dark-phone/p42-runner-detail.png": {
+   "equal": true,
+   "sha256": "b529e3157b4dcc662500d704ee89b38210fa0f9296738af46709a6942bab997c"
+  },
+  "chromium-dark-phone/p42-runner-offline.png": {
+   "equal": true,
+   "sha256": "59df71cf1d10c0cbffd4516dfe7ab95273403359c3d447597623fc9a4b5a9ae1"
+  },
+  "chromium-dark-phone/p42-users-add-google.png": {
+   "equal": true,
+   "sha256": "d9380915c722d0a9e8a87a129d9b0604f3d9307384fcc5483dc6a394ecc248b5"
+  },
+  "chromium-dark-phone/p42-users-add.png": {
+   "equal": true,
+   "sha256": "25e8946949fe6e956d941f2e2b2f53805d1be893f6403310744c69859b9a9dd5"
+  },
+  "chromium-dark-phone/p42-users-delete.png": {
+   "equal": true,
+   "sha256": "ded9016410fc4d4fbd622e6e655450a8a876857a1ebe3456bcc7602cde2e62ce"
+  },
+  "chromium-dark-phone/p42-users-disable-refused.png": {
+   "equal": true,
+   "sha256": "16fbb71675570a5e69a3af60a0c9a203acdc3ed4ea7f452cba4c1807763679e4"
+  },
+  "chromium-dark-phone/p42-users-disable.png": {
+   "equal": true,
+   "sha256": "7cef4ab1565956dc70e2d441bdacf692c5bd5ebf34fe4bd1f4e5c26cbc238c6b"
+  },
+  "chromium-dark-phone/p42-users-disabled.png": {
+   "equal": true,
+   "sha256": "53874817eaaa46b4485ff143e516f079196f7eeb4e76c93d9b1b4f3e0206c0e3"
+  },
+  "chromium-dark-phone/p42-users-empty.png": {
+   "equal": true,
+   "sha256": "404cc348893062cd221adbc2ef5220f599bac419fc6dc7fdd42bba4b9e9e605e"
+  },
+  "chromium-dark-phone/p42-users-loading.png": {
+   "equal": true,
+   "sha256": "c37bb89b3b6ae9fea94926ac440eadf9013b8560eca163397ae2317b6e029054"
+  },
+  "chromium-dark-phone/p42-users-password.png": {
+   "equal": true,
+   "sha256": "f8c947f30d7d5a2be84e70e1db9970d36554cb5eed5d98ab60083cbe174d733b"
+  },
+  "chromium-dark-phone/p42-users-reset.png": {
+   "equal": true,
+   "sha256": "7374aa4cb37b27aa864b28b2e7019b3236003cbef3999e8d218d368756b962e3"
+  },
+  "chromium-dark-phone/p42-users.png": {
+   "equal": true,
+   "sha256": "3c0951ab4bd0266ac776b5f7c54c31539d932fd026ca7a788ae711fb2a21cd94"
+  },
+  "chromium-dark-phone/p42-workspace-advanced.png": {
+   "equal": true,
+   "sha256": "cd558e9ab8e90538d867d0b280e20bb65097d034b74dee525ff204c2cff8e95b"
+  },
+  "chromium-dark-phone/p42-workspace-discard.png": {
+   "equal": true,
+   "sha256": "a6d419f584359ada77591d3f1138c9309b037b0eaddb1c01e89bbcc560eadada"
+  },
+  "chromium-dark-phone/p42-workspace-edit.png": {
+   "equal": true,
+   "sha256": "d71cef99912e333b9b784d2de2604ab8cdd6437cddf5b6e3fa6e6b8a55734b6e"
+  },
+  "chromium-dark-phone/p42-workspace-history.png": {
+   "equal": true,
+   "sha256": "129a4b3c5463aeac8f96b6811ea7ceec9c8cbe3545c1a630ba8abe212b472292"
+  },
+  "chromium-dark-phone/p42-workspace-menu.png": {
+   "equal": true,
+   "sha256": "a93a732a0738fc2f14da6b39ee869e72e9e6c4a8a29cb1d4c4a827f894faa008"
+  },
+  "chromium-light-desktop/p42-account-pause-custom.png": {
+   "equal": true,
+   "sha256": "f861ddf7898488e0902f8e6c3489d5aa93b50efc7123d2b77f035577fa6df0a1"
+  },
+  "chromium-light-desktop/p42-account-pause.png": {
+   "equal": true,
+   "sha256": "6b3f849a6f45604a614f406f27fc3f4c3ca6b5969b43ca0c345f45a15ecff504"
+  },
+  "chromium-light-desktop/p42-capacity.png": {
+   "equal": true,
+   "sha256": "92af8d4222d9631fb0ad4d762f4a926518e7008663805736f2cbbab71c4e5aee"
+  },
+  "chromium-light-desktop/p42-codex-signin-code.png": {
+   "equal": true,
+   "sha256": "f61dee2dde8bbdeb16fe7896962460e400d5e6b07d0e95a830f78676416ff43d"
+  },
+  "chromium-light-desktop/p42-codex-signin.png": {
+   "equal": true,
+   "sha256": "496d6849cb522af044914f760ab5c5f72ca35eff0fb1b1e072b1be21e1e203ed"
+  },
+  "chromium-light-desktop/p42-connect-advanced.png": {
+   "equal": true,
+   "sha256": "c2a24177f228d0e78dc712a077b32ed32182f86117fe2fa79709bb7561d8c1fc"
+  },
+  "chromium-light-desktop/p42-connect-custom.png": {
+   "equal": true,
+   "sha256": "03581be5b06fe1c8a0722fda7069649908142f8e95e382f131e9bcb8820929b1"
+  },
+  "chromium-light-desktop/p42-connect-dialect-open.png": {
+   "equal": true,
+   "sha256": "f8808783a720ae4fe10a22a501f0253405e18ce4650d68bbd61b72a7f90e0e32"
+  },
+  "chromium-light-desktop/p42-connect-edit-shown.png": {
+   "equal": true,
+   "sha256": "d8264c104cde418526fd735e53288c2d2d4eec081c90085b5c5f3ad148530693"
+  },
+  "chromium-light-desktop/p42-connect-edit.png": {
+   "equal": true,
+   "sha256": "6cff8319e3bf64f1fb44c5a57550c352ece5a9cb7daed08c94604034ef2850ad"
+  },
+  "chromium-light-desktop/p42-connect-models.png": {
+   "equal": true,
+   "sha256": "43f7dc1ab3b0c9f9a77e1014aaf44ba8230567d41d41e6ceef6458596f52558b"
+  },
+  "chromium-light-desktop/p42-connect-probe-error.png": {
+   "equal": true,
+   "sha256": "7bafa08afb9ea9a9e4646f95d14c496ffa0741e4a6bd42960f5f8418b5a73d42"
+  },
+  "chromium-light-desktop/p42-connect.png": {
+   "equal": true,
+   "sha256": "7e8f7375d5f841120eb717ff93289f3539df07cc80fab8290602b40a60af85c6"
+  },
+  "chromium-light-desktop/p42-deepseek-lines.png": {
+   "equal": true,
+   "sha256": "8bcb5c24c172af3767a90c2c43277309d871500a655b2201f1174f388ca7edaf"
+  },
+  "chromium-light-desktop/p42-deepseek-loading.png": {
+   "equal": true,
+   "sha256": "630a1f1742bdc5e7ab8904dc5336888c3728b0c590f04bc34be81ad1bb4cde32"
+  },
+  "chromium-light-desktop/p42-deepseek-low.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 9,
+     "x": [
+      1118,
+      1119
+     ],
+     "y": [
+      89,
+      93
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 9,
+     "x": [
+      1118,
+      1119
+     ],
+     "y": [
+      137,
+      141
+     ]
+    },
+    {
+     "maxChannelDiff": 2,
+     "pixels": 8,
+     "x": [
+      1117,
+      1119
+     ],
+     "y": [
+      205,
+      208
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 7,
+     "x": [
+      1118,
+      1119
+     ],
+     "y": [
+      229,
+      232
+     ]
+    },
+    {
+     "maxChannelDiff": 2,
+     "pixels": 8,
+     "x": [
+      1117,
+      1119
+     ],
+     "y": [
+      312,
+      315
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 7,
+     "x": [
+      1118,
+      1119
+     ],
+     "y": [
+      336,
+      339
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 8,
+     "x": [
+      1118,
+      1119
+     ],
+     "y": [
+      423,
+      427
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 8,
+     "x": [
+      1118,
+      1119
+     ],
+     "y": [
+      634,
+      638
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 8,
+     "x": [
+      1118,
+      1119
+     ],
+     "y": [
+      723,
+      727
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 7,
+     "x": [
+      1118,
+      1119
+     ],
+     "y": [
+      749,
+      753
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 2,
+   "pixels": 79,
+   "pixelsAtMost2": 79,
+   "sha256Del": "c4549a5140421e348a78f9f090645f8a3d1ff24dc91b15c2fb3178f513c85230",
+   "sha256Ref": "73dc1ced79d53564f80c53b20967e7ac3ec9363d12feb8c71610b53914297c7a"
+  },
+  "chromium-light-desktop/p42-deepseek-read.png": {
+   "equal": true,
+   "sha256": "f7c523f5a1fdbb29b9f699295d50419b3f7f1c3cc8eff81fc2483f6bd9c15ae4"
+  },
+  "chromium-light-desktop/p42-deepseek-refreshing.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 2,
+     "pixels": 7,
+     "x": [
+      440,
+      442
+     ],
+     "y": [
+      340,
+      343
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 8,
+     "x": [
+      440,
+      441
+     ],
+     "y": [
+      427,
+      431
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 2,
+   "pixels": 15,
+   "pixelsAtMost2": 15,
+   "sha256Del": "6dfd427bcdf506afda2c9d1faec70243cca8b18656142ad1dafb1f5ac4974d25",
+   "sha256Ref": "500b95711ba8451d3da239e26391af0f0231198693156f3d942c8cf2d92ebf82"
+  },
+  "chromium-light-desktop/p42-deepseek-refused.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      440,
+      441
+     ],
+     "y": [
+      551,
+      553
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 7,
+     "x": [
+      440,
+      441
+     ],
+     "y": [
+      638,
+      642
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 7,
+     "x": [
+      440,
+      441
+     ],
+     "y": [
+      677,
+      681
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 6,
+     "x": [
+      440,
+      441
+     ],
+     "y": [
+      702,
+      706
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 24,
+   "pixelsAtMost2": 24,
+   "sha256Del": "6fd2a09cf84ac35077e98d292e0109e7c314e5829ed0aabf831736b7aafbf60d",
+   "sha256Ref": "dccc8ea6f78fa5c0e411a66db266d319afefa97d769ddfea70844c7d2d8da4dd"
+  },
+  "chromium-light-desktop/p42-engine-menu.png": {
+   "equal": true,
+   "sha256": "c801cada6dd6028e4b6492c5d55bbb45f91c237c8ca62acdf9892d1b273ad78b"
+  },
+  "chromium-light-desktop/p42-engine-remove.png": {
+   "equal": true,
+   "sha256": "89b79ce20faccdd97e22bfeb804bd8df3f8328fa1c3ecb594987b75993671ff9"
+  },
+  "chromium-light-desktop/p42-enroll-approved.png": {
+   "equal": true,
+   "sha256": "80685cafa1633c468b6d59540beb600d74f10771c16934d64af335bd08c050be"
+  },
+  "chromium-light-desktop/p42-enroll-conflict.png": {
+   "equal": true,
+   "sha256": "d061fd2350dc0d3bd8326aa021eff9a1665c5e0112efd104ea304702d2fa82e6"
+  },
+  "chromium-light-desktop/p42-enroll-error.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      410,
+      411
+     ],
+     "y": [
+      265,
+      267
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      868,
+      869
+     ],
+     "y": [
+      265,
+      267
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 9,
+     "x": [
+      410,
+      417
+     ],
+     "y": [
+      633,
+      640
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 9,
+     "x": [
+      862,
+      869
+     ],
+     "y": [
+      633,
+      640
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 26,
+   "pixelsAtMost2": 26,
+   "sha256Del": "21bda701da4d70b360f3f78a1c26431ae2fa9569888054a66f2c7bbde8eca05d",
+   "sha256Ref": "871f505911f2a72129e4c4aa68fe164bb19d7aba9b0d0fa74cd2abaf2aada772"
+  },
+  "chromium-light-desktop/p42-enroll-loading.png": {
+   "equal": true,
+   "sha256": "70a9eb0ebca578827e506cc9234ae2dc8ac9b8a85e316fcf1bfabf996d194f5e"
+  },
+  "chromium-light-desktop/p42-enroll.png": {
+   "equal": true,
+   "sha256": "4c5abc2a59e088d65eb10902e3cabcc712b380e64ed12455e894f5a92cbb71d4"
+  },
+  "chromium-light-desktop/p42-keep-free-open.png": {
+   "equal": true,
+   "sha256": "6a9f267ad11f9b3eb5e4abeccca98da9b594a463b66b19217b6588b699df54d6"
+  },
+  "chromium-light-desktop/p42-new-pool-claude.png": {
+   "equal": true,
+   "sha256": "cec9dfde126a45ef7391711130fa6892238fee1feeef30929b8545829fd5cc79"
+  },
+  "chromium-light-desktop/p42-new-pool-people.png": {
+   "equal": true,
+   "sha256": "6a766dfb623b860db79aec4b1a9680c6ab9daacc7ce43f1e73b7a405bd09129f"
+  },
+  "chromium-light-desktop/p42-new-pool.png": {
+   "equal": true,
+   "sha256": "b2e6c1e844decb2b56677b3c01ceb668400ed8c95fe4b48213f78db3fd3c48a5"
+  },
+  "chromium-light-desktop/p42-pool-add-account.png": {
+   "equal": true,
+   "sha256": "ec823098e48e34e7021f2a8cade081163261367c316caf1606506daee651ecc5"
+  },
+  "chromium-light-desktop/p42-pool-add-key-form.png": {
+   "equal": true,
+   "sha256": "03e89c0d684822a8ea21489ec50059b1af253dfe8220366f9665d68cbbeb746a"
+  },
+  "chromium-light-desktop/p42-pool-add-key.png": {
+   "equal": true,
+   "sha256": "11f57abdb8ec784d363ea4bc3928e14681206413912a3efd52d9ed4dbe7315e9"
+  },
+  "chromium-light-desktop/p42-pool-add-kind.png": {
+   "equal": true,
+   "sha256": "ed3b5c4d744b39d34ec72c8dfbc0a4c2a575c6b3588d3f2781271560d1bb0b4c"
+  },
+  "chromium-light-desktop/p42-pool-claude.png": {
+   "equal": true,
+   "sha256": "915a57ce01387ea3658d152da408e5ec98b1ec778f302058f0c9e2e237dc14ae"
+  },
+  "chromium-light-desktop/p42-pool-codex.png": {
+   "equal": true,
+   "sha256": "9df32d91835534f633f5d1466a5cd86cdf291f962d4c9d0f2dcec14b45bfa0e5"
+  },
+  "chromium-light-desktop/p42-pool-delete.png": {
+   "equal": true,
+   "sha256": "b175bc20fc3683134ed209fd03b81b305f1283be9d93c0db0cb66d80e409ba8b"
+  },
+  "chromium-light-desktop/p42-pool-just-mine.png": {
+   "equal": true,
+   "sha256": "2d0f3c72e7479571353faed0c1f82ac68ca27ee9afe719960362c8c2dabbe80c"
+  },
+  "chromium-light-desktop/p42-pool-leave.png": {
+   "equal": true,
+   "sha256": "9e0e7ac08482c33996386e0aa9b2ed53ce876c34c90e698f5154e3208377b540"
+  },
+  "chromium-light-desktop/p42-pool-member.png": {
+   "equal": true,
+   "sha256": "b19c44c957355960c8c760c614dd13247296c74c4d6f505eba66e3a98ebabaa3"
+  },
+  "chromium-light-desktop/p42-pool-person-menu.png": {
+   "equal": true,
+   "sha256": "1715e7853cfc0fb1e478c06f275b4424734d01c964ca6749a3a2b74d7c8b6f3f"
+  },
+  "chromium-light-desktop/p42-pool-replace-key.png": {
+   "equal": true,
+   "sha256": "227cb85b1cac8b13973e782f8ab2d8b0a733a369c6f6f0fe208ad004061909cc"
+  },
+  "chromium-light-desktop/p42-pool-share.png": {
+   "equal": true,
+   "sha256": "b22e090161177bb37a75f74bab560306df7516c03cec17d827b0e4e68c76e5e2"
+  },
+  "chromium-light-desktop/p42-pool-signout.png": {
+   "equal": true,
+   "sha256": "8453ef0e940f00b711b2c3e857775f6e351a4cffe80c2f7d3233b095ef7535bc"
+  },
+  "chromium-light-desktop/p42-pool-tooltip.png": {
+   "equal": true,
+   "sha256": "74bb85332289a26b7525bc71f61d105bfb53de759c63703d2f0e324ce2be6a05"
+  },
+  "chromium-light-desktop/p42-pool-who.png": {
+   "equal": true,
+   "sha256": "4d90abcf87dee8cce06717a32037ffd7f34aea2545a51e0e41b398d634227c4e"
+  },
+  "chromium-light-desktop/p42-pools.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 9,
+     "x": [
+      330,
+      331
+     ],
+     "y": [
+      6,
+      10
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 8,
+     "x": [
+      330,
+      331
+     ],
+     "y": [
+      37,
+      41
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 9,
+     "x": [
+      330,
+      331
+     ],
+     "y": [
+      90,
+      94
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 7,
+     "x": [
+      330,
+      331
+     ],
+     "y": [
+      278,
+      282
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 9,
+     "x": [
+      330,
+      331
+     ],
+     "y": [
+      365,
+      369
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 7,
+     "x": [
+      330,
+      331
+     ],
+     "y": [
+      394,
+      398
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 49,
+   "pixelsAtMost2": 49,
+   "sha256Del": "55093f0b34f1d5b9d3e922fbddc757191ee35b7dc846ca8c63ec4caed1938427",
+   "sha256Ref": "0870a7aa32f8d617966b2a345ddf64006ff0707182883d76130e37885a3d6bc4"
+  },
+  "chromium-light-desktop/p42-providers.png": {
+   "equal": true,
+   "sha256": "4b3ed2b6d79d6abe6dba6a85d8fd6b0869e313c1a69b1f44acd3a11e4f1909d7"
+  },
+  "chromium-light-desktop/p42-register-windows.png": {
+   "equal": true,
+   "sha256": "e0f09012e2a8c192f5e1d35e538c1f2f628bd403786813514ce9d656789091d6"
+  },
+  "chromium-light-desktop/p42-register.png": {
+   "equal": true,
+   "sha256": "a27491a216f95765ae75c3bb11f0ca689c7521994638356e03dc2558ae12ba30"
+  },
+  "chromium-light-desktop/p42-runner-actions.png": {
+   "equal": true,
+   "sha256": "2532dc190ec8caaad7472ab6a986d83c09e1daacc26ae481106b55d8c29a6184"
+  },
+  "chromium-light-desktop/p42-runner-detail.png": {
+   "equal": true,
+   "sha256": "de5d53f2305dd0244ece84b9d593d4668897a4c48dd643ce3c90d20a8134fda8"
+  },
+  "chromium-light-desktop/p42-runner-offline.png": {
+   "equal": true,
+   "sha256": "e6da6b82b31ca2dd3e884eca3f212d4e612c4f4ae4275d07c56f6151d7e13c26"
+  },
+  "chromium-light-desktop/p42-users-add-google.png": {
+   "equal": true,
+   "sha256": "6510eeb0aa402b241198fbb07024f434fcaaab88b5f04482e6b665465ebf106f"
+  },
+  "chromium-light-desktop/p42-users-add.png": {
+   "equal": true,
+   "sha256": "583828f71ec79c07b82e7d0d32d8bb8cb83c6ba78ae76e7458e733428fe5663a"
+  },
+  "chromium-light-desktop/p42-users-delete.png": {
+   "equal": true,
+   "sha256": "b778f9a914fe95025e7732dc7842434f629da4ddb1880a8f35638c91feb9ab2c"
+  },
+  "chromium-light-desktop/p42-users-disable-refused.png": {
+   "equal": true,
+   "sha256": "aa4076bf22ef9faece6196f034e78c2866ec9908b95b4c09aa32219bbb59512d"
+  },
+  "chromium-light-desktop/p42-users-disable.png": {
+   "equal": true,
+   "sha256": "0a339b27788354e61893c9862a7c948c103f8e2cfda475e981bad5f263cbc8c0"
+  },
+  "chromium-light-desktop/p42-users-disabled.png": {
+   "equal": true,
+   "sha256": "473f9dd0d88405a6618efd5d13f9a3c9fe654cdf430e4626ccc187a2deb03bb1"
+  },
+  "chromium-light-desktop/p42-users-empty.png": {
+   "equal": true,
+   "sha256": "49983ea2353cfa643d161f5d5ce344d4b026194a22b4f217d7520c269a41e241"
+  },
+  "chromium-light-desktop/p42-users-loading.png": {
+   "equal": true,
+   "sha256": "8993dfbf64a85abd68c7181e06af379b51f01e59836773ed275a441624b83368"
+  },
+  "chromium-light-desktop/p42-users-password.png": {
+   "equal": true,
+   "sha256": "ef04c837f46070d98c4a93cbc189c3a8ee61212deea93580605cbfd88a1e3970"
+  },
+  "chromium-light-desktop/p42-users-reset.png": {
+   "equal": true,
+   "sha256": "037c79e360c5a8c5d3b8ce184cae06b3951f4319f00e905a55c1fee868ae4413"
+  },
+  "chromium-light-desktop/p42-users.png": {
+   "equal": true,
+   "sha256": "6587b69b29bfc42d8d963d0f33388d4cb24ad45def923bdcf297d611c52b64a8"
+  },
+  "chromium-light-desktop/p42-workspace-advanced.png": {
+   "equal": true,
+   "sha256": "cf00a8aa23517620bb26ccf24d4187be25cf8ba73182cbfb89210376daf57f75"
+  },
+  "chromium-light-desktop/p42-workspace-discard.png": {
+   "equal": true,
+   "sha256": "ca0dd1656a23f9576905fab4923146b0a833c0fec12eb5a1ddf266bc65f0ca1a"
+  },
+  "chromium-light-desktop/p42-workspace-edit.png": {
+   "equal": true,
+   "sha256": "22efabb51640a2c407a9671a64e870a035c53e4d50e04da8904134b0f2f55927"
+  },
+  "chromium-light-desktop/p42-workspace-history.png": {
+   "equal": true,
+   "sha256": "11cbbdfca589377545eb4fe224b062cbaaf0b4d211b6e1024680fff4de5f221d"
+  },
+  "chromium-light-desktop/p42-workspace-menu.png": {
+   "equal": true,
+   "sha256": "514c7d8de14428a2d16f3701152008662ecc2664f8ce55ee0d1f03e3e6bcff76"
+  },
+  "chromium-light-phone/p42-account-pause-custom.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 2,
+     "pixels": 3,
+     "x": [
+      77,
+      80
+     ],
+     "y": [
+      340,
+      340
+     ]
+    },
+    {
+     "maxChannelDiff": 2,
+     "pixels": 3,
+     "x": [
+      167,
+      170
+     ],
+     "y": [
+      340,
+      340
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 2,
+   "pixels": 6,
+   "pixelsAtMost2": 6,
+   "sha256Del": "5fa84d171a3c032fae2b4da8d7f6c6a05f3ef7d7c083b01ec7ee7d313a8e35b4",
+   "sha256Ref": "73251cb877af58cbca183d2d7840b5b99a94b554810fcbf66295cef3a75053c9"
+  },
+  "chromium-light-phone/p42-account-pause.png": {
+   "equal": true,
+   "sha256": "f76846802c7d4f361f74100947c2450598f927a787e6e96965d33aed05892884"
+  },
+  "chromium-light-phone/p42-capacity.png": {
+   "equal": true,
+   "sha256": "52121be0a14b3943a4d1852230906395a0a55da7f4679fea2a69ab4bf9240f64"
+  },
+  "chromium-light-phone/p42-codex-signin-code.png": {
+   "equal": true,
+   "sha256": "a710d14e8d2f7013ecac417180258c8aec0ca19cd46fbb4135711d322d64b1c5"
+  },
+  "chromium-light-phone/p42-codex-signin.png": {
+   "equal": true,
+   "sha256": "c03bdae26c366ce8c070b598b753af3276870ee49d8190eafd0b2d9771d81787"
+  },
+  "chromium-light-phone/p42-connect-advanced.png": {
+   "equal": true,
+   "sha256": "cbe557510f5a7d38dfaa17e67fc63d0621c574febd93a4341d530c629503ccf0"
+  },
+  "chromium-light-phone/p42-connect-custom.png": {
+   "equal": true,
+   "sha256": "da69242a8a0c940684dc7bf34c3d778f378842d919970c2a6794f2d08fd640fc"
+  },
+  "chromium-light-phone/p42-connect-dialect-open.png": {
+   "equal": true,
+   "sha256": "825c9fc6f401b74ae7db3c82f7bf83b4b853c5ca369a270fbf2261f9230c78bd"
+  },
+  "chromium-light-phone/p42-connect-edit-shown.png": {
+   "equal": true,
+   "sha256": "a2e65d9d2d87ea625bcd36fe8112f2a8e1e8aa4cee3899bbdb83f0e1b363f259"
+  },
+  "chromium-light-phone/p42-connect-edit.png": {
+   "equal": true,
+   "sha256": "0cba5385dc688a8c3a95f07427064234ec36f61edb024170c54e4a715db5120c"
+  },
+  "chromium-light-phone/p42-connect-models.png": {
+   "equal": true,
+   "sha256": "9969fa4674626d040eac567b0e8e6de481233cae98fe89f2ca5e382e5181674a"
+  },
+  "chromium-light-phone/p42-connect-probe-error.png": {
+   "equal": true,
+   "sha256": "a45cec802c47f5c4deb36de249421610f264b5144c82bc258d11f7434aebe66c"
+  },
+  "chromium-light-phone/p42-connect.png": {
+   "equal": true,
+   "sha256": "8ed8e13f72a9c86506b90507a1236f1525152e418430cbc786d4d7fc72920408"
+  },
+  "chromium-light-phone/p42-deepseek-lines.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 7,
+     "x": [
+      16,
+      17
+     ],
+     "y": [
+      476,
+      480
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 8,
+     "x": [
+      372,
+      373
+     ],
+     "y": [
+      476,
+      480
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 6,
+     "x": [
+      16,
+      17
+     ],
+     "y": [
+      529,
+      533
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 6,
+     "x": [
+      372,
+      373
+     ],
+     "y": [
+      529,
+      533
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 6,
+     "x": [
+      16,
+      17
+     ],
+     "y": [
+      560,
+      564
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 8,
+     "x": [
+      372,
+      373
+     ],
+     "y": [
+      560,
+      564
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 6,
+     "x": [
+      16,
+      17
+     ],
+     "y": [
+      613,
+      617
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 6,
+     "x": [
+      372,
+      373
+     ],
+     "y": [
+      613,
+      617
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 8,
+     "x": [
+      16,
+      17
+     ],
+     "y": [
+      644,
+      648
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 7,
+     "x": [
+      372,
+      373
+     ],
+     "y": [
+      644,
+      648
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 8,
+     "x": [
+      16,
+      17
+     ],
+     "y": [
+      697,
+      701
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 5,
+     "x": [
+      372,
+      373
+     ],
+     "y": [
+      697,
+      700
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 5,
+     "x": [
+      16,
+      17
+     ],
+     "y": [
+      728,
+      732
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 7,
+     "x": [
+      372,
+      373
+     ],
+     "y": [
+      728,
+      732
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 6,
+     "x": [
+      16,
+      17
+     ],
+     "y": [
+      780,
+      784
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 6,
+     "x": [
+      372,
+      373
+     ],
+     "y": [
+      780,
+      784
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 8,
+     "x": [
+      16,
+      17
+     ],
+     "y": [
+      811,
+      815
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 7,
+     "x": [
+      372,
+      373
+     ],
+     "y": [
+      811,
+      815
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 120,
+   "pixelsAtMost2": 120,
+   "sha256Del": "891baab4bbb2e0a9b761baecbe300f7c39c05552c51dae67c4af6b6cc60bd194",
+   "sha256Ref": "0edbae34733db2b915ca1cec67daa5909a349353e71a9da4e2b0bf5189888352"
+  },
+  "chromium-light-phone/p42-deepseek-loading.png": {
+   "equal": true,
+   "sha256": "51acf1347b8bdc5462b41d797f7f1d2094eecbe0353fd3a8bcaea7c95367c9de"
+  },
+  "chromium-light-phone/p42-deepseek-low.png": {
+   "equal": true,
+   "sha256": "e6d2ee842adce49a6b9bab0dda1b19d60af5de9e6f478c73a82b5f07ed760482"
+  },
+  "chromium-light-phone/p42-deepseek-read.png": {
+   "equal": true,
+   "sha256": "c76068dac0eea7951a26d14f8717daa90fcaacb60e07464bcefb6531511ac9a6"
+  },
+  "chromium-light-phone/p42-deepseek-refreshing.png": {
+   "equal": true,
+   "sha256": "aee5017f236929880ee0d0f8cf82107d954924c5fa28d560798828b875f0c926"
+  },
+  "chromium-light-phone/p42-deepseek-refused.png": {
+   "equal": true,
+   "sha256": "00bffda7eb72d6c805bf129375c2f5dac1577e9dae25d612ecc5568aa93c36ed"
+  },
+  "chromium-light-phone/p42-engine-menu.png": {
+   "equal": true,
+   "sha256": "6f14fe6bcb8a1e09f330260970982c18bd1a755da21f5de6be9958373c56ea8c"
+  },
+  "chromium-light-phone/p42-engine-remove.png": {
+   "equal": true,
+   "sha256": "e8e21da4fafdfbd095e8c8862a4d14b5b52218fd9b4ce4713731d9f28fe16bfa"
+  },
+  "chromium-light-phone/p42-enroll-approved.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 5,
+     "x": [
+      5,
+      7
+     ],
+     "y": [
+      611,
+      612
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 5,
+   "pixelsAtMost2": 5,
+   "sha256Del": "5f026a0fecf7cced6184cd1ba0068426fd374e934921c54206b5b90807427321",
+   "sha256Ref": "a9bb67872c606876f39261916159f2f0b20a0f99ac0061f795ba59c30630b49b"
+  },
+  "chromium-light-phone/p42-enroll-conflict.png": {
+   "equal": true,
+   "sha256": "8515aa3045bd98708366510eb1088bdcd52ec114b6ff9ef9755ff9f2b8053484"
+  },
+  "chromium-light-phone/p42-enroll-error.png": {
+   "equal": true,
+   "sha256": "f6475782662eb31a79e196aab12471ed225c51616155d0f590a76ac61209d30d"
+  },
+  "chromium-light-phone/p42-enroll-loading.png": {
+   "equal": true,
+   "sha256": "2e8d7cfc0d86d7ca0097b630e27bd38780511aaea4e15879b8190a0409b6f026"
+  },
+  "chromium-light-phone/p42-enroll.png": {
+   "equal": true,
+   "sha256": "fbc473e65c596dfad2d46ab3a7724dc1ba923f705e37f4dab473890e2499f100"
+  },
+  "chromium-light-phone/p42-keep-free-open.png": {
+   "equal": true,
+   "sha256": "f96756861e010441c1224f831a85f18adb6a2496cb90e31fda6935af2bbb8a51"
+  },
+  "chromium-light-phone/p42-new-pool-claude.png": {
+   "equal": true,
+   "sha256": "dc3f2adb0d70a184ee07748692d0c7a4336b908969042df56476681902a490ff"
+  },
+  "chromium-light-phone/p42-new-pool-people.png": {
+   "equal": true,
+   "sha256": "bded5b65bc829b45832f8d56b1616c88221ff40474f5010a01b4554a5e6a1ff6"
+  },
+  "chromium-light-phone/p42-new-pool.png": {
+   "equal": true,
+   "sha256": "cabfcb487d77ea23fda0d1041711b7b748738b728437d5d01a14443325b982ce"
+  },
+  "chromium-light-phone/p42-pool-add-account.png": {
+   "equal": true,
+   "sha256": "53203deba3ccb905cd7d49d960fd9e0adb03ae5adcb33c1af48ab7f60e8e29db"
+  },
+  "chromium-light-phone/p42-pool-add-key-form.png": {
+   "equal": true,
+   "sha256": "5ea71b7e94a73c8fd411862bbe9fa77308511611a758301eec91e2f595ede61a"
+  },
+  "chromium-light-phone/p42-pool-add-key.png": {
+   "equal": true,
+   "sha256": "2357d39c7e1027aab3bbf824ae9ca15fa808ecaf0db5fec4d1044f5cda3da3c1"
+  },
+  "chromium-light-phone/p42-pool-add-kind.png": {
+   "equal": true,
+   "sha256": "4554d247d114a381fb0823f7c2d184a92f36885aaf3e2d43f0f2c0a926ea8ee5"
+  },
+  "chromium-light-phone/p42-pool-claude.png": {
+   "equal": true,
+   "sha256": "a136240f70d478db7fc70a4bcc6572c419eb68f67f087341fd48677456320404"
+  },
+  "chromium-light-phone/p42-pool-codex.png": {
+   "equal": true,
+   "sha256": "e7c2fba46feda44d7c06f2e0df9492c3e4756ebbbb5d8a114d7fbec82761e94b"
+  },
+  "chromium-light-phone/p42-pool-delete.png": {
+   "equal": true,
+   "sha256": "3b7fd8f4ed44dca91990925639f2e63ed091b0c786d323cd7984bd821af4f394"
+  },
+  "chromium-light-phone/p42-pool-just-mine.png": {
+   "equal": true,
+   "sha256": "f92b1bffcba5d279b96d093547b8d7ed09a3d502099b64f9bbb8c425840431e6"
+  },
+  "chromium-light-phone/p42-pool-leave.png": {
+   "equal": true,
+   "sha256": "3a3cc38750106fcd4e3e0a3a71ae0b97903d9036422936a37ddc1542c1ea08b2"
+  },
+  "chromium-light-phone/p42-pool-member.png": {
+   "equal": true,
+   "sha256": "4cfa3247b47360fe768a67c45e450367fccec9f93decf6a64d87154d8c399573"
+  },
+  "chromium-light-phone/p42-pool-person-menu.png": {
+   "equal": true,
+   "sha256": "97392841e6f66c04c8c7c32217cb8b1c5ac97956033c1ff3bc2b70f0562451dc"
+  },
+  "chromium-light-phone/p42-pool-replace-key.png": {
+   "equal": true,
+   "sha256": "8e96cef229c085e20994e9660b4a5f6d797f64073c692764cc2e1807b8ef1b87"
+  },
+  "chromium-light-phone/p42-pool-share.png": {
+   "equal": true,
+   "sha256": "ca0fecf0d91b94d9648c3cd150d854a7e2ce03092a2bda0c59ee1362f82b8394"
+  },
+  "chromium-light-phone/p42-pool-signout.png": {
+   "equal": true,
+   "sha256": "500ed11e4634c45d4e9a528e1411c71a50c04c0d1043b22c8158800d490fed5e"
+  },
+  "chromium-light-phone/p42-pool-who.png": {
+   "equal": true,
+   "sha256": "d7c5be3eca44dc8a3c0faadfc4acff1eff731d21899d12af56633f19f0e24865"
+  },
+  "chromium-light-phone/p42-pools.png": {
+   "equal": true,
+   "sha256": "87a51ad14440b5e9bcbb5d0bceb520af26bf67c76b405123908fc30611c84daa"
+  },
+  "chromium-light-phone/p42-providers.png": {
+   "equal": true,
+   "sha256": "755d3c6ff6a95cc5493aaa2b50deac74fa9378120252b9c6246738ecd3d248a7"
+  },
+  "chromium-light-phone/p42-register-windows.png": {
+   "equal": true,
+   "sha256": "76f5cdb97ee407736bf6b1ef8bbf464a7494967d746efe09f45879862d99eb36"
+  },
+  "chromium-light-phone/p42-register.png": {
+   "equal": true,
+   "sha256": "eafbd1cca223e748682ddfa49e2c19a18cb854b547f7b324e572130f1d377a6e"
+  },
+  "chromium-light-phone/p42-runner-actions.png": {
+   "equal": true,
+   "sha256": "5fbd812d9183ac5644a160b48a99b6400c643532bf84ab6af348379c8a5ad5c5"
+  },
+  "chromium-light-phone/p42-runner-detail.png": {
+   "equal": true,
+   "sha256": "e76c2a07a1cff429771054f1e46ea3294173265d60c24ef3d9c60fdb48586783"
+  },
+  "chromium-light-phone/p42-runner-offline.png": {
+   "equal": true,
+   "sha256": "94b8bf753ceecdc504d302addda4fb52dae4cee7b69bf25210dc5a5477bed13b"
+  },
+  "chromium-light-phone/p42-users-add-google.png": {
+   "equal": true,
+   "sha256": "4eb05eb816a71fd78d163f516bde4a39013e996d8eaff1fe8e13c17362967d4d"
+  },
+  "chromium-light-phone/p42-users-add.png": {
+   "equal": true,
+   "sha256": "2be04960853b3a4160be5b781af3a2b0b2608430cccdf148c7a0941eea286729"
+  },
+  "chromium-light-phone/p42-users-delete.png": {
+   "equal": true,
+   "sha256": "5ff73f7a8fb2363324a94a46a381afebd6dfa5e0b0479390c0b8ffe954854d7a"
+  },
+  "chromium-light-phone/p42-users-disable-refused.png": {
+   "equal": true,
+   "sha256": "554f6ed0b28bf6444be779fc9f4e995c5998b35c3962a1f60ac4fc4580915243"
+  },
+  "chromium-light-phone/p42-users-disable.png": {
+   "equal": true,
+   "sha256": "887858c8668e7ff3773aa8ddc4f9c0197f88c187a59c6e6ed4ab2b0167c3cf15"
+  },
+  "chromium-light-phone/p42-users-disabled.png": {
+   "equal": true,
+   "sha256": "32bbd8da0364c7bf859d964336e0da0c1694d85b11df2eb17ea672abd6447075"
+  },
+  "chromium-light-phone/p42-users-empty.png": {
+   "equal": true,
+   "sha256": "dbebecdcba2ec71757b05e79eb0c01f64ec5fbc20030e8ee34e88b65b6ca0603"
+  },
+  "chromium-light-phone/p42-users-loading.png": {
+   "equal": true,
+   "sha256": "5c222d120aa818dd82c09aab737baecb0f0d4b5b97e5aa7db392485f8d075fe0"
+  },
+  "chromium-light-phone/p42-users-password.png": {
+   "equal": true,
+   "sha256": "d9ae408ce03b702050803c6eb99e9ce4b7350c2ca7ef2a22f40172d20a498fb1"
+  },
+  "chromium-light-phone/p42-users-reset.png": {
+   "equal": true,
+   "sha256": "174ad48904f146274c0e88fd7da04b16164453841a3f52c5a36f226479ff3672"
+  },
+  "chromium-light-phone/p42-users.png": {
+   "equal": true,
+   "sha256": "f88d69a1190563d74fe10f1913c8b454ecdcaa0d458455d7dcaa5b4c49b107f7"
+  },
+  "chromium-light-phone/p42-workspace-advanced.png": {
+   "equal": true,
+   "sha256": "c2ac9db8c439c15da5670013cee5d5df65a4052932c178cb1239af6418d94fd5"
+  },
+  "chromium-light-phone/p42-workspace-discard.png": {
+   "equal": true,
+   "sha256": "5eb019af3c433d7d6e4a9ac02f07dd528f7e938c3400fceba204b4e61c594539"
+  },
+  "chromium-light-phone/p42-workspace-edit.png": {
+   "equal": true,
+   "sha256": "eef0becee78723b492553d189c08ba3126ab24c893f20e75b8bf239b3b81705a"
+  },
+  "chromium-light-phone/p42-workspace-history.png": {
+   "equal": true,
+   "sha256": "4d22830c354e65e80ea4dc34e2a9d58a4639de5c0973b371465e6b1b2ca5130b"
+  },
+  "chromium-light-phone/p42-workspace-menu.png": {
+   "equal": true,
+   "sha256": "92ca6e8bbe5eda41865ec203cb30a379da8b8ed34cc70288f05a823fa5bf8da4"
+  },
+  "webkit-dark-desktop/p42-account-pause-custom.png": {
+   "equal": true,
+   "sha256": "aea7550c5a1424c6f3814ffef97da6ed351dda0ca51825083fbc8363a985fc6a"
+  },
+  "webkit-dark-desktop/p42-account-pause.png": {
+   "equal": true,
+   "sha256": "11be44e19e689bba99384bd020ed55bb1d271326de18bba9164d6140ee979dd0"
+  },
+  "webkit-dark-desktop/p42-capacity.png": {
+   "equal": true,
+   "sha256": "e512cd36396389fef5c57214721f2677432378968b5fe77ad4ecea0fc8b6d67f"
+  },
+  "webkit-dark-desktop/p42-codex-signin-code.png": {
+   "equal": true,
+   "sha256": "09f8e7494fa65ec65eb06afd4a6b8211cbb566fe6de2e53b89fe8dc6cfd50a9c"
+  },
+  "webkit-dark-desktop/p42-codex-signin.png": {
+   "equal": true,
+   "sha256": "c6132a7ee90a56c685c41c17a1ed26564b40c06579b9e149fb4c5848b574ee82"
+  },
+  "webkit-dark-desktop/p42-connect-advanced.png": {
+   "equal": true,
+   "sha256": "9d280a8a723a11d15bd2d1733a9e6aeb4adb2da7cc8341d2794ce69caa586702"
+  },
+  "webkit-dark-desktop/p42-connect-custom.png": {
+   "equal": true,
+   "sha256": "3688da045455b10527e04050a0eb765bd83019ea5affab5f5561d7d9c460f872"
+  },
+  "webkit-dark-desktop/p42-connect-dialect-open.png": {
+   "equal": true,
+   "sha256": "0f63f85d162e46aff166f4961f5cf52833c5a252823d33deb91e86dbbac21b42"
+  },
+  "webkit-dark-desktop/p42-connect-edit-shown.png": {
+   "equal": true,
+   "sha256": "e5578a60c8a4fad4c2e1093b4c3075949d73080c9c7841b0e33f759fa4202db7"
+  },
+  "webkit-dark-desktop/p42-connect-edit.png": {
+   "equal": true,
+   "sha256": "ac69d5417dbe5d311d6782969ba6e1677210119d8afad4623919f89104cfd6f7"
+  },
+  "webkit-dark-desktop/p42-connect-models.png": {
+   "equal": true,
+   "sha256": "8dd47af4e433da9130b03111a2c928ad82ce8986ce544f2721d6f65b6b1828bf"
+  },
+  "webkit-dark-desktop/p42-connect-probe-error.png": {
+   "equal": true,
+   "sha256": "ca0eef9644548c2649e74d600a8e4c0c71641370b9fb193955bc15703f1df74c"
+  },
+  "webkit-dark-desktop/p42-connect.png": {
+   "equal": true,
+   "sha256": "827b15dec2bbd24c175cae7b1d35ed08f8cae399bf4647e4e3af9d6d1e56690b"
+  },
+  "webkit-dark-desktop/p42-deepseek-lines.png": {
+   "equal": true,
+   "sha256": "bcf528c35c5c4dda1cd2ab16ee55cab515ad3e5d2527af991aa14fc9bdb723fb"
+  },
+  "webkit-dark-desktop/p42-deepseek-loading.png": {
+   "equal": true,
+   "sha256": "0b7085351e33c3f5d3569e1c92c370a2ac899b815ee7902511436313de518455"
+  },
+  "webkit-dark-desktop/p42-deepseek-low.png": {
+   "equal": true,
+   "sha256": "008bd513db9edd89022e9d157a0ecf5dd9a7f26297d5afd06f7dec06e7ac2b7d"
+  },
+  "webkit-dark-desktop/p42-deepseek-read.png": {
+   "equal": true,
+   "sha256": "aa37ed369b6a742416db58f5182a336116ea7ebecd4c8ee5686525c59ea7c348"
+  },
+  "webkit-dark-desktop/p42-deepseek-refreshing.png": {
+   "equal": true,
+   "sha256": "2b01c84c5a1d2775a23c29f1e5d3d7f85312708d9efd6cb24a8e7e87305b182e"
+  },
+  "webkit-dark-desktop/p42-deepseek-refused.png": {
+   "equal": true,
+   "sha256": "8adb092d67f305f64fa46b4d3de550d0f8066a84e2ba2a3c5a011f4de72814df"
+  },
+  "webkit-dark-desktop/p42-engine-menu.png": {
+   "equal": true,
+   "sha256": "c35d0275b6e283a5e2dbffc194bd52cc5e4e624f4b20b9c2f49e385ed9e791e2"
+  },
+  "webkit-dark-desktop/p42-engine-remove.png": {
+   "equal": true,
+   "sha256": "2faf5c1498468d91c00c0e979979bc13335e457a6b55fd5c43a8ae0382c067af"
+  },
+  "webkit-dark-desktop/p42-enroll-approved.png": {
+   "equal": true,
+   "sha256": "d51f64dab8231370cac00d4c730194b2fbcd333fe451cb628596f311ffb2375c"
+  },
+  "webkit-dark-desktop/p42-enroll-conflict.png": {
+   "equal": true,
+   "sha256": "5d4ed89bfef249f60ba7b2d328f59bf8b8e8e28d6e1be03a2a42a25397090c11"
+  },
+  "webkit-dark-desktop/p42-enroll-error.png": {
+   "equal": true,
+   "sha256": "f70a0f12d8a0bfd812a14c5e9efa5b663f30f9a9e490a897afb353f05b0ec0d3"
+  },
+  "webkit-dark-desktop/p42-enroll-loading.png": {
+   "equal": true,
+   "sha256": "a0e14e7b1128e18e14801b445576e8b95775c4849e65da6af32b0cf8ba32f749"
+  },
+  "webkit-dark-desktop/p42-enroll.png": {
+   "equal": true,
+   "sha256": "e7f40348f1073802db5ee0e4dea7a78939a90f6eb4574b10e419a054bd4a12a5"
+  },
+  "webkit-dark-desktop/p42-keep-free-open.png": {
+   "equal": true,
+   "sha256": "a0fc7bcd304b8b8573b82158a9d44bb8159a7c5f1fd00d3ac6d3b63a53586fa7"
+  },
+  "webkit-dark-desktop/p42-new-pool-claude.png": {
+   "equal": true,
+   "sha256": "9a26b38b28a7208b4ab91911f1ce2ac90ae7588f4fd9fe4a281085b834b2610c"
+  },
+  "webkit-dark-desktop/p42-new-pool-people.png": {
+   "equal": true,
+   "sha256": "5ba09d26f19073e6d86ea8e81abab416a37231a20fc49a468f7c72e669f7951d"
+  },
+  "webkit-dark-desktop/p42-new-pool.png": {
+   "equal": true,
+   "sha256": "6fd2596b0376f0a221725a33935ed44476b834fa94cb380cd94b56e4458e69e3"
+  },
+  "webkit-dark-desktop/p42-pool-add-account.png": {
+   "equal": true,
+   "sha256": "87adeed903c69ea5576f1a4e45352fa7840397d1d71b250929381bc1589e2e2a"
+  },
+  "webkit-dark-desktop/p42-pool-add-key-form.png": {
+   "equal": true,
+   "sha256": "f417faeee4a6779237eac31447480342e30ec03d80a696602d46eb2548b1da05"
+  },
+  "webkit-dark-desktop/p42-pool-add-key.png": {
+   "equal": true,
+   "sha256": "698942357f61b817e0a6ad46fe17c6e4bdbb53a4f1a44c887c162598101d826e"
+  },
+  "webkit-dark-desktop/p42-pool-add-kind.png": {
+   "equal": true,
+   "sha256": "c44a27087384b0793643e51f751bc67775a224d7309c260ac51310c38b7ea297"
+  },
+  "webkit-dark-desktop/p42-pool-claude.png": {
+   "equal": true,
+   "sha256": "887470d3df86aba29daccf3620ab7a1d30dfd0c8058e98a7d7716c65ef856f24"
+  },
+  "webkit-dark-desktop/p42-pool-codex.png": {
+   "equal": true,
+   "sha256": "44c6a09622f68986a1bb5f8763aba02e3c73d020daa989f84532f878302c6769"
+  },
+  "webkit-dark-desktop/p42-pool-delete.png": {
+   "equal": true,
+   "sha256": "b5981d07dba9389e3bb7933dec9fb9373fc84c201843ca660b4cb6a25dd9d351"
+  },
+  "webkit-dark-desktop/p42-pool-just-mine.png": {
+   "equal": true,
+   "sha256": "508722874e32ad83e313ee277e85c25aeced03623d07afa0eaa5fd62c36ad5e6"
+  },
+  "webkit-dark-desktop/p42-pool-leave.png": {
+   "equal": true,
+   "sha256": "311d5b6b1cf3ce2735ac3e683eba6920f45edc08a5952af3792093fd16091fd2"
+  },
+  "webkit-dark-desktop/p42-pool-member.png": {
+   "equal": true,
+   "sha256": "56febc18d2b0a609d4f2cd12d1617d092fb5b4b292dc4ebd816e76be9152fe67"
+  },
+  "webkit-dark-desktop/p42-pool-person-menu.png": {
+   "equal": true,
+   "sha256": "5a13c2b034c6ab1c570d72f83e3d4b1f756cb22157a46961c923bb043d0e4381"
+  },
+  "webkit-dark-desktop/p42-pool-replace-key.png": {
+   "equal": true,
+   "sha256": "0b92645a53cbe19530d219070baf653a7f0b321c35ffaed8e8dba412b1579a85"
+  },
+  "webkit-dark-desktop/p42-pool-share.png": {
+   "equal": true,
+   "sha256": "5aeacc4fbf92c5c4f7717615d39dfe42d050895dd6b89df03c94debf959d216b"
+  },
+  "webkit-dark-desktop/p42-pool-signout.png": {
+   "equal": true,
+   "sha256": "54ae826225c2e8394bdd49b42969a2590f2fd1f84b34b32669a468dffc7f50d3"
+  },
+  "webkit-dark-desktop/p42-pool-tooltip.png": {
+   "equal": true,
+   "sha256": "ac9241f88df4f29f2ada08d68de9b86231b93af6abd7bca379913c3ddfe427c1"
+  },
+  "webkit-dark-desktop/p42-pool-who.png": {
+   "equal": true,
+   "sha256": "2249eec98645a86643369d56ac966b894f9bb0e66fc5478b5a5416c4203b4dd9"
+  },
+  "webkit-dark-desktop/p42-pools.png": {
+   "equal": true,
+   "sha256": "ce32638170b72f420695808af2efeb689f85d7e7010f9ac1500b77da3d75f491"
+  },
+  "webkit-dark-desktop/p42-providers.png": {
+   "equal": true,
+   "sha256": "2522ecea119bddb3833f58caa1471bf446e76b063a261f68986002770efc0e9c"
+  },
+  "webkit-dark-desktop/p42-register-windows.png": {
+   "equal": true,
+   "sha256": "c2670796116a1015f37ab322bdf4891ce3d34e85254e849e740ea2510eacb219"
+  },
+  "webkit-dark-desktop/p42-register.png": {
+   "equal": true,
+   "sha256": "35352579af3b38a6580247b030b01ec96c854b2f9a8f16201a9d776dd1a1d11a"
+  },
+  "webkit-dark-desktop/p42-runner-actions.png": {
+   "equal": true,
+   "sha256": "4c5a87190a644241668b11349c19b107afede76c0a4182c8b2565524484226dc"
+  },
+  "webkit-dark-desktop/p42-runner-detail.png": {
+   "equal": true,
+   "sha256": "2b1adab1c0200117eba00b2cc5dd3f55e49a44ef8585a4074dec69e680c63f85"
+  },
+  "webkit-dark-desktop/p42-runner-offline.png": {
+   "equal": true,
+   "sha256": "271b61bfff9d423b2dbdec0fee814ea5049dd443a4b6bbc9f1abdd255eb8c781"
+  },
+  "webkit-dark-desktop/p42-users-add-google.png": {
+   "equal": true,
+   "sha256": "6d56e51720c7307ee944e97eea83f6f83f4b2d3528227b849f4a9b970d025b28"
+  },
+  "webkit-dark-desktop/p42-users-add.png": {
+   "equal": true,
+   "sha256": "07020d077bcbfd07dad79084708abf0ab087c47c8ec781edfbfaf14940f40d54"
+  },
+  "webkit-dark-desktop/p42-users-delete.png": {
+   "equal": true,
+   "sha256": "b20d48c764d61cc54581ff5da3df4e27fdd9ce663ad64518c9c579c140655a86"
+  },
+  "webkit-dark-desktop/p42-users-disable-refused.png": {
+   "equal": true,
+   "sha256": "10add5bbde68d123b036380a2eb415ab92a2a7a48f8b6050f330f2480d49f059"
+  },
+  "webkit-dark-desktop/p42-users-disable.png": {
+   "equal": true,
+   "sha256": "e66a762f19b0828bd69004c59845fbbd92effd916941d93d00137515e369dadc"
+  },
+  "webkit-dark-desktop/p42-users-disabled.png": {
+   "equal": true,
+   "sha256": "3b08efb02f6c21c042563bc5c229951cacb5802e56cfa269c36c87c68e385ebb"
+  },
+  "webkit-dark-desktop/p42-users-empty.png": {
+   "equal": true,
+   "sha256": "a74073258e6dda4e12d903ec9eb92d668097b26551749bca9180d881c6a6c781"
+  },
+  "webkit-dark-desktop/p42-users-loading.png": {
+   "equal": true,
+   "sha256": "59d32080d2cbb2c34712692a9146ea326f5eaf09c30bd9e91929459770d6bbb3"
+  },
+  "webkit-dark-desktop/p42-users-password.png": {
+   "equal": true,
+   "sha256": "05f6f3ff17ed768c416f8576e569a0966973269601983b44daac9dd14ce614f5"
+  },
+  "webkit-dark-desktop/p42-users-reset.png": {
+   "equal": true,
+   "sha256": "dec7c6b33921eadd5cff75660577ac2f8fe13f01768f2de99bc120f789d1c598"
+  },
+  "webkit-dark-desktop/p42-users.png": {
+   "equal": true,
+   "sha256": "3ff26567e02311e15cec73445dca45e800850182b11a732174443975c7614e6b"
+  },
+  "webkit-dark-desktop/p42-workspace-advanced.png": {
+   "equal": true,
+   "sha256": "64087dc4d212e56f4d45efc2ec4650545ce5a38fde8b2e27ee29877ef84ff844"
+  },
+  "webkit-dark-desktop/p42-workspace-discard.png": {
+   "equal": true,
+   "sha256": "2afb9298d9623ebd88958ee4e0e1e3fdff104be63785bc0746004d8b831e6641"
+  },
+  "webkit-dark-desktop/p42-workspace-edit.png": {
+   "equal": true,
+   "sha256": "58f0be88994de710b4a4a9c882fee67ec3ac0401324a7712b8bbc224dfc853bf"
+  },
+  "webkit-dark-desktop/p42-workspace-history.png": {
+   "equal": true,
+   "sha256": "3ec916c74d5f2d0da1e3e0a91f28de07fa8083c1167bc77c0972058a7a3a9b59"
+  },
+  "webkit-dark-desktop/p42-workspace-menu.png": {
+   "equal": true,
+   "sha256": "4c5b7eb77a976946e2c8ddd4e63f2e804062e75aa2983a1967252adae055c504"
+  },
+  "webkit-dark-phone/p42-account-pause-custom.png": {
+   "equal": true,
+   "sha256": "8cf4ac24b101f127cc2e577f64f95f1a66df42b59242f69668db143ff0a5e4c0"
+  },
+  "webkit-dark-phone/p42-account-pause.png": {
+   "equal": true,
+   "sha256": "759830c812eb6e61bfc1aad805858f52ad303352b9fbac5b104f2a2dd67c3923"
+  },
+  "webkit-dark-phone/p42-capacity.png": {
+   "equal": true,
+   "sha256": "197a10bace79d3250a45dd61bf78991776006201bb1313c9a130e65c68583e0f"
+  },
+  "webkit-dark-phone/p42-codex-signin-code.png": {
+   "equal": true,
+   "sha256": "23d5eb33a1fb6df1a94329b3b6c05c277b2e9c15b5c4a8a008846b008fffac4e"
+  },
+  "webkit-dark-phone/p42-codex-signin.png": {
+   "equal": true,
+   "sha256": "c31e66085e12b927062673b88dc62980c6c1f11c5b0e179b72ace70a3e54d440"
+  },
+  "webkit-dark-phone/p42-connect-advanced.png": {
+   "equal": true,
+   "sha256": "4d13dddb5b8a10b0ba6cbba03ed7efac1d802c3020b078cd23fef2aaa1b6fdde"
+  },
+  "webkit-dark-phone/p42-connect-custom.png": {
+   "equal": true,
+   "sha256": "dab3fa76206d9a476986d7ccb5aa8c2857758f322d82db1ca0db4abe291711c6"
+  },
+  "webkit-dark-phone/p42-connect-dialect-open.png": {
+   "equal": true,
+   "sha256": "80fb6bbb1a482436473ea289d1c6f40446f85668bbc2ad0079b180b802ae9b36"
+  },
+  "webkit-dark-phone/p42-connect-edit-shown.png": {
+   "equal": true,
+   "sha256": "cc163082b49b52e470bd4ca2ede42e856dd691ad6cea09f0e9b500d0261ea793"
+  },
+  "webkit-dark-phone/p42-connect-edit.png": {
+   "equal": true,
+   "sha256": "be1738e1c9ccc5b35094c62eadc69f43c5e81efa757f6766832bf3124897d2c6"
+  },
+  "webkit-dark-phone/p42-connect-models.png": {
+   "equal": true,
+   "sha256": "a6f6381196d7e2a4b9c1fd53ecf3c5797c5969d80b7d324cc855948aa232af11"
+  },
+  "webkit-dark-phone/p42-connect-probe-error.png": {
+   "equal": true,
+   "sha256": "6f26702bdddc3132c41971b0f885147b83e52c31cfbb38818ae61f358aecf126"
+  },
+  "webkit-dark-phone/p42-connect.png": {
+   "equal": true,
+   "sha256": "6165d8044d35ac81c150a5f72ed1ecdcd6b057a77fc51863cd85ad9dbdf43cec"
+  },
+  "webkit-dark-phone/p42-deepseek-lines.png": {
+   "equal": true,
+   "sha256": "e9d0adef57dfdec0d54f41999a340ad0154dfa7689154c440ef9dd12606530c2"
+  },
+  "webkit-dark-phone/p42-deepseek-loading.png": {
+   "equal": true,
+   "sha256": "298e39a1a6799d6ea6ae8e4b8e1d53b4a56edaab77e6296771d674a11f3d4f2f"
+  },
+  "webkit-dark-phone/p42-deepseek-low.png": {
+   "equal": true,
+   "sha256": "c13ef6a2fb2168c0d721984c91408b1f9d866a0311756d5eb47a829274f9058e"
+  },
+  "webkit-dark-phone/p42-deepseek-read.png": {
+   "equal": true,
+   "sha256": "06768d4121b12a3ed6dcfd97f7929461e2a31d56fe0980aad14262f41c0ec1fa"
+  },
+  "webkit-dark-phone/p42-deepseek-refreshing.png": {
+   "equal": true,
+   "sha256": "e895bc76921c339ab288631b67e05703a14ce88a5bb64eb91f4c0f22c9a32b10"
+  },
+  "webkit-dark-phone/p42-deepseek-refused.png": {
+   "equal": true,
+   "sha256": "d8d272a3bd9a2d379a7b65899f76a9625f12fcb66268a07242d98410da2faa06"
+  },
+  "webkit-dark-phone/p42-engine-menu.png": {
+   "equal": true,
+   "sha256": "38693e5b23595d5a2f2403371b519a0246817ced40ef955e6a1b4175ee42e976"
+  },
+  "webkit-dark-phone/p42-engine-remove.png": {
+   "equal": true,
+   "sha256": "72afdf0f944cf25756c9240a78710b65f10262baf5f14ae93b7fb378fa8e319a"
+  },
+  "webkit-dark-phone/p42-enroll-approved.png": {
+   "equal": true,
+   "sha256": "9675e13d664a4492e36e4d5a95746f9437d086edea99f03b5a141a759f23643c"
+  },
+  "webkit-dark-phone/p42-enroll-conflict.png": {
+   "equal": true,
+   "sha256": "477a2c78dd521bb21c55e7f4f2c8f93de30d4beeb0e0fe90169125f219291532"
+  },
+  "webkit-dark-phone/p42-enroll-error.png": {
+   "equal": true,
+   "sha256": "dcccb80c6c9a65bdbfd63d95ad8e41817a4ff5f012885a8c2b50f69317cba250"
+  },
+  "webkit-dark-phone/p42-enroll-loading.png": {
+   "equal": true,
+   "sha256": "1376327a4cbb18d340d0bc54c2be44e257330691ac332dfdb2683d09900945dd"
+  },
+  "webkit-dark-phone/p42-enroll.png": {
+   "equal": true,
+   "sha256": "636ba52a391dcdff6e18e760c445101a061cdbf016ecf94cb04e80c1b894a2ab"
+  },
+  "webkit-dark-phone/p42-keep-free-open.png": {
+   "equal": true,
+   "sha256": "4ec0918c89dd07e44c93f9a959c777e021dcf5a2dceb2ebf1391d9abd268be02"
+  },
+  "webkit-dark-phone/p42-new-pool-claude.png": {
+   "equal": true,
+   "sha256": "6ef6ce40181035a8a3d98e0a22e3e5f44c9b330de912d2ab52c16d82dd154ae2"
+  },
+  "webkit-dark-phone/p42-new-pool-people.png": {
+   "equal": true,
+   "sha256": "33408c20176f677ed3bee55412951779a4cc5175a49cd87a7a1427728a964a39"
+  },
+  "webkit-dark-phone/p42-new-pool.png": {
+   "equal": true,
+   "sha256": "48a2d211187cce4c737497561776f30838a6810ff703d8e08c6b72355bcf1773"
+  },
+  "webkit-dark-phone/p42-pool-add-account.png": {
+   "equal": true,
+   "sha256": "1412c3f19b02f1e785d616bdca8e575e420da33e760371a1fa1d82596e0ca9dc"
+  },
+  "webkit-dark-phone/p42-pool-add-key-form.png": {
+   "equal": true,
+   "sha256": "9e289152bbb573a63811e20ce93cc8346415568ecd369b54967e451a00132511"
+  },
+  "webkit-dark-phone/p42-pool-add-key.png": {
+   "equal": true,
+   "sha256": "449489f1bbf695e4be314fb56adf84d6e92202c058e1746235d530cb9a4366b2"
+  },
+  "webkit-dark-phone/p42-pool-add-kind.png": {
+   "equal": true,
+   "sha256": "100f300c48257ff6c0c48c87565d3781eb9e0beaf91e8767043c166320cf7f99"
+  },
+  "webkit-dark-phone/p42-pool-claude.png": {
+   "equal": true,
+   "sha256": "5fc2796da6a21bff2402841fa138550c9392cbb25b5a309113496f63bd8f3993"
+  },
+  "webkit-dark-phone/p42-pool-codex.png": {
+   "equal": true,
+   "sha256": "07b3817954be84d5933e9e07aba94f5e02de9664a1a2a4c8f11819a96722af39"
+  },
+  "webkit-dark-phone/p42-pool-delete.png": {
+   "equal": true,
+   "sha256": "27a3056208467a748af84a1488fe7d6ed74a3828945f4a242e2976826eaa38b1"
+  },
+  "webkit-dark-phone/p42-pool-just-mine.png": {
+   "equal": true,
+   "sha256": "78af1af3d43d5d0931c985d7bdf9ac3df589ac87b0fefaa9f5d0989977d30428"
+  },
+  "webkit-dark-phone/p42-pool-leave.png": {
+   "equal": true,
+   "sha256": "e11ac8b993501f48fd398f6126886d3d09914f398e9fbbd2e44122df6c9501b6"
+  },
+  "webkit-dark-phone/p42-pool-member.png": {
+   "equal": true,
+   "sha256": "b831d09f4988d4361c6d844d1d4d1e10fc19595af207fa842dab5ffbe14e812f"
+  },
+  "webkit-dark-phone/p42-pool-person-menu.png": {
+   "equal": true,
+   "sha256": "8d7db56496e7899fff03e592d581f14b87e0e1e84ee58931e05ca036b4ebd41c"
+  },
+  "webkit-dark-phone/p42-pool-replace-key.png": {
+   "equal": true,
+   "sha256": "d46463ddc8ce288fd3ba355359b7342f03165864f9f087a196db23da4c9124be"
+  },
+  "webkit-dark-phone/p42-pool-share.png": {
+   "equal": true,
+   "sha256": "ef3f936312ae295b4d8ac7efa77e3b7f2c144e7f1cb78eaa61fba0656814a524"
+  },
+  "webkit-dark-phone/p42-pool-signout.png": {
+   "equal": true,
+   "sha256": "ef258a9bb17b134b959298d3782ae4c6f276dcb77d220669b7cc4ed64c1d193e"
+  },
+  "webkit-dark-phone/p42-pool-who.png": {
+   "equal": true,
+   "sha256": "35fac2cb96c0956ca0b99656d09b6aab7d7c58111e275b735bb919d678e24fed"
+  },
+  "webkit-dark-phone/p42-pools.png": {
+   "equal": true,
+   "sha256": "9c37b862878a7c991ab1453dbffdfdaa6b9c9d64fc0811334c74e185ab4d4184"
+  },
+  "webkit-dark-phone/p42-providers.png": {
+   "equal": true,
+   "sha256": "971177689a3e16dc4ba6ad9c1b628b22c5748ea3020cbc76c62540840d7e5387"
+  },
+  "webkit-dark-phone/p42-register-windows.png": {
+   "equal": true,
+   "sha256": "82e9b29383773fd858e9495d4960839aca5c7137db4ac929a37c30291a5998f7"
+  },
+  "webkit-dark-phone/p42-register.png": {
+   "equal": true,
+   "sha256": "724ba3eb854f90a155034ec08d818b237abb81bfa0b731d860bbfa1e7ffbc51a"
+  },
+  "webkit-dark-phone/p42-runner-actions.png": {
+   "equal": true,
+   "sha256": "1ebd2a965d3ebc8e3d97c10dfdc9df49282454d5e59a3e6d5c0d831af387bbc6"
+  },
+  "webkit-dark-phone/p42-runner-detail.png": {
+   "equal": true,
+   "sha256": "17254a4e165389758ff0d0c0aeb008ef6c4b1d1377f41ed43da380775c5b5f53"
+  },
+  "webkit-dark-phone/p42-runner-offline.png": {
+   "equal": true,
+   "sha256": "6b835770e4964a530f91f39dc9e01b9da2ab57ea5e30d760ec79c5f3479cd916"
+  },
+  "webkit-dark-phone/p42-users-add-google.png": {
+   "equal": true,
+   "sha256": "e126dd262337c8ba531b792c97646970cedc9cf996c0ec4dc78f67cad99846ab"
+  },
+  "webkit-dark-phone/p42-users-add.png": {
+   "equal": true,
+   "sha256": "727c603fdca2a0bcac714a460fb55191f6586589fe09ea61db9110286f680c8a"
+  },
+  "webkit-dark-phone/p42-users-delete.png": {
+   "equal": true,
+   "sha256": "24f9210ea282e48f06b8e748c4c6b5a49134995068f9cc8f07795f9a37ecd1dc"
+  },
+  "webkit-dark-phone/p42-users-disable-refused.png": {
+   "equal": true,
+   "sha256": "ca7731adf81b0c93c7147ed8a8cebea05c09c64f7181e266ed94bf500a3fb10b"
+  },
+  "webkit-dark-phone/p42-users-disable.png": {
+   "equal": true,
+   "sha256": "690a4b893eeba15892633e5fd36b0724a801229fbea31265379a1e3c08550966"
+  },
+  "webkit-dark-phone/p42-users-disabled.png": {
+   "equal": true,
+   "sha256": "0aa536dbbb11bab9414ddc8763008e01897d9ee445df6a0472a177a70cc3b09e"
+  },
+  "webkit-dark-phone/p42-users-empty.png": {
+   "equal": true,
+   "sha256": "a9a19a0af63f8c4e60eb723bcdd92026dd85d6bb8b725256c86ac89390caa46c"
+  },
+  "webkit-dark-phone/p42-users-loading.png": {
+   "equal": true,
+   "sha256": "22a6c504a42b728950be50ccf34634e5952cd9341517d5ce3f317732da509d58"
+  },
+  "webkit-dark-phone/p42-users-password.png": {
+   "equal": true,
+   "sha256": "ae5797a10ef454b344d0b73de08f3c0406179f7fbe71506a48a8768407cfecf3"
+  },
+  "webkit-dark-phone/p42-users-reset.png": {
+   "equal": true,
+   "sha256": "c07756cc100f7ac221a3321e21a8df18c3c32ab2574269f6d770611210e6cdd0"
+  },
+  "webkit-dark-phone/p42-users.png": {
+   "equal": true,
+   "sha256": "9a680a710b6d2ce9ac426653e3da419c1b4dce47fd0857625361861c5ba0e869"
+  },
+  "webkit-dark-phone/p42-workspace-advanced.png": {
+   "equal": true,
+   "sha256": "64d8c964f6629124203f633c3b73836e1542102b4f4655de3a2fb7d8ae3d12fb"
+  },
+  "webkit-dark-phone/p42-workspace-discard.png": {
+   "equal": true,
+   "sha256": "fb511c05d4089820acf379766df2dcc5cb86141e8d4aef3d82b331eae2eb935f"
+  },
+  "webkit-dark-phone/p42-workspace-edit.png": {
+   "equal": true,
+   "sha256": "bfe018bc1ce4f2e86e9f9c0355db4d8cae9d1c8c676747f4da2ded711aa274d6"
+  },
+  "webkit-dark-phone/p42-workspace-history.png": {
+   "equal": true,
+   "sha256": "442faaaff6b5b9ee9810f83f9a9b2572967c5704d5db446d164c8c59353ecdd7"
+  },
+  "webkit-dark-phone/p42-workspace-menu.png": {
+   "equal": true,
+   "sha256": "16e988a3344c0792831dd19bbfa1d1ed96bd18dc3887a0c9a2bb1075ca066710"
+  },
+  "webkit-light-desktop/p42-account-pause-custom.png": {
+   "equal": true,
+   "sha256": "acafc6eeb14544efc799a1c4a9d28016f27ede0fab5b975583c79b2fe72ee387"
+  },
+  "webkit-light-desktop/p42-account-pause.png": {
+   "equal": true,
+   "sha256": "5207b2c2079ef84590c6833a81be24780f9a5e8aca2397c0a4b7b1609cb83ab1"
+  },
+  "webkit-light-desktop/p42-capacity.png": {
+   "equal": true,
+   "sha256": "9aefdd5812b4d5b5ae56846915baf2d09b9026fbf8a48c6e5ad03ef0f1e4a7e8"
+  },
+  "webkit-light-desktop/p42-codex-signin-code.png": {
+   "equal": true,
+   "sha256": "7a5448632d4bac05a847b593dc1eebef37c8778adf6b1058aaa5ff5525464498"
+  },
+  "webkit-light-desktop/p42-codex-signin.png": {
+   "equal": true,
+   "sha256": "393081fbe7641cbaa3ada396724c65ef3eedbfbb00fda4637160dfe83bd95b8c"
+  },
+  "webkit-light-desktop/p42-connect-advanced.png": {
+   "equal": true,
+   "sha256": "c347edb27df12f5d7b4e690b7b752c91024171b667b1f14f775e61e31be2e9db"
+  },
+  "webkit-light-desktop/p42-connect-custom.png": {
+   "equal": true,
+   "sha256": "49bb245038e6dd653e47a4a593a6b1b3d46413e1bd9f2411136e6f4d44a6c429"
+  },
+  "webkit-light-desktop/p42-connect-dialect-open.png": {
+   "equal": true,
+   "sha256": "e5c42e6cebc6406f1c7e52688530474809c16eaa1175269f06044080b17625a0"
+  },
+  "webkit-light-desktop/p42-connect-edit-shown.png": {
+   "equal": true,
+   "sha256": "4bae695c7e0ded7b394b3b603583019ce3282f6d796ae20345479a1ebcded653"
+  },
+  "webkit-light-desktop/p42-connect-edit.png": {
+   "equal": true,
+   "sha256": "23d079843cc00f66b3590e78231665c70ae37cbadd140a4e6bac8a698454ea29"
+  },
+  "webkit-light-desktop/p42-connect-models.png": {
+   "equal": true,
+   "sha256": "326d08db6fe75ffb328b2ef00d8ad30bc5c5231ccf6d0f5e0347325f152463d7"
+  },
+  "webkit-light-desktop/p42-connect-probe-error.png": {
+   "equal": true,
+   "sha256": "9ae3352232fce59b8ab0af9fe49106a5f8091a62532d878351fbc7f4f9165204"
+  },
+  "webkit-light-desktop/p42-connect.png": {
+   "equal": true,
+   "sha256": "d5a5947f3851a895a779f4e4eae99b7efbcd7f5ac1e018d440af0e2882f20bcf"
+  },
+  "webkit-light-desktop/p42-deepseek-lines.png": {
+   "equal": true,
+   "sha256": "56b268f61172b29af5f584d865352a24a623da58bf0a6d48476a499cd8475b13"
+  },
+  "webkit-light-desktop/p42-deepseek-loading.png": {
+   "equal": true,
+   "sha256": "c0e15924da4158dce0d168290211e05a4c07fcd040af678e55e8002e1b7707a5"
+  },
+  "webkit-light-desktop/p42-deepseek-low.png": {
+   "equal": true,
+   "sha256": "3857e5c2ba3a94e240353d4803d4a8bcf7f702f3b151a67e9c61db34bd6a0b41"
+  },
+  "webkit-light-desktop/p42-deepseek-read.png": {
+   "equal": true,
+   "sha256": "f49b99b1699d7c8f26ef34a8da1e1c379331fd8614e927f0512019b41560f113"
+  },
+  "webkit-light-desktop/p42-deepseek-refreshing.png": {
+   "equal": true,
+   "sha256": "295eab5b5333e053f34ffe6b330383e058b26a4c418abce018496e29dc134cdf"
+  },
+  "webkit-light-desktop/p42-deepseek-refused.png": {
+   "equal": true,
+   "sha256": "472900cf33b56da8929d72c701ffe9fe9c5d465c1f028b07aaa89f12580d1fec"
+  },
+  "webkit-light-desktop/p42-engine-menu.png": {
+   "equal": true,
+   "sha256": "5f38981d8a5d56f1de40e0223beb6f3aee0c8e2fba9e42c794917a025fb01a8b"
+  },
+  "webkit-light-desktop/p42-engine-remove.png": {
+   "equal": true,
+   "sha256": "453541afb8e23c16929e5024354a283bf12b07f6175621a2f14bef70b367aea0"
+  },
+  "webkit-light-desktop/p42-enroll-approved.png": {
+   "equal": true,
+   "sha256": "667cdd6acae49e9c2045acf9c071a57051cacaff279839542e225f631dcfb6a2"
+  },
+  "webkit-light-desktop/p42-enroll-conflict.png": {
+   "equal": true,
+   "sha256": "976177b42084fb8aee69164b5a38ca835fe890d3e9d1aa28938eda3237f67695"
+  },
+  "webkit-light-desktop/p42-enroll-error.png": {
+   "equal": true,
+   "sha256": "6d1de9736aa23212d2abe1dca50f7c9d09eae712f69dbc0b652f2f2904423b6e"
+  },
+  "webkit-light-desktop/p42-enroll-loading.png": {
+   "equal": true,
+   "sha256": "35aba967ffd0d9ec5322b3dc0bca006dac1a38d54031a1b63588f7a0f6fbd63e"
+  },
+  "webkit-light-desktop/p42-enroll.png": {
+   "equal": true,
+   "sha256": "bdbc7621f7a706d557c6d24c7c1aa0de088a5f4d80fb28b23ee562ef17330374"
+  },
+  "webkit-light-desktop/p42-keep-free-open.png": {
+   "equal": true,
+   "sha256": "ed47ce1786fbefe25662f576490020e8e5d3516aa5b8a4c470a34ed9a9c6958f"
+  },
+  "webkit-light-desktop/p42-new-pool-claude.png": {
+   "equal": true,
+   "sha256": "ef505c6ca1065542b7959ea559edcdcc0c8b7a64e935fb40c3d0fb4456d2b73d"
+  },
+  "webkit-light-desktop/p42-new-pool-people.png": {
+   "equal": true,
+   "sha256": "16d909e88882ea7aeb683b7990ce06ea10796f260242fb64a066320eed5a2564"
+  },
+  "webkit-light-desktop/p42-new-pool.png": {
+   "equal": true,
+   "sha256": "14ce0d52a51a098a48589567bfeb28c89acaa33f655aef3d5c03a2c1d3697132"
+  },
+  "webkit-light-desktop/p42-pool-add-account.png": {
+   "equal": true,
+   "sha256": "2fb724f8c871fcabe5a301d291333bbc48ae582687d5078aacab15f1c8ba01ee"
+  },
+  "webkit-light-desktop/p42-pool-add-key-form.png": {
+   "equal": true,
+   "sha256": "b69ba424549c2b467f20f1041b12b7402aa780629e11110519c7c9de1a46d38a"
+  },
+  "webkit-light-desktop/p42-pool-add-key.png": {
+   "equal": true,
+   "sha256": "aa5928f52a41f97a62d2b774504e7799ecf0d74399ff8c52157c5480cf3c267b"
+  },
+  "webkit-light-desktop/p42-pool-add-kind.png": {
+   "equal": true,
+   "sha256": "dc16b1d8d47ca289d41b113f0fa60be9b3f124165687b8fb56102f0c2c6162c5"
+  },
+  "webkit-light-desktop/p42-pool-claude.png": {
+   "equal": true,
+   "sha256": "d2af059a3dc4a152bcef877e0817ea4c806beb95107f95cab4f4602664bb1800"
+  },
+  "webkit-light-desktop/p42-pool-codex.png": {
+   "equal": true,
+   "sha256": "5e64d20c1944f011bc341f121adeb7f676d6243da9e0dd27a05d16a0be9794ed"
+  },
+  "webkit-light-desktop/p42-pool-delete.png": {
+   "equal": true,
+   "sha256": "d8bcf91ce5931e7d1e4bcdfa9855d5f2776eeeab136d4cade69c63e88a338d0a"
+  },
+  "webkit-light-desktop/p42-pool-just-mine.png": {
+   "equal": true,
+   "sha256": "6cda351b96a4b31f79b29c884002b1d33b050b475a6443f9eeb23c553dcfc49a"
+  },
+  "webkit-light-desktop/p42-pool-leave.png": {
+   "equal": true,
+   "sha256": "1a2659b5ab5936b521ce4f6d53a7333cd28fa1a85a887a1af45045223ac957fa"
+  },
+  "webkit-light-desktop/p42-pool-member.png": {
+   "equal": true,
+   "sha256": "3df6d5831286fb15bc98359f6f2eec25650e96886632c9831fcb3f12880c3c5d"
+  },
+  "webkit-light-desktop/p42-pool-person-menu.png": {
+   "equal": true,
+   "sha256": "a1f6380c44d91a08a5d011897bb30bf0df8b4d170f5ad8295acdf5815341a67e"
+  },
+  "webkit-light-desktop/p42-pool-replace-key.png": {
+   "equal": true,
+   "sha256": "79a725dcff2229983abf067fbce148130724789aef25eb68c74c4617d0f0cd63"
+  },
+  "webkit-light-desktop/p42-pool-share.png": {
+   "equal": true,
+   "sha256": "f161aa1367a37555c485ec8a911a76daf88f00647792acde2f48cabc30203456"
+  },
+  "webkit-light-desktop/p42-pool-signout.png": {
+   "equal": true,
+   "sha256": "b3a08a25a1acbafb68d6f5ae8ede2cd69ae52cd73c71a0d3a648c9c83ce43efb"
+  },
+  "webkit-light-desktop/p42-pool-tooltip.png": {
+   "equal": true,
+   "sha256": "a65002e501a0d32db8bc411511663a6940a12c2038d23cdb378a5a9202020261"
+  },
+  "webkit-light-desktop/p42-pool-who.png": {
+   "equal": true,
+   "sha256": "69499a536b840165d3b457248dbee8aa513fd66838bd661756ae4067a4f5bc43"
+  },
+  "webkit-light-desktop/p42-pools.png": {
+   "equal": true,
+   "sha256": "dfe7fc5443f9b70e9cdf748a898705cfb693a0122a68af7aebab47e8e97a56d8"
+  },
+  "webkit-light-desktop/p42-providers.png": {
+   "equal": true,
+   "sha256": "3d01818a9e76b5e03a4398c325a259a98534c413b128e12839a45bc75807d43d"
+  },
+  "webkit-light-desktop/p42-register-windows.png": {
+   "equal": true,
+   "sha256": "980fb429f3c0ea0d059e990aefff2c24008f55be5399af61a321092cee5129d1"
+  },
+  "webkit-light-desktop/p42-register.png": {
+   "equal": true,
+   "sha256": "7636e96098b6be822ec395caf35b91b2c21ac6ee3a0f808d76c45296f1fdad68"
+  },
+  "webkit-light-desktop/p42-runner-actions.png": {
+   "equal": true,
+   "sha256": "60354a2c4b823dd969e8696a5d48ea1b35edc14ff9c901a093db3cb498504239"
+  },
+  "webkit-light-desktop/p42-runner-detail.png": {
+   "equal": true,
+   "sha256": "289d4b082101915b889a27bdbe9e1a71b9da21fc70d08aeb5c342356c997d740"
+  },
+  "webkit-light-desktop/p42-runner-offline.png": {
+   "equal": true,
+   "sha256": "a42d1bc1c94b692b22c70e06095176b6241fc8a9fd7ec1cd6ad0cb46e5991921"
+  },
+  "webkit-light-desktop/p42-users-add-google.png": {
+   "equal": true,
+   "sha256": "ccc675f04ab332270c62a5bfceaec65a5d8c0dea0abac284ffde462e0ff78615"
+  },
+  "webkit-light-desktop/p42-users-add.png": {
+   "equal": true,
+   "sha256": "b86a488d8c3bd9a9e2ee122d1049f9a3664ee90b819f1455dd23603a5f03ce12"
+  },
+  "webkit-light-desktop/p42-users-delete.png": {
+   "equal": true,
+   "sha256": "cd610c4cf02dd7516246a4bc765999c6b916b1ab3aff343ad7b6dffadea4cf7f"
+  },
+  "webkit-light-desktop/p42-users-disable-refused.png": {
+   "equal": true,
+   "sha256": "43b2b049ee44578adae99d6137ace7e2c536af3bb231bfe998252a9bc10ba969"
+  },
+  "webkit-light-desktop/p42-users-disable.png": {
+   "equal": true,
+   "sha256": "1ef1f2a2c461256309d88535755132546d978de23829c238418c5036af44eee8"
+  },
+  "webkit-light-desktop/p42-users-disabled.png": {
+   "equal": true,
+   "sha256": "2da7769c99c1fe29c48926b7e869d9080f52dd78313a7db54ee529df18e305d4"
+  },
+  "webkit-light-desktop/p42-users-empty.png": {
+   "equal": true,
+   "sha256": "0c6a494d20651ff773910d0d228acb606c015a4ebd9ec8f6f12c21d8abc860bb"
+  },
+  "webkit-light-desktop/p42-users-loading.png": {
+   "equal": true,
+   "sha256": "1d2160d8d4b55563b7a941cb04546a3efebf5195c507c1cbc4379290caff71af"
+  },
+  "webkit-light-desktop/p42-users-password.png": {
+   "equal": true,
+   "sha256": "6dc1827d31af7d90ce5206a5144fb466a296529e58d4fb0104b3e12bed13ca6d"
+  },
+  "webkit-light-desktop/p42-users-reset.png": {
+   "equal": true,
+   "sha256": "f4a557e3be4b2fe2fd776e7eeac1c4182093b48622e2947bc3013fe2dea0b0a6"
+  },
+  "webkit-light-desktop/p42-users.png": {
+   "equal": true,
+   "sha256": "58cb84ee4c48b719ef4da0be621db2c863d3eae34edffdf0e4b1482ea6e23cda"
+  },
+  "webkit-light-desktop/p42-workspace-advanced.png": {
+   "equal": true,
+   "sha256": "b489fc8c9b860bc34db3cfa67cf2c7fafaca87f1b467b7d36b52e6e8ca025414"
+  },
+  "webkit-light-desktop/p42-workspace-discard.png": {
+   "equal": true,
+   "sha256": "0d5f69ed83c56561b5eb860fa8b6a1d6f87323a7002ff90b146de2b1f7a9673e"
+  },
+  "webkit-light-desktop/p42-workspace-edit.png": {
+   "equal": true,
+   "sha256": "97f0f69fb7721ed9bd8941b8697fed7953000acbbf83ae9021f107774c52d1a7"
+  },
+  "webkit-light-desktop/p42-workspace-history.png": {
+   "equal": true,
+   "sha256": "9c2d274a19ce7eee8e77c8be4cf8ac1a3710ebdad205d58f7a112a48caa6730f"
+  },
+  "webkit-light-desktop/p42-workspace-menu.png": {
+   "equal": true,
+   "sha256": "ea1c1524881cb9de088c6e8cc53e97d3433b52f47ff727fbda64ed5ad3cc0db3"
+  },
+  "webkit-light-phone/p42-account-pause-custom.png": {
+   "equal": true,
+   "sha256": "cb4ac9d6d1d11e8b7c1ad94f696bcbfc4682d3b084f5fc0054052b92788d97f4"
+  },
+  "webkit-light-phone/p42-account-pause.png": {
+   "equal": true,
+   "sha256": "c97d0d0d8bcc84419a6094af501c1f45bce954d934c24d35373ab5ced948dd5d"
+  },
+  "webkit-light-phone/p42-capacity.png": {
+   "equal": true,
+   "sha256": "51ada2695282f4d1869a787fddc26edf8507bc3a678357ed4447aa749dbcf704"
+  },
+  "webkit-light-phone/p42-codex-signin-code.png": {
+   "equal": true,
+   "sha256": "607364977123838ba142cb509c820e6b915630add85ffae47c6b5368e2ea2ca8"
+  },
+  "webkit-light-phone/p42-codex-signin.png": {
+   "equal": true,
+   "sha256": "2cdbae9c6fe6cd50f9f621644d1a48acec8096e7ca52344c6008b583e44ccde5"
+  },
+  "webkit-light-phone/p42-connect-advanced.png": {
+   "equal": true,
+   "sha256": "3c52add783cb3411b27c86801420b1ea25a5f1eb9c4713504234cc17c1a97415"
+  },
+  "webkit-light-phone/p42-connect-custom.png": {
+   "equal": true,
+   "sha256": "361c35cd10b8b306afcf99b9cb226dd830c650c1e76eeed940e667208fc7baa6"
+  },
+  "webkit-light-phone/p42-connect-dialect-open.png": {
+   "equal": true,
+   "sha256": "534a1b5982c0e613a40b1e9a782a2a60d57b44a85fa5e78642d905ff172fb0d3"
+  },
+  "webkit-light-phone/p42-connect-edit-shown.png": {
+   "equal": true,
+   "sha256": "29fd300233a9cbb561f4a8f90c84b990ecfc66a046dcb9473cbc47d232f66845"
+  },
+  "webkit-light-phone/p42-connect-edit.png": {
+   "equal": true,
+   "sha256": "461e237dabd9a9ddf998814aa3ebaf470f3fa7dadc484080c204254947c6581f"
+  },
+  "webkit-light-phone/p42-connect-models.png": {
+   "equal": true,
+   "sha256": "2b9adfa67c7861fad38a4077ea05dae825528da60c8ea9a27a5cf964d74688e7"
+  },
+  "webkit-light-phone/p42-connect-probe-error.png": {
+   "equal": true,
+   "sha256": "7b86eb225dcb174b0abaa4a64d7f798e5220a95ecb68c7a315026e815a7b3391"
+  },
+  "webkit-light-phone/p42-connect.png": {
+   "equal": true,
+   "sha256": "f360e5699d03c466dcedfaa38e93c40760109e575061ca0cbdca9a6aa2493d26"
+  },
+  "webkit-light-phone/p42-deepseek-lines.png": {
+   "equal": true,
+   "sha256": "de3b97300f08954353d300916c7dfd275d748ea051283cbdaa9644d8e977774c"
+  },
+  "webkit-light-phone/p42-deepseek-loading.png": {
+   "equal": true,
+   "sha256": "67113e7b1f986b8eec5035f5056696b53e2d9bc61090eddf9e4bd3c1f96436bb"
+  },
+  "webkit-light-phone/p42-deepseek-low.png": {
+   "equal": true,
+   "sha256": "35b62626d08ee1a9237d0a20099d7eca4c6e0ca9f8b81d3f63b77d56e65183e0"
+  },
+  "webkit-light-phone/p42-deepseek-read.png": {
+   "equal": true,
+   "sha256": "b5b192f7bcda5c74d3bd1bd1ac1942c0dcd17387505073c82081b8268124caa6"
+  },
+  "webkit-light-phone/p42-deepseek-refreshing.png": {
+   "equal": true,
+   "sha256": "d440f7db42e4e191855c6c5348b7dd73de9a5c45abfeea0dd819767e1d052e69"
+  },
+  "webkit-light-phone/p42-deepseek-refused.png": {
+   "equal": true,
+   "sha256": "be0af0cbacb0aa3fb8b1a866574cd0726ec16aa580ed7990f8c4d724849edba9"
+  },
+  "webkit-light-phone/p42-engine-menu.png": {
+   "equal": true,
+   "sha256": "8e5070c3d3c9bb0bc6332a593002ebbe60d104b9a3919e193cfb63ecd86142d1"
+  },
+  "webkit-light-phone/p42-engine-remove.png": {
+   "equal": true,
+   "sha256": "f95d61bb581bf2c36b82e3130ab038051ae67fc7f8c14722e1394f7dbebc453d"
+  },
+  "webkit-light-phone/p42-enroll-approved.png": {
+   "equal": true,
+   "sha256": "09122e7d1592cffae1f368e7044b2d7f1d32a9aff4bcb070e7cf8f564077d718"
+  },
+  "webkit-light-phone/p42-enroll-conflict.png": {
+   "equal": true,
+   "sha256": "0f4b8d9035cd8896e0a621aa2bba7c3a940a454415893da0d266cc3431ad29c9"
+  },
+  "webkit-light-phone/p42-enroll-error.png": {
+   "equal": true,
+   "sha256": "f0768f4c1238ebb8e0d4c60e77aeff9f7585be93f365f748124ccd19042f5ac7"
+  },
+  "webkit-light-phone/p42-enroll-loading.png": {
+   "equal": true,
+   "sha256": "3904a2ba363c0d9449fa8c0365f6371977ff5511e06953a154666989f7cb5ca0"
+  },
+  "webkit-light-phone/p42-enroll.png": {
+   "equal": true,
+   "sha256": "8ada9df1f2e9c83b1f2ff8d33d356894e4bf550546aa0901c71a592b062fb594"
+  },
+  "webkit-light-phone/p42-keep-free-open.png": {
+   "equal": true,
+   "sha256": "bbb8810c4aa4f1dd9542a8ae798832ff6a9ef73c8079c2f075f42e4653ded4fa"
+  },
+  "webkit-light-phone/p42-new-pool-claude.png": {
+   "equal": true,
+   "sha256": "f3167e7772b848fa590e59574e65b7ff27861713ddc0a048c2281cfa11b2f08b"
+  },
+  "webkit-light-phone/p42-new-pool-people.png": {
+   "equal": true,
+   "sha256": "e578fab051fb6ce110819c1885dfd2808aaa2640bb7adeb5cb090fbb55605705"
+  },
+  "webkit-light-phone/p42-new-pool.png": {
+   "equal": true,
+   "sha256": "5f7f2a45404e77cf5abdfb3a40fc0aa232cbc2d7f73ec1ae2db1802dbba80ae6"
+  },
+  "webkit-light-phone/p42-pool-add-account.png": {
+   "equal": true,
+   "sha256": "c7d13e9d3697b4173468f0d951fd141fbc5c8304374b30858f24260edf531714"
+  },
+  "webkit-light-phone/p42-pool-add-key-form.png": {
+   "equal": true,
+   "sha256": "50f0d51bdecdfe60648722365e8e5f8f743608a0f113c0b1786c1487942887b9"
+  },
+  "webkit-light-phone/p42-pool-add-key.png": {
+   "equal": true,
+   "sha256": "d78ac63cbb44757c6e7b79aa5bea904d864184395dcf85d62f6caef6156d5ea6"
+  },
+  "webkit-light-phone/p42-pool-add-kind.png": {
+   "equal": true,
+   "sha256": "7f53ce881bff2933630c36ad1cc3a78a5ad6fc3428848933dc79d4996a481258"
+  },
+  "webkit-light-phone/p42-pool-claude.png": {
+   "equal": true,
+   "sha256": "1e662e4e33ac5ef97c11c664310037259da6e14b3f2ebd9aed68ef2caa0e49e9"
+  },
+  "webkit-light-phone/p42-pool-codex.png": {
+   "equal": true,
+   "sha256": "909aa941363c31a6ab48ebad9b86693f9d54e45f37182e8ca13423f2d0ec68e5"
+  },
+  "webkit-light-phone/p42-pool-delete.png": {
+   "equal": true,
+   "sha256": "d0e0888e64b9f6ec48a17b762ab12a71a86cf97fee4f19c8846dfe2a8b2a747a"
+  },
+  "webkit-light-phone/p42-pool-just-mine.png": {
+   "equal": true,
+   "sha256": "0c09d6f12a4c7b14392bbe540b14b6d312bfee7b38b40a5cab9ddceef03d824f"
+  },
+  "webkit-light-phone/p42-pool-leave.png": {
+   "equal": true,
+   "sha256": "0756d26358f25a8423aed910832cd7ed89fde5722d3a396227ca81d452a9e064"
+  },
+  "webkit-light-phone/p42-pool-member.png": {
+   "equal": true,
+   "sha256": "a35d7cb16fac21bcfb6b0c6c6aab0b1faa6953b34579121d5a43f1da62867ea6"
+  },
+  "webkit-light-phone/p42-pool-person-menu.png": {
+   "equal": true,
+   "sha256": "67eb799d0ecdbd8516796ae28bb6f2e11f67e9b657853472966732be3919f460"
+  },
+  "webkit-light-phone/p42-pool-replace-key.png": {
+   "equal": true,
+   "sha256": "56ec0a3083c5fcc6ff9f7d29c4cbf139b7ce14c528e02847810aa2123c5d6bcb"
+  },
+  "webkit-light-phone/p42-pool-share.png": {
+   "equal": true,
+   "sha256": "8d0add73f594128c42b76de444c2da05df996acf555608c5141ac184d20fa142"
+  },
+  "webkit-light-phone/p42-pool-signout.png": {
+   "equal": true,
+   "sha256": "d686f354e046b39656657f4f80e499001fcf9c1872886df37bd2758acd610041"
+  },
+  "webkit-light-phone/p42-pool-who.png": {
+   "equal": true,
+   "sha256": "7a04074d65cb613cab734a1f7aa23842a736c24344d22cc11daa6526ca93c2a5"
+  },
+  "webkit-light-phone/p42-pools.png": {
+   "equal": true,
+   "sha256": "5e0142e68ed83731581cae86bc4390e1be169748131039bde1c552e5c8eac703"
+  },
+  "webkit-light-phone/p42-providers.png": {
+   "equal": true,
+   "sha256": "cd728a81c7fab687904550fa181fc99628b0cfe118802373e580ca38348ade3a"
+  },
+  "webkit-light-phone/p42-register-windows.png": {
+   "equal": true,
+   "sha256": "198d064d46a85c31eb00f5c5547764692ac2a0d27e9444baa74b353aa867a02e"
+  },
+  "webkit-light-phone/p42-register.png": {
+   "equal": true,
+   "sha256": "9b0470a6159e6ddb9c318cd14b810f0bbddb8d3db8622f97fbbaf980994bf0b4"
+  },
+  "webkit-light-phone/p42-runner-actions.png": {
+   "equal": true,
+   "sha256": "a33dd6b28786bd2f27ebf02e0665c33a80e20dd02373f9b2b128c3813da825f4"
+  },
+  "webkit-light-phone/p42-runner-detail.png": {
+   "equal": true,
+   "sha256": "8c8ee843529bd1a6151d4eb9bced6b96a039b3bf72adb0280b0f794d3463f694"
+  },
+  "webkit-light-phone/p42-runner-offline.png": {
+   "equal": true,
+   "sha256": "78015ebe90d990d276063e9a017d1493c6562ce52cbd2f5fd960a4b46871b929"
+  },
+  "webkit-light-phone/p42-users-add-google.png": {
+   "equal": true,
+   "sha256": "ad3316c70be8710bfc596fdffa48849e22808e54809209f144a25bc63b523376"
+  },
+  "webkit-light-phone/p42-users-add.png": {
+   "equal": true,
+   "sha256": "83c307d9c7d7f299e6fe549e5f29dee3deee88886a4b432c62ea3a7f8d2875d9"
+  },
+  "webkit-light-phone/p42-users-delete.png": {
+   "equal": true,
+   "sha256": "c6124dbcc2311a27c60c97ab971df4570c13f4efbd66e5d19dd499853495e95a"
+  },
+  "webkit-light-phone/p42-users-disable-refused.png": {
+   "equal": true,
+   "sha256": "4a3f2923fb2055217295ce1f112d4ac5f66186094d833348b636e3209a74902d"
+  },
+  "webkit-light-phone/p42-users-disable.png": {
+   "equal": true,
+   "sha256": "c6aca52ac97e33f539314c7b7b0b039318610d79506ee113f1ca291eeefc01d2"
+  },
+  "webkit-light-phone/p42-users-disabled.png": {
+   "equal": true,
+   "sha256": "13b5e33e143ec887a7eeef412395bf40c9735d7b867d7932b7c0d18773cbeb15"
+  },
+  "webkit-light-phone/p42-users-empty.png": {
+   "equal": true,
+   "sha256": "cbee5b39ac6bdf5000d6fb41668666ba299e0472952849e35c9581d1424098ae"
+  },
+  "webkit-light-phone/p42-users-loading.png": {
+   "equal": true,
+   "sha256": "7ea5d4f89fd5a7fa21fd768a9d1e1acbd748f34abeea6b5c67e2aa63f605c77d"
+  },
+  "webkit-light-phone/p42-users-password.png": {
+   "equal": true,
+   "sha256": "c64acc3dfb69e88fb59a4bdfbf7f826bef27bbba8de221f412d8308f1a7a6e1e"
+  },
+  "webkit-light-phone/p42-users-reset.png": {
+   "equal": true,
+   "sha256": "62afe225e2d98816972f08dd455e9f3a4a274d22c8b43fcb8ad2e6e4b5b2e09b"
+  },
+  "webkit-light-phone/p42-users.png": {
+   "equal": true,
+   "sha256": "c42736623bbe519140de3350a36b5c0129033e3a89cc6eb46d28c2aff5c4bd8f"
+  },
+  "webkit-light-phone/p42-workspace-advanced.png": {
+   "equal": true,
+   "sha256": "7883dc0712bbbab7822c2219508cf96a3db565f7a56a16a3f95e0a3b37375932"
+  },
+  "webkit-light-phone/p42-workspace-discard.png": {
+   "equal": true,
+   "sha256": "eb0581902dce0918dc9b7693af95be8c4b4ab5699d4b0427676fb81711f48398"
+  },
+  "webkit-light-phone/p42-workspace-edit.png": {
+   "equal": true,
+   "sha256": "19fb6989375d21941eafd30f2a21bad05be85267b14a6688b3f9e71a69963afe"
+  },
+  "webkit-light-phone/p42-workspace-history.png": {
+   "equal": true,
+   "sha256": "61fefb733f1b2422f94d51f56590f4c310f29b4a384ae8594ea740bbd8c46b8b"
+  },
+  "webkit-light-phone/p42-workspace-menu.png": {
+   "equal": true,
+   "sha256": "0bf05c7dfd3f6c4984c959bc0f19c16d4c7eb3d85661516edf6ff913eb1dcd8e"
+  }
+ },
+ "styles": {
+  "chromium-dark-desktop/p42-account-pause": {},
+  "chromium-dark-desktop/p42-account-pause-custom": {},
+  "chromium-dark-desktop/p42-capacity": {},
+  "chromium-dark-desktop/p42-codex-signin": {},
+  "chromium-dark-desktop/p42-codex-signin-code": {},
+  "chromium-dark-desktop/p42-connect": {},
+  "chromium-dark-desktop/p42-connect-advanced": {},
+  "chromium-dark-desktop/p42-connect-custom": {},
+  "chromium-dark-desktop/p42-connect-dialect-open": {},
+  "chromium-dark-desktop/p42-connect-edit": {},
+  "chromium-dark-desktop/p42-connect-edit-shown": {},
+  "chromium-dark-desktop/p42-connect-models": {},
+  "chromium-dark-desktop/p42-connect-probe-error": {},
+  "chromium-dark-desktop/p42-deepseek-lines": {},
+  "chromium-dark-desktop/p42-deepseek-loading": {},
+  "chromium-dark-desktop/p42-deepseek-low": {},
+  "chromium-dark-desktop/p42-deepseek-read": {},
+  "chromium-dark-desktop/p42-deepseek-refreshing": {},
+  "chromium-dark-desktop/p42-deepseek-refused": {},
+  "chromium-dark-desktop/p42-engine-menu": {},
+  "chromium-dark-desktop/p42-engine-remove": {},
+  "chromium-dark-desktop/p42-enroll": {},
+  "chromium-dark-desktop/p42-enroll-approved": {},
+  "chromium-dark-desktop/p42-enroll-conflict": {},
+  "chromium-dark-desktop/p42-enroll-error": {},
+  "chromium-dark-desktop/p42-enroll-loading": {},
+  "chromium-dark-desktop/p42-keep-free-open": {},
+  "chromium-dark-desktop/p42-new-pool": {},
+  "chromium-dark-desktop/p42-new-pool-claude": {},
+  "chromium-dark-desktop/p42-new-pool-people": {},
+  "chromium-dark-desktop/p42-pool-add-account": {},
+  "chromium-dark-desktop/p42-pool-add-key": {},
+  "chromium-dark-desktop/p42-pool-add-key-form": {},
+  "chromium-dark-desktop/p42-pool-add-kind": {},
+  "chromium-dark-desktop/p42-pool-claude": {},
+  "chromium-dark-desktop/p42-pool-codex": {},
+  "chromium-dark-desktop/p42-pool-delete": {},
+  "chromium-dark-desktop/p42-pool-just-mine": {},
+  "chromium-dark-desktop/p42-pool-leave": {},
+  "chromium-dark-desktop/p42-pool-member": {},
+  "chromium-dark-desktop/p42-pool-person-menu": {},
+  "chromium-dark-desktop/p42-pool-replace-key": {},
+  "chromium-dark-desktop/p42-pool-share": {},
+  "chromium-dark-desktop/p42-pool-signout": {},
+  "chromium-dark-desktop/p42-pool-tooltip": {},
+  "chromium-dark-desktop/p42-pool-who": {},
+  "chromium-dark-desktop/p42-pools": {},
+  "chromium-dark-desktop/p42-providers": {},
+  "chromium-dark-desktop/p42-register": {},
+  "chromium-dark-desktop/p42-register-windows": {},
+  "chromium-dark-desktop/p42-runner-actions": {},
+  "chromium-dark-desktop/p42-runner-detail": {},
+  "chromium-dark-desktop/p42-runner-offline": {},
+  "chromium-dark-desktop/p42-users": {},
+  "chromium-dark-desktop/p42-users-add": {},
+  "chromium-dark-desktop/p42-users-add-google": {},
+  "chromium-dark-desktop/p42-users-delete": {},
+  "chromium-dark-desktop/p42-users-disable": {},
+  "chromium-dark-desktop/p42-users-disable-refused": {},
+  "chromium-dark-desktop/p42-users-disabled": {},
+  "chromium-dark-desktop/p42-users-empty": {},
+  "chromium-dark-desktop/p42-users-loading": {},
+  "chromium-dark-desktop/p42-users-password": {},
+  "chromium-dark-desktop/p42-users-reset": {},
+  "chromium-dark-desktop/p42-workspace-advanced": {},
+  "chromium-dark-desktop/p42-workspace-discard": {},
+  "chromium-dark-desktop/p42-workspace-edit": {},
+  "chromium-dark-desktop/p42-workspace-history": {},
+  "chromium-dark-desktop/p42-workspace-menu": {},
+  "chromium-dark-phone/p42-account-pause": {},
+  "chromium-dark-phone/p42-account-pause-custom": {},
+  "chromium-dark-phone/p42-capacity": {},
+  "chromium-dark-phone/p42-codex-signin": {},
+  "chromium-dark-phone/p42-codex-signin-code": {},
+  "chromium-dark-phone/p42-connect": {},
+  "chromium-dark-phone/p42-connect-advanced": {},
+  "chromium-dark-phone/p42-connect-custom": {},
+  "chromium-dark-phone/p42-connect-dialect-open": {},
+  "chromium-dark-phone/p42-connect-edit": {},
+  "chromium-dark-phone/p42-connect-edit-shown": {},
+  "chromium-dark-phone/p42-connect-models": {},
+  "chromium-dark-phone/p42-connect-probe-error": {},
+  "chromium-dark-phone/p42-deepseek-lines": {},
+  "chromium-dark-phone/p42-deepseek-loading": {},
+  "chromium-dark-phone/p42-deepseek-low": {},
+  "chromium-dark-phone/p42-deepseek-read": {},
+  "chromium-dark-phone/p42-deepseek-refreshing": {},
+  "chromium-dark-phone/p42-deepseek-refused": {},
+  "chromium-dark-phone/p42-engine-menu": {},
+  "chromium-dark-phone/p42-engine-remove": {},
+  "chromium-dark-phone/p42-keep-free-open": {},
+  "chromium-dark-phone/p42-new-pool": {},
+  "chromium-dark-phone/p42-new-pool-claude": {},
+  "chromium-dark-phone/p42-new-pool-people": {},
+  "chromium-dark-phone/p42-pool-add-account": {},
+  "chromium-dark-phone/p42-pool-add-key": {},
+  "chromium-dark-phone/p42-pool-add-key-form": {},
+  "chromium-dark-phone/p42-pool-add-kind": {},
+  "chromium-dark-phone/p42-pool-claude": {},
+  "chromium-dark-phone/p42-pool-codex": {},
+  "chromium-dark-phone/p42-pool-delete": {},
+  "chromium-dark-phone/p42-pool-just-mine": {},
+  "chromium-dark-phone/p42-pool-leave": {},
+  "chromium-dark-phone/p42-pool-member": {},
+  "chromium-dark-phone/p42-pool-person-menu": {},
+  "chromium-dark-phone/p42-pool-replace-key": {},
+  "chromium-dark-phone/p42-pool-share": {},
+  "chromium-dark-phone/p42-pool-signout": {},
+  "chromium-dark-phone/p42-pool-who": {},
+  "chromium-dark-phone/p42-pools": {},
+  "chromium-dark-phone/p42-providers": {},
+  "chromium-dark-phone/p42-register": {},
+  "chromium-dark-phone/p42-register-windows": {},
+  "chromium-dark-phone/p42-runner-actions": {},
+  "chromium-dark-phone/p42-runner-detail": {},
+  "chromium-dark-phone/p42-runner-offline": {},
+  "chromium-dark-phone/p42-users": {},
+  "chromium-dark-phone/p42-users-add": {},
+  "chromium-dark-phone/p42-users-add-google": {},
+  "chromium-dark-phone/p42-users-delete": {},
+  "chromium-dark-phone/p42-users-disable": {},
+  "chromium-dark-phone/p42-users-disable-refused": {},
+  "chromium-dark-phone/p42-users-disabled": {},
+  "chromium-dark-phone/p42-users-empty": {},
+  "chromium-dark-phone/p42-users-loading": {},
+  "chromium-dark-phone/p42-users-password": {},
+  "chromium-dark-phone/p42-users-reset": {},
+  "chromium-dark-phone/p42-workspace-advanced": {},
+  "chromium-dark-phone/p42-workspace-discard": {},
+  "chromium-dark-phone/p42-workspace-edit": {},
+  "chromium-dark-phone/p42-workspace-history": {},
+  "chromium-dark-phone/p42-workspace-menu": {},
+  "chromium-light-desktop/p42-account-pause": {},
+  "chromium-light-desktop/p42-account-pause-custom": {},
+  "chromium-light-desktop/p42-capacity": {},
+  "chromium-light-desktop/p42-codex-signin": {},
+  "chromium-light-desktop/p42-codex-signin-code": {},
+  "chromium-light-desktop/p42-connect": {},
+  "chromium-light-desktop/p42-connect-advanced": {},
+  "chromium-light-desktop/p42-connect-custom": {},
+  "chromium-light-desktop/p42-connect-dialect-open": {},
+  "chromium-light-desktop/p42-connect-edit": {},
+  "chromium-light-desktop/p42-connect-edit-shown": {},
+  "chromium-light-desktop/p42-connect-models": {},
+  "chromium-light-desktop/p42-connect-probe-error": {},
+  "chromium-light-desktop/p42-deepseek-lines": {},
+  "chromium-light-desktop/p42-deepseek-loading": {},
+  "chromium-light-desktop/p42-deepseek-low": {},
+  "chromium-light-desktop/p42-deepseek-read": {},
+  "chromium-light-desktop/p42-deepseek-refreshing": {},
+  "chromium-light-desktop/p42-deepseek-refused": {},
+  "chromium-light-desktop/p42-engine-menu": {},
+  "chromium-light-desktop/p42-engine-remove": {},
+  "chromium-light-desktop/p42-enroll": {},
+  "chromium-light-desktop/p42-enroll-approved": {},
+  "chromium-light-desktop/p42-enroll-conflict": {},
+  "chromium-light-desktop/p42-enroll-error": {},
+  "chromium-light-desktop/p42-enroll-loading": {},
+  "chromium-light-desktop/p42-keep-free-open": {},
+  "chromium-light-desktop/p42-new-pool": {},
+  "chromium-light-desktop/p42-new-pool-claude": {},
+  "chromium-light-desktop/p42-new-pool-people": {},
+  "chromium-light-desktop/p42-pool-add-account": {},
+  "chromium-light-desktop/p42-pool-add-key": {},
+  "chromium-light-desktop/p42-pool-add-key-form": {},
+  "chromium-light-desktop/p42-pool-add-kind": {},
+  "chromium-light-desktop/p42-pool-claude": {},
+  "chromium-light-desktop/p42-pool-codex": {},
+  "chromium-light-desktop/p42-pool-delete": {},
+  "chromium-light-desktop/p42-pool-just-mine": {},
+  "chromium-light-desktop/p42-pool-leave": {},
+  "chromium-light-desktop/p42-pool-member": {},
+  "chromium-light-desktop/p42-pool-person-menu": {},
+  "chromium-light-desktop/p42-pool-replace-key": {},
+  "chromium-light-desktop/p42-pool-share": {},
+  "chromium-light-desktop/p42-pool-signout": {},
+  "chromium-light-desktop/p42-pool-tooltip": {},
+  "chromium-light-desktop/p42-pool-who": {},
+  "chromium-light-desktop/p42-pools": {},
+  "chromium-light-desktop/p42-providers": {},
+  "chromium-light-desktop/p42-register": {},
+  "chromium-light-desktop/p42-register-windows": {},
+  "chromium-light-desktop/p42-runner-actions": {},
+  "chromium-light-desktop/p42-runner-detail": {},
+  "chromium-light-desktop/p42-runner-offline": {},
+  "chromium-light-desktop/p42-users": {},
+  "chromium-light-desktop/p42-users-add": {},
+  "chromium-light-desktop/p42-users-add-google": {},
+  "chromium-light-desktop/p42-users-delete": {},
+  "chromium-light-desktop/p42-users-disable": {},
+  "chromium-light-desktop/p42-users-disable-refused": {},
+  "chromium-light-desktop/p42-users-disabled": {},
+  "chromium-light-desktop/p42-users-empty": {},
+  "chromium-light-desktop/p42-users-loading": {},
+  "chromium-light-desktop/p42-users-password": {},
+  "chromium-light-desktop/p42-users-reset": {},
+  "chromium-light-desktop/p42-workspace-advanced": {},
+  "chromium-light-desktop/p42-workspace-discard": {},
+  "chromium-light-desktop/p42-workspace-edit": {},
+  "chromium-light-desktop/p42-workspace-history": {},
+  "chromium-light-desktop/p42-workspace-menu": {},
+  "chromium-light-phone/p42-account-pause": {},
+  "chromium-light-phone/p42-account-pause-custom": {},
+  "chromium-light-phone/p42-capacity": {},
+  "chromium-light-phone/p42-codex-signin": {},
+  "chromium-light-phone/p42-codex-signin-code": {},
+  "chromium-light-phone/p42-connect": {},
+  "chromium-light-phone/p42-connect-advanced": {},
+  "chromium-light-phone/p42-connect-custom": {},
+  "chromium-light-phone/p42-connect-dialect-open": {},
+  "chromium-light-phone/p42-connect-edit": {},
+  "chromium-light-phone/p42-connect-edit-shown": {},
+  "chromium-light-phone/p42-connect-models": {},
+  "chromium-light-phone/p42-connect-probe-error": {},
+  "chromium-light-phone/p42-deepseek-lines": {},
+  "chromium-light-phone/p42-deepseek-loading": {},
+  "chromium-light-phone/p42-deepseek-low": {},
+  "chromium-light-phone/p42-deepseek-read": {},
+  "chromium-light-phone/p42-deepseek-refreshing": {},
+  "chromium-light-phone/p42-deepseek-refused": {},
+  "chromium-light-phone/p42-engine-menu": {},
+  "chromium-light-phone/p42-engine-remove": {},
+  "chromium-light-phone/p42-keep-free-open": {},
+  "chromium-light-phone/p42-new-pool": {},
+  "chromium-light-phone/p42-new-pool-claude": {},
+  "chromium-light-phone/p42-new-pool-people": {},
+  "chromium-light-phone/p42-pool-add-account": {},
+  "chromium-light-phone/p42-pool-add-key": {},
+  "chromium-light-phone/p42-pool-add-key-form": {},
+  "chromium-light-phone/p42-pool-add-kind": {},
+  "chromium-light-phone/p42-pool-claude": {},
+  "chromium-light-phone/p42-pool-codex": {},
+  "chromium-light-phone/p42-pool-delete": {},
+  "chromium-light-phone/p42-pool-just-mine": {},
+  "chromium-light-phone/p42-pool-leave": {},
+  "chromium-light-phone/p42-pool-member": {},
+  "chromium-light-phone/p42-pool-person-menu": {},
+  "chromium-light-phone/p42-pool-replace-key": {},
+  "chromium-light-phone/p42-pool-share": {},
+  "chromium-light-phone/p42-pool-signout": {},
+  "chromium-light-phone/p42-pool-who": {},
+  "chromium-light-phone/p42-pools": {},
+  "chromium-light-phone/p42-providers": {},
+  "chromium-light-phone/p42-register": {},
+  "chromium-light-phone/p42-register-windows": {},
+  "chromium-light-phone/p42-runner-actions": {},
+  "chromium-light-phone/p42-runner-detail": {},
+  "chromium-light-phone/p42-runner-offline": {},
+  "chromium-light-phone/p42-users": {},
+  "chromium-light-phone/p42-users-add": {},
+  "chromium-light-phone/p42-users-add-google": {},
+  "chromium-light-phone/p42-users-delete": {},
+  "chromium-light-phone/p42-users-disable": {},
+  "chromium-light-phone/p42-users-disable-refused": {},
+  "chromium-light-phone/p42-users-disabled": {},
+  "chromium-light-phone/p42-users-empty": {},
+  "chromium-light-phone/p42-users-loading": {},
+  "chromium-light-phone/p42-users-password": {},
+  "chromium-light-phone/p42-users-reset": {},
+  "chromium-light-phone/p42-workspace-advanced": {},
+  "chromium-light-phone/p42-workspace-discard": {},
+  "chromium-light-phone/p42-workspace-edit": {},
+  "chromium-light-phone/p42-workspace-history": {},
+  "chromium-light-phone/p42-workspace-menu": {},
+  "webkit-dark-desktop/p42-account-pause": {},
+  "webkit-dark-desktop/p42-account-pause-custom": {},
+  "webkit-dark-desktop/p42-capacity": {},
+  "webkit-dark-desktop/p42-codex-signin": {},
+  "webkit-dark-desktop/p42-codex-signin-code": {},
+  "webkit-dark-desktop/p42-connect": {},
+  "webkit-dark-desktop/p42-connect-advanced": {},
+  "webkit-dark-desktop/p42-connect-custom": {},
+  "webkit-dark-desktop/p42-connect-dialect-open": {},
+  "webkit-dark-desktop/p42-connect-edit": {},
+  "webkit-dark-desktop/p42-connect-edit-shown": {},
+  "webkit-dark-desktop/p42-connect-models": {},
+  "webkit-dark-desktop/p42-connect-probe-error": {},
+  "webkit-dark-desktop/p42-deepseek-lines": {},
+  "webkit-dark-desktop/p42-deepseek-loading": {},
+  "webkit-dark-desktop/p42-deepseek-low": {},
+  "webkit-dark-desktop/p42-deepseek-read": {},
+  "webkit-dark-desktop/p42-deepseek-refreshing": {},
+  "webkit-dark-desktop/p42-deepseek-refused": {},
+  "webkit-dark-desktop/p42-engine-menu": {},
+  "webkit-dark-desktop/p42-engine-remove": {},
+  "webkit-dark-desktop/p42-enroll": {},
+  "webkit-dark-desktop/p42-enroll-approved": {},
+  "webkit-dark-desktop/p42-enroll-conflict": {},
+  "webkit-dark-desktop/p42-enroll-error": {},
+  "webkit-dark-desktop/p42-enroll-loading": {},
+  "webkit-dark-desktop/p42-keep-free-open": {},
+  "webkit-dark-desktop/p42-new-pool": {},
+  "webkit-dark-desktop/p42-new-pool-claude": {},
+  "webkit-dark-desktop/p42-new-pool-people": {},
+  "webkit-dark-desktop/p42-pool-add-account": {},
+  "webkit-dark-desktop/p42-pool-add-key": {},
+  "webkit-dark-desktop/p42-pool-add-key-form": {},
+  "webkit-dark-desktop/p42-pool-add-kind": {},
+  "webkit-dark-desktop/p42-pool-claude": {},
+  "webkit-dark-desktop/p42-pool-codex": {},
+  "webkit-dark-desktop/p42-pool-delete": {},
+  "webkit-dark-desktop/p42-pool-just-mine": {},
+  "webkit-dark-desktop/p42-pool-leave": {},
+  "webkit-dark-desktop/p42-pool-member": {},
+  "webkit-dark-desktop/p42-pool-person-menu": {},
+  "webkit-dark-desktop/p42-pool-replace-key": {},
+  "webkit-dark-desktop/p42-pool-share": {},
+  "webkit-dark-desktop/p42-pool-signout": {},
+  "webkit-dark-desktop/p42-pool-tooltip": {},
+  "webkit-dark-desktop/p42-pool-who": {},
+  "webkit-dark-desktop/p42-pools": {},
+  "webkit-dark-desktop/p42-providers": {},
+  "webkit-dark-desktop/p42-register": {},
+  "webkit-dark-desktop/p42-register-windows": {},
+  "webkit-dark-desktop/p42-runner-actions": {},
+  "webkit-dark-desktop/p42-runner-detail": {},
+  "webkit-dark-desktop/p42-runner-offline": {},
+  "webkit-dark-desktop/p42-users": {},
+  "webkit-dark-desktop/p42-users-add": {},
+  "webkit-dark-desktop/p42-users-add-google": {},
+  "webkit-dark-desktop/p42-users-delete": {},
+  "webkit-dark-desktop/p42-users-disable": {},
+  "webkit-dark-desktop/p42-users-disable-refused": {},
+  "webkit-dark-desktop/p42-users-disabled": {},
+  "webkit-dark-desktop/p42-users-empty": {},
+  "webkit-dark-desktop/p42-users-loading": {},
+  "webkit-dark-desktop/p42-users-password": {},
+  "webkit-dark-desktop/p42-users-reset": {},
+  "webkit-dark-desktop/p42-workspace-advanced": {},
+  "webkit-dark-desktop/p42-workspace-discard": {},
+  "webkit-dark-desktop/p42-workspace-edit": {},
+  "webkit-dark-desktop/p42-workspace-history": {},
+  "webkit-dark-desktop/p42-workspace-menu": {},
+  "webkit-dark-phone/p42-account-pause": {},
+  "webkit-dark-phone/p42-account-pause-custom": {},
+  "webkit-dark-phone/p42-capacity": {},
+  "webkit-dark-phone/p42-codex-signin": {},
+  "webkit-dark-phone/p42-codex-signin-code": {},
+  "webkit-dark-phone/p42-connect": {},
+  "webkit-dark-phone/p42-connect-advanced": {},
+  "webkit-dark-phone/p42-connect-custom": {},
+  "webkit-dark-phone/p42-connect-dialect-open": {},
+  "webkit-dark-phone/p42-connect-edit": {},
+  "webkit-dark-phone/p42-connect-edit-shown": {},
+  "webkit-dark-phone/p42-connect-models": {},
+  "webkit-dark-phone/p42-connect-probe-error": {},
+  "webkit-dark-phone/p42-deepseek-lines": {},
+  "webkit-dark-phone/p42-deepseek-loading": {},
+  "webkit-dark-phone/p42-deepseek-low": {},
+  "webkit-dark-phone/p42-deepseek-read": {},
+  "webkit-dark-phone/p42-deepseek-refreshing": {},
+  "webkit-dark-phone/p42-deepseek-refused": {},
+  "webkit-dark-phone/p42-engine-menu": {},
+  "webkit-dark-phone/p42-engine-remove": {},
+  "webkit-dark-phone/p42-enroll": {},
+  "webkit-dark-phone/p42-enroll-approved": {},
+  "webkit-dark-phone/p42-enroll-conflict": {},
+  "webkit-dark-phone/p42-enroll-error": {},
+  "webkit-dark-phone/p42-enroll-loading": {},
+  "webkit-dark-phone/p42-keep-free-open": {},
+  "webkit-dark-phone/p42-new-pool": {},
+  "webkit-dark-phone/p42-new-pool-claude": {},
+  "webkit-dark-phone/p42-new-pool-people": {},
+  "webkit-dark-phone/p42-pool-add-account": {},
+  "webkit-dark-phone/p42-pool-add-key": {},
+  "webkit-dark-phone/p42-pool-add-key-form": {},
+  "webkit-dark-phone/p42-pool-add-kind": {},
+  "webkit-dark-phone/p42-pool-claude": {},
+  "webkit-dark-phone/p42-pool-codex": {},
+  "webkit-dark-phone/p42-pool-delete": {},
+  "webkit-dark-phone/p42-pool-just-mine": {},
+  "webkit-dark-phone/p42-pool-leave": {},
+  "webkit-dark-phone/p42-pool-member": {},
+  "webkit-dark-phone/p42-pool-person-menu": {},
+  "webkit-dark-phone/p42-pool-replace-key": {},
+  "webkit-dark-phone/p42-pool-share": {},
+  "webkit-dark-phone/p42-pool-signout": {},
+  "webkit-dark-phone/p42-pool-who": {},
+  "webkit-dark-phone/p42-pools": {},
+  "webkit-dark-phone/p42-providers": {},
+  "webkit-dark-phone/p42-register": {},
+  "webkit-dark-phone/p42-register-windows": {},
+  "webkit-dark-phone/p42-runner-actions": {},
+  "webkit-dark-phone/p42-runner-detail": {},
+  "webkit-dark-phone/p42-runner-offline": {},
+  "webkit-dark-phone/p42-users": {},
+  "webkit-dark-phone/p42-users-add": {},
+  "webkit-dark-phone/p42-users-add-google": {},
+  "webkit-dark-phone/p42-users-delete": {},
+  "webkit-dark-phone/p42-users-disable": {},
+  "webkit-dark-phone/p42-users-disable-refused": {},
+  "webkit-dark-phone/p42-users-disabled": {},
+  "webkit-dark-phone/p42-users-empty": {},
+  "webkit-dark-phone/p42-users-loading": {},
+  "webkit-dark-phone/p42-users-password": {},
+  "webkit-dark-phone/p42-users-reset": {},
+  "webkit-dark-phone/p42-workspace-advanced": {},
+  "webkit-dark-phone/p42-workspace-discard": {},
+  "webkit-dark-phone/p42-workspace-edit": {},
+  "webkit-dark-phone/p42-workspace-history": {},
+  "webkit-dark-phone/p42-workspace-menu": {},
+  "webkit-light-desktop/p42-account-pause": {},
+  "webkit-light-desktop/p42-account-pause-custom": {},
+  "webkit-light-desktop/p42-capacity": {},
+  "webkit-light-desktop/p42-codex-signin": {},
+  "webkit-light-desktop/p42-codex-signin-code": {},
+  "webkit-light-desktop/p42-connect": {},
+  "webkit-light-desktop/p42-connect-advanced": {},
+  "webkit-light-desktop/p42-connect-custom": {},
+  "webkit-light-desktop/p42-connect-dialect-open": {},
+  "webkit-light-desktop/p42-connect-edit": {},
+  "webkit-light-desktop/p42-connect-edit-shown": {},
+  "webkit-light-desktop/p42-connect-models": {},
+  "webkit-light-desktop/p42-connect-probe-error": {},
+  "webkit-light-desktop/p42-deepseek-lines": {},
+  "webkit-light-desktop/p42-deepseek-loading": {},
+  "webkit-light-desktop/p42-deepseek-low": {},
+  "webkit-light-desktop/p42-deepseek-read": {},
+  "webkit-light-desktop/p42-deepseek-refreshing": {},
+  "webkit-light-desktop/p42-deepseek-refused": {},
+  "webkit-light-desktop/p42-engine-menu": {},
+  "webkit-light-desktop/p42-engine-remove": {},
+  "webkit-light-desktop/p42-enroll": {},
+  "webkit-light-desktop/p42-enroll-approved": {},
+  "webkit-light-desktop/p42-enroll-conflict": {},
+  "webkit-light-desktop/p42-enroll-error": {},
+  "webkit-light-desktop/p42-enroll-loading": {},
+  "webkit-light-desktop/p42-keep-free-open": {},
+  "webkit-light-desktop/p42-new-pool": {},
+  "webkit-light-desktop/p42-new-pool-claude": {},
+  "webkit-light-desktop/p42-new-pool-people": {},
+  "webkit-light-desktop/p42-pool-add-account": {},
+  "webkit-light-desktop/p42-pool-add-key": {},
+  "webkit-light-desktop/p42-pool-add-key-form": {},
+  "webkit-light-desktop/p42-pool-add-kind": {},
+  "webkit-light-desktop/p42-pool-claude": {},
+  "webkit-light-desktop/p42-pool-codex": {},
+  "webkit-light-desktop/p42-pool-delete": {},
+  "webkit-light-desktop/p42-pool-just-mine": {},
+  "webkit-light-desktop/p42-pool-leave": {},
+  "webkit-light-desktop/p42-pool-member": {},
+  "webkit-light-desktop/p42-pool-person-menu": {},
+  "webkit-light-desktop/p42-pool-replace-key": {},
+  "webkit-light-desktop/p42-pool-share": {},
+  "webkit-light-desktop/p42-pool-signout": {},
+  "webkit-light-desktop/p42-pool-tooltip": {},
+  "webkit-light-desktop/p42-pool-who": {},
+  "webkit-light-desktop/p42-pools": {},
+  "webkit-light-desktop/p42-providers": {},
+  "webkit-light-desktop/p42-register": {},
+  "webkit-light-desktop/p42-register-windows": {},
+  "webkit-light-desktop/p42-runner-actions": {},
+  "webkit-light-desktop/p42-runner-detail": {},
+  "webkit-light-desktop/p42-runner-offline": {},
+  "webkit-light-desktop/p42-users": {},
+  "webkit-light-desktop/p42-users-add": {},
+  "webkit-light-desktop/p42-users-add-google": {},
+  "webkit-light-desktop/p42-users-delete": {},
+  "webkit-light-desktop/p42-users-disable": {},
+  "webkit-light-desktop/p42-users-disable-refused": {},
+  "webkit-light-desktop/p42-users-disabled": {},
+  "webkit-light-desktop/p42-users-empty": {},
+  "webkit-light-desktop/p42-users-loading": {},
+  "webkit-light-desktop/p42-users-password": {},
+  "webkit-light-desktop/p42-users-reset": {},
+  "webkit-light-desktop/p42-workspace-advanced": {},
+  "webkit-light-desktop/p42-workspace-discard": {},
+  "webkit-light-desktop/p42-workspace-edit": {},
+  "webkit-light-desktop/p42-workspace-history": {},
+  "webkit-light-desktop/p42-workspace-menu": {},
+  "webkit-light-phone/p42-account-pause": {},
+  "webkit-light-phone/p42-account-pause-custom": {},
+  "webkit-light-phone/p42-capacity": {},
+  "webkit-light-phone/p42-codex-signin": {},
+  "webkit-light-phone/p42-codex-signin-code": {},
+  "webkit-light-phone/p42-connect": {},
+  "webkit-light-phone/p42-connect-advanced": {},
+  "webkit-light-phone/p42-connect-custom": {},
+  "webkit-light-phone/p42-connect-dialect-open": {},
+  "webkit-light-phone/p42-connect-edit": {},
+  "webkit-light-phone/p42-connect-edit-shown": {},
+  "webkit-light-phone/p42-connect-models": {},
+  "webkit-light-phone/p42-connect-probe-error": {},
+  "webkit-light-phone/p42-deepseek-lines": {},
+  "webkit-light-phone/p42-deepseek-loading": {},
+  "webkit-light-phone/p42-deepseek-low": {},
+  "webkit-light-phone/p42-deepseek-read": {},
+  "webkit-light-phone/p42-deepseek-refreshing": {},
+  "webkit-light-phone/p42-deepseek-refused": {},
+  "webkit-light-phone/p42-engine-menu": {},
+  "webkit-light-phone/p42-engine-remove": {},
+  "webkit-light-phone/p42-enroll": {},
+  "webkit-light-phone/p42-enroll-approved": {},
+  "webkit-light-phone/p42-enroll-conflict": {},
+  "webkit-light-phone/p42-enroll-error": {},
+  "webkit-light-phone/p42-enroll-loading": {},
+  "webkit-light-phone/p42-keep-free-open": {},
+  "webkit-light-phone/p42-new-pool": {},
+  "webkit-light-phone/p42-new-pool-claude": {},
+  "webkit-light-phone/p42-new-pool-people": {},
+  "webkit-light-phone/p42-pool-add-account": {},
+  "webkit-light-phone/p42-pool-add-key": {},
+  "webkit-light-phone/p42-pool-add-key-form": {},
+  "webkit-light-phone/p42-pool-add-kind": {},
+  "webkit-light-phone/p42-pool-claude": {},
+  "webkit-light-phone/p42-pool-codex": {},
+  "webkit-light-phone/p42-pool-delete": {},
+  "webkit-light-phone/p42-pool-just-mine": {},
+  "webkit-light-phone/p42-pool-leave": {},
+  "webkit-light-phone/p42-pool-member": {},
+  "webkit-light-phone/p42-pool-person-menu": {},
+  "webkit-light-phone/p42-pool-replace-key": {},
+  "webkit-light-phone/p42-pool-share": {},
+  "webkit-light-phone/p42-pool-signout": {},
+  "webkit-light-phone/p42-pool-who": {},
+  "webkit-light-phone/p42-pools": {},
+  "webkit-light-phone/p42-providers": {},
+  "webkit-light-phone/p42-register": {},
+  "webkit-light-phone/p42-register-windows": {},
+  "webkit-light-phone/p42-runner-actions": {},
+  "webkit-light-phone/p42-runner-detail": {},
+  "webkit-light-phone/p42-runner-offline": {},
+  "webkit-light-phone/p42-users": {},
+  "webkit-light-phone/p42-users-add": {},
+  "webkit-light-phone/p42-users-add-google": {},
+  "webkit-light-phone/p42-users-delete": {},
+  "webkit-light-phone/p42-users-disable": {},
+  "webkit-light-phone/p42-users-disable-refused": {},
+  "webkit-light-phone/p42-users-disabled": {},
+  "webkit-light-phone/p42-users-empty": {},
+  "webkit-light-phone/p42-users-loading": {},
+  "webkit-light-phone/p42-users-password": {},
+  "webkit-light-phone/p42-users-reset": {},
+  "webkit-light-phone/p42-workspace-advanced": {},
+  "webkit-light-phone/p42-workspace-discard": {},
+  "webkit-light-phone/p42-workspace-edit": {},
+  "webkit-light-phone/p42-workspace-history": {},
+  "webkit-light-phone/p42-workspace-menu": {}
+ },
+ "tests": {
+  "chromium-dark-desktop :: P4.2 a DeepSeek key\u2019s balance \u203a its line in the keys table, and on its page: read, refreshing, too low, refused and loading": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: P4.2 a pool on its own page \u203a a Claude pool: its tooltip, delete question and Add account": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: P4.2 a pool on its own page \u203a a Codex pool of one\u2019s own: who can use it, its menus and questions": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: P4.2 a pool on its own page \u203a a pool somebody added the reader to: leaving it": {
+   "del": "timedOut",
+   "ref": "timedOut"
+  },
+  "chromium-dark-desktop :: P4.2 a pool on its own page \u203a adding to a Codex pool: the kind, a key, and signing ChatGPT in": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: P4.2 a runner\u2019s page \u203a a new workspace with the directory\u2019s Claude history": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: P4.2 a runner\u2019s page \u203a an offline runner: what needs attention": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: P4.2 a runner\u2019s page \u203a capacity: max concurrent, keep free and rename": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: P4.2 a runner\u2019s page \u203a its menus, a workspace\u2019s settings and the discard question": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: P4.2 approving orbit register \u203a loading, the machine, a name already registered, approved and a dead code": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: P4.2 connecting a provider \u203a a custom endpoint: its dialect, models and context windows": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: P4.2 connecting a provider \u203a a vendor: the key, a failed probe and Save anyway": {
+   "del": "timedOut",
+   "ref": "timedOut"
+  },
+  "chromium-dark-desktop :: P4.2 connecting a provider \u203a editing: the stored key shown, the switch, and Save": {
+   "del": "timedOut",
+   "ref": "timedOut"
+  },
+  "chromium-dark-desktop :: P4.2 providers \u203a New pool: each engine and who can use it": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: P4.2 providers \u203a engines: an account menu, its remove question and the pause dialog": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: P4.2 providers \u203a keys: the table, its delete question, loading and empty": {
+   "del": "failed",
+   "ref": "failed"
+  },
+  "chromium-dark-desktop :: P4.2 providers \u203a pools: each kind": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: P4.2 runners \u203a the list: loading, its menu, rename, token rotation and delete": {
+   "del": "failed",
+   "ref": "failed"
+  },
+  "chromium-dark-desktop :: P4.2 runners \u203a the register guide: each system": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: P4.2 the pages\u2019 own button styles \u203a at rest, under the pointer and pressed": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: P4.2 users \u203a adding a user: with a password, and Google only": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: P4.2 users \u203a disabling an account and enabling it again: who is offered what, a refusal, the question, disabled and enabled": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-desktop :: P4.2 users \u203a the table: loading, reset password, a one-time password and delete": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: P4.2 a DeepSeek key\u2019s balance \u203a its line in the keys table, and on its page: read, refreshing, too low, refused and loading": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: P4.2 a pool on its own page \u203a a Claude pool: its tooltip, delete question and Add account": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: P4.2 a pool on its own page \u203a a Codex pool of one\u2019s own: who can use it, its menus and questions": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: P4.2 a pool on its own page \u203a a pool somebody added the reader to: leaving it": {
+   "del": "timedOut",
+   "ref": "timedOut"
+  },
+  "chromium-dark-phone :: P4.2 a pool on its own page \u203a adding to a Codex pool: the kind, a key, and signing ChatGPT in": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: P4.2 a runner\u2019s page \u203a a new workspace with the directory\u2019s Claude history": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: P4.2 a runner\u2019s page \u203a an offline runner: what needs attention": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: P4.2 a runner\u2019s page \u203a capacity: max concurrent, keep free and rename": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: P4.2 a runner\u2019s page \u203a its menus, a workspace\u2019s settings and the discard question": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: P4.2 approving orbit register \u203a loading, the machine, a name already registered, approved and a dead code": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: P4.2 connecting a provider \u203a a custom endpoint: its dialect, models and context windows": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: P4.2 connecting a provider \u203a a vendor: the key, a failed probe and Save anyway": {
+   "del": "timedOut",
+   "ref": "timedOut"
+  },
+  "chromium-dark-phone :: P4.2 connecting a provider \u203a editing: the stored key shown, the switch, and Save": {
+   "del": "timedOut",
+   "ref": "timedOut"
+  },
+  "chromium-dark-phone :: P4.2 providers \u203a New pool: each engine and who can use it": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: P4.2 providers \u203a engines: an account menu, its remove question and the pause dialog": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: P4.2 providers \u203a keys: the table, its delete question, loading and empty": {
+   "del": "failed",
+   "ref": "failed"
+  },
+  "chromium-dark-phone :: P4.2 providers \u203a pools: each kind": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: P4.2 runners \u203a the list: loading, its menu, rename, token rotation and delete": {
+   "del": "failed",
+   "ref": "failed"
+  },
+  "chromium-dark-phone :: P4.2 runners \u203a the register guide: each system": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: P4.2 the pages\u2019 own button styles \u203a at rest, under the pointer and pressed": {
+   "del": "skipped",
+   "ref": "skipped"
+  },
+  "chromium-dark-phone :: P4.2 users \u203a adding a user: with a password, and Google only": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: P4.2 users \u203a disabling an account and enabling it again: who is offered what, a refusal, the question, disabled and enabled": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-dark-phone :: P4.2 users \u203a the table: loading, reset password, a one-time password and delete": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: P4.2 a DeepSeek key\u2019s balance \u203a its line in the keys table, and on its page: read, refreshing, too low, refused and loading": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: P4.2 a pool on its own page \u203a a Claude pool: its tooltip, delete question and Add account": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: P4.2 a pool on its own page \u203a a Codex pool of one\u2019s own: who can use it, its menus and questions": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: P4.2 a pool on its own page \u203a a pool somebody added the reader to: leaving it": {
+   "del": "timedOut",
+   "ref": "timedOut"
+  },
+  "chromium-light-desktop :: P4.2 a pool on its own page \u203a adding to a Codex pool: the kind, a key, and signing ChatGPT in": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: P4.2 a runner\u2019s page \u203a a new workspace with the directory\u2019s Claude history": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: P4.2 a runner\u2019s page \u203a an offline runner: what needs attention": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: P4.2 a runner\u2019s page \u203a capacity: max concurrent, keep free and rename": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: P4.2 a runner\u2019s page \u203a its menus, a workspace\u2019s settings and the discard question": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: P4.2 approving orbit register \u203a loading, the machine, a name already registered, approved and a dead code": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: P4.2 connecting a provider \u203a a custom endpoint: its dialect, models and context windows": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: P4.2 connecting a provider \u203a a vendor: the key, a failed probe and Save anyway": {
+   "del": "timedOut",
+   "ref": "timedOut"
+  },
+  "chromium-light-desktop :: P4.2 connecting a provider \u203a editing: the stored key shown, the switch, and Save": {
+   "del": "timedOut",
+   "ref": "timedOut"
+  },
+  "chromium-light-desktop :: P4.2 providers \u203a New pool: each engine and who can use it": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: P4.2 providers \u203a engines: an account menu, its remove question and the pause dialog": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: P4.2 providers \u203a keys: the table, its delete question, loading and empty": {
+   "del": "failed",
+   "ref": "failed"
+  },
+  "chromium-light-desktop :: P4.2 providers \u203a pools: each kind": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: P4.2 runners \u203a the list: loading, its menu, rename, token rotation and delete": {
+   "del": "failed",
+   "ref": "failed"
+  },
+  "chromium-light-desktop :: P4.2 runners \u203a the register guide: each system": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: P4.2 the pages\u2019 own button styles \u203a at rest, under the pointer and pressed": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: P4.2 users \u203a adding a user: with a password, and Google only": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: P4.2 users \u203a disabling an account and enabling it again: who is offered what, a refusal, the question, disabled and enabled": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-desktop :: P4.2 users \u203a the table: loading, reset password, a one-time password and delete": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-phone :: P4.2 a DeepSeek key\u2019s balance \u203a its line in the keys table, and on its page: read, refreshing, too low, refused and loading": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-phone :: P4.2 a pool on its own page \u203a a Claude pool: its tooltip, delete question and Add account": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-phone :: P4.2 a pool on its own page \u203a a Codex pool of one\u2019s own: who can use it, its menus and questions": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-phone :: P4.2 a pool on its own page \u203a a pool somebody added the reader to: leaving it": {
+   "del": "timedOut",
+   "ref": "timedOut"
+  },
+  "chromium-light-phone :: P4.2 a pool on its own page \u203a adding to a Codex pool: the kind, a key, and signing ChatGPT in": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-phone :: P4.2 a runner\u2019s page \u203a a new workspace with the directory\u2019s Claude history": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-phone :: P4.2 a runner\u2019s page \u203a an offline runner: what needs attention": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-phone :: P4.2 a runner\u2019s page \u203a capacity: max concurrent, keep free and rename": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-phone :: P4.2 a runner\u2019s page \u203a its menus, a workspace\u2019s settings and the discard question": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-phone :: P4.2 approving orbit register \u203a loading, the machine, a name already registered, approved and a dead code": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-phone :: P4.2 connecting a provider \u203a a custom endpoint: its dialect, models and context windows": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-phone :: P4.2 connecting a provider \u203a a vendor: the key, a failed probe and Save anyway": {
+   "del": "timedOut",
+   "ref": "timedOut"
+  },
+  "chromium-light-phone :: P4.2 connecting a provider \u203a editing: the stored key shown, the switch, and Save": {
+   "del": "timedOut",
+   "ref": "timedOut"
+  },
+  "chromium-light-phone :: P4.2 providers \u203a New pool: each engine and who can use it": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-phone :: P4.2 providers \u203a engines: an account menu, its remove question and the pause dialog": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-phone :: P4.2 providers \u203a keys: the table, its delete question, loading and empty": {
+   "del": "failed",
+   "ref": "failed"
+  },
+  "chromium-light-phone :: P4.2 providers \u203a pools: each kind": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-phone :: P4.2 runners \u203a the list: loading, its menu, rename, token rotation and delete": {
+   "del": "failed",
+   "ref": "failed"
+  },
+  "chromium-light-phone :: P4.2 runners \u203a the register guide: each system": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-phone :: P4.2 the pages\u2019 own button styles \u203a at rest, under the pointer and pressed": {
+   "del": "skipped",
+   "ref": "skipped"
+  },
+  "chromium-light-phone :: P4.2 users \u203a adding a user: with a password, and Google only": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-phone :: P4.2 users \u203a disabling an account and enabling it again: who is offered what, a refusal, the question, disabled and enabled": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "chromium-light-phone :: P4.2 users \u203a the table: loading, reset password, a one-time password and delete": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: P4.2 a DeepSeek key\u2019s balance \u203a its line in the keys table, and on its page: read, refreshing, too low, refused and loading": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: P4.2 a pool on its own page \u203a a Claude pool: its tooltip, delete question and Add account": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: P4.2 a pool on its own page \u203a a Codex pool of one\u2019s own: who can use it, its menus and questions": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: P4.2 a pool on its own page \u203a a pool somebody added the reader to: leaving it": {
+   "del": "timedOut",
+   "ref": "timedOut"
+  },
+  "webkit-dark-desktop :: P4.2 a pool on its own page \u203a adding to a Codex pool: the kind, a key, and signing ChatGPT in": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: P4.2 a runner\u2019s page \u203a a new workspace with the directory\u2019s Claude history": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: P4.2 a runner\u2019s page \u203a an offline runner: what needs attention": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: P4.2 a runner\u2019s page \u203a capacity: max concurrent, keep free and rename": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: P4.2 a runner\u2019s page \u203a its menus, a workspace\u2019s settings and the discard question": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: P4.2 approving orbit register \u203a loading, the machine, a name already registered, approved and a dead code": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: P4.2 connecting a provider \u203a a custom endpoint: its dialect, models and context windows": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: P4.2 connecting a provider \u203a a vendor: the key, a failed probe and Save anyway": {
+   "del": "timedOut",
+   "ref": "timedOut"
+  },
+  "webkit-dark-desktop :: P4.2 connecting a provider \u203a editing: the stored key shown, the switch, and Save": {
+   "del": "timedOut",
+   "ref": "timedOut"
+  },
+  "webkit-dark-desktop :: P4.2 providers \u203a New pool: each engine and who can use it": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: P4.2 providers \u203a engines: an account menu, its remove question and the pause dialog": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: P4.2 providers \u203a keys: the table, its delete question, loading and empty": {
+   "del": "failed",
+   "ref": "failed"
+  },
+  "webkit-dark-desktop :: P4.2 providers \u203a pools: each kind": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: P4.2 runners \u203a the list: loading, its menu, rename, token rotation and delete": {
+   "del": "failed",
+   "ref": "failed"
+  },
+  "webkit-dark-desktop :: P4.2 runners \u203a the register guide: each system": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: P4.2 the pages\u2019 own button styles \u203a at rest, under the pointer and pressed": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: P4.2 users \u203a adding a user: with a password, and Google only": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: P4.2 users \u203a disabling an account and enabling it again: who is offered what, a refusal, the question, disabled and enabled": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-desktop :: P4.2 users \u203a the table: loading, reset password, a one-time password and delete": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: P4.2 a DeepSeek key\u2019s balance \u203a its line in the keys table, and on its page: read, refreshing, too low, refused and loading": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: P4.2 a pool on its own page \u203a a Claude pool: its tooltip, delete question and Add account": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: P4.2 a pool on its own page \u203a a Codex pool of one\u2019s own: who can use it, its menus and questions": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: P4.2 a pool on its own page \u203a a pool somebody added the reader to: leaving it": {
+   "del": "timedOut",
+   "ref": "timedOut"
+  },
+  "webkit-dark-phone :: P4.2 a pool on its own page \u203a adding to a Codex pool: the kind, a key, and signing ChatGPT in": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: P4.2 a runner\u2019s page \u203a a new workspace with the directory\u2019s Claude history": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: P4.2 a runner\u2019s page \u203a an offline runner: what needs attention": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: P4.2 a runner\u2019s page \u203a capacity: max concurrent, keep free and rename": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: P4.2 a runner\u2019s page \u203a its menus, a workspace\u2019s settings and the discard question": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: P4.2 approving orbit register \u203a loading, the machine, a name already registered, approved and a dead code": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: P4.2 connecting a provider \u203a a custom endpoint: its dialect, models and context windows": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: P4.2 connecting a provider \u203a a vendor: the key, a failed probe and Save anyway": {
+   "del": "timedOut",
+   "ref": "timedOut"
+  },
+  "webkit-dark-phone :: P4.2 connecting a provider \u203a editing: the stored key shown, the switch, and Save": {
+   "del": "timedOut",
+   "ref": "timedOut"
+  },
+  "webkit-dark-phone :: P4.2 providers \u203a New pool: each engine and who can use it": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: P4.2 providers \u203a engines: an account menu, its remove question and the pause dialog": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: P4.2 providers \u203a keys: the table, its delete question, loading and empty": {
+   "del": "failed",
+   "ref": "failed"
+  },
+  "webkit-dark-phone :: P4.2 providers \u203a pools: each kind": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: P4.2 runners \u203a the list: loading, its menu, rename, token rotation and delete": {
+   "del": "failed",
+   "ref": "failed"
+  },
+  "webkit-dark-phone :: P4.2 runners \u203a the register guide: each system": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: P4.2 the pages\u2019 own button styles \u203a at rest, under the pointer and pressed": {
+   "del": "skipped",
+   "ref": "skipped"
+  },
+  "webkit-dark-phone :: P4.2 users \u203a adding a user: with a password, and Google only": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: P4.2 users \u203a disabling an account and enabling it again: who is offered what, a refusal, the question, disabled and enabled": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-dark-phone :: P4.2 users \u203a the table: loading, reset password, a one-time password and delete": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: P4.2 a DeepSeek key\u2019s balance \u203a its line in the keys table, and on its page: read, refreshing, too low, refused and loading": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: P4.2 a pool on its own page \u203a a Claude pool: its tooltip, delete question and Add account": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: P4.2 a pool on its own page \u203a a Codex pool of one\u2019s own: who can use it, its menus and questions": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: P4.2 a pool on its own page \u203a a pool somebody added the reader to: leaving it": {
+   "del": "timedOut",
+   "ref": "timedOut"
+  },
+  "webkit-light-desktop :: P4.2 a pool on its own page \u203a adding to a Codex pool: the kind, a key, and signing ChatGPT in": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: P4.2 a runner\u2019s page \u203a a new workspace with the directory\u2019s Claude history": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: P4.2 a runner\u2019s page \u203a an offline runner: what needs attention": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: P4.2 a runner\u2019s page \u203a capacity: max concurrent, keep free and rename": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: P4.2 a runner\u2019s page \u203a its menus, a workspace\u2019s settings and the discard question": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: P4.2 approving orbit register \u203a loading, the machine, a name already registered, approved and a dead code": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: P4.2 connecting a provider \u203a a custom endpoint: its dialect, models and context windows": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: P4.2 connecting a provider \u203a a vendor: the key, a failed probe and Save anyway": {
+   "del": "timedOut",
+   "ref": "timedOut"
+  },
+  "webkit-light-desktop :: P4.2 connecting a provider \u203a editing: the stored key shown, the switch, and Save": {
+   "del": "timedOut",
+   "ref": "timedOut"
+  },
+  "webkit-light-desktop :: P4.2 providers \u203a New pool: each engine and who can use it": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: P4.2 providers \u203a engines: an account menu, its remove question and the pause dialog": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: P4.2 providers \u203a keys: the table, its delete question, loading and empty": {
+   "del": "failed",
+   "ref": "failed"
+  },
+  "webkit-light-desktop :: P4.2 providers \u203a pools: each kind": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: P4.2 runners \u203a the list: loading, its menu, rename, token rotation and delete": {
+   "del": "failed",
+   "ref": "failed"
+  },
+  "webkit-light-desktop :: P4.2 runners \u203a the register guide: each system": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: P4.2 the pages\u2019 own button styles \u203a at rest, under the pointer and pressed": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: P4.2 users \u203a adding a user: with a password, and Google only": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: P4.2 users \u203a disabling an account and enabling it again: who is offered what, a refusal, the question, disabled and enabled": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-desktop :: P4.2 users \u203a the table: loading, reset password, a one-time password and delete": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-phone :: P4.2 a DeepSeek key\u2019s balance \u203a its line in the keys table, and on its page: read, refreshing, too low, refused and loading": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-phone :: P4.2 a pool on its own page \u203a a Claude pool: its tooltip, delete question and Add account": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-phone :: P4.2 a pool on its own page \u203a a Codex pool of one\u2019s own: who can use it, its menus and questions": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-phone :: P4.2 a pool on its own page \u203a a pool somebody added the reader to: leaving it": {
+   "del": "timedOut",
+   "ref": "timedOut"
+  },
+  "webkit-light-phone :: P4.2 a pool on its own page \u203a adding to a Codex pool: the kind, a key, and signing ChatGPT in": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-phone :: P4.2 a runner\u2019s page \u203a a new workspace with the directory\u2019s Claude history": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-phone :: P4.2 a runner\u2019s page \u203a an offline runner: what needs attention": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-phone :: P4.2 a runner\u2019s page \u203a capacity: max concurrent, keep free and rename": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-phone :: P4.2 a runner\u2019s page \u203a its menus, a workspace\u2019s settings and the discard question": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-phone :: P4.2 approving orbit register \u203a loading, the machine, a name already registered, approved and a dead code": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-phone :: P4.2 connecting a provider \u203a a custom endpoint: its dialect, models and context windows": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-phone :: P4.2 connecting a provider \u203a a vendor: the key, a failed probe and Save anyway": {
+   "del": "timedOut",
+   "ref": "timedOut"
+  },
+  "webkit-light-phone :: P4.2 connecting a provider \u203a editing: the stored key shown, the switch, and Save": {
+   "del": "timedOut",
+   "ref": "timedOut"
+  },
+  "webkit-light-phone :: P4.2 providers \u203a New pool: each engine and who can use it": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-phone :: P4.2 providers \u203a engines: an account menu, its remove question and the pause dialog": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-phone :: P4.2 providers \u203a keys: the table, its delete question, loading and empty": {
+   "del": "failed",
+   "ref": "failed"
+  },
+  "webkit-light-phone :: P4.2 providers \u203a pools: each kind": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-phone :: P4.2 runners \u203a the list: loading, its menu, rename, token rotation and delete": {
+   "del": "failed",
+   "ref": "failed"
+  },
+  "webkit-light-phone :: P4.2 runners \u203a the register guide: each system": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-phone :: P4.2 the pages\u2019 own button styles \u203a at rest, under the pointer and pressed": {
+   "del": "skipped",
+   "ref": "skipped"
+  },
+  "webkit-light-phone :: P4.2 users \u203a adding a user: with a password, and Google only": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-phone :: P4.2 users \u203a disabling an account and enabling it again: who is offered what, a refusal, the question, disabled and enabled": {
+   "del": "passed",
+   "ref": "passed"
+  },
+  "webkit-light-phone :: P4.2 users \u203a the table: loading, reset password, a one-time password and delete": {
+   "del": "passed",
+   "ref": "passed"
+  }
+ },
+ "traces": {
+  "chromium-dark-desktop :: P4.2 a DeepSeek key\u2019s balance \u203a its line in the keys table, and on its page: read, refreshing, too low, refused and loading": {
+   "equal": true
+  },
+  "chromium-dark-desktop :: P4.2 a pool on its own page \u203a a Claude pool: its tooltip, delete question and Add account": {
+   "equal": true
+  },
+  "chromium-dark-desktop :: P4.2 a pool on its own page \u203a a Codex pool of one\u2019s own: who can use it, its menus and questions": {
+   "equal": true
+  },
+  "chromium-dark-desktop :: P4.2 a pool on its own page \u203a adding to a Codex pool: the kind, a key, and signing ChatGPT in": {
+   "equal": true
+  },
+  "chromium-dark-desktop :: P4.2 a runner\u2019s page \u203a a new workspace with the directory\u2019s Claude history": {
+   "equal": true
+  },
+  "chromium-dark-desktop :: P4.2 a runner\u2019s page \u203a an offline runner: what needs attention": {
+   "equal": true
+  },
+  "chromium-dark-desktop :: P4.2 a runner\u2019s page \u203a capacity: max concurrent, keep free and rename": {
+   "equal": true
+  },
+  "chromium-dark-desktop :: P4.2 a runner\u2019s page \u203a its menus, a workspace\u2019s settings and the discard question": {
+   "equal": true
+  },
+  "chromium-dark-desktop :: P4.2 approving orbit register \u203a loading, the machine, a name already registered, approved and a dead code": {
+   "equal": true
+  },
+  "chromium-dark-desktop :: P4.2 connecting a provider \u203a a custom endpoint: its dialect, models and context windows": {
+   "equal": true
+  },
+  "chromium-dark-desktop :: P4.2 providers \u203a New pool: each engine and who can use it": {
+   "equal": true
+  },
+  "chromium-dark-desktop :: P4.2 providers \u203a engines: an account menu, its remove question and the pause dialog": {
+   "equal": true
+  },
+  "chromium-dark-desktop :: P4.2 providers \u203a pools: each kind": {
+   "equal": true
+  },
+  "chromium-dark-desktop :: P4.2 runners \u203a the register guide: each system": {
+   "equal": true
+  },
+  "chromium-dark-desktop :: P4.2 the pages\u2019 own button styles \u203a at rest, under the pointer and pressed": {
+   "equal": true
+  },
+  "chromium-dark-desktop :: P4.2 users \u203a adding a user: with a password, and Google only": {
+   "equal": true
+  },
+  "chromium-dark-desktop :: P4.2 users \u203a disabling an account and enabling it again: who is offered what, a refusal, the question, disabled and enabled": {
+   "equal": true
+  },
+  "chromium-dark-desktop :: P4.2 users \u203a the table: loading, reset password, a one-time password and delete": {
+   "equal": true
+  },
+  "chromium-dark-phone :: P4.2 a DeepSeek key\u2019s balance \u203a its line in the keys table, and on its page: read, refreshing, too low, refused and loading": {
+   "equal": true
+  },
+  "chromium-dark-phone :: P4.2 a pool on its own page \u203a a Claude pool: its tooltip, delete question and Add account": {
+   "equal": true
+  },
+  "chromium-dark-phone :: P4.2 a pool on its own page \u203a a Codex pool of one\u2019s own: who can use it, its menus and questions": {
+   "equal": true
+  },
+  "chromium-dark-phone :: P4.2 a pool on its own page \u203a adding to a Codex pool: the kind, a key, and signing ChatGPT in": {
+   "equal": true
+  },
+  "chromium-dark-phone :: P4.2 a runner\u2019s page \u203a a new workspace with the directory\u2019s Claude history": {
+   "equal": true
+  },
+  "chromium-dark-phone :: P4.2 a runner\u2019s page \u203a an offline runner: what needs attention": {
+   "equal": true
+  },
+  "chromium-dark-phone :: P4.2 a runner\u2019s page \u203a capacity: max concurrent, keep free and rename": {
+   "equal": true
+  },
+  "chromium-dark-phone :: P4.2 a runner\u2019s page \u203a its menus, a workspace\u2019s settings and the discard question": {
+   "equal": true
+  },
+  "chromium-dark-phone :: P4.2 approving orbit register \u203a loading, the machine, a name already registered, approved and a dead code": {
+   "equal": true
+  },
+  "chromium-dark-phone :: P4.2 connecting a provider \u203a a custom endpoint: its dialect, models and context windows": {
+   "equal": true
+  },
+  "chromium-dark-phone :: P4.2 providers \u203a New pool: each engine and who can use it": {
+   "equal": true
+  },
+  "chromium-dark-phone :: P4.2 providers \u203a engines: an account menu, its remove question and the pause dialog": {
+   "equal": true
+  },
+  "chromium-dark-phone :: P4.2 providers \u203a pools: each kind": {
+   "equal": true
+  },
+  "chromium-dark-phone :: P4.2 runners \u203a the register guide: each system": {
+   "equal": true
+  },
+  "chromium-dark-phone :: P4.2 users \u203a adding a user: with a password, and Google only": {
+   "differences": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [
+       "Add userGoogle sign-in onlyA one-time password is generated and shown once after creating.CancelCreate",
+       "Created second@example.testShare this one-time password:tidal-orbit-4821OKCreated new@example.test"
+      ],
+      "focus": {
+       "name": "OK",
+       "role": "button"
+      },
+      "menus": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "email": "second@example.test"
+        },
+        "method": "POST",
+        "path": "/api/admin/users"
+       }
+      ],
+      "step": "created with a one-time password",
+      "url": "/admin"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [
+       "Created second@example.testShare this one-time password:tidal-orbit-4821OKCreated new@example.test"
+      ],
+      "focus": {
+       "name": "OK",
+       "role": "button"
+      },
+      "menus": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "email": "second@example.test"
+        },
+        "method": "POST",
+        "path": "/api/admin/users"
+       }
+      ],
+      "step": "created with a one-time password",
+      "url": "/admin"
+     },
+     "step": "created with a one-time password"
+    }
+   ],
+   "equal": false
+  },
+  "chromium-dark-phone :: P4.2 users \u203a disabling an account and enabling it again: who is offered what, a refusal, the question, disabled and enabled": {
+   "equal": true
+  },
+  "chromium-dark-phone :: P4.2 users \u203a the table: loading, reset password, a one-time password and delete": {
+   "equal": true
+  },
+  "chromium-light-desktop :: P4.2 a DeepSeek key\u2019s balance \u203a its line in the keys table, and on its page: read, refreshing, too low, refused and loading": {
+   "equal": true
+  },
+  "chromium-light-desktop :: P4.2 a pool on its own page \u203a a Claude pool: its tooltip, delete question and Add account": {
+   "equal": true
+  },
+  "chromium-light-desktop :: P4.2 a pool on its own page \u203a a Codex pool of one\u2019s own: who can use it, its menus and questions": {
+   "equal": true
+  },
+  "chromium-light-desktop :: P4.2 a pool on its own page \u203a adding to a Codex pool: the kind, a key, and signing ChatGPT in": {
+   "equal": true
+  },
+  "chromium-light-desktop :: P4.2 a runner\u2019s page \u203a a new workspace with the directory\u2019s Claude history": {
+   "equal": true
+  },
+  "chromium-light-desktop :: P4.2 a runner\u2019s page \u203a an offline runner: what needs attention": {
+   "equal": true
+  },
+  "chromium-light-desktop :: P4.2 a runner\u2019s page \u203a capacity: max concurrent, keep free and rename": {
+   "equal": true
+  },
+  "chromium-light-desktop :: P4.2 a runner\u2019s page \u203a its menus, a workspace\u2019s settings and the discard question": {
+   "equal": true
+  },
+  "chromium-light-desktop :: P4.2 approving orbit register \u203a loading, the machine, a name already registered, approved and a dead code": {
+   "equal": true
+  },
+  "chromium-light-desktop :: P4.2 connecting a provider \u203a a custom endpoint: its dialect, models and context windows": {
+   "equal": true
+  },
+  "chromium-light-desktop :: P4.2 providers \u203a New pool: each engine and who can use it": {
+   "equal": true
+  },
+  "chromium-light-desktop :: P4.2 providers \u203a engines: an account menu, its remove question and the pause dialog": {
+   "equal": true
+  },
+  "chromium-light-desktop :: P4.2 providers \u203a pools: each kind": {
+   "equal": true
+  },
+  "chromium-light-desktop :: P4.2 runners \u203a the register guide: each system": {
+   "equal": true
+  },
+  "chromium-light-desktop :: P4.2 the pages\u2019 own button styles \u203a at rest, under the pointer and pressed": {
+   "equal": true
+  },
+  "chromium-light-desktop :: P4.2 users \u203a adding a user: with a password, and Google only": {
+   "differences": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [
+       "Add userGoogle sign-in onlyA one-time password is generated and shown once after creating.CancelCreate",
+       "Created second@example.testShare this one-time password:tidal-orbit-4821OKCreated new@example.test"
+      ],
+      "focus": {
+       "name": "OK",
+       "role": "button"
+      },
+      "menus": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "email": "second@example.test"
+        },
+        "method": "POST",
+        "path": "/api/admin/users"
+       }
+      ],
+      "step": "created with a one-time password",
+      "url": "/admin"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [
+       "Created second@example.testShare this one-time password:tidal-orbit-4821OKCreated new@example.test"
+      ],
+      "focus": {
+       "name": "OK",
+       "role": "button"
+      },
+      "menus": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "email": "second@example.test"
+        },
+        "method": "POST",
+        "path": "/api/admin/users"
+       }
+      ],
+      "step": "created with a one-time password",
+      "url": "/admin"
+     },
+     "step": "created with a one-time password"
+    }
+   ],
+   "equal": false
+  },
+  "chromium-light-desktop :: P4.2 users \u203a disabling an account and enabling it again: who is offered what, a refusal, the question, disabled and enabled": {
+   "equal": true
+  },
+  "chromium-light-desktop :: P4.2 users \u203a the table: loading, reset password, a one-time password and delete": {
+   "equal": true
+  },
+  "chromium-light-phone :: P4.2 a DeepSeek key\u2019s balance \u203a its line in the keys table, and on its page: read, refreshing, too low, refused and loading": {
+   "equal": true
+  },
+  "chromium-light-phone :: P4.2 a pool on its own page \u203a a Claude pool: its tooltip, delete question and Add account": {
+   "equal": true
+  },
+  "chromium-light-phone :: P4.2 a pool on its own page \u203a a Codex pool of one\u2019s own: who can use it, its menus and questions": {
+   "equal": true
+  },
+  "chromium-light-phone :: P4.2 a pool on its own page \u203a adding to a Codex pool: the kind, a key, and signing ChatGPT in": {
+   "equal": true
+  },
+  "chromium-light-phone :: P4.2 a runner\u2019s page \u203a a new workspace with the directory\u2019s Claude history": {
+   "equal": true
+  },
+  "chromium-light-phone :: P4.2 a runner\u2019s page \u203a an offline runner: what needs attention": {
+   "equal": true
+  },
+  "chromium-light-phone :: P4.2 a runner\u2019s page \u203a capacity: max concurrent, keep free and rename": {
+   "equal": true
+  },
+  "chromium-light-phone :: P4.2 a runner\u2019s page \u203a its menus, a workspace\u2019s settings and the discard question": {
+   "equal": true
+  },
+  "chromium-light-phone :: P4.2 approving orbit register \u203a loading, the machine, a name already registered, approved and a dead code": {
+   "equal": true
+  },
+  "chromium-light-phone :: P4.2 connecting a provider \u203a a custom endpoint: its dialect, models and context windows": {
+   "equal": true
+  },
+  "chromium-light-phone :: P4.2 providers \u203a New pool: each engine and who can use it": {
+   "equal": true
+  },
+  "chromium-light-phone :: P4.2 providers \u203a engines: an account menu, its remove question and the pause dialog": {
+   "equal": true
+  },
+  "chromium-light-phone :: P4.2 providers \u203a pools: each kind": {
+   "equal": true
+  },
+  "chromium-light-phone :: P4.2 runners \u203a the register guide: each system": {
+   "equal": true
+  },
+  "chromium-light-phone :: P4.2 users \u203a adding a user: with a password, and Google only": {
+   "equal": true
+  },
+  "chromium-light-phone :: P4.2 users \u203a disabling an account and enabling it again: who is offered what, a refusal, the question, disabled and enabled": {
+   "equal": true
+  },
+  "chromium-light-phone :: P4.2 users \u203a the table: loading, reset password, a one-time password and delete": {
+   "equal": true
+  },
+  "webkit-dark-desktop :: P4.2 a DeepSeek key\u2019s balance \u203a its line in the keys table, and on its page: read, refreshing, too low, refused and loading": {
+   "equal": true
+  },
+  "webkit-dark-desktop :: P4.2 a pool on its own page \u203a a Claude pool: its tooltip, delete question and Add account": {
+   "equal": true
+  },
+  "webkit-dark-desktop :: P4.2 a pool on its own page \u203a a Codex pool of one\u2019s own: who can use it, its menus and questions": {
+   "equal": true
+  },
+  "webkit-dark-desktop :: P4.2 a pool on its own page \u203a adding to a Codex pool: the kind, a key, and signing ChatGPT in": {
+   "equal": true
+  },
+  "webkit-dark-desktop :: P4.2 a runner\u2019s page \u203a a new workspace with the directory\u2019s Claude history": {
+   "equal": true
+  },
+  "webkit-dark-desktop :: P4.2 a runner\u2019s page \u203a an offline runner: what needs attention": {
+   "equal": true
+  },
+  "webkit-dark-desktop :: P4.2 a runner\u2019s page \u203a capacity: max concurrent, keep free and rename": {
+   "equal": true
+  },
+  "webkit-dark-desktop :: P4.2 a runner\u2019s page \u203a its menus, a workspace\u2019s settings and the discard question": {
+   "equal": true
+  },
+  "webkit-dark-desktop :: P4.2 approving orbit register \u203a loading, the machine, a name already registered, approved and a dead code": {
+   "equal": true
+  },
+  "webkit-dark-desktop :: P4.2 connecting a provider \u203a a custom endpoint: its dialect, models and context windows": {
+   "equal": true
+  },
+  "webkit-dark-desktop :: P4.2 providers \u203a New pool: each engine and who can use it": {
+   "equal": true
+  },
+  "webkit-dark-desktop :: P4.2 providers \u203a engines: an account menu, its remove question and the pause dialog": {
+   "equal": true
+  },
+  "webkit-dark-desktop :: P4.2 providers \u203a pools: each kind": {
+   "equal": true
+  },
+  "webkit-dark-desktop :: P4.2 runners \u203a the register guide: each system": {
+   "equal": true
+  },
+  "webkit-dark-desktop :: P4.2 the pages\u2019 own button styles \u203a at rest, under the pointer and pressed": {
+   "equal": true
+  },
+  "webkit-dark-desktop :: P4.2 users \u203a adding a user: with a password, and Google only": {
+   "equal": true
+  },
+  "webkit-dark-desktop :: P4.2 users \u203a disabling an account and enabling it again: who is offered what, a refusal, the question, disabled and enabled": {
+   "equal": true
+  },
+  "webkit-dark-desktop :: P4.2 users \u203a the table: loading, reset password, a one-time password and delete": {
+   "equal": true
+  },
+  "webkit-dark-phone :: P4.2 a DeepSeek key\u2019s balance \u203a its line in the keys table, and on its page: read, refreshing, too low, refused and loading": {
+   "equal": true
+  },
+  "webkit-dark-phone :: P4.2 a pool on its own page \u203a a Claude pool: its tooltip, delete question and Add account": {
+   "equal": true
+  },
+  "webkit-dark-phone :: P4.2 a pool on its own page \u203a a Codex pool of one\u2019s own: who can use it, its menus and questions": {
+   "equal": true
+  },
+  "webkit-dark-phone :: P4.2 a pool on its own page \u203a adding to a Codex pool: the kind, a key, and signing ChatGPT in": {
+   "equal": true
+  },
+  "webkit-dark-phone :: P4.2 a runner\u2019s page \u203a a new workspace with the directory\u2019s Claude history": {
+   "equal": true
+  },
+  "webkit-dark-phone :: P4.2 a runner\u2019s page \u203a an offline runner: what needs attention": {
+   "equal": true
+  },
+  "webkit-dark-phone :: P4.2 a runner\u2019s page \u203a capacity: max concurrent, keep free and rename": {
+   "equal": true
+  },
+  "webkit-dark-phone :: P4.2 a runner\u2019s page \u203a its menus, a workspace\u2019s settings and the discard question": {
+   "equal": true
+  },
+  "webkit-dark-phone :: P4.2 approving orbit register \u203a loading, the machine, a name already registered, approved and a dead code": {
+   "equal": true
+  },
+  "webkit-dark-phone :: P4.2 connecting a provider \u203a a custom endpoint: its dialect, models and context windows": {
+   "equal": true
+  },
+  "webkit-dark-phone :: P4.2 providers \u203a New pool: each engine and who can use it": {
+   "equal": true
+  },
+  "webkit-dark-phone :: P4.2 providers \u203a engines: an account menu, its remove question and the pause dialog": {
+   "equal": true
+  },
+  "webkit-dark-phone :: P4.2 providers \u203a pools: each kind": {
+   "equal": true
+  },
+  "webkit-dark-phone :: P4.2 runners \u203a the register guide: each system": {
+   "equal": true
+  },
+  "webkit-dark-phone :: P4.2 users \u203a adding a user: with a password, and Google only": {
+   "equal": true
+  },
+  "webkit-dark-phone :: P4.2 users \u203a disabling an account and enabling it again: who is offered what, a refusal, the question, disabled and enabled": {
+   "equal": true
+  },
+  "webkit-dark-phone :: P4.2 users \u203a the table: loading, reset password, a one-time password and delete": {
+   "equal": true
+  },
+  "webkit-light-desktop :: P4.2 a DeepSeek key\u2019s balance \u203a its line in the keys table, and on its page: read, refreshing, too low, refused and loading": {
+   "equal": true
+  },
+  "webkit-light-desktop :: P4.2 a pool on its own page \u203a a Claude pool: its tooltip, delete question and Add account": {
+   "equal": true
+  },
+  "webkit-light-desktop :: P4.2 a pool on its own page \u203a a Codex pool of one\u2019s own: who can use it, its menus and questions": {
+   "equal": true
+  },
+  "webkit-light-desktop :: P4.2 a pool on its own page \u203a adding to a Codex pool: the kind, a key, and signing ChatGPT in": {
+   "equal": true
+  },
+  "webkit-light-desktop :: P4.2 a runner\u2019s page \u203a a new workspace with the directory\u2019s Claude history": {
+   "equal": true
+  },
+  "webkit-light-desktop :: P4.2 a runner\u2019s page \u203a an offline runner: what needs attention": {
+   "equal": true
+  },
+  "webkit-light-desktop :: P4.2 a runner\u2019s page \u203a capacity: max concurrent, keep free and rename": {
+   "equal": true
+  },
+  "webkit-light-desktop :: P4.2 a runner\u2019s page \u203a its menus, a workspace\u2019s settings and the discard question": {
+   "equal": true
+  },
+  "webkit-light-desktop :: P4.2 approving orbit register \u203a loading, the machine, a name already registered, approved and a dead code": {
+   "equal": true
+  },
+  "webkit-light-desktop :: P4.2 connecting a provider \u203a a custom endpoint: its dialect, models and context windows": {
+   "equal": true
+  },
+  "webkit-light-desktop :: P4.2 providers \u203a New pool: each engine and who can use it": {
+   "equal": true
+  },
+  "webkit-light-desktop :: P4.2 providers \u203a engines: an account menu, its remove question and the pause dialog": {
+   "equal": true
+  },
+  "webkit-light-desktop :: P4.2 providers \u203a pools: each kind": {
+   "equal": true
+  },
+  "webkit-light-desktop :: P4.2 runners \u203a the register guide: each system": {
+   "equal": true
+  },
+  "webkit-light-desktop :: P4.2 the pages\u2019 own button styles \u203a at rest, under the pointer and pressed": {
+   "equal": true
+  },
+  "webkit-light-desktop :: P4.2 users \u203a adding a user: with a password, and Google only": {
+   "equal": true
+  },
+  "webkit-light-desktop :: P4.2 users \u203a disabling an account and enabling it again: who is offered what, a refusal, the question, disabled and enabled": {
+   "equal": true
+  },
+  "webkit-light-desktop :: P4.2 users \u203a the table: loading, reset password, a one-time password and delete": {
+   "equal": true
+  },
+  "webkit-light-phone :: P4.2 a DeepSeek key\u2019s balance \u203a its line in the keys table, and on its page: read, refreshing, too low, refused and loading": {
+   "equal": true
+  },
+  "webkit-light-phone :: P4.2 a pool on its own page \u203a a Claude pool: its tooltip, delete question and Add account": {
+   "equal": true
+  },
+  "webkit-light-phone :: P4.2 a pool on its own page \u203a a Codex pool of one\u2019s own: who can use it, its menus and questions": {
+   "equal": true
+  },
+  "webkit-light-phone :: P4.2 a pool on its own page \u203a adding to a Codex pool: the kind, a key, and signing ChatGPT in": {
+   "equal": true
+  },
+  "webkit-light-phone :: P4.2 a runner\u2019s page \u203a a new workspace with the directory\u2019s Claude history": {
+   "equal": true
+  },
+  "webkit-light-phone :: P4.2 a runner\u2019s page \u203a an offline runner: what needs attention": {
+   "equal": true
+  },
+  "webkit-light-phone :: P4.2 a runner\u2019s page \u203a capacity: max concurrent, keep free and rename": {
+   "equal": true
+  },
+  "webkit-light-phone :: P4.2 a runner\u2019s page \u203a its menus, a workspace\u2019s settings and the discard question": {
+   "equal": true
+  },
+  "webkit-light-phone :: P4.2 approving orbit register \u203a loading, the machine, a name already registered, approved and a dead code": {
+   "equal": true
+  },
+  "webkit-light-phone :: P4.2 connecting a provider \u203a a custom endpoint: its dialect, models and context windows": {
+   "equal": true
+  },
+  "webkit-light-phone :: P4.2 providers \u203a New pool: each engine and who can use it": {
+   "equal": true
+  },
+  "webkit-light-phone :: P4.2 providers \u203a engines: an account menu, its remove question and the pause dialog": {
+   "equal": true
+  },
+  "webkit-light-phone :: P4.2 providers \u203a pools: each kind": {
+   "equal": true
+  },
+  "webkit-light-phone :: P4.2 runners \u203a the register guide: each system": {
+   "equal": true
+  },
+  "webkit-light-phone :: P4.2 users \u203a adding a user: with a password, and Google only": {
+   "equal": true
+  },
+  "webkit-light-phone :: P4.2 users \u203a disabling an account and enabling it again: who is offered what, a refusal, the question, disabled and enabled": {
+   "equal": true
+  },
+  "webkit-light-phone :: P4.2 users \u203a the table: loading, reset password, a one-time password and delete": {
+   "equal": true
+  }
+ }
+}
