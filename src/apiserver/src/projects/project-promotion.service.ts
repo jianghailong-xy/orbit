@@ -10,6 +10,7 @@ import { randomUUID } from 'crypto';
 import type { IntegrationJobPhase, PromotionTask } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
+import { type MergeReceiptResult, resultLanded } from '../sessions/merge-receipt';
 import { MergeReceiptService } from '../sessions/merge-receipt.service';
 import {
   IntegrationCheckResult,
@@ -31,6 +32,7 @@ import {
   ProjectPromotionView,
   PromotionBlockedReason,
   PromotionRow,
+  PromotionSourceKind,
   PromotionState,
   automaticConfirmationRefusal,
   medianMs,
@@ -938,6 +940,120 @@ export async function refileCandidateBehindTheWork(
     codebase,
     session: { id: session.sessionId, branch: ended.branch, runnerId: session.runnerId },
   });
+}
+
+/** The receipt columns `retireCandidatesLandedByReceipt` reads: whose work, from which branch, into
+ *  which branch, what happened, and when it was recorded. */
+export interface RecordedMergeFacts {
+  projectId: string | null;
+  taskId: string | null;
+  result: string;
+  sourceBranch: string;
+  targetBranch: string;
+  createdAt: Date;
+}
+
+/** The states a candidate can be retired from by a merge made somewhere else: the ones still asking
+ *  or blocked. A confirmed merge is the platform's own and ends on its own landing (M-T8). */
+const RETIRABLE_BY_RECEIPT: ReadonlyArray<PromotionState> = ['CHECKING', 'READY', 'BLOCKED'];
+
+/**
+ * M-T13: a merge recorded onto the upstream ends the candidate that was offering the same branch,
+ * in the transaction that records it.
+ *
+ * WHAT WAS WRONG (2026-10-09, project 34b78EQPNkVF8kM3ki7Ch)
+ * ----------------------------------------------------------
+ * A MAIN-line task went DONE and its branch became a `TASK_BRANCH` candidate (M-F2). The branch was
+ * never pushed: its session committed in the runner's worktree, and the coordinator fast-forwarded
+ * main to that commit by hand and recorded the merge receipt. The check ran after that, could not
+ * fetch the branch (`SOURCE_BRANCH_MISSING`) and blocked the candidate. The coordinator closed the
+ * exception it opened ("the work is already on main") and the project went DONE, but nothing ends a
+ * blocked candidate except a newer one, a decline or a merge — so the project's sessions page kept
+ * saying "Can't merge into main yet", with "Coordinator is resolving it" under it, about work that was
+ * already on main. All five BLOCKED task-branch candidates in production had this shape (migration
+ * 0411 retires them).
+ *
+ * THE RULE
+ * --------
+ * A receipt that says a task's branch landed on the upstream (`MERGED` or `ALREADY_MERGED`) answers
+ * the question a candidate for that same branch was asking. The candidate goes `SUPERSEDED`, as when
+ * a newer candidate takes its place (M-T6): a merge somewhere else took it. Its check job is stopped
+ * as J-T8 asks (a queued one is cancelled, a running one is asked to stop), and the owner's card and
+ * the exceptions about it are closed by the platform (`PROMOTION_MOVED_ON`, §4.2) — so a check that
+ * reports afterwards finds the candidate gone and opens nothing (`applyPromotionJobResult`).
+ *
+ * WHAT IT LEAVES ALONE
+ * --------------------
+ *  - another branch of the same task: that one can still carry work main does not have;
+ *  - a receipt onto anything but the candidate's upstream, and one that did not land;
+ *  - a `PROJECT_BRANCH` candidate: one task's receipt says nothing about the whole branch;
+ *  - a candidate the owner already confirmed: its landing job is in flight, and it answers
+ *    `ALREADY_LANDED` itself if the work is there (M-T8);
+ *  - a candidate made after the receipt was recorded. That is new work offered again, and only a
+ *    receipt written after it can answer it — which is what keeps a replayed receipt from ending a
+ *    question it never saw.
+ *
+ * Called by the receipt writers that record a merge somebody made outside a promotion — the agent's
+ * and the user's door (`MergeReceiptService.record`, also for the replay of a receipt already
+ * recorded) and the runner's own merge (`fromRunnerMergeResult`). The receipts a promotion writes for
+ * its own landing (M9) are written beside a candidate that is already being merged. Answers the ids
+ * it retired.
+ */
+export async function retireCandidatesLandedByReceipt(
+  tx: Prisma.TransactionClient,
+  receipt: RecordedMergeFacts,
+): Promise<string[]> {
+  if (!receipt.projectId || !receipt.taskId) return [];
+  if (!resultLanded(receipt.result as MergeReceiptResult)) return [];
+  // A receipt names branches as a person does and a candidate names refs; either spelling is the
+  // same branch.
+  const spellings = (branch: string): string[] => {
+    const short = shortBranchName(branch);
+    return [short, `refs/heads/${short}`];
+  };
+  const answered = await tx.projectPromotion.findMany({
+    where: {
+      projectId: receipt.projectId,
+      taskId: receipt.taskId,
+      sourceKind: 'TASK_BRANCH' satisfies PromotionSourceKind,
+      sourceRef: { in: spellings(receipt.sourceBranch) },
+      upstreamRef: { in: spellings(receipt.targetBranch) },
+      state: { in: [...RETIRABLE_BY_RECEIPT] },
+      createdAt: { lte: receipt.createdAt },
+    },
+    select: { id: true, projectId: true, state: true, checkJobId: true, openItemId: true },
+  });
+  const now = new Date();
+  const retired: string[] = [];
+  for (const row of answered) {
+    // A CAS on the state it was read in: a landing or an owner's press that moved it first wins.
+    const moved = await tx.projectPromotion.updateMany({
+      where: { id: row.id, state: row.state },
+      data: { state: 'SUPERSEDED' satisfies PromotionState, decidedAt: now },
+    });
+    if (moved.count === 0) continue;
+    if (row.checkJobId) {
+      await tx.projectIntegrationJob.updateMany({
+        where: { id: row.checkJobId, state: 'QUEUED' },
+        data: { state: 'CANCELLED', finishedAt: now },
+      });
+      await tx.projectIntegrationJob.updateMany({
+        where: { id: row.checkJobId, state: 'RUNNING', cancelRequestedAt: null },
+        data: { cancelRequestedAt: now },
+      });
+    }
+    // The owner's card, when the check had already put one in front of them: the merge it asked
+    // about has been made, so there is nothing left to approve.
+    if (row.openItemId) {
+      await tx.projectOpenItem.updateMany({
+        where: { id: row.openItemId, state: 'OPEN' },
+        data: { state: 'RESOLVED', resolution: 'PROMOTION_MOVED_ON', resolvedBy: 'PLATFORM', resolvedAt: now },
+      });
+    }
+    await closePromotionItems(tx, row.projectId, row.id, 'RESOLVED');
+    retired.push(row.id);
+  }
+  return retired;
 }
 
 /**

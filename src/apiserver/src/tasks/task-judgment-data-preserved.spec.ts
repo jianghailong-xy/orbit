@@ -2144,6 +2144,21 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // created, replaced or dropped — so it is not another writer of the DONE fence. No INSERT,
       // UPDATE or DELETE: every stored job reads NULL.
       '0410_integration_job_source_fully_applied',
+      // The merge candidates a recorded merge had already answered (0411, contract §3.3 M-T13):
+      // historical-row repair, the shape 0394 has. Three UPDATEs over one predicate — a TASK_BRANCH
+      // `project_promotion` still CHECKING, READY or BLOCKED whose task has a MERGED or ALREADY_MERGED
+      // receipt for the same branch onto the candidate's upstream, recorded after the candidate — in
+      // this order: its QUEUED check job cancelled or its RUNNING one asked to stop
+      // (`project_integration_job`), the OPEN card and failures about it closed as PROMOTION_MOVED_ON
+      // by the PLATFORM (`project_open_item`), and the candidate written SUPERSEDED. No DDL of any
+      // kind: no table, column, constraint, index, type, function or trigger is created, replaced,
+      // altered or dropped, so it is not another writer of the DONE fence and names none of the six
+      // preserved objects. `session_merge_receipt` is READ, never written; `task`, `session`,
+      // `project`, the 0177 relations and every `project_acceptance_*` object are not named, so the
+      // preserved pair, the criterion labels and the receipts a criterion lands on cannot move. The
+      // last write is the only one that changes what the predicate sees, so re-applying the file is a
+      // no-op.
+      '0411_retire_candidates_landed_by_receipt',
       // A text with a U+0000 in it is kept as its bytes (0412): one TEXT NOT NULL DEFAULT 'text' on `wiki_repo_file`
       // (`content_encoding`) and two on `wiki_model_request` (`answer_encoding`, `partial_encoding`), each `text` or
       // `base64`, catalog-only as a constant default is, and one CHECK per table holding them to the two — `base64`

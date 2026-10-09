@@ -3986,8 +3986,9 @@ extension EnvironmentValues {
 @MainActor
 protocol PromotionReviewSource: AnyObject {
     func promotionStanding(_ promotionID: String) -> ProjectPromotionView?
-    /// The project's open items, both groups: a blocked candidate's holder is one of them.
-    var promotionItems: [ProjectOpenItemRow] { get }
+    /// The project's open items, or nil until the read has come back: a blocked candidate's holder
+    /// is one of them, and none is somebody too (`PromotionCards.holder`).
+    var promotionOpenItems: ProjectOpenItemsView? { get }
     /// The project's current landings, for the row that names what is in front of a blocked
     /// candidate (`PromotionCards.blockedByLine`). Empty where the host has not read them, and the
     /// row is then absent rather than wrong.
@@ -4000,9 +4001,7 @@ protocol PromotionReviewSource: AnyObject {
 }
 
 extension ConsoleModel: PromotionReviewSource {
-    var promotionItems: [ProjectOpenItemRow] {
-        (openItems?.needsYou ?? []) + (openItems?.withCoordinator ?? [])
-    }
+    var promotionOpenItems: ProjectOpenItemsView? { openItems }
 
     func refreshPromotion() async {
         await refreshRulerQuestions(force: true)
@@ -4071,11 +4070,12 @@ struct PromotionReviewSheet: View {
 
     private var view: ProjectPromotionView? { source.promotionStanding(promotionID) }
 
-    /// The open item filed for this candidate, when the project's read carries one: whose problem
-    /// the block is, and since when. Nil before that read lands — the card then says who state D
-    /// means and stops, which is what it did before the press carried the sentence at all.
-    private var item: ProjectOpenItemRow? {
-        source.promotionItems.first { $0.promotionId == promotionID }
+    /// Who holds this candidate, off the project's read: the item filed for it — whose problem the
+    /// block is, and since when — or nobody, once the read has come back without one. Unread before
+    /// that read lands, and the card then says who state D means and stops, which is what it did
+    /// before the press carried the sentence at all.
+    private var holder: OwnerItemStanding {
+        PromotionCards.holder(of: promotionID, in: source.promotionOpenItems)
     }
 
     var body: some View {
@@ -4231,19 +4231,22 @@ struct PromotionReviewSheet: View {
             // The press reads rather than acts: who has the branch and how long they have had it,
             // over the same mark the merging card's own button carries. It stays disabled — the
             // door would refuse a confirm on a blocked candidate — so it is a state, not a press
-            // the reader is being told they may not make.
-            ApprovalActions {
-                Button {} label: {
-                    HStack(spacing: 6) {
-                        if PromotionCards.resolvingSpins(item) {
-                            ProgressView().controlSize(.mini)
+            // the reader is being told they may not make. With nobody holding it there is nothing
+            // to say, and nothing is drawn.
+            if let resolving = PromotionCards.resolvingLine(holder) {
+                ApprovalActions {
+                    Button {} label: {
+                        HStack(spacing: 6) {
+                            if PromotionCards.resolvingSpins(holder) {
+                                ProgressView().controlSize(.mini)
+                            }
+                            Text(resolving)
                         }
-                        Text(PromotionCards.resolvingLine(item))
+                        .approvalActionLabel()
                     }
-                    .approvalActionLabel()
+                    .buttonStyle(.borderedProminent)
+                    .disabled(true)
                 }
-                .buttonStyle(.borderedProminent)
-                .disabled(true)
             }
         case .merging:
             ApprovalActions {
