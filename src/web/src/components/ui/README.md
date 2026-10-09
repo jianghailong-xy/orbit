@@ -144,7 +144,7 @@ P2.2 提供 `Menu`、`Popover`、`Tooltip`、`Select`、`Combobox` 和 `MultiSel
 - `Select` 与 `Combobox` 共用字符串 `value | null`、`options` 和 `onValueChange`。空字符串是有效选择（账号 Automatic）；null 表示未选择/显式清除。options 为 `{value,label,disabled?,title?}` 或 `{label,options}` 分组（`title`，P4.3a：可检索列表中选项的原生悬停提示）；label 为搜索/无障碍文本，复杂展示使用 `renderOption/renderValue`。支持 small/middle、outlined/borderless、disabled/loading、placeholder/clearable、emptyContent、showArrow 和 matchTriggerWidth。
 - 需要文本检索时使用 `Combobox`；默认按 label 忽略大小写匹配。修改查询和 Esc 不清掉已选值；显式清除才回调 null。远端搜索设置 `filter={false}` 与 `onSearch`，由业务处理请求/过期响应；`value={null}` 可用于选择后重置的动作入口。已选标签通过 aria-describedby 暴露给辅助技术。ref 分别指向 Select 按钮和 Combobox 输入框，name 支持原生表单值。
 
-P3.2 试点据真实页面补齐：Select 家族根类名为 `.orbit-select`（原 `.orbit-choice` 与 Checkbox/Radio 的标签类同名，两份样式同时加载时互相套用边框与内边距）；loading 时在箭头位置显示旋转弧形图标，可搜索的 Combobox 打开时显示放大镜，与被替换的选择器一致；Combobox 的占位文字画在输入框旁（按文字宽度裁切），输入框在 ≤960px 提为 16px 时占位仍保持字段字号；Select 只在值真正改变时回调 `onValueChange`，重选当前项只关闭列表。
+P3.2 试点据真实页面补齐：Select 家族根类名为 `.orbit-select`（原 `.orbit-choice` 与 Checkbox/Radio 的标签类同名，两份样式同时加载时互相套用边框与内边距）；loading 时在箭头位置显示旋转弧形图标，可搜索的 Combobox 打开时显示放大镜，与被替换的选择器一致；Combobox 的占位文字画在输入框旁（按文字宽度裁切），输入框在 ≤960px 提为 16px 时占位仍保持字段字号；Select 只在值真正改变时回调 `onValueChange`，重选当前项只关闭列表。没有选项持有 value（null 或不在选项中）时，用指针打开即高亮第一个可用选项，Enter 选它（被替换选择器的 defaultActiveFirstOption）；键盘打开沿用 Base UI：↓/Enter/Space 在第一项，↑ 在最后一项（`Select.test.tsx` 锁定）；有值时高亮当前值。
 
 Combobox 的值、占位与搜索输入框放在同一个行盒 `.orbit-combobox-field` 中（与被替换选择器的 content 盒相同）：行高来自隐藏的不换行空格，同时给控件提供文字基线；输入框由 inset 撑满而非百分比高度（后者使输入文字低1px）；打开且有值时整个行盒（含业务的悬停底色）一起淡化到 .25。未选值时打开即高亮第一项，Enter 选它（旧选择器的 defaultActiveFirstOption）。
 
