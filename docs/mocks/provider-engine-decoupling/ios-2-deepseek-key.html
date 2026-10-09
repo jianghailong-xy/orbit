@@ -1,0 +1,92 @@
+<!doctype html>
+<!-- Design board iOS 2: a DeepSeek key's page (read-only on iOS) — balance, the engines it works with, the key
+     itself; connecting a key stays on the web. 393 × 852 pt. "现在" is drawn from today's DeepSeekKeyPageView
+     (ProviderPoolViews.swift) and DeepSeekBalance.swift, matching the 2026-10-06 balance screenshots; "改后" is
+     the proposal. Not shipped code. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>iOS 2 · A DeepSeek key's page — provider/engine decoupling</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="../antigravity-accounts/kit.css">
+<link rel="stylesheet" href="board.css">
+<script src="glyphs.js"></script>
+<script src="board.js"></script>
+</head>
+<body class="m">
+<section class="board m-sheet">
+  <h1 class="m-h1 zh">iOS 2 · DeepSeek key 页：余额照旧；「Runs on」换成「Works with」三个 engine；连接、停用、删除仍在 Web，写明影响</h1>
+  <p class="m-sub zh">在 Infrastructure 的 API keys 里点一把 DeepSeek key（有余额、带箭头的那几行），iOS 上这页只读。今天下半页「Provider」写「Runs on Claude Code」或「Runs on DeepSeek Harness」——同一家的两把 key、两种说法。改后一把 key 一个页面：余额卡片不动；下面先是「Works with」，列三个 engine；再下面是 key 本身：协议、默认模型、endpoint。停用、删除只能在 Web 做，是否先弹窗确认见 Web 板 3 的待定项；iOS 只在 footer 说明影响。iOS 不做连接表单（Web 板 2 那张）。新会话里的「Connect a DeepSeek key」打开 Web 的 <code>/providers/new/deepseek</code>。engine 名按待定项 A。灰色字母标现在的问题，橙色数字标改动。</p>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">① key 页（第二、四台手机往下滚）</div>
+    <div class="phones">
+      <div class="ph-wrap"><div class="lbl zh"><span class="m-k">现在</span>DeepSeek</div><div id="p1"></div></div>
+      <div class="ph-wrap"><div class="lbl zh"><span class="m-k">现在</span>DeepSeek Harness（另一把 key）</div><div id="p2"></div></div>
+      <div class="ph-wrap"><div class="lbl zh"><span class="m-k new">改后</span>DeepSeek</div><div id="p3"></div></div>
+      <div class="ph-wrap"><div class="lbl zh"><span class="m-k new">改后</span>往下滚</div><div id="p4"></div></div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">② 差异</div>
+    <div id="notes"></div>
+  </div>
+</section>
+
+<script>
+const balance = (amount, granted, topped, extra = '') => `<div class="s-h">DeepSeek account balance</div>
+  <div class="s-card">
+    <div class="r i-bal"><div class="tl">Total</div><div class="amt">${amount}<small>CNY</small></div>
+      <div class="split"><i></i></div><div class="leg"><span>Granted <b>${granted}</b></span><span>Topped up <b>${topped}</b></span></div></div>
+    ${iKV('Updated', '1 min ago')}
+    <div class="r btn"><span class="ic">⟳</span>Refresh</div>
+    <div class="r btn"><span class="ic">↗</span>Top up on DeepSeek</div>
+  </div>
+  <div class="s-f"><p>The balance of the whole DeepSeek account this key belongs to — everything using that account draws on it, so it isn't what Orbit or a session spent. Granted credit is spent first.</p>${extra}</div>`;
+const web = '<div class="s-f"><p>Adding or changing a key happens on the web.</p></div>';
+
+document.getElementById('p1').innerHTML = sheetPhone({ title: 'DeepSeek', id: 'ph1', body:
+  balance('¥110.00', '¥10.00', '¥100.00', '<p id="same">Same DeepSeek account as <b>DeepSeek Harness</b> — both show this balance.</p>')
+  + iSection({ header: 'Provider', id: 'prov1', rows: [iKV('Runs on', 'Claude Code', 'runs1'), iKV('Default model', 'deepseek-v4-pro'), iKV('Endpoint', 'api.deepseek.com')] }) + web });
+document.getElementById('p2').innerHTML = sheetPhone({ title: 'DeepSeek Harness', id: 'ph2', body:
+  balance('¥36.20', '¥0.00', '¥36.20')
+  + iSection({ header: 'Provider', id: 'prov2', rows: [iKV('Runs on', 'DeepSeek Harness', 'runs2'), iKV('Endpoint', 'api.deepseek.com')] }) + web });
+
+const works = iSection({ header: 'Works with', id: 'works', rows: [
+  iRow({ mark: iEng('claude'), title: 'Claude Code', chevron: false }),
+  iRow({ mark: iEng('opencode'), title: 'OpenCode', chevron: false }),
+  iRow({ mark: iEng('dsh'), title: 'DeepSeek Harness', chevron: false }),
+], footer: 'Pick it for a session on any of these in the composer\'s model menu → Provider.' });
+const keySec = iSection({ header: 'Key', id: 'keysec', rows: [iKV('Protocol', 'Anthropic-compatible'), iKV('Default model', 'DeepSeek V4 Pro'), iKV('Endpoint', 'api.deepseek.com')] })
+  + '<div class="s-f" id="webnote"><p>Adding or changing a key happens on the web. Turning it off there stops it on Claude Code, OpenCode and DeepSeek Harness.</p></div>';
+document.getElementById('p3').innerHTML = sheetPhone({ title: 'DeepSeek', id: 'ph3', body: balance('¥110.00', '¥10.00', '¥100.00') + works + keySec });
+document.getElementById('p4').innerHTML = sheetPhone({ title: 'DeepSeek', id: 'ph4', body: balance('¥110.00', '¥10.00', '¥100.00') + works + keySec });
+
+finish();
+requestAnimationFrame(() => {
+  const ph = (id) => document.getElementById(id);
+  scrollPhone(ph('ph1'), '#prov1', 520);
+  scrollPhone(ph('ph2'), '#prov2', 560);
+  scrollPhone(ph('ph4'), '#works', 120);
+  ring(ph('ph1'), '#same', 'A', 3);
+  ring(ph('ph1'), '#runs1', 'B', 2);
+  ring(ph('ph2'), '#runs2', 'B', 2);
+  ring(ph('ph4'), '#works', 1, 3);
+  ring(ph('ph4'), '#keysec', 2, 3);
+  ring(ph('ph4'), '#webnote', 3, 0, -16, 0);
+  document.querySelectorAll('.mk-n').forEach((m) => { if (/^[A-Z]$/.test(m.textContent)) m.style.background = '#6b7280'; });
+});
+
+document.getElementById('notes').innerHTML = notes([
+  ['A', '<b>「Same DeepSeek account as DeepSeek Harness」</b>：同一把 key 配了两份，才需要这句。'],
+  ['B', '<b>「Runs on」把 key 说成某个 engine 的：</b>DeepSeek 页写 Claude Code，DeepSeek Harness 页写 DeepSeek Harness。同一家的 key 两个页面、两种说法；Default model 显示原始 id。'],
+  [1, '<b>新增「Works with」：</b>三个 engine 各一行，顺序按兼容表；footer 说在 composer 的 Provider 里选它。'],
+  [2, '<b>「Provider」一节改叫「Key」：</b>Runs on 换成 Protocol（Anthropic-compatible）；Default model 用显示名（DeepSeek V4 Pro）。'],
+  [3, '<b>footer 写影响：</b>加、改 key 仍在 Web；在那里停用它，Claude Code、OpenCode、DeepSeek Harness 上的会话都会停（契约 §3.6）。'],
+  ['·', '<b>不变的：</b>余额卡片、Refresh、Top up on DeepSeek，以及余额过低、拿不到余额时的样子（板上没画，照旧）；页面只读。'],
+]);
+</script>
+</body>
+</html>

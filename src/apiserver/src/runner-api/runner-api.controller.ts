@@ -154,7 +154,6 @@ import { generateToken, generateUserCode, sha256 } from '../common/crypto.util';
 import {
   normalizeBuiltinPermissionMode,
   normalizeEffortForRuntimeModel,
-  normalizeRuntimeProvider,
 } from '../common/runtime-provider';
 import { OPEN_SESSION_STATUSES, statusAfterTurnCompleted } from '../common/session-scheduling';
 import { assertValidUpload, MAX_UPLOAD_BYTES, toBytes, UploadedFile } from '../attachments/attachments.media';
@@ -370,7 +369,13 @@ import {
   hasResolvedSource,
   sessionSourceSnapshot,
 } from '../projects/session-source';
-import { providerDispatchWhereOn, providerSlugsOn, sessionExecRuntime } from '../providers/custom-provider';
+import { providerDispatchWhereOn } from '../providers/custom-provider';
+import {
+  recordedEngine,
+  SESSION_ENGINE_UNKNOWN_MESSAGE,
+  sessionEngine,
+  type SessionEngineFacts,
+} from '../providers/session-engine';
 import { refuseManagedRunnerDeletion } from '../managed-runners/managed-runner-delete';
 import { reauthorizeManagedRunnerInstance, type ManagedRunnerInstance } from '../managed-runners/managed-runner-instance';
 import { MANAGED_RUNNER_GATE, type ManagedRunnerGate } from '../managed-runners/managed-runner-gate';
@@ -525,7 +530,7 @@ const COORDINATOR_CONTEXT_BOUNDARY_SUBTYPES = new Set([
 ]);
 
 function supportsSparseCoordinatorContext(
-  runtime: AgentProvider,
+  runtime: AgentProvider | null,
   capabilities: readonly string[],
   leaseGeneration: string | null,
 ): leaseGeneration is string {
@@ -618,19 +623,29 @@ async function persistedDshRefusal(db: Prisma.TransactionClient, runnerId: strin
   return dshRuntimeUnavailable(snapshot.engines);
 }
 
+/**
+ * Whether the session runs on DeepSeek Harness — by its recorded engine, whatever key it spends —
+ * which a runner may only lease when both its request and its persisted heartbeat declare Harness
+ * (migration 0377); that declaration is made here for the lease write to come.
+ */
 async function assertDshLeaseSupport(
   tx: Prisma.TransactionClient,
   runnerId: string,
-  session: { provider: string; providerBuiltin: boolean; ownerId: string },
+  session: SessionEngineFacts,
   providerHeader?: string,
 ): Promise<boolean> {
-  if (!session.provider || await sessionExecRuntime(tx, session) !== AgentProvider.DSH) return false;
+  if (!session.provider || (await sessionEngine(tx, session)) !== AgentProvider.DSH) return false;
   if (!runnerAdvertisesProvider(providerHeader, AgentProvider.DSH) || !await persistedDshSupport(tx, runnerId)) {
     throw new ConflictException(DSH_RUNNER_UPGRADE_ERROR);
   }
   await tx.$executeRaw`SELECT set_config('orbit.runner_supports_dsh', '1', true)`;
   return true;
 }
+
+/** A lease write that did not land on a session that is not Harness's. The row is locked and the
+ *  transaction declared what the database asks of it, so only a guard refusing it gets here; the
+ *  runner retries as it does every refused takeover. */
+const LEASE_WRITE_REFUSED = 'the inbox lease was not written; retry';
 
 export function runnerSupportsCapability(
   header: string | string[] | undefined,
@@ -2319,10 +2334,11 @@ export class RunnerApiController {
 
   /**
    * Mark pending work on a runtime this runner has not advertised (ADVERTISED_RUNTIMES: OpenCode,
-   * Antigravity) visibly, before carrying on without it. `slugs` are the providers that run on it
-   * (providerSlugsOn): the built-in slug, and the configured rows that borrow the runtime. The
-   * conditional update repeats the scheduling predicates, so a capable claim/cancel racing this
-   * check can never have its now-live/ended row stamped with a stale upgrade error.
+   * Antigravity) visibly, before carrying on without it. `providerWhere` is the sessions that run on
+   * it (providerDispatchWhereOn): those whose recorded engine it is, and — for a row without one — the
+   * built-in slug and the configured rows that borrowed the runtime. The conditional update repeats
+   * the scheduling predicates, so a capable claim/cancel racing this check can never have its
+   * now-live/ended row stamped with a stale upgrade error.
    */
   private async markProviderUpgradeRequired(
     runnerId: string,
@@ -2564,26 +2580,20 @@ export class RunnerApiController {
     });
     const supportsDsh = runnerAdvertisesProvider(providerHeader, AgentProvider.DSH)
       && await persistedDshSupport(this.prisma, runner.id);
+    // The engine each session runs on: its own, else — for a row an older replica wrote — the old
+    // rules'. Everything below that asks which CLI rebuilds a session asks this, never its slug.
+    const engines = new Map<string, AgentProvider | null>();
+    for (const session of sessions) engines.set(session.id, await sessionEngine(this.prisma, session));
     const undrivable = new Set<string>();
     for (const { provider, upgradeError } of ADVERTISED_RUNTIMES) {
       if (provider === AgentProvider.DSH ? supportsDsh : runnerAdvertisesProvider(providerHeader, provider)) continue;
-      // The configured rows that borrow the runtime too: this runner would rebuild a Gemini key's
-      // session as Claude just the same.
-      const slugs = await providerSlugsOn(this.prisma, runner.ownerId, provider);
-      const onProvider = sessions.filter((session) =>
-        provider === AgentProvider.DSH
-          ? (session.providerBuiltin && session.provider === provider)
-            || (!session.providerBuiltin && slugs.slice(1).includes(session.provider))
-          : slugs.includes(session.provider ?? AgentProvider.CLAUDE)
-            && !(session.provider === AgentProvider.DSH && session.providerBuiltin),
-      );
+      // Every session on the runtime, whatever credential it spends: this runner would rebuild a
+      // Gemini key's session — or a DeepSeek key's Harness one — as Claude just the same.
+      const onProvider = sessions.filter((session) => engines.get(session.id) === provider);
       if (onProvider.length === 0) continue;
       await this.markProviderUpgradeRequired(
         runner.id,
-        provider === AgentProvider.DSH
-          ? { OR: [{ provider, providerBuiltin: true }, { provider: { in: slugs.slice(1) }, providerBuiltin: false }] }
-          : { provider: { in: slugs }, ...(slugs.includes(AgentProvider.DSH)
-              ? { NOT: { provider: AgentProvider.DSH, providerBuiltin: true } } : {}) },
+        await providerDispatchWhereOn(this.prisma, runner.ownerId, provider),
         upgradeError,
         onProvider
           .filter(
@@ -2686,8 +2696,12 @@ export class RunnerApiController {
         continue;
       }
       const openCodeKeys = declared === AgentProvider.OPENCODE ? await openCodeKeyRows(this.prisma, s.ownerId) : undefined;
+      // Rebuilt on the engine it runs on (above), with its credential injected the way that engine
+      // reads it — never on the engine the credential would pick.
+      const engine = engines.get(s.id) ?? undefined;
       const resolveExec = (sessionModel: string | null) =>
         resolveProviderExec({
+          engine,
           declaredProvider: poolFallback ? AgentProvider.CLAUDE : declared,
           declaredProviderBuiltin: poolFallback || s.providerBuiltin,
           customRow,
@@ -2704,7 +2718,18 @@ export class RunnerApiController {
           kimiAccount: s.kimiAccount ?? workspace?.kimiAccount,
           runnerEngines: s.assignedRunner?.engines,
         });
-      let exec = resolveExec(s.model);
+      let exec: ReturnType<typeof resolveExec>;
+      try {
+        exec = resolveExec(s.model);
+      } catch (error) {
+        // A credential its engine cannot run — a key whose protocol was changed under it — is left
+        // out with the reason the claim holds it with (QueueService.pausedPendingSessions).
+        const refusal = (error as { getResponse?: () => { code?: string; message?: string } }).getResponse?.();
+        if (refusal?.code !== 'PROVIDER_ENGINE_INCOMPATIBLE' || !refusal.message) throw error;
+        await this.markProviderUpgradeRequired(runner.id, { id: s.id }, refusal.message,
+          s.status === RunStatus.PENDING ? [{ id: s.id, error: s.error }] : []);
+        continue;
+      }
       // Same materialization as the claim path: an unset model is snapshotted, and one the runtime
       // has retired is refreshed to what this session now actually runs.
       if (s.model === null || s.model.trim() === '' || exec.retiredPin) {
@@ -2725,6 +2750,8 @@ export class RunnerApiController {
         }
       }
       const provider = exec.provider;
+      // The model as the runner is handed it (an OpenCode session on a key names it OpenCode's way).
+      const runnerModel = exec.runnerModel ?? exec.model;
       const permissionMode = resolvePermissionMode(s.permissionMode, s.owner);
       const runtime = reclaimRuntimeIds({
         provider,
@@ -2740,7 +2767,7 @@ export class RunnerApiController {
       // keeps the model it was created with; cross-provider ids are still coerced safely.
       const workspaceCfg: AgentExecConfig = {
         provider,
-        model: exec.model,
+        model: runnerModel,
         appendSystemPrompt: workspace?.appendSystemPrompt ?? undefined,
         systemPrompt: workspace?.systemPrompt ?? undefined,
         allowedTools: dispatchAllowedTools(
@@ -2751,7 +2778,7 @@ export class RunnerApiController {
         disallowedTools: (workspace?.disallowedTools as string[] | null) ?? [],
         permissionMode: normalizeBuiltinPermissionMode(
           provider,
-          exec.model,
+          runnerModel,
           permissionMode,
           customRow?.enabled === true,
           runner.runsAsRoot,
@@ -2767,7 +2794,7 @@ export class RunnerApiController {
         // drew the pill from.
         fastMode:
           s.fastMode &&
-          fastModeAvailable(provider, exec.model, s.assignedRunner?.modelCatalog as RunnerModelCatalog | null),
+          fastModeAvailable(provider, runnerModel, s.assignedRunner?.modelCatalog as RunnerModelCatalog | null),
         // cf. the claim path: a reclaimed engine is spawned again, so it is asked again.
         promptSuggestions: claimPromptSuggestions({
           owner: s.owner,
@@ -2784,7 +2811,7 @@ export class RunnerApiController {
         effort: normalizeEffortForRuntimeModel(
           provider,
           s.effort ?? workspace?.effort,
-          exec.model,
+          runnerModel,
           s.assignedRunner?.modelCatalog,
           exec.reasoningLevels,
         ),
@@ -2942,6 +2969,7 @@ export class RunnerApiController {
           id: string;
           provider: string;
           providerBuiltin: boolean;
+          engine: string | null;
           ownerId: string;
           inboxLeaseGeneration: string | null;
           inboxLeaseOwner: string | null;
@@ -2956,7 +2984,7 @@ export class RunnerApiController {
           commitRequestedAt: Date | null;
         }>
       >`
-        SELECT id, provider, "provider_builtin" AS "providerBuiltin", "owner_id" AS "ownerId", "inbox_lease_generation" AS "inboxLeaseGeneration",
+        SELECT id, provider, "provider_builtin" AS "providerBuiltin", engine, "owner_id" AS "ownerId", "inbox_lease_generation" AS "inboxLeaseGeneration",
                "inbox_lease_owner" AS "inboxLeaseOwner", status,
                "merge_status" AS "mergeStatus",
                "merge_operation_id" AS "mergeOperationId",
@@ -3031,6 +3059,11 @@ export class RunnerApiController {
       // dies with it for the same reason. A runner killed mid-turn (crash, restart, self-update)
       // emits no turn_end, so the flag stays true and the session reads as generating forever —
       // it is what makes a parked session count toward the running set in the UI.
+      //
+      // Declared first: this replica judges the session by its recorded engine (migration 0414). The
+      // database refuses a lease write on a session with one from a transaction that does not say so
+      // — an older replica's, which would run it on the engine its slug suggests (§5.2).
+      await tx.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`;
       const acquired = await tx.$executeRaw`
         UPDATE "session"
         SET "inbox_lease_generation" = ${fence}::uuid,
@@ -3042,7 +3075,10 @@ export class RunnerApiController {
             "engine_turn_active" = false
         WHERE id = ${sessionId}::uuid
       `;
-      if (onDsh && acquired !== 1) throw new ConflictException(DSH_RUNNER_UPGRADE_ERROR);
+      // Checked on every engine, not only Harness: a refused write that this transaction then
+      // committed around — the generation retired, the in-flight turn expired, the approvals reaped —
+      // would leave the session naming the previous owner, and its runner letting go of it.
+      if (acquired !== 1) throw new ConflictException(onDsh ? DSH_RUNNER_UPGRADE_ERROR : LEASE_WRITE_REFUSED);
       await tx.$executeRaw`
         UPDATE "conversation_turn"
         SET "lease_deadline_at" = now() - interval '1 second'
@@ -3099,12 +3135,12 @@ export class RunnerApiController {
     // below is: a session of another runner is one this one has never heard of.
     const preflight = await this.prisma.session.findFirst({
       where: { id: sessionId, assignedRunnerId: runner.id },
-      select: { inboxLeaseOwner: true, inboxLeaseGeneration: true, status: true, provider: true, providerBuiltin: true, ownerId: true },
+      select: { inboxLeaseOwner: true, inboxLeaseGeneration: true, status: true, provider: true, providerBuiltin: true, engine: true, ownerId: true },
     });
-    const preflightRuntime = preflight ? await sessionExecRuntime(this.prisma, preflight) : undefined;
+    const preflightEngine = preflight ? await sessionEngine(this.prisma, preflight) : undefined;
     if (
       preflight &&
-      preflightRuntime !== AgentProvider.DSH &&
+      preflightEngine !== AgentProvider.DSH &&
       OPEN.includes(preflight.status) &&
       preflight.inboxLeaseOwner === leaseOwner &&
       preflight.inboxLeaseGeneration === generation
@@ -3124,13 +3160,14 @@ export class RunnerApiController {
           id: string;
           provider: string;
           providerBuiltin: boolean;
+          engine: string | null;
           ownerId: string;
           inboxLeaseGeneration: string | null;
           inboxLeaseOwner: string | null;
           status: RunStatus;
         }>
       >`
-        SELECT id, provider, "provider_builtin" AS "providerBuiltin", "owner_id" AS "ownerId", "inbox_lease_generation" AS "inboxLeaseGeneration",
+        SELECT id, provider, "provider_builtin" AS "providerBuiltin", engine, "owner_id" AS "ownerId", "inbox_lease_generation" AS "inboxLeaseGeneration",
                "inbox_lease_owner" AS "inboxLeaseOwner", status
         FROM "session"
         WHERE id = ${sessionId}::uuid AND "assigned_runner_id" = ${runner.id}::uuid
@@ -3188,6 +3225,8 @@ export class RunnerApiController {
       ) {
         throw new ConflictException('inbox generation has already been retired or reused');
       }
+      // Declared first, as on the takeover: this replica reads the session's recorded engine.
+      await tx.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`;
       const acquired = await tx.$executeRaw`
         UPDATE "session"
         SET "inbox_lease_generation" = ${generation}::uuid
@@ -3196,7 +3235,7 @@ export class RunnerApiController {
       // A legacy NULL poll or a predecessor may have leased after reclaim but before this
       // activation acquired the Session lock. Make every non-current executable turn visible
       // now, rather than letting it block the new engine for the normal five-minute deadline.
-      if (onDsh && acquired !== 1) throw new ConflictException(DSH_RUNNER_UPGRADE_ERROR);
+      if (acquired !== 1) throw new ConflictException(onDsh ? DSH_RUNNER_UPGRADE_ERROR : LEASE_WRITE_REFUSED);
       await tx.$executeRaw`
         UPDATE "conversation_turn"
         SET "lease_deadline_at" = now() - interval '1 second'
@@ -3527,12 +3566,13 @@ export class RunnerApiController {
           ownerId: string;
           provider: string;
           providerBuiltin: boolean;
+          engine: string | null;
           taskId: string | null;
         }>
       >`
         SELECT id, "inbox_lease_generation" AS "inboxLeaseGeneration",
                "inbox_lease_owner" AS "inboxLeaseOwner", status,
-               "owner_id" AS "ownerId", provider, "provider_builtin" AS "providerBuiltin"
+               "owner_id" AS "ownerId", provider, "provider_builtin" AS "providerBuiltin", engine
                , "task_id" AS "taskId"
         FROM "session"
         WHERE id = ${sessionId}::uuid AND "assigned_runner_id" = ${runnerId}::uuid
@@ -3575,23 +3615,23 @@ export class RunnerApiController {
       // knows the kind but not this engine's mid-turn call refuses every steer it is handed,
       // so withholding one here is what keeps a half-upgraded fleet on the behaviour it has
       // today. A legacy steer is re-filed after the turn; explicit CURRENT_WORK instead reaches
-      // a visible failed-delivery terminal. Resolved per poll, through the same runtime resolution
-      // dispatch and createTurn use, so a configured (BYOK) session is judged by the runtime it
-      // borrows rather than by its slug.
-      const execRuntime = await sessionExecRuntime(tx, owned[0]);
+      // a visible failed-delivery terminal. Asked of the session's own engine — the column, which
+      // dispatch and createTurn read too — so a configured (BYOK) session is judged by the CLI that
+      // runs it rather than by its slug, and an edit of its key cannot change the answer.
+      const engine = await sessionEngine(tx, owned[0]);
       // Legacy steer predates routing-v1 and retains its provider-specific behaviour. Explicit
       // CURRENT_WORK is narrower: only an exact-target primitive may dequeue it, otherwise a
       // Claude stdin frame could cross the target result boundary and become the next turn.
       const deliverLegacySteer =
-        acceptsSteer && supportsMidTurnSteer(execRuntime, declaredCapabilities);
+        acceptsSteer && supportsMidTurnSteer(engine ?? '', declaredCapabilities);
       const deliverCurrentWorkSteer =
         acceptsSteer
-        && supportsTargetBoundCurrentWorkSteer(execRuntime, declaredCapabilities);
+        && supportsTargetBoundCurrentWorkSteer(engine ?? '', declaredCapabilities);
       // Only runtimes whose runner can durably report history compaction may stop repeating the
       // coordinator block on every turn. A null generation is a legacy poller and cannot prove a
       // process boundary either, so it stays on the correctness-first legacy path.
       const sparseCoordinatorContext = supportsSparseCoordinatorContext(
-        execRuntime,
+        engine,
         declaredCapabilities,
         leaseGeneration,
       );
@@ -3649,6 +3689,10 @@ export class RunnerApiController {
               where: { sessionId, kind: 'message', status: 'IN_FLIGHT', leaseDeadlineAt: { lt: now } },
               data: { status: 'PENDING', deliveredAt: null, leaseDeadlineAt: null, leaseGeneration: null },
             });
+            // A legacy NULL poller's session is fenced with a generation of its own here, a lease
+            // write the database allows only to a transaction that reads the session's engine
+            // (migration 0414) — which this one does, above.
+            await tx.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`;
             await tx.session.update({
               where: { id: sessionId },
               data: {
@@ -4063,6 +4107,7 @@ export class RunnerApiController {
         model: true,
         provider: true,
         providerBuiltin: true,
+        engine: true,
         poolMemberProviderId: true,
         poolKeyId: true,
         poolCodexAccountId: true,
@@ -4076,6 +4121,11 @@ export class RunnerApiController {
       },
     });
     if (!session) return undefined;
+    // The environment is built for the engine the session runs on — the one it was spawned with and
+    // is re-spawned with now — from wherever its credential now comes from: a switch moves the
+    // credential, never the engine.
+    const engine = await sessionEngine(tx, session);
+    if (!engine) throw new BadRequestException(`provider not available: "${session.provider}"`);
     const customRow = isBuiltinProvider(session.provider, session.providerBuiltin)
       ? null
       : ((await tx.modelProvider.findFirst({
@@ -4092,6 +4142,7 @@ export class RunnerApiController {
     const poolFallback = !customRow && !isBuiltinProvider(session.provider, session.providerBuiltin)
       && (await accountPoolRuntime(tx, session.ownerId, session.provider!)) === AgentProvider.CLAUDE;
     const exec = resolveProviderExec({
+      engine,
       declaredProvider: poolFallback ? AgentProvider.CLAUDE : session.provider,
       declaredProviderBuiltin: poolFallback || session.providerBuiltin,
       customRow,
@@ -4266,25 +4317,14 @@ export class RunnerApiController {
    * the human is asked, exactly as before.
    */
   private async standingGrantCovers(
-    session: { workspaceId: string | null; provider: string | null; providerBuiltin: boolean; ownerId: string },
+    session: SessionEngineFacts & { workspaceId: string | null },
     dto: ApprovalCreateRequest,
   ): Promise<boolean> {
     if (!session.workspaceId) return false;
-    // A configured (BYOK) slug borrows a built-in runtime, and it is the runtime that will run
-    // the command — so resolve it rather than judging the label the session was created with.
-    let runtime = normalizeRuntimeProvider(session.provider, session.providerBuiltin);
-    if (!isBuiltinProvider(session.provider, session.providerBuiltin)) {
-      const customRow = await this.prisma.modelProvider.findFirst({
-        where: { slug: session.provider!, ...(await usableProviderScope(this.prisma, session.ownerId)) },
-        select: { runtime: true },
-      });
-      // A pool has no row of its own: a shared pool runs Codex.
-      runtime = normalizeRuntimeProvider(
-        customRow?.runtime ?? (await accountPoolRuntime(this.prisma, session.ownerId, session.provider!)),
-        true,
-      );
-    }
-    if (!serverMatchedRuntime(runtime)) return false;
+    // It is the engine that will run the command, so the grant is judged by the session's own —
+    // not by the label its credential was given. One nobody can place is asked about.
+    const runtime = await sessionEngine(this.prisma, session);
+    if (!runtime || !serverMatchedRuntime(runtime)) return false;
     const rules = await this.prisma.workspacePermissionRule.findMany({
       where: { workspaceId: session.workspaceId },
       select: { toolName: true, ruleContent: true },
@@ -4512,6 +4552,7 @@ export class RunnerApiController {
           // `keyRetryAt` below.
           provider: true,
           providerBuiltin: true,
+          engine: true,
           poolKeyId: true,
           poolCodexAccountId: true,
           model: true,
@@ -4892,9 +4933,14 @@ export class RunnerApiController {
       // usage limit ended as an ordinary end and says nothing of why; the runner reads the limit from
       // the turn's own record and reports it as the turn's error, in the words this reads
       // (kimi_acp.go kimiTurnUsageLimit).
-      const usageLimitEngine = current.provider === AgentProvider.CODEX
+      //
+      // Asked of the session's engine, on the runner's own sign-in for it only: a Codex or Kimi session
+      // on a key or a pool spends no account of the runner's, and has none to be moved off.
+      const runsOnLogin = isBuiltinProvider(current.provider, current.providerBuiltin)
+        && (recordedEngine(current.engine) ?? current.provider) === current.provider;
+      const usageLimitEngine = runsOnLogin && current.provider === AgentProvider.CODEX
         ? 'codex' as const
-        : current.provider === AgentProvider.KIMI ? 'kimi' as const : null;
+        : runsOnLogin && current.provider === AgentProvider.KIMI ? 'kimi' as const : null;
       const usageLimit =
         failSession
         && completedTurn?.kind === 'message'
@@ -7211,13 +7257,19 @@ export class RunnerApiController {
     return { ok: true };
   }
 
-  /** Return the runtime session UUID + workDir so `orbit resume` can reattach locally. */
+  /**
+   * Return the runtime session UUID + workDir so `orbit resume` can reattach locally, with the engine
+   * whose conversation it is (docs/provider-engine-contract.md §6.3). `provider` carries the engine
+   * too: an older `orbit resume` picks the CLI it reattaches with from it, and a session on a key or a
+   * pool used to come back as `claude` there whatever ran it.
+   */
   @UseGuards(RunnerAuthGuard)
   @Get('sessions/:id/meta')
   async getSessionMeta(
     @CurrentRunner() runner: { id: string },
     @Param('id', PublicIdPipe) sessionId: string,
   ): Promise<{
+    engine: AgentProvider;
     provider: AgentProvider;
     sessionUuid: string;
     runtimeSessionId?: string;
@@ -7225,14 +7277,18 @@ export class RunnerApiController {
     title: string;
   }> {
     const session = await this.assertSessionOwnership(sessionId, runner.id);
-    const provider = normalizeRuntimeProvider(session.provider, session.providerBuiltin);
     const runtimeSessionId = session.runtimeSessionId ?? undefined;
     if (!runtimeSessionId) {
       throw new NotFoundException('session has no runtime session ID');
     }
+    const engine = await sessionEngine(this.prisma, session);
+    // A conversation whose engine was never recorded, on a credential that is gone: no CLI can be
+    // named for it without guessing, and a guess reattaches the id to a conversation it is not.
+    if (!engine) throw new ConflictException({ code: 'SESSION_ENGINE_UNKNOWN', message: SESSION_ENGINE_UNKNOWN_MESSAGE });
     const workspace = session.workspaceId ? await this.prisma.workspace.findUnique({ where: { id: session.workspaceId } }) : null;
     return {
-      provider,
+      engine,
+      provider: engine,
       sessionUuid: runtimeSessionId,
       runtimeSessionId,
       workDir: workspace?.workDir ?? null,

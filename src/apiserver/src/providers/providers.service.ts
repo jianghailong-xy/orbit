@@ -21,7 +21,7 @@ import {
 } from './pool-admission';
 import { selectPoolMember, spentUntil } from './pool-select';
 import { withPreset } from './preset-overlay';
-import { runsOnOpenCode, usableProviderScope } from './custom-provider';
+import { keyRowEngine, runsOnOpenCode, usableProviderScope } from './custom-provider';
 import { geminiApiModel, isInternalHost } from './held-key';
 import { pickFreeSlug, slugBase } from './provider-slug';
 
@@ -480,6 +480,9 @@ export class ProvidersService {
       baseUrl: dto.baseUrl ?? current.baseUrl,
       apiKeyEnc: apiKeyEnc ?? current.apiKeyEnc,
     });
+    if ((dto.runtime && dto.runtime !== current.runtime) || (dto.baseUrl && dto.baseUrl !== current.baseUrl) || apiKeyEnc) {
+      await this.recordSessionEngines(current);
+    }
     const row = await this.prisma.modelProvider.update({ where: { id }, data });
     this.publishChanged(ownerId, row.id);
     return this.desensitize(row);
@@ -502,6 +505,7 @@ export class ProvidersService {
     if ((current.runtime === AgentProvider.DSH || current.slug === AgentProvider.DSH) && await this.hasProviderHistory(current)) {
       throw new BadRequestException('DeepSeek Harness provider has session or task history and cannot be removed');
     }
+    await this.recordSessionEngines(current);
     await this.prisma.modelProvider.delete({ where: { id } });
     this.publishChanged(ownerId, id);
     return { ok: true };
@@ -656,6 +660,25 @@ export class ProvidersService {
 
   /** Push a provider change to the clients whose picker it affects: just the owner for a personal
    *  row, everyone for a shared one (ownerId null = the admin-managed catalog). */
+  /**
+   * Record the engine of every session on this key that has none recorded yet — one an older API
+   * replica wrote — before the key's protocol, endpoint or secret changes, or the key goes. Such a
+   * session's engine is derived from the key's runtime (providers/session-engine.ts), so after the
+   * change it would be derived from the new protocol, or from nothing: no edit of a key may move a
+   * session onto another CLI (docs/provider-engine-contract.md §1.1, §3.6). Ahead of the edit and
+   * not atomic with it: a session it records keeps the engine it already ran on whether or not the
+   * edit then lands. Every session of the key's owner names it by slug; a shared key's, anyone's.
+   */
+  private async recordSessionEngines(row: { slug: string; runtime: string; ownerId: string | null }): Promise<void> {
+    const engine = keyRowEngine(row.runtime);
+    if (!engine) return;
+    await this.prisma.$executeRaw`
+      UPDATE "session" SET "engine" = ${engine}
+      WHERE "engine" IS NULL AND "provider" = ${row.slug} AND NOT "provider_builtin"
+        AND (${row.ownerId}::uuid IS NULL OR "owner_id" = ${row.ownerId}::uuid)
+    `;
+  }
+
   private publishChanged(ownerId: string | null, id: string): void {
     if (ownerId) this.realtime.publishForUser(ownerId, RunEventType.PROVIDER_CHANGED, id);
     else this.realtime.publishForAllUsers(RunEventType.PROVIDER_CHANGED, id);

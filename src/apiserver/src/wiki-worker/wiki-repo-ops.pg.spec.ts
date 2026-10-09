@@ -13,7 +13,8 @@
  *      including the characters that are not one byte — into the space's cache, replacing the last one;
  *   5. a job parked on an operation is woken by the NOTIFY the settle writes, not by its poll: the wait
  *      resolves with the answer while its poll interval is still 30 seconds away, and the job is back in
- *      the queue afterwards;
+ *      the queue afterwards; a wait the worker's stop cuts short hands the job back, due at once and with
+ *      nothing counted (design §5.4, the owner's decision of 2026-10-09);
  *   6. the health line: what the space's repository steps depend on, and the one word that says a runner
  *      is too old to be given them.
  *
@@ -433,6 +434,40 @@ test('a read that waits past its limit puts the job back as an infra failure', {
   assert.equal(job.failure_kind, 'infra');
   assert.equal(job.attempts, 1);
   // The operation is still queued and still belongs to the job: nothing was cancelled by the wait ending.
+  assert.equal((await h.prisma.wikiRepoOp.findUnique({ where: { id: opId } }))?.state, 'queued');
+  await h.prisma.wikiJob.deleteMany({ where: { id: jobId } });
+});
+
+test('a job parked on an operation when its worker stops is handed back: queued at once, its attempts as they were', { skip, timeout: 60_000 }, async () => {
+  const h = await boot();
+  const { jobId, opId } = await queued(h, 'read', { sha: 'b'.repeat(40), items: [] });
+  const jobGeneration = randomUUID();
+  // Running, and failed twice already: the stop must not make this its third attempt.
+  await h.sql.query(
+    `UPDATE "wiki_job" SET "state" = 'running', "attempts" = 2, "lease_owner" = $2::uuid, "lease_generation" = $3::uuid,
+       "lease_deadline_at" = now() + interval '60 seconds' WHERE "id" = $1`,
+    [jobId, randomUUID(), jobGeneration],
+  );
+  const stop = new AbortController();
+  const waiting = waitForWikiRepoOpAsJob(h.prisma as unknown as PrismaService, {
+    jobId, generation: jobGeneration, opId, timeoutMs: 20_000, pollMs: 50, signal: stop.signal,
+  });
+  waiting.catch(() => undefined);
+  // Parked, holding no lease, when SIGTERM comes.
+  for (let i = 0; i < 250; i += 1) {
+    const { rows: [row] } = await h.sql.query<{ state: string }>('SELECT "state" FROM "wiki_job" WHERE "id" = $1', [jobId]);
+    if (row.state === 'waiting') break;
+    await delay(20);
+  }
+  stop.abort();
+  await assert.rejects(waiting, (error: unknown) => error instanceof Error && error.name === 'WikiRepoOpWaitCancelled');
+  const { rows: [job] } = await h.sql.query(
+    'SELECT "state", "waiting_for", "attempts", "next_attempt_at", "failure_kind", "error" FROM "wiki_job" WHERE "id" = $1', [jobId]);
+  assert.deepEqual(job, {
+    state: 'queued', waiting_for: null, attempts: 2, next_attempt_at: null, failure_kind: null,
+    error: 'WORKER_STOPPED: the worker was stopped and handed this job back; the next one takes it over at once, without counting an attempt',
+  }, 'handed back as the executor hands back a running job: due at once, nothing counted, and why on the row');
+  // The operation is not touched: still queued and still the job's, for its replay to meet.
   assert.equal((await h.prisma.wikiRepoOp.findUnique({ where: { id: opId } }))?.state, 'queued');
   await h.prisma.wikiJob.deleteMany({ where: { id: jobId } });
 });

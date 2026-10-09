@@ -24,7 +24,10 @@
  *   6. an anchor verdict whose echo names another anchor than the one at its index fails the run as
  *      content: the run refuses to lay a verdict on a guess;
  *   7. the documents step with a confirmed plan: it reads the plan through its read, where a section's projects are
- *      { id, title }, and the section's material is found by the project's id (2026-10-09: 22P02, nothing written).
+ *      { id, title }, and the section's material is found by the project's id (2026-10-09: 22P02, nothing written);
+ *   8. a worker that stops while the documents step waits for a read: the job is handed back (design §5.4) — the
+ *      run not settled, no REPO_OP_FAILED, no read asked again, nothing counted, and the health line still reads the
+ *      run under way with no failure — and the next worker takes it over.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/wiki-worker/wiki-maintain-job.pg.spec.ts
  *
@@ -49,11 +52,13 @@ import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '.
 import type { PushService } from '../push/push.service';
 import type { RealtimeService } from '../realtime/realtime.service';
 import { WikiDocs } from '../wiki/wiki-docs';
+import { WikiHealth } from '../wiki/wiki-health';
 import { WikiPlans } from '../wiki/wiki-plan';
 import { WikiRefusalError, WikiService, type WikiPrincipal } from '../wiki/wiki.service';
 import { WikiRepoOps } from './wiki-repo-ops';
 import { WIKI_REPO_OP_CAPABILITY } from '@orbit/shared';
 import { WikiJobExecutor, WIKI_JOB_RUNNERS, type WikiJobRunner } from './wiki-job-executor';
+import { WIKI_JOB_HANDED_BACK } from './wiki-jobs';
 import { WikiModelRequestQueue } from './wiki-model-queue.service';
 import { WikiModelStatusProbe } from './wiki-model-status';
 import { readWikiSystemModel, type WikiSystemModelConfig } from './wiki-system-model';
@@ -360,13 +365,17 @@ async function clearWork(h: Harness): Promise<void> {
   await modelUp(h);
 }
 
-/** The runner this spec plays: every queued repository operation is answered at once, by kind. */
-async function runRepoOps(h: Harness, over: { failSnapshot?: boolean; checkAnchor?: (anchor: Record<string, unknown>) => Record<string, unknown> } = {}): Promise<number> {
+/**
+ * The runner this spec plays: every queued repository operation is answered at once, by kind — but a read, under
+ * `holdReads`, which stays queued as on a runner whose fetch hangs.
+ */
+async function runRepoOps(h: Harness, over: { failSnapshot?: boolean; holdReads?: boolean; checkAnchor?: (anchor: Record<string, unknown>) => Record<string, unknown> } = {}): Promise<number> {
   const rows = await h.sql.query<{ id: string; kind: string; input: Record<string, unknown> }>(
     `SELECT "id", "kind", "input" FROM "wiki_repo_op" WHERE "owner_id" = $1 AND "state" = 'queued' ORDER BY "created_at"`,
     [h.ownerId],
   ).then((result) => result.rows);
   for (const row of rows) {
+    if (over.holdReads === true && row.kind === 'read') continue;
     if (over.failSnapshot === true && row.kind === 'snapshot') {
       await h.sql.query(`UPDATE "wiki_repo_op" SET "state"='failed', "error"='the machine went away', "ended_at"=now() WHERE "id"=$1`, [row.id]);
       continue;
@@ -401,7 +410,7 @@ async function pass(
   h: Harness,
   which: { queue: WikiModelRequestQueue; executor: WikiJobExecutor },
   done: () => Promise<boolean>,
-  over: { failSnapshot?: boolean; checkAnchor?: (anchor: Record<string, unknown>) => Record<string, unknown> } = {},
+  over: { failSnapshot?: boolean; holdReads?: boolean; checkAnchor?: (anchor: Record<string, unknown>) => Record<string, unknown> } = {},
   rounds = 400,
 ): Promise<void> {
   for (let i = 0; i < rounds; i += 1) {
@@ -960,4 +969,83 @@ test('a refusal of the run\'s own ends it failed, counts it against the space an
   assert.ok(run.endedAt);
   const cursor = await h.prisma.wikiCursor.findFirstOrThrow({ where: { spaceId: fx.spaceId, source: 'facts' } });
   assert.equal(cursor.consecutiveFailures, 1, 'a failure of the work is counted against the space');
+});
+
+// ── Stopping (2026-10-09) ───────────────────────────────────────────────────────────────────────
+
+/** The job's row as a stop leaves it: where it is, whether a retry was put off, and what it counted and said. */
+async function jobAfterStop(h: Harness, jobId: string): Promise<{ state: string; next_attempt_at: Date | null; attempts: number; failure_kind: string | null; error: string | null }> {
+  return (await h.sql.query(
+    'SELECT "state", "next_attempt_at", "attempts", "failure_kind", "error" FROM "wiki_job" WHERE "id" = $1', [jobId],
+  )).rows[0];
+}
+
+async function repoOpsOf(h: Harness, jobId: string): Promise<Array<{ id: string; kind: string }>> {
+  return (await h.sql.query<{ id: string; kind: string }>('SELECT "id", "kind" FROM "wiki_repo_op" WHERE "job_id" = $1 ORDER BY "created_at", "id"', [jobId])).rows;
+}
+
+test('a worker that stops while the documents step waits for a read hands the job back: the run is not settled, no REPO_OP_FAILED, no read asked again, nothing counted (design §5.4)', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const fx = await fixture(h);
+  // No dossiers: the run goes through to the documents step, which is where it reads files.
+  h.maintenance.dossierPage = (async () => ({ ...(pageOf(fx) as Record<string, unknown>), facts: 0, dossiers: [] })) as unknown as WikiMaintenance['dossierPage'];
+  // The plan its owner confirmed: one document, its overview and a section of the code the step reads through the runner.
+  const empty = { docs: [], code: [], contracts: [], sessions: null };
+  await h.prisma.wikiPlan.create({
+    data: {
+      spaceId: fx.spaceId, ownerId: h.ownerId, version: 1, status: 'confirmed', origin: 'owner', authorUserId: h.ownerId,
+      confirmedByUserId: h.ownerId, confirmedAt: new Date(), docsMin: 1, docsMax: 10, gate: {},
+      categories: [{ key: 'dev', title: 'Development', question: 'How it works', forAgents: true }],
+      docs: {
+        create: [{
+          position: 0, category: 'dev', slug: 'app', title: '应用', question: '应用怎么启动？',
+          audience: ['新加入的开发者'], scopeIn: ['入口'], lengthMin: 400, lengthMax: 4000,
+          sections: {
+            create: [
+              { position: 0, key: 'overview', title: '总览', kind: 'overview', covers: '这篇讲应用怎么启动。', length: 300, sources: empty },
+              { position: 1, key: 'main', title: '入口', kind: 'flow', covers: 'main 做什么。', length: 400, sources: { ...empty, code: [{ path: 'src/app.go', symbols: ['main'] }] } },
+            ],
+          },
+        }],
+      },
+    },
+  });
+  h.model.answer = (hit) => writerAnswer(hit.prompt);
+  const first = worker(h, { repoWaitMs: 60_000 });
+  // Run until the documents step waits on its read: the runner answers everything else, and never that.
+  await pass(h, first, async () => (await repoOpsOf(h, fx.jobId)).some((op) => op.kind === 'read'), { holdReads: true });
+  const before = await repoOpsOf(h, fx.jobId);
+
+  // SIGTERM: the worker stops, and the read's wait is cancelled with it.
+  await first.executor.onModuleDestroy();
+  await first.queue.onModuleDestroy();
+  await delay(300);
+  const run = await runRow(h, fx.runId);
+  assert.deepEqual(
+    {
+      ...(await jobAfterStop(h, fx.jobId)),
+      run: run.outcome,
+      docs: (run.report as { docs?: { error?: string } } | null)?.docs?.error ?? null,
+      asked: (await repoOpsOf(h, fx.jobId)).slice(before.length).map((op) => op.kind),
+    },
+    { state: 'queued', next_attempt_at: null, attempts: 0, failure_kind: null, error: WIKI_JOB_HANDED_BACK, run: null, docs: null, asked: [] },
+    'the job is handed back — the run not settled, nothing counted, no REPO_OP_FAILED — and asks the runner for nothing more',
+  );
+  // What the space's health line reads meanwhile (maintenance.health): the run still under way, no failure and no
+  // streak — the hand-back writes no run row and no cursor.
+  const { maintenance: health } = await new WikiHealth(h.prisma as unknown as PrismaService).read(h.ownerId, fx.spaceId);
+  assert.deepEqual(
+    { look: health.look, consecutiveFailures: health.consecutiveFailures, lastFailure: health.lastFailure, running: health.running?.jobId ?? null },
+    { look: 'running', consecutiveFailures: 0, lastFailure: null, running: fx.jobId },
+    'the health line shows the run under way, and nothing of the stop counts against the space',
+  );
+
+  // The next worker takes the job over, and its replay finishes the run. The attempt the stop cut short is not counted
+  // (the owner's decision of 2026-10-09).
+  await pass(h, worker(h), async () => ['succeeded', 'failed'].includes((await jobOf(h, fx.jobId)).state));
+  const ended = await jobOf(h, fx.jobId);
+  assert.equal(ended.state, 'succeeded', ended.error ?? '');
+  assert.equal((await jobAfterStop(h, fx.jobId)).attempts, 0, 'the stop counted nothing');
+  assert.equal((await runRow(h, fx.runId)).outcome, 'succeeded');
 });
