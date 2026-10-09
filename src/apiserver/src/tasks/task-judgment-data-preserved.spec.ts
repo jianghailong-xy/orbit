@@ -2159,6 +2159,13 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // last write is the only one that changes what the predicate sees, so re-applying the file is a
       // no-op.
       '0411_retire_candidates_landed_by_receipt',
+      // A text with a U+0000 in it is kept as its bytes (0412): one TEXT NOT NULL DEFAULT 'text' on `wiki_repo_file`
+      // (`content_encoding`) and two on `wiki_model_request` (`answer_encoding`, `partial_encoding`), each `text` or
+      // `base64`, catalog-only as a constant default is, and one CHECK per table holding them to the two — `base64`
+      // only on a file row with a text — each added only when absent. No row is written, backfilled or deleted; no
+      // other column, and no function, trigger, type or index, is created, replaced or dropped; `task`, `project`
+      // and the six preserved objects are named nowhere.
+      '0412_wiki_stored_text_encoding',
       // Managed runner capacity, wake and sleep (0413): one new table, `managed_runner_capacity`,
       // with its unique pool key and three CHECKs (totals and reserved figures never below zero, a
       // named location); four nullable columns with no default on `managed_runner` (0399's table) and

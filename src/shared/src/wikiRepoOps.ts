@@ -77,7 +77,25 @@ export const WIKI_REPO_OPS = {
   operationBytes: 4 * 1024 * 1024,
   /** How often a job waiting on an operation polls, when no announcement reached it. */
   pollSeconds: 2,
+  /**
+   * How long a running operation's claim may stay silent before the worker's sweep settles it `failed`. A
+   * runner renews a claim only by staging fragments; its fetch is bounded at five minutes, every other git
+   * command at two, and it stops reporting a result after five tries; no job waits longer than 300 seconds
+   * for one operation. A claim silent for fifteen minutes belongs to a runner that gave up on it or is gone,
+   * and the answer of one still working would reach nobody: its late result is answered with the row's state.
+   */
+  abandonedSeconds: 900,
 } as const;
+
+/**
+ * How the server keeps a text it was handed (contract `repoOps.storedText`): `text` as it is, or `base64` — the
+ * text's UTF-8 bytes in base64 — when Postgres cannot hold it as it is. `text` and `jsonb` both refuse U+0000
+ * (a file with a NUL in it, 2026-10-09: 22P05), so a file's text that has one is kept as its bytes, and read
+ * back byte for byte. The column or the key beside the text says which (`wiki_repo_file.content_encoding`,
+ * the model queue's `request.encoding`).
+ */
+export const WIKI_STORED_TEXT_ENCODINGS = ['text', 'base64'] as const;
+export type WikiStoredTextEncoding = (typeof WIKI_STORED_TEXT_ENCODINGS)[number];
 
 /**
  * What one file's text is, as the server holds it at a (space, sha, path) — the read cache

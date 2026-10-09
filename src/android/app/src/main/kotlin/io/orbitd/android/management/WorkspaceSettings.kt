@@ -140,7 +140,9 @@ fun WorkspaceSettings(api: ManagementApi, workspaceId: String?, revision: Long, 
             OutlinedTextField(workDir, { workDir = it }, Modifier.fillMaxWidth().padding(vertical = 6.dp), label = { Text("Path") },
                 placeholder = { Text("/path/to/project on the runner (optional)") }, singleLine = true)
         }
-        FormSection("Task runs") {
+        // Off by default, and only the owner's to turn on (docs/model-routing-design.md §7.2). With the account's switch off the
+        // Agent has no switch of its own; its stored value is left alone, since Done sends it only when it moved (iOS 9fb3ae6ee).
+        if (LocalSmartSelection.current) FormSection("Task runs") {
             Row(Modifier.fillMaxWidth().toggleable(modelRouting, role = Role.Switch) { modelRouting = it }.padding(vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {

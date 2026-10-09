@@ -13,7 +13,11 @@
  *      for, and an answer that is not a verdict — an id the model copied one character short, the 09-30
  *      failure — is reported as nothing: the op keeps waiting, and nothing of it applies;
  *   4. one queued job covers its session's later ops: two submissions while a job is queued queue one job,
- *      and the one job verifies both.
+ *      and the one job verifies both;
+ *   5. a NUL in the model's answer (2026-10-09): written as \u0000 inside the verdict's JSON, the verdict is
+ *      recorded with the NUL left out (contract `jobs.serverWrites`); written raw, the answer is kept as it came
+ *      (`modelQueue.answerEncoding`) and its JSON does not read — a control character in a string, which Go's
+ *      decoder refuses too — so it is reported as nothing, the op keeps waiting, and the job goes on.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/wiki-worker/wiki-verify-job.pg.spec.ts
  *
@@ -479,4 +483,48 @@ test('one queued job covers its session\'s later ops: two submissions queue one 
   assert.equal((await opRow(h, first)).decision, 'auto_applied');
   assert.equal((await opRow(h, second)).decision, 'auto_applied');
   process.env.ORBIT_WIKI_EXECUTOR = 'runner';
+});
+
+test('a NUL in the answer: as \\u0000 the verdict is recorded without it; raw, its JSON does not read, as Go\'s decoder says', { skip, timeout: 60_000 }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const fx = await fixture(h);
+  process.env.ORBIT_WIKI_EXECUTOR = 'server';
+  // Built rather than written: a raw NUL in this source is the hazard itself (runner-api/strip-nul.ts).
+  const NUL = String.fromCharCode(0);
+  try {
+    // The model escapes the NUL of what it was shown: the JSON reads, and the reason it gives has a NUL in it.
+    const escaped = await propose(h, fx, 'A source file can carry a NUL');
+    const [escapedJob] = (await jobs(h, fx.sessionId)).filter((row) => row.state === 'queued');
+    assert.ok(escapedJob, 'no job was queued for the op');
+    h.model.answer = () => '{"verdict": "supported", "reason": "The record quotes the regex a\\u0000b."}';
+    const first = await settle(h, escapedJob.id);
+    assert.equal(first.state, 'succeeded', `the job ended ${first.state}: ${first.error}`);
+    const applied = await opRow(h, escaped);
+    assert.equal(applied.decision, 'auto_applied', 'the verdict was recorded');
+    assert.equal(applied.verificationReason, 'The record quotes the regex ab.', 'the NUL the model wrote is left out, and nothing else');
+
+    // The model writes the NUL raw, inside a JSON string: the answer is kept as it came, as its bytes ...
+    const raw = await propose(h, fx, 'A source file can carry a raw NUL');
+    const [rawJob] = (await jobs(h, fx.sessionId)).filter((row) => row.state === 'queued');
+    assert.ok(rawJob, 'no job was queued for the second op');
+    h.model.answer = () => `{"verdict": "supported", "reason": "The record quotes the regex a${NUL}b."}`;
+    const second = await settle(h, rawJob.id);
+    assert.equal(second.state, 'succeeded', `the job ended ${second.state}: ${second.error}`);
+    const { rows: [call] } = await h.sql.query<{ state: string; answer: string; answer_encoding: string }>(
+      `SELECT "state", "answer", "answer_encoding" FROM "wiki_model_request" WHERE "job_id" = $1`, [rawJob.id]);
+    assert.equal(call.state, 'succeeded', 'the call answered, and its answer was written');
+    assert.equal(call.answer_encoding, 'base64');
+    assert.equal(Buffer.from(call.answer, 'base64').toString('utf8'), `{"verdict": "supported", "reason": "The record quotes the regex a${NUL}b."}`);
+    // ... and its JSON does not read, which is what Go's decoder says of it too: nothing is applied, the op waits.
+    const waiting = await opRow(h, raw);
+    assert.equal(waiting.decision, 'verifying', 'an answer whose JSON does not read let something through');
+    assert.equal(waiting.verificationVerdict, null);
+    const failures = (second.report?.failures ?? []) as Array<{ opId: string; why: string; refused: string }>;
+    assert.deepEqual(failures.map((one) => one.opId), [raw]);
+    assert.match(failures[0].refused, /JSON/u);
+  } finally {
+    h.model.answer = () => '{"verdict": "supported", "reason": "The record says exactly this."}';
+    process.env.ORBIT_WIKI_EXECUTOR = 'runner';
+  }
 });

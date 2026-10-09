@@ -72,6 +72,12 @@ final class AgentsModel {
     /// The last (agent, view) `loadSessions` ran for, so a row action can silently refresh the same
     /// list without the view having to thread the agent id / tab back in.
     private var lastSessionQuery: (agentID: String, view: SessionView)?
+    /// Sessions being moved to Trash from this device (`AppModel.deleteSession`), kept out of this
+    /// pane's own Completed / Trash reads until the move has settled: a read already on the wire when
+    /// Delete was pressed — this pane's poll, or the re-read a delete just before it started — would
+    /// otherwise put the row back for a beat. The Open rows come down from the app's snapshot, which
+    /// keeps them out itself.
+    private var trashing: Set<String> = []
     /// The app's latest Open snapshot (`applyOpenSnapshot`), kept whichever list is on screen: an
     /// agent's Open list is that snapshot narrowed to the agent, so a first load of one can start
     /// from its rows instead of a blank "Loading…".
@@ -367,6 +373,20 @@ final class AgentsModel {
         agentSessions = SessionFilter.removing(id, from: agentSessions)
     }
 
+    /// Take a row being moved to Trash out of this pane's lists on the tap, and keep it out of the
+    /// reads that land before the move settles (`trashing`).
+    func hideTrashedSession(_ id: String) {
+        trashing.insert(id)
+        agentSessions = SessionFilter.removing(id, from: agentSessions)
+        #if os(iOS)
+        allSessions = SessionFilter.removing(id, from: allSessions)
+        #endif
+    }
+
+    func revealTrashedSession(_ id: String) {
+        trashing.remove(id)
+    }
+
     /// Load one agent's sessions for a view. The list endpoint filters by view only, so narrow to
     /// the agent client-side (the payload nests `agent.id`), mirroring the web agent console.
     ///
@@ -400,7 +420,8 @@ final class AgentsModel {
             return
         }
         do {
-            let all = try await api.listSessions(view: view)
+            let read = try await api.listSessions(view: view)
+            let all = SessionFilter.removing(trashing, from: read)
             #if os(iOS)
             allSessions = all
             #endif
