@@ -1395,8 +1395,8 @@ export const RUNNER_OPAQUE_BODIES: Readonly<Record<string, { reads: readonly str
   'POST /runner/wiki/repo-ops/:id/result body result.*': {
     reads: [],
     reading: 'the runner\'s own answer — a snapshot\'s index, a read\'s text, a diff\'s paths, an anchor\'s states — '
-      + 'stored as it is on the operation it holds and never dereferenced (wiki-worker/wiki-repo-ops.ts:436, the row '
-      + 'the result is written to)',
+      + 'kept on the operation it holds or in that operation\'s space\'s caches, and never dereferenced '
+      + '(wiki-worker/wiki-repo-ops.ts:412, the row the result is written to)',
   },
   'POST /runner/integration-jobs/:jobId/result body errorDetail.*': {
     reads: [],

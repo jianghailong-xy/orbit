@@ -1720,7 +1720,7 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     attempts: 4,
     replay: 'The claim is re-evaluated inside the closure (the UPDATE re-matches), so a re-run either writes the same fragment over itself or is refused STALE_CLAIM because the claim moved in between — never a fragment staged under somebody else\'s generation. Nothing is read before the closure that the statement depends on.',
     effects: 'None. The route answers the running count, which the runner treats as information rather than as a receipt.',
-    answer: 'Typed 503 from the global boundary; the runner retries the fragment (its upload loop keeps the fragment and sends it again), which is idempotent by construction.',
+    answer: 'Typed 503 from the global boundary for a conflict the retries did not absorb, and the runner retries the fragment (its upload loop keeps the fragment and sends it again), which is idempotent by construction. A fragment that is refused, or that the database will not store, is answered by `failWikiRepoOp` instead: the operation is failed under the same claim and the route says 400 / 422, which the runner does not retry.',
   },
   {
     at: 'wiki-worker/wiki-repo-ops.ts#applyWikiRepoOpResult',
@@ -1731,7 +1731,18 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     attempts: 4,
     replay: 'Everything the settle decides — the row\'s state, the staged fragments, the space\'s snapshot and the files a read answered — is read inside the closure, under the row lock the compare-and-set took, so a re-run re-decides against the committed world: a re-run after a takeover is refused, and a re-run of the same generation finds the row already settled and answers with what it says.',
     effects: 'None inside. One `pg_notify` on the `wiki_repo_op` channel travels with the transaction: Postgres delivers it at COMMIT, so a job parked on this operation wakes as the row it settles becomes visible, and a transaction that rolls back wakes nobody.',
-    answer: 'Typed 503 from the global boundary; the runner retries the result, which is answered idempotently when the first attempt did commit.',
+    answer: 'Typed 503 from the global boundary for a conflict the retries did not absorb (and 500 for the database itself failing); the runner retries the result, which is answered idempotently when the first attempt did commit. A result that is refused (INVALID_RESULT), or that the database will not store (22P05 and the like — a value it cannot hold, a constraint), rolls back whole and is answered by `failWikiRepoOp`: the operation is failed under the same claim with the reason, and the route says 400 / 422, which the runner does not retry.',
+  },
+  {
+    at: 'wiki-worker/wiki-repo-ops.ts#failWikiRepoOp',
+    shape: 'TX_RETRIED',
+    locks: 'The operation row (60) first, by one UPDATE … WHERE (id, state = running, lease_owner, claim_generation, runner_id, owner_id) — the claim the refused write was made under, as a compare-and-set. Then its staged fragments (60) by one DELETE, and `SELECT pg_notify` on the `wiki_repo_op` channel, which locks nothing. The same tables in the same order as the settle it stands in for, and fewer of them.',
+    identity: 'The claim: a fence that no longer matches — another claim\'s, or a row already settled — writes nothing and says so (false), so a refusal answered twice fails the operation once.',
+    isolation: '',
+    attempts: 4,
+    replay: 'The compare-and-set re-matches inside the closure: a re-run after a commit finds the row failed already and writes nothing. Nothing is read before the closure; the reason is the refusal\'s, fixed before it starts.',
+    effects: 'None inside. One `pg_notify` on the `wiki_repo_op` channel travels with the transaction, so the job parked on the operation wakes at COMMIT with the failure, instead of waiting out its limit.',
+    answer: 'Nothing typed: it runs after a write that was not made, and a close that fails leaves that write\'s own error standing — the route answers it, and the runner\'s retry comes back here.',
   },
 ];
 
@@ -1762,7 +1773,7 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   // caller is, under the claim the caller took.
   { at: 'wiki-worker/wiki-repo-ops.ts#settleSnapshot', under: 'wiki-worker/wiki-repo-ops.ts#applyWikiRepoOpResult' },
   { at: 'wiki-worker/wiki-repo-ops.ts#settleRead', under: 'wiki-worker/wiki-repo-ops.ts#applyWikiRepoOpResult' },
-  { at: 'wiki-worker/wiki-repo-ops.ts#notifyRepoOpSettled', under: 'wiki-worker/wiki-repo-ops.ts#applyWikiRepoOpResult' },
+  { at: 'wiki-worker/wiki-repo-ops.ts#notifyRepoOpSettled', under: 'wiki-worker/wiki-repo-ops.ts#applyWikiRepoOpResult and #failWikiRepoOp' },
   // What waits on a job that ended for good — its calls, its repository operations, its run or plan job — settled
   // in the transaction that ended it: the rollback sweep's cancellation and the retry limit's failure.
   { at: 'wiki-worker/wiki-jobs.ts#settleWikiJobRows', under: 'wiki/wiki-executor-sweep.ts#settle and wiki-worker/wiki-jobs.ts#endAtRetryLimit' },
@@ -2111,6 +2122,7 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   { at: "wiki-worker/wiki-model-queue.ts#reclaimExpiredWikiModelRequests", class: "MANY_ROWS", statements: 1, note: "The request lease-expiry sweep (design §5.2): running rows whose lease deadline passed go back to queued with attempts one higher and their partial KEPT — the next claim re-issues the call and hands the client what had arrived. `FOR UPDATE SKIP LOCKED`, so a live holder is left to its compare-and-set." },
   { at: "wiki-worker/wiki-model-queue.ts#failWikiModelRequestsPastWaitLimit", class: "MANY_ROWS", statements: 1, note: "Queued requests that have waited past their step's limit (design §5.3) end here, with the error prefix the job reads as an infra failure. `FOR UPDATE SKIP LOCKED`; the limit is looked up per row from the shared table, so the query and the code cannot drift about which steps are the short ones. A request that is running is not touched: its budget is the call's own." },
   { at: "wiki-worker/wiki-model-queue.ts#releaseWikiModelRequestLease", class: "ONE_ROW_CAS", statements: 1, note: "The shutdown's let-go (design §5.4, plan A): the partial saved and the lease deadline set to now in one statement, under the claim's generation. The call itself is aborted through its own AbortController; what this leaves is a row the next process's sweep requeues with the partial already on it." },
+  { at: "wiki-worker/wiki-repo-ops.ts#failAbandonedWikiRepoOps", class: "MANY_ROWS", statements: 1, note: "The worker's sweep of repository operations nothing will settle (contract `repoOps.abandoned`): running rows whose job has ended, or whose claim has been silent for `abandonedSeconds` — each quiet for at least the takeover window — go to failed with the reason, their claim cleared, and each is announced on the `wiki_repo_op` channel by the same statement. One UPDATE … FROM (SELECT … FOR UPDATE OF o SKIP LOCKED), so a settle holding a row keeps it, and two workers sweeping at once take disjoint rows. Matches only `running`: a row a result settled in between is not touched." },
   { at: "wiki-worker/wiki-repo-ops.ts#renewWikiRepoOp", class: "ONE_ROW_CAS", statements: 1, note: "A running operation's heartbeat, under the claim: `heartbeat_at` and `updated_at` set only while the row is still this runner, this lease owner and this generation, and still running. A miss is answered as STALE_CLAIM rather than swallowed — the runner stops working on an operation that is no longer its." },
   { at: "wiki-worker/wiki-repo-ops.ts#resumeJobAfterRepoOp", class: "ONE_ROW_CAS", statements: 2, note: "Put a job whose repository operation settled back in the queue. Two statements because there are two cases: the operation succeeded and the job simply runs again (next_attempt_at cleared, so the claim takes it at once), or the operation failed, was cancelled, or is gone — and then the job takes the infra path, attempts one higher and the reason on its row so the health line has something to show while it waits. Both are `wiki_job` writes, neither holds anything else, and each matches only the parked state: a job that is no longer `waiting` for the repository — a supervisor ended it, or a sweep moved it — is not touched." },
   { at: "wiki-worker/wiki-repo-ops.ts#requeueJobAfterRepoOpFailure", class: "ONE_ROW_CAS", statements: 1, note: "A job whose WAIT for the repository ended badly — the operation did not settle within the job's limit, or the worker stopped while it waited: back to queued with the lost attempt counted, failure_kind infra and the reason on its row, which is what keeps a runner that is away or too old from reading as the work's own failure. The operation itself is not touched: it stays queued for the attempt that follows. Matches only the parked state." },

@@ -104,6 +104,7 @@ import {
   WIKI_REPO_OP_KINDS,
   WIKI_REPO_OP_READ_CAPABILITY,
   WIKI_REPO_OP_STATES,
+  WIKI_STORED_TEXT_ENCODINGS,
 } from './wikiRepoOps';
 import { PROVIDER_PRESETS } from './providerPresets';
 import { WIKI_MAINTENANCE_HEALTH, WIKI_MAINTENANCE_LOOKS, wikiMaintenanceLook } from './wikiHealth';
@@ -258,6 +259,14 @@ describe('wiki contract', () => {
     // The two routes the runner writes back through are named where the doors are.
     expect(repoOps.routes.result).toMatch(/POST \/runner\/wiki\/repo-ops\/:id\/result/u);
     expect(repoOps.routes.fragments).toMatch(/POST \/runner\/wiki\/repo-ops\/:id\/fragments/u);
+    // A text Postgres cannot hold as it is — a file with a U+0000 in it (2026-10-09) — is kept as its bytes, and
+    // the migration that lets a row say so exists; a write that is refused ends its operation; and the sweep's
+    // window is the constant the worker reads.
+    expect(repoOps.storedText.encodings).toEqual([...WIKI_STORED_TEXT_ENCODINGS]);
+    expect(existsSync(path.join(ROOT, repoOps.storedText.migration)), `${repoOps.storedText.migration} does not exist`).toBe(true);
+    expect(readFileSync(path.join(ROOT, repoOps.storedText.migration), 'utf8')).toContain('"content_encoding" TEXT NOT NULL DEFAULT \'text\'');
+    expect(repoOps.unsettled.rule).toMatch(/INVALID_RESULT, 400.*UNSTORABLE_RESULT, 422/u);
+    expect(repoOps.abandoned.seconds).toBe(WIKI_REPO_OPS.abandonedSeconds);
   });
 
   it('ships every closed set exactly as the contract lists it', () => {
@@ -1878,6 +1887,9 @@ describe('wiki contract', () => {
     expect(sql).toContain(`CREATE TABLE IF NOT EXISTS "${queue.table}"`);
     for (const column of queue.columns) expect(sql).toContain(`"${column}"`);
     expect(queue.identity).toMatch(/\(job_id, step, unit, attempt\) is unique/u);
+    // A call whose text has a U+0000 is kept as its bytes (repoOps.storedText), and the digest stays the call's.
+    expect(queue.requestEncoding).toMatch(/`encoding: "base64"`/u);
+    expect(queue.requestEncoding).toMatch(/`request_sha256` is the call's/u);
     expect(sql).toContain('CONSTRAINT "wiki_model_request_unit_key" UNIQUE ("job_id", "step", "unit", "attempt")');
     // The claim's order and its lock are the statement's, in the worker; the queue's sets and numbers are here.
     expect(queue.states).toEqual([...WIKI_MODEL_REQUEST_STATES]);

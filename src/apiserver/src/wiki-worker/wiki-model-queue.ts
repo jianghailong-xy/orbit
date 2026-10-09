@@ -2,6 +2,7 @@ import { createHash } from 'crypto';
 import { Prisma } from '@prisma/client';
 import { WIKI_MODEL_QUEUE, type WikiSystemModelErrorKind } from '@orbit/shared';
 import type { PrismaService } from '../prisma/prisma.service';
+import { wikiTextBase64, wikiTextFromStored, wikiTextIsStorable } from './wiki-stored-text';
 
 /**
  * The `wiki_model_request` table: the queue every wiki model call goes through (migration 0401, contract
@@ -55,6 +56,31 @@ export function wikiModelRequestSha256(call: WikiModelRequestCall): string {
   return createHash('sha256')
     .update(JSON.stringify({ system: call.system, prompt: call.prompt, maxTokens: call.maxTokens }))
     .digest('hex');
+}
+
+/**
+ * The call as the `request` column keeps it (contract `modelQueue.requestEncoding`): as it is, or — when its
+ * system or its prompt has a U+0000, which jsonb cannot hold — both as their UTF-8 bytes in base64, with
+ * `encoding: 'base64'` saying so. A prompt carries the repository's text (a code piece is a file's lines), and a
+ * source file can have a NUL: the call the model is sent is the one the pipeline made, byte for byte, as the
+ * runner path's is. The digest is the call's, not the column's.
+ */
+export function wikiModelRequestStored(call: WikiModelRequestCall): Record<string, unknown> {
+  if (wikiTextIsStorable(call.system) && wikiTextIsStorable(call.prompt)) {
+    return { system: call.system, prompt: call.prompt, maxTokens: call.maxTokens };
+  }
+  return { system: wikiTextBase64(call.system), prompt: wikiTextBase64(call.prompt), maxTokens: call.maxTokens, encoding: 'base64' };
+}
+
+/** The call a `request` column keeps, read back to what the pipeline made. */
+export function wikiModelRequestCallOf(stored: unknown): WikiModelRequestCall {
+  const row = (stored ?? {}) as { system?: unknown; prompt?: unknown; maxTokens?: unknown; encoding?: unknown };
+  const encoding = typeof row.encoding === 'string' ? row.encoding : 'text';
+  return {
+    system: wikiTextFromStored(String(row.system ?? ''), encoding),
+    prompt: wikiTextFromStored(String(row.prompt ?? ''), encoding),
+    maxTokens: Number(row.maxTokens),
+  };
 }
 
 /**
@@ -150,7 +176,7 @@ export async function claimWikiModelRequests(
       RETURNING r."id", r."job_id" AS "jobId", r."owner_id" AS "ownerId", r."space_id" AS "spaceId",
                 r."step", r."unit", r."attempt", r."attempts", r."priority", r."request",
                 r."request_sha256" AS "requestSha256", r."partial", r."lease_generation" AS "leaseGeneration"`;
-    return claimed.map((row) => ({ ...row, request: row.request as unknown as WikiModelRequestCall }));
+    return claimed.map((row) => ({ ...row, request: wikiModelRequestCallOf(row.request) }));
   });
 }
 
@@ -405,7 +431,7 @@ export async function enqueueWikiModelRequest(
                                       "request", "request_sha256", "state")
     VALUES (${input.id}::uuid, ${input.jobId}::uuid, ${input.ownerId}::uuid, ${input.spaceId}::uuid,
             ${input.step}, ${input.unit}, ${input.attempt ?? 1}, ${input.priority ?? 0},
-            ${JSON.stringify(input.request)}::jsonb, ${sha}, 'queued')
+            ${JSON.stringify(wikiModelRequestStored(input.request))}::jsonb, ${sha}, 'queued')
     ON CONFLICT ("job_id", "step", "unit", "attempt") DO NOTHING
     RETURNING "id"`;
   if (inserted.length > 0) return { id: inserted[0].id, inserted: true };

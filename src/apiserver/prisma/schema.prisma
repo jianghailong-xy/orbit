@@ -7587,6 +7587,9 @@ model WikiRepoFile {
   state String
   /// The text, for `found` and `cut`; empty otherwise. At most the file cap, so one row is one file.
   content String @default("")
+  /// How `content` reads back (0411, contract `repoOps.storedText`): `text` as it is, or `base64` — the text's
+  /// UTF-8 bytes, for a file with a U+0000 in it, which Postgres cannot keep in text.
+  contentEncoding String @default("text") @map("content_encoding")
   /// The file's size in bytes at the sha: the whole file's, even when only its head was answered.
   sizeBytes BigInt @default(0) @map("size_bytes")
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)

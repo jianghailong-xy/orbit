@@ -2127,7 +2127,13 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // `project_acceptance_*` object nor any of the six preserved triggers/functions is, and no function,
       // trigger, enum or type is created — so it is not another writer of the DONE fence. No INSERT,
       // UPDATE or DELETE: nothing is backfilled.
-      '0408_kimi_account'],
+      '0408_kimi_account',
+      // The read cache keeps a file byte for byte (0411): one TEXT NOT NULL DEFAULT 'text' on `wiki_repo_file`
+      // (`content_encoding`, `text` or `base64` for a file with a U+0000 in it), catalog-only as a constant default
+      // is, and one CHECK holding it to the two — `base64` only on a row with a text — added only when absent. No
+      // row is written, backfilled or deleted; no other table, and no function, trigger, type or index, is created,
+      // replaced or dropped; `task`, `project` and the six preserved objects are named nowhere.
+      '0411_wiki_repo_file_content_encoding'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
