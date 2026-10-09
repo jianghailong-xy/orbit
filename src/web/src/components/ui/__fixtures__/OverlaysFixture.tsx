@@ -1,8 +1,11 @@
 import { useRef, useState } from 'react';
 import { App as AntApp, Button as AntButton, ConfigProvider, Drawer as AntDrawer, Input as AntInput, Modal, Popconfirm, Select } from 'antd';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { BrowserRouter } from 'react-router-dom';
 import { ThemeProvider, useThemeMode } from '../../../lib/theme';
+import { useToast } from '../../../lib/toast';
 import { darkTheme, lightTheme } from '../../../theme';
+import { ToastViewport } from '../../ToastViewport';
 import { Button } from '../Button';
 import { Input } from '../Input';
 import { Dialog } from '../Dialog';
@@ -199,7 +202,37 @@ function Content() {
   </AntApp></ConfigProvider>;
 }
 
+// A card the way the providers, pools and runners pages build theirs: the app's .re-card size container,
+// its height set by its rows. Around such cards WebKit drops .app-view's scroll position when the
+// document's own scrollbar changes mode.
+function PageCard({ name }: { name: string }) {
+  return <div className="re-card">{Array.from({ length: 40 }, (_, i) => <p key={i}>{name}, row {i + 1}</p>)}</div>;
+}
+
+// The app's page frame (main.tsx, AppShell's DocView): html, body and #root are one viewport high and
+// the page scrolls inside .app-view, so the document itself never scrolls. A notice goes through
+// lib/toast to the app's ToastViewport and leaves the screen-reader live region at the end of <body>.
+function AppFrame() {
+  const { resolved } = useThemeMode();
+  const toast = useToast();
+  return <ConfigProvider theme={resolved === 'dark' ? darkTheme : lightTheme}><AntApp><BrowserRouter>
+    <div className="app-shell"><main className="app-main"><div className="app-view app-view--doc">
+      <h1>Orbit overlays in the app frame</h1><output data-testid="theme">{resolved}</output>
+      <PageCard name="Card above the overlays" />
+      <div className="overlays-fixture-actions">
+        <Button onClick={() => toast.success('Workspace saved')}>Show notice</Button>
+        <Button onClick={() => toast.destroy()}>Clear notifications</Button>
+      </div>
+      <Samples />
+      <PageCard name="Card below the overlays" />
+    </div></main></div>
+    <ToastViewport />
+  </BrowserRouter></AntApp></ConfigProvider>;
+}
+
 export function OverlaysFixture() {
   const [client] = useState(() => new QueryClient({ defaultOptions: { queries: { retry: false } } }));
-  return <QueryClientProvider client={client}><ThemeProvider><Content /></ThemeProvider></QueryClientProvider>;
+  // overlays.html?app-frame: the reference overlays inside the app's page frame.
+  const appFrame = new URLSearchParams(window.location.search).has('app-frame');
+  return <QueryClientProvider client={client}><ThemeProvider>{appFrame ? <AppFrame /> : <Content />}</ThemeProvider></QueryClientProvider>;
 }

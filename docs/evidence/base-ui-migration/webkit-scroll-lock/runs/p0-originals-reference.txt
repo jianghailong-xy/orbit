@@ -1,0 +1,390 @@
+[WebServer] (node:1244496) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+P0 expected screenshots: 88 P0.2 originals, 150 main drift references, 14 accepted migration differences.
+
+Running 112 tests using 1 worker
+
+(node:1244708) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-light-desktop/breakpoint-599-share.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-light-desktop/breakpoint-599-dialog.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-light-desktop/breakpoint-601-share.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-light-desktop/breakpoint-601-dialog.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-light-desktop/breakpoint-639-projects.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-light-desktop/breakpoint-639-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-light-desktop/breakpoint-641-projects.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-light-desktop/breakpoint-641-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-light-desktop/breakpoint-959-wiki.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-light-desktop/breakpoint-959-session.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-light-desktop/breakpoint-961-wiki.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-light-desktop/breakpoint-961-session.png, writing actual.
+  ✓    1 [chromium-light-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules (15.7s)
+  ✓    2 [chromium-light-desktop] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (6.8s)
+  ✓    3 [chromium-light-desktop] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-1: task share Escape restores focus (1.6s)
+  ✓    4 [chromium-light-desktop] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-2: task share Done restores focus (1.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-light-desktop/task-detail.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-light-desktop/task-action-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-light-desktop/task-action-focus.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-light-desktop/task-action-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-light-desktop/task-share-dialog.png, writing actual.
+  ✓    5 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › task (3.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-light-desktop/task-public-share.png, writing actual.
+  ✓    6 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › share (1.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-light-desktop/projects-list.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-light-desktop/projects-search-empty.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-light-desktop/project-overview.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-light-desktop/project-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-light-desktop/project-graph-fullscreen.png, writing actual.
+  ✓    7 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › projects (4.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-light-desktop/wiki-home.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-light-desktop/wiki-new-entry.png, writing actual.
+  ✓    8 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki (2.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-light-desktop/settings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-light-desktop/settings-saved.png, writing actual.
+  ✓    9 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › settings (1.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-light-desktop/profile.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-light-desktop/profile-validation.png, writing actual.
+  ✓   10 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › profile (1.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-light-desktop/session-idle.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-light-desktop/session-streaming.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-light-desktop/session-composer-focus.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-light-desktop/session-attachment-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-light-desktop/session-attachment-staged.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-light-desktop/notification-error.png, writing actual.
+  ✓   11 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › session (7.0s)
+  ✓   12 [chromium-light-desktop] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline (27.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-light-desktop/projects-loading.png, writing actual.
+  ✓   13 [chromium-light-desktop] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (1.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-light-desktop/projects-error.png, writing actual.
+  ✓   14 [chromium-light-desktop] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (3.8s)
+(node:1255591) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  -   15 [chromium-light-phone] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules
+  ✓   16 [chromium-light-phone] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (3.4s)
+  ✓   17 [chromium-light-phone] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-1: task share Escape restores focus (1.3s)
+  ✓   18 [chromium-light-phone] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-2: task share Done restores focus (1.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-light-phone/task-detail.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-light-phone/task-action-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-light-phone/task-action-focus.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-light-phone/task-action-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-light-phone/task-share-dialog.png, writing actual.
+  ✓   19 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › task (3.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-light-phone/task-public-share.png, writing actual.
+  ✓   20 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › share (819ms)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-light-phone/projects-list.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-light-phone/projects-search-empty.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-light-phone/project-overview.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-light-phone/project-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-light-phone/project-graph-fullscreen.png, writing actual.
+  ✓   21 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › projects (4.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-light-phone/wiki-home.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-light-phone/wiki-contents.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-light-phone/wiki-new-entry.png, writing actual.
+  ✓   22 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › wiki (2.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-light-phone/settings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-light-phone/settings-saved.png, writing actual.
+  ✓   23 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › settings (1.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-light-phone/profile.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-light-phone/profile-validation.png, writing actual.
+  ✓   24 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › profile (1.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-light-phone/session-idle.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-light-phone/session-streaming.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-light-phone/session-composer-focus.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-light-phone/session-attachment-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-light-phone/session-attachment-staged.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-light-phone/notification-error.png, writing actual.
+  ✓   25 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › session (6.0s)
+  -   26 [chromium-light-phone] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-light-phone/projects-loading.png, writing actual.
+  ✓   27 [chromium-light-phone] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (1.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-light-phone/projects-error.png, writing actual.
+  ✓   28 [chromium-light-phone] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (3.7s)
+(node:1260987) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-dark-desktop/breakpoint-599-share.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-dark-desktop/breakpoint-599-dialog.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-dark-desktop/breakpoint-601-share.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-dark-desktop/breakpoint-601-dialog.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-dark-desktop/breakpoint-639-projects.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-dark-desktop/breakpoint-639-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-dark-desktop/breakpoint-641-projects.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-dark-desktop/breakpoint-641-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-dark-desktop/breakpoint-959-wiki.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-dark-desktop/breakpoint-959-session.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-dark-desktop/breakpoint-961-wiki.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-dark-desktop/breakpoint-961-session.png, writing actual.
+  ✓   29 [chromium-dark-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules (13.4s)
+  ✓   30 [chromium-dark-desktop] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (3.1s)
+  ✓   31 [chromium-dark-desktop] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-1: task share Escape restores focus (1.2s)
+  ✓   32 [chromium-dark-desktop] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-2: task share Done restores focus (1.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-dark-desktop/task-detail.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-dark-desktop/task-action-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-dark-desktop/task-action-focus.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-dark-desktop/task-action-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-dark-desktop/task-share-dialog.png, writing actual.
+  ✓   33 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › task (3.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-dark-desktop/task-public-share.png, writing actual.
+  ✓   34 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › share (1.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-dark-desktop/projects-list.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-dark-desktop/projects-search-empty.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-dark-desktop/project-overview.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-dark-desktop/project-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-dark-desktop/project-graph-fullscreen.png, writing actual.
+  ✓   35 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › projects (4.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-dark-desktop/wiki-home.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-dark-desktop/wiki-new-entry.png, writing actual.
+  ✓   36 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki (2.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-dark-desktop/settings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-dark-desktop/settings-saved.png, writing actual.
+  ✓   37 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › settings (1.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-dark-desktop/profile.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-dark-desktop/profile-validation.png, writing actual.
+  ✓   38 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › profile (1.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-dark-desktop/session-idle.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-dark-desktop/session-streaming.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-dark-desktop/session-composer-focus.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-dark-desktop/session-attachment-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-dark-desktop/session-attachment-staged.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-dark-desktop/notification-error.png, writing actual.
+  ✓   39 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › session (6.5s)
+  -   40 [chromium-dark-desktop] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-dark-desktop/projects-loading.png, writing actual.
+  ✓   41 [chromium-dark-desktop] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (1.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-dark-desktop/projects-error.png, writing actual.
+  ✓   42 [chromium-dark-desktop] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (3.6s)
+(node:1268536) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  -   43 [chromium-dark-phone] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules
+  ✓   44 [chromium-dark-phone] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (3.2s)
+  ✓   45 [chromium-dark-phone] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-1: task share Escape restores focus (1.5s)
+  ✓   46 [chromium-dark-phone] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-2: task share Done restores focus (1.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-dark-phone/task-detail.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-dark-phone/task-action-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-dark-phone/task-action-focus.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-dark-phone/task-action-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-dark-phone/task-share-dialog.png, writing actual.
+  ✓   47 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › task (3.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-dark-phone/task-public-share.png, writing actual.
+  ✓   48 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › share (1.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-dark-phone/projects-list.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-dark-phone/projects-search-empty.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-dark-phone/project-overview.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-dark-phone/project-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-dark-phone/project-graph-fullscreen.png, writing actual.
+  ✓   49 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › projects (4.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-dark-phone/wiki-home.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-dark-phone/wiki-contents.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-dark-phone/wiki-new-entry.png, writing actual.
+  ✓   50 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › wiki (2.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-dark-phone/settings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-dark-phone/settings-saved.png, writing actual.
+  ✓   51 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › settings (1.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-dark-phone/profile.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-dark-phone/profile-validation.png, writing actual.
+  ✓   52 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › profile (1.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-dark-phone/session-idle.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-dark-phone/session-streaming.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-dark-phone/session-composer-focus.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-dark-phone/session-attachment-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-dark-phone/session-attachment-staged.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-dark-phone/notification-error.png, writing actual.
+  ✓   53 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › session (6.1s)
+  -   54 [chromium-dark-phone] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-dark-phone/projects-loading.png, writing actual.
+  ✓   55 [chromium-dark-phone] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (1.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/chromium-dark-phone/projects-error.png, writing actual.
+  ✓   56 [chromium-dark-phone] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (2.3s)
+(node:1273482) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-light-desktop/breakpoint-599-share.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-light-desktop/breakpoint-599-dialog.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-light-desktop/breakpoint-601-share.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-light-desktop/breakpoint-601-dialog.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-light-desktop/breakpoint-639-projects.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-light-desktop/breakpoint-639-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-light-desktop/breakpoint-641-projects.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-light-desktop/breakpoint-641-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-light-desktop/breakpoint-959-wiki.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-light-desktop/breakpoint-959-session.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-light-desktop/breakpoint-961-wiki.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-light-desktop/breakpoint-961-session.png, writing actual.
+  ✓   57 [webkit-light-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules (16.8s)
+  ✓   58 [webkit-light-desktop] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (4.8s)
+  ✓   59 [webkit-light-desktop] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-1: task share Escape restores focus (2.1s)
+  ✓   60 [webkit-light-desktop] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-2: task share Done restores focus (2.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-light-desktop/task-detail.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-light-desktop/task-action-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-light-desktop/task-action-focus.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-light-desktop/task-action-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-light-desktop/task-share-dialog.png, writing actual.
+  ✓   61 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › task (4.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-light-desktop/task-public-share.png, writing actual.
+  ✓   62 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › share (1.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-light-desktop/projects-list.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-light-desktop/projects-search-empty.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-light-desktop/project-overview.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-light-desktop/project-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-light-desktop/project-graph-fullscreen.png, writing actual.
+  ✓   63 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › projects (6.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-light-desktop/wiki-home.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-light-desktop/wiki-new-entry.png, writing actual.
+  ✓   64 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki (2.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-light-desktop/settings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-light-desktop/settings-saved.png, writing actual.
+  ✓   65 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › settings (1.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-light-desktop/profile.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-light-desktop/profile-validation.png, writing actual.
+  ✓   66 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › profile (1.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-light-desktop/session-idle.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-light-desktop/session-streaming.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-light-desktop/session-composer-focus.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-light-desktop/session-attachment-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-light-desktop/session-attachment-staged.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-light-desktop/notification-error.png, writing actual.
+  ✓   67 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › session (6.2s)
+  -   68 [webkit-light-desktop] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-light-desktop/projects-loading.png, writing actual.
+  ✓   69 [webkit-light-desktop] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (1.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-light-desktop/projects-error.png, writing actual.
+  ✓   70 [webkit-light-desktop] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (3.6s)
+(node:1283472) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  -   71 [webkit-light-phone] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules
+  ✓   72 [webkit-light-phone] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (3.2s)
+  ✓   73 [webkit-light-phone] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-1: task share Escape restores focus (1.7s)
+  ✓   74 [webkit-light-phone] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-2: task share Done restores focus (1.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-light-phone/task-detail.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-light-phone/task-action-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-light-phone/task-action-focus.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-light-phone/task-action-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-light-phone/task-share-dialog.png, writing actual.
+  ✓   75 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › task (4.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-light-phone/task-public-share.png, writing actual.
+  ✓   76 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › share (1.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-light-phone/projects-list.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-light-phone/projects-search-empty.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-light-phone/project-overview.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-light-phone/project-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-light-phone/project-graph-fullscreen.png, writing actual.
+  ✓   77 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › projects (4.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-light-phone/wiki-home.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-light-phone/wiki-contents.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-light-phone/wiki-new-entry.png, writing actual.
+  ✓   78 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › wiki (3.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-light-phone/settings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-light-phone/settings-saved.png, writing actual.
+  ✓   79 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › settings (2.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-light-phone/profile.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-light-phone/profile-validation.png, writing actual.
+  ✓   80 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › profile (1.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-light-phone/session-idle.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-light-phone/session-streaming.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-light-phone/session-composer-focus.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-light-phone/session-attachment-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-light-phone/session-attachment-staged.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-light-phone/notification-error.png, writing actual.
+  ✓   81 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › session (6.4s)
+  -   82 [webkit-light-phone] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-light-phone/projects-loading.png, writing actual.
+  ✓   83 [webkit-light-phone] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (1.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-light-phone/projects-error.png, writing actual.
+  ✓   84 [webkit-light-phone] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (3.9s)
+(node:1289131) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-dark-desktop/breakpoint-599-share.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-dark-desktop/breakpoint-599-dialog.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-dark-desktop/breakpoint-601-share.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-dark-desktop/breakpoint-601-dialog.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-dark-desktop/breakpoint-639-projects.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-dark-desktop/breakpoint-639-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-dark-desktop/breakpoint-641-projects.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-dark-desktop/breakpoint-641-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-dark-desktop/breakpoint-959-wiki.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-dark-desktop/breakpoint-959-session.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-dark-desktop/breakpoint-961-wiki.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-dark-desktop/breakpoint-961-session.png, writing actual.
+  ✓   85 [webkit-dark-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules (15.2s)
+  ✓   86 [webkit-dark-desktop] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (3.7s)
+  ✓   87 [webkit-dark-desktop] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-1: task share Escape restores focus (1.5s)
+  ✓   88 [webkit-dark-desktop] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-2: task share Done restores focus (1.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-dark-desktop/task-detail.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-dark-desktop/task-action-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-dark-desktop/task-action-focus.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-dark-desktop/task-action-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-dark-desktop/task-share-dialog.png, writing actual.
+  ✓   89 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › task (4.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-dark-desktop/task-public-share.png, writing actual.
+  ✓   90 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › share (1.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-dark-desktop/projects-list.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-dark-desktop/projects-search-empty.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-dark-desktop/project-overview.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-dark-desktop/project-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-dark-desktop/project-graph-fullscreen.png, writing actual.
+  ✓   91 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › projects (6.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-dark-desktop/wiki-home.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-dark-desktop/wiki-new-entry.png, writing actual.
+  ✓   92 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki (2.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-dark-desktop/settings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-dark-desktop/settings-saved.png, writing actual.
+  ✓   93 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › settings (1.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-dark-desktop/profile.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-dark-desktop/profile-validation.png, writing actual.
+  ✓   94 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › profile (2.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-dark-desktop/session-idle.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-dark-desktop/session-streaming.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-dark-desktop/session-composer-focus.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-dark-desktop/session-attachment-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-dark-desktop/session-attachment-staged.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-dark-desktop/notification-error.png, writing actual.
+  ✓   95 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › session (8.1s)
+  -   96 [webkit-dark-desktop] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-dark-desktop/projects-loading.png, writing actual.
+  ✓   97 [webkit-dark-desktop] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (1.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-dark-desktop/projects-error.png, writing actual.
+  ✓   98 [webkit-dark-desktop] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (4.1s)
+(node:1296122) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  -   99 [webkit-dark-phone] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules
+  ✓  100 [webkit-dark-phone] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (3.8s)
+  ✓  101 [webkit-dark-phone] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-1: task share Escape restores focus (2.2s)
+  ✓  102 [webkit-dark-phone] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-2: task share Done restores focus (1.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-dark-phone/task-detail.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-dark-phone/task-action-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-dark-phone/task-action-focus.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-dark-phone/task-action-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-dark-phone/task-share-dialog.png, writing actual.
+  ✓  103 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › task (3.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-dark-phone/task-public-share.png, writing actual.
+  ✓  104 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › share (1.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-dark-phone/projects-list.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-dark-phone/projects-search-empty.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-dark-phone/project-overview.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-dark-phone/project-graph.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-dark-phone/project-graph-fullscreen.png, writing actual.
+  ✓  105 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › projects (5.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-dark-phone/wiki-home.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-dark-phone/wiki-contents.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-dark-phone/wiki-new-entry.png, writing actual.
+  ✓  106 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › wiki (2.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-dark-phone/settings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-dark-phone/settings-saved.png, writing actual.
+  ✓  107 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › settings (1.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-dark-phone/profile.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-dark-phone/profile-validation.png, writing actual.
+  ✓  108 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › profile (1.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-dark-phone/session-idle.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-dark-phone/session-streaming.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-dark-phone/session-composer-focus.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-dark-phone/session-attachment-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-dark-phone/session-attachment-staged.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-dark-phone/notification-error.png, writing actual.
+  ✓  109 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › session (5.7s)
+  -  110 [webkit-dark-phone] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-dark-phone/projects-loading.png, writing actual.
+  ✓  111 [webkit-dark-phone] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (1.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/p0/f2-before-15b7b5609/snapshots/webkit-dark-phone/projects-error.png, writing actual.
+  ✓  112 [webkit-dark-phone] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (3.5s)
+
+  11 skipped
+  101 passed (6.5m)
+commit 15b7b56093139c7b502e6618e9700ef78c9cccba exit 0 start 2026-10-09T00:34:00Z end 2026-10-09T00:40:35Z screenshots 252 environment fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf
