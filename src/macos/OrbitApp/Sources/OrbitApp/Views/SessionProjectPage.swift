@@ -833,9 +833,11 @@ private struct ProjectMergeCardView: View {
         }
     }
 
-    /// D: why it cannot merge, and who has it — the coordinator, until the clock hands it over.
+    /// D: why it cannot merge, and who has it — the coordinator, until the clock hands it over. Once
+    /// the project's items have been read and none holds it, nobody does, and there is no press to
+    /// draw (`PromotionCards.holder`).
     @ViewBuilder private func blocked(_ view: ProjectPromotionView) -> some View {
-        let item = merge.promotionItems.first { $0.promotionId == view.promotionId }
+        let holder = PromotionCards.holder(of: view.promotionId, in: merge.openItems)
         header(PromotionCards.pageTitle(view), symbol: "exclamationmark.triangle.fill")
         Text(PromotionCards.blockedLine(view)).font(.orbitLabel)
         // Who is in front of it, when the project's own line is busy: the landing holding this
@@ -848,16 +850,26 @@ private struct ProjectMergeCardView: View {
             .font(.orbitMeta)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        HStack(spacing: 6) {
-            if PromotionCards.resolvingSpins(item) { ProgressView().controlSize(.mini) }
-            Text(PromotionCards.resolvingLine(item, now: now))
+        if let resolving = PromotionCards.resolvingLine(holder, now: now) {
+            HStack(spacing: 6) {
+                if PromotionCards.resolvingSpins(holder) { ProgressView().controlSize(.mini) }
+                Text(resolving)
+            }
+            .font(.orbitMeta.weight(.semibold))
+            .foregroundStyle(PromotionCards.resolvingIsYours(holder) ? Color.orange : Color.secondary)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 7)
+            .background(Color.secondary.opacity(0.12), in: Capsule())
         }
-        .font(.orbitMeta.weight(.semibold))
-        .foregroundStyle(item?.assignee == .owner ? Color.orange : Color.secondary)
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 7)
-        .background(Color.secondary.opacity(0.12), in: Capsule())
         HStack {
+            // The whole card, as the web strip's blocked card opens it: every row, and why.
+            Button { onDetails(view.promotionId) } label: {
+                HStack(spacing: 2) {
+                    Text(PromotionCards.details)
+                    Image(systemName: "chevron.right")
+                }
+            }
+            .buttonStyle(.borderless)
             Spacer()
             if let onCoordinator {
                 Button(action: onCoordinator) {
