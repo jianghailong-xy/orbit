@@ -434,13 +434,16 @@ class ComposerDeviceTest {
         awaitText("New session"); compose.onAllNodesWithText("New session")[0].performClick()
         compose.onNodeWithTag("composer-input").performTextInput("账户草稿")
         // Claude's accounts come first and Codex's second (A07-3, A07-10): the last of a label is Codex's, the first Claude's.
-        // Rows of the Provider section only: the Effort section above it has a "Default" of its own.
+        // Rows of the Provider section only: the Effort section above it has a "Default" of its own, drawn before the
+        // runner's accounts arrive.
+        fun inSection(label:String):List<Int> {
+            val provider=compose.onAllNodesWithText("Provider").fetchSemanticsNodes().firstOrNull()?.boundsInRoot?.top ?: return emptyList()
+            return compose.onAllNodesWithText(label).fetchSemanticsNodes().withIndex().filter { it.value.boundsInRoot.top>provider }.map { it.index }
+        }
         fun choose(label:String, current:String="fixture-model", first:Boolean=false) {
-            appClick(current); awaitText(label)
-            val provider=compose.onNodeWithText("Provider").fetchSemanticsNode().boundsInRoot.top
-            val rows=compose.onAllNodesWithText(label)
-            val inSection=rows.fetchSemanticsNodes().withIndex().filter { it.value.boundsInRoot.top>provider }.map { it.index }
-            rows[if (first) inSection.first() else inSection.last()].performScrollTo().performClick()
+            appClick(current); compose.waitUntil(15000) { inSection(label).isNotEmpty() }
+            val section=inSection(label)
+            compose.onAllNodesWithText(label)[if (first) section.first() else section.last()].performScrollTo().performClick()
             compose.onNodeWithText("Close").performClick()
         }
         fun quota(label:String) {
@@ -805,7 +808,10 @@ class ComposerDeviceTest {
             for(i in 0 until node.childCount)visit(node.getChild(i),depth+1)
         }
         visit(systemRoot(),0);File(evidence,"$name-ui.txt").writeText(tree.toString())
-        instrument.uiAutomation.takeScreenshot().let { b->File(evidence,"$name.png").outputStream().use { b.compress(Bitmap.CompressFormat.PNG,100,it) };b.recycle() }
+        // Under host load the system can hand back no screenshot at all: try again, and count one still missing rather than fail.
+        val shot=(1..3).firstNotNullOfOrNull { instrument.uiAutomation.takeScreenshot() ?: run { SystemClock.sleep(1000); null } }
+        if (shot==null) { File(evidence,"missing-captures.txt").appendText("$name\n"); return }
+        File(evidence,"$name.png").outputStream().use { shot.compress(Bitmap.CompressFormat.PNG,100,it) };shot.recycle()
     }
     private fun journey(name:String,block:()->Unit) {
         instrument.sendStatus(0,Bundle().apply { putString("a07_pid",Process.myPid().toString()) })
