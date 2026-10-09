@@ -287,12 +287,14 @@ const HTTP_RUNNER = { id: AT_BUCKET[50], ownerId: randomUUID() };
     RunnerAuthGuard,
     {
       provide: PrismaService,
-      // The one read RunnerAuthGuard makes: the runner whose token hashes to the presented one.
+      // The two reads RunnerAuthGuard makes: the runner whose token hashes to the presented one, and
+      // its managed runner mapping — none: a self-managed runner, whose credential is bound to nothing.
       useValue: {
         runner: {
           findFirst: async ({ where }: { where: { tokenHash: string } }) =>
             where.tokenHash === sha256(HTTP_TOKEN) ? { ...HTTP_RUNNER, owner: { disabledAt: null } } : null,
         },
+        managedRunner: { findUnique: async () => null },
       },
     },
   ],

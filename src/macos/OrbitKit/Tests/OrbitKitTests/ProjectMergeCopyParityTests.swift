@@ -63,6 +63,11 @@ final class ProjectMergeCopyParityTests: XCTestCase {
             "`✓ Merged into ${shortRef(promotion.upstreamRef)}`",
             "`Merged into ${shortRef(promotion.upstreamRef)}`",
             "'the checks on the combined tree did not pass'",
+            // Why a blocked merge is blocked, when the job said so (0409).
+            "`nothing to merge — ${shortRef(promotion.sourceRef)} is already on ${shortRef(promotion.upstreamRef)}`",
+            "'the merge stopped on an error — no check failed'",
+            "'nothing to merge'",
+            "'check errored'",
             "'No checks recorded'",
             "'Checks timed out'",
             "'✓ Checks passed'",
@@ -79,5 +84,13 @@ final class ProjectMergeCopyParityTests: XCTestCase {
         XCTAssertEqual(PromotionCards.eventLine(asking).text, "Merge into main is waiting for you")
         XCTAssertEqual(PromotionCards.previewChecks(asking), "No checks recorded")
         XCTAssertEqual(PromotionCards.upstreamLine(asking), "no conflicts")
+        let landed = ProjectPromotionView(promotionId: "p", state: .blocked, sourceRef: "refs/heads/b", sourceSha: "",
+                                          upstreamRef: "refs/heads/main", blockedReason: "ALREADY_LANDED")
+        XCTAssertEqual(PromotionCards.blockedLine(landed), "nothing to merge — b is already on main")
+        XCTAssertEqual(PromotionCards.blockedReason(landed), "nothing to merge")
+        let errored = ProjectPromotionView(promotionId: "p", state: .blocked, sourceRef: "b", sourceSha: "",
+                                           upstreamRef: "refs/heads/main", blockedReason: "ERROR")
+        XCTAssertEqual(PromotionCards.blockedLine(errored), "the merge stopped on an error — no check failed")
+        XCTAssertEqual(PromotionCards.blockedReason(errored), "check errored")
     }
 }

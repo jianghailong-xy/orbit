@@ -10,10 +10,10 @@ import { encodeId } from '../lib/idCodec';
 import { formatResetTime, type ProviderPool } from '../lib/providerPools';
 import type { SharedPool } from '../lib/sharedPools';
 import { ProviderPoolPage } from './ProviderPoolPage';
-import { ProvidersPage } from './ProvidersPage';
+import { InfrastructurePage } from './InfrastructurePage';
 
 /**
- * A Codex pool of one's own ChatGPT account (migration 0323) on /providers and on its own page, mounted
+ * A Codex pool of one's own ChatGPT account (migration 0323) on /infrastructure and on its own page, mounted
  * for real against a fake API: one row per account it holds — its email, plan and `…AB12`, where it
  * stands, each window's quota and when it resets, and NEXT on the account a session would run on — and
  * "Add account", which asks first what kind of account (03-1; ProviderPoolPage.whoCanUseIt.test.tsx), then
@@ -181,7 +181,7 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
           <MemoryRouter initialEntries={[at]}>
             <Probe />
             <Routes>
-              <Route path="/providers" element={<ProvidersPage />} />
+              <Route path="/infrastructure" element={<InfrastructurePage />} />
               <Route path="/providers/pools/:id" element={<ProviderPoolPage />} />
             </Routes>
           </MemoryRouter>
@@ -237,6 +237,8 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
 
   beforeEach(() => {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    // Going back from a pool's page brings the page's pools into view (#pools); jsdom has no scrolling.
+    Element.prototype.scrollIntoView = vi.fn();
     path = '';
     state = null;
     pools = [codexPool(account())];
@@ -288,7 +290,7 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
   });
 
   it('heads its card with Codex and "Just me", and gives the account a row: its email, plan, status and each window', async () => {
-    await mount('/providers');
+    await mount('/infrastructure');
     const card = container.querySelector<HTMLElement>('.pool-sec .pool-card')!;
     const head = card.querySelector<HTMLElement>('.re-head')!;
     expect(head.querySelector('.re-runner')?.textContent).toBe('My Codex');
@@ -314,7 +316,7 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
 
   it('says so when no quota has been read yet — the account runs all the same', async () => {
     pools = [codexPool(account({ usage: null, usageUnavailable: 'no quota has been read for this account yet' }))];
-    await mount('/providers');
+    await mount('/infrastructure');
     expect(row().querySelector('.pool-status')?.textContent).toBe('Available');
     expect(row().querySelector('.pool-login-quota')?.textContent).toBe('No quota reported');
   });
@@ -331,7 +333,7 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
         }),
       ),
     ];
-    await mount('/providers');
+    await mount('/infrastructure');
     expect(row().querySelector('.pool-status')?.textContent).toBe(`Spent · resets ${formatResetTime(IN_AN_HOUR)}`);
     expect(container.querySelector('.pool-gauge')?.textContent).toBe(`All spent · resets ${formatResetTime(IN_AN_HOUR)}`);
   });
@@ -348,7 +350,7 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
         }),
       ),
     ];
-    await mount('/providers');
+    await mount('/infrastructure');
     expect(row().querySelector('.pool-status')?.textContent).toBe(`Spent · resets ${formatResetTime(IN_THREE_DAYS)}`);
     expect(container.querySelector('.pool-gauge')?.textContent).toBe(
       `All spent · resets ${formatResetTime(IN_THREE_DAYS)}`,
@@ -368,7 +370,7 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
         }),
       ),
     ];
-    await mount('/providers');
+    await mount('/infrastructure');
     const gauge = container.querySelector<HTMLElement>('.pool-sec .pool-card .re-head .pool-gauge')!;
     expect(gauge.querySelector('.pool-gauge-name')?.textContent).toBe('lin@example.com');
     expect(gauge.querySelector('.pool-gauge-pct')?.textContent).toBe('Weekly 97%');
@@ -402,7 +404,7 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
         }),
       ),
     ];
-    await mount('/providers');
+    await mount('/infrastructure');
     const gauge = container.querySelector<HTMLElement>('.pool-sec .pool-card .re-head .pool-gauge')!;
     expect(gauge.querySelector('.pool-gauge-pct')?.textContent).toBe('5h 64%');
     expect(gauge.querySelector('.pool-gauge-pct')?.classList.contains('near-limit')).toBe(false);
@@ -412,7 +414,7 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
 
   it('signs an account OpenAI signed out in again from its card, as that account', async () => {
     pools = [codexPool(account({ state: 'SIGNED_OUT', lastError: 'refresh_token_reused' }))];
-    await mount('/providers');
+    await mount('/infrastructure');
     expect(row().querySelector('.pool-status')?.textContent).toBe('Signed out');
     expect(row().querySelector('.pool-why')?.textContent).toBe(
       'OpenAI signed this account out — sign in again to put it back in the pool.',
@@ -466,7 +468,7 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
     expect(nameOf(del)).toBe('Delete My Codex?');
     await click(button('Delete', del));
     expect(sent[1]).toEqual({ method: 'DELETE', path: AT, body: undefined });
-    expect(path).toBe('/providers');
+    expect(path).toBe('/infrastructure');
   });
 
   it('puts an account in with the device flow: the notice, the code and its page, then the account', async () => {
@@ -638,7 +640,7 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
         hl(),
       ),
     ];
-    await mount('/providers');
+    await mount('/infrastructure');
     const card = container.querySelector<HTMLElement>('.pool-sec .pool-card')!;
     const head = card.querySelector<HTMLElement>('.re-head')!;
     // The card says who can use it and how many of its accounts can run.
@@ -734,7 +736,7 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
 
   it('makes a "Just me" Codex pool one of these, and opens it straight to signing in', async () => {
     pools = [];
-    await mount('/providers');
+    await mount('/infrastructure');
     await click(button('New pool'));
     const modal = dialog()!;
     expect(modal.querySelector('[role="radiogroup"][aria-label="Engine"] [role="radio"][aria-checked="true"]')?.textContent?.trim()).toBe('Codex');

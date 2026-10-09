@@ -6,6 +6,7 @@ import type {
   IntegrationCheckResult,
   ProjectLandTask,
   ProjectOpenItemRow,
+  ProjectOpenItemsView,
   ProjectPromotionView,
 } from '@orbit/shared';
 import { CardActionButton, CardActions } from './CardAction';
@@ -475,7 +476,15 @@ function BlockedRows({
   return (
     <>
       <Row k="Why">
-        {promotion.conflicts.length > 0 ? (
+        {/* The job's own reason first (0409): nothing to merge, and an error before any check, both
+            leave no checks and no conflicts behind, which read as a build that failed. */}
+        {promotion.blockedReason === 'ALREADY_LANDED' ? (
+          <span className="promotion-bad">
+            {`Nothing to merge — ${shortRef(promotion.sourceRef)} is already on ${upstream}`}
+          </span>
+        ) : promotion.blockedReason === 'ERROR' ? (
+          <span className="promotion-bad">The merge stopped on an error — no check failed</span>
+        ) : promotion.conflicts.length > 0 ? (
           <>
             <span className="promotion-bad">{`${plural(promotion.conflicts.length, 'file')} conflict`}</span>
             {` with ${upstream} after syncing: `}
@@ -515,10 +524,14 @@ function BlockedRows({
   );
 }
 
-/** State D's `Why` row in words, for a chat about the candidate: the same three answers, in the
- *  same order, that `BlockedRows` draws. */
+/** State D's `Why` row in words, for a chat about the candidate: the same answers, in the same
+ *  order, that `BlockedRows` draws. */
 function blockedWhy(promotion: ProjectPromotionView): string {
   const upstream = shortRef(promotion.upstreamRef);
+  if (promotion.blockedReason === 'ALREADY_LANDED') {
+    return `nothing to merge — ${shortRef(promotion.sourceRef)} is already on ${upstream}`;
+  }
+  if (promotion.blockedReason === 'ERROR') return 'the merge stopped on an error — no check failed';
   if (promotion.conflicts.length > 0) {
     return `${plural(promotion.conflicts.length, 'file')} conflict with ${upstream} after syncing: `
       + promotion.conflicts.join(', ');
@@ -583,18 +596,35 @@ export function promotionChatContext({
 }
 
 /**
+ * The exception item holding a candidate, off the project's open items: `undefined` while that read
+ * has not come back, `null` when it has and no item names the candidate — nobody holds it.
+ */
+export function promotionItem(
+  items: Pick<ProjectOpenItemsView, 'needsYou' | 'withCoordinator'> | undefined,
+  promotionId: string,
+): ProjectOpenItemRow | null | undefined {
+  if (!items) return undefined;
+  return [...(items.needsYou ?? []), ...(items.withCoordinator ?? [])]
+    .find((row) => row.promotionId === promotionId) ?? null;
+}
+
+/**
  * State D's press: who has the branch and how long they have had it, which is the sentence the
  * body's `Who` row used to carry, and whether the mark over it turns.
  *
  * The mark is `.promotion-spin`, the card's one moving part, and it says somebody else is working
  * on the branch — so it is drawn over the coordinator's sentence and not over the reader's own,
- * which is waiting on them rather than on anybody. A card whose item has not been read says who
- * state D means and stops, exactly as the row did without one: the wait is the item's to know.
+ * which is waiting on them rather than on anybody. A card whose item has not been read
+ * (`undefined`) says who state D means and stops, exactly as the row did without one: the wait is
+ * the item's to know. One whose project's items were read with none holding it (`null`) has
+ * nobody to name, and has no press: on 2026-10-09 it said "Coordinator is resolving it", mark
+ * turning, about work the coordinator had closed as already on main.
  */
 export function resolvingPress(
-  item: ProjectOpenItemRow | null,
+  item: ProjectOpenItemRow | null | undefined,
   now: number,
-): { label: string; spinning: boolean } {
+): { label: string; spinning: boolean } | null {
+  if (item === null) return null;
   const waited = item ? formatSpan(now - Date.parse(item.waitingSince)) : null;
   if (item && item.assignee !== 'COORDINATOR') {
     return { label: `${IT_IS_YOURS}${waited ? ` · waiting ${waited}` : ''}`, spinning: false };
@@ -659,8 +689,9 @@ export function ProjectPromotionCard({
 }: {
   projectId: string;
   promotion: ProjectPromotionView;
-  /** The exception item holding a BLOCKED candidate, when one has been filed. */
-  item: ProjectOpenItemRow | null;
+  /** The exception item holding a BLOCKED candidate (`promotionItem`): undefined while the
+   *  project's items have not been read, null when they have and none holds it. */
+  item: ProjectOpenItemRow | null | undefined;
   /** The project's current landings, for the row that says what is in front of a blocked candidate
    *  (`promotionBlockedBy`). Null where the host has not read them. */
   landings?: readonly ProjectLandTask[] | null;
@@ -720,7 +751,7 @@ export function ProjectPromotionCard({
   const coordinator =
     chat?.sessionId ?? item?.delivery.sessionId ?? project?.coordinatorSessionId ?? null;
   const chatRefusal = chat?.refusal ?? (!onChat && !coordinator ? 'NO_COORDINATOR' : null);
-  const chatSubject: CoordinatorChatSubject = { kind: 'promotion', promotion, item };
+  const chatSubject: CoordinatorChatSubject = { kind: 'promotion', promotion, item: item ?? null };
   const chatAbout = (): void => {
     if (chatRefusal != null) return;
     setReviewOpen(false);
@@ -751,7 +782,7 @@ export function ProjectPromotionCard({
         ) : merging ? (
           <MergingRows promotion={promotion} now={now} />
         ) : blocked ? (
-          <BlockedRows promotion={promotion} item={item} landings={landings} now={now} />
+          <BlockedRows promotion={promotion} item={item ?? null} landings={landings} now={now} />
         ) : (
           <ReadyRows promotion={promotion} project={project} now={now} />
         )}
@@ -772,33 +803,36 @@ export function ProjectPromotionCard({
             blocked && chatRefusal != null ? ' has-chat-refusal' : ''
           }`}
         >
-          <CardActionButton
-            tone="primary"
-            // The one rule `CardAction` exists for: a press that the door would refuse — a merge
-            // while the tree is blocked, or one already under way — is disabled, never lit. A
-            // blocked one is disabled AND says who has the branch instead, so a grey button reads
-            // as a state rather than as a refusal (`resolvingPress`).
-            disabled={merging || blocked || decide.isPending}
-            onClick={() => decide.mutate('confirm')}
-          >
-            {merging ? (
-              promotion.execution?.state === 'QUEUED' ? 'Queued'
-                : promotion.execution?.state !== 'RUNNING' ? 'Confirmed'
-                  : promotion.execution.phase === 'CHECK' ? 'Re-checking…' : MERGING
-            ) : blocked ? (
-              <>
-                {resolving.spinning ? (
-                  <span className="promotion-spin" aria-hidden="true" />
-                ) : null}
-                {resolving.label}
-              </>
-            ) : (
-              <>
-                {MERGE_TO_MAIN}
-                {keys && <span className="approval-kbd">{SHORTCUT_HINT}</span>}
-              </>
-            )}
-          </CardActionButton>
+          {/* A blocked candidate nobody holds has nobody to name, so it has no press at all. */}
+          {blocked && resolving === null ? null : (
+            <CardActionButton
+              tone="primary"
+              // The one rule `CardAction` exists for: a press that the door would refuse — a merge
+              // while the tree is blocked, or one already under way — is disabled, never lit. A
+              // blocked one is disabled AND says who has the branch instead, so a grey button reads
+              // as a state rather than as a refusal (`resolvingPress`).
+              disabled={merging || blocked || decide.isPending}
+              onClick={() => decide.mutate('confirm')}
+            >
+              {merging ? (
+                promotion.execution?.state === 'QUEUED' ? 'Queued'
+                  : promotion.execution?.state !== 'RUNNING' ? 'Confirmed'
+                    : promotion.execution.phase === 'CHECK' ? 'Re-checking…' : MERGING
+              ) : blocked && resolving ? (
+                <>
+                  {resolving.spinning ? (
+                    <span className="promotion-spin" aria-hidden="true" />
+                  ) : null}
+                  {resolving.label}
+                </>
+              ) : (
+                <>
+                  {MERGE_TO_MAIN}
+                  {keys && <span className="approval-kbd">{SHORTCUT_HINT}</span>}
+                </>
+              )}
+            </CardActionButton>
+          )}
           {merging ? (
             <CardActionButton disabled={decide.isPending || promotion.execution?.phase === 'PUSH'} onClick={() => decide.mutate('cancel')}>
               {CANCEL_MERGE}
@@ -929,12 +963,11 @@ export function ProjectPromotion({
   // A candidate with a moment is drawn by the transcript, and one whose stamp nothing can read
   // stays here rather than going nowhere (`promotionRecordMoment`).
   if (!drawRecords && promotionRecordMoment(current) !== null) return null;
-  const rows = [...(items.data?.needsYou ?? []), ...(items.data?.withCoordinator ?? [])];
   return (
     <ProjectPromotionCard
       projectId={projectId}
       promotion={current}
-      item={rows.find((row) => row.promotionId === current.promotionId) ?? null}
+      item={promotionItem(items.data, current.promotionId)}
       project={project.data ?? null}
       landings={integration.data?.landTasks ?? null}
       now={now}

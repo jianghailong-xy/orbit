@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
 import { ConflictException, Injectable, Logger } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, type ManagedRunnerManagementState } from '@prisma/client';
 import { EventEmitter } from 'events';
 import {
   AgentProvider,
@@ -95,6 +95,16 @@ import {
   wikiMaintenanceSessionSql,
   withWikiMaintenanceRun,
 } from '../wiki/wiki-maintenance-session';
+import { managedRunnerInstanceClaimable, type ManagedRunnerInstance } from '../managed-runners/managed-runner-instance';
+
+/** The runner asking for work, as the claim route knows it. */
+export interface ClaimingRunner {
+  id: string;
+  supportedProviders?: readonly AgentProvider[];
+  dshUnavailable?: string | null;
+  /** The managed runner instance the runner guard authorized; absent for a self-managed runner. */
+  managedInstance?: ManagedRunnerInstance;
+}
 
 /**
  * Session claim queue backed by the `Session` table. A runner long-polls for the
@@ -148,7 +158,7 @@ export class QueueService {
    * minutes — until an unrelated failed claim made the new process reconcile.
    */
   async claimSessionForRunner(
-    runner: { id: string; supportedProviders?: readonly AgentProvider[]; dshUnavailable?: string | null },
+    runner: ClaimingRunner,
     waitMs = 0,
     supportsTerminalHandoff = false,
     supportsSourcePin = false,
@@ -265,8 +275,20 @@ export class QueueService {
     return blocked;
   }
 
+  /** The mapping row under FOR SHARE, and whether `instance` may still be handed work. */
+  private async managedInstanceClaimable(tx: Prisma.TransactionClient, instance: ManagedRunnerInstance): Promise<boolean> {
+    const [mapping] = await tx.$queryRaw<Array<{
+      id: string;
+      generation: number;
+      podUid: string | null;
+      managementState: ManagedRunnerManagementState;
+    }>>`SELECT id::text AS id, generation, pod_uid AS "podUid", management_state::text AS "managementState"
+        FROM managed_runner WHERE id = ${instance.mappingId}::uuid FOR SHARE`;
+    return managedRunnerInstanceClaimable(mapping ?? null, instance);
+  }
+
   private async trySessionClaim(
-    runner: { id: string; supportedProviders?: readonly AgentProvider[]; dshUnavailable?: string | null },
+    runner: ClaimingRunner,
     supportsTerminalHandoff: boolean,
     supportsSourcePin: boolean,
     supportsWikiMaintenance: boolean,
@@ -309,6 +331,11 @@ export class QueueService {
         // Asked again here, after the waits for a connection and for the lock above (up to 20s
         // under a busy pool): the runner may have hung up during them.
         if (hungUp?.aborted) return [];
+        // A managed runner is handed work only while the instance that asked is still the one the
+        // manager authorizes, and not draining (managed-runner-instance.ts). The guard answered when
+        // the long poll began; this answers at the claim itself. FOR SHARE: a fencing or generation
+        // advance that committed first is seen here, and one that comes later waits for this claim.
+        if (runner.managedInstance && !(await this.managedInstanceClaimable(tx, runner.managedInstance))) return [];
         // Prisma.sql rather than a bare tagged template so the cap fragments below are the
         // SAME SQL the session list uses to explain a queued row. Written twice they drift,
         // and a UI that names the wrong gate is worse than one that names none.

@@ -593,6 +593,11 @@ public struct ProjectPromotionView: Codable, Equatable, Sendable {
     public let tasks: [PromotionTask]
     public let checks: [IntegrationCheckResult]
     public let conflicts: [String]
+    /// Why a BLOCKED candidate is blocked, as the job that blocked it answered (migration 0409):
+    /// `ALREADY_LANDED`, `CHECK_FAILED`, `CONFLICT` or `ERROR`. Nil on a candidate blocked before the
+    /// reason was recorded, on one that is not blocked, and from a server older than the field —
+    /// all of which are read off `checks` and `conflicts` as before (`@orbit/shared`'s field).
+    public let blockedReason: String?
     /// `MERGE_COMMIT` for a project branch, `FAST_FORWARD` for a single task's branch (M6).
     public let landsAs: String?
     public let askedAt: String?
@@ -638,7 +643,7 @@ public struct ProjectPromotionView: Codable, Equatable, Sendable {
     public init(promotionId: String, state: PromotionState, sourceRef: String, sourceSha: String,
                 upstreamRef: String, commitsAhead: Int? = nil, filesChanged: Int? = nil,
                 taskIds: [String] = [], tasks: [PromotionTask] = [], checks: [IntegrationCheckResult] = [],
-                conflicts: [String] = [], landsAs: String? = "MERGE_COMMIT",
+                conflicts: [String] = [], blockedReason: String? = nil, landsAs: String? = "MERGE_COMMIT",
                 askedAt: String? = nil, recheckedAt: String? = nil, decidedAt: String? = nil,
                 merged: Merged? = nil, execution: Execution? = nil) {
         self.promotionId = promotionId
@@ -652,6 +657,7 @@ public struct ProjectPromotionView: Codable, Equatable, Sendable {
         self.tasks = tasks
         self.checks = checks
         self.conflicts = conflicts
+        self.blockedReason = blockedReason
         self.landsAs = landsAs
         self.askedAt = askedAt
         self.recheckedAt = recheckedAt
@@ -673,6 +679,7 @@ public struct ProjectPromotionView: Codable, Equatable, Sendable {
         tasks = try c.decodeIfPresent([PromotionTask].self, forKey: .tasks) ?? []
         checks = try c.decodeIfPresent([IntegrationCheckResult].self, forKey: .checks) ?? []
         conflicts = try c.decodeIfPresent([String].self, forKey: .conflicts) ?? []
+        blockedReason = try c.decodeIfPresent(String.self, forKey: .blockedReason)
         landsAs = try c.decodeIfPresent(String.self, forKey: .landsAs)
         askedAt = try c.decodeIfPresent(String.self, forKey: .askedAt)
         recheckedAt = try c.decodeIfPresent(String.self, forKey: .recheckedAt)

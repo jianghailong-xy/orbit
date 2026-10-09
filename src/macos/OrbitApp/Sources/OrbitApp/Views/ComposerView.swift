@@ -696,11 +696,12 @@ struct ComposerView: View {
                         if !headsSection {
                             Button {
                                 // Picking a blocked row isn't a switch — it's a request for the
-                                // sign-in that would make it one, so go to that runner's Engines
-                                // section rather than doing nothing.
+                                // sign-in that would make it one, so go to that engine's page on the
+                                // runner rather than doing nothing.
                                 if fixable {
-                                    if let rid = console.runnerID, let url = console.webFixURL(engine: choice.fixEngine ?? "", runnerID: rid) { openURL(url) }
-                                    else if let rid = console.runnerID { app.route(to: .runner(rid)) }
+                                    let engine = choice.fixEngine ?? ""
+                                    if let url = console.webFixURL(engine: engine) { openURL(url) }
+                                    else if let rid = console.runnerID { app.openRunnerEngine(rid, engine: engine) }
                                 } else if !blocked {
                                     Task { await console.selectProvider(choice.slug) }
                                 }

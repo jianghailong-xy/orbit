@@ -7,19 +7,41 @@ import { MODEL_UNAVAILABLE, type ManagedRunnerReason } from '@orbit/shared';
 import { generateToken, sha256 } from '../common/crypto.util';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import type { PrismaService } from '../prisma/prisma.service';
-import { KubeApiError, isRetryableKubeError, type ManagedKubeClient, type PersistentVolumeClaim, type Pod, type Secret } from './kube-client';
+import {
+  KubeApiError,
+  isRetryableKubeError,
+  type ManagedKubeClient,
+  type PersistentVolume,
+  type PersistentVolumeClaim,
+  type Pod,
+  type Secret,
+} from './kube-client';
+import { MANAGED_ADMISSION_DENIAL_MARKER } from './managed-runner-admission';
+import {
+  observedStop,
+  readFencingReceipt,
+  stopProofFor,
+  type ManagedRunnerPredecessor,
+  type ManagedRunnerStopProof,
+} from './managed-runner-fencing';
 import type { ManagedRunnerProfile } from './managed-runner-profile';
 import {
+  OWNER_ANNOTATION,
+  RUNNER_ANNOTATION,
   bootstrapCredentialOf,
   buildManagedPod,
   buildManagedPvc,
   buildManagedSecret,
+  managedAdmissionProbeName,
+  managedFencingReceiptName,
   managedPodName,
   managedSecretName,
   podIdentityProblem,
+  podStopConfirmed,
   podTerminated,
   pvIdentityProblem,
   pvcIdentityProblem,
+  secretGeneration,
   secretIdentityProblem,
   type ManagedRunnerIdentity,
 } from './managed-runner-resources';
@@ -38,14 +60,22 @@ import { managedRuntimeSupply, type ManagedSupplyRunner } from './managed-runner
  * generation, until the runner row has a fresh heartbeat reporting a runtime installed and signed
  * in — the one READY records as `initialProvider`; without one it reports MODEL_UNAVAILABLE) →
  * READY; and FAILED, with a structured cause, when the attempt budget is spent or what the cluster
- * holds is not what the mapping recorded. It never deletes a PVC, a Secret, a runner row or a
- * workspace. The only object it deletes is a Pod that has already terminated, and only when an
- * explicit retry asked for a fresh start, by UID.
+ * holds is not what the mapping recorded. It never deletes a PVC, a runner row or a workspace. The
+ * only objects it deletes, always by UID, are a Pod the kubelet reported stopped, when an explicit
+ * retry asked for a fresh start, and the bootstrap Secret of a generation the gate has retired.
  *
- * Left to the work that follows, at the places marked below: capacity admission (WAITING_CAPACITY),
- * sleep/wake/drain, deletion, and the single-writer gate — replacing a predecessor Pod needs proof
- * that it stopped, or a fencing receipt, before the generation may advance. Until that gate exists
- * a vanished or replaced predecessor leaves the mapping FAILED with the disk kept.
+ * The single-writer gate (docs/managed-runner-design.md, "Single Pod and single writer protection")
+ * is `replacePredecessor`: generation N+1 — a new credential, a new Secret, a new Pod — is issued only
+ * after the recorded instance of generation N is proven stopped. Proof is the kubelet's report that
+ * every container of that Pod UID stopped, or an operator's fencing receipt bound to that instance
+ * and volume (managed-runner-fencing.ts); either way the Pod object must be gone and no
+ * VolumeAttachment may hold the volume. A Pod that vanished or was replaced unobserved, a stale
+ * heartbeat or an expired lease is not proof: the mapping goes FENCING, its predecessor's credential
+ * stops working at once, its disk is kept, and it waits for the proof. No Pod is created at all
+ * until a dry run shows the admission guard refusing one it must refuse.
+ *
+ * Left to the work that follows: capacity admission (WAITING_CAPACITY), sleep/wake/drain and
+ * deletion.
  */
 
 /** Where a pass got to. */
@@ -60,6 +90,8 @@ export type ReconcileOutcome =
   | 'BACKOFF'
   | 'READY'
   | 'FAILED'
+  /** The recorded instance's stop is not proven: nothing replaces it until it is. */
+  | 'FENCING'
   /** A state this version does not drive (sleep, deletion, capacity wait), or a non-RUNNING desire. */
   | 'IDLE'
   | 'NOT_FOUND';
@@ -111,8 +143,28 @@ const REASONS: Record<string, { message: string; retryable: boolean }> = {
   SECRET_MISSING: { message: "The runner's bootstrap credential is gone while an instance exists. No new credential is issued under it; an operator has to review it.", retryable: false },
   POD_CONFLICT: { message: "An instance under this runner's name is not the expected one. An operator has to review it.", retryable: false },
   PREDECESSOR_STOP_UNPROVEN: {
-    message: 'The previous runner instance is gone or was replaced, and its stop is not proven, so no new instance is started and the data volume is kept. An operator has to confirm the stop.',
+    message: 'The previous runner instance is gone, and nothing proves it stopped, so no new instance is started and the data volume is kept. It waits for proof that it stopped or for an operator’s fencing receipt.',
     retryable: false,
+  },
+  POD_REPLACED: {
+    message: 'An instance this runner did not authorize holds its name, so no new instance is started and the data volume is kept. It waits for proof that the previous one stopped or for an operator’s fencing receipt.',
+    retryable: false,
+  },
+  FENCING_RECEIPT_INVALID: {
+    message: 'A fencing receipt was found, but it is incomplete or names another instance or volume, so it was not accepted. An operator has to correct it.',
+    retryable: false,
+  },
+  VOLUME_STILL_ATTACHED: {
+    message: 'The previous instance has stopped and its data volume is still detaching. The next instance starts once it is detached.',
+    retryable: false,
+  },
+  ADMISSION_GUARD_MISSING: {
+    message: 'The single-Pod admission guard is not in force in this environment, so no instance is started. An operator has to install it; then it can be retried.',
+    retryable: true,
+  },
+  ADMISSION_GUARD_UNVERIFIED: {
+    message: 'Whether the single-Pod admission guard is in force could not be established, so no instance is started. An operator has to check it; then it can be retried.',
+    retryable: true,
   },
 };
 
@@ -124,7 +176,7 @@ export function managedRunnerReason(code: string): ManagedRunnerReason {
 /** What a step decided: stop the pass with an outcome, or go on from the row it committed. */
 type Step = { done: ReconcileOutcome } | { next: ManagedRunner };
 
-const ACTIVE_STATES = ['REQUESTED', 'PROVISIONING', 'STARTING', 'READY'] as const;
+const ACTIVE_STATES = ['REQUESTED', 'PROVISIONING', 'STARTING', 'READY', 'FENCING'] as const;
 /** A pass takes at most this many steps; the worker's next pass continues. */
 const MAX_STEPS_PER_PASS = 12;
 
@@ -212,6 +264,8 @@ export class ManagedRunnerManager {
           return await this.provisioning(mapping);
         case 'STARTING':
           return await this.starting(mapping);
+        case 'FENCING':
+          return (await this.replacePredecessor(mapping)) ?? { done: 'FENCING' };
         default:
           return await this.ready(mapping);
       }
@@ -237,16 +291,11 @@ export class ManagedRunnerManager {
   // ── states ─────────────────────────────────────────────────────────────────────────────────
 
   private async requested(mapping: ManagedRunner): Promise<Step> {
-    // An explicit retry after the instance stopped: release the terminated Pod object (by UID, so a
-    // successor under the same name is never deleted). The runner row, the workspace, the PVC and
-    // the Secret stay; replacing the instance is the single-writer gate's decision (`starting`).
+    // An explicit retry with an instance recorded. One still running is waited on again (a retry
+    // after a startup timeout); one that stopped is replaced through the single-writer gate.
     if (mapping.podUid) {
-      const pod = await this.kube.pods.get(managedPodName(mapping.runnerId));
-      if (pod && pod.metadata.uid === mapping.podUid && podTerminated(pod) && !pod.metadata.deletionTimestamp) {
-        const begun = await this.beginOperation(mapping, 'DELETE_POD');
-        await this.kube.pods.delete(managedPodName(mapping.runnerId), { uid: mapping.podUid });
-        return { next: await this.commit(begun, { resourceOperationState: 'COMPLETED' }) };
-      }
+      const replaced = await this.replacePredecessor(mapping);
+      if (replaced) return replaced;
     }
     // Capacity admission (WAITING_CAPACITY) is decided here, before any resource exists.
     const admission = await this.admit(mapping);
@@ -283,6 +332,8 @@ export class ManagedRunnerManager {
       return { next: await this.commit(mapping, { pvUid: pv.metadata.uid, volumeHandle: pv.spec.csi!.volumeHandle }) };
     }
 
+    const retired = await this.replaceRetiredSecret(mapping);
+    if (retired) return retired;
     const issued = await this.ensureSecret(mapping);
     if (!issued.mapping.podUid) {
       const adopted = await this.adoptCredential(issued.mapping, issued.secret);
@@ -303,22 +354,27 @@ export class ManagedRunnerManager {
     const name = managedPodName(mapping.runnerId);
     let pod = await this.kube.pods.get(name);
     if (!pod && mapping.podUid) {
-      // The single-writer gate: the recorded instance is gone, and nothing proves it stopped writing.
-      // A successor needs that proof or a fencing receipt before the generation may advance.
-      throw new Conflict('PREDECESSOR_STOP_UNPROVEN', `Pod ${mapping.podUid} of generation ${mapping.generation} is gone without a stop proof`);
+      // The recorded instance is gone, and nothing proves it stopped writing.
+      return this.fence(mapping, 'PREDECESSOR_STOP_UNPROVEN', `Pod ${mapping.podUid} of generation ${mapping.generation} is gone without a stop proof`);
     }
     if (!pod) {
+      // The one Pod of this generation, created only where the admission guard is known to refuse
+      // any other.
+      await this.requireAdmissionGuard(mapping);
       const begun = await this.beginOperation(mapping, 'CREATE_POD');
       pod = await this.createOrReadBack(this.kube.pods, buildManagedPod(this.identity(begun), begun.pvcUid!, this.profile));
       return { next: await this.recordPod(begun, pod) };
+    }
+    if (mapping.podUid && pod.metadata.uid !== mapping.podUid) {
+      return this.fence(mapping, 'POD_REPLACED', `Pod ${mapping.podUid} was replaced by ${pod.metadata.uid} without a stop proof`);
     }
     this.checkPod(mapping, pod);
     if (pod.metadata.uid !== mapping.podUid || (pod.spec.nodeName ?? null) !== mapping.nodeName) {
       return { next: await this.recordPod(mapping, pod) };
     }
-    // A released instance still being removed: wait for it to go, then the gate above decides.
+    if (podTerminated(pod)) return this.terminated(mapping, pod);
+    // A released instance still being removed: wait for it to go, then the gate decides.
     if (pod.metadata.deletionTimestamp) return this.waitWithin(mapping);
-    if (podTerminated(pod)) return this.fail(mapping, 'POD_TERMINATED', `Pod ${pod.metadata.uid} is ${pod.status?.phase}`);
     const report = pod.status?.phase === 'Running' ? await this.reportSince(mapping, mapping.stateEnteredAt) : null;
     if (!report) return this.waitWithin(mapping);
     // READY needs model supply as well as a live instance: the runtime it is found ready with is the
@@ -341,12 +397,236 @@ export class ManagedRunnerManager {
     await this.verifyStorage(mapping);
     const pod = await this.kube.pods.get(managedPodName(mapping.runnerId));
     if (!pod) {
-      throw new Conflict('PREDECESSOR_STOP_UNPROVEN', `Pod ${mapping.podUid} of generation ${mapping.generation} is gone without a stop proof`);
+      return this.fence(mapping, 'PREDECESSOR_STOP_UNPROVEN', `Pod ${mapping.podUid} of generation ${mapping.generation} is gone without a stop proof`);
+    }
+    if (pod.metadata.uid !== mapping.podUid) {
+      return this.fence(mapping, 'POD_REPLACED', `Pod ${mapping.podUid} was replaced by ${pod.metadata.uid} without a stop proof`);
     }
     this.checkPod(mapping, pod);
-    if (podTerminated(pod)) return this.fail(mapping, 'POD_TERMINATED', `Pod ${pod.metadata.uid} is ${pod.status?.phase}`);
-    // A stale heartbeat makes READY unusable (the status says so); it is not proof the instance died.
+    if (podTerminated(pod)) return this.terminated(mapping, pod);
+    // A stale heartbeat makes READY unusable (the status says so); it is not proof the instance died,
+    // and it authorizes nothing.
     return { done: 'READY' };
+  }
+
+  // ── the single-writer gate ─────────────────────────────────────────────────────────────────
+
+  /** The recorded instance, as a proof has to name it. */
+  private predecessorOf(mapping: ManagedRunner): ManagedRunnerPredecessor {
+    return {
+      runnerId: mapping.runnerId,
+      generation: mapping.generation,
+      podName: mapping.podName ?? managedPodName(mapping.runnerId),
+      podUid: mapping.podUid!,
+      nodeName: mapping.nodeName,
+      pvcUid: mapping.pvcUid!,
+      volumeHandle: mapping.volumeHandle!,
+    };
+  }
+
+  /**
+   * The recorded Pod is terminal. With the kubelet's report of it, that report is recorded as the
+   * stop proof and the mapping fails retryable: an explicit retry replaces the instance. A Pod the
+   * control plane made terminal for its node proves nothing about the node: FENCING.
+   */
+  private async terminated(mapping: ManagedRunner, pod: Pod): Promise<Step> {
+    if (!podStopConfirmed(pod)) {
+      return this.fence(mapping, 'PREDECESSOR_STOP_UNPROVEN', `Pod ${pod.metadata.uid} is ${pod.status?.phase}, but not by its kubelet's report`);
+    }
+    const proof = stopProofFor(mapping.fencingReceipt, this.predecessorOf(mapping)) ?? observedStop(this.predecessorOf(mapping), pod, this.now());
+    return this.fail(mapping, 'POD_TERMINATED', `Pod ${pod.metadata.uid} is ${pod.status?.phase}`, {
+      fencingReceipt: proof as unknown as Prisma.InputJsonValue,
+    });
+  }
+
+  /**
+   * Retire the recorded instance (`mapping.podUid`, generation N) and advance to generation N+1, if
+   * and only if it is proven stopped (see the class comment). Answers null when there is nothing to
+   * do because the instance is still running and the mapping is not fencing — a retry waits on it.
+   */
+  private async replacePredecessor(mapping: ManagedRunner): Promise<Step | null> {
+    const name = managedPodName(mapping.runnerId);
+    const predecessor = this.predecessorOf(mapping);
+    const pod = await this.kube.pods.get(name);
+    if (pod && pod.metadata.uid !== mapping.podUid) {
+      return this.fence(mapping, 'POD_REPLACED', `Pod ${mapping.podUid} was replaced by ${pod.metadata.uid} without a stop proof`);
+    }
+    let proof = stopProofFor(mapping.fencingReceipt, predecessor);
+    if (pod) {
+      if (podStopConfirmed(pod)) {
+        let current = mapping;
+        if (!proof) current = await this.commit(mapping, { fencingReceipt: observedStop(predecessor, pod, this.now()) as unknown as Prisma.InputJsonValue });
+        if (pod.metadata.deletionTimestamp) return { done: 'WAITING' };
+        // Released by UID: a successor under the same name is never deleted.
+        const begun = await this.beginOperation(current, 'DELETE_POD');
+        await this.kube.pods.delete(name, { uid: mapping.podUid! });
+        return { next: await this.commit(begun, { resourceOperationState: 'COMPLETED' }) };
+      }
+      if (podTerminated(pod)) {
+        return this.fence(mapping, 'PREDECESSOR_STOP_UNPROVEN', `Pod ${pod.metadata.uid} is ${pod.status?.phase}, but not by its kubelet's report`);
+      }
+      // Still there and not stopped: a retry waits on it; a fencing mapping waits for its removal.
+      return mapping.managementState === 'FENCING' ? { done: 'FENCING' } : null;
+    }
+    // The Pod object is gone.
+    const { pvc, pv } = await this.verifyStorage(mapping);
+    if (!proof) {
+      if (mapping.managementState !== 'FENCING') {
+        return this.fence(mapping, 'PREDECESSOR_STOP_UNPROVEN', `Pod ${mapping.podUid} of generation ${mapping.generation} is gone without a stop proof`);
+      }
+      const received = await this.receivedFencing(mapping, predecessor, pv);
+      if (!received) return { done: 'FENCING' };
+      proof = received.proof;
+      mapping = received.mapping;
+    }
+    const attached = (await this.kube.listVolumeAttachments()).filter((va) => va.spec.source.persistentVolumeName === pvc.spec.volumeName);
+    if (attached.length > 0) {
+      if ((mapping.lastError as { code?: unknown } | null)?.code !== 'VOLUME_STILL_ATTACHED') {
+        await this.commit(mapping, { lastError: { ...managedRunnerReason('VOLUME_STILL_ATTACHED'), detail: attached.map((va) => va.metadata.name).join(', ') } });
+      }
+      return { done: mapping.managementState === 'FENCING' ? 'FENCING' : 'WAITING' };
+    }
+    return { next: await this.advance(mapping, proof) };
+  }
+
+  /**
+   * A fencing receipt for this predecessor, read from its ConfigMap and recorded once accepted. An
+   * unacceptable one is reported on the mapping (what was wrong goes to the log) and changes nothing.
+   */
+  private async receivedFencing(
+    mapping: ManagedRunner,
+    predecessor: ManagedRunnerPredecessor,
+    pv: PersistentVolume,
+  ): Promise<{ mapping: ManagedRunner; proof: ManagedRunnerStopProof } | null> {
+    const configMap = await this.kube.configMaps.get(managedFencingReceiptName(mapping.runnerId));
+    if (!configMap) return null;
+    const verdict = readFencingReceipt(configMap, predecessor, pv, this.now());
+    if (!verdict.ok) {
+      const detail = verdict.problems.join('; ');
+      const stored = mapping.lastError as { code?: unknown; detail?: unknown } | null;
+      if (stored?.code !== 'FENCING_RECEIPT_INVALID' || stored.detail !== detail) {
+        this.log.warn(`managed runner ${mapping.id}: fencing receipt ${configMap.metadata.name} not accepted: ${detail}`);
+        await this.commit(mapping, { lastError: { ...managedRunnerReason('FENCING_RECEIPT_INVALID'), detail } });
+      }
+      return null;
+    }
+    const current = await this.commit(mapping, { fencingReceipt: verdict.proof as unknown as Prisma.InputJsonValue });
+    return { mapping: current, proof: verdict.proof };
+  }
+
+  /**
+   * FENCING: no instance of this mapping is authorized until a stop is proven. In the same
+   * transaction the runner credential the predecessor holds is replaced by one nobody holds, so the
+   * predecessor's requests fail from now on whatever state the mapping later passes through; the
+   * next generation's credential arrives with its own Secret. The disk, the Secret and the Pod
+   * object stay where they are.
+   */
+  private async fence(mapping: ManagedRunner, code: string, detail: string): Promise<Step> {
+    if (mapping.managementState === 'FENCING') {
+      if ((mapping.lastError as { code?: unknown } | null)?.code !== code) {
+        await this.commit(mapping, { lastError: { ...managedRunnerReason(code), detail } });
+      }
+      return { done: 'FENCING' };
+    }
+    this.log.warn(`managed runner ${mapping.id}: FENCING: ${code}: ${detail}`);
+    const now = this.now();
+    await withTransactionRetry(
+      this.prisma,
+      async (tx) => {
+        const { count } = await tx.managedRunner.updateMany({
+          where: { id: mapping.id, revision: mapping.revision, leaseHolder: this.holder },
+          data: {
+            managementState: 'FENCING',
+            stateEnteredAt: now,
+            nextAttemptAt: null,
+            startupDeadlineAt: null,
+            lastError: { ...managedRunnerReason(code), detail },
+            revision: { increment: 1 },
+            leaseExpiresAt: this.leaseUntil(now),
+          },
+        });
+        if (count === 0) throw new Superseded();
+        await tx.runner.update({ where: { id: mapping.runnerId }, data: { tokenHash: sha256(generateToken(32)) } });
+      },
+      loggedRetry(this.log, 'managedRunners.fence'),
+    );
+    return { done: 'FENCING' };
+  }
+
+  /**
+   * The gate opens: generation N is retired on `proof`, and N+1 is reserved in the same
+   * compare-and-set — no Pod recorded, a fresh attempt budget, REQUESTED. The retired credential is
+   * replaced by one nobody holds; N+1's is issued with its own Secret once N's is removed.
+   */
+  private async advance(mapping: ManagedRunner, proof: ManagedRunnerStopProof): Promise<ManagedRunner> {
+    const now = this.now();
+    await withTransactionRetry(
+      this.prisma,
+      async (tx) => {
+        const { count } = await tx.managedRunner.updateMany({
+          where: { id: mapping.id, revision: mapping.revision, leaseHolder: this.holder, generation: mapping.generation, podUid: mapping.podUid },
+          data: {
+            generation: { increment: 1 },
+            podName: null,
+            podUid: null,
+            nodeName: null,
+            nodeUid: null,
+            fencingReceipt: { ...proof, retiredAt: now.toISOString() } as unknown as Prisma.InputJsonValue,
+            managementState: 'REQUESTED',
+            stateEnteredAt: now,
+            attempt: 0,
+            nextAttemptAt: null,
+            startupDeadlineAt: null,
+            lastError: Prisma.DbNull,
+            ...this.settled(mapping),
+            revision: { increment: 1 },
+            leaseExpiresAt: this.leaseUntil(now),
+          },
+        });
+        if (count === 0) throw new Superseded();
+        await tx.runner.update({ where: { id: mapping.runnerId }, data: { tokenHash: sha256(generateToken(32)) } });
+      },
+      loggedRetry(this.log, 'managedRunners.advanceGeneration'),
+    );
+    this.log.warn(`managed runner ${mapping.id}: generation ${mapping.generation} retired (${proof.kind}); generation ${mapping.generation + 1} reserved`);
+    return this.reread(mapping.id);
+  }
+
+  /**
+   * The bootstrap Secret of a generation the gate retired: removed, by UID, before this generation's
+   * is issued under the same name. Its credential stopped working when the generation advanced.
+   */
+  private async replaceRetiredSecret(mapping: ManagedRunner): Promise<Step | null> {
+    if (mapping.podUid) return null;
+    const name = managedSecretName(mapping.runnerId);
+    const secret = await this.kube.secrets.get(name);
+    const generation = secret ? secretGeneration(secret) : null;
+    if (!secret || generation === null || generation >= mapping.generation) return null;
+    const said = secret.metadata.annotations ?? {};
+    // Not this runner's: ensureSecret reports the conflict.
+    if (said[OWNER_ANNOTATION] !== mapping.ownerId || said[RUNNER_ANNOTATION] !== mapping.runnerId) return null;
+    if (secret.metadata.deletionTimestamp) return this.waitWithin(mapping);
+    const begun = await this.beginOperation(mapping, 'DELETE_SECRET');
+    await this.kube.secrets.delete(name, { uid: secret.metadata.uid });
+    return { next: await this.commit(begun, { resourceOperationState: 'COMPLETED' }) };
+  }
+
+  /**
+   * Proof that the environment's admission guard is in force (managed-runner-admission.ts): a dry
+   * run of a Pod it must refuse — this generation's template under another name — comes back
+   * refused by it. Admitted, or refused by anything else, nothing is created.
+   */
+  private async requireAdmissionGuard(mapping: ManagedRunner): Promise<void> {
+    const probe = buildManagedPod(this.identity(mapping), mapping.pvcUid!, this.profile);
+    probe.metadata.name = managedAdmissionProbeName(mapping.runnerId);
+    try {
+      await this.kube.pods.create(probe, { dryRun: true });
+    } catch (error) {
+      if (error instanceof KubeApiError && error.message.includes(MANAGED_ADMISSION_DENIAL_MARKER)) return;
+      if (isRetryableKubeError(error)) throw error;
+      throw new Conflict('ADMISSION_GUARD_UNVERIFIED', `the admission probe was refused, but not by the guard: ${(error as Error).message}`);
+    }
+    throw new Conflict('ADMISSION_GUARD_MISSING', 'a Pod the single-Pod admission guard must refuse was admitted by a dry run');
   }
 
   // ── resources ──────────────────────────────────────────────────────────────────────────────
@@ -366,7 +646,7 @@ export class ManagedRunnerManager {
   }
 
   /** The recorded PVC and PV, unchanged: checked on every pass once the instance is being started. */
-  private async verifyStorage(mapping: ManagedRunner): Promise<void> {
+  private async verifyStorage(mapping: ManagedRunner): Promise<{ pvc: PersistentVolumeClaim; pv: PersistentVolume }> {
     const pvc = await this.kube.persistentVolumeClaims.get(mapping.pvcName);
     if (!pvc) throw new Conflict('PVC_MISSING', `PVC ${mapping.pvcName} (${mapping.pvcUid}) is gone`);
     const problem = pvcIdentityProblem(pvc, this.identity(mapping), this.profile, mapping.pvcUid);
@@ -376,6 +656,7 @@ export class ManagedRunnerManager {
     if (!pv) throw new Conflict('PV_CONFLICT', `PV ${pvc.spec.volumeName} is gone`);
     const pvProblem = pvIdentityProblem(pv, mapping.pvcUid!, this.profile, { pvUid: mapping.pvUid, volumeHandle: mapping.volumeHandle });
     if (pvProblem) throw new Conflict('PV_CONFLICT', pvProblem);
+    return { pvc, pv };
   }
 
   /**
@@ -414,13 +695,11 @@ export class ManagedRunnerManager {
     }
   }
 
+  /** A Pod under the fixed name that is not this generation's template is a conflict for an operator.
+   *  (One that replaced the recorded Pod UID is the single-writer gate's: callers fence first.) */
   private checkPod(mapping: ManagedRunner, pod: Pod): void {
     const problem = podIdentityProblem(pod, this.identity(mapping), mapping.pvcUid!);
     if (problem) throw new Conflict('POD_CONFLICT', problem);
-    if (mapping.podUid && pod.metadata.uid !== mapping.podUid) {
-      // Same name and generation, another incarnation: the recorded Pod was replaced without the gate.
-      throw new Conflict('PREDECESSOR_STOP_UNPROVEN', `Pod ${mapping.podUid} was replaced by ${pod.metadata.uid} without a stop proof`);
-    }
   }
 
   private async recordPod(mapping: ManagedRunner, pod: Pod): Promise<ManagedRunner> {
@@ -509,7 +788,10 @@ export class ManagedRunnerManager {
   }
 
   /** Record the one resource operation in flight before it is sent, so a restart knows it may exist. */
-  private beginOperation(mapping: ManagedRunner, kind: 'CREATE_PVC' | 'CREATE_SECRET' | 'CREATE_POD' | 'DELETE_POD'): Promise<ManagedRunner> {
+  private beginOperation(
+    mapping: ManagedRunner,
+    kind: 'CREATE_PVC' | 'CREATE_SECRET' | 'CREATE_POD' | 'DELETE_POD' | 'DELETE_SECRET',
+  ): Promise<ManagedRunner> {
     return this.commit(mapping, { resourceOperationId: randomUUID(), resourceOperationKind: kind, resourceOperationState: 'PENDING' });
   }
 
@@ -541,8 +823,9 @@ export class ManagedRunnerManager {
     return { done: 'WAITING' };
   }
 
-  private async fail(mapping: ManagedRunner, code: string, detail: string): Promise<Step> {
+  private async fail(mapping: ManagedRunner, code: string, detail: string, also: Prisma.ManagedRunnerUpdateManyMutationInput = {}): Promise<Step> {
     await this.commit(mapping, {
+      ...also,
       managementState: 'FAILED',
       stateEnteredAt: this.now(),
       nextAttemptAt: null,
