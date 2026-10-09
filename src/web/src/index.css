@@ -8379,6 +8379,20 @@ button.chat-jump-start:hover {
 .chat-turn-divider {
   margin: 12px 0;
 }
+/* A finished turn's foot (TurnFoot): copy · time under the reply's left edge, at rest. Closer to the
+   reply above than to the next turn, so it reads as the reply's. Inset like .chat-assistant's text;
+   the 20px copy button steps back 4px so its 13px glyph, not its box, starts on that edge. */
+.chat-turn-foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 18px;
+  margin: 8px 0 24px;
+  padding: 0 12px;
+}
+.chat-turn-foot > .chat-copy {
+  margin-left: -4px;
+}
 .chat-error {
   color: var(--error);
   font-size: 13px;
