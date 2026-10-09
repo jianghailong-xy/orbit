@@ -200,8 +200,9 @@ test('a provider the caller cannot dispatch with is rejected on the write, not a
     user: { findUnique: async () => ({ role: 'MEMBER' }) },
     // No configured row matches, and the slug isn't a built-in engine either.
     modelProvider: { findFirst: async () => null },
-    // Nor one of the caller's account pools.
+    // Nor one of the caller's account pools, nor a retired provider name (migration 0415).
     providerPool: { findFirst: async () => null },
+    providerSlugAlias: { findUnique: async () => null },
   } as never;
   const service = serviceForUpdate(prisma);
 
@@ -232,6 +233,7 @@ test("one of the caller's own account pools is a provider a task may pin", async
         return args.where.ownerId === 'owner-1' ? { id: 'pool-1' } : null;
       },
     },
+    providerSlugAlias: { findUnique: async () => null },
   } as never;
   const service = serviceForUpdate(prisma);
 

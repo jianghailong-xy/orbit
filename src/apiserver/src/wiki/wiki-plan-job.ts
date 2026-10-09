@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleDestroy, OnModuleInit, Optional } from '@ne
 import { Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import {
+  AgentProvider,
   RunEventType,
   uuidToBase62,
   WIKI_DOCS_BUILD_JOB,
@@ -451,6 +452,9 @@ class PlanJobTaskWriter {
             creatorId: ownerId,
             listId,
             assigneeId: input.task.workspaceId,
+            // The space's key, on Claude Code: the one engine a maintenance run takes (provider-engine
+            // contract §3.5), pinned beside the key so the run never resolves onto another.
+            engine: AgentProvider.CLAUDE,
             provider: input.task.provider,
             runAt: now,
             dispatchHold: list.paused,

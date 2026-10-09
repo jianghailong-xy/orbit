@@ -34,6 +34,7 @@ import {
   type ModelProviderRow,
 } from '../providers/custom-provider';
 import { legacySessionEngine, recordedEngine } from '../providers/session-engine';
+import { dispatchKeyRow, keyRowForSlug } from '../providers/engine-provider';
 import { ProviderPlanUsageService } from '../providers/plan-usage.service';
 import { isPoolCandidate, poolUnavailableReason } from '../providers/pool-admission';
 import { keyCanRun, keyRunsAgainAt, poolKeysResumeAt } from '../providers/pool-key-select';
@@ -244,10 +245,8 @@ export class QueueService {
         if (move) until = null;
       }
       if (!isBuiltinProvider(slug, session.providerBuiltin) && slug) {
-        const provider = await this.prisma.modelProvider.findFirst({
-          where: { slug, ...(await usableProviderScope(this.prisma, session.ownerId)) },
-          select: { slug: true, enabled: true, runtime: true, presetSlug: true, baseUrl: true, apiKeyEnc: true },
-        });
+        // The key it names, or the one a retired name of it resolves to (migration 0415).
+        const provider = await keyRowForSlug(this.prisma, session.ownerId, slug);
         const poolEngine = provider ? null : await accountPoolRuntime(this.prisma, session.ownerId, slug);
         engine ??= provider ? keyRowEngine(provider.runtime) : poolEngine;
         unavailable = provider ? !provider.enabled || !keyRowEngine(provider.runtime) : !poolEngine;
@@ -449,7 +448,10 @@ export class QueueService {
                 OR (NOT s."provider_builtin" AND (
                   EXISTS (
                     SELECT 1 FROM "model_provider" mp
-                    WHERE mp.slug = s.provider AND mp.enabled
+                    -- The key the slug names, or the one a retired name of it resolves to (0415).
+                    WHERE (mp.slug = s.provider OR mp.id = (
+                            SELECT a.provider_id FROM "provider_slug_alias" a WHERE a.slug = s.provider))
+                      AND mp.enabled
                       AND mp.runtime = ANY(CASE s."engine"
                         WHEN 'claude' THEN ARRAY['claude', 'dsh']
                         WHEN 'dsh' THEN ARRAY['claude', 'dsh']
@@ -894,14 +896,17 @@ export class QueueService {
     // pool of their own, through the pool gateway on the ChatGPT login it holds — or a shared pool the
     // owner is in, which dispatches through the pool gateway; each on a token minted for this claim.
     const declaredIsBuiltin = isBuiltinProvider(declared, declaredProviderBuiltin);
-    // A maintenance run is never dispatched through a pool: it has no member to fall back on (its refusal says so).
-    const configuredRow = declaredIsBuiltin
-      ? null
-      : await this.prisma.modelProvider.findFirst({
-          where: { slug: declared!, ...(await usableProviderScope(this.prisma, session.ownerId)) },
-        });
+    // The key the slug names, or a retired name of one; and for a legacy built-in dsh session whose
+    // workspace holds no key of its own, the owner's default DeepSeek key (docs/provider-engine-contract.md
+    // §4.1) — a built-in credential is otherwise no key. A maintenance run is never dispatched through a
+    // pool: it has no member to fall back on (its refusal says so).
+    const configuredRow = await dispatchKeyRow(
+      this.prisma,
+      { ownerId: session.ownerId, provider: declared, providerBuiltin: declaredProviderBuiltin },
+      workspace?.env,
+    );
     const customRow = declaredIsBuiltin
-      ? null
+      ? configuredRow
       : (configuredRow ??
         (maintenance
           ? null

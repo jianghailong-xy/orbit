@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { BadRequestException, Injectable, Logger, OnModuleDestroy, OnModuleInit, Optional } from '@nestjs/common';
 import { Prisma, RunStatus } from '@prisma/client';
 import {
+  AgentProvider,
   RunEventType,
   WIKI_CURSOR_OUTCOMES,
   WIKI_DEFAULT_TOPICS,
@@ -440,6 +441,9 @@ class MaintenanceTaskWriter {
             creatorId: ownerId,
             listId,
             assigneeId: input.task.workspaceId,
+            // The space's key, on Claude Code: the one engine a maintenance run takes (provider-engine
+            // contract §3.5), pinned beside the key so the run never resolves onto another.
+            engine: AgentProvider.CLAUDE,
             provider: input.task.provider,
             runAt: now,
             dispatchHold: list.paused,

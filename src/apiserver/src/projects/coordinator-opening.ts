@@ -90,7 +90,7 @@ function renderCoordinatorInstructions(
         + 'L：根因不明、并发、跨模块、迁移、改派发等核心路径（Opus · high）；'
         + 'XL：架构设计、长时间无人值守、L 档反复失败（Opus · max）。'
         + 'Codex 引擎在同一个默认模型上对应 low/medium/high/xhigh。理由写判断依据，不超过 500 字。'
-        + 'modelHint 是难度建议，失败后可以升档；model 是硬指定，优先于建议。引擎仍用 provider 字段指定。\n\n'
+        + 'modelHint 是难度建议，失败后可以升档；model 是硬指定，优先于建议。引擎用 engine 字段指定，provider 只决定用哪份凭据（登录、账号池或 key），须是该引擎能用的。\n\n'
       : '')
     + '项目开工之前 task_start 会被拒：任务可以先建好，别想办法绕开。开工由账号所有者来按，'
     + '由你来请求：计划写好、每条验收标准都有任务服务（task_create 带 criterionKey）之后，'
