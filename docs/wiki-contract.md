@@ -2297,7 +2297,7 @@ JSON 里是 `modelQueue` 一节；设计见 `docs/wiki-server-execution-design.m
   旁边写 `encoding: "base64"`；领取时解码，发给模型的就是流水线拼出的那次调用，和 runner 路径一样逐字节相同。`request_sha256` 按调用
   本身算，不按列里存的形式（`modelQueue.requestEncoding`）。
 - `answer` 和 `partial` 含 U+0000 时——模型可能把代码里的 NUL 抄进回答——按 UTF-8 字节的 base64 存，`answer_encoding` /
-  `partial_encoding`（迁移 `0411_wiki_stored_text_encoding`）说明怎么读回；每个读者都解码，流水线解析的就是模型发来的原文，和 runner
+  `partial_encoding`（迁移 `0412_wiki_stored_text_encoding`）说明怎么读回；每个读者都解码，流水线解析的就是模型发来的原文，和 runner
   路径一样（`modelQueue.answerEncoding`）。2026-10-09 之前，回答里有原始 NUL 时写入以 22021 失败，调用一直 running 到租约过期再重问。
 - `(job_id, step, unit, attempt)` 唯一，`(step, unit)` 是这次调用在作业里的地址；`attempt` 是这一单元的第几次（真重做才 +1），
   `attempts` 是这一行被跑过几次（租约过期和可重试失败各记一次，退避读它）。
@@ -2369,7 +2369,7 @@ JSON 里是 `modelQueue` 一节；设计见 `docs/wiki-server-execution-design.m
 ## 26. 仓库操作 `wiki_repo_op`、快照缓存与原文缓存（服务端执行 P2）
 
 JSON 里是 `repoOps` 一节；设计见 `docs/wiki-server-execution-design.md` §4.3 和 §7。迁移 `0402_wiki_repo_op`（操作、分片暂存与快照缓存）
-、`0406_wiki_repo_file`（按 (space, sha, path) 保存读到的原文）和 `0411_wiki_stored_text_encoding`（原文怎么读回）；服务端实现在
+、`0406_wiki_repo_file`（按 (space, sha, path) 保存读到的原文）和 `0412_wiki_stored_text_encoding`（原文怎么读回）；服务端实现在
 `src/apiserver/src/wiki-worker/`（表、领取、结算、快照与原文缓存 `wiki-repo-ops.ts`、`pg_notify` 监听 `wiki-repo-op-notify.ts`、
 两个通道共用的 LISTEN 连接 `wiki-notify-channel.ts`），runner 侧在 `src/runner-go/wiki_repo_ops.go`（四种操作复用
 `wiki_plan_repo.go` 的索引和 `wiki_anchors.go` 的锚点检查）；共享常量在 `src/shared/src/wikiRepoOps.ts`。
@@ -2436,7 +2436,7 @@ JSON 里是 `repoOps` 一节；设计见 `docs/wiki-server-execution-design.md` 
   `read`。新的快照落地时，这个空间只留它那个 sha 的行（和快照一起换代）；空间删除时随复合外键一起删。`cut` 是只声明了
   `wiki-repo-op/v1` 的 runner 给的窗口：读旧路径的调用者能用，声明了整文件能力的调用者按未命中重新读。
 - 上传途中死掉的进程不会破坏缓存：分片先落在 `wiki_repo_op_fragment`（挂在操作上，随操作删），只有结算那一刻才写缓存。
-- **原文逐字节保存**（`repoOps.storedText`，迁移 `0411_wiki_stored_text_encoding`，2026-10-09）：Postgres 的 `text` 和 `jsonb`
+- **原文逐字节保存**（`repoOps.storedText`，迁移 `0412_wiki_stored_text_encoding`，2026-10-09）：Postgres 的 `text` 和 `jsonb`
   都存不下 U+0000（22021 / 22P05），源文件里却可能有——main 上有 3 个文件在字面量里带原始 NUL。`wiki_repo_file.content_encoding`
   说明 `content` 怎么读回：`text` 是原样（没有 NUL 的文件，以及此前缓存的每一行），`base64` 是原文 UTF-8 字节的 base64（含 NUL 的文件）。
   读缓存时解码，所以交给文档构建、plan 的符号回退和维护的文本，和 runner 上 `git show` 打印的逐字节相同。

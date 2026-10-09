@@ -34,10 +34,11 @@
 --
 -- NUMBERING, RE-RUNNABILITY
 -- -------------------------
--- 0411: main and this project's line stood at 0408_kimi_account when this was written (2026-10-09),
--- no origin branch held a later number, and one worktree on this host held 0409 and 0410 (a branch not
--- yet pushed, since landed on main), so 0409 and 0410 were left to it. Every statement can run twice:
--- ADD COLUMN IF NOT EXISTS, and each constraint added only when absent.
+-- 0412: main and this project's line stood at 0408_kimi_account when this was first written (2026-10-09)
+-- and it took 0411, leaving 0409 and 0410 to a worktree on this host that held them; main then took
+-- 0409 to 0411 (0411_retire_candidates_landed_by_receipt) before this landed, so it is 0412 — no origin
+-- branch or worktree held a later number. Every statement can run twice: ADD COLUMN IF NOT EXISTS,
+-- and each constraint added only when absent.
 -- ══════════════════════════════════════════════════════════════════════════════════════════════════
 
 ALTER TABLE "wiki_repo_file" ADD COLUMN IF NOT EXISTS "content_encoding" TEXT NOT NULL DEFAULT 'text';
