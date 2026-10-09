@@ -1,5 +1,9 @@
+import { Logger } from '@nestjs/common';
+import type { Prisma } from '@prisma/client';
 import { WIKI_JOB, type WikiJobFailureKind } from '@orbit/shared';
+import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import type { PrismaService } from '../prisma/prisma.service';
+import { cutRunes } from './wiki-import-extract';
 
 /**
  * The `wiki_job` table (migration 0401, contract `jobs`, design §5.1).
@@ -22,6 +26,15 @@ import type { PrismaService } from '../prisma/prisma.service';
  * WHO RUNS
  * `owners` is the claim's account filter: null for every account (`server`), the canary list under `canary`,
  * and the empty array under `runner` — a worker started with the default claims nothing at all.
+ *
+ * THE RETRY LIMIT
+ * An infra failure puts the job back in the queue, but not for ever (contract `jobs.retry.limit`): the attempt
+ * that makes WIKI_JOB.maxAttempts ends it failed, and so does the attempt that makes
+ * WIKI_JOB.unexpectedMaxAttempts when it failed with an error the build did not expect. Before the limit, a
+ * docs_build job whose writer failed an assertion was put back every time its space was free (2026-10-09).
+ * The executor ends the attempt it settles; a job the lease sweep or a repository wait put back at the limit
+ * is never claimed again, and the next pass ends it. Either way what waits on the job (its calls, its
+ * repository operations, its run or plan job) is settled in the same transaction.
  */
 
 /** One claimed job, with the generation every later write must still match. */
@@ -69,6 +82,8 @@ export async function claimWikiJobs(prisma: PrismaService, input: ClaimWikiJobsI
         SELECT c."id" FROM "wiki_job" c
         WHERE c."state" = 'queued'
           AND (c."next_attempt_at" IS NULL OR c."next_attempt_at" <= now())
+          -- A job at the retry limit is never run again: the pass ends it (endWikiJobsPastRetryLimit).
+          AND c."attempts" < ${WIKI_JOB.maxAttempts}
           AND c."kind" = ANY(${input.kinds as string[]}::text[])
           AND (${input.owners as string[] | null}::uuid[] IS NULL OR c."owner_id" = ANY(${input.owners as string[] | null}::uuid[]))
           -- No running job of this space: the space is free.
@@ -84,6 +99,7 @@ export async function claimWikiJobs(prisma: PrismaService, input: ClaimWikiJobsI
             WHERE e."space_id" = c."space_id" AND e."state" = 'queued'
               AND e."kind" = ANY(${input.kinds as string[]}::text[])
               AND (e."next_attempt_at" IS NULL OR e."next_attempt_at" <= now())
+              AND e."attempts" < ${WIKI_JOB.maxAttempts}
               AND (e."priority" > c."priority"
                 OR (e."priority" = c."priority" AND (e."created_at", e."id") < (c."created_at", c."id")))
           )
@@ -237,6 +253,132 @@ export async function failWikiJobAsContent(
         "updated_at" = now()
     WHERE "id" = ${input.id}::uuid AND "state" = 'running' AND "lease_generation" = ${input.generation}::uuid`;
   return updated > 0;
+}
+
+/** A job ended for good, as the write that ended it returns it: what its rows are found by. */
+interface EndedWikiJob {
+  id: string;
+  kind: string;
+  input: unknown;
+}
+
+/**
+ * What a job the retry limit ended says on its row, and on its run or plan job: how many attempts, and the last
+ * one's error, within the 2,000 characters those rows keep of an error.
+ */
+export function wikiJobRetryLimitError(attempts: number, error: string, unexpected = false): string {
+  return cutRunes(`Ended after ${attempts} attempts${unexpected ? ' (an error this build did not expect)' : ''}: ${error}`, 2000);
+}
+
+/**
+ * End a job at the retry limit (contract `jobs.retry.limit`): failed, failure_kind infra, why on its row, and in
+ * the same transaction everything that waits on it (`settleWikiJobRows`). `from` is the state the write expects
+ * the row in. A running row under the claim's generation is the attempt that just failed, and that attempt is
+ * counted here. A queued row already at the limit was put back by the lease sweep or a repository wait, which
+ * counted the attempt then. A row that has moved on matches nothing, and nothing is written. Answers whether
+ * the job was ended here.
+ */
+export async function endWikiJobAtRetryLimit(
+  prisma: PrismaService,
+  input: { id: string; from: { state: 'running'; generation: string } | { state: 'queued' }; error: string },
+  now: Date = new Date(),
+): Promise<boolean> {
+  return new RetryLimitWriter(prisma).endAtRetryLimit(input, now);
+}
+
+/** The one writer of an end at the retry limit: a class only so that its retry is labelled like every other's. */
+class RetryLimitWriter {
+  private readonly logger = new Logger('WikiJobs');
+
+  constructor(private readonly prisma: PrismaService) {}
+
+  async endAtRetryLimit(
+    input: { id: string; from: { state: 'running'; generation: string } | { state: 'queued' }; error: string },
+    now: Date,
+  ): Promise<boolean> {
+    return withTransactionRetry(
+      this.prisma,
+      async (tx) => {
+        const ended = input.from.state === 'running'
+          ? await tx.$queryRaw<EndedWikiJob[]>`
+              UPDATE "wiki_job"
+                 SET "state" = 'failed', "attempts" = "attempts" + 1, "failure_kind" = 'infra', "error" = ${input.error},
+                     "lease_owner" = NULL, "lease_generation" = NULL, "lease_deadline_at" = NULL,
+                     "ended_at" = ${now}, "updated_at" = now()
+               WHERE "id" = ${input.id}::uuid AND "state" = 'running' AND "lease_generation" = ${input.from.generation}::uuid
+              RETURNING "id", "kind", "input"`
+          : await tx.$queryRaw<EndedWikiJob[]>`
+              UPDATE "wiki_job"
+                 SET "state" = 'failed', "failure_kind" = 'infra', "error" = ${input.error}, "ended_at" = ${now}, "updated_at" = now()
+               WHERE "id" = ${input.id}::uuid AND "state" = 'queued' AND "attempts" >= ${WIKI_JOB.maxAttempts}
+              RETURNING "id", "kind", "input"`;
+        if (ended.length === 0) return false;
+        await settleWikiJobRows(tx, ended[0], input.error, now);
+        return true;
+      },
+      loggedRetry(this.logger, 'wiki.jobRetryLimit'),
+    );
+  }
+}
+
+/**
+ * The queued jobs that reached the retry limit (contract `jobs.retry.limit`), of the accounts this worker serves
+ * (`owners`, the claim's filter): each ended with its last error (`endWikiJobAtRetryLimit`). These are the jobs
+ * the lease sweep or a repository wait put back with their last attempt counted. The claim never takes one, so
+ * no job runs past the limit, whichever way its attempts were counted. Answers the jobs it ended.
+ */
+export async function endWikiJobsPastRetryLimit(prisma: PrismaService, owners: readonly string[] | null): Promise<string[]> {
+  const due = await prisma.$queryRaw<Array<{ id: string; attempts: number; error: string | null }>>`
+    SELECT "id", "attempts", "error" FROM "wiki_job"
+     WHERE "state" = 'queued' AND "attempts" >= ${WIKI_JOB.maxAttempts}
+       AND (${owners as string[] | null}::uuid[] IS NULL OR "owner_id" = ANY(${owners as string[] | null}::uuid[]))
+     ORDER BY "updated_at", "id"
+     LIMIT 50`;
+  const ended: string[] = [];
+  for (const job of due) {
+    const error = wikiJobRetryLimitError(job.attempts, job.error ?? 'every attempt failed');
+    if (await endWikiJobAtRetryLimit(prisma, { id: job.id, from: { state: 'queued' }, error })) ended.push(job.id);
+  }
+  return ended;
+}
+
+/**
+ * What waits on a job that ended for good, settled in the transaction that ended it, and only when that end
+ * matched: the rollback sweep's cancellation (wiki/wiki-executor-sweep.ts, contract `jobs.executor.rollback`) and
+ * the retry limit's failure (`jobs.retry.limit`).
+ *
+ * Its model calls still queued or running are cancelled. A cancelled row's error, error_kind, partial and lease
+ * columns must be NULL (the 0401 constraints), so a replayed job asks again from nothing. Its repository
+ * operations still queued or running are cancelled too, so no runner works on a result nobody will read. Then
+ * the one row its kind runs. A `maintain` job's run ends failed / infra with the reason: the failure is not the
+ * pipeline's, so the space's streak is not touched, and the next run reads again what this one did not take in.
+ * The plan job of a plan_draft, plan_revise or docs_build job ends failed with the reason. It still names its
+ * wiki_job (a made or ended plan job names its maker, 0405), and the owner's next request makes a new one.
+ */
+export async function settleWikiJobRows(tx: Prisma.TransactionClient, job: EndedWikiJob, reason: string, now: Date): Promise<void> {
+  await tx.$executeRaw`
+    UPDATE "wiki_model_request"
+       SET "state" = 'cancelled', "ended_at" = ${now}, "error" = NULL, "error_kind" = NULL, "partial" = NULL,
+           "not_before" = NULL, "lease_owner" = NULL, "lease_generation" = NULL, "lease_deadline_at" = NULL, "updated_at" = now()
+     WHERE "job_id" = ${job.id}::uuid AND "state" IN ('queued', 'running')`;
+  await tx.$executeRaw`
+    UPDATE "wiki_repo_op"
+       SET "state" = 'cancelled', "ended_at" = ${now}, "error" = ${reason},
+           "lease_owner" = NULL, "claimed_at" = NULL, "heartbeat_at" = NULL, "runner_id" = NULL, "updated_at" = now()
+     WHERE "job_id" = ${job.id}::uuid AND "state" IN ('queued', 'running')`;
+  const input = (job.input ?? {}) as { runId?: unknown; planJobId?: unknown };
+  if (job.kind === 'maintain' && typeof input.runId === 'string') {
+    await tx.$executeRaw`
+      UPDATE "wiki_maintenance_run"
+         SET "outcome" = 'failed', "failure_kind" = 'infra', "error" = ${reason}, "ended_at" = ${now}, "updated_at" = now()
+       WHERE "id" = ${input.runId}::uuid AND "outcome" IS NULL`;
+  }
+  if ((job.kind === 'plan_draft' || job.kind === 'plan_revise' || job.kind === 'docs_build') && typeof input.planJobId === 'string') {
+    await tx.wikiPlanJob.updateMany({
+      where: { id: input.planJobId, state: 'made' },
+      data: { state: 'ended', outcome: 'failed', endedAt: now, error: reason },
+    });
+  }
 }
 
 /**

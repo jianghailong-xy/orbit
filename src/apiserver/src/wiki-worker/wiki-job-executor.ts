@@ -5,12 +5,15 @@ import { PrismaService } from '../prisma/prisma.service';
 import { currentWikiExecutorSwitch, wikiExecutorClaimOwners } from '../wiki/wiki-executor-switch';
 import {
   claimWikiJobs,
+  endWikiJobAtRetryLimit,
+  endWikiJobsPastRetryLimit,
   failWikiJobAsContent,
   reclaimExpiredWikiJobs,
   releaseWikiJobLease,
   requeueWikiJobForInfra,
   succeedWikiJob,
   renewWikiJobLease,
+  wikiJobRetryLimitError,
   type ClaimedWikiJob,
 } from './wiki-jobs';
 import {
@@ -101,7 +104,8 @@ export const WIKI_JOB_RUNNERS_TOKEN = Symbol('WIKI_JOB_RUNNERS');
  * ONE PASS: reclaim, claim, start.
  *   - reclaim: running jobs whose lease ran out go back to queued with the lost attempt counted — the
  *     worker that had them died. Their requests were let go the same way (their own sweep), so the job is
- *     re-run from the start and its pipeline re-uses the requests that already answered.
+ *     re-run from the start and its pipeline re-uses the requests that already answered. A job put back
+ *     at the retry limit (contract `jobs.retry.limit`) is ended here instead of claimed again.
  *   - claim: `claimWikiJobs` (wiki-jobs.ts) — priority first, a new lease generation, one job per space.
  *   - start: each claimed job runs concurrently; its lease is renewed while it runs.
  * Bootstrap runs a pass at once, so a worker that starts after a restart picks the queue up where it stands.
@@ -180,6 +184,10 @@ export class WikiJobExecutor implements OnApplicationBootstrap, OnModuleDestroy 
     if (owners !== null && owners.length === 0) return 0;
     await reclaimExpiredWikiJobs(this.prisma, WIKI_JOB.maxConcurrentPerWorker).catch((error: unknown) =>
       this.log.warn(`the job sweep failed: ${this.message(error)}`));
+    // A job the sweep, or a repository wait, put back at the retry limit is ended rather than claimed.
+    await endWikiJobsPastRetryLimit(this.prisma, owners)
+      .then((ended) => ended.forEach((id) => this.log.warn(`job ${id} reached the retry limit and is ended`)))
+      .catch((error: unknown) => this.log.warn(`the retry limit's pass failed: ${this.message(error)}`));
     if (this.stopped) return 0;
     const room = WIKI_JOB.maxConcurrentPerWorker - this.running.size;
     if (room <= 0) return 0;
@@ -256,7 +264,20 @@ export class WikiJobExecutor implements OnApplicationBootstrap, OnModuleDestroy 
       return;
     }
     // Everything else — a WikiJobInfraError, or an error this build did not expect — is the platform's:
-    // the job is tried again rather than counted against the space's streak.
+    // the job is tried again rather than counted against the space's streak, up to the retry limit
+    // (contract `jobs.retry.limit`). An unexpected error, a failed assertion or a TypeError, gets the
+    // smaller limit: another attempt would only meet it again.
+    const unexpected = !(error instanceof WikiJobInfraError);
+    const attempts = job.attempts + 1;
+    if (attempts >= (unexpected ? WIKI_JOB.unexpectedMaxAttempts : WIKI_JOB.maxAttempts)) {
+      const ended = await endWikiJobAtRetryLimit(this.prisma, {
+        id: job.id,
+        from: { state: 'running', generation: job.leaseGeneration },
+        error: wikiJobRetryLimitError(attempts, message, unexpected),
+      });
+      if (ended) this.log.warn(`job ${job.id} (${job.kind}) failed ${attempts} times and is ended: ${message}`);
+      return;
+    }
     await requeueWikiJobForInfra(this.prisma, { id: job.id, generation: job.leaseGeneration, error: message });
     this.log.warn(`job ${job.id} (${job.kind}) will be tried again: ${message}`);
   }

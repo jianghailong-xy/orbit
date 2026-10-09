@@ -19,10 +19,10 @@ import kotlinx.coroutines.flow.map
 import kotlinx.serialization.json.JsonObject
 
 val LocalAppearanceChanged = staticCompositionLocalOf<(String) -> Unit> { {} }
-
-/** The account's switch for smart model selection (preferences.modelRouting, iOS UserPreferences.smartModelSelection): while it is
- * off, the default, no page draws smart selection — the task page's Suggested and tier tags, the workspace form's Task runs, the
- * composer's ✦. Settings' switch sets it the moment the server has taken the change. */
+/** The account's smart model selection switch (`preferences.modelRouting`; off unless the owner turned it on, iOS
+ * UserPreferences.smartModelSelection), read with the theme from the same `users/me`. While it is off no page draws smart selection:
+ * the composer's ✦ (OrbitKit `ComposerLogic.smartRoute`), the task page's Suggested and tier tags, the workspace form's Task runs.
+ * Settings' switch sets it the moment the server has taken the change. */
 val LocalSmartSelection = compositionLocalOf { false }
 val LocalSmartSelectionChanged = staticCompositionLocalOf<(Boolean) -> Unit> { {} }
 
@@ -39,8 +39,8 @@ fun AccountAppearance(app: OrbitApplication, content: @Composable () -> Unit) {
         .collectAsState(null to 0L)
     val revision = if (live.first === handle) live.second else 0L
     var theme by remember(handle) { mutableStateOf("system") }
-    var appearanceVersion by remember(handle) { mutableLongStateOf(0L) }
     var smartSelection by remember(handle) { mutableStateOf(false) }
+    var appearanceVersion by remember(handle) { mutableLongStateOf(0L) }
     var smartSelectionVersion by remember(handle) { mutableLongStateOf(0L) }
     var resume by remember { mutableIntStateOf(0) }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -56,6 +56,7 @@ fun AccountAppearance(app: OrbitApplication, content: @Composable () -> Unit) {
             try {
                 val user = ManagementApi(app.session, handle).get("users/me") as JsonObject
                 if (version == appearanceVersion) theme = (user["preferences"] as? JsonObject)?.text("theme") ?: "system"
+                // A read that left before the switch was pressed does not take its answer back.
                 if (smartVersion == smartSelectionVersion) smartSelection = smartModelSelection(user["preferences"] as? JsonObject)
             } catch (cancel: CancellationException) { throw cancel }
             catch (_: Exception) { /* Keep this account's last known preference until the next refresh. */ }

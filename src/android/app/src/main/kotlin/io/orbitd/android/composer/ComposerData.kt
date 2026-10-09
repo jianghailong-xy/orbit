@@ -174,6 +174,29 @@ internal fun sendEndpoint(detail: JsonObject): String {
 
 internal fun SessionState?.canCompose() = this != null && fresh && !accessDenied && snapshot != null
 
+/** The decision behind a task run whose model smart selection picked, while the composer still shows that model (OrbitKit
+ * `ComposerLogic.smartRoute`; the session read's `route`): it marks the model chip ✦ and opens its menu on why. A model changed here
+ * is this run's own, a session opened by hand has no route, a run on an Agent without smart selection has one that was not applied —
+ * and so does every run while the account's switch (`preferences.modelRouting`, off by default) is off: all keep the chip as it was. */
+internal fun smartRoute(taskId: String?, route: JsonObject?, model: String, smartSelection: Boolean): JsonObject? {
+    if (!smartSelection || taskId.isNullOrEmpty() || route == null || route.flag("applied") != true) return null
+    if (route.text("level").isNullOrEmpty() || route.text("model") != model) return null
+    return route
+}
+
+/** A short paragraph's sentences, each with its full stop — what a phone's menu shows as items of their own (`ComposerLogic.sentences`). */
+internal fun sentences(text: String): List<String> {
+    val parts = text.split(". ")
+    return parts.mapIndexed { index, part -> if (index < parts.size - 1) "$part." else part }
+}
+
+/** An effort as the chip's spoken name says it (OrbitKit `Effort.label`): "Default", "xHigh", else the word capitalised. */
+internal fun effortLabel(effort: String?) = when {
+    effort.isNullOrEmpty() -> "Default"
+    effort == "xhigh" -> "xHigh"
+    else -> effort.replaceFirstChar { it.uppercase() }
+}
+
 private val PARKED_STATES = setOf("AWAITING_INPUT", "INTERRUPTED", "SUCCEEDED", "ENDED", "CANCELLED")
 
 /** The engine's guess at the next message, if the empty box offers it (docs/prompt-suggestions-design.md

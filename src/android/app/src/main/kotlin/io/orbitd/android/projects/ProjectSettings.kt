@@ -266,73 +266,49 @@ private fun OwnerStartCard(doc: JsonObject, digest: String, state: ProjectPageSt
         }, onViewTasks = viewTasks, trailing = cancel)
 }
 
-@Composable
-private fun StartHead(title: String) = Text(title.uppercase(), Modifier.padding(top = 6.dp), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold,
-    color = MaterialTheme.colorScheme.onSurfaceVariant)
-
-@Composable
-private fun StartPanel(content: @Composable ColumnScope.() -> Unit) = Column(Modifier.fillMaxWidth()
-    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f), RoundedCornerShape(10.dp)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp), content = content)
-
-/** "Is this project done?" over the project page — Review on the coordinator's request, or the owner's own
- * Record as done… — pressed at the owner's done door (iOS main `ProjectDoneSheet`, web's `ProjectDoneDialog`):
- * the seal read, the gaps shown, the request answered. A refusal stays on the sheet in the door's words. */
+/** "Is this project done?" over the project page — Review on the coordinator's request, or the owner's own Record as done… — the
+ * same card the coordinator conversation draws (iOS main `ProjectDoneSheet`): pressed at the owner's done door it turns into its
+ * receipt in place, with Done where Cancel was; "Not yet…" sends the note and the sheet goes down, and so does Reopen project. A
+ * refusal stays on the card in the door's words. */
 @Composable
 internal fun ProjectDoneSheet(api: ProjectApi, id: String, state: ProjectPageState, now: Instant, enabled: Boolean, close: () -> Unit,
-    record: suspend (JsonObject) -> String?) {
+    write: suspend (String, suspend () -> Unit) -> String?) {
     val doc = state.document ?: return
     val row = ProjectDone.live(state.openItems, ProjectDoc.status(doc))
-    val request = row?.obj("doneRequest")
     var confirmation by remember { mutableStateOf<JsonObject?>(null) }
     var unread by remember { mutableStateOf(false) }
-    var recording by remember { mutableStateOf(false) }
+    var record by remember { mutableStateOf<JsonObject?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
-    val scope = rememberCoroutineScope()
+    // While a press is out the sheet cannot be put away from it.
+    var writing by remember { mutableStateOf(false) }
     LaunchedEffect(id) {
         try { confirmation = api.confirmation(id); unread = false } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { unread = true }
     }
     val digest = confirmation?.obj("currentVersion")?.text("digest")
-    val body = ProjectDone.body(doc, row?.text("itemId"), request, digest)
-    val counts = ProjectDone.counts(doc)
-    val criteria = ProjectDone.criteria(doc)
-    val gaps = ProjectDone.gaps(doc, request)
-    Dialog(onDismissRequest = { if (!recording) close() }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+    suspend fun press(refusal: String, body: suspend () -> Unit): Boolean {
+        writing = true
+        try { error = write(refusal, body); return error == null } finally { writing = false }
+    }
+    val itemId = row?.text("itemId")
+    val notYet: (suspend (String) -> Boolean)? = if (itemId == null) null else { note ->
+        press("${ProjectDone.notDeclined} — ") { api.declineDone(id, itemId, note) }.also { if (it) close() }
+    }
+    Dialog(onDismissRequest = { if (!writing) close() }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(Modifier.fillMaxWidth(0.94f).testTag("project-done-sheet"), shape = MaterialTheme.shapes.large) {
             Column(Modifier.heightIn(max = 720.dp).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("✓ ${ProjectDone.heading}", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary)
-                    TextButton(onClick = close, enabled = !recording, modifier = Modifier.testTag("project-done-cancel")) { Text("Cancel") }
-                }
-                Note(ProjectDone.meta(doc.text("title").orEmpty(), row?.text("waitingSince")?.let { ProjectTime.ago(it, now) }))
-                request?.text("judgment")?.takeIf { it.isNotBlank() }?.let { StartHead(ProjectDone.coordinatorCall); Text(it) }
-                StartHead(ProjectDone.doneWhenHead(criteria.size))
-                criteria.forEach { c -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(c.text, Modifier.weight(1f), maxLines = 3, overflow = TextOverflow.Ellipsis)
-                    Text(ProjectDone.criterionState(c), style = MaterialTheme.typography.labelMedium,
-                        color = if (c.satisfied) LocalOrbitColors.current.success else MaterialTheme.colorScheme.onSurfaceVariant)
-                } }
-                StartHead(ProjectDone.gapsHead(gaps.size))
-                if (gaps.isEmpty()) Note(ProjectDone.noGaps)
-                gaps.forEach { gap -> StartPanel {
-                    Text(gap.text("title") ?: gap.text("criterionKey").orEmpty(), fontWeight = FontWeight.SemiBold)
-                    gap.text("whyNotProven")?.let { Note(it) }
-                    ProjectDone.checkedLine(gap)?.let { Note(it) }
-                } }
-                Note(ProjectDone.orbitCheckedLine(counts, confirmation?.obj("confirmation")?.text("confirmedAt"), ProjectDone.openItemsCount(state.openItems),
-                    ProjectDone.runningCount(doc)))
-                Text(ProjectDone.recordingExplanation, style = MaterialTheme.typography.bodyMedium)
-                if (unread && request == null) Note(StartProjectCopy.unreadSeal)
-                error?.let { Note(it, MaterialTheme.colorScheme.error) }
-                Button(onClick = {
-                    val sent = body ?: return@Button
-                    if (recording) return@Button
-                    recording = true
-                    scope.launch {
-                        try { val failure = record(sent); if (failure == null) close() else error = failure }
-                        finally { recording = false }
-                    }
-                }, Modifier.fillMaxWidth().testTag("project-done-record"), enabled = enabled && body != null && !recording) { Text(ProjectDone.recordLabel(counts)) }
+                ProjectDoneCard(doc, row, confirmation?.obj("confirmation")?.text("confirmedAt"), ProjectDone.openItemsCount(state.openItems),
+                    ProjectDone.runningCount(doc), record, sealRead = row?.obj("doneRequest") != null || digest != null, now = now, enabled = enabled,
+                    error = error, tag = "project-done",
+                    onRecord = {
+                        val body = ProjectDone.body(doc, itemId, row?.obj("doneRequest"), digest)
+                        var answer: JsonObject? = null
+                        if (body != null && press("${ProjectDone.notRecorded} — ") { answer = api.done(id, body) }) record = answer ?: buildJsonObject { put("status", "DONE") }
+                    },
+                    onNotYet = notYet,
+                    onReopen = { if (press("${ProjectDone.notReopened} — ") { api.setStatus(id, "OPEN", "reopen:${doc.text("updatedAt")}") }) { record = null; close() } },
+                    trailing = { TextButton(onClick = close, enabled = !writing, modifier = Modifier.testTag("project-done-cancel")) {
+                        Text(if (record == null) "Cancel" else "Done") } })
+                if (unread && row == null) Note(StartProjectCopy.unreadSeal)
             }
         }
     }

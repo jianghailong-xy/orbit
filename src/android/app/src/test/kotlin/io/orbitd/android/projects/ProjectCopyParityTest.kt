@@ -36,12 +36,16 @@ class ProjectCopyParityTest {
     @Test fun startWords() = assertIn(StartProjectCopy, swift("${kit}StartProject.swift", "${kit}ProjectRunSettings.swift", "${kit}CriteriaDecision.swift"))
     @Test fun runSettingsWords() = assertIn(RunSettings, swift("${kit}ProjectRunSettings.swift", "${kit}StartProject.swift"))
     @Test fun markdownWords() = assertIn(ProjectMarkdown, swift("${kit}ShareMarkdown.swift"))
+    @Test fun crossingsWords() = assertIn(ProjectCrossings, swift("${kit}ProjectCrossings.swift"))
+    @Test fun doneWords() = assertIn(ProjectDone, swift("${kit}ProjectDone.swift"))
     @Test fun attentionWords() {
         val source = swift("${kit}ProjectAttention.swift")
-        // The one composed chip: Swift interpolates the start's own word, and so does Kotlin.
-        assertIn(ProjectAttention, source, composed = setOf("readyToStartSays"))
+        // The two composed chips: Swift interpolates the start's and the close's own words, and so does Kotlin.
+        assertIn(ProjectAttention, source, composed = setOf("readyToStartSays", "readyToCloseSays"))
         assertTrue(source.contains("\"Needs you · \\(StartProject.readyToStart)\""))
         assertTrue(ProjectAttention.readyToStartSays == "Needs you · ${StartProjectCopy.readyToStart}")
+        assertTrue(source.contains("\"Needs you · \\(ProjectDone.readyToClose)\""))
+        assertTrue(ProjectAttention.readyToCloseSays == "Needs you · ${ProjectDone.readyToClose}")
         val lanes = ProjectLane.entries.flatMap { listOf(it.title, it.note) }.filter { !source.contains("\"$it\"") }
         assertTrue("lane words not in ProjectAttention.swift: $lanes", lanes.isEmpty())
     }

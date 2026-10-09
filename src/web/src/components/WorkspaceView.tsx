@@ -307,7 +307,7 @@ import {
   SessionCriteriaDecisionCard,
   type CriteriaDecisionReply,
 } from './CriteriaDecisionCard';
-import { CoordinatorQuestions } from './CoordinatorQuestionCard';
+import { AnsweredQuestionCard, CoordinatorQuestions, closedQuestionRows } from './CoordinatorQuestionCard';
 import {
   ItemAsCard,
   exceptionCardRows,
@@ -4345,12 +4345,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         seen.current.add(ev.seq);
         // A block the provider closes with no text of its own would otherwise take its reasoning
         // with it: the draft is cleared just below, and an empty durable event renders nothing.
-        // Keep what was streamed — and how long it took — on this LOCAL copy of the event. It is
-        // never sent back, so a reload still reads the server's empty text and still renders
-        // nothing, which is deliberate (see lib/thinkingDraft).
+        // Keep what was streamed — and how long it took, when the runner did not say — on this
+        // LOCAL copy of the event. It is never sent back, so a reload still reads the server's
+        // empty text and still renders nothing, which is deliberate (see lib/thinkingDraft).
         if (ev.type === 'thinking') {
           const patch = settleThinking(
-            ev.payload?.text,
+            ev.payload,
             streamingThinkRef.current,
             thinkStartedAtRef.current,
             Date.now(),
@@ -5319,11 +5319,29 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     transcriptEvents,
   ]);
 
+  // The coordinator's questions that have ended — answered, here or at another end, or withdrawn —
+  // each drawn as the record it became at the moment it ended (§5.2 R10, R12), placed by the rule
+  // every record above is (`decisionReceiptAnchor`). The question's own card, below the transcript,
+  // goes when the read drops it from `needsYou`, in the same poll that brings the record. The
+  // native clients do the same (`CoordinatorQuestions.receipts`).
+  const questionRecords = useMemo(
+    () =>
+      coordinatedProjectId
+        ? closedQuestionRows(openItems.data, transcriptEvents).map(({ record, placement }) => ({
+            anchor: placement,
+            moment: record.resolvedAt,
+            key: `question-record:${record.itemId}`,
+            element: <AnsweredQuestionCard record={record} />,
+          }))
+        : [],
+    [coordinatedProjectId, openItems.data, transcriptEvents],
+  );
+
   // One array for the transcript, memoized: a fresh array on every render would rebuild the whole
   // conversation with it (`Transcript` memoizes on this prop).
   const transcriptInserts = useMemo(
-    () => [...decisionReceipts, ...blockedPromotionCard, ...exceptionCards],
-    [decisionReceipts, blockedPromotionCard, exceptionCards],
+    () => [...decisionReceipts, ...questionRecords, ...blockedPromotionCard, ...exceptionCards],
+    [decisionReceipts, questionRecords, blockedPromotionCard, exceptionCards],
   );
 
   // Whether the settlement card below is on screen and still a question, as the card reports it:
@@ -10012,9 +10030,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   (mock 5, §5.2): the coordinator asks and goes on working, and the card is what the
                   owner answers — so the conversation shows what it is waiting on rather than only
                   the sentence it wrote when it asked. Drawn from the open items and not from any
-                  turn, so it is the same card the project page shows, and it goes when it is
-                  answered. Keyed apart from its siblings for the reason the evidence card's note
-                  gives below. */}
+                  turn, so it is the same card the project page shows. Once it is answered or
+                  withdrawn it is drawn above as the record it became (`questionRecords`). Keyed
+                  apart from its siblings for the reason the evidence card's note gives below. */}
               {selected && selectedId && !selectedTrashed && (
                 <CoordinatorQuestions
                   key={`coordinator-question:${selectedId}`}

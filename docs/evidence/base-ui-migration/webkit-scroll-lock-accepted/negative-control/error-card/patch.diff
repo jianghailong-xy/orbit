@@ -1,0 +1,12 @@
+diff --git a/src/web/src/index.css b/src/web/src/index.css
+index 99ccdca71..b95cc570a 100755
+--- a/src/web/src/index.css
++++ b/src/web/src/index.css
+@@ -23348,3 +23348,7 @@ button.agent-progress-agent:hover {
+   text-align: center;
+   text-wrap: balance;
+ }
++
++/* Negative control, never delivered: on the session page (the only P0 page with the composer), the error card
++   ("Couldn't send the message") 1px further right. */
++body:has(.composer-box) .toast--attention { position: relative; left: 1px; }

@@ -119,9 +119,9 @@ func clearCallingSession() {
 // fakeStep is one instruction of a fake CLI script: emit a frame, or block until one
 // arrives. Steps run in order; the process outlives the last one.
 type fakeStep struct {
-	// Emit: system_init | assistant | tool_use | tool_result | result | prompt_suggestion |
-	// control_request | control_response | replay_user | local_command_stdout |
-	// task_notification | stop_reading | eof (eof exits, closing stdout).
+	// Emit: system_init | assistant | thinking_delta | thinking | tool_use | tool_result |
+	// result | prompt_suggestion | control_request | control_response | replay_user |
+	// local_command_stdout | task_notification | stop_reading | eof (eof exits, closing stdout).
 	//
 	// task_notification is a background task's lifecycle report, which Claude sends as a
 	// user-role message holding one bare string — the same shape as its local-command output.
@@ -392,6 +392,20 @@ func fakeFrame(s fakeStep, sessionID, lastReqID, model string) (string, error) {
 		return marshalFrame(init), nil
 	case "assistant":
 		return assistantFrame(sessionID, map[string]interface{}{"type": "text", "text": s.Text}), nil
+	case "thinking_delta":
+		// One chunk of reasoning as --include-partial-messages streams it.
+		return marshalFrame(map[string]interface{}{
+			"type": "stream_event", "session_id": sessionID, "parent_tool_use_id": nil,
+			"event": map[string]interface{}{
+				"type": "content_block_delta", "index": 0,
+				"delta": map[string]interface{}{"type": "thinking_delta", "thinking": s.Text},
+			},
+		}), nil
+	case "thinking":
+		// The block that closes it. Claude's own carries no text and a signature in its place.
+		return assistantFrame(sessionID, map[string]interface{}{
+			"type": "thinking", "thinking": s.Text, "signature": "EqQBCkYIBxgCKkA",
+		}), nil
 	case "tool_use":
 		input := s.Input
 		if input == nil {

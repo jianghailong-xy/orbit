@@ -36,7 +36,13 @@ object ProjectDoc {
 enum class Glyph { DISC, TRIANGLE, SQUARE, HOURGLASS, CHECK, CROSS, SLASH, SPINNER, BRANCH }
 enum class TagTone { NEUTRAL, BRAND, WARNING, DANGER, SUCCESS, VERIFICATION }
 data class OverviewCell(val key: String, val label: String, val value: Int, val footnote: String, val glyph: Glyph)
-data class LandingLine(val word: String, val what: String?, val running: Boolean, val state: String, val clock: String, val clockLabel: String, val updated: String?)
+/** `timedOut`: the server judged the job's runner silent past its limit — the row says so in the warning ink, a triangle where
+ * the ring was, and nothing spins. */
+data class LandingLine(val word: String, val what: String?, val running: Boolean, val state: String, val clock: String, val clockLabel: String, val updated: String?,
+    val timedOut: Boolean = false)
+/** One job of the list the landing row opens, drawn as the row itself: `taskId` is what a press opens, `detail` what a timed-out or
+ * retried job adds under it, and Retry is offered on the server's `retryable`, never inferred from `timedOut`. */
+data class LandingJobLine(val jobId: String, val taskId: String?, val line: LandingLine, val detail: String?, val retryable: Boolean)
 data class Pill(val label: String, val tone: TagTone)
 data class Tag(val text: String, val tone: TagTone)
 data class TaskGroup(val key: String, val heading: String, val tasks: List<JsonObject>, val settled: Boolean = false)
@@ -90,25 +96,97 @@ object ProjectPage {
     val integrationJobWords = mapOf("LAND_TASK" to "Landing", "CHECK_PROMOTION" to "Merge check", "LAND_PROMOTION" to "Merge to main")
     val integrationPhaseWords = mapOf("FETCH" to "fetching", "MAIN_SYNC" to "syncing main", "REBASE" to "rebasing", "MERGE" to "merging",
         "CHECK" to "checking", "VERIFY" to "verifying", "PUSH" to "pushing")
+    // The job list's words (iOS 3a5c576fc).
+    const val landingTimedOut = "Timed out"
+    const val landingNoReportFor = "No report for"
+    const val landingRetry = "Retry"
+    const val landingRetryFailed = "Retry failed"
+    const val landingNoPushRecorded = "no push recorded"
+    const val landingMayHaveBeenPushed = "may have been pushed"
+    const val landingRetriedByOwner = "retried by you"
+    const val landingRetriedByCoordinator = "retried by the coordinator"
     /** Minutes and seconds always: this number is watched while it moves. */
     fun landingClock(seconds: Double): String { val whole = max(0.0, seconds).toInt(); return "${whole / 60}m ${whole % 60}s" }
+    /** The name slot when more than one job is in flight: "2 jobs", or "2 jobs · 1 timed out". */
+    fun landingJobsCount(jobs: Int, timedOut: Int) = if (timedOut > 0) "$jobs jobs · $timedOut timed out" else "$jobs jobs"
+    /** A timed-out job's limit, in minutes rounded as the web's `Math.round` rounds them: "limit 10m". */
+    fun landingLimit(seconds: Int) = "limit ${Math.round(seconds / 60.0)}m"
+    /** The job list's title: "1 job in flight", "2 jobs in flight". */
+    fun landingJobsTitle(jobs: Int) = "$jobs ${if (jobs == 1) "job" else "jobs"} in flight"
+    /** "20:07": a local 24-hour clock time, as the job list says when a runner took a job and when a retry was asked for. */
+    fun landingClockTime(at: Instant, zone: ZoneId = ZoneId.systemDefault()) = at.atZone(zone).let { "%02d:%02d".format(it.hour, it.minute) }
 
-    /** The landing in flight, or null when nothing is (`landingLine`). */
+    /** Every job the two counts count, in `inFlight`'s order; null from a server that does not list them — which is not none in flight. */
+    fun inFlightJobs(view: JsonObject): List<JsonObject>? = (view["inFlightJobs"] as? JsonArray)?.takeIf { jobs -> jobs.all { it is JsonObject } }?.map { it as JsonObject }
+
+    /** The landing in flight, or null when nothing is (`landingLine`). A server that lists its jobs judges a silent runner itself, so
+     * the row no longer guesses from the heartbeat's age: "Update unavailable" is then only this app unable to read the server, and a
+     * job the server judged timed out says so. An older server keeps the row as it was. */
     fun landingLine(view: JsonObject, now: Instant, updatedAt: Instant?, refreshFailed: Boolean): LandingLine? {
         val inFlight = view.obj("inFlight") ?: return null
         val running = inFlight.text("state") == "RUNNING"
         val jobs = view.n("integratingCount") + view.n("queuedCount")
+        val listed = inFlightJobs(view)
+        val timedOutJobs = listed?.count { it.flag("timedOut") } ?: 0
         val heartbeatAt = inFlight.text("heartbeatAt")?.let(ProjectTime::parse)
-        val heartbeatStale = running && heartbeatAt?.let { seconds(it, now) > 600 } == true
-        val readStale = updatedAt?.let { seconds(it, now) > 90 } == true
-        val unavailable = refreshFailed || readStale || heartbeatStale
-        val lastUpdate = if (running) heartbeatAt ?: updatedAt else updatedAt
+        val heartbeatStale = listed == null && running && heartbeatAt?.let { seconds(it, now) > 600 } == true
+        val unavailable = cannotRead(now, updatedAt, refreshFailed) || heartbeatStale
+        val word = integrationJobWords[inFlight.text("kind")] ?: "Integration"
+        val what = if (jobs > 1) landingJobsCount(jobs, timedOutJobs) else inFlight.text("taskTitle")
+        val lead = listed?.firstOrNull()
+        if (!unavailable && lead != null && lead.flag("timedOut")) return timedOutLine(lead, word, what, now)
+        return liveLine(word, what, running, inFlight.text("phase"), inFlight.text("startedAt"), inFlight.text("heartbeatAt"), now, updatedAt, unavailable)
+    }
+
+    /** Every job in flight, one line each in `inFlightJobs`' order; none from a server that does not list them. Each is the landing row's
+     * own rendering of that job, its task's title in the name slot, on the row's terms: this app unable to read the server first, then
+     * the server's judgement that the runner went silent, then the job's own clock. */
+    fun landingJobLines(view: JsonObject, now: Instant, updatedAt: Instant?, refreshFailed: Boolean, zone: ZoneId = ZoneId.systemDefault()): List<LandingJobLine> {
+        val unavailable = cannotRead(now, updatedAt, refreshFailed)
+        return inFlightJobs(view).orEmpty().map { job ->
+            val word = integrationJobWords[job.text("kind")] ?: "Integration"
+            val line = if (job.flag("timedOut") && !unavailable) timedOutLine(job, word, job.text("taskTitle"), now)
+                else liveLine(word, job.text("taskTitle"), (job.text("state") ?: "QUEUED") == "RUNNING", job.text("phase"), job.text("startedAt"),
+                    job.text("heartbeatAt"), now, updatedAt, unavailable)
+            LandingJobLine(job.text("jobId").orEmpty(), job.text("taskId"), line, landingJobDetail(job, zone), job.flag("retryable"))
+        }
+    }
+
+    /** Whether this app has lost the server: its last read failed, or is more than 90 s old. */
+    private fun cannotRead(now: Instant, updatedAt: Instant?, refreshFailed: Boolean) = refreshFailed || updatedAt?.let { seconds(it, now) > 90 } == true
+
+    /** A job running or waiting its turn. `unavailable` freezes the clock at the last update the app had and stops the row claiming activity. */
+    private fun liveLine(word: String, what: String?, running: Boolean, phase: String?, startedAt: String?, heartbeatAt: String?, now: Instant,
+        updatedAt: Instant?, unavailable: Boolean): LandingLine {
+        // A queued job's heartbeat and phase can be an earlier claim's: only a running job's count.
+        val lastUpdate = if (running) heartbeatAt?.let(ProjectTime::parse) ?: updatedAt else updatedAt
         val elapsedAt = if (unavailable) minOf(now, lastUpdate ?: now) else now
         val age = lastUpdate?.let { (max(0.0, seconds(it, now)) / 60).toInt() }
-        val elapsed = inFlight.text("startedAt")?.let(ProjectTime::parse)?.let { seconds(it, elapsedAt) } ?: 0.0
-        return LandingLine(integrationJobWords[inFlight.text("kind")] ?: "Integration", if (jobs > 1) "$jobs jobs" else inFlight.text("taskTitle"),
-            running && !unavailable, if (unavailable) "Update unavailable" else if (running) integrationPhaseWords[inFlight.text("phase")] ?: "running" else "queued",
+        val elapsed = startedAt?.let(ProjectTime::parse)?.let { seconds(it, elapsedAt) } ?: 0.0
+        return LandingLine(word, what, running && !unavailable, if (unavailable) "Update unavailable" else if (running) integrationPhaseWords[phase] ?: "running" else "queued",
             landingClock(elapsed), if (running) "Elapsed" else "Queued for", age?.let { if (it == 0) "Updated just now" else "Updated ${it}m ago" })
+    }
+
+    /** A job the server judged timed out: how long its runner has said nothing, in whole minutes, against the limit it went past. */
+    private fun timedOutLine(job: JsonObject, word: String, what: String?, now: Instant): LandingLine {
+        val minutes = (job.text("heartbeatAt") ?: job.text("startedAt"))?.let(ProjectTime::parse)?.let { max(0, (seconds(it, now) / 60).toInt()) } ?: 0
+        return LandingLine(word, what, false, landingTimedOut, "${minutes}m", landingNoReportFor, landingLimit(job.number("limitSeconds") ?: 600), timedOut = true)
+    }
+
+    /** The line under a job: what a timed-out job's runner did, or which generation a retried job is and who asked for it. Whether a
+     * push may have happened is read off the step it stopped at. */
+    private fun landingJobDetail(job: JsonObject, zone: ZoneId): String? {
+        // An instant the clock cannot read is said to be one, never a wrong time.
+        fun time(iso: String?) = iso?.let(ProjectTime::parse)?.let { landingClockTime(it, zone) } ?: "--:--"
+        if (job.flag("timedOut")) {
+            val runner = job.text("runnerName")?.takeIf { it.isNotEmpty() }?.let { "Runner $it" } ?: "The runner"
+            val step = integrationPhaseWords[job.text("phase")] ?: "running"
+            val push = if (job.text("phase") == "PUSH" || job.text("phase") == "VERIFY") landingMayHaveBeenPushed else landingNoPushRecorded
+            return "$runner took it at ${time(job.text("startedAt"))} · stopped at $step · $push"
+        }
+        val retriedBy = job.text("retriedBy") ?: return null
+        val who = if (retriedBy == "OWNER") landingRetriedByOwner else landingRetriedByCoordinator
+        return "Generation ${job.number("generation") ?: 1} · $who at ${time(job.text("queuedAt"))}"
     }
 
     // MARK: criteria
@@ -230,7 +308,32 @@ object ProjectPage {
     const val openItemsHeading = "Open items"
     const val needsYouGroup = "Needs you"
     const val withCoordinatorGroup = "With the coordinator"
-    fun openItemsHint(needsYou: Int, withCoordinator: Int) = "$needsYou need you · $withCoordinator with the coordinator · oldest first"
+    const val noOpenItems = "No open items"
+    const val noActionNeeded = "No action needed from you"
+    const val nothingWaiting = "Nothing is waiting on you or the coordinator."
+    const val openItemsUnread = "Open items couldn't be loaded"
+    /** What the toolbar's Open items says aloud before its read has answered, or once it has failed. */
+    const val openItemsLoading = "Loading"
+    const val openItemsCantLoad = "Couldn't load open items"
+    const val closeOpenItems = "Close open items"
+    /** The toolbar counts every open item; only the owner's share raises a reminder on the page (`OpenItemsSummary`). */
+    data class OpenItemsSummary(val needsYou: Int, val withCoordinator: Int) {
+        val count get() = needsYou + withCoordinator
+        val attention get() = if (needsYou <= 0) null else if (needsYou == 1) "1 item needs you" else "$needsYou items need you"
+        val subtitle get() = if (count == 0) noOpenItems
+            else (attention ?: noActionNeeded).let { if (withCoordinator > 0) "$it · $withCoordinator with the coordinator" else it }
+    }
+    /** A missing read is not an empty inbox. A start request counts only while the page can answer it, and the coordinator's
+     * request to record the project done while it is OPEN; the owner's own Start… and Record as done… are actions nobody waits on. */
+    fun openItemsSummary(doc: JsonObject, items: JsonObject?): OpenItemsSummary? {
+        if (items == null) return null
+        val asked = StartProjectCopy.pageRow(ProjectDoc.status(doc), ProjectDoc.started(doc), items) is StartProjectCopy.PageRow.Asked
+        val done = ProjectDone.live(items, ProjectDoc.status(doc)) != null
+        return OpenItemsSummary(needsYouRows(items).size + (if (asked) 1 else 0) + (if (done) 1 else 0), items.objects("withCoordinator").size)
+    }
+    /** The owner's rows, without the request to record the project done should a server ever list it there too: it has a row of
+     * its own (`ProjectDone.PageRow`). */
+    fun needsYouRows(items: JsonObject) = items.objects("needsYou").filter { it.obj("doneRequest") == null }
     fun who(row: JsonObject) = if (row.text("assignee") == "COORDINATOR") "Coordinator" else "You"
     fun waitingLabel(row: JsonObject, now: Instant): String {
         val since = row.text("waitingSince")?.let(ProjectTime::parse) ?: now
@@ -723,6 +826,14 @@ object StartProjectCopy {
 
     fun requestSummary(settings: JsonObject) = listOf(rowAsked, RunSettings.lineInSentence(settings.text("line")),
         "${RunSettings.automatic} ${if (settings.flag("automatic")) "on" else "off"}", "at most ${settings.number("maxConcurrentTasks") ?: 1} at a time").joinToString(" · ")
+    /** The start's row in Open items (`StartProject.PageRow`): the coordinator's request, answered on its card, or the owner's own Start…. */
+    sealed interface PageRow { data class Asked(val row: JsonObject) : PageRow; data object Own : PageRow }
+    /** Only an OPEN project nobody has started draws one, and the owner's own Start… only once the open-items read has answered:
+     * a request still on its way is not a project nobody asked about. */
+    fun pageRow(status: String, started: Boolean?, openItems: JsonObject?): PageRow? {
+        if (status != "OPEN" || started != false || openItems == null) return null
+        return openItems.obj("startRequest")?.let { PageRow.Asked(it) } ?: PageRow.Own
+    }
     /** The plan has dependencies when a run is filed or a live edge joins two live marks. */
     fun planHasDependencies(graph: DependencyGraph): Boolean {
         fun status(mark: GraphMark) = if (mark.kind == MarkKind.TASK) mark.status.orEmpty() else when {

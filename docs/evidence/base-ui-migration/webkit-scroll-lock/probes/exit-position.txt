@@ -1,0 +1,309 @@
+[WebServer] (node:1603312) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+P0 expected screenshots: 88 P0.2 originals, 150 main drift references, 14 accepted migration differences.
+
+Running 160 tests using 1 worker
+
+(node:1603626) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓    1 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with no-preference motion (2.2s)
+  ✓    2 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with reduce motion (1.7s)
+  ✓    3 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with no-preference motion (2.0s)
+  ✓    4 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with reduce motion (1.6s)
+(node:1605069) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓    5 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with no-preference motion (2.1s)
+  ✓    6 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with reduce motion (1.5s)
+  ✓    7 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with no-preference motion (1.9s)
+  ✓    8 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with reduce motion (1.9s)
+(node:1606151) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓    9 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with no-preference motion (2.1s)
+  ✓   10 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with reduce motion (1.4s)
+  ✓   11 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with no-preference motion (2.0s)
+  ✓   12 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with reduce motion (1.6s)
+(node:1607015) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   13 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with no-preference motion (2.2s)
+  ✓   14 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with reduce motion (1.7s)
+  ✓   15 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with no-preference motion (2.2s)
+  ✓   16 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with reduce motion (1.9s)
+(node:1608072) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   17 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with no-preference motion (2.1s)
+  ✓   18 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with reduce motion (1.8s)
+  ✓   19 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with no-preference motion (2.2s)
+  ✓   20 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with reduce motion (1.9s)
+(node:1609075) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘   21 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with no-preference motion (2.5s)
+(node:1609295) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   22 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with reduce motion (1.5s)
+  ✓   23 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with no-preference motion (2.0s)
+  ✓   24 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with reduce motion (1.7s)
+(node:1609835) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   25 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with no-preference motion (2.1s)
+  ✘   26 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with reduce motion (1.8s)
+(node:1610252) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   27 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with no-preference motion (2.3s)
+  ✓   28 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with reduce motion (1.6s)
+(node:1610982) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   29 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with no-preference motion (2.1s)
+  ✓   30 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with reduce motion (1.7s)
+  ✓   31 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with no-preference motion (2.0s)
+  ✓   32 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with reduce motion (1.4s)
+(node:1611928) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   33 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with no-preference motion (1.9s)
+  ✓   34 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with reduce motion (1.4s)
+  ✓   35 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with no-preference motion (2.0s)
+  ✓   36 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with reduce motion (1.4s)
+(node:1612762) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   37 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with no-preference motion (1.8s)
+  ✓   38 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with reduce motion (1.4s)
+  ✓   39 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with no-preference motion (1.9s)
+  ✓   40 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with reduce motion (1.5s)
+(node:1613665) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   41 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with no-preference motion (2.0s)
+  ✓   42 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with reduce motion (1.4s)
+  ✓   43 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with no-preference motion (2.0s)
+  ✓   44 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with reduce motion (1.8s)
+(node:1614537) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   45 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with no-preference motion (1.9s)
+  ✓   46 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with reduce motion (1.5s)
+  ✓   47 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with no-preference motion (1.8s)
+  ✓   48 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with reduce motion (1.4s)
+(node:1615679) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   49 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with no-preference motion (1.8s)
+  ✓   50 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with reduce motion (1.4s)
+  ✓   51 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with no-preference motion (1.9s)
+  ✓   52 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with reduce motion (1.5s)
+(node:1616371) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   53 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with no-preference motion (1.8s)
+  ✓   54 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with reduce motion (1.4s)
+  ✓   55 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with no-preference motion (1.9s)
+  ✓   56 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with reduce motion (1.4s)
+(node:1617351) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   57 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with no-preference motion (1.9s)
+  ✓   58 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with reduce motion (1.4s)
+  ✓   59 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with no-preference motion (1.8s)
+  ✓   60 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with reduce motion (1.4s)
+(node:1618365) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   61 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with no-preference motion (1.9s)
+  ✓   62 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with reduce motion (1.4s)
+  ✓   63 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with no-preference motion (1.8s)
+  ✓   64 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with reduce motion (1.5s)
+(node:1619577) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   65 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with no-preference motion (1.9s)
+  ✓   66 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with reduce motion (1.3s)
+  ✓   67 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with no-preference motion (1.8s)
+  ✓   68 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with reduce motion (1.4s)
+(node:1620656) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   69 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with no-preference motion (1.9s)
+  ✓   70 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with reduce motion (1.3s)
+  ✓   71 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with no-preference motion (1.8s)
+  ✓   72 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with reduce motion (1.5s)
+(node:1621528) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   73 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with no-preference motion (1.8s)
+  ✓   74 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with reduce motion (1.3s)
+  ✓   75 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with no-preference motion (1.7s)
+  ✓   76 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with reduce motion (1.4s)
+(node:1622250) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   77 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with no-preference motion (1.8s)
+  ✓   78 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with reduce motion (1.4s)
+  ✓   79 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with no-preference motion (1.8s)
+  ✓   80 [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with reduce motion (1.6s)
+(node:1623415) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   81 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with no-preference motion (2.0s)
+  ✓   82 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with reduce motion (1.4s)
+  ✓   83 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with no-preference motion (1.8s)
+  ✓   84 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with reduce motion (1.3s)
+(node:1624422) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   85 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with no-preference motion (1.7s)
+  ✓   86 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with reduce motion (1.5s)
+  ✓   87 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with no-preference motion (1.9s)
+  ✓   88 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with reduce motion (1.4s)
+(node:1625596) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   89 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with no-preference motion (1.8s)
+  ✓   90 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with reduce motion (1.4s)
+  ✓   91 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with no-preference motion (1.8s)
+  ✓   92 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with reduce motion (1.3s)
+(node:1626633) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   93 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with no-preference motion (1.7s)
+  ✓   94 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with reduce motion (1.3s)
+  ✓   95 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with no-preference motion (1.7s)
+  ✓   96 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with reduce motion (1.4s)
+(node:1627606) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   97 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with no-preference motion (1.8s)
+  ✓   98 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with reduce motion (1.6s)
+  ✓   99 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with no-preference motion (2.0s)
+  ✓  100 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with reduce motion (1.4s)
+(node:1628602) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  101 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with no-preference motion (1.8s)
+  ✓  102 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with reduce motion (1.5s)
+  ✓  103 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with no-preference motion (2.0s)
+  ✓  104 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with reduce motion (1.4s)
+(node:1629393) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  105 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with no-preference motion (1.9s)
+  ✓  106 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with reduce motion (1.4s)
+  ✓  107 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with no-preference motion (1.8s)
+  ✓  108 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with reduce motion (1.3s)
+(node:1630205) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  109 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with no-preference motion (1.8s)
+  ✓  110 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with reduce motion (1.4s)
+  ✓  111 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with no-preference motion (1.9s)
+  ✓  112 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with reduce motion (1.5s)
+(node:1630956) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  113 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with no-preference motion (2.1s)
+  ✓  114 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with reduce motion (2.2s)
+  ✓  115 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with no-preference motion (2.5s)
+  ✓  116 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with reduce motion (3.6s)
+(node:1632201) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  117 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with no-preference motion (1.9s)
+  ✓  118 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with reduce motion (1.6s)
+  ✓  119 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with no-preference motion (2.0s)
+  ✓  120 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with reduce motion (2.2s)
+(node:1632874) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  121 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with no-preference motion (1.9s)
+  ✓  122 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with reduce motion (1.4s)
+  ✓  123 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with no-preference motion (1.8s)
+  ✓  124 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with reduce motion (1.3s)
+(node:1633619) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  125 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with no-preference motion (1.8s)
+  ✓  126 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with reduce motion (1.5s)
+  ✓  127 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with no-preference motion (2.1s)
+  ✓  128 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with reduce motion (1.3s)
+(node:1634600) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  129 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with no-preference motion (3.8s)
+  ✓  130 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with reduce motion (2.6s)
+  ✓  131 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with no-preference motion (1.9s)
+  ✓  132 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with reduce motion (1.4s)
+(node:1635624) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  133 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with no-preference motion (2.1s)
+  ✓  134 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with reduce motion (1.4s)
+  ✓  135 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with no-preference motion (1.7s)
+  ✓  136 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with reduce motion (1.2s)
+(node:1636232) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  137 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with no-preference motion (1.7s)
+  ✓  138 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with reduce motion (1.3s)
+  ✓  139 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with no-preference motion (1.8s)
+  ✓  140 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with reduce motion (1.3s)
+(node:1637033) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  141 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with no-preference motion (1.9s)
+  ✓  142 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with reduce motion (1.6s)
+  ✓  143 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with no-preference motion (2.1s)
+  ✓  144 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with reduce motion (1.6s)
+(node:1638390) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  145 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with no-preference motion (2.0s)
+  ✓  146 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with reduce motion (1.4s)
+  ✓  147 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with no-preference motion (1.8s)
+  ✓  148 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with reduce motion (1.3s)
+(node:1639388) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  149 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with no-preference motion (1.8s)
+  ✓  150 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with reduce motion (1.4s)
+  ✓  151 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with no-preference motion (1.8s)
+  ✓  152 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with reduce motion (1.3s)
+(node:1640170) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  153 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with no-preference motion (1.8s)
+  ✓  154 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with reduce motion (1.4s)
+  ✓  155 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with no-preference motion (1.8s)
+  ✓  156 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with reduce motion (1.4s)
+(node:1641017) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  157 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with no-preference motion (1.9s)
+  ✓  158 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with reduce motion (1.4s)
+  ✓  159 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with no-preference motion (1.8s)
+  ✓  160 [webkit-dark-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region fixed: exit keeps its own native progress through modal transfers with reduce motion (1.5s)
+
+
+  1) [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with no-preference motion 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: 2
+    Received: 1
+
+      64 |     expect(connected.every((s) => s.inert && s.hidden === 'true' && s.sameCard)).toBe(true);
+      65 |     expect(connected.every((s) => s.animation === (motion === 'reduce' ? 'orbit-toast-fade' : 'orbit-toast-exit'))).toBe(true);
+    > 66 |     expect(new Set(connected.map((s) => s.owner)).size).toBe(2);
+         |                                                         ^
+      67 |     for (let i = 1; i < connected.length; i++) {
+      68 |       // CSS serializes the visible opacity; raw effect progress can differ by
+      69 |       // sub-ULP rounding when a delay replaces elapsed animation time.
+        at /var/tmp/34cBi-ref/src/web/ui-migration/toasts-probe-exit-position.browser.mjs:66:57
+
+    Error Context: ../../../../../mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/probes/out-exit-position/toasts-probe-exit-position-8c185-s-with-no-preference-motion-webkit-light-desktop-repeat5/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/probes/out-exit-position/toasts-probe-exit-position-8c185-s-with-no-preference-motion-webkit-light-desktop-repeat5/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../../mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/probes/out-exit-position/toasts-probe-exit-position-8c185-s-with-no-preference-motion-webkit-light-desktop-repeat5/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with reduce motion 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: 2
+    Received: 1
+
+      64 |     expect(connected.every((s) => s.inert && s.hidden === 'true' && s.sameCard)).toBe(true);
+      65 |     expect(connected.every((s) => s.animation === (motion === 'reduce' ? 'orbit-toast-fade' : 'orbit-toast-exit'))).toBe(true);
+    > 66 |     expect(new Set(connected.map((s) => s.owner)).size).toBe(2);
+         |                                                         ^
+      67 |     for (let i = 1; i < connected.length; i++) {
+      68 |       // CSS serializes the visible opacity; raw effect progress can differ by
+      69 |       // sub-ULP rounding when a delay replaces elapsed animation time.
+        at /var/tmp/34cBi-ref/src/web/ui-migration/toasts-probe-exit-position.browser.mjs:66:57
+
+    Error Context: ../../../../../mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/probes/out-exit-position/toasts-probe-exit-position-11d4e-ransfers-with-reduce-motion-webkit-light-desktop-repeat6/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/probes/out-exit-position/toasts-probe-exit-position-11d4e-ransfers-with-reduce-motion-webkit-light-desktop-repeat6/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../../mnt/data/tmp/34cBi0yt6bFcSmbJFgDPj/probes/out-exit-position/toasts-probe-exit-position-11d4e-ransfers-with-reduce-motion-webkit-light-desktop-repeat6/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2 failed
+    [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with no-preference motion 
+    [webkit-light-desktop] › ui-migration/toasts-probe-exit-position.browser.mjs:21:3 › live region absolute: exit keeps its own native progress through modal transfers with reduce motion 
+  158 passed (5.0m)
+exit 1

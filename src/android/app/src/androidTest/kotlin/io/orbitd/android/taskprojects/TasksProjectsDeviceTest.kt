@@ -11,6 +11,7 @@ import android.view.KeyEvent
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.orbitd.android.auth.chooseServer
@@ -18,6 +19,7 @@ import io.orbitd.android.*
 import io.orbitd.android.core.auth.AuthState
 import io.orbitd.android.core.cards.*
 import io.orbitd.android.core.protocol.Wire
+import io.orbitd.android.projects.ProjectDone
 import io.orbitd.android.projects.ProjectPage
 import io.orbitd.android.projects.RunSettings
 import io.orbitd.android.projects.StartProjectCopy
@@ -294,9 +296,15 @@ class TasksProjectsDeviceTest {
 
     @Test fun anExceptionIsReviewedOnTheCoordinatorsCardAndThePageIsReturnedTo() = journey("project-review-handoff") {
         login(case = "x1"); open("orbit-project:$projectId"); awaitIn("project-detail", "A11 Android launch")
-        awaitScrollTo("project-detail", hasTestTag("open-item:x1")); capture("project-open-items")
+        // A11-4: the page says only that something needs the owner; the toolbar's Open items holds the items.
+        awaitScrollTo("project-detail", hasTestTag("open-items-attention"))
+        compose.onNodeWithTag("open-items-attention").assertTextContains("1 item needs you", substring = true); capture("project-open-items-reminder")
+        compose.onAllNodesWithTag("open-item:x1").assertCountEquals(0)
+        tap("project-open-items"); awaitTag("open-item:x1"); capture("project-open-items")
+        compose.onNodeWithTag("project-open-items-subtitle").assertTextContains("1 item needs you", substring = true)
+        tap("project-open-items-close"); awaitGone("project-open-items-sheet")
         scrollTo("project-detail", hasTestTag("project-coordinator-section")); capture("project-coordinator-entry")
-        scrollTo("project-detail", hasTestTag("open-item:x1")); compose.onNodeWithTag("open-item:x1").performClick()
+        tap("open-items-attention", "project-detail"); awaitTag("open-item:x1"); compose.onNodeWithTag("open-item:x1").performClick()
         awaitTag("interaction-cards")
         awaitScrollTo("transcript-list", hasTestTag("item:x1")); capture("exception-existing-card")
         compose.onNodeWithTag("item:x1:MARK_HANDLED").performScrollTo().performClick()
@@ -310,7 +318,7 @@ class TasksProjectsDeviceTest {
         assertFalse(http("/__stats").flag("pending")); capture("exception-recorded-after-handoff")
         assertTrue(journal().any { it.text("method") == "POST" && it.text("path") == "/api/projects/$projectId/coordinator" })
         back(); awaitIn("project-detail", "A11 Android launch")
-        compose.waitUntil(20_000) { compose.onAllNodesWithTag("open-item:x1").fetchSemanticsNodes().isEmpty() }
+        compose.waitUntil(20_000) { compose.onAllNodesWithTag("open-items-attention").fetchSemanticsNodes().isEmpty() }
         capture("review-return-project")
     }
 
@@ -374,7 +382,8 @@ class TasksProjectsDeviceTest {
      * the request through the card actions with every setting the card shows. */
     @Test fun startCardTheCoordinatorAsked() = journey("start-card-asked") {
         login(case = "start"); http("/__control", """{"plan":true}""")
-        open("orbit-project:$projectId"); awaitIn("project-detail", "A11 Android launch"); awaitScrollTo("project-detail", hasTestTag("start-request"))
+        open("orbit-project:$projectId"); awaitIn("project-detail", "A11 Android launch")
+        tap("open-items-attention", "project-detail"); awaitTag("start-request")
         compose.onNodeWithTag("start-request").assertTextContains("The coordinator asked · a project branch · Automatic on · at most 2 at a time")
         capture("start-asked-0-project-row")
         tap("start-request:action")
@@ -543,7 +552,7 @@ class TasksProjectsDeviceTest {
     @Test fun regressionFocus_theCoordinatorConversationOpensOntoTheItemsCard() = journey("focus-item-card") {
         login(case = "x1"); http("/__control", """{"manyJobs":true}""")
         open("orbit-project:$projectId"); awaitIn("project-detail", "A11 Android launch")
-        tap("open-item:x1", "project-detail")
+        tap("open-items-attention", "project-detail"); awaitTag("open-item:x1"); tap("open-item:x1")
         awaitTag("interaction-cards")
         try { compose.waitUntil(15_000) { runCatching { compose.onNodeWithTag("item:x1").assertIsDisplayed() }.isSuccess } }
         finally { capture("focus-item-card") }
@@ -737,10 +746,175 @@ class TasksProjectsDeviceTest {
         instrument.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK); awaitGone("task-acceptance-sheet")
         drawer("Projects"); awaitTag("projects-list"); awaitText("A11 Android launch"); capture("tour-5-projects-list")
         tap("project:$projectId", "projects-list"); awaitIn("project-detail", "A11 Android launch")
-        awaitScrollTo("project-detail", hasTestTag("open-item:x1")); capture("tour-6-project-detail")
+        awaitScrollTo("project-detail", hasTestTag("open-items-attention")); capture("tour-6-project-detail")
         scrollTo("project-detail", hasTestTag("project-overview")); capture("tour-7-project-progress")
         scrollTo("project-detail", hasTestTag("project-coordinator-section")); capture("tour-8-coordinator-entry")
-        scrollTo("project-detail", hasTestTag("open-item:x1")); compose.onNodeWithTag("open-item:x1").performClick()
+        tap("open-items-attention", "project-detail"); awaitTag("open-item:x1"); capture("tour-8b-open-items")
+        compose.onNodeWithTag("open-item:x1").performClick()
         awaitTag("interaction-cards"); awaitScrollTo("transcript-list", hasTestTag("item:x1")); capture("tour-9-review-card")
+    }
+
+    // MARK: A11c — the increments of 4f695a286 (A11-1/2/3/4/5/7/10), each write read back from the fixture's journal and state
+
+    /** A11-7: Run is the play mark and the word on a light tint, 48dp to press, and still starts the task under one name. */
+    @Test fun a11cRunQueueRunPress() = journey("a11c-run-press") {
+        login(); open("orbit-project:$projectId"); awaitIn("project-detail", "A11 Android launch")
+        awaitScrollTo("project-detail", hasTestTag("queue:$projectTaskId:run"))
+        compose.onNodeWithTag("queue:$projectTaskId:run").assertTextEquals(ProjectPage.runPress).assertHeightIsAtLeast(48.dp)
+            .assertContentDescriptionEquals("Run A11 project delivery")
+        compose.onNodeWithTag("queue:$projectTaskId:run:play", useUnmergedTree = true).assertExists()
+        capture("a11c-run-press")
+        val mark = journal().size
+        tap("queue:$projectTaskId:run")
+        compose.waitUntil(20_000) { http("/__stats").obj("tasks")?.obj(projectTaskId)?.flag("running") == true }
+        assertEquals(1, journal().drop(mark).filter { it.text("path") == "/api/tasks/$projectTaskId/execute" }.mapNotNull { it.obj("body")?.text("triggerId") }.distinct().size)
+        capture("a11c-run-press-started")
+    }
+
+    /** A11-10: a timed-out landing reads as one on the row; the row opens the jobs in flight, and Retry ends the silent generation. */
+    @Test fun a11cLandingJobsAndRetry() = journey("a11c-landing-jobs") {
+        login(); http("/__control", """{"landingJobs":true}""")
+        open("orbit-project:$projectId"); awaitIn("project-detail", "A11 Android launch")
+        awaitScrollTo("project-detail", hasTestTag("landing-row"))
+        compose.onNodeWithTag("landing-row").assertTextContains("2 jobs · 1 timed out", substring = true).assertTextContains("Timed out", substring = true)
+            .assertTextContains("limit 10m", substring = true)
+        compose.onNodeWithTag("landing-timed-out", useUnmergedTree = true).assertExists()
+        capture("a11c-landing-row-timed-out")
+        tap("landing-row", "project-detail"); awaitTag("landing-jobs-sheet")
+        compose.onNodeWithTag("landing-jobs-title").assertTextEquals("2 jobs in flight")
+        compose.onNodeWithTag("landing-job:34cJobStuck:detail", useUnmergedTree = true)
+            .assertTextContains("Runner workstation-gpu took it at ", substring = true).assertTextContains(" · stopped at fetching · no push recorded", substring = true)
+        compose.onAllNodesWithTag("landing-job:34cJobMerge:retry").assertCountEquals(0)
+        capture("a11c-landing-jobs-sheet")
+        val mark = journal().size
+        tap("landing-job:34cJobStuck:retry")
+        compose.waitUntil(20_000) { journal().drop(mark).any { it.text("path") == "/api/projects/$projectId/integration/jobs/34cJobStuck/retry" && it["status"]?.toString() == "200" } }
+        awaitText("Generation 2 · retried by you at")
+        val retried = http("/__stats").obj("integration")!!.objects("inFlightJobs").first()
+        assertEquals("OWNER", retried.text("retriedBy")); assertEquals(2, retried.number("generation"))
+        capture("a11c-landing-jobs-retried")
+    }
+
+    /** A11-3: the crossings this project is an end of, answered in two presses; a refusal stays on its row with the door's code. */
+    @Test fun a11cCrossingsAnswered() = journey("a11c-crossings") {
+        login(); http("/__control", """{"crossings":true,"mode":"landing-in-flight"}""")
+        open("orbit-project:$projectId"); awaitIn("project-detail", "A11 Android launch")
+        awaitScrollTo("project-detail", hasTestTag("crossing:34cHandoffMove1"))
+        compose.onNodeWithTag("crossings-head").assert(hasAnyChild(hasText("1 waiting")))
+        compose.onNodeWithTag("crossing:34cHandoffMove1:meaning").assertTextEquals("the task stays in its project until you answer, and confirming moves it")
+        compose.onNodeWithTag("crossing:34cHandoffMove1:subject").assertTextContains("Task to move: A11 task checklist", substring = true)
+        capture("a11c-crossings")
+        tap("crossing:34cHandoffMove1:approve", "project-detail"); awaitTag("crossing:34cHandoffMove1:confirm")
+        compose.onNodeWithText("Approve moving “A11 task checklist” from A11 runner hardening to A11 Android launch?").assertExists()
+        capture("a11c-crossing-second-press")
+        val mark = journal().size
+        tap("crossing:34cHandoffMove1:answer", "project-detail")
+        awaitTag("crossing:34cHandoffMove1:refusal")
+        compose.onNodeWithTag("crossing:34cHandoffMove1:refusal").assert(hasAnyChild(hasText("MOVE_TASK_LANDING_IN_FLIGHT", substring = true)))
+        compose.onNodeWithTag("crossing:34cHandoffMove1:confirm").assertExists()
+        capture("a11c-crossing-refused")
+        http("/__control", """{"mode":""}""")
+        tap("crossing:34cHandoffMove1:answer", "project-detail")
+        compose.waitUntil(20_000) { http("/__stats").objects("crossings").firstOrNull()?.text("state") == "APPLIED" }
+        val answers = journal().drop(mark).filter { it.text("path") == "/api/projects/$projectId/handoffs/34cHandoffMove1/decision" }
+        assertEquals(listOf(409, 200), answers.map { it["status"]?.toString()?.toInt() })
+        answers.forEach { assertEquals(buildJsonObject { put("decision", "APPROVE"); put("acknowledgedCrossingKey", "k".repeat(64)) }, it.obj("body")) }
+        assertEquals(projectId, http("/__stats").obj("tasks")?.obj(taskId)?.text("projectId"))
+        awaitGone("crossing:34cHandoffMove1:confirm")
+        compose.onNodeWithTag("crossing:34cHandoffMove1:meaning").assertTextEquals("the task was moved when this request was confirmed")
+        capture("a11c-crossing-applied")
+    }
+
+    /** A11-2, the project page: the projects list says Ready to close; the request's row opens the card; Not yet… sends the note. */
+    @Test fun a11cDoneRequestOnTheProjectPage() = journey("a11c-done-page") {
+        login(case = "done-request"); http("/__control", """{"closeOut":true}""")
+        drawer("Projects"); awaitTag("projects-list")
+        compose.waitUntil(20_000) { compose.onAllNodesWithText("Needs you · Ready to close · ", substring = true).fetchSemanticsNodes().isNotEmpty() }
+        capture("a11c-projects-ready-to-close")
+        tap("project:$projectId", "projects-list"); awaitIn("project-detail", "A11 Android launch")
+        awaitTag("project-ready-to-close"); compose.onNodeWithTag("open-items-attention").assertTextContains("1 item needs you", substring = true)
+        tap("open-items-attention", "project-detail"); awaitTag("project-done-request")
+        compose.onNodeWithTag("project-done-request").assertTextContains("The coordinator asked · 1 gaps it couldn’t prove", substring = true)
+        capture("a11c-done-request-row")
+        tap("project-done-request:action"); awaitTag("project-done-sheet")
+        compose.onNodeWithTag("project-done-meta").assertTextContains("A11 Android launch · asked by the coordinator · waiting ", substring = true)
+        compose.onNodeWithTag("project-done-judgment").assertTextEquals("The goal is met: every criterion is on main. I checked the release evidence below.")
+        compose.onNodeWithTag("project-done-orbit-checked").assertTextContains("Orbit checked: every criterion is met by its work", substring = true)
+        capture("a11c-done-sheet")
+        compose.onNodeWithTag("project-done-not-yet").performScrollTo().performClick()
+        compose.onNodeWithTag("project-done-note").performScrollTo().performTextInput("  The release notes are not published yet. ")
+        hideKeyboard(); capture("a11c-done-not-yet")
+        val mark = journal().size
+        compose.onNodeWithTag("project-done-send").performScrollTo().performClick()
+        compose.waitUntil(20_000) { http("/__stats").obj("declined") != null }
+        assertEquals("The release notes are not published yet.", http("/__stats").obj("declined")?.text("note"))
+        assertEquals(buildJsonObject { put("note", "The release notes are not published yet.") },
+            journal().drop(mark).single { it.text("path") == "/api/projects/$projectId/done-requests/done1/decline" }.obj("body"))
+        awaitGone("project-done-sheet"); compose.waitUntil(20_000) { compose.onAllNodesWithTag("project-ready-to-close").fetchSemanticsNodes().isEmpty() }
+        capture("a11c-done-not-yet-sent")
+    }
+
+    /** A11-2, the conversation: "Is this project done?" drawn whole where it arrived, and Record as done turns it into its receipt. */
+    @Test fun a11cDoneRequestInTheCoordinatorConversation() = journey("a11c-done-conversation") {
+        login(case = "done-request"); http("/__control", """{"closeOut":true}""")
+        // The conversation's cards follow its messages, below the fold of a fresh open: scrolled to, not awaited in view.
+        open("orbit-session:$sessionId"); awaitScrollTo("transcript-list", hasTestTag("done:$projectId"))
+        compose.onNodeWithTag("done:$projectId-meta").assertTextContains("A11 Android launch · asked by the coordinator · waiting ", substring = true)
+        compose.onNodeWithTag("done:$projectId-record").assertTextEquals(ProjectDone.recordAsDone)
+        compose.onNodeWithTag("done:$projectId-not-yet").assertTextEquals(ProjectDone.notYet)
+        capture("a11c-conversation-done-card")
+        val mark = journal().size
+        compose.onNodeWithTag("done:$projectId-record").performScrollTo().performClick()
+        awaitScrollTo("transcript-list", hasTestTag("done:$projectId-receipt"))
+        compose.onNodeWithTag("done:$projectId-receipt-line").assertTextContains("You recorded this project done · ", substring = true)
+        val done = journal().drop(mark).single { it.text("path") == "/api/projects/$projectId/done" }.obj("body")!!
+        assertEquals("done1", done.text("requestId")); assertEquals("seal1", done.text("criteriaDigest")); assertEquals(1, done.objects("acceptedGaps").size)
+        val project = http("/__stats").obj("project")!!
+        assertEquals("DONE", project.text("status")); assertEquals("OWNER", project.text("doneBy"))
+        capture("a11c-conversation-done-receipt")
+    }
+
+    /** A11-5: a confirmed merge says where its own job is; Cancel goes dead once the job is pushing. */
+    @Test fun a11cMergeCardSaysWhereItsJobIs() = journey("a11c-merge-card") {
+        login(case = "promotion"); http("/__control", """{"promotionExecution":{"state":"RUNNING","phase":"PUSH","startedAt":"2026-10-05T00:00:00.000Z"}}""")
+        open("orbit-session:$sessionId"); awaitTag("interaction-cards")
+        awaitScrollTo("transcript-list", hasTestTag("promotion:promotion1"))
+        awaitText("Merging project/cards into main…"); awaitText("confirmed — publishing the tested tree to main")
+        compose.onNodeWithTag("promotion:promotion1:merging").assertTextEquals("Merging…").assertIsNotEnabled()
+        compose.onNodeWithTag("promotion:promotion1:CANCEL_MERGE").assertIsNotEnabled()
+        capture("a11c-merge-pushing")
+        http("/__control", """{"promotionExecution":{"state":"QUEUED","startedAt":"2026-10-05T00:00:00.000Z"}}""")
+        compose.onNodeWithText("Check status").performScrollTo().performClick()
+        awaitText("Merge queued: project/cards into main"); awaitText("confirmed — queued to merge into main")
+        awaitScrollTo("transcript-list", hasTestTag("promotion:promotion1:CANCEL_MERGE"))
+        compose.waitUntil(20_000) { compose.onAllNodes(hasTestTag("promotion:promotion1:CANCEL_MERGE") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        capture("a11c-merge-queued")
+    }
+
+    /** A11-1: a task run on smart selection's pick marks the model chip ✦, its menu opens on why, and Open task › lands over the run. */
+    @Test fun a11cComposerChipPickedBySmartSelection() = journey("a11c-composer-chip") {
+        login(); http("/__control", """{"modelRouting":true,"route":{"level":"L","model":"claude-opus-5-5","effort":"high","applied":true,
+            "reasons":["Touches the dispatch path across two modules"]}}""".replace("\n", ""))
+        open("orbit-session:$sessionId"); awaitTag("composer-input")
+        compose.waitUntil(20_000) { compose.onAllNodesWithTag("composer-model-smart", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("composer-model").assertContentDescriptionEquals("Model claude-opus-5-5, effort High, picked by smart selection")
+        capture("a11c-composer-chip")
+        tap("composer-model"); awaitText("✦ Picked by smart selection · tier L")
+        compose.onNodeWithText("Touches the dispatch path across two modules").assertExists()
+        compose.onNodeWithText("Changing the model here applies to this run only.").assertExists()
+        compose.onNodeWithText("To fix the model for every run, set it on the task.").assertExists()
+        compose.onNodeWithTag("composer-open-task").performScrollTo(); capture("a11c-composer-chip-menu")
+        compose.onNodeWithTag("composer-open-task").assertTextEquals("Open task ›").performClick()
+        awaitIn("task-detail", "A11 project delivery"); capture("a11c-open-task-over-run")
+        back(); awaitTag("composer-input")
+        // The account's switch off: the same run's chip is the model alone.
+        http("/__control", """{"modelRouting":false}""")
+        val reads = journal().size
+        compose.activityRule.scenario.recreate(); awaitTag("composer-input")
+        compose.waitUntil(20_000) { journal().drop(reads).any { it.text("path") == "/api/users/me" } }
+        // The recreated reader reads its session again: the chip is the bare "Model" until then.
+        compose.waitUntil(20_000) { compose.onAllNodes(hasTestTag("composer-model") and hasContentDescription("Model claude-opus-5-5, effort High")).fetchSemanticsNodes().isNotEmpty() }
+        compose.onAllNodesWithTag("composer-model-smart", useUnmergedTree = true).assertCountEquals(0)
+        capture("a11c-composer-chip-switch-off")
     }
 }

@@ -54,7 +54,10 @@ function Samples() {
     { key: 'private', label: <div>Only you<div className="fixture-detail">Turns the link off.</div></div>, icon: <LockOutlined />, selected: true },
     { key: 'public', label: <div>Anyone with the link<div className="fixture-detail">No sign-in needed to view.</div></div>, icon: <GlobalOutlined /> },
   ];
-  const submenuItems = [{ key: 'provider', label: 'Provider', popupClassName: 'sample-submenu', children: [{ key: 'codex', label: 'Codex' }, { key: 'claude', label: 'Claude' }] }];
+  // The submenus' second label: short, as long as an account name, or wider than a phone leaves beside its item.
+  const claude = params.get('labels') === 'long' ? 'Claude Opus 5.5 with extended thinking (work)'
+    : params.get('labels') === 'medium' ? 'Claude · work account' : 'Claude';
+  const submenuItems = [{ key: 'provider', label: 'Provider', popupClassName: 'sample-submenu', children: [{ key: 'codex', label: 'Codex' }, { key: 'claude', label: claude }] }];
   const items = kind === 'access' ? accessItems : kind === 'submenu' ? submenuItems : attachmentItems;
   const menuClass = kind === 'access' ? 'fixture-access-menu share-access-menu' : kind === 'attachment' ? 'composer-attach-menu' : '';
   const trigger = <Button disabled={disabled}>{kind === 'access' ? 'Access' : 'Add attachment'}</Button>;
@@ -67,11 +70,11 @@ function Samples() {
       // A workspace menu's shape: items around a submenu, one dangerous; same items and trigger for both systems.
       : kind === 'session' ? <>{legacy
         ? <Dropdown trigger={['click']} menu={{ onClick: ({ key }) => setPicked(key), items: [{ key: 'default', label: 'Default model' },
-          { key: 'provider', label: 'Provider', children: [{ key: 'codex', label: 'Codex' }, { key: 'claude', label: 'Claude' }] },
+          { key: 'provider', label: 'Provider', children: [{ key: 'codex', label: 'Codex' }, { key: 'claude', label: claude }] },
           { key: 'separator', type: 'divider' }, { key: 'group', label: 'Group by tag' }, { key: 'delete', label: 'Delete', danger: true }] }}>
           <Button>Session actions</Button></Dropdown>
         : <Menu trigger={<Button>Session actions</Button>} items={[{ key: 'default', label: 'Default model', onSelect: () => setPicked('default') },
-          { key: 'provider', label: 'Provider', children: [{ key: 'codex', label: 'Codex', onSelect: () => setPicked('codex') }, { key: 'claude', label: 'Claude', onSelect: () => setPicked('claude') }] },
+          { key: 'provider', label: 'Provider', children: [{ key: 'codex', label: 'Codex', onSelect: () => setPicked('codex') }, { key: 'claude', label: claude, onSelect: () => setPicked('claude') }] },
           { key: 'separator', type: 'separator' }, { key: 'group', label: 'Group by tag', onSelect: () => setPicked('group') },
           { key: 'delete', label: 'Delete', danger: true, onSelect: () => setPicked('delete') }]} />}
         <output aria-label="Picked">{picked}</output></>

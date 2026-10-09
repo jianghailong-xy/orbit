@@ -220,8 +220,10 @@ object CardCatalog {
                 "CONFIRMED", "RECHECKING" -> listOf(CardVerb.CANCEL_MERGE)
                 else -> emptyList()
             }
-            add(InteractionCard("promotion:$promotion", CardFamily.PROMOTION, "Merge to ${row.text("upstreamRef") ?: "main"}", row,
-                session, project, promotion, "${row.text("sourceSha")}:${row.text("state")}", actions, row.text("state")))
+            // While it merges, the card says where the merge's own job stands (`PromotionCards`).
+            val merging = PromotionCards.isMerging(row)
+            add(InteractionCard("promotion:$promotion", CardFamily.PROMOTION, if (merging) PromotionCards.mergingTitle(row) else "Merge to ${row.text("upstreamRef") ?: "main"}", row,
+                session, project, promotion, "${row.text("sourceSha")}:${row.text("state")}", actions, if (merging) PromotionCards.mergingStatusLine(row) else row.text("state")))
         }
     }
 }

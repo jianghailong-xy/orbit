@@ -1,0 +1,74 @@
+{
+ "webkit-dark-desktop/notification-error.png": {
+  "scrollbar": 7201,
+  "shift4": 5023,
+  "shift8": 14565,
+  "other": 326
+ },
+ "webkit-dark-desktop/profile-validation.png": {
+  "scrollbar": 7201,
+  "shift4": 37657,
+  "shift8": 6813,
+  "other": 3
+ },
+ "webkit-dark-desktop/settings-saved.png": {
+  "scrollbar": 7201,
+  "shift4": 53609,
+  "shift8": 5583,
+  "other": 2
+ },
+ "webkit-dark-phone/notification-error.png": {
+  "scrollbar": 6753,
+  "shift4": 0,
+  "shift8": 0,
+  "other": 0
+ },
+ "webkit-dark-phone/profile-validation.png": {
+  "scrollbar": 6753,
+  "shift4": 0,
+  "shift8": 0,
+  "other": 0
+ },
+ "webkit-dark-phone/settings-saved.png": {
+  "scrollbar": 6753,
+  "shift4": 0,
+  "shift8": 0,
+  "other": 0
+ },
+ "webkit-light-desktop/notification-error.png": {
+  "scrollbar": 7201,
+  "shift4": 5193,
+  "shift8": 17259,
+  "other": 253
+ },
+ "webkit-light-desktop/profile-validation.png": {
+  "scrollbar": 7201,
+  "shift4": 32906,
+  "shift8": 7665,
+  "other": 3
+ },
+ "webkit-light-desktop/settings-saved.png": {
+  "scrollbar": 7201,
+  "shift4": 49622,
+  "shift8": 6439,
+  "other": 4
+ },
+ "webkit-light-phone/notification-error.png": {
+  "scrollbar": 6753,
+  "shift4": 0,
+  "shift8": 0,
+  "other": 0
+ },
+ "webkit-light-phone/profile-validation.png": {
+  "scrollbar": 6753,
+  "shift4": 0,
+  "shift8": 0,
+  "other": 0
+ },
+ "webkit-light-phone/settings-saved.png": {
+  "scrollbar": 6753,
+  "shift4": 0,
+  "shift8": 0,
+  "other": 0
+ }
+}

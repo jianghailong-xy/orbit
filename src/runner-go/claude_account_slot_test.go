@@ -207,6 +207,49 @@ func TestClaudeSessionAccountDirResolvesTheSessionsOwnDirectory(t *testing.T) {
 	}
 }
 
+// TestClaudeSessionAuthAsksDefaultAsItsEngineRuns: a session on Default runs its claude with no
+// CLAUDE_CONFIG_DIR, and the spawn preflight asks that login, not Default's directory named outright —
+// on a Mac those are two Keychain items (claudeKeychainService), and a sign-in into Default never
+// writes the named one. The fake answers the way the CLI does there: signed in with no
+// CLAUDE_CONFIG_DIR, and in a named directory only once that directory has a login of its own.
+func TestClaudeSessionAuthAsksDefaultAsItsEngineRuns(t *testing.T) {
+	home, _ := claudeAccountSlotTestHomes(t)
+	work, err := claudeAccountKind.create("Work")
+	if err != nil {
+		t.Fatal(err)
+	}
+	asked := filepath.Join(t.TempDir(), "asked")
+	fake := writeFakeBin(t, t.TempDir(), "claude", `printf '[%s]\n' "$CLAUDE_CONFIG_DIR" >> '`+asked+`'
+if [ -z "$CLAUDE_CONFIG_DIR" ] || [ -f "$CLAUDE_CONFIG_DIR/signed-in" ]; then
+  echo '{"loggedIn":true}'
+else
+  echo '{"loggedIn":false}'
+fi`)
+
+	if got := sessionEngineAuth(providerClaude, fake, nil); got != authYes {
+		t.Fatalf("a session on Default = %v, want signed in", got)
+	}
+	onWork := map[string]string{"CLAUDE_CONFIG_DIR": work.Dir}
+	if got := sessionEngineAuth(providerClaude, fake, onWork); got != authNo {
+		t.Fatalf("a session on Work, never signed in = %v, want signed out", got)
+	}
+	if err := os.WriteFile(filepath.Join(work.Dir, "signed-in"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := sessionEngineAuth(providerClaude, fake, onWork); got != authYes {
+		t.Fatalf("a session on Work, signed in = %v, want signed in", got)
+	}
+
+	b, err := os.ReadFile(asked)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "[]\n[" + work.Dir + "]\n[" + work.Dir + "]\n"; string(b) != want {
+		t.Fatalf("`claude auth status` ran with CLAUDE_CONFIG_DIR %q, want %q — Default is never asked as %s",
+			b, want, filepath.Join(home, ".claude"))
+	}
+}
+
 // TestClaudeSessionAccountDirsReadTheSessionsRecord: the directories a removal refuses to delete,
 // read from each running session's own record rather than from a claim that may have moved on.
 func TestClaudeSessionAccountDirsReadTheSessionsRecord(t *testing.T) {

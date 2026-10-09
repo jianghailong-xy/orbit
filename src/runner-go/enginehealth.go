@@ -23,11 +23,11 @@ import (
 // itself refreshes it immediately (see runloop).
 const engineHealthRefreshInterval = 5 * time.Minute
 
-// engineSignedOutSeen is told when a session finds its engine signed out as it starts it — an
-// Antigravity whose Google sign-in agy refused (antigravity_google_session.go). The run loop then
-// re-probes the engines and beats at once, so the heartbeat carries the sign-out, the yes -> no edge the
-// control plane notifies on, now rather than at the next refresh. Unset — in tests, outside the run
-// loop — it does nothing.
+// engineSignedOutSeen is told when a session finds its engine signed out as it starts it — the sign-in
+// preflight refusing to spawn it (runSessionProcess), or an Antigravity whose Google sign-in agy
+// refused (antigravity_google_session.go). The run loop then re-probes the engines and beats at once,
+// so the heartbeat carries the sign-out, the yes -> no edge the control plane notifies on, now rather
+// than at the next refresh. Unset — in tests, outside the run loop — it does nothing.
 var engineSignedOutSeen atomic.Pointer[func()]
 
 func noteEngineSignedOut() {
