@@ -33,10 +33,12 @@ import io.orbitd.android.core.cards.CardPreviews
 import io.orbitd.android.cards.ReaderSide
 import io.orbitd.android.cards.SessionCards
 import io.orbitd.android.cards.SessionNeedsYouBar
+import io.orbitd.android.cards.SessionRunStartCard
 import io.orbitd.android.cards.SessionTasksCard
 import io.orbitd.android.watch.SessionWatches
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.cards.OwnerReview
+import io.orbitd.android.core.cards.SessionRunStart
 import io.orbitd.android.core.net.HttpMethod
 import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.core.realtime.*
@@ -281,6 +283,15 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     TextButton(onClick = { follow = true; model.latest() }) { Text("Jump to latest") }
                 }
                 }
+                // A08-5: a run that never started says why, first in the band above the composer — and stays while a phone types.
+                SessionRunStartCard(app, handle, state.session?.snapshot?.detail, state.session?.fresh == true,
+                    chat = {
+                        // The composer is handed a reply about this run, in place of whatever was in it (iOS `chatAboutRefusedRun`).
+                        composer.edit(SessionRunStart.chatPrefix, SessionRunStart.chatPrefix.length, SessionRunStart.chatPrefix.length)
+                        composerFocused = true; composeFocus++
+                    },
+                    sendAgain = { composer.control("retry-message", body = JsonObject(emptyMap())) },
+                    openRunner = { runner -> open(OrbitRoute(Destination.RUNNER, runner)) })
                 SessionWatches(app, handle, route.id!!, open = open)
                 // The session's tasks — created here, or waited on by its watches (A08-6) — and its code output, folded with the rest
                 // of the chrome while a phone's composer is focused.
