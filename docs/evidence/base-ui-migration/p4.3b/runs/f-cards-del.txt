@@ -1,0 +1,215 @@
+argv: env P43B_SNAPSHOTS=/mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots P43B_OUTPUT=/mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-out npx playwright test --config ui-migration/p43b-cards.config.mjs --update-snapshots=all
+tree: /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/del
+head: e21fad17277ffe30d40e76097191ca77e5b7f884
+uncommitted:
+load: 34.18 40.22 39.39 15/4354 1967147
+mem: 3436M available, swap 14313M free
+disk: / 14774M available, TMPDIR /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/tmp
+started: 2026-10-09T09:39:25Z
+
+
+Running 72 tests using 1 worker
+
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/chromium-light-desktop/p43b-card-evidence-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/chromium-light-desktop/p43b-card-evidence-stale.png, writing actual.
+  ✓   1 [chromium-light-desktop] › ui-migration/p43b-cards.browser.mjs:41:3 › P4.3b session decision cards › an evidence decision: refused, then out of date (5.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/chromium-light-desktop/p43b-card-owner-typed.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/chromium-light-desktop/p43b-card-owner-refused.png, writing actual.
+  ✓   2 [chromium-light-desktop] › ui-migration/p43b-cards.browser.mjs:65:3 › P4.3b session decision cards › an owner confirmation: a review question answered in the owner’s own words, refused (3.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/chromium-light-desktop/p43b-card-criteria-refused.png, writing actual.
+  ✓   3 [chromium-light-desktop] › ui-migration/p43b-cards.browser.mjs:91:3 › P4.3b session decision cards › a criteria decision: refused (1.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/chromium-light-desktop/p43b-card-strip.png, writing actual.
+  ✓   4 [chromium-light-desktop] › ui-migration/p43b-cards.browser.mjs:109:3 › P4.3b session decision cards › the decision strip: what waits on the reader (1.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/chromium-light-desktop/p43b-card-review-turns.png, writing actual.
+  ✓   5 [chromium-light-desktop] › ui-migration/p43b-cards.browser.mjs:127:3 › P4.3b session decision cards › the review turns: the run’s session opened from the request (1.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/chromium-light-desktop/p43b-card-receipt.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/chromium-light-desktop/p43b-card-reopen.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/chromium-light-desktop/p43b-card-reopen-refused.png, writing actual.
+  ✓   6 [chromium-light-desktop] › ui-migration/p43b-cards.browser.mjs:144:3 › P4.3b session decision cards › a receipt’s Reopen task: asked, refused, and back (3.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/chromium-light-desktop/p43b-card-start-gone.png, writing actual.
+  ✓   7 [chromium-light-desktop] › ui-migration/p43b-cards.browser.mjs:173:3 › P4.3b session decision cards › the start dialog when its request no longer stands (2.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/chromium-light-desktop/p43b-card-question-records.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/chromium-light-desktop/p43b-card-question-review.png, writing actual.
+  ✓   8 [chromium-light-desktop] › ui-migration/p43b-cards.browser.mjs:193:3 › P4.3b session decision cards › ended coordinator questions: the records, and an answered one’s review (2.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/chromium-light-desktop/p43b-card-start-live.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/chromium-light-desktop/p43b-card-start-live-plan.png, writing actual.
+  ✓   9 [chromium-light-desktop] › ui-migration/p43b-cards.browser.mjs:222:3 › P4.3b session decision cards › the start card in a conversation: 720px at most, More and Read all only while cut, the plan as the task graph or by level (2.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/chromium-light-phone/p43b-card-evidence-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/chromium-light-phone/p43b-card-evidence-stale.png, writing actual.
+  ✓  10 [chromium-light-phone] › ui-migration/p43b-cards.browser.mjs:41:3 › P4.3b session decision cards › an evidence decision: refused, then out of date (4.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/chromium-light-phone/p43b-card-owner-typed.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/chromium-light-phone/p43b-card-owner-refused.png, writing actual.
+  ✓  11 [chromium-light-phone] › ui-migration/p43b-cards.browser.mjs:65:3 › P4.3b session decision cards › an owner confirmation: a review question answered in the owner’s own words, refused (2.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/chromium-light-phone/p43b-card-criteria-refused.png, writing actual.
+  ✓  12 [chromium-light-phone] › ui-migration/p43b-cards.browser.mjs:91:3 › P4.3b session decision cards › a criteria decision: refused (1.6s)
+  -  13 [chromium-light-phone] › ui-migration/p43b-cards.browser.mjs:109:3 › P4.3b session decision cards › the decision strip: what waits on the reader
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/chromium-light-phone/p43b-card-review-turns.png, writing actual.
+  ✓  14 [chromium-light-phone] › ui-migration/p43b-cards.browser.mjs:127:3 › P4.3b session decision cards › the review turns: the run’s session opened from the request (1.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/chromium-light-phone/p43b-card-receipt.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/chromium-light-phone/p43b-card-reopen.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/chromium-light-phone/p43b-card-reopen-refused.png, writing actual.
+  ✓  15 [chromium-light-phone] › ui-migration/p43b-cards.browser.mjs:144:3 › P4.3b session decision cards › a receipt’s Reopen task: asked, refused, and back (6.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/chromium-light-phone/p43b-card-start-gone.png, writing actual.
+  ✓  16 [chromium-light-phone] › ui-migration/p43b-cards.browser.mjs:173:3 › P4.3b session decision cards › the start dialog when its request no longer stands (1.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/chromium-light-phone/p43b-card-question-records.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/chromium-light-phone/p43b-card-question-review.png, writing actual.
+  ✓  17 [chromium-light-phone] › ui-migration/p43b-cards.browser.mjs:193:3 › P4.3b session decision cards › ended coordinator questions: the records, and an answered one’s review (2.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/chromium-light-phone/p43b-card-start-live.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/chromium-light-phone/p43b-card-start-live-plan.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/chromium-light-phone/p43b-card-start-live-more.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/chromium-light-phone/p43b-card-start-live-graph.png, writing actual.
+  ✓  18 [chromium-light-phone] › ui-migration/p43b-cards.browser.mjs:222:3 › P4.3b session decision cards › the start card in a conversation: 720px at most, More and Read all only while cut, the plan as the task graph or by level (2.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/chromium-dark-desktop/p43b-card-evidence-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/chromium-dark-desktop/p43b-card-evidence-stale.png, writing actual.
+  ✓  19 [chromium-dark-desktop] › ui-migration/p43b-cards.browser.mjs:41:3 › P4.3b session decision cards › an evidence decision: refused, then out of date (2.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/chromium-dark-desktop/p43b-card-owner-typed.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/chromium-dark-desktop/p43b-card-owner-refused.png, writing actual.
+  ✓  20 [chromium-dark-desktop] › ui-migration/p43b-cards.browser.mjs:65:3 › P4.3b session decision cards › an owner confirmation: a review question answered in the owner’s own words, refused (2.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/chromium-dark-desktop/p43b-card-criteria-refused.png, writing actual.
+  ✓  21 [chromium-dark-desktop] › ui-migration/p43b-cards.browser.mjs:91:3 › P4.3b session decision cards › a criteria decision: refused (2.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/chromium-dark-desktop/p43b-card-strip.png, writing actual.
+  ✓  22 [chromium-dark-desktop] › ui-migration/p43b-cards.browser.mjs:109:3 › P4.3b session decision cards › the decision strip: what waits on the reader (2.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/chromium-dark-desktop/p43b-card-review-turns.png, writing actual.
+  ✓  23 [chromium-dark-desktop] › ui-migration/p43b-cards.browser.mjs:127:3 › P4.3b session decision cards › the review turns: the run’s session opened from the request (1.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/chromium-dark-desktop/p43b-card-receipt.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/chromium-dark-desktop/p43b-card-reopen.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/chromium-dark-desktop/p43b-card-reopen-refused.png, writing actual.
+  ✓  24 [chromium-dark-desktop] › ui-migration/p43b-cards.browser.mjs:144:3 › P4.3b session decision cards › a receipt’s Reopen task: asked, refused, and back (2.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/chromium-dark-desktop/p43b-card-start-gone.png, writing actual.
+  ✓  25 [chromium-dark-desktop] › ui-migration/p43b-cards.browser.mjs:173:3 › P4.3b session decision cards › the start dialog when its request no longer stands (2.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/chromium-dark-desktop/p43b-card-question-records.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/chromium-dark-desktop/p43b-card-question-review.png, writing actual.
+  ✓  26 [chromium-dark-desktop] › ui-migration/p43b-cards.browser.mjs:193:3 › P4.3b session decision cards › ended coordinator questions: the records, and an answered one’s review (2.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/chromium-dark-desktop/p43b-card-start-live.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/chromium-dark-desktop/p43b-card-start-live-plan.png, writing actual.
+  ✓  27 [chromium-dark-desktop] › ui-migration/p43b-cards.browser.mjs:222:3 › P4.3b session decision cards › the start card in a conversation: 720px at most, More and Read all only while cut, the plan as the task graph or by level (2.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/chromium-dark-phone/p43b-card-evidence-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/chromium-dark-phone/p43b-card-evidence-stale.png, writing actual.
+  ✓  28 [chromium-dark-phone] › ui-migration/p43b-cards.browser.mjs:41:3 › P4.3b session decision cards › an evidence decision: refused, then out of date (2.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/chromium-dark-phone/p43b-card-owner-typed.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/chromium-dark-phone/p43b-card-owner-refused.png, writing actual.
+  ✓  29 [chromium-dark-phone] › ui-migration/p43b-cards.browser.mjs:65:3 › P4.3b session decision cards › an owner confirmation: a review question answered in the owner’s own words, refused (3.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/chromium-dark-phone/p43b-card-criteria-refused.png, writing actual.
+  ✓  30 [chromium-dark-phone] › ui-migration/p43b-cards.browser.mjs:91:3 › P4.3b session decision cards › a criteria decision: refused (2.1s)
+  -  31 [chromium-dark-phone] › ui-migration/p43b-cards.browser.mjs:109:3 › P4.3b session decision cards › the decision strip: what waits on the reader
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/chromium-dark-phone/p43b-card-review-turns.png, writing actual.
+  ✓  32 [chromium-dark-phone] › ui-migration/p43b-cards.browser.mjs:127:3 › P4.3b session decision cards › the review turns: the run’s session opened from the request (2.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/chromium-dark-phone/p43b-card-receipt.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/chromium-dark-phone/p43b-card-reopen.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/chromium-dark-phone/p43b-card-reopen-refused.png, writing actual.
+  ✓  33 [chromium-dark-phone] › ui-migration/p43b-cards.browser.mjs:144:3 › P4.3b session decision cards › a receipt’s Reopen task: asked, refused, and back (5.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/chromium-dark-phone/p43b-card-start-gone.png, writing actual.
+  ✓  34 [chromium-dark-phone] › ui-migration/p43b-cards.browser.mjs:173:3 › P4.3b session decision cards › the start dialog when its request no longer stands (2.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/chromium-dark-phone/p43b-card-question-records.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/chromium-dark-phone/p43b-card-question-review.png, writing actual.
+  ✓  35 [chromium-dark-phone] › ui-migration/p43b-cards.browser.mjs:193:3 › P4.3b session decision cards › ended coordinator questions: the records, and an answered one’s review (2.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/chromium-dark-phone/p43b-card-start-live.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/chromium-dark-phone/p43b-card-start-live-plan.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/chromium-dark-phone/p43b-card-start-live-more.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/chromium-dark-phone/p43b-card-start-live-graph.png, writing actual.
+  ✓  36 [chromium-dark-phone] › ui-migration/p43b-cards.browser.mjs:222:3 › P4.3b session decision cards › the start card in a conversation: 720px at most, More and Read all only while cut, the plan as the task graph or by level (3.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/webkit-light-desktop/p43b-card-evidence-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/webkit-light-desktop/p43b-card-evidence-stale.png, writing actual.
+  ✓  37 [webkit-light-desktop] › ui-migration/p43b-cards.browser.mjs:41:3 › P4.3b session decision cards › an evidence decision: refused, then out of date (3.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/webkit-light-desktop/p43b-card-owner-typed.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/webkit-light-desktop/p43b-card-owner-refused.png, writing actual.
+  ✓  38 [webkit-light-desktop] › ui-migration/p43b-cards.browser.mjs:65:3 › P4.3b session decision cards › an owner confirmation: a review question answered in the owner’s own words, refused (3.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/webkit-light-desktop/p43b-card-criteria-refused.png, writing actual.
+  ✓  39 [webkit-light-desktop] › ui-migration/p43b-cards.browser.mjs:91:3 › P4.3b session decision cards › a criteria decision: refused (3.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/webkit-light-desktop/p43b-card-strip.png, writing actual.
+  ✓  40 [webkit-light-desktop] › ui-migration/p43b-cards.browser.mjs:109:3 › P4.3b session decision cards › the decision strip: what waits on the reader (3.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/webkit-light-desktop/p43b-card-review-turns.png, writing actual.
+  ✓  41 [webkit-light-desktop] › ui-migration/p43b-cards.browser.mjs:127:3 › P4.3b session decision cards › the review turns: the run’s session opened from the request (3.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/webkit-light-desktop/p43b-card-receipt.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/webkit-light-desktop/p43b-card-reopen.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/webkit-light-desktop/p43b-card-reopen-refused.png, writing actual.
+  ✓  42 [webkit-light-desktop] › ui-migration/p43b-cards.browser.mjs:144:3 › P4.3b session decision cards › a receipt’s Reopen task: asked, refused, and back (3.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/webkit-light-desktop/p43b-card-start-gone.png, writing actual.
+  ✓  43 [webkit-light-desktop] › ui-migration/p43b-cards.browser.mjs:173:3 › P4.3b session decision cards › the start dialog when its request no longer stands (4.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/webkit-light-desktop/p43b-card-question-records.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/webkit-light-desktop/p43b-card-question-review.png, writing actual.
+  ✓  44 [webkit-light-desktop] › ui-migration/p43b-cards.browser.mjs:193:3 › P4.3b session decision cards › ended coordinator questions: the records, and an answered one’s review (3.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/webkit-light-desktop/p43b-card-start-live.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/webkit-light-desktop/p43b-card-start-live-plan.png, writing actual.
+  ✓  45 [webkit-light-desktop] › ui-migration/p43b-cards.browser.mjs:222:3 › P4.3b session decision cards › the start card in a conversation: 720px at most, More and Read all only while cut, the plan as the task graph or by level (3.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/webkit-light-phone/p43b-card-evidence-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/webkit-light-phone/p43b-card-evidence-stale.png, writing actual.
+  ✓  46 [webkit-light-phone] › ui-migration/p43b-cards.browser.mjs:41:3 › P4.3b session decision cards › an evidence decision: refused, then out of date (2.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/webkit-light-phone/p43b-card-owner-typed.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/webkit-light-phone/p43b-card-owner-refused.png, writing actual.
+  ✓  47 [webkit-light-phone] › ui-migration/p43b-cards.browser.mjs:65:3 › P4.3b session decision cards › an owner confirmation: a review question answered in the owner’s own words, refused (2.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/webkit-light-phone/p43b-card-criteria-refused.png, writing actual.
+  ✓  48 [webkit-light-phone] › ui-migration/p43b-cards.browser.mjs:91:3 › P4.3b session decision cards › a criteria decision: refused (2.0s)
+  -  49 [webkit-light-phone] › ui-migration/p43b-cards.browser.mjs:109:3 › P4.3b session decision cards › the decision strip: what waits on the reader
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/webkit-light-phone/p43b-card-review-turns.png, writing actual.
+  ✓  50 [webkit-light-phone] › ui-migration/p43b-cards.browser.mjs:127:3 › P4.3b session decision cards › the review turns: the run’s session opened from the request (1.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/webkit-light-phone/p43b-card-receipt.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/webkit-light-phone/p43b-card-reopen.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/webkit-light-phone/p43b-card-reopen-refused.png, writing actual.
+  ✓  51 [webkit-light-phone] › ui-migration/p43b-cards.browser.mjs:144:3 › P4.3b session decision cards › a receipt’s Reopen task: asked, refused, and back (2.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/webkit-light-phone/p43b-card-start-gone.png, writing actual.
+  ✓  52 [webkit-light-phone] › ui-migration/p43b-cards.browser.mjs:173:3 › P4.3b session decision cards › the start dialog when its request no longer stands (1.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/webkit-light-phone/p43b-card-question-records.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/webkit-light-phone/p43b-card-question-review.png, writing actual.
+  ✓  53 [webkit-light-phone] › ui-migration/p43b-cards.browser.mjs:193:3 › P4.3b session decision cards › ended coordinator questions: the records, and an answered one’s review (2.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/webkit-light-phone/p43b-card-start-live.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/webkit-light-phone/p43b-card-start-live-plan.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/webkit-light-phone/p43b-card-start-live-more.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/webkit-light-phone/p43b-card-start-live-graph.png, writing actual.
+  ✓  54 [webkit-light-phone] › ui-migration/p43b-cards.browser.mjs:222:3 › P4.3b session decision cards › the start card in a conversation: 720px at most, More and Read all only while cut, the plan as the task graph or by level (3.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/webkit-dark-desktop/p43b-card-evidence-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/webkit-dark-desktop/p43b-card-evidence-stale.png, writing actual.
+  ✓  55 [webkit-dark-desktop] › ui-migration/p43b-cards.browser.mjs:41:3 › P4.3b session decision cards › an evidence decision: refused, then out of date (2.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/webkit-dark-desktop/p43b-card-owner-typed.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/webkit-dark-desktop/p43b-card-owner-refused.png, writing actual.
+  ✓  56 [webkit-dark-desktop] › ui-migration/p43b-cards.browser.mjs:65:3 › P4.3b session decision cards › an owner confirmation: a review question answered in the owner’s own words, refused (3.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/webkit-dark-desktop/p43b-card-criteria-refused.png, writing actual.
+  ✓  57 [webkit-dark-desktop] › ui-migration/p43b-cards.browser.mjs:91:3 › P4.3b session decision cards › a criteria decision: refused (2.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/webkit-dark-desktop/p43b-card-strip.png, writing actual.
+  ✓  58 [webkit-dark-desktop] › ui-migration/p43b-cards.browser.mjs:109:3 › P4.3b session decision cards › the decision strip: what waits on the reader (2.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/webkit-dark-desktop/p43b-card-review-turns.png, writing actual.
+  ✓  59 [webkit-dark-desktop] › ui-migration/p43b-cards.browser.mjs:127:3 › P4.3b session decision cards › the review turns: the run’s session opened from the request (2.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/webkit-dark-desktop/p43b-card-receipt.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/webkit-dark-desktop/p43b-card-reopen.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/webkit-dark-desktop/p43b-card-reopen-refused.png, writing actual.
+  ✓  60 [webkit-dark-desktop] › ui-migration/p43b-cards.browser.mjs:144:3 › P4.3b session decision cards › a receipt’s Reopen task: asked, refused, and back (2.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/webkit-dark-desktop/p43b-card-start-gone.png, writing actual.
+  ✓  61 [webkit-dark-desktop] › ui-migration/p43b-cards.browser.mjs:173:3 › P4.3b session decision cards › the start dialog when its request no longer stands (2.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/webkit-dark-desktop/p43b-card-question-records.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/webkit-dark-desktop/p43b-card-question-review.png, writing actual.
+  ✓  62 [webkit-dark-desktop] › ui-migration/p43b-cards.browser.mjs:193:3 › P4.3b session decision cards › ended coordinator questions: the records, and an answered one’s review (3.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/webkit-dark-desktop/p43b-card-start-live.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/webkit-dark-desktop/p43b-card-start-live-plan.png, writing actual.
+  ✓  63 [webkit-dark-desktop] › ui-migration/p43b-cards.browser.mjs:222:3 › P4.3b session decision cards › the start card in a conversation: 720px at most, More and Read all only while cut, the plan as the task graph or by level (5.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/webkit-dark-phone/p43b-card-evidence-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/webkit-dark-phone/p43b-card-evidence-stale.png, writing actual.
+  ✓  64 [webkit-dark-phone] › ui-migration/p43b-cards.browser.mjs:41:3 › P4.3b session decision cards › an evidence decision: refused, then out of date (4.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/webkit-dark-phone/p43b-card-owner-typed.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/webkit-dark-phone/p43b-card-owner-refused.png, writing actual.
+  ✓  65 [webkit-dark-phone] › ui-migration/p43b-cards.browser.mjs:65:3 › P4.3b session decision cards › an owner confirmation: a review question answered in the owner’s own words, refused (8.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/webkit-dark-phone/p43b-card-criteria-refused.png, writing actual.
+  ✓  66 [webkit-dark-phone] › ui-migration/p43b-cards.browser.mjs:91:3 › P4.3b session decision cards › a criteria decision: refused (3.5s)
+  -  67 [webkit-dark-phone] › ui-migration/p43b-cards.browser.mjs:109:3 › P4.3b session decision cards › the decision strip: what waits on the reader
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/webkit-dark-phone/p43b-card-review-turns.png, writing actual.
+  ✓  68 [webkit-dark-phone] › ui-migration/p43b-cards.browser.mjs:127:3 › P4.3b session decision cards › the review turns: the run’s session opened from the request (4.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/webkit-dark-phone/p43b-card-receipt.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/webkit-dark-phone/p43b-card-reopen.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/webkit-dark-phone/p43b-card-reopen-refused.png, writing actual.
+  ✓  69 [webkit-dark-phone] › ui-migration/p43b-cards.browser.mjs:144:3 › P4.3b session decision cards › a receipt’s Reopen task: asked, refused, and back (6.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/webkit-dark-phone/p43b-card-start-gone.png, writing actual.
+  ✓  70 [webkit-dark-phone] › ui-migration/p43b-cards.browser.mjs:173:3 › P4.3b session decision cards › the start dialog when its request no longer stands (4.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/webkit-dark-phone/p43b-card-question-records.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/webkit-dark-phone/p43b-card-question-review.png, writing actual.
+  ✓  71 [webkit-dark-phone] › ui-migration/p43b-cards.browser.mjs:193:3 › P4.3b session decision cards › ended coordinator questions: the records, and an answered one’s review (2.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/webkit-dark-phone/p43b-card-start-live.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/webkit-dark-phone/p43b-card-start-live-plan.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/webkit-dark-phone/p43b-card-start-live-more.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34blYpxEcHMAf4oafuC2W/runs/f-cards-del-shots/webkit-dark-phone/p43b-card-start-live-graph.png, writing actual.
+  ✓  72 [webkit-dark-phone] › ui-migration/p43b-cards.browser.mjs:222:3 › P4.3b session decision cards › the start card in a conversation: 720px at most, More and Read all only while cut, the plan as the task graph or by level (4.7s)
+
+  4 skipped
+  68 passed (3.8m)
+exit=0
+load: 38.27 36.97 38.07 20/3955 2086372
+mem: 4525M available, swap 18765M free
+ended: 2026-10-09T09:43:19Z

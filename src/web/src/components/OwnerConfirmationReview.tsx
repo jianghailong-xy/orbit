@@ -1,6 +1,5 @@
 import { useState, type JSX, type ReactNode } from 'react';
 import { ClockCircleOutlined, DownOutlined, MinusCircleOutlined, RightOutlined } from '@ant-design/icons';
-import { Input } from 'antd';
 import type {
   ConfirmationNeedsYouItem,
   ConfirmationReviewHeadline,
@@ -12,6 +11,7 @@ import type {
 } from '@orbit/shared';
 import { OTHER_OPTION, RECOMMENDED } from './CoordinatorQuestionCard';
 import { decisionReceiptTime } from './EvidenceDecisionCard';
+import { Textarea } from './ui/Textarea';
 
 /**
  * The review bar of the owner-confirmation card (docs/owner-confirmation-review-contract.md §6–§9).
@@ -648,7 +648,7 @@ function ReviewAnswerBlocks({
               <span className="coordinator-question-option-text">{OTHER_OPTION}</span>
             </label>
             {typeof choice === 'number' ? null : (
-              <Input.TextArea
+              <Textarea
                 className="coordinator-question-free"
                 value={choice.other}
                 maxLength={2000}

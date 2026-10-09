@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, type JSX, type Ref } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Input, Modal } from 'antd';
 import type { DoneRequest, ProjectDoneRecord, ProjectOpenItemRow, SessionWaitingKind } from '@orbit/shared';
 import { api } from '../api';
 import {
@@ -38,6 +37,9 @@ import {
   type ProjectDoneDocument,
 } from '../lib/projectDone';
 import { projectStarted } from '../lib/projectStart';
+import { Alert } from './ui/Alert';
+import { Dialog } from './ui/Dialog';
+import { Textarea } from './ui/Textarea';
 
 /**
  * WHY this project is not DONE — the projection, rendered.
@@ -591,8 +593,7 @@ export function ProjectSettlementCard({
           <Alert
             className="project-settlement-error"
             type="error"
-            showIcon
-            message={SETTLEMENT_NOT_RECORDED}
+            title={SETTLEMENT_NOT_RECORDED}
             description={error.message}
           />
         ) : null}
@@ -1099,10 +1100,10 @@ export function ProjectDoneCard({
         <p className="project-done-explanation">
           {PROJECT_DONE_COPY.recordingExplanation}
         </p>
-        {error ? <Alert className="project-settlement-error" type="error" showIcon message="Project was not recorded done" description={error.message} /> : null}
+        {error ? <Alert className="project-settlement-error" type="error" title="Project was not recorded done" description={error.message} /> : null}
         {notYetOpen ? (
           <div className="project-done-not-yet">
-            <Input.TextArea
+            <Textarea
               aria-label={DONE_CARD_MISSING}
               placeholder={DONE_CARD_MISSING}
               value={note}
@@ -1230,7 +1231,9 @@ export function ProjectDoneDialog({
     if (row?.itemId && note.trim()) decline.mutate({ itemId: row.itemId, note });
   };
   return (
-    <Modal open={open} title="" footer={null} onCancel={onClose} width={680} destroyOnClose={false} className="project-done-dialog">
+    // Kept mounted once open, as before: a note half-typed under Not yet is still there when the
+    // dialog comes back. It has no title of its own; the card's head is its heading.
+    <Dialog open={open} title={null} onClose={onClose} width={680} keepMounted className="project-done-dialog">
       {project ? (
         <ProjectDoneCard
           project={project}
@@ -1249,8 +1252,8 @@ export function ProjectDoneDialog({
           onNotYet={submitNotYet}
           onReopen={() => reopen.mutate()}
         />
-      ) : projectRead.isError ? <Alert type="error" showIcon message="Project could not be loaded" description={projectRead.error.message} /> : null}
-    </Modal>
+      ) : projectRead.isError ? <Alert type="error" title="Project could not be loaded" description={projectRead.error.message} /> : null}
+    </Dialog>
   );
 }
 

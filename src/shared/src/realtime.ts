@@ -136,6 +136,10 @@ export interface ControlSessionSummary {
   filingState: SessionFilingState;
   /** Server-derived actions; optional for rolling-version compatibility. */
   capabilities?: SessionCapabilities;
+  /** The engine the session runs on for good — the CLI on the runner (`claude`, `codex`, `kimi`,
+   *  `antigravity`, `opencode`, `dsh`); null when it was never recorded and its credential is gone.
+   *  Absent from an older control plane. */
+  engine?: string | null;
   agentId: string | null;
   agent: { id: string; name: string | null; model: string | null; effort: string | null } | null;
   /** The session folder this session is filed in, or null when it is in no folder. Always sent by

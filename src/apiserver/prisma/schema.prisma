@@ -6044,6 +6044,8 @@ model ModelProvider {
   // The account pools this provider is a member of. Joining one adds a way to dispatch it and
   // takes nothing away: the row keeps its own slug and can still be pinned on its own.
   poolMemberships ProviderPoolMember[]
+  // The retired provider names that resolve to this key (ProviderSlugAlias).
+  aliases       ProviderSlugAlias[]
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
 
@@ -6052,6 +6054,26 @@ model ModelProvider {
   @@unique([id, ownerId], map: "model_provider_id_owner_id_key")
   @@index([ownerId])
   @@map("model_provider")
+}
+
+/// A retired provider name (migration 0415, docs/provider-engine-contract.md §1.5): the slug of a
+/// `deepseek-harness` row that was merged into a DeepSeek key or became one under another slug. It
+/// resolves to that key on the engine the old slug ran on, so a caller still naming it gets what it got
+/// before; nothing lists it, and whatever stores a provider stores the key's own slug. It is a name in
+/// the one dispatch namespace — the `*_dispatch_slug_guard` triggers refuse a key, a pool or an alias
+/// whose slug one of the others holds — and deleting its key deletes it.
+model ProviderSlugAlias {
+  slug       String        @id
+  providerId String        @map("provider_id") @db.Uuid
+  provider   ModelProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  // The engine the old slug ran on: `dsh` (provider_slug_alias_engine_check).
+  engine     String
+  // MERGED or RENAMED (provider_slug_alias_reason_check).
+  reason     String
+  createdAt  DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([providerId])
+  @@map("provider_slug_alias")
 }
 
 /// An account pool (migration 0265): several of one owner's Claude subscription providers, dispatched

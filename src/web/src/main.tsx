@@ -1,4 +1,12 @@
 import { App as AntApp, ConfigProvider } from 'antd';
+// The first page's stylesheet is these modules' CSS in the order they are first imported (vite.config.ts).
+// The overlays', the review cards' and highlight.js's styles come ahead of the reset and index.css, where
+// production builds have linked them so far (a chunk the entry shared with the lazy session export), so
+// the page rules keep the same-weight ties with them that they have been winning. Every other Orbit
+// component's CSS follows index.css.
+import './components/ui/Overlay.css';
+import './components/ReviewCard.css';
+import 'highlight.js/styles/github.css';
 import 'antd/dist/reset.css';
 import './index.css';
 import './components/ui/foundation.css';
