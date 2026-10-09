@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { WIKI_IMPORT_JOB, WIKI_IMPORT_RULES, type WikiOpOutcome } from '@orbit/shared';
 import type { PrismaService } from '../prisma/prisma.service';
+import { stripNul } from '../runner-api/strip-nul';
 import { wikiImportPrincipal } from '../wiki/wiki-import';
 import { WikiRefusalError, type WikiProposeInput, type WikiService } from '../wiki/wiki.service';
 import { WikiJobContentError, type WikiJobContext, type WikiJobRunner } from './wiki-job-executor';
@@ -496,7 +497,9 @@ class WikiImportRun {
       ...(dryRun ? { dryRun: true } : { idempotencyKey: wikiImportIdempotencyKey(job.spaceId, ops) }),
     };
     try {
-      const answer = await this.deps.wiki.submitChangeset(wikiImportPrincipal(job.ownerId, this.input.sessionId), job.spaceId, body);
+      // What the model wrote goes to the shared writer without any U+0000 (contract `jobs.serverWrites`): Postgres keeps
+      // none, and a model may copy one out of the code it was shown — the runner gate drops it from a report the same way.
+      const answer = await this.deps.wiki.submitChangeset(wikiImportPrincipal(job.ownerId, this.input.sessionId), job.spaceId, stripNul(body));
       return Array.isArray(answer.ops) ? (answer.ops as WikiOpOutcome[]) : [];
     } catch (error) {
       // A refusal of the whole request — not of an op — is no answer this run can go on from.

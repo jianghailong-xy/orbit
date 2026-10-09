@@ -108,6 +108,12 @@ final class RunnersModel {
         await press { _ = try await self.api.installDsh(id) }
     }
 
+    /// Install one engine's CLI on the machine — the same relay, for an engine it doesn't have.
+    @discardableResult
+    func installEngine(_ id: String, engine: String) async -> String? {
+        await press { _ = try await self.api.installEngine(id, engine: engine) }
+    }
+
     /// The machine re-reads its CLIs' model lists; the new ones arrive on a later check-in.
     @discardableResult
     func refreshModels(_ id: String) async -> String? {

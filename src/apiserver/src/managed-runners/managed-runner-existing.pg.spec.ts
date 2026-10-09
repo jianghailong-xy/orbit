@@ -11,7 +11,9 @@
  *   - the runner rows and their credentials stay (no revocation), and the default workspaces stay;
  *   - no Kubernetes client is constructed and no timer started by managed runner code (the tripwire
  *     of `managed-runner-boot.pg.spec.ts`), so nothing can stop or delete a Pod or a PVC;
- *   - the existing managed runner still heartbeats and reads itself: execution continues;
+ *   - the existing managed runner still heartbeats and reads itself as the instance it is:
+ *     execution continues, and its credential stays bound to that instance (a request from another
+ *     Pod or an older runner is refused, and writes nothing);
  *   - the capability and status reads allocate nothing; every managed write is 404;
  *   - unregistering or removing the managed runner, or deleting its owner, is refused.
  *
@@ -28,6 +30,7 @@ import { test } from 'node:test';
 import { setTimeout as sleep } from 'node:timers/promises';
 
 import { JwtService } from '@nestjs/jwt';
+import { MANAGED_RUNNER_GENERATION_HEADER, MANAGED_RUNNER_INSTANCE_CAPABILITY, MANAGED_RUNNER_POD_UID_HEADER } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { call } from '../auth/pat-test-apiserver';
@@ -68,7 +71,7 @@ test('managed runners switched off with existing state: nothing is stopped, dele
   const admin = await user('admin', 'ADMIN');
   const bystander = await user('bystander');
 
-  interface Seeded { ownerId: string; runnerId: string; workspaceId: string; token: string; mappingId: string }
+  interface Seeded { ownerId: string; runnerId: string; workspaceId: string; token: string; mappingId: string; podUid?: string }
   async function seed(label: string, mapping: Record<string, unknown>): Promise<Seeded> {
     const ownerId = await user(label);
     const token = generateToken(32);
@@ -94,7 +97,7 @@ test('managed runners switched off with existing state: nothing is stopped, dele
       `INSERT INTO managed_runner (${names.map((n) => `"${n}"`).join(', ')}) VALUES (${names.map((_, i) => `$${i + 1}`).join(', ')})`,
       names.map((n) => columns[n]),
     );
-    return { ownerId, runnerId, workspaceId, token, mappingId: columns.id as string };
+    return { ownerId, runnerId, workspaceId, token, mappingId: columns.id as string, podUid: columns.pod_uid as string | undefined };
   }
 
   const ready = await seed('ready', {
@@ -152,18 +155,33 @@ test('managed runners switched off with existing state: nothing is stopped, dele
         assert.equal(refused.json.code, 'MANAGED_RUNNER_DISABLED');
       }
 
-      // The running instance keeps working: it heartbeats and reads itself with its credential.
-      const beat = await call(server, 'POST', '/api/runner/heartbeat', ready.token, {});
+      // The running instance keeps working: it heartbeats and reads itself with its credential, as
+      // the instance it is (managed-runner-instance.ts) — whatever the switch says.
+      const asItself = {
+        'x-orbit-runner-capabilities': MANAGED_RUNNER_INSTANCE_CAPABILITY,
+        [MANAGED_RUNNER_GENERATION_HEADER]: '1',
+        [MANAGED_RUNNER_POD_UID_HEADER]: ready.podUid!,
+      };
+      const beat = await call(server, 'POST', '/api/runner/heartbeat', ready.token, {}, asItself);
       assert.ok(beat.status === 200 || beat.status === 201, `heartbeat: ${beat.text}`);
-      const me = await call(server, 'GET', '/api/runner/me', ready.token);
+      const me = await call(server, 'GET', '/api/runner/me', ready.token, undefined, asItself);
       assert.equal(me.status, 200, me.text);
       assert.equal(me.json.workspaces.length, 1);
+      // Switching management off does not hand the credential to another instance.
+      for (const [who, headers, code] of [
+        ['another Pod', { ...asItself, [MANAGED_RUNNER_POD_UID_HEADER]: randomUUID() }, 'MANAGED_RUNNER_INSTANCE_NOT_AUTHORIZED'],
+        ['an older runner', {}, 'MANAGED_RUNNER_INSTANCE_REQUIRED'],
+      ] as const) {
+        const refused = await call(server, 'POST', '/api/runner/heartbeat', ready.token, {}, headers);
+        assert.equal(refused.status, 403, `${who}: ${refused.text}`);
+        assert.equal(refused.json.code, code, who);
+      }
 
       // Removing it any ordinary way is refused, with the switch off as well.
       const removed = await call(server, 'DELETE', `/api/runners/${ready.runnerId}`, owner);
       assert.equal(removed.status, 409, removed.text);
       assert.equal(removed.json.code, 'MANAGED_RUNNER_DELETE_REFUSED');
-      const unregistered = await call(server, 'POST', '/api/runner/deregister', ready.token, {});
+      const unregistered = await call(server, 'POST', '/api/runner/deregister', ready.token, {}, asItself);
       assert.equal(unregistered.status, 409, unregistered.text);
       assert.equal(unregistered.json.code, 'MANAGED_RUNNER_DELETE_REFUSED');
       const ownerDeleted = await call(server, 'DELETE', `/api/admin/users/${ready.ownerId}`, await login(admin));

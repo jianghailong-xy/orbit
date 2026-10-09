@@ -319,10 +319,16 @@ public final class APIClient: @unchecked Sendable {
         try await post("sessions/\(sessionID)/turns", body: req)
     }
 
-    /// Still-PENDING user turns, oldest first. Unlike leased turns these have no transcript event,
-    /// so opening/reconnecting a console fetches this durable queue explicitly.
+    /// The user turns no transcript event draws yet, oldest first, each with its `placement`: the
+    /// accepted head a runner has taken but not echoed, the turns queued behind it, and steers. They
+    /// have no replayable event, so opening/reconnecting a console fetches them explicitly.
+    ///
+    /// The `active` view, not the bare one: that one is the queue alone and leaves the accepted head
+    /// out, so a turn vanished from this end between the runner taking it and its echo — a resumed
+    /// run's brief behind a busy runner was a blank pane until it ran. The bare view stays as it is
+    /// for the clients already installed. Web parity: `listQueuedTurns`.
     public func queuedTurns(sessionID: String) async throws -> [QueuedTurnInfo] {
-        try await get("sessions/\(sessionID)/turns")
+        try await get("sessions/\(sessionID)/turns", query: [URLQueryItem(name: "view", value: "active")])
     }
 
     public func interrupt(sessionID: String) async throws {
@@ -1407,6 +1413,13 @@ public final class APIClient: @unchecked Sendable {
     public func installDsh(_ runnerID: String) async throws -> RunnerInstallState {
         struct Request: Encodable { let engine = "dsh" }
         return try await post("runners/\(runnerID)/install", body: Request())
+    }
+
+    /// Install one engine's CLI on the runner (POST /runners/:id/install) — what an engine's page offers
+    /// for an engine the machine doesn't have, as the web's engine row does.
+    public func installEngine(_ runnerID: String, engine: String) async throws -> RunnerInstallState {
+        struct Request: Encodable { let engine: String }
+        return try await post("runners/\(runnerID)/install", body: Request(engine: engine))
     }
 
     @discardableResult

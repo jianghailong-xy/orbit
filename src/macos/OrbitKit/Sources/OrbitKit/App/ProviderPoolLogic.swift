@@ -135,7 +135,7 @@ public enum ProviderPools {
         return (keys ? "key\(n == 1 ? "" : "s")" : "account\(n == 1 ? "" : "s")") + " you can run on"
     }
 
-    // MARK: the pool's page (Settings → Providers → an account pool)
+    // MARK: the pool's page (Settings → Infrastructure → an account pool)
 
     /// The page's head: what the pool is, and how many of its accounts a session could start on now
     /// (`availability`).

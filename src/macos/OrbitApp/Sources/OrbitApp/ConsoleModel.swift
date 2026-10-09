@@ -240,20 +240,12 @@ final class ConsoleModel {
         return api.baseURL.appendingPathComponent("providers/new/\(DshRuntime.presetSlug)")
     }
 
-    /// The web page a picker row's `fixEngine` is fixed on, or nil when the fix is this runner's
-    /// own Engines section. Providers is where an engine's install and sign-in live for every
-    /// engine the page has a row for — the login engines and OpenCode with them, Antigravity and
-    /// Harness — and `?engine=` focuses the row that was asked for, so a row's "Not installed,
-    /// sign in →" lands on the one press that keeps it. Only an engine neither end has a row for
-    /// is nil, and that press falls back to the runner's own page.
-    func webFixURL(engine: String, runnerID: String) -> URL? {
-        if engine == DshRuntime.connectFix {
-            return api.baseURL.appendingPathComponent("providers/new/\(DshRuntime.presetSlug)")
-        }
-        // Web's `ROW_ENGINES` (RunnerEngines.tsx), plus Harness, whose key row the page draws with
-        // the configured providers rather than under "On your runners".
-        let inProviders = ["claude", "codex", "kimi", "opencode", "antigravity", "dsh"]
-        return inProviders.contains(engine) ? providersURL(engine: engine, runnerID: runnerID) : nil
+    /// The web page a picker row's `fixEngine` is fixed on — connecting a Harness key, which these
+    /// clients don't do themselves — or nil when the fix is that engine's page on the runner, in the app
+    /// (`AppModel.openRunnerEngine`), where an engine is signed in and installed.
+    func webFixURL(engine: String) -> URL? {
+        guard engine == DshRuntime.connectFix else { return nil }
+        return api.baseURL.appendingPathComponent("providers/new/\(DshRuntime.presetSlug)")
     }
 
     func installDsh() async {
@@ -276,17 +268,6 @@ final class ConsoleModel {
             return choice.kind == .byok && choice.slug != provider && choice.unavailable == nil
                 && configured?.presetSlug == "gemini" && configured?.runtime == "antigravity"
         }
-    }
-
-    var antigravityProvidersURL: URL? {
-        guard let runnerID else { return nil }
-        return providersURL(engine: "antigravity", runnerID: runnerID)
-    }
-
-    func providersURL(engine: String, runnerID: String) -> URL? {
-        var components = URLComponents(url: api.baseURL.appendingPathComponent("providers"), resolvingAgainstBaseURL: false)
-        components?.queryItems = [URLQueryItem(name: "runner", value: runnerID), URLQueryItem(name: "engine", value: engine)]
-        return components?.url
     }
 
     func connectGeminiURL() async -> URL {
@@ -4915,16 +4896,17 @@ final class ConsoleModel {
         publishStateNow()
     }
 
-    /// Fetch and reconcile the server's still-PENDING user turns. The generation fence makes a
-    /// burst of add/withdraw nudges monotonic: an older, slower response cannot repaint a turn a
-    /// newer response already observed as cancelled or leased. `knownBefore` deliberately contains
-    /// only turn ids learned from the server; an untagged local POST still in flight survives a
-    /// snapshot that raced just ahead of its commit.
+    /// Fetch and reconcile the server's user turns no transcript event draws yet — the accepted head
+    /// and the queue behind it. The generation fence makes a burst of add/withdraw nudges monotonic:
+    /// an older, slower response cannot repaint a turn a newer response already observed as
+    /// cancelled or leased. `knownBefore` deliberately contains only turn ids learned from the
+    /// server, the accepted head's among them, so a head the listing no longer names goes too; an
+    /// untagged local POST still in flight survives a snapshot that raced just ahead of its commit.
     private var queuedTurnsFetchGeneration = 0
     private func refreshQueuedTurns() async {
         queuedTurnsFetchGeneration &+= 1
         let generation = queuedTurnsFetchGeneration
-        let knownBefore = Set(reducer.state.queued.compactMap(\.turnId))
+        let knownBefore = reducer.state.listedTurnIDs
         guard let turns = try? await api.queuedTurns(sessionID: sessionID),
               generation == queuedTurnsFetchGeneration else { return }
         reducer.reconcileQueuedTurns(turns, knownBefore: knownBefore)

@@ -470,8 +470,9 @@ public enum TranscriptRow: Identifiable, Equatable, Sendable {
 }
 
 public enum TranscriptRows {
-    /// Flatten one snapshot into the rows to render, in web's order: history, then pending
-    /// approvals, then the working indicator, then queued sends, then the scroll-to-bottom target.
+    /// Flatten one snapshot into the rows to render, in web's order: history and the accepted head
+    /// at its end, then pending approvals, then the working indicator, then queued sends, then the
+    /// scroll-to-bottom target.
     public static func build(state: TranscriptState,
                              statusCards: [LocalStatusCard],
                              canPageOlder: Bool,
@@ -541,6 +542,12 @@ public enum TranscriptRows {
                 rows.append(.decisionCard(card))
             }
         }
+        // The accepted head waiting on its echo, drawn where that echo will land — after every item —
+        // and as the transcript draws a user turn, so with no Cancel: the runner has it. Its row
+        // carries the id the echo takes over (`appendUser`), so the echo replaces it in place rather
+        // than removing one row and inserting another (web parity: `acceptedUserTurnEvent`, appended
+        // after the last event).
+        rows.append(contentsOf: state.accepted.map { TranscriptRow.item(.user($0)) })
         // An anchor no longer in the window (its item was dropped — e.g. an optimistic bubble whose
         // send failed) would otherwise take the card down with it. Trail those instead of losing them.
         for card in statusCards where card.afterItemID.map({ anchored[$0] != nil }) == true {

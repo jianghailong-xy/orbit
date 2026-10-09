@@ -759,16 +759,16 @@ describe('ProjectsPage — starting a project', () => {
     await mount();
 
     await click(button('New project', mountedContainer()), () => {
-      expect(currentLocation()).toBe('/runners');
+      expect(currentLocation()).toBe('/infrastructure');
     });
 
-    expect(currentLocation()).toBe('/runners');
+    expect(currentLocation()).toBe('/infrastructure');
   });
 
   it.each([
     { label: 'registration guide', runners: [], expected: '/runners/register' },
     { label: 'only runner', runners: [{ id: R1 }], expected: `/runners/${encodeId(R1)}` },
-    { label: 'runner picker', runners: [{ id: R1 }, { id: R2 }], expected: '/runners' },
+    { label: 'machine list', runners: [{ id: R1 }, { id: R2 }], expected: '/infrastructure' },
   ])('uses the DefaultLanding $label when no workspace can open', async ({ runners, expected }) => {
     serve(
       { '/projects?status=OPEN': [REVAMP] },

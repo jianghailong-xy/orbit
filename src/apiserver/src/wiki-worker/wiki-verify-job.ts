@@ -1,6 +1,7 @@
 import { NotFoundException } from '@nestjs/common';
 import { WIKI_REVIEW_RULES, type WikiVerificationItem } from '@orbit/shared';
 import { WikiRefusalError, type WikiPrincipal, type WikiService } from '../wiki/wiki.service';
+import { stripNul } from '../runner-api/strip-nul';
 import { WikiJobContentError, type WikiJobContext, type WikiJobRunner } from './wiki-job-executor';
 import {
   WIKI_VERIFY_SYSTEM_PROMPT,
@@ -269,7 +270,9 @@ async function writeVerdict(
   verdict: Record<string, unknown>,
 ): Promise<Awaited<ReturnType<WikiService['recordVerifications']>>> {
   try {
-    return await wiki.recordVerifications(principal, spaceId, [verdict]);
+    // What the model wrote goes to the shared writer without any U+0000 (contract `jobs.serverWrites`): Postgres keeps
+    // none, and a model may copy one out of the code it was shown — the runner gate drops it from a report the same way.
+    return await wiki.recordVerifications(principal, spaceId, [stripNul(verdict)]);
   } catch (error) {
     throw asContent(error, 'the verdict could not be recorded');
   }

@@ -134,6 +134,8 @@ let currentPromotion: Record<string, unknown> | null = null;
 let merges: Array<Record<string, unknown>> = [];
 /** The coordinator's request to start, as the open-items door serves it, and how often it was read. */
 let startRequest: Record<string, unknown> | null = null;
+/** The exceptions the open-items door serves as the coordinator's — a blocked candidate's holder. */
+let withCoordinatorItems: Array<Record<string, unknown>> = [];
 let openItemsCalls = 0;
 /** The project's integration line, with whatever is landing on it. */
 let integrationView: Record<string, unknown> | null = null;
@@ -233,6 +235,7 @@ beforeEach(() => {
   currentPromotion = null;
   merges = [];
   startRequest = null;
+  withCoordinatorItems = [];
   openItemsCalls = 0;
   integrationView = null;
   FakeEventSource.streams = [];
@@ -270,7 +273,7 @@ beforeEach(() => {
     if (path === `/projects/${PROJECT_ID}/promotions/merged`) return reply(merges);
     if (path === `/projects/${PROJECT_ID}/open-items`) {
       openItemsCalls += 1;
-      return reply({ needsYou: [], withCoordinator: [], startRequest });
+      return reply({ needsYou: [], withCoordinator: withCoordinatorItems, startRequest });
     }
     if (path === `/projects/${PROJECT_ID}/integration`) return reply(integrationView ?? []);
     if (path.startsWith('/sessions/search?')) return reply({
@@ -1041,6 +1044,13 @@ describe('the merge into main on the project sessions page', { timeout: 60_000 }
 
   it('says a blocked candidate is the coordinator’s, and offers the way to it', async () => {
     currentPromotion = candidate('BLOCKED', { conflicts: ['src/a.go', 'src/b.go'], decidedAt: '2026-10-04T08:40:00Z' });
+    // The exception its check opened, which the coordinator holds.
+    withCoordinatorItems = [{
+      itemId: 'item-conflict', kind: 'INTEGRATION_CONFLICT', title: 'Merge conflict', detailLine: '',
+      assignee: 'COORDINATOR', assigneeReason: 'DEFAULT', waitingSince: '2026-10-04T08:40:00Z',
+      escalateAt: null, escalatedAt: null, taskId: null, sessionId: null, promotionId: 'promo-1',
+      fuseEpisodeId: null, actions: [], delivery: { state: 'DELIVERED', sessionId: COORDINATOR.id, at: '2026-10-04T08:40:00Z' },
+    }];
     await mount();
     await openSessions();
     await until(() => expect(card()?.getAttribute('data-shape')).toBe('blocked'));
@@ -1052,6 +1062,21 @@ describe('the merge into main on the project sessions page', { timeout: 60_000 }
     await click([...card()!.querySelectorAll('button')].find((button) => button.textContent === 'Open coordinator ›'), 'Open coordinator');
     await until(() => expect(location).toBe(`/sessions/${COORDINATOR.id}?project=${PROJECT_ID}`));
     expect(page()).not.toBeNull();
+  });
+
+  /** 2026-10-09: the coordinator had closed the exception (the work was already on main), and the
+   *  card still said "Coordinator is resolving it". Read with nothing holding it, it names nobody. */
+  it('names nobody once the project’s items are read and none holds the blocked candidate', async () => {
+    currentPromotion = candidate('BLOCKED', { conflicts: ['src/a.go'], decidedAt: '2026-10-04T08:40:00Z' });
+    await mount();
+    await openSessions();
+    await until(() => expect(card()?.getAttribute('data-shape')).toBe('blocked'));
+    await until(() => expect(openItemsCalls).toBeGreaterThan(0));
+    await until(() => expect(card()!.textContent ?? '').not.toContain('Coordinator is resolving it'));
+    expect(card()!.querySelector('.promotion-spin')).toBeNull();
+    const text = card()!.textContent ?? '';
+    expect(text).toContain('Can’t merge into main yet');
+    expect(text).toContain('Open coordinator ›');
   });
 
   it('lists the jobs in flight from the merge check’s landing row', async () => {

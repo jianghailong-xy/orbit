@@ -7,6 +7,7 @@ import {
 import type { Runner } from '@prisma/client';
 import { accountDisabled } from '../auth/disabled-accounts';
 import { sha256 } from '../common/crypto.util';
+import { authorizeManagedRunnerInstance } from '../managed-runners/managed-runner-instance';
 import { PrismaService } from '../prisma/prisma.service';
 
 /** What the runner a credential names is read with: whether its owner's account is disabled, too. */
@@ -43,7 +44,12 @@ export class RunnerAuthGuard implements CanActivate {
     });
     if (!runner) throw new UnauthorizedException('invalid runner token');
 
-    req.runner = admitRunner(runner);
+    // A disabled account's runner first: 403 ACCOUNT_DISABLED, whichever instance asks. Then a managed
+    // runner's credential is accepted only from the instance the manager authorized
+    // (managed-runner-instance.ts); a self-managed runner is not asked.
+    const admitted = admitRunner(runner);
+    req.managedRunnerInstance = await authorizeManagedRunnerInstance(this.prisma, admitted.id, req.headers);
+    req.runner = admitted;
     return true;
   }
 }

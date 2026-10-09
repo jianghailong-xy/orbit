@@ -35,16 +35,23 @@ final class AgentsModel {
     /// keys: a new-session draft is what offers pools, and the draft seed resolves a workspace that
     /// runs on one through them.
     private(set) var providerPools: [ProviderPool] = []
+    /// How the pool reads have gone: the Infrastructure page waits for an answer before it says what an
+    /// engine can run on.
+    private(set) var poolsState = ListLoadState()
+    /// The account's own keys (GET /providers/mine), disabled ones included: the Infrastructure page's API
+    /// keys, and what each engine can run on. Read when that page asks, unlike the catalogue above.
+    private(set) var ownKeys: [ConfiguredProvider] = []
+    private(set) var ownKeysState = ListLoadState()
     /// The shared Codex pools this account is in (GET /providers/shared-pools), read into their own
     /// model. A new-session draft offers them beside the account pools (`allPools`), and the
-    /// Providers page lists them on their own — which is why the two are kept apart here.
+    /// Infrastructure page lists them on their own — which is why the two are kept apart here.
     private(set) var sharedPools: [SharedPool] = []
     /// Every pool a new-session draft may offer, in web's order: the shared ones drawn as account
     /// pools whose members are their keys (`SharedPools.asProviderPool`), then this account's own.
     var allPools: [ProviderPool] { SharedPools.asProviderPools(sharedPools) + providerPools }
     /// The account's own providers as its key list reads them (GET /providers/mine), with the ids and
     /// endpoints the catalogue above leaves out: what tells a DeepSeek key, and what its balance is
-    /// asked by. Read for Settings → Providers (`loadDeepSeekBalances`).
+    /// asked by. Read for Infrastructure's API keys (`loadDeepSeekBalances`).
     private(set) var personalProviders: [ConfiguredProvider] = []
     /// Each DeepSeek key's account balance by provider id, as the server last answered — or why it
     /// didn't. Absent until asked, which a page reads as loading.
@@ -65,6 +72,12 @@ final class AgentsModel {
     /// The last (agent, view) `loadSessions` ran for, so a row action can silently refresh the same
     /// list without the view having to thread the agent id / tab back in.
     private var lastSessionQuery: (agentID: String, view: SessionView)?
+    /// Sessions being moved to Trash from this device (`AppModel.deleteSession`), kept out of this
+    /// pane's own Completed / Trash reads until the move has settled: a read already on the wire when
+    /// Delete was pressed — this pane's poll, or the re-read a delete just before it started — would
+    /// otherwise put the row back for a beat. The Open rows come down from the app's snapshot, which
+    /// keeps them out itself.
+    private var trashing: Set<String> = []
     /// The app's latest Open snapshot (`applyOpenSnapshot`), kept whichever list is on screen: an
     /// agent's Open list is that snapshot narrowed to the agent, so a first load of one can start
     /// from its rows instead of a blank "Loading…".
@@ -158,7 +171,24 @@ final class AgentsModel {
 
     /// The pools read again: an account went in or out, or a pool went.
     func reloadPools() async {
-        if let pools = try? await api.providerPools() { providerPools = pools }
+        poolsState.begin()
+        do {
+            providerPools = try await api.providerPools()
+            poolsState.succeed()
+        } catch {
+            poolsState.fail()
+        }
+    }
+
+    /// Best-effort like the pools: a failed read keeps the last good list.
+    func loadOwnKeys() async {
+        ownKeysState.begin()
+        do {
+            ownKeys = try await api.personalProviders()
+            ownKeysState.succeed()
+        } catch {
+            ownKeysState.fail()
+        }
     }
 
     func pausePoolMember(_ pool: ProviderPool, member: PoolMember, durationMinutes: Int?) async -> String? {
@@ -220,7 +250,7 @@ final class AgentsModel {
                 configuredProviders = providers
                 configuredProvidersLoaded = true
             }
-            if let pools = try? await api.providerPools() { providerPools = pools }
+            await reloadPools()
             if let shared = try? await api.sharedPools() { sharedPools = shared }
             loadState.succeed()
         } catch {
@@ -343,6 +373,20 @@ final class AgentsModel {
         agentSessions = SessionFilter.removing(id, from: agentSessions)
     }
 
+    /// Take a row being moved to Trash out of this pane's lists on the tap, and keep it out of the
+    /// reads that land before the move settles (`trashing`).
+    func hideTrashedSession(_ id: String) {
+        trashing.insert(id)
+        agentSessions = SessionFilter.removing(id, from: agentSessions)
+        #if os(iOS)
+        allSessions = SessionFilter.removing(id, from: allSessions)
+        #endif
+    }
+
+    func revealTrashedSession(_ id: String) {
+        trashing.remove(id)
+    }
+
     /// Load one agent's sessions for a view. The list endpoint filters by view only, so narrow to
     /// the agent client-side (the payload nests `agent.id`), mirroring the web agent console.
     ///
@@ -376,7 +420,8 @@ final class AgentsModel {
             return
         }
         do {
-            let all = try await api.listSessions(view: view)
+            let read = try await api.listSessions(view: view)
+            let all = SessionFilter.removing(trashing, from: read)
             #if os(iOS)
             allSessions = all
             #endif
