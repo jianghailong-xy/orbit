@@ -291,7 +291,6 @@ class CardsDeviceTest {
             http("/__control", """{"case":"$kind"}"""); compose.runOnIdle { app.realtime.refreshSession() }
             val before = http("/__stats").objects("journal").size
             press("$key:$verb")
-            if (verb == "CONFIRM_MERGE") compose.onNodeWithTag("confirm:CONFIRM_MERGE").performClick()
             compose.waitUntil(15_000) { http("/__stats").objects("journal").size > before && !http("/__stats").flag("pending") }
             val recorded = http("/__stats").objects("journal").last()
             assertEquals(kind, recorded.text("case")); assertEquals(200, recorded.number("status"))
