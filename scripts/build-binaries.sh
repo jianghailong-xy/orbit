@@ -6,8 +6,10 @@
 # install.sh and the Go self-updater fetch the .gz and decompress with stdlib gzip):
 #   orbit-linux-x64.gz  orbit-linux-arm64.gz  orbit-darwin-x64.gz  orbit-darwin-arm64.gz
 #   version.json  (names each .gz with the sha256 of its bytes as served: assets.<platform>)
+# With ORBIT_MACOS_SIGNING_P12 set, the two darwin binaries are signed with that Developer ID
+# before they are compressed, so version.json vouches for the signed bytes (see below).
 #
-# Requires: the Go toolchain on PATH.
+# Requires: the Go toolchain on PATH, and rcodesign (apple-codesign) when signing.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -68,6 +70,74 @@ if [ -n "${PUBLIC_ORIGIN:-}" ]; then
   LDFLAGS="$LDFLAGS -X main.defaultServer=$PUBLIC_ORIGIN"
 fi
 
+# A Developer ID signature for the darwin binaries (docs/release-process.md, "macOS runner
+# signature"). The Go linker signs a darwin binary ad hoc, as "a.out", and macOS files a user's
+# privacy (TCC) answers for such a binary under its code hash, which every release changes: each
+# update asked for Documents, Desktop and the rest all over again. Signed under one identifier by
+# one team, every release meets the same designated requirement, and the answers carry over.
+# ORBIT_MACOS_SIGNING_P12 names the identity's .p12 and ORBIT_MACOS_SIGNING_PASSWORD_FILE a file
+# whose first line is its password; nothing here prints either. Unset, nothing is signed.
+MACOS_SIGNING_P12="${ORBIT_MACOS_SIGNING_P12:-}"
+MACOS_SIGNING_PASSWORD_FILE="${ORBIT_MACOS_SIGNING_PASSWORD_FILE:-}"
+MACOS_IDENTIFIER="com.orbit.runner"
+if [ -n "$MACOS_SIGNING_P12" ]; then
+  if [ ! -s "$MACOS_SIGNING_P12" ] || [ ! -s "$MACOS_SIGNING_PASSWORD_FILE" ]; then
+    echo "error: ORBIT_MACOS_SIGNING_P12 and ORBIT_MACOS_SIGNING_PASSWORD_FILE must name the" >&2
+    echo "       Developer ID .p12 and a file holding its password" >&2
+    exit 1
+  fi
+  if ! command -v rcodesign >/dev/null 2>&1; then
+    echo "error: signing the macOS binaries needs rcodesign (apple-codesign) on PATH" >&2
+    exit 1
+  fi
+  # The hardened runtime, with the entitlements that keep its prompts. macOS asks on the runner's
+  # behalf for what the tools an agent runs reach for, and a hardened process without the matching
+  # entitlement is refused the camera, microphone, location, contacts, calendars, photos and Apple
+  # Events outright, the user never asked. Files and folders need no entitlement.
+  MACOS_ENTITLEMENTS="$(mktemp)"
+  trap 'rm -f "$MACOS_ENTITLEMENTS"' EXIT
+  cat >"$MACOS_ENTITLEMENTS" <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>com.apple.security.automation.apple-events</key><true/>
+  <key>com.apple.security.device.audio-input</key><true/>
+  <key>com.apple.security.device.camera</key><true/>
+  <key>com.apple.security.personal-information.addressbook</key><true/>
+  <key>com.apple.security.personal-information.calendars</key><true/>
+  <key>com.apple.security.personal-information.location</key><true/>
+  <key>com.apple.security.personal-information.photos-library</key><true/>
+</dict>
+</plist>
+PLIST
+fi
+
+# sign_macos signs one darwin binary in place, then reads back the identifier it now carries.
+# rcodesign's own output is shown only when it fails.
+sign_macos() {
+  local bin="$1" log info identifier team
+  log="$(mktemp)"
+  if ! rcodesign sign --p12-file "$MACOS_SIGNING_P12" --p12-password-file "$MACOS_SIGNING_PASSWORD_FILE" \
+      --binary-identifier "$MACOS_IDENTIFIER" --code-signature-flags runtime \
+      --entitlements-xml-file "$MACOS_ENTITLEMENTS" "$bin" >"$log" 2>&1; then
+    cat "$log" >&2
+    rm -f "$log"
+    echo "error: could not sign $(basename "$bin")" >&2
+    exit 1
+  fi
+  rm -f "$log"
+  info="$(rcodesign print-signature-info "$bin")"
+  identifier="$(sed -n 's/^ *identifier: //p' <<<"$info")"
+  team="$(sed -n 's/^ *team_name: //p' <<<"$info")"
+  if [ "$identifier" != "$MACOS_IDENTIFIER" ]; then
+    echo "error: $(basename "$bin") came out signed as '$identifier', not $MACOS_IDENTIFIER" >&2
+    exit 1
+  fi
+  # An Apple-issued Developer ID puts its team in the signature; another certificate puts none.
+  echo "   signed as $MACOS_IDENTIFIER, team ${team:-none (not an Apple-issued certificate)}"
+}
+
 mkdir -p "$OUT"
 echo ">> source $SOURCE_SHA"
 ASSETS=()
@@ -86,6 +156,9 @@ for t in "${TARGETS[@]}"; do
   if ! grep -qa "$SOURCE_SHA" "$ROOT/$OUT/orbit-$suffix"; then
     echo "error: orbit-$suffix carries no source stamp — does anything still read main.sourceSHA?" >&2
     exit 1
+  fi
+  if [ -n "$MACOS_SIGNING_P12" ] && [ "$goos" = darwin ]; then
+    sign_macos "$ROOT/$OUT/orbit-$suffix"
   fi
   # Ship the binary gzip-compressed; -f replaces orbit-$suffix with orbit-$suffix.gz.
   gzip -9 -f "$ROOT/$OUT/orbit-$suffix"

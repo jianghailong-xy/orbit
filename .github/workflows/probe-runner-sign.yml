@@ -1,0 +1,91 @@
+# TEMPORARY (probe branch, never merged; task 34ckUsDB9IxmvzLjTCxWI). The host that made this change
+# has no gh and no token, so a push is its one trigger: Linux builds signed and ad-hoc runner releases
+# with scripts/build-binaries.sh (a throwaway self-signed certificate; no repository secret is read),
+# a Mac checks them (.probe-runner-sign/macos.sh), and the last job pushes the transcript to
+# probe/macos-runner-devid-sign-results, which a clone reads.
+name: Probe macOS runner signature
+
+on:
+  push:
+    branches: ["probe/macos-runner-devid-sign"]
+
+jobs:
+  build:
+    name: Build signed and ad-hoc releases (Linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.27.x'
+          cache-dependency-path: src/runner-go/go.sum
+      - name: Build
+        run: bash .probe-runner-sign/build.sh "$RUNNER_TEMP/dists" 2>&1 | tee build.log
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dists
+          path: ${{ runner.temp }}/dists
+          retention-days: 1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: out-build
+          path: build.log
+          retention-days: 1
+
+  macos:
+    name: Check on macOS
+    needs: [build]
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v4
+        with:
+          name: dists
+          path: ${{ runner.temp }}/dists
+      - name: Check
+        run: |
+          mkdir -p out
+          bash .probe-runner-sign/macos.sh "$RUNNER_TEMP/dists" "$PWD/out" 2>&1 | tee out/macos.log
+          echo "exit: ${PIPESTATUS[0]}" | tee -a out/macos.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: out-macos
+          path: out
+          retention-days: 1
+
+  report:
+    name: Push the results where a clone can read them
+    needs: [build, macos]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: out-*
+          path: out
+      - name: Push to probe/macos-runner-devid-sign-results
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p out && cd out
+          {
+            echo "run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            echo "sha: ${{ github.sha }}"
+            echo "build: ${{ needs.build.result }}"
+            echo "macos: ${{ needs.macos.result }}"
+          } > RESULTS.txt
+          cat RESULTS.txt
+          git init -q
+          git config user.name "orbit-probe"
+          git config user.email "probe@orbit.invalid"
+          git checkout -q -b results
+          git add -A
+          git commit -q -m "probe results for ${{ github.sha }} (run ${{ github.run_id }})"
+          git push -q -f "https://x-access-token:${TOKEN}@github.com/${{ github.repository }}.git" \
+            results:refs/heads/probe/macos-runner-devid-sign-results

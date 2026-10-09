@@ -158,6 +158,62 @@ Check a build against its manifest with
 `(cd dist-bin && jq -r '.assets[] | "\(.sha256)  \(.file)"' version.json | sha256sum -c)`
 (`shasum -a 256 -c` on macOS).
 
+### macOS runner signature
+
+The Go linker signs a darwin binary ad hoc, with the identifier `a.out`. macOS records a person's privacy
+(TCC) answers for such a binary against its code hash, which every release changes, so after each runner
+update a Mac asked again about Documents, Desktop and every other protected place an agent's work had
+reached. A deployment with an Apple Developer ID signs the two darwin binaries instead.
+`scripts/build-binaries.sh` signs them with [rcodesign](https://github.com/indygreg/apple-platform-rs) on
+Linux before compressing them, so `version.json` carries the digests of the signed files and the update
+check passes as before. Each binary is signed:
+
+- as `com.orbit.runner`, by the team's Developer ID. Its designated requirement is then that identifier
+  and that team, the same for every release, so an answer given to one release holds for the next.
+- with the hardened runtime, and the entitlements that let macOS still ask on the runner's behalf for the
+  camera, microphone, location, contacts, calendars, photos and Apple Events. A hardened process without
+  them is refused those outright. Files and folders need no entitlement.
+- with a secure timestamp from Apple, so the signature outlives the certificate.
+
+The binaries are not notarized. A runner, `install.sh` and the macOS app download them without a
+quarantine attribute, so Gatekeeper does not assess them.
+
+To turn signing on, once, on the deploy host:
+
+1. Export the Developer ID Application certificate and its private key from Keychain Access as a `.p12`
+   with a password. A team can hold more than one Developer ID Application certificate, and the
+   designated requirement names the team rather than the certificate, so a certificate of the runner's
+   own keeps the macOS app's signing key off the deploy host and can be revoked alone.
+2. Copy the `.p12` to the deploy host outside the checkout, and put its password on the first line of a
+   second file. Make both readable only by the account that deploys (`chmod 600`).
+3. Add three lines to the checkout's `.env`:
+
+   ```bash
+   COMPOSE_FILE=docker-compose.yml:deploy/macos-runner-signing.yml
+   ORBIT_MACOS_SIGNING_P12=/root/orbit-signing/developer-id.p12
+   ORBIT_MACOS_SIGNING_PASSWORD_FILE=/root/orbit-signing/developer-id.password
+   ```
+
+   Every Compose command in the checkout, the upgrade skill's included, then also reads
+   [deploy/macos-runner-signing.yml](../deploy/macos-runner-signing.yml). It hands the two files to the
+   web build as BuildKit secrets, which reach only the step that signs: not an image layer, a build
+   argument or the build log. A build that is told to sign and cannot (a missing file, a wrong password,
+   Apple's timestamp server out of reach) fails instead of publishing unsigned binaries.
+4. Deploy with the upgrade skill. The build log names what it signed:
+   `signed as com.orbit.runner, team <team ID>`.
+
+Without these lines nothing changes: the darwin binaries keep the linker's signature and the build fetches
+nothing. A build that leaves them out, such as one from another checkout, publishes ad-hoc binaries again,
+and every Mac that updates to them asks once more.
+
+On a Mac whose runner has updated to a signed release, `codesign -dv ~/.orbit/bin/orbit` shows
+`Identifier=com.orbit.runner`, the team's `TeamIdentifier` and `flags=0x10000(runtime)`, and
+`codesign -d -r- ~/.orbit/bin/orbit` shows a designated requirement naming both. The first signed
+release asks once more about what the ad-hoc one was allowed, since the stored answer names the ad-hoc
+hash. From then on the answers survive updates. After the next update,
+`log show --last 1h --info --debug --predicate 'subsystem == "com.apple.TCC"'` shows `AUTHREQ_RESULT` with
+`authValue=2` for the runner and no `AUTHREQ_PROMPTING` naming it.
+
 ### Runner rollout and rollback
 
 `/dl` publishes two runner releases, each with its own `version.json` and asset digests:
