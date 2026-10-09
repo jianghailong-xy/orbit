@@ -17,7 +17,10 @@ import {
   CODEX_OAUTH_CLIENT_ID,
   codexUsageSnapshot,
   codexVersionFromUserAgent,
+  LOGIN_GATEWAY_PATHS,
+  loginBackendBase,
   loginForwardedHeaders,
+  loginGatewayAllows,
   loginMissingReason,
   loginProviderRequest,
   loginSignedOutNotice,
@@ -240,4 +243,44 @@ test('the session is told which window of which account is spent and when it goe
   for (const words of [loginSpentNotice(login, reading, reset), loginSignedOutNotice(login, 'My Codex')]) {
     assert.ok(!words.includes(login.accountId));
   }
+});
+
+// The login gateway's allowed paths are what codex asks the ChatGPT backend for when signed in itself,
+// plus the turn — recorded off the CLI (runner-go codex_chatgpt_backend_recording_test.go writes
+// fixtures/codex-chatgpt-startup-recording.json). Held together here so neither can drift: a codex that
+// asks for a new path, or a path list that stops covering what it asks for, is red.
+test('the login gateway forwards the turn and exactly the backend calls the CLI makes for itself', () => {
+  const startup = JSON.parse(
+    readFileSync(path.resolve(__dirname, '../../src/providers/fixtures/codex-chatgpt-startup-recording.json'), 'utf8'),
+  ) as { codex: string; startup: Array<{ request: Exchange }> };
+  assert.ok(startup.startup.length > 0, 'the startup recording is empty');
+  for (const { request } of startup.startup) {
+    const relative = request.path.split('?')[0].replace(/^\/backend-api/, '');
+    assert.ok(
+      loginGatewayAllows(request.method, relative),
+      `${request.method} ${request.path} is recorded off codex but the gateway does not allow it`,
+    );
+  }
+  // The turn, and the recording's own shape: the backend paths name the CLI's, minus its `/backend-api`.
+  assert.ok(loginGatewayAllows('POST', '/responses'));
+  assert.ok(startup.startup.some((exchange) => exchange.request.path.startsWith('/backend-api/wham/accounts/check')));
+  // The CLI's plugin and settings reads (recorded on 0.161; 0.162 omits the plugin ones here) are on the
+  // list too, spelled without the `/backend-api` prefix.
+  for (const p of ['/wham/settings/user', '/ps/plugins/list', '/ps/plugins/suggested/codex', '/ps/plugins/installed', '/plugins/featured', '/ps/mcp']) {
+    assert.ok(LOGIN_GATEWAY_PATHS.some((allowed) => allowed.path === p), `${p} is not on the login gateway's path list`);
+  }
+  // Nothing codex does not ask for is let through: the wrong method, a path off the list, or the
+  // `/backend-api` prefix left on.
+  for (const [method, p] of [
+    ['GET', '/responses'], ['POST', '/wham/accounts/check'], ['GET', '/analytics-events/events'],
+    ['GET', '/models'], ['POST', '/codex/analytics-events/events/nope'], ['POST', '/backend-api/wham/accounts/check'],
+  ] as const) {
+    assert.equal(loginGatewayAllows(method, p), false, `${method} ${p}`);
+  }
+});
+
+test('the non-turn backend paths live under the backend root, not the codex base', () => {
+  assert.equal(loginBackendBase(CHATGPT_CODEX_BASE), 'https://chatgpt.com/backend-api');
+  assert.equal(loginBackendBase('http://127.0.0.1:9/backend-api/codex'), 'http://127.0.0.1:9/backend-api');
+  assert.equal(loginBackendBase('https://chatgpt.com/backend-api/codex/'), 'https://chatgpt.com/backend-api');
 });
