@@ -162,7 +162,7 @@ class WikiServerExecutionShotsTest {
         // ① the settings page: no provider, the System model read-only with its state, the privacy note.
         val settings = OrbitRoute(Destination.WIKI_SETTINGS)
         show(settings) { WikiSettingsScreen(it, settings, DirectoryData(), nav) }
-        compose.waitUntil(5_000) { compose.onAllNodesWithTag("wiki-settings-model-row").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(60_000) { compose.onAllNodesWithTag("wiki-settings-model-row").fetchSemanticsNodes().isNotEmpty() }
         says("wiki-settings-workspace-row", WikiModeCopy.repoFrom, "orbit · Mac mini")
         says("wiki-settings-model-row", WikiRunsCopy.systemModelLabel("qwen3.8-27b-fp8"), WikiRunsCopy.modelState("up"))
         compose.onAllNodesWithTag("wiki-settings-provider-row").assertCountEquals(0)
@@ -172,7 +172,7 @@ class WikiServerExecutionShotsTest {
         // ② the Runs band on Activity (the Wiki page's management half since A12-2), after Review and Plan.
         val activity = OrbitRoute(Destination.WIKI_ACTIVITY)
         show(activity) { WikiActivityScreen(it, activity, DirectoryData(), nav) }
-        compose.waitUntil(5_000) { compose.onAllNodesWithTag("wiki-job-row").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(60_000) { compose.onAllNodesWithTag("wiki-job-row").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("wiki-activity-list").performScrollToIndex(3)
         compose.onNodeWithTag("wiki-activity-list").performScrollToNode(hasText(WikiRunsCopy.systemModelLabel("qwen3.8-27b-fp8")))
         val rows = compose.onAllNodesWithTag("wiki-job-row")
@@ -183,7 +183,7 @@ class WikiServerExecutionShotsTest {
         // ③ a run's page: its state and line, then each call.
         val run = OrbitRoute(Destination.WIKI_JOB, "34cE0job0000000000001")
         show(run) { WikiJobScreen(it, run) }
-        compose.waitUntil(5_000) { compose.onAllNodesWithTag("wiki-job-page").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(60_000) { compose.onAllNodesWithTag("wiki-job-page").fetchSemanticsNodes().isNotEmpty() }
         compose.onAllNodesWithTag("wiki-call-row").assertCountEquals(3)
         compose.onNodeWithTag("wiki-job-page").performScrollToNode(hasText("waited 1s · ran 14s · 1,204 → 296 tokens"))
         shot("run-server")

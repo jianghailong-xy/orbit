@@ -78,6 +78,7 @@ import {
   type TouchEvent as ReactTouchEvent,
   useCallback,
   useEffect,
+  useId,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -306,7 +307,7 @@ import {
   SessionCriteriaDecisionCard,
   type CriteriaDecisionReply,
 } from './CriteriaDecisionCard';
-import { CoordinatorQuestions } from './CoordinatorQuestionCard';
+import { AnsweredQuestionCard, CoordinatorQuestions, closedQuestionRows } from './CoordinatorQuestionCard';
 import {
   ItemAsCard,
   exceptionCardRows,
@@ -5318,11 +5319,29 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     transcriptEvents,
   ]);
 
+  // The coordinator's questions that have ended — answered, here or at another end, or withdrawn —
+  // each drawn as the record it became at the moment it ended (§5.2 R10, R12), placed by the rule
+  // every record above is (`decisionReceiptAnchor`). The question's own card, below the transcript,
+  // goes when the read drops it from `needsYou`, in the same poll that brings the record. The
+  // native clients do the same (`CoordinatorQuestions.receipts`).
+  const questionRecords = useMemo(
+    () =>
+      coordinatedProjectId
+        ? closedQuestionRows(openItems.data, transcriptEvents).map(({ record, placement }) => ({
+            anchor: placement,
+            moment: record.resolvedAt,
+            key: `question-record:${record.itemId}`,
+            element: <AnsweredQuestionCard record={record} />,
+          }))
+        : [],
+    [coordinatedProjectId, openItems.data, transcriptEvents],
+  );
+
   // One array for the transcript, memoized: a fresh array on every render would rebuild the whole
   // conversation with it (`Transcript` memoizes on this prop).
   const transcriptInserts = useMemo(
-    () => [...decisionReceipts, ...blockedPromotionCard, ...exceptionCards],
-    [decisionReceipts, blockedPromotionCard, exceptionCards],
+    () => [...decisionReceipts, ...questionRecords, ...blockedPromotionCard, ...exceptionCards],
+    [decisionReceipts, questionRecords, blockedPromotionCard, exceptionCards],
   );
 
   // Whether the settlement card below is on screen and still a question, as the card reports it:
@@ -7090,6 +7109,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // picking one replaces just that token with `/<name> ` (the trailing space drops the
   // regex match, so the menu auto-hides).
   const taRef = useRef<any>(null);
+  const suggestionHintId = useId();
   const imageInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Manual composer height (px). null = autoSize auto-grow (up to maxRows); once the user
@@ -10010,9 +10030,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   (mock 5, §5.2): the coordinator asks and goes on working, and the card is what the
                   owner answers — so the conversation shows what it is waiting on rather than only
                   the sentence it wrote when it asked. Drawn from the open items and not from any
-                  turn, so it is the same card the project page shows, and it goes when it is
-                  answered. Keyed apart from its siblings for the reason the evidence card's note
-                  gives below. */}
+                  turn, so it is the same card the project page shows. Once it is answered or
+                  withdrawn it is drawn above as the record it became (`questionRecords`). Keyed
+                  apart from its siblings for the reason the evidence card's note gives below. */}
               {selected && selectedId && !selectedTrashed && (
                 <CoordinatorQuestions
                   key={`coordinator-question:${selectedId}`}
@@ -10609,6 +10629,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             // the cap truncates; very large content should go through File instead.
             maxLength={MAX_PROMPT_CHARS}
             placeholder={offeredSuggestion ? '' : composerPlaceholder}
+            aria-describedby={offeredSuggestion ? suggestionHintId : undefined}
             value={text}
             disabled={composerDisabled}
             // Typing exits history recall: the next Up starts fresh from this draft.
@@ -10784,9 +10805,16 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           />
           {offeredSuggestion && (
             <div className="composer-suggestion">
-              <span className="composer-suggestion-text" title={offeredSuggestion}>
+              {/* Drawn for the eye; a screen reader hears the box's description below instead. */}
+              <span className="composer-suggestion-text" title={offeredSuggestion} aria-hidden="true">
                 {offeredSuggestion}
               </span>
+              {/* With a keyboard the grey line itself says how to take it, and there is no button;
+                  Use is for a touch screen, which has no Tab to press. Which one shows is CSS's
+                  call. Drawn in docs/mocks/prompt-suggestions-web-tab. */}
+              <kbd className="composer-suggestion-key" aria-hidden="true">
+                Tab
+              </kbd>
               <button
                 type="button"
                 className="composer-suggestion-use"
@@ -10797,8 +10825,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 aria-label={`Use suggestion: ${offeredSuggestion}`}
                 title="Use this suggestion"
               >
-                Use <kbd className="composer-suggestion-key">Tab</kbd>
+                Use
               </button>
+              <span id={suggestionHintId} className="sr-only">
+                Suggested reply: {offeredSuggestion}.
+                <span className="composer-suggestion-tab-hint"> Press Tab to use it.</span>
+              </span>
             </div>
           )}
           </div>

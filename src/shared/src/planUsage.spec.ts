@@ -12,6 +12,7 @@ import {
   codexAccountToStartOn,
   accountToStartOn,
   accountToMoveTo,
+  accountToMoveToAt,
   quotaExpiresAt,
   quotaNearLimit,
   withEnginePlanUsage,
@@ -468,6 +469,55 @@ describe('codexAccountToMoveTo — where a session whose account hit its limit g
   it('has nowhere to go without a second account', () => {
     expect(codexAccountToMoveTo([account('default')], usage(100, 0, 0), NOW, 'default')).toBeNull();
     expect(codexAccountToMoveTo(undefined, null, NOW, 'default')).toBeNull();
+  });
+});
+
+describe('accountToMoveToAt — when a session whose account hit its limit can go again on another', () => {
+  const ACCOUNT_2 = '1e84046c';
+  const ACCOUNT_3 = '44bf2acd';
+  const account = (id: string, auth: 'yes' | 'no' | 'unknown' = 'yes', pausedUntil?: string): RunnerEngineAccount => ({
+    id,
+    home: id === 'default' ? '/root/.claude' : `/root/.orbit/claude-accounts/${id}`,
+    auth,
+    ...(pausedUntil ? { pausedUntil } : {}),
+  });
+  const three = [account('default'), account(ACCOUNT_2), account(ACCOUNT_3)];
+  const IN_AN_HOUR = '2026-08-03T14:00:00Z';
+  /** 2026-10-08 on HPC, in miniature: Account 3's week spent for days while Account 2's 5 hours came
+   *  back within the hour — and the session on Account 3 waited for its own week. */
+  const usage = (def: number, two: number, three: number): PlanUsage => ({
+    claude: {
+      sevenDay: { utilization: def, resetsAt: EARLIER },
+      accounts: {
+        [ACCOUNT_2]: { fiveHour: { utilization: two, resetsAt: IN_AN_HOUR } },
+        [ACCOUNT_3]: { sevenDay: { utilization: three, resetsAt: LATER } },
+      },
+    },
+  });
+
+  it('is now while another account has room', () => {
+    expect(accountToMoveToAt('claude', three, usage(100, 40, 100), NOW, ACCOUNT_3)).toEqual(NOW);
+    expect(accountToMoveToAt('claude', three, usage(40, 100, 100), NOW, ACCOUNT_3)).toEqual(NOW);
+  });
+
+  it('with every other account spent, is the first of their resets, not the reset of the one it leaves', () => {
+    expect(accountToMoveToAt('claude', three, usage(100, 100, 100), NOW, ACCOUNT_3)).toEqual(new Date(IN_AN_HOUR));
+    expect(accountToMoveToAt('claude', three, usage(100, 100, 100), NOW, ACCOUNT_2)).toEqual(new Date(EARLIER));
+  });
+
+  it("counts a paused account's pause, and passes over one signed out", () => {
+    const paused = [account('default', 'yes', LATER), account(ACCOUNT_2), account(ACCOUNT_3)];
+    expect(accountToMoveToAt('claude', paused, usage(40, 100, 100), NOW, ACCOUNT_3)).toEqual(new Date(IN_AN_HOUR));
+    const signedOut = [account('default'), account(ACCOUNT_2, 'no'), account(ACCOUNT_3)];
+    expect(accountToMoveToAt('claude', signedOut, usage(100, 40, 100), NOW, ACCOUNT_3)).toEqual(new Date(EARLIER));
+  });
+
+  it('is null when no other account names a moment, or there is no other account', () => {
+    const noReset: PlanUsage = { claude: { sevenDay: { utilization: 100 } } };
+    expect(accountToMoveToAt('claude', [account('default'), account(ACCOUNT_3)], noReset, NOW, ACCOUNT_3)).toBeNull();
+    expect(accountToMoveToAt('claude', [account('default', 'no'), account(ACCOUNT_3)], usage(0, 0, 100), NOW, ACCOUNT_3)).toBeNull();
+    expect(accountToMoveToAt('claude', [account(ACCOUNT_3)], usage(0, 0, 100), NOW, ACCOUNT_3)).toBeNull();
+    expect(accountToMoveToAt('claude', undefined, null, NOW, ACCOUNT_3)).toBeNull();
   });
 });
 

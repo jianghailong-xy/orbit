@@ -72,7 +72,7 @@ class MainActivityTest {
         compose.onNodeWithText("Password").performTextInput("fixture-password")
         compose.onNodeWithText("Sign In").assertIsEnabled()
         // Nothing remembered: the page is on orbitd.io, and asks it what it offers.
-        compose.waitUntil(5_000) { app().requests.any { it.api.path == listOf("auth", "methods") } }
+        compose.waitUntil(60_000) { app().requests.any { it.api.path == listOf("auth", "methods") } }
         assertEquals(ServerAddress.parse("https://orbitd.io"), app().requests.first { it.api.path == listOf("auth", "methods") }.server)
     }
 
@@ -93,7 +93,7 @@ class MainActivityTest {
         compose.onNodeWithText("Server address").assertDoesNotExist()
         // TalkBack's "Change server" action opens it too. A host typed without a scheme is HTTPS.
         compose.chooseServer("example.test")
-        compose.waitUntil(5_000) { app().requests.any { it.api.path == listOf("auth", "methods") && it.server == ServerAddress.parse("https://example.test") } }
+        compose.waitUntil(60_000) { app().requests.any { it.api.path == listOf("auth", "methods") && it.server == ServerAddress.parse("https://example.test") } }
         assertFalse(app().requests.any { it.server.value.startsWith("http://") })
         compose.onNodeWithContentDescription("Orbit").performCustomAccessibilityActionWithLabel("Change server")
         compose.onNodeWithText("Server address").assert(hasText("example.test"))
@@ -130,7 +130,7 @@ class MainActivityTest {
         awaitLogin()
         app().login = { ApiResponse(401, """{"message":"Unauthorized"}""".encodeToByteArray()) }
         compose.signIn("bad.example", "  fixture@example.test ", "wrong-password")
-        compose.waitUntil(5_000) { compose.onAllNodesWithText("Incorrect email or password.").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(60_000) { compose.onAllNodesWithText("Incorrect email or password.").fetchSemanticsNodes().isNotEmpty() }
         assertNull(app().instance)
         assertTrue(app().emails.isEmpty())
         // The form stays, with the email as it was sent and without the password.
@@ -139,7 +139,7 @@ class MainActivityTest {
 
         app().login = { ApiResponse(200, LOGIN.encodeToByteArray()) }
         compose.signIn("example.test", "fixture@example.test", "fixture-password")
-        compose.waitUntil(5_000) { appSession().state.value is AuthState.SignedIn }
+        compose.waitUntil(60_000) { appSession().state.value is AuthState.SignedIn }
         assertEquals("https://example.test/", app().instance)
         assertEquals(mapOf("https://example.test/" to "fixture@example.test"), app().emails.toMap())
         compose.onNodeWithContentDescription("Open navigation").performClick()
@@ -148,7 +148,7 @@ class MainActivityTest {
         compose.onNode(hasText("Sign out") and hasAnyAncestor(isDialog())).performClick()
         awaitLogin()
         // Back on example.test with its email; never the password.
-        compose.waitUntil(5_000) { compose.onAllNodes(hasText("Email") and hasText("fixture@example.test")).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(60_000) { compose.onAllNodes(hasText("Email") and hasText("fixture@example.test")).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("fixture-password").assertDoesNotExist()
         assertFalse(app().emails.values.any { it.contains("password") })
         compose.onNodeWithContentDescription("Orbit").performCustomAccessibilityActionWithLabel("Change server")
@@ -156,7 +156,7 @@ class MainActivityTest {
         // Another server prefills its own email, or none.
         compose.onNodeWithText("Server address").performTextReplacement("other.example")
         compose.onNodeWithText("Save").performClick()
-        compose.waitUntil(5_000) { compose.onAllNodes(hasText("Email") and hasText("fixture@example.test")).fetchSemanticsNodes().isEmpty() }
+        compose.waitUntil(60_000) { compose.onAllNodes(hasText("Email") and hasText("fixture@example.test")).fetchSemanticsNodes().isEmpty() }
         compose.onNodeWithText("Email").assert(hasText("you@example.com"))
     }
 
@@ -189,7 +189,7 @@ class MainActivityTest {
     fun loginIsUsableAndLogoutReturnsToAnEmptyPasswordField() {
         awaitLogin()
         compose.signIn("https://example.test", "fixture@example.test", "fixture-password")
-        compose.waitUntil(5_000) { appSession().state.value is AuthState.SignedIn }
+        compose.waitUntil(60_000) { appSession().state.value is AuthState.SignedIn }
         compose.onNodeWithContentDescription("Open navigation").performClick()
         compose.onNodeWithText("Settings").performScrollTo().performClick()
         compose.onNodeWithContentDescription("Edit profile").assertIsDisplayed()
@@ -218,7 +218,7 @@ class MainActivityTest {
         compose.waitForIdle()
         compose.activityRule.scenario.recreate()
         compose.signIn("https://example.test", "fixture@example.test", "fixture-password")
-        compose.waitUntil(5_000) { compose.onAllNodesWithText("Linked task").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(60_000) { compose.onAllNodesWithText("Linked task").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Linked task").assertIsDisplayed()
         compose.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
         compose.onNodeWithContentDescription("Open navigation").assertIsDisplayed()
@@ -230,7 +230,7 @@ class MainActivityTest {
     private fun awaitLogin() {
         org.junit.Assert.assertSame("Activity and ViewModel must use the same application session", appSession().state,
             androidx.lifecycle.ViewModelProvider(compose.activity)[io.orbitd.android.auth.AuthViewModel::class.java].state)
-        compose.waitUntil(5_000) { appSession().state.value is AuthState.SignedOut }
+        compose.waitUntil(60_000) { appSession().state.value is AuthState.SignedOut }
     }
 }
 

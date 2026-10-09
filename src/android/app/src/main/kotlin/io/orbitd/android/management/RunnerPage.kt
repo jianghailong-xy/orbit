@@ -40,6 +40,9 @@ internal object RunnerCopy {
     const val SIGNED_OUT = "Signed out"
     const val NOT_INSTALLED = "Not installed"
     const val NO_QUOTA = "No quota reported"
+    /** A Kimi login whose plan carries no quota limit: its quota was read and held no window at all — not a read that
+     * failed or never ran (NO_QUOTA). Web RUNNER_ENGINE_NO_QUOTA_LIMIT. */
+    const val NO_QUOTA_LIMIT = "No quota limit"
     const val SIGN_IN = "Sign In"
     const val UPDATE_ENGINES_NOW = "Update Engines Now"
     const val REFRESH_MODEL_LISTS = "Refresh Model Lists"
@@ -787,6 +790,12 @@ internal object RunnerPage {
     fun accountWindows(runner: JsonObject, engine: String, account: String): List<UsageRow> =
         accountSnapshot(EngineAccounts.usage(engine, runner), account)?.let(::usageRows).orEmpty()
 
+    /** Kimi only: [account]'s quota was read and its plan carries no limit — said as "No quota limit" where a read that
+     * failed or never ran says "No quota reported" (web kimiNoQuotaLimit). Resolves the engine's usage exactly as
+     * accountWindows does, but keeps a windowless snapshot rather than collapsing it (accountSnapshotReported). */
+    fun accountNoQuotaLimit(runner: JsonObject, engine: String, account: String): Boolean =
+        engine == "kimi" && kimiNoQuotaLimit(accountSnapshotReported(EngineAccounts.usage(engine, runner), account))
+
     /** CodexAccounts.label: what the user called it, else Default, or `Account <id>`. */
     fun accountLabel(id: String, accounts: List<JsonObject>): String =
         accounts.firstOrNull { it.str("id") == id }?.str("name")?.takeIf { it.isNotEmpty() } ?: if (id == "default") "Default" else "Account $id"
@@ -993,6 +1002,24 @@ internal fun accountSnapshot(usage: JsonObject?, account: String): JsonObject? {
     val own = JsonObject(usage - "accounts")
     return own.takeIf { EngineAccounts.windows(it).isNotEmpty() }
 }
+
+/** accountSnapshot with the web codexAccountSnapshot's presence rather than its windows: whether the runner reported
+ * anything for this account at all. Default counts once the snapshot carries more than its `provider` — a windowless
+ * but read Default still has fetchedAt, which accountSnapshot collapses to null, and kimiNoQuotaLimit must tell that
+ * from a read never made or failed; any other account counts by its entry under `accounts`, as there. */
+internal fun accountSnapshotReported(usage: JsonObject?, account: String): JsonObject? {
+    usage ?: return null
+    if (account != "default") return usage.obj("accounts")?.obj(account)
+    if (usage["accounts"] == null) return usage
+    val own = JsonObject(usage - "accounts")
+    return own.takeIf { reported -> reported.keys.any { it != "provider" } }
+}
+
+/** Web kimiNoQuotaLimit (planUsage.ts): a Kimi login whose plan carries no quota limit — its quota was read and the
+ * answer held no window at all. The coding share of the month (monthCode) counts though it is never drawn: a plan
+ * that reports it has a limit. */
+internal fun kimiNoQuotaLimit(snapshot: JsonObject?): Boolean =
+    snapshot != null && snapshot.str("provider") == "kimi" && EngineAccounts.windows(snapshot).isEmpty()
 
 /** `usageRows` as they stand at [nowMs]: a window whose reset has passed reads as the fresh window it now is — nothing used,
  * no reset to name. An Antigravity bucket stays as agy read it. */

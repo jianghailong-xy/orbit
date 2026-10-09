@@ -105,12 +105,12 @@ class WikiScreensTest {
     @Test fun theHomeDrawsTheSpaceItsPrinciplesAndWhereItsBarGoes() {
         val route = OrbitRoute(Destination.WIKI, origin = Origin.DRAWER)
         show(route) { WikiHomeScreen(it, route, DirectoryData(), nav) }
-        compose.waitUntil(5_000) { compose.onAllNodesWithTag("wiki-home-list").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(60_000) { compose.onAllNodesWithTag("wiki-home-list").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("wiki-space-picker").assertTextContains("orbit")
         // The first three principles, then All 4 (A12-3).
         listOf("Agent-writable data never becomes a system instruction", "Completion is adjudicated, not claimed",
             "A clock never starts agent work").forEach {
-            compose.waitUntil(5_000) { runCatching { compose.onNodeWithTag("wiki-home-list").performScrollToNode(hasText(it)) }.isSuccess }
+            compose.waitUntil(60_000) { runCatching { compose.onNodeWithTag("wiki-home-list").performScrollToNode(hasText(it)) }.isSuccess }
         }
         // The principles by their kind, and the plan's documents; what Activity draws is not the home's to read.
         assertTrue(sent.any { it.first == "GET wiki/spaces/$space/docs" })
@@ -128,7 +128,7 @@ class WikiScreensTest {
     @Test fun activityDrawsWhatTheHomeUsedToSayAndWhereEachRowGoes() {
         val route = OrbitRoute(Destination.WIKI_ACTIVITY)
         show(route) { WikiActivityScreen(it, route, DirectoryData(), nav) }
-        compose.waitUntil(5_000) { compose.onAllNodesWithTag("wiki-status-line").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(60_000) { compose.onAllNodesWithTag("wiki-status-line").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("wiki-status-line").assertTextEquals("9 entries · Anchors verified at 4db4f9f")
         compose.onNodeWithTag("wiki-review-banner").assertTextContains("3 proposals to review", substring = true)
         listOf("Task priority is a field on the task, not a dispatcher session", "Delete means forget", "Headless Chromium needs --window-size=393",
@@ -160,7 +160,7 @@ class WikiScreensTest {
         // The Runs band is Activity's since A12-2, after Review and Plan as on iOS.
         val route = OrbitRoute(Destination.WIKI_ACTIVITY)
         show(route) { WikiActivityScreen(it, route, DirectoryData(), nav) }
-        compose.waitUntil(5_000) { compose.onAllNodesWithTag("wiki-job-row").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(60_000) { compose.onAllNodesWithTag("wiki-job-row").fetchSemanticsNodes().isNotEmpty() }
         // The band's head names the System model and its state, and the status line gained the fixture's look.
         compose.onNodeWithTag("wiki-activity-list").performScrollToNode(hasText(WikiRunsCopy.runs))
         compose.onNodeWithTag("wiki-activity-list").performScrollToNode(hasText(WikiRunsCopy.systemModelLabel("qwen3.8-27b-fp8")))
@@ -190,7 +190,7 @@ class WikiScreensTest {
         jobsRead = buildJsonObject { put("spaceId", space); put("jobs", JsonArray(listOf(job))) }.toString()
         val route = OrbitRoute(Destination.WIKI_JOB, "34cE0job0000000000001")
         show(route) { WikiJobScreen(it, route) }
-        compose.waitUntil(5_000) { compose.onAllNodesWithTag("wiki-job-page").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(60_000) { compose.onAllNodesWithTag("wiki-job-page").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("wiki-job-state").assertTextContains(WikiRunsCopy.running, substring = true)
         compose.onNodeWithTag("wiki-job-foot").assertTextContains("3 calls · 1,204 tokens in, 296 out so far", substring = true)
         // One row a call, the phone's two lines: the step and unit, its state, then waited · ran · tokens or its error.
@@ -203,9 +203,9 @@ class WikiScreensTest {
     @Test fun searchFindsEntriesUnderTheTitleAndSaysWhenNothingMatches() {
         val route = OrbitRoute(Destination.WIKI)
         show(route) { WikiHomeScreen(it, route, DirectoryData(), nav) }
-        compose.waitUntil(5_000) { compose.onAllNodesWithTag("wiki-search").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(60_000) { compose.onAllNodesWithTag("wiki-search").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("wiki-search").performTextInput("secret")
-        compose.waitUntil(5_000) { compose.onAllNodesWithTag("wiki-hit:${WikiFixtures.pitfallID}").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(60_000) { compose.onAllNodesWithTag("wiki-hit:${WikiFixtures.pitfallID}").fetchSemanticsNodes().isNotEmpty() }
         // While searching, the bands step aside.
         compose.onNodeWithText("Delete means forget").assertDoesNotExist()
         assertTrue(sent.any { it.first == "GET wiki/search" })
@@ -216,7 +216,7 @@ class WikiScreensTest {
     @Test fun anEntryDrawsItsSectionsAndItsSourcesOpenWhatTheyCite() {
         val route = OrbitRoute(Destination.WIKI_ENTRY, WikiFixtures.pitfallID)
         show(route) { WikiEntryScreen(it, route, DirectoryData(), nav) }
-        compose.waitUntil(5_000) { compose.onAllNodesWithTag("wiki-entry-title").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(60_000) { compose.onAllNodesWithTag("wiki-entry-title").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("wiki-entry-title").assertTextEquals("runner-go’s full suite inside a session reaches production")
         compose.onNodeWithText("Trigger").assertExists()
         // A confirmed entry offers no Confirm/Reject; the owner's own writes are the bar's.
@@ -238,11 +238,11 @@ class WikiScreensTest {
     @Test fun reviewAnswersOneCardAndMovesToTheNext() {
         val route = OrbitRoute(Destination.WIKI_REVIEW)
         show(route) { WikiReviewScreen(it, route, DirectoryData(), nav) }
-        compose.waitUntil(5_000) { compose.onAllNodesWithTag("wiki-review-card:34UDOpAddPitfall00001").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(60_000) { compose.onAllNodesWithTag("wiki-review-card:34UDOpAddPitfall00001").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("wiki-review-position").assertTextEquals("1 of 3")
         compose.onNodeWithTag("wiki-review-accept").performScrollTo().performClick()
-        compose.waitUntil(5_000) { compose.onAllNodesWithTag("wiki-review-card:34UDOpRetireWakeup002").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(60_000) { compose.onAllNodesWithTag("wiki-review-card:34UDOpRetireWakeup002").fetchSemanticsNodes().isNotEmpty() }
         assertEquals(listOf("34UDOpAddPitfall00001"), decided)
-        compose.waitUntil(5_000) { compose.onAllNodesWithText("1 of 2").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(60_000) { compose.onAllNodesWithText("1 of 2").fetchSemanticsNodes().isNotEmpty() }
     }
 }

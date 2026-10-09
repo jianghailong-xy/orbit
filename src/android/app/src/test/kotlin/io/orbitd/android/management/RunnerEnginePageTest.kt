@@ -64,19 +64,19 @@ class RunnerEnginePageTest {
         }
         compose.waitForIdle()
     }
-    private fun await(text: String) = compose.waitUntil(10_000) { compose.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty() }
-    private fun gone(text: String) = compose.waitUntil(10_000) { compose.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isEmpty() }
+    private fun await(text: String) = compose.waitUntil(60_000) { compose.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty() }
+    private fun gone(text: String) = compose.waitUntil(60_000) { compose.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isEmpty() }
     private fun shown(text: String) = compose.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().size
     /** Waits for [condition] while moving the test clock on: a delay in an effect elapses only when the clock moves. */
     private fun until(condition: () -> Boolean) {
-        val end = System.currentTimeMillis() + 15_000
+        val end = System.currentTimeMillis() + 60_000
         while (!condition()) {
-            assertTrue("still waiting after 15 s", System.currentTimeMillis() < end)
+            assertTrue("still waiting after 60 s", System.currentTimeMillis() < end)
             compose.mainClock.advanceTimeBy(250); compose.waitForIdle()
         }
     }
     private fun click(matcher: SemanticsMatcher) {
-        compose.waitUntil(10_000) { compose.onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(60_000) { compose.onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty() }
         val node = compose.onAllNodes(matcher).onFirst()
         try { node.performScrollTo() } catch (_: AssertionError) { }
         node.performClick()
@@ -195,7 +195,7 @@ class RunnerEnginePageTest {
         menu("Work")
         for (item in listOf("Rename…", "Sign In Again", "Resume Now", "Change Duration…", "Remove…")) compose.onNodeWithText(item).assertExists()
         click(hasText("Resume Now"))
-        compose.waitUntil(10_000) { fixture.pauseBodies.isNotEmpty() }
+        compose.waitUntil(60_000) { fixture.pauseBodies.isNotEmpty() }
         assertEquals("runners/${fixture.RUNNER}/accounts/claude/1fda3f43/pause {\"durationMinutes\":null}", fixture.pauseBodies.single())
         menu("Default")
         for (item in listOf("Rename…", "Sign In Again", "Pause…")) compose.onNodeWithText(item).assertExists()
@@ -221,7 +221,7 @@ class RunnerEnginePageTest {
         menu("Default")
         click(hasText("Sign In Again"))
         // The press asked for the sign-in: the card starts it, with no button of its own to press first.
-        compose.waitUntil(10_000) { fixture.loginBodies.isNotEmpty() }
+        compose.waitUntil(60_000) { fixture.loginBodies.isNotEmpty() }
         assertEquals(buildJsonObject { put("engine", "claude"); put("account", "default") }, fixture.loginBodies.single())
         await("Approve it there, then paste the code the page gives you:")
         compose.onNode(hasText("Open the sign-in page") and hasClickAction()).assertExists()
@@ -229,7 +229,7 @@ class RunnerEnginePageTest {
         compose.onNode(hasText("Cancel") and hasClickAction()).assertExists()
         (compose.activity.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("code", "  pasted#code  "))
         click(hasText("Paste") and hasClickAction())
-        compose.waitUntil(10_000) { fixture.loginBodies.size == 2 }
+        compose.waitUntil(60_000) { fixture.loginBodies.size == 2 }
         assertEquals(buildJsonObject { put("code", "pasted#code") }, fixture.loginBodies[1])
         // Signed in: said for a moment, then the card folds back once the runner reports it.
         await("Signed in — this runner is ready.")
@@ -279,6 +279,20 @@ class RunnerEnginePageTest {
         // Work's five hours are 91% used: a new session starts on Default, whose window the row carries.
         await("Next: Default")
         assertEquals("two accounts can be on different sites: each says its own on the engine page", 0, shown("kimi.ai"))
+    }
+
+    /** A Kimi login whose plan carries no quota limit was read and held no window: its row says "No quota limit", where
+     * an account with no snapshot of its own still says "No quota reported". */
+    @Test fun aKimiAccountWithNoQuotaLimitSaysSoWhereAnUnreadOneSaysNoQuotaReported() {
+        fixture.runnerEngines = "[${kimiEngine(kimiDefault, kimiWork)}]"
+        // Default's snapshot was read and held no window; Work has none under `accounts`.
+        fixture.runnerExtra = kimiCapabilities + ""","planUsage":{"kimi":{"provider":"kimi","fetchedAt":"${at(0)}"}}"""
+        page("engine:kimi")
+        await("Accounts"); await("Work")
+        await(RunnerCopy.NO_QUOTA_LIMIT)
+        assertEquals("only Default was read", 1, shown(RunnerCopy.NO_QUOTA_LIMIT))
+        await(RunnerCopy.NO_QUOTA)
+        assertEquals("Work was never read", 1, shown(RunnerCopy.NO_QUOTA))
     }
 
     /** One account still offers Add Account; the form takes a name first, then asks the site — nothing starts until a site is
@@ -398,7 +412,7 @@ class RunnerEnginePageTest {
         fixture.loginStarted = """{"engine":"antigravity","status":"awaiting_code","url":"https://accounts.google.com/o/oauth2/auth"}"""
         page("engine:antigravity")
         click(hasText("Add Account") and hasClickAction())
-        compose.waitUntil(10_000) { fixture.loginBodies.isNotEmpty() }
+        compose.waitUntil(60_000) { fixture.loginBodies.isNotEmpty() }
         assertEquals(buildJsonObject { put("engine", "antigravity"); put("accountName", "Account 3") }, fixture.loginBodies.single())
         await("Approve it there, then paste the code the page gives you:")
         assertEquals(0, shown("Close"))

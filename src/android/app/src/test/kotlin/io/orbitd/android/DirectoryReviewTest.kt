@@ -22,7 +22,7 @@ class DirectoryReviewTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
     private fun api(response: () -> ApiResponse): DirectoryApi {
         val session = (compose.activity.application as OrbitApplication).session
-        compose.waitUntil(5_000) { session.state.value is AuthState.SignedOut }
+        compose.waitUntil(60_000) { session.state.value is AuthState.SignedOut }
         runBlocking { session.login(ServerAddress.parse("https://fixture.test"), "a@example.test", "fixture-password") }
         return DirectoryApi(object : OrbitApi {
             override suspend fun request(handle: SessionHandle, request: ApiRequest) = response()

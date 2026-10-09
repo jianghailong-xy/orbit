@@ -1,0 +1,2462 @@
+{
+ "summary": {
+  "expectedDir": "entries/f2-p41-before-15b7b5609/shots",
+  "actualDir": "entries/f2-p41-after-d49a8749b/shots",
+  "total": 272,
+  "missing": 0,
+  "bytesEqual": 238,
+  "differ": 34,
+  "pixelEqualButBytesDiffer": 0,
+  "p0ComparatorFails": 12
+ },
+ "rows": [
+  {
+   "file": "chromium-dark-desktop/p41-admin-revoke.png",
+   "expectedSha256": "13e5f516121833e97d54d68ceb0465d67f6395b5fcd4448c4f8be6a3f7264c9c",
+   "actualSha256": "13e5f516121833e97d54d68ceb0465d67f6395b5fcd4448c4f8be6a3f7264c9c",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-desktop/p41-admin-tokens.png",
+   "expectedSha256": "1da6f10a8adc0d6786469da5d917c2301330057fe08316af3dcaba3b33d55bac",
+   "actualSha256": "1da6f10a8adc0d6786469da5d917c2301330057fe08316af3dcaba3b33d55bac",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-desktop/p41-cli-approved.png",
+   "expectedSha256": "a137c0a8b711d24e67563185ef2b09756766783397a5dfd71602d8f1009faf95",
+   "actualSha256": "a137c0a8b711d24e67563185ef2b09756766783397a5dfd71602d8f1009faf95",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-desktop/p41-cli-denied.png",
+   "expectedSha256": "9d809ec80487f44e04aa614ac5a5ac440e9c66f82e8e7bd849a8c9b548525f0c",
+   "actualSha256": "6ad3befa715ecdb3ffdf81e2e7ce72f372a6c4568d614293df2e96541ea16fc5",
+   "bytesEqual": false,
+   "expectedSize": [
+    1280,
+    900
+   ],
+   "actualSize": [
+    1280,
+    900
+   ],
+   "differentPixels": 4,
+   "maxChannelDelta": 1,
+   "box": {
+    "x": 888,
+    "y": 633,
+    "width": 2,
+    "height": 3
+   },
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-desktop/p41-cli-error.png",
+   "expectedSha256": "be0f6b03e8a9743e1f628ff6eceabdaecf0930c2aec50708b08c6fe764e35995",
+   "actualSha256": "be0f6b03e8a9743e1f628ff6eceabdaecf0930c2aec50708b08c6fe764e35995",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-desktop/p41-cli-loading.png",
+   "expectedSha256": "9e5bdfb1e85495f7bd68bed2e3ba332edacff6c8e0e5a3c50d72d968832b9506",
+   "actualSha256": "9e5bdfb1e85495f7bd68bed2e3ba332edacff6c8e0e5a3c50d72d968832b9506",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-desktop/p41-cli-warnings.png",
+   "expectedSha256": "50e1dd159b58cd87c23075e8fbd52a7410fa48dc12c74652547aa52dde972954",
+   "actualSha256": "50e1dd159b58cd87c23075e8fbd52a7410fa48dc12c74652547aa52dde972954",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-desktop/p41-cli.png",
+   "expectedSha256": "00afe41a82d275d4addd1b3ebd780cd329c1b8c927c249ffab1535296cf92a68",
+   "actualSha256": "00afe41a82d275d4addd1b3ebd780cd329c1b8c927c249ffab1535296cf92a68",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-desktop/p41-login-error.png",
+   "expectedSha256": "c2529ca222883aa537af263c18a4c5cd070045d8069473084105d616b3d93727",
+   "actualSha256": "c2529ca222883aa537af263c18a4c5cd070045d8069473084105d616b3d93727",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-desktop/p41-login.png",
+   "expectedSha256": "82c823ec5085470f3931c1e6c17e70e11787e537928baadb23c046163bb60f28",
+   "actualSha256": "82c823ec5085470f3931c1e6c17e70e11787e537928baadb23c046163bb60f28",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-desktop/p41-profile-mismatch.png",
+   "expectedSha256": "7a90af8e97e2145481fe6bc9d65ad72b43c1fc4e98fc759647a40c6ac696a164",
+   "actualSha256": "7a90af8e97e2145481fe6bc9d65ad72b43c1fc4e98fc759647a40c6ac696a164",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-desktop/p41-profile-photo.png",
+   "expectedSha256": "65a92503b875d89ca34b2d9c70670ca92d578e637cf351ac1ba29c96782ff9ca",
+   "actualSha256": "8068176f7a824dca63713c29833d24de414757701b806b3de04cd6a0477a2e0e",
+   "bytesEqual": false,
+   "expectedSize": [
+    1280,
+    900
+   ],
+   "actualSize": [
+    1280,
+    900
+   ],
+   "differentPixels": 66,
+   "maxChannelDelta": 40,
+   "box": {
+    "x": 500,
+    "y": 151,
+    "width": 560,
+    "height": 747
+   },
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-desktop/p41-profile-ready.png",
+   "expectedSha256": "a6d6f0572d3cd72c35c9495e96515617ceb3aa9ef998b25a34a6aae2db39520c",
+   "actualSha256": "a6d6f0572d3cd72c35c9495e96515617ceb3aa9ef998b25a34a6aae2db39520c",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-desktop/p41-profile-reset.png",
+   "expectedSha256": "47c6b3711d47e62f7370428a27d6d94c4b8dde3b34b0b6e4d1ccaac2c208f29a",
+   "actualSha256": "9972ad20b054052fe89810b5e365e1e2969462ad8f34490163f1f3f4cb924db8",
+   "bytesEqual": false,
+   "expectedSize": [
+    1280,
+    900
+   ],
+   "actualSize": [
+    1280,
+    900
+   ],
+   "differentPixels": 33,
+   "maxChannelDelta": 1,
+   "box": {
+    "x": 525,
+    "y": 539,
+    "width": 3,
+    "height": 225
+   },
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-desktop/p41-profile-signin.png",
+   "expectedSha256": "5e63fbd9cc272e672c8e8bbcf54ed350fae8892fdc91349267f562f1f9fc1de5",
+   "actualSha256": "5e63fbd9cc272e672c8e8bbcf54ed350fae8892fdc91349267f562f1f9fc1de5",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-desktop/p41-settings-mode-open.png",
+   "expectedSha256": "2c1a310b7718f3a6e77224b9323994c85b362ba7fa247f907e8abf4eae160700",
+   "actualSha256": "2c1a310b7718f3a6e77224b9323994c85b362ba7fa247f907e8abf4eae160700",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-desktop/p41-settings-saving.png",
+   "expectedSha256": "42ee05b9f015ac9210c5f95b693ceddd65ed13888686fc82254d2887a58fb054",
+   "actualSha256": "42ee05b9f015ac9210c5f95b693ceddd65ed13888686fc82254d2887a58fb054",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-desktop/p41-settings-theme.png",
+   "expectedSha256": "443beca77456904677359ddbf08d3234b54c4decd50aa30d12862d1bf58fa80d",
+   "actualSha256": "443beca77456904677359ddbf08d3234b54c4decd50aa30d12862d1bf58fa80d",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-desktop/p41-setup-invalid.png",
+   "expectedSha256": "4302e3e2127e8b7d464cb8a035d0b3e5b3b9ea95314c1e930de57833b5600803",
+   "actualSha256": "bc3ae7ba65a06df2955b02f7fbace4d6b91ce21c1ba0cfee523ad767aff6d9b0",
+   "bytesEqual": false,
+   "expectedSize": [
+    1280,
+    900
+   ],
+   "actualSize": [
+    1280,
+    900
+   ],
+   "differentPixels": 37,
+   "maxChannelDelta": 2,
+   "box": {
+    "x": 445,
+    "y": 351,
+    "width": 390,
+    "height": 286
+   },
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-desktop/p41-setup-required.png",
+   "expectedSha256": "d8aa3adf238b3b1b2acc1e757bedea553915c676bd788d29b08c51dabce0f5df",
+   "actualSha256": "5ee7272f12abe2e01d5800fcad54f0e70803ecef609c31ba03e3f2fa460de79a",
+   "bytesEqual": false,
+   "expectedSize": [
+    1280,
+    900
+   ],
+   "actualSize": [
+    1280,
+    900
+   ],
+   "differentPixels": 44,
+   "maxChannelDelta": 2,
+   "box": {
+    "x": 829,
+    "y": 351,
+    "width": 6,
+    "height": 286
+   },
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-desktop/p41-setup-valid.png",
+   "expectedSha256": "08d97a470f7dad1f73cea1f69c14ea9cf360188845a187993af73a77106636cc",
+   "actualSha256": "08d97a470f7dad1f73cea1f69c14ea9cf360188845a187993af73a77106636cc",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-desktop/p41-setup.png",
+   "expectedSha256": "1f720e199e6a2b9f4df1e2de108a60e6de3e336c14786d8a543977efcaa66dbf",
+   "actualSha256": "1f720e199e6a2b9f4df1e2de108a60e6de3e336c14786d8a543977efcaa66dbf",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-desktop/p41-tokens-empty.png",
+   "expectedSha256": "f15e7848b555879fa1e8bb84e3d96f682c0ec438270d12436080d18d97b89631",
+   "actualSha256": "f15e7848b555879fa1e8bb84e3d96f682c0ec438270d12436080d18d97b89631",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-desktop/p41-tokens-ended.png",
+   "expectedSha256": "dd3cb41d32cae58947e20ea528b4e3a2885df81545210c3818b6e3f38de5e917",
+   "actualSha256": "dd3cb41d32cae58947e20ea528b4e3a2885df81545210c3818b6e3f38de5e917",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-desktop/p41-tokens-error.png",
+   "expectedSha256": "7dbcf24e4172351b53089ab9a86ad26b5f78673f81e31fd9f5b0d74d5113d560",
+   "actualSha256": "7dbcf24e4172351b53089ab9a86ad26b5f78673f81e31fd9f5b0d74d5113d560",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-desktop/p41-tokens-hover.png",
+   "expectedSha256": "3a42e7fbc8afb6448078174a7b78713e5df68892f2548911ae47dda9f1b0172b",
+   "actualSha256": "3a42e7fbc8afb6448078174a7b78713e5df68892f2548911ae47dda9f1b0172b",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-desktop/p41-tokens-issued.png",
+   "expectedSha256": "35285cd14c2ffd937e8514a0355aed4bf5702319ea920a89a281b9b478c27139",
+   "actualSha256": "35285cd14c2ffd937e8514a0355aed4bf5702319ea920a89a281b9b478c27139",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-desktop/p41-tokens-loading.png",
+   "expectedSha256": "60dc1dbad53961cf6d1ddc6bbc80ba41ce91bdf73e6599d16b33a747087cf875",
+   "actualSha256": "60dc1dbad53961cf6d1ddc6bbc80ba41ce91bdf73e6599d16b33a747087cf875",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-desktop/p41-tokens-new-custom.png",
+   "expectedSha256": "5614a23d34fb3c9cc98ad03bf065b75543052aa5ac283bd704a05a90ddbe15b8",
+   "actualSha256": "5614a23d34fb3c9cc98ad03bf065b75543052aa5ac283bd704a05a90ddbe15b8",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-desktop/p41-tokens-new-never.png",
+   "expectedSha256": "f888395c433bd304b307ccb091422cefc8c0564b61bea0ba606f61693e81dfff",
+   "actualSha256": "f888395c433bd304b307ccb091422cefc8c0564b61bea0ba606f61693e81dfff",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-desktop/p41-tokens-new-workspaces.png",
+   "expectedSha256": "9ce4af2859a8f79a8fcc99959bfc390446bdc2b5a6845f51487e14d5e1d1ee57",
+   "actualSha256": "9ce4af2859a8f79a8fcc99959bfc390446bdc2b5a6845f51487e14d5e1d1ee57",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-desktop/p41-tokens-new.png",
+   "expectedSha256": "2969ff618697b1637c692ef47a3ba0ff634e20c48e3de4ae3e00429e77979011",
+   "actualSha256": "2969ff618697b1637c692ef47a3ba0ff634e20c48e3de4ae3e00429e77979011",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-desktop/p41-tokens-revoke.png",
+   "expectedSha256": "4a3a47b0733fbe2fde9040e24758fe3789e45e0c150d3eb48546f030c817e17b",
+   "actualSha256": "4a3a47b0733fbe2fde9040e24758fe3789e45e0c150d3eb48546f030c817e17b",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-desktop/p41-tokens.png",
+   "expectedSha256": "0f42e5d911475cff62e3cad264dd138cbf95ed9438910feec816bd206e20369d",
+   "actualSha256": "0f42e5d911475cff62e3cad264dd138cbf95ed9438910feec816bd206e20369d",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-phone/p41-admin-revoke.png",
+   "expectedSha256": "d784a39de07aa200f0be0e15b664724ed14abdbcbb45ca5b82bfbdb2aa7209e8",
+   "actualSha256": "d784a39de07aa200f0be0e15b664724ed14abdbcbb45ca5b82bfbdb2aa7209e8",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-phone/p41-admin-tokens.png",
+   "expectedSha256": "5bbc8225a86df19d5fff1179ef7f30502d3d7842eb535a53b33ed67f92694124",
+   "actualSha256": "5bbc8225a86df19d5fff1179ef7f30502d3d7842eb535a53b33ed67f92694124",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-phone/p41-cli-approved.png",
+   "expectedSha256": "003c4ff5bf97204ec6a23a62d10ea7356aea9e9582756bd435e771a776949479",
+   "actualSha256": "003c4ff5bf97204ec6a23a62d10ea7356aea9e9582756bd435e771a776949479",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-phone/p41-cli-denied.png",
+   "expectedSha256": "17c94e96d0a3b129dafd42a5c377bda77130576fe92fdd06ac6aa6465efec100",
+   "actualSha256": "99e6730f3a2fabf9249e44864fbaa6a245b00240462eb47a82649deb97f91c6c",
+   "bytesEqual": false,
+   "expectedSize": [
+    390,
+    844
+   ],
+   "actualSize": [
+    390,
+    844
+   ],
+   "differentPixels": 4,
+   "maxChannelDelta": 1,
+   "box": {
+    "x": 387,
+    "y": 237,
+    "width": 2,
+    "height": 3
+   },
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-phone/p41-cli-error.png",
+   "expectedSha256": "cfc5bdede9ddc2a02652c21dac2624e6a6db422caf83bcb8c71824856b64088b",
+   "actualSha256": "cfc5bdede9ddc2a02652c21dac2624e6a6db422caf83bcb8c71824856b64088b",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-phone/p41-cli-loading.png",
+   "expectedSha256": "41a7d627408fd86ef4a53d050a6a133b6e0148e9131e20b66b0edf12c7c229c6",
+   "actualSha256": "41a7d627408fd86ef4a53d050a6a133b6e0148e9131e20b66b0edf12c7c229c6",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-phone/p41-cli-warnings.png",
+   "expectedSha256": "114e345635e35646c0c2bb1632656b85ac4d5e3f1ff60bdf65489f471d1d18f7",
+   "actualSha256": "114e345635e35646c0c2bb1632656b85ac4d5e3f1ff60bdf65489f471d1d18f7",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-phone/p41-cli.png",
+   "expectedSha256": "2b7df707765b543c56724bc0980239f3837670c618bbde45e3d7fc99615e6327",
+   "actualSha256": "2b7df707765b543c56724bc0980239f3837670c618bbde45e3d7fc99615e6327",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-phone/p41-login-error.png",
+   "expectedSha256": "c721f2bae9a40e3e042a33451ddf0ccb702007a0554a02ee6c68333696a1c71d",
+   "actualSha256": "c721f2bae9a40e3e042a33451ddf0ccb702007a0554a02ee6c68333696a1c71d",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-phone/p41-login.png",
+   "expectedSha256": "85ba2a17c79c6877e1508b5d1755d5aa8bef3aed05a8ec2b3a36e344ffd05102",
+   "actualSha256": "85ba2a17c79c6877e1508b5d1755d5aa8bef3aed05a8ec2b3a36e344ffd05102",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-phone/p41-profile-mismatch.png",
+   "expectedSha256": "3ddad4b3ca6d46b60f08bf514df05b4b023e46200010f4429c6ad82f2a5fe0d0",
+   "actualSha256": "3ddad4b3ca6d46b60f08bf514df05b4b023e46200010f4429c6ad82f2a5fe0d0",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-phone/p41-profile-photo.png",
+   "expectedSha256": "ff2451e2827dab58afb6b8cd9d34843c8beebd320842192908cac347c2f375f5",
+   "actualSha256": "ff2451e2827dab58afb6b8cd9d34843c8beebd320842192908cac347c2f375f5",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-phone/p41-profile-ready.png",
+   "expectedSha256": "2736a7a30c817e9e32221230e71cf4870f514ba6de137957a20effe4fd62659d",
+   "actualSha256": "2736a7a30c817e9e32221230e71cf4870f514ba6de137957a20effe4fd62659d",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-phone/p41-profile-reset.png",
+   "expectedSha256": "3c6212a4d30b99b643a3306216150eb02251539663b72bb7146c11e3624e34ec",
+   "actualSha256": "3c6212a4d30b99b643a3306216150eb02251539663b72bb7146c11e3624e34ec",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-phone/p41-profile-signin.png",
+   "expectedSha256": "99ba50b14f2c917fc0fc813b8c5084784a9a1798997ab068061df24d3fba7ea1",
+   "actualSha256": "99ba50b14f2c917fc0fc813b8c5084784a9a1798997ab068061df24d3fba7ea1",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-phone/p41-settings-mode-open.png",
+   "expectedSha256": "db958f8a0c04aba2623dda7fc95b3a29e0289339858144a526870565aa69986d",
+   "actualSha256": "db958f8a0c04aba2623dda7fc95b3a29e0289339858144a526870565aa69986d",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-phone/p41-settings-saving.png",
+   "expectedSha256": "1f962e161a0502d8567a4ef91b7c83de0c8ed36fa3d0dd1a35acbe460a6bef9b",
+   "actualSha256": "1f962e161a0502d8567a4ef91b7c83de0c8ed36fa3d0dd1a35acbe460a6bef9b",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-phone/p41-settings-theme.png",
+   "expectedSha256": "d5474b15c3058343eb1dfc1c451ae9eb7eda86a6126a8707cfc1c42a9892aecf",
+   "actualSha256": "d5474b15c3058343eb1dfc1c451ae9eb7eda86a6126a8707cfc1c42a9892aecf",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-phone/p41-setup-invalid.png",
+   "expectedSha256": "d8010faba2d1d2b87e0bd0e571ae70432a19bb2240ad808d0954d2fba8eacefc",
+   "actualSha256": "75fb7d131e8d9469a66323e4cc58d8469efa2a95601dd4f863f92173c354b357",
+   "bytesEqual": false,
+   "expectedSize": [
+    390,
+    844
+   ],
+   "actualSize": [
+    390,
+    844
+   ],
+   "differentPixels": 6,
+   "maxChannelDelta": 1,
+   "box": {
+    "x": 0,
+    "y": 319,
+    "width": 3,
+    "height": 4
+   },
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-phone/p41-setup-required.png",
+   "expectedSha256": "b2607dba63cce16fbc1a8b0daa83c374c695a05eaf547d8b8ebc47bdd1723b13",
+   "actualSha256": "0304a52be637f6a09f0e5f3a8fe89674b56e6c1cb285f58822b489debec75469",
+   "bytesEqual": false,
+   "expectedSize": [
+    390,
+    844
+   ],
+   "actualSize": [
+    390,
+    844
+   ],
+   "differentPixels": 28,
+   "maxChannelDelta": 2,
+   "box": {
+    "x": 0,
+    "y": 347,
+    "width": 3,
+    "height": 155
+   },
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-phone/p41-setup-valid.png",
+   "expectedSha256": "dc169d4cbdf66793eb86e0a27f0947e5cb078e8cbe76d347f6432f25de491226",
+   "actualSha256": "c3080f790b748917bf1c0755f1b17b4efe453d1381d2f5e146ccb7650d3d2c6e",
+   "bytesEqual": false,
+   "expectedSize": [
+    390,
+    844
+   ],
+   "actualSize": [
+    390,
+    844
+   ],
+   "differentPixels": 16,
+   "maxChannelDelta": 2,
+   "box": {
+    "x": 0,
+    "y": 319,
+    "width": 390,
+    "height": 32
+   },
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-phone/p41-setup.png",
+   "expectedSha256": "23a8bfc243e90148afb1960686b3cd2405a3ff66312a31709d42b563b0be1caa",
+   "actualSha256": "23a8bfc243e90148afb1960686b3cd2405a3ff66312a31709d42b563b0be1caa",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-phone/p41-tokens-empty.png",
+   "expectedSha256": "4fda48233528c3c54bd63f766ca0026a3365e885bdf80ea5dea14d58aed9369e",
+   "actualSha256": "4fda48233528c3c54bd63f766ca0026a3365e885bdf80ea5dea14d58aed9369e",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-phone/p41-tokens-ended.png",
+   "expectedSha256": "579574d2bfb7e8a67bf6e7e6e237c01aa501217aa027e1f8140db3aebb6c4567",
+   "actualSha256": "579574d2bfb7e8a67bf6e7e6e237c01aa501217aa027e1f8140db3aebb6c4567",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-phone/p41-tokens-error.png",
+   "expectedSha256": "7177d2033bb768ff20184b9ddff2f78777a9e474b47f9b54774d3cc76d44611e",
+   "actualSha256": "7177d2033bb768ff20184b9ddff2f78777a9e474b47f9b54774d3cc76d44611e",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-phone/p41-tokens-hover.png",
+   "expectedSha256": "3bbc6905798663199d2a9319739542f2fecb3befacac29c8738d2c5aaf47cf50",
+   "actualSha256": "3bbc6905798663199d2a9319739542f2fecb3befacac29c8738d2c5aaf47cf50",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-phone/p41-tokens-issued.png",
+   "expectedSha256": "4652dc18c4c27ec6a2d0f824e57f4c33d914214ad80d2a6849a9f2687428cc42",
+   "actualSha256": "4652dc18c4c27ec6a2d0f824e57f4c33d914214ad80d2a6849a9f2687428cc42",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-phone/p41-tokens-loading.png",
+   "expectedSha256": "7a32bc94758b0ceaf699f2cb8ada40386837e12203d881550b75d1f2c837f748",
+   "actualSha256": "7a32bc94758b0ceaf699f2cb8ada40386837e12203d881550b75d1f2c837f748",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-phone/p41-tokens-new-custom.png",
+   "expectedSha256": "14e4d703a0c77ed4d26993ac2c457729ace8cb545e9c67d519c8c802f6f527c1",
+   "actualSha256": "14e4d703a0c77ed4d26993ac2c457729ace8cb545e9c67d519c8c802f6f527c1",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-phone/p41-tokens-new-never.png",
+   "expectedSha256": "c0e8a92ff7aee9d94d5e746e2647ea6683107d70312087eb6b415e05c6e793a8",
+   "actualSha256": "c0e8a92ff7aee9d94d5e746e2647ea6683107d70312087eb6b415e05c6e793a8",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-phone/p41-tokens-new-workspaces.png",
+   "expectedSha256": "2a5b46d7bd39d7276d99ca4fa776eb865fe0255ed4db1686164a0d5996723e65",
+   "actualSha256": "2a5b46d7bd39d7276d99ca4fa776eb865fe0255ed4db1686164a0d5996723e65",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-phone/p41-tokens-new.png",
+   "expectedSha256": "6f8cbfdb04c3611084fbd31a8c32354d50e3d0d5a4d1a11daa19cd86906a2661",
+   "actualSha256": "6f8cbfdb04c3611084fbd31a8c32354d50e3d0d5a4d1a11daa19cd86906a2661",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-phone/p41-tokens-revoke.png",
+   "expectedSha256": "a4c51a3832581f624bd2f4c14ff9c16f3f479d09c92665bdcf5c5cfc6bd03a47",
+   "actualSha256": "a4c51a3832581f624bd2f4c14ff9c16f3f479d09c92665bdcf5c5cfc6bd03a47",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-dark-phone/p41-tokens.png",
+   "expectedSha256": "486adbda34158f769143e7bdf260bbd283aed135d78473198fa93a11dbaa633f",
+   "actualSha256": "486adbda34158f769143e7bdf260bbd283aed135d78473198fa93a11dbaa633f",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-desktop/p41-admin-revoke.png",
+   "expectedSha256": "de78638042c9b1cd9a3997bd73cd1f44e4b7e51980e82f59980ab63131f21f6f",
+   "actualSha256": "de78638042c9b1cd9a3997bd73cd1f44e4b7e51980e82f59980ab63131f21f6f",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-desktop/p41-admin-tokens.png",
+   "expectedSha256": "6e9e2420fcf512c018e6d99956cd2f7c698de75b858805625314e490ca5bf626",
+   "actualSha256": "6e9e2420fcf512c018e6d99956cd2f7c698de75b858805625314e490ca5bf626",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-desktop/p41-cli-approved.png",
+   "expectedSha256": "cfbf5ed7d673d7797c9aa55ab76ff43bb2405a3e9123e35e76fe23eaee699709",
+   "actualSha256": "cfbf5ed7d673d7797c9aa55ab76ff43bb2405a3e9123e35e76fe23eaee699709",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-desktop/p41-cli-denied.png",
+   "expectedSha256": "af17743d37bff726c2e6c73d8a1d791e424d034981eae1337de1c2cc3652ea70",
+   "actualSha256": "65b0af362b5d9d081cafca99cc15128e1dbb6b9066a38225fd99832e8ce72b2f",
+   "bytesEqual": false,
+   "expectedSize": [
+    1280,
+    900
+   ],
+   "actualSize": [
+    1280,
+    900
+   ],
+   "differentPixels": 4,
+   "maxChannelDelta": 1,
+   "box": {
+    "x": 390,
+    "y": 265,
+    "width": 2,
+    "height": 3
+   },
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-desktop/p41-cli-error.png",
+   "expectedSha256": "c27b779b6b2ed33814e13156ee2e70323d37f1c83b3d49dda158b5bcad5afc45",
+   "actualSha256": "c27b779b6b2ed33814e13156ee2e70323d37f1c83b3d49dda158b5bcad5afc45",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-desktop/p41-cli-loading.png",
+   "expectedSha256": "6c7543fcd3a929a156cb7a659232784805abf9410767dacaa04cf40cc15bb704",
+   "actualSha256": "6c7543fcd3a929a156cb7a659232784805abf9410767dacaa04cf40cc15bb704",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-desktop/p41-cli-warnings.png",
+   "expectedSha256": "02d1cee7abf82111b6f11744c48c164102f144fecba0069474becf9a8d42200c",
+   "actualSha256": "02d1cee7abf82111b6f11744c48c164102f144fecba0069474becf9a8d42200c",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-desktop/p41-cli.png",
+   "expectedSha256": "1ff5301bcfa2c88ccf43023d5d60e8eff5e3bcaa0fe66a6f214e1f62d985787a",
+   "actualSha256": "1ff5301bcfa2c88ccf43023d5d60e8eff5e3bcaa0fe66a6f214e1f62d985787a",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-desktop/p41-login-error.png",
+   "expectedSha256": "d2866036a12b049848e1a074f3b4738ef3aef9ef4c8d5d3313bf65c3a8340154",
+   "actualSha256": "d2866036a12b049848e1a074f3b4738ef3aef9ef4c8d5d3313bf65c3a8340154",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-desktop/p41-login.png",
+   "expectedSha256": "49423c06c8828b5d3f075bf53ae837f1b4767a7f51123d2a83ebdbaa61a5bc87",
+   "actualSha256": "49423c06c8828b5d3f075bf53ae837f1b4767a7f51123d2a83ebdbaa61a5bc87",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-desktop/p41-profile-mismatch.png",
+   "expectedSha256": "974fe41ad3972e26f30b3e8d81446f59e841edc0e8fa3b42b57042a9e0da2bd0",
+   "actualSha256": "974fe41ad3972e26f30b3e8d81446f59e841edc0e8fa3b42b57042a9e0da2bd0",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-desktop/p41-profile-photo.png",
+   "expectedSha256": "32102a4f932f254a1d4d630aeb94b377f736d44e2f883c4ebc1705db0635921c",
+   "actualSha256": "bc719f5adae84caabeb0fbbd540df0d0981ba79d02bba78b80cff94c5d4a26c8",
+   "bytesEqual": false,
+   "expectedSize": [
+    1280,
+    900
+   ],
+   "actualSize": [
+    1280,
+    900
+   ],
+   "differentPixels": 37,
+   "maxChannelDelta": 39,
+   "box": {
+    "x": 500,
+    "y": 151,
+    "width": 238,
+    "height": 747
+   },
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-desktop/p41-profile-ready.png",
+   "expectedSha256": "b643ee4a41ebcfbd115d0ed84035a8f29f2c310257d9362c36c718a1c8ea1023",
+   "actualSha256": "b643ee4a41ebcfbd115d0ed84035a8f29f2c310257d9362c36c718a1c8ea1023",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-desktop/p41-profile-reset.png",
+   "expectedSha256": "01d68a1d731f0d2e2aadc9b3afa5416d7a8504db39a889fc8c59fdb375c72da5",
+   "actualSha256": "05e241aa40e54671d694de7544e8666ee51d7355089e7305760a236da236cf05",
+   "bytesEqual": false,
+   "expectedSize": [
+    1280,
+    900
+   ],
+   "actualSize": [
+    1280,
+    900
+   ],
+   "differentPixels": 45,
+   "maxChannelDelta": 2,
+   "box": {
+    "x": 525,
+    "y": 539,
+    "width": 3,
+    "height": 225
+   },
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-desktop/p41-profile-signin.png",
+   "expectedSha256": "7bae1a387141831c11da7d7538b7c44c18ab547d8ea92079b135b672fba029b4",
+   "actualSha256": "7bae1a387141831c11da7d7538b7c44c18ab547d8ea92079b135b672fba029b4",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-desktop/p41-settings-mode-open.png",
+   "expectedSha256": "88479a16b123bd9cde96f329d9a182df1cfa35969cdbbd8be7ce0ee5487fa957",
+   "actualSha256": "88479a16b123bd9cde96f329d9a182df1cfa35969cdbbd8be7ce0ee5487fa957",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-desktop/p41-settings-saving.png",
+   "expectedSha256": "3f6d488bb92ed361764e77bdf36b87c3d8575b2e83ba0e617c458ff3d5f693c8",
+   "actualSha256": "3f6d488bb92ed361764e77bdf36b87c3d8575b2e83ba0e617c458ff3d5f693c8",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-desktop/p41-settings-theme.png",
+   "expectedSha256": "c8c0f7841408953b139c903af73d0ba77cbf2ebddeb5db153c943d4212882c35",
+   "actualSha256": "c8c0f7841408953b139c903af73d0ba77cbf2ebddeb5db153c943d4212882c35",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-desktop/p41-setup-invalid.png",
+   "expectedSha256": "9c4b1d9bc88661da8ea1a3b12423992d185e6aed2494941a983fdf52dd756757",
+   "actualSha256": "26281019d7b427138a33a44aa8ecdfbac84ea8585022fb9090b55c88b4f3b7a9",
+   "bytesEqual": false,
+   "expectedSize": [
+    1280,
+    900
+   ],
+   "actualSize": [
+    1280,
+    900
+   ],
+   "differentPixels": 15,
+   "maxChannelDelta": 2,
+   "box": {
+    "x": 832,
+    "y": 351,
+    "width": 3,
+    "height": 28
+   },
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-desktop/p41-setup-required.png",
+   "expectedSha256": "7f89e81f32ccdae291995c755a4ec93cd985b90651fc03ff48074bb3ce5115e2",
+   "actualSha256": "39155eb9a1eab7fe3701ce89e2a198b6f6d23e6b9b06e054ca45d38c75ae7304",
+   "bytesEqual": false,
+   "expectedSize": [
+    1280,
+    900
+   ],
+   "actualSize": [
+    1280,
+    900
+   ],
+   "differentPixels": 31,
+   "maxChannelDelta": 2,
+   "box": {
+    "x": 829,
+    "y": 351,
+    "width": 6,
+    "height": 116
+   },
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-desktop/p41-setup-valid.png",
+   "expectedSha256": "f95dd70d0904e2ee90745793cf1d3cbb3c7996034ab8ed9292b11859eb961b41",
+   "actualSha256": "edb8f653fe4b02ac29017ec40079e9ece0feb17914a3e9ab5ea36c25143a7776",
+   "bytesEqual": false,
+   "expectedSize": [
+    1280,
+    900
+   ],
+   "actualSize": [
+    1280,
+    900
+   ],
+   "differentPixels": 7,
+   "maxChannelDelta": 1,
+   "box": {
+    "x": 445,
+    "y": 351,
+    "width": 3,
+    "height": 4
+   },
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-desktop/p41-setup.png",
+   "expectedSha256": "6c4b3af35e8ec4d1c3d0e5ada1b4d5a79a39c661e2178e65d407edb48ffc23c5",
+   "actualSha256": "6c4b3af35e8ec4d1c3d0e5ada1b4d5a79a39c661e2178e65d407edb48ffc23c5",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-desktop/p41-tokens-empty.png",
+   "expectedSha256": "60e0ef0b78e8b110985bc91d9487979eeed64d63ea5d15447d5e0b3878b3d08a",
+   "actualSha256": "60e0ef0b78e8b110985bc91d9487979eeed64d63ea5d15447d5e0b3878b3d08a",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-desktop/p41-tokens-ended.png",
+   "expectedSha256": "d1ad8963215c27d6fa8b02b2d901e8c8798e9f9f9e9315b6a53c2dd95c5cd936",
+   "actualSha256": "d1ad8963215c27d6fa8b02b2d901e8c8798e9f9f9e9315b6a53c2dd95c5cd936",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-desktop/p41-tokens-error.png",
+   "expectedSha256": "c2fdff817f6194653b9dbfa080b9a0db449e51f8330cfab8962493737b74cb3d",
+   "actualSha256": "c2fdff817f6194653b9dbfa080b9a0db449e51f8330cfab8962493737b74cb3d",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-desktop/p41-tokens-hover.png",
+   "expectedSha256": "abdce34d9b4907da844da45fb1cfe2d2fefb939ff72065f8ef317b5917024c57",
+   "actualSha256": "abdce34d9b4907da844da45fb1cfe2d2fefb939ff72065f8ef317b5917024c57",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-desktop/p41-tokens-issued.png",
+   "expectedSha256": "3ed7e16efd2614911de3b6a8ef42664e01531a35f4c0199190733e5b161dbd5f",
+   "actualSha256": "3ed7e16efd2614911de3b6a8ef42664e01531a35f4c0199190733e5b161dbd5f",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-desktop/p41-tokens-loading.png",
+   "expectedSha256": "65a29bad9e4b12a66d15a03d184376e597564cd3d7e8e66db682f94f53afcc8c",
+   "actualSha256": "65a29bad9e4b12a66d15a03d184376e597564cd3d7e8e66db682f94f53afcc8c",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-desktop/p41-tokens-new-custom.png",
+   "expectedSha256": "2785843a74c738956c26c5df4f842760900ff7bc2397e3c24e9dc41710e0e519",
+   "actualSha256": "2785843a74c738956c26c5df4f842760900ff7bc2397e3c24e9dc41710e0e519",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-desktop/p41-tokens-new-never.png",
+   "expectedSha256": "6ae156b6913a64c2b1377a296d415dbb1b9ac9037e47bbf882ab33fbd6d6d627",
+   "actualSha256": "6ae156b6913a64c2b1377a296d415dbb1b9ac9037e47bbf882ab33fbd6d6d627",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-desktop/p41-tokens-new-workspaces.png",
+   "expectedSha256": "d6cb0345b61bfd0e020cff77f5b287a11143d338d967b5214517857f9cb503d3",
+   "actualSha256": "d6cb0345b61bfd0e020cff77f5b287a11143d338d967b5214517857f9cb503d3",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-desktop/p41-tokens-new.png",
+   "expectedSha256": "6b605af775595204047462b5b75d7ad410063628dac733786acd6999ada07fac",
+   "actualSha256": "6b605af775595204047462b5b75d7ad410063628dac733786acd6999ada07fac",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-desktop/p41-tokens-revoke.png",
+   "expectedSha256": "02f58c2d67f5ac766a2d2fd14093a66d94cb8820bae6fc14aa8c30b196c86e38",
+   "actualSha256": "02f58c2d67f5ac766a2d2fd14093a66d94cb8820bae6fc14aa8c30b196c86e38",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-desktop/p41-tokens.png",
+   "expectedSha256": "d9246378eee681037d262f563bab6dfa31b2df7d1f79b93f47d604ae925491ee",
+   "actualSha256": "d9246378eee681037d262f563bab6dfa31b2df7d1f79b93f47d604ae925491ee",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-phone/p41-admin-revoke.png",
+   "expectedSha256": "3c172cd1928924bfe7a4bc882974504b272a973482aaf377bc4ee58aa1e7d5f4",
+   "actualSha256": "3c172cd1928924bfe7a4bc882974504b272a973482aaf377bc4ee58aa1e7d5f4",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-phone/p41-admin-tokens.png",
+   "expectedSha256": "e5acd0df22c0cd462bdea4c51f4492d111ef03aa6065388c52de095859a9c8bf",
+   "actualSha256": "e5acd0df22c0cd462bdea4c51f4492d111ef03aa6065388c52de095859a9c8bf",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-phone/p41-cli-approved.png",
+   "expectedSha256": "f5c4ab7a12983d96154a2cb93f949774e413ddc5403f185960433b5cf9e2c3a9",
+   "actualSha256": "f5c4ab7a12983d96154a2cb93f949774e413ddc5403f185960433b5cf9e2c3a9",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-phone/p41-cli-denied.png",
+   "expectedSha256": "cb77de9a2aa882fe83244a04d0e74ccf982716691258653947469321bcac4a55",
+   "actualSha256": "9812c2aede5f1e04c2a2b38fb2b72e6416a03c4a826a85af028dc37c95c2ef88",
+   "bytesEqual": false,
+   "expectedSize": [
+    390,
+    844
+   ],
+   "actualSize": [
+    390,
+    844
+   ],
+   "differentPixels": 4,
+   "maxChannelDelta": 1,
+   "box": {
+    "x": 387,
+    "y": 237,
+    "width": 2,
+    "height": 3
+   },
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-phone/p41-cli-error.png",
+   "expectedSha256": "172dd063804f347de5dd6514883197011af9bc07795bed4bb4a6fc19cb21782c",
+   "actualSha256": "172dd063804f347de5dd6514883197011af9bc07795bed4bb4a6fc19cb21782c",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-phone/p41-cli-loading.png",
+   "expectedSha256": "d8053bf2f2a1da4d82da59aed309b83aa44dd9250ad5a0e3d7428e9b1ed95d53",
+   "actualSha256": "d8053bf2f2a1da4d82da59aed309b83aa44dd9250ad5a0e3d7428e9b1ed95d53",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-phone/p41-cli-warnings.png",
+   "expectedSha256": "b14f050afd4f2dea629c899513cee4e2e85b30b0058fb7b22bfa1681d5ccbea5",
+   "actualSha256": "b14f050afd4f2dea629c899513cee4e2e85b30b0058fb7b22bfa1681d5ccbea5",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-phone/p41-cli.png",
+   "expectedSha256": "dc2a6fdab4d4518e41e36076be12b3135403a069ef02f708f5dd79cbdce43978",
+   "actualSha256": "dc2a6fdab4d4518e41e36076be12b3135403a069ef02f708f5dd79cbdce43978",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-phone/p41-login-error.png",
+   "expectedSha256": "894d33782fba6e64d74fd14accd1ef8472470c73364ff4fdad2b75c0f288dd8e",
+   "actualSha256": "894d33782fba6e64d74fd14accd1ef8472470c73364ff4fdad2b75c0f288dd8e",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-phone/p41-login.png",
+   "expectedSha256": "a498e1fbe9e32b99d3d9e491f4c4a69a71c60d8808d8d09dca5c9ea53b62d688",
+   "actualSha256": "a498e1fbe9e32b99d3d9e491f4c4a69a71c60d8808d8d09dca5c9ea53b62d688",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-phone/p41-profile-mismatch.png",
+   "expectedSha256": "938b100bbe9a9d2cfde9c3a4bd311422bc544a750b540ac2b7527649347a3aa9",
+   "actualSha256": "938b100bbe9a9d2cfde9c3a4bd311422bc544a750b540ac2b7527649347a3aa9",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-phone/p41-profile-photo.png",
+   "expectedSha256": "65e23978610f199ccf17f5fd1ce47eb477173702504c54ce85a2c9ffc1f8f3be",
+   "actualSha256": "24609271a2e06bce8a5c6965eba9c529efc2a0ef01422c6bd68a786c16ae13dd",
+   "bytesEqual": false,
+   "expectedSize": [
+    390,
+    844
+   ],
+   "actualSize": [
+    390,
+    844
+   ],
+   "differentPixels": 26,
+   "maxChannelDelta": 1,
+   "box": {
+    "x": 16,
+    "y": 95,
+    "width": 358,
+    "height": 367
+   },
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-phone/p41-profile-ready.png",
+   "expectedSha256": "37798b2483b491aa01f21b91f193b571b29ec2900a42e5bcba867d2b223e1869",
+   "actualSha256": "37798b2483b491aa01f21b91f193b571b29ec2900a42e5bcba867d2b223e1869",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-phone/p41-profile-reset.png",
+   "expectedSha256": "f07c3bf0a2226d4a1ea300044e71da183bcc12096b784bdb642f910045fea30c",
+   "actualSha256": "f07c3bf0a2226d4a1ea300044e71da183bcc12096b784bdb642f910045fea30c",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-phone/p41-profile-signin.png",
+   "expectedSha256": "b7f28ce9bbf155046bdd8191f627022140c3f59fe74da7410472a78854cd3797",
+   "actualSha256": "b7f28ce9bbf155046bdd8191f627022140c3f59fe74da7410472a78854cd3797",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-phone/p41-settings-mode-open.png",
+   "expectedSha256": "165f1c9ec6e4bc5b6a6129d12d1a32512c6a429eb7ff5c8e352013cca9faa688",
+   "actualSha256": "165f1c9ec6e4bc5b6a6129d12d1a32512c6a429eb7ff5c8e352013cca9faa688",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-phone/p41-settings-saving.png",
+   "expectedSha256": "e23550387276088e23b6a2eee08a8ff59539dbe9c73c29510efac577fb557752",
+   "actualSha256": "e23550387276088e23b6a2eee08a8ff59539dbe9c73c29510efac577fb557752",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-phone/p41-settings-theme.png",
+   "expectedSha256": "bcb21807eecf5591279d6914ba8095c5c9049b4f3ac939f5cd7c9f281c36c132",
+   "actualSha256": "bcb21807eecf5591279d6914ba8095c5c9049b4f3ac939f5cd7c9f281c36c132",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-phone/p41-setup-invalid.png",
+   "expectedSha256": "981e1bb8c5b02c38831cb684a6a526a87919ac3d1b10a3581a8f2f345f465c19",
+   "actualSha256": "c1242e09148d400730acd01b57e441ac6cd167949edfbca02f26aad3bd8dc4e6",
+   "bytesEqual": false,
+   "expectedSize": [
+    390,
+    844
+   ],
+   "actualSize": [
+    390,
+    844
+   ],
+   "differentPixels": 6,
+   "maxChannelDelta": 1,
+   "box": {
+    "x": 0,
+    "y": 608,
+    "width": 3,
+    "height": 4
+   },
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-phone/p41-setup-required.png",
+   "expectedSha256": "e352881bfc5b0dcb2782e704a1ae636f732448faa79712862cb5fece284ba623",
+   "actualSha256": "e352881bfc5b0dcb2782e704a1ae636f732448faa79712862cb5fece284ba623",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-phone/p41-setup-valid.png",
+   "expectedSha256": "e79135a3af8a6db9558d16e898ade9750bcf6570fc1088a766fe047e4420eeb4",
+   "actualSha256": "e79135a3af8a6db9558d16e898ade9750bcf6570fc1088a766fe047e4420eeb4",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-phone/p41-setup.png",
+   "expectedSha256": "14c6437ba57054caa5eb1db7ff3c0d8335d6514d774291efeb537b57ec1a8968",
+   "actualSha256": "14c6437ba57054caa5eb1db7ff3c0d8335d6514d774291efeb537b57ec1a8968",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-phone/p41-tokens-empty.png",
+   "expectedSha256": "310a56ddaefa371e8d950a8a425ca4fa9db82ee85fa9d702951d1afaa838ee56",
+   "actualSha256": "310a56ddaefa371e8d950a8a425ca4fa9db82ee85fa9d702951d1afaa838ee56",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-phone/p41-tokens-ended.png",
+   "expectedSha256": "1f825a491980c69d5112f0e46ce461a591eae07d72a92f9b84735d0cb684eb08",
+   "actualSha256": "1f825a491980c69d5112f0e46ce461a591eae07d72a92f9b84735d0cb684eb08",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-phone/p41-tokens-error.png",
+   "expectedSha256": "dfcb339b7d1d3551715dbd54b74e2022eaecdcf185fdfbfff014f5a2c2e20c5f",
+   "actualSha256": "dfcb339b7d1d3551715dbd54b74e2022eaecdcf185fdfbfff014f5a2c2e20c5f",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-phone/p41-tokens-hover.png",
+   "expectedSha256": "6d4a72a193b34f9e5cb75f48e317aeab3d794b41f860c2f0ea2f0901dc98223d",
+   "actualSha256": "6d4a72a193b34f9e5cb75f48e317aeab3d794b41f860c2f0ea2f0901dc98223d",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-phone/p41-tokens-issued.png",
+   "expectedSha256": "27fa967aa925dbcffa9db0ff2513070993883312699a5ad71b3e045f16687a01",
+   "actualSha256": "27fa967aa925dbcffa9db0ff2513070993883312699a5ad71b3e045f16687a01",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-phone/p41-tokens-loading.png",
+   "expectedSha256": "2ca3f0e4223ba597501e18395daf647863e72f458c932bf2771fe03ad82cae3d",
+   "actualSha256": "2ca3f0e4223ba597501e18395daf647863e72f458c932bf2771fe03ad82cae3d",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-phone/p41-tokens-new-custom.png",
+   "expectedSha256": "e1861dbfee564955d2faf7734c2c1e4f26f7d89a7a6a2eeff88e27b82de108a2",
+   "actualSha256": "e1861dbfee564955d2faf7734c2c1e4f26f7d89a7a6a2eeff88e27b82de108a2",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-phone/p41-tokens-new-never.png",
+   "expectedSha256": "6b0024dc45dfe43cbd0b875ebd5680e73c38b7972547531dcc12586c264221f4",
+   "actualSha256": "6b0024dc45dfe43cbd0b875ebd5680e73c38b7972547531dcc12586c264221f4",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-phone/p41-tokens-new-workspaces.png",
+   "expectedSha256": "a542ecd5584bf67058b62a21cf9cbffbe629e4c848bc29214039ae7ad129b6bf",
+   "actualSha256": "a542ecd5584bf67058b62a21cf9cbffbe629e4c848bc29214039ae7ad129b6bf",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-phone/p41-tokens-new.png",
+   "expectedSha256": "f8cfd5363394eb8f2809f8915f379eba260efffc3cd880c422724de3baa01050",
+   "actualSha256": "f8cfd5363394eb8f2809f8915f379eba260efffc3cd880c422724de3baa01050",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-phone/p41-tokens-revoke.png",
+   "expectedSha256": "21f8912a863caf21cb8e980b052dff7505160371e9f96218cda16f87791e62b2",
+   "actualSha256": "21f8912a863caf21cb8e980b052dff7505160371e9f96218cda16f87791e62b2",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "chromium-light-phone/p41-tokens.png",
+   "expectedSha256": "fa0540c788581afdba126eb293644ade894e6eb58ebf21f8eff4428e9b9227d7",
+   "actualSha256": "fa0540c788581afdba126eb293644ade894e6eb58ebf21f8eff4428e9b9227d7",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-desktop/p41-admin-revoke.png",
+   "expectedSha256": "1d520d882b08c32a8a6fc58ba356003299d0999cddce9d77113079d88386b6a4",
+   "actualSha256": "1d520d882b08c32a8a6fc58ba356003299d0999cddce9d77113079d88386b6a4",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-desktop/p41-admin-tokens.png",
+   "expectedSha256": "64851949e41cee3fa29bc63a62a95f76c79dfa67129bd6c02e7109c03551aa34",
+   "actualSha256": "64851949e41cee3fa29bc63a62a95f76c79dfa67129bd6c02e7109c03551aa34",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-desktop/p41-cli-approved.png",
+   "expectedSha256": "c43aac451073171c684d6f88079da91fab1f0a4caa3f969727f04b6d2ca4e3c4",
+   "actualSha256": "c43aac451073171c684d6f88079da91fab1f0a4caa3f969727f04b6d2ca4e3c4",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-desktop/p41-cli-denied.png",
+   "expectedSha256": "71c04fec003bf1de4a293442f28d931219291b1c9a7bad8b719c8704feb5bd0d",
+   "actualSha256": "ac22d39973319ab88d649e31ddb88cb3a1a1cc35ae8467eb23a52693d7e0c263",
+   "bytesEqual": false,
+   "expectedSize": [
+    1280,
+    900
+   ],
+   "actualSize": [
+    1280,
+    900
+   ],
+   "differentPixels": 34840,
+   "maxChannelDelta": 255,
+   "box": {
+    "x": 0,
+    "y": 0,
+    "width": 1280,
+    "height": 900
+   },
+   "p0Comparator": "12110 pixels (ratio 0.02 of all image pixels) are different."
+  },
+  {
+   "file": "webkit-dark-desktop/p41-cli-error.png",
+   "expectedSha256": "c5724d9245fc822995bbfe122d06d04bb39d9ed6205457306e0538997f887eb4",
+   "actualSha256": "c5724d9245fc822995bbfe122d06d04bb39d9ed6205457306e0538997f887eb4",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-desktop/p41-cli-loading.png",
+   "expectedSha256": "e2ed9ff7140075a02a47dfe6fca74c867309d0117c1c983c0eb90fb7f4843b9c",
+   "actualSha256": "e2ed9ff7140075a02a47dfe6fca74c867309d0117c1c983c0eb90fb7f4843b9c",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-desktop/p41-cli-warnings.png",
+   "expectedSha256": "ef5b0573a3da5be5f537b0a8b39d6ede10876740169c9f7147fca9a1002cc38e",
+   "actualSha256": "ef5b0573a3da5be5f537b0a8b39d6ede10876740169c9f7147fca9a1002cc38e",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-desktop/p41-cli.png",
+   "expectedSha256": "f74806c871fb9fd32b28b2c3ef1ba5735e4ce3dbd290b1ee4f282e772c1d2127",
+   "actualSha256": "f74806c871fb9fd32b28b2c3ef1ba5735e4ce3dbd290b1ee4f282e772c1d2127",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-desktop/p41-login-error.png",
+   "expectedSha256": "e6366f8dd52c8900554365575bd3a0dccfa05c4f67301e6c643d42ba25e8ffed",
+   "actualSha256": "e6366f8dd52c8900554365575bd3a0dccfa05c4f67301e6c643d42ba25e8ffed",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-desktop/p41-login.png",
+   "expectedSha256": "8afe2611d150b5a565c81e51e6e87d1c28bc05e0df7479ad8cb4bf18414c227c",
+   "actualSha256": "8afe2611d150b5a565c81e51e6e87d1c28bc05e0df7479ad8cb4bf18414c227c",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-desktop/p41-profile-mismatch.png",
+   "expectedSha256": "e039d594ced028e18364520a92b1fa6cb01d54ee688a6b2b1cac57d1895889e9",
+   "actualSha256": "e039d594ced028e18364520a92b1fa6cb01d54ee688a6b2b1cac57d1895889e9",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-desktop/p41-profile-photo.png",
+   "expectedSha256": "d4b0f9cf7417289caa8f2b1dad33a2eef339d5e359833755be1a8bdb97411728",
+   "actualSha256": "d4b0f9cf7417289caa8f2b1dad33a2eef339d5e359833755be1a8bdb97411728",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-desktop/p41-profile-ready.png",
+   "expectedSha256": "e4d67a510cbbd4702147e9ccd1b4f3146feab40aeb1859350ca20a74550c8608",
+   "actualSha256": "e4d67a510cbbd4702147e9ccd1b4f3146feab40aeb1859350ca20a74550c8608",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-desktop/p41-profile-reset.png",
+   "expectedSha256": "089b4d2529841c9cd12ac4cbda1662900156aa9ed4d32409aa4dd14be19f094a",
+   "actualSha256": "e404c9157e2d34da3b793665340f53e4aeac638e7f543c72772bbb2c346a4173",
+   "bytesEqual": false,
+   "expectedSize": [
+    1280,
+    900
+   ],
+   "actualSize": [
+    1280,
+    900
+   ],
+   "differentPixels": 49961,
+   "maxChannelDelta": 255,
+   "box": {
+    "x": 0,
+    "y": 0,
+    "width": 1280,
+    "height": 900
+   },
+   "p0Comparator": "14519 pixels (ratio 0.02 of all image pixels) are different."
+  },
+  {
+   "file": "webkit-dark-desktop/p41-profile-signin.png",
+   "expectedSha256": "d25bab33faff513637638466b98d9a51460447d4f3bd87e160b9036bc18ef971",
+   "actualSha256": "d25bab33faff513637638466b98d9a51460447d4f3bd87e160b9036bc18ef971",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-desktop/p41-settings-mode-open.png",
+   "expectedSha256": "87589f282817707757346608a339f8185ef84b9345d078885f8946562f8b3e0b",
+   "actualSha256": "87589f282817707757346608a339f8185ef84b9345d078885f8946562f8b3e0b",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-desktop/p41-settings-saving.png",
+   "expectedSha256": "8318b16e207ec2b08a465d6c6d95f4580d9c07db45e68b3dfe5d1c6ef61e55c4",
+   "actualSha256": "6638778b0382107f4fed0227813a6454ec4046e18af6048b5d5cf6a05e52b8d2",
+   "bytesEqual": false,
+   "expectedSize": [
+    1280,
+    900
+   ],
+   "actualSize": [
+    1280,
+    900
+   ],
+   "differentPixels": 61854,
+   "maxChannelDelta": 255,
+   "box": {
+    "x": 0,
+    "y": 0,
+    "width": 1280,
+    "height": 900
+   },
+   "p0Comparator": "19784 pixels (ratio 0.02 of all image pixels) are different."
+  },
+  {
+   "file": "webkit-dark-desktop/p41-settings-theme.png",
+   "expectedSha256": "c3d9e44e642e0d1f7363b04ca4d6f7c4b57fee20dfe84b2065e03ad68df30434",
+   "actualSha256": "39e7c4b273553641eb2b729c1cae3307784eacb2c7bb4863f4169ff723ac16e0",
+   "bytesEqual": false,
+   "expectedSize": [
+    1280,
+    900
+   ],
+   "actualSize": [
+    1280,
+    900
+   ],
+   "differentPixels": 52028,
+   "maxChannelDelta": 255,
+   "box": {
+    "x": 0,
+    "y": 0,
+    "width": 1280,
+    "height": 900
+   },
+   "p0Comparator": "16879 pixels (ratio 0.02 of all image pixels) are different."
+  },
+  {
+   "file": "webkit-dark-desktop/p41-setup-invalid.png",
+   "expectedSha256": "ae05badaa5ca0b17339176f5e0db6049af393e02d0ee06a22ec5e65d2247945b",
+   "actualSha256": "ae05badaa5ca0b17339176f5e0db6049af393e02d0ee06a22ec5e65d2247945b",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-desktop/p41-setup-required.png",
+   "expectedSha256": "ea7fd61701c1fa6f70ca5e27bbed3ff5ee9810d04f943778f53e425e2b17e438",
+   "actualSha256": "ea7fd61701c1fa6f70ca5e27bbed3ff5ee9810d04f943778f53e425e2b17e438",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-desktop/p41-setup-valid.png",
+   "expectedSha256": "711f9a84ed0b66e2190be2648dd912e654ceb06eb1310b4e8b2bdbc01ba13284",
+   "actualSha256": "711f9a84ed0b66e2190be2648dd912e654ceb06eb1310b4e8b2bdbc01ba13284",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-desktop/p41-setup.png",
+   "expectedSha256": "146daf935359b15a0c9806bb7de10a5dd37b2ff416f34cb75e28fbf187d251ec",
+   "actualSha256": "146daf935359b15a0c9806bb7de10a5dd37b2ff416f34cb75e28fbf187d251ec",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-desktop/p41-tokens-empty.png",
+   "expectedSha256": "023bfcec2f9ff888d4bd6328ae63db7b6e2d37b79db8047d04968f23d5f9e061",
+   "actualSha256": "023bfcec2f9ff888d4bd6328ae63db7b6e2d37b79db8047d04968f23d5f9e061",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-desktop/p41-tokens-ended.png",
+   "expectedSha256": "310d6a9d961b0422172f419cdd6c2a1f4b2f147d9a98bdd3d0bad965423226e2",
+   "actualSha256": "310d6a9d961b0422172f419cdd6c2a1f4b2f147d9a98bdd3d0bad965423226e2",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-desktop/p41-tokens-error.png",
+   "expectedSha256": "8c94918569c316d5012dfa9052122fdee257113bdd9268b57edd3092d405b6d6",
+   "actualSha256": "8c94918569c316d5012dfa9052122fdee257113bdd9268b57edd3092d405b6d6",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-desktop/p41-tokens-hover.png",
+   "expectedSha256": "2df050f1c1ed160995318ba2fbec329effa4e5ce2bbc5f69c96bc25a8dad4ff4",
+   "actualSha256": "2df050f1c1ed160995318ba2fbec329effa4e5ce2bbc5f69c96bc25a8dad4ff4",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-desktop/p41-tokens-issued.png",
+   "expectedSha256": "74feac8ae8f042cb3bb645dc65693e284bdcd9e988d4f295d0b3f1da112885b2",
+   "actualSha256": "74feac8ae8f042cb3bb645dc65693e284bdcd9e988d4f295d0b3f1da112885b2",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-desktop/p41-tokens-loading.png",
+   "expectedSha256": "b346a22f70213bafe59aa810709d1af3b7b529efef00d3cec7e08f51ce74da97",
+   "actualSha256": "b346a22f70213bafe59aa810709d1af3b7b529efef00d3cec7e08f51ce74da97",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-desktop/p41-tokens-new-custom.png",
+   "expectedSha256": "803de1baa766c905db1566ad247beea188e957fc2f652a9927ffa1577dd6e916",
+   "actualSha256": "803de1baa766c905db1566ad247beea188e957fc2f652a9927ffa1577dd6e916",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-desktop/p41-tokens-new-never.png",
+   "expectedSha256": "5d7631de6790d8c5d7850c5fbabf1a8ce232ab5c2deb46f337d24ce423c88abd",
+   "actualSha256": "5d7631de6790d8c5d7850c5fbabf1a8ce232ab5c2deb46f337d24ce423c88abd",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-desktop/p41-tokens-new-workspaces.png",
+   "expectedSha256": "a78a3aa32cce7b9d2cbb1e5085a198cecc3cbf3e9d413bfb3e94659c28160d87",
+   "actualSha256": "a78a3aa32cce7b9d2cbb1e5085a198cecc3cbf3e9d413bfb3e94659c28160d87",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-desktop/p41-tokens-new.png",
+   "expectedSha256": "dcd9b12dd8982608fe9a93488d3f8568581dd2b68ef95cad117eeb48b7e3b384",
+   "actualSha256": "dcd9b12dd8982608fe9a93488d3f8568581dd2b68ef95cad117eeb48b7e3b384",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-desktop/p41-tokens-revoke.png",
+   "expectedSha256": "318a8f2d6a4db25e3f739627280bcccf8f96bb08394bee2fc12ae90a0bbae68b",
+   "actualSha256": "318a8f2d6a4db25e3f739627280bcccf8f96bb08394bee2fc12ae90a0bbae68b",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-desktop/p41-tokens.png",
+   "expectedSha256": "2a013ceec36f6d00786d2ee0f983eaaf2ba229e2bd9a9b55e873d3fe6120f7bb",
+   "actualSha256": "2a013ceec36f6d00786d2ee0f983eaaf2ba229e2bd9a9b55e873d3fe6120f7bb",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-phone/p41-admin-revoke.png",
+   "expectedSha256": "38fead736b79aeb512abc8d085ea3973ca39cd2192405c8801f12ffb0b4363d1",
+   "actualSha256": "38fead736b79aeb512abc8d085ea3973ca39cd2192405c8801f12ffb0b4363d1",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-phone/p41-admin-tokens.png",
+   "expectedSha256": "26e324a8a84e1376b3bc321181f85b6b29a87200a7539d947f48e1aa9ac06244",
+   "actualSha256": "26e324a8a84e1376b3bc321181f85b6b29a87200a7539d947f48e1aa9ac06244",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-phone/p41-cli-approved.png",
+   "expectedSha256": "62cb6ec3f9268147444c0e46152d99485d6f44df554fdbe6bb5d28b07ddbd7ac",
+   "actualSha256": "62cb6ec3f9268147444c0e46152d99485d6f44df554fdbe6bb5d28b07ddbd7ac",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-phone/p41-cli-denied.png",
+   "expectedSha256": "b65c7f5ee670ecc69c4c75a69db8618d737e390764a3183f003ea7500e2d6029",
+   "actualSha256": "d73d7b09012a82a1a158969c48f7a9e23d7ff7ee8440782b39ce42027a94a271",
+   "bytesEqual": false,
+   "expectedSize": [
+    390,
+    844
+   ],
+   "actualSize": [
+    390,
+    844
+   ],
+   "differentPixels": 6753,
+   "maxChannelDelta": 255,
+   "box": {
+    "x": 0,
+    "y": 0,
+    "width": 390,
+    "height": 844
+   },
+   "p0Comparator": "6576 pixels (ratio 0.02 of all image pixels) are different."
+  },
+  {
+   "file": "webkit-dark-phone/p41-cli-error.png",
+   "expectedSha256": "0ab8d3fe0f4a9f606dbcc27d78e9a1d326192d8af4d4e97c2439bf3d6ddc2586",
+   "actualSha256": "0ab8d3fe0f4a9f606dbcc27d78e9a1d326192d8af4d4e97c2439bf3d6ddc2586",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-phone/p41-cli-loading.png",
+   "expectedSha256": "ca1f2eb47bb5ae07927966a5cdc9382338ccfd925ad9a32076e6d947a58b07c3",
+   "actualSha256": "ca1f2eb47bb5ae07927966a5cdc9382338ccfd925ad9a32076e6d947a58b07c3",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-phone/p41-cli-warnings.png",
+   "expectedSha256": "a025c77b46acbb24cf9623bc8872a673a6d8883fdb080df3c1927e11b2782813",
+   "actualSha256": "a025c77b46acbb24cf9623bc8872a673a6d8883fdb080df3c1927e11b2782813",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-phone/p41-cli.png",
+   "expectedSha256": "0a176ce1277587f08a259662950cb1c18a5e03325ea41a148a19aef5e5819f5a",
+   "actualSha256": "0a176ce1277587f08a259662950cb1c18a5e03325ea41a148a19aef5e5819f5a",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-phone/p41-login-error.png",
+   "expectedSha256": "6b262d417f8ab8a80e9b5da074319b4413c85c42908710bc75f039d7f8196219",
+   "actualSha256": "6b262d417f8ab8a80e9b5da074319b4413c85c42908710bc75f039d7f8196219",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-phone/p41-login.png",
+   "expectedSha256": "63bc076c97dd50a2b04660fbb0e7c35b25bc7de9e5fa48abfb559199bc2b4834",
+   "actualSha256": "63bc076c97dd50a2b04660fbb0e7c35b25bc7de9e5fa48abfb559199bc2b4834",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-phone/p41-profile-mismatch.png",
+   "expectedSha256": "66a7677149a7b4c911a48f2eb3310565ac8cf404e25dd60b99ee222aebf0d897",
+   "actualSha256": "66a7677149a7b4c911a48f2eb3310565ac8cf404e25dd60b99ee222aebf0d897",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-phone/p41-profile-photo.png",
+   "expectedSha256": "fe7a1b9fa20668ea2af87b4f8aab451f37bbb6b8ae88847235e2f577e5697fe9",
+   "actualSha256": "fe7a1b9fa20668ea2af87b4f8aab451f37bbb6b8ae88847235e2f577e5697fe9",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-phone/p41-profile-ready.png",
+   "expectedSha256": "8f6821fa260692e6d8af2e62ca4f3642d67962f8ece7f21844473b44face8635",
+   "actualSha256": "8f6821fa260692e6d8af2e62ca4f3642d67962f8ece7f21844473b44face8635",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-phone/p41-profile-reset.png",
+   "expectedSha256": "e74fd08161c49664291d2c62623a40d650df2785bd5fcd9518ca1d6799660fa2",
+   "actualSha256": "ab79f289d5b6c5e37ccd12f07915af4c53e2a1bf47d9ddb59896736c968f4207",
+   "bytesEqual": false,
+   "expectedSize": [
+    390,
+    844
+   ],
+   "actualSize": [
+    390,
+    844
+   ],
+   "differentPixels": 6753,
+   "maxChannelDelta": 255,
+   "box": {
+    "x": 0,
+    "y": 0,
+    "width": 390,
+    "height": 844
+   },
+   "p0Comparator": "6728 pixels (ratio 0.03 of all image pixels) are different."
+  },
+  {
+   "file": "webkit-dark-phone/p41-profile-signin.png",
+   "expectedSha256": "06deb7fb904a8f751f978acfcc975943b2d0d9da42f3f3dae7c445292a538846",
+   "actualSha256": "06deb7fb904a8f751f978acfcc975943b2d0d9da42f3f3dae7c445292a538846",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-phone/p41-settings-mode-open.png",
+   "expectedSha256": "95f265492de8f3f71e4ed3958d774c9a92df1c929fbd6daf2072768f7d5aa58f",
+   "actualSha256": "95f265492de8f3f71e4ed3958d774c9a92df1c929fbd6daf2072768f7d5aa58f",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-phone/p41-settings-saving.png",
+   "expectedSha256": "ce61f48f0a751bab8cd9cd1e2f70f7e5173898bd7ad94fa3834ca1616835f25b",
+   "actualSha256": "22ab89029325e1644bb5e9a478c45dc817d2706abf1084e015b014ae2262312f",
+   "bytesEqual": false,
+   "expectedSize": [
+    390,
+    844
+   ],
+   "actualSize": [
+    390,
+    844
+   ],
+   "differentPixels": 6753,
+   "maxChannelDelta": 255,
+   "box": {
+    "x": 0,
+    "y": 0,
+    "width": 390,
+    "height": 844
+   },
+   "p0Comparator": "6728 pixels (ratio 0.03 of all image pixels) are different."
+  },
+  {
+   "file": "webkit-dark-phone/p41-settings-theme.png",
+   "expectedSha256": "0d6494434a9ee202435818958d7efe2e6be0ccfca0ac80d92096ed30335c7611",
+   "actualSha256": "1b53ecf33004a840e91ac3bc343bfeed12693a261b933ac28b0fed3139b7bd5f",
+   "bytesEqual": false,
+   "expectedSize": [
+    390,
+    844
+   ],
+   "actualSize": [
+    390,
+    844
+   ],
+   "differentPixels": 6753,
+   "maxChannelDelta": 255,
+   "box": {
+    "x": 0,
+    "y": 0,
+    "width": 390,
+    "height": 844
+   },
+   "p0Comparator": "6728 pixels (ratio 0.03 of all image pixels) are different."
+  },
+  {
+   "file": "webkit-dark-phone/p41-setup-invalid.png",
+   "expectedSha256": "eb16544e4b6fc0f5edb1ec93373be9437ab153c251a46bbb76de556a44f23c72",
+   "actualSha256": "eb16544e4b6fc0f5edb1ec93373be9437ab153c251a46bbb76de556a44f23c72",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-phone/p41-setup-required.png",
+   "expectedSha256": "84c2e9596c20920aab545d8ff7e39fb97567ce5880118241376f815280bde2b4",
+   "actualSha256": "84c2e9596c20920aab545d8ff7e39fb97567ce5880118241376f815280bde2b4",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-phone/p41-setup-valid.png",
+   "expectedSha256": "16ec65aa671fe74c7ba34311e039aac75a669e1b8eb1591f84a69acad081982c",
+   "actualSha256": "16ec65aa671fe74c7ba34311e039aac75a669e1b8eb1591f84a69acad081982c",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-phone/p41-setup.png",
+   "expectedSha256": "00c0611f556d4f9a9b4fe8b548a36838ffebbbaa1b5f8f9d6c3c926058624b96",
+   "actualSha256": "00c0611f556d4f9a9b4fe8b548a36838ffebbbaa1b5f8f9d6c3c926058624b96",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-phone/p41-tokens-empty.png",
+   "expectedSha256": "925b627ee81edc46a8cddc766ae8aab0235f52829662df27e3b50b694c23be48",
+   "actualSha256": "925b627ee81edc46a8cddc766ae8aab0235f52829662df27e3b50b694c23be48",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-phone/p41-tokens-ended.png",
+   "expectedSha256": "0cdab49283ae6d36be41702ba5a4f9de07e8758671bfb2c64d85d3049d7d3d2d",
+   "actualSha256": "0cdab49283ae6d36be41702ba5a4f9de07e8758671bfb2c64d85d3049d7d3d2d",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-phone/p41-tokens-error.png",
+   "expectedSha256": "72299566af733d060cafdd18fddc474749cbea5e96668493bb2bfe759b067d5b",
+   "actualSha256": "72299566af733d060cafdd18fddc474749cbea5e96668493bb2bfe759b067d5b",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-phone/p41-tokens-hover.png",
+   "expectedSha256": "8bb4e0390c3037ae6ecbdceb5cd408893558d0dcd49e5dc017f13c78cedb3cbd",
+   "actualSha256": "8bb4e0390c3037ae6ecbdceb5cd408893558d0dcd49e5dc017f13c78cedb3cbd",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-phone/p41-tokens-issued.png",
+   "expectedSha256": "3bb371096e4a643b9754bdc39d600ced47193025578a457ccff4df010b9bc5cc",
+   "actualSha256": "3bb371096e4a643b9754bdc39d600ced47193025578a457ccff4df010b9bc5cc",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-phone/p41-tokens-loading.png",
+   "expectedSha256": "d153802aa752f455fa53933d7d1a8c8acf1840f160a7b2130c4b6918525b2d6b",
+   "actualSha256": "d153802aa752f455fa53933d7d1a8c8acf1840f160a7b2130c4b6918525b2d6b",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-phone/p41-tokens-new-custom.png",
+   "expectedSha256": "32644eb05a5b1ec38d55b7b06b137007dae2f61ed0d19cb464811cf795dcef02",
+   "actualSha256": "32644eb05a5b1ec38d55b7b06b137007dae2f61ed0d19cb464811cf795dcef02",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-phone/p41-tokens-new-never.png",
+   "expectedSha256": "f96c2222003be0ec4004608d628ffbcb6098c9b66a65da28fead39d7aa755de2",
+   "actualSha256": "f96c2222003be0ec4004608d628ffbcb6098c9b66a65da28fead39d7aa755de2",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-phone/p41-tokens-new-workspaces.png",
+   "expectedSha256": "6050112910aadeb8807c27603b93f1a8c30f3ca034ddde7f0afcb074d8fe99e3",
+   "actualSha256": "6050112910aadeb8807c27603b93f1a8c30f3ca034ddde7f0afcb074d8fe99e3",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-phone/p41-tokens-new.png",
+   "expectedSha256": "bfe380fd97007df656e5098cb150a171156f1e86a502901eab9c997ac9c7b828",
+   "actualSha256": "bfe380fd97007df656e5098cb150a171156f1e86a502901eab9c997ac9c7b828",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-phone/p41-tokens-revoke.png",
+   "expectedSha256": "89403e0e1bdfcfdf58a435578a086815ff492a729ad585cd8008334265aaf731",
+   "actualSha256": "89403e0e1bdfcfdf58a435578a086815ff492a729ad585cd8008334265aaf731",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-dark-phone/p41-tokens.png",
+   "expectedSha256": "b862901d69af6edc25dbf841a43cdccd30aa3919213202be337046584d317594",
+   "actualSha256": "b862901d69af6edc25dbf841a43cdccd30aa3919213202be337046584d317594",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-desktop/p41-admin-revoke.png",
+   "expectedSha256": "a428ba9020fb41f6c194682674c650a90da75e9c0cc45b86db42157b0fb495c6",
+   "actualSha256": "a428ba9020fb41f6c194682674c650a90da75e9c0cc45b86db42157b0fb495c6",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-desktop/p41-admin-tokens.png",
+   "expectedSha256": "9ef728abc5eb5b3cbe2c0734201f2705acc7b3bb1b3d19fae2f6ca858b11a75b",
+   "actualSha256": "9ef728abc5eb5b3cbe2c0734201f2705acc7b3bb1b3d19fae2f6ca858b11a75b",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-desktop/p41-cli-approved.png",
+   "expectedSha256": "6a2f9f06dcf3ba89cf43ecf27abba2ceda1742a6ff037640de828d8f9f3bbb95",
+   "actualSha256": "6a2f9f06dcf3ba89cf43ecf27abba2ceda1742a6ff037640de828d8f9f3bbb95",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-desktop/p41-cli-denied.png",
+   "expectedSha256": "bbe04afeb34e679a79c7fae3621c9edb7a869db93a9fb67986297803972b32f4",
+   "actualSha256": "6c6f02bbee8d930876ee634dfea6e4b7a4764e4123d183b3707c58ee4f3d0b2c",
+   "bytesEqual": false,
+   "expectedSize": [
+    1280,
+    900
+   ],
+   "actualSize": [
+    1280,
+    900
+   ],
+   "differentPixels": 33848,
+   "maxChannelDelta": 255,
+   "box": {
+    "x": 0,
+    "y": 0,
+    "width": 1280,
+    "height": 900
+   },
+   "p0Comparator": "5105 pixels (ratio 0.01 of all image pixels) are different."
+  },
+  {
+   "file": "webkit-light-desktop/p41-cli-error.png",
+   "expectedSha256": "d2ecd52ca5edcf40ea4c0b25f7e2e3909453edc1cf5c98cca17295e03933dad2",
+   "actualSha256": "d2ecd52ca5edcf40ea4c0b25f7e2e3909453edc1cf5c98cca17295e03933dad2",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-desktop/p41-cli-loading.png",
+   "expectedSha256": "0dcf3e07dc96f50c8d71ea7616773a1fc004f7c2a0c3ef9d64d9774f520703a0",
+   "actualSha256": "0dcf3e07dc96f50c8d71ea7616773a1fc004f7c2a0c3ef9d64d9774f520703a0",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-desktop/p41-cli-warnings.png",
+   "expectedSha256": "a950b153ac2f7bf6bb1c2e788b4b7a003fb363bf0e32611af55146f78c3b4eb2",
+   "actualSha256": "a950b153ac2f7bf6bb1c2e788b4b7a003fb363bf0e32611af55146f78c3b4eb2",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-desktop/p41-cli.png",
+   "expectedSha256": "bc53ff894b51de6e4577ce93696e62dbd4080f3723647604e876bc9073686944",
+   "actualSha256": "bc53ff894b51de6e4577ce93696e62dbd4080f3723647604e876bc9073686944",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-desktop/p41-login-error.png",
+   "expectedSha256": "e986e5dec0076f29590778c945654254fd6d7488698ff67c21a59831515dce53",
+   "actualSha256": "e986e5dec0076f29590778c945654254fd6d7488698ff67c21a59831515dce53",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-desktop/p41-login.png",
+   "expectedSha256": "eb35236be3b9ac4c2dbd48fea80e109f31f223238d6afdfefe91690abbd8dea9",
+   "actualSha256": "eb35236be3b9ac4c2dbd48fea80e109f31f223238d6afdfefe91690abbd8dea9",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-desktop/p41-profile-mismatch.png",
+   "expectedSha256": "24489e4bf26407e34c7bbbe2e6db064d8f444f9eebddced509035fc3d4edc93f",
+   "actualSha256": "24489e4bf26407e34c7bbbe2e6db064d8f444f9eebddced509035fc3d4edc93f",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-desktop/p41-profile-photo.png",
+   "expectedSha256": "1fad3ae986423a2e8740c848752e8934eeed9c55c7955eedf8b9243571362025",
+   "actualSha256": "1fad3ae986423a2e8740c848752e8934eeed9c55c7955eedf8b9243571362025",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-desktop/p41-profile-ready.png",
+   "expectedSha256": "1df1de9722cf8df49477a581413e5cc3ba487109e6f842efbc2174a493ca04b9",
+   "actualSha256": "1df1de9722cf8df49477a581413e5cc3ba487109e6f842efbc2174a493ca04b9",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-desktop/p41-profile-reset.png",
+   "expectedSha256": "180038d7fceafd62f3a1e8e0ea1dc5cd282360ccbde82f5f5267d4f8b55fe277",
+   "actualSha256": "f27140c792d68f3d699c21a8738fce26e3d602aee2fab1e983e31389f7b917d4",
+   "bytesEqual": false,
+   "expectedSize": [
+    1280,
+    900
+   ],
+   "actualSize": [
+    1280,
+    900
+   ],
+   "differentPixels": 46230,
+   "maxChannelDelta": 255,
+   "box": {
+    "x": 0,
+    "y": 0,
+    "width": 1280,
+    "height": 900
+   },
+   "p0Comparator": "8016 pixels (ratio 0.01 of all image pixels) are different."
+  },
+  {
+   "file": "webkit-light-desktop/p41-profile-signin.png",
+   "expectedSha256": "4169dd05782f11a4e21bc3f7ecad95b038ad6c5a098075b3eb4c2bd6a8e8b177",
+   "actualSha256": "4169dd05782f11a4e21bc3f7ecad95b038ad6c5a098075b3eb4c2bd6a8e8b177",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-desktop/p41-settings-mode-open.png",
+   "expectedSha256": "5214f8607f6a767a47c7461bcc37dae3ee3858accfebceabf4614206acf2ca41",
+   "actualSha256": "5214f8607f6a767a47c7461bcc37dae3ee3858accfebceabf4614206acf2ca41",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-desktop/p41-settings-saving.png",
+   "expectedSha256": "dc4f1ecfdbc3513177bacae615c119bf40ae3f28ff95ffc2cae136c5e7b78098",
+   "actualSha256": "959c7f119044589ab691fe6e702b90510f2309e32e6d45c72447d4a352f65d57",
+   "bytesEqual": false,
+   "expectedSize": [
+    1280,
+    900
+   ],
+   "actualSize": [
+    1280,
+    900
+   ],
+   "differentPixels": 57668,
+   "maxChannelDelta": 255,
+   "box": {
+    "x": 0,
+    "y": 0,
+    "width": 1280,
+    "height": 900
+   },
+   "p0Comparator": "14140 pixels (ratio 0.02 of all image pixels) are different."
+  },
+  {
+   "file": "webkit-light-desktop/p41-settings-theme.png",
+   "expectedSha256": "02f409ddb9587211cb0b13131238773665271258503a8bff4334ffd7ae83594a",
+   "actualSha256": "81db3632eae018ec607de682c0289782262724a740bfc48e35795c0d87db0f5f",
+   "bytesEqual": false,
+   "expectedSize": [
+    1280,
+    900
+   ],
+   "actualSize": [
+    1280,
+    900
+   ],
+   "differentPixels": 47909,
+   "maxChannelDelta": 255,
+   "box": {
+    "x": 0,
+    "y": 0,
+    "width": 1280,
+    "height": 900
+   },
+   "p0Comparator": "10572 pixels (ratio 0.01 of all image pixels) are different."
+  },
+  {
+   "file": "webkit-light-desktop/p41-setup-invalid.png",
+   "expectedSha256": "71368fc1a4fbd19263da0b09213828f70af6832c5e38e61a7905ff7063c96e3b",
+   "actualSha256": "71368fc1a4fbd19263da0b09213828f70af6832c5e38e61a7905ff7063c96e3b",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-desktop/p41-setup-required.png",
+   "expectedSha256": "355ef2a83c33903954d67fa4d9379158ecbed86e801131f5abefa3fb90b87b41",
+   "actualSha256": "355ef2a83c33903954d67fa4d9379158ecbed86e801131f5abefa3fb90b87b41",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-desktop/p41-setup-valid.png",
+   "expectedSha256": "750f3f2117ca1a068b0d5ba95e30f811fca935b8208d9e908a622be7dd694a17",
+   "actualSha256": "750f3f2117ca1a068b0d5ba95e30f811fca935b8208d9e908a622be7dd694a17",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-desktop/p41-setup.png",
+   "expectedSha256": "e8ff8c40aeb522678e0329c228f5b192ea0cb9236c1e88379052a3aad80699a0",
+   "actualSha256": "e8ff8c40aeb522678e0329c228f5b192ea0cb9236c1e88379052a3aad80699a0",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-desktop/p41-tokens-empty.png",
+   "expectedSha256": "ce281ae0f902cd06b037c0ebeae55db291eea4055104377b4f6803988bf74d5c",
+   "actualSha256": "ce281ae0f902cd06b037c0ebeae55db291eea4055104377b4f6803988bf74d5c",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-desktop/p41-tokens-ended.png",
+   "expectedSha256": "eebce43f7db5ffbae550a51b7ff20fd865f3ae995b5df2dab3f144ce6a42a0e9",
+   "actualSha256": "eebce43f7db5ffbae550a51b7ff20fd865f3ae995b5df2dab3f144ce6a42a0e9",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-desktop/p41-tokens-error.png",
+   "expectedSha256": "6742eb1ab70737ce6dd85838e6ed52a407413c5395efdbeba054746f20cfb612",
+   "actualSha256": "6742eb1ab70737ce6dd85838e6ed52a407413c5395efdbeba054746f20cfb612",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-desktop/p41-tokens-hover.png",
+   "expectedSha256": "e44262bc7a887f7a151fffd9c3bcbd9dd2cbeedbb04cf8ebf713dbc6afe4547c",
+   "actualSha256": "e44262bc7a887f7a151fffd9c3bcbd9dd2cbeedbb04cf8ebf713dbc6afe4547c",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-desktop/p41-tokens-issued.png",
+   "expectedSha256": "40ea64b6d46f81842037c71b40513866f9d98b727626364163da7901d386cccb",
+   "actualSha256": "40ea64b6d46f81842037c71b40513866f9d98b727626364163da7901d386cccb",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-desktop/p41-tokens-loading.png",
+   "expectedSha256": "6d28749deba3acf91073c22a670b257cea77e43b7752850f104ec075526a2b8f",
+   "actualSha256": "6d28749deba3acf91073c22a670b257cea77e43b7752850f104ec075526a2b8f",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-desktop/p41-tokens-new-custom.png",
+   "expectedSha256": "3064886c6f7f02965e1806bf278ae646d2952cd563bb2f8dcdeb0bc724fe8762",
+   "actualSha256": "3064886c6f7f02965e1806bf278ae646d2952cd563bb2f8dcdeb0bc724fe8762",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-desktop/p41-tokens-new-never.png",
+   "expectedSha256": "006b3eaaaceef164fa3457e6b3419ce48cbb4c72c2b5d74eda57488fac54785e",
+   "actualSha256": "006b3eaaaceef164fa3457e6b3419ce48cbb4c72c2b5d74eda57488fac54785e",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-desktop/p41-tokens-new-workspaces.png",
+   "expectedSha256": "648e87dd38c7b980de80f3f121da778e8ae724cbbb2e25dfa6c61b0ce2b8d885",
+   "actualSha256": "648e87dd38c7b980de80f3f121da778e8ae724cbbb2e25dfa6c61b0ce2b8d885",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-desktop/p41-tokens-new.png",
+   "expectedSha256": "096e9fd7e876dba12e07dd1a343d03d7009675ff64b1303f9f55c43881ac3312",
+   "actualSha256": "096e9fd7e876dba12e07dd1a343d03d7009675ff64b1303f9f55c43881ac3312",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-desktop/p41-tokens-revoke.png",
+   "expectedSha256": "da6541db2060921fa204c6cd7f7e13d0053fec1b7ebbd75436dad1c479425bf2",
+   "actualSha256": "da6541db2060921fa204c6cd7f7e13d0053fec1b7ebbd75436dad1c479425bf2",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-desktop/p41-tokens.png",
+   "expectedSha256": "77d8b503b3ff33964f25ee4303619e4221b6a859b5b69deb54d04a2dc80cd69c",
+   "actualSha256": "77d8b503b3ff33964f25ee4303619e4221b6a859b5b69deb54d04a2dc80cd69c",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-phone/p41-admin-revoke.png",
+   "expectedSha256": "140a211067950a968df6c3fdc627376f43c12481e9031b0c60733b17bfb5f2d4",
+   "actualSha256": "140a211067950a968df6c3fdc627376f43c12481e9031b0c60733b17bfb5f2d4",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-phone/p41-admin-tokens.png",
+   "expectedSha256": "292fee2a8096d7f866cfa57b0df876744e5061939c414b914e879527cad7287e",
+   "actualSha256": "292fee2a8096d7f866cfa57b0df876744e5061939c414b914e879527cad7287e",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-phone/p41-cli-approved.png",
+   "expectedSha256": "44568c28e1c458a7fa684908ebde3d3a4761f933e2928b09c4a1ff686eee283a",
+   "actualSha256": "44568c28e1c458a7fa684908ebde3d3a4761f933e2928b09c4a1ff686eee283a",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-phone/p41-cli-denied.png",
+   "expectedSha256": "6b6347039d37e21afb968fd7d85bd7e8fb246b97eda33fbbdf9491c6d2ef7660",
+   "actualSha256": "872767f9270e3bf51c3de9372cc99393bfa9c3feaaaeffdb94d76c867e2394a1",
+   "bytesEqual": false,
+   "expectedSize": [
+    390,
+    844
+   ],
+   "actualSize": [
+    390,
+    844
+   ],
+   "differentPixels": 6753,
+   "maxChannelDelta": 255,
+   "box": {
+    "x": 0,
+    "y": 0,
+    "width": 390,
+    "height": 844
+   },
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-phone/p41-cli-error.png",
+   "expectedSha256": "1dfdf69751d77e0a13a2d45363635719b8a18f13146c6d07672458c3fa11e264",
+   "actualSha256": "1dfdf69751d77e0a13a2d45363635719b8a18f13146c6d07672458c3fa11e264",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-phone/p41-cli-loading.png",
+   "expectedSha256": "185234aca2a9e31795da8041603514f6e4099106d60abca005d443e23c65a706",
+   "actualSha256": "185234aca2a9e31795da8041603514f6e4099106d60abca005d443e23c65a706",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-phone/p41-cli-warnings.png",
+   "expectedSha256": "96ce3d44a59fdca590eb8e7247c3d761fcc008be2d4fb02f2720763839248fa3",
+   "actualSha256": "96ce3d44a59fdca590eb8e7247c3d761fcc008be2d4fb02f2720763839248fa3",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-phone/p41-cli.png",
+   "expectedSha256": "8da3e789651236cf3dd53231205d0740db74685ecb93739bfeeaa3b17e54e467",
+   "actualSha256": "8da3e789651236cf3dd53231205d0740db74685ecb93739bfeeaa3b17e54e467",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-phone/p41-login-error.png",
+   "expectedSha256": "2094b85695576fa93e5bdc1cfa7a9087361540ff4ce646378ffd6b04a3278a89",
+   "actualSha256": "2094b85695576fa93e5bdc1cfa7a9087361540ff4ce646378ffd6b04a3278a89",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-phone/p41-login.png",
+   "expectedSha256": "2280a84506c3c47f46a1936b6e1c914603cc93152a0cf66ed115b294d19b11a9",
+   "actualSha256": "2280a84506c3c47f46a1936b6e1c914603cc93152a0cf66ed115b294d19b11a9",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-phone/p41-profile-mismatch.png",
+   "expectedSha256": "8727a932c15c4ea136dc4e5b8c1c6ee4ca99f6cbefd143458f3b7900a25c332e",
+   "actualSha256": "8727a932c15c4ea136dc4e5b8c1c6ee4ca99f6cbefd143458f3b7900a25c332e",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-phone/p41-profile-photo.png",
+   "expectedSha256": "9684e755f5fe843ad0dc944c79af23c861f492d0282724668ffde5865f7d797b",
+   "actualSha256": "9684e755f5fe843ad0dc944c79af23c861f492d0282724668ffde5865f7d797b",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-phone/p41-profile-ready.png",
+   "expectedSha256": "66f2503645cfe997e48b792b42fa2c297d15af22e68e4a972f7ac8ef4875ca60",
+   "actualSha256": "66f2503645cfe997e48b792b42fa2c297d15af22e68e4a972f7ac8ef4875ca60",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-phone/p41-profile-reset.png",
+   "expectedSha256": "fbe3372ec3c2dd16e2c790965109dfdd07ffd68f20c9401b06512e1bd0dd3c30",
+   "actualSha256": "7bcbbba13f8f3560d6275501132ea97021fd864031623a36443d49dfd049ab8a",
+   "bytesEqual": false,
+   "expectedSize": [
+    390,
+    844
+   ],
+   "actualSize": [
+    390,
+    844
+   ],
+   "differentPixels": 6753,
+   "maxChannelDelta": 255,
+   "box": {
+    "x": 0,
+    "y": 0,
+    "width": 390,
+    "height": 844
+   },
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-phone/p41-profile-signin.png",
+   "expectedSha256": "3834530d7e84beb7fa18d7954a2ae3b6b11aef69dc64b61679752c1a983878d5",
+   "actualSha256": "3834530d7e84beb7fa18d7954a2ae3b6b11aef69dc64b61679752c1a983878d5",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-phone/p41-settings-mode-open.png",
+   "expectedSha256": "91e05d76131252628eefb6b6a51ca6c4c804791b150366f0656b1079912c399d",
+   "actualSha256": "91e05d76131252628eefb6b6a51ca6c4c804791b150366f0656b1079912c399d",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-phone/p41-settings-saving.png",
+   "expectedSha256": "af81ea5eac9e17336d4a42bbcaed17718d1f2b13d3f1705477ddf0a080cbd417",
+   "actualSha256": "5a39936850e355d903eff1a4e59378d113f94c09557985d15a80571298f3e212",
+   "bytesEqual": false,
+   "expectedSize": [
+    390,
+    844
+   ],
+   "actualSize": [
+    390,
+    844
+   ],
+   "differentPixels": 6753,
+   "maxChannelDelta": 255,
+   "box": {
+    "x": 0,
+    "y": 0,
+    "width": 390,
+    "height": 844
+   },
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-phone/p41-settings-theme.png",
+   "expectedSha256": "d36b73a97f8abc481192b4c9284a3764de2734725576ad487039f52cdb1e7a0f",
+   "actualSha256": "ebb3b4a680f585d3c8243fa1252153c280e6cbef80cf5f2beb9753db685970d9",
+   "bytesEqual": false,
+   "expectedSize": [
+    390,
+    844
+   ],
+   "actualSize": [
+    390,
+    844
+   ],
+   "differentPixels": 6753,
+   "maxChannelDelta": 255,
+   "box": {
+    "x": 0,
+    "y": 0,
+    "width": 390,
+    "height": 844
+   },
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-phone/p41-setup-invalid.png",
+   "expectedSha256": "18b931af6cae31846cadf31f692c2d38649d6e5ce4baf3e2421c5ef3bd78376c",
+   "actualSha256": "18b931af6cae31846cadf31f692c2d38649d6e5ce4baf3e2421c5ef3bd78376c",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-phone/p41-setup-required.png",
+   "expectedSha256": "a755809aea4bf30e970e9ae4d95bc32afe8bc263386aa9248f088859183ef52f",
+   "actualSha256": "a755809aea4bf30e970e9ae4d95bc32afe8bc263386aa9248f088859183ef52f",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-phone/p41-setup-valid.png",
+   "expectedSha256": "3e3c8d7052316059944a857910537f6938a027a593ee52edb16ec7bc85b7879c",
+   "actualSha256": "3e3c8d7052316059944a857910537f6938a027a593ee52edb16ec7bc85b7879c",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-phone/p41-setup.png",
+   "expectedSha256": "e47a4550a9062c793d982998972f2b12a2295a7e434439d07fb36098b5a38c22",
+   "actualSha256": "e47a4550a9062c793d982998972f2b12a2295a7e434439d07fb36098b5a38c22",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-phone/p41-tokens-empty.png",
+   "expectedSha256": "4810698b84d65af47776137426da96f3eed5a9135f3af2067b32f5e5127c5bfa",
+   "actualSha256": "4810698b84d65af47776137426da96f3eed5a9135f3af2067b32f5e5127c5bfa",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-phone/p41-tokens-ended.png",
+   "expectedSha256": "1fd4cf710458710df9603cafc0ea372f16f809a6def49000fe3548d1baaa3c18",
+   "actualSha256": "1fd4cf710458710df9603cafc0ea372f16f809a6def49000fe3548d1baaa3c18",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-phone/p41-tokens-error.png",
+   "expectedSha256": "b890c26e20b332486f4b033c19ab2c227605c62ac1e940844907dbf2c4aafe87",
+   "actualSha256": "b890c26e20b332486f4b033c19ab2c227605c62ac1e940844907dbf2c4aafe87",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-phone/p41-tokens-hover.png",
+   "expectedSha256": "ca65333988b88ef21e9b0b25aeff77f521c12dae00685b81be2467d0da08601d",
+   "actualSha256": "ca65333988b88ef21e9b0b25aeff77f521c12dae00685b81be2467d0da08601d",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-phone/p41-tokens-issued.png",
+   "expectedSha256": "d7c84aad16c8e6b1c3b4bed13ec838faa2597e1af8c1bbe2547f6b09c31ceb53",
+   "actualSha256": "d7c84aad16c8e6b1c3b4bed13ec838faa2597e1af8c1bbe2547f6b09c31ceb53",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-phone/p41-tokens-loading.png",
+   "expectedSha256": "3d96609c5fa4f507685e237bc6c2ee4a603dcba5894b3a825bc13d2bd358d469",
+   "actualSha256": "3d96609c5fa4f507685e237bc6c2ee4a603dcba5894b3a825bc13d2bd358d469",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-phone/p41-tokens-new-custom.png",
+   "expectedSha256": "116abdd0924a8aa75f720499ae9dcfd777849860a0338a5b60468b0c49483d16",
+   "actualSha256": "116abdd0924a8aa75f720499ae9dcfd777849860a0338a5b60468b0c49483d16",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-phone/p41-tokens-new-never.png",
+   "expectedSha256": "8b0e53a95a6b3fa67392f0e3a51441a60134e338182088e3a289ec275ef4f4cf",
+   "actualSha256": "8b0e53a95a6b3fa67392f0e3a51441a60134e338182088e3a289ec275ef4f4cf",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-phone/p41-tokens-new-workspaces.png",
+   "expectedSha256": "0a8d5d63b16b0ee903ddb510c57f0869c7405a7c5be5b976c19f679892243863",
+   "actualSha256": "0a8d5d63b16b0ee903ddb510c57f0869c7405a7c5be5b976c19f679892243863",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-phone/p41-tokens-new.png",
+   "expectedSha256": "434058b7395a7d333c57abe5f6ba8c139b2db0d546d7725ea7cf44faec103d92",
+   "actualSha256": "434058b7395a7d333c57abe5f6ba8c139b2db0d546d7725ea7cf44faec103d92",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-phone/p41-tokens-revoke.png",
+   "expectedSha256": "b1eb1b7b0fc11d44f07a8ee828f64cf4006a06a3012eca173c31025d5fc00dd1",
+   "actualSha256": "b1eb1b7b0fc11d44f07a8ee828f64cf4006a06a3012eca173c31025d5fc00dd1",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  },
+  {
+   "file": "webkit-light-phone/p41-tokens.png",
+   "expectedSha256": "28dea5c082cfe1fb3a94f080a84c3555701eefc4a8f9dd91e86faf8763ce3f26",
+   "actualSha256": "28dea5c082cfe1fb3a94f080a84c3555701eefc4a8f9dd91e86faf8763ce3f26",
+   "bytesEqual": true,
+   "p0Comparator": "match"
+  }
+ ]
+}

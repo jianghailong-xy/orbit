@@ -47,9 +47,9 @@ public struct ProviderChoice: Equatable, Sendable, Identifiable {
     /// Nil for anything else.
     public let note: String?
     /// The runner's own accounts of this engine, when it has signed in more than one: offered under
-    /// its row, so a session can start on another account than its workspace's. Codex, Claude and
-    /// Antigravity — the engines whose CLI keeps a login per directory (`Session.codexAccount`,
-    /// `.claudeAccount`, `.antigravityAccount`).
+    /// its row, so a session can start on another account than its workspace's. Codex, Claude,
+    /// Antigravity and Kimi — the engines whose CLI keeps a login per directory (`Session.codexAccount`,
+    /// `.claudeAccount`, `.antigravityAccount`, `.kimiAccount`).
     public let accounts: [AccountChoice]?
     /// Not a provider at all: the offer to connect one (DeepSeek Harness with no key yet). Always
     /// `unavailable`, never a session's provider, so no runtime's menu lists it.

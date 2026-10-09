@@ -255,6 +255,24 @@ export function planUsageRows(usage: PlanUsageSnapshot): PlanUsageDisplayRow[] {
 }
 
 /**
+ * A Kimi login whose plan carries no quota limit: the runner read its quota and the answer held no
+ * window at all — Kimi Code's /usage skips a limit the backend omits, so a plan with none reads as
+ * none. Distinct from a login never read or whose read failed ("No quota reported"): this one was
+ * read, and there is no quota to gauge. The coding share of the month (`monthCode`) counts as a
+ * window here though it is never drawn: a plan that reports it has a limit.
+ */
+export function kimiNoQuotaLimit(snapshot: PlanUsageSnapshot | null | undefined): boolean {
+  return (
+    !!snapshot &&
+    snapshot.provider === 'kimi' &&
+    !snapshot.fiveHour &&
+    !snapshot.sevenDay &&
+    !snapshot.month &&
+    !snapshot.monthCode
+  );
+}
+
+/**
  * planUsageRows as they stand at `now`. A window whose reset has passed reads as the fresh window it
  * now is — nothing used, no reset to name — rather than as the reading taken before it rolled over.
  * The runner reads again just after a reset, so a past one outlives it only on a reading that has

@@ -1856,6 +1856,10 @@ struct DeliveredDecisionCardView: View {
                 EvidenceDecisionReceiptCard(decided: decided)
             case .coordinatorQuestion(let itemID):
                 CoordinatorQuestionCardView(console: console, itemID: itemID)
+            case .coordinatorQuestionRecord(let record):
+                // The read's newest copy of it, when it has one: a sheet opened on the copy this
+                // console drew from its own press goes on to show the server's.
+                CoordinatorQuestionRecordView(record: console.questionRecord(record.itemId) ?? record)
             case .escalatedItem(let itemID):
                 OwnerItemCardView(console: console, itemID: itemID, isPause: false)
             case .fusePause(let itemID):
@@ -2369,7 +2373,8 @@ private struct StartProjectCardView: View {
                 // Start stays live.
                 onChatAbout: {
                     console.startPlanChangeReply(criteriaDigest: request.criteriaDigest, question: .start)
-                })
+                },
+                graph: console.projectGraph)
         } else {
             VStack(alignment: .leading, spacing: ApprovalMetrics.spacing) {
                 ApprovalHeader(symbol: "play.fill", title: StartProject.title, tone: .blue)
@@ -2478,11 +2483,23 @@ struct StartProjectCard: View {
     var onChatAbout: (() -> Void)? = nil
     /// A press the door did not take, in its own words.
     var error: String? = nil
+    /// The dependency graph `plan` was read off, which the Plan draws while the whole of it fits.
+    var graph: ProjectDependencyGraph? = nil
+    /// Opens one task of the plan; where there is no such press, a task opens the way View tasks
+    /// does.
+    var onOpenTask: ((String) -> Void)? = nil
     @Environment(\.dismissApprovalReview) private var dismissReview
     @State private var starting = false
     @State private var criteriaOpen = false
     @State private var whyOpen = false
     @State private var mergeCheckOpen = false
+    /// Whether the clamps hide anything: More and Read all are drawn only while they do (or once
+    /// opened), since a toggle for words already in full would open nothing.
+    @State private var whyCut = false
+    @State private var cutCriteria: Set<String> = []
+    @State private var planWidth: CGFloat = 0
+    @State private var graphOpen = false
+    @State private var graphExpanded: Set<String> = []
 
     /// Whether a coordinator asked for this card.
     private var asked: Bool { askedAt != nil }
@@ -2550,24 +2567,26 @@ struct StartProjectCard: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Label(StartProject.coordinator, systemImage: "bubble.left.fill")
                         .font(.orbitLabel).foregroundStyle(.secondary)
-                    Text(request.why).font(.orbitSubtext).lineLimit(whyOpen ? nil : 3)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    Button {
-                        PlatformHaptics.tap()
-                        whyOpen.toggle()
-                    } label: {
-                        Text(whyOpen ? StartProject.less : StartProject.more)
-                            .font(.orbitLabel).foregroundStyle(Color.blue)
+                    ClampedText(text: request.why, font: .orbitSubtext, lineLimit: whyOpen ? nil : 3) { whyCut = $0 }
+                    if whyOpen || whyCut {
+                        Button {
+                            PlatformHaptics.tap()
+                            whyOpen.toggle()
+                        } label: {
+                            Text(whyOpen ? StartProject.less : StartProject.more)
+                                .font(.orbitLabel).foregroundStyle(Color.blue)
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
                 .startRow()
             }
         }
     }
 
-    /// The criteria, open, each clamped to two lines, the toggle taking the clamp off — the
-    /// confirmation card's rule, for its reason: a folded list is an invitation to sign unread.
+    /// The criteria, open, each clamped to two lines, the toggle taking the clamp off while the clamp
+    /// hides anything — the confirmation card's rule, for its reason: a folded list is an invitation
+    /// to sign unread.
     @ViewBuilder private var criteriaList: some View {
         if !criteria.isEmpty {
             ForEach(criteria) { item in
@@ -2575,22 +2594,25 @@ struct StartProjectCard: View {
                     Text("\(item.ordinal)")
                         .font(.orbitMonoFine).foregroundStyle(.secondary)
                         .frame(minWidth: 14, alignment: .trailing)
-                    Text(item.text).font(.orbitProse).lineLimit(criteriaOpen ? nil : 2)
-                    Spacer(minLength: 0)
+                    ClampedText(text: item.text, font: .orbitProse, lineLimit: criteriaOpen ? nil : 2) { cut in
+                        cutCriteria = cut ? cutCriteria.union([item.id]) : cutCriteria.subtracting([item.id])
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            Button {
-                PlatformHaptics.tap()
-                criteriaOpen.toggle()
-            } label: {
-                Text(criteriaOpen ? AcceptanceConfirmations.showLessLabel
-                                  : AcceptanceConfirmations.readLabel(count: criteria.count))
-                    .font(.orbitLabel)
-                    .foregroundStyle(Color.blue)
+            if criteriaOpen || !cutCriteria.isEmpty {
+                Button {
+                    PlatformHaptics.tap()
+                    criteriaOpen.toggle()
+                } label: {
+                    Text(criteriaOpen ? AcceptanceConfirmations.showLessLabel
+                                      : AcceptanceConfirmations.readLabel(count: criteria.count))
+                        .font(.orbitLabel)
+                        .foregroundStyle(Color.blue)
+                }
+                .buttonStyle(.plain)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .buttonStyle(.plain)
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
@@ -2789,31 +2811,81 @@ struct StartProjectCard: View {
         .startRow()
     }
 
-    // MARK: the plan, by level
+    // MARK: the plan, as the task graph or by level
 
-    /// The plan by level — what starts now, what runs side by side, and the task that needs the
-    /// owner — the batch-create review's rule; the tasks themselves are one press away.
+    /// The plan: the project page's task graph while the whole of it fits the card at
+    /// `StartProject.planGraphMinFit` or better — what waits on what, task by task — and otherwise
+    /// by level (what starts now, what runs side by side, the task that needs the owner, the
+    /// batch-create review's rule) with the graph a press away. A drawn graph's rows are its
+    /// layout's, so its head counts tasks only (docs/mocks/start-card-web-width, board 02).
     @ViewBuilder
     private var planSection: some View {
-        StartSectionHead(title: StartProject.planHead(plan.count, levels: plan.levels?.count ?? 1))
+        let drawn = StartProject.planGraph(graph, availableWidth: Double(planWidth))
+        StartSectionHead(title: StartProject.planHead(plan.count, levels: drawn == nil ? (plan.levels?.count ?? 1) : 1))
         StartPanel {
             VStack(alignment: .leading, spacing: 8) {
-                if let levels = plan.levels {
+                if let drawn {
+                    let scale = CGFloat(drawn.scale)
+                    ProjectGraphCanvas(layout: drawn.layout, edges: drawn.edges) { mark in
+                        if mark.kind == .task { openTask(mark.taskId ?? mark.id) }
+                    }
+                    .scaleEffect(scale, anchor: .topLeading)
+                    .frame(width: CGFloat(drawn.layout.width) * scale, height: CGFloat(drawn.layout.height) * scale,
+                           alignment: .topLeading)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                } else if let levels = plan.levels {
                     ForEach(Array(levels.enumerated()), id: \.offset) { at, level in
                         planLevel(at + 1, level)
                     }
                 }
-                Button {
-                    PlatformHaptics.tap()
-                    dismissReview()
-                    onViewTasks()
-                } label: {
-                    Text(StartProject.viewTasks).font(.orbitSubtext).foregroundStyle(Color.blue)
+                HStack(spacing: 14) {
+                    Button {
+                        PlatformHaptics.tap()
+                        dismissReview()
+                        onViewTasks()
+                    } label: {
+                        Text(StartProject.viewTasks).font(.orbitSubtext).foregroundStyle(Color.blue)
+                    }
+                    .buttonStyle(.plain)
+                    if graph != nil, drawn == nil {
+                        Button {
+                            PlatformHaptics.tap()
+                            graphOpen = true
+                        } label: {
+                            Label(StartProject.taskGraph, systemImage: "arrow.up.left.and.arrow.down.right")
+                                .font(.orbitSubtext).foregroundStyle(Color.blue)
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
-                .buttonStyle(.plain)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background {
+                GeometryReader { geo in
+                    Color.clear.onChange(of: geo.size.width, initial: true) { _, width in planWidth = width }
+                }
             }
             .startRow()
         }
+        #if os(iOS)
+        .fullScreenCover(isPresented: $graphOpen) { graphFullScreen }
+        #else
+        .sheet(isPresented: $graphOpen) { graphFullScreen.frame(minWidth: 720, minHeight: 520) }
+        #endif
+    }
+
+    /// The project page's task graph full screen, for a plan the card lists by level.
+    @ViewBuilder private var graphFullScreen: some View {
+        if let graph {
+            ProjectGraphFullScreen(graph: graph, expanded: $graphExpanded, onOpenTask: openTask)
+        }
+    }
+
+    /// One task of the plan, opened: by the page's own press where there is one, otherwise the way
+    /// View tasks opens the plan's tasks.
+    private func openTask(_ taskID: String) {
+        dismissReview()
+        if let onOpenTask { onOpenTask(taskID) } else { onViewTasks() }
     }
 
     private func planLevel(_ number: Int, _ level: [StartPlanLevelTask]) -> some View {
@@ -2870,6 +2942,48 @@ struct StartProjectCard: View {
         }
         .buttonStyle(.bordered)
         .disabled(criteria.isEmpty)
+    }
+}
+
+/// Text clamped to `lineLimit` lines that says whether the clamp hides any of it: the same words,
+/// laid out unclamped at the same width and never shown, measured against what is drawn. The start
+/// card draws its More and Read all only while this says so — a toggle for words already shown in
+/// full would open nothing (docs/mocks/start-card-web-width, the browser's `useClampHides`).
+private struct ClampedText: View {
+    let text: String
+    let font: Font
+    let lineLimit: Int?
+    let onCut: (Bool) -> Void
+
+    @State private var drawn: CGFloat = 0
+    @State private var whole: CGFloat = 0
+
+    var body: some View {
+        Text(text).font(font).lineLimit(lineLimit)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background {
+                GeometryReader { geo in
+                    Color.clear.onChange(of: geo.size.height, initial: true) { _, height in
+                        drawn = height
+                        onCut(whole > height + 1)
+                    }
+                }
+            }
+            .background(alignment: .topLeading) {
+                Text(text).font(font)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .hidden()
+                    .background {
+                        GeometryReader { geo in
+                            Color.clear.onChange(of: geo.size.height, initial: true) { _, height in
+                                whole = height
+                                onCut(height > drawn + 1)
+                            }
+                        }
+                    }
+                    .accessibilityHidden(true)
+            }
     }
 }
 
@@ -3132,7 +3246,8 @@ struct RunSettingsSummaryText: View {
 /// Every word here is `CoordinatorQuestions`, which is the browser's own copy
 /// (`CoordinatorQuestionCard.tsx`) held to it by `OwnerItemCardsTests`. The card keeps nothing but
 /// the address and what this window typed: the standing is re-derived from the read on every body
-/// pass, so a question answered in a browser goes stale in place here instead of staying pressable.
+/// pass, so a question answered in a browser goes stale in place here instead of staying pressable —
+/// and once it has ended, the card is the record it became (`CoordinatorQuestionRecordView`).
 private struct CoordinatorQuestionCardView: View {
     let console: ConsoleModel
     let itemID: String
@@ -3144,20 +3259,28 @@ private struct CoordinatorQuestionCardView: View {
     private var standing: CoordinatorQuestionStanding { console.questionStanding(itemID) }
 
     var body: some View {
+        // Answered — here, which the console draws from the press until the read has it, or at
+        // another end — or withdrawn: what is left to show is the record, in the review sheet that
+        // stayed open through the answer as much as in the conversation.
+        if let record = console.questionRecord(itemID) {
+            CoordinatorQuestionRecordView(record: record)
+        } else {
+            questionCard
+        }
+    }
+
+    private var questionCard: some View {
         let standing = self.standing
-        ApprovalReviewLayout(title: draft.receipt == nil
-                                ? CoordinatorQuestions.heading : CoordinatorQuestions.answeredHeading,
+        return ApprovalReviewLayout(title: CoordinatorQuestions.heading,
                              symbol: "questionmark.bubble.fill", tone: .blue,
                              summary: previewSummary,
-                             dimmed: draft.receipt != nil || !CoordinatorQuestions.isOpen(standing)) {
+                             dimmed: !CoordinatorQuestions.isOpen(standing)) {
             Text(CoordinatorQuestions.provenance)
                 .font(.orbitLabel).foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .help(CoordinatorQuestions.provenanceTitle)
 
-            if let receipt = draft.receipt {
-                answered(receipt)
-            } else if case .open(let row) = standing, let question = row.question {
+            if case .open(let row) = standing, let question = row.question {
                 asked(row, question)
             } else if case .unread = standing {
                 Text(CoordinatorQuestions.unreadable)
@@ -3170,7 +3293,7 @@ private struct CoordinatorQuestionCardView: View {
             }
 
         } actions: {
-            if draft.receipt == nil, case .open(let row) = standing, let question = row.question {
+            if case .open(let row) = standing, let question = row.question {
                 ApprovalActions {
                     Button { send(row, question) } label: {
                         Text(CoordinatorQuestions.sendAnswer).approvalActionLabel()
@@ -3189,14 +3312,13 @@ private struct CoordinatorQuestionCardView: View {
         // recommendation nobody can see the shape of is not one.
         .task(id: itemID) {
             if draft.chosen == nil, draft.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-               draft.receipt == nil, case .open(let row) = console.questionStanding(itemID) {
+               case .open(let row) = console.questionStanding(itemID) {
                 draft.chosen = row.question?.recommendedOption.map { .option($0) }
             }
         }
     }
 
     private var previewSummary: String {
-        if draft.receipt != nil { return "✓ \(draft.sent)" }
         if case .open(let row) = standing { return row.question?.question ?? row.detailLine }
         return CoordinatorQuestions.gone
     }
@@ -3204,8 +3326,9 @@ private struct CoordinatorQuestionCardView: View {
     /// The question, its options, the row that means "none of these", and a box to answer it in.
     private func asked(_ row: ProjectOpenItemRow, _ question: CoordinatorQuestion) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(question.question)
-                .font(.orbitProse)
+            // The question as the coordinator wrote it — Markdown, as the browser's card renders
+            // it (`CoordinatorQuestionCard`), so bullets and emphasis do not arrive raw.
+            MarkdownView(source: question.question).font(.orbitProse)
                 .frame(maxWidth: .infinity, alignment: .leading)
             ForEach(Array(question.options.enumerated()), id: \.offset) { index, option in
                 optionRow(index: index, option: option,
@@ -3290,34 +3413,238 @@ private struct CoordinatorQuestionCardView: View {
         .buttonStyle(.plain)
     }
 
-    /// The record this window drew: what was answered, and whether anybody has been told yet.
-    private func answered(_ receipt: OwnerAnswerReceipt) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("✓ \(draft.sent)")
-                .font(.orbitProse)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            Text(CoordinatorQuestions.receiptLine(delivered: receipt.delivery != nil))
-                .font(.orbitLabel).foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-    }
-
     /// The press re-reads what the button was rendered from, so a race between a render and a tap
-    /// cannot send an answer to a question that is no longer open.
+    /// cannot send an answer to a question that is no longer open. A press the door takes leaves the
+    /// card as the record of the answer (`ConsoleModel.answerQuestion`); a refusal leaves it
+    /// standing, with the reason in the console's status line.
     private func send(_ row: ProjectOpenItemRow, _ question: CoordinatorQuestion) {
         guard !sending, CoordinatorQuestions.sendable(question: question, chosen: draft.chosen, text: draft.text)
         else { return }
         PlatformHaptics.tap()
         sending = true
-        let words = CoordinatorQuestions.answerInWords(
-            question: question, option: CoordinatorQuestions.optionIndex(draft.chosen), text: draft.text)
         Task {
-            if let answered = await console.answerQuestion(row, chosen: draft.chosen, text: draft.text) {
-                draft.sent = words
-                draft.receipt = answered
-            }
+            _ = await console.answerQuestion(row, chosen: draft.chosen, text: draft.text)
             sending = false
         }
+    }
+}
+
+/// What a coordinator's question became once it ended — answered, here or at another end, or
+/// withdrawn (contract §5.2 R10, R12; `docs/mocks/coordinator-question-answered/`).
+///
+/// Drawn from the record the read publishes (`closedQuestions`) rather than from anything this
+/// window kept, so it is the same card after a relaunch, on a device that never saw the question
+/// open, and in the browser (`AnsweredQuestionCard`). Every word is `CoordinatorQuestions`, the
+/// browser's own copy, held to it by `OwnerItemCardsTests`.
+///
+/// The card in the conversation says what was asked and how it ended, in the question card's own
+/// dimmed blue; the sheet replays the question and every option as they were asked, with the answer
+/// ticked, and says who answered, when, and where the answer went where Send answer used to be.
+private struct CoordinatorQuestionRecordView: View {
+    @Environment(\.inApprovalReview) private var inReview
+    @Environment(\.approvalReviewTarget) private var target
+    @Environment(\.openApprovalReview) private var openReview
+    let record: ProjectClosedQuestion
+
+    var body: some View {
+        if inReview {
+            ApprovalReviewLayout(title: CoordinatorQuestions.recordHeading(record),
+                                 symbol: "questionmark.bubble.fill", tone: .blue,
+                                 summary: CoordinatorQuestions.lead(record.question), dimmed: true) {
+                details
+            } actions: {
+                footer
+            }
+        } else if let target {
+            Button { openReview(target) } label: { card }
+                .buttonStyle(.plain)
+        } else {
+            card
+        }
+    }
+
+    /// A withdrawn question's chip is grey: nothing was decided on it.
+    private var iconTone: Color { record.withdrawn ? Color.gray : Color.blue }
+
+    /// The card: what was asked, in its opening lines, and how it ended — the option chosen, or the
+    /// owner's own words; the note beside the option; an answer no coordinator has had yet; or who
+    /// withdrew it and why.
+    private var card: some View {
+        VStack(alignment: .leading, spacing: ApprovalMetrics.spacing) {
+            HStack(spacing: 8) {
+                Image(systemName: "questionmark.bubble.fill")
+                    .font(.orbitMeta)
+                    .foregroundStyle(iconTone)
+                    .frame(width: 22, height: 22)
+                    .background(iconTone.opacity(0.16), in: RoundedRectangle(cornerRadius: 6))
+                Text(CoordinatorQuestions.recordHeading(record))
+                    .font(.orbitProse.bold())
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                Spacer(minLength: 4)
+                if let time = CoordinatorQuestions.time(record) {
+                    Text(time).font(.orbitLabel).foregroundStyle(.secondary)
+                }
+            }
+            cardLines
+            Divider()
+            HStack {
+                Text(CoordinatorQuestions.viewDetails)
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.right")
+            }
+            .font(.orbitLabel.weight(.semibold)).foregroundStyle(Color.accentColor)
+        }
+        .approvalChrome(.blue, dimmed: true)
+        .contentShape(Rectangle())
+    }
+
+    /// The card's lines under its heading: the question's opening, cut at two lines, then how it
+    /// ended.
+    private var cardLines: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(CoordinatorQuestions.lead(record.question))
+                .font(.orbitLabel).foregroundStyle(.secondary)
+                .lineLimit(2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if let answer = CoordinatorQuestions.answerLine(record) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.orbitMeta).foregroundStyle(Color.blue)
+                    Text(answer).font(.orbitProse)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            if let note = CoordinatorQuestions.noteLine(record) {
+                Text(note)
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .padding(.leading, 22)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            if let waiting = CoordinatorQuestions.waitingLine(record) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Image(systemName: "clock")
+                    Text(waiting)
+                }
+                .font(.orbitLabel).foregroundStyle(Color.orange)
+            }
+            if let withdrew = CoordinatorQuestions.withdrewLine(record) {
+                Text(withdrew)
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            if let reason = CoordinatorQuestions.withdrawReasonLine(record) {
+                Text(reason).font(.orbitProse)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+
+    /// The sheet: the question as it was asked, and every option as it was offered — the one chosen
+    /// ticked on a light blue, the rest grey but readable — with the owner's note inside the chosen
+    /// one, the Other row ticked over their own words, or a read-only box for a question asked
+    /// without options. What the question blocked while it waited is not repeated: it waits no more.
+    private var details: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(CoordinatorQuestions.provenance)
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+                    .help(CoordinatorQuestions.provenanceTitle)
+                Spacer(minLength: 8)
+                if let asked = CoordinatorQuestions.askedAtLine(record) {
+                    Text(asked).font(.orbitLabel).foregroundStyle(.secondary)
+                }
+            }
+            MarkdownView(source: record.question.question).font(.orbitProse)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            ForEach(Array(record.question.options.enumerated()), id: \.offset) { index, option in
+                let chosen = CoordinatorQuestions.chosenOption(record) == index
+                optionRow(label: option.label, why: option.description,
+                          recommended: index == record.question.recommendedOption, chosen: chosen,
+                          words: chosen ? CoordinatorQuestions.note(record) : nil,
+                          wordsLabel: CoordinatorQuestions.yourNote)
+            }
+            if CoordinatorQuestions.choseOther(record) {
+                optionRow(label: CoordinatorQuestions.otherOption, why: nil, recommended: false,
+                          chosen: true, words: CoordinatorQuestions.ownWords(record), wordsLabel: nil)
+            }
+            if record.question.options.isEmpty, let words = CoordinatorQuestions.ownWords(record) {
+                wordsBox(label: CoordinatorQuestions.freeAnswerPrompt, words: words,
+                         background: Color.blue.opacity(0.08))
+            }
+        }
+    }
+
+    /// One option as it was offered, ticked when it is the answer.
+    private func optionRow(label: String, why: String?, recommended: Bool, chosen: Bool,
+                           words: String?, wordsLabel: String?) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Image(systemName: chosen ? "checkmark.circle.fill" : "circle")
+                .font(.orbitMeta)
+                .foregroundStyle(chosen ? Color.blue : Color.secondary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(label).font(.orbitProse)
+                    .foregroundStyle(chosen ? Color.primary : Color.secondary)
+                if recommended {
+                    Text(CoordinatorQuestions.recommended)
+                        .font(.orbitLabel).foregroundStyle(Color.blue)
+                }
+                if let why {
+                    Text(why).font(.orbitLabel).foregroundStyle(.secondary)
+                }
+                if let words {
+                    wordsBox(label: wordsLabel, words: words, background: nil)
+                        .padding(.top, 4)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 10).padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(chosen ? Color.blue.opacity(0.08) : Color.clear,
+                    in: RoundedRectangle(cornerRadius: ApprovalMetrics.rowRadius))
+    }
+
+    /// The owner's own words, read-only: a note on the chosen option, the Other row's answer, or a
+    /// free answer.
+    private func wordsBox(label: String?, words: String, background: Color?) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            if let label {
+                Text(label).font(.orbitLabel).foregroundStyle(.secondary)
+            }
+            Text(words).font(.orbitProse)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.horizontal, 10).padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            if let background {
+                RoundedRectangle(cornerRadius: ApprovalMetrics.rowRadius).fill(background)
+            } else {
+                RoundedRectangle(cornerRadius: ApprovalMetrics.rowRadius).fill(.background)
+            }
+        }
+    }
+
+    /// Where Send answer was: who ended it and when, then where the answer went — or the reason it
+    /// was withdrawn with.
+    private var footer: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Image(systemName: record.withdrawn ? "arrow.uturn.backward" : "checkmark.circle.fill")
+                    .foregroundStyle(record.withdrawn ? Color.secondary : Color.green)
+                Text(CoordinatorQuestions.footerLine(record)).font(.orbitProse.weight(.semibold))
+            }
+            if let detail = CoordinatorQuestions.footerDetail(record) {
+                Text(detail)
+                    .font(.orbitLabel)
+                    .foregroundStyle(CoordinatorQuestions.waitingLine(record) != nil
+                                     ? Color.orange : Color.secondary)
+                    .padding(.leading, 22)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

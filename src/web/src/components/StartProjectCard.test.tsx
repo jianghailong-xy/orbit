@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider, notifyManager } from '@tanstack/react-query';
 import { act } from 'react';
+import type { ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import { MemoryRouter, useNavigate } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ProjectOpenItemRow, ProjectStartRequest, StartProjectRequestBody } from '@orbit/shared';
 import { api, ApiError } from '../api';
@@ -27,6 +29,7 @@ import {
   START_PROJECT_ACTION,
   START_PROJECT_TITLE,
   START_REQUEST_GONE,
+  START_TASK_GRAPH,
   START_VIEW_TASKS,
   planLevels,
   planTaskLabel,
@@ -46,6 +49,7 @@ import {
 } from '../lib/projectStart';
 import {
   ACCEPTANCE_PLAN_CHANGE_PLACEHOLDER,
+  ACCEPTANCE_SHOW_LESS_LABEL,
   SessionAcceptanceConfirmationCard,
   acceptancePlanChangePlaceholder,
   acceptanceReadLabel,
@@ -76,6 +80,51 @@ vi.mock('../api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api')>();
   return { ...actual, api: vi.fn() };
 });
+
+/** The graph is React Flow, which jsdom cannot lay out: whether the plan fits is the arithmetic's
+ *  (`startPlanGraphFits`, ProjectDependencyGraph.test.tsx), and what the card does with the answer
+ *  is under test here — so the answer is the test's to give. */
+const planGraph = vi.hoisted(() => ({ fits: false }));
+vi.mock('./StartPlanGraph', async () => {
+  const { createElement, Fragment, useEffect } = await import('react');
+  return {
+    default: function StubPlanGraph({ fallback, onDrawn }: { fallback: ReactNode; onDrawn: (drawn: boolean) => void }) {
+      useEffect(() => {
+        onDrawn(planGraph.fits);
+      }, [onDrawn]);
+      return planGraph.fits
+        ? createElement('div', { 'data-testid': 'start-plan-graph' })
+        : createElement(Fragment, null, fallback);
+    },
+    StartTaskGraph: function StubTaskGraph({ onClose }: { onClose: () => void }) {
+      return createElement('button', { type: 'button', 'data-testid': 'start-task-graph', onClick: onClose }, 'close');
+    },
+  };
+});
+
+/** Where a test sends the router, as a task opened from the card's graph would. */
+let navigateTo: ((path: string) => void) | null = null;
+function RouteHand(): null {
+  const navigate = useNavigate();
+  navigateTo = navigate;
+  return null;
+}
+
+/** jsdom lays nothing out, so a clamped text never reads as cut; a test that needs one says which. */
+function cutText(cut: { why?: boolean; criteria?: boolean }): () => void {
+  const tall = (element: Element): boolean =>
+    (cut.why === true && element.classList.contains('start-card-quote-text') && !element.classList.contains('is-open'))
+    || (cut.criteria === true && element.classList.contains('settlement-card-criterion')
+      && element.closest('.is-open') === null);
+  const scroll = vi.spyOn(Element.prototype, 'scrollHeight', 'get').mockImplementation(function (this: Element) {
+    return tall(this) ? 60 : 20;
+  });
+  const client = vi.spyOn(Element.prototype, 'clientHeight', 'get').mockImplementation(() => 20);
+  return () => {
+    scroll.mockRestore();
+    client.mockRestore();
+  };
+}
 
 const PROJECT = '34WvwUS8YMXfOfWbMqVuu';
 const SEAL = `c2b4e16c4b59${'0'.repeat(52)}`;
@@ -216,6 +265,8 @@ function answer<T>(value: Answer<T>): Promise<T> {
 beforeEach(() => {
   narrow = false;
   startedCalls = 0;
+  planGraph.fits = false;
+  navigateTo = null;
   server.standing = standingOf();
   server.document = documentOf();
   server.row = rowOf('item-1');
@@ -300,26 +351,29 @@ async function mount(
   root = tree;
   await act(async () => {
     tree.render(
-      <QueryClientProvider client={qc}>
-        {options.dialog ? (
-          <ProjectStartDialog projectId={PROJECT} asked open onClose={() => { startedCalls += 1; }} />
-        ) : options.bare ? (
-          <SessionStartProjectCard projectId={PROJECT} bare onStarted={() => { startedCalls += 1; }} />
-        ) : options.router ? (
-          <SessionAcceptanceConfirmationCard
-            projectId={PROJECT}
-            onOpenQuestion={(question) => reports.push(question)}
-            onChatAbout={(plan) => armed.push(plan)}
-          />
-        ) : (
-          <SessionStartProjectCard
-            projectId={PROJECT}
-            onOpen={(open) => reports.push(open)}
-            onChatAbout={(plan) => armed.push(plan)}
-            onViewTasks={options.onViewTasks}
-          />
-        )}
-      </QueryClientProvider>,
+      <MemoryRouter initialEntries={[`/projects/${PROJECT}`]}>
+        <RouteHand />
+        <QueryClientProvider client={qc}>
+          {options.dialog ? (
+            <ProjectStartDialog projectId={PROJECT} asked open onClose={() => { startedCalls += 1; }} />
+          ) : options.bare ? (
+            <SessionStartProjectCard projectId={PROJECT} bare onStarted={() => { startedCalls += 1; }} />
+          ) : options.router ? (
+            <SessionAcceptanceConfirmationCard
+              projectId={PROJECT}
+              onOpenQuestion={(question) => reports.push(question)}
+              onChatAbout={(plan) => armed.push(plan)}
+            />
+          ) : (
+            <SessionStartProjectCard
+              projectId={PROJECT}
+              onOpen={(open) => reports.push(open)}
+              onChatAbout={(plan) => armed.push(plan)}
+              onViewTasks={options.onViewTasks}
+            />
+          )}
+        </QueryClientProvider>
+      </MemoryRouter>,
     );
   });
   return { node, qc };
@@ -329,7 +383,11 @@ const cardIn = (_node: ParentNode): HTMLElement | null => document.querySelector
 
 async function delivered(options: { onViewTasks?: () => void } = {}) {
   const { node, qc } = await mount(options);
-  await until(() => cardIn(node) !== null && (cardIn(node)!.querySelector('.start-card-plan span') !== null), 'the card and its plan');
+  await until(
+    () => cardIn(node) !== null
+      && cardIn(node)!.querySelector('.start-card-plan span, .start-card-plan [data-testid="start-plan-graph"]') !== null,
+    'the card and its plan',
+  );
   expect(node.querySelector('.review-card-preview')).toBeNull();
   expect(node.contains(cardIn(node))).toBe(true);
   const card = (): HTMLElement => {
@@ -659,11 +717,13 @@ describe('what the card says', () => {
       .toBe('B and C both build on A — one branch checks them together before main.');
     // The three sections, in the order of the questions they answer.
     expect(sections(card())).toEqual(['Done when · 4 criteria', 'How it runs', 'Plan · 5 tasks in 4 levels']);
-    // Every criterion is on the card before anything is pressed, clamped until read in full, and
-    // what starting binds the project to under them.
+    // Every criterion is on the card before anything is pressed, clamped until read in full — and
+    // here nothing is cut, so there is nothing to open: no Read all, and no More under the words —
+    // and what starting binds the project to under them.
     expect([...card().querySelectorAll('.settlement-card-criteria li')].map((li) => li.textContent))
       .toEqual(CRITERIA.map((c) => c.text));
-    expect(card().querySelector('.settlement-card-read')?.textContent).toBe(acceptanceReadLabel(4));
+    expect(card().querySelector('.settlement-card-read')).toBeNull();
+    expect(card().querySelector('.start-card-quote .start-card-link')).toBeNull();
     expect(card().querySelector('.start-card-note')?.textContent).toBe(startExplanation(4));
     // Automatic on, what it means with this merge check, and what still comes to the owner.
     const automatic = settingRow(card(), 'Automatic');
@@ -758,7 +818,55 @@ describe('what the card says', () => {
     const link = card().querySelector<HTMLAnchorElement>('a.start-card-link');
     expect(link?.textContent).toBe(START_VIEW_TASKS);
     expect(new URL(link!.href, window.location.href).pathname).toBe(`/projects/${PROJECT}`);
-    expect(card().querySelector('.start-card-plan button.start-card-link')).toBeNull();
+    // The plan's one press that is not a link is the task graph's.
+    expect([...card().querySelectorAll('.start-card-plan button.start-card-link')].map((b) => b.textContent))
+      .toEqual([`${START_TASK_GRAPH} ⤢`]);
+  });
+
+  it('offers More and Read all only while the clamp hides words, and keeps them once opened', async () => {
+    const restore = cutText({ why: true, criteria: true });
+    try {
+      const { card } = await delivered();
+      const more = () => card().querySelector<HTMLButtonElement>('.start-card-quote .start-card-link');
+      const read = () => card().querySelector<HTMLButtonElement>('.settlement-card-read');
+      expect(more()?.textContent).toBe('More');
+      expect(read()?.textContent).toBe(acceptanceReadLabel(4));
+      // Opened, the clamp is off and nothing is cut any more — the toggles stay, to close it again.
+      await act(async () => {
+        more()!.click();
+        read()!.click();
+      });
+      expect(more()?.textContent).toBe('Less');
+      expect(read()?.textContent).toBe(ACCEPTANCE_SHOW_LESS_LABEL);
+      expect(card().querySelector('.settlement-card-criteria.is-open')).not.toBeNull();
+    } finally {
+      restore();
+    }
+  });
+
+  it('draws the plan as the project’s task graph when the whole of it fits, and counts tasks only', async () => {
+    planGraph.fits = true;
+    const { card } = await delivered();
+    await until(() => card().querySelector('[data-testid="start-plan-graph"]') !== null, 'the graph');
+    expect(card().querySelector('.start-card-levels')).toBeNull();
+    // The graph's rows are its layout's, not levels: the head says how many tasks and no more.
+    expect(sections(card()).at(-1)).toBe('Plan · 5 tasks');
+    expect(card().querySelector('.start-card-graph-link')).toBeNull();
+  });
+
+  it('lists the plan by level when the graph does not fit, with the graph full screen a press away', async () => {
+    const { card } = await delivered();
+    await until(() => card().querySelector('.start-card-graph-link') !== null, 'the task graph link');
+    expect(levelsOf(card())).toHaveLength(4);
+    expect(sections(card()).at(-1)).toBe('Plan · 5 tasks in 4 levels');
+    await act(async () => {
+      card().querySelector<HTMLButtonElement>('.start-card-graph-link')!.click();
+    });
+    await until(() => document.querySelector('[data-testid="start-task-graph"]') !== null, 'the full-screen graph');
+    await act(async () => {
+      document.querySelector<HTMLButtonElement>('[data-testid="start-task-graph"]')!.click();
+    });
+    expect(document.querySelector('[data-testid="start-task-graph"]')).toBeNull();
   });
 });
 
@@ -801,6 +909,16 @@ describe('the card answered over the project’s sessions page', () => {
       await mount({ dialog: true });
       await until(() => document.querySelector(`${shell} .start-card`) !== null, `the card in ${shell}`);
     });
+
+  it('gets out of the way of a task opened from its graph, which opens over the page', async () => {
+    await mount({ dialog: true });
+    await until(() => document.querySelector('.start-card-dialog .start-card') !== null, 'the card');
+    expect(startedCalls).toBe(0);
+    await act(async () => {
+      navigateTo!(`/projects/${PROJECT}/tasks/task-b`);
+    });
+    expect(startedCalls).toBe(1);
+  });
 });
 
 describe('the press', () => {

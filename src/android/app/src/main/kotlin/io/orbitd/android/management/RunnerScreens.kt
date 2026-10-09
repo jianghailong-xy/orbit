@@ -836,7 +836,9 @@ private fun AccountRow(api: ManagementApi, runner: JsonObject, engine: String, l
         }
         if (windows.isNotEmpty()) windows.forEach { UsageWindowRow(it, RunnerPage.resetsLine(it, now), withGroup = true) }
         else if (line.envKey) Text(AccountCopy.ENV_KEY_LINE, style = MaterialTheme.typography.labelMedium, color = Ink.muted)
-        else if (line.auth == "yes" && RunnerPage.reportsQuota(engine)) Text(RunnerCopy.NO_QUOTA, style = MaterialTheme.typography.labelMedium, color = Ink.muted)
+        else if (line.auth == "yes" && RunnerPage.reportsQuota(engine)) Text(
+            if (RunnerPage.accountNoQuotaLimit(runner, engine, line.id)) RunnerCopy.NO_QUOTA_LIMIT else RunnerCopy.NO_QUOTA,
+            style = MaterialTheme.typography.labelMedium, color = Ink.muted)
         // A login about to lapse, said before it does the way Claude Code says it, with the way to renew it beside it.
         if (!signingIn) RunnerPage.loginExpiresLine(line, now)?.let { expiring ->
             Row(verticalAlignment = Alignment.CenterVertically) {

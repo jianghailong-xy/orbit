@@ -19,6 +19,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { SessionsService } from '../sessions/sessions.service';
+import { EvidenceReviewService } from '../tasks/evidence-review.service';
 import {
   countPendingEvidenceJudgments,
   readPendingEvidenceJudgments,
@@ -91,6 +92,9 @@ import { WakeDispositionService } from './wake-disposition.service';
  *   (10) A revision the coordinator could not decide is only recorded, and is the owner's at once.
  *   (11) The hold decides where the question is asked, not who may answer it: the owner's own
  *        answer to a held revision is taken at the same door, and settles the task.
+ *   (12) A SEND_BACK's note is handed to the run that submitted the revision, as a platform turn
+ *        of its own — in a project as out of one, and whoever decided — and is on the revision in
+ *        the list read for anybody else, the coordinator included.
  *
  * Every "the owner is asked" is paired with a "the owner is not asked" over the same read, so a
  * read that filters nothing and a read that filters everything both fail.
@@ -162,7 +166,9 @@ async function connect(): Promise<Stack> {
   return {
     db,
     prisma,
-    evidence: new TaskCompletionEvidenceService(prisma, undefined, router),
+    evidence: new TaskCompletionEvidenceService(
+      prisma, undefined, router, undefined, new EvidenceReviewService(prisma, sessions),
+    ),
     unrouted: new TaskCompletionEvidenceService(prisma),
     producer,
     deliveries,
@@ -929,6 +935,60 @@ test('(11) the owner may answer a revision the coordinator holds, at any moment,
       const later = new Date(Date.now() + (ESCALATION_SECONDS + 60) * 1_000);
       assert.deepEqual(await ownerAsked(stack, w, later), []);
       assert.equal(await ownerCount(stack, w, later), 0);
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('(12) a send-back’s note is handed to the run, and is on the revision for anybody to read',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'sent-back');
+      await submit(stack, w);
+      const [row] = await evidenceWakes(stack.db, w.taskId);
+      assert.equal(row!.status, 'DELIVERED', `refused with ${row!.refusalCode}`);
+
+      // The coordinator sends it back: the runner door, its own session as the deciding one.
+      const decided = await stack.evidence.decide(
+        w.ownerId,
+        w.taskId,
+        { type: CreatorType.AGENT, id: w.workspaceId },
+        {
+          decidingSessionId: w.coordinatorSessionId!,
+          evidenceRevision: '1',
+          decision: 'SEND_BACK',
+          note: '日志里要有一次干净运行六个场景全 PASS 的输出',
+        },
+      );
+      assert.equal(decided.decision, 'SEND_BACK');
+      assert.equal(
+        (await stack.db.task.findUniqueOrThrow({ where: { id: w.taskId } })).status,
+        TaskStatus.IN_PROGRESS,
+        'a send-back leaves the task open',
+      );
+
+      // The note reaches the run that submitted the revision, as a platform turn of its own —
+      // until 2026-10-09 it went nowhere, and neither the run nor the coordinator could see why.
+      const notices = await stack.db.conversationTurn.findMany({
+        where: { sessionId: w.runSessionId, clientTurnId: `evidence-send-back:v1:${decided.id}` },
+      });
+      assert.equal(notices.length, 1, 'the run was handed the reason its evidence came back');
+      const [notice] = notices;
+      assert.equal(notice.senderSessionId, null, 'the platform’s words, not the coordinator’s');
+      assert.ok((notice.content ?? '').includes('日志里要有一次干净运行六个场景全 PASS 的输出'));
+      assert.match(notice.content ?? '', /sent back by the session that reviewed it/);
+      assert.match(notice.content ?? '', new RegExp(`<orbit-evidence-send-back task="${uuidToBase62(w.taskId)}" revision="1">`));
+
+      // And it is on the revision in the list read, for the coordinator and anybody else.
+      const [listed] = await stack.evidence.list(w.ownerId, w.taskId);
+      assert.equal(listed.decision?.decision, 'SEND_BACK');
+      assert.equal(listed.decision?.note, '日志里要有一次干净运行六个场景全 PASS 的输出');
+      assert.equal(listed.decision?.decidedByType, CreatorType.AGENT);
+
+      // Nobody else was told anything: not the owner, not an unrelated reader.
+      assert.deepEqual(await messagesOn(stack.db, w.readerSessionId), []);
+      assert.deepEqual(await ownerAsked(stack, w), []);
     } finally {
       await stack.db.$disconnect();
     }

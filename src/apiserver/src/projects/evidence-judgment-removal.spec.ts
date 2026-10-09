@@ -70,6 +70,9 @@ test('(c) nothing in the tree still names task_human_signoff, raw SQL included',
   for (const file of tracked) {
     // Migrations are append-only history: 0180 must still be able to CREATE what 0224 drops.
     if (file.startsWith('src/apiserver/prisma/migrations/')) continue;
+    // Frozen evidence reports record what was run at the time, for the same reason the migration
+    // ledger is excluded above: they are history, not a live caller.
+    if (file.startsWith('docs/evidence/')) continue;
     // These two specs are where the name is asserted absent, so they necessarily contain it.
     if (file.includes('evidence-judgment-removal')) continue;
     if (!/\.(ts|tsx|js|mjs|cjs|go|sql|json|ya?ml|sh|md|swift)$/.test(file)) continue;

@@ -204,10 +204,11 @@ func (p *planUsageProbe) mergeCodexRateLimits(raw map[string]interface{}) {
 // run keeps the usage snapshot fresh without blocking heartbeats: it refreshes on
 // the idle→busy edge (fresh when work starts), periodically while sessions run, once
 // more on the busy→idle edge (capture just-finished usage), and at a slower idle
-// cadence when this runner has an agent for the provider. activeCount reports how
-// many sessions are currently running for that provider; idleEnabled reports whether
-// it is worth polling the provider while no sessions are active. Failures are soft:
-// the last good value is kept and a repeated error is logged only once.
+// cadence when this runner has an agent for the provider or the engine is signed in
+// here (idleUsage). activeCount reports how many sessions are currently running for
+// that provider; idleEnabled reports whether it is worth polling the provider while
+// no sessions are active. Failures are soft: the last good value is kept and a
+// repeated error is logged only once.
 func (p *planUsageProbe) run(ctx context.Context, activeCount func() int, idleEnabled func() bool) {
 	p.runWithIntervals(ctx, activeCount, idleEnabled, planUsageCheckInterval, planUsageActiveInterval, planUsageIdleInterval)
 }

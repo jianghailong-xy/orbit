@@ -1,0 +1,37 @@
+[orbit-runner 2026-10-08T17:13:02.539Z] runner "hpc-kimi" online -> http://127.0.0.1:3741 (max 16 concurrent)
+[orbit-runner 2026-10-08T17:14:27.342Z] > interactive run 01a11c82-5a34-763d-a293-e9d8f1d35aba — Scenario 2: which Kimi account is this session on?
+[orbit-runner 2026-10-08T17:14:45.448Z] kimi conversation for session_629d05ad-d1bf-461f-b788-94e261ed9c46 carried from account a70fa033 (/var/tmp/kimi-accounts-stack/runners/hpc-kimi/home/kimi-accounts/a70fa033) to default (/var/tmp/kimi-accounts-stack/runners/hpc-kimi/userhome/.kimi-code)
+[orbit-runner 2026-10-08T17:14:49.757Z] runner stopping; draining session supervisors...
+[orbit-runner 2026-10-08T17:14:49.790Z] ⏸ interactive run 01a11c82-5a34-763d-a293-e9d8f1d35aba — detached for shutdown (resumable)
+[orbit-runner 2026-10-08T17:14:50.284Z] runner "hpc-kimi" online -> http://127.0.0.1:3741 (max 16 concurrent)
+[orbit-runner 2026-10-08T17:14:50.304Z] reclaiming session 01a11c82-5a34-763d-a293-e9d8f1d35aba — Scenario 2: which Kimi account is this session on?
+[orbit-runner 2026-10-08T17:15:31.743Z] > interactive run 01a11c83-55f4-7734-8387-8c5bbcfe233b — Scenario 4, round 1: started on Automatic — which account?
+[orbit-runner 2026-10-08T17:15:36.815Z] runner stopping; draining session supervisors...
+[orbit-runner 2026-10-08T17:15:36.838Z] ⏸ interactive run 01a11c83-55f4-7734-8387-8c5bbcfe233b — detached for shutdown (resumable)
+[orbit-runner 2026-10-08T17:15:37.340Z] runner "hpc-kimi" online -> http://127.0.0.1:3741 (max 16 concurrent)
+[orbit-runner 2026-10-08T17:15:37.359Z] reclaiming session 01a11c82-5a34-763d-a293-e9d8f1d35aba — Scenario 2: which Kimi account is this session on?
+[orbit-runner 2026-10-08T17:15:37.365Z] reclaiming session 01a11c83-55f4-7734-8387-8c5bbcfe233b — Scenario 4, round 1: started on Automatic — which account?
+[orbit-runner 2026-10-08T17:16:15.025Z] > interactive run 01a11c83-fefd-762f-97c7-00e577079535 — Scenario 4, round 2: started on Automatic — which account?
+[orbit-runner 2026-10-08T17:16:20.111Z] runner stopping; draining session supervisors...
+[orbit-runner 2026-10-08T17:16:20.127Z] kimi acp stdout read failed: read |0: file already closed
+[orbit-runner 2026-10-08T17:16:20.132Z] ⏸ interactive run 01a11c83-fefd-762f-97c7-00e577079535 — detached for shutdown (resumable)
+[orbit-runner 2026-10-08T17:16:20.637Z] runner "hpc-kimi" online -> http://127.0.0.1:3741 (max 16 concurrent)
+[orbit-runner 2026-10-08T17:16:20.659Z] reclaiming session 01a11c82-5a34-763d-a293-e9d8f1d35aba — Scenario 2: which Kimi account is this session on?
+[orbit-runner 2026-10-08T17:16:20.665Z] reclaiming session 01a11c83-55f4-7734-8387-8c5bbcfe233b — Scenario 4, round 1: started on Automatic — which account?
+[orbit-runner 2026-10-08T17:16:20.670Z] reclaiming session 01a11c83-fefd-762f-97c7-00e577079535 — Scenario 4, round 2: started on Automatic — which account?
+[orbit-runner 2026-10-08T17:16:54.442Z] > interactive run 01a11c84-98f6-74d8-9bce-88e7a44723aa — Scenario 4, round 3, turn 1: started on Automatic.
+[orbit-runner 2026-10-08T17:16:59.098Z] failed-turn completion handed to session supervisor for 01a11c84-98f6-74d8-9bce-88e7a44723aa
+[orbit-runner 2026-10-08T17:16:59.238Z] ■ interactive run 01a11c84-98f6-74d8-9bce-88e7a44723aa — failed turn terminal acknowledgement settled
+[orbit-runner 2026-10-08T17:17:28.801Z] > interactive run 01a11c84-98f6-74d8-9bce-88e7a44723aa — Scenario 4, round 3, turn 1: started on Automatic.
+[orbit-runner 2026-10-08T17:17:28.890Z] kimi conversation for session_a416c885-4ba5-4ef0-a23f-bd2e2649a7bc carried from account a70fa033 (/var/tmp/kimi-accounts-stack/runners/hpc-kimi/home/kimi-accounts/a70fa033) to default (/var/tmp/kimi-accounts-stack/runners/hpc-kimi/userhome/.kimi-code)
+[orbit-runner 2026-10-08T17:17:40.533Z] > interactive run 01a11c85-4d0b-7485-82de-f1a7bf90dfcb — Scenario 5: hold this account — FAKE_KIMI_SLOW 75
+[orbit-runner 2026-10-08T17:19:03.345Z] ■ interactive run 01a11c85-4d0b-7485-82de-f1a7bf90dfcb → SUCCEEDED
+[orbit-runner 2026-10-08T17:19:03.357Z] ■ interactive run 01a11c84-98f6-74d8-9bce-88e7a44723aa → SUCCEEDED
+[orbit-runner 2026-10-08T17:19:20.667Z] > interactive run 01a11c82-5a34-763d-a293-e9d8f1d35aba — Scenario 2: which Kimi account is this session on?
+[orbit-runner 2026-10-08T17:19:20.670Z] > interactive run 01a11c83-55f4-7734-8387-8c5bbcfe233b — Scenario 4, round 1: started on Automatic — which account?
+[orbit-runner 2026-10-08T17:19:20.670Z] > interactive run 01a11c83-fefd-762f-97c7-00e577079535 — Scenario 4, round 2: started on Automatic — which account?
+[orbit-runner 2026-10-08T17:19:20.689Z] ■ interactive run 01a11c82-5a34-763d-a293-e9d8f1d35aba → CANCELLED
+[orbit-runner 2026-10-08T17:19:20.690Z] ■ interactive run 01a11c83-55f4-7734-8387-8c5bbcfe233b → CANCELLED
+[orbit-runner 2026-10-08T17:19:20.697Z] ■ interactive run 01a11c83-fefd-762f-97c7-00e577079535 → CANCELLED
+[orbit-runner 2026-10-08T17:20:23.409Z] runner stopping; draining session supervisors...
+[orbit-runner 2026-10-08T17:20:23.940Z] runner "hpc-kimi" online -> http://127.0.0.1:3741 (max 16 concurrent)

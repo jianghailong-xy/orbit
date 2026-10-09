@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   bindingPlanUsageRow,
   currentPlanUsageRows,
+  kimiNoQuotaLimit,
   planUsageRows,
   planUsageSnapshotForProvider,
   planUsageSnapshots,
@@ -105,6 +106,17 @@ describe('planUsageRows', () => {
     expect(planUsageSnapshotForProvider(flatKimi, 'kimi')).toBe(flatKimi);
     expect(planUsageSnapshotForProvider(flatKimi, 'claude')).toBeNull();
     expect(planUsageSnapshotForProvider(flatKimi, 'codex')).toBeNull();
+  });
+
+  it('knows a Kimi login with no quota limit from one never read or one whose read failed', () => {
+    // Read, and the answer held no window: a plan with no quota limit.
+    expect(kimiNoQuotaLimit({ provider: 'kimi', fetchedAt: '2026-10-09T00:00:00Z' })).toBe(true);
+    // The month's coding share counts though it is never drawn: a plan reporting it has a limit.
+    expect(kimiNoQuotaLimit({ provider: 'kimi', monthCode: { utilization: 30 } })).toBe(false);
+    expect(kimiNoQuotaLimit({ provider: 'kimi', fiveHour: { utilization: 0 } })).toBe(false);
+    // Never read at all, or a windowless read of another engine's — both "No quota reported".
+    expect(kimiNoQuotaLimit(null)).toBe(false);
+    expect(kimiNoQuotaLimit({ provider: 'claude' })).toBe(false);
   });
 });
 

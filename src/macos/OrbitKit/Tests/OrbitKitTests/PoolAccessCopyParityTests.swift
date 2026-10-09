@@ -119,7 +119,7 @@ final class PoolAccessCopyParityTests: XCTestCase {
                    in: Self.poolPage)
         assertSays(page, "{mayAddAccount ? '\(CodexPoolPage.addAccount)' : '\(CodexPoolPage.addKey)'}", in: Self.poolPage)
         assertSays(page, "const mayAddAccount = mine || (!!access && canAddAccount(access));", in: Self.poolPage)
-        assertSays(page, "(mayAddAccount || mayAddKey) && ( <Button type=\"primary\" icon={<PlusOutlined />}", in: Self.poolPage)
+        assertSays(page, "(mayAddAccount || mayAddKey) && ( <Button variant=\"primary\" icon={<PlusOutlined />}", in: Self.poolPage)
         assertSays(page, "\(CodexPoolPage.accountsHeader){mine && <span className=\"pool-head-count\">{pool.members.length}</span>}",
                    in: Self.poolPage)
 
@@ -202,7 +202,7 @@ final class PoolAccessCopyParityTests: XCTestCase {
                    in: Self.poolPage)
         assertSays(page, "title={mine ? `\(CodexPoolPage.deleteTitle("${pool.label}"))` : `\(CodexPoolPage.leaveTitle("${pool.label}"))`}",
                    in: Self.poolPage)
-        assertSays(page, "okText={mine ? '\(CodexPoolPage.delete)' : '\(CodexPoolPage.leave)'}", in: Self.poolPage)
+        assertSays(page, "confirmText={mine ? '\(CodexPoolPage.delete)' : '\(CodexPoolPage.leave)'}", in: Self.poolPage)
         assertSays(page, "{mine ? '\(CodexPoolPage.deletePool)' : '\(CodexPoolPage.leavePool)'}", in: Self.poolPage)
 
         let spec = try web(Self.whoSpec)
@@ -265,7 +265,7 @@ final class PoolAccessCopyParityTests: XCTestCase {
                    in: Self.sharedPool)
         assertSays(card, "const ran = pool.people.some((row) => row.usage.costUsd > 0);", in: Self.sharedPool)
         assertSays(card, "{mine && !person.creator && <PersonMenu pool={pool} person={person} />}", in: Self.sharedPool)
-        assertSays(card, "...(pool.shared ? [{ key: 'role', label: person.role === 'ADMIN' ? '\(SharedPoolPage.makeMember)' : '\(SharedPoolPage.makeAdmin)' }] : []),",
+        assertSays(card, "...(pool.shared ? [{ key: 'role', label: person.role === 'ADMIN' ? '\(SharedPoolPage.makeMember)' : '\(SharedPoolPage.makeAdmin)', onSelect: () => setRole.mutate(person.role === 'ADMIN' ? 'MEMBER' : 'ADMIN'), }] : []),",
                    in: Self.sharedPool)
         // Two rules, the accounts' beside the keys' (migration 0371), each with its own hint.
         assertSays(card, "{mine && people && ( <> <div className=\"pool-rule\"> <div> <div className=\"pool-rule-t\">\(WhoCanUseIt.ruleTitle)</div> <div className=\"pool-rule-h\"> \(WhoCanUseIt.ruleHint) </div>",
@@ -363,7 +363,7 @@ final class PoolAccessCopyParityTests: XCTestCase {
         assertSays(dialog, "{pool.membersCanAddAccounts && ( <li> <b>\(facts[2].lead)</b>\(facts[2].rest) </li> )}",
                    in: Self.sharedPool)
         assertSays(dialog, "<b>\(facts[3].lead)</b>\(facts[3].rest) </li>", in: Self.sharedPool)
-        assertSays(dialog, "onChange={(e) => setCanAdd(e.target.checked)}> \(WhoCanUseIt.ruleTitle) </Checkbox>", in: Self.sharedPool)
+        assertSays(dialog, "onCheckedChange={setCanAdd}> \(WhoCanUseIt.ruleTitle) </Checkbox>", in: Self.sharedPool)
         assertSays(dialog, "if (!noKey && canAdd !== pool.membersCanAdd) {", in: Self.sharedPool)
         assertSays(dialog, "onClick={() => share.mutate()}> \(SharePool.shareAnyway) </Button>", in: Self.sharedPool)
         assertSays(dialog, "> \(SharePool.addKeyFirst) </Button>", in: Self.sharedPool)
@@ -391,7 +391,7 @@ final class PoolAccessCopyParityTests: XCTestCase {
     func testMakeItJustMineSaysWhatTheWebDialogSays() throws {
         let card = try web(Self.sharedPool)
         assertSays(card, "title: `\(JustMine.title(pool("${pool.label}")))`,", in: Self.sharedPool)
-        assertSays(card, "okText: '\(JustMine.confirm)',", in: Self.sharedPool)
+        assertSays(card, "confirmText: '\(JustMine.confirm)',", in: Self.sharedPool)
         assertSays(card, "{listOf(others.map((person) => person.name))} {others.length === 1 ? 'loses' : 'lose'} it at once, and their sessions on it stop.",
                    in: Self.sharedPool)
         assertSays(card, "{listOf(keys)} {keys.length === 1 ? 'leaves' : 'leave'} with {person.name}", in: Self.sharedPool)

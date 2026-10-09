@@ -593,10 +593,43 @@ export interface ProjectOpenItemRow<Instant = string> {
   chat?: OpenItemChat | null;
 }
 
+/**
+ * A question the coordinator put to the owner that has ended (§5.2 R10, R12): the owner answered
+ * it, or it was withdrawn. The card the conversation drew for it is drawn as this record — the
+ * question as it was asked, every option, what the owner chose and wrote, and where the answer went —
+ * so it survives a relaunch and reads the same on a device that never saw the question open.
+ */
+export interface ProjectClosedQuestion<Instant = string> {
+  itemId: string;
+  /** The question as it was asked: the same shape as an open row's `question`. */
+  question: CoordinatorQuestion;
+  /** When the coordinator asked it. */
+  askedAt: Instant;
+  resolution: 'ANSWERED' | 'WITHDRAWN';
+  /** Who ended it: the owner (`USER`), or the conversation that asked it (`COORDINATOR`). */
+  resolvedBy: 'USER' | 'COORDINATOR';
+  /** When it was answered or withdrawn — the moment the record is drawn at. */
+  resolvedAt: Instant;
+  /** What the owner answered: an option's index, their own words, or both. Null when withdrawn. */
+  answer: { option: number | null; text: string | null } | null;
+  /** The first coordinator conversation the answer was delivered to, and when. Null while none has
+   *  had it — no conversation was coordinating the project — and for a withdrawn question. */
+  delivery: { sessionId: string; at: Instant } | null;
+  /** The reason it was withdrawn with; null for an answered question. */
+  withdrawReason: string | null;
+}
+
 /** The project's open exceptions, split by who is expected to act (§4.8). */
 export interface ProjectOpenItemsView<Instant = string> {
   needsYou: Array<ProjectOpenItemRow<Instant>>;
   withCoordinator: Array<ProjectOpenItemRow<Instant>>;
+  /**
+   * The coordinator's questions that have ended — answered or withdrawn — newest first, at most 50
+   * (§4.8, §5.2 R10, R12). Kept out of `needsYou`: nobody owes anything about them, and a
+   * conversation draws each at the moment it ended, as the record its card became. Absent from a
+   * server that predates it.
+   */
+  closedQuestions?: Array<ProjectClosedQuestion<Instant>>;
   /**
    * Exceptions the coordinator closed in the last day, newest first (§4.7 H5): handled — its rerun
    * landed or passed, or it closed the item with a reason — or superseded by the new item its failed

@@ -52,7 +52,10 @@ final class ApprovalReviewDraftsTests: XCTestCase {
         XCTAssertTrue(newer.choices.isEmpty)
     }
 
-    func testCoordinatorQuestionKeepsItsDraftAndThenItsSentReceipt() {
+    /// What the owner picked and typed survives the sheet closing. What they SENT is not kept here
+    /// any more: the console draws it as the question's record (`CoordinatorQuestions.answeredHere`),
+    /// which the read then publishes to every device.
+    func testCoordinatorQuestionKeepsItsDraft() {
         let drafts = ApprovalReviewDrafts()
         let opened = drafts.coordinator("item-1")
         opened.chosen = .other
@@ -62,17 +65,10 @@ final class ApprovalReviewDraftsTests: XCTestCase {
         XCTAssertTrue(opened === reopened)
         XCTAssertEqual(reopened.chosen, .other)
         XCTAssertEqual(reopened.text, "Neither option fits")
-        reopened.sent = "Neither option fits"
-        reopened.receipt = OwnerAnswerReceipt(itemId: "item-1")
 
-        let receipt = drafts.coordinator("item-1")
-        XCTAssertEqual(receipt.sent, "Neither option fits")
-        XCTAssertEqual(receipt.receipt?.itemId, "item-1")
         let next = drafts.coordinator("item-2")
         XCTAssertNil(next.chosen)
         XCTAssertEqual(next.text, "")
-        XCTAssertEqual(next.sent, "")
-        XCTAssertNil(next.receipt)
     }
 
     func testChangingConversationsStartsAllThreeDraftFamiliesEmpty() {

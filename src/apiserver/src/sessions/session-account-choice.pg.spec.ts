@@ -30,6 +30,9 @@
  *  (10) A usage limit met in a turn nobody sent — a background agent reporting in — moves the session
  *       as well, re-sending nothing; and the engine being replaced saying so again does not move it a
  *       second time.
+ *  (11) With every account spent, the retry is armed for the first of them to free up — not for the
+ *       reset of the one the session ran on — and when it fires, the claim starts it on that account. A
+ *       pinned session waits for its own account.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/sessions/session-account-choice.pg.spec.ts
  *
@@ -61,6 +64,8 @@ import { CLAUDE_ACCOUNT_MOVE_V1, CODEX_ACCOUNT_MOVE_V1 } from '../providers/acco
 import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { ProviderPlanUsageService } from '../providers/plan-usage.service';
 import { QueueService as RealQueueService } from '../queue/queue.service';
+import { AutoRetryService } from './auto-retry.service';
+import { SESSION_RUNNER_OFFLINE_AFTER_MS } from './session-state';
 import { SessionsService } from './sessions.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -555,5 +560,78 @@ test('which of its runner’s accounts a session runs on — picked by hand, or 
     await limitSaid(pinned, 1);
     assert.equal((await row(pinned)).claude_account, 'default');
     assert.deepEqual(await reloads(pinned), []);
+  });
+
+  await t.test('(11) with no account to move to, the retry waits for the first to free up, and is sent there', async () => {
+    // Every Claude account spent: Default's week for days, Work's 5 hours back within the hour — the
+    // shape of 2026-10-08, when a coordinator on a spent week was armed five days out.
+    const workBack = new Date(Date.now() + 3_600_000).toISOString();
+    const usage = (workUsed: number) => ({
+      claude: {
+        provider: AgentProvider.CLAUDE,
+        fiveHour: { utilization: 0, resetsAt: LATER },
+        sevenDay: { utilization: 100, resetsAt: LATER },
+        accounts: {
+          [WORK]: { provider: AgentProvider.CLAUDE, fiveHour: { utilization: workUsed, resetsAt: workBack }, sevenDay: { utilization: 28, resetsAt: LATER } },
+        },
+      },
+    }) as unknown as Prisma.InputJsonValue;
+    /** A session on Default whose reply is its weekly limit, with no reset time: the snapshot says when. */
+    async function limited(m: { ownerId: string; runnerId: string; workspaceId: string }, extra: Partial<Prisma.SessionUncheckedCreateInput> = {}) {
+      await db.runner.update({ where: { id: m.runnerId }, data: { planUsage: usage(100) } });
+      const id = await sessionOn(m, 'claude', RunStatus.RUNNING, { engineTurnActive: true, ...extra });
+      const turn = await db.conversationTurn.create({
+        data: {
+          sessionId: id,
+          seq: 1,
+          clientTurnId: `turn-${randomUUID()}`,
+          kind: 'message',
+          content: 'and the second one',
+          status: 'IN_FLIGHT',
+          deliveredAt: new Date(),
+          leaseDeadlineAt: new Date(Date.now() + 300_000),
+          leaseGeneration: randomUUID(),
+        },
+        select: { id: true },
+      });
+      const limit = "You've hit your weekly limit";
+      await api.events({ id: m.runnerId }, id, {
+        events: [{ seq: 1, type: RunEventType.ASSISTANT, ts: new Date().toISOString(), turnId: turn.id, payload: { text: limit } }],
+      });
+      await api.turnComplete({ id: m.runnerId }, id, {
+        turnId: turn.id, status: SharedRunStatus.FAILED, subtype: 'success', result: limit, numTurns: 1, costUsd: 0,
+      });
+      return id;
+    }
+    const within = (ms: number | null, at: string) => ms !== null && ms >= Date.parse(at) && ms < Date.parse(at) + 60_000;
+
+    // Pinned to Default by hand, it waits for Default's week.
+    const pinnedMachine = await machine('all-spent-pinned');
+    const pinned = await limited(pinnedMachine, { claudeAccountPinned: true });
+    assert.ok(within((await row(pinned)).retry_ms, LATER), `pinned, armed for ${(await row(pinned)).retry_ms}`);
+
+    // On Automatic, for Work's 5 hours — and it stays on Default meanwhile: Work has no room yet.
+    const m = await machine('all-spent');
+    const id = await limited(m);
+    const armed = await row(id);
+    assert.ok(within(armed.retry_ms, workBack), `armed for ${armed.retry_ms}, not for when Work comes back`);
+    assert.deepEqual({ account: armed.claude_account, notice: armed.pool_switch_notice }, { account: 'default', notice: null });
+
+    // Work comes back: the runner's next snapshot says so, and the sweep fires at the arm's instant.
+    await db.runner.update({ where: { id: m.runnerId }, data: { planUsage: usage(8) } });
+    const at = new Date(armed.retry_ms! + 1_000);
+    await db.runner.update({ where: { id: m.runnerId }, data: { lastHeartbeatAt: new Date(at.getTime() - SESSION_RUNNER_OFFLINE_AFTER_MS / 2) } });
+    await new AutoRetryService(prisma, sessions, quiet).sweep(at);
+    const revived = await db.session.findUniqueOrThrow({ where: { id }, select: { status: true, retryAttempts: true } });
+    assert.deepEqual(revived, { status: RunStatus.PENDING, retryAttempts: 1 }, 'not re-sent while Default is still spent');
+
+    // The claim that picks it up starts it on Work, and the transcript says why.
+    const claims = new RealQueueService(prisma, quiet, new ProviderPlanUsageService(quiet));
+    const claimed = await claims.claimSessionForRunner({ id: m.runnerId }, 0, true, false);
+    assert.equal(claimed?.agent.env?.CLAUDE_CONFIG_DIR, CLAUDE_WORK_HOME);
+    assert.deepEqual(
+      { account: (await row(id)).claude_account, notice: (await row(id)).pool_switch_notice },
+      { account: WORK, notice: 'Switched to Work — the usage limit on Default is reached' },
+    );
   });
 });
