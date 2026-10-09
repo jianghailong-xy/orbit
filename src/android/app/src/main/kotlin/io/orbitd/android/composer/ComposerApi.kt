@@ -29,9 +29,10 @@ class ComposerApi(private val auth: OrbitApi, private val handle: SessionHandle,
         val pools = read(listOf("providers", "pools")).jsonArray.filterIsInstance<JsonObject>()
         val shared = read(listOf("providers", "shared-pools")).jsonArray.filterIsInstance<JsonObject>()
         // Marked, so the Provider list keeps the pools together after the engines (SessionProviderChoices.choices).
-        fun pool(row: JsonObject, fallback: String) = JsonObject(row + mapOf("runtime" to JsonPrimitive(row.text("engine") ?: fallback),
-            "modelsFromRuntime" to JsonPrimitive(true), "pool" to JsonPrimitive(true)))
-        return ComposerCatalog(runner, (providers + pools.map { pool(it, "claude") } + shared.map { pool(it, "codex") }).distinctBy { it.text("slug") })
+        fun pool(row: JsonObject, fallback: String, isShared: Boolean = false) = JsonObject(row + mapOf("runtime" to JsonPrimitive(row.text("engine") ?: fallback),
+            "modelsFromRuntime" to JsonPrimitive(true), "pool" to JsonPrimitive(true), "sharedPool" to JsonPrimitive(isShared)))
+        return ComposerCatalog(runner, (providers + pools.map { pool(it, "claude") } + shared.map { pool(it, "codex", isShared = true) })
+            .distinctBy { it.text("slug") })
     }
     suspend fun upload(attachment: StagedAttachment, bytes: ByteArray, progress: (Float) -> Unit): String = withContext(Dispatchers.IO) {
         val multipart = MultipartBody.Builder().setType(MultipartBody.FORM)

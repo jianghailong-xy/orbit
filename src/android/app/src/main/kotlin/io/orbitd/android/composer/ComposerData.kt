@@ -2,6 +2,7 @@ package io.orbitd.android.composer
 
 import io.orbitd.android.core.realtime.SessionState
 import io.orbitd.android.management.AccountCopy
+import io.orbitd.android.management.CodexLogins
 import io.orbitd.android.management.EngineAccounts
 import io.orbitd.android.management.ProviderPools
 import io.orbitd.android.management.RunnerPage
@@ -54,6 +55,14 @@ data class ProviderOption(val id: String, val label: String, val runtime: String
 data class AccountChoice(val id: String, val label: String, val quota: String? = null, val nearLimit: Boolean = false,
     val unavailable: String? = null)
 
+/** The account of a pool a session spends (iOS `PoolAccount`, f929ab1e4, a0a76a760): its name, its own quota, whether it is the
+ * session's own ([current]) or the one the next claim picks, and how many the pool holds. */
+data class PoolAccount(val pool: String, val label: String, val usage: JsonObject?, val current: Boolean, val accounts: Int, val shared: Boolean) {
+    /** ProviderPools.accountHelp: what the account beside the quota says about itself when asked. */
+    val help get() = if (current) "$pool is running this session on $label"
+        else "A session on $pool starts on $label — " + if (shared) "the key it picks for you right now" else "the account whose quota resets soonest"
+}
+
 data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObject>) {
     fun usage(detail: JsonObject): JsonObject? {
         val provider = detail.text("provider") ?: return null
@@ -67,12 +76,8 @@ data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObjec
         }
         if (provider !in BUILT_INS) {
             val row = providers.firstOrNull { it.text("slug") == provider } ?: return null
-            if (row["members"] is JsonArray) {
-                val assigned = detail.text("poolMemberProviderId")
-                val member = if (assigned != null) row.objects("members").firstOrNull { ObjectId.same(it.text("id"), assigned) }
-                    else row.objects("members").firstOrNull { it.flag("next") == true }
-                return member?.get("planUsage") as? JsonObject
-            }
+            // A pool's quota is the account the session spends, never the pool's — and none while no account can be named.
+            if (isPool(row)) return poolAccount(detail)?.usage
             return row["planUsage"] as? JsonObject // Never borrow a runner login's quota for BYOK.
         }
         val all = runner["planUsage"] as? JsonObject ?: return null
@@ -86,6 +91,27 @@ data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObjec
         if (account == "automatic") return null // The server has not yet chosen the billed account.
         return if (account == "default") snapshot else (snapshot["accounts"] as? JsonObject)?.get(account) as? JsonObject
     }
+    /** ConsoleModel.poolAccount (ProviderPools.sessionAccount, CodexLoginPool.sessionMember): on a pool of one's own ChatGPT accounts,
+     * the one the session's detail names (`poolCodexLogin`, matched by its masked id) whatever its state; on any pool, the member its
+     * last claim recorded (a shared pool's key, `poolKeyId`); for a draft, or a session no claim has reached yet, the one the next
+     * claim picks. Null once the recorded one has left the pool: nobody is guessed. */
+    fun poolAccount(detail: JsonObject): PoolAccount? {
+        val row = providers.firstOrNull { isPool(it) && it.text("slug") == detail.text("provider") } ?: return null
+        val now = System.currentTimeMillis()
+        val shared = row.flag("sharedPool") == true
+        val pool = if (shared) ProviderPools.shared(row, now) else ProviderPools.own(row, now)
+        val login = (detail["poolCodexLogin"] as? JsonObject)?.text("fingerprint")
+        val recorded = detail.text(if (shared) "poolKeyId" else "poolMemberProviderId")?.takeIf { it.isNotEmpty() }
+        val (member, current) = when {
+            login != null && CodexLogins.isLoginPool(pool) -> (pool.members.firstOrNull { it.login?.text("fingerprint") == login } ?: return null) to true
+            recorded != null -> (pool.members.firstOrNull { ObjectId.same(it.id, recorded) } ?: return null) to true
+            else -> (pool.members.firstOrNull { it.next } ?: return null) to false
+        }
+        val accounts = if (CodexLogins.isLoginPool(pool)) CodexLogins.logins(pool).size else pool.members.size
+        return PoolAccount(pool.label, member.label, member.planUsage, current, accounts, shared)
+    }
+    /** A pool as the catalog marks it, or a row with the members GET /providers/pools answers with. */
+    private fun isPool(row: JsonObject) = row.flag("pool") == true || row["members"] is JsonArray
     fun slashItems(provider: String, agentId: String?): List<JsonObject> =
         (runner.objects("commands") + runner.objects("skills")).filter { item ->
             (item.text("agentId").isNullOrEmpty() || item.text("agentId") == agentId) && when (provider) {
