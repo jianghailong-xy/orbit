@@ -1,17 +1,28 @@
 import { useState, type JSX } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Input } from 'antd';
+import {
+  CheckCircleFilled,
+  ClockCircleOutlined,
+  QuestionCircleFilled,
+  RightOutlined,
+  RollbackOutlined,
+} from '@ant-design/icons';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type {
   CoordinatorQuestion,
+  ProjectClosedQuestion,
   ProjectOpenItemRow,
   ProjectOpenItemsView,
 } from '@orbit/shared';
 import { CardActionButton, CardActions } from './CardAction';
+import { decisionReceiptTime } from './EvidenceDecisionCard';
 import { ReviewCard } from './ReviewCard';
 import { api } from '../api';
+import { decisionReceiptAnchor, type ReceiptPlacement } from '../lib/decisionReceipt';
 import { ReferenceLink, referenceUrlTransform } from '../lib/markdownLinks';
+import { markdownToPlainText } from '../lib/markdownText';
 import { projectOpenItemsQuery } from '../lib/queries';
 import { ago } from '../lib/watches';
 
@@ -53,6 +64,7 @@ import { ago } from '../lib/watches';
  */
 export type {
   CoordinatorQuestion,
+  ProjectClosedQuestion,
   ProjectOpenItemRow,
   ProjectOpenItemsView,
 } from '@orbit/shared';
@@ -81,8 +93,10 @@ export const OTHER_OPTION = 'Other — say it in my own words';
 export const RECOMMENDED = 'Recommended';
 export const ANSWERED_HEADING = 'Answered';
 /** An answer with nobody to tell yet: R11 tells the next coordinator when one is bound. */
-export const WAITING_FOR_COORDINATOR = 'waiting for this project’s next coordinator';
-export const DELIVERED_TO_COORDINATOR = 'delivered to the current coordinator';
+export const WAITING_FOR_COORDINATOR = 'Waiting for this project’s next coordinator';
+export const DELIVERED_TO_COORDINATOR = 'Delivered to the current coordinator';
+/** The box a question asked without options is answered in, and the record's read-only copy of it. */
+export const YOUR_ANSWER = 'Your answer';
 
 /**
  * The questions on a project's open items. Only the owner's group: a question is filed with the
@@ -105,12 +119,6 @@ function answerOpenItem(
     `/projects/${encodeURIComponent(projectId)}/open-items/${encodeURIComponent(itemId)}/answer`,
     { method: 'POST', body },
   );
-}
-
-/** What the owner chose, in the words the card showed it in. */
-function answerInWords(question: CoordinatorQuestion, option: number | null, text: string): string {
-  const chosen = option !== null ? question.options[option]?.label : undefined;
-  return [chosen, text.trim()].filter(Boolean).join(' — ');
 }
 
 /**
@@ -152,27 +160,14 @@ export function CoordinatorQuestionCard({
   });
   if (!question) return null;
 
-  // The receipt this window drew: the read no longer carries the item, and where the answer went is
-  // known only to the press that made it (mock 5, the third stage).
-  const receipt = answer.data;
-  if (receipt) {
+  // Answered from this window: until the read publishes the record (`closedQuestions`) — and drops
+  // this row, which unmounts the card — the card is the record of what was sent, built from the
+  // question it was sent about, so nothing stands empty in between (§5.2 R10).
+  if (answer.data && answer.variables) {
     return (
-      <div className="approval-card coordinator-question is-answered" id={`question-${row.itemId}`}>
-        <div className="approval-head coordinator-question-head">
-          <span className="coordinator-question-heading">{ANSWERED_HEADING}</span>
-          <span className="criteria-provenance prov-brand" title={FROM_COORDINATOR_TITLE}>
-            {FROM_COORDINATOR}
-          </span>
-        </div>
-        <p className="coordinator-question-receipt">
-          <span className="coordinator-question-verdict">
-            {`✓ ${answerInWords(question, optionIndex(chosen), text) || '(no answer given)'}`}
-          </span>
-          <span className="coordinator-question-foot">
-            {`by you · ${receipt.delivery ? DELIVERED_TO_COORDINATOR : WAITING_FOR_COORDINATOR}`}
-          </span>
-        </p>
-      </div>
+      <AnsweredQuestionCard
+        record={answeredHere(row, question, answer.variables, answer.data, new Date(answer.submittedAt))}
+      />
     );
   }
 
@@ -264,7 +259,7 @@ export function CoordinatorQuestionCard({
           maxLength={2000}
           autoSize={{ minRows: 2, maxRows: 8 }}
           placeholder={
-            free ? 'Your answer' : chosenOption !== null ? NOTE_PROMPT : OWN_ANSWER_PROMPT
+            free ? YOUR_ANSWER : chosenOption !== null ? NOTE_PROMPT : OWN_ANSWER_PROMPT
           }
           onChange={(event) => setText(event.target.value)}
         />
@@ -322,5 +317,295 @@ export function CoordinatorQuestions({
         <CoordinatorQuestionCard key={row.itemId} projectId={projectId} row={row} now={now} />
       ))}
     </>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────────────────────
+   THE RECORD A QUESTION BECOMES (§5.2 R10, R12; `docs/mocks/coordinator-question-answered/`)
+   ─────────────────────────────────────────────────────────────────────────────────────────────
+
+   Answered — here, at another end, on another device — or withdrawn, a question is no longer drawn
+   as a question: the read carries it as a record (`closedQuestions`), and the coordinator's
+   conversation draws that record at the moment it ended (`closedQuestionRows`), the way every other
+   receipt there is placed (`decisionReceiptAnchor`). The card says what was asked and how it ended;
+   its review replays the question and every option as they were asked, with the answer ticked, and
+   says who answered, when, and where the answer went where Send answer used to be. The project page
+   draws none of these: it lists only the questions still waiting for the owner.
+
+   The words are OrbitKit's too (`CoordinatorQuestions`), held to these declarations by
+   `OwnerItemCardsTests`. */
+
+export const WITHDRAWN_HEADING = 'Withdrawn';
+/** The review's footer, first line, before its time. */
+export const ANSWERED_BY_YOU = 'Answered by you';
+export const WITHDRAWN_BY_COORDINATOR = 'Withdrawn by the coordinator';
+export const WITHDRAWN_BY_YOU = 'Withdrawn by you';
+/** The withdrawn card's line above its reason. */
+export const COORDINATOR_WITHDREW = 'The coordinator withdrew it';
+export const YOU_WITHDREW = 'You withdrew it';
+/** Over the words the owner wrote beside the option they chose. */
+export const YOUR_NOTE = 'Your note';
+/** The card's last row. */
+export const VIEW_DETAILS = 'View details';
+
+const withdrawn = (record: ProjectClosedQuestion): boolean => record.resolution === 'WITHDRAWN';
+
+/** The option the owner chose, when it is one the question offered. */
+function chosenOptionOf(record: ProjectClosedQuestion): number | null {
+  const option = record.answer?.option;
+  return typeof option === 'number' && option >= 0 && option < record.question.options.length
+    ? option
+    : null;
+}
+
+/** What the owner wrote, trimmed; null when they wrote nothing. */
+function wordsOf(record: ProjectClosedQuestion): string | null {
+  const text = record.answer?.text?.trim();
+  return text ? text : null;
+}
+
+const quoted = (text: string): string => `“${text}”`;
+
+/** The question's opening as one run of plain text, which the card cuts at two lines. */
+export function closedQuestionLead(question: CoordinatorQuestion): string {
+  return markdownToPlainText(question.question);
+}
+
+/**
+ * The card's lines under the lead: the option chosen — or, with no option (the Other row, or a
+ * question asked without options), the owner's own words in quotes; the note beside a chosen
+ * option, in quotes; an answer no coordinator has had yet (R11); or who withdrew it and why.
+ */
+export function closedQuestionLines(record: ProjectClosedQuestion): {
+  answer: string | null;
+  note: string | null;
+  waiting: string | null;
+  withdrew: string | null;
+  reason: string | null;
+} {
+  if (withdrawn(record)) {
+    const reason = record.withdrawReason?.trim();
+    return {
+      answer: null,
+      note: null,
+      waiting: null,
+      withdrew: record.resolvedBy === 'USER' ? YOU_WITHDREW : COORDINATOR_WITHDREW,
+      reason: reason ? quoted(reason) : null,
+    };
+  }
+  const option = chosenOptionOf(record);
+  const said = wordsOf(record);
+  return {
+    answer: option !== null ? record.question.options[option]!.label : said ? quoted(said) : null,
+    note: option !== null && said ? quoted(said) : null,
+    waiting: record.delivery ? null : WAITING_FOR_COORDINATOR,
+    withdrew: null,
+    reason: null,
+  };
+}
+
+/** The review's footer, where Send answer was: who ended it and when, then where the answer went —
+ *  or the reason it was withdrawn with. `waiting` marks the line that is still owed somewhere. */
+export function closedQuestionFooter(
+  record: ProjectClosedQuestion,
+  now: Date = new Date(),
+): { line: string; detail: string | null; waiting: boolean } {
+  const who = withdrawn(record)
+    ? record.resolvedBy === 'USER' ? WITHDRAWN_BY_YOU : WITHDRAWN_BY_COORDINATOR
+    : ANSWERED_BY_YOU;
+  const line = `${who} · ${decisionReceiptTime(record.resolvedAt, now)}`;
+  if (withdrawn(record)) return { line, detail: closedQuestionLines(record).reason, waiting: false };
+  return {
+    line,
+    detail: record.delivery ? DELIVERED_TO_COORDINATOR : WAITING_FOR_COORDINATOR,
+    waiting: !record.delivery,
+  };
+}
+
+/**
+ * The answer THIS window just sent, as the record the read will publish: the question it was sent
+ * about, what was chosen and written, and where the door says it went. Drawn from the press until
+ * the read comes back with its own copy.
+ */
+export function answeredHere(
+  row: ProjectOpenItemRow,
+  question: CoordinatorQuestion,
+  body: { option?: number; text?: string },
+  receipt: OwnerAnswerReceipt,
+  at: Date = new Date(),
+): ProjectClosedQuestion {
+  const moment = at.toISOString();
+  return {
+    itemId: row.itemId,
+    question,
+    askedAt: row.waitingSince,
+    resolution: 'ANSWERED',
+    resolvedBy: 'USER',
+    resolvedAt: moment,
+    answer: { option: body.option ?? null, text: body.text ?? null },
+    delivery: receipt.delivery ? { sessionId: receipt.delivery.sessionId, at: moment } : null,
+    withdrawReason: null,
+  };
+}
+
+/** One ended question the coordinator's conversation draws, and where in its flow it goes. */
+export interface ClosedQuestionRow {
+  record: ProjectClosedQuestion;
+  placement: ReceiptPlacement;
+}
+
+/** The records an open coordinator conversation draws: every ended question the read carries, at
+ *  the moment it ended. A stamp nothing can place is not drawn in the wrong place. */
+export function closedQuestionRows(
+  items: ProjectOpenItemsView | null | undefined,
+  events: ReadonlyArray<{ seq: number; ts?: string }>,
+): ClosedQuestionRow[] {
+  return (items?.closedQuestions ?? []).flatMap((record) => {
+    const placement = decisionReceiptAnchor(events, record.resolvedAt);
+    return placement === null ? [] : [{ record, placement }];
+  });
+}
+
+/** One option as it was offered, ticked when it is the answer, with the owner's words inside. */
+function RecordOption({ label, why, recommended, chosen, said, saidLabel }: {
+  label: string;
+  why?: string;
+  recommended: boolean;
+  chosen: boolean;
+  said: string | null;
+  saidLabel: string | null;
+}): JSX.Element {
+  return (
+    <div className={`answered-question-option${chosen ? ' is-chosen' : ''}`}>
+      <span className="answered-question-mark" aria-hidden="true">
+        {chosen ? <CheckCircleFilled /> : null}
+      </span>
+      <span className="answered-question-option-text">
+        <span className="answered-question-option-label">{label}</span>
+        {recommended ? <span className="answered-question-recommended">{RECOMMENDED}</span> : null}
+        {why ? <span className="coordinator-question-option-why">{why}</span> : null}
+        {said ? (
+          <span className="answered-question-words">
+            {saidLabel ? <span className="answered-question-words-label">{saidLabel}</span> : null}
+            {said}
+          </span>
+        ) : null}
+      </span>
+    </div>
+  );
+}
+
+/**
+ * An ended question, as the conversation draws it: the card, and the review it opens. `now` is
+ * passed in so a test reads a fixed clock.
+ */
+export function AnsweredQuestionCard({
+  record,
+  now = new Date(),
+}: {
+  record: ProjectClosedQuestion;
+  now?: Date;
+}): JSX.Element {
+  const [open, setOpen] = useState(false);
+  const isWithdrawn = withdrawn(record);
+  const heading = isWithdrawn ? WITHDRAWN_HEADING : ANSWERED_HEADING;
+  const lead = closedQuestionLead(record.question);
+  const lines = closedQuestionLines(record);
+  const footer = closedQuestionFooter(record, now);
+  const option = isWithdrawn ? null : chosenOptionOf(record);
+  const said = isWithdrawn ? null : wordsOf(record);
+  const { question } = record;
+  const choseOther = option === null && said !== null && question.options.length > 0;
+  return (
+    <ReviewCard
+      title={heading}
+      summary={lead}
+      id={`question-record-${record.itemId}`}
+      open={open}
+      onOpenChange={setOpen}
+      preview={{
+        className: `answered-question-card${isWithdrawn ? ' is-withdrawn' : ''}`,
+        content: (
+          <>
+            <span className="answered-question-head">
+              <span className="answered-question-icon" aria-hidden="true"><QuestionCircleFilled /></span>
+              <span className="answered-question-heading">{heading}</span>
+              <span className="answered-question-time">{decisionReceiptTime(record.resolvedAt, now)}</span>
+            </span>
+            <span className="answered-question-lead">{lead}</span>
+            {lines.answer ? (
+              <span className="answered-question-answer">
+                <span className="answered-question-tick" aria-hidden="true"><CheckCircleFilled /></span>
+                <span>{lines.answer}</span>
+              </span>
+            ) : null}
+            {lines.note ? <span className="answered-question-note">{lines.note}</span> : null}
+            {lines.waiting ? (
+              <span className="answered-question-waiting">
+                <ClockCircleOutlined aria-hidden="true" /> {lines.waiting}
+              </span>
+            ) : null}
+            {lines.withdrew ? <span className="answered-question-withdrew">{lines.withdrew}</span> : null}
+            {lines.reason ? <span className="answered-question-reason">{lines.reason}</span> : null}
+            <span className="answered-question-open">
+              {VIEW_DETAILS}
+              <RightOutlined aria-hidden="true" />
+            </span>
+          </>
+        ),
+      }}
+    >
+      <div className="approval-card coordinator-question answered-question" data-question-record={record.itemId}>
+        <div className="approval-body is-questions coordinator-question-body">
+          <div className="answered-question-provenance">
+            <span className="criteria-provenance prov-brand" title={FROM_COORDINATOR_TITLE}>
+              {FROM_COORDINATOR}
+            </span>
+            <span className="answered-question-asked">{`asked ${decisionReceiptTime(record.askedAt, now)}`}</span>
+          </div>
+          {/* The question as it was asked, in the Markdown the open card renders it in. */}
+          <div className="coordinator-question-text md">
+            <Markdown
+              remarkPlugins={[remarkGfm]}
+              urlTransform={referenceUrlTransform}
+              components={{ a: ReferenceLink }}
+            >
+              {question.question}
+            </Markdown>
+          </div>
+          {question.options.map((offered, index) => (
+            <RecordOption
+              key={`${index}-${offered.label}`}
+              label={offered.label}
+              why={offered.description}
+              recommended={index === question.recommendedOption}
+              chosen={option === index}
+              said={option === index ? said : null}
+              saidLabel={YOUR_NOTE}
+            />
+          ))}
+          {choseOther ? (
+            <RecordOption label={OTHER_OPTION} recommended={false} chosen said={said} saidLabel={null} />
+          ) : null}
+          {question.options.length === 0 && said ? (
+            <span className="answered-question-words is-free">
+              <span className="answered-question-words-label">{YOUR_ANSWER}</span>
+              {said}
+            </span>
+          ) : null}
+        </div>
+        <div className="card-actions approval-actions answered-question-footer">
+          <span className="answered-question-footer-line">
+            {isWithdrawn ? <RollbackOutlined aria-hidden="true" /> : <CheckCircleFilled aria-hidden="true" />}
+            {footer.line}
+          </span>
+          {footer.detail ? (
+            <span className={`answered-question-footer-detail${footer.waiting ? ' is-waiting' : ''}`}>
+              {footer.detail}
+            </span>
+          ) : null}
+        </div>
+      </div>
+    </ReviewCard>
   );
 }
