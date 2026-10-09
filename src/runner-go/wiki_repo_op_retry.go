@@ -25,6 +25,14 @@ package main
 // spool: a process that stops before the window ends leaves no report worth replaying, since the answer
 // would reach a job that has given up by then, and the operation is settled failed by the sweep either
 // way.
+//
+// A STOPPING PROCESS STILL SENDS ONCE. The run loop drains its context the moment a SIGTERM, a SIGINT or
+// a self-update arrives, but it goes on waiting for the repository operations already running — the work
+// is half done and there is nothing to hand over. A send tied to that context would therefore fail at
+// once, every time, and the operation that just finished would be dropped for the whole of a graceful
+// stop. So the sends carry no context of the caller's (only their route's own timeout bounds them), and
+// the drain only decides that there are no *further* attempts: what an operation still owes the control
+// plane — a result, or the fragments of a payload not yet staged — goes out once, and a failure ends it.
 
 import (
 	"context"
@@ -127,8 +135,14 @@ type wikiRepoOpDelivery struct {
 }
 
 // sendWikiRepoOpResult makes one attempt at reporting what an operation came to.
-func sendWikiRepoOpResult(ctx context.Context, t *Transport, opID string, body WikiRepoOpResultRequest) wikiRepoOpDelivery {
-	answer, err := t.wikiRepoOpResult(ctx, opID, body)
+//
+// The send carries no context of the caller's, deliberately: a runner that is draining still makes it.
+// The operation has already been run, and one request bounded by this route's own timeout costs the stop
+// seconds — where dropping the result costs the job a 300-second REPO_OP_WAIT and the whole operation
+// again. What the caller's context decides is whether there is a *further* attempt (the loop below), and
+// whether the waits between attempts are cut short.
+func sendWikiRepoOpResult(t *Transport, opID string, body WikiRepoOpResultRequest) wikiRepoOpDelivery {
+	answer, err := t.wikiRepoOpResult(opID, body)
 	if err == nil {
 		return wikiRepoOpDelivery{answer: answer, settled: true}
 	}
@@ -161,6 +175,11 @@ func wikiRepoOpResultWorthSendingAgain(err error) bool {
 
 // reportWikiRepoOpResult sends an operation's result until the control plane answers for good or the
 // window is spent, whichever comes first. Every retry and the ending are logged.
+//
+// The caller's context is the runner's state, not the send's: while it is live, a failed send is sent
+// again after a wait, and one that started stopping ends the retrying after one more attempt — no waits,
+// no retries, but no dropped result either (see sendWikiRepoOpResult). A stopping process therefore
+// spends at most one request on a result it never got to send.
 func reportWikiRepoOpResult(ctx context.Context, t *Transport, cmd WikiRepoOpCommand, body WikiRepoOpResultRequest, deadline time.Time) {
 	p := wikiRepoOpRetry
 	for attempt := 1; ; attempt++ {
@@ -170,13 +189,13 @@ func reportWikiRepoOpResult(ctx context.Context, t *Transport, cmd WikiRepoOpCom
 			logln("wiki repo op", cmd.ID, "the window a result is worth sending inside was spent before it could go out; nothing is sent")
 			return
 		}
-		delivery := sendWikiRepoOpResult(ctx, t, cmd.ID, body)
+		delivery := sendWikiRepoOpResult(t, cmd.ID, body)
 		if delivery.settled {
 			finishWikiRepoOpResult(cmd, body, delivery)
 			return
 		}
 		if ctx.Err() != nil {
-			logln("wiki repo op", cmd.ID, "result not delivered and this runner is stopping:", delivery.err)
+			logln("wiki repo op", cmd.ID, "result not delivered, and this runner is stopping, so it is not sent again:", delivery.err)
 			return
 		}
 		wait := p.wait(attempt)

@@ -186,6 +186,38 @@ func TestWikiRepoOpAndReportSendsAFailureThroughAServerFault(t *testing.T) {
 	}
 }
 
+// The production shape of the same case: runLoop drains its context as soon as the stop arrives, then
+// waits for the repository operation it started (heartbeatOps.Wait) — and the operation that finishes
+// there is reported anyway. Sent with the drained context, this result would fail on the spot and the job
+// would wait out its 300 seconds and run the operation again, which is the cost this task exists to
+// remove.
+func TestWikiRepoOpAndReportReportsOnceWhileStopping(t *testing.T) {
+	fastWikiRepoOpRetry(t)
+	var sends atomic.Int32
+	var got WikiRepoOpResultRequest
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sends.Add(1)
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Errorf("decode result: %v", err)
+		}
+		_, _ = w.Write([]byte(`{"accepted":true,"state":"failed"}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	ctx, stop := context.WithCancel(context.Background())
+	stop()
+	cmd := wikiRepoOpTestCommand()
+	cmd.WorkDir = "" // no checkout to read: the operation fails and says so
+	runWikiRepoOpAndReport(ctx, NewTransport(srv.URL, "tok"), cmd)
+
+	if n := sends.Load(); n != 1 {
+		t.Fatalf("a stopping runner told the control plane %d times, want exactly one: the operation ran, so its result is not dropped", n)
+	}
+	if got.State != "failed" || !strings.Contains(got.Error, "no working directory") {
+		t.Fatalf("the send carried %#v, want the operation's failure and its reason", got)
+	}
+}
+
 // An answer that settles the matter ends the report after one send: 409 STALE_CLAIM is a claim that moved
 // on (the operation is not this process's any more), and 404, 400 INVALID_RESULT and 422 UNSTORABLE_RESULT
 // each say the operation is gone or has been failed with why. Sending the same bytes again cannot change
@@ -273,9 +305,45 @@ func TestWikiRepoOpResultGivesUpWhenItsWindowIsSpent(t *testing.T) {
 	}
 }
 
-// A runner that is stopping abandons the send it is in: nothing is spooled for the next process, so there
-// is nothing to wait for, and the drain must not be held by a control plane that is down.
-func TestAStoppingRunnerStopsReportingAWikiRepoOp(t *testing.T) {
+// The run loop drains its context the moment a SIGTERM or a self-update arrives, but it goes on waiting
+// for the repository operations already running — and the operation that finishes there must not be
+// dropped for it. The drain ends the retrying; it does not end the send: the result goes out once, and a
+// healthy control plane takes it exactly as it would have a moment earlier.
+func TestWikiRepoOpResultIsStillDeliveredWhenTheRunnerIsStopping(t *testing.T) {
+	clock := fastWikiRepoOpRetry(t)
+	var sends atomic.Int32
+	var got WikiRepoOpResultRequest
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sends.Add(1)
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Errorf("decode result: %v", err)
+		}
+		_, _ = w.Write([]byte(`{"accepted":true,"state":"succeeded"}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	ctx, stop := context.WithCancel(context.Background())
+	stop()
+	body := wikiRepoOpResultBody()
+	logs := captureLogs(t, func() {
+		reportWikiRepoOpResult(ctx, NewTransport(srv.URL, "tok"), wikiRepoOpTestCommand(), body,
+			wikiRepoOpRetry.deadline(clock.time()))
+	})
+
+	if n := sends.Load(); n != 1 {
+		t.Fatalf("a stopping runner told the control plane %d times, want exactly one send: the work is done and the result is the only thing left", n)
+	}
+	if got.State != "succeeded" || got.ClaimGeneration != 4 {
+		t.Fatalf("the send carried %#v, want the operation's own result", got)
+	}
+	if !strings.Contains(logs, "reported succeeded accepted=true") {
+		t.Fatalf("the log does not say the result was delivered:\n%s", logs)
+	}
+}
+
+// The other half of stopping: a control plane that will not take the result does not keep the drain
+// waiting. One request is made and the failure stands — no waits, no retries, nothing held back.
+func TestAStoppingRunnerSendsAStuckResultOnce(t *testing.T) {
 	fastWikiRepoOpRetry(t)
 	var sends atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -286,16 +354,75 @@ func TestAStoppingRunnerStopsReportingAWikiRepoOp(t *testing.T) {
 
 	ctx, stop := context.WithCancel(context.Background())
 	stop()
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
+	began := time.Now()
+	logs := captureLogs(t, func() {
 		reportWikiRepoOpResult(ctx, NewTransport(srv.URL, "tok"), wikiRepoOpTestCommand(),
 			wikiRepoOpResultBody(), time.Now().Add(time.Hour))
-	}()
-	select {
-	case <-done:
-	case <-time.After(10 * time.Second):
-		t.Fatal("the report kept running after the runner was told to stop")
+	})
+	if elapsed := time.Since(began); elapsed > 10*time.Second {
+		t.Fatalf("a stopping runner spent %s on a result the control plane would not take", elapsed)
+	}
+
+	if n := sends.Load(); n != 1 {
+		t.Fatalf("the control plane was told %d times, want one: a stopping runner has no retries left", n)
+	}
+	if !strings.Contains(logs, "and this runner is stopping, so it is not sent again:") {
+		t.Fatalf("the log does not say why the report ended:\n%s", logs)
+	}
+}
+
+// A payload is worthless incomplete, so a stop in the middle of an upload does not abandon it: the pieces
+// still unstaged are sent — each once, since a stopping runner has no retries — and the result that names
+// them goes out after. This is the path a snapshot takes when the runner is told to stop while its
+// fragments are in flight.
+func TestAStoppingRunnerStagesTheRestOfAPayloadAndReports(t *testing.T) {
+	clock := fastWikiRepoOpRetry(t)
+	ctx, stop := context.WithCancel(context.Background())
+	t.Cleanup(stop)
+	var mu sync.Mutex
+	var staged []int
+	var reports atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/wiki/repo-ops/op-9/fragments") {
+			var body WikiRepoOpFragmentRequest
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Errorf("decode fragment: %v", err)
+			}
+			mu.Lock()
+			staged = append(staged, body.Index)
+			mu.Unlock()
+			if body.Index == 0 {
+				// The drain begins while the first fragment is being staged.
+				stop()
+			}
+			_, _ = w.Write([]byte(`{"accepted":true,"received":1}`))
+			return
+		}
+		reports.Add(1)
+		_, _ = w.Write([]byte(`{"accepted":true,"state":"succeeded"}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	fragments := []string{`{"a":1}`, `{"b":2}`, `{"c":3}`}
+	deadline := wikiRepoOpRetry.deadline(clock.time())
+	if err := uploadWikiRepoOpFragments(ctx, NewTransport(srv.URL, "tok"), wikiRepoOpTestCommand(),
+		strings.Repeat("c", 40), fragments, deadline); err != nil {
+		t.Fatalf("an upload interrupted by a stop failed: %v", err)
+	}
+	reportWikiRepoOpResult(ctx, NewTransport(srv.URL, "tok"), wikiRepoOpTestCommand(), wikiRepoOpResultBody(), deadline)
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(staged) != 3 {
+		t.Fatalf("fragments %v were staged, want all three: the payload is worthless incomplete", staged)
+	}
+	for index, got := range staged {
+		if got != index {
+			t.Fatalf("fragments were staged as %v, want each ordinal in order", staged)
+		}
+	}
+	if n := reports.Load(); n != 1 {
+		t.Fatalf("the result was sent %d times, want the one a stopping runner makes", n)
 	}
 }
 

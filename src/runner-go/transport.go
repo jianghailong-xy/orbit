@@ -674,23 +674,23 @@ func (t *Transport) wikiRepoOpProgress(opID string, b WikiRepoOpProgressRequest)
 }
 
 // wikiRepoOpFragment uploads one piece of a snapshot too large for one request body. Idempotent by its
-// ordinal, so a piece that has to be sent again is the same piece. It carries a context because it is
-// sent again while it can still be used (wiki_repo_op_retry.go): a runner that is stopping abandons the
-// send it is in rather than holding the process open for a control plane that may stay down.
-func (t *Transport) wikiRepoOpFragment(ctx context.Context, opID string, b WikiRepoOpFragmentRequest) (*WikiRepoOpFragmentResponse, error) {
+// ordinal, so a piece that has to be sent again is the same piece. Deliberately no caller's context: a
+// send goes out while the runner is stopping too, and only this route's own timeout bounds it
+// (wiki_repo_op_retry.go).
+func (t *Transport) wikiRepoOpFragment(opID string, b WikiRepoOpFragmentRequest) (*WikiRepoOpFragmentResponse, error) {
 	var out WikiRepoOpFragmentResponse
-	if err := t.do(ctx, "POST", "/runner/wiki/repo-ops/"+opID+"/fragments", b, &out, 60*time.Second); err != nil {
+	if err := t.do(nil, "POST", "/runner/wiki/repo-ops/"+opID+"/fragments", b, &out, 60*time.Second); err != nil {
 		return nil, err
 	}
 	return &out, nil
 }
 
 // wikiRepoOpResult reports what a claimed repository operation came to. The answer says whether the
-// control plane took it; a 409 means this process's claim had already moved on. The context is the
-// fragment route's, for the same reason.
-func (t *Transport) wikiRepoOpResult(ctx context.Context, opID string, b WikiRepoOpResultRequest) (*WikiRepoOpResultResponse, error) {
+// control plane took it; a 409 means this process's claim had already moved on. The fragment route's
+// no-context rule is this one's too, for the same reason.
+func (t *Transport) wikiRepoOpResult(opID string, b WikiRepoOpResultRequest) (*WikiRepoOpResultResponse, error) {
 	var out WikiRepoOpResultResponse
-	if err := t.do(ctx, "POST", "/runner/wiki/repo-ops/"+opID+"/result", b, &out, wikiRepoOpResultTimeout); err != nil {
+	if err := t.do(nil, "POST", "/runner/wiki/repo-ops/"+opID+"/result", b, &out, wikiRepoOpResultTimeout); err != nil {
 		return nil, err
 	}
 	return &out, nil

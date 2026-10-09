@@ -702,7 +702,9 @@ var errWikiRepoOpPayloadWindowSpent = errors.New("the payload could not be uploa
 // first, and the result that follows names what they reassemble to. Both the fragments and the result are
 // sent again while they can still be used — inside the window the claim opened — and an answer that
 // settles the matter, 2xx, 409 STALE_CLAIM, 404, 400 INVALID_RESULT or 422 UNSTORABLE_RESULT among them,
-// ends the sending there (wiki_repo_op_retry.go).
+// ends the sending there (wiki_repo_op_retry.go). ctx is the run loop's: it says the runner is draining,
+// which ends the retrying but never the operations still owed to the control plane — a stop still sends
+// them, once each.
 func runWikiRepoOpAndReport(ctx context.Context, t *Transport, cmd WikiRepoOpCommand) {
 	// The window runs from the claim: this process was handed the operation by the heartbeat that claimed
 	// it, so this is when its life — and the usefulness of anything reported about it — started.
@@ -728,9 +730,10 @@ func runWikiRepoOpAndReport(ctx context.Context, t *Transport, cmd WikiRepoOpCom
 	if outcome.state == "succeeded" && outcome.payload != "" {
 		fragments := wikiRepoOpFragments(outcome.payload)
 		uploadErr := uploadWikiRepoOpFragments(ctx, t, cmd, outcome.sha, fragments, deadline)
-		if uploadErr != nil && (!wikiRepoOpResultWorthSendingAgain(uploadErr) || ctx.Err() != nil) {
+		if uploadErr != nil && !wikiRepoOpResultWorthSendingAgain(uploadErr) {
 			// The control plane answered for good about this operation — each of those answers settles it —
-			// or this runner is stopping: there is nothing left for a result to say that anybody can hear.
+			// so there is nothing left for a result to say. A runner that is stopping is not that case: it
+			// still reports the failure below, once.
 			return
 		}
 		if uploadErr != nil {
@@ -768,6 +771,11 @@ func runWikiRepoOpAndReport(ctx context.Context, t *Transport, cmd WikiRepoOpCom
 // An answer that settles the matter ends the upload at once: 409 STALE_CLAIM (the claim moved on), 404,
 // 400 INVALID_RESULT or 422 UNSTORABLE_RESULT — each of the last two has already failed the operation at
 // the control plane, so no fragment after it is worth sending either.
+//
+// The caller's context is the runner's state, not the send's (wiki_repo_op_retry.go): every piece still
+// unstaged when the runner is stopping is sent once — pieces that succeed go on being sent, since the
+// payload is worthless incomplete — and a piece that fails ends the upload there rather than being waited
+// out.
 func uploadWikiRepoOpFragments(ctx context.Context, t *Transport, cmd WikiRepoOpCommand, sha string, fragments []string, deadline time.Time) error {
 	p := wikiRepoOpRetry
 	for index, content := range fragments {
@@ -787,7 +795,7 @@ func uploadWikiRepoOpFragments(ctx context.Context, t *Transport, cmd WikiRepoOp
 			Content:         content,
 		}
 		for attempt := 1; ; attempt++ {
-			_, err := t.wikiRepoOpFragment(ctx, cmd.ID, body)
+			_, err := t.wikiRepoOpFragment(cmd.ID, body) // no context of the caller's: see sendWikiRepoOpResult
 			if err == nil {
 				break
 			}
@@ -796,7 +804,7 @@ func uploadWikiRepoOpFragments(ctx context.Context, t *Transport, cmd WikiRepoOp
 				return err
 			}
 			if ctx.Err() != nil {
-				logln("wiki repo op", cmd.ID, what, "not staged and this runner is stopping:", err)
+				logln("wiki repo op", cmd.ID, what, "not staged, and this runner is stopping, so it is not sent again:", err)
 				return err
 			}
 			wait := p.wait(attempt)
