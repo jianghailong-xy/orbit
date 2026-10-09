@@ -745,6 +745,20 @@ test('a build the stop handed back keeps its attempts and is the next worker\'s 
   const articles = await job(h, { kind: 'articles' });
   await stopping.executor.onModuleDestroy();
   const handedBack = await jobRow(h, build);
+  // What Activity reads meanwhile (jobs.read): the build first in line, nothing scheduled and nothing counted — the Runs
+  // card's `next in line`, never a `retrying in` — and the articles behind it.
+  const { jobs } = await new WikiJobReads(h.prisma as unknown as PrismaService).read(h.owner.id, h.owner.spaceId);
+  assert.deepEqual(
+    [build, articles].map((id) => {
+      const one = jobs.find((shown) => shown.id === id);
+      return one && { state: one.state, attempts: one.attempts, ahead: one.ahead, nextAttemptAt: one.nextAttemptAt, failureKind: one.failureKind, error: one.error };
+    }),
+    [
+      { state: 'queued', attempts: 2, ahead: 0, nextAttemptAt: null, failureKind: null, error: HANDED_BACK },
+      { state: 'queued', attempts: 0, ahead: 1, nextAttemptAt: null, failureKind: null, error: null },
+    ],
+    'Activity reads the build first in line, with nothing scheduled or counted, and the articles behind it',
+  );
   // The next worker's first pass: the one its bootstrap runs at once.
   const next = recording(h);
   const claimed = await next.executor.runOnce();

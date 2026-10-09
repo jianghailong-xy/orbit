@@ -1234,7 +1234,7 @@ class WikiMaintainRun {
           signal: this.jobContext.signal,
         });
       } catch (error) {
-        // Not asked again and not reworded: the executor lets the job's lease out to now (design §5.4).
+        // Not asked again and not reworded: the executor hands the job back, nothing counted (design §5.4).
         if (isWikiJobCancellation(error, this.jobContext.signal)) throw error;
         last = (error as Error)?.message ?? String(error);
       }

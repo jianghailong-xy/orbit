@@ -26,7 +26,8 @@
  *   7. the documents step with a confirmed plan: it reads the plan through its read, where a section's projects are
  *      { id, title }, and the section's material is found by the project's id (2026-10-09: 22P02, nothing written);
  *   8. a worker that stops while the documents step waits for a read: the job is handed back (design §5.4) — the
- *      run not settled, no REPO_OP_FAILED, no read asked again, nothing counted — and the next worker takes it over.
+ *      run not settled, no REPO_OP_FAILED, no read asked again, nothing counted, and the health line still reads the
+ *      run under way with no failure — and the next worker takes it over.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/wiki-worker/wiki-maintain-job.pg.spec.ts
  *
@@ -51,6 +52,7 @@ import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '.
 import type { PushService } from '../push/push.service';
 import type { RealtimeService } from '../realtime/realtime.service';
 import { WikiDocs } from '../wiki/wiki-docs';
+import { WikiHealth } from '../wiki/wiki-health';
 import { WikiPlans } from '../wiki/wiki-plan';
 import { WikiRefusalError, WikiService, type WikiPrincipal } from '../wiki/wiki.service';
 import { WikiRepoOps } from './wiki-repo-ops';
@@ -1029,6 +1031,14 @@ test('a worker that stops while the documents step waits for a read hands the jo
     },
     { state: 'queued', next_attempt_at: null, attempts: 0, failure_kind: null, error: WIKI_JOB_HANDED_BACK, run: null, docs: null, asked: [] },
     'the job is handed back — the run not settled, nothing counted, no REPO_OP_FAILED — and asks the runner for nothing more',
+  );
+  // What the space's health line reads meanwhile (maintenance.health): the run still under way, no failure and no
+  // streak — the hand-back writes no run row and no cursor.
+  const { maintenance: health } = await new WikiHealth(h.prisma as unknown as PrismaService).read(h.ownerId, fx.spaceId);
+  assert.deepEqual(
+    { look: health.look, consecutiveFailures: health.consecutiveFailures, lastFailure: health.lastFailure, running: health.running?.jobId ?? null },
+    { look: 'running', consecutiveFailures: 0, lastFailure: null, running: fx.jobId },
+    'the health line shows the run under way, and nothing of the stop counts against the space',
   );
 
   // The next worker takes the job over, and its replay finishes the run. The attempt the stop cut short is not counted
