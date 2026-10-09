@@ -15,8 +15,10 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -31,6 +33,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.OrbitApplication
+import io.orbitd.android.R
 import io.orbitd.android.core.auth.AuthState
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.cards.*
@@ -831,9 +834,8 @@ private fun LazyListScope.queueSection(state: ProjectPageState, enabled: Boolean
                 Text(ProjectPage.queueImpact(item), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             when {
-                item.text("runState") == "READY" -> FilledTonalButton(onClick = { run(item) }, enabled = enabled, modifier = Modifier.testTag("queue:${item.text("taskId")}:run")
-                    .semantics { contentDescription = "Run ${item.text("title").orEmpty()}" }) {
-                    Text("▶ ${if (item.text("taskId") in state.starting) ProjectPage.runPressStarting else ProjectPage.runPress}") }
+                item.text("runState") == "READY" -> RunPress(if (item.text("taskId") in state.starting) ProjectPage.runPressStarting else ProjectPage.runPress,
+                    enabled, "queue:${item.text("taskId")}:run", "Run ${item.text("title").orEmpty()}") { run(item) }
                 item.text("runState") == "PAUSED" && item.obj("pausedList") != null -> OutlinedButton(onClick = { resume(item) }, enabled = enabled) { Text(ProjectPage.resumeListPress) }
                 item.text("runState") in setOf("RUNNING", "QUEUED") && item.text("sessionId") != null -> TextButton(onClick = {
                     item.text("sessionId")?.let { open(OrbitRoute(Destination.SESSION, it)) } }) { Text(ProjectPage.openRunSession) }
@@ -842,6 +844,22 @@ private fun LazyListScope.queueSection(state: ProjectPageState, enabled: Boolean
         }
     }
     if (queue.objects("items").isNotEmpty()) item(key = "queue-help") { Text(ProjectPage.queueHelp(queue), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+}
+
+/** The run queue's Run (iOS 6f2a10f9f): the play mark and the word in the tint on a light tint of it, a 48dp press however
+ * small the label, and half faded while it cannot be pressed. */
+@Composable
+internal fun RunPress(label: String, enabled: Boolean, tag: String, description: String, run: () -> Unit) {
+    val tint = MaterialTheme.colorScheme.primary
+    Box(Modifier.heightIn(min = 48.dp).alpha(if (enabled) 1f else 0.5f).clickable(enabled = enabled, role = Role.Button, onClick = run)
+        .testTag(tag).semantics { contentDescription = description }, contentAlignment = Alignment.Center) {
+        Row(Modifier.widthIn(min = 72.dp).heightIn(min = 34.dp).background(tint.copy(alpha = 0.08f), RoundedCornerShape(9.dp))
+            .padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally)) {
+            Icon(painterResource(R.drawable.ic_play), null, Modifier.size(12.dp).testTag("$tag:play"), tint = tint)
+            Text(label, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, color = tint, maxLines = 1)
+        }
+    }
 }
 
 private fun LazyListScope.criteriaSection(doc: JsonObject, openTask: (String) -> Unit) {
