@@ -192,6 +192,17 @@ final class StartProjectWiringTests: XCTestCase {
                        "the ready check's warnings are the coordinator's, and the card draws none")
         XCTAssertTrue(start.contains("if let levels = plan.levels {"),
                       "the plan is drawn by level, the batch review's rule")
+        // docs/mocks/start-card-web-width (approved 2026-10-09): the toggles only while the clamps
+        // hide words, and the plan as the task graph while the whole of it fits.
+        XCTAssertTrue(start.contains("if whyOpen || whyCut {"), "More only while the coordinator's words are cut")
+        XCTAssertTrue(start.contains("if criteriaOpen || !cutCriteria.isEmpty {"),
+                      "Read all only while a criterion is cut")
+        XCTAssertTrue(start.contains("let drawn = StartProject.planGraph(graph, availableWidth: Double(planWidth))"),
+                      "the plan is drawn as the task graph by OrbitKit's rule")
+        XCTAssertTrue(start.contains("ProjectGraphFullScreen(graph: graph, expanded: $graphExpanded, onOpenTask: openTask)"),
+                      "and a plan listed by level opens the project page's task graph full screen")
+        XCTAssertTrue(start.contains("graph: console.projectGraph)"),
+                      "the conversation's card is given the graph its plan is read off")
         XCTAssertTrue(start.contains("Text(StartProject.barCaption(opensCoordinator: opensCoordinator, startsNow: plan.startsNow,"),
                       "and the line under Start says what pressing it does")
         XCTAssertTrue(start.contains("escalationSeconds: console.projectEscalationSeconds,"),

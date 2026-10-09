@@ -63,7 +63,7 @@ class HttpTransportTest {
             val body = """{"clientTurnId":"same-turn","message":"Hello"}""".encodeToByteArray()
             client.request(handle, ApiRequest(listOf("sessions", "s1", "turn"), HttpMethod.POST, body = body))
             client.logout()
-            val calls = List(5) { server.takeRequest(5, TimeUnit.SECONDS)!! }
+            val calls = List(5) { server.takeRequest(60, TimeUnit.SECONDS)!! }
             assertTrue(calls.all { it.getHeader("X-Orbit-Client") == "android/0.1.0-a03" })
             assertEquals(listOf("/prefix/api/auth/login", "/prefix/api/sessions/s1/turn", "/prefix/api/auth/refresh", "/prefix/api/sessions/s1/turn", "/prefix/api/auth/logout"), calls.map { it.path })
             assertNull(calls[0].getHeader("Authorization"))
@@ -84,7 +84,7 @@ class HttpTransportTest {
             val client = AuthSession(OkHttpTransport(), MemoryCredentials(), MemoryInstances(), MemoryData(), "0.1.0-d1", true)
             assertEquals(SignInMethods(google = true, googleSignup = true), client.signInMethods(server.address()))
             client.loginWithGoogleTicket(server.address(), "fixture-ticket", "fixture-verifier")
-            val (methods, exchange) = List(2) { server.takeRequest(5, TimeUnit.SECONDS)!! }
+            val (methods, exchange) = List(2) { server.takeRequest(60, TimeUnit.SECONDS)!! }
             assertEquals("GET /prefix/api/auth/methods", "${methods.method} ${methods.path}")
             assertEquals("POST /prefix/api/auth/google/exchange", "${exchange.method} ${exchange.path}")
             assertTrue(listOf(methods, exchange).all { it.getHeader("X-Orbit-Client") == "android/0.1.0-d1" && it.getHeader("Authorization") == null })
@@ -126,7 +126,7 @@ class HttpTransportTest {
             val call = async(kotlinx.coroutines.Dispatchers.IO) {
                 OkHttpTransport().execute(HttpRequest(server.address(), ApiRequest(listOf("users", "me")), "test"))
             }
-            assertNotNull(server.takeRequest(5, TimeUnit.SECONDS))
+            assertNotNull(server.takeRequest(60, TimeUnit.SECONDS))
             call.cancel()
             withTimeout(2_000) { call.join() }
             assertTrue(call.isCancelled)

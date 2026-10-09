@@ -34,6 +34,8 @@ export const START_PLAN = 'Plan';
 export const START_HOW_IT_RUNS = 'How it runs';
 /** The link under the plan, to the tasks it names. */
 export const START_VIEW_TASKS = 'View tasks ›';
+/** Beside it, while the plan is drawn as levels: the project page's task graph, full screen. */
+export const START_TASK_GRAPH = 'Task graph';
 export const START_PROJECT_ACTION = 'Start the project';
 /** What the armed composer asks for, once "Chat about this" has handed the reply to it. */
 export const START_CHAT_PLACEHOLDER = 'What should change before it starts?';

@@ -107,6 +107,7 @@ final class StartProjectCardCopyParityTests: XCTestCase {
         assertDeclares(web, "START_PLAN", StartProject.plan)
         assertDeclares(web, "START_HOW_IT_RUNS", StartProject.howItRuns)
         assertDeclares(web, "START_VIEW_TASKS", StartProject.viewTasks)
+        assertDeclares(web, "START_TASK_GRAPH", StartProject.taskGraph)
         assertDeclares(web, "START_PROJECT_ACTION", StartProject.action)
         assertDeclares(web, "START_CHAT_PLACEHOLDER", StartProject.chatPlaceholder)
         assertDeclares(web, "START_NOBODY_ASKED", StartProject.nobodyAsked)

@@ -142,6 +142,29 @@ final class StartProjectTests: XCTestCase {
         XCTAssertEqual(view.startsNow, ["B"])
     }
 
+    /// The plan is the project page's task graph while the whole of it fits the card at
+    /// `planGraphMinFit` or better, top to bottom; otherwise the card lists it by level
+    /// (docs/mocks/start-card-web-width, board 02).
+    func testThePlanIsDrawnAsTheTaskGraphOnlyWhileTheWholeOfItFitsTheCard() throws {
+        let drawn = try XCTUnwrap(StartProject.planGraph(graph(), availableWidth: 700))
+        XCTAssertEqual(drawn.layout.direction, .topToBottom)
+        XCTAssertEqual(Set(drawn.layout.placements.map(\.mark.id)),
+                       ["task-a", "task-b", "task-c", "task-d", "task-e"])
+        XCTAssertEqual(drawn.edges.count, 5)
+        XCTAssertGreaterThanOrEqual(drawn.scale, StartProject.planGraphMinFit)
+        // A card that would have to shrink it past the line lists it; one that just reaches the line
+        // draws it.
+        let width = drawn.layout.width
+        XCTAssertNil(StartProject.planGraph(graph(), availableWidth: width * (StartProject.planGraphMinFit - 0.05)))
+        XCTAssertNotNil(StartProject.planGraph(graph(), availableWidth: width * StartProject.planGraphMinFit))
+        // Never a plan the server folded or cut short, nor one not read yet or a card not measured yet.
+        XCTAssertNil(StartProject.planGraph(graph(folded: true), availableWidth: 700))
+        let cut = ProjectDependencyGraph(marks: graph().marks, edges: graph().edges, truncated: true)
+        XCTAssertNil(StartProject.planGraph(cut, availableWidth: 700))
+        XCTAssertNil(StartProject.planGraph(nil, availableWidth: 700))
+        XCTAssertNil(StartProject.planGraph(graph(), availableWidth: 0))
+    }
+
     // MARK: what still comes to the owner
 
     func testWithAutomaticOnTheOwnerKeepsTheTasksTheyConfirmTheCriteriaAndWhatCannotBeResolved() {

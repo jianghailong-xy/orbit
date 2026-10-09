@@ -996,7 +996,8 @@ private struct RequestedStartProjectSheet: View {
                 onDraft: { edited = $0 },
                 onStart: { await start(request, draft, itemID: row.itemId) },
                 onViewTasks: onViewTasks,
-                error: error)
+                error: error,
+                graph: store.graph)
             .onAppear { if held == nil { held = row } }
         } else if store.document != nil, store.confirmation != nil, store.openItems != nil {
             // The request stopped standing before this sheet could draw it: said, not drawn blank.
