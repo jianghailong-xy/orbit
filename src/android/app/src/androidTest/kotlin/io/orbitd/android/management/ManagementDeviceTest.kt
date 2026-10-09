@@ -80,6 +80,11 @@ class ManagementDeviceTest {
     @Volatile private var sharingActive = true
     @Volatile private var shareTools = false
     @Volatile private var bearerOnPublicManifest: String? = "unread"
+    /** A13d: the account's switch for smart model selection as users/me carries it (absent until written); the access tokens
+     * GET access-tokens answers (DELETE revokes one); and the DeepSeek key's balance, too low once [deepSeekLow]. */
+    @Volatile private var modelRouting: Boolean? = null
+    @Volatile private var revoked = emptySet<String>()
+    @Volatile private var deepSeekLow = false
     private val workspaceId = "34Tcl0kralZrY8opuLJU4"
     private val runnerId = "34TcwNgAIo6tGUiIKjqnQ"
     private val sessionId = "34TcwNgAIo6tGUiIKjqnS"
@@ -202,7 +207,7 @@ class ManagementDeviceTest {
                 compose.onNode(hasText("Close") and hasClickAction() and hasAnyAncestor(isDialog())).performClick()
                 // The workspace list's gear opens the form; Done writes only what changed.
                 compose.onNodeWithContentDescription("Workspace settings").performClick()
-                await("Smart model selection for tasks")
+                await("Working directory")
                 compose.onNode(hasSetTextAction() and hasText("Name")).performTextReplacement("Configured workspace")
                 capture("workspace-settings")
                 click(hasText("Done") and hasClickAction(), scroll = false)
@@ -440,6 +445,66 @@ class ManagementDeviceTest {
         }
     }
 
+    /**
+     * A13d's pages (A01b A13-7/13/14/16): Settings' Smart model selection switch — written alone — and Access tokens row; the
+     * tokens page's two tabs and a revoke asked first; Providers' new footers and a DeepSeek key's balance at the end of its row,
+     * its page — Refresh reading it again, too low this time — and a key DeepSeek refused.
+     */
+    @Test fun accessTokensSmartSelectionAndDeepSeekBalance() {
+        start()
+        MockWebServer().use { server ->
+            server.dispatcher = dispatcher()
+            try {
+                role = "ADMIN"; modelRouting = null; revoked = emptySet(); deepSeekLow = false
+                signIn(server); settings()
+                await("Smart model selection"); await("2 active")
+                capture("a13d-settings-sessions")
+                click(hasText("Smart model selection") and isToggleable())
+                compose.waitUntil(10_000) { modelRouting == true }
+                compose.waitUntil(10_000) { runCatching { compose.onNode(hasText("Smart model selection") and isToggleable()).assertIsOn() }.isSuccess }
+                capture("a13d-smart-selection-on")
+                compose.onAllNodesWithText("Access tokens").onFirst().performScrollTo()
+                capture("a13d-settings-account")
+                click(hasText("Access tokens") and hasClickAction())
+                await("Active 2"); await("orbit_pat_…k3Fq"); await("Never expires")
+                capture("a13d-access-tokens")
+                click(hasContentDescription("More for laptop"), scroll = false)
+                click(hasText("Revoke") and hasClickAction(), scroll = false)
+                await("Revoke “laptop”?")
+                compose.onNode(hasText("Cancel") and hasAnyAncestor(isDialog())).assertExists()
+                capture("a13d-revoke-confirm")
+                click(hasText("Revoke") and hasClickAction() and hasAnyAncestor(isDialog()), scroll = false)
+                compose.waitUntil(10_000) { calls.contains("DELETE /api/access-tokens/t1") }
+                await("Active 1")
+                capture("a13d-access-tokens-revoked")
+                click(hasText("Revoked & expired 3") and hasClickAction(), scroll = false)
+                await("Revoked by an administrator")
+                capture("a13d-access-tokens-ended")
+                back(); await("Default permission")
+                click(hasText("Providers") and hasClickAction()); await("¥110.00 · $5.00"); await("Unavailable")
+                compose.onAllNodesWithText("Your API keys").onFirst().performScrollTo()
+                capture("a13d-providers")
+                click(hasText("DeepSeek") and hasClickAction()); await("DeepSeek account balance"); await("Total")
+                capture("a13d-deepseek-key")
+                deepSeekLow = true
+                click(hasText("Refresh", substring = true) and hasClickAction())
+                compose.waitUntil(10_000) { calls.count { it == "GET /api/providers/mine/K1/balance" } >= 3 }
+                await("Balance too low — DeepSeek calls will fail")
+                capture("a13d-deepseek-key-low")
+                compose.onAllNodesWithText("Endpoint").onFirst().performScrollTo()
+                capture("a13d-deepseek-key-provider")
+                back(); await("Your API keys")
+                click(hasText("DeepSeek Harness") and hasClickAction()); await("Couldn't get the balance")
+                capture("a13d-deepseek-key-rejected")
+                back()
+            } finally {
+                modelRouting = null; revoked = emptySet(); deepSeekLow = false
+                runBlocking { app.session.logout() }
+                File(app.filesDir, "a13-management").apply { mkdirs() }.resolve("a13d-requests.txt").writeText(calls.joinToString("\n"))
+            }
+        }
+    }
+
     /** The module's main pages in the account's dark appearance. Each pass starts from its own fresh activity. */
     @Test fun mainPagesInTheAccountsDarkAppearance() {
         start()
@@ -493,7 +558,7 @@ class ManagementDeviceTest {
         await("Tool calls and output"); capture("$pass-session-share")
         compose.onNode(hasText("Close") and hasClickAction() and hasAnyAncestor(isDialog())).performClick()
         compose.onNodeWithContentDescription("Workspace settings").performClick()
-        await("Smart model selection for tasks"); capture("$pass-workspace-settings")
+        await("Working directory"); capture("$pass-workspace-settings")
         click(hasText("Cancel") and hasClickAction(), scroll = false)
         settings(); capture("$pass-settings-home")
         compose.onNodeWithContentDescription("Edit profile").performScrollTo().performClick(); await("Save profile"); capture("$pass-edit-profile"); back()
@@ -876,7 +941,27 @@ class ManagementDeviceTest {
         }
     }
 
-    private fun user() = """{"id":"fixture-user","name":"$name","email":"a13@example.test","role":"$role","avatarUpdatedAt":null,"preferences":{"theme":"$theme","defaultPermissionMode":"$permission","notifySessionFinished":false,"notifyAgentMessage":true}}"""
+    private fun user() = """{"id":"fixture-user","name":"$name","email":"a13@example.test","role":"$role","avatarUpdatedAt":null,"preferences":{"theme":"$theme","defaultPermissionMode":"$permission","notifySessionFinished":false,"notifyAgentMessage":true${modelRouting?.let { ",\"modelRouting\":$it" }.orEmpty()}}}"""
+    private fun token(id: String, name: String, hint: String, scopes: String, extra: String) =
+        """{"id":"$id","name":"$name","tokenHint":"$hint","scopes":$scopes,"createdVia":"WEB","createdAt":"${now.minusSeconds(30 * 86_400)}",""" +
+            (if (id in revoked) """"state":"REVOKED","revokedAt":"$now","revokedReason":"USER",""" else "") + extra + "}"
+    private val everything = """["tasks:read","tasks:write","projects:read","projects:write","sessions:read","sessions:write","workspaces:read","workspaces:write","runners:read","wiki:read","wiki:write","events:read"]"""
+    private fun tokens() = """{"tokens":[""" + listOf(
+        token("t1", "laptop", "k3Fq", everything, """"workspaceIds":[],"workspaces":[],"expiresAt":null,"lastUsedAt":"${now.minusSeconds(12_000)}","lastUsedIp":"203.0.113.7"""" +
+            if ("t1" in revoked) "" else ""","state":"ACTIVE""""),
+        token("t2", "ci", "Zz90", """["tasks:read","tasks:write","sessions:read"]""", """"workspaceIds":["w1","w2"],"workspaces":[{"id":"w1","name":"orbit"}],"expiresAt":"${now.plusSeconds(90 * 86_400)}","lastUsedAt":null,"state":"ACTIVE""""),
+        token("t3", "old phone", "Ab12", everything, """"workspaceIds":[],"workspaces":[],"expiresAt":null,"revokedAt":"${now.minusSeconds(2 * 86_400)}","revokedReason":"ADMIN","state":"REVOKED""""),
+        token("t4", "spike", "Cd34", """["tasks:read","projects:read","sessions:read","workspaces:read","runners:read","wiki:read","events:read"]""",
+            """"workspaceIds":[],"workspaces":[],"expiresAt":"${now.minusSeconds(3 * 86_400)}","state":"EXPIRED""""),
+    ).joinToString(",") + "]}"
+    private fun mine() = """[{"id":"K1","slug":"deepseek","label":"DeepSeek","runtime":"claude","presetSlug":"deepseek","baseUrl":"https://api.deepseek.com/anthropic","hasApiKey":true,"defaultModel":"deepseek-chat"},
+        {"id":"K2","slug":"dsh","label":"DeepSeek Harness","runtime":"dsh","presetSlug":"deepseek-harness","baseUrl":"https://api.deepseek.com/anthropic","hasApiKey":true},
+        {"id":"K3","slug":"openai-work","label":"OpenAI (work)","runtime":"codex","presetSlug":"openai","baseUrl":"https://api.openai.com/v1","hasApiKey":true,"defaultModel":"gpt-5"}]"""
+    private fun balance(id: String) = when {
+        id == "K2" -> """{"ok":false,"reason":"KEY_REJECTED","message":"DeepSeek rejected this API key (401 Authentication Fails).","fetchedAt":"$now","sharedWith":[]}"""
+        deepSeekLow -> """{"ok":true,"isAvailable":false,"fetchedAt":"$now","sharedWith":[],"balances":[{"currency":"CNY","totalBalance":"0.42","grantedBalance":"0.00","toppedUpBalance":"0.42"}]}"""
+        else -> """{"ok":true,"isAvailable":true,"fetchedAt":"$now","sharedWith":[],"balances":[{"currency":"CNY","totalBalance":"110.00","grantedBalance":"10.00","toppedUpBalance":"100.00"},{"currency":"USD","totalBalance":"5.00","grantedBalance":"0.00","toppedUpBalance":"5.00"}]}"""
+    }
     private fun heartbeat() = if (runnerOnline) now.toString() else now.minusSeconds(5 * 3600).toString()
     private val fleetNames = mapOf("0198f3a2-aaaa-7000-8000-00000000000a" to "Alpha box", "0198f3a2-bbbb-7000-8000-00000000000b" to "Bravo box",
         "0198f3a2-cccc-7000-8000-00000000000c" to "Charlie box")
@@ -1005,6 +1090,7 @@ class ManagementDeviceTest {
                     val patch = bodyOf()
                     patch["theme"]?.let { theme = it.jsonPrimitive.content }
                     patch["defaultPermissionMode"]?.let { permission = it.jsonPrimitive.content }
+                    patch["modelRouting"]?.let { modelRouting = it.jsonPrimitive.boolean }
                     user()
                 }
                 "/api/admin/users" -> if (role == "ADMIN") admins() else return MockResponse().setResponseCode(403).setBody("""{"message":"Admin role required"}""")
@@ -1054,13 +1140,25 @@ class ManagementDeviceTest {
                 }
                 "/api/sessions" -> if (request.requestUrl!!.queryParameter("view") == "open") "[${session()}]" else "[]"
                 "/api/sessions/counts" -> """[{"workspaceId":"$workspaceId","active":1,"running":1,"jobs":0,"needsYou":0}]"""
-                "/api/providers" -> """[{"slug":"openai-work","label":"OpenAI (work)","defaultModel":"gpt-5"}]"""
+                "/api/providers" -> """[{"slug":"deepseek","label":"DeepSeek","runtime":"claude","defaultModel":"deepseek-chat"},{"slug":"dsh","label":"DeepSeek Harness","runtime":"dsh"},
+                    {"slug":"openai-work","label":"OpenAI (work)","defaultModel":"gpt-5"}]"""
+                "/api/providers/mine" -> mine()
+                "/api/access-tokens" -> tokens()
                 "/api/providers/pools" -> pools()
                 "/api/providers/shared-pools" -> "[]"
                 "/api/providers/shared-pools/P1" -> access()
                 "/api/events" -> return MockResponse().setHeader("Content-Type", "text/event-stream")
                     .setChunkedBody(": connected\n\n".repeat(120), 13).throttleBody(13, 1, TimeUnit.SECONDS)
-                else -> if (request.method == "GET") "[]" else "{}"
+                else -> when {
+                    path.startsWith("/api/access-tokens/") && request.method == "DELETE" -> {
+                        val id = path.removePrefix("/api/access-tokens/")
+                        revoked = revoked + id
+                        """{"id":"$id","revokedAt":"$now","revokedReason":"USER"}"""
+                    }
+                    path.startsWith("/api/providers/mine/") && path.endsWith("/balance") -> balance(path.removePrefix("/api/providers/mine/").removeSuffix("/balance"))
+                    request.method == "GET" -> "[]"
+                    else -> "{}"
+                }
             }
             return MockResponse().setHeader("Content-Type", "application/json").setBody(body)
         }
