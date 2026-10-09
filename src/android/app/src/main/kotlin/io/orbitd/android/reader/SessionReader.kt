@@ -157,6 +157,8 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         state.session?.snapshot?.queuedTurns) {
         if (placed && follow && !dragging && state.window.newerAfter == null && !state.loading) {
             withFrameNanos { }
+            // A reader who stopped following during that frame stays where they went: a card brought into view, a touch.
+            if (!follow || dragging) return@LaunchedEffect
             positioning = true
             list.scrollToItem((list.layoutInfo.totalItemsCount - 1).coerceAtLeast(0))
             positioning = false
