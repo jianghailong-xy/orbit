@@ -1,6 +1,5 @@
 import { useState, type JSX } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Alert, Button, Modal, Typography } from 'antd';
 import { useToast } from '../lib/toast';
 import {
   REOPENABLE_STATUSES,
@@ -10,6 +9,9 @@ import {
   reopenMutationOptions,
   reopenParagraphs,
 } from './TaskDetailPanel';
+import { Alert } from './ui/Alert';
+import { Button } from './ui/Button';
+import { Dialog } from './ui/Dialog';
 
 /**
  * Reopen task, where a confirmation receipt's late review found a problem
@@ -35,41 +37,40 @@ export function OwnerConfirmationReopen({
   const [asking, setAsking] = useState(false);
   const reopen = useMutation(reopenMutationOptions(qc, message, taskId, projectId, () => setAsking(false)));
   if (!REOPENABLE_STATUSES.includes(status)) return null;
+  const back = () => {
+    reopen.reset();
+    setAsking(false);
+  };
+  // The task panel's own Reopen question (TaskDetailPanel), drawn the same: its dialog, paragraphs
+  // and refusal.
   return (
     <>
-      <Button block onClick={() => setAsking(true)}>
+      <Button style={{ width: '100%' }} onClick={() => setAsking(true)}>
         {REOPEN_ACTION_LABEL}
       </Button>
-      <Modal
+      <Dialog
         open={asking}
         title={REOPEN_MODAL_TITLE}
-        okText={REOPEN_MODAL_OK}
-        cancelText="Back"
-        okButtonProps={{ loading: reopen.isPending }}
-        onOk={() => reopen.mutate()}
-        onCancel={() => {
-          reopen.reset();
-          setAsking(false);
-        }}
+        className="tdp-reopen-dialog"
+        onClose={back}
+        footer={
+          <>
+            <Button onClick={back}>Back</Button>
+            <Button variant="primary" loading={reopen.isPending} onClick={() => reopen.mutate()}>
+              {REOPEN_MODAL_OK}
+            </Button>
+          </>
+        }
       >
         {reopenParagraphs({ projectId }).map((paragraph) => (
-          <Typography.Paragraph
-            key={paragraph.text}
-            strong={paragraph.strong}
-            type={paragraph.strong ? undefined : 'secondary'}
-          >
-            {paragraph.text}
-          </Typography.Paragraph>
+          <p key={paragraph.text} className={`tdp-reopen-paragraph${paragraph.strong ? ' is-strong' : ''}`}>
+            {paragraph.strong ? <strong>{paragraph.text}</strong> : paragraph.text}
+          </p>
         ))}
         {reopen.error ? (
-          <Alert
-            type="error"
-            showIcon
-            message="Task status was not changed"
-            description={(reopen.error as Error).message}
-          />
+          <Alert type="error" title="Task status was not changed" description={(reopen.error as Error).message} />
         ) : null}
-      </Modal>
+      </Dialog>
     </>
   );
 }

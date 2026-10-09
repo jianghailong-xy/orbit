@@ -6,6 +6,8 @@ import java.net.URLDecoder
 import kotlinx.serialization.Serializable
 
 enum class Destination { WORKSPACES, WORKSPACE, FOLDER, SEARCH, SESSION, DRAFT, PROJECTS, PROJECT, TASKS, TASK, LIST, WIKI, WIKI_ENTRY, WATCH, RUNNER, SETTINGS, BUILD,
+    /** A project's sessions page (A05-7): `id` the project, `workspaceId` the workspace it was entered over. */
+    PROJECT_SESSIONS,
     WIKI_BROWSE, WIKI_INDEX, WIKI_ARTICLE, WIKI_DOC, WIKI_REVIEW, WIKI_SETTINGS, WIKI_RUN, WIKI_JOB, WIKI_PLAN, WIKI_PLAN_DOC, WIKI_PLAN_SECTION,
     WIKI_ACTIVITY }
 enum class Origin { DRAWER, LIST, SEARCH, LINK, EXTERNAL }

@@ -159,6 +159,6 @@ final class CriteriaChangeCardCopyParityTests: XCTestCase {
         // And the second action is the word the other composer handoffs share.
         XCTAssertTrue(card.contains("{OWNER_SEND_BACK_ACTION}"))
         // A refused press is said in the confirmation card's words at both ends.
-        XCTAssertTrue(card.contains("message={CONFIRMATION_NOT_RECORDED}"))
+        XCTAssertTrue(card.contains("title={CONFIRMATION_NOT_RECORDED}"))
     }
 }

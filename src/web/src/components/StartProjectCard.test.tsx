@@ -280,7 +280,7 @@ beforeEach(() => {
   bodies.length = 0;
   armed.length = 0;
   reports.length = 0;
-  // The merge check's box grows with its command (antd's autoSize), which watches its own size.
+  // The merge check's box grows with its command (the Textarea's autoSize), which watches its own size.
   vi.stubGlobal('ResizeObserver', class {
     observe(): void {}
     unobserve(): void {}
@@ -736,7 +736,7 @@ describe('what the card says', () => {
       'Problems it can’t resolve within 2 h',
     ]);
     // The three settings that can change later, one row each.
-    expect(settingRow(card(), 'Tasks land on').querySelector('.ant-select-content')?.getAttribute('title'))
+    expect(settingRow(card(), 'Tasks land on').querySelector('[role="combobox"]')?.textContent)
       .toBe('A project branch');
     expect(settingRow(card(), 'Merge check').querySelector('.start-card-row-value')?.textContent).toBe('Set ›');
     expect(settingRow(card(), 'At most').querySelector<HTMLInputElement>('input')?.value).toBe('3');
@@ -994,7 +994,7 @@ describe('the press', () => {
     // Still on screen, with nothing to start and the conversation still open to it.
     expect(action(card(), START_PROJECT_ACTION).disabled).toBe(true);
     expect(action(card(), OWNER_SEND_BACK_ACTION).disabled).toBe(false);
-    expect(settingRow(card(), 'Automatic').querySelector<HTMLButtonElement>('[role="switch"]')?.disabled).toBe(true);
+    expect(settingRow(card(), 'Automatic').querySelector('[role="switch"]')?.getAttribute('aria-disabled')).toBe('true');
     expect(bodies).toHaveLength(1);
   });
 
@@ -1019,7 +1019,7 @@ describe('the press', () => {
     await reread(qc);
     await until(() => settingRow(card(), 'At most').querySelector<HTMLInputElement>('input')?.value === '2',
       'the new suggestion to replace the edit');
-    expect(settingRow(card(), 'Tasks land on').querySelector('.ant-select-content')?.getAttribute('title'))
+    expect(settingRow(card(), 'Tasks land on').querySelector('[role="combobox"]')?.textContent)
       .toBe('Directly into main');
     expect(card().querySelector('.start-card-quote-text')?.textContent).toBe('a single fix');
     await act(async () => {

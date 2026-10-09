@@ -191,6 +191,28 @@ describe('First-run setup', () => {
     });
   });
 
+  // docs/managed-runner-design.md: bootstrap records a managed runner for the first account when
+  // the server offers them, so setup lands where its workspace opens; otherwise, as always, the guide.
+  it.each([
+    ['switched on', { managedRunners: { enabled: true, contractVersion: 1 } }, '/'],
+    ['switched off', { managedRunners: { enabled: false, contractVersion: 1 } }, '/runners/register'],
+    ['a contract this client does not know', { managedRunners: { enabled: true, contractVersion: 2 } }, '/runners/register'],
+    ['no managedRunners member', {}, '/runners/register'],
+  ])('with managed runners %s, the new account lands on %#', async (_label, capabilities, landing) => {
+    vi.mocked(api).mockImplementation(async (path: string) => {
+      if (path === '/auth/setup-status') return { needsSetup };
+      if (path === '/auth/bootstrap') return { accessToken: 'header.eyJzdWIiOiJVMSJ9.sig', refreshToken: 'refresh' };
+      if (path === '/auth/capabilities') return capabilities;
+      throw new Error(`unexpected ${path}`);
+    });
+    await open();
+    await type('Email', 'owner@example.test');
+    await type('Password', 'secret1');
+    await type('Confirm password', 'secret1');
+    await submit();
+    expect(sentTo).toEqual([landing]);
+  });
+
   it('a refused setup says why and keeps the form', async () => {
     await open();
     vi.mocked(api).mockImplementation(async (path: string) => {

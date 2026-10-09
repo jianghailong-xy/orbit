@@ -1,0 +1,1 @@
+chromium-light-desktop p41-profile-photo.png          all=   365 gt2=   155 max= 39 clusters=  2 [144px x16-47 y856-879 m30] [11px x520-527 y152-183 m39]

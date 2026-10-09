@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type JSX, type Ref } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert } from 'antd';
+import { Alert } from './ui/Alert';
 import { api } from '../api';
 import { decisionReceiptAnchor } from '../lib/decisionReceipt';
 import { pendingDecisionsQuery, taskEvidenceQuery } from '../lib/queries';
@@ -595,8 +595,7 @@ export function EvidenceDecisionCard({
             <Alert
               className="evidence-decision-error"
               type={refusal.stale ? 'warning' : 'error'}
-              showIcon
-              message={refusal.title}
+              title={refusal.title}
               description={error.message}
             />
           ) : null}
