@@ -159,3 +159,35 @@ test('READY reports the runtime it was found ready with; waiting on model supply
   assert.equal(waiting.reason?.retryable, true);
   assert.equal(waiting.actions.canRetry, false, 'nothing to retry while it is still waiting');
 });
+
+test('a disabled owner: ACCOUNT_DISABLED before any stored cause, nothing offered and nothing usable; off, the switch is the reason', () => {
+  const NONE = { canEnsure: false, canWake: false, canSleep: false, canRetry: false, canDelete: false };
+  const disabled = (m: ManagedRunner | null, runner: ReturnType<typeof beat> | null = null) =>
+    managedRunnerStatus({ enabled: true, available: true, ownerDisabled: true, mapping: m, runner, now: NOW, heartbeatFreshMs: FRESH });
+  const none = disabled(null);
+  assert.equal(none.managementState, 'NOT_PROVISIONED');
+  assert.deepEqual(none.reason, { code: 'ACCOUNT_DISABLED', message: none.reason?.message, retryable: false });
+  assert.ok(none.reason?.message.length, 'a sentence a client can show');
+  assert.deepEqual(none.actions, NONE);
+  for (const [state, stored] of [
+    ['READY', null],
+    ['SLEEPING', null],
+    ['DRAINING', null],
+    ['WAITING_CAPACITY', managedRunnerReason('TRANSIENT')],
+    ['FAILED', managedRunnerReason('RETRY_EXHAUSTED')],
+    ['FENCING', managedRunnerReason('PREDECESSOR_STOP_UNPROVEN')],
+  ] as const) {
+    const status = disabled(mapping({ managementState: state, lastError: stored as never }), beat(1000));
+    assert.equal(status.managementState, state, `${state}: the stored state is reported as it is`);
+    assert.equal(status.reason?.code, 'ACCOUNT_DISABLED', `${state}: the account is the reason`);
+    assert.equal(status.usable, false, `${state}: not usable`);
+    assert.deepEqual(status.actions, NONE, `${state}: no retry, wake or sleep is offered`);
+  }
+  // Off, management is frozen: the switch is the reason, as for every owner.
+  const off = managedRunnerStatus({ enabled: false, available: false, ownerDisabled: true, mapping: mapping(), runner: beat(1000), now: NOW, heartbeatFreshMs: FRESH });
+  assert.equal(off.reason?.code, 'MANAGED_RUNNER_DISABLED');
+  // Enabled again: an ordinary sleeping runner, which the owner may wake.
+  const again = managedRunnerStatus({ enabled: true, available: true, ownerDisabled: false, mapping: mapping({ managementState: 'SLEEPING', desiredState: 'SLEEPING' }), runner: null, now: NOW, heartbeatFreshMs: FRESH });
+  assert.equal(again.reason, null);
+  assert.equal(again.actions.canWake, true);
+});
