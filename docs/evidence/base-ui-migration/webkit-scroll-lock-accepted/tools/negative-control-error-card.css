@@ -1,0 +1,4 @@
+
+/* Negative control, never delivered: on the session page (the only P0 page with the composer), the error card
+   ("Couldn't send the message") 1px further right. */
+body:has(.composer-box) .toast--attention { position: relative; left: 1px; }
