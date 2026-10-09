@@ -2,6 +2,8 @@ package io.orbitd.android.management
 
 import android.content.ComponentName
 import androidx.activity.ComponentActivity
+import androidx.compose.foundation.layout.Column
+import androidx.compose.material3.Text
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
@@ -118,6 +120,27 @@ class SmartSelectionGateTest {
         await("Working directory")
         compose.onAllNodesWithText("Task runs").assertCountEquals(0)
         compose.onAllNodesWithText("Smart model selection for tasks").assertCountEquals(0)
+    }
+
+    /** The switch is the whole app's at once: what AccountAppearance hands every page — the composer's ✦ (A11c) as much as the task
+     * page — follows Settings the moment the server took the change. */
+    @Test fun settingsSwitchIsTheWholeAppsAtOnce() {
+        val app = RuntimeEnvironment.getApplication() as OrbitApplication
+        runBlocking { fixture.signIn(app.session) }
+        val api = ManagementApi(app.session, (app.session.state.value as AuthState.SignedIn).handle)
+        compose.setContent {
+            AccountAppearance(app) {
+                Column {
+                    Text("smart selection: " + if (LocalSmartSelection.current) "on" else "off")
+                    SettingsScreen(api, OrbitRoute(Destination.SETTINGS), revision, {}, {}, logout = {}, changed = {}, workspaceDeleted = {},
+                        deviceAlerts = { true }, notifications = {}, about = {})
+                }
+            }
+        }
+        await("smart selection: off"); await("Smart model selection")
+        compose.onNode(hasText("Smart model selection") and isToggleable()).performScrollTo().performClick()
+        await("smart selection: on")
+        assertEquals(true, fixture.modelRouting)
     }
 
     @Test fun settingsHasTheSwitchWrittenAloneAsModelRouting() {

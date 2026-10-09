@@ -348,8 +348,8 @@ Differences from iOS, intended:
   decision; Android opens the page in whatever browser the device uses.
 - A13-15: Android's confirmations were already centred dialogs, so iOS's anchoring fixes have nothing to port.
 - A13-7: Revoke is in the row's ⋯ menu (iOS's swipe and context menu).
-- A13-14: the composer's ✦ chip (A11-1) is A11c's and is not on the project line at this task's start; it reads
-  `LocalSmartSelection` once both are on one line.
+- A13-14: the composer's ✦ chip (A11-1) is A11c's; since the merge of the project line it reads the same
+  `LocalSmartSelection`, which Settings' switch now sets the moment the server took the change.
 
 Tests: `AccessTokensTest`, `AccessTokensLogicTest` (iOS AccessTokensListTests), `DeepSeekBalanceTest`,
 `DeepSeekBalanceLogicTest` (iOS DeepSeekBalanceTests), `SmartSelectionGateTest`, `TaskLogicTest`
