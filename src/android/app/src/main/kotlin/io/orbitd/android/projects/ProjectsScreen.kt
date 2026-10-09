@@ -575,9 +575,7 @@ private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: Stri
             }
         } ?: run { dialog = null }
         ProjectDialog.Share -> ShareSheet(app, handle, ShareRootKind.PROJECT, id, close = { dialog = null }) { state.share = it }
-        ProjectDialog.Done -> ProjectDoneSheet(api, id, state, now, enabled, close = { dialog = null }) { body ->
-            attempt("${ProjectDone.notRecorded} — ") { api.done(id, body) }
-        }
+        ProjectDialog.Done -> ProjectDoneSheet(api, id, state, now, enabled, close = { dialog = null }) { refusal, body -> attempt(refusal, body) }
         // The jobs the landing row counts, read off the page's own integration read, which its polls keep current. Retry answers the
         // line read again, which the list redraws from at once; then the page reads everything again (iOS `retryIntegrationJob`).
         ProjectDialog.LandingJobs -> LandingJobsSheet(state.integration?.let { ProjectPage.landingJobLines(it, now, state.integrationReadAt, state.integrationReadFailed) }.orEmpty(),
