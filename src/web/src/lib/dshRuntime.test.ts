@@ -15,7 +15,8 @@ import {
   type ConfiguredProvider,
 } from './workspaceDefaults';
 
-// A Harness key as GET /providers serves it: runtime dsh, no static models (P1a).
+// A row from the retired DeepSeek Harness preset, as GET /providers serves it until the migration folds
+// it into a DeepSeek key: runtime dsh, no static models (P1a).
 const harness: ConfiguredProvider = {
   slug: 'deepseek-harness',
   label: 'DeepSeek Harness',
@@ -129,13 +130,14 @@ describe('dshRepair failure semantics (D2)', () => {
 });
 
 describe('DeepSeek Harness identity in the pickers', () => {
-  it('resolves a Harness key to the dsh runtime and keeps the DeepSeek preset on Claude', () => {
+  it('resolves the retired Harness preset’s row to the dsh runtime, and both DeepSeek rows to Anthropic’s protocol', () => {
     expect(runtimeForProvider('deepseek-harness', [harness, deepseek])).toBe('dsh');
     expect(runtimeForProvider('dsh', [])).toBe('dsh');
     expect(runtimeForProvider('deepseek', [harness, deepseek])).toBe('claude');
-    expect(runtimeSummary('dsh', 'deepseek-harness')).toBe('Runs on DeepSeek Harness');
-    expect(runtimeSummary(undefined, 'deepseek')).toBe('Runs on Claude Code');
-    expect(runtimeSummary(undefined, 'anthropic')).toBe('Anthropic-compatible');
+    // Whichever engine runs them, both rows speak Anthropic's protocol: that is what their pages say,
+    // never an engine.
+    expect(runtimeSummary('dsh')).toBe('Anthropic-compatible');
+    expect(runtimeSummary('claude')).toBe('Anthropic-compatible');
   });
 
   it('lists models from the runner catalogue and never falls back to a Claude model', () => {
@@ -194,7 +196,7 @@ describe('providerChoices for DeepSeek Harness', () => {
   const choicesOn = (runner: Parameters<typeof dshRunnerState>[0], configured = [harness, deepseek]) =>
     providerChoices(configured, catalog, undefined, runner?.engines ?? null, [], null, undefined, false, runner);
 
-  it('labels both DeepSeek rows by the agent that runs them and offers a ready Harness key', () => {
+  it('labels both DeepSeek rows by the agent that runs them and offers Harness ready on its key', () => {
     const choices = choicesOn(capable([health()]));
     const dsh = choices.find((c) => c.slug === 'deepseek-harness')!;
     expect(dsh).toMatchObject({ label: 'DeepSeek Harness', kind: 'byok', labelDetail: 'Harness', modelLabel: 'DeepSeek V4 Pro' });
@@ -204,7 +206,7 @@ describe('providerChoices for DeepSeek Harness', () => {
     expect(choices.some((c) => c.setup)).toBe(false);
   });
 
-  it('keeps an unrunnable Harness key listed with the reason and the Providers row that fixes it', () => {
+  it('keeps Harness’s key listed where Harness can’t run, with the reason and the Infrastructure row that fixes it', () => {
     for (const [runner, reason] of [
       [{ capabilities: [], engines: [health()] }, 'Update runner'],
       [capable([health({ installed: false, version: undefined })]), 'Not installed'],
@@ -228,7 +230,7 @@ describe('providerChoices for DeepSeek Harness', () => {
     expect(sameRuntimeChoices('claude', all, [deepseek]).some((c) => c.setup)).toBe(false);
   });
 
-  it('lets a running Harness session move only between Harness keys', () => {
+  it('lets a running Harness session move only between the keys Harness runs on', () => {
     const second = { ...harness, slug: 'deepseek-harness-2', label: 'Work key' };
     const configured = [harness, second, deepseek];
     const choices = choicesOn(capable([health()]), configured);
@@ -238,7 +240,7 @@ describe('providerChoices for DeepSeek Harness', () => {
     ]);
   });
 
-  it('groups Harness keys and the connect row under one DeepSeek Harness engine in the hero', () => {
+  it('groups the keys Harness runs on and the connect row under one DeepSeek Harness engine in the hero', () => {
     const ready = choicesOn(capable([health()]));
     const engines = engineChoices(ready, [harness, deepseek]);
     const dsh = engines.find((e) => e.slug === 'dsh')!;

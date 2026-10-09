@@ -16,8 +16,9 @@ import { InfrastructurePage } from './InfrastructurePage';
  * needs a person, a line each: an engine signed out on a machine that is online, signed in again from
  * that line; a machine that is offline, with its page; an account pool no session can start on, with
  * its page — and no block at all while nothing does. Then what the agents can run on, a card per
- * engine: Ready with a machine signed in to it, a key that runs on it or a pool of it, and Not set up,
- * with the two ways to get one, without.
+ * engine (docs/mocks/provider-engine-decoupling/web-1-infrastructure.html): Ready with a machine signed
+ * in to it, a key that runs on it or a pool of it — each key under every engine its `engines` names —
+ * and Not set up, with the ways to get one, without.
  */
 
 vi.mock('../api', async (original) => ({ ...(await original<typeof import('../api')>()), api: vi.fn() }));
@@ -89,6 +90,7 @@ const key = (n: number, label: string, over: Partial<ProviderRow> = {}): Provide
   slug: `key-${n}`,
   label,
   runtime: 'claude',
+  engines: ['claude', 'opencode'] as ProviderRow['engines'],
   baseUrl: 'https://api.anthropic.com',
   models: [
     { value: 'claude-opus-5', label: 'Claude Opus 5' },
@@ -104,8 +106,9 @@ const key = (n: number, label: string, over: Partial<ProviderRow> = {}): Provide
 });
 const ANTHROPIC = key(1, 'Anthropic (Claude)');
 const ANTHROPIC_WORK = key(2, 'Anthropic · Work', { defaultModel: 'claude-sonnet-5' });
-// DeepSeek's key runs on Claude Code, so that is the engine it is listed under.
+// DeepSeek's key runs on Claude Code, OpenCode and DeepSeek Harness, and is listed under all three.
 const DEEPSEEK = key(3, 'DeepSeek', {
+  engines: ['claude', 'opencode', 'dsh'] as ProviderRow['engines'],
   baseUrl: 'https://api.deepseek.com/anthropic',
   presetSlug: 'deepseek',
   models: [
@@ -116,6 +119,7 @@ const DEEPSEEK = key(3, 'DeepSeek', {
 });
 const MOONSHOT = key(4, 'Kimi (Moonshot)', {
   runtime: 'kimi',
+  engines: ['kimi', 'opencode'] as ProviderRow['engines'],
   baseUrl: 'https://api.moonshot.ai/v1',
   presetSlug: 'moonshot',
   models: [{ value: 'kimi-k2.7-code', label: 'Kimi K2.7 Code' }],
@@ -123,6 +127,7 @@ const MOONSHOT = key(4, 'Kimi (Moonshot)', {
 });
 const OPENAI_OFF = key(5, 'OpenAI', {
   runtime: 'codex',
+  engines: ['codex', 'opencode'] as ProviderRow['engines'],
   baseUrl: 'https://api.openai.com/v1',
   presetSlug: 'openai',
   models: [{ value: 'gpt-5.6-sol', label: 'GPT-5.6 Sol' }],
@@ -366,7 +371,9 @@ describe('What your agents can run on', () => {
       ['Claude Code', 'Ready'],
       ['Codex', 'Ready'],
       ['Kimi Code', 'Ready'],
-      ['Antigravity', 'Not set up'],
+      ['Antigravity CLI', 'Not set up'],
+      ['OpenCode', 'Ready'],
+      ['DeepSeek Harness', 'Ready'],
     ]);
     // Online machines signed in to it, by how many of their accounts; keys that run on it; its pools.
     expect(sourcesOf('Claude Code')).toEqual([
@@ -377,26 +384,91 @@ describe('What your agents can run on', () => {
     // Mac Studio's Codex is signed out, and ThinkPad's Claude Code is on a machine that is offline.
     expect(sourcesOf('Codex')).toEqual(['Subscription · HPC ×2']);
     expect(sourcesOf('Kimi Code')).toEqual(['Subscription · HPC']);
+    // The same three keys again: OpenCode runs every one of them, DeepSeek Harness the DeepSeek key.
+    expect(sourcesOf('OpenCode')).toEqual([
+      'API key · Anthropic (Claude) Claude Opus 5, Anthropic · Work Claude Sonnet 5, DeepSeek DeepSeek V4 Pro',
+    ]);
+    expect(sourcesOf('DeepSeek Harness')).toEqual(['API key · DeepSeek']);
   });
 
-  it('puts a key under the engine it runs on, beside the model it starts on', async () => {
+  it('puts one key under every engine it runs on, beside the model it starts on there', async () => {
     runners = [];
     pools = [];
     keys = [DEEPSEEK, MOONSHOT, OPENAI_OFF];
     await mount();
-    // DeepSeek is a vendor of its own, and runs on Claude Code.
-    const deepseek = engineCard('Claude Code');
+    // DeepSeek is a vendor of its own, and its one key runs on three engines.
+    const claude = engineCard('Claude Code');
     expect(stateOf('Claude Code')).toBe('Ready');
     expect(sourcesOf('Claude Code')).toEqual(['API key · DeepSeek DeepSeek V4 Pro']);
-    expect([...deepseek.querySelectorAll('.infra-model')].map(text)).toEqual(['DeepSeek V4 Pro']);
+    expect([...claude.querySelectorAll('.infra-model')].map(text)).toEqual(['DeepSeek V4 Pro']);
+    expect(sourcesOf('OpenCode')).toEqual(['API key · DeepSeek DeepSeek V4 Pro, Kimi (Moonshot) Kimi K2.7 Code']);
+    // Harness lists its models on each machine, and none has reported them: the key, and no model.
+    expect(stateOf('DeepSeek Harness')).toBe('Ready');
+    expect(sourcesOf('DeepSeek Harness')).toEqual(['API key · DeepSeek']);
     expect(sourcesOf('Kimi Code')).toEqual(['API key · Kimi (Moonshot) Kimi K2.7 Code']);
-    // A key that is switched off is nothing Codex can run on.
+    // A key that is switched off is nothing Codex — or OpenCode — can run on.
     expect(stateOf('Codex')).toBe('Not set up');
+    expect(sourcesOf('OpenCode').join()).not.toContain('OpenAI');
+  });
+
+  it('names a DeepSeek Harness session’s model from a machine’s Harness catalogue, the same for every DeepSeek key', async () => {
+    const flash = '["deepseek", "deepseek-v4-flash"]';
+    runners = [
+      machine(HPC, 'HPC', {
+        capabilities: ['provider:dsh'],
+        engines: [{ engine: 'dsh', installed: true, auth: 'unknown', version: '0.2.0-rc.2' }],
+        modelCatalog: {
+          dsh: [
+            { value: '["deepseek", "deepseek-v4-pro"]', label: 'DeepSeek V4 Pro' },
+            { value: flash, label: 'DeepSeek V4 Flash' },
+          ],
+        } as Runner['modelCatalog'],
+        runtimeDefaultModels: { dsh: flash } as Runner['runtimeDefaultModels'],
+      }),
+    ];
+    pools = [];
+    keys = [DEEPSEEK, key(6, 'DeepSeek 2', { ...DEEPSEEK, id: id(106), slug: 'deepseek-2', label: 'DeepSeek 2' })];
+    await mount();
+    expect(sourcesOf('DeepSeek Harness')).toEqual(['API key · DeepSeek DeepSeek V4 Flash, DeepSeek 2 DeepSeek V4 Flash']);
+    // On Claude Code and OpenCode each key starts on its own list's default.
+    expect(sourcesOf('Claude Code')).toEqual(['API key · DeepSeek DeepSeek V4 Pro, DeepSeek 2 DeepSeek V4 Pro']);
+    expect(sourcesOf('OpenCode')).toEqual(['API key · DeepSeek DeepSeek V4 Pro, DeepSeek 2 DeepSeek V4 Pro']);
+  });
+
+  it('lists a Claude subscription token under Claude Code alone, as the server answers for it', async () => {
+    runners = [];
+    pools = [];
+    keys = [key(7, 'Claude Max', { engines: ['claude'] as ProviderRow['engines'] }), ANTHROPIC_WORK];
+    await mount();
+    expect(sourcesOf('Claude Code')).toEqual(['API key · Claude Max Claude Opus 5, Anthropic · Work Claude Sonnet 5']);
+    expect(sourcesOf('OpenCode')).toEqual(['API key · Anthropic · Work Claude Sonnet 5']);
+  });
+
+  it('says where OpenCode’s own sign-in is set up, beside the keys it runs', async () => {
+    runners = [
+      machine(HPC, 'HPC', { engines: [{ engine: 'opencode', installed: true, auth: 'yes', version: '1.18.35' }] }),
+      machine(MAC, 'Mac Studio', { engines: [{ engine: 'opencode', installed: true, auth: 'no', version: '1.18.35' }] }),
+    ];
+    pools = [];
+    keys = [MOONSHOT];
+    await mount();
+    expect(sourcesOf('OpenCode')).toEqual(['Own sign-in · HPC', 'API key · Kimi (Moonshot) Kimi K2.7 Code']);
+  });
+
+  it('calls DeepSeek Harness Not set up without a DeepSeek key, and connects one that runs on Claude Code and OpenCode too', async () => {
+    keys = [ANTHROPIC, { ...DEEPSEEK, enabled: false }];
+    await mount();
+    const card = engineCard('DeepSeek Harness');
+    expect(card.classList.contains('none')).toBe(true);
+    expect(text(card.querySelector('.infra-engine-src'))).toBe(
+      'No DeepSeek key. Connect a DeepSeek key — it runs on Claude Code and OpenCode too.',
+    );
+    expect(link('Connect a DeepSeek key', card)?.getAttribute('href')).toBe('/providers/new/deepseek');
   });
 
   it('calls an engine with nothing that can pay for it Not set up, and offers to install it on a machine or connect a key', async () => {
     await mount();
-    const card = engineCard('Antigravity');
+    const card = engineCard('Antigravity CLI');
     expect(card.classList.contains('none')).toBe(true);
     expect(text(card.querySelector('.infra-engine-src'))).toBe(
       'No machine signed in, no key. Install on a machine or connect a key.',

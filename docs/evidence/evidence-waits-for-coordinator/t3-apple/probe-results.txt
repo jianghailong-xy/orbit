@@ -1,0 +1,51 @@
+probe/evidence-waits-t3-apple — round 2 (the pictures in this directory)
+run: https://github.com/jianghailong-xy/orbit/actions/runs/37994710793
+probe commit: b1876bbd898cfa34d7d836f61222243425fbe7a6 (parent b3b5e4017eb933611f4a9d6af3f4f79a6de3d6eb + .ewc-probe/ + client.yml)
+jobs: macOS (OrbitKit swift test + OrbitApp swift build) 114037678433 success; iOS (generate + build the app) 114037678717 success; iPhone probe 114037678864 success
+macOS OrbitKit: 	 Executed 3603 tests, with 5 tests skipped and 0 failures (0 unexpected) in 22.372 (22.970) seconds
+macOS OrbitApp: Build complete! (160.13s)
+iOS app: ** BUILD SUCCEEDED **
+
+== iPhone UI tests (xcodebuild test-without-building, one per test) ==
+Test Case '-[EwcProbeUITests.QueueShotTests test1QueuedSheetAndSentLight]' passed (193.324 seconds).
+Test Case '-[EwcProbeUITests.QueueShotTests test2QueuedSheetAndSentDark]' passed (172.513 seconds).
+Test Case '-[EwcProbeUITests.QueueShotTests test3ConfirmFromTheSheet]' passed (62.914 seconds).
+
+== what the app asked the fixture API for its evidence (requests.log, excerpt) ==
+    POST /__reset body: 
+21:51:13.758 "POST /__reset 200 -
+21:52:12.875 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=C1 200 -
+21:52:32.448 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=C1 200 -
+21:52:52.593 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=C1 200 -
+21:53:12.621 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=C1 200 -
+21:53:32.737 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=C1 200 -
+21:53:42.111 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=C1 200 -
+21:53:52.912 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=C1 200 -
+    POST /__set body: {"stage": "sent"}
+21:53:58.918 "POST /__set 200 -
+21:54:12.932 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=C1 200 -
+    POST /__reset body: 
+21:55:23.524 "POST /__reset 200 -
+21:55:59.894 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=C1 200 -
+21:56:19.957 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=C1 200 -
+21:56:39.988 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=C1 200 -
+21:57:00.134 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=C1 200 -
+21:57:20.381 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=C1 200 -
+21:57:27.330 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=C1 200 -
+21:57:40.441 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=C1 200 -
+    POST /__set body: {"stage": "sent"}
+21:57:46.389 "POST /__set 200 -
+21:58:00.529 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=C1 200 -
+    POST /__reset body: 
+21:59:32.749 "POST /__reset 200 -
+21:59:55.014 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=C1 200 -
+22:00:03.361 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=C1 200 -
+22:00:14.894 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=C1 200 -
+    POST /api/tasks/34dB07cTabletCardsRev01/evidence/decision body: {"decidingSessionId":"C1","decision":"CONFIRM","evidenceRevision":"1"}
+22:00:22.731 "POST /api/tasks/34dB07cTabletCardsRev01/evidence/decision 201 -
+22:00:22.755 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=C1 200 -
+22:00:35.055 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=C1 200 -
+
+probe/evidence-waits-t3-apple — round 1: run https://github.com/jianghailong-xy/orbit/actions/runs/37991957751 (5878946, product code ab00b9ce7):
+  iOS app build success; macOS OrbitApp swift build success (Build complete! (155.75s)); macOS OrbitKit swift test red only on
+  ComposerHandoffWiringTests.testAFailedReadDoesNotDisarmTheComposer (pinned isOpen, fixed to holdsReply in b3b5e4017); 3 iPhone UI tests passed.
