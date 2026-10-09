@@ -1,0 +1,19 @@
+** TEST BUILD SUCCEEDED **
+Test Case '-[EwcProbeUITests.QueueShotTests test1QueuedSheetAndSentLight]' started.
+Test Case '-[EwcProbeUITests.QueueShotTests test1QueuedSheetAndSentLight]' passed (193.324 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 193.324 (193.328) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 193.324 (193.330) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 193.324 (193.332) seconds
+** TEST EXECUTE SUCCEEDED **
+Test Case '-[EwcProbeUITests.QueueShotTests test2QueuedSheetAndSentDark]' started.
+Test Case '-[EwcProbeUITests.QueueShotTests test2QueuedSheetAndSentDark]' passed (172.513 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 172.513 (172.514) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 172.513 (172.515) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 172.513 (172.516) seconds
+** TEST EXECUTE SUCCEEDED **
+Test Case '-[EwcProbeUITests.QueueShotTests test3ConfirmFromTheSheet]' started.
+Test Case '-[EwcProbeUITests.QueueShotTests test3ConfirmFromTheSheet]' passed (62.914 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 62.914 (62.918) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 62.914 (62.919) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 62.914 (62.920) seconds
+** TEST EXECUTE SUCCEEDED **

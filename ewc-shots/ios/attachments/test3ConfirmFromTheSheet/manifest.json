@@ -1,0 +1,25 @@
+[
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "56E24416-B60B-45C6-A904-4A2B6B13E69B.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-04-decided_0_483F1556-ED60-4D20-BCE2-D38C469684BD.png",
+        "timestamp" : 1791583234.017
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "2FF963EC-3FB6-4881-A83D-FD0C6910B0F8.txt",
+        "isAssociatedWithFailure" : true,
+        "suggestedHumanReadableName" : "Complete Issue Description.txt"
+      }
+    ],
+    "testIdentifier" : "QueueShotTests/test3ConfirmFromTheSheet()",
+    "testIdentifierURL" : "test://com.apple.xcode/EwcProbe/EwcProbeUITests/QueueShotTests/test3ConfirmFromTheSheet"
+  }
+]

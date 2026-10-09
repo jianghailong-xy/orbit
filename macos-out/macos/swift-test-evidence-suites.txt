@@ -1,0 +1,160 @@
+Test Case '-[OrbitKitTests.EvidenceDecisionCopyParityTests testCountedLinesMatchTheWebCard]' started.
+Test Case '-[OrbitKitTests.EvidenceDecisionCopyParityTests testCountedLinesMatchTheWebCard]' passed (0.003 seconds).
+Test Case '-[OrbitKitTests.EvidenceDecisionCopyParityTests testGapsShownIsTheSameNumberOnBothEnds]' started.
+Test Case '-[OrbitKitTests.EvidenceDecisionCopyParityTests testGapsShownIsTheSameNumberOnBothEnds]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.EvidenceDecisionCopyParityTests testTheHeadingsAndActionsMatchTheWebCard]' started.
+Test Case '-[OrbitKitTests.EvidenceDecisionCopyParityTests testTheHeadingsAndActionsMatchTheWebCard]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.EvidenceDecisionCopyParityTests testThePauseAndSentLinesMatchTheWebTemplates]' started.
+Test Case '-[OrbitKitTests.EvidenceDecisionCopyParityTests testThePauseAndSentLinesMatchTheWebTemplates]' passed (0.002 seconds).
+Test Case '-[OrbitKitTests.EvidenceDecisionCopyParityTests testThePauseWindowIsTheTranscriptsOwnJudgmentAtBothEnds]' started.
+Test Case '-[OrbitKitTests.EvidenceDecisionCopyParityTests testThePauseWindowIsTheTranscriptsOwnJudgmentAtBothEnds]' passed (0.002 seconds).
+Test Case '-[OrbitKitTests.EvidenceDecisionCopyParityTests testTheQueuedCardsWordsMatchTheWebCard]' started.
+Test Case '-[OrbitKitTests.EvidenceDecisionCopyParityTests testTheQueuedCardsWordsMatchTheWebCard]' passed (0.003 seconds).
+Test Case '-[OrbitKitTests.EvidenceDecisionCopyParityTests testTheReceiptMatchesTheWebCardsWords]' started.
+Test Case '-[OrbitKitTests.EvidenceDecisionCopyParityTests testTheReceiptMatchesTheWebCardsWords]' passed (0.002 seconds).
+Test Case '-[OrbitKitTests.EvidenceDecisionCopyParityTests testTheRecordedLineMatchesTheWebCard]' started.
+Test Case '-[OrbitKitTests.EvidenceDecisionCopyParityTests testTheRecordedLineMatchesTheWebCard]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.EvidenceDecisionCopyParityTests testTheRefusalCodesAreSpelledTheSameOnBothEnds]' started.
+Test Case '-[OrbitKitTests.EvidenceDecisionCopyParityTests testTheRefusalCodesAreSpelledTheSameOnBothEnds]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.EvidenceDecisionCopyParityTests testTheSecondActionTakesItsWordFromTheSharedComposerHandoffControl]' started.
+Test Case '-[OrbitKitTests.EvidenceDecisionCopyParityTests testTheSecondActionTakesItsWordFromTheSharedComposerHandoffControl]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.EvidenceDecisionCopyParityTests testTheStaleExplanationsMatchTheWebCardWordForWord]' started.
+Test Case '-[OrbitKitTests.EvidenceDecisionCopyParityTests testTheStaleExplanationsMatchTheWebCardWordForWord]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.EvidenceDecisionDoorTests testARevisionDisplacedByALaterOneIsSuperseded]' started.
+Test Case '-[OrbitKitTests.EvidenceDecisionDoorTests testARevisionDisplacedByALaterOneIsSuperseded]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.EvidenceDecisionDoorTests testARevisionStillInTheReadIsDecidable]' started.
+Test Case '-[OrbitKitTests.EvidenceDecisionDoorTests testARevisionStillInTheReadIsDecidable]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.EvidenceDecisionDoorTests testARevisionThatLeftTheReadWasAlreadyDecided]' started.
+Test Case '-[OrbitKitTests.EvidenceDecisionDoorTests testARevisionThatLeftTheReadWasAlreadyDecided]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.EvidenceDecisionDoorTests testARowTheCardFilterDropsIsNeverDecidable]' started.
+Test Case '-[OrbitKitTests.EvidenceDecisionDoorTests testARowTheCardFilterDropsIsNeverDecidable]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.EvidenceDecisionDoorTests testASendBackWithoutAReasonIsNoRequest]' started.
+Test Case '-[OrbitKitTests.EvidenceDecisionDoorTests testASendBackWithoutAReasonIsNoRequest]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.EvidenceDecisionDoorTests testConfirmPostsTheThreeBindingsToTheTasksDecisionDoor]' started.
+Test Case '-[OrbitKitTests.EvidenceDecisionDoorTests testConfirmPostsTheThreeBindingsToTheTasksDecisionDoor]' passed (0.002 seconds).
+Test Case '-[OrbitKitTests.EvidenceDecisionDoorTests testNoReadIsUnreadRatherThanAnswered]' started.
+Test Case '-[OrbitKitTests.EvidenceDecisionDoorTests testNoReadIsUnreadRatherThanAnswered]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.EvidenceDecisionDoorTests testSendBackPostsTheTrimmedReasonBesideTheThreeBindings]' started.
+Test Case '-[OrbitKitTests.EvidenceDecisionDoorTests testSendBackPostsTheTrimmedReasonBesideTheThreeBindings]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.EvidenceDecisionTests testADispatchedTasksRowGetsACardOnlyWhereItsOwnerCardIs]' started.
+Test Case '-[OrbitKitTests.EvidenceDecisionTests testADispatchedTasksRowGetsACardOnlyWhereItsOwnerCardIs]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.EvidenceDecisionTests testAnAnswerOlderThanTheWindowIsStillDrawn]' started.
+Test Case '-[OrbitKitTests.EvidenceDecisionTests testAnAnswerOlderThanTheWindowIsStillDrawn]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.EvidenceDecisionTests testAPressDecidesAsTheSessionTheOwnerCardNames]' started.
+Test Case '-[OrbitKitTests.EvidenceDecisionTests testAPressDecidesAsTheSessionTheOwnerCardNames]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.EvidenceDecisionTests testAQuestionGivesWayOnlyWhenTheReadNamesItsRevision]' started.
+Test Case '-[OrbitKitTests.EvidenceDecisionTests testAQuestionGivesWayOnlyWhenTheReadNamesItsRevision]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.EvidenceDecisionTests testAReceiptCarriesTheMomentTheRecordIsPlacedBy]' started.
+Test Case '-[OrbitKitTests.EvidenceDecisionTests testAReceiptCarriesTheMomentTheRecordIsPlacedBy]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.EvidenceDecisionTests testAVersionWaitingOrSentIsAnswerableOrNotButNeverOpen]' started.
+Test Case '-[OrbitKitTests.EvidenceDecisionTests testAVersionWaitingOrSentIsAnswerableOrNotButNeverOpen]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.EvidenceDecisionTests testClaimClampDiffersBetweenAPhoneAndAWindow]' started.
+Test Case '-[OrbitKitTests.EvidenceDecisionTests testClaimClampDiffersBetweenAPhoneAndAWindow]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.EvidenceDecisionTests testClaimCriterionAndCitationsAreReadAsFields]' started.
+Test Case '-[OrbitKitTests.EvidenceDecisionTests testClaimCriterionAndCitationsAreReadAsFields]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.EvidenceDecisionTests testEmptyClaimAndNoCriterionSaySo]' started.
+Test Case '-[OrbitKitTests.EvidenceDecisionTests testEmptyClaimAndNoCriterionSaySo]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.EvidenceDecisionTests testFiveGapsShowThreeAndCountTheRest]' started.
+Test Case '-[OrbitKitTests.EvidenceDecisionTests testFiveGapsShowThreeAndCountTheRest]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.EvidenceDecisionTests testGapsShownIsSharedByBothClients]' started.
+Test Case '-[OrbitKitTests.EvidenceDecisionTests testGapsShownIsSharedByBothClients]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.EvidenceDecisionTests testNoCardComesFromWaitingOnYouFromNoProjectOrFromNoRead]' started.
+Test Case '-[OrbitKitTests.EvidenceDecisionTests testNoCardComesFromWaitingOnYouFromNoProjectOrFromNoRead]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.EvidenceDecisionTests testOneCardFollowsItsVersionBetweenTheGroups]' started.
+Test Case '-[OrbitKitTests.EvidenceDecisionTests testOneCardFollowsItsVersionBetweenTheGroups]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.EvidenceDecisionTests testOnlyThisProjectsQueueIsDrawnHere]' started.
+Test Case '-[OrbitKitTests.EvidenceDecisionTests testOnlyThisProjectsQueueIsDrawnHere]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.EvidenceDecisionTests testOnlyThisProjectsRowsThatThisSessionMayAnswerGetACard]' started.
+Test Case '-[OrbitKitTests.EvidenceDecisionTests testOnlyThisProjectsRowsThatThisSessionMayAnswerGetACard]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.EvidenceDecisionTests testQueueDecodesFromTheServersShape]' started.
+Test Case '-[OrbitKitTests.EvidenceDecisionTests testQueueDecodesFromTheServersShape]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.EvidenceDecisionTests testTheCoordinatorsTwoGroupsDecodeFromTheServersShape]' started.
+Test Case '-[OrbitKitTests.EvidenceDecisionTests testTheCoordinatorsTwoGroupsDecodeFromTheServersShape]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.EvidenceDecisionTests testThePauseLineIsReadOffTheCoordinatorsOwnRow]' started.
+Test Case '-[OrbitKitTests.EvidenceDecisionTests testThePauseLineIsReadOffTheCoordinatorsOwnRow]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.EvidenceDecisionTests testTheQueueIsReReadWhileItCanMove]' started.
+Test Case '-[OrbitKitTests.EvidenceDecisionTests testTheQueueIsReReadWhileItCanMove]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.EvidenceDecisionTests testTheReceiptLineSaysWhichAnswerToWhichRevision]' started.
+Test Case '-[OrbitKitTests.EvidenceDecisionTests testTheReceiptLineSaysWhichAnswerToWhichRevision]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.EvidenceDecisionTests testTheSecondAnswerHasOneWordForTheButtonAndOneForTheRecord]' started.
+Test Case '-[OrbitKitTests.EvidenceDecisionTests testTheSecondAnswerHasOneWordForTheButtonAndOneForTheRecord]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.EvidenceDecisionTests testTheSentLineSaysWhenInTheReceiptsClock]' started.
+Test Case '-[OrbitKitTests.EvidenceDecisionTests testTheSentLineSaysWhenInTheReceiptsClock]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.EvidenceDecisionTests testTheSharedFixturesQueueStandsWhereItsConversationDrawsIt]' started.
+Test Case '-[OrbitKitTests.EvidenceDecisionTests testTheSharedFixturesQueueStandsWhereItsConversationDrawsIt]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.EvidenceDecisionTests testTwoRevisionsOfOneTaskAreTwoCards]' started.
+Test Case '-[OrbitKitTests.EvidenceDecisionTests testTwoRevisionsOfOneTaskAreTwoCards]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.EvidenceDecisionWiringTests testAnAskUserQuestionIsTheOrdinaryFormAndTheCardIsADeliveredOne]' started.
+Test Case '-[OrbitKitTests.EvidenceDecisionWiringTests testAnAskUserQuestionIsTheOrdinaryFormAndTheCardIsADeliveredOne]' passed (0.022 seconds).
+Test Case '-[OrbitKitTests.EvidenceDecisionWiringTests testEveryVerdictControlIsDisabledByTheDerivedStanding]' started.
+Test Case '-[OrbitKitTests.EvidenceDecisionWiringTests testEveryVerdictControlIsDisabledByTheDerivedStanding]' passed (0.002 seconds).
+Test Case '-[OrbitKitTests.EvidenceDecisionWiringTests testTheArmingPressNamesTheVersionItIsAbout]' started.
+Test Case '-[OrbitKitTests.EvidenceDecisionWiringTests testTheArmingPressNamesTheVersionItIsAbout]' passed (0.006 seconds).
+Test Case '-[OrbitKitTests.EvidenceDecisionWiringTests testTheBodyIsReadFromTheRow]' started.
+Test Case '-[OrbitKitTests.EvidenceDecisionWiringTests testTheBodyIsReadFromTheRow]' passed (0.003 seconds).
+Test Case '-[OrbitKitTests.EvidenceDecisionWiringTests testTheCardDrawsAWaitingVersionFoldedAndASentOneAsALine]' started.
+Test Case '-[OrbitKitTests.EvidenceDecisionWiringTests testTheCardDrawsAWaitingVersionFoldedAndASentOneAsALine]' passed (0.002 seconds).
+Test Case '-[OrbitKitTests.EvidenceDecisionWiringTests testTheConsoleDeliversOnlyTheRowsTheCardFilterKeeps]' started.
+Test Case '-[OrbitKitTests.EvidenceDecisionWiringTests testTheConsoleDeliversOnlyTheRowsTheCardFilterKeeps]' passed (0.033 seconds).
+Test Case '-[OrbitKitTests.EvidenceDecisionWiringTests testTheConsoleDeliversTheCoordinatorsQueueInTheEvidenceSlot]' started.
+Test Case '-[OrbitKitTests.EvidenceDecisionWiringTests testTheConsoleDeliversTheCoordinatorsQueueInTheEvidenceSlot]' passed (0.018 seconds).
+Test Case '-[OrbitKitTests.EvidenceDecisionWiringTests testTheConsoleDerivesEvidenceReceiptsFromTheReadAndLetsTheAnsweredQuestionGo]' started.
+Test Case '-[OrbitKitTests.EvidenceDecisionWiringTests testTheConsoleDerivesEvidenceReceiptsFromTheReadAndLetsTheAnsweredQuestionGo]' passed (0.028 seconds).
+Test Case '-[OrbitKitTests.EvidenceDecisionWiringTests testTheEvidenceReceiptCardIsARecordWithNoActions]' started.
+Test Case '-[OrbitKitTests.EvidenceDecisionWiringTests testTheEvidenceReceiptCardIsARecordWithNoActions]' passed (0.004 seconds).
+Test Case '-[OrbitKitTests.EvidenceDecisionWiringTests testTheFoldedCardOffersOnlyDecideItMyself]' started.
+Test Case '-[OrbitKitTests.EvidenceDecisionWiringTests testTheFoldedCardOffersOnlyDecideItMyself]' passed (0.005 seconds).
+Test Case '-[OrbitKitTests.EvidenceDecisionWiringTests testThePressGoesToTheDoorAsTheRequestOrbitKitBuilds]' started.
+Test Case '-[OrbitKitTests.EvidenceDecisionWiringTests testThePressGoesToTheDoorAsTheRequestOrbitKitBuilds]' passed (0.008 seconds).
+Test Case '-[OrbitKitTests.EvidenceDecisionWiringTests testThePressReChecksTheStandingItWasRenderedFrom]' started.
+Test Case '-[OrbitKitTests.EvidenceDecisionWiringTests testThePressReChecksTheStandingItWasRenderedFrom]' passed (0.002 seconds).
+Test Case '-[OrbitKitTests.EvidenceDecisionWiringTests testTheSecondAnswerArmsTheComposerInsteadOfOpeningABox]' started.
+Test Case '-[OrbitKitTests.EvidenceDecisionWiringTests testTheSecondAnswerArmsTheComposerInsteadOfOpeningABox]' passed (0.002 seconds).
+Test Case '-[OrbitKitTests.EvidenceDecisionWiringTests testTheStandingIsDerivedOnEveryRenderAndNeverKept]' started.
+Test Case '-[OrbitKitTests.EvidenceDecisionWiringTests testTheStandingIsDerivedOnEveryRenderAndNeverKept]' passed (0.002 seconds).
+Test Case '-[OrbitKitTests.NeedsYouLogicTests testACardAboveTheReaderSaysSo]' started.
+Test Case '-[OrbitKitTests.NeedsYouLogicTests testACardAboveTheReaderSaysSo]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.NeedsYouLogicTests testAnExceptionBelowIsCountedButNotCalledAQuestion]' started.
+Test Case '-[OrbitKitTests.NeedsYouLogicTests testAnExceptionBelowIsCountedButNotCalledAQuestion]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.NeedsYouLogicTests testAnOwnerItemOutranksABlockedToolCall]' started.
+Test Case '-[OrbitKitTests.NeedsYouLogicTests testAnOwnerItemOutranksABlockedToolCall]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.NeedsYouLogicTests testAnUnknownKindDoesNotNameTheBar]' started.
+Test Case '-[OrbitKitTests.NeedsYouLogicTests testAnUnknownKindDoesNotNameTheBar]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.NeedsYouLogicTests testAVersionWaitingForTheCoordinatorIsNotCounted]' started.
+Test Case '-[OrbitKitTests.NeedsYouLogicTests testAVersionWaitingForTheCoordinatorIsNotCounted]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.NeedsYouLogicTests testBannerExcludesTheFocusedSession]' started.
+Test Case '-[OrbitKitTests.NeedsYouLogicTests testBannerExcludesTheFocusedSession]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.NeedsYouLogicTests testBannerIsNilWhenNothingIsWaiting]' started.
+Test Case '-[OrbitKitTests.NeedsYouLogicTests testBannerIsNilWhenNothingIsWaiting]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.NeedsYouLogicTests testByAgentCountsOnlyBlockedSessionsAndOmitsZeros]' started.
+Test Case '-[OrbitKitTests.NeedsYouLogicTests testByAgentCountsOnlyBlockedSessionsAndOmitsZeros]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.NeedsYouLogicTests testByAgentPrefersNestedAgentAndFallsBackToFlatID]' started.
+Test Case '-[OrbitKitTests.NeedsYouLogicTests testByAgentPrefersNestedAgentAndFallsBackToFlatID]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.NeedsYouLogicTests testByAgentSkipsSessionsWithNoAgent]' started.
+Test Case '-[OrbitKitTests.NeedsYouLogicTests testByAgentSkipsSessionsWithNoAgent]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.NeedsYouLogicTests testCoordinatorItemsDoNotCount]' started.
+Test Case '-[OrbitKitTests.NeedsYouLogicTests testCoordinatorItemsDoNotCount]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.NeedsYouLogicTests testCountAndCopyBothDropTheFocusedSession]' started.
+Test Case '-[OrbitKitTests.NeedsYouLogicTests testCountAndCopyBothDropTheFocusedSession]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.NeedsYouLogicTests testNothingBelowIsNoBar]' started.
+Test Case '-[OrbitKitTests.NeedsYouLogicTests testNothingBelowIsNoBar]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.NeedsYouLogicTests testOneQuestionInThisConversationNamesItAndPointsAtIt]' started.
+Test Case '-[OrbitKitTests.NeedsYouLogicTests testOneQuestionInThisConversationNamesItAndPointsAtIt]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.NeedsYouLogicTests testOwnerItemsCountTowardNeedsYou]' started.
+Test Case '-[OrbitKitTests.NeedsYouLogicTests testOwnerItemsCountTowardNeedsYou]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.NeedsYouLogicTests testOwnerItemsDecodeFromASessionRow]' started.
+Test Case '-[OrbitKitTests.NeedsYouLogicTests testOwnerItemsDecodeFromASessionRow]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.NeedsYouLogicTests testSeveralQuestionsCountAndTheTapGoesToTheOldest]' started.
+Test Case '-[OrbitKitTests.NeedsYouLogicTests testSeveralQuestionsCountAndTheTapGoesToTheOldest]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.NeedsYouLogicTests testSeveralWaitingSessionsCollapseToACount]' started.
+Test Case '-[OrbitKitTests.NeedsYouLogicTests testSeveralWaitingSessionsCollapseToACount]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.NeedsYouLogicTests testSingleSessionFallsBackToTitleThenAGenericNoun]' started.
+Test Case '-[OrbitKitTests.NeedsYouLogicTests testSingleSessionFallsBackToTitleThenAGenericNoun]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.NeedsYouLogicTests testSingleWaitingSessionNamesItsWorkspace]' started.
+Test Case '-[OrbitKitTests.NeedsYouLogicTests testSingleWaitingSessionNamesItsWorkspace]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.NeedsYouLogicTests testTargetIsTheLongestWaitingSessionRegardlessOfInputOrder]' started.
+Test Case '-[OrbitKitTests.NeedsYouLogicTests testTargetIsTheLongestWaitingSessionRegardlessOfInputOrder]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.NeedsYouLogicTests testTheOldestOwnerItemIsTheOneNamed]' started.
+Test Case '-[OrbitKitTests.NeedsYouLogicTests testTheOldestOwnerItemIsTheOneNamed]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.NeedsYouLogicTests testWithNoReaderPlaceReportedTheBarDoesNotGuess]' started.
+Test Case '-[OrbitKitTests.NeedsYouLogicTests testWithNoReaderPlaceReportedTheBarDoesNotGuess]' passed (0.000 seconds).

@@ -1,0 +1,52 @@
+[
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "6C919B97-8E64-49B2-80FD-A86AE035CD37.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-03-sent-dark_0_524D53FF-B01C-48F7-B851-38CFE86D10B5.png",
+        "timestamp" : 1791583094.122
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "C0F18809-4C01-4072-B01C-F6635A0C26B0.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-03a-back-dark_0_A01C348B-B4CF-48E2-940A-549F1AA0C422.png",
+        "timestamp" : 1791583072.334
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "F40AB0A5-03CD-4712-AA2E-E8CFE6FA85AD.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-02-sheet-dark_0_B6854FBF-2BE1-461A-9A78-1C7C91B81A43.png",
+        "timestamp" : 1791583062.258
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "49FBFC8B-1726-4C71-A803-372ADCE6F3E8.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-01-queued-dark_0_9D3F911F-63DF-4B8A-9AFE-9555194BE253.png",
+        "timestamp" : 1791583044.675
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "02FA95A4-B364-4914-972F-73DEB1B6B076.txt",
+        "isAssociatedWithFailure" : true,
+        "suggestedHumanReadableName" : "Complete Issue Description.txt"
+      }
+    ],
+    "testIdentifier" : "QueueShotTests/test2QueuedSheetAndSentDark()",
+    "testIdentifierURL" : "test://com.apple.xcode/EwcProbe/EwcProbeUITests/QueueShotTests/test2QueuedSheetAndSentDark"
+  }
+]

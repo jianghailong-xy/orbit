@@ -1,0 +1,52 @@
+[
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "F5A3964D-449E-4378-9BE2-C7FEE2005149.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-03-sent_0_FCDAF0DD-2BFA-4547-85ED-10F58FC2D601.png",
+        "timestamp" : 1791582864.03
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "EEB4F959-AFDC-416A-B061-4F2864469B8A.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-03a-back_0_BA2BAB67-36E8-43E6-AFD8-4F21E24261A9.png",
+        "timestamp" : 1791582843.505
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "5377EBA3-D385-4120-82B8-41F847DB9871.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-02-sheet_0_DA899269-A1E5-4564-8845-86ECBBA98EE3.png",
+        "timestamp" : 1791582834.122
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "8713CBFF-18B7-406C-8552-691977692FDC.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-01-queued_0_C1DFFC65-AE4B-4FB5-B2EF-FEC30B5CA45A.png",
+        "timestamp" : 1791582818.969
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "080DB194-A4C9-4834-94AD-2FE3960AA6D2.txt",
+        "isAssociatedWithFailure" : true,
+        "suggestedHumanReadableName" : "Complete Issue Description.txt"
+      }
+    ],
+    "testIdentifier" : "QueueShotTests/test1QueuedSheetAndSentLight()",
+    "testIdentifierURL" : "test://com.apple.xcode/EwcProbe/EwcProbeUITests/QueueShotTests/test1QueuedSheetAndSentLight"
+  }
+]

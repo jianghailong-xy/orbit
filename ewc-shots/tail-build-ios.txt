@@ -1,0 +1,300 @@
+    t =   166.34s Find the "[Project “Tablet 客户端：与 iOS 体验对齐” has evidence waiting for your judgment] Task “B07c · 卡片增量与会话提醒条（B07-1/2/3/4/5/6/7/8/9/11）” submitted revision 1 of its completion evidence. This revision was submitted at 2026-10-09T21:55:03.521Z while you were unavailable. It waited for you; nobody has decided it yet." TextView
+    t =   166.58s Find the "[Project “Tablet 客户端：与 iOS 体验对齐” has evidence waiting for your judgment] Task “B07c · 卡片增量与会话提醒条（B07-1/2/3/4/5/6/7/8/9/11）” submitted revision 1 of its completion evidence. This revision was submitted at 2026-10-09T21:55:03.521Z while you were unavailable. It waited for you; nobody has decided it yet." TextView
+    t =   166.76s Find the "[Project “Tablet 客户端：与 iOS 体验对齐” has evidence waiting for your judgment] Task “B07c · 卡片增量与会话提醒条（B07-1/2/3/4/5/6/7/8/9/11）” submitted revision 1 of its completion evidence. This revision was submitted at 2026-10-09T21:55:03.521Z while you were unavailable. It waited for you; nobody has decided it yet." TextView
+    t =   166.94s Find the "[Project “Tablet 客户端：与 iOS 体验对齐” has evidence waiting for your judgment] Task “B07c · 卡片增量与会话提醒条（B07-1/2/3/4/5/6/7/8/9/11）” submitted revision 1 of its completion evidence. This revision was submitted at 2026-10-09T21:55:03.521Z while you were unavailable. It waited for you; nobody has decided it yet." TextView
+    t =   167.16s Checking existence of `"Sent to the coordinator · 5:57 AM" StaticText`
+    t =   167.33s Checking existence of `"[Project “Tablet 客户端：与 iOS 体验对齐” has evidence waiting for your judgment] Task “B07c · 卡片增量与会话提醒条（B07-1/2/3/4/5/6/7/8/9/11）” submitted revision 1 of its completion evidence. This revision was submitted at 2026-10-09T21:55:03.521Z while you were unavailable. It waited for you; nobody has decided it yet." TextView`
+    t =   167.51s Find the "Sent to the coordinator · 5:57 AM" StaticText
+    t =   167.84s Find the "[Project “Tablet 客户端：与 iOS 体验对齐” has evidence waiting for your judgment] Task “B07c · 卡片增量与会话提醒条（B07-1/2/3/4/5/6/7/8/9/11）” submitted revision 1 of its completion evidence. This revision was submitted at 2026-10-09T21:55:03.521Z while you were unavailable. It waited for you; nobody has decided it yet." TextView
+    t =   168.03s Get all elements bound by index for: Descendants matching type StaticText
+    t =   168.11s Find the StaticText (Element at index 0)
+    t =   168.17s Find the StaticText (Element at index 1)
+    t =   168.23s Find the StaticText (Element at index 2)
+    t =   168.29s Find the StaticText (Element at index 3)
+    t =   168.36s Find the StaticText (Element at index 4)
+    t =   168.42s Find the StaticText (Element at index 5)
+    t =   168.51s Find the StaticText (Element at index 6)
+    t =   168.59s Find the StaticText (Element at index 7)
+    t =   168.67s Find the StaticText (Element at index 8)
+    t =   168.75s Find the StaticText (Element at index 9)
+    t =   168.83s Find the StaticText (Element at index 10)
+    t =   168.90s Find the StaticText (Element at index 11)
+    t =   168.96s Find the StaticText (Element at index 12)
+    t =   169.08s Find the StaticText (Element at index 13)
+    t =   169.17s Find the StaticText (Element at index 14)
+    t =   169.23s Find the StaticText (Element at index 15)
+    t =   169.30s Find the StaticText (Element at index 16)
+    t =   169.36s Find the StaticText (Element at index 17)
+    t =   169.44s Find the StaticText (Element at index 18)
+    t =   169.52s Find the StaticText (Element at index 19)
+    t =   169.60s Get all elements bound by index for: Descendants matching type Button
+    t =   169.66s Find the Button (Element at index 0)
+    t =   169.73s Find the Button (Element at index 1)
+    t =   169.79s Find the Button (Element at index 2)
+    t =   169.84s Find the Button (Element at index 3)
+    t =   169.90s Find the Button (Element at index 4)
+    t =   169.97s Find the Button (Element at index 5)
+    t =   170.03s Find the Button (Element at index 6)
+    t =   170.16s Find the Button (Element at index 7)
+    t =   170.26s Find the Button (Element at index 8)
+    t =   170.32s Find the Button (Element at index 9)
+    t =   170.38s Find the Button (Element at index 10)
+    t =   170.44s Find the Button (Element at index 11)
+    t =   170.51s Find the Button (Element at index 12)
+    t =   170.57s Find the Button (Element at index 13)
+    t =   170.65s Find the Button (Element at index 14)
+    t =   170.76s Find the Button (Element at index 15)
+    t =   170.84s Find the Button (Element at index 16)
+    t =   170.90s Find the Button (Element at index 17)
+    t =   170.97s Find the Button (Element at index 18)
+    t =   171.04s Find the Button (Element at index 19)
+    t =   171.12s Find the Button (Element at index 20)
+    t =   171.39s Added attachment named 'ios-03-sent-dark'
+    t =   171.39s Requesting snapshot of accessibility hierarchy for app with pid 31395
+    t =   171.81s Requesting snapshot of accessibility hierarchy for app with pid 31395
+    t =   171.99s Tear Down
+Test Case '-[EwcProbeUITests.QueueShotTests test2QueuedSheetAndSentDark]' passed (172.513 seconds).
+Test Suite 'QueueShotTests' passed at 2026-10-09 21:58:15.246.
+	 Executed 1 test, with 0 failures (0 unexpected) in 172.513 (172.514) seconds
+Test Suite 'EwcProbeUITests.xctest' passed at 2026-10-09 21:58:15.247.
+	 Executed 1 test, with 0 failures (0 unexpected) in 172.513 (172.515) seconds
+Test Suite 'Selected tests' passed at 2026-10-09 21:58:15.247.
+	 Executed 1 test, with 0 failures (0 unexpected) in 172.513 (172.516) seconds
+2026-10-09 21:58:41.500 xcodebuild[29622:85766] [MT] IDETestOperationsObserverDebug: 209.802 elapsed -- Testing started completed.
+2026-10-09 21:58:41.501 xcodebuild[29622:85766] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-09 21:58:41.501 xcodebuild[29622:85766] [MT] IDETestOperationsObserverDebug: 209.802 sec, +209.802 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/runner/work/orbit/orbit/.ewc-probe/results/test2QueuedSheetAndSentDark.xcresult
+
+** TEST EXECUTE SUCCEEDED **
+
+Testing started
+Command line invocation:
+    /Applications/Xcode_26.6.app/Contents/Developer/usr/bin/xcodebuild test-without-building -project EwcProbe.xcodeproj -scheme EwcProbe -destination id=22452A91-4697-4369-8812-53ADB77EB73B -derivedDataPath .dd-ios -resultBundlePath results/test3ConfirmFromTheSheet.xcresult -only-testing EwcProbeUITests/QueueShotTests/test3ConfirmFromTheSheet CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=-
+
+Build settings from command line:
+    CODE_SIGN_IDENTITY = -
+    CODE_SIGNING_ALLOWED = YES
+
+Resolve Package Graph
+
+
+Resolved source packages:
+  cmark-gfm: https://github.com/swiftlang/swift-cmark.git @ 0.9.0
+  OrbitKit: /Users/runner/work/orbit/orbit/src/macos/OrbitKit
+  swift-markdown: https://github.com/apple/swift-markdown @ 0.9.0
+
+Writing result bundle at path:
+	/Users/runner/work/orbit/orbit/.ewc-probe/results/test3ConfirmFromTheSheet.xcresult
+
+--- xcodebuild: WARNING: Using the first of multiple matching destinations:
+{ platform:iOS Simulator, arch:arm64, id:22452A91-4697-4369-8812-53ADB77EB73B, OS:26.5, name:iPhone 17 Pro }
+{ platform:iOS Simulator, arch:x86_64, id:22452A91-4697-4369-8812-53ADB77EB73B, OS:26.5, name:iPhone 17 Pro }
+2026-10-09 21:59:27.804337+0000 EwcProbeUITests-Runner[44400:124441] [Default] Running tests...
+2026-10-09 21:59:28.017906+0000 EwcProbeUITests-Runner[44400:124905] [General] Failed to send CA Event for app launch measurements for ca_event_type: 0 event_name: com.apple.app_launch_measurement.FirstFramePresentationMetric
+    t =      nans Interface orientation changed to Portrait
+2026-10-09 21:59:31.497727+0000 EwcProbeUITests-Runner[44400:124904] [General] Failed to send CA Event for app launch measurements for ca_event_type: 1 event_name: com.apple.app_launch_measurement.ExtendedLaunchMetrics
+Test Suite 'Selected tests' started at 2026-10-09 21:59:31.626.
+Test Suite 'EwcProbeUITests.xctest' started at 2026-10-09 21:59:31.627.
+Test Suite 'QueueShotTests' started at 2026-10-09 21:59:31.627.
+Test Case '-[EwcProbeUITests.QueueShotTests test3ConfirmFromTheSheet]' started.
+    t =     0.00s Start Test at 2026-10-09 21:59:31.633
+    t =     0.22s Set Up
+objc[44400]: Class UIAccessibilityLoaderWebShared is implemented in both /Library/Developer/CoreSimulator/Volumes/iOS_23F77/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebCore.axbundle/WebCore (0x1083b4310) and /Library/Developer/CoreSimulator/Volumes/iOS_23F77/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebKit.axbundle/WebKit (0x108848398). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+    t =     1.40s Open io.orbitd.ewcprobe
+    t =     1.40s     Launch io.orbitd.ewcprobe
+2026-10-09 21:59:33.818 xcodebuild[42601:120004] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-09 21:59:33.818 xcodebuild[42601:120004] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     8.38s         Setting up automation session
+    t =    10.89s         Wait for io.orbitd.ewcprobe to idle
+    t =    14.21s Checking existence of `Any (First Match)`
+    t =    15.92s Checking existence of `Any (First Match)`
+    t =    24.32s Checking existence of `Any (First Match)`
+    t =    28.37s Get all elements bound by index for: Elements matching predicate 'label BEGINSWITH "Decide it myself"'
+    t =    28.64s Checking existence of `Button (Element at index 0)`
+    t =    28.75s Find the Button (Element at index 0)
+    t =    28.94s Waiting 10.0s for "Decide it myself" Button to exist
+    t =    29.99s     Checking `Expect predicate `existsNoRetry == 1` for object "Decide it myself" Button`
+    t =    30.00s         Checking existence of `"Decide it myself" Button`
+    t =    30.12s Checking existence of `"Decide it myself" Button`
+    t =    30.26s Find the "Decide it myself" Button
+    t =    30.39s Find the "Decide it myself" Button
+    t =    30.48s Find the "Decide it myself" Button
+    t =    30.59s Find the "Decide it myself" Button
+    t =    30.69s Find the "Decide it myself" Button
+    t =    30.84s Find the "Decide it myself" Button
+    t =    30.98s Tap "Decide it myself" Button
+    t =    30.98s     Wait for io.orbitd.ewcprobe to idle
+    t =    30.98s     Find the "Decide it myself" Button
+    t =    31.09s     Check for interrupting elements affecting "Decide it myself" Button
+    t =    31.21s     Synthesize event
+    t =    31.53s     Wait for io.orbitd.ewcprobe to idle
+    t =    32.24s Checking existence of `Any (First Match)`
+    t =    35.04s Checking existence of `Any (First Match)`
+    t =    35.65s Checking existence of `Any (First Match)`
+    t =    36.26s Checking existence of `Any (First Match)`
+    t =    36.76s Checking existence of `Any (First Match)`
+    t =    37.26s Checking existence of `Any (First Match)`
+    t =    37.62s Checking existence of `Any (First Match)`
+    t =    38.67s Checking existence of `Any (First Match)`
+    t =    39.14s Get all elements bound by index for: Descendants matching type StaticText
+    t =    39.30s Find the StaticText (Element at index 0)
+    t =    39.42s Find the StaticText (Element at index 1)
+    t =    39.51s Find the StaticText (Element at index 2)
+    t =    39.61s Find the StaticText (Element at index 3)
+    t =    39.72s Find the StaticText (Element at index 4)
+    t =    39.87s Find the StaticText (Element at index 5)
+    t =    40.01s Find the StaticText (Element at index 6)
+    t =    40.14s Find the StaticText (Element at index 7)
+    t =    40.30s Find the StaticText (Element at index 8)
+    t =    40.41s Find the StaticText (Element at index 9)
+    t =    40.52s Find the StaticText (Element at index 10)
+    t =    40.65s Find the StaticText (Element at index 11)
+    t =    40.77s Find the StaticText (Element at index 12)
+    t =    40.91s Find the StaticText (Element at index 13)
+    t =    41.03s Find the StaticText (Element at index 14)
+    t =    41.15s Find the StaticText (Element at index 15)
+    t =    41.29s Find the StaticText (Element at index 16)
+    t =    41.46s Find the StaticText (Element at index 17)
+    t =    41.58s Find the StaticText (Element at index 18)
+    t =    41.69s Find the StaticText (Element at index 19)
+    t =    41.84s Find the StaticText (Element at index 20)
+    t =    42.03s Find the StaticText (Element at index 21)
+    t =    42.16s Find the StaticText (Element at index 22)
+    t =    42.27s Find the StaticText (Element at index 23)
+    t =    42.38s Find the StaticText (Element at index 24)
+    t =    42.50s Find the StaticText (Element at index 25)
+    t =    42.62s Find the StaticText (Element at index 26)
+    t =    42.85s Find the StaticText (Element at index 27)
+    t =    43.02s Find the StaticText (Element at index 28)
+    t =    43.16s Find the StaticText (Element at index 29)
+    t =    43.33s Find the StaticText (Element at index 30)
+    t =    43.49s Find the StaticText (Element at index 31)
+    t =    43.66s Find the StaticText (Element at index 32)
+    t =    43.83s Find the StaticText (Element at index 33)
+    t =    43.99s Find the StaticText (Element at index 34)
+    t =    44.18s Find the StaticText (Element at index 35)
+    t =    44.33s Find the StaticText (Element at index 36)
+    t =    44.52s Find the StaticText (Element at index 37)
+    t =    44.78s Find the StaticText (Element at index 38)
+    t =    44.91s Find the StaticText (Element at index 39)
+    t =    45.24s Find the StaticText (Element at index 40)
+    t =    45.41s Find the StaticText (Element at index 41)
+    t =    45.53s Find the StaticText (Element at index 42)
+    t =    45.67s Find the StaticText (Element at index 43)
+    t =    45.81s Find the StaticText (Element at index 44)
+    t =    45.93s Get all elements bound by index for: Descendants matching type Button
+    t =    46.06s Find the Button (Element at index 0)
+    t =    46.16s Find the Button (Element at index 1)
+    t =    46.31s Find the Button (Element at index 2)
+    t =    46.41s Find the Button (Element at index 3)
+    t =    46.52s Find the Button (Element at index 4)
+    t =    46.65s Find the Button (Element at index 5)
+    t =    46.78s Find the Button (Element at index 6)
+    t =    47.00s Find the Button (Element at index 7)
+    t =    47.20s Find the Button (Element at index 8)
+    t =    47.32s Find the Button (Element at index 9)
+    t =    47.44s Find the Button (Element at index 10)
+    t =    47.54s Find the Button (Element at index 11)
+    t =    47.67s Find the Button (Element at index 12)
+    t =    47.83s Find the Button (Element at index 13)
+    t =    47.99s Find the Button (Element at index 14)
+    t =    48.14s Find the Button (Element at index 15)
+    t =    48.32s Find the Button (Element at index 16)
+    t =    48.44s Find the Button (Element at index 17)
+    t =    48.62s Find the Button (Element at index 18)
+    t =    48.75s Find the Button (Element at index 19)
+    t =    48.90s Find the Button (Element at index 20)
+    t =    49.01s Find the Button (Element at index 21)
+    t =    49.11s Find the Button (Element at index 22)
+    t =    49.23s Find the Button (Element at index 23)
+    t =    49.39s Find the Button (Element at index 24)
+    t =    49.52s Find the Button (Element at index 25)
+    t =    49.63s Find the Button (Element at index 26)
+    t =    49.78s Find the Button (Element at index 27)
+    t =    49.89s Find the Button (Element at index 28)
+    t =    50.01s Find the Button (Element at index 29)
+    t =    50.15s Get all elements bound by index for: Elements matching predicate 'label BEGINSWITH "Confirm done"'
+    t =    50.29s Checking existence of `Button (Element at index 0)`
+    t =    50.43s Find the Button (Element at index 0)
+    t =    50.57s Checking existence of `"Confirm done" Button`
+    t =    50.67s Tap "Confirm done" Button
+    t =    50.67s     Wait for io.orbitd.ewcprobe to idle
+    t =    50.67s     Find the "Confirm done" Button
+    t =    50.83s     Check for interrupting elements affecting "Confirm done" Button
+    t =    50.94s     Synthesize event
+    t =    51.25s     Wait for io.orbitd.ewcprobe to idle
+    t =    51.39s Checking existence of `Any (First Match)`
+    t =    55.77s Checking existence of `"Close" Button`
+    t =    55.97s Checking existence of `Any (First Match)`
+    t =    57.82s Checking existence of `Any (First Match)`
+    t =    58.04s Checking existence of `Any (First Match)`
+    t =    58.26s Get all elements bound by index for: Descendants matching type StaticText
+    t =    58.34s Find the StaticText (Element at index 0)
+    t =    58.41s Find the StaticText (Element at index 1)
+    t =    58.48s Find the StaticText (Element at index 2)
+    t =    58.56s Find the StaticText (Element at index 3)
+    t =    58.62s Find the StaticText (Element at index 4)
+    t =    58.69s Find the StaticText (Element at index 5)
+    t =    58.76s Find the StaticText (Element at index 6)
+    t =    58.82s Find the StaticText (Element at index 7)
+    t =    58.90s Find the StaticText (Element at index 8)
+    t =    58.98s Find the StaticText (Element at index 9)
+    t =    59.10s Find the StaticText (Element at index 10)
+    t =    59.22s Find the StaticText (Element at index 11)
+    t =    59.32s Find the StaticText (Element at index 12)
+    t =    59.40s Find the StaticText (Element at index 13)
+    t =    59.48s Find the StaticText (Element at index 14)
+    t =    59.56s Find the StaticText (Element at index 15)
+    t =    59.63s Find the StaticText (Element at index 16)
+    t =    59.68s Find the StaticText (Element at index 17)
+    t =    59.75s Find the StaticText (Element at index 18)
+    t =    59.83s Find the StaticText (Element at index 19)
+    t =    59.90s Find the StaticText (Element at index 20)
+    t =    60.04s Find the StaticText (Element at index 21)
+    t =    60.12s Find the StaticText (Element at index 22)
+    t =    60.18s Find the StaticText (Element at index 23)
+    t =    60.27s Find the StaticText (Element at index 24)
+    t =    60.35s Get all elements bound by index for: Descendants matching type Button
+    t =    60.42s Find the Button (Element at index 0)
+    t =    60.49s Find the Button (Element at index 1)
+    t =    60.59s Find the Button (Element at index 2)
+    t =    60.67s Find the Button (Element at index 3)
+    t =    60.73s Find the Button (Element at index 4)
+    t =    60.81s Find the Button (Element at index 5)
+    t =    60.87s Find the Button (Element at index 6)
+    t =    60.93s Find the Button (Element at index 7)
+    t =    61.03s Find the Button (Element at index 8)
+    t =    61.13s Find the Button (Element at index 9)
+    t =    61.20s Find the Button (Element at index 10)
+    t =    61.27s Find the Button (Element at index 11)
+    t =    61.34s Find the Button (Element at index 12)
+    t =    61.48s Find the Button (Element at index 13)
+    t =    61.57s Find the Button (Element at index 14)
+    t =    61.63s Find the Button (Element at index 15)
+    t =    61.69s Find the Button (Element at index 16)
+    t =    61.78s Find the Button (Element at index 17)
+    t =    61.87s Find the Button (Element at index 18)
+    t =    61.96s Find the Button (Element at index 19)
+    t =    62.04s Find the Button (Element at index 20)
+    t =    62.12s Find the Button (Element at index 21)
+    t =    62.39s Added attachment named 'ios-04-decided'
+    t =    62.40s Tear Down
+Test Case '-[EwcProbeUITests.QueueShotTests test3ConfirmFromTheSheet]' passed (62.914 seconds).
+Test Suite 'QueueShotTests' passed at 2026-10-09 22:00:34.545.
+	 Executed 1 test, with 0 failures (0 unexpected) in 62.914 (62.918) seconds
+Test Suite 'EwcProbeUITests.xctest' passed at 2026-10-09 22:00:34.546.
+	 Executed 1 test, with 0 failures (0 unexpected) in 62.914 (62.919) seconds
+Test Suite 'Selected tests' passed at 2026-10-09 22:00:34.547.
+	 Executed 1 test, with 0 failures (0 unexpected) in 62.914 (62.920) seconds
+2026-10-09 22:01:00.801 xcodebuild[42601:120004] [MT] IDETestOperationsObserverDebug: 117.496 elapsed -- Testing started completed.
+2026-10-09 22:01:00.803 xcodebuild[42601:120004] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-09 22:01:00.803 xcodebuild[42601:120004] [MT] IDETestOperationsObserverDebug: 117.496 sec, +117.496 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/runner/work/orbit/orbit/.ewc-probe/results/test3ConfirmFromTheSheet.xcresult
+
+** TEST EXECUTE SUCCEEDED **
+
+Testing started

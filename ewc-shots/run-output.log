@@ -1,0 +1,48 @@
+==> stub ready after 2s
+==> iPhone 22452A91-4697-4369-8812-53ADB77EB73B
+** TEST BUILD SUCCEEDED **
+Test Case '-[EwcProbeUITests.QueueShotTests test1QueuedSheetAndSentLight]' started.
+Test Case '-[EwcProbeUITests.QueueShotTests test1QueuedSheetAndSentLight]' passed (193.324 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 193.324 (193.328) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 193.324 (193.330) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 193.324 (193.332) seconds
+** TEST EXECUTE SUCCEEDED **
+Test Case '-[EwcProbeUITests.QueueShotTests test2QueuedSheetAndSentDark]' started.
+Test Case '-[EwcProbeUITests.QueueShotTests test2QueuedSheetAndSentDark]' passed (172.513 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 172.513 (172.514) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 172.513 (172.515) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 172.513 (172.516) seconds
+** TEST EXECUTE SUCCEEDED **
+Test Case '-[EwcProbeUITests.QueueShotTests test3ConfirmFromTheSheet]' started.
+Test Case '-[EwcProbeUITests.QueueShotTests test3ConfirmFromTheSheet]' passed (62.914 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 62.914 (62.918) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 62.914 (62.919) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 62.914 (62.920) seconds
+** TEST EXECUTE SUCCEEDED **
+.ewc-probe/run.sh: line 67:  2999 Terminated: 15          python3 -u stub.py 8765 "$OUT/ios/requests.log" > "$OUT/ios/stub.out" 2>&1
+total 9208
+drwxr-xr-x  25 runner  staff     800 Oct  9 22:01 .
+drwxr-xr-x   3 runner  staff      96 Oct  9 21:40 ..
+drwxr-xr-x   5 runner  staff     160 Oct  9 22:01 attachments
+-rw-r--r--   1 runner  staff  320727 Oct  9 21:57 ios-01-queued-dark.png
+-rw-r--r--   1 runner  staff  351406 Oct  9 21:53 ios-01-queued.png
+-rw-r--r--   1 runner  staff  626790 Oct  9 21:57 ios-02-sheet-dark.png
+-rw-r--r--   1 runner  staff  573600 Oct  9 21:53 ios-02-sheet.png
+-rw-r--r--   1 runner  staff  363732 Oct  9 21:58 ios-03-sent-dark.png
+-rw-r--r--   1 runner  staff  396707 Oct  9 21:54 ios-03-sent.png
+-rw-r--r--   1 runner  staff  358099 Oct  9 21:57 ios-03a-back-dark.png
+-rw-r--r--   1 runner  staff  412411 Oct  9 21:54 ios-03a-back.png
+-rw-r--r--   1 runner  staff  361049 Oct  9 22:00 ios-04-decided.png
+-rw-r--r--@  1 runner  staff   17429 Oct  9 21:57 missing-band-queued-dark.txt
+-rw-r--r--@  1 runner  staff   17429 Oct  9 21:53 missing-band-queued.txt
+-rw-r--r--   1 runner  staff    5896 Oct  9 22:01 not-served.txt
+-rw-r--r--@  1 runner  staff    5347 Oct  9 21:54 QueueShotTeststest1QueuedSheetAndSentLight-notes.txt
+-rw-r--r--@  1 runner  staff    5402 Oct  9 21:58 QueueShotTeststest2QueuedSheetAndSentDark-notes.txt
+-rw-r--r--@  1 runner  staff    5053 Oct  9 22:00 QueueShotTeststest3ConfirmFromTheSheet-notes.txt
+-rw-r--r--   1 runner  staff   25880 Oct  9 22:00 requests.log
+-rw-r--r--   1 runner  staff      92 Oct  9 21:40 stub.out
+-rw-r--r--@  1 runner  staff   17429 Oct  9 21:53 tree-queued.txt
+-rw-r--r--@  1 runner  staff   17940 Oct  9 21:58 tree-sent-dark.txt
+-rw-r--r--@  1 runner  staff   17940 Oct  9 21:54 tree-sent.txt
+-rw-r--r--@  1 runner  staff   24209 Oct  9 21:53 tree-sheet.txt
+-rw-r--r--   1 runner  staff  736906 Oct  9 22:01 xcodebuild-ios.log
