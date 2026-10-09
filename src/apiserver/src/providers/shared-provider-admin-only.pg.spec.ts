@@ -53,7 +53,8 @@ import { ADMIN_ONLY_PROVIDER_ERROR } from '../runner-api/runner-provider-support
 import { SessionsService } from '../sessions/sessions.service';
 import { TasksService } from '../tasks/tasks.service';
 import { wikiMaintenanceProviderProblem } from '../wiki/wiki-maintenance-settings';
-import { openCodeKeyRows, providerSlugsOn, sessionExecRuntime } from './custom-provider';
+import { openCodeKeyRows, providerSlugsOn } from './custom-provider';
+import { sessionEngine } from './session-engine';
 import { ProviderPlanUsageService } from './plan-usage.service';
 import { ProvidersService } from './providers.service';
 import { SharedPoolsService } from './shared-pools.service';
@@ -456,7 +457,7 @@ suite('a shared model provider runs an admin\'s sessions only, on real PostgreSQ
     );
   });
 
-  await t.test('(3) the picker, the slugs an agent may pass, a runtime gate and the runtime a session runs on name a shared provider for an admin only', async () => {
+  await t.test("(3) the picker, the slugs an agent may pass and a runtime gate name a shared provider for an admin only, while a session's engine is its key's for anyone", async () => {
     const slugs = (rows: Array<{ slug: string }>) => rows.map((row) => row.slug);
     const shared = [sharedClaude.slug, sharedCodex.slug];
     const named = (list: string[]) => shared.filter((slug) => list.includes(slug));
@@ -475,11 +476,13 @@ suite('a shared model provider runs an admin\'s sessions only, on real PostgreSQ
     assert.deepEqual(named(slugs(await openCodeKeyRows(db as never, member.id))), []);
     assert.deepEqual(named(slugs(await openCodeKeyRows(db as never, admin.id))), shared);
 
-    // The runtime a session on the shared Codex provider runs on: Codex for an admin's; for a member's, the row
-    // resolves to nothing, as a slug nothing holds — the very slug the claim never hands out.
-    const onCodex = (ownerId: string) => sessionExecRuntime(db as never, { provider: sharedCodex.slug, providerBuiltin: false, ownerId });
+    // The engine a session on the shared Codex provider runs on, for a row without one recorded: Codex, the
+    // row's runtime, for an admin's and for a member's alike. Out of a member's reach is not Claude — what
+    // keeps a member's session off the key is the claim, which never hands that slug out (below), not a
+    // guess at another engine (docs/provider-engine-contract.md §5.4).
+    const onCodex = (ownerId: string) => sessionEngine(db as never, { provider: sharedCodex.slug, providerBuiltin: false, ownerId });
     assert.equal(await onCodex(admin.id), AgentProvider.CODEX);
-    assert.equal(await onCodex(member.id), AgentProvider.CLAUDE);
+    assert.equal(await onCodex(member.id), AgentProvider.CODEX);
   });
 
   await t.test('(4) the role is read at every claim: promoted, a member runs on the shared provider; demoted again, they do not', async () => {

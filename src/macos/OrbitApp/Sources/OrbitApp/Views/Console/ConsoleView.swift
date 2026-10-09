@@ -748,6 +748,8 @@ struct TranscriptView: View {
                 Color.clear.onChange(of: g.frame(in: .global).minY, initial: true) { _, y in ruler.viewportTop = y }
             }
         }
+        // On the list alone, under `chrome`, so the jump-to-latest disc floating over it stays solid.
+        .fadesIntoComposerBand()
         // Follow new/streaming content only while pinned at the bottom (web's smart auto-scroll):
         // if the user has scrolled up to read, don't drag them back. A session switch always
         // re-pins. One-shot, non-animated scrollTo — never the per-frame animated scroll that froze
@@ -986,7 +988,7 @@ struct TranscriptView: View {
                              clocks: console.receiptClocks)
     }
 
-    /// Only the load-earlier spinner and the zero-height tail row differ from the chat-flow insets.
+    /// Only the load-earlier spinner and the tail row differ from the chat-flow insets.
     private func rowInsets(_ row: TranscriptRow) -> EdgeInsets {
         switch row {
         case .loadOlder: return EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16)
@@ -1038,6 +1040,9 @@ struct TranscriptView: View {
                 Task { await console.cancelQueued(bubble) }
             })
         case .bottom:
+            // Both shapes end in the room the list's fade lies over (`fadesIntoComposerBand`), so a list
+            // at its tail has nothing in the fade. In the row's content, not its insets: every follow and
+            // jump lands on this row (`bottomID`), and room held in its insets would stay below the fold.
             if console.detached {
                 // A window opened at a record ends at a gap: reaching its bottom pulls in the newer page.
                 HStack {
@@ -1046,10 +1051,11 @@ struct TranscriptView: View {
                     Spacer()
                 }
                 .padding(.vertical, 8)
+                .padding(.bottom, .composerBandFade)
                 .accessibilityLabel(SessionRecordLink.Copy.loadingNewer)
                 .onAppear { Task { await console.loadNewer() } }
             } else {
-                Color.clear.frame(height: 1)
+                Color.clear.frame(height: CGFloat.composerBandFade + 1)
             }
         }
     }
@@ -1131,7 +1137,8 @@ struct TranscriptView: View {
     // Circular "scroll to latest" control (ChatGPT parity). Wrapped in `CoastingButton` so the tap lands
     // even while the List is still coasting, and so a press springs the disc ~1.2× larger (ChatGPT's
     // feel — the shadow deepens with it). The disc rests at 40pt inside a 44pt hit target
-    // (near-filling it, with a hair of margin); bottom padding is 6, so it floats just above the composer.
+    // (near-filling it, with a hair of margin); it sits 6 above the list's fade, so it floats just above
+    // the composer.
     private func scrollToBottomButton(proxy: ScrollViewProxy) -> some View {
         CoastingButton {
             // A window opened at a record ends at a gap: the latest message is past it, so reaching it
@@ -1177,7 +1184,8 @@ struct TranscriptView: View {
                 .contentShape(Circle())
                 .animation(.spring(response: 0.28, dampingFraction: 0.6), value: pressed)
         }
-        .padding(.bottom, 6)
+        // 6 above the room the tail row keeps under the list, which ends at the composer.
+        .padding(.bottom, CGFloat.composerBandFade + 6)
         .accessibilityLabel(console.detached ? SessionRecordLink.Copy.jumpToLatest : "Scroll to latest")
         .help(console.detached ? SessionRecordLink.Copy.jumpToLatest : "Scroll to latest")
     }

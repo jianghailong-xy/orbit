@@ -274,6 +274,10 @@ const CORE_TRIGGERS_AFTER: Readonly<Record<string, readonly string[]>> = {
   conversation_turn: [],
   run_event: ['run_event_ingestion_provenance_guard'],
   session: [
+    // 0414's: a session's recorded engine is claimed and leased only by a transaction that declares it
+    // reads it, so an older control plane cannot run it on the engine its slug suggests. Another SIBLING
+    // change, like the two below it.
+    'session_acquisition_engine_guard',
     'session_admission_lock_order_insert_delete',
     'session_admission_lock_order_update',
     // 0367's: an older control plane's claim cannot start an Antigravity row as Claude, the same
@@ -284,6 +288,10 @@ const CORE_TRIGGERS_AFTER: Readonly<Record<string, readonly string[]>> = {
     // 0377's: DeepSeek Harness claims and positive inbox acquisitions require the current
     // request and persisted heartbeat declarations. Another SIBLING change.
     'session_dsh_runner_acquisition_guard',
+    // 0414's: a run an older control plane creates on a task's pinned credential takes the task's
+    // engine pin, and a recorded engine never changes.
+    'session_engine_from_task_pin',
+    'session_engine_immutable',
     'session_merge_projection_checkpoint_authority_trg',
     'session_opencode_runner_claim_guard',
     'session_project_capacity_serialize_insert_delete',
@@ -317,7 +325,7 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
   // `task` carries 24; naming all of them here would restate the inventory rather than check it.
   // What matters for it is the same two properties, stated directly.
   const core = TRIGGER_WRITE_SOURCES.filter((entry) => CENSUS_TABLES.includes(entry.table));
-  assert.equal(core.length, 47,
+  assert.equal(core.length, 50,
     'these four tables carried 43 triggers before 0224, 40 after it, 39 once 0226 removed '
     + '`failure_successor_task_binding_immutable` from `task`, 38 once 0227 removed '
     + '`task_executable_plan_bind` with the EXECUTABLE acceptance runtime, 35 once 0228 '
@@ -334,7 +342,9 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
     + '`session_antigravity_runner_claim_guard` with the Antigravity runtime, and 47 once 0370 '
     + 'added `task_owner_confirmation_review_reviewer_ended` to `session` — and 46 on this line, '
     + 'where 0329 removed 0122\'s `task_dispatch_authority_derive` with the column it stamped, '
-    + 'and 47 once 0377 added `session_dsh_runner_acquisition_guard` for DeepSeek Harness');
+    + 'and 47 once 0377 added `session_dsh_runner_acquisition_guard` for DeepSeek Harness, and 50 '
+    + 'once 0414 added `session_acquisition_engine_guard`, `session_engine_from_task_pin` and '
+    + '`session_engine_immutable` with the recorded session engine');
   assert.deepEqual(core.filter((entry) => entry.since.startsWith('0207_')), [],
     'no trigger attributed to 0207 may still be registered');
   // Every one of them installed BEFORE 0207 is still here. Derived from the inventory's own
@@ -348,8 +358,10 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
     core.filter((entry) => Number(entry.since.slice(0, 4)) >= 207).map((entry) => entry.trigger).sort(),
     ['project_task_status_count_delete', 'project_task_status_count_insert',
       'project_task_status_count_move', 'run_event_ingestion_provenance_guard',
+      'session_acquisition_engine_guard',
       'session_antigravity_runner_claim_guard',
       'session_dsh_runner_acquisition_guard',
+      'session_engine_from_task_pin', 'session_engine_immutable',
       'session_request_asker_stopped', 'session_request_recipient_ended', 'session_source_freeze_guard',
       'task_list_task_count_delete', 'task_list_task_count_insert', 'task_list_task_count_relist',
       'task_owner_confirmation_review_reviewer_ended', 'task_progress_epoch_advance'],
@@ -359,7 +371,8 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
     + 'three `project_task_status_count_*`, 0350\'s `session_request_recipient_ended`, 0352\'s '
     + '`session_request_asker_stopped`, 0367\'s `session_antigravity_runner_claim_guard` and '
     + '0370\'s `task_owner_confirmation_review_reviewer_ended` and '
-    + '0377\'s `session_dsh_runner_acquisition_guard`. '
+    + '0377\'s `session_dsh_runner_acquisition_guard` and 0414\'s `session_acquisition_engine_guard`, '
+    + '`session_engine_from_task_pin` and `session_engine_immutable`. '
     + '0212\'s `failure_successor_task_binding_immutable` was another, and 0226 removed it',
   );
   assert.ok(

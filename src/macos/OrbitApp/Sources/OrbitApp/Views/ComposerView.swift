@@ -22,8 +22,8 @@ private final class ComposerPasteState {
 
 /// The composer band: everything below the transcript that belongs to the message you're about to
 /// send — the error strip, staged attachments, the background tray, the git bar, and the composer
-/// itself. ONE place owns the band's 16pt gutter, its top rule, and the 8pt rhythm between its
-/// members (web parity: `.workspace-composer` — a `border-top`-only container whose children each
+/// itself. ONE place owns the band's 16pt gutter and the 8pt rhythm between its members (web
+/// parity: `.workspace-composer` — a container with no surface and no rule whose children each
 /// carry `margin-bottom: 8px`). Before this existed every member padded itself and the
 /// stack drifted: the git bar had picked up a stray 4pt top padding nobody else had, so the gap
 /// above it was 12 where the tray's was 8, and the whole stack's top edge jumped 4pt whenever a
@@ -40,28 +40,16 @@ struct ComposerBand<Content: View>: View {
     var body: some View {
         VStack(spacing: 0) { content }
             .padding(.horizontal, 16)
-            .padding(.top, 12)
             .padding(.bottom, 10)
-            // NO surface of its own — the band is defined by its top rule alone (web parity:
-            // `.workspace-composer` sets `border-top` and nothing else). A `.bar` fill here reads as
-            // a grey panel behind the tray and the git bar, which web has nowhere; the two cards and
-            // the composer box each already carry their own fill + border, so they stand on the
-            // content backdrop exactly as they do on the web. (`.bar` used to sit on `ComposerView`,
-            // covering only the field and its footer — hoisting it to the band is what spread it.)
+            // NO surface of its own (web parity: `.workspace-composer` has none). A `.bar` fill here
+            // reads as a grey panel behind the tray and the git bar, which web has nowhere; the two
+            // cards and the composer box each already carry their own fill + border, so they stand on
+            // the content backdrop exactly as they do on the web. (`.bar` used to sit on
+            // `ComposerView`, covering only the field and its footer — hoisting it to the band is what
+            // spread it.)
             //
-            // Full-bleed hairline (so it can't be inset by the gutter above) marking where the
-            // transcript ends. Wrapped in a stack to give the rule a horizontal axis — a bare
-            // `Divider()` in a background draws as a VERTICAL line down the middle instead (same fix
-            // as the sticky question header's bottom rule). BEHIND the content, not over it: nothing
-            // in the band reaches its top edge (the 12pt padding keeps it clear), but the composer's
-            // floating `/` menu crosses it, and as an overlay the hairline drew a seam across that card.
-            .background(alignment: .top) { VStack(spacing: 0) { Divider() } }
-            // Clearance ABOVE the rule (web's `.workspace-composer { margin-top: 8px }`) — applied
-            // after the background so it pads the band outward and leaves the hairline on the
-            // content's edge. Without it the rule sat ~7pt under the last transcript row (its 6pt
-            // inset + the 1pt tail anchor) while web gives the same bubble 16 (8pt message margin +
-            // this 8), so the tail — a reply, or the working dots — read as crowding the line.
-            .padding(.top, 8)
+            // No top rule and no clearance above the first member either: what scrolls above the band
+            // fades out into it (`fadesIntoComposerBand`), and keeps that room under its own last row.
     }
 }
 
@@ -85,6 +73,30 @@ extension CGFloat {
     /// The one vertical gap between `ComposerBand` members. Read it, don't retype it — the drift it
     /// replaces was four hand-written literals that stopped agreeing.
     static let composerBandGap: CGFloat = 8
+    /// How far a scroll view fades out above the composer band — and the room it keeps clear under
+    /// its last row, so at rest nothing sits in the fade. See `fadesIntoComposerBand`.
+    static let composerBandFade: CGFloat = 20
+}
+
+extension View {
+    /// The bottom edge of a scroll view that ends at the composer band (web: the conversation's
+    /// `.workspace-sessions` mask). The band draws no rule, so a row cut off at the edge dissolves
+    /// into it instead of being sliced through. The scroll view keeps `composerBandFade` of room
+    /// under its last row, so the fade only covers rows on their way out of view. The trailing 16pt
+    /// — the rows' own inset, where the scroller runs — stays out of it, so a scroller resting at
+    /// the bottom keeps its whole knob (web keeps its scrollbar gutter out the same way).
+    func fadesIntoComposerBand() -> some View {
+        mask {
+            HStack(spacing: 0) {
+                VStack(spacing: 0) {
+                    Color.black
+                    LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
+                        .frame(height: .composerBandFade)
+                }
+                Color.black.frame(width: 16)
+            }
+        }
+    }
 }
 
 struct ComposerView: View {
