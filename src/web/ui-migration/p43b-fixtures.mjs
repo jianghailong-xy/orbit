@@ -120,6 +120,21 @@ const edges = [
 export const RICH_GRAPH = { marks, edges, taskCount: 18, folded: true, truncated: false, limits: { maxTasks: 500, maxMarks: 500 } };
 export const EMPTY_GRAPH = { marks: [], edges: [], taskCount: 0, folded: false, truncated: false, limits: { maxTasks: 500, maxMarks: 500 } };
 export const TRUNCATED_GRAPH = { ...RICH_GRAPH, truncated: true, taskCount: 500 };
+// For the start card's plan (main d91a0dd48): it is drawn as this graph only when the whole plan fits the card
+// at the canvas's fitting zoom, and a folded read never is. A chain of three fits a dialog and a phone's sheet;
+// one task with six after it, side by side, fits neither, and is listed by level instead.
+const open = (suffix, title) => task(suffix, title, 'OPEN');
+export const PLAN_FITS = {
+  marks: [open('4401', 'Write the usage note template'), open('4402', 'Draft the overlay notes'), open('4403', 'Link the notes from the README')],
+  edges: [edge('4401', '4402'), edge('4402', '4403')],
+  taskCount: 3, folded: false, truncated: false, limits: { maxTasks: 500, maxMarks: 500 },
+};
+const wide = ['Overlays', 'Pickers', 'Feedback', 'Typography', 'Layout', 'Icons'];
+export const PLAN_WIDE = {
+  marks: [open('4410', 'Set up the examples page'), ...wide.map((name, at) => open(`441${at + 1}`, `Notes for ${name.toLowerCase()}`))],
+  edges: wide.map((_, at) => edge('4410', `441${at + 1}`)),
+  taskCount: 7, folded: false, truncated: false, limits: { maxTasks: 500, maxMarks: 500 },
+};
 
 // ── The crossings card ────────────────────────────────────────────────────────────────────────
 const crossing = (suffix, over) => ({

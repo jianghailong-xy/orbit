@@ -1,7 +1,7 @@
 import { test, expect } from './harness.mjs';
 import {
   ANSWER_REFUSAL, CROSSING_REFUSAL, CROSSINGS_ERROR, DECLINE_REFUSAL, DONE_REFUSAL, EMPTY_GRAPH, GRAPH_ERROR,
-  MERGE_REFUSAL, P43B_PATHS, RICH_GRAPH, START_REFUSAL, TRUNCATED_GRAPH, gate, installP43bFixtures,
+  MERGE_REFUSAL, P43B_PATHS, PLAN_FITS, PLAN_WIDE, RICH_GRAPH, START_REFUSAL, TRUNCATED_GRAPH, gate, installP43bFixtures,
 } from './p43b-fixtures.mjs';
 import { PILOT_IDS, PILOT_PATHS, installPilotFixtures } from './pilot-fixtures.mjs';
 import { attachTrace, button, dialog, fill, frames, observe, phone, popup, settled, top } from './p43b-helpers.mjs';
@@ -14,7 +14,7 @@ import { attachTrace, button, dialog, fill, frames, observe, phone, popup, settl
 // baseline recorded the existing layout defects; a task's own dependency graph (the remove question,
 // a drag in the panel and in its full screen, a node opening its task); and the project page's
 // decision cards: crossings, a coordinator question, a merge into main, the done question and the
-// owner's own start.
+// owner's own start, whose plan is the task graph when it fits and by level when it does not.
 // Locators are roles, accessible names, labels and the pages' own classes, so the same file drives the
 // replaced controls (same-commit reference tree) and the Orbit ones; a painted box is named by both
 // class names. Screenshots, computed styles and each step's observation (`trace`: address, focus, open
@@ -597,6 +597,65 @@ test.describe('P4.3b project decision cards', () => {
     await frames(page);
     trace.push(await observe(page, fixtures, 'unread'));
     await capture('p43b-start-unread', { alert: unread.locator(ALERT) });
+    await attachTrace(testInfo, trace);
+  });
+
+  // main d91a0dd48 (docs/mocks/start-card-web-width): the plan is the project's task graph while the whole
+  // of it fits the card, and otherwise the plan by level, with "Task graph" opening the graph full screen.
+  // Whether Escape there leaves the start dialog open is recorded, not asserted: it is where the replaced
+  // modals and the Orbit layers differ.
+  test('the owner’s start: the plan as the task graph when it fits; by level, with the graph full screen, when it does not', async ({ evidence }, testInfo) => {
+    const { page, capture } = evidence;
+    const fixtures = await installP43bFixtures(page, { started: false });
+    fixtures.state.graph = PLAN_FITS;
+    const trace = [];
+    const openStart = async () => {
+      await page.locator('.project-open-items').getByRole('button', { name: /^Start/ }).first().click();
+      const sheet = page.locator('[role="dialog"]').filter({ visible: true }).last();
+      const card = sheet.locator('.start-card');
+      // Decided once StartPlanGraph has loaded and measured the card: the graph, or the list by level in
+      // its box (until then the list stands on its own).
+      await expect(card.locator('.start-card-plan > div > .start-card-levels, .start-card-graph .react-flow__node').first()).toBeVisible();
+      await frames(page);
+      return { sheet, card };
+    };
+    const plan = (card) => card.evaluate((el) => ({
+      // Which toggles are drawn: More (the coordinator's reasons) and "Read all" (the criteria).
+      more:[...el.querySelectorAll('.start-card-quote .start-card-link')].map((node) => node.textContent),
+      read: [...el.querySelectorAll('.settlement-card-read')].map((node) => node.textContent),
+      graph: el.querySelectorAll('.start-card-graph').length, levels: el.querySelectorAll('.start-card-levels').length,
+      graphLink: [...el.querySelectorAll('.start-card-graph-link')].map((node) => node.textContent),
+      head: [...el.querySelectorAll('.start-card-section')].map((node) => node.textContent).at(-1) ?? null,
+    }));
+    await page.goto(P43B_PATHS.project);
+    let { sheet, card } = await openStart();
+    // A chain of three fits the card: drawn top to bottom, nothing to press.
+    await expect(card.locator('.start-card-graph .react-flow')).toBeVisible();
+    trace.push({ ...(await observe(page, fixtures, 'plan as the graph')), geometry: await plan(card) });
+    // The plan in view, below the rest of the card.
+    const inView = (locator) => locator.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+    await inView(card.locator('.start-card-plan'));
+    await capture('p43b-start-plan-graph', { plan: card.locator('.start-card-plan') });
+    await page.keyboard.press('Escape');
+    await expect(sheet).toHaveCount(0);
+
+    // Six tasks side by side do not fit it: by level, and the graph full screen.
+    fixtures.state.graph = PLAN_WIDE;
+    await page.reload();
+    ({ sheet, card } = await openStart());
+    await expect(card.locator('.start-card-levels')).toBeVisible();
+    trace.push({ ...(await observe(page, fixtures, 'plan by level')), geometry: await plan(card) });
+    await inView(card.locator('.start-card-plan'));
+    await capture('p43b-start-plan-levels', { plan: card.locator('.start-card-plan') });
+    await card.getByRole('button', { name: /^Task graph/ }).click();
+    const full = page.locator('.tdg-full-canvas');
+    await expect(full.locator('.pdg-task').first()).toBeVisible();
+    await frames(page);
+    trace.push(await observe(page, fixtures, 'task graph full screen'));
+    await capture('p43b-start-task-graph', { surface: page.locator(DIALOG_SURFACE).filter({ visible: true }).last() });
+    await page.keyboard.press('Escape');
+    await expect(full).toHaveCount(0);
+    trace.push(await observe(page, fixtures, 'task graph closed'));
     await attachTrace(testInfo, trace);
   });
 });

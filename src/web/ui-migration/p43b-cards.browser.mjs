@@ -9,7 +9,8 @@ import { attachTrace, button, dialog, fill, frames, observe, phone, top } from '
 // through REST fixtures. An evidence decision refused, then out of date; an owner confirmation whose
 // review asks a question answered in the owner's own words, refused; a criteria decision refused; the
 // strip's rows waiting on the reader; the two review turns; a receipt's Reopen task, asked and
-// refused; and the start dialog when its request no longer stands.
+// refused; the start dialog when its request no longer stands; and the start card a conversation draws
+// (its width, its toggles, its plan).
 // Locators are roles, accessible names, labels and the cards' own classes, so the same file drives the
 // replaced controls (same-commit reference tree) and the Orbit ones. Screenshots, computed styles and
 // each step's observation are compared between the two runs.
@@ -183,6 +184,74 @@ test.describe('P4.3b session decision cards', () => {
     await page.keyboard.press('Escape');
     await expect(start).toHaveCount(0);
     trace.push(await observe(page, fixtures, 'closed'));
+    await attachTrace(testInfo, trace);
+  });
+
+  // main d91a0dd48 (docs/mocks/start-card-web-width): in a conversation as wide as this page the card is
+  // capped at 720px; More and "Read all" are drawn only while the clamp hides words; the plan is the
+  // project's task graph while the whole of it fits the card, and otherwise by level with "Task graph"
+  // opening it full screen. The coordinator's reasons run past three lines on a phone only; one
+  // criterion runs past two lines everywhere (p43b-cards-fixtures.mjs).
+  test('the start card in a conversation: 720px at most, More and Read all only while cut, the plan as the task graph or by level', async ({ evidence }, testInfo) => {
+    const { page, capture } = evidence;
+    const fixtures = await installCardFixtures(page);
+    const trace = [];
+    await open(page);
+    const scope = section(page, 'live-start');
+    await top(scope);
+    const host = await reviewed(page, scope, '.start-card');
+    const card = host.locator('.start-card').filter({ visible: true }).first();
+    // The plan's reading is decided once StartPlanGraph has loaded and measured the card: its box holds the
+    // graph, or the list by level when the graph does not fit (until then the list stands on its own).
+    await expect(card.locator('.start-card-plan > div > .start-card-levels, .start-card-graph .react-flow__node').first()).toBeVisible();
+    await frames(page);
+    const reading = () => card.evaluate((el) => {
+      const width = (node) => (node ? Math.round(node.getBoundingClientRect().width * 100) / 100 : null);
+      const texts = (selector) => [...el.querySelectorAll(selector)].map((node) => node.textContent);
+      return {
+        card: width(el), room: width(el.parentElement),
+        more: texts('.start-card-quote .start-card-link'), read: texts('.settlement-card-read'),
+        graph: el.querySelectorAll('.start-card-graph').length, levels: el.querySelectorAll('.start-card-levels').length,
+        graphLink: texts('.start-card-graph-link'), head: texts('.start-card-section').at(-1) ?? null,
+      };
+    });
+    const first = await reading();
+    trace.push({ ...(await observe(page, fixtures, 'start card')), geometry: first });
+    await capture('p43b-card-start-live', { card });
+    // The plan in view: the graph on a desktop, the list by level on a phone.
+    const planned = card.locator('.start-card-plan');
+    await planned.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+    await capture('p43b-card-start-live-plan', { plan: planned });
+    await expect(card.locator('.settlement-card-read')).toHaveCount(1);
+    const more = card.locator('.start-card-quote .start-card-link');
+    if (phone(testInfo)) {
+      // Cut on a phone: More is there, and opening it leaves Less to close it again.
+      await expect(more).toHaveText('More');
+      await more.click();
+      await expect(more).toHaveText('Less');
+      await frames(page);
+      trace.push({ ...(await observe(page, fixtures, 'reasons opened')), geometry: await reading() });
+      await capture('p43b-card-start-live-more', { card });
+      // The plan does not fit a phone's card: by level, with the graph full screen.
+      const link = card.getByRole('button', { name: /^Task graph/ });
+      await link.click();
+      const full = dialog(page, 'Task graph');
+      await expect(full).toBeVisible();
+      await expect(full.locator('.pdg-task').first()).toBeVisible();
+      await frames(page);
+      trace.push(await observe(page, fixtures, 'task graph full screen'));
+      await capture('p43b-card-start-live-graph', { surface: page.locator(DIALOG_SURFACE).filter({ visible: true }).last() });
+      // Which layer Escape closes is recorded, not asserted: on the reference the graph (AntD) and the
+      // review it opened over (Orbit) answer Escape in separate layer stacks.
+      await page.keyboard.press('Escape');
+      await expect.poll(async () => (await page.locator('.tdg-full-canvas').filter({ visible: true }).count()) === 0 || !(await host.isVisible())).toBe(true);
+      trace.push(await observe(page, fixtures, 'escape in the task graph'));
+    } else {
+      // A desktop card is capped at 720px, its reasons fit three lines, and the plan fits it as a graph.
+      expect(first.card).toBe(720);
+      await expect(more).toHaveCount(0);
+      await expect(card.locator('.start-card-graph .react-flow')).toBeVisible();
+    }
     await attachTrace(testInfo, trace);
   });
 });

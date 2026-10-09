@@ -93,6 +93,51 @@ const START_PROJECT = {
   acceptanceCriteriaItems: [{ id: 'start-c1', key: 'notes', ordinal: 1, revision: 1, text: 'Every component has a usage note.' }],
 };
 
+// The start card a conversation draws while its project waits to be started (main d91a0dd48): its card is at
+// most 720px wide, More and "Read all" are drawn only while the clamp hides words, and the plan is the
+// project's task graph while the whole of it fits the card (otherwise by level, with the graph full screen).
+// The coordinator's reasons run past three lines on a phone but not on a desktop; one criterion runs past
+// two lines everywhere; the plan fits a desktop card as a graph but not a phone's.
+const LIVE_START_PROJECT = {
+  id: CARD_IDS.liveStartProject, title: 'Component usage notes', status: 'OPEN', startedAt: null, coordinatorEnabled: true,
+  coordinatorSessionId: CARD_IDS.session, exceptionEscalationSeconds: 7200, _count: { tasks: 5 },
+  acceptanceCriteriaItems: [
+    { id: 'live-c1', key: 'notes', ordinal: 1, revision: 1, text: 'Every public component has a usage note.' },
+    { id: 'live-c2', key: 'examples', ordinal: 2, revision: 1, text: 'Each usage note shows the component in both themes, at a desktop and a phone width, with the states a reader meets in the product: at rest, under the pointer, focused from the keyboard, disabled, and while it waits for an answer from the server.' },
+    { id: 'live-c3', key: 'links', ordinal: 3, revision: 1, text: 'The notes are linked from the component README.' },
+  ],
+};
+const LIVE_START_ROW = {
+  itemId: 'live-start-1', kind: 'START_REQUEST', title: 'Start this project?', detailLine: '', assignee: 'OWNER',
+  assigneeReason: 'DEFAULT', waitingSince: FIXED_NOW, escalateAt: null, escalatedAt: null, taskId: null, sessionId: null,
+  promotionId: null, fuseEpisodeId: null, delivery: { state: 'NOT_REQUIRED', sessionId: null, at: null }, actions: [],
+  question: null, facts: null,
+  startRequest: {
+    settings: {
+      line: 'PROJECT_BRANCH', projectBranchName: `refs/heads/project/${CARD_IDS.liveStartProject}`, automatic: true,
+      maxConcurrentTasks: 3, mergeCheckCommand: 'npm run build -w @orbit/web',
+    },
+    why: 'The notes for the overlays and the pickers both build on the shared examples page, so one branch checks them together before anything reaches main; the README links land last.',
+    criteriaDigest: SEAL, planDigest: 'p'.repeat(64), repository: 'https://github.com/example/orbit.git', warnings: [],
+  },
+};
+const liveMark = (id, title, completionCriterion = 'EVIDENCE_JUDGMENT') => ({
+  kind: 'TASK', id, taskId: id, title, status: 'OPEN', parentTaskId: null, completionCriterion, autoRunWhenReady: true,
+});
+const LIVE_START_GRAPH = {
+  marks: [
+    liveMark('live-a', 'A · The shared examples page'),
+    liveMark('live-b', 'B · Notes for the overlays'),
+    liveMark('live-c', 'C · Notes for the pickers'),
+    liveMark('live-d', 'D · Notes for the feedback components'),
+    liveMark('live-e', 'E · Link the notes from the README', 'OWNER_CONFIRMED'),
+  ],
+  // A, then B, C and D side by side, then E: it fits a desktop card, not a phone's.
+  edges: [['live-a', 'live-b'], ['live-a', 'live-c'], ['live-a', 'live-d'], ['live-b', 'live-e'], ['live-c', 'live-e'], ['live-d', 'live-e']]
+    .map(([sourceMarkId, targetMarkId]) => ({ sourceMarkId, targetMarkId })),
+  taskCount: 5, folded: false, truncated: false, limits: { maxTasks: 500, maxMarks: 500 },
+};
+
 /**
  * Install the harness routes. `state.evidence` decides how the evidence door refuses the next press
  * ('error': no code; 'stale': already decided elsewhere). Returns the requests answered here, with
@@ -125,6 +170,13 @@ export async function installCardFixtures(page) {
     if (method === 'GET' && path === `/api/projects/${CARD_IDS.startProject}/open-items`) {
       return json({ needsYou: [], withCoordinator: [], doneRequest: null, startRequest: null });
     }
+    const live = `/api/projects/${CARD_IDS.liveStartProject}`;
+    if (method === 'GET' && path === `${live}/acceptance/confirmation`) return json(START_STANDING);
+    if (method === 'GET' && path === live) return json(LIVE_START_PROJECT);
+    if (method === 'GET' && path === `${live}/open-items`) {
+      return json({ needsYou: [], withCoordinator: [], doneRequest: null, startRequest: LIVE_START_ROW });
+    }
+    if (method === 'GET' && path === `${live}/dependency-graph`) return json(LIVE_START_GRAPH);
     return route.fallback();
   });
   return { requests, state };

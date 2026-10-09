@@ -21,7 +21,7 @@ import { SessionDecisionStrip } from '../src/components/DecisionRail';
 import { SessionEvidenceDecisionCard } from '../src/components/EvidenceDecisionCard';
 import { OwnerDecisionReceipt, SessionOwnerConfirmationCard, type RecordedOwnerDecision } from '../src/components/OwnerConfirmationCard';
 import { OwnerConfirmationReopen } from '../src/components/OwnerConfirmationReopen';
-import { ProjectStartDialog } from '../src/components/StartProjectCard';
+import { ProjectStartDialog, SessionStartProjectCard } from '../src/components/StartProjectCard';
 import reviewFixture from '../../shared/src/owner-confirmation-review.fixture.json';
 import ids from './p43b-cards-ids.json';
 
@@ -92,6 +92,9 @@ function Cards() {
                 decided={late}
                 reopen={<OwnerConfirmationReopen taskId={ids.receiptTask} projectId={null} status="DONE" />}
               />
+            </Section>
+            <Section name="live-start" title="Start card in a conversation">
+              <SessionStartProjectCard projectId={ids.liveStartProject} />
             </Section>
             <Section name="start" title="Start dialog">
               <button type="button" onClick={() => setStartOpen(true)}>Open the start dialog</button>
