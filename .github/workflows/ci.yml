@@ -147,11 +147,16 @@ jobs:
   # `PCC_PG_SHARD=<i>/3` (scripts/project-pg-matrix.sh) takes a share by the roster's own index
   # modulo the count, over the same `ls build/**/*.pg.spec.js | sort` the whole run uses: the shards
   # partition the roster by construction, and a spec added tomorrow lands in exactly one of them
-  # with no list to keep honest here. Over the roster of the last complete sweep (run 37895053362:
-  # 387 specs), modulo 3 splits the 41 minutes of spec time 13.9 / 15.0 / 12.2 (contiguous thirds
-  # would be 12.3 / 9.7 / 19.1 — the 280s spec lands inside one of them), so a shard's wall clock is
-  # ~17 minutes against the same 45-minute budget, with room for the second run of every spec that
-  # goes red.
+  # with no list to keep honest here. The first run of it (`probe/pg-specs-shards`, run 37942654032,
+  # 393 specs) gave each shard 131 specs — 4894 tests between them, 0 failed, 0 skipped, none re-run
+  # — in 21:34 / 14:30 / 13:37 of spec time, and 23:15 / 15:52 / 15:12 of wall clock, the difference
+  # being the ~1.6 minutes of checkout, `npm ci`, `prisma generate`, provisioning and `tsc` that each
+  # pays for itself. That spread, and not a prediction, is what a reader should expect: the partition
+  # is by index, so the six specs main gained between the 387-spec roster the split was measured on
+  # and this run moved some names between shards. The bound is what makes it safe, and it is
+  # measured too: the 131 SLOWEST specs of that 387-spec roster total 34.5 minutes of spec time, so
+  # no partition of this roster by index can put 45 minutes of work on one shard — and a red costs
+  # only the second run of the spec that went red.
   #
   # THE COST, AND WHY IT IS THE RIGHT ONE. Three runners for ~17 minutes instead of one runner that
   # never finished: runner minutes go UP (about 51 against 45) and the signal goes from "cancelled"
@@ -224,8 +229,10 @@ jobs:
     needs: postgres-shards
     # Without this the job is SKIPPED when a shard fails, and a skipped required check reads as
     # neither a pass nor a failure in front of every PR. `needs.<job>.result` is 'success' only when
-    # every shard passed, so the press below is the whole verdict.
-    if: always()
+    # every shard passed, so the press below is the whole verdict. `!cancelled()` rather than
+    # `always()`: a run somebody cancelled is not this job's to turn red, and that is how the check
+    # behaved before the split.
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     steps:
       - name: Every shard passed
