@@ -67,7 +67,7 @@
 | OpenCode 自身配置 | `opencode` | true | 仅 `opencode` | runner 上 OpenCode 自己的 provider 配置 |
 
 - 旧编码只在读取时兼容，新写入不再产生：
-  - `provider='dsh' AND providerBuiltin`：engine `dsh` + 该用户的默认 DeepSeek key（§3.3）。今天这类会话派发时服务端不注入 key，只有工作区 env 里手写了 `ORBIT_DSH_API_KEY` 才能运行，否则在 runner 上以 `DSH_CREDENTIAL_MISSING` 失败；解耦后由默认 key 补上。
+  - `provider='dsh' AND providerBuiltin`：engine `dsh`。今天这类会话派发时服务端不注入 key，只有工作区 env 里手写了 `ORBIT_DSH_API_KEY` 才能运行，否则在 runner 上以 `DSH_CREDENTIAL_MISSING` 失败。解耦后，工作区 env 里有这把 key 的照旧运行，凭据不变；没有的由该用户的默认 DeepSeek key 补上（§3.3）。
   - `provider='opencode'` 且 `model='orbit-<slug>/<model>'`：engine `opencode` + key `<slug>` + 模型 `<model>`。
 - `providerBuiltin` 保持现有含义：区分内置的 `kimi`、`dsh` 与同名的配置身份。
   - 0077 把旧的 `kimi` 配置行改了名，并禁止再用这个 slug；但旧副本的陈旧写入仍可能带着它。
@@ -173,8 +173,9 @@ export function defaultEngineOf(credential: EngineCredential): AgentProvider | n
 export function isEngineCompatible(engine: string, credential: EngineCredential): boolean;
 ```
 
-- 遗留的内置 `dsh` 不是凭据，不进这张表：解析时先换成默认 DeepSeek key（§3.3）。
+- 遗留的内置 `dsh` 不是凭据，不进这张表。新写入时换成默认 DeepSeek key；已存在、靠工作区 env 里的 key 运行的保持原样（§3.3）。
 - Swift（OrbitKit）和 Kotlin 镜像以上导出；单测用例要与 `providerEngines.spec.ts` 的用例逐条一致。
+- engine 的显示名只在 `ENGINE_CLI_NAMES` 定义。T0 设计图经所有者确认后若改了显示名，只改这一处；Web 的 `ENGINE_CLI_NAME` 和 Swift/Kotlin 镜像都跟着它（§10 第 1 条）。
 - 客户端拿 key 的 engines 一律读接口字段，不自己判断 DeepSeek 或订阅 token。
 
 ### 2.2 模型空间
@@ -256,8 +257,10 @@ export function isEngineCompatible(engine: string, credential: EngineCredential)
   - 顺序：`position` 升序（空值在后）、`createdAt`，再按 `id` 打破平局。`/providers` 今天只按前两项排，T3 让它也加上 `id`，两处一致。
   - 遗留 `runtime='dsh'` 行也算，因为它的 preset 是 `deepseek-harness`。
 - **内置 `dsh`**（`provider='dsh'`，§3.1 第 5 步）：
-  - 新写入一律换成 (engine `dsh`, provider = 默认 DeepSeek key 的 slug, `providerBuiltin = false`)；没有这样的 key 时返回 `DEEPSEEK_KEY_REQUIRED`。
-  - 已存在的此类会话由 T4 改写为 (默认 DeepSeek key, `dsh`)（§7.3）。没有 key 而保留下来的，领取时按 §4.1 处理。
+  - 新写入点名内置 `dsh`（新会话、任务 pin）：换成 (engine `dsh`, provider = 默认 DeepSeek key 的 slug, `providerBuiltin = false`)；没有这样的 key 时返回 `DEEPSEEK_KEY_REQUIRED`。
+  - 已存在的遗留内置 `dsh` 会话（`provider='dsh' AND provider_builtin`），按会话所在工作区的 env 分两种：
+    - env 里有非空的 `ORBIT_DSH_API_KEY`：保持 (provider `dsh`、builtin、engine `dsh`) 不变，凭据就是那把 key。解析函数不得用默认 DeepSeek key 覆盖它：续聊、改配置时 provider 不变，就不算切换。T4 不改写它（§7.3），派发照今天的方式把 env 里的 key 传下去（§4.1）。
+    - env 里没有这把 key：今天以 `DSH_CREDENTIAL_MISSING` 失败，没有可保持的凭据。T4 把它改写为 (默认 DeepSeek key, `dsh`)；用户没有 DeepSeek key 时保留（§7.3），领取时按 §4.1 处理。
 - **别名**：解析出目标 key 和别名的 engine，存储时写 key 自己的 slug。
 
 ### 3.4 工作区种子
@@ -392,7 +395,10 @@ export function isEngineCompatible(engine: string, credential: EngineCredential)
   - 池：选成员，与现在相同。
   - key：按 engine 注入（§4.2）。
   - 别名：解析到 key。
-  - 遗留内置 `dsh`：有默认 DeepSeek key 时注入它；没有时照今天的方式派发（不注入 key，工作区 env 里手写的 `ORBIT_DSH_API_KEY` 仍然生效，没有就在 runner 上以 `DSH_CREDENTIAL_MISSING` 失败）。已经能跑的旧会话不会因为解耦而停。
+  - 遗留内置 `dsh`：
+    - 工作区 env 里有非空的 `ORBIT_DSH_API_KEY`：照今天的方式派发，不注入任何 key，用的就是 env 里那把。
+    - 没有：注入默认 DeepSeek key。用户也没有 DeepSeek key 时照今天的方式派发，在 runner 上以 `DSH_CREDENTIAL_MISSING` 失败。
+    - 已经能跑的旧会话不会因为解耦而停，也不会换 key。
 - 领取时再校验一次兼容。旧副本或并发写入可能留下不兼容的组合，这类组合不派发：`pausedPendingSessions` 把 PENDING 行写上 `PROVIDER_ENGINE_INCOMPATIBLE` 的 message 并跳过，领取成功时清除，与现有暂留机制相同。领取时不会遇到「dsh 没有 key」：只给 engine 的 dsh 在写入时已解析到一把 key，遗留内置 `dsh` 按上一条派发。
 - engine 为 NULL 的行按旧规则推导，领取成功后在同一事务里另用一条 UPDATE 写回（§1.1）。
 - 交给 runner 的负载形状不变：
@@ -534,7 +540,7 @@ Orbit 把 key 写进 engine 进程的环境（§4.2）。agent 跑的命令是 e
   - 精确的兼容（DeepSeek、订阅 token）由应用层在 §4.1 判定并暂留。
 - `providerSlugsOn` 与 `providerDispatchWhereOn` 改为「engine 为 X 的会话」：`{ OR: [{ engine: X }, { engine: null, ...<现有条件> }] }`。claim 与 reclaim 用它标记或省略暂留行，逻辑不变。
 
-### 5.7 旧副本新建的会话（T1 补充，待协调会话确认）
+### 5.7 旧副本新建的会话
 
 旧副本建会话不写 engine，列为 NULL，按 §5.4 推导。它执行的就是推导出的 engine，会话自身一致。
 
@@ -545,7 +551,7 @@ Orbit 把 key 写进 engine 进程的环境（§4.2）。agent 跑的命令是 e
   - `NEW.starts_task_work` 为真：只管任务运行，不管从任务页打开的对话；
   - 任务的 `engine` 非空，且任务的 `provider` 等于 `NEW.provider`：旧副本照 pin 选了凭据，而 pin 写入时已校验兼容。
 
-  这样旧副本领不到这个会话（§5.2），新副本按 pin 的 engine 执行。
+  这样旧副本领不到这个会话（§5.2），新副本按 pin 的 engine 执行。触发器由 T2 实现，并在 T2 的具名 PG 场景里覆盖。
 - 旧副本绑定的 v1/v2 回执由新副本执行：按 §6.4 的读法用任务的 engine pin。
 
 混合窗口内接受以下限制，两种情况下会话的记录与执行都一致，只是没照用户的选择走：
@@ -711,7 +717,8 @@ T2 的迁移只写列。回填结果的逐行报告由 T4 的迁移给出：它�
 | `user.preferences.defaultModels` | 键 `S` | 改为 `dsh:T`，值不变；`dsh:T` 已存在时保留已存在的，报告冲突 |
 | `wiki_space.settings.maintenance.provider` | 等于 S | 改为 T。设置校验不接受 DSH 行，正常不会出现，出现时在报告中标出 |
 | `workspace.provider_fallbacks` | 项的 `provider` 等于 S | 改为 T。该字段只存储、派发不读 |
-| `session` 遗留内置 `dsh` | `provider = 'dsh' AND provider_builtin` | 用户此时有默认 DeepSeek key 时，改为 (该 key, `dsh`)，`provider_builtin = false`；没有则保留并报告 `LEGACY_DSH_NO_KEY` |
+| `session` 遗留内置 `dsh`，工作区 env 有 key | `provider = 'dsh' AND provider_builtin`，会话所在工作区的 env 里 `ORBIT_DSH_API_KEY` 非空 | 不改写，保持 (provider `dsh`、builtin、engine `dsh`)，报告 `LEGACY_DSH_ENV_KEY`。换成别的 key 会改变计费账户，迁移前后的 key 指纹比对也会失败 |
+| `session` 遗留内置 `dsh`，工作区 env 无 key | `provider = 'dsh' AND provider_builtin`，工作区 env 里没有这把 key | 用户此时有默认 DeepSeek key 时，改为 (该 key, `dsh`)，`provider_builtin = false`；没有则保留并报告 `LEGACY_DSH_NO_KEY`。这类会话今天以 `DSH_CREDENTIAL_MISSING` 失败，没有可保持的凭据 |
 
 - 任务的 `provider = 'dsh'` pin 不改写，派发时按 §3.3 解析。
 - 不改写：`task_route_decision`、`task_run_request`、run event、`Agent.*`。它们读取时经别名解析。
@@ -751,9 +758,10 @@ T2 的迁移只写列。回填结果的逐行报告由 T4 的迁移给出：它�
   - 引用改写带原值条件（compare-and-set）。改写时被并发修改的行先跳过，报告 `SKIPPED_CHANGED`，在本次执行内重读后再试；仍有剩余时不写完成标记，下次启动再处理。
   - 线上流量不必停：领取路径能解析别名（§3.1 第 4 步），改写前后读到的都是同一把 key 和同一个 engine。
 - **逐行报告**：写日志，同时写入可查询的记录（例如一张报告表）。每行 `{step, table, id, ownerId, action, before, after, note}`。
-  - `action` 取 `MERGED`、`CONVERTED`、`ALIASED`、`REWRITTEN`、`NOOP`、`SKIPPED_CHANGED`、`UNRESOLVED`、`LEGACY_DSH_NO_KEY`。
+  - `action` 取 `MERGED`、`CONVERTED`、`ALIASED`、`REWRITTEN`、`NOOP`、`SKIPPED_CHANGED`、`UNRESOLVED`、`LEGACY_DSH_ENV_KEY`、`LEGACY_DSH_NO_KEY`。
   - 报告不含任何 key 材料，合并行只写 `sameKey: true`。
   - 报告末尾汇总各 action 的计数，并对每个会话列出迁移前后的解析结果（engine、凭据 slug、endpoint、模型、`runtimeSessionId`）是否相同，作为第 3 条验收的比对依据。
+  - 比对中唯一允许的差异：工作区 env 无 key 的遗留内置 `dsh` 会话从「无凭据」变为默认 DeepSeek key（§7.3），逐行列为预期差异。`LEGACY_DSH_ENV_KEY` 的会话前后必须完全一致。
 - **只能前滚**：迁移不删除会话数据，但改写不自动回退。报告逐行保留 `before`，需要时据此手工修复：
   - 被合并而删除的 DSH 行可以重建：先删别名，再建行，key 仍在目标行里。
   - 原地转换的行可以改回。
@@ -821,3 +829,17 @@ T2 的迁移只写列。回填结果的逐行报告由 T4 的迁移给出：它�
 
 - 2026-10-09 最后一次合入 main 时，最大的是 0412（`0412_wiki_stored_text_encoding`）。
 - 取号前按作业指导扫描 main、各 `project/*`、已推送的 `orbit/*` 分支与其它会话的工作树。
+
+## 10. 裁决记录
+
+2026-10-09，协调会话对 T1 交付说明（任务评论 `34cnQXrn9cmko8egQazEj`）中 7 个待裁决点的结论。正文已按此写，T2–T9 以本文为准。
+
+| # | 事项 | 结论 | 落在 |
+| --- | --- | --- | --- |
+| 1 | engine 的 CLI 显示名 | 接受：用 `ENGINE_CLI_NAMES`（Kimi Code、Antigravity CLI）。T0 设计图经所有者确认后若改了显示名，只改这一处 | §0、§2.1 |
+| 2 | 旧副本替带 engine pin 的任务建运行 | 接受：`session_engine_from_task_pin` 插入触发器，由 T2 实现，并在 T2 的具名 PG 场景里覆盖 | §5.7 |
+| 3 | 旧客户端写的偏好键 | 接受：旧键照存，同时镜像一份新键 `<engine>:<provider>` | §3.5、§6.5 |
+| 4 | 靠工作区 env key 运行的遗留内置 dsh 会话 | 改：T4 不改写，保持 (provider `dsh`、builtin、engine `dsh`)。派发照今天的方式传 env 里的 key，解析不得用默认 DeepSeek key 覆盖，报告用 `LEGACY_DSH_ENV_KEY`。只有工作区 env 无 key 的才改写为默认 DeepSeek key；新写入点名内置 dsh 的仍换成默认 key。理由：第 3 条验收要求迁移前后每个会话的 key 指纹一致，换成另一把 key 会改变计费账户 | §1.3、§2.1、§3.3、§4.1、§7.3、§7.6 |
+| 5 | PATCH 把 runtime 改成 dsh | 接受：报 `PROVIDER_RUNTIME_DSH_RETIRED` | §3.6、§3.7 |
+| 6 | `DEEPSEEK_KEY_REQUIRED` 的文案 | 接受：不写页面名；页面改名不在本项目范围 | §3.7 |
+| 7 | 让命令看不到 key 的开关 | 接受：不在本项目范围 | §4.6 |
