@@ -76,4 +76,36 @@ class ProviderChoicesTest {
         assertEquals("Claude Code", ProviderChoices.engineTitle("deepseek", listOf(deepseek), next = "claude"))
         assertEquals("Claude Code", ProviderChoices.engineTitle("claude", emptyList(), next = null))
     }
+
+    /** A07-6 (iOS 09dc74803, shared openCodeKeys.spec): how an OpenCode session names the key it spends. */
+    @Test fun openCodeKeysNameTheKeyInTheModelAndThePickerChoice() {
+        assertEquals("orbit-glm/glm-5", OpenCodeKeys.model("glm", "glm-5"))
+        assertEquals("glm" to "glm-5", OpenCodeKeys.key("orbit-glm/glm-5"))
+        assertEquals("deepseek" to "deepseek/chat", OpenCodeKeys.key("orbit-deepseek/deepseek/chat"))
+        assertNull(OpenCodeKeys.key("opencode/big-pickle"))
+        assertNull(OpenCodeKeys.key("orbit-/x"))
+        assertNull(OpenCodeKeys.key("orbit-glm/"))
+        assertEquals("glm", OpenCodeKeys.choiceKey("opencode/glm"))
+        assertNull(OpenCodeKeys.choiceKey("opencode"))
+        assertEquals("opencode/glm", OpenCodeKeys.choice("opencode", "orbit-glm/glm-5"))
+        assertEquals("opencode", OpenCodeKeys.choice("opencode", "opencode/big-pickle"))
+        assertEquals("a key's model on another engine names nothing", "claude", OpenCodeKeys.choice("claude", "orbit-glm/glm-5"))
+        assertEquals("opencode", ProviderChoices.executingRuntime("opencode/glm", emptyList()))
+    }
+
+    /** Every key the server marks runsOnOpenCode is listed again after OpenCode, its models under the ids that name the key; an
+     * OpenCode session moves between OpenCode's own config and those keys. */
+    @Test fun theKeysOpenCodeMaySpendFollowItWithTheirModels() {
+        val providers = list("""[{"slug":"deepseek","label":"DeepSeek","runtime":"claude","runsOnOpenCode":true,
+            "models":[{"value":"deepseek-chat","label":"DeepSeek Chat"}]},
+            {"slug":"moonshot","label":"Moonshot","runtime":"kimi","runsOnOpenCode":false}]""") + pool
+        val catalog = catalog("""[{"engine":"claude","installed":true,"auth":"yes"},{"engine":"opencode","installed":true}]""", providers)
+        assertEquals(listOf("opencode", "opencode/deepseek"), catalog.choices().map { it.id }.takeLast(2))
+        assertEquals("DeepSeek", catalog.choices().last().label)
+        assertEquals(listOf("orbit-deepseek/deepseek-chat" to "DeepSeek Chat"),
+            catalog.models("opencode/deepseek").map { it.text("value") to it.text("label") })
+        assertEquals(listOf("opencode", "opencode/deepseek"), catalog.sameRuntime("opencode/deepseek").map { it.id })
+        assertFalse("no key is listed under an OpenCode the runner doesn't have",
+            catalog("""[{"engine":"claude","installed":true,"auth":"yes"}]""", providers).choices().any { it.id.startsWith("opencode") })
+    }
 }

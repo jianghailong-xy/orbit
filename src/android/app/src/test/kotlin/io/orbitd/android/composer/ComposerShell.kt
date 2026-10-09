@@ -85,6 +85,7 @@ internal object ComposerShell {
             path == "providers/pools" -> ok(pools)
             path == "providers/shared-pools" -> ok(sharedPools)
             path == "sessions" && method == "GET" -> ok(if (api.query.any { it == "view" to "open" }) "[${detail()}]" else "[]")
+            path == "sessions" && method == "POST" -> ok("""{"id":"$SESSION"}""")
             path == "sessions/$SESSION" && method == "GET" -> ok(detail().toString())
             path == "sessions/$SESSION" || path == "sessions/$SESSION/config" || path == "sessions/$SESSION/account" -> ok(detail().toString())
             path == "sessions/$SESSION/events/page" -> ok(buildJsonObject {

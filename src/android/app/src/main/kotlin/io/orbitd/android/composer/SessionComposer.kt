@@ -338,6 +338,8 @@ private fun ModelChoices(model: ComposerModel, state: ComposerState, detail: Jso
     val catalog = state.catalog
     val provider = detail.text("provider") ?: ""
     val chosen = detail.text("model") ?: ""
+    // OpenCode on a configured key is on that key: whose models the menu lists and whose row is ticked (A07-6).
+    val choice = OpenCodeKeys.choice(provider, chosen)
     val enabled = usable && !state.busy && catalog != null && state.draft.pending == null
     fun change(key: String, value: String) { model.config(buildJsonObject { put(key, value) }) }
     AlertDialog(onDismissRequest = close, title = { Text("Model and account") }, text = {
@@ -349,7 +351,7 @@ private fun ModelChoices(model: ComposerModel, state: ComposerState, detail: Jso
             smart?.let { SmartRouteNote(it); HorizontalDivider(Modifier.padding(vertical = 8.dp)) }
             if (state.catalogLoading) CircularProgressIndicator()
             state.catalogError?.let { Text(it); TextButton(onClick = model::loadCatalog) { Text("Retry model catalog") } }
-            val rows = catalog?.models(provider).orEmpty()
+            val rows = catalog?.models(choice).orEmpty()
             rows.forEach { row ->
                 TextButton(enabled = enabled, onClick = {
                     val id = row.text("value") ?: return@TextButton
@@ -377,12 +379,15 @@ private fun ModelChoices(model: ComposerModel, state: ComposerState, detail: Jso
             }
             Text("Provider")
             // A draft starts on any engine, in iOS's order; a session moves only between the providers of its own CLI.
-            catalog?.let { if (model.target != null) it.choices() else it.sameRuntime(provider) }?.forEach { option ->
+            catalog?.let { if (model.target != null) it.choices() else it.sameRuntime(choice) }?.forEach { option ->
                 TextButton(enabled = enabled && option.unavailable == null, onClick = {
-                    model.config(buildJsonObject {
-                        put("provider", option.id); put("model", option.models.firstOrNull()?.text("value") ?: ""); put("effort", "")
+                    val next = option.models.firstOrNull()?.text("value") ?: ""
+                    // Within OpenCode a key is part of the model, so moving between its own config and its keys is a model change.
+                    if (provider == "opencode" && option.runtime == "opencode") model.config(buildJsonObject { put("model", next) })
+                    else model.config(buildJsonObject {
+                        put("provider", if (OpenCodeKeys.choiceKey(option.id) != null) "opencode" else option.id); put("model", next); put("effort", "")
                     })
-                }) { Text(option.label + (option.unavailable?.let { " · $it" } ?: "")) }
+                }) { Text((if (option.id == choice) "✓ " else "") + option.label + (option.unavailable?.let { " · $it" } ?: "")) }
             }
             // A draft starts on any of the runner's accounts; a session moves only where the runner carries it across.
             val accounts = catalog?.takeIf { model.target != null || it.movesAccounts(provider) }?.accountChoices(provider).orEmpty()

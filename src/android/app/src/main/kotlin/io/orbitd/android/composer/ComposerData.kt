@@ -92,9 +92,13 @@ data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObjec
                 else -> item.text("provider") in listOf(null, "claude")
             }
         }.sortedWith(compareBy({ it.flag("builtin") == true }, { it.text("name")?.lowercase() }))
-    fun runtime(provider: String): String? = if (provider in BUILT_INS) provider
+    fun runtime(provider: String): String? = if (provider in BUILT_INS || OpenCodeKeys.choiceKey(provider) != null) provider.substringBefore('/')
         else providers.firstOrNull { it.text("slug") == provider }?.text("runtime")
     fun models(provider: String): List<JsonObject> {
+        // A key run on OpenCode offers the key's own models, under the OpenCode ids that name the key (OpenCodeKeys).
+        OpenCodeKeys.choiceKey(provider)?.let { key ->
+            return models(key).map { row -> JsonObject(row + ("value" to JsonPrimitive(OpenCodeKeys.model(key, row.text("value").orEmpty())))) }
+        }
         val configured = providers.firstOrNull { it.text("slug") == provider }
         val own = configured?.objects("models").orEmpty()
         val space = runtime(provider) ?: return emptyList()
@@ -120,7 +124,8 @@ data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObjec
     private fun option(slug: String, unavailable: String?) =
         ProviderOption(slug, ProviderChoices.providerName(slug, providers), runtime(slug) ?: slug, models(slug), unavailable)
     /** SessionProviderChoices.choices: the runner's engines in iOS's order — claude, codex, antigravity, kimi — then the account
-     * pools, then the configured keys, then OpenCode once the runner has it. A row this runner can't run stays listed with why. */
+     * pools, then the configured keys, then OpenCode once the runner has it and the keys it may spend (A07-6: each key the server
+     * marks `runsOnOpenCode`, listed again under OpenCode as `opencode/<slug>`). A row this runner can't run stays listed with why. */
     fun choices(): List<ProviderOption> {
         val engines = ProviderChoices.engineSlugs.map { slug -> option(slug, ProviderChoices.engineBlocker(health(slug))) }
         // A pool, like a configured key, needs the CLI it runs on and nothing signed in; what the server says it lacks follows.
@@ -133,7 +138,11 @@ data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObjec
             val slug = row.text("slug").orEmpty()
             option(slug, ProviderChoices.byokBlocker(health(ProviderChoices.executingRuntime(slug, providers))))
         }
-        val openCode = if (health("opencode")?.flag("installed") == true) listOf(option("opencode", null)) else emptyList()
+        val openCode = if (health("opencode")?.flag("installed") != true) emptyList() else listOf(option("opencode", null)) +
+            providers.filter { it.flag("runsOnOpenCode") == true && it.flag("pool") != true }.map { row ->
+                val choice = OpenCodeKeys.choice(row.text("slug").orEmpty())
+                ProviderOption(choice, row.text("label") ?: choice, "opencode", models(choice), null)
+            }
         return engines + pools + keys + openCode
     }
     /** SessionProviderChoices.sameRuntime: what an existing session may move to — the choices on the CLI it was started on, in

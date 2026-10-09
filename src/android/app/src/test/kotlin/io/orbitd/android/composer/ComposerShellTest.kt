@@ -39,7 +39,13 @@ abstract class ComposerShellTest {
     @Before fun startShell() = ComposerShell.reset()
 
     protected fun app() = compose.activity.application as OrbitApplication
-    protected fun await(condition: () -> Boolean) = compose.waitUntil(60_000, condition)
+    /** Waits up to a minute; a wait that fails prints what the screen held, and the requests made, so the report says why. */
+    protected fun await(condition: () -> Boolean) = try { compose.waitUntil(60_000, condition) } catch (timeout: ComposeTimeoutException) {
+        println("--- screen ---")
+        compose.onAllNodes(isRoot()).fetchSemanticsNodes().indices.forEach { println(compose.onAllNodes(isRoot())[it].printToString(Int.MAX_VALUE)) }
+        println("--- requests ---\n" + ComposerShell.calls.joinToString("\n"))
+        throw timeout
+    }
     protected fun has(matcher: SemanticsMatcher, unmerged: Boolean = false) =
         compose.onAllNodes(matcher, useUnmergedTree = unmerged).fetchSemanticsNodes().isNotEmpty()
     protected fun shows(text: String) = has(hasText(text))

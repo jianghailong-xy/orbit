@@ -19,7 +19,7 @@ fun ComposerUsage(model: ComposerModel, state: ComposerState, detail: JsonObject
         (event.fields[key] as? JsonPrimitive)?.longOrNull?.takeIf { it > 0 }
     }
     val tokens = reported("contextTokens") ?: 0
-    val window = reported("contextWindow") ?: state.catalog?.models(detail.text("provider").orEmpty())
+    val window = reported("contextWindow") ?: state.catalog?.models(OpenCodeKeys.choice(detail.text("provider").orEmpty(), detail.text("model")))
         ?.firstOrNull { it.text("value") == detail.text("model") }?.get("contextWindow")?.jsonPrimitive?.longOrNull?.takeIf { it > 0 }
     val contextLabel = if (window == null) "$tokens tokens" else "$tokens / $window tokens"
     TextButton(onClick = { expanded = true; model.loadCatalog() }, contentPadding = PaddingValues(0.dp)) {
