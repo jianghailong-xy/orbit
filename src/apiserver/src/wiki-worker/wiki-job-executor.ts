@@ -63,7 +63,7 @@ export class WikiJobParked extends Error {
  * Whether an error is the worker stopping (design §5.4): a model call's or a repository operation's wait the
  * shutdown cut short, or whatever a step ends with once the job's signal is aborted — the work's own verdict
  * (WikiJobContentError) excepted. A loop that asks again, or rewords what went wrong, lets it through as it is:
- * it is no failure to retry or to report, and the executor lets the job's lease out to now for the next process.
+ * it is no failure to retry or to report, and the executor hands the job back to the queue for the next process.
  */
 export function isWikiJobCancellation(error: unknown, signal?: AbortSignal): boolean {
   if (error instanceof WikiModelWaitCancelled || error instanceof WikiRepoOpWaitCancelled) return true;
@@ -124,8 +124,8 @@ export const WIKI_JOB_RUNNERS_TOKEN = Symbol('WIKI_JOB_RUNNERS');
  * Bootstrap runs a pass at once, so a worker that starts after a restart picks the queue up where it stands.
  *
  * WHAT STOPS IT CLAIMING: ORBIT_WIKI_EXECUTOR (nothing under `runner`, only the listed accounts under
- * `canary`) and SIGTERM — the loop stops, the jobs in flight are cancelled, each lets its lease out to now,
- * and the next process's sweep takes them over (design §5.4, plan A).
+ * `canary`) and SIGTERM — the loop stops, the jobs in flight are cancelled, each is handed back to the queue
+ * with nothing counted, and the next process's first pass claims them (design §5.4, plan A).
  */
 @Injectable()
 export class WikiJobExecutor implements OnApplicationBootstrap, OnModuleDestroy {
@@ -152,7 +152,7 @@ export class WikiJobExecutor implements OnApplicationBootstrap, OnModuleDestroy 
     this.arm();
   }
 
-  /** SIGTERM (design §5.4, plan A): claim nothing more, cancel what runs, let its lease out to now. */
+  /** SIGTERM (design §5.4, plan A): claim nothing more, cancel what runs, hand it back to the queue. */
   async onModuleDestroy(): Promise<void> {
     this.loop = 'STOPPING';
     this.stopped = true;
@@ -218,6 +218,12 @@ export class WikiJobExecutor implements OnApplicationBootstrap, OnModuleDestroy 
       limit: room,
       leaseMs: this.options.leaseMs ?? WIKI_JOB.leaseSeconds * 1000,
     });
+    if (this.stopped) {
+      // The stop came while the claim was on its way, and may have handed back a job this very claim then took. What it
+      // took is handed back unstarted: a job started now would get a cancel the stop has already gone past.
+      for (const job of claimed) await releaseWikiJobLease(this.prisma, { id: job.id, generation: job.leaseGeneration });
+      return 0;
+    }
     for (const job of claimed) this.start(job);
     return claimed.length;
   }
@@ -259,7 +265,8 @@ export class WikiJobExecutor implements OnApplicationBootstrap, OnModuleDestroy 
       if (settled) this.log.log(`job ${job.id} (${job.kind}) succeeded`);
       else this.log.warn(`job ${job.id} finished after its lease was taken over: its end is dropped`);
     } catch (error) {
-      // No renewal may land after the end is written: one still in flight would take back the lease a stop lets out.
+      // No renewal may land after the end is written. Every end clears the generation a renewal matches, so a late one
+      // would match nothing; the one in flight is still waited for, and then this attempt writes nothing more.
       clearInterval(renew);
       await renewing;
       await this.settleFailure(job, error, controller.signal);
@@ -268,7 +275,7 @@ export class WikiJobExecutor implements OnApplicationBootstrap, OnModuleDestroy 
     }
   }
 
-  /** What a failed job leaves: a requeue (the platform's), an end (the work's), or a lease out to now. */
+  /** What a failed job leaves: a requeue (the platform's), an end (the work's), or a hand-back (the stop's). */
   private async settleFailure(job: ClaimedWikiJob, error: unknown, signal: AbortSignal): Promise<void> {
     if (error instanceof WikiJobParked) {
       // Its row already says where it is (waiting, or queued again): this run settles nothing.
@@ -276,10 +283,10 @@ export class WikiJobExecutor implements OnApplicationBootstrap, OnModuleDestroy 
       return;
     }
     if (isWikiJobCancellation(error, signal)) {
-      // SIGTERM: the job was cancelled with us — a wait cut short, or what its pipeline ended with once stopped. Let
-      // its lease out to now so the next process takes it over at once (design §5.4); its requests were let go the
-      // same way by the queue's own shutdown. Nothing is counted here: the sweep that takes it over counts the
-      // attempt, as it counts any lease that ran out.
+      // SIGTERM: the job was cancelled with us — a wait cut short, or what its pipeline ended with once stopped. Hand
+      // it back (design §5.4): queued at once with its attempts as they were, so the next process's first claim takes
+      // it in its space's order rather than after a backoff, and a deploy costs it no attempt (the owner's decision of
+      // 2026-10-09). Its requests were let go by the queue's own shutdown, and its replay meets them again.
       await releaseWikiJobLease(this.prisma, { id: job.id, generation: job.leaseGeneration });
       return;
     }

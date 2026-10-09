@@ -21,8 +21,8 @@
  *      by side, and each is shown the article only once its read landed;
  *   8. a session condition whose projects are { id, title } — the read's spelling — is read as ids by every reader on
  *      the way: the plan's reads, the runner door's material and the build's own;
- *  11. a worker that stops while the build waits for its reads lets the job's lease out to now (design §5.4): no
- *      REPO_OP_FAILED, no read asked again — the third read, waiting for a slot, is never asked — and the next worker
+ *  11. a worker that stops while the build waits for its reads hands the job back (design §5.4): no REPO_OP_FAILED,
+ *      no read asked again — the third read, waiting for a slot, is never asked — nothing counted, and the next worker
  *      takes the job over.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/wiki-worker/wiki-docs-build-job.pg.spec.ts
@@ -64,6 +64,7 @@ import { WikiService } from '../wiki/wiki.service';
 import { wikiDocsBuildJobRunner } from './wiki-docs-build-job';
 import { WIKI_DOCS_BUILD_SYSTEM_PROMPT } from './wiki-docs-writer';
 import { WikiJobExecutor } from './wiki-job-executor';
+import { WIKI_JOB_HANDED_BACK } from './wiki-jobs';
 import { WikiModelRequestQueue } from './wiki-model-queue.service';
 import { WikiModelStatusProbe } from './wiki-model-status';
 import { WikiRepoOps, type WikiRepoOpClaim } from './wiki-repo-ops';
@@ -1115,10 +1116,10 @@ function threeReadsPlanFor(s: Scene): Record<string, unknown> {
   return plan;
 }
 
-/** The job's row as a stop leaves it: whether its lease was let out, and what it counted and said. */
-async function jobLease(h: Harness, jobId: string): Promise<{ state: string; let_out: boolean | null; attempts: number; failure_kind: string | null; error: string | null }> {
+/** The job's row as a stop leaves it: where it is, whether a retry was put off, and what it counted and said. */
+async function jobAfterStop(h: Harness, jobId: string): Promise<{ state: string; next_attempt_at: Date | null; attempts: number; failure_kind: string | null; error: string | null }> {
   return (await h.sql.query(
-    'SELECT "state", "lease_deadline_at" <= now() AS "let_out", "attempts", "failure_kind", "error" FROM "wiki_job" WHERE "id" = $1', [jobId],
+    'SELECT "state", "next_attempt_at", "attempts", "failure_kind", "error" FROM "wiki_job" WHERE "id" = $1', [jobId],
   )).rows[0];
 }
 
@@ -1126,7 +1127,7 @@ async function repoOpsOf(h: Harness, jobId: string): Promise<Array<{ id: string;
   return (await h.sql.query<{ id: string; kind: string }>('SELECT "id", "kind" FROM "wiki_repo_op" WHERE "job_id" = $1 ORDER BY "created_at", "id"', [jobId])).rows;
 }
 
-test('a worker that stops while the build waits for its reads lets the lease out to now: no REPO_OP_FAILED, no read asked again, and the next worker takes it over (design §5.4)', { skip, timeout: 180_000 }, async () => {
+test('a worker that stops while the build waits for its reads hands the job back: no REPO_OP_FAILED, no read asked again, nothing counted, and the next worker takes it over (design §5.4)', { skip, timeout: 180_000 }, async () => {
   const h = await boot();
   await modelUp(h);
   const s = await scene(h, 'stop-on-read');
@@ -1149,16 +1150,16 @@ test('a worker that stops while the build waits for its reads lets the lease out
   await first.queue.onModuleDestroy();
   await delay(300);
   assert.deepEqual(
-    { ...(await jobLease(h, jobId)), asked: (await repoOpsOf(h, jobId)).slice(before.length).map((op) => op.kind) },
-    { state: 'running', let_out: true, attempts: 0, failure_kind: null, error: null, asked: [] },
-    'the job lets its lease out to now — nothing settled, nothing counted, no REPO_OP_FAILED — and asks the runner for nothing more',
+    { ...(await jobAfterStop(h, jobId)), asked: (await repoOpsOf(h, jobId)).slice(before.length).map((op) => op.kind) },
+    { state: 'queued', next_attempt_at: null, attempts: 0, failure_kind: null, error: WIKI_JOB_HANDED_BACK, asked: [] },
+    'the job is handed back — nothing settled, nothing counted, no REPO_OP_FAILED — and asks the runner for nothing more',
   );
 
-  // The next worker takes the job over at once, the attempt the stop cut short counted as the lease sweep counts
-  // one, and its replay finishes the build.
+  // The next worker takes the job over at once, and its replay finishes the build. The attempt the stop cut short is
+  // not counted (the owner's decision of 2026-10-09).
   hold.reads = false;
   const ended = await runToEnd(h, worker(h), jobId);
   assert.equal(ended.state, 'succeeded', JSON.stringify(ended));
-  assert.equal((await jobLease(h, jobId)).attempts, 1, 'the lost attempt, counted once');
+  assert.equal((await jobAfterStop(h, jobId)).attempts, 0, 'the stop counted nothing');
   assert.deepEqual([ended.report?.written, ended.report?.failed], [4, 0]);
 });

@@ -25,8 +25,8 @@
  *      content: the run refuses to lay a verdict on a guess;
  *   7. the documents step with a confirmed plan: it reads the plan through its read, where a section's projects are
  *      { id, title }, and the section's material is found by the project's id (2026-10-09: 22P02, nothing written);
- *   8. a worker that stops while the documents step waits for a read: the job lets its lease out to now (design
- *      §5.4) — the run not settled, no REPO_OP_FAILED, no read asked again — and the next worker takes it over.
+ *   8. a worker that stops while the documents step waits for a read: the job is handed back (design §5.4) — the
+ *      run not settled, no REPO_OP_FAILED, no read asked again, nothing counted — and the next worker takes it over.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/wiki-worker/wiki-maintain-job.pg.spec.ts
  *
@@ -56,6 +56,7 @@ import { WikiRefusalError, WikiService, type WikiPrincipal } from '../wiki/wiki.
 import { WikiRepoOps } from './wiki-repo-ops';
 import { WIKI_REPO_OP_CAPABILITY } from '@orbit/shared';
 import { WikiJobExecutor, WIKI_JOB_RUNNERS, type WikiJobRunner } from './wiki-job-executor';
+import { WIKI_JOB_HANDED_BACK } from './wiki-jobs';
 import { WikiModelRequestQueue } from './wiki-model-queue.service';
 import { WikiModelStatusProbe } from './wiki-model-status';
 import { readWikiSystemModel, type WikiSystemModelConfig } from './wiki-system-model';
@@ -970,10 +971,10 @@ test('a refusal of the run\'s own ends it failed, counts it against the space an
 
 // ── Stopping (2026-10-09) ───────────────────────────────────────────────────────────────────────
 
-/** The job's row as a stop leaves it: whether its lease was let out, and what it counted and said. */
-async function jobLease(h: Harness, jobId: string): Promise<{ state: string; let_out: boolean | null; attempts: number; failure_kind: string | null; error: string | null }> {
+/** The job's row as a stop leaves it: where it is, whether a retry was put off, and what it counted and said. */
+async function jobAfterStop(h: Harness, jobId: string): Promise<{ state: string; next_attempt_at: Date | null; attempts: number; failure_kind: string | null; error: string | null }> {
   return (await h.sql.query(
-    'SELECT "state", "lease_deadline_at" <= now() AS "let_out", "attempts", "failure_kind", "error" FROM "wiki_job" WHERE "id" = $1', [jobId],
+    'SELECT "state", "next_attempt_at", "attempts", "failure_kind", "error" FROM "wiki_job" WHERE "id" = $1', [jobId],
   )).rows[0];
 }
 
@@ -981,7 +982,7 @@ async function repoOpsOf(h: Harness, jobId: string): Promise<Array<{ id: string;
   return (await h.sql.query<{ id: string; kind: string }>('SELECT "id", "kind" FROM "wiki_repo_op" WHERE "job_id" = $1 ORDER BY "created_at", "id"', [jobId])).rows;
 }
 
-test('a worker that stops while the documents step waits for a read lets the lease out to now: the run is not settled, no REPO_OP_FAILED, no read asked again (design §5.4)', { skip }, async () => {
+test('a worker that stops while the documents step waits for a read hands the job back: the run is not settled, no REPO_OP_FAILED, no read asked again, nothing counted (design §5.4)', { skip }, async () => {
   const h = await boot();
   await clearWork(h);
   const fx = await fixture(h);
@@ -1021,20 +1022,20 @@ test('a worker that stops while the documents step waits for a read lets the lea
   const run = await runRow(h, fx.runId);
   assert.deepEqual(
     {
-      ...(await jobLease(h, fx.jobId)),
+      ...(await jobAfterStop(h, fx.jobId)),
       run: run.outcome,
       docs: (run.report as { docs?: { error?: string } } | null)?.docs?.error ?? null,
       asked: (await repoOpsOf(h, fx.jobId)).slice(before.length).map((op) => op.kind),
     },
-    { state: 'running', let_out: true, attempts: 0, failure_kind: null, error: null, run: null, docs: null, asked: [] },
-    'the job lets its lease out to now — the run not settled, nothing counted, no REPO_OP_FAILED — and asks the runner for nothing more',
+    { state: 'queued', next_attempt_at: null, attempts: 0, failure_kind: null, error: WIKI_JOB_HANDED_BACK, run: null, docs: null, asked: [] },
+    'the job is handed back — the run not settled, nothing counted, no REPO_OP_FAILED — and asks the runner for nothing more',
   );
 
-  // The next worker takes the job over, the attempt the stop cut short counted as the lease sweep counts one, and
-  // its replay finishes the run.
+  // The next worker takes the job over, and its replay finishes the run. The attempt the stop cut short is not counted
+  // (the owner's decision of 2026-10-09).
   await pass(h, worker(h), async () => ['succeeded', 'failed'].includes((await jobOf(h, fx.jobId)).state));
   const ended = await jobOf(h, fx.jobId);
   assert.equal(ended.state, 'succeeded', ended.error ?? '');
-  assert.equal((await jobLease(h, fx.jobId)).attempts, 1, 'the lost attempt, counted once');
+  assert.equal((await jobAfterStop(h, fx.jobId)).attempts, 0, 'the stop counted nothing');
   assert.equal((await runRow(h, fx.runId)).outcome, 'succeeded');
 });

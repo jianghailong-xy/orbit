@@ -22,6 +22,7 @@ import { classifyTransactionFault, loggedRetry, withTransactionRetry } from '../
 import { notifyRunnerWakeOnCommit } from '../realtime/runner-wake';
 import { stripNul } from '../runner-api/strip-nul';
 import { postgresSqlState } from '../tasks/task-supersession';
+import { WIKI_JOB_HANDED_BACK } from './wiki-jobs';
 import { wikiJsonIsStorable, wikiStoredText, wikiTextFromStored, wikiTextIsStorable, wikiTextIsWellFormed } from './wiki-stored-text';
 
 /**
@@ -1253,7 +1254,8 @@ function wakeOrPoll(
  *
  * A wait that runs out is an infra failure: the job goes back to queued with the lost attempt counted and
  * the reason on its row. It never ends a job by itself: a runner that is away, or one too old to be given
- * the work at all, is something the next attempt and the health line are for.
+ * the work at all, is something the next attempt and the health line are for. A wait the worker's stop cuts
+ * short is no failure: the job is handed back as a running one is, nothing counted (`handBackParkedJob`).
  */
 export async function waitForWikiRepoOpAsJob(
   prisma: PrismaService,
@@ -1290,7 +1292,13 @@ export async function waitForWikiRepoOpAsJob(
     await resumeJobAfterRepoOp(prisma, { jobId: input.jobId, opId: input.opId });
     return answer;
   } catch (error) {
-    // The wait itself ended — its limit ran out, or the worker is stopping — and that is the platform's
+    if (error instanceof WikiRepoOpWaitCancelled) {
+      // The worker is stopping (design §5.4): no failure, so the job is handed back at once with nothing counted,
+      // and the operation stays where it is for the replay to meet.
+      await handBackParkedJob(prisma, { jobId: input.jobId });
+      throw error;
+    }
+    // The wait itself ended — its limit ran out, or it could not go on — and that is the platform's
     // failure, not the work's: the job goes back to the queue with the lost attempt counted and the reason
     // on its row, and the operation stays where it is for the attempt that follows.
     const reason = error instanceof WikiRepoOpWaitTimedOut
@@ -1319,6 +1327,24 @@ export async function requeueJobAfterRepoOpFailure(
              * interval '1 second',
            "failure_kind" = 'infra',
            "error" = ${`REPO_OP_WAIT: ${input.reason}`},
+           "updated_at" = now()
+     WHERE "id" = ${input.jobId}::uuid AND "state" = 'waiting' AND "waiting_for" = 'repo'`;
+}
+
+/**
+ * A parked job whose wait the worker's stop cut short (design §5.4, the owner's decision of 2026-10-09): handed back
+ * as the executor hands back a running job (`releaseWikiJobLease` in wiki-jobs.ts, contract `jobs.lease.handBack`) —
+ * queued, nothing scheduled, its attempts as they were, and why on its row — so the next claim takes it at once.
+ * Matches only the parked state, so a job a supervisor has since ended is not touched.
+ */
+async function handBackParkedJob(prisma: PrismaService, input: { jobId: string }): Promise<void> {
+  await prisma.$executeRaw`
+    UPDATE "wiki_job"
+       SET "state" = 'queued',
+           "waiting_for" = NULL,
+           "next_attempt_at" = NULL,
+           "failure_kind" = NULL,
+           "error" = ${WIKI_JOB_HANDED_BACK},
            "updated_at" = now()
      WHERE "id" = ${input.jobId}::uuid AND "state" = 'waiting' AND "waiting_for" = 'repo'`;
 }
