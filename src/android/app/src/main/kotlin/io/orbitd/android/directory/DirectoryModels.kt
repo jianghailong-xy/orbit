@@ -6,6 +6,7 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.temporal.ChronoUnit
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
@@ -35,6 +36,13 @@ data class DirectorySession(
     val confirmationUnderReview: JsonObject? = null,
     val lastAssistantText: String? = null, val lastUserText: String? = null,
     val tags: List<Tag> = emptyList(), val capabilities: SessionCapabilities? = null,
+    // What SessionLine reads beyond the above (OrbitKit `Session`): null from a server that does not send it.
+    val runStatus: String? = null, val endReason: String? = null, val error: String? = null, val retryAt: String? = null,
+    val completedAt: String? = null, val deletedAt: String? = null, val lastToolUse: String? = null,
+    val runningBgCount: Int? = null, val runningSubagentCount: Int? = null, val engineTurnActive: Boolean? = null,
+    val waitingKind: String? = null, val ownerItems: JsonArray? = null,
+    /** The project this session belongs to in any role; null for an ordinary conversation and from an older server. */
+    val projectMembership: SessionProjectMembership? = null,
 ) {
     val workspace get() = workspaceId ?: agentId ?: agent?.id
     val name get() = title?.takeIf(String::isNotBlank) ?: "Untitled session"
@@ -46,6 +54,13 @@ data class DirectorySession(
         runState == "RUNNING" || status == "RUNNING" -> "Running"
         else -> (runState ?: status).lowercase().replace('_', ' ').replaceFirstChar(Char::uppercase)
     }
+}
+/** A session's project membership (OrbitKit `SessionProjectMembership`): derived from its coordinator, task, context, judgment or
+ * root relation. A role or status this build does not know is kept as the server spelled it, and matches none of the known ones. */
+@Serializable
+data class SessionProjectMembership(val projectId: String, val projectTitle: String = "", val projectStatus: String = "UNKNOWN",
+    val role: String = "UNKNOWN") {
+    val isCoordinator get() = role == "COORDINATOR"
 }
 @Serializable
 data class SearchHit(val id: String, val title: String, val status: String = "UNKNOWN",
