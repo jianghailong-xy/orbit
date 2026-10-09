@@ -195,7 +195,7 @@ fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: Str
                         DropdownMenuItem(text = { Text("Shell command") }, onClick = { menu = false; if (!draft.text.startsWith("!")) model.edit("!${draft.text}", 1, 1) })
                         if (target == null) DropdownMenuItem(text = { Text("Queued messages (${session?.snapshot?.queuedTurns?.size ?: 0})") }, onClick = { menu = false; queued = true })
                         if (target == null) DropdownMenuItem(text = { Text("Retry last failed message") }, enabled = usable && !state.busy,
-                            onClick = { menu = false; model.control("retry-message", body = JsonObject(emptyMap())) })
+                            onClick = { menu = false; model.retryFailed() })
                         if (detail.text("retryAt") != null) DropdownMenuItem(text = { Text("Cancel automatic retry") }, enabled = usable && !state.busy,
                             onClick = { menu = false; model.control("auto-retry", HttpMethod.DELETE) })
                     }

@@ -221,6 +221,15 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
         pending.attachments.forEach { auth.writeData(handle, DataKind.DRAFT, "$key:attachment:${it.id}", ByteArray(0)) }
         refresh()
     }
+    /** What a Retry re-sends with (RetryIdentityDto, iOS 163e67872): the provider picked here for the next turn, and its account —
+     * so the re-send runs there, as a send would. Nothing picked, the body is empty and the re-send goes where the session is. */
+    fun retryIdentity(): JsonObject = buildJsonObject {
+        val config = state.value.draft.resumeConfig
+        config.text("provider")?.let { provider -> put("provider", provider); config.text("account")?.let { put("account", it) } }
+    }
+    /** The failed message again, through the retry door: the server re-sends it under a key of its own, so a second press is the
+     * turn already queued. */
+    fun retryFailed() = control("retry-message", body = retryIdentity())
     fun control(endpoint: String, method: HttpMethod = HttpMethod.POST, body: JsonObject? = null) {
         if (state.value.busy || state.value.waiting) return
         mutable.update { it.copy(busy = true, error = null) }

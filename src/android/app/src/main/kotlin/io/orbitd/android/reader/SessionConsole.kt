@@ -97,8 +97,8 @@ internal class SessionConsole(val app: OrbitApplication, val handle: SessionHand
         put("provider", choice.id); put("model", choice.models.firstOrNull()?.get("value")?.jsonPrimitive?.contentOrNull ?: ""); put("effort", "")
     })
 
-    /** The failed message again, now that what stopped it is fixed. */
-    fun retry() = composer.control("retry-message", body = JsonObject(emptyMap()))
+    /** The failed message again, now that what stopped it is fixed — on the provider picked in the composer, if any (A07-8). */
+    fun retry() = composer.retryFailed()
 }
 
 internal val LocalSessionConsole = staticCompositionLocalOf<SessionConsole?> { null }

@@ -313,7 +313,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                         composer.edit(SessionRunStart.chatPrefix, SessionRunStart.chatPrefix.length, SessionRunStart.chatPrefix.length)
                         composerFocused = true; composeFocus++
                     },
-                    sendAgain = { composer.control("retry-message", body = JsonObject(emptyMap())) },
+                    sendAgain = { composer.retryFailed() },
                     openRunner = { runner -> open(OrbitRoute(Destination.RUNNER, runner)) })
                 // A07-4: a session queued behind the runner's Antigravity gate says what to fix, above the composer (iOS
                 // `queuedAntigravityRepair`).
