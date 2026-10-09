@@ -1,0 +1,114 @@
+<!doctype html>
+<!-- Design board 2 (web): connecting a DeepSeek key. "现在" is drawn from today's ProviderConnectPage.tsx
+     (the DeepSeek preset and the DeepSeek Harness preset); "改后" is the proposal. Hand-drawn on the shipped
+     tokens; not shipped code. Render: render.mjs. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>2 · Connect a DeepSeek key (web) — provider/engine decoupling</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="board.css">
+<script src="glyphs.js"></script>
+<script src="board.js"></script>
+<style>
+  .formcol .w-page { padding: 24px 40px 28px; }
+  .advbody { border: 1px solid var(--border); border-top: 0; border-radius: 0 0 12px 12px; padding: 12px 14px 14px; margin-top: -1px; }
+  .advbody .w-step { margin-top: 0; }
+  .advbody .w-step + .w-step { margin-top: 14px; }
+  .w-adv.open { border-radius: 12px 12px 0 0; }
+</style>
+</head>
+<body class="m">
+<section class="board m-sheet">
+  <h1 class="m-h1 zh">2 · 连接 DeepSeek key（Web）：一张表单，说清这把 key 能在哪几个 engine 上用、交给谁</h1>
+  <p class="m-sub zh">今天连 DeepSeek 有两个入口、两张表：「Connect DeepSeek」说这把 key「Runs on Claude Code」，「Connect DeepSeek Harness」说「不是 DeepSeek 那个 provider」，同一把 key 要贴两遍。改后只有「Connect DeepSeek」一张：key 贴一次，表单写明 Claude Code、OpenCode、DeepSeek Harness 都能用它，以及 key 会交给哪些进程。agent 跑的命令能不能读到 key，以 T1 契约 §4.6 的实测为准：Claude Code、OpenCode 能读到，DeepSeek Harness 会把它去掉。<code>/providers/new/deepseek-harness</code> 跳到这里；旧版 App 的「Add API key」和旧链接都还指向它。保存和取消后回到 <code>/infrastructure#keys</code>（main 已是如此）。iOS 不能加 key，仍写「Adding or changing a key happens on the web.」。灰色字母标现在的问题，橙色数字标改动。</p>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">① 现在：两个入口、两张表</div>
+    <div class="cols2 formcol">
+      <div>
+        <div class="lbl zh"><span class="m-k">现在</span>画廊点 DeepSeek → Connect DeepSeek</div>
+        <div class="w-app"><div class="w-page"><div class="w-form" id="nowA"></div></div></div>
+      </div>
+      <div>
+        <div class="lbl zh"><span class="m-k">现在</span>画廊点 DeepSeek Harness → Connect DeepSeek Harness（已有一把 Harness key 时）</div>
+        <div class="w-app"><div class="w-page"><div class="w-form" id="nowB"></div></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">② 改后：一张 Connect DeepSeek（已经有一把 DeepSeek key 时，展开 Advanced）</div>
+    <div class="cols2 formcol">
+      <div>
+        <div class="lbl zh"><span class="m-k new">改后</span>画廊点 DeepSeek，或任一处「Connect a DeepSeek key」</div>
+        <div class="w-app"><div class="w-page"><div class="w-form" id="after"></div></div></div>
+      </div>
+      <div id="notes"></div>
+    </div>
+  </div>
+</section>
+
+<script>
+const back = '<div class="w-back">‹ All providers</div>';
+const keyStep = (label) => `<div class="w-step"><div class="w-step-h"><span>${label}</span><span class="w-link">Get your API key ↗</span></div>
+  <div class="w-input ph">Provider API key<span class="eye">◌</span></div>`;
+const adv = '<div class="w-adv"><span class="w-muted" style="font-size:10px">▶</span>Advanced<span class="tag">Auto-filled</span></div>';
+const foot = '<div class="w-foot"><span class="w-btn">Cancel</span><span class="w-btn primary">Connect</span></div>';
+const idbar = (name, sub) => `<div class="w-idbar">${tile('deepseek', 40)}<div><div class="n">${name}</div><div class="s">${sub}</div></div></div>`;
+
+document.getElementById('nowA').innerHTML = `${back}
+  <div class="w-h1" style="margin-top:10px">Connect DeepSeek</div>
+  ${mk('A', idbar('DeepSeek', 'Runs on Claude Code · 2 models included'))}
+  ${keyStep('Paste your DeepSeek API key')}
+    <div class="w-hint">Stored encrypted — only you can see it. Connecting sends one tiny test request first.</div></div>
+  ${adv}${foot}`;
+
+document.getElementById('nowB').innerHTML = `${back}
+  <div class="w-h1" style="margin-top:10px">Connect DeepSeek Harness</div>
+  ${idbar('DeepSeek Harness', 'Runs on DeepSeek Harness · models from the runtime CLI')}
+  <div class="w-step"><div class="w-step-h"><span>Name this provider</span></div><div class="w-input">DeepSeek Harness 2</div>
+    <div class="w-hint">You already have one DeepSeek Harness key — the name is what tells them apart when picking a model.</div></div>
+  ${keyStep('Paste your DeepSeek Harness API key')}
+    <div class="w-hint">Stored encrypted — only you can see it.</div>
+    ${mk('B', '<div class="w-hint" style="margin:0">Sessions on DeepSeek Harness use this key — not the DeepSeek provider, which runs on Claude Code. The key is checked by the first request a session sends; a rejected key shows in that session with a link back here.</div>')}</div>
+  ${adv}${foot}`;
+
+document.getElementById('after').innerHTML = `${back}
+  <div class="w-h1" style="margin-top:10px">Connect DeepSeek</div>
+  ${mk(1, idbar('DeepSeek', 'Anthropic-compatible · 2 models included'))}
+  <div class="w-step"><div class="w-step-h"><span>Name this provider</span></div><div class="w-input">DeepSeek 2</div>
+    <div class="w-hint">You already have one DeepSeek key — the name is what tells them apart when picking a model.</div></div>
+  ${keyStep('Paste your DeepSeek API key')}
+    <div class="w-hint">Stored encrypted — only you can see it. Connecting sends one tiny test request first.</div></div>
+  <div class="w-step">${mk(2, `<div class="w-box"><div class="w-box-h">Works with<small>— pick the engine when you start a session; this key is one of its providers</small></div>
+    <div class="w-er2"><span>${eng('claude', 18)}</span><span class="d">DeepSeek's Anthropic-compatible API · <b>DeepSeek V4 Pro</b>, V4 Flash</span></div>
+    <div class="w-er2"><span>${eng('opencode', 18)}</span><span class="d">as an OpenCode provider · <b>DeepSeek V4 Pro</b>, V4 Flash</span></div>
+    <div class="w-er2"><span>${eng('dsh', 18)}</span><span class="d">DeepSeek's own agent · models from its catalogue on each machine</span></div></div>`)}</div>
+  <div class="w-step">${mk(3, `<div class="w-goes"><b>Who gets this key</b><ul>
+    <li>Sessions on Claude Code and OpenCode hand this key to the CLI in its environment, where commands the agent runs can read it.</li>
+    <li>DeepSeek Harness keeps it out of the commands it runs, but any program running as the runner's user can still read it from the Harness process.</li>
+    <li>Orbit's server uses it to test it when you connect and to read this DeepSeek account's balance.</li></ul></div>`)}</div>
+  ${mk(4, `<div class="w-adv open"><span class="w-muted" style="font-size:10px">▼</span>Advanced<span class="tag">Auto-filled</span></div>
+  <div class="advbody">
+    <div class="w-step"><div class="w-step-h" style="font-size:13.5px"><span>Endpoint</span></div><div class="w-input">https://api.deepseek.com/anthropic</div>
+      <div class="w-hint">DeepSeek's Anthropic-compatible API — Claude Code, OpenCode and DeepSeek Harness all call it.</div></div>
+    <div class="w-step"><div class="w-step-h" style="font-size:13.5px"><span>Models</span></div><div class="w-input">DeepSeek V4 Pro (default) · DeepSeek V4 Flash</div>
+      <div class="w-hint">For Claude Code and OpenCode — maintained by Orbit from the official DeepSeek catalogue. DeepSeek Harness lists its own models on each machine.</div></div>
+  </div>`)}
+  ${foot}`;
+
+document.getElementById('notes').innerHTML = `<div class="lbl zh"><span class="m-k">差异</span>和现在比</div>` + notes([
+  ['A', '<b>key 被说成 Claude Code 的：</b>身份条写「Runs on Claude Code」，读起来像 DeepSeek 只能跑 Claude Code。'],
+  ['B', '<b>同一把 key 要用两张表、贴两遍：</b>Harness 表里专门解释「不是 DeepSeek 那个 provider，那个跑 Claude Code」——用户得先懂两个同名的 provider 才能连对。'],
+  [1, '<b>身份条写协议，不写 engine：</b>「Anthropic-compatible · 2 models included」。DeepSeek Harness 这张表和它的画廊卡片一起去掉。名字一步照旧，只在已有一把 DeepSeek key 时出现，默认名 DeepSeek 2（已定）。'],
+  [2, '<b>新增「Works with」：</b>列出这把 key 能用的三个 engine，以及各自怎么用它、用哪些模型。顺序按兼容表：默认 engine 在前（契约 §2.1）。自定义 endpoint 指向 <code>api.deepseek.com</code> 的 key 同样是这三个。engine 在开会话时选，这里不用勾。'],
+  [3, '<b>新增「Who gets this key」：</b>前两条照契约 §4.6 的实测与建议文案。Claude Code、OpenCode 把 key 放进 CLI 的环境，agent 跑的命令读得到；DeepSeek Harness 不让它跑的命令读到，但同一系统用户的程序仍能从 Harness 进程里读。第三条写 Orbit 服务端：连接时测一次，以及读余额。'],
+  [4, '<b>Advanced 里的说明跟着改：</b>Endpoint 不再写「DeepSeek documents for Claude Code」；Models 写明给 Claude Code 和 OpenCode 用，DeepSeek Harness 用各机器自己的模型目录。'],
+  ['·', '<b>不变的：</b>Get your API key ↗、加密存储那句、连接时的测试请求、Cancel / Connect、Save anyway；连接失败、key 被拒的提示照旧。'],
+]);
+finish();
+</script>
+</body>
+</html>
