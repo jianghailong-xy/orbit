@@ -455,15 +455,19 @@ export interface ClosedQuestionRow {
 }
 
 /** The records an open coordinator conversation draws: every ended question the read carries, at
- *  the moment it ended. A stamp nothing can place is not drawn in the wrong place. */
+ *  the moment it ended. A stamp nothing can place is not drawn in the wrong place. Oldest first —
+ *  the read is newest first — because two answered between the same two messages are drawn after
+ *  the same row, in this order, and read top-down in the order they happened. */
 export function closedQuestionRows(
   items: ProjectOpenItemsView | null | undefined,
   events: ReadonlyArray<{ seq: number; ts?: string }>,
 ): ClosedQuestionRow[] {
-  return (items?.closedQuestions ?? []).flatMap((record) => {
-    const placement = decisionReceiptAnchor(events, record.resolvedAt);
-    return placement === null ? [] : [{ record, placement }];
-  });
+  return [...(items?.closedQuestions ?? [])]
+    .sort((a, b) => Date.parse(a.resolvedAt) - Date.parse(b.resolvedAt))
+    .flatMap((record) => {
+      const placement = decisionReceiptAnchor(events, record.resolvedAt);
+      return placement === null ? [] : [{ record, placement }];
+    });
 }
 
 /** One option as it was offered, ticked when it is the answer, with the owner's words inside. */
