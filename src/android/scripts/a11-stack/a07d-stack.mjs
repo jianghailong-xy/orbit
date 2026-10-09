@@ -10,7 +10,7 @@
 //         with the relay's words, then — A07D_INSTALL_SECONDS later (default 60) — `done`, its Harness now a supported version.
 //   dump  what the server now says of those runners, the key, the sessions and the approval, as JSON (to argv[3]).
 import { randomUUID } from 'node:crypto';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { S, API, call, login, readSeed, seedFile } from './lib.mjs';
 
 const tokens = `${S}/a07d-runners.json`;
@@ -33,7 +33,9 @@ async function until(what, read, { timeoutMs = 120_000, everyMs = 1_000 } = {}) 
 }
 
 // ── what the two runners report ───────────────────────────────────────────────────────────────────────────────────────────
-const leaseOwner = randomUUID();
+// One process speaks for both runners, under one lease owner kept with their tokens: to the server `run` is the process that
+// claimed the sessions, not a restarted one whose sessions it would take back.
+const leaseOwner = process.argv[2] !== 'seed' && existsSync(tokens) ? JSON.parse(readFileSync(tokens, 'utf8')).leaseOwner : randomUUID();
 const harness = (version, compatible) => ({ engine: 'dsh', installed: true, version, auth: 'unknown',
   dsh: { versionCompatible: compatible, credentialPresent: false, modelCatalogReadable: false, requestValidation: 'unknown',
     sandboxEnforcement: 'unknown' } });
@@ -54,17 +56,22 @@ const seed = readSeed();
 const state = (d) => d.runStatus ?? d.status;
 const detail = (id) => call('GET', `/sessions/${id}`, owner);
 
-/** One claim through the runner's own door, as the runner long-polls it: the session it hands out and the lease generation it
- * holds it under, or null. Only those are kept: what it hands the runner (the key among them) is neither kept nor printed. */
+/** One claim through the runner's own door, as the runner long-polls it: the session it hands out, by its runner-side id and
+ * title, or null. Only those are kept: what it hands the runner (the key among them) is neither kept nor printed. */
 async function claim(token) {
   const res = await fetch(`${API}/runner/sessions/claim`, { headers: { authorization: `Bearer ${token}`, ...headers } });
   const job = res.ok ? JSON.parse((await res.text()) || 'null') : null;
-  return job?.sessionId ? { sessionId: job.sessionId, lease: job.leaseOwner ?? leaseOwner } : null;
+  return job?.sessionId ? { sessionId: job.sessionId, title: job.title, owner: job.leaseOwner ?? null } : null;
 }
-/** The session's opening turn, as the runner takes it from its inbox (runner transport.inbox): its id, which completes it. */
-async function openingTurn(token, sessionId, lease) {
+/** The session's opening turn, as the runner takes it (runner transport.go, session.go): this process takes over the leases the
+ * claim saw ([owner], none for a session never run), activates a fresh inbox generation, and is handed the turn — whose id
+ * completes it. */
+async function openingTurn(token, sessionId, owner) {
+  await call('POST', `/runner/sessions/${sessionId}/takeover-leases`, token, { leaseOwner, expectedLeaseOwner: owner }, headers);
+  const generation = randomUUID();
+  await call('POST', `/runner/sessions/${sessionId}/activate-leases`, token, { leaseGeneration: generation, leaseOwner }, headers);
   return until(`the opening turn of ${sessionId}`, async () => {
-    const turn = await call('GET', `/runner/sessions/${sessionId}/inbox?acceptsSteer=1&leaseGeneration=${encodeURIComponent(lease)}`, token, undefined, headers);
+    const turn = await call('GET', `/runner/sessions/${sessionId}/inbox?acceptsSteer=1&leaseGeneration=${generation}`, token, undefined, headers);
     return turn?.turnId || null;
   }, { timeoutMs: 60_000, everyMs: 2_000 });
 }
@@ -78,7 +85,7 @@ if (mode === 'seed') {
     registered[name] = await call('POST', '/runner/register', undefined, { enrollmentToken: enroll.token, name, hostname: `${name}-host`, version: '0.1.230', maxConcurrent: 4 });
     await heartbeat(name, registered[name].runnerToken);
   }
-  writeFileSync(tokens, JSON.stringify(registered, null, 2), { mode: 0o600 });
+  writeFileSync(tokens, JSON.stringify({ ...registered, leaseOwner }, null, 2), { mode: 0o600 });
   const workspace = await call('POST', '/workspaces', owner, { name: 'a07d-dsh', description: 'A07d: a runner whose DeepSeek Harness is ready (no engine runs here)',
     runnerId: registered['a07d-dsh'].runnerId, workDir: '/srv/a07d-dsh', enableWorktree: false, defaultMergeTarget: 'main' });
   // Registration answers with the runner's UUID; every owner read names it by its public id.
@@ -90,32 +97,34 @@ if (mode === 'seed') {
   for (const [name, title, prompt] of [['approval', 'A07d Harness approval', 'A07d: check the tree before the release'],
     ['rejected', 'A07d Harness rejected key', 'A07d: summarize the failing test']]) {
     const created = await call('POST', '/sessions', owner, { workspaceId: workspace.id, title, prompt, engine: 'dsh', provider: key.slug });
+    // The runner's door names a session by its UUID, the owner's by its public id: the claim is matched by its title.
     const claimed = await until(`a07d-dsh to claim "${title}"`, () => claim(token));
-    if (claimed.sessionId !== created.id) throw new Error(`claimed ${claimed.sessionId}, created ${created.id}`);
-    sessions[name] = { id: created.id, title, prompt, lease: claimed.lease };
+    if (claimed.title !== title) throw new Error(`claimed "${claimed.title}", made "${title}"`);
+    sessions[name] = { id: created.id, runnerId: claimed.sessionId, owner: claimed.owner, title, prompt };
   }
   await heartbeat('a07d-dsh', token);
-  for (const row of Object.values(sessions)) row.turnId = await openingTurn(token, row.id, row.lease);
+  for (const row of Object.values(sessions)) row.turnId = await openingTurn(token, row.runnerId, row.owner);
   // The approval session: the permission prompt the runner's bridge files, and the user's words before it.
   const asking = sessions.approval;
-  await call('POST', `/runner/sessions/${asking.id}/events`, token, { leaseOwner: asking.lease, events: [
+  await call('POST', `/runner/sessions/${asking.runnerId}/events`, token, { leaseOwner, events: [
     { seq: 1, type: 'user', ts: iso(), turnId: asking.turnId, payload: { text: asking.prompt } }] });
-  const approval = await call('POST', `/runner/sessions/${asking.id}/approvals`, token,
+  const approval = await call('POST', `/runner/sessions/${asking.runnerId}/approvals`, token,
     { toolName: 'Bash', input: { command: 'git status', description: 'Show the working tree status' }, toolUseId: `a07d-${randomUUID()}` });
   asking.approvalId = approval.id;
   // The rejected session: the user's words, then the runner's error line, then the failed turn.
   const rejected = sessions.rejected;
-  await call('POST', `/runner/sessions/${rejected.id}/events`, token, { leaseOwner: rejected.lease, events: [
+  await call('POST', `/runner/sessions/${rejected.runnerId}/events`, token, { leaseOwner, events: [
     { seq: 1, type: 'user', ts: iso(), turnId: rejected.turnId, payload: { text: rejected.prompt } },
     { seq: 2, type: 'error', ts: iso(), turnId: rejected.turnId, payload: { message: REJECTED } }] });
-  await call('POST', `/runner/sessions/${rejected.id}/turn-complete`, token, { turnId: rejected.turnId, leaseOwner: rejected.lease, status: 'FAILED', error: REJECTED });
+  await call('POST', `/runner/sessions/${rejected.runnerId}/turn-complete`, token, { turnId: rejected.turnId, leaseOwner, status: 'FAILED', error: REJECTED });
 
   seed.a07d = {
     runner: { id: runnerId('a07d-dsh'), name: 'a07d-dsh' },
     oldRunner: { id: runnerId('a07d-dsh-old'), name: 'a07d-dsh-old' },
     workspace: { id: workspace.id, name: workspace.name },
     key: { id: key.id, slug: key.slug, label: key.label },
-    sessions: Object.fromEntries(Object.entries(sessions).map(([k, v]) => [k, { id: v.id, title: v.title, ...(v.approvalId ? { approvalId: v.approvalId } : {}) }])),
+    sessions: Object.fromEntries(Object.entries(sessions).map(([k, v]) => [k, { id: v.id, runnerId: v.runnerId, title: v.title,
+      ...(v.approvalId ? { approvalId: v.approvalId } : {}) }])),
     how: 'a07d-stack.mjs seed: POST /providers/mine, /runners/enrollment-tokens, /runner/register, /runner/heartbeat, /workspaces, ' +
       '/sessions {engine:"dsh"}, GET /runner/sessions/claim, POST /runner/sessions/:id/approvals|events|turn-complete',
   };
@@ -162,7 +171,7 @@ if (mode === 'seed') {
     providers: await call('GET', '/providers', owner), sessions,
     approvals: await call('GET', `/sessions/${a07d.sessions.approval.id}/approvals`, owner),
     // What the runner's bridge is told of the decision — remember rules included, when any were sent.
-    approvalForRunner: await call('GET', `/runner/sessions/${a07d.sessions.approval.id}/approvals/${a07d.sessions.approval.approvalId}`,
+    approvalForRunner: await call('GET', `/runner/sessions/${a07d.sessions.approval.runnerId}/approvals/${a07d.sessions.approval.approvalId}`,
       registered['a07d-dsh'].runnerToken).catch((error) => ({ error: error.message })),
     workspace: await call('GET', `/workspaces/${a07d.workspace.id}`, owner),
     events: await call('GET', `/sessions/${a07d.sessions.rejected.id}/events/page?limit=20`, owner).catch((error) => ({ error: error.message })) };
