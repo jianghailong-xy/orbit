@@ -21,6 +21,7 @@ import {
   MANAGED_RUNNER_ROTATE_REFUSED,
 } from '@orbit/shared';
 
+import { ACCOUNT_DISABLED } from '../auth/disabled-accounts';
 import { sha256 } from '../common/crypto.util';
 import { RunnerAuthGuard } from '../runner-api/runner-auth.guard';
 import { RunnerSessionAuthGuard } from '../runner-api/runner-session-auth.guard';
@@ -113,13 +114,20 @@ test('a long poll’s later rounds re-read the mapping: a fenced instance is ref
   await assert.rejects(reauthorizeManagedRunnerInstance(reading(null) as never, instance), (e: any) => e.getStatus() === 403);
 });
 
-/** A database with one runner credential and, for a managed runner, its mapping. */
-function database(managed: ManagedRunnerInstanceRecord | null) {
+/**
+ * A database with one runner credential, its owner's account state (RUNNER_OWNER_STATE — read on
+ * every request, so a change to `account` applies to the next one) and, for a managed runner, its
+ * mapping.
+ */
+function database(managed: ManagedRunnerInstanceRecord | null, account: { disabledAt: Date | null } = { disabledAt: null }) {
   const lookups: unknown[] = [];
   return {
     lookups,
     prisma: {
-      runner: { findFirst: async ({ where }: { where: { tokenHash: string } }) => (where.tokenHash === sha256('runner-secret') ? { id: 'runner-1', ownerId: 'owner-1' } : null) },
+      runner: {
+        findFirst: async ({ where }: { where: { tokenHash: string } }) =>
+          where.tokenHash === sha256('runner-secret') ? { id: 'runner-1', ownerId: 'owner-1', owner: { disabledAt: account.disabledAt } } : null,
+      },
       managedRunner: {
         findUnique: async (query: unknown) => {
           lookups.push(query);
@@ -179,6 +187,38 @@ test('the runner guards: a managed runner’s credential is accepted from its au
   const { prisma: pending } = database(mapping({ podUid: null, managementState: 'STARTING' }));
   for (const [name, guard] of guards(pending)) {
     await assert.rejects(guard.canActivate(context(headers()).ctx), (e: any) => e.getStatus() === 503 && e.getResponse().retryable === true, name);
+  }
+});
+
+test('a disabled account’s managed runner is refused 403 ACCOUNT_DISABLED, even from its authorized instance, on both guards; enabled again, that instance is served', async () => {
+  const account = { disabledAt: new Date('2026-10-09T05:00:00.000Z') as Date | null };
+  const { prisma, lookups } = database(mapping(), account);
+  for (const [name, guard] of guards(prisma)) {
+    // The authorized instance, a predecessor and an older runner alike: the account answers first.
+    for (const h of [headers(), headers({ [MANAGED_RUNNER_GENERATION_HEADER]: '2' }), {}]) {
+      const refusedCall = context(h);
+      await assert.rejects(
+        guard.canActivate(refusedCall.ctx),
+        (e: any) => e.getStatus() === 403 && e.getResponse().code === ACCOUNT_DISABLED,
+        `${name}: ${JSON.stringify(h)}`,
+      );
+      assert.equal(refusedCall.req.runner, undefined, `${name}: a refused request reaches no handler`);
+    }
+  }
+  assert.equal(lookups.length, 0, 'refused before the managed instance is even looked up');
+
+  // An administrator enables the account again: the authorized instance is served, nothing else.
+  account.disabledAt = null;
+  for (const [name, guard] of guards(prisma)) {
+    const served = context(headers());
+    assert.equal(await guard.canActivate(served.ctx), true, name);
+    assert.deepEqual(served.req.managedRunnerInstance, { mappingId: MAPPING, generation: 3, podUid: POD });
+    assert.equal(served.req.runner.owner, undefined, `${name}: the account state is not handed on`);
+    await assert.rejects(
+      guard.canActivate(context(headers({ [MANAGED_RUNNER_GENERATION_HEADER]: '2' })).ctx),
+      (e: any) => e.getResponse().code === MANAGED_RUNNER_INSTANCE_SUPERSEDED,
+      `${name}: a predecessor is still refused`,
+    );
   }
 });
 

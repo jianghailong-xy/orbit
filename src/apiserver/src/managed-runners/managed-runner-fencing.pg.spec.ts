@@ -24,8 +24,9 @@
  *
  * The second test runs the instance binding over HTTP through the real application (main.ts's
  * pipes, interceptors and filters): heartbeat, claim, inbox, events and the session lease routes
- * from the authorized instance only; a predecessor refused on every one; a self-managed runner and
- * an older managed runner as the compatibility matrix says.
+ * from the authorized instance only; a predecessor refused on every one; a disabled account refused
+ * 403 ACCOUNT_DISABLED before any instance is considered, and served again once enabled; a
+ * self-managed runner and an older managed runner as the compatibility matrix says.
  *
  * Not destructive: every row belongs to a user this run creates.
  */
@@ -48,6 +49,7 @@ import type { ManagedRunner, PrismaClient } from '@prisma/client';
 import { json, urlencoded } from 'express';
 import { Client } from 'pg';
 
+import { DisabledAccounts } from '../auth/disabled-accounts';
 import { call, type Apiserver } from '../auth/pat-test-apiserver';
 import { generateToken, hashPassword, sha256 } from '../common/crypto.util';
 import { PublicIdExceptionFilter } from '../common/public-id.filter';
@@ -674,6 +676,36 @@ test('managed runner instance binding over HTTP: the authorized instance only, a
     assert.equal(old.status, 403);
     assert.equal(old.json.code, 'MANAGED_RUNNER_INSTANCE_REQUIRED');
     // Another Pod presenting the right generation.
+    const other = await call(server, 'POST', '/api/runner/heartbeat', generation1.credential, { engines }, instance('1', randomUUID()));
+    assert.equal(other.status, 403);
+    assert.equal(other.json.code, 'MANAGED_RUNNER_INSTANCE_NOT_AUTHORIZED');
+  });
+
+  await t.test('(H1b) a disabled account’s managed runner is refused 403 ACCOUNT_DISABLED even from its authorized instance; enabled again, it is served', async () => {
+    // As an administrator's change does (X1), the account state is written and the JWT door's view
+    // of disabled accounts read again; the runner doors read the owner's state with every request.
+    const setDisabled = async (disabledAt: Date | null) => {
+      await db.user.update({ where: { id: owner.id }, data: { disabledAt } });
+      await app!.get(DisabledAccounts, { strict: false }).reload();
+    };
+    await setDisabled(new Date());
+    // RunnerAuthGuard (heartbeat, claim) and RunnerSessionAuthGuard (a session read), with the
+    // authorized instance's own credential, generation and Pod UID: the account answers first.
+    for (const [label, method, route, body] of [
+      ['heartbeat', 'POST', '/api/runner/heartbeat', { engines, version: '0.1.0' }],
+      ['claim', 'GET', '/api/runner/sessions/claim', undefined],
+      ['session read (session guard)', 'GET', `/api/runner/sessions/${sessionId}/meta`, undefined],
+    ] as const) {
+      const refused = await call(server, method, route, generation1.credential, body, generation1.headers);
+      assert.equal(refused.status, 403, `${label}: ${refused.text}`);
+      assert.equal(refused.json.code, 'ACCOUNT_DISABLED', label);
+    }
+    // Enabled again: the same instance is served, and the instance check still applies after it.
+    await setDisabled(null);
+    const beat = await call(server, 'POST', '/api/runner/heartbeat', generation1.credential, { engines, version: '0.1.0' }, generation1.headers);
+    assert.equal(beat.status, 201, beat.text);
+    const meta = await call(server, 'GET', `/api/runner/sessions/${sessionId}/meta`, generation1.credential, undefined, generation1.headers);
+    assert.ok(meta.status !== 401 && meta.status !== 403, `session read: ${meta.status} ${meta.text}`);
     const other = await call(server, 'POST', '/api/runner/heartbeat', generation1.credential, { engines }, instance('1', randomUUID()));
     assert.equal(other.status, 403);
     assert.equal(other.json.code, 'MANAGED_RUNNER_INSTANCE_NOT_AUTHORIZED');
