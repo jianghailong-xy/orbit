@@ -1395,7 +1395,7 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
   {
     at: 'managed-runners/managed-runner-manager.ts#fallAsleep',
     shape: 'TX_RETRIED',
-    locks: 'managed_runner by id (a compare-and-set on revision, lease holder, generation, the recorded Pod UID and DRAINING: generation + 1, SLEEPING, compute share cleared), then runner by id (its credential hash replaced), then managed_runner_capacity by id (the compute share given back). The order of advance, with the pool row last, as in admitted and commitFailed.',
+    locks: 'managed_runner by id (a compare-and-set on revision, lease holder, generation, the recorded Pod UID and DRAINING: generation + 1, SLEEPING, compute share cleared), then runner by id (its credential hash replaced), then managed_runner_capacity by id (the compute share given back). The order of advance, with the pool row last, as in admitted and commitReleasingCompute.',
     identity: 'The mapping revision, lease, generation and Pod UID the pass read and proved stopped: a second sleep of the same instance matches no row.',
     isolation: '',
     attempts: 4,
@@ -1404,15 +1404,15 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     answer: 'No request waits on it: the worker logs the exhausted conflict, and its next pass finds the Pod gone and the proof recorded and falls asleep then.',
   },
   {
-    at: 'managed-runners/managed-runner-manager.ts#commitFailed',
+    at: 'managed-runners/managed-runner-manager.ts#commitReleasingCompute',
     shape: 'TX_RETRIED',
-    locks: 'managed_runner by id (a compare-and-set on revision, lease holder and no recorded Pod: FAILED, compute share cleared), then managed_runner_capacity by id (that share given back). Taken only when no Pod of the generation is recorded or being created; otherwise FAILED is the ordinary one-row commit.',
+    locks: 'managed_runner by id (a compare-and-set on revision, lease holder and no recorded Pod: FAILED, or SLEEPING for a disabled owner\'s mapping with no instance, compute share cleared), then managed_runner_capacity by id (that share given back). Taken only when no Pod of the generation is recorded or being created; otherwise it is the ordinary one-row commit.',
     identity: 'The mapping revision and lease the pass read.',
     isolation: '',
     attempts: 4,
-    replay: 'A rolled-back attempt failed nothing and released nothing; the re-run does both from the same row, once.',
+    replay: 'A rolled-back attempt moved nothing and released nothing; the re-run does both from the same row, once.',
     effects: 'None inside.',
-    answer: 'No request waits on it: the worker logs the exhausted conflict, and its next pass fails the mapping again.',
+    answer: 'No request waits on it: the worker logs the exhausted conflict, and its next pass fails the mapping, or puts it to sleep, again.',
   },
   // ── Orbit Wiki (migration 0307, docs/wiki-design.md §4). Every unit below locks wiki rows and
   //    nothing else: 0307's header works through why the wiki's children reach their owner through
@@ -1835,7 +1835,7 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   // Managed runner capacity (migration 0413): the pool's two conditional UPDATEs, run only inside the
   // transaction that records or clears the mapping's share.
   { at: 'managed-runners/managed-runner-capacity.ts#reserveCapacity', under: 'managed-runners/managed-runner-manager.ts#admitted' },
-  { at: 'managed-runners/managed-runner-capacity.ts#releaseCapacity', under: 'managed-runners/managed-runner-manager.ts#fallAsleep and #commitFailed' },
+  { at: 'managed-runners/managed-runner-capacity.ts#releaseCapacity', under: 'managed-runners/managed-runner-manager.ts#fallAsleep and #commitReleasingCompute' },
   { at: 'wiki-worker/wiki-repo-ops.ts#settleRead', under: 'wiki-worker/wiki-repo-ops.ts#applyWikiRepoOpResult' },
   { at: 'wiki-worker/wiki-repo-ops.ts#notifyRepoOpSettled', under: 'wiki-worker/wiki-repo-ops.ts#applyWikiRepoOpResult and #failWikiRepoOp' },
   // What waits on a job that ended for good — its calls, its repository operations, its run or plan job — settled
@@ -1937,7 +1937,8 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   { at: 'projects/project-open-item.ts#recordTaskFailure', under: 'runnerApi.turnComplete and runnerApi.finalize, realtime reaper.forceFinalize (all three through reclaimStalledTask), tasks.update — the transaction that wrote the failure' },
   { at: 'projects/project-open-item.ts#returnQueuedTurns', under: 'runnerApi turn-complete/finalize, sessions end/interrupt/cancelQueuedTurn and realtime reaper — each caller already owns the rank-30 Session transaction that takes the item turn off the queue unrun' },
   { at: 'projects/project-open-item.service.ts#acknowledgeDelivery', under: "sessions.createTurn — the delivery's ledger row is written in the turn's own transaction, under the Session lock it already holds" },
-  { at: 'projects/coordinator-delivery.service.ts#bindQueuedDelivery', under: "sessions.createTurn — `CoordinatorDeliveryService.queue` binds the wake it holds to DELIVERED in the turn's own transaction, under the Session lock that transaction already holds, after re-reading that the conversation has not ended" },
+  { at: 'projects/coordinator-delivery.service.ts#bindQueuedDelivery', under: "sessions.createTurn — `CoordinatorDeliveryService.queue` binds the wake it holds to DELIVERED in the turn's own transaction, under the Session lock that transaction already holds, after re-reading that the conversation has not ended — and, for a fact that waits for a paused coordinator (evidence, `holdWhilePaused`), that it is not paused, refusing before the turn is written so a retry it is parked on stays armed. The delivery record names the turn and, for a revision that waited, says so" },
+  { at: 'projects/coordinator-delivery.service.ts#bindRequeuedDelivery', under: "sessions.createTurn — `CoordinatorDeliveryService.requeue` moves a DELIVERED evidence wake onto the turn it re-sends (a turn key derived from the one taken off the queue unread) in that turn's own transaction, under the Session lock it already holds, after re-reading that the conversation is neither ended nor paused. One UPDATE of the wake row by primary key (rank 60), conditioned on its delivery still naming the turn being replaced, so two re-sends of one delivery write one turn between them; it writes session_id, the delivery record and, through @updatedAt, the moment the coordinator's hold runs from. The row stays DELIVERED inside 0174's index, so no key is claimed or released" },
   { at: 'projects/project-open-item.service.ts#acknowledgeAnswer', under: "sessions.createTurn — the same hook and the same lock as acknowledgeDelivery above, for the ANSWER delivery of a question the owner answered (§5.2 R10). It upserts one delivery row (rank 60) keyed by item, session and purpose, so a generation told twice keeps the row it already had; it refuses inside the transaction when that conversation has ended, which is what stops a platform turn from reviving one" },
   { at: 'projects/project-open-item.service.ts#acknowledgeDoneRequestDecline', under: "sessions.createTurn — the ANSWER delivery ledger row for an owner’s Not yet… response, under the Session lock the turn already holds. It upserts one row keyed by item, session and the existing ANSWER purpose; the item id is distinct from coordinator-question answers, and a replay keeps the same client turn key." },
   { at: 'tasks/reclaim-stalled-task.ts#reclaimStalledTask', under: 'runnerApi.finalize, reaper.forceFinalize' },
@@ -2473,7 +2474,7 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   { at: 'managed-runners/managed-runner-manager.ts#beginDrain', class: 'ONE_ROW_CAS', statements: 1, note: 'READY to DRAINING: the mapping by id, only at the revision and demand revision the idle decision read, under this replica\'s lease. Demand that came meanwhile matches nothing and the runner stays READY.' },
   { at: 'managed-runners/managed-runner-manager.ts#abortDrain', class: 'ONE_ROW_CAS', statements: 1, note: 'DRAINING back to READY: the mapping by id at the revision the pass read, under its lease, and only while the instance has not accepted the stop. The acceptance (managedRunnerHeartbeat) is the other conditional write on that column, so exactly one of the two lands.' },
   { at: 'managed-runners/managed-runner-sleep.ts#managedRunnerHeartbeat', class: 'ONE_ROW_CAS', statements: 1, note: 'A drained instance\'s acceptance of its stop: the mapping by id, only while it is DRAINING for that generation and Pod, the same request, not yet accepted, and with no demand since the drain began. Written from the heartbeat route after its runner update, never in one transaction with it.' },
-  { at: 'managed-runners/managed-runner-work.ts#recordManagedDemand', class: 'ONE_ROW_CAS', statements: 1, note: 'Demand: the mapping by its unique runner id, unless deleted — the demand counter and time, and RUNNING desired. A runner without a mapping matches no row. It does not move the revision: the manager\'s sleep decisions compare the demand revision itself.' },
+  { at: 'managed-runners/managed-runner-work.ts#recordManagedDemand', class: 'ONE_ROW_CAS', statements: 1, note: 'Demand: the mapping by its unique runner id, unless deleted or its owner\'s account is disabled (a key read of the owner row in the same statement) — the demand counter and time, and RUNNING desired. A runner without a mapping matches no row. It does not move the revision: the manager\'s sleep decisions compare the demand revision itself.' },
   { at: 'managed-runners/managed-runner.service.ts#sleep', class: 'ONE_ROW_CAS', statements: 1, note: 'An owner\'s explicit sleep: the mapping by id and owner, only while READY and wanted running at the revision the owner read, to SLEEPING desired with the request\'s idempotency key.' },
   { at: 'managed-runners/managed-runner.service.ts#wake', class: 'ONE_ROW_BY_KEY', statements: 1, note: 'An owner\'s explicit wake records demand (recordManagedDemand) and then the request\'s idempotency key on the mapping by id and owner.' },
 ];
@@ -2553,6 +2554,7 @@ export const TRIGGER_WRITE_SOURCES: readonly TriggerWriteSource[] = [
   {"table":"project_ratified_action_intent","trigger":"project_action_intent_bind_full_revision","event":"BEFORE INSERT","kind":"ROW/STATEMENT","since":"0196_outcome_binding_version_invalidation","takes":[]},
   {"table":"project_ratified_action_intent","trigger":"project_ratified_action_intent_immutable","event":"BEFORE UPDATE OR DELETE","kind":"ROW/STATEMENT","since":"0195_project_owner_ratification","takes":[]},
   {"table":"provider_pool","trigger":"provider_pool_dispatch_slug_guard","event":"BEFORE INSERT OR UPDATE OF \"slug\"","kind":"ROW/STATEMENT","since":"0265_provider_pool","takes":[]},
+  {"table":"provider_slug_alias","trigger":"provider_slug_alias_dispatch_slug_guard","event":"BEFORE INSERT OR UPDATE OF \"slug\"","kind":"ROW/STATEMENT","since":"0415_provider_slug_alias","takes":[]},
   {"table":"run_event","trigger":"run_event_ingestion_provenance_guard","event":"BEFORE INSERT OR UPDATE OF ingested_at, ingested_by_runner_id, ingested_under_lease_generation","kind":"ROW/STATEMENT","since":"0220_completion_ack_removal","takes":[]},
   {"table":"session","trigger":"session_acquisition_engine_guard","event":"BEFORE UPDATE OF \"status\", \"inbox_lease_owner\", \"inbox_lease_generation\"","kind":"ROW/STATEMENT","since":"0414_session_engine","takes":[]},
   {"table":"session","trigger":"session_admission_lock_order_insert_delete","event":"BEFORE INSERT OR DELETE","kind":"ROW/STATEMENT","since":"0130_task_supersession_dispatch_guard","takes":["project LOCK","scope_before LOCK","task LOCK"]},

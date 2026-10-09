@@ -76,12 +76,14 @@ const TIERS: Record<string, { model: string; effort: string }> = {
  *  (model null), and the Agent's effort — what the shadow decision records as its baseline. */
 const UNROUTED = { provider: 'claude', model: null, effort: AGENT_EFFORT };
 const BASELINE = {
+  // The task pins only the provider, so its engine is the one that provider runs on by default.
+  engine: 'claude', engineSource: 'provider-pin',
   provider: 'claude', providerSource: 'task-pin', model: null, runtimeDefaultModel: OPUS,
   effort: AGENT_EFFORT, permissionMode: 'auto',
 };
 /** The coordinator paragraph that asks for a tier, by its first words and its last sentence. */
 const HINT_HEAD = '给你创建的每个任务填 modelHint';
-const HINT_TAIL = '引擎仍用 provider 字段指定。';
+const HINT_TAIL = '引擎用 engine 字段指定，provider 只决定用哪份凭据（登录、账号池或 key），须是该引擎能用的。';
 const CONTEXT_TAG = '<orbit_project_coordinator_context>';
 
 /** Publishes nothing: every realtime / queue call is a no-op. */
@@ -336,7 +338,10 @@ test('off by default: a single and a bulk Run record no decision and run exactly
       const run = await runNow(services, target, single);
       const bound = await receipt(db, target.ownerId, TASK_RUN_ACTION.execute, run.press);
       assert.equal(bound.status, 'COMPLETED');
-      assert.equal(bound.target.v, 2);
+      // Run receipt v3 (docs/provider-engine-contract.md §6.4): an unrouted target names the task's
+      // engine pin, which this task has none of.
+      assert.equal(bound.target.v, 3);
+      assert.equal(bound.target.engine, null);
       assert.deepEqual(dispatchedBy(bound.target), { provider: 'claude', model: null, effort: null });
       await assertNotRouted(db, single, run.sessionId, bound.target, UNROUTED, 'M');
       const detail = await services.tasks.get(target.ownerId, single) as unknown as {
@@ -357,7 +362,7 @@ test('off by default: a single and a bulk Run record no decision and run exactly
       const answer = await services.tasks.batchExecute(target.ownerId, bulk.map((b) => b.taskId), undefined, press);
       assert.equal(answer.dispatched, bulk.length);
       const bulkReceipt = await receipt(db, target.ownerId, TASK_RUN_ACTION.batchExecute, press);
-      assert.equal(bulkReceipt.target.v, 2);
+      assert.equal(bulkReceipt.target.v, 3);
       for (const item of bulk) {
         const sessionId = answer.results.find((r) => r.id === item.taskId)?.sessionId;
         assert.ok(sessionId, `the bulk Run started ${item.taskId}`);
@@ -539,10 +544,8 @@ interface Engine { sessionId: string; leaseOwner: string; generation: string }
 async function startEngine(services: Services, target: Fixture, sessionId: string): Promise<Engine> {
   const { db, api } = services;
   const engine = { sessionId, leaseOwner: randomUUID(), generation: randomUUID() };
-  const session = await db.session.update({
-    where: { id: sessionId },
-    data: { assignedRunnerId: target.runnerId, status: RunStatus.RUNNING, inboxLeaseOwner: engine.leaseOwner },
-    select: { prompt: true, provider: true },
+  const session = await claimWrite(db, sessionId, {
+    assignedRunnerId: target.runnerId, status: RunStatus.RUNNING, inboxLeaseOwner: engine.leaseOwner,
   });
   assert.equal(session.provider, 'claude', 'a claude engine: the runtime the declared capability is for');
   await queueTurn(db, sessionId, session.prompt, `initial-${sessionId}`);
@@ -550,6 +553,17 @@ async function startEngine(services: Services, target: Fixture, sessionId: strin
     leaseOwner: engine.leaseOwner, leaseGeneration: engine.generation,
   } as never);
   return engine;
+}
+
+/**
+ * A claim's write, as a current replica makes it: one that reads the session's engine, which every
+ * run is created with (migration 0414's acquisition guard refuses the claim of any replica that does not).
+ */
+function claimWrite(db: PrismaClient, sessionId: string, data: Prisma.SessionUncheckedUpdateInput) {
+  return db.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`;
+    return tx.session.update({ where: { id: sessionId }, data, select: { prompt: true, provider: true } });
+  });
 }
 
 /** A queued message turn, after every turn the session already has. */
@@ -567,7 +581,7 @@ async function queueTurn(db: PrismaClient, sessionId: string, content: string, c
 async function turn(services: Services, target: Fixture, engine: Engine): Promise<string> {
   const { db, api } = services;
   // The claim's part: the session is running again.
-  await db.session.update({ where: { id: engine.sessionId }, data: { status: RunStatus.RUNNING } });
+  await claimWrite(db, engine.sessionId, { status: RunStatus.RUNNING });
   const handed = await (api as unknown as {
     dequeueTurn(
       sessionId: string, runnerId: string, leaseGeneration: string, acceptsSteer: boolean, declared: string[],

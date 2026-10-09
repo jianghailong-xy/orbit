@@ -456,6 +456,7 @@ export enum AgentProvider {
   OPENCODE = 'opencode',
   /** Google's Antigravity CLI (`agy`), driven headless; see docs/antigravity-runtime-contract.md. */
   ANTIGRAVITY = 'antigravity',
-  /** DeepSeek Harness, driven through ACP; existing `deepseek` providers still borrow Claude. */
+  /** DeepSeek Harness, driven through ACP. An engine like the rest: it runs on a DeepSeek key, which
+   *  Claude Code and OpenCode can run as well (providerEngines.ts). */
   DSH = 'dsh',
 }

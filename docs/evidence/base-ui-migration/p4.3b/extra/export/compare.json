@@ -1,0 +1,86 @@
+{
+ "bodiesIdentical": {
+  "light": true,
+  "dark": true
+ },
+ "shots": {
+  "chromium-dark-desktop.png": {
+   "size": [
+    1280,
+    900
+   ],
+   "bytesEqual": true,
+   "differingBox": null
+  },
+  "chromium-dark-phone.png": {
+   "size": [
+    390,
+    844
+   ],
+   "bytesEqual": true,
+   "differingBox": null
+  },
+  "chromium-light-desktop.png": {
+   "size": [
+    1280,
+    900
+   ],
+   "bytesEqual": true,
+   "differingBox": null
+  },
+  "chromium-light-phone.png": {
+   "size": [
+    390,
+    844
+   ],
+   "bytesEqual": true,
+   "differingBox": null
+  },
+  "webkit-dark-desktop.png": {
+   "size": [
+    1280,
+    900
+   ],
+   "bytesEqual": true,
+   "differingBox": null
+  },
+  "webkit-dark-phone.png": {
+   "size": [
+    390,
+    844
+   ],
+   "bytesEqual": true,
+   "differingBox": null
+  },
+  "webkit-light-desktop.png": {
+   "size": [
+    1280,
+    900
+   ],
+   "bytesEqual": true,
+   "differingBox": null
+  },
+  "webkit-light-phone.png": {
+   "size": [
+    390,
+    844
+   ],
+   "bytesEqual": true,
+   "differingBox": null
+  }
+ },
+ "computedStylesEqual": {
+  "chromium-light-desktop": true,
+  "chromium-light-phone": true,
+  "chromium-dark-desktop": true,
+  "chromium-dark-phone": true,
+  "webkit-light-desktop": true,
+  "webkit-light-phone": true,
+  "webkit-dark-desktop": true,
+  "webkit-dark-phone": true
+ },
+ "requestedReview": {
+  "ref": "threw: useNavigate() may be used only in the context of a <Router> component.",
+  "del": "threw: useNavigate() may be used only in the context of a <Router> component."
+ }
+}

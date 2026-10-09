@@ -8,6 +8,7 @@ import { Field, FieldFeedback } from '../components/ui/Field';
 import { Input } from '../components/ui/Input';
 import { PasswordInput } from '../components/ui/PasswordInput';
 import { useFormFields } from '../components/ui/useFormFields';
+import { firstRunLanding } from '../lib/managedRunner';
 import { setupStatusQuery } from '../lib/queries';
 import { useToast } from '../lib/toast';
 
@@ -62,8 +63,9 @@ export function SetupPage() {
         body: { email: values.email, name: values.name || undefined, password: values.password },
       });
       setSession(res);
-      // A brand-new system has no runner yet — start onboarding at the registration guide.
-      location.href = '/runners/register';
+      // A brand-new system has no runner yet — start onboarding at the registration guide (or, on a
+      // server that offers managed runners, at the landing where the one bootstrap started opens).
+      location.href = await firstRunLanding();
     } catch (err) {
       message.error("Couldn't create the account", (err as Error).message);
     }

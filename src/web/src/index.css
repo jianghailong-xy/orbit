@@ -6239,8 +6239,8 @@ html[data-theme='dark'] .session-tag-chip {
 }
 /* The engine's guess at the next message, offered in the empty box (lib/promptSuggestion). It sits
    on the first line exactly where the placeholder would — same inset, same 24px line — so nothing
-   moves when it arrives a second after the turn ends. Only Use takes the pointer: a click anywhere
-   else on the line still lands in the textarea, to type something else instead. */
+   moves when it arrives a second after the turn ends. Nothing on the line takes the pointer (Use is
+   for a screen reader): a click on it lands in the textarea, to type something else instead. */
 .composer-suggestion {
   position: absolute;
   top: 12px;
@@ -6303,10 +6303,35 @@ html[data-theme='dark'] .session-tag-chip {
     display: inline-block;
   }
 }
-/* No keyboard to press Tab on: Use instead of the key, and the box's description leaves Tab out. */
+/* A touch screen's way to say it: right after the words, as the key is on a keyboard, until the
+   first double-tap on this device takes a suggestion. */
+.composer-suggestion-tap {
+  display: none;
+  flex: none;
+  font-size: 12px;
+  color: var(--text-4);
+  white-space: nowrap;
+}
+/* No keyboard to press Tab on: a double-tap on the box takes it (WorkspaceView's
+   onComposerTouchEnd), the hint says so, and the box's description leaves Tab out. Use stays for a
+   screen reader, whose own double-tap is "activate" — there, hidden from the eye as .sr-only is.
+   `manipulation` keeps a double-tap on the box from zooming the page. */
 @media (hover: none) {
+  .composer-field {
+    touch-action: manipulation;
+  }
+  .composer-suggestion-tap {
+    display: inline;
+  }
   .composer-suggestion-use {
     display: inline-flex;
+    position: absolute;
+    overflow: hidden;
+    clip-path: inset(50%);
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    white-space: nowrap;
   }
   .composer-suggestion-tab-hint {
     display: none;
@@ -9838,7 +9863,7 @@ button.chat-jump-start:hover {
   line-height: 1.6;
   color: var(--text-2);
 }
-.evidence-decision-error {
+.evidence-decision-error.orbit-alert {
   margin-top: 12px;
 }
 /* A decision recorded from the conversation, kept where it was made (`EvidenceDecisionReceipt`):
@@ -10247,7 +10272,7 @@ button.chat-jump-start:hover {
   line-height: 1.6;
   color: var(--text-2);
 }
-.settlement-card-error {
+.settlement-card-error.orbit-alert {
   margin-top: 10px;
 }
 /* The record of a confirmation (`AcceptanceConfirmationReceipt`): what was signed, by whom, and at
@@ -10297,11 +10322,17 @@ button.chat-jump-start:hover {
 .start-card-sheet .settlement-card-head {
   display: none;
 }
-/* In a conversation as wide as the window, the card keeps the width it was drawn for: a form whose
-   settings sit beside their names, and criteria a reader can follow from line to line. Narrower
-   conversations, the project page's dialog and the phone's sheet are under the cap already. */
-.start-card {
-  max-width: 720px;
+/* On a wide screen it is a dialog with no title of its own (the card's head asks the question), so
+   no title row: only the close button, over the card. The replaced modal's line height was unitless:
+   the card's smaller text keeps its proportional line (the Dialog shell stays at 22px). */
+.start-card-dialog.orbit-overlay {
+  line-height: 1.5714285714285714;
+}
+.start-card-dialog > .orbit-overlay-header {
+  margin-bottom: 0;
+}
+.start-card-dialog .orbit-overlay-title:empty {
+  display: none;
 }
 /* The plan as the project page's task graph (`StartPlanGraph`), drawn only while it fits. */
 .start-card-graph {
@@ -10565,9 +10596,17 @@ button.chat-jump-start:hover {
 }
 .start-card-branch,
 .start-card-mono,
-.start-card-mono input {
+.start-card-mono input,
+.start-card-mono.orbit-textarea {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 12px;
+}
+/* On a phone the merge check box keeps the 16px every focusable field is lifted to there (the iOS
+   zoom rule further down; it outranked this one over the replaced field), still monospace. */
+@media (max-width: 960px) {
+  .start-card-mono.orbit-textarea {
+    font-size: 16px;
+  }
 }
 .start-card-branch {
   padding: 1px 5px;
@@ -10861,7 +10900,7 @@ button.chat-jump-start:hover {
   align-items: center;
   gap: 10px;
 }
-.project-settlement-error {
+.project-settlement-error.orbit-alert {
   margin-top: 10px;
 }
 .project-settlement-hint {
@@ -10997,7 +11036,7 @@ button.chat-jump-start:hover {
   line-height: 1.6;
 }
 .project-done-not-yet { margin-top: 12px; }
-.project-done-not-yet .ant-input { font: inherit; font-size: 13px; }
+.project-done-not-yet .orbit-textarea { font: inherit; font-size: 13px; }
 .project-done-not-yet > p {
   margin: 6px 0 0;
   color: var(--text-3);
@@ -11010,7 +11049,12 @@ button.chat-jump-start:hover {
 .project-done-accepted summary { color: var(--brand); cursor: pointer; }
 .project-done-accepted .project-done-gaps { margin-top: 8px; }
 .project-done-empty { margin: 7px 0 0; color: var(--text-2); font-size: 12.5px; }
-.project-done-dialog .ant-modal-content { padding: 0; overflow: hidden; }
+/* The dialog has no title of its own (the card's head is its heading), so no title row: only the
+   close button, over the card. The replaced modal's line height was unitless, so the card's 12–13px
+   text keeps its own proportional line (the shared Dialog shell stays at 22px). */
+.project-done-dialog.orbit-overlay { line-height: 1.5714285714285714; }
+.project-done-dialog > .orbit-overlay-header { margin-bottom: 0; }
+.project-done-dialog .orbit-overlay-title:empty { display: none; }
 .project-done-dialog .project-done-card { border: 0; border-radius: 0; margin: 0; }
 .project-done-dialog .project-done-card .approval-head { border-radius: 0; }
 .project-done-provenance,
@@ -11654,7 +11698,7 @@ button.chat-jump-start:hover {
 .criteria-decision .approval-stale {
   background: var(--bg-raised);
 }
-.criteria-decision-error {
+.criteria-decision-error.orbit-alert {
   margin: 8px 14px 0;
 }
 .card-actions.criteria-decision-actions {
@@ -11737,7 +11781,7 @@ button.chat-jump-start:hover {
   font-weight: 600;
   white-space: nowrap;
 }
-.coordinator-question-free {
+.coordinator-question-free.orbit-textarea {
   margin: 6px 0;
 }
 /* What it holds up, and what happens if nobody answers. */
@@ -11746,7 +11790,7 @@ button.chat-jump-start:hover {
   font-size: 12.5px;
   color: var(--text-2);
 }
-.coordinator-question-error {
+.coordinator-question-error.orbit-alert {
   margin: 8px 14px 0;
 }
 .card-actions.coordinator-question-actions {
@@ -13090,6 +13134,7 @@ button.chat-jump-start:hover {
   padding: 4px 6px;
   border-radius: 6px;
   color: var(--text-1);
+  text-decoration: none;
 }
 .pdg-fold-sample:hover {
   background: var(--bg-sunken);
@@ -13120,6 +13165,7 @@ button.chat-jump-start:hover {
   gap: 8px;
   padding: 8px 14px 0;
   color: var(--text-1);
+  text-decoration: none;
 }
 .pdg-group-title {
   overflow: hidden;
@@ -13163,6 +13209,9 @@ button.chat-jump-start:hover {
   width: 3px;
   background: var(--dot-idle);
 }
+/* The graph's links (a mark, a box's header, a motif's sample) say they are not underlined: on the page
+   the replaced library's root link rule said so, and it does not reach the full screen and the motif's
+   popover, which render outside the page's root. */
 .pdg-task-main {
   display: flex;
   min-width: 0;
@@ -13175,6 +13224,7 @@ button.chat-jump-start:hover {
   background: transparent;
   color: var(--text-1);
   text-align: left;
+  text-decoration: none;
   cursor: pointer;
 }
 .pdg-task-main:focus-visible {
@@ -13265,7 +13315,7 @@ button.chat-jump-start:hover {
   gap: 16px;
   margin-bottom: 10px;
 }
-.pdg-section-title.ant-typography {
+.pdg-section-title.orbit-typography {
   flex: none;
   white-space: nowrap;
 }
@@ -13295,12 +13345,17 @@ button.chat-jump-start:hover {
   font-size: 12px;
   text-align: center;
 }
-.ant-modal.tdg-modal {
-  max-width: none;
-  top: 24px;
-  padding-bottom: 0;
+/* The full-screen graph: 24px down instead of a dialog's 100px, as wide as it is given. The replaced
+   modal's line height was unitless, and the marks' smaller text without one of its own inherits it
+   (the shared Dialog shell stays at 22px). */
+.orbit-dialog-viewport:has(> .tdg-modal) {
+  padding-top: 24px;
 }
-.tdg-modal .ant-modal-body {
+.tdg-modal.orbit-overlay {
+  max-width: none;
+  line-height: 1.5714285714285714;
+}
+.tdg-modal > .orbit-overlay-body {
   padding-top: 4px;
 }
 .tdg-modal .react-flow__minimap {
@@ -13315,18 +13370,17 @@ button.chat-jump-start:hover {
    the long axis. The container is the viewport; only a compact safe-area inset remains around the
    canvas. This applies to both project and single-task dependency graphs. */
 @media (max-width: 640px) {
-  .ant-modal.tdg-modal {
-    top: 0;
+  .orbit-dialog-viewport:has(> .tdg-modal) {
+    padding-top: 0;
+  }
+  .tdg-modal.orbit-overlay {
+    display: flex;
     width: 100% !important;
     height: var(--app-vh);
-    max-width: none;
-    margin: 0;
-  }
-  .tdg-modal .ant-modal-container {
-    display: flex;
-    height: 100%;
     min-height: 0;
+    max-width: none;
     flex-direction: column;
+    margin: 0;
     padding:
       max(12px, env(safe-area-inset-top, 0px))
       max(12px, env(safe-area-inset-right, 0px))
@@ -13334,18 +13388,18 @@ button.chat-jump-start:hover {
       max(12px, env(safe-area-inset-left, 0px));
     border-radius: 0;
   }
-  .tdg-modal .ant-modal-header {
+  .tdg-modal > .orbit-overlay-header {
     flex: none;
     margin-bottom: 10px;
   }
-  .tdg-modal .ant-modal-title {
-    padding-inline-end: 40px;
+  .tdg-modal.orbit-dialog > .orbit-overlay-header > .orbit-overlay-title {
+    padding-right: 40px;
   }
-  .tdg-modal .ant-modal-close {
+  .tdg-modal .orbit-overlay-close {
     top: max(12px, env(safe-area-inset-top, 0px));
-    inset-inline-end: max(12px, env(safe-area-inset-right, 0px));
+    right: max(12px, env(safe-area-inset-right, 0px));
   }
-  .tdg-modal .ant-modal-body {
+  .tdg-modal > .orbit-overlay-body {
     display: flex;
     flex: 1;
     min-height: 0;
@@ -21826,7 +21880,7 @@ button.project-open-item-action:disabled {
   font-size: 11.5px;
   color: var(--text-3);
 }
-.project-promotion-error {
+.project-promotion-error.orbit-alert {
   margin: 0 14px 10px;
 }
 /* B5's row: the blockers this merge would decide along with it, as a short list under the sentence

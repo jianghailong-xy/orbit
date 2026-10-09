@@ -1,0 +1,506 @@
+[
+ {
+  "environment": "chromium-dark-desktop",
+  "test": "breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-dark-desktop",
+  "shot": "breakpoint-961-wiki",
+  "startActualByteIdentical": true,
+  "pixels": 6164,
+  "box": [
+   16,
+   24,
+   499,
+   391
+  ],
+  "crop": "chromium-dark-desktop/breakpoint-961-wiki.png"
+ },
+ {
+  "environment": "chromium-light-desktop",
+  "test": "breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-light-desktop",
+  "shot": "breakpoint-961-wiki",
+  "startActualByteIdentical": true,
+  "pixels": 6191,
+  "box": [
+   16,
+   24,
+   499,
+   391
+  ],
+  "crop": "chromium-light-desktop/breakpoint-961-wiki.png"
+ },
+ {
+  "environment": "webkit-dark-desktop",
+  "test": "breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-dark-desktop",
+  "shot": "breakpoint-961-wiki",
+  "startActualByteIdentical": true,
+  "pixels": 6217,
+  "box": [
+   16,
+   172,
+   262,
+   391
+  ],
+  "crop": "webkit-dark-desktop/breakpoint-961-wiki.png"
+ },
+ {
+  "environment": "webkit-light-desktop",
+  "test": "breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-light-desktop",
+  "shot": "breakpoint-961-wiki",
+  "startActualByteIdentical": true,
+  "pixels": 6248,
+  "box": [
+   16,
+   172,
+   262,
+   391
+  ],
+  "crop": "webkit-light-desktop/breakpoint-961-wiki.png"
+ },
+ {
+  "environment": "chromium-dark-desktop",
+  "test": "pages.browser.mjs-profile-chromium-dark-desktop",
+  "shot": "profile",
+  "startActualByteIdentical": true,
+  "pixels": 6158,
+  "box": [
+   16,
+   172,
+   262,
+   391
+  ],
+  "crop": "chromium-dark-desktop/profile.png"
+ },
+ {
+  "environment": "chromium-light-desktop",
+  "test": "pages.browser.mjs-profile-chromium-light-desktop",
+  "shot": "profile",
+  "startActualByteIdentical": true,
+  "pixels": 6184,
+  "box": [
+   16,
+   172,
+   262,
+   391
+  ],
+  "crop": "chromium-light-desktop/profile.png"
+ },
+ {
+  "environment": "webkit-dark-desktop",
+  "test": "pages.browser.mjs-profile-webkit-dark-desktop",
+  "shot": "profile",
+  "startActualByteIdentical": true,
+  "pixels": 6217,
+  "box": [
+   16,
+   172,
+   262,
+   391
+  ],
+  "crop": "webkit-dark-desktop/profile.png"
+ },
+ {
+  "environment": "webkit-light-desktop",
+  "test": "pages.browser.mjs-profile-webkit-light-desktop",
+  "shot": "profile",
+  "startActualByteIdentical": true,
+  "pixels": 6248,
+  "box": [
+   16,
+   172,
+   262,
+   391
+  ],
+  "crop": "webkit-light-desktop/profile.png"
+ },
+ {
+  "environment": "chromium-dark-desktop",
+  "test": "pages.browser.mjs-projects-chromium-dark-desktop",
+  "shot": "projects-list",
+  "startActualByteIdentical": true,
+  "pixels": 6158,
+  "box": [
+   16,
+   172,
+   262,
+   391
+  ],
+  "crop": "chromium-dark-desktop/projects-list.png"
+ },
+ {
+  "environment": "chromium-light-desktop",
+  "test": "pages.browser.mjs-projects-chromium-light-desktop",
+  "shot": "projects-list",
+  "startActualByteIdentical": true,
+  "pixels": 6184,
+  "box": [
+   16,
+   172,
+   262,
+   391
+  ],
+  "crop": "chromium-light-desktop/projects-list.png"
+ },
+ {
+  "environment": "webkit-dark-desktop",
+  "test": "pages.browser.mjs-projects-webkit-dark-desktop",
+  "shot": "projects-list",
+  "startActualByteIdentical": true,
+  "pixels": 6217,
+  "box": [
+   16,
+   172,
+   262,
+   391
+  ],
+  "crop": "webkit-dark-desktop/projects-list.png"
+ },
+ {
+  "environment": "webkit-light-desktop",
+  "test": "pages.browser.mjs-projects-webkit-light-desktop",
+  "shot": "projects-list",
+  "startActualByteIdentical": true,
+  "pixels": 6248,
+  "box": [
+   16,
+   172,
+   262,
+   391
+  ],
+  "crop": "webkit-light-desktop/projects-list.png"
+ },
+ {
+  "environment": "chromium-dark-desktop",
+  "test": "pages.browser.mjs-session-chromium-dark-desktop",
+  "shot": "session-idle",
+  "startActualByteIdentical": true,
+  "pixels": 22466,
+  "box": [
+   8,
+   172,
+   270,
+   391
+  ],
+  "crop": "chromium-dark-desktop/session-idle.png"
+ },
+ {
+  "environment": "chromium-light-desktop",
+  "test": "pages.browser.mjs-session-chromium-light-desktop",
+  "shot": "session-idle",
+  "startActualByteIdentical": true,
+  "pixels": 22483,
+  "box": [
+   8,
+   172,
+   270,
+   391
+  ],
+  "crop": "chromium-light-desktop/session-idle.png"
+ },
+ {
+  "environment": "webkit-dark-desktop",
+  "test": "pages.browser.mjs-session-webkit-dark-desktop",
+  "shot": "session-idle",
+  "startActualByteIdentical": true,
+  "pixels": 22499,
+  "box": [
+   8,
+   172,
+   270,
+   391
+  ],
+  "crop": "webkit-dark-desktop/session-idle.png"
+ },
+ {
+  "environment": "webkit-light-desktop",
+  "test": "pages.browser.mjs-session-webkit-light-desktop",
+  "shot": "session-idle",
+  "startActualByteIdentical": true,
+  "pixels": 22513,
+  "box": [
+   8,
+   172,
+   270,
+   391
+  ],
+  "crop": "webkit-light-desktop/session-idle.png"
+ },
+ {
+  "environment": "chromium-dark-desktop",
+  "test": "pages.browser.mjs-settings-chromium-dark-desktop",
+  "shot": "settings",
+  "startActualByteIdentical": true,
+  "pixels": 6158,
+  "box": [
+   16,
+   172,
+   262,
+   391
+  ],
+  "crop": "chromium-dark-desktop/settings.png"
+ },
+ {
+  "environment": "chromium-light-desktop",
+  "test": "pages.browser.mjs-settings-chromium-light-desktop",
+  "shot": "settings",
+  "startActualByteIdentical": true,
+  "pixels": 6184,
+  "box": [
+   16,
+   172,
+   262,
+   391
+  ],
+  "crop": "chromium-light-desktop/settings.png"
+ },
+ {
+  "environment": "webkit-dark-desktop",
+  "test": "pages.browser.mjs-settings-webkit-dark-desktop",
+  "shot": "settings",
+  "startActualByteIdentical": true,
+  "pixels": 6217,
+  "box": [
+   16,
+   172,
+   262,
+   391
+  ],
+  "crop": "webkit-dark-desktop/settings.png"
+ },
+ {
+  "environment": "webkit-light-desktop",
+  "test": "pages.browser.mjs-settings-webkit-light-desktop",
+  "shot": "settings",
+  "startActualByteIdentical": true,
+  "pixels": 6248,
+  "box": [
+   16,
+   172,
+   262,
+   391
+  ],
+  "crop": "webkit-light-desktop/settings.png"
+ },
+ {
+  "environment": "chromium-dark-desktop",
+  "test": "pages.browser.mjs-task-chromium-dark-desktop",
+  "shot": "task-detail",
+  "startActualByteIdentical": true,
+  "pixels": 6158,
+  "box": [
+   16,
+   172,
+   262,
+   391
+  ],
+  "crop": "chromium-dark-desktop/task-detail.png"
+ },
+ {
+  "environment": "chromium-light-desktop",
+  "test": "pages.browser.mjs-task-chromium-light-desktop",
+  "shot": "task-detail",
+  "startActualByteIdentical": true,
+  "pixels": 6184,
+  "box": [
+   16,
+   172,
+   262,
+   391
+  ],
+  "crop": "chromium-light-desktop/task-detail.png"
+ },
+ {
+  "environment": "webkit-dark-desktop",
+  "test": "pages.browser.mjs-task-webkit-dark-desktop",
+  "shot": "task-detail",
+  "startActualByteIdentical": true,
+  "pixels": 6217,
+  "box": [
+   16,
+   172,
+   262,
+   391
+  ],
+  "crop": "webkit-dark-desktop/task-detail.png"
+ },
+ {
+  "environment": "webkit-light-desktop",
+  "test": "pages.browser.mjs-task-webkit-light-desktop",
+  "shot": "task-detail",
+  "startActualByteIdentical": true,
+  "pixels": 6248,
+  "box": [
+   16,
+   172,
+   262,
+   391
+  ],
+  "crop": "webkit-light-desktop/task-detail.png"
+ },
+ {
+  "environment": "chromium-dark-desktop",
+  "test": "pages.browser.mjs-wiki-chromium-dark-desktop",
+  "shot": "wiki-home",
+  "startActualByteIdentical": true,
+  "pixels": 6158,
+  "box": [
+   16,
+   172,
+   262,
+   391
+  ],
+  "crop": "chromium-dark-desktop/wiki-home.png"
+ },
+ {
+  "environment": "chromium-light-desktop",
+  "test": "pages.browser.mjs-wiki-chromium-light-desktop",
+  "shot": "wiki-home",
+  "startActualByteIdentical": true,
+  "pixels": 6184,
+  "box": [
+   16,
+   172,
+   262,
+   391
+  ],
+  "crop": "chromium-light-desktop/wiki-home.png"
+ },
+ {
+  "environment": "webkit-dark-desktop",
+  "test": "pages.browser.mjs-wiki-webkit-dark-desktop",
+  "shot": "wiki-home",
+  "startActualByteIdentical": true,
+  "pixels": 6217,
+  "box": [
+   16,
+   172,
+   262,
+   391
+  ],
+  "crop": "webkit-dark-desktop/wiki-home.png"
+ },
+ {
+  "environment": "webkit-light-desktop",
+  "test": "pages.browser.mjs-wiki-webkit-light-desktop",
+  "shot": "wiki-home",
+  "startActualByteIdentical": true,
+  "pixels": 6248,
+  "box": [
+   16,
+   172,
+   262,
+   391
+  ],
+  "crop": "webkit-light-desktop/wiki-home.png"
+ },
+ {
+  "environment": "chromium-dark-desktop",
+  "test": "states.browser.mjs-control-74696-rojects-loading-and-release-chromium-dark-desktop",
+  "shot": "projects-loading",
+  "startActualByteIdentical": true,
+  "pixels": 6158,
+  "box": [
+   16,
+   172,
+   262,
+   391
+  ],
+  "crop": "chromium-dark-desktop/projects-loading.png"
+ },
+ {
+  "environment": "chromium-light-desktop",
+  "test": "states.browser.mjs-control-74696-rojects-loading-and-release-chromium-light-desktop",
+  "shot": "projects-loading",
+  "startActualByteIdentical": true,
+  "pixels": 6184,
+  "box": [
+   16,
+   172,
+   262,
+   391
+  ],
+  "crop": "chromium-light-desktop/projects-loading.png"
+ },
+ {
+  "environment": "webkit-dark-desktop",
+  "test": "states.browser.mjs-control-74696-rojects-loading-and-release-webkit-dark-desktop",
+  "shot": "projects-loading",
+  "startActualByteIdentical": true,
+  "pixels": 6217,
+  "box": [
+   16,
+   172,
+   262,
+   391
+  ],
+  "crop": "webkit-dark-desktop/projects-loading.png"
+ },
+ {
+  "environment": "webkit-light-desktop",
+  "test": "states.browser.mjs-control-74696-rojects-loading-and-release-webkit-light-desktop",
+  "shot": "projects-loading",
+  "startActualByteIdentical": true,
+  "pixels": 6248,
+  "box": [
+   16,
+   172,
+   262,
+   391
+  ],
+  "crop": "webkit-light-desktop/projects-loading.png"
+ },
+ {
+  "environment": "chromium-dark-desktop",
+  "test": "states.browser.mjs-controlled-error-projects-error-and-retry-chromium-dark-desktop",
+  "shot": "projects-error",
+  "startActualByteIdentical": true,
+  "pixels": 6158,
+  "box": [
+   16,
+   172,
+   262,
+   391
+  ],
+  "crop": "chromium-dark-desktop/projects-error.png"
+ },
+ {
+  "environment": "chromium-light-desktop",
+  "test": "states.browser.mjs-controlled-error-projects-error-and-retry-chromium-light-desktop",
+  "shot": "projects-error",
+  "startActualByteIdentical": true,
+  "pixels": 6184,
+  "box": [
+   16,
+   172,
+   262,
+   391
+  ],
+  "crop": "chromium-light-desktop/projects-error.png"
+ },
+ {
+  "environment": "webkit-dark-desktop",
+  "test": "states.browser.mjs-controlled-error-projects-error-and-retry-webkit-dark-desktop",
+  "shot": "projects-error",
+  "startActualByteIdentical": true,
+  "pixels": 6217,
+  "box": [
+   16,
+   172,
+   262,
+   391
+  ],
+  "crop": "webkit-dark-desktop/projects-error.png"
+ },
+ {
+  "environment": "webkit-light-desktop",
+  "test": "states.browser.mjs-controlled-error-projects-error-and-retry-webkit-light-desktop",
+  "shot": "projects-error",
+  "startActualByteIdentical": true,
+  "pixels": 6248,
+  "box": [
+   16,
+   172,
+   262,
+   391
+  ],
+  "crop": "webkit-light-desktop/projects-error.png"
+ }
+]

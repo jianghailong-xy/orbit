@@ -204,6 +204,8 @@ import {
 } from '../lib/contextSeed';
 import { SessionOutputs } from './SessionOutputs';
 import { NewSessionProviderHero } from './NewSessionProviderHero';
+import { ManagedRunnerNotice } from './ManagedRunnerNotice';
+import { managedRunnerStatusQuery, type ManagedRunner } from '../lib/managedRunner';
 import {
   currentProviderChoice,
   engineChoiceFor,
@@ -840,6 +842,14 @@ const SESSION_COL_DEFAULT = 320;
 
 // Whether the session list's Pinned section is folded to its heading, persisted across reloads.
 const PINNED_COLLAPSED_KEY = 'orbit.sessionPinnedCollapsed';
+
+// Set by the first double-tap that takes a suggestion on this device: from then on a touch screen's
+// grey line is the guess alone, without "Double-tap to use" after it (prompt-suggestions-design §4.3).
+const SUGGESTION_TAP_LEARNED_KEY = 'orbit.suggestionDoubleTapLearned';
+// Two taps on the composer this close in time and place are one double-tap (the platforms' own
+// double-tap window).
+const DOUBLE_TAP_MS = 300;
+const DOUBLE_TAP_SLOP_PX = 24;
 
 // Delay the SSE (re)connect on a session switch so holding the arrow keys to scrub
 // the list doesn't open-then-immediately-close a connection per session skipped past.
@@ -1902,7 +1912,14 @@ export function QueuedTurnMeta({
 // WorkspaceView remounts across runner switches.
 const lastSessionByWorkspace = new Map<string, string>();
 
-export function WorkspaceView({ runner }: { runner: Runner }) {
+export function WorkspaceView({
+  runner,
+  managed = null,
+}: {
+  runner: Runner;
+  /** The managed runner, when this console's runner is it (WorkspaceConsole decides). */
+  managed?: ManagedRunner | null;
+}) {
   const { modal } = AntApp.useApp();
   const message = useToast();
   const qc = useQueryClient();
@@ -3003,18 +3020,24 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     !live &&
     !!selectedSession.startedAt &&
     !!runner.online;
-  const resumable = selectedSession
-    ? sessionCapabilityOf(selectedSession, 'canResume', legacyResumable)
-    : false;
   const selectedResumeBlockedReason = selectedSession
     ? sessionResumeBlockedReasonOf(selectedSession)
     : null;
+  // A managed runner that is asleep or on its way up comes back by itself, so work for it is not
+  // refused as offline: the server queues a message for it, and the resume of an ended session
+  // too (SessionsService.resume). Sending is what wakes it.
+  const runnerTakesWork = !!runner.online || !!managed?.display.acceptsWork;
+  const managedResumes = !!managed?.display.acceptsWork && selectedResumeBlockedReason === 'RUNNER_OFFLINE';
+  const resumable = selectedSession
+    ? sessionCapabilityOf(selectedSession, 'canResume', legacyResumable) || managedResumes
+    : false;
   const selectedResumeBlockedCopy = sessionResumeBlockedMessage(selectedResumeBlockedReason);
   // A run can still look live/resumable in cached state while a Complete/end transition has
   // already denied its same-session endpoint. Never reinterpret that denial as a fresh run.
   const sameSessionSendBlocked =
     !!selectedSession &&
     (live || resumable) &&
+    !managedResumes &&
     !sessionCapabilityOf(selectedSession, 'canSend', true);
   const sameSessionSendBlockedCopy = sessionSendBlockedMessage(selectedResumeBlockedReason);
   const selectedCanComplete = selectedSession
@@ -3391,6 +3414,16 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const pickedProvider: string = draftProvider ?? lastWorkspaceProvider;
   // The Provider-menu identity of that pick: the model space, the model seed and the menu's tick.
   const pickedChoice: string = draftChoice ?? lastWorkspaceProvider;
+  // The managed runner's default workspace has no engine for a first session until its runner has
+  // been ready with one (`initialProvider`): before that the server refuses the session with
+  // MODEL_UNAVAILABLE, so the draft offers no default engine and shows the runner's state instead.
+  const managedDraftBlocked =
+    !selected &&
+    !!managed &&
+    !managed.display.startsNewSession &&
+    !!workspaceId &&
+    !!managed.status.workspaceId &&
+    routeId(managed.status.workspaceId) === routeId(workspaceId);
   // The Codex, Claude, Antigravity or Kimi account picked for the draft on the New Session hero, scoped to
   // its workspace like the provider pick. Without one a new session starts where Automatic or its
   // workspace says.
@@ -5672,7 +5705,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         qc.setQueryData(sessionQuery(selected.id).queryKey, fresh);
         const freshReason = sessionResumeBlockedReasonOf(fresh);
         const freshLegacyResumable = !!fresh.startedAt && !!runner.online;
-        const disposition = sessionSendDispositionOf(fresh, freshLegacyResumable);
+        const disposition =
+          !!managed?.display.acceptsWork && freshReason === 'RUNNER_OFFLINE'
+            ? 'RESUME'
+            : sessionSendDispositionOf(fresh, freshLegacyResumable);
         if (disposition === 'BLOCK')
           throw new Error(
             sessionSendBlockedMessage(
@@ -5840,6 +5876,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       if (sendOperationRef.current?.clientTurnId === clientTurnId) {
         sendOperationRef.current = null;
       }
+      // Work for a managed runner that is not up asks it to wake: show that now, not at the next poll.
+      if (managed && !runner.online) qc.invalidateQueries({ queryKey: managedRunnerStatusQuery().queryKey });
       pushHistory(id, vars.shell ? `!${vars.content}` : vars.content); // record under the resolved session id, new sessions included
       // Delivered, to the run that has this task rather than to the one it was typed in. Nothing
       // about this row changed, so none of the optimistic painting below applies — the bubble is
@@ -7149,7 +7187,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     : (!!text.trim() || readyImages.length > 0) &&
       !send.isPending &&
       !uploading &&
-      runner.online &&
+      runnerTakesWork &&
+      !managedDraftBlocked &&
       !selectedTrashed &&
       !sameSessionSendBlocked &&
       !selectedMissing &&
@@ -7173,6 +7212,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // regex match, so the menu auto-hides).
   const taRef = useRef<any>(null);
   const suggestionHintId = useId();
+  const [suggestionTapLearned, setSuggestionTapLearned] = useState(
+    () => localStorage.getItem(SUGGESTION_TAP_LEARNED_KEY) === '1',
+  );
+  // The composer's last tap on a touch screen, to tell a double-tap from two taps; `held` is the
+  // timer that hands a held first tap on as the box's focus.
+  const lastComposerTap = useRef<{ at: number; x: number; y: number; held?: number } | null>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Manual composer height (px). null = autoSize auto-grow (up to maxRows); once the user
@@ -8991,16 +9036,17 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       ? 'Session not found'
       : sameSessionSendBlocked
         ? sameSessionSendBlockedCopy
-        : !runner.online
-          ? 'Runner offline'
+        : managedDraftBlocked || !runnerTakesWork
+          ? (managed?.display.title ?? 'Runner offline')
           : replyTo
             ? replyTo.placeholder
             : selectedId
               ? 'Reply…'
               : 'Send this workspace a task…';
   // The engine's guess at the next message (lib/promptSuggestion): offered in an idle, empty
-  // composer as a grey line with Use (and Tab), where "Reply…" would be. Only the placeholders
-  // above that explain why the box cannot send outrank it — and those states never offer one.
+  // composer as a grey line where "Reply…" would be, taken with Tab (a double-tap on a touch
+  // screen). Only the placeholders above that explain why the box cannot send outrank it — and
+  // those states never offer one.
   const waitingSummary = selectedSession as { pendingApprovals?: number; waitingKind?: string | null } | null;
   const offeredSuggestion = offeredPromptSuggestion(
     eventsSessionId === selectedId ? currentPromptSuggestion(events) : null,
@@ -9017,7 +9063,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         !selectedMissing &&
         !loadingSession &&
         !sameSessionSendBlocked &&
-        runner.online === true,
+        runnerTakesWork,
       failed: !!selectedSession && sessionRunStatusOf(selectedSession) === 'FAILED',
     },
   );
@@ -9033,6 +9079,43 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       ta.focus();
       ta.selectionStart = ta.selectionEnd = ta.value.length;
     }, 0);
+  };
+  // A touch screen has no Tab: two taps on the box take the suggestion, as on the iPhone. The second
+  // tap is kept from the box, so it neither zooms the page nor drops the caret into the words it just
+  // received. The first is held too while the box is not focused yet: the keyboard it would raise
+  // lifts the page, and the second tap would land on the keyboard instead. A lone tap is handed on as
+  // the box's focus once the double-tap window passes (a timer this short keeps the tap's user
+  // activation, so the keyboard still comes up). A focused box keeps its first tap.
+  const onComposerTouchEnd = (e: ReactTouchEvent<HTMLTextAreaElement>): void => {
+    const touch = e.changedTouches[0];
+    const last = lastComposerTap.current;
+    if (!offeredSuggestion || !touch) {
+      lastComposerTap.current = null;
+      return;
+    }
+    const tap = { at: e.timeStamp, x: touch.clientX, y: touch.clientY };
+    if (
+      last &&
+      tap.at - last.at <= DOUBLE_TAP_MS &&
+      Math.hypot(tap.x - last.x, tap.y - last.y) <= DOUBLE_TAP_SLOP_PX
+    ) {
+      window.clearTimeout(last.held);
+      lastComposerTap.current = null;
+      e.preventDefault();
+      acceptSuggestion();
+      if (!suggestionTapLearned) {
+        setSuggestionTapLearned(true);
+        localStorage.setItem(SUGGESTION_TAP_LEARNED_KEY, '1');
+      }
+      return;
+    }
+    const box = e.currentTarget;
+    let held: number | undefined;
+    if (document.activeElement !== box) {
+      e.preventDefault();
+      held = window.setTimeout(() => box.focus(), DOUBLE_TAP_MS);
+    }
+    lastComposerTap.current = { ...tap, held };
   };
 
   return (
@@ -10363,17 +10446,19 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               className={`workspace-sessions${localStatusCards.length ? '' : ' workspace-draft'}`}
               ref={scrollRef}
             >
-              <NewSessionProviderHero
-                current={currentDraftEngine}
-                engines={draftEngines}
-                onPick={pickDraftProvider}
-                runnerId={runner.id}
-                currentModelLabel={shownModelLabel}
-                // Nothing to choose until we know which workspace (and so which project) this runs in.
-                disabled={!pickedWorkspace}
-                note={providerSwitchNote}
-                projectIntent={projectIntent}
-              />
+              {!managedDraftBlocked && (
+                <NewSessionProviderHero
+                  current={currentDraftEngine}
+                  engines={draftEngines}
+                  onPick={pickDraftProvider}
+                  runnerId={runner.id}
+                  currentModelLabel={shownModelLabel}
+                  // Nothing to choose until we know which workspace (and so which project) this runs in.
+                  disabled={!pickedWorkspace}
+                  note={providerSwitchNote}
+                  projectIntent={projectIntent}
+                />
+              )}
               {localStatusCards.map((card) => (
                 <SessionStatusCard card={card} key={card.id} />
               ))}
@@ -10407,6 +10492,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         </div>
 
       <div className="workspace-composer">
+        {/* The managed runner's state while it is anything but ready: preparing, waiting, asleep,
+            waking, failed (with Retry), removed. */}
+        {managed && managed.display.kind !== 'available' && <ManagedRunnerNotice managed={managed} />}
         {/* What this session is waiting on: live watches it observes. A watch waits on the server,
             not in a process, so it gets its own strip rather than a row in the tray below
             (docs/watch-contract.md §9.2). Hidden when there are none. */}
@@ -10735,6 +10823,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           <Input.TextArea
             ref={taRef}
             onScroll={(e) => setComposerScroll(e.currentTarget.scrollTop)}
+            onTouchEnd={onComposerTouchEnd}
             className={shellMode ? 'composer-shell' : undefined}
             variant="borderless"
             // Auto-grow up to 12 rows, then scroll — unless the user has dragged the handle to
@@ -10926,12 +11015,20 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               <span className="composer-suggestion-text" title={offeredSuggestion} aria-hidden="true">
                 {offeredSuggestion}
               </span>
-              {/* With a keyboard the grey line itself says how to take it, and there is no button;
-                  Use is for a touch screen, which has no Tab to press. Which one shows is CSS's
-                  call. Drawn in docs/mocks/prompt-suggestions-web-tab. */}
+              {/* The grey line itself says how to take it, and there is no button to see: Tab with a
+                  keyboard, a double-tap on the box on a touch screen (the hint goes once one has
+                  worked on this device). Which shows is CSS's call. Drawn in
+                  docs/mocks/prompt-suggestions-web-tab and docs/mocks/prompt-suggestion-double-tap. */}
               <kbd className="composer-suggestion-key" aria-hidden="true">
                 Tab
               </kbd>
+              {!suggestionTapLearned && (
+                <span className="composer-suggestion-tap" aria-hidden="true">
+                  Double-tap to use
+                </span>
+              )}
+              {/* For a screen reader on a touch screen, whose own double-tap is "activate": hidden
+                  from the eye there, and gone with a keyboard, which has Tab. */}
               <button
                 type="button"
                 className="composer-suggestion-use"
@@ -11101,49 +11198,53 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 way a reference composer writes "model · effort" as one button: the model in the
                 label's colour, the effort after it in the secondary one. The menu behind it
                 (`modelMenuItems`) keeps each field's own rules. */}
-            <span className="composer-pill composer-model-pill">
-              <Dropdown
-                trigger={['click']}
-                placement="topRight"
-                disabled={!configEditable}
-                // Rows that open a level down open on hover where the pointer can hover, the way
-                // the browser's own menus do — and on a tap where it cannot, because a phone has
-                // no hover to give: one row, two gestures, decided by the pointer.
-                // They open to the right — and on a phone, where the control sits near the
-                // right edge, there is no right: shift the level back inside the screen rather
-                // than let it hang off the edge (and widen the page with it).
-                menu={{
-                  className: 'composer-model-menu',
-                  items: modelMenuItems,
-                  triggerSubMenuAction: canHover ? 'hover' : 'click',
-                  builtinPlacements: {
-                    rightTop: {
-                      points: ['tl', 'tr'],
-                      overflow: { adjustX: true, adjustY: true, shiftX: true, shiftY: true },
-                    },
-                  },
-                }}
-              >
-                <button
-                  type="button"
-                  className={`composer-model-chip${smartRoute ? ' is-smart' : ''}`}
+            {/* No model to show where a first session cannot start yet: the managed default
+                workspace before its runner was ever ready (`managedDraftBlocked`). */}
+            {!managedDraftBlocked && (
+              <span className="composer-pill composer-model-pill">
+                <Dropdown
+                  trigger={['click']}
+                  placement="topRight"
                   disabled={!configEditable}
-                  aria-label={`Model ${shownModelLabel}, effort ${shownEffortLabel}${
-                    smartRoute ? ', picked by smart selection' : ''
-                  }`}
+                  // Rows that open a level down open on hover where the pointer can hover, the way
+                  // the browser's own menus do — and on a tap where it cannot, because a phone has
+                  // no hover to give: one row, two gestures, decided by the pointer.
+                  // They open to the right — and on a phone, where the control sits near the
+                  // right edge, there is no right: shift the level back inside the screen rather
+                  // than let it hang off the edge (and widen the page with it).
+                  menu={{
+                    className: 'composer-model-menu',
+                    items: modelMenuItems,
+                    triggerSubMenuAction: canHover ? 'hover' : 'click',
+                    builtinPlacements: {
+                      rightTop: {
+                        points: ['tl', 'tr'],
+                        overflow: { adjustX: true, adjustY: true, shiftX: true, shiftY: true },
+                      },
+                    },
+                  }}
                 >
-                  {smartRoute && (
-                    <span className="composer-model-spark" aria-hidden="true">
-                      ✦
+                  <button
+                    type="button"
+                    className={`composer-model-chip${smartRoute ? ' is-smart' : ''}`}
+                    disabled={!configEditable}
+                    aria-label={`Model ${shownModelLabel}, effort ${shownEffortLabel}${
+                      smartRoute ? ', picked by smart selection' : ''
+                    }`}
+                  >
+                    {smartRoute && (
+                      <span className="composer-model-spark" aria-hidden="true">
+                        ✦
+                      </span>
+                    )}
+                    <span className="composer-model-name">{shownModelLabel}</span>
+                    <span className="composer-model-effort">
+                      {fastModeUsable && shownFastMode ? `${shownEffortLabel} · Fast` : shownEffortLabel}
                     </span>
-                  )}
-                  <span className="composer-model-name">{shownModelLabel}</span>
-                  <span className="composer-model-effort">
-                    {fastModeUsable && shownFastMode ? `${shownEffortLabel} · Fast` : shownEffortLabel}
-                  </span>
-                </button>
-              </Dropdown>
-            </span>
+                  </button>
+                </Dropdown>
+              </span>
+            )}
             {shownPool && shownPoolAccount && (
               <Tooltip title={poolAccountHelp(shownPool, shownPoolAccount)}>
                 <span className="composer-pill composer-account" data-pool-account={shownPoolAccount.member.id}>

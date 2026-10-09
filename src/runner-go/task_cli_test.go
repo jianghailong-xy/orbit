@@ -557,10 +557,10 @@ func TestTaskCLIRejectsArbitraryDescriptionAndBodyFiles(t *testing.T) {
 }
 
 func TestTaskCLICommentReadsStdinAndAuthorsAsAgentInSession(t *testing.T) {
-	var gotAgent string
+	var gotAgent, gotSession string
 	var gotBody map[string]interface{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotAgent = r.Header.Get("X-Orbit-Agent-Id")
+		gotAgent, gotSession = r.Header.Get("X-Orbit-Agent-Id"), r.Header.Get("X-Orbit-Session-Id")
 		_ = json.NewDecoder(r.Body).Decode(&gotBody)
 		_, _ = w.Write([]byte(`{"id":"comment-1"}`))
 	}))
@@ -573,9 +573,10 @@ func TestTaskCLICommentReadsStdinAndAuthorsAsAgentInSession(t *testing.T) {
 	if err := cmdTaskCLI([]string{"comment", "task-1", "--body-file", "-", "--json"}, strings.NewReader("done\n"), &out); err != nil {
 		t.Fatal(err)
 	}
-	// In-session, the comment is authored by the acting agent (same as the MCP path).
-	if gotAgent != "agent-1" || gotBody["body"] != "done\n" {
-		t.Fatalf("agent = %q body = %#v", gotAgent, gotBody["body"])
+	// In-session, the comment is authored by the acting agent and names its session (same as the
+	// MCP path).
+	if gotAgent != "agent-1" || gotSession != "session-1" || gotBody["body"] != "done\n" {
+		t.Fatalf("agent = %q session = %q body = %#v", gotAgent, gotSession, gotBody["body"])
 	}
 }
 
@@ -1011,5 +1012,147 @@ func TestTaskCLIUpdateCarriesTheActingSession(t *testing.T) {
 	}
 	if sawHeader {
 		t.Fatalf("X-Orbit-Session-Id sent outside a session: %q", sawSession)
+	}
+}
+
+// taskWriteServer records each request's method, path and body, answering with `{"id":"t1"}`.
+func taskWriteServer(t *testing.T) (*[]string, *[]map[string]interface{}) {
+	t.Helper()
+	var requests []string
+	var bodies []map[string]interface{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests = append(requests, r.Method+" "+r.URL.Path)
+		body := map[string]interface{}{}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		bodies = append(bodies, body)
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"t1"}`))
+	}))
+	t.Cleanup(srv.Close)
+	configureCLITestRunner(t, srv.URL)
+	// Headless: no card to answer, so each request recorded is the write itself.
+	t.Setenv("ORBIT_SESSION_ID", "")
+	t.Setenv("ORBIT_AGENT_ID", "")
+	return &requests, &bodies
+}
+
+// T5 (docs/provider-engine-contract.md §3.5, §6.2): `orbit task create --engine` pins the CLI a
+// task's runs use beside the credential pin. A create naming only --provider sends no engine — the
+// server pins the engine that provider runs on by default, which is what the pin meant before.
+func TestTaskCLICreateSendsTheEnginePinOnlyWhenNamed(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		flags      []string
+		wantEngine interface{}
+		hasEngine  bool
+	}{
+		{name: "engine and provider", flags: []string{"--engine", "dsh", "--provider", "deepseek-2"}, wantEngine: "dsh", hasEngine: true},
+		{name: "engine alone", flags: []string{"--engine", "codex"}, wantEngine: "codex", hasEngine: true},
+		{name: "provider alone keeps the engine it ran on", flags: []string{"--provider", "deepseek-2"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			requests, bodies := taskWriteServer(t)
+			args := append([]string{"create", "--title", "Pin it", "--completion-criterion", "EVIDENCE_JUDGMENT"}, tc.flags...)
+			var out bytes.Buffer
+			if err := cmdTaskCLI(append(args, "--json"), strings.NewReader(""), &out); err != nil {
+				t.Fatal(err)
+			}
+			if len(*requests) != 1 || (*requests)[0] != "POST /api/runner/tasks" {
+				t.Fatalf("requests = %v", *requests)
+			}
+			body := (*bodies)[0]
+			engine, present := body["engine"]
+			if present != tc.hasEngine || engine != tc.wantEngine {
+				t.Fatalf("engine = %#v (present=%v), want %#v (present=%v)", engine, present, tc.wantEngine, tc.hasEngine)
+			}
+			if provider, named := body["provider"]; named != containsString(tc.flags, "--provider") ||
+				(named && provider != "deepseek-2") {
+				t.Fatalf("provider = %#v (present=%v)", provider, named)
+			}
+		})
+	}
+	t.Run("an empty engine is refused", func(t *testing.T) {
+		requests, _ := taskWriteServer(t)
+		var out bytes.Buffer
+		err := cmdTaskCLI([]string{"create", "--title", "Pin it", "--completion-criterion", "EVIDENCE_JUDGMENT", "--engine", ""}, strings.NewReader(""), &out)
+		if err == nil || !strings.Contains(err.Error(), "--engine cannot be empty") || len(*requests) != 0 {
+			t.Fatalf("err = %v, requests = %v", err, *requests)
+		}
+	})
+}
+
+// `orbit task update --engine` / `--clear-engine` are three-state like --provider: a value pins, the
+// clear sends an explicit null that clears only the engine pin, and a re-pin of the provider alone
+// leaves the engine out so the server gives it the engine it always got.
+func TestTaskCLIUpdateSetsClearsOrLeavesTheEnginePin(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		flags      []string
+		wantEngine interface{}
+		hasEngine  bool
+	}{
+		{name: "set", flags: []string{"--engine", "antigravity"}, wantEngine: "antigravity", hasEngine: true},
+		{name: "clear", flags: []string{"--clear-engine"}, wantEngine: nil, hasEngine: true},
+		{name: "provider alone", flags: []string{"--provider", "gemini"}},
+		{name: "provider cleared alone", flags: []string{"--clear-provider"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			requests, bodies := taskWriteServer(t)
+			var out bytes.Buffer
+			if err := cmdTaskCLI(append([]string{"update", "task-1"}, append(tc.flags, "--json")...), strings.NewReader(""), &out); err != nil {
+				t.Fatal(err)
+			}
+			if len(*requests) != 1 || (*requests)[0] != "PATCH /api/runner/tasks/task-1" {
+				t.Fatalf("requests = %v", *requests)
+			}
+			engine, present := (*bodies)[0]["engine"]
+			if present != tc.hasEngine || engine != tc.wantEngine {
+				t.Fatalf("engine = %#v (present=%v), want %#v (present=%v)", engine, present, tc.wantEngine, tc.hasEngine)
+			}
+		})
+	}
+	for _, tc := range []struct {
+		name  string
+		flags []string
+		want  string
+	}{
+		{name: "set beside clear", flags: []string{"--engine", "codex", "--clear-engine"}, want: "--clear-engine and --engine cannot be used together"},
+		{name: "empty", flags: []string{"--engine", " "}, want: "--engine cannot be empty; use --clear-engine"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			requests, _ := taskWriteServer(t)
+			var out bytes.Buffer
+			err := cmdTaskCLI(append([]string{"update", "task-1"}, tc.flags...), strings.NewReader(""), &out)
+			if err == nil || !strings.Contains(err.Error(), tc.want) || len(*requests) != 0 {
+				t.Fatalf("err = %v, requests = %v", err, *requests)
+			}
+		})
+	}
+}
+
+// `orbit task create-batch` forwards each item's "engine" as written, and an item naming only
+// "provider" reaches the server without one.
+func TestTaskCLICreateBatchCarriesEachItemsEngine(t *testing.T) {
+	requests, bodies := taskWriteServer(t)
+	stdin := strings.NewReader(`[{"title":"On Harness","engine":"dsh","provider":"deepseek-2","completionCriterion":"EVIDENCE_JUDGMENT"},
+	  {"title":"On the key's own CLI","provider":"deepseek-2","completionCriterion":"EVIDENCE_JUDGMENT"}]`)
+	var out bytes.Buffer
+	if err := cmdTaskCLI([]string{"create-batch", "--tasks-file", "-", "--json"}, stdin, &out); err != nil {
+		t.Fatal(err)
+	}
+	if len(*requests) != 1 || (*requests)[0] != "POST /api/runner/tasks/batch-create" {
+		t.Fatalf("requests = %v", *requests)
+	}
+	items, _ := (*bodies)[0]["tasks"].([]interface{})
+	if len(items) != 2 {
+		t.Fatalf("body = %#v", (*bodies)[0])
+	}
+	first, _ := items[0].(map[string]interface{})
+	second, _ := items[1].(map[string]interface{})
+	if first["engine"] != "dsh" || first["provider"] != "deepseek-2" {
+		t.Fatalf("tasks[0] = %#v", first)
+	}
+	if engine, present := second["engine"]; present {
+		t.Fatalf("tasks[1] engine = %#v, want it absent", engine)
 	}
 }

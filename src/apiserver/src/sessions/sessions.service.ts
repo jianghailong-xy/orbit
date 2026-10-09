@@ -179,21 +179,19 @@ import {
   normalizeBuiltinPermissionMode,
   normalizeEffortForProvider,
   normalizeEffortForRuntimeModel,
-  normalizeRuntimeProvider,
 } from '../common/runtime-provider';
+import { isBuiltinProvider, openCodeKeyRows, resolveProviderExec } from '../providers/custom-provider';
+import { recordedEngine, sessionEngine, sessionEnginesOf, type SessionEngineFacts } from '../providers/session-engine';
 import {
-  accountPoolRuntime,
-  adminOnlyProviderRefusal,
-  builtinSessionEngine,
-  execRuntime,
-  isBuiltinProvider,
-  keyRowEngine,
-  openCodeKeyRows,
-  resolveProviderExec,
-  runsOnOpenCode,
-  usableProviderScope,
-} from '../providers/custom-provider';
-import { recordedEngine, sessionEngine, type SessionEngineFacts } from '../providers/session-engine';
+  credentialPairLabels,
+  engineImmutable,
+  requestedEngine,
+  resolveEngineProvider,
+  resolveSessionSwitch,
+  switchTargetSlug,
+  type EngineProviderDeps,
+  type SessionSwitch,
+} from '../providers/engine-provider';
 import { ownsModel } from '../providers/preset-overlay';
 import { sessionHeldKey } from '../providers/held-key';
 import {
@@ -365,6 +363,8 @@ function resumeRequestFingerprint(dto: SessionResumeDto): string {
       permissionMode: dto.permissionMode ?? null,
       effort: dto.effort ?? null,
       provider: dto.provider ?? null,
+      // Hashed only when named, so a replay from before engines were a field keeps its fingerprint.
+      ...(dto.engine !== undefined ? { engine: dto.engine } : {}),
     }))
     .digest('hex');
 }
@@ -614,24 +614,12 @@ export type SessionReceiveBlockedReason =
   /** §13.6 SU6: the run this conversation belongs to was replaced or abandoned. */
   | 'RUN_RETIRED';
 
-/** What SessionsService.resolveProviderSwitch answers — see its doc comment. */
-interface ResolvedProviderSwitch {
-  /** The identity the session should dispatch under: the requested one, or the current one when
-   *  nothing was asked for. */
-  provider: string;
-  providerBuiltin: boolean;
-  /** The configured row behind it, already scoped to the session's owner. Null for a built-in
-   *  engine, and for a slug whose row was deleted or disabled. */
-  customRow: Awaited<ReturnType<Prisma.TransactionClient['modelProvider']['findFirst']>>;
-  changed: boolean;
+/** What SessionsService.resolveProviderSwitch answers: the session's engine — before the switch and
+ *  after it, since a switch moves the credential and never the engine — the credential it is on after
+ *  the write (the requested one, or the current one when nothing was asked for), and whether the
+ *  model it runs survives the move. */
+interface ResolvedProviderSwitch extends SessionSwitch {
   keepsModel: boolean;
-  /** The engine the session runs on — before the switch and after it, since a switch moves the
-   *  credential and never the engine (Session.engine, or the old rules for a row without one). */
-  engine: AgentProvider;
-  /** Whether that engine is not recorded on the row yet, so the write that moves the credential has to
-   *  record it first: derived from the credential being left, it would otherwise be derived from the
-   *  one being moved to next time (docs/provider-engine-contract.md §1.1). */
-  recordsEngine: boolean;
 }
 
 /**
@@ -901,11 +889,6 @@ export class SessionsService {
     // the chosen workspace's machine (workspaces belong to a runner) — picking a workspace is
     // enough to know which machine + project dir to run in.
     let assignedRunnerId: string | undefined = dto.assignedRunnerId;
-    // The session's provider identity: a built-in ("claude"/"codex"/"kimi"/"opencode"/"antigravity")
-    // or a custom slug ("deepseek"). Stored verbatim; runtime is derived below. A workspace holds no
-    // provider of its own — absent an explicit pick this is seeded from what the project last ran on.
-    let provider: string = AgentProvider.CLAUDE;
-    let providerBuiltin = true;
     // Per-workspace worktree toggle: default off. A workspace with it turned off (the default)
     // makes its sessions run with no branch, so the runner runs them in the shared workDir.
     let enableWorktree = false;
@@ -998,87 +981,26 @@ export class SessionsService {
     if (!assignedRunnerId) {
       throw new BadRequestException('pick a workspace bound to a runner, or pass assignedRunnerId');
     }
-    // No explicit pick: start where this project last started. Derived, not stored — see
-    // workspace-provider.ts for why a workspace holds no provider of its own.
-    if (!dto.provider && dto.workspaceId) {
-      ({ provider, providerBuiltin } = await agentProviderSeed(this.prisma, dto.workspaceId));
-    }
-    // The runtime a configured provider borrows, which is what decides the pre-generated session
-    // id below — its slug says nothing about which CLI ends up running it.
-    let borrowedRuntime: string | null = null;
-    // An explicit provider (the New Session picker) overrides what the workspace would have
-    // contributed. Resolved here rather than trusted: a built-in engine slug is always fine,
-    // and anything else has to be a provider this caller can actually dispatch with.
-    if (dto.provider) {
-      provider = dto.provider;
-      // Deliberately NOT isBuiltinProvider(): that one reads `kimi` as custom unless told
-      // otherwise. This test has to match the one the seed carries forward, or a session started
-      // from a `kimi` predecessor would land with a different providerBuiltin than it had.
-      providerBuiltin = Object.values(AgentProvider).includes(dto.provider as AgentProvider);
-      // dsh is a new reserved engine name. A reachable provider or pool that already held it
-      // remains configured, fenced by the existing discriminator rather than renamed.
-      if (!providerBuiltin || provider === AgentProvider.DSH) {
-        const configured = await this.prisma.modelProvider.findFirst({
-          where: {
-            slug: dto.provider,
-            ...(provider === AgentProvider.DSH ? {} : { enabled: true }),
-            ...(await usableProviderScope(this.prisma, ownerId)),
-          },
-          select: { runtime: true, enabled: true },
-        });
-        if (configured?.enabled === false) {
-          throw new BadRequestException(`provider not available: "${dto.provider}"`);
-        }
-        // …or one of the caller's own account pools, which the claim resolves to a member.
-        borrowedRuntime = configured
-          ? configured.runtime
-          : await accountPoolRuntime(this.prisma, ownerId, dto.provider);
-        if (configured || borrowedRuntime) providerBuiltin = false;
-        // The slug is named: a command-line caller typed it, and no picker checked it first.
-        if (!providerBuiltin && !configured && !borrowedRuntime) {
-          throw new BadRequestException(
-            (await adminOnlyProviderRefusal(this.prisma, ownerId, dto.provider)) ?? `provider not available: "${dto.provider}"`,
-          );
-        }
-        if (!configured && borrowedRuntime) await this.assertUsablePool(ownerId, dto.provider);
-      }
-    } else if (!isBuiltinProvider(provider, providerBuiltin)) {
-      providerBuiltin = false;
-      // Inherited from the workspace: a removed/disabled provider cannot substitute the runner's
-      // own Claude login for the configured endpoint the caller inherited.
-      const configured = await this.prisma.modelProvider.findFirst({
-        where: { slug: provider, enabled: true, ...(await usableProviderScope(this.prisma, ownerId)) },
-        select: { runtime: true },
-      });
-      borrowedRuntime = configured
-        ? configured.runtime
-        : await accountPoolRuntime(this.prisma, ownerId, provider);
-      if (!borrowedRuntime) {
-        throw new BadRequestException(
-          (await adminOnlyProviderRefusal(this.prisma, ownerId, provider)) ?? `provider not available: "${provider}"`,
-        );
-      }
-      if (!configured && borrowedRuntime) await this.assertUsablePool(ownerId, provider);
-    }
-    if (borrowedRuntime && (!Object.values(AgentProvider).includes(borrowedRuntime as AgentProvider) ||
-      borrowedRuntime === AgentProvider.OPENCODE)) {
-      throw new BadRequestException(`provider runtime not available: "${borrowedRuntime}"`);
-    }
-    // An OpenCode model on one of the caller's configured keys (shared `openCodeKeys`) has to name a
-    // key that can run there, or the claim would only refuse it later.
-    const openCodeKey = provider === AgentProvider.OPENCODE ? openCodeKeyOf(dto.model) : null;
-    if (openCodeKey) {
-      const row = await this.prisma.modelProvider.findFirst({
-        where: { slug: openCodeKey.slug, ...(await usableProviderScope(this.prisma, ownerId)) },
-        select: { enabled: true, runtime: true, apiKeyEnc: true },
-      });
-      if (!row || !runsOnOpenCode(row)) {
-        throw new BadRequestException(
-          (!row && (await adminOnlyProviderRefusal(this.prisma, ownerId, openCodeKey.slug)))
-            || `provider not available on OpenCode: "${openCodeKey.slug}"`,
-        );
-      }
-    }
+    // The engine it runs on and the credential it spends, resolved together by the one rule every door
+    // follows (providers/engine-provider.ts, docs/provider-engine-contract.md §3): the pair the caller
+    // named, an engine alone (its own sign-in, OpenCode's own config, or DeepSeek Harness on the
+    // default DeepSeek key), a provider alone (the engine it ran on before the split, so no older
+    // caller changes engine) — else where this project last started, derived rather than stored (see
+    // workspace-provider.ts for why a workspace holds no provider of its own). Anything named is
+    // resolved rather than trusted: a command-line caller typed it, and no picker checked it first.
+    const resolved = await resolveEngineProvider(this.engineProviderDeps(), {
+      ownerId,
+      engine: dto.engine,
+      provider: dto.provider,
+      model: dto.model,
+      door: 'session',
+      seed: dto.workspaceId ? () => agentProviderSeed(this.prisma, dto.workspaceId!) : undefined,
+    });
+    const { provider, providerBuiltin } = resolved;
+    // The model as asked; an old OpenCode request's `orbit-<key>/<model>` is stored as its bare id.
+    const model = resolved.model ?? undefined;
+    // A key or an account pool brings its own credential; only an engine's own sign-in is the runner's.
+    const bringsOwnCredentials = resolved.credential.kind !== 'login';
     await this.assertOwnedRefs(ownerId, { workspaceId: dto.workspaceId, assignedRunnerId });
     // §3.2: a session opened from a folder's page is filed in that folder, which has to be one of
     // the caller's folders in the workspace this session is created in. A plain read: a folder
@@ -1095,14 +1017,10 @@ export class SessionsService {
         : null;
       if (!folder) throw new BadRequestException('folderId must be a folder of this workspace');
     }
-    // provider is the identity stored on the row; runtime is which built-in CLI actually
-    // drives it (a custom provider borrows Claude/Codex/Kimi), and decides the pre-generated
-    // session-id and effort normalization. A borrowed runtime is authoritative here: giving a
-    // Codex/Kimi session a Claude-style id it never created makes its very first spawn a resume
-    // of a conversation that doesn't exist.
-    const runtime = borrowedRuntime
-      ? normalizeRuntimeProvider(borrowedRuntime)
-      : normalizeRuntimeProvider(provider, providerBuiltin);
+    // The engine is the CLI that runs this session for good (Session.engine), and decides the
+    // pre-generated session id and effort normalization: giving a Codex/Kimi session a Claude-style id
+    // it never created makes its very first spawn a resume of a conversation that doesn't exist.
+    const runtime = resolved.engine;
     // A mode the target machine cannot run at all: Bypass on a runner deployed as root, which
     // claude refuses by exiting inside its own startup — five seconds in, with the refusal on
     // stderr and a bare FAILED in every UI. Which of the two outcomes below applies turns on who
@@ -1212,7 +1130,7 @@ export class SessionsService {
       // refusal comes first so an older machine receives the availability action it needs.
       normalizeBuiltinPermissionMode(
         runtime,
-        dto.model ?? '',
+        model ?? '',
         resolvePermissionMode(dto.permissionMode ?? accountPermissionMode, null),
       );
       // Declaring dsh does not install it. Refused here like the upgrade, rather than creating a
@@ -1224,9 +1142,13 @@ export class SessionsService {
     // which pins it there — else, when its workspace leaves the account to Orbit, the runner's account
     // whose quota resets soonest (automaticAccount), which Orbit may move it off when that account's
     // usage limit stops it. Stored here; a Codex, Claude or Kimi conversation lives in that account's
-    // directory. Null runs on the workspace's.
+    // directory. Null runs on the workspace's. An engine's account is the runner's sign-in to it, so it
+    // is read only for a session that runs on that sign-in: a key or a pool brings its own credential,
+    // and an account named beside one is not kept (docs/provider-engine-contract.md §8.2 4).
+    const signedInOn = (engine: AccountEngine) =>
+      resolved.credential.kind === 'login' && resolved.credential.engine === engine;
     const automatic = (engine: AccountEngine) =>
-      provider === engine && providerBuiltin && targetRunner
+      signedInOn(engine) && targetRunner
         ? automaticAccount(
             engine,
             { env: workspaceEnv, ...accountChoices },
@@ -1236,15 +1158,21 @@ export class SessionsService {
             targetRunner.accountPauses,
           )
         : null;
-    const codexAccount = dto.codexAccount ?? automatic(AgentProvider.CODEX);
-    const claudeAccount = dto.claudeAccount ?? automatic(AgentProvider.CLAUDE);
-    const antigravityAccount = dto.antigravityAccount ?? automatic(AgentProvider.ANTIGRAVITY);
-    const kimiAccount = dto.kimiAccount ?? automatic(AgentProvider.KIMI);
+    const picked = (engine: AccountEngine, account: string | undefined) =>
+      signedInOn(engine) ? account : undefined;
+    const pickedCodexAccount = picked(AgentProvider.CODEX, dto.codexAccount);
+    const pickedClaudeAccount = picked(AgentProvider.CLAUDE, dto.claudeAccount);
+    const pickedAntigravityAccount = picked(AgentProvider.ANTIGRAVITY, dto.antigravityAccount);
+    const pickedKimiAccount = picked(AgentProvider.KIMI, dto.kimiAccount);
+    const codexAccount = pickedCodexAccount ?? automatic(AgentProvider.CODEX);
+    const claudeAccount = pickedClaudeAccount ?? automatic(AgentProvider.CLAUDE);
+    const antigravityAccount = pickedAntigravityAccount ?? automatic(AgentProvider.ANTIGRAVITY);
+    const kimiAccount = pickedKimiAccount ?? automatic(AgentProvider.KIMI);
     const refusal =
       targetRunner &&
       signedOutEngineRefusal({
         runtime,
-        bringsOwnCredentials: borrowedRuntime != null,
+        bringsOwnCredentials,
         workspaceEnv,
         // The account this session runs on is the one judged, whatever the workspace says.
         accounts: {
@@ -1270,7 +1198,7 @@ export class SessionsService {
       await assertManagedFirstSessionRuntime(this.prisma, {
         workspaceId: dto.workspaceId,
         runtime,
-        bringsOwnCredentials: borrowedRuntime != null,
+        bringsOwnCredentials,
         workspaceEnv,
         runner: targetRunner,
       });
@@ -1300,7 +1228,7 @@ export class SessionsService {
         // Pre-generate the Claude session id so the runner spawns with --session-id.
         // Codex/Kimi/OpenCode/Antigravity create and return their own thread id after process init.
         runtimeSessionId: runtime === AgentProvider.CLAUDE ? runtimeSessionId : null,
-        model: dto.model,
+        model,
         // Old replicas omit this post-0079 column and receive its false default. That lets claim
         // distinguish their legacy null-model inheritance from new Runtime-default semantics.
         usesRuntimeDefaultModel: true,
@@ -1317,13 +1245,13 @@ export class SessionsService {
         // As picked or chosen above, `default` included: NULL is the one value that follows the
         // workspace's choice. A pick by hand pins it.
         codexAccount,
-        codexAccountPinned: dto.codexAccount != null,
+        codexAccountPinned: pickedCodexAccount != null,
         claudeAccount,
-        claudeAccountPinned: dto.claudeAccount != null,
+        claudeAccountPinned: pickedClaudeAccount != null,
         antigravityAccount,
-        antigravityAccountPinned: dto.antigravityAccount != null,
+        antigravityAccountPinned: pickedAntigravityAccount != null,
         kimiAccount,
-        kimiAccountPinned: dto.kimiAccount != null,
+        kimiAccountPinned: pickedKimiAccount != null,
         workspaceId: dto.workspaceId,
         assignedRunnerId,
         taskId: dto.taskId,
@@ -1888,6 +1816,8 @@ export class SessionsService {
       agentName?: string;
       title?: string;
       model?: string;
+      /** The child's engine, resolved with `provider` as on create (engine-provider.ts). */
+      engine?: string;
       provider?: string;
       /** The child's own permission posture. Omitted, create() materializes the account default —
        *  the spawn does NOT inherit the parent's mode, which is per-run and not per-tree. */
@@ -1905,6 +1835,8 @@ export class SessionsService {
     title: string;
     /** Wire name kept: `orbit mcp` renders this straight back to the calling model. */
     agentName: string | null;
+    /** The engine the child runs on, beside the credential it spends. */
+    engine: string | null;
     provider: string;
   }> {
     if (!dto.prompt) throw new BadRequestException('prompt is required');
@@ -1993,6 +1925,7 @@ export class SessionsService {
         title: dto.title,
         workspaceId,
         model: dto.model,
+        engine: dto.engine,
         provider: dto.provider,
         permissionMode: dto.permissionMode,
         effort,
@@ -2019,6 +1952,7 @@ export class SessionsService {
       filingState: created.filingState,
       title: created.title,
       agentName: targetWorkspace?.name ?? null,
+      engine: created.engine,
       provider: created.provider,
     };
   }
@@ -2084,7 +2018,7 @@ export class SessionsService {
   async spawnForServiceToken(
     ownerId: string,
     scope: { assignedRunnerId: string; workspaceId: string; tokenId: string },
-    dto: { prompt: string; title?: string; model?: string; provider?: string; permissionMode?: string },
+    dto: { prompt: string; title?: string; model?: string; engine?: string; provider?: string; permissionMode?: string },
   ) {
     if (!dto.prompt) throw new BadRequestException('prompt is required');
     assertKnownPermissionMode(dto.permissionMode);
@@ -2109,6 +2043,7 @@ export class SessionsService {
         title: dto.title,
         workspaceId: workspace.id,
         model: dto.model,
+        engine: dto.engine,
         provider: dto.provider,
         permissionMode: dto.permissionMode,
         effort,
@@ -2125,6 +2060,7 @@ export class SessionsService {
       filingState: created.filingState,
       title: created.title,
       agentName: workspace.name,
+      engine: created.engine,
       provider: created.provider,
     };
   }
@@ -2165,11 +2101,17 @@ export class SessionsService {
         // tell the coordinator conversation a person is in from a judgment that woke beside it —
         // they share an owner, a workspace and often a title stem.
         dispatchOrigin: true,
+        // The engine it runs on and the credential it spends (docs/provider-engine-contract.md §6.1).
+        engine: true,
+        provider: true,
+        providerBuiltin: true,
       },
       orderBy: [{ lastTurnAt: 'desc' }, { createdAt: 'desc' }],
       take: 100,
     });
-    return sessions.map((session) => withSessionState(session));
+    const engines = await sessionEnginesOf(this.prisma, sessions.map((session) => ({ ...session, ownerId })));
+    return sessions.map(({ providerBuiltin: _providerBuiltin, ...session }) =>
+      withSessionState({ ...session, engine: engines.get(session.id) ?? null }));
   }
 
   /**
@@ -2189,7 +2131,9 @@ export class SessionsService {
         completedAt: true,
         archivedAt: true,
         deletedAt: true,
+        engine: true,
         provider: true,
+        providerBuiltin: true,
         model: true,
         effort: true,
         workspaceId: true,
@@ -2235,7 +2179,9 @@ export class SessionsService {
       },
     });
     if (!session) throw new NotFoundException('session not found');
-    return withSessionState(session);
+    const { providerBuiltin: _providerBuiltin, ...compact } = session;
+    // The engine it runs on: recorded, else derived, null when nobody can tell (§6.1).
+    return withSessionState({ ...compact, engine: await sessionEngine(this.prisma, { ...session, ownerId }) });
   }
 
   /**
@@ -3057,6 +3003,7 @@ export class SessionsService {
       archivedAt: Date | null;
       deletedAt: Date | null;
       source: string;
+      engine: string | null;
       provider: string;
       providerBuiltin: boolean;
       model: string | null;
@@ -3140,7 +3087,7 @@ export class SessionsService {
         COALESCE(s.completed_at, s.archived_at) AS "completedAt",
         COALESCE(s.completed_at, s.archived_at) AS "archivedAt",
         s.deleted_at      AS "deletedAt",
-        s.source, s.provider, s.model,
+        s.source, s.engine, s.provider, s.model,
         s.provider_builtin AS "providerBuiltin",
         s.permission_mode AS "permissionMode",
         s.effort,
@@ -3283,6 +3230,8 @@ export class SessionsService {
       ORDER BY ${orderBy}
       ${pageLimit}
     `);
+    // The engine each row runs on — its recorded one, else what the old rules derive (§6.1).
+    const engines = await sessionEnginesOf(this.prisma, rows.map((r) => ({ ...r, ownerId })));
     // Re-nest workspace/assignedRunner to keep the same response shape as the typed query.
     const sessions = rows.map((r) =>
       withSessionCapabilities({
@@ -3304,6 +3253,7 @@ export class SessionsService {
         archivedAt: r.archivedAt,
         deletedAt: r.deletedAt,
         source: r.source,
+        engine: engines.get(r.id) ?? null,
         provider: r.provider,
         providerBuiltin: r.providerBuiltin,
         model: r.model,
@@ -3575,6 +3525,9 @@ export class SessionsService {
       : null;
     return withSessionCapabilities({
       ...rest,
+      // The engine it runs on: its recorded one, else what the old rules derive, null when nobody can
+      // tell (docs/provider-engine-contract.md §6.1).
+      engine: await sessionEngine(this.prisma, session),
       workspace: session.workspace ? {
         ...session.workspace,
         antigravityKeyAvailableByRunner: session.assignedRunner ? {
@@ -3622,7 +3575,10 @@ export class SessionsService {
         id: true,
         workspaceId: true,
         assignedRunnerId: true,
+        engine: true,
         provider: true,
+        providerBuiltin: true,
+        ownerId: true,
         mergeRecovery: true,
       },
     });
@@ -3649,6 +3605,8 @@ export class SessionsService {
       {
         workspaceId: parent.workspaceId,
         assignedRunnerId: parent.assignedRunnerId ?? undefined,
+        // On the engine and the credential the session it repairs ran on.
+        engine: (await sessionEngine(this.prisma, parent)) ?? undefined,
         provider: parent.provider ?? undefined,
         prompt: mergeRecoveryPrompt(recovery, preparePR),
       },
@@ -7226,7 +7184,9 @@ export class SessionsService {
           workspaceId: true,
           startsTaskWork: true,
           cancelRequestedAt: true,
+          engine: true,
           provider: true,
+          providerBuiltin: true,
         },
       });
       if (holder) {
@@ -7254,7 +7214,12 @@ export class SessionsService {
         // Per-session overrides that rode along (model, effort, permission mode, fast mode) are
         // deliberately NOT carried over: they configure the session they were sent for, and this
         // message is being delivered into a different one that is already running under its own.
-        if (dto.provider === undefined || dto.provider === holder.provider) {
+        // What was chosen is compared with what is running as the pair it is — the engine this session
+        // runs on and the credential named for it — not by its slug: the same key under another CLI is
+        // another run (docs/provider-engine-contract.md §3.5).
+        const running = { engine: await sessionEngine(this.prisma, { ...holder, ownerId }), provider: holder.provider };
+        const chosen = dto.provider === undefined ? null : await this.chosenOnThisSession(ownerId, id, dto.provider);
+        if (!chosen || (chosen.provider === running.provider && chosen.engine === running.engine)) {
           // ...unless the message brought files with it. An `attachment` row is scoped to ONE
           // session (`assertLinkableAttachments`), so the only two things this could do are hand
           // the other run the words without the screenshot they are about, or fail on the
@@ -7273,12 +7238,13 @@ export class SessionsService {
         // before reaching the index if the two ran on different runtimes — so what is left is the
         // destructive half: this can only be done by ending the run that is going.
         if (dto.stopSessionId !== holder.id) {
+          const [runningProvider, requestedProvider] = credentialPairLabels(running, chosen);
           throw taskRunProviderSwitchConfirmation({
             taskPublicId: uuidToBase62(taskId),
             sessionPublicId: uuidToBase62(holder.id),
             sessionStatus: holder.status,
-            runningProvider: holder.provider,
-            requestedProvider: dto.provider,
+            runningProvider,
+            requestedProvider,
           });
         }
         // Confirmed, and naming this run. The ordinary stop — the one the Stop button and
@@ -7374,6 +7340,9 @@ export class SessionsService {
       },
     });
     if (!session) throw new NotFoundException('session not found');
+    // A session's engine never changes (docs/provider-engine-contract.md §3.5): naming another one is
+    // refused on the live path too, where the turn joins the process already running.
+    await this.assertSameEngine(this.prisma, session, dto.engine);
     // §13.6 SU6, and it comes BEFORE the runtime repair below on purpose.
     //
     // A resume of a session whose task was replaced is refused — by 0130's revive guard if it gets
@@ -7700,7 +7669,11 @@ export class SessionsService {
       );
       // A revive keeps its runtime and durable id. Resolve that boundary and the still-unverified
       // Harness permission policy before accepting the next turn.
-      const next = await this.resolveProviderSwitch(tx, current, dto.provider);
+      const next = await this.resolveProviderSwitch(tx, current, {
+        engine: dto.engine,
+        provider: dto.provider,
+        model: dto.model,
+      });
       // The engine it revives on is its own, whichever credential it now takes.
       const resumeRuntime = next.engine;
       if (resumeRuntime === AgentProvider.DSH) {
@@ -7709,7 +7682,7 @@ export class SessionsService {
         }
         normalizeBuiltinPermissionMode(
           resumeRuntime,
-          dto.model ?? current.model ?? '',
+          next.model ?? current.model ?? '',
           resolvePermissionMode(dto.permissionMode ?? current.permissionMode, null),
         );
         // Nothing is written: the session stays as it was and revives once the CLI is installed.
@@ -7794,8 +7767,8 @@ export class SessionsService {
           // turn it writes is the one a claim was waiting for (migration 0354): both go together.
           retryAt: null,
           retryClaimedAt: null,
-          ...(dto.model !== undefined
-            ? { model: dto.model }
+          ...(next.model !== undefined
+            ? { model: next.model }
             : next.keepsModel
               ? {}
               : { model: null }),
@@ -7962,6 +7935,46 @@ export class SessionsService {
     return this.queue.accountPoolRefusal(ownerId, slug, db);
   }
 
+  /**
+   * The (engine, credential) pair a resume of session `id` naming `provider` moves it onto: its own
+   * engine, which never changes, and the credential the switch stores for that slug (a retired name is
+   * its key; the built-in `dsh` is the default DeepSeek key). The revive already judged the switch, so
+   * a slug that no longer resolves is compared as it was named.
+   */
+  private async chosenOnThisSession(
+    ownerId: string,
+    id: string,
+    provider: string,
+  ): Promise<{ engine: AgentProvider | null; provider: string }> {
+    const session = await this.prisma.session.findFirst({
+      where: { id, ownerId },
+      select: { engine: true, provider: true, providerBuiltin: true, ownerId: true },
+    });
+    const engine = session ? await sessionEngine(this.prisma, session) : null;
+    return { engine, provider: await switchTargetSlug(this.engineProviderDeps(), ownerId, provider) };
+  }
+
+  /**
+   * What the engine/provider resolution reads with (providers/engine-provider.ts): the database — this
+   * service's, or the caller's transaction — and the account-pool refusal every door gives a pool that
+   * can take no session.
+   */
+  engineProviderDeps(db: Prisma.TransactionClient = this.prisma): EngineProviderDeps {
+    return { db, poolRefusal: (ownerId, slug, client) => this.accountPoolRefusal(ownerId, slug, client) };
+  }
+
+  /** ENGINE_IMMUTABLE for a request naming an engine other than the one `session` runs on. */
+  private async assertSameEngine(
+    db: Prisma.TransactionClient,
+    session: SessionEngineFacts,
+    engine: unknown,
+  ): Promise<void> {
+    const named = requestedEngine(engine);
+    if (!named) return;
+    const runsOn = await sessionEngine(db, session);
+    if (runsOn && runsOn !== named) throw engineImmutable(runsOn, named);
+  }
+
   /** accountPoolRefusal, as the 400 this service's own doors answer with. */
   private async assertUsablePool(ownerId: string, slug: string, db?: Prisma.TransactionClient): Promise<void> {
     const refusal = await this.accountPoolRefusal(ownerId, slug, db);
@@ -8070,94 +8083,22 @@ export class SessionsService {
       providerBuiltin: boolean;
       engine: string | null;
       model: string | null;
+      runtimeSessionId: string | null;
     },
-    requested: string | undefined,
+    request: { engine?: unknown; provider?: string; model?: string | null },
   ): Promise<ResolvedProviderSwitch> {
-    const declared = session.provider;
-    const currentRow = isBuiltinProvider(declared, session.providerBuiltin)
-      ? null
-      : await tx.modelProvider.findFirst({
-          where: { slug: declared, ...(await usableProviderScope(tx, session.ownerId)) },
-        });
-    const fromPool = isBuiltinProvider(declared, session.providerBuiltin) || currentRow
-      ? null
-      : await accountPoolRuntime(tx, session.ownerId, declared);
-    if (!isBuiltinProvider(declared, session.providerBuiltin) && !currentRow && !fromPool) {
-      throw new BadRequestException(
-        (await adminOnlyProviderRefusal(tx, session.ownerId, declared)) ?? `provider not available: "${declared}"`,
-      );
-    }
-    // The engine it runs on: its own, else what its current credential ran it on — a key's row runtime
-    // whether or not the key is enabled now, a pool's engine. Never the Claude a disabled key used to be
-    // read as: that is what let a switch move a session onto another CLI.
-    const recorded = recordedEngine(session.engine);
-    const engine =
-      recorded ??
-      fromPool ??
-      (currentRow ? keyRowEngine(currentRow.runtime) : builtinSessionEngine(declared, session.providerBuiltin));
-    if (!engine) throw new BadRequestException(`provider runtime not available: "${currentRow?.runtime}"`);
-    const recordsEngine = !recorded;
-    if (requested === undefined || requested === declared) {
-      if (currentRow?.enabled === false) throw new BadRequestException('provider is disabled');
-      return {
-        provider: declared,
-        providerBuiltin: session.providerBuiltin,
-        customRow: currentRow,
-        changed: false,
-        keepsModel: true,
-        engine,
-        recordsEngine,
-      };
-    }
-    // Mirrors create(): membership of the enum, deliberately not isBuiltinProvider(), so a
-    // session moved onto the built-in `kimi` slug keeps the discriminator that slug means.
-    let providerBuiltin = Object.values(AgentProvider).includes(requested as AgentProvider);
-    const targetRow = providerBuiltin && requested !== AgentProvider.DSH
-      ? null
-      : await tx.modelProvider.findFirst({
-          where: {
-            slug: requested,
-            ...(requested === AgentProvider.DSH ? {} : { enabled: true }),
-            ...(await usableProviderScope(tx, session.ownerId)),
-          },
-        });
-    if (targetRow?.enabled === false) throw new BadRequestException('provider not available');
-    // One of the owner's own account pools has no row: the claim and the reload resolve it to the
-    // member they choose, whose model space is Claude's own.
-    const poolRuntime =
-      targetRow || (providerBuiltin && requested !== AgentProvider.DSH)
-        ? null
-        : await accountPoolRuntime(tx, session.ownerId, requested);
-    if (targetRow || poolRuntime) providerBuiltin = false;
-    if (!providerBuiltin && !targetRow && !poolRuntime) {
-      throw new BadRequestException(
-        (await adminOnlyProviderRefusal(tx, session.ownerId, requested)) ?? 'provider not available',
-      );
-    }
-    if (poolRuntime) await this.assertUsablePool(session.ownerId, requested, tx);
-    // The session keeps its engine (above); the target has to run on it. A pool has no row, and runs on
-    // its own engine — a shared pool's on Codex.
-    const from = engine;
-    const to =
-      poolRuntime ??
-      execRuntime({
-        declaredProvider: requested,
-        declaredProviderBuiltin: providerBuiltin,
-        customRow: targetRow,
-      });
-    if (from !== to) {
-      throw new BadRequestException(
-        `a ${from} session cannot switch to a provider that runs on ${to}`,
-      );
-    }
+    // The engine never moves; the credential may, to one that engine runs (engine-provider.ts, §3.5).
+    const next = await resolveSessionSwitch(this.engineProviderDeps(tx), session, request);
     return {
-      provider: requested,
-      providerBuiltin,
-      customRow: targetRow,
-      changed: true,
-      keepsModel: !targetRow || ownsModel(targetRow, session.model ?? ''),
-      engine,
-      recordsEngine,
+      ...next,
+      // DeepSeek Harness reads its models from its own runtime catalogue on whatever DeepSeek key it
+      // spends, so a session moving between keys keeps its model; elsewhere a key with its own list
+      // keeps it only when that list has it.
+      keepsModel:
+        !next.changed ||
+        next.engine === AgentProvider.DSH ||
+        !next.customRow ||
+        ownsModel(next.customRow, session.model ?? ''),
     };
   }
 
@@ -8201,6 +8142,15 @@ export class SessionsService {
       dto.provider === undefined &&
       dto.account === undefined
     ) {
+      // An engine alone changes nothing — a session's engine never does — and naming another is said so.
+      if (dto.engine !== undefined) {
+        const session = await this.prisma.session.findFirst({
+          where: { id, ownerId },
+          select: { engine: true, provider: true, providerBuiltin: true, ownerId: true },
+        });
+        if (!session) throw new NotFoundException('session not found');
+        await this.assertSameEngine(this.prisma, session, dto.engine);
+      }
       throw new BadRequestException('nothing to update');
     }
     // Retried whole: a locked re-read decides what the new config may be, and the inbox nudge
@@ -8229,11 +8179,13 @@ export class SessionsService {
       if (SessionsService.TERMINAL.includes(session.status)) {
         throw new ConflictException('the session has ended');
       }
-      const next = await this.resolveProviderSwitch(tx, session, dto.provider);
+      const next = await this.resolveProviderSwitch(tx, session, {
+        engine: dto.engine,
+        provider: dto.provider,
+        model: dto.model,
+      });
       const accounts = await this.accountOnProviderSwitch(tx, id, next, dto.account);
-      const poolRuntime = isBuiltinProvider(next.provider, next.providerBuiltin) || next.customRow
-        ? null
-        : await accountPoolRuntime(tx, ownerId, next.provider);
+      const poolRuntime = next.credential?.kind === 'pool' ? next.credential.engine : null;
       // Resolved on the session's own engine: the switch moved the credential, not the CLI.
       const exec = resolveProviderExec({
         engine: next.engine,
@@ -8242,10 +8194,10 @@ export class SessionsService {
         customRow: next.customRow,
         // A model naming a configured key is refused here, with its reason, when the key cannot run.
         openCodeKeys:
-          next.provider === AgentProvider.OPENCODE && openCodeKeyOf(dto.model ?? session.model)
+          next.provider === AgentProvider.OPENCODE && openCodeKeyOf(next.model ?? session.model)
             ? await openCodeKeyRows(tx, ownerId)
             : undefined,
-        sessionModel: dto.model ?? (next.keepsModel ? session.model : null),
+        sessionModel: next.model ?? (next.keepsModel ? session.model : null),
         usesRuntimeDefaultModel: session.usesRuntimeDefaultModel,
         runtimeDefaultModels: session.assignedRunner?.runtimeDefaultModels,
         workspaceModel: session.workspace?.model,
@@ -8340,7 +8292,7 @@ export class SessionsService {
       // half stays what it always was: part of the re-spawn, effort included.
       //
       // Asked of the RUNTIME, the way deliverSteer asks its own question, and read off
-      // `resolveProviderExec` — whose `provider` IS that runtime (`execRuntime`), resolved after
+      // `resolveProviderExec` — whose `provider` IS that runtime (the session's engine), resolved after
       // the switch above. A configured (BYOK) slug is its owner's word and says nothing about
       // the CLI underneath; judged by the slug, the borrowers of the claude runtime would be the
       // ones losing the frame.
@@ -8467,6 +8419,7 @@ export class SessionsService {
         where: { id },
         select: {
           status: true,
+          engine: true,
           provider: true,
           providerBuiltin: true,
           retryAt: true,
@@ -8482,8 +8435,15 @@ export class SessionsService {
           assignedRunner: { select: { engines: true, accountNames: true, accountPauses: true, planUsage: true, capabilities: true } },
         },
       });
+      // An engine's accounts are its sign-ins on the runner: only a session whose credential IS that
+      // sign-in — the engine's own slug, on the engine it names — runs on one of them.
       const engine: AccountEngine | null = isAccountEngine(session.provider) ? session.provider : null;
-      if (!engine || !isBuiltinProvider(session.provider, session.providerBuiltin) || !session.assignedRunner) {
+      if (
+        !engine ||
+        !isBuiltinProvider(session.provider, session.providerBuiltin) ||
+        (recordedEngine(session.engine) ?? engine) !== engine ||
+        !session.assignedRunner
+      ) {
         throw new BadRequestException(
           "only a session on the built-in Codex, Claude, Antigravity or Kimi engine runs on one of its runner's accounts",
         );

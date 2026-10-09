@@ -1,0 +1,632 @@
+{
+ "records": [
+  "2026-10-07.json",
+  "2026-10-07b.json",
+  "2026-10-07c.json",
+  "2026-10-07d.json",
+  "2026-10-08.json",
+  "2026-10-08b.json",
+  "2026-10-09.json",
+  "2026-10-09b.json"
+ ],
+ "before": {
+  "baseline": {
+   "commit": "40f79c5ab4618c4718201cd13a096b66fbd5977c",
+   "scopeHash": "c13ba2b9aae2f3b7a6751c5784c57ca5f6582e578f5bc7d28814b9d2ac443c89"
+  },
+  "owners": {
+   "KEEP": 1,
+   "P4.3b": 30,
+   "P4.4": 55,
+   "P5.1": 28,
+   "P5.2": 11,
+   "P5.3": 94,
+   "P6": 42
+  },
+  "unowned": [],
+  "pending": [],
+  "p43b": [
+   {
+    "path": "src/web/src/components/AcceptanceConfirmationCard.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/ConfirmationReviewTurnCards.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/CoordinatorQuestionCard.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/CriteriaChangeCard.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/CriteriaDecisionCard.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/DecisionRail.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/EvidenceDecisionCard.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/OwnerConfirmationCard.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/OwnerConfirmationReopen.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/OwnerConfirmationReview.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/ProjectCrossingsCard.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/ProjectDependencyGraph.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/ProjectPromotionCard.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/ProjectSettlementCard.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/ProjectTasksGraph.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/ProjectTasksGraph.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/StartProjectCard.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/StartProjectCard.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/TaskDependencyGraph.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 10964,
+    "kind": "ant-class",
+    "text": ".project-done-not-yet .ant-input { font: inherit; font-size: 13px; }"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 10977,
+    "kind": "ant-class",
+    "text": ".project-done-dialog .ant-modal-content { padding: 0; overflow: hidden; }"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 13232,
+    "kind": "ant-class",
+    "text": ".pdg-section-title.ant-typography {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 13262,
+    "kind": "ant-class",
+    "text": ".ant-modal.tdg-modal {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 13267,
+    "kind": "ant-class",
+    "text": ".tdg-modal .ant-modal-body {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 13282,
+    "kind": "ant-class",
+    "text": ".ant-modal.tdg-modal {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 13289,
+    "kind": "ant-class",
+    "text": ".tdg-modal .ant-modal-container {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 13301,
+    "kind": "ant-class",
+    "text": ".tdg-modal .ant-modal-header {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 13305,
+    "kind": "ant-class",
+    "text": ".tdg-modal .ant-modal-title {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 13308,
+    "kind": "ant-class",
+    "text": ".tdg-modal .ant-modal-close {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 13312,
+    "kind": "ant-class",
+    "text": ".tdg-modal .ant-modal-body {"
+   }
+  ]
+ },
+ "after": {
+  "baseline": {
+   "commit": "2fefd4747094805129d4ffbd53ee1f40bea58065",
+   "scopeHash": "51248843bb95ed152ffd8274753f423a143557104e67be8b89cfabbf0fc4098a"
+  },
+  "owners": {
+   "KEEP": 1,
+   "P4.4": 55,
+   "P5.1": 28,
+   "P5.2": 11,
+   "P5.3": 94,
+   "P6": 42
+  },
+  "unowned": [],
+  "pending": [],
+  "p43b": []
+ },
+ "counts": {
+  "scannedFiles": [
+   755,
+   755
+  ],
+  "productionFiles": [
+   377,
+   377
+  ],
+  "testFiles": [
+   376,
+   376
+  ],
+  "antdProductionFiles": [
+   59,
+   42
+  ],
+  "antdTestFiles": [
+   60,
+   60
+  ],
+  "antSelectorTestFiles": [
+   29,
+   27
+  ],
+  "antClassTestFiles": [
+   30,
+   28
+  ],
+  "iconProductionFiles": [
+   110,
+   111
+  ],
+  "iconTestFiles": [
+   0,
+   0
+  ],
+  "relevantSourceFiles": [
+   250,
+   238
+  ],
+  "retirementBlockingFiles": [
+   156,
+   137
+  ]
+ },
+ "hitLines": {
+  "ant-class": [
+   223,
+   209
+  ],
+  "ant-design-support": [
+   19,
+   19
+  ],
+  "ant-selector": [
+   216,
+   202
+  ],
+  "antd-reference": [
+   241,
+   222
+  ],
+  "icon-class": [
+   82,
+   82
+  ],
+  "icon-reference": [
+   121,
+   122
+  ],
+  "imperative-confirm": [
+   11,
+   11
+  ],
+  "imperative-feedback": [
+   221,
+   221
+  ],
+  "internal-ref": [
+   4,
+   4
+  ],
+  "provider": [
+   73,
+   73
+  ],
+  "rc-support": [
+   233,
+   233
+  ],
+  "ref-focus": [
+   28,
+   28
+  ],
+  "theme": [
+   2,
+   2
+  ],
+  "use-app": [
+   6,
+   6
+  ],
+  "use-token": [
+   1,
+   1
+  ]
+ },
+ "files": {
+  "src/web/src/components/AcceptanceConfirmationCard.tsx": {
+   "before": {
+    "antdImports": [
+     "Alert"
+    ],
+    "hitKinds": {
+     "antd-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/ConfirmationReviewTurnCards.tsx": {
+   "before": {
+    "antdImports": [
+     "Button"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "icon-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1
+    }
+   }
+  },
+  "src/web/src/components/CoordinatorQuestionCard.tsx": {
+   "before": {
+    "antdImports": [
+     "Alert",
+     "Input"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "icon-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1
+    }
+   }
+  },
+  "src/web/src/components/CriteriaChangeCard.tsx": {
+   "before": {
+    "antdImports": [
+     "Alert"
+    ],
+    "hitKinds": {
+     "antd-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/CriteriaDecisionCard.tsx": {
+   "before": {
+    "antdImports": [
+     "Alert"
+    ],
+    "hitKinds": {
+     "antd-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/DecisionRail.tsx": {
+   "before": {
+    "antdImports": [
+     "Typography"
+    ],
+    "hitKinds": {
+     "antd-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/EvidenceDecisionCard.tsx": {
+   "before": {
+    "antdImports": [
+     "Alert"
+    ],
+    "hitKinds": {
+     "antd-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/OwnerConfirmationCard.tsx": {
+   "before": {
+    "antdImports": [
+     "Alert"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "icon-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1
+    }
+   }
+  },
+  "src/web/src/components/OwnerConfirmationReopen.tsx": {
+   "before": {
+    "antdImports": [
+     "Alert",
+     "Button",
+     "Modal",
+     "Typography"
+    ],
+    "hitKinds": {
+     "antd-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/OwnerConfirmationReview.tsx": {
+   "before": {
+    "antdImports": [
+     "Input"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "icon-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1
+    }
+   }
+  },
+  "src/web/src/components/ProjectCrossingsCard.tsx": {
+   "before": {
+    "antdImports": [
+     "Alert",
+     "Button",
+     "Card",
+     "Skeleton",
+     "Space",
+     "Tag",
+     "Typography"
+    ],
+    "hitKinds": {
+     "antd-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1
+    }
+   }
+  },
+  "src/web/src/components/ProjectDependencyGraph.tsx": {
+   "before": {
+    "antdImports": [
+     "Alert",
+     "Button",
+     "Empty",
+     "Modal",
+     "Popover",
+     "Spin",
+     "Tooltip"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "icon-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1
+    }
+   }
+  },
+  "src/web/src/components/ProjectPromotionCard.tsx": {
+   "before": {
+    "antdImports": [
+     "Alert"
+    ],
+    "hitKinds": {
+     "antd-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/ProjectSettlementCard.tsx": {
+   "before": {
+    "antdImports": [
+     "Alert",
+     "Input",
+     "Modal"
+    ],
+    "hitKinds": {
+     "antd-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/ProjectTasksGraph.test.tsx": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 1,
+     "ant-selector": 1,
+     "antd-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/ProjectTasksGraph.tsx": {
+   "before": {
+    "antdImports": [
+     "Typography"
+    ],
+    "hitKinds": {
+     "antd-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/StartProjectCard.test.tsx": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 2,
+     "ant-selector": 2,
+     "antd-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/StartProjectCard.tsx": {
+   "before": {
+    "antdImports": [
+     "Alert",
+     "Input",
+     "InputNumber",
+     "Modal",
+     "Select",
+     "Spin",
+     "Switch"
+    ],
+    "hitKinds": {
+     "antd-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/TaskDependencyGraph.tsx": {
+   "before": {
+    "antdImports": [
+     "Modal",
+     "Popconfirm",
+     "Tooltip"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "icon-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1
+    }
+   }
+  },
+  "src/web/src/index.css": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 80,
+     "ant-selector": 80,
+     "antd-reference": 28,
+     "icon-class": 27
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 69,
+     "ant-selector": 69,
+     "antd-reference": 28,
+     "icon-class": 27
+    }
+   }
+  }
+ }
+}

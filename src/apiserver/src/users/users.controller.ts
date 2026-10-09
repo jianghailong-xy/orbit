@@ -22,6 +22,7 @@ import type { UploadedFile } from '../attachments/attachments.media';
 import { AVATAR_MAX_BYTES, readAvatar } from './avatar';
 import { UpdatePreferencesDto, UpdateProfileDto } from './dto';
 import { SIGN_IN_METHODS_SELECT, signInMethodsOf } from './sign-in-methods';
+import { normalizeDefaultModels } from '../providers/engine-provider';
 
 /** What every answer about one's own account reads: the account, when its photo was set, and how
  *  it signs in. */
@@ -138,9 +139,11 @@ export class UsersController {
     if (dto.theme !== undefined) merged.theme = dto.theme;
     if (dto.defaultModel !== undefined) merged.defaultModel = dto.defaultModel;
     if (dto.defaultModels !== undefined) {
+      // Keyed by (engine, provider) — `<engine>:<provider>` — and an older client's own keys kept as it
+      // wrote them, beside the new key each means (docs/provider-engine-contract.md §6.5).
       merged.defaultModels = {
         ...((merged.defaultModels ?? {}) as Record<string, string>),
-        ...dto.defaultModels,
+        ...(await normalizeDefaultModels(this.prisma, user.userId, dto.defaultModels)),
       };
     }
     if (dto.defaultPermissionMode !== undefined) merged.defaultPermissionMode = dto.defaultPermissionMode;

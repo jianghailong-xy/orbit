@@ -471,7 +471,9 @@ private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: Stri
         state.graph?.takeIf { it.objects("marks").isNotEmpty() }?.let { graph -> item(key = "graph") {
             SectionHead("Task graph", "Prerequisite → dependent"); ProjectGraph(graph, openTask)
         } }
-        blockersSection(doc, now, enabled) { dialog = ProjectDialog.Resolve(it) }
+        blockersSection(doc, now, enabled, titleFor = { id -> state.tasks.firstOrNull { ObjectId.same(it.text("id"), id) }?.text("title") }) {
+            dialog = ProjectDialog.Resolve(it)
+        }
         queueSection(state, enabled, open, run = { item ->
             val taskId = item.text("taskId") ?: return@queueSection
             val trigger = UUID.randomUUID().toString()
@@ -837,7 +839,7 @@ private fun LazyListScope.overviewSection(state: ProjectPageState, doc: JsonObje
 /** The landing in flight (ProjectLandingRow.swift): what the platform is doing while the counts stand still — and, on a server that
  * lists its jobs, a press that opens them. */
 @Composable
-private fun LandingRow(line: LandingLine, openJobs: (() -> Unit)?) {
+internal fun LandingRow(line: LandingLine, openJobs: (() -> Unit)?) {
     Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp))
         .then(if (openJobs != null) Modifier.clickable(role = Role.Button, onClick = openJobs) else Modifier).padding(10.dp).testTag("landing-row"),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -875,7 +877,7 @@ private fun LandingLineView(line: LandingLine, modifier: Modifier = Modifier) {
  * Retry, and a Retry that did not go through says why under its row. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun LandingJobsSheet(lines: List<LandingJobLine>, retry: suspend (String) -> String?, openTask: (String) -> Unit, close: () -> Unit) {
+internal fun LandingJobsSheet(lines: List<LandingJobLine>, retry: suspend (String) -> String?, openTask: (String) -> Unit, close: () -> Unit) {
     // The jobs a Retry is on its way for take no second press; why one did not go through stays under its row.
     var retrying by remember { mutableStateOf<Set<String>>(emptySet()) }
     var failures by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
@@ -989,7 +991,8 @@ private fun Folded(source: String, height: Int, link: (String) -> Unit) {
     }
 }
 
-private fun LazyListScope.blockersSection(doc: JsonObject, now: Instant, enabled: Boolean, resolve: (JsonObject) -> Unit) {
+private fun LazyListScope.blockersSection(doc: JsonObject, now: Instant, enabled: Boolean, titleFor: (String) -> String? = { null },
+    resolve: (JsonObject) -> Unit) {
     val blockers = doc.obj("blockers") ?: return
     val open = blockers.objects("open")
     if (open.isEmpty()) return
@@ -1009,6 +1012,11 @@ private fun LazyListScope.blockersSection(doc: JsonObject, now: Instant, enabled
                     Text(blocker.text("requiredAction").orEmpty(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     ProjectPage.blockerPathsLine(blocker.obj("detail")?.strings("paths").orEmpty())?.let {
                         Text(it, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1) }
+                    // A refused source: its code and ref, then the tasks whose runs it refuses (A08-5).
+                    SessionRunStart.blockerSourceLines(blocker, titleFor).forEach {
+                        Text(it, Modifier.testTag("blocker:${blocker.text("id")}:source"), style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
                 OutlinedButton(onClick = { resolve(blocker) }, enabled = enabled, modifier = Modifier.testTag("blocker:${blocker.text("id")}:resolve")) {
                     Text(ProjectPage.resolveBlockerPress(blocker)) }

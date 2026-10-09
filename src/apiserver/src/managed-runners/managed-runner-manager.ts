@@ -38,6 +38,7 @@ import {
   type ManagedRunnerReservation,
   type StorageAmounts,
 } from './managed-runner-capacity';
+import { ownerAccountDisabled } from './managed-runner-eligibility';
 import {
   observedStop,
   readFencingReceipt,
@@ -117,6 +118,10 @@ import { managedRunnerWork, recordManagedDemand, sleepingRunnersWithDemand } fro
  *   - Wake: demand (managed-runner-demand.ts, or the sweep below) desires RUNNING again; a sleeping
  *     mapping goes back through admission and provisioning, which adopt the recorded PVC and the
  *     same runner row, and starts the next generation's Pod on them.
+ *
+ * A mapping whose owner an administrator disabled is driven to sleep and never towards READY
+ * (`whileDisabled`): nothing is created for it, its instance drains and stops through the same gate a
+ * sleep goes through, and demand does not wake it until the account is enabled again.
  *
  * Left to the work that follows: deletion.
  */
@@ -227,6 +232,10 @@ type Step = { done: ReconcileOutcome } | { next: ManagedRunner };
 
 /** The states a RUNNING desire drives towards READY (and READY itself, watched). */
 const ACTIVE_STATES = ['REQUESTED', 'PROVISIONING', 'STARTING', 'READY', 'FENCING'] as const;
+/** The states a disabled owner's mapping is driven to sleep from, or kept asleep or fenced in. */
+const DRIVEN_WHILE_DISABLED: ReadonlySet<ManagedRunner['managementState']> = new Set([
+  'REQUESTED', 'WAITING_CAPACITY', 'PROVISIONING', 'STARTING', 'READY', 'DRAINING', 'SLEEPING', 'FENCING',
+]);
 /** A pass takes at most this many steps; the worker's next pass continues. */
 const MAX_STEPS_PER_PASS = 12;
 /** Sleeping mappings the demand sweep wakes per pass. */
@@ -256,15 +265,30 @@ export class ManagedRunnerManager {
   }
 
   /**
-   * The mappings a pass should visit now. Work first — every state that moves by itself, an intent
-   * waiting for capacity once its retry time comes or the pool has moved since it was refused
-   * (oldest waiter first, so a release is offered in the order the waits began), a drain, a wake —
-   * then the READY runners whose instance and idleness each pass looks at.
+   * The mappings a pass should visit now. A disabled owner's first, whatever their retry time: what
+   * of theirs runs, is on its way up or still wants to wake is put to sleep (`whileDisabled`), and its
+   * compute given back. Then work — every state that moves by itself, an intent waiting for capacity
+   * once its retry time comes or the pool has moved since it was refused (oldest waiter first, so a
+   * release is offered in the order the waits began), a drain, a wake — then the READY runners whose
+   * instance and idleness each pass looks at.
    */
   async dueMappings(limit: number): Promise<string[]> {
     const now = this.now();
     const due = { OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: now } }] };
     const pool = await this.capacityPool();
+    const disabled = await this.prisma.managedRunner.findMany({
+      where: {
+        owner: { disabledAt: { not: null } },
+        desiredState: { not: 'DELETED' },
+        OR: [
+          { managementState: { in: ['REQUESTED', 'WAITING_CAPACITY', 'PROVISIONING', 'STARTING', 'READY'] } },
+          { managementState: 'SLEEPING', desiredState: 'RUNNING' },
+        ],
+      },
+      orderBy: { stateEnteredAt: 'asc' },
+      take: limit,
+      select: { id: true },
+    });
     const waiting = await this.prisma.managedRunner.findMany({
       where: {
         managementState: 'WAITING_CAPACITY',
@@ -279,6 +303,8 @@ export class ManagedRunnerManager {
       where: {
         OR: [
           { desiredState: 'RUNNING', managementState: { in: ['REQUESTED', 'PROVISIONING', 'STARTING', 'FENCING'] }, ...due },
+          // Demand cannot come for a disabled owner's fenced mapping: its proof is looked for anyway.
+          { managementState: 'FENCING', owner: { disabledAt: { not: null } }, ...due },
           { managementState: 'DRAINING' },
           { managementState: 'SLEEPING', desiredState: 'RUNNING' },
           { managementState: 'READY', desiredState: 'SLEEPING' },
@@ -294,7 +320,7 @@ export class ManagedRunnerManager {
       take: limit,
       select: { id: true },
     });
-    return [...new Set([...waiting, ...moving, ...watched].map((row) => row.id))].slice(0, limit);
+    return [...new Set([...disabled, ...waiting, ...moving, ...watched].map((row) => row.id))].slice(0, limit);
   }
 
   /**
@@ -339,36 +365,43 @@ export class ManagedRunnerManager {
   }
 
   private async step(mapping: ManagedRunner): Promise<Step> {
-    switch (mapping.managementState) {
-      // Whatever is desired: a drain finishes or is called off; a sleeping mapping wakes or stays.
-      case 'DRAINING':
-      case 'SLEEPING':
-        break;
-      // READY is watched under either desire: SLEEPING there is an owner's request to sleep.
-      case 'READY':
-        if (mapping.desiredState === 'DELETED') return { done: 'IDLE' };
-        break;
-      case 'WAITING_CAPACITY':
-        if (mapping.desiredState !== 'RUNNING') return { done: 'IDLE' };
-        if (!this.capacityDue(mapping, await this.capacityPool())) return { done: 'WAITING_CAPACITY' };
-        break;
-      default:
-        if (mapping.desiredState !== 'RUNNING') return { done: 'IDLE' };
-        if (!(ACTIVE_STATES as readonly string[]).includes(mapping.managementState)) {
-          return { done: mapping.managementState === 'FAILED' ? 'FAILED' : 'IDLE' };
-        }
-        if (mapping.nextAttemptAt && mapping.nextAttemptAt > this.now()) return { done: 'BACKOFF' };
+    // A disabled owner's mapping goes to sleep whatever it wants and whenever it was to be retried.
+    // FAILED, deletion and the states nothing drives are left to the rules below.
+    const disabled = mapping.desiredState !== 'DELETED' && DRIVEN_WHILE_DISABLED.has(mapping.managementState)
+      && (await ownerAccountDisabled(this.prisma, mapping.ownerId));
+    if (!disabled) {
+      switch (mapping.managementState) {
+        // Whatever is desired: a drain finishes or is called off; a sleeping mapping wakes or stays.
+        case 'DRAINING':
+        case 'SLEEPING':
+          break;
+        // READY is watched under either desire: SLEEPING there is an owner's request to sleep.
+        case 'READY':
+          if (mapping.desiredState === 'DELETED') return { done: 'IDLE' };
+          break;
+        case 'WAITING_CAPACITY':
+          if (mapping.desiredState !== 'RUNNING') return { done: 'IDLE' };
+          if (!this.capacityDue(mapping, await this.capacityPool())) return { done: 'WAITING_CAPACITY' };
+          break;
+        default:
+          if (mapping.desiredState !== 'RUNNING') return { done: 'IDLE' };
+          if (!(ACTIVE_STATES as readonly string[]).includes(mapping.managementState)) {
+            return { done: mapping.managementState === 'FAILED' ? 'FAILED' : 'IDLE' };
+          }
+          if (mapping.nextAttemptAt && mapping.nextAttemptAt > this.now()) return { done: 'BACKOFF' };
+      }
     }
     try {
-      return await this.drive(mapping);
+      return await this.drive(mapping, disabled);
     } catch (error) {
       if (error instanceof Superseded) return { done: 'SUPERSEDED' };
       throw error;
     }
   }
 
-  private async drive(mapping: ManagedRunner): Promise<Step> {
+  private async drive(mapping: ManagedRunner, ownerDisabled = false): Promise<Step> {
     try {
+      if (ownerDisabled) return await this.whileDisabled(mapping);
       switch (mapping.managementState) {
         case 'REQUESTED':
           return await this.requested(mapping);
@@ -685,13 +718,14 @@ export class ManagedRunnerManager {
   /**
    * DRAINING. Until the instance accepts, the drain is called off — back to READY, claims open
    * again — by demand, by work in the records, by the instance reporting work or no longer reporting,
-   * or by the drain budget running out unaccepted. Once it accepts it exits on its own; nothing here
-   * stops it. Its stop then goes through the single-writer gate's own rules: the kubelet's report of
-   * every container stopped is recorded as the stop proof, the Pod object is released by UID, and the
-   * mapping sleeps only once the object is gone and the volume detached. A Pod that vanished or was
-   * replaced unobserved, or was made terminal by the control plane, fences, as anywhere else.
+   * or by the drain budget running out unaccepted; never while the owner's account is disabled. Once
+   * it accepts it exits on its own; nothing here stops it. Its stop then goes through the
+   * single-writer gate's own rules: the kubelet's report of every container stopped is recorded as
+   * the stop proof, the Pod object is released by UID, and the mapping sleeps only once the object is
+   * gone and the volume detached. A Pod that vanished or was replaced unobserved, or was made terminal
+   * by the control plane, fences, as anywhere else.
    */
-  private async draining(mapping: ManagedRunner): Promise<Step> {
+  private async draining(mapping: ManagedRunner, ownerDisabled = false): Promise<Step> {
     const name = managedPodName(mapping.runnerId);
     const pod = await this.kube.pods.get(name);
     const predecessor = this.predecessorOf(mapping);
@@ -724,7 +758,9 @@ export class ManagedRunnerManager {
     }
     const now = this.now();
     if (!mapping.stopAcknowledgedAt) {
-      const abort = await this.drainAbort(mapping, now);
+      // A disabled owner's drain is never called off: its runner, refused at every door, can neither
+      // accept nor be kept, and stops on its own.
+      const abort = ownerDisabled ? null : await this.drainAbort(mapping, now);
       return abort ? this.abortDrain(mapping, abort) : { done: 'DRAINING' };
     }
     // Accepted: it stops by itself. Overdue is said, never forced.
@@ -834,6 +870,71 @@ export class ManagedRunnerManager {
         lastError: Prisma.DbNull,
       }),
     };
+  }
+
+  // ── a disabled owner ───────────────────────────────────────────────────────────────────────
+
+  /**
+   * A step for a mapping whose owner an administrator disabled (`User.disabledAt`, docs/google-sign-in-
+   * design.md §5.5). Its runner is refused at every door — a claim answered 403 ACCOUNT_DISABLED is a
+   * permanent failure to the runner, which stops claiming, drains and exits on its own — and the
+   * mapping is driven to sleep, never towards READY: no PVC, Secret or Pod is created and nothing is
+   * admitted.
+   *
+   *   - An instance, recorded or found under its name, drains: the drain a sleep takes, except that it
+   *     is never called off and waits for no idle report. It ends as a sleep ends: the kubelet's report
+   *     of the stop is recorded as the proof, the Pod object is deleted by UID, and only once it is
+   *     gone and the volume detached is the generation retired and compute given back (`draining`,
+   *     `fallAsleep`). A Pod gone or made terminal without that report fences, as anywhere.
+   *   - Without one: SLEEPING at once, compute it holds given back — unless a Pod create may still
+   *     commit, which keeps the share and the mapping where they are until a Pod is seen.
+   *   - Asleep, it stays asleep: a wake desired before the account was disabled is dropped.
+   *   - FENCING still waits for its proof; once it is proven, the next step puts the mapping to sleep.
+   *
+   * The PVC with its storage share, the runner row and the default workspace stay. Enabled again, it
+   * is an ordinary sleeping mapping: demand wakes it on the same volume and runner.
+   */
+  private async whileDisabled(mapping: ManagedRunner): Promise<Step> {
+    switch (mapping.managementState) {
+      case 'DRAINING':
+        return this.draining(mapping, true);
+      case 'SLEEPING':
+        if (mapping.desiredState === 'RUNNING') await this.commit(mapping, { desiredState: 'SLEEPING' });
+        return { done: 'SLEEPING' };
+      case 'FENCING':
+        return (await this.replacePredecessor(mapping)) ?? { done: 'FENCING' };
+      default:
+        return this.stopForDisabledOwner(mapping);
+    }
+  }
+
+  /** REQUESTED, WAITING_CAPACITY, PROVISIONING, STARTING or READY, for a disabled owner (see `whileDisabled`). */
+  private async stopForDisabledOwner(mapping: ManagedRunner): Promise<Step> {
+    if (!mapping.podUid && mapping.pvcUid) {
+      // A Pod created and never recorded — a create whose answer was lost — is found under its name.
+      const pod = await this.kube.pods.get(managedPodName(mapping.runnerId));
+      if (pod) return { next: await this.recordPod(mapping, pod) };
+      if (mapping.resourceOperationKind === 'CREATE_POD' && mapping.resourceOperationState === 'PENDING') return { done: 'WAITING' };
+    }
+    const now = this.now();
+    const stopped = { attempt: 0, nextAttemptAt: null, startupDeadlineAt: null, capacityRevision: null, lastError: Prisma.DbNull };
+    if (mapping.podUid) {
+      this.log.warn(`managed runner ${mapping.id}: its owner's account is disabled; draining generation ${mapping.generation} to sleep`);
+      return {
+        next: await this.commit(mapping, {
+          managementState: 'DRAINING',
+          desiredState: 'SLEEPING',
+          stateEnteredAt: now,
+          drainDemandRevision: mapping.demandRevision,
+          stopRequestedAt: now,
+          stopAcknowledgedAt: null,
+          ...stopped,
+        }),
+      };
+    }
+    this.log.warn(`managed runner ${mapping.id}: its owner's account is disabled; asleep from ${mapping.managementState}, nothing having started`);
+    await this.commitReleasingCompute(mapping, { managementState: 'SLEEPING', desiredState: 'SLEEPING', stateEnteredAt: now, ...stopped });
+    return { done: 'SLEEPING' };
   }
 
   // ── the single-writer gate ─────────────────────────────────────────────────────────────────
@@ -1251,7 +1352,7 @@ export class ManagedRunnerManager {
   }
 
   private async fail(mapping: ManagedRunner, code: string, detail: string, also: Prisma.ManagedRunnerUpdateManyMutationInput = {}): Promise<Step> {
-    await this.commitFailed(mapping, {
+    await this.commitReleasingCompute(mapping, {
       ...also,
       managementState: 'FAILED',
       stateEnteredAt: this.now(),
@@ -1262,12 +1363,13 @@ export class ManagedRunnerManager {
   }
 
   /**
-   * FAILED. Its compute share goes back to the pool in the same transaction when no instance of this
-   * generation exists or can exist — none recorded and no Pod create in flight, so there is nothing
-   * whose stop would have to be proven first. A recorded or possibly created Pod keeps it: that one
-   * is released only through the stop gate. A retry is admitted again from REQUESTED.
+   * FAILED, or a disabled owner's mapping put to sleep with no instance. Its compute share goes back
+   * to the pool in the same transaction when no instance of this generation exists or can exist —
+   * none recorded and no Pod create in flight, so there is nothing whose stop would have to be proven
+   * first. A recorded or possibly created Pod keeps it: that one is released only through the stop
+   * gate. A retry, or a wake, is admitted again from REQUESTED.
    */
-  private async commitFailed(mapping: ManagedRunner, data: Prisma.ManagedRunnerUpdateManyMutationInput): Promise<void> {
+  private async commitReleasingCompute(mapping: ManagedRunner, data: Prisma.ManagedRunnerUpdateManyMutationInput): Promise<void> {
     const held = readReservation(mapping.reservation);
     const compute = computeOf(held);
     const createInFlight = mapping.resourceOperationKind === 'CREATE_POD' && mapping.resourceOperationState === 'PENDING';
@@ -1291,7 +1393,7 @@ export class ManagedRunnerManager {
         if (count === 0) throw new Superseded();
         await releaseCapacity(tx, held.pool, compute, null);
       },
-      loggedRetry(this.log, 'managedRunners.failReleasingCompute'),
+      loggedRetry(this.log, 'managedRunners.releaseIdleCompute'),
     );
   }
 
@@ -1300,7 +1402,7 @@ export class ManagedRunnerManager {
     const attempt = mapping.attempt + 1;
     this.log.warn(`managed runner ${mapping.id}: transient failure ${attempt}/${this.profile.lifecycle.maxAttempts}: ${(error as Error).message}`);
     if (attempt >= this.profile.lifecycle.maxAttempts) {
-      await this.commitFailed(mapping, {
+      await this.commitReleasingCompute(mapping, {
         attempt,
         managementState: 'FAILED',
         stateEnteredAt: this.now(),

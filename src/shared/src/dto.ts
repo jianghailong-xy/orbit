@@ -532,6 +532,21 @@ export type ProviderBalanceRead =
  */
 export type ProviderBalance = ProviderBalanceRead & { sharedWith: ProviderBalanceSibling[] };
 
+/**
+ * GET /providers/mine/:id/usage: what uses one of the caller's own keys, per engine — its open
+ * sessions (not completed, not in Trash) and the tasks still to run whose pin names it
+ * (docs/provider-engine-contract.md §3.6). What a client shows before the key is disabled or deleted,
+ * which every one of them, on every engine, then waits on; the same count that refuses a protocol
+ * change while they use it (PROVIDER_DIALECT_IN_USE). Engines nothing uses are absent.
+ */
+export interface ProviderKeyUsage {
+  providerId: string;
+  engines: Array<{ engine: AgentProvider; sessions: number; tasks: number }>;
+  /** The totals over `engines`. */
+  sessions: number;
+  tasks: number;
+}
+
 export interface RunnerHeartbeatRequest {
   status: RunnerStatus;
   /** How many more active turns the runner can accept right now. Warm idle

@@ -244,6 +244,8 @@ test('smart selection on: a fresh run is created on the routed model and effort,
       assert.equal((row.features as Record<string, unknown>).modelRouting, true);
       // The baseline is still recorded as what would have run without routing.
       assert.deepEqual(row.baseline, {
+        // The task pins only the provider, so its engine is the one that provider runs on by default.
+        engine: 'claude', engineSource: 'provider-pin',
         provider: 'claude', providerSource: 'task-pin', model: null, runtimeDefaultModel: OPUS,
         effort: AGENT_EFFORT, permissionMode: 'auto',
       });
@@ -252,7 +254,8 @@ test('smart selection on: a fresh run is created on the routed model and effort,
       const bound = await receipt(services.db, target.ownerId, TASK_RUN_ACTION.execute, press);
       assert.equal(bound.status, 'COMPLETED');
       assert.deepEqual(dispatchedBy(bound.target), { provider: 'claude', model: SONNET, effort: 'medium' });
-      assert.deepEqual(bound.target.route, snapshotOf(row));
+      // A v3 route also names the engine it chose (docs/provider-engine-contract.md §6.4).
+      assert.deepEqual(bound.target.route, { ...snapshotOf(row), engine: 'claude' });
       assert.deepEqual(await sessionOf(services.db, sessionId), { provider: 'claude', model: SONNET, effort: 'medium' });
 
       // Never written back: the task's provider and model are what a person pinned, and nobody did.
@@ -336,7 +339,7 @@ test('a bulk run applies routing per item: a provider pin only fixes the engine,
         assert.equal(row.reasons[0], want.reason);
         const item = bound.target.items.find((i: { taskId: string }) => i.taskId === taskId);
         assert.deepEqual(dispatchedBy(item), want.dispatched, `what ${taskId} is dispatched with`);
-        assert.deepEqual(item.route, snapshotOf(row));
+        assert.deepEqual(item.route, { ...snapshotOf(row), engine: 'claude' });
         assert.deepEqual(await sessionOf(services.db, sessionId!), want.session, `the Session of ${taskId}`);
       }
       const unpinnedRow = (await decisionsOf(services.db, unpinned))[0];

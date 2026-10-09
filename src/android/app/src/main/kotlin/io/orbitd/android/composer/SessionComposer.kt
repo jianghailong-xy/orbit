@@ -1,11 +1,16 @@
 package io.orbitd.android.composer
 
 import android.content.ClipboardManager
+import android.content.Context
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.*
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -13,15 +18,21 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.*
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.TextRange
@@ -29,6 +40,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.content.edit
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.attachments.*
 import io.orbitd.android.core.auth.SessionHandle
@@ -79,9 +91,9 @@ fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: Str
     val running = detail.text("runState") == "RUNNING" || detail.text("status") == "RUNNING"
     // The decision behind this task run, while the chip still shows the model it picked (A11-1).
     val smart = smartRoute(detail.text("taskId"), detail["route"] as? JsonObject, effective.text("model").orEmpty(), LocalSmartSelection.current)
-    // The engine's guess at the next message, offered in the empty box with Use, which fills the box
-    // and sends nothing (docs/prompt-suggestions-design.md §4). A message just sent answers it before its
-    // `user` event arrives, so the one standing at the send is held back until the transcript moves on.
+    // The engine's guess at the next message, offered in the empty box and taken with a double-tap on it,
+    // which fills the box and sends nothing (docs/prompt-suggestions-design.md §4). A message just sent answers
+    // it before its `user` event arrives, so the one standing at the send is held back until the transcript moves on.
     val standing = session?.transcript?.promptSuggestion
     var spent by remember(model) { mutableStateOf<String?>(null) }
     LaunchedEffect(standing) { if (standing == null) spent = null }
@@ -89,6 +101,23 @@ fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: Str
         draftEmpty = draft.text.isEmpty() && draft.attachments.isEmpty() && draft.pending == null,
         usable = usable && !state.busy && !state.waiting)
     val send = { spent = standing; model.send() }
+    var inputFocused by remember { mutableStateOf(false) }
+    // Set by the first double-tap that takes a suggestion on this device: from then on the box shows the guess alone,
+    // without "Double-tap to use" after it.
+    val composerPrefs = remember { context.getSharedPreferences("orbit.composer", Context.MODE_PRIVATE) }
+    var suggestionTapLearned by remember { mutableStateOf(composerPrefs.getBoolean(SUGGESTION_TAP_LEARNED, false)) }
+    val focusField: () -> Unit = { focus.requestFocus(); keyboard?.show() }
+    val useSuggestion: () -> Unit = {
+        suggestion?.let {
+            field = TextFieldValue(it, TextRange(it.length))
+            model.edit(it, it.length, it.length)
+            focusField()
+        }
+        if (!suggestionTapLearned) {
+            suggestionTapLearned = true
+            composerPrefs.edit { putBoolean(SUGGESTION_TAP_LEARNED, true) }
+        }
+    }
     Surface(tonalElevation = 2.dp) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).testTag("session-composer")) {
             Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
@@ -129,24 +158,25 @@ fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: Str
                     state.failures[att.id]?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                 }
                 ComposerUsage(model, state, effective, session)
-            OutlinedTextField(field, onValueChange = { field = it; model.edit(it.text, it.selection.start, it.selection.end) },
-                modifier = Modifier.fillMaxWidth().focusRequester(focus).onFocusChanged { inputFocusChanged(it.isFocused) }.testTag("composer-input").onPreviewKeyEvent {
-                    if (it.type == KeyEventType.KeyDown && it.key == Key.Enter && (it.isCtrlPressed || it.isMetaPressed) && field.composition == null && usable) {
-                        send(); true
-                    } else false
-                }, enabled = state.loaded,
-                placeholder = { Text(suggestion ?: "Message…", maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                trailingIcon = if (suggestion != null) {
-                    {
-                        TextButton(onClick = {
-                            field = TextFieldValue(suggestion, TextRange(suggestion.length))
-                            model.edit(suggestion, suggestion.length, suggestion.length)
-                            focus.requestFocus(); keyboard?.show()
-                        }, modifier = Modifier.testTag("composer-suggestion-use")) { Text("Use") }
-                    }
-                } else null,
-                minLines = 1, maxLines = 4,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default))
+            SuggestionTaps(suggestion != null, inputFocused, focusField, useSuggestion) { taps ->
+                OutlinedTextField(field, onValueChange = { field = it; model.edit(it.text, it.selection.start, it.selection.end) },
+                    modifier = Modifier.fillMaxWidth().focusRequester(focus).onFocusChanged { inputFocused = it.isFocused; inputFocusChanged(it.isFocused) }
+                        .testTag("composer-input")
+                        .then(taps)
+                        // TalkBack's own double-tap is "activate": it takes the guess with this action.
+                        .semantics { if (suggestion != null) customActions = listOf(CustomAccessibilityAction("Use suggestion") { useSuggestion(); true }) }
+                        .onPreviewKeyEvent {
+                            if (it.type == KeyEventType.KeyDown && it.key == Key.Enter && (it.isCtrlPressed || it.isMetaPressed) && field.composition == null && usable) {
+                                send(); true
+                            } else false
+                        }, enabled = state.loaded,
+                    placeholder = {
+                        if (suggestion != null) SuggestionPlaceholder(suggestion, showsHint = !suggestionTapLearned)
+                        else Text("Message…", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    },
+                    minLines = 1, maxLines = 4,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default))
+            }
             }
             Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                 Box {
@@ -221,6 +251,55 @@ fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: Str
             }
         }
     }, confirmButton = { TextButton(onClick = { queued = false }) { Text("Close") } })
+}
+
+private const val SUGGESTION_TAP_LEARNED = "suggestionDoubleTapLearned"
+
+/** The engine's guess in the empty box (docs/prompt-suggestions-design.md §4.3): the words, cut at the end, and — until the first
+ * double-tap that takes one on this device — "Double-tap to use" right after them. TalkBack skips the hint: its own double-tap is
+ * "activate", and it takes the guess with the field's "Use suggestion" action. */
+@Composable
+internal fun SuggestionPlaceholder(suggestion: String, showsHint: Boolean) = Row(verticalAlignment = Alignment.CenterVertically) {
+    Text(suggestion, Modifier.weight(1f, fill = false), maxLines = 1, overflow = TextOverflow.Ellipsis)
+    if (showsHint) Text("Double-tap to use", Modifier.padding(start = 8.dp).testTag("composer-suggestion-hint").clearAndSetSemantics {},
+        style = MaterialTheme.typography.bodySmall, maxLines = 1)
+}
+
+/** The field, taking the engine's guess with a double-tap (docs/prompt-suggestions-design.md §4.3). While a guess is [offered] and the
+ * field is not [focused], a catcher lies over it: the keyboard a first tap would raise lifts the composer, and the second tap would land
+ * on the keyboard instead. So a lone tap there (or a long press) is held until the double-tap timeout has passed and handed on as
+ * [focus]. A focused field keeps its own taps, and only the second of two is kept from it ([doubleTapToUse]). */
+@Composable
+internal fun SuggestionTaps(offered: Boolean, focused: Boolean, focus: () -> Unit, use: () -> Unit, field: @Composable (Modifier) -> Unit) {
+    val latestFocus by rememberUpdatedState(focus)
+    val latestUse by rememberUpdatedState(use)
+    Box {
+        field(Modifier.doubleTapToUse(offered && focused, use))
+        if (offered && !focused) Box(Modifier.matchParentSize().testTag("composer-suggestion-taps").pointerInput(Unit) {
+            detectTapGestures(onDoubleTap = { latestUse() }, onLongPress = { latestFocus() }, onTap = { latestFocus() })
+        })
+    }
+}
+
+/** Two taps on a field within the double-tap timeout run [use]. The first is the field's own; the second's lift is kept from it, so it
+ * neither drops the cursor into the words it just received nor opens the text toolbar. Watched in the Initial pass, ahead of the field's
+ * own gestures. */
+internal fun Modifier.doubleTapToUse(enabled: Boolean, use: () -> Unit): Modifier = if (!enabled) this else composed {
+    val latestUse by rememberUpdatedState(use)
+    pointerInput(Unit) {
+        awaitEachGesture {
+            awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+            waitForUpOrCancellation(PointerEventPass.Initial) ?: return@awaitEachGesture
+            withTimeoutOrNull(viewConfiguration.doubleTapTimeoutMillis) {
+                awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+            } ?: return@awaitEachGesture
+            val lift = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+                waitForUpOrCancellation(PointerEventPass.Initial)
+            } ?: return@awaitEachGesture
+            lift.consume()
+            latestUse()
+        }
+    }
 }
 
 /** The model chip (iOS `modelChipLabel`): the model's name, and — on a task run still on the model smart selection picked — a ✦ before

@@ -259,7 +259,9 @@ suite('a shared model provider runs an admin\'s sessions only, on real PostgreSQ
     const theirs = await sessions.create(admin.id, { prompt: 'hello', title: 'on shared', workspaceId: adminAt.workspaceId, provider: sharedClaude.slug });
     assert.equal((await recorded(theirs.id)).provider, sharedClaude.slug);
     const onKey = await sessions.create(admin.id, { prompt: 'hello', title: 'on shared key', workspaceId: adminAt.workspaceId, provider: 'opencode', model: openCodeModel });
-    assert.equal((await recorded(onKey.id)).provider, 'opencode');
+    // Written in the new form (docs/provider-engine-contract.md §3.3): the key is the provider, on OpenCode.
+    const written = await db.session.findUniqueOrThrow({ where: { id: onKey.id }, select: { provider: true, engine: true } });
+    assert.deepEqual(written, { provider: sharedCodex.slug, engine: 'opencode' });
   });
 
   await t.test("(1) a new session that inherits a shared provider from the agent's last one is refused for a member, and opens for an admin", async () => {

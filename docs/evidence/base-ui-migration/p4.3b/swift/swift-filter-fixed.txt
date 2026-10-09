@@ -1,0 +1,93 @@
+[0/1] Planning build
+Building for debugging...
+[0/3] Write sources
+[1/3] Write swift-version-24593BA9C3E375BF.txt
+[3/9] Compiling OrbitKitTests CriteriaChangeCardCopyParityTests.swift
+[4/9] Compiling OrbitKitTests ProjectDoneCopyParityTests.swift
+/repo/src/macos/OrbitKit/Tests/OrbitKitTests/ProjectDoneCopyParityTests.swift:210:14: warning: immutable value 'reason' was never used; consider replacing with '_' or removing it
+208 |             (nil, "default: return 'Landed on main';"),
+209 |         ]
+210 |         for (reason, line) in rows {
+    |              `- warning: immutable value 'reason' was never used; consider replacing with '_' or removing it
+211 |             XCTAssertTrue(web.contains(line), "landingReasonLabel no longer says \(line)")
+212 |         }
+[5/9] Compiling OrbitKitTests ProjectCrossingsCardCopyParityTests.swift
+[6/9] Emitting module OrbitKitTests
+[7/10] /repo/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKitPackageDiscoveredTests.derived/all-discovered-tests.swift
+[8/11] Write sources
+[10/14] Compiling OrbitKitPackageDiscoveredTests all-discovered-tests.swift
+[11/14] Emitting module OrbitKitPackageDiscoveredTests
+[12/14] Compiling OrbitKitPackageDiscoveredTests OrbitKitTests.swift
+[13/15] Write Objects.LinkFileList
+[14/15] Linking OrbitKitPackageTests.xctest
+Build complete! (62.65s)
+Test Suite 'Selected tests' started at 2026-10-09 01:49:03.817
+Test Suite 'CriteriaChangeCardCopyParityTests' started at 2026-10-09 01:49:03.818
+Test Case 'CriteriaChangeCardCopyParityTests.testTheCardsFixedWordsMatchTheWeb' started at 2026-10-09 01:49:03.818
+Test Case 'CriteriaChangeCardCopyParityTests.testTheCardsFixedWordsMatchTheWeb' passed (0.06 seconds)
+Test Case 'CriteriaChangeCardCopyParityTests.testTheCountedLinesAreBuiltFromTheWebsWords' started at 2026-10-09 01:49:03.878
+Test Case 'CriteriaChangeCardCopyParityTests.testTheCountedLinesAreBuiltFromTheWebsWords' passed (0.103 seconds)
+Test Case 'CriteriaChangeCardCopyParityTests.testTheMarksAndTheOrderOfTheRowsAreTheWebs' started at 2026-10-09 01:49:03.981
+Test Case 'CriteriaChangeCardCopyParityTests.testTheMarksAndTheOrderOfTheRowsAreTheWebs' passed (0.02 seconds)
+Test Case 'CriteriaChangeCardCopyParityTests.testTheSentencesWithANumberInThemMatchTheWebWhole' started at 2026-10-09 01:49:04.001
+Test Case 'CriteriaChangeCardCopyParityTests.testTheSentencesWithANumberInThemMatchTheWebWhole' passed (0.002 seconds)
+Test Suite 'CriteriaChangeCardCopyParityTests' passed at 2026-10-09 01:49:04.003
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.185 (0.185) seconds
+Test Suite 'ProjectCrossingsCardCopyParityTests' started at 2026-10-09 01:49:04.003
+Test Case 'ProjectCrossingsCardCopyParityTests.testAFilingsConsequencesAreTheWebs' started at 2026-10-09 01:49:04.003
+Test Case 'ProjectCrossingsCardCopyParityTests.testAFilingsConsequencesAreTheWebs' passed (0.002 seconds)
+Test Case 'ProjectCrossingsCardCopyParityTests.testAMovesRowDrawsItsLabelsTheWayTheWebDoes' started at 2026-10-09 01:49:04.004
+Test Case 'ProjectCrossingsCardCopyParityTests.testAMovesRowDrawsItsLabelsTheWayTheWebDoes' passed (0.002 seconds)
+Test Case 'ProjectCrossingsCardCopyParityTests.testAMovesWordsAreTheWebsDeclaredConstants' started at 2026-10-09 01:49:04.006
+Test Case 'ProjectCrossingsCardCopyParityTests.testAMovesWordsAreTheWebsDeclaredConstants' passed (0.001 seconds)
+Test Case 'ProjectCrossingsCardCopyParityTests.testTheAnswerableStateAndTheOrderAreTheWebs' started at 2026-10-09 01:49:04.008
+Test Case 'ProjectCrossingsCardCopyParityTests.testTheAnswerableStateAndTheOrderAreTheWebs' passed (0.03 seconds)
+Test Case 'ProjectCrossingsCardCopyParityTests.testTheCardsOwnWords' started at 2026-10-09 01:49:04.038
+Test Case 'ProjectCrossingsCardCopyParityTests.testTheCardsOwnWords' passed (0.002 seconds)
+Test Case 'ProjectCrossingsCardCopyParityTests.testTheFirstPressOnlyAsks' started at 2026-10-09 01:49:04.039
+Test Case 'ProjectCrossingsCardCopyParityTests.testTheFirstPressOnlyAsks' passed (0.001 seconds)
+Test Case 'ProjectCrossingsCardCopyParityTests.testThePressReachesTheWebsDoorWithTheWebsBody' started at 2026-10-09 01:49:04.041
+Test Case 'ProjectCrossingsCardCopyParityTests.testThePressReachesTheWebsDoorWithTheWebsBody' passed (0.002 seconds)
+Test Case 'ProjectCrossingsCardCopyParityTests.testTheSecondPressNamesItsEndsAndSubjectTheWayTheWebDoes' started at 2026-10-09 01:49:04.042
+Test Case 'ProjectCrossingsCardCopyParityTests.testTheSecondPressNamesItsEndsAndSubjectTheWayTheWebDoes' passed (0.101 seconds)
+Test Case 'ProjectCrossingsCardCopyParityTests.testTheSecondPressSaysWhatTheWebsSays' started at 2026-10-09 01:49:04.144
+Test Case 'ProjectCrossingsCardCopyParityTests.testTheSecondPressSaysWhatTheWebsSays' passed (0.002 seconds)
+Test Case 'ProjectCrossingsCardCopyParityTests.testTheStateWordsAreAttributionsAndAMoveSaysItsOwn' started at 2026-10-09 01:49:04.145
+Test Case 'ProjectCrossingsCardCopyParityTests.testTheStateWordsAreAttributionsAndAMoveSaysItsOwn' passed (0.102 seconds)
+Test Suite 'ProjectCrossingsCardCopyParityTests' passed at 2026-10-09 01:49:04.248
+	 Executed 10 tests, with 0 failures (0 unexpected) in 0.245 (0.245) seconds
+Test Suite 'ProjectDoneCopyParityTests' started at 2026-10-09 01:49:04.248
+Test Case 'ProjectDoneCopyParityTests.testEveryWordTheWebDeclaresIsThisClientsWordForWord' started at 2026-10-09 01:49:04.248
+Test Case 'ProjectDoneCopyParityTests.testEveryWordTheWebDeclaresIsThisClientsWordForWord' passed (0.063 seconds)
+Test Case 'ProjectDoneCopyParityTests.testOrbitCheckedCountsTheOpenItemsTheWebCounts' started at 2026-10-09 01:49:04.311
+Test Case 'ProjectDoneCopyParityTests.testOrbitCheckedCountsTheOpenItemsTheWebCounts' passed (0.133 seconds)
+Test Case 'ProjectDoneCopyParityTests.testTheConversationDrawsTheWebsCardForEachState' started at 2026-10-09 01:49:04.444
+Test Case 'ProjectDoneCopyParityTests.testTheConversationDrawsTheWebsCardForEachState' passed (0.007 seconds)
+Test Case 'ProjectDoneCopyParityTests.testTheFourTalliesAreTheWebsSentences' started at 2026-10-09 01:49:04.451
+Test Case 'ProjectDoneCopyParityTests.testTheFourTalliesAreTheWebsSentences' passed (0.001 seconds)
+Test Case 'ProjectDoneCopyParityTests.testTheMessageTheCoordinatorIsHandedIsTheWebs' started at 2026-10-09 01:49:04.452
+Test Case 'ProjectDoneCopyParityTests.testTheMessageTheCoordinatorIsHandedIsTheWebs' passed (0.003 seconds)
+Test Case 'ProjectDoneCopyParityTests.testTheOwnerCardsSentencesAreTheWebs' started at 2026-10-09 01:49:04.455
+Test Case 'ProjectDoneCopyParityTests.testTheOwnerCardsSentencesAreTheWebs' passed (0.011 seconds)
+Test Case 'ProjectDoneCopyParityTests.testTheReasonsAreSaidInTheWebsOrderAndWords' started at 2026-10-09 01:49:04.466
+Test Case 'ProjectDoneCopyParityTests.testTheReasonsAreSaidInTheWebsOrderAndWords' passed (0.002 seconds)
+Test Case 'ProjectDoneCopyParityTests.testTheReceiptsSentencesAreTheWebs' started at 2026-10-09 01:49:04.467
+Test Case 'ProjectDoneCopyParityTests.testTheReceiptsSentencesAreTheWebs' passed (0.004 seconds)
+Test Case 'ProjectDoneCopyParityTests.testTheRowsSayTheWebsWords' started at 2026-10-09 01:49:04.471
+Test Case 'ProjectDoneCopyParityTests.testTheRowsSayTheWebsWords' passed (0.059 seconds)
+Test Case 'ProjectDoneCopyParityTests.testTheShapesOnTheWireAreTheSharedTypes' started at 2026-10-09 01:49:04.530
+Test Case 'ProjectDoneCopyParityTests.testTheShapesOnTheWireAreTheSharedTypes' passed (0.036 seconds)
+Test Case 'ProjectDoneCopyParityTests.testTheWhyNotDoneCardsGroupsAndButtonsAreTheWebs' started at 2026-10-09 01:49:04.566
+Test Case 'ProjectDoneCopyParityTests.testTheWhyNotDoneCardsGroupsAndButtonsAreTheWebs' passed (0.11 seconds)
+Test Case 'ProjectDoneCopyParityTests.testTheWordsTheCopyObjectSpellsInlineAreThisClients' started at 2026-10-09 01:49:04.677
+Test Case 'ProjectDoneCopyParityTests.testTheWordsTheCopyObjectSpellsInlineAreThisClients' passed (0.003 seconds)
+Test Case 'ProjectDoneCopyParityTests.testWhoRecordedItIsTheWebsSentence' started at 2026-10-09 01:49:04.679
+Test Case 'ProjectDoneCopyParityTests.testWhoRecordedItIsTheWebsSentence' passed (0.001 seconds)
+Test Suite 'ProjectDoneCopyParityTests' passed at 2026-10-09 01:49:04.680
+	 Executed 13 tests, with 0 failures (0 unexpected) in 0.432 (0.432) seconds
+Test Suite 'Selected tests' passed at 2026-10-09 01:49:04.680
+	 Executed 27 tests, with 0 failures (0 unexpected) in 0.862 (0.862) seconds
+◇ Test run started.
+↳ Testing Library Version: 6.1.3 (1d1f7e489c9c606)
+↳ Target Platform: x86_64-unknown-linux-gnu
+✔ Test run with 0 tests passed after 0.001 seconds.

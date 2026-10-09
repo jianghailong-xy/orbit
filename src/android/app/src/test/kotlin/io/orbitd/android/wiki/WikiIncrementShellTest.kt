@@ -25,6 +25,7 @@ import org.junit.runner.Description
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import io.orbitd.android.toast.OrbitToasts
 
 /** The A12c items in the real shell over the controlled server ([WikiShell]). A12-1 (iOS b85473546): the home's
  * principles and Activity's decisions read by their own kind out of a space thousands of entries deep, one proposal said
@@ -49,7 +50,7 @@ class WikiIncrementShellTest {
     val compose = createAndroidComposeRule<MainActivity>()
     private val shell = WikiShell
 
-    @Before fun start() { shell.reset(); WikiToast.text = null }
+    @Before fun start() { shell.reset(); OrbitToasts.clear() }
 
     // MARK: A12-1 — the home reads its principles and decisions by kind
 

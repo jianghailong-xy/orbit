@@ -219,7 +219,9 @@ exec '${process.execPath}' '${path.join(REPO, 'scripts/deepseek-harness-dispatch
     assert.equal(provider.status, 201, `dsh provider: ${provider.text}`);
     const harness = provider.json.slug;
     assert.ok(harness, `dsh provider has no slug: ${provider.text}`);
-    say(`==> provider ${harness} (runtime dsh) → ${mockURL}`);
+    // An older client's Harness form is stored as a DeepSeek key (docs/provider-engine-contract.md §3.6),
+    // which runs on Claude Code unless DeepSeek Harness is named as the engine.
+    say(`==> provider ${harness} (a DeepSeek key, run on DeepSeek Harness) → ${mockURL}`);
 
     // The command prints who ran it ($PPID is the process that exec'd bash) and where, then does the real check.
     const acceptanceCommand = (expectation) =>
@@ -234,6 +236,7 @@ exec '${process.execPath}' '${path.join(REPO, 'scripts/deepseek-harness-dispatch
         description: `${tag}: calc.divide in this directory is already correct. Reply that the work is done; change nothing.`,
         assigneeId: workspaceRef.id,
         provider: providerSlug,
+        ...(providerSlug === harness ? { engine: 'dsh' } : {}),
         completionCriterion: 'EXECUTABLE',
         acceptanceCommand: command,
         acceptanceExpectedExitCode: 0,
@@ -360,7 +363,7 @@ exec '${process.execPath}' '${path.join(REPO, 'scripts/deepseek-harness-dispatch
 
     await scenario(SCENARIOS[2], async () => {
       const prompt = `D3-S3 ${randomBytes(4).toString('hex')}: answer once.`;
-      const created = await call('POST', '/sessions', { workspaceId: ws.harness.id, provider: harness, prompt, permissionMode: 'dontAsk' });
+      const created = await call('POST', '/sessions', { workspaceId: ws.harness.id, engine: 'dsh', provider: harness, prompt, permissionMode: 'dontAsk' });
       assert.equal(created.status, 201, `Harness session create: ${created.status} ${created.text}`);
       const publicId = created.json.publicId ?? created.json.id;
       const session = await eventually('the Harness session to settle its first turn', async () => {

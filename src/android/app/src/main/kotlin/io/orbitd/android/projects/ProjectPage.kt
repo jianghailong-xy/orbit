@@ -476,6 +476,9 @@ object ProjectPage {
         reason(blocker)?.let { blockerReasonHeadlines[it] }?.let { return it }
         val (tag, tone) = when (blocker.text("owner")) { "USER" -> "Needs you" to TagTone.WARNING; "COORDINATOR" -> "Coordinator" to TagTone.BRAND; else -> "System" to TagTone.NEUTRAL }
         val kind = blocker.text("kind").orEmpty()
+        // A refused source says why in the words the run's own card uses (A08-5; iOS 698b707ea).
+        if (kind == SessionRunStart.unresolvedBlockerKind) return BlockerHeadline(tag, tone,
+            SessionRunStart.refusalProse(blocker.obj("detail")?.text("fixAction")).first)
         val words = kind.lowercase().split("_").filter { it.isNotEmpty() }.joinToString(" ")
         return BlockerHeadline(tag, tone, if (words.isEmpty()) kind else words.replaceFirstChar { it.uppercase() })
     }

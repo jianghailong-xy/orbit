@@ -389,6 +389,18 @@ async function start(stack: Stack, f: Fixture, taskId: string): Promise<string> 
 }
 
 /**
+ * The claim's own write, as a current replica makes it: one that reads the session's engine, which
+ * every run is created with (migration 0414's acquisition guard drops the claim of any replica that
+ * does not).
+ */
+async function claimWrite(stack: Stack, sessionId: string): Promise<void> {
+  await stack.db.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`;
+    await tx.session.update({ where: { id: sessionId }, data: { status: RunStatus.RUNNING } });
+  });
+}
+
+/**
  * What the runner does with a claimed run whose ref it could not resolve (§6.3 steps 2 and 3).
  *
  * The claim's own write, the selector off the row, and the refusal POSTed through the real pin
@@ -401,7 +413,7 @@ async function refuseAtResolution(
   f: Fixture,
   sessionId: string,
 ): Promise<{ ref: string; stderr: string; response: Awaited<ReturnType<RunnerApiController['pinSessionSource']>> }> {
-  await stack.db.session.update({ where: { id: sessionId }, data: { status: RunStatus.RUNNING } });
+  await claimWrite(stack, sessionId);
   const selected = await stack.db.session.findUniqueOrThrow({
     where: { id: sessionId }, select: { sourceState: true, sourceRef: true },
   });
@@ -442,7 +454,7 @@ interface RunnerOutcome {
  */
 async function runnerTakes(stack: Stack, f: Fixture, sessionId: string): Promise<RunnerOutcome> {
   // The claim's own write: the run is this runner's now.
-  await stack.db.session.update({ where: { id: sessionId }, data: { status: RunStatus.RUNNING } });
+  await claimWrite(stack, sessionId);
   const selected = await stack.db.session.findUniqueOrThrow({
     where: { id: sessionId },
     select: { sourceState: true, sourceKind: true, sourceRef: true, sourceRequiredContains: true },
@@ -980,7 +992,7 @@ test('a start refused at its checkout opens the project\'s SOURCE_UNRESOLVED ite
       const gone = 'b'.repeat(40);
       const missingObject = await dependentOf(stack, f, 'refused-object-missing', p.taskId);
       const objectSession = await start(stack, f, missingObject);
-      await stack.db.session.update({ where: { id: objectSession }, data: { status: RunStatus.RUNNING } });
+      await claimWrite(stack, objectSession);
       const frozen = await freezeSessionSourcePin(
         stack.prisma,
         { sessionId: objectSession, runnerId: f.runnerId, ownerId: f.ownerId },

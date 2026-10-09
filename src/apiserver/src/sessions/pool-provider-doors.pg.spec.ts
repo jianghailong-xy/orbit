@@ -394,14 +394,14 @@ suite('an account pool through the doors that take a provider, on real PostgreSQ
     const mine = await providers.listUsable(me.id);
     assert.deepEqual(
       mine.find((p) => p.slug === pool.slug),
-      { slug: pool.slug, label: 'Claude accounts', runtime: 'claude', builtin: false },
+      { slug: pool.slug, label: 'Claude accounts', runtime: 'claude', engines: ['claude'], builtin: false },
     );
     assert.equal(mine.some((p) => p.slug === theirPool.slug), false);
 
     const theirs = await providers.listUsable(stranger.id);
     assert.deepEqual(
       theirs.find((p) => p.slug === theirPool.slug),
-      { slug: theirPool.slug, label: 'Their accounts', runtime: 'claude', builtin: false },
+      { slug: theirPool.slug, label: 'Their accounts', runtime: 'claude', engines: ['claude'], builtin: false },
     );
     assert.equal(theirs.some((p) => p.slug === pool.slug), false);
 

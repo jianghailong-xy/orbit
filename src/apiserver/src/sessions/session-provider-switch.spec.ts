@@ -90,6 +90,8 @@ function harness(
       findFirst: async ({ where }: { where: PoolRow }) =>
         pools.find((p) => p.slug === where.slug && p.ownerId === where.ownerId) ?? null,
     },
+    // No retired provider names (migration 0415).
+    providerSlugAlias: { findUnique: async () => null },
     conversationTurn: {
       findUnique: async () => null,
       findFirst: async () => null,
@@ -145,7 +147,12 @@ test('the built-in engine is a legal target for a claude-runtime provider', asyn
   assert.equal(updated().model, 'claude-opus-5');
 });
 
-test('a cross-runtime switch is refused rather than silently re-pointed', async () => {
+/** PROVIDER_ENGINE_INCOMPATIBLE (docs/provider-engine-contract.md §3.7), as a switch refuses one. */
+const incompatible = (message: string) =>
+  (error: { response?: { code?: string; message?: string } }) =>
+    error.response?.code === 'PROVIDER_ENGINE_INCOMPATIBLE' && error.response.message === message;
+
+test('a switch onto a credential the session engine cannot run is refused rather than silently re-pointed', async () => {
   const { service, reloads } = harness(
     { provider: 'claude', providerBuiltin: true, model: 'claude-opus-5' },
     [providerRow({ slug: 'openai', runtime: 'codex', presetSlug: 'openai' })],
@@ -153,17 +160,17 @@ test('a cross-runtime switch is refused rather than silently re-pointed', async 
 
   await assert.rejects(
     () => service.updateConfig(ownerId, id, { provider: 'openai' }),
-    /claude session cannot switch to a provider that runs on codex/,
+    incompatible('provider "openai" cannot run on Claude Code; it runs on Codex, OpenCode'),
   );
   assert.equal(reloads().length, 0);
 });
 
-test('a built-in cross-runtime target is refused too', async () => {
+test("another engine's own sign-in is refused too", async () => {
   const { service } = harness({ provider: 'claude', providerBuiltin: true, model: 'claude-opus-5' });
 
   await assert.rejects(
     () => service.updateConfig(ownerId, id, { provider: 'codex' }),
-    /claude session cannot switch to a provider that runs on codex/,
+    incompatible('provider "codex" cannot run on Claude Code; it runs on Codex'),
   );
 });
 
@@ -219,7 +226,7 @@ test('a codex session cannot switch onto an account pool, which runs on Claude',
 
   await assert.rejects(
     () => service.updateConfig(ownerId, id, { provider: 'claude-accounts' }),
-    /codex session cannot switch to a provider that runs on claude/,
+    incompatible('provider "claude-accounts" cannot run on Codex; it runs on Claude Code'),
   );
   assert.equal(reloads().length, 0);
 });
@@ -399,6 +406,8 @@ function resumeHarness(session: Record<string, unknown>, providers: ProviderRow[
               (p) => p.slug === where.slug && (where.enabled === undefined || p.enabled),
             ) ?? null,
         },
+        providerPool: { findFirst: async () => null },
+        providerSlugAlias: { findUnique: async () => null },
       }),
   } as never;
   const service = new SessionsService(prisma, { notifySessionQueued: () => undefined } as never, {
@@ -453,7 +462,7 @@ test('a revive cannot cross runtimes either', async () => {
 
   await assert.rejects(
     () => service.resume(ownerId, id, { ...revive, provider: 'codex' }),
-    /claude session cannot switch to a provider that runs on codex/,
+    incompatible('provider "codex" cannot run on Claude Code; it runs on Codex'),
   );
 });
 

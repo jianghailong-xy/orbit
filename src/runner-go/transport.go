@@ -970,6 +970,10 @@ func taskCreateHeaders(agentID, sessionID string) map[string]string {
 }
 
 type SessionMetaResponse struct {
+	// Engine is the engine the session runs on, the one its conversation belongs to. Provider carries
+	// the same engine for an older orbit resume, and is the only one a control plane older than
+	// engines sends (resumeMetaFromServer).
+	Engine           string  `json:"engine,omitempty"`
 	Provider         string  `json:"provider,omitempty"`
 	SessionUUID      string  `json:"sessionUuid"`
 	RuntimeSessionID string  `json:"runtimeSessionId,omitempty"`
@@ -1913,13 +1917,15 @@ func deliverRunRequest(send func() (json.RawMessage, error)) (json.RawMessage, e
 	return nil, lastErr
 }
 
-func (t *Transport) commentTask(id, agentID, bodyText string) (json.RawMessage, error) {
+// A comment names the session it was written from, so the control plane can record which run of
+// the task (and which attempt) it came from; with no session it is the author's alone.
+func (t *Transport) commentTask(id, agentID, sessionID, bodyText string) (json.RawMessage, error) {
 	if err := validatePathSegmentID(id); err != nil {
 		return nil, err
 	}
 	var out json.RawMessage
 	err := t.doHeaders(nil, "POST", "/runner/tasks/"+url.PathEscape(id)+"/comments",
-		map[string]string{"body": bodyText}, &out, taskOpTimeout, agentHeader(agentID))
+		map[string]string{"body": bodyText}, &out, taskOpTimeout, taskCreateHeaders(agentID, sessionID))
 	return out, err
 }
 

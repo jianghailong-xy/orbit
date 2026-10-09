@@ -1,0 +1,59 @@
+dry run: git merge-tree --write-tree e21fad172 origin/main (a74ecb43b), 2026-10-09T09:20:13Z
+exit 0, tree c83177808d8e56e516b27f3408e7f8f2d5a1edb4, no conflicts
+project tip abc0a4cfa is in origin/main: yes
+
+main's commits not in the delivery (git log --oneline --no-merges e21fad172..origin/main):
+bab3256a7 fix(copy): put the clients' Chinese labels back into English, and hold all copy to it
+c45c90366 chore(release): publish the runner's faster turn-end diff as 0.1.228
+53f633053 fix(runner): seed the live diff's temp index from the checkout's own
+9e6f773ed docs(provider-engine): record the coordinator's rulings on the seven open points
+d774cfb2d docs(provider-engine): main's latest migration is now 0412
+7c0c5056f docs(provider-engine): review fixes, key visibility per engine, DeepSeek 2 naming
+0689c111f docs(provider-engine): note main's latest migration number after the merge
+b3248cf27 docs(provider-engine): decoupling contract and shared engine compatibility module
+
+what the merge would bring in (git diff --stat e21fad172 <merged tree>):
+ AGENTS.md                                                                   |   9 +
+ CLAUDE.md                                                                   |   9 +
+ docs/antigravity-runtime-contract.md                                        |   2 +-
+ docs/deepseek-harness-rollout.md                                            |  99 ++++++---
+ docs/deepseek-harness-runtime-contract.md                                   |  13 +-
+ docs/deepseek-harness-runtime-environment.md                                |  17 +-
+ docs/provider-engine-contract.md                                            | 845 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ package.json                                                                |   2 +-
+ src/apiserver/src/common/antigravity-readiness.ts                           |   2 +-
+ src/apiserver/src/common/db-write-inventory.ts                              |   2 +-
+ src/apiserver/src/projects/project-integration-job.ts                       |   2 +-
+ src/apiserver/src/projects/session-source.ts                                |   2 +-
+ src/macos/OrbitApp/Sources/OrbitApp/Views/ApprovalCards.swift               |   2 +-
+ src/macos/OrbitApp/Sources/OrbitApp/Views/BackgroundWakeCardView.swift      |  10 +-
+ src/macos/OrbitKit/Sources/OrbitKit/App/SessionRunStart.swift               |  33 +--
+ src/macos/OrbitKit/Sources/OrbitKit/App/WatchWake.swift                     |   2 +-
+ src/macos/OrbitKit/Tests/OrbitKitTests/BackgroundWakeCopyParityTests.swift  |  12 +-
+ src/macos/OrbitKit/Tests/OrbitKitTests/SessionRunStartCopyParityTests.swift |  22 +-
+ src/macos/OrbitKit/Tests/OrbitKitTests/SessionRunStartTests.swift           |  12 +-
+ src/macos/OrbitKit/Tests/OrbitKitTests/WatchWakeTests.swift                 |   2 +-
+ src/runner-go/antigravity_google_login_other_test.go                        |   2 +-
+ src/runner-go/antigravity_google_pty_other.go                               |   2 +-
+ src/runner-go/background_job.go                                             |   2 +-
+ src/runner-go/login.go                                                      |   2 +-
+ src/runner-go/worktree.go                                                   |  65 +++++-
+ src/runner-go/worktree_test.go                                              | 152 ++++++++++++++
+ src/shared/src/index.ts                                                     |   1 +
+ src/shared/src/providerEngines.spec.ts                                      | 121 +++++++++++
+ src/shared/src/providerEngines.ts                                           | 122 +++++++++++
+ src/shared/src/source-refusal.ts                                            |  35 ++--
+ src/web/src/components/BackgroundWakeCard.tsx                               |  16 +-
+ src/web/src/components/BackgroundWakeSteer.test.tsx                         |   2 +-
+ src/web/src/components/Transcript.backgroundWake.test.tsx                   |   6 +-
+ src/web/src/components/Transcript.watchWake.test.tsx                        |   2 +-
+ src/web/src/components/WatchWakeCard.tsx                                    |   2 +-
+ src/web/src/copyLanguage.test.ts                                            | 284 ++++++++++++++++++++++++++
+ src/web/src/pages/ProjectsPage.status.test.tsx                              |  16 +-
+ src/web/src/pages/ProjectsPage.tsx                                          |  36 +---
+ 38 files changed, 1803 insertions(+), 164 deletions(-)
+
+of those, files this batch changed (abc0a4cfa..e21fad172): 0
+of those, under src/web/src/components/ui/ or src/web/src/index.css or Toast*: 0
+
+main's new src/web/src/copyLanguage.test.ts (bab3256a7) counts Chinese string literals in product sources: the 20 product .ts/.tsx files this batch changed (abc0a4cfa..e21fad172, tests and fixtures excluded) hold no Han character at all (grep -P '[\x{3400}-\x{4dbf}\x{4e00}-\x{9fff}]': 0 lines in each).
