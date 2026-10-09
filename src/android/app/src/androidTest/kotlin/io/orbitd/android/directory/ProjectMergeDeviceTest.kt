@@ -99,9 +99,12 @@ class ProjectMergeDeviceTest {
                 await { exists(hasTestTag("project-merge-card:checking")) }
                 capture("05-checking")
 
-                // C · merged: no card; a row on the timeline at its own instant, opening its receipt.
+                // C · merged: the candidate became the merge, as the server records one — no card; a row on the timeline at its own
+                // instant, opening its receipt. (The page reads the merges again when the candidate moves, else once a minute.)
                 job = "LAND_TASK"
-                merged = "[${candidate("MERGED", merged = """{"sha":"8d5a868e90df","at":"${ago(7)}","automatic":false,"revert":null}""")}]"
+                val made = """{"sha":"8d5a868e90df","at":"${ago(7)}","automatic":false,"revert":null}"""
+                merged = "[${candidate("MERGED", merged = made)}]"
+                promotion = candidate("MERGED", merged = made)
                 await { !exists(hasTestTag("project-merge-card:checking")) && exists(hasTestTag("project-merge-row:pr-1")) }
                 capture("06-timeline")
                 compose.onNodeWithTag("project-merge-row:pr-1").performClick()
