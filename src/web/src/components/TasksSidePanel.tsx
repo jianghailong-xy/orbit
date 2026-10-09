@@ -147,7 +147,8 @@ const TOP: TopNavItem[] = [
   // Infrastructure is where agents run and whose quota they spend — what the Runners and Providers
   // rows used to split between them: the user's own machines and API keys, and the account pools
   // they own or were added to. Shared providers (those with no owner) are not on it, an admin's
-  // included: the UI manages only each user's own (PROVIDERS_BASE).
+  // included: admins manage them through /api/admin/providers alone, and the UI manages only each
+  // user's own (PROVIDERS_BASE).
   { key: 'infrastructure', icon: <SidebarNavIcon name="runners" />, label: 'Infrastructure' },
 ];
 
