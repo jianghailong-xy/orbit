@@ -3,6 +3,8 @@ package io.orbitd.android.projects
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
@@ -23,6 +25,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -219,6 +222,8 @@ internal class ProjectPageState {
     var integrationReadAt by mutableStateOf<Instant?>(null)
     var integrationReadFailed by mutableStateOf(false)
     var openItems by mutableStateOf<JsonObject?>(null)
+    /** A failed first read must not leave the Open items sheet spinning or claim there are none. */
+    var openItemsUnread by mutableStateOf(false)
     var coordinator by mutableStateOf<JsonObject?>(null)
     var graph by mutableStateOf<JsonObject?>(null)
     var queue by mutableStateOf<JsonObject?>(null)
@@ -248,6 +253,7 @@ private sealed interface ProjectDialog {
     data object MergeCheck : ProjectDialog
     data object Share : ProjectDialog
     data object Done : ProjectDialog
+    data object OpenItems : ProjectDialog
 }
 
 @Composable
@@ -291,7 +297,7 @@ private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: Stri
                 }
                 panorama.await()?.let { state.panorama = it }
                 integration.await().let { if (it != null) { state.integration = it; state.integrationReadAt = Instant.now(); state.integrationReadFailed = false } else state.integrationReadFailed = true }
-                openItems.await()?.let { state.openItems = it }
+                openItems.await().let { if (it != null) { state.openItems = it; state.openItemsUnread = false } else state.openItemsUnread = state.openItems == null }
                 coordinator.await()?.let { state.coordinator = it }
                 graph.await()?.let { state.graph = it }
                 queue.await().onSuccess { state.queue = it; state.queueUnread = false }.onFailure { if (it is CancellationException) throw it; state.queueUnread = true }
@@ -387,8 +393,27 @@ private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: Stri
     val started = ProjectDoc.started(doc)
     val paused = doc.text("pausedAt") != null
     val webUrl = "${handle.account.server.trimEnd('/')}/projects/${doc.text("id") ?: id}"
+    // An open item's press, from the Open items sheet — which goes down first (iOS `perform`).
+    val perform: (String, JsonObject) -> Unit = { action, row ->
+        dialog = null
+        val owners = row.text("assignee") != "COORDINATOR"
+        val card = when {
+            !owners -> null
+            row.text("kind") == "PROMOTION_APPROVAL" -> "promotion:${row.text("promotionId").orEmpty()}"
+            else -> row.text("itemId")?.let { "item:$it" }
+        }
+        when (action) {
+            "RESUME" -> row.text("fuseEpisodeId")?.let { episode -> write("Couldn't resume the coordinator: ") { api.resumeFuse(id, episode) } }
+            "OPEN_TASK_SESSION" -> row.text("sessionId")?.let { open(OrbitRoute(Destination.SESSION, it)) } ?: row.text("taskId")?.let(openTask)
+            "OPEN_COORDINATOR" -> row.obj("delivery")?.text("sessionId")?.let { session ->
+                card?.let { CardFocus.request(session, it) }; open(OrbitRoute(Destination.SESSION, session))
+            } ?: openCoordinator(card)
+            else -> openCoordinator(card)
+        }
+    }
     LazyColumn(Modifier.fillMaxSize().testTag("project-detail"), state = listState, contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 32.dp)) {
         item(key = "header") { Header(state, doc, now, connected, menu = {
+            OpenItemsEntry(ProjectPage.openItemsSummary(doc, state.openItems), state.openItemsUnread) { dialog = ProjectDialog.OpenItems }
             Box {
                 TextButton(onClick = { menu = true }, enabled = !state.busy, modifier = Modifier.testTag("project-menu").semantics { contentDescription = "Project actions" }) {
                     Text("⋯", style = MaterialTheme.typography.titleLarge) }
@@ -413,23 +438,7 @@ private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: Stri
                 }
             }
         }) }
-        openItemsSection(state, doc, now, enabled, startOwn = { dialog = ProjectDialog.Start }, recordDone = { dialog = ProjectDialog.Done },
-            review = { row -> openCoordinator(row?.text("itemId")?.let { "start:$it" }) }, perform = { action, row ->
-            val owners = row.text("assignee") != "COORDINATOR"
-            val card = when {
-                !owners -> null
-                row.text("kind") == "PROMOTION_APPROVAL" -> "promotion:${row.text("promotionId").orEmpty()}"
-                else -> row.text("itemId")?.let { "item:$it" }
-            }
-            when (action) {
-                "RESUME" -> row.text("fuseEpisodeId")?.let { episode -> write("Couldn't resume the coordinator: ") { api.resumeFuse(id, episode) } }
-                "OPEN_TASK_SESSION" -> row.text("sessionId")?.let { open(OrbitRoute(Destination.SESSION, it)) } ?: row.text("taskId")?.let(openTask)
-                "OPEN_COORDINATOR" -> row.obj("delivery")?.text("sessionId")?.let { session ->
-                    card?.let { CardFocus.request(session, it) }; open(OrbitRoute(Destination.SESSION, session))
-                } ?: openCoordinator(card)
-                else -> openCoordinator(card)
-            }
-        })
+        openItemsAttention(state, doc, enabled, openSheet = { dialog = ProjectDialog.OpenItems }, startOwn = { dialog = ProjectDialog.Start })
         overviewSection(state, doc, now, openTask)
         coordinatorSection(state, doc, now, enabled, openCoordinator = { openCoordinator() }, replace = { finished ->
             if (finished) replaceCoordinator() else dialog = ProjectDialog.Replace })
@@ -533,6 +542,10 @@ private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: Stri
         ProjectDialog.Done -> ProjectDoneSheet(api, id, state, now, enabled, close = { dialog = null }) { body ->
             attempt("${ProjectDone.notRecorded} — ") { api.done(id, body) }
         }
+        ProjectDialog.OpenItems -> OpenItemsSheet(state, doc, now, enabled, startOwn = { dialog = ProjectDialog.Start }, recordDone = { dialog = ProjectDialog.Done },
+            // Review on the coordinator's request to start: into its conversation, onto the start card.
+            reviewStart = { row -> dialog = null; openCoordinator(row.text("itemId")?.let { "start:$it" }) }, perform = perform,
+            retry = { scope.launch { load(refreshGraph = false) } }, close = { dialog = null })
     }
 }
 
@@ -566,88 +579,172 @@ private fun Header(state: ProjectPageState, doc: JsonObject, now: Instant, conne
     }
 }
 
-private fun LazyListScope.openItemsSection(state: ProjectPageState, doc: JsonObject, now: Instant, enabled: Boolean, startOwn: () -> Unit, recordDone: () -> Unit,
-    review: (JsonObject?) -> Unit, perform: (String, JsonObject) -> Unit) {
-    val items = state.openItems ?: return
-    val start = if (ProjectDoc.status(doc) == "OPEN" && ProjectDoc.started(doc) == false) (items.obj("startRequest") ?: JsonObject(emptyMap())) else null
-    val asked = start?.takeIf { it.isNotEmpty() }
-    val needsYou = items.objects("needsYou")
-    val withCoordinator = items.objects("withCoordinator")
-    // The closing row (iOS main `ProjectDone.pageRow`): the coordinator's request to record it done, or the owner's own.
-    val done = ProjectDone.pageRow(doc, items)
-    if (needsYou.isEmpty() && withCoordinator.isEmpty() && start == null && done == null) return
-    val asking = (if (asked != null) 1 else 0) + if (done is ProjectDone.PageRow.Asked) 1 else 0
-    item(key = "open-items-head") { SectionHead(ProjectPage.openItemsHeading, ProjectPage.openItemsHint(needsYou.size + asking, withCoordinator.size)) }
-    if (needsYou.isNotEmpty() || start != null || done != null) {
-        item(key = "needs-you") { GroupLabel(ProjectPage.needsYouGroup) }
-        if (start != null) item(key = "start-row") {
-            if (asked != null) ItemRow(StartProjectCopy.title, asked.obj("startRequest")?.obj("settings")?.let(StartProjectCopy::requestSummary) ?: asked.text("detailLine").orEmpty(),
-                "${ProjectPage.who(asked)} · ${ProjectPage.waitingLabel(asked, now)}", true, ProjectPage.actionLabel("REVIEW"), enabled, tag = "start-request",
-                press = { review(asked) }, tap = { review(asked) })
-            else Row(Modifier.fillMaxWidth().clickable(enabled = enabled, role = Role.Button, onClick = startOwn).padding(vertical = 8.dp).testTag("project-start-own"),
-                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Box(Modifier.size(8.dp).background(MaterialTheme.colorScheme.outline, CircleShape))
-                Column(Modifier.weight(1f)) {
-                    Text(StartProjectCopy.rowOwn, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
-                    Text(StartProjectCopy.rowNotAsked, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Text("›", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-        when (done) {
-            is ProjectDone.PageRow.Asked -> item(key = "done-request") {
-                ItemRow(ProjectDone.heading, ProjectDone.requestRowDetail(done.row), "${ProjectPage.who(done.row)} · ${ProjectPage.waitingLabel(done.row, now)}", true,
-                    ProjectPage.actionLabel("REVIEW"), enabled, tag = "project-done-request", press = recordDone, tap = recordDone)
-            }
-            ProjectDone.PageRow.Own -> item(key = "done-own") {
-                Row(Modifier.fillMaxWidth().clickable(enabled = enabled, role = Role.Button, onClick = recordDone).padding(vertical = 8.dp).testTag("project-done-own"),
-                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Box(Modifier.size(8.dp).background(MaterialTheme.colorScheme.outline, CircleShape))
-                    Column(Modifier.weight(1f)) {
-                        Text(ProjectDone.recordAsDoneRow, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
-                        Text(ProjectDone.notAskedYet, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    Text("›", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-            null -> Unit
-        }
-        items(needsYou, key = { "item:${it.text("itemId")}" }) { row ->
-            val action = ProjectPage.primaryAction(row)
-            ItemRow(row.text("title").orEmpty(), row.text("detailLine").orEmpty(), "${ProjectPage.who(row)} · ${ProjectPage.waitingLabel(row, now)}", true,
-                action?.let(ProjectPage::actionLabel), enabled, tag = "open-item:${row.text("itemId")}", press = { action?.let { perform(it, row) } }, tap = { perform("REVIEW", row) })
+/** The toolbar's Open items (iOS `openItemsEntry`): the word, and every open item counted — amber while some are the owner's. */
+@Composable
+private fun OpenItemsEntry(summary: ProjectPage.OpenItemsSummary?, unread: Boolean, open: () -> Unit) {
+    val warning = LocalOrbitColors.current.needsYou
+    TextButton(onClick = open, modifier = Modifier.testTag("project-open-items").semantics {
+        contentDescription = ProjectPage.openItemsHeading
+        stateDescription = summary?.subtitle ?: if (unread) ProjectPage.openItemsCantLoad else ProjectPage.openItemsLoading
+    }) {
+        Text(ProjectPage.openItemsHeading, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+        if (summary != null && summary.count > 0) {
+            Spacer(Modifier.width(6.dp))
+            Text("${summary.count}", Modifier.background(if (summary.needsYou > 0) warning else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.15f),
+                RoundedCornerShape(50)).padding(horizontal = 6.dp, vertical = 2.dp).testTag("project-open-items-count"),
+                style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold,
+                color = if (summary.needsYou > 0) Color.White else MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
-    if (withCoordinator.isNotEmpty()) {
-        item(key = "with-coordinator") { GroupLabel(ProjectPage.withCoordinatorGroup) }
-        items(withCoordinator, key = { "coordinator-item:${it.text("itemId")}" }) { row ->
-            val action = ProjectPage.primaryAction(row)
-            ItemRow(row.text("title").orEmpty(), row.text("detailLine").orEmpty(), "${ProjectPage.who(row)} · ${ProjectPage.waitingLabel(row, now)}", false,
-                action?.let(ProjectPage::actionLabel), enabled, tag = "open-item:${row.text("itemId")}", press = { action?.let { perform(it, row) } }, tap = { perform("OPEN_COORDINATOR", row) })
+}
+
+/** On the page, only what needs the owner (iOS `openItemsAttention`): a reminder that opens the sheet — or, with nothing to
+ * remind of, the owner's own Start… on a project nobody asked to start, which stays discoverable. */
+private fun LazyListScope.openItemsAttention(state: ProjectPageState, doc: JsonObject, enabled: Boolean, openSheet: () -> Unit, startOwn: () -> Unit) {
+    val attention = ProjectPage.openItemsSummary(doc, state.openItems)?.attention
+    if (attention != null) item(key = "open-items-attention") {
+        val warning = LocalOrbitColors.current.needsYou
+        Row(Modifier.fillMaxWidth().padding(top = 8.dp).background(warning.copy(alpha = 0.1f), RoundedCornerShape(10.dp))
+            .clickable(role = Role.Button, onClick = openSheet).padding(horizontal = 12.dp, vertical = 12.dp).testTag("open-items-attention"),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Box(Modifier.size(16.dp).border(1.5.dp, warning, CircleShape), contentAlignment = Alignment.Center) {
+                Text("!", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = warning)
+            }
+            Text(attention, Modifier.weight(1f), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, color = warning)
+            Text("›", fontWeight = FontWeight.SemiBold, color = warning)
+        }
+    } else if (StartProjectCopy.pageRow(ProjectDoc.status(doc), ProjectDoc.started(doc), state.openItems) == StartProjectCopy.PageRow.Own) item(key = "start-own") {
+        OwnRow(StartProjectCopy.rowOwn, StartProjectCopy.rowNotAsked, MaterialTheme.colorScheme.primary, enabled, "project-start-own", startOwn)
+    }
+}
+
+/** Open items, over the page (iOS `openItemsSheet`): what needs the owner — the start, the close, the owner's items — then what is
+ * with the coordinator. A first read that failed says so with Retry, rather than spinning or claiming there is nothing. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun OpenItemsSheet(state: ProjectPageState, doc: JsonObject, now: Instant, enabled: Boolean, startOwn: () -> Unit, recordDone: () -> Unit,
+    reviewStart: (JsonObject) -> Unit, perform: (String, JsonObject) -> Unit, retry: () -> Unit, close: () -> Unit) {
+    ModalBottomSheet(onDismissRequest = close, modifier = Modifier.testTag("project-open-items-sheet")) {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 20.dp, end = 12.dp, bottom = 24.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(ProjectPage.openItemsHeading, Modifier.weight(1f), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                IconButton(onClick = close, modifier = Modifier.testTag("project-open-items-close")) {
+                    Icon(painterResource(R.drawable.ic_close), ProjectPage.closeOpenItems, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            val items = state.openItems
+            val summary = ProjectPage.openItemsSummary(doc, items)
+            when {
+                items != null && summary != null -> {
+                    Text(summary.subtitle, Modifier.padding(end = 8.dp).testTag("project-open-items-subtitle"), style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    val start = StartProjectCopy.pageRow(ProjectDoc.status(doc), ProjectDoc.started(doc), items)
+                    val done = ProjectDone.pageRow(doc, items)
+                    val needsYou = ProjectPage.needsYouRows(items)
+                    val withCoordinator = items.objects("withCoordinator")
+                    Column(Modifier.padding(end = 8.dp)) {
+                        if (needsYou.isNotEmpty() || start != null || done != null) {
+                            GroupLabel(ProjectPage.needsYouGroup)
+                            when (start) {
+                                is StartProjectCopy.PageRow.Asked -> AskedRow(StartProjectCopy.title, null,
+                                    start.row.obj("startRequest")?.obj("settings")?.let(StartProjectCopy::requestSummary) ?: start.row.text("detailLine").orEmpty(),
+                                    "${ProjectPage.who(start.row)} · ${ProjectPage.waitingLabel(start.row, now)}", enabled, "start-request") { reviewStart(start.row) }
+                                StartProjectCopy.PageRow.Own -> OwnRow(StartProjectCopy.rowOwn, StartProjectCopy.rowNotAsked, MaterialTheme.colorScheme.primary, enabled,
+                                    "project-start-own", startOwn)
+                                null -> Unit
+                            }
+                            when (done) {
+                                is ProjectDone.PageRow.Asked -> AskedRow(ProjectDone.heading, ProjectDone.readyToClose, ProjectDone.requestRowDetail(done.row),
+                                    "${ProjectPage.who(done.row)} · ${ProjectPage.waitingLabel(done.row, now)}", enabled, "project-done-request", recordDone)
+                                // Nobody asked: a grey hint, dot and title alike, counted with nothing that needs the owner.
+                                ProjectDone.PageRow.Own -> OwnRow(ProjectDone.recordAsDoneRow, ProjectDone.notAskedYet, MaterialTheme.colorScheme.onSurfaceVariant, enabled,
+                                    "project-done-own", recordDone)
+                                null -> Unit
+                            }
+                            needsYou.forEach { row -> OpenItemRow(row, now, enabled, perform) { perform("REVIEW", row) } }
+                        }
+                        if (withCoordinator.isNotEmpty()) {
+                            GroupLabel(ProjectPage.withCoordinatorGroup)
+                            withCoordinator.forEach { row -> OpenItemRow(row, now, enabled, perform) { perform("OPEN_COORDINATOR", row) } }
+                        }
+                        if (summary.count == 0 && start == null && done == null)
+                            Text(ProjectPage.nothingWaiting, Modifier.padding(top = 12.dp).testTag("project-open-items-empty"), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+                state.openItemsUnread -> Column(Modifier.fillMaxWidth().padding(vertical = 24.dp).testTag("project-open-items-failed"),
+                    horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(ProjectPage.openItemsUnread, style = MaterialTheme.typography.titleMedium)
+                    Button(onClick = retry) { Text("Retry") }
+                }
+                else -> CircularProgressIndicator(Modifier.align(Alignment.CenterHorizontally).padding(24.dp))
+            }
         }
     }
 }
 
 @Composable
-private fun GroupLabel(text: String) = Text(text.uppercase(), Modifier.padding(top = 6.dp), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold,
-    color = MaterialTheme.colorScheme.onSurfaceVariant)
+private fun GroupLabel(text: String) = Text(text.uppercase(), Modifier.padding(top = 14.dp, bottom = 2.dp), style = MaterialTheme.typography.labelSmall,
+    fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
+/** A request somebody asked the owner (iOS `startItem`'s asked row and `ProjectDoneRequestRow`): the amber dot over what it asks,
+ * who asked and how long ago, and Review across the row — the whole row opens it too. */
 @Composable
-private fun ItemRow(title: String, detail: String, meta: String, owner: Boolean, action: String?, enabled: Boolean, tag: String, press: () -> Unit, tap: () -> Unit) {
-    Row(Modifier.fillMaxWidth().clickable(enabled = enabled, role = Role.Button, onClick = tap).padding(vertical = 6.dp).testTag(tag),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        Box(Modifier.size(8.dp).background(if (owner) LocalOrbitColors.current.needsYou else MaterialTheme.colorScheme.primary, CircleShape))
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(title, fontWeight = FontWeight.SemiBold, maxLines = 3)
-            if (detail.isNotEmpty()) Text(detail, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 3)
+private fun AskedRow(title: String, flag: String?, detail: String, meta: String, enabled: Boolean, tag: String, review: () -> Unit) {
+    val warning = LocalOrbitColors.current.needsYou
+    Column(Modifier.fillMaxWidth().clickable(enabled = enabled, role = Role.Button, onClick = review).padding(vertical = 10.dp).testTag(tag),
+        verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Box(Modifier.size(8.dp).background(warning, CircleShape))
+            if (flag != null) Text(flag, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold, color = warning)
+            else Text(title, fontWeight = FontWeight.SemiBold)
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            if (flag != null) Text(title, fontWeight = FontWeight.SemiBold)
+            Text(detail, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(meta, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        // iOS's small capsule: a bounded press, so the item's own words keep the row under a large font.
-        action?.let { label -> Button(onClick = press, enabled = enabled, modifier = Modifier.widthIn(max = 150.dp).testTag("$tag:action"),
-            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-            colors = if (owner) ButtonDefaults.buttonColors() else ButtonDefaults.filledTonalButtonColors()) {
-            Text(label, style = MaterialTheme.typography.labelLarge, maxLines = 2, textAlign = TextAlign.Center) } }
+        Button(onClick = review, enabled = enabled, modifier = Modifier.fillMaxWidth().testTag("$tag:action")) { Text(ProjectPage.actionLabel("REVIEW").orEmpty()) }
     }
+    HorizontalDivider()
+}
+
+/** The owner's own press where nobody asked (Start…, Record as done…): a quiet row with a grey dot that opens the card over the page. */
+@Composable
+private fun OwnRow(title: String, note: String, ink: Color, enabled: Boolean, tag: String, press: () -> Unit) {
+    Row(Modifier.fillMaxWidth().clickable(enabled = enabled, role = Role.Button, onClick = press).padding(vertical = 10.dp).testTag(tag),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Box(Modifier.size(8.dp).background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f), CircleShape))
+        Column(Modifier.weight(1f)) {
+            Text(title, color = ink, fontWeight = FontWeight.SemiBold)
+            Text(note, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Text("›", color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+/** One open item (iOS `openItem`): whose it is, the item's own words, how long it has waited, and its first press across the row;
+ * the whole row opens the card it is answered on, in the coordinator conversation. */
+@Composable
+private fun OpenItemRow(row: JsonObject, now: Instant, enabled: Boolean, perform: (String, JsonObject) -> Unit, tap: () -> Unit) {
+    val owner = row.text("assignee") != "COORDINATOR"
+    val action = ProjectPage.primaryAction(row)
+    val tag = "open-item:${row.text("itemId")}"
+    Column(Modifier.fillMaxWidth().clickable(enabled = enabled, role = Role.Button, onClick = tap).padding(vertical = 10.dp).testTag(tag),
+        verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Box(Modifier.size(8.dp).background(if (owner) LocalOrbitColors.current.needsYou else MaterialTheme.colorScheme.primary, CircleShape))
+            Text(ProjectPage.who(row), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(row.text("title").orEmpty(), fontWeight = FontWeight.SemiBold)
+            row.text("detailLine")?.takeIf { it.isNotEmpty() }?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        }
+        Text(ProjectPage.waitingLabel(row, now), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        action?.let { verb -> ProjectPage.actionLabel(verb)?.let { label ->
+            Button(onClick = { perform(verb, row) }, enabled = enabled, modifier = Modifier.fillMaxWidth().testTag("$tag:action")) { Text(label, textAlign = TextAlign.Center) }
+        } }
+    }
+    HorizontalDivider()
 }
 
 private fun LazyListScope.overviewSection(state: ProjectPageState, doc: JsonObject, now: Instant, openTask: (String) -> Unit) {

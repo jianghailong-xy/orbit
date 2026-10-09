@@ -181,6 +181,60 @@ class ProjectPageTest {
         assertNull(ProjectPage.actionLabel("CANCEL_TASK"))
     }
 
+    // The toolbar's Open items and the page's reminder (iOS 39a1aadde; ProjectPageTests, ProjectRunSettingsTests on main).
+    private fun page(status: String = "OPEN", started: Boolean? = true) = buildJsonObject {
+        put("status", status); if (started != null) put("startedAt", if (started) JsonPrimitive(iso(86_400)) else JsonNull)
+    }
+    private fun items(needsYou: List<JsonObject> = emptyList(), withCoordinator: List<JsonObject> = emptyList(), startRequest: JsonObject? = null,
+        doneRequest: JsonObject? = null) = buildJsonObject {
+        put("needsYou", JsonArray(needsYou)); put("withCoordinator", JsonArray(withCoordinator))
+        startRequest?.let { put("startRequest", it) }; doneRequest?.let { put("doneRequest", it) }
+    }
+
+    @Test fun openItemsSummaryKeepsCoordinatorItemsQuietUntilTheServerReassignsThem() {
+        val coordinator = item("INTEGRATION_CHECK_FAILED", "COORDINATOR", 3_600, escalateIn = -60)
+        val quiet = ProjectPage.openItemsSummary(page(), items(withCoordinator = listOf(coordinator)))!!
+        assertEquals(1, quiet.count); assertEquals(0, quiet.needsYou)
+        assertNull("a local countdown reaching zero does not reassign an item", quiet.attention)
+        assertEquals("No action needed from you · 1 with the coordinator", quiet.subtitle)
+        val owner = item("INTEGRATION_CHECK_FAILED", "OWNER", 3_600)
+        val escalated = ProjectPage.openItemsSummary(page(), items(needsYou = listOf(owner)))!!
+        assertEquals(1, escalated.count); assertEquals("1 item needs you", escalated.attention); assertEquals("1 item needs you", escalated.subtitle)
+        val pause = item("FUSE_PAUSED", "OWNER", 60, actions = listOf("RESUME"), fuse = "f1")
+        val mixed = ProjectPage.openItemsSummary(page(), items(needsYou = listOf(owner, pause), withCoordinator = listOf(coordinator)))!!
+        assertEquals(3, mixed.count); assertEquals("2 items need you", mixed.attention); assertEquals("2 items need you · 1 with the coordinator", mixed.subtitle)
+    }
+
+    @Test fun openItemsSummaryDoesNotTurnAnUnreadInboxIntoAnEmptyOne() {
+        assertNull(ProjectPage.openItemsSummary(page(), null))
+        val empty = ProjectPage.openItemsSummary(page(), items())!!
+        assertEquals(0, empty.count); assertNull(empty.attention); assertEquals(ProjectPage.noOpenItems, empty.subtitle)
+    }
+
+    @Test fun openItemsSummaryCountsOnlyAStartRequestThePageCanStillAnswer() {
+        val asked = items(startRequest = buildJsonObject { put("itemId", "s1"); put("kind", "START_REQUEST") })
+        val live = ProjectPage.openItemsSummary(page(started = false), asked)!!
+        assertEquals(1, live.count); assertEquals("1 item needs you", live.attention)
+        val own = ProjectPage.openItemsSummary(page(started = false), items())!!
+        assertEquals("the owner's own Start… is not a pending request", 0, own.count); assertNull(own.attention)
+        assertEquals(StartProjectCopy.PageRow.Own, StartProjectCopy.pageRow("OPEN", false, items()))
+        for (started in listOf(true, null)) assertEquals(0, ProjectPage.openItemsSummary(page(started = started), asked)!!.count)
+        for (status in listOf("DONE", "CANCELLED")) assertEquals(0, ProjectPage.openItemsSummary(page(status, started = false), asked)!!.count)
+        assertNull("a request still on its way is not a project nobody asked about", StartProjectCopy.pageRow("OPEN", false, null))
+    }
+
+    @Test fun openItemsSummaryCountsTheRequestToRecordTheProjectDoneOnce() {
+        val request = buildJsonObject { put("itemId", "d"); put("kind", "DONE_REQUEST"); put("title", ProjectDone.heading); put("waitingSince", iso(240))
+            put("doneRequest", buildJsonObject { put("criteriaDigest", "c"); put("judgment", "j") }) }
+        val asked = ProjectPage.openItemsSummary(page(), items(doneRequest = request))!!
+        assertEquals(1, asked.needsYou); assertEquals("1 item needs you", asked.attention)
+        val twice = ProjectPage.openItemsSummary(page(), items(needsYou = listOf(request), doneRequest = request))!!
+        assertEquals("the request has its own row and is counted once", 1, twice.needsYou)
+        assertEquals(emptyList<JsonObject>(), ProjectPage.needsYouRows(items(needsYou = listOf(request))))
+        assertEquals("the owner's own Record as done… is waiting on nobody", 0, ProjectPage.openItemsSummary(page(), items())!!.needsYou)
+        assertEquals("a project already done is asked nothing", 0, ProjectPage.openItemsSummary(page("DONE"), items(doneRequest = request))!!.needsYou)
+    }
+
     @Test fun integrationFactsOnABranchAndOnMain() {
         val branch = j("""{"line":"PROJECT_BRANCH","ref":"project/bg-jobs","upstreamRef":"main","commitsAheadOfUpstream":7,"lastUpstreamSyncAt":"${iso(720)}",
             "integratingCount":1,"queuedCount":1,"mergeCheckOnTip":"PASSING"}""")

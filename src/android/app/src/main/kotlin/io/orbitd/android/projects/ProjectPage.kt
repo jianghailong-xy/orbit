@@ -230,7 +230,32 @@ object ProjectPage {
     const val openItemsHeading = "Open items"
     const val needsYouGroup = "Needs you"
     const val withCoordinatorGroup = "With the coordinator"
-    fun openItemsHint(needsYou: Int, withCoordinator: Int) = "$needsYou need you · $withCoordinator with the coordinator · oldest first"
+    const val noOpenItems = "No open items"
+    const val noActionNeeded = "No action needed from you"
+    const val nothingWaiting = "Nothing is waiting on you or the coordinator."
+    const val openItemsUnread = "Open items couldn't be loaded"
+    /** What the toolbar's Open items says aloud before its read has answered, or once it has failed. */
+    const val openItemsLoading = "Loading"
+    const val openItemsCantLoad = "Couldn't load open items"
+    const val closeOpenItems = "Close open items"
+    /** The toolbar counts every open item; only the owner's share raises a reminder on the page (`OpenItemsSummary`). */
+    data class OpenItemsSummary(val needsYou: Int, val withCoordinator: Int) {
+        val count get() = needsYou + withCoordinator
+        val attention get() = if (needsYou <= 0) null else if (needsYou == 1) "1 item needs you" else "$needsYou items need you"
+        val subtitle get() = if (count == 0) noOpenItems
+            else (attention ?: noActionNeeded).let { if (withCoordinator > 0) "$it · $withCoordinator with the coordinator" else it }
+    }
+    /** A missing read is not an empty inbox. A start request counts only while the page can answer it, and the coordinator's
+     * request to record the project done while it is OPEN; the owner's own Start… and Record as done… are actions nobody waits on. */
+    fun openItemsSummary(doc: JsonObject, items: JsonObject?): OpenItemsSummary? {
+        if (items == null) return null
+        val asked = StartProjectCopy.pageRow(ProjectDoc.status(doc), ProjectDoc.started(doc), items) is StartProjectCopy.PageRow.Asked
+        val done = ProjectDone.live(items, ProjectDoc.status(doc)) != null
+        return OpenItemsSummary(needsYouRows(items).size + (if (asked) 1 else 0) + (if (done) 1 else 0), items.objects("withCoordinator").size)
+    }
+    /** The owner's rows, without the request to record the project done should a server ever list it there too: it has a row of
+     * its own (`ProjectDone.PageRow`). */
+    fun needsYouRows(items: JsonObject) = items.objects("needsYou").filter { it.obj("doneRequest") == null }
     fun who(row: JsonObject) = if (row.text("assignee") == "COORDINATOR") "Coordinator" else "You"
     fun waitingLabel(row: JsonObject, now: Instant): String {
         val since = row.text("waitingSince")?.let(ProjectTime::parse) ?: now
@@ -723,6 +748,14 @@ object StartProjectCopy {
 
     fun requestSummary(settings: JsonObject) = listOf(rowAsked, RunSettings.lineInSentence(settings.text("line")),
         "${RunSettings.automatic} ${if (settings.flag("automatic")) "on" else "off"}", "at most ${settings.number("maxConcurrentTasks") ?: 1} at a time").joinToString(" · ")
+    /** The start's row in Open items (`StartProject.PageRow`): the coordinator's request, answered on its card, or the owner's own Start…. */
+    sealed interface PageRow { data class Asked(val row: JsonObject) : PageRow; data object Own : PageRow }
+    /** Only an OPEN project nobody has started draws one, and the owner's own Start… only once the open-items read has answered:
+     * a request still on its way is not a project nobody asked about. */
+    fun pageRow(status: String, started: Boolean?, openItems: JsonObject?): PageRow? {
+        if (status != "OPEN" || started != false || openItems == null) return null
+        return openItems.obj("startRequest")?.let { PageRow.Asked(it) } ?: PageRow.Own
+    }
     /** The plan has dependencies when a run is filed or a live edge joins two live marks. */
     fun planHasDependencies(graph: DependencyGraph): Boolean {
         fun status(mark: GraphMark) = if (mark.kind == MarkKind.TASK) mark.status.orEmpty() else when {
