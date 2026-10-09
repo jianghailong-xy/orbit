@@ -88,6 +88,7 @@ import {
   projectStandsStill,
 } from './project-pause-dispatch';
 import { ProjectFuseService } from '../projects/project-fuse.service';
+import { CoordinatorEvidenceQueueService } from '../projects/coordinator-evidence-queue.service';
 import { ProjectOpenItemService } from '../projects/project-open-item.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { QueueService } from '../queue/queue.service';
@@ -2056,6 +2057,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
      * QueueModule is global, so Nest always has one.
      */
     @Optional() queue?: QueueService,
+    /**
+     * Hands an idle coordinator the evidence revisions that waited for it while it was paused, on the
+     * reconcile timer (`onModuleInit`). `@Optional()` and last for the same reason as `queue`.
+     */
+    @Optional() evidenceQueue?: CoordinatorEvidenceQueueService,
   ) {
     this.handoffs = handoffs ?? new ProjectHandoffService(prisma);
     // The account owner's yes to a MOVE_TASK is applied here (`applyMoveApproval`), so the one
@@ -2066,6 +2072,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     this.openItems = openItems;
     this.fuse = fuse;
     this.queue = queue;
+    this.evidenceQueue = evidenceQueue;
   }
 
   private readonly handoffs: ProjectHandoffService;
@@ -2074,6 +2081,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   private readonly openItems?: ProjectOpenItemService;
   private readonly fuse?: ProjectFuseService;
   private readonly queue?: QueueService;
+  private readonly evidenceQueue?: CoordinatorEvidenceQueueService;
 
   /** Build a complete, fetchable row invalidation. A caller that cannot prove completeness uses
    * {@link publishTaskResync}; RealtimeService deliberately treats scalar legacy ids as coarse. */
@@ -2464,6 +2472,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         .then(() => this.pauseProjector?.catchUp())
         .catch((e) =>
           this.logger.error(`pause projection sweep failed: ${e instanceof Error ? e.message : e}`),
+        )
+        // The evidence an idle coordinator was not handed while it was paused, on this timer and not
+        // one of its own, for the reason at the top of this block. A coordinator's own turn ending
+        // hands it over too; that is the latency, and this is the guarantee that one which is back and
+        // has no turn ending is not left with revisions waiting (coordinator-evidence-queue.service.ts).
+        .then(() => this.evidenceQueue?.deliverToIdleCoordinators())
+        .catch((e) =>
+          this.logger.error(`waiting evidence sweep failed: ${e instanceof Error ? e.message : e}`),
         );
     }, RECONCILE_INTERVAL_MS);
     this.reconcileTimer.unref(); // don't keep the process alive just for this timer
