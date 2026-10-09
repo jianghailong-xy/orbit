@@ -22,11 +22,12 @@ conversation, and the lines above it are what is happening now.
 | Android | `android/list-with-recap.png` | `Recap · 5:57 AM Moved the recap onto the session list row; the three states are covered` (muted label, then the recap) · `Recap · Wed, Oct 7, 6:02 AM Shipped the drawer fix and re-ran the web suite.` (another day's) · `Rebased the fixtures; the suite is green.` (no recap, the raw reply) · `Running` (the live row's own state line) |
 | Android | `android/list-with-recaps-off.png` | the same four rows with the switch off: `Committed the row change.` and `Pushed the drawer fix.` back in the recap rows' place, no label anywhere, the live row untouched |
 | Android | `android/settings-session-recaps.png` | Settings → Sessions' **Session recaps** row, its hint under it, the switch on |
-| iOS | `ios/ios-list-with-recap.png` | the phone list: the recap row, the reply-only row, `Running Bash…`, and an older-day recap whose label carries the date |
-| iOS | `ios/ios-list-with-recaps-off.png` | `--recaps-off`: both recapped rows back on their raw replies, no `Recap · ` anywhere |
-| iOS | `ios/ios-settings-session-recaps.png` | Settings → Sessions' switch |
-| macOS | `mac/mac-list-with-recap.png`, `mac/mac-list-with-recaps-off.png`, `mac/mac-settings-session-recaps.png` | the same three, the Mac window |
-| macOS | `mac/mac-window-mac-*.png` | the same window written by the app itself (`-probe.shot`), kept beside the UI test's own shot |
+| iOS | `ios/ios-list-with-recap.png` | `Running Bash…` (blue) · `Recap · 9:56 PM Moved the recap onto the session li…` (muted label, then the recap) · `Pushed the drawer fix.` (no recap) · under **2–7 days ago**, `Recap · Thu, Aug 6, 5:38 PM Tightened the second li…` (the dated label) |
+| iOS | `ios/ios-list-with-recaps-off.png` | `--recaps-off`: `Committed the row change.` and `Adjusted the row spacing.` back in the recap rows' place, no `Recap · ` anywhere, the live row untouched |
+| iOS | `ios/ios-settings-session-recaps.png` | the Settings sheet: **Session recaps** with its hint under it, the switch on, after Suggested replies |
+| macOS | `mac/mac-list-with-recap.png`, `mac/mac-list-with-recaps-off.png` | the same two lists in the Mac window (the summary column), `Select a session` beside them |
+| macOS | `mac/mac-settings-session-recaps.png` | Settings → Session defaults: **Session recaps**, its hint, the switch on |
+| macOS | `mac/mac-window-mac-*.png` | the window written by the app itself (`-probe.shot`), kept beside the UI test's own shot |
 
 Each probe picture has its accessibility tree (`tree-*.txt`), the pass's notes (`*-notes.txt`, every
 claim answered `shown` / `MISSING` / `confirmed` / `NO`), and the stub's request log beside it
@@ -51,8 +52,16 @@ git commit -am "probe: session-recap evidence run" && git push -u origin probe/s
 gh workflow run client.yml --ref probe/session-recap-native -f session_recap_probe=true
 ```
 
-The run's own record — the build logs, `outcomes.txt`, the runner's display geometry and clock, and
-`.done-probe` — is in `ci/` and beside the pictures.
+The run's own record — `run-output.log`, the per-pass `summary-`/`tail-` files, `outcomes.txt`
+(`capture=success`, the run URL, the sha), the runner's display geometry and clock, and `.done-probe`
+(`exit=0`) — is in `ci/` and beside the pictures.
+
+Two things the first dispatch found, both fixed before the run whose pictures are here (it is that
+run's `ci/outcomes.txt` these files carry): the iPhone's Settings launch trapped in
+`EnvironmentValues.subscript.getter` because the probe applied `.environment(model)` to the shell and
+then attached `.settingsSheet(model)` outside it, while the real `RootView` hosts the sheet inside
+the environment scope; and both passes of a platform write one shots directory, so the notes say
+which pass wrote them (`…-on-notes.txt` / `…-off-notes.txt`).
 
 **Android** — `SessionRecapShotsTest` renders the real `DirectoryScreen` and `SettingsScreen` under
 Robolectric (`@GraphicsMode(NATIVE)`) over a stub `OrbitApi`, asserts each row's text, and writes the
@@ -70,13 +79,13 @@ env JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 ANDROID_HOME=/opt/android-sdk \
 | Check | Result |
 |---|---|
 | apiserver unit suite (`npm test -w @orbit/apiserver`) | **5126 pass, 0 fail** — including `users-preferences.http.spec.ts`'s new case: `recaps` is written only when sent, absent stays absent, a malformed value is refused |
-| web suite (`npx vitest run`, `src/web`) | **4968 pass, 0 fail** across 379 files (two unrelated `WorkspaceView.taskRunHandoff` timeouts under a load average of 123 re-run green in isolation: 6/6) |
+| web suite (`npx vitest run`, `src/web`) | **4968 passed, 2 failed — both `WorkspaceView.taskRunHandoff` timing out at 60 s on a box at load average 123, neither about this change.** That file alone is **6/6 green** on a re-run, and the three files this change touches (`WorkspaceView.recapRow`, `WorkspaceView.sessionLine`, `SettingsPage`) are **38/38 green** on a fresh run |
 | root build (`npm run build`) | **exit 0** — shared + apiserver (tsc) + web (tsc + vite) |
 | OrbitKit (`swift test`, swift:6.1 container) | **3595 tests, 0 failures** (5 skipped are the environment-dependent ones) |
 | Android (`:core:test`, `:app:testDebugUnitTest`, `:app:assembleDebug`) | **1078 app unit tests, 0 failures**, `BUILD SUCCESSFUL` — the APK at `src/android/app/build/outputs/apk/debug/app-debug.apk`, the three shots below written by the same run |
-| CI `macos` gate (OrbitKit `swift test` + OrbitApp `swift build`, macos-15) | **success** (run 37995783036) — the first real compile of the Swift view changes (this host has no Xcode), and OrbitKit's suite on the Mac |
-| CI `ios` gate (`xcodegen` + `xcodebuild -destination 'generic/platform=iOS Simulator'`, macos-15) | **success** (same run) |
-| CI probe job (`session-recap-shots`, macos-26) | to fill |
+| CI `macos` gate (OrbitKit `swift test` + OrbitApp `swift build`, macos-15) | **success** — runs [37995783036](https://github.com/jianghailong-xy/orbit/actions/runs/37995783036) and [37997894305](https://github.com/jianghailong-xy/orbit/actions/runs/37997894305); the first real compile of the Swift view changes (this host has no Xcode), plus OrbitKit's suite on the Mac |
+| CI `ios` gate (`xcodegen` + `xcodebuild -destination 'generic/platform=iOS Simulator'`, macos-15) | **success** (both runs) |
+| CI probe job (`session-recap-shots`, macos-26) | **success**, `capture=success`, `exit=0` — run [37997894305](https://github.com/jianghailong-xy/orbit/actions/runs/37997894305), 19m; every assertion in `ios/…-on-notes.txt` / `…-off-notes.txt` and the two Mac notes confirmed (`S1 carries the label and the recap text on one row: yes`, `S1 does NOT show its raw reply beside the label: confirmed`, `S3 is NOT drawn as its recap: confirmed`, `no Recap · label anywhere: confirmed`). `writes.txt` holds only the tests' own `POST /__reset` — the probe presses nothing — and the only 404 is `/api/auth/capabilities` (3×), counted in `not-served.txt` |
 
 ## Limits
 
@@ -94,3 +103,9 @@ env JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 ANDROID_HOME=/opt/android-sdk \
   `SessionLine`'s, which is what Android's *project* rows draw and what the whole Mac/phone list
   draws; it is asserted in `SessionLineTest` (`liveLinesOutrankTheRecap`) and photographed on the
   phone and the Mac.
+- The **web** client honors the same switch (`sessionLine`'s fourth argument, off the same
+  `GET /users/me`) and is covered by tests (`WorkspaceView.recapRow.test.tsx`'s new case,
+  `WorkspaceView.sessionLine.test.tsx`), not by a picture here: the web list's own screenshots are
+  Phase 1's (`docs/evidence/session-recap-web-list/`), taken before this switch existed.
+- Criterion 6's first clause — the **settle push notification** using the recap as its body — is the
+  sibling task `Phase 2：settle 推送通知正文优先使用 recap` (34d0xzNVO80qiSdhrzgL0), not this one.
