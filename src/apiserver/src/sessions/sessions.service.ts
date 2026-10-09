@@ -5,9 +5,11 @@ import {
   ForbiddenException,
   HttpException,
   HttpStatus,
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import {
   type ConversationTurn,
@@ -213,6 +215,13 @@ import {
 } from './transcript-around';
 import { EngineSignedOutConflict, engineSignInAction, signedOutEngineRefusal } from './engine-signin-preflight';
 import { assertManagedFirstSessionRuntime } from '../managed-runners/managed-runner-supply';
+import {
+  MANAGED_RUNNER_DEMAND,
+  NOT_MANAGED,
+  type ManagedDemandSource,
+  type ManagedRunnerDemand,
+  type ManagedRunnerDemandAnswer,
+} from '../managed-runners/managed-runner-demand';
 import { antigravityState, hasGeminiEnvKey } from '../common/antigravity-readiness';
 import { DSH_RUNNER_UPGRADE_ERROR, dshRuntimeUnavailable } from '../runner-api/runner-provider-support';
 import { ACCOUNT_ID_PATTERN } from '../runners/dto';
@@ -675,7 +684,23 @@ export class SessionsService {
     private readonly prisma: PrismaService,
     private readonly queue: QueueService,
     private readonly realtime: RealtimeService,
+    /**
+     * Demand for a managed runner (managed-runners/managed-runner-demand.ts): a session queued or
+     * revived for one wakes it. It answers `managed: false` without reading anything while the
+     * switch is off, and for every self-managed runner; absent in the specs that build this service
+     * by hand, which is the same.
+     */
+    @Optional() @Inject(MANAGED_RUNNER_DEMAND) private readonly managedDemand?: ManagedRunnerDemand,
   ) {}
+
+  /**
+   * Work for `runnerId` has just been recorded — a session or a turn queued — or is about to be, as
+   * a revive asks before the offline gate: a managed runner asleep, draining or waiting for capacity
+   * is asked to wake. Never throws.
+   */
+  private wakeManagedRunner(runnerId: string | null | undefined, source: ManagedDemandSource): Promise<ManagedRunnerDemandAnswer> {
+    return this.managedDemand ? this.managedDemand.requested(runnerId, source) : Promise.resolve(NOT_MANAGED);
+  }
 
   /**
    * Do a write UNDER the right to do it, in one transaction.
@@ -1353,6 +1378,8 @@ export class SessionsService {
     // reach the engine.
     if (attachmentsAlone) await this.seedOpeningTurn(session);
     this.queue.notifySessionQueued();
+    // A task run, a delegation or a message opening a session on a sleeping managed runner wakes it.
+    await this.wakeManagedRunner(session.assignedRunnerId, 'session');
     // Push the new session to the owner's control-plane stream (GET /api/events) so other
     // clients see it appear without polling.
     this.realtime.publishSessionCreated(session.id);
@@ -1544,6 +1571,7 @@ export class SessionsService {
       loggedRetry(this.logger, 'session.import'),
     );
     this.queue.notifySessionQueued();
+    await this.wakeManagedRunner(session.assignedRunnerId, 'session');
     this.realtime.publishSessionCreated(session.id);
     return withSessionState(session);
   }
@@ -5137,6 +5165,7 @@ export class SessionsService {
     // turnComplete, and every one of those decisions is taken from the Session row read under the
     // lock inside the closure. A victim wrote no turn, so a re-run enqueues once — and the delivery
     // notice to the runner is outside the loop, after commit.
+    let turnRunnerId: string | null = null;
     const queued = await withTransactionRetry(this.prisma, async (tx) => {
       // THE RIGHT TO WRITE THIS TURN, first and held to commit. A delivery whose lease was taken
       // over while it was getting here must not enqueue the prompt anyway — the receipt would
@@ -5161,6 +5190,7 @@ export class SessionsService {
         FOR UPDATE`;
       if (locked.length === 0) throw new NotFoundException('session not found');
       const session = await tx.session.findUniqueOrThrow({ where: { id } });
+      turnRunnerId = session.assignedRunnerId;
       // A committed operation owns its key even after its Session later ends or moves to Trash.
       // Check the durable receipt while holding the Session lock before any lifecycle, attachment
       // or budget decision. Hard purge remains a 404 because there is no owner-scoped Session row
@@ -5475,6 +5505,9 @@ export class SessionsService {
     }));
     if (queued.wakeQueue) this.queue.notifySessionQueued();
     if (queued.wakeInbox) this.realtime.notifyInbox(id);
+    // A message, a scheduled wakeup, a watch or a task's prompt that left the session waiting for its
+    // runner wakes a sleeping managed runner. A turn joining a running one needs no wake.
+    if (queued.wakeQueue) await this.wakeManagedRunner(turnRunnerId, 'turn');
     // No transcript event exists until the runner leases this turn. Tell every focused client to
     // refresh the durable queue now, so a message queued on web appears on iOS (and vice versa).
     if (!queued.idempotent) this.realtime.publishQueuedTurnsChanged(id);
@@ -7439,6 +7472,12 @@ export class SessionsService {
     ) {
       throw SessionsService.resumeBlocked(initialCapabilities.resumeBlockedReason);
     }
+    // Before the offline gate below: a managed runner that is asleep, draining, starting or waiting
+    // for capacity is asked to wake, and comes back by itself — so its revive is queued, the way a
+    // message to a parked session waits for its runner, instead of refused as offline.
+    const askedManagedRunner = initialCapabilities.resumeBlockedReason === 'RUNNER_OFFLINE';
+    const managedComingBack = askedManagedRunner
+      && (await this.wakeManagedRunner(session.assignedRunnerId, 'resume')).comingBack;
 
     // Re-check capability and revive under the same Session row lock used by complete/delete.
     // This closes the race where Trash could win after the fast read but before the turn insert.
@@ -7629,7 +7668,7 @@ export class SessionsService {
         throw SessionsService.resumeBlocked(capabilities.resumeBlockedReason);
       }
       if (existing) return { turn: existing, wasCompleted: false, wasRevived: false };
-      if (capabilities.resumeBlockedReason) {
+      if (capabilities.resumeBlockedReason && !(capabilities.resumeBlockedReason === 'RUNNER_OFFLINE' && managedComingBack)) {
         throw SessionsService.resumeBlocked(capabilities.resumeBlockedReason);
       }
       if (
@@ -7820,6 +7859,9 @@ export class SessionsService {
     if (revived.wasCompleted) this.realtime.publishSessionCreated(id);
     else if (revived.wasRevived) this.realtime.publishSessionUpdated(id);
     this.queue.notifySessionQueued();
+    // A revived run waits for its runner like any queued turn: a managed one not asked above — its
+    // heartbeat still looked fresh — is asked now.
+    if (revived.wasRevived && !askedManagedRunner) await this.wakeManagedRunner(session.assignedRunnerId, 'resume');
     return {
       turnId: revived.turn.id,
       seq: revived.turn.seq,

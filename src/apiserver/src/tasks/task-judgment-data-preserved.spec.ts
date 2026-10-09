@@ -2158,7 +2158,16 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // preserved pair, the criterion labels and the receipts a criterion lands on cannot move. The
       // last write is the only one that changes what the predicate sees, so re-applying the file is a
       // no-op.
-      '0411_retire_candidates_landed_by_receipt'],
+      '0411_retire_candidates_landed_by_receipt',
+      // Managed runner capacity, wake and sleep (0413): one new table, `managed_runner_capacity`,
+      // with its unique pool key and three CHECKs (totals and reserved figures never below zero, a
+      // named location); four nullable columns with no default on `managed_runner` (0399's table) and
+      // one nullable JSONB column with no default on `runner` — catalog-only. No existing column,
+      // constraint, index, function, trigger or type is altered or dropped; no `task`, `project` or
+      // `project_acceptance_*` object nor any of the six preserved triggers/functions is named, so
+      // it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE: the manager writes
+      // the pool row on first use, and every stored mapping and runner reads NULL.
+      '0413_managed_runner_capacity'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

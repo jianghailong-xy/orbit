@@ -110,7 +110,7 @@ type codexResetRelay struct {
 	// Steps run under ctx, which outlives the drain: a draining process still finishes and reports a
 	// step it has started. ops is joined before the process image is replaced.
 	ctx  context.Context
-	ops  *sync.WaitGroup
+	ops  opGroup
 	now  func() time.Time
 	wait func(ctx context.Context, d time.Duration) bool
 	// awaiting, when set, hears that a step has begun waiting for its claim to be delivered again. Tests use
@@ -123,7 +123,13 @@ type codexResetRelay struct {
 	delivered map[codexResetClaim]*codexResetDelivery
 }
 
-func newCodexResetRelay(ctx context.Context, t *Transport, execute codexResetExecutor, ops *sync.WaitGroup) *codexResetRelay {
+// opGroup is what the relay joins its started steps with: a WaitGroup, or the run loop's countedOps.
+type opGroup interface {
+	Add(delta int)
+	Done()
+}
+
+func newCodexResetRelay(ctx context.Context, t *Transport, execute codexResetExecutor, ops opGroup) *codexResetRelay {
 	return &codexResetRelay{
 		leaseOwner: t.leaseOwner,
 		send:       t.codexRateLimitResetResult,

@@ -9,6 +9,7 @@ import {
   Headers,
   HttpCode,
   HttpException,
+  Inject,
   Logger,
   NotFoundException,
   Optional,
@@ -372,6 +373,13 @@ import {
 import { providerDispatchWhereOn, providerSlugsOn, sessionExecRuntime } from '../providers/custom-provider';
 import { refuseManagedRunnerDeletion } from '../managed-runners/managed-runner-delete';
 import { reauthorizeManagedRunnerInstance, type ManagedRunnerInstance } from '../managed-runners/managed-runner-instance';
+import { MANAGED_RUNNER_GATE, type ManagedRunnerGate } from '../managed-runners/managed-runner-gate';
+import {
+  managedRunnerHeartbeat,
+  sanitizeManagedWorkload,
+  storedWorkloadFor,
+  type ManagedHeartbeatAnswer,
+} from '../managed-runners/managed-runner-sleep';
 
 // Must stay >= the runner's own loginRelayTimeout (login.go): the runner kills its CLI at that
 // point, so anything still marked in-flight past this window has no process behind it.
@@ -844,6 +852,13 @@ export class RunnerApiController {
      * the operations stay queued, and the space's health line says so.
      */
     @Optional() private readonly wikiRepoOps?: WikiRepoOps,
+    /**
+     * The managed runner switch (managed-runners/managed-runner-gate.ts), for the heartbeat's half of
+     * idle sleep: off — or absent, in the specs that build this controller by hand — a managed
+     * instance's workload is not stored and nothing about sleep is said or recorded. The instance
+     * binding the runner guards enforce does not depend on it.
+     */
+    @Optional() @Inject(MANAGED_RUNNER_GATE) private readonly managedGate?: ManagedRunnerGate,
   ) {}
 
   /** `orbit register` — exchange a one-time enrollment token for a runner credential. */
@@ -1037,8 +1052,16 @@ export class RunnerApiController {
     @Headers(RUNNER_CAPABILITIES_HEADER) capabilities?: string | string[],
     @Headers(RUNNER_PROVIDERS_HEADER) providerHeader?: string,
     @Headers(RUNNER_OS_HEADER) osHeader?: string,
+    /** A managed runner's authorized instance: its workload is stored and its sleep is negotiated here. */
+    @CurrentManagedRunnerInstance() managedInstance?: ManagedRunnerInstance,
   ): Promise<RunnerHeartbeatResponse> {
     const heartbeatLeaseOwner = parseLeaseGeneration(dto?.leaseOwner);
+    // Idle sleep (managed-runners/managed-runner-sleep.ts), only for an authorized managed instance
+    // while the switch is on. Its report is stored as sent, or as NULL when it sends none: a runner
+    // that stops reporting is one nothing may put to sleep. Every other runner's row is left alone.
+    const managedSleepOn = !!managedInstance && this.managedGate?.enabled === true;
+    const managedWorkload = managedSleepOn ? sanitizeManagedWorkload(dto?.managedWorkload) : null;
+    const beatAt = new Date();
     const reportedCapabilities = parseRunnerCapabilities(capabilities);
     const supportsWorktreeOps = runnerSupportsCapability(capabilities, SESSION_WORKTREE_OPS_V1);
     if ((dto?.supervisedSessionIds?.length ?? 0) > 10_000) {
@@ -1070,7 +1093,7 @@ export class RunnerApiController {
       data: {
         status: dto?.status ?? 'ONLINE',
         version: dto?.version ?? runner.version ?? undefined,
-        lastHeartbeatAt: new Date(),
+        lastHeartbeatAt: beatAt,
         // Refresh the `/` autocomplete catalog; older runners omit these (leave as-is).
         // Cast: a typed interface[] isn't structurally an InputJsonValue (no index sig).
         // Stripped (see strip-nul): these are read off the machine's disk — a command or skill
@@ -1128,8 +1151,30 @@ export class RunnerApiController {
           dto?.repos == null
             ? undefined
             : ((sanitizeRunnerRepoHealth(dto.repos) ?? []) as unknown as Prisma.InputJsonValue),
+        ...(managedSleepOn
+          ? {
+            managedWorkload: managedWorkload
+              ? (storedWorkloadFor(managedWorkload, managedInstance!, dto?.draining === true, beatAt) as unknown as Prisma.InputJsonValue)
+              : Prisma.DbNull,
+          }
+          : {}),
       },
     });
+    // Whether this instance's mapping is draining to sleep, and what it is told about it. Advisory
+    // like the relays below: a read that fails hands out this beat's work as usual, and the instance,
+    // busy, then declines the sleep it would have been asked for.
+    let managedBeat: ManagedHeartbeatAnswer = { draining: false };
+    if (managedSleepOn) {
+      try {
+        managedBeat = await managedRunnerHeartbeat(this.prisma, managedInstance!, managedWorkload, beatAt);
+      } catch (error) {
+        this.logger.warn(`runner ${runner.id}: managed sleep state not read this heartbeat (${(error as { code?: string })?.code ?? (error as Error)?.name})`);
+      }
+    }
+    // A process draining by itself, or a managed instance its manager is draining to sleep, is handed
+    // no new heartbeat work: it stays queued for the next instance, or for this one once the drain is
+    // called off.
+    const draining = dto?.draining === true || managedBeat.draining;
     // Latest provider plan-usage snapshot; older runners omit it (leave as-is). Written on its own by
     // compare-and-set, so the Codex reset block in it only moves forwards: a block relayed by another
     // process, an older read, an old process or a late heartbeat never takes a newer one back.
@@ -1159,7 +1204,7 @@ export class RunnerApiController {
         codexRateLimitResetRequest = await dispatchCodexResetCommand(this.prisma, {
           runnerId: runner.id,
           leaseOwner: heartbeatLeaseOwner,
-          draining: dto?.draining === true,
+          draining,
           capabilities: reportedCapabilities,
         });
       }
@@ -1175,7 +1220,7 @@ export class RunnerApiController {
       const claimed = (await this.integrationJobs?.dispatch({
         runnerId: runner.id,
         leaseOwner: heartbeatLeaseOwner,
-        draining: dto?.draining === true,
+        draining,
         capabilities: reportedCapabilities,
       })) ?? [];
       if (claimed.length > 0) integrationJobs = claimed;
@@ -1191,7 +1236,7 @@ export class RunnerApiController {
       const claimed = (await this.wikiRepoOps?.dispatch({
         runnerId: runner.id,
         leaseOwner: heartbeatLeaseOwner,
-        draining: dto?.draining === true,
+        draining,
         capabilities: reportedCapabilities,
       })) ?? [];
       if (claimed.length > 0) wikiRepoOps = claimed;
@@ -1409,7 +1454,7 @@ export class RunnerApiController {
         // longer dispatches git work. Claiming for it would pin the session to an epoch
         // that is about to be replaced, which is what the staleness backstop then has to
         // clean up minutes later — the successor process claims these instead.
-        if (!dto?.draining) {
+        if (!draining) {
           mergeRequests = await this.realtime.drainMergeRequests(runner.id, heartbeatLeaseOwner, runnerSupportsCapability(capabilities, SESSION_MERGE_RECOVERY_V1));
           commitRequests = await this.realtime.drainCommitRequests(runner.id, heartbeatLeaseOwner);
         }
@@ -1482,6 +1527,8 @@ export class RunnerApiController {
       // Present only when this beat claimed something, for the same reason.
       ...(integrationJobs ? { integrationJobs } : {}),
       ...(wikiRepoOps ? { wikiRepoOps } : {}),
+      // Only to the instance being drained to sleep: every other runner's response keeps its shape.
+      ...(managedBeat.sleep ? { managedSleep: managedBeat.sleep } : {}),
     };
   }
 
