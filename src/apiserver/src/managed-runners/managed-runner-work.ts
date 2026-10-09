@@ -13,7 +13,9 @@ import type { PrismaService } from '../prisma/prisma.service';
 /**
  * Record demand on the runner's mapping: the demand counter and time, and RUNNING desired — which
  * is what wakes a sleeping mapping and calls off a drain that has not been acknowledged. One
- * statement by the runner's unique key; a deleted mapping is not woken. Null: not a managed runner.
+ * statement by the runner's unique key; a deleted mapping is not woken, and neither is one whose
+ * owner an administrator disabled — nothing is recorded for it, and its account enabled again, the
+ * work still waiting is found by the sweep. Null: not a managed runner, or not one demand may wake.
  */
 export async function recordManagedDemand(
   prisma: Pick<PrismaService, 'managedRunner'>,
@@ -21,7 +23,7 @@ export async function recordManagedDemand(
   now: Date,
 ): Promise<ManagedRunner | null> {
   const { count } = await prisma.managedRunner.updateMany({
-    where: { runnerId, desiredState: { not: 'DELETED' } },
+    where: { runnerId, desiredState: { not: 'DELETED' }, owner: { disabledAt: null } },
     data: { demandRevision: { increment: 1 }, lastDemandAt: now, desiredState: 'RUNNING' },
   });
   return count === 0 ? null : prisma.managedRunner.findUnique({ where: { runnerId } });
@@ -102,12 +104,15 @@ const WAKING_WORK: readonly ManagedRunnerWork[] = [
 
 /**
  * The sweep: sleeping mappings, not yet asked to wake, whose runner has work waiting. The runners'
- * ids, oldest asleep first; the caller records demand for each.
+ * ids, oldest asleep first; the caller records demand for each. A disabled owner's are not among
+ * them (demand would wake nothing, and they would keep the batch from the rest) until the account is
+ * enabled again.
  */
 export async function sleepingRunnersWithDemand(prisma: Pick<PrismaService, '$queryRaw'>, limit: number): Promise<string[]> {
   const work = workSql(Prisma.raw('m."runner_id"'));
   const rows = await prisma.$queryRaw<Array<{ runnerId: string }>>(Prisma.sql`
     SELECT m."runner_id"::text AS "runnerId" FROM "managed_runner" m
+      JOIN "user" u ON u."id" = m."owner_id" AND u."disabled_at" IS NULL
      WHERE m."management_state" = 'SLEEPING' AND m."desired_state" = 'SLEEPING'
        AND (${Prisma.join(WAKING_WORK.map((kind) => work[kind]), ' OR ')})
      ORDER BY m."state_entered_at" ASC

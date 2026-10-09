@@ -6,7 +6,7 @@ import {
   type ManagedRunnerStatus,
 } from '@orbit/shared';
 
-import { managedRunnerNotEligibleReason } from './managed-runner-eligibility';
+import { managedRunnerAccountDisabledReason, managedRunnerNotEligibleReason } from './managed-runner-eligibility';
 import { managedRunnerDisabledReason } from './managed-runner-gate';
 
 /** How fresh a heartbeat must be to count, when no profile says otherwise: the reaper's threshold. */
@@ -19,6 +19,8 @@ export interface ManagedRunnerStatusInput {
   available: boolean;
   /** ManagedRunnerEligibility's answer for an owner without a mapping. Absent: eligible. */
   eligible?: boolean;
+  /** An administrator disabled the owner's account (asked only while the switch is on). Absent: no. */
+  ownerDisabled?: boolean;
   mapping: ManagedRunner | null;
   runner: { status: RunnerStatus; lastHeartbeatAt: Date | null } | null;
   now: Date;
@@ -47,9 +49,13 @@ function storedReason(value: unknown): ManagedRunnerReason | null {
  */
 export function managedRunnerStatus(input: ManagedRunnerStatusInput): ManagedRunnerStatus {
   const { enabled, available, mapping, runner, now } = input;
-  const operable = enabled && available;
+  // A disabled account's managed runner is operated by nobody: no action is offered, and the account
+  // is the reason given — before any stored cause, which is about the runner, not its owner.
+  const disabled = enabled && input.ownerDisabled === true;
+  const operable = enabled && available && !disabled;
   const actions = { canEnsure: false, canWake: false, canSleep: false, canRetry: false, canDelete: false };
   const switchReason = !enabled ? managedRunnerDisabledReason() : !available ? managedRunnerUnavailableReason() : null;
+  const accountReason = disabled ? managedRunnerAccountDisabledReason() : null;
 
   if (!mapping) {
     const eligible = input.eligible !== false;
@@ -64,7 +70,7 @@ export function managedRunnerStatus(input: ManagedRunnerStatusInput): ManagedRun
       heartbeatStatus: null,
       lastHeartbeatAt: null,
       usable: false,
-      reason: switchReason ?? (eligible ? null : managedRunnerNotEligibleReason()),
+      reason: accountReason ?? switchReason ?? (eligible ? null : managedRunnerNotEligibleReason()),
       retryAfter: null,
       initialProvider: null,
       actions: { ...actions, canEnsure: operable && eligible },
@@ -84,8 +90,8 @@ export function managedRunnerStatus(input: ManagedRunnerStatusInput): ManagedRun
     workspaceId: mapping.defaultWorkspaceId,
     heartbeatStatus: runner?.status ?? null,
     lastHeartbeatAt: beat?.toISOString() ?? null,
-    usable: mapping.managementState === 'READY' && fresh && runner?.status !== 'OFFLINE',
-    reason: !enabled ? switchReason : (reason ?? switchReason),
+    usable: mapping.managementState === 'READY' && fresh && runner?.status !== 'OFFLINE' && !disabled,
+    reason: !enabled ? switchReason : (accountReason ?? reason ?? switchReason),
     retryAfter: mapping.nextAttemptAt && mapping.nextAttemptAt > now ? mapping.nextAttemptAt.toISOString() : null,
     initialProvider: mapping.initialProvider,
     actions: {

@@ -742,6 +742,47 @@ The local evidence is `managed-runner-capacity.pg.spec.ts`, `managed-runner-slee
 `scripts/run-pg-spec.sh <spec>`; the profile and status specs in the unit suite; and
 `src/runner-go/managed_sleep_test.go`.
 
+## Implementation record: disabled accounts
+
+Recorded 2026-10-09 for the code-track disabled-accounts task. It was verified with the in-memory
+Kubernetes namespace of `test-support/fake-kube-client.ts` (admission guard installed), disposable
+PostgreSQL databases, the whole application in-process with the switch on, and the production server
+with the switch absent and `false`. No cluster, kubeconfig, Ceph or model credential was used. Nothing
+here is evidence that a real runner exits when its account is disabled, or of a real Pod deletion or
+detach. It narrows the sign-in record's eligibility row: a disabled account is not eligible.
+
+An administrator disables an account by setting `User.disabledAt` (migration 0396,
+docs/google-sign-in-design.md §5.5); its runner credential is then refused 403 `ACCOUNT_DISABLED` at
+every runner door before any instance is considered (single-writer record above). This record makes
+the managed runner follow the account. The disable itself and that refusal are unchanged.
+
+| Area | As implemented |
+| --- | --- |
+| Manager | Each step reads the owner's `disabledAt` (one key read). A disabled owner's mapping is driven to sleep and never towards READY: no PVC, Secret or Pod is created, and no admission dry run or capacity admission is made. A mapping with an instance — a recorded Pod, or one found under its fixed name — goes DRAINING at once, without the idle interval or an instance report, and that drain is never called off. It ends as an idle sleep ends: the kubelet's report of the stop is recorded as the stop proof, the Pod object is deleted by UID, and once it is gone and the volume detached one transaction retires the generation (credential replaced) and releases compute: SLEEPING, desired SLEEPING. A mapping with no instance (REQUESTED, WAITING_CAPACITY, PROVISIONING, or STARTING before its Pod) goes straight to SLEEPING and gives back the compute it held, in the transaction a FAILED with no Pod uses. A Pod create whose answer was lost keeps the share and the mapping where it is and is not tried again; a Pod it committed late is recorded and drained. A sleeping mapping stays asleep, and a wake desired before the disable is dropped. A disabled owner's FENCING mapping is looked at for its proof whatever it desires, and once proven is put to sleep. FAILED, DELETING and DELETED are left as they are. `dueMappings` lists a disabled owner's mappings first, whatever their retry time. A disable that lands while a step is creating an object is seen by the next step, which drains or releases what was made. The PVC with its storage share, the runner row and the default workspace stay. |
+| Runner's exit | Nothing stops the instance. The runner treats the claim's 403 as a permanent failure: it stops claiming, drains its sessions (whose event posts are refused too) and exits 0, so its Pod ends `Succeeded` with the kubelet's report. An instance that stopped before the manager looked sleeps the same way; an enabled owner's unrequested stop is still FAILED `POD_TERMINATED`. A Pod gone or made terminal without the kubelet's report fences, as anywhere. No runner code changed; a runner test pins the two answers this relies on. |
+| Demand | `recordManagedDemand` matches no row for a disabled owner, so the hook every session path calls (messages, task runs, scheduled wakeups, watch deliveries, revives, auto retry) records nothing and answers `managed: false`. The caller goes on as for a runner that is not coming back: a revive of an offline runner is refused as offline, and an auto retry takes the ordinary offline path with its 30-minute give-up. The sweep passes over disabled owners. |
+| Owner writes | Ensure, retry, wake, sleep and delete answer 403 `ACCOUNT_DISABLED` after the switch check, before the mapping is read or anything written. The owner's row is read afresh: JwtAuthGuard's view of disabled accounts can be 30 seconds old on another replica. |
+| Eligibility | The service asks its rule (`EVERY_ACCOUNT`, unless another is provided under the token) through `enabledAccountsOnly`: a disabled account is not eligible, at sign-in or on ensure, whatever the rule says. |
+| Status | With the switch on, a disabled owner's status reason is `ACCOUNT_DISABLED` (shared code; `ManagedRunnerReason.code` stays an open string), ahead of any stored cause; `usable` is false and no action is offered. The reason is derived, never stored, so an enabled account reads its mapping's own status again. |
+| Enabled again | An ordinary sleeping mapping: demand — the sweep finding work that waited, a message, the owner's wake — admits it and starts its reserved generation on the same PVC, runner row and workspace. A sign-in does not wake it. |
+| Switch off | None of this runs: the hooks return before reading, no manager exists, the status read reads nothing more, and no Kubernetes client is constructed. The runner door's `ACCOUNT_DISABLED` refusal belongs to the account work and holds whatever the switch says. |
+
+Left for the authorized test environment (T06): that a real managed runner of a disabled account exits
+on its own — the refused claim, the drain with its sessions' event posts refused, exit 0 — including a
+runner whose session slots are all busy, and how long that takes; the kubelet's terminal report, the
+Pod deletion by UID, the VolumeAttachment removal and the CSI detach of that stop, with their timing;
+the delay from an administrator's disable to the drain (the disable does not kick the manager, so the
+worker's poll interval bounds it); a re-enabled account's wake on a real cluster with the original
+PVC; and a disabled account's Pod that never started (Pending: unschedulable or image pull), which
+nothing stops — it stays DRAINING with its compute reserved until an operator acts, as a Pod that hit
+`STARTUP_TIMEOUT` stays FAILED.
+
+The local evidence is `managed-runner-account-disabled.pg.spec.ts`, case (8) of
+`managed-runner-wake.pg.spec.ts` and the disabled accounts seeded in
+`managed-runner-existing.pg.spec.ts`, each run with `scripts/run-pg-spec.sh <spec>`;
+`managed-runner-status.spec.ts` and `managed-runner-eligibility.spec.ts` in the unit suite; and
+`TestManagedInstanceStopsOnItsDisabledAccount` in `src/runner-go/managed_instance_test.go`.
+
 ## Implementation record: client status
 
 Recorded 2026-10-09 for the code-track client task. It was verified with the shared state fixture
