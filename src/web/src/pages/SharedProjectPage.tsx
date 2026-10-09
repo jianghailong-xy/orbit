@@ -1,4 +1,3 @@
-import { Empty, List, Tag, Typography } from 'antd';
 import { useEffect, useMemo } from 'react';
 import type { ShareInclude, SharedProject, SharedProjectTaskRow, SharedScope } from '../api';
 import { AppLink } from '../components/AppLink';
@@ -9,6 +8,10 @@ import { ProjectPageBlock } from '../components/ProjectPageBlocks';
 import { ProjectPanoramaCard } from '../components/ProjectPanoramaHeader';
 import { ProjectTasksGraph } from '../components/ProjectTasksGraph';
 import { PublicShell } from '../components/PublicShell';
+import { Badge } from '../components/ui/Badge';
+import { Empty } from '../components/ui/Empty';
+import '../components/ui/List.css';
+import '../components/ui/Typography.css';
 import { encodeId } from '../lib/idCodec';
 import { projectLinkResolver, PublicLinkResolverCtx } from '../lib/publicLinks';
 import { countOf, shortDate } from '../lib/shareLinks';
@@ -22,6 +25,7 @@ import {
   projectTaskWorkStateOf,
   STATUS_COLOR,
   STATUS_LABEL,
+  tagTone,
   TASK_STATUS_COLOR,
   TaskStatusMark,
 } from './ProjectsPage';
@@ -110,34 +114,35 @@ function SharedProjectTaskRow({ task }: { task: ProjectTask }) {
     ? { text: 'Pending landing', color: 'default' }
     : projectTaskIntegrationTag(task, { ref: null, upstreamRef: null });
   return (
-    <List.Item
-      className="project-task-row"
+    <li
+      className="orbit-list-item project-task-row"
       data-work-state={projectTaskWorkStateOf(task)}
       data-integration-state={task.integration?.state}
       style={{ display: 'block', ...(task.integration?.state === 'ON_UPSTREAM' ? { opacity: 0.55 } : {}) }}
     >
       <div className="project-task-row-layout">
         <div className="project-task-row-copy">
-          <List.Item.Meta
-            className="project-task-row-meta"
-            title={
-              <span className="project-task-row-title">
-                <TaskStatusMark status={task.status} />{' '}
-                <AppLink className="share-project-task" to={`/tasks/${encodeId(task.id)}`}>
-                  {task.title}
-                </AppLink>{' '}
-                <Tag color={TASK_STATUS_COLOR[task.status] ?? 'default'}>{task.status}</Tag>
-                {workLabel ? <Tag color={workLabel.color}>{workLabel.text}</Tag> : null}
-                {landing ? <Tag color={landing.color}>{landing.text}</Tag> : null}
-                {task.unmetCount > 0 ? <Tag color="gold">waits {task.unmetCount}</Tag> : null}
-                {task.blocksCount > 0 ? <Tag color="blue">blocks {task.blocksCount}</Tag> : null}
-              </span>
-            }
-          />
+          <div className="orbit-list-item-meta project-task-row-meta">
+            <div className="orbit-list-item-meta-content">
+              <h4 className="orbit-list-item-meta-title">
+                <span className="project-task-row-title">
+                  <TaskStatusMark status={task.status} />{' '}
+                  <AppLink className="share-project-task" to={`/tasks/${encodeId(task.id)}`}>
+                    {task.title}
+                  </AppLink>{' '}
+                  <Badge tone={tagTone(TASK_STATUS_COLOR[task.status] ?? 'default')}>{task.status}</Badge>
+                  {workLabel ? <Badge tone={tagTone(workLabel.color)}>{workLabel.text}</Badge> : null}
+                  {landing ? <Badge tone={tagTone(landing.color)}>{landing.text}</Badge> : null}
+                  {task.unmetCount > 0 ? <Badge tone="gold">waits {task.unmetCount}</Badge> : null}
+                  {task.blocksCount > 0 ? <Badge tone="blue">blocks {task.blocksCount}</Badge> : null}
+                </span>
+              </h4>
+            </div>
+          </div>
         </div>
         <div className="project-task-row-count">{countOf(task.childCount, 'subtask')}</div>
       </div>
-    </List.Item>
+    </li>
   );
 }
 
@@ -178,11 +183,9 @@ export function SharedProjectPage({
       <PublicLinkResolverCtx.Provider value={resolve}>
         <div className="share-project">
           <header className="project-detail-identity" data-project-block="header">
-            <Typography.Title level={2} className="page-title">
-              {project.title}
-            </Typography.Title>
+            <h2 className="page-title orbit-typography">{project.title}</h2>
             <div className="project-detail-meta">
-              <Tag color={STATUS_COLOR[project.status]}>{STATUS_LABEL[project.status]}</Tag>
+              <Badge tone={tagTone(STATUS_COLOR[project.status])}>{STATUS_LABEL[project.status]}</Badge>
               <span>{countOf(project.taskCount, 'task')}</span>
               <span className="share-project-meta is-started">Started {shortDate(project.createdAt)}</span>
               {project.lastActivityAt ? (
@@ -234,13 +237,19 @@ export function SharedProjectPage({
 
           <ProjectPageBlock name="tasks">
             <div className="share-project-tasks">
-              <Typography.Title level={4}>Tasks</Typography.Title>
+              <h4 className="orbit-typography">Tasks</h4>
               {tasks.length > 0 ? (
                 <ProjectTaskGroupsList
                   items={tasks}
                   hasMore={project.tasks.hasMore}
                   renderRows={(rows) => (
-                    <List dataSource={rows} rowKey="id" renderItem={(task) => <SharedProjectTaskRow task={task} />} />
+                    <div className="orbit-list orbit-list-split">
+                      <ul className="orbit-list-items">
+                        {rows.map((task) => (
+                          <SharedProjectTaskRow key={task.id} task={task} />
+                        ))}
+                      </ul>
+                    </div>
                   )}
                 />
               ) : (

@@ -3,7 +3,6 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
-import { App as AntApp } from 'antd';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -136,9 +135,7 @@ async function mount(row: WikiSpaceRow): Promise<void> {
     root.render(
       <QueryClientProvider client={client}>
         <MemoryRouter>
-          <AntApp>
-            <WikiSettingsPage space={row} />
-          </AntApp>
+          <WikiSettingsPage space={row} />
         </MemoryRouter>
       </QueryClientProvider>,
     );
@@ -148,12 +145,26 @@ async function mount(row: WikiSpaceRow): Promise<void> {
 
 const text = (): string => (container.textContent ?? '').replace(/\s+/g, ' ');
 
-function radio(label: string): HTMLInputElement {
+function radio(label: string): HTMLElement {
   const found = [...container.querySelectorAll<HTMLLabelElement>('.wk-mode label')].find((one) =>
     one.textContent?.startsWith(label),
   );
   if (!found) throw new Error(`no ${label} mode`);
-  return found.querySelector('input')!;
+  return found.querySelector<HTMLElement>('[role="radio"]')!;
+}
+
+/** A mouse press as a browser delivers it — pointer and mouse down and up, then the click — which a
+ *  list option needs before it takes a click as a choice rather than a keyboard activation. */
+async function press(element: Element): Promise<void> {
+  await act(async () => {
+    const init = { bubbles: true, cancelable: true, button: 0, buttons: 1, detail: 1 };
+    element.dispatchEvent(new PointerEvent('pointerdown', { ...init, pointerType: 'mouse' }));
+    element.dispatchEvent(new MouseEvent('mousedown', init));
+    element.dispatchEvent(new PointerEvent('pointerup', { ...init, buttons: 0, pointerType: 'mouse' }));
+    element.dispatchEvent(new MouseEvent('mouseup', { ...init, buttons: 0 }));
+    element.dispatchEvent(new MouseEvent('click', { ...init, buttons: 0 }));
+  });
+  await settle();
 }
 
 function button(label: string, scope: ParentNode = document.body): HTMLButtonElement {
@@ -182,8 +193,8 @@ describe('Wiki settings', () => {
 
   it('switches the mode through the owner’s door, and lets only Automatic take spot checks', async () => {
     await mount(space({ reviewMode: 'tiered' }));
-    const spot = container.querySelector<HTMLButtonElement>('button[role="switch"]')!;
-    expect(spot.disabled).toBe(true);
+    const spot = container.querySelector<HTMLElement>('[role="switch"]')!;
+    expect(spot.getAttribute('aria-disabled')).toBe('true');
     await act(async () => radio('Automatic').click());
     await settle();
     expect(patches).toEqual([{ reviewMode: 'automatic' }]);
@@ -191,8 +202,8 @@ describe('Wiki settings', () => {
 
   it('turns Automatic’s spot checks on', async () => {
     await mount(space({ reviewMode: 'automatic', automaticSpotChecks: false }));
-    const spot = container.querySelector<HTMLButtonElement>('button[role="switch"]')!;
-    expect(spot.disabled).toBe(false);
+    const spot = container.querySelector<HTMLElement>('[role="switch"]')!;
+    expect(spot.getAttribute('aria-disabled')).not.toBe('true');
     await act(async () => spot.click());
     await settle();
     expect(patches).toEqual([{ automaticSpotChecks: true }]);
@@ -213,7 +224,7 @@ describe('Wiki settings', () => {
     expect(container.querySelector('.wk-maint-state')?.textContent).toContain('Off');
     await act(async () => button('Set up…', container).click());
     await settle();
-    const dialog = document.querySelector<HTMLElement>('.ant-modal')!;
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
     expect(dialog.textContent).toContain('Set up maintenance');
     const fields = [...dialog.querySelectorAll('.wk-setup-k')].map((node) => node.textContent);
     expect(fields).toEqual(['Workspace', 'Provider', 'Daily limit', 'Look back']);
@@ -234,18 +245,14 @@ describe('Wiki settings', () => {
     const setUp = async (): Promise<HTMLElement> => {
       await act(async () => button('Set up…', container).click());
       await settle();
-      return document.querySelector<HTMLElement>('.ant-modal-wrap:not([style*="display: none"]) .ant-modal')!;
+      return document.querySelector<HTMLElement>('[role="dialog"]')!;
     };
     const pick = async (label: string): Promise<void> => {
-      await act(async () => {
-        document.getElementById('wk-setup-lookback')?.closest('.ant-select')?.querySelector('.ant-select-content')
-          ?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
-      });
+      await act(async () => document.getElementById('wk-setup-lookback')!.click());
       await settle();
-      const options = [...document.body.querySelectorAll<HTMLElement>('.ant-select-item-option')];
+      const options = [...document.body.querySelectorAll<HTMLElement>('[role="listbox"] [role="option"]')];
       expect(options.map((option) => option.textContent)).toEqual(['From now on', 'Last 14 days', 'All history']);
-      await act(async () => options.find((option) => option.textContent === label)!.click());
-      await settle();
+      await press(options.find((option) => option.textContent === label)!);
     };
 
     let dialog = await setUp();
@@ -332,7 +339,7 @@ describe('Wiki settings while the server executes the account’s wiki (mock 35 
     expect(container.querySelector('.wk-privacy')?.textContent).toBe(SERVER.settings.privacy);
     await act(async () => button('Set up…', container).click());
     await settle();
-    const dialog = document.querySelector<HTMLElement>('.ant-modal')!;
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
     expect(dialog.querySelector('.wk-modal-note')?.textContent).toBe(SERVER.settings.maintenanceNote);
     expect([...dialog.querySelectorAll('.wk-setup-k')].map((node) => node.textContent)).toEqual(SERVER.settings.form.fields.map((field) => field.label));
     expect([...dialog.querySelectorAll('.wk-setup-d')].map((node) => node.textContent)).toEqual(SERVER.settings.form.fields.map((field) => field.note));
