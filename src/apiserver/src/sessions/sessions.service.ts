@@ -3013,6 +3013,10 @@ export class SessionsService {
       lastAssistantText: string | null;
       lastToolUse: string | null;
       lastUserText: string | null;
+      // The rolling recap and when it was written (0418): the line the list prefers to the raw
+      // last reply. Both null on a session no pass has recapped yet.
+      recapText: string | null;
+      recapAt: Date | null;
       mergeStatus: string | null;
       sourceState: SourceState;
       sourceRefusalCode: SourceRefusalCode | null;
@@ -3095,6 +3099,10 @@ export class SessionsService {
         left(s.last_assistant_text, ${SessionsService.PREVIEW_LEN}::int) AS "lastAssistantText",
         s.last_tool_use   AS "lastToolUse",
         left(s.last_user_text, ${SessionsService.PREVIEW_LEN}::int) AS "lastUserText",
+        -- The rolling recap (0418), clipped like the previews above. A session with no recap yet
+        -- answers nulls, which is what the row falls back from to lastAssistantText.
+        left(s.recap_text, ${SessionsService.PREVIEW_LEN}::int) AS "recapText",
+        s.recap_at        AS "recapAt",
         s.merge_status    AS "mergeStatus",
         -- The SOURCE snapshot (migration 0231), for the "this run never started" card: which
         -- baseline this run was to start from, and — when a runner refused it — the code, and the
@@ -3263,6 +3271,8 @@ export class SessionsService {
         lastAssistantText: r.lastAssistantText,
         lastToolUse: r.lastToolUse,
         lastUserText: r.lastUserText,
+        recapText: r.recapText,
+        recapAt: r.recapAt,
         mergeStatus: r.mergeStatus,
         // The SOURCE snapshot, passed through as the columns hold it: a row that resolves nothing
         // is `UNBOUND` with nulls, which is the shape a card tests before it draws anything.

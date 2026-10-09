@@ -73,6 +73,17 @@ const CANCEL_MAX_AGE_MS = 60 * 60_000; // stop redelivering a cancel after an ho
  */
 const TURN_PREFIX_MAX_CHARS = 64_000;
 
+/**
+ * How much of a reply preview rides in a summary. The list row clips its own two previews to the
+ * same length in SQL (`SessionsService.PREVIEW_LEN`), and the summary is those same two fields on
+ * the same row: a client folds it in verbatim, so the two have to agree on the text or a row's
+ * preview would change length every time an update landed. Counted in code points, as `left()`
+ * counts them, so a clip never splits a surrogate pair.
+ */
+const PREVIEW_LEN = 200;
+const previewText = (text: string | null | undefined): string | null =>
+  text == null || text.length <= PREVIEW_LEN ? (text ?? null) : [...text].slice(0, PREVIEW_LEN).join('');
+
 /** One session's streamed-but-unpersisted text for the turn in flight. `null` is a kind that blew
  *  past TURN_PREFIX_MAX_CHARS and stays abandoned until the next boundary clears it. */
 type HeldTurnPrefix = { text: string | null; thinking: string | null };
@@ -962,6 +973,13 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         sourceRefusalCode: true,
         sourceRefusalDetail: true,
         lastTurnAt: true,
+        // What the row previews, and the recap the list prefers to it: an already-open list
+        // learns a new reply (or a fresh recap) from this event alone, so a summary that omitted
+        // them would leave every row on screen previewing the turn before the one just finished.
+        lastAssistantText: true,
+        lastUserText: true,
+        recapText: true,
+        recapAt: true,
         // The engine it runs on, and what the old rules derive it from for a row that has none.
         engine: true,
         provider: true,
@@ -1044,6 +1062,13 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       awaitingReplyFrom: peers?.awaitingReplyFrom ?? [],
       owesReplyTo: peers?.owesReplyTo ?? [],
       lastTurnAt: s.lastTurnAt ? s.lastTurnAt.toISOString() : null,
+      // The two previews, clipped the way the list's own query clips them, and the recap beside
+      // them. Null as a value, not "unchanged": a preview the server cleared has to clear on the
+      // row holding this summary, and a recap the session does not have is a null.
+      lastAssistantText: previewText(s.lastAssistantText),
+      lastUserText: previewText(s.lastUserText),
+      recapText: s.recapText ?? null,
+      recapAt: s.recapAt ? s.recapAt.toISOString() : null,
       // Read fresh with the status it qualifies: the same summary has to be able to say both
       // "failed, retrying at 12:04" and, once the retries are spent, "failed, nothing coming".
       retryAt: s.retryAt ? s.retryAt.toISOString() : null,
