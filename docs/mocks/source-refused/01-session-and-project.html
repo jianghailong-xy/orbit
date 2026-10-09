@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="zh">
+<meta charset="utf-8">
+<title>Effect: did not start because its baseline does not exist</title>
+<style>
+  :root {
+    --orange: #FF9500;
+    --blue: #007AFF;
+    --red: #FF3B30;
+    --green: #34C759;
+    --label: #000;
+    --label-2: rgba(60, 60, 67, .6);
+    --label-3: rgba(60, 60, 67, .3);
+    --sep: rgba(60, 60, 67, .16);
+    --surface: #fff;
+    --fill: rgba(120, 120, 128, .12);
+    --fill-2: rgba(120, 120, 128, .08);
+    --glass: rgba(255, 255, 255, .55);
+    --mark: rgba(255, 59, 48, .85);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; width: fit-content; padding: 40px 40px 56px; background: #ececef; color: #16161a;
+    font: 15px/1.55 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Liberation Sans",
+          "Noto Sans CJK SC", "PingFang SC", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1 { font-size: 24px; letter-spacing: -.02em; margin: 0 0 8px; }
+  .lede { color: #55555e; max-width: 1330px; margin: 0 0 26px; }
+  .lede code, figcaption code, .note code, .detail code {
+    font: 12.5px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+    background: rgba(0,0,0,.06); padding: 1px 4px; border-radius: 4px;
+  }
+  .row { display: flex; flex-wrap: wrap; gap: 34px; align-items: flex-start; margin-bottom: 30px; }
+  figure { margin: 0; }
+  figcaption { margin-top: 14px; width: 393px; font-size: 13.5px; line-height: 1.5; color: #55555e; }
+  figcaption b { color: #16161a; display: block; font-size: 14px; margin-bottom: 3px; }
+  figcaption b:not(:first-child) { display: inline; font-size: inherit; margin: 0; }
+  .tag { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 999px;
+         padding: 1px 8px; margin-bottom: 6px; }
+  .tag.now { background: #ffd9d4; color: #8f1d13; }
+  .tag.a { background: #d6e4ff; color: #14428f; }
+  .tag.b { background: #d9f2e0; color: #14532d; }
+  .mark { outline: 1.5px dashed var(--mark); outline-offset: 3px; border-radius: 10px; }
+
+  /* ── phone ───────────────────────────────────────────────── */
+  .phone {
+    width: 393px; background: var(--surface); overflow: hidden; border-radius: 30px;
+    box-shadow: 0 18px 44px rgba(0,0,0,.18), 0 0 0 1px rgba(0,0,0,.07); color: var(--label);
+    display: flex; flex-direction: column;
+  }
+  .status { height: 54px; display: flex; align-items: flex-end; justify-content: space-between;
+            padding: 0 26px 6px; font-size: 15px; font-weight: 600; letter-spacing: .01em; }
+  .status .r { display: flex; align-items: center; gap: 5px; font-weight: 500; font-size: 14px; }
+  .bars { display: flex; align-items: flex-end; gap: 1.5px; height: 10px; }
+  .bars i { width: 3px; background: var(--label); border-radius: 1px; }
+  .batt { display: flex; align-items: center; justify-content: center; width: 24px; height: 12px;
+          border: 1.5px solid var(--label-3); border-radius: 4px; font-size: 9px; font-weight: 700;
+          position: relative; }
+  .batt::after { content: ""; position: absolute; right: -3.5px; width: 2px; height: 4px;
+                 background: var(--label-3); border-radius: 0 1px 1px 0; }
+  .ico { width: 19px; height: 19px; fill: none; stroke: var(--label); stroke-width: 1.9;
+         stroke-linecap: round; stroke-linejoin: round; }
+  .nav { padding: 2px 14px 10px; display: flex; align-items: center; gap: 10px; }
+  .platter { display: flex; align-items: center; justify-content: center; height: 40px;
+             background: var(--glass); border-radius: 999px;
+             box-shadow: 0 1px 3px rgba(0,0,0,.06), inset 0 0 0 .5px rgba(0,0,0,.04); }
+  .platter.circle { width: 40px; }
+  .nav .titles { flex: 1; text-align: center; line-height: 1.15; min-width: 0; }
+  .nav .t { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden;
+            text-overflow: ellipsis; }
+  .nav .s { font-size: 11.5px; color: var(--label-2); white-space: nowrap; overflow: hidden;
+            text-overflow: ellipsis; }
+  .badge { background: var(--fill); border-radius: 6px; padding: 2px 6px; font-size: 11px;
+           color: var(--label-2); margin-left: 4px; vertical-align: 1px; }
+  .chiprun { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 600;
+             border-radius: 999px; padding: 1px 8px; margin-right: 5px; }
+  .chiprun.starting { background: rgba(0,122,255,.12); color: #0a58ca; }
+  .chiprun.refused { background: rgba(255,59,48,.12); color: #b3261e; }
+  .spinner { width: 9px; height: 9px; border-radius: 50%; border: 1.6px solid rgba(0,122,255,.45);
+             border-top-color: transparent; }
+
+  .thread { flex: 1; padding: 10px 14px 0; display: flex; flex-direction: column;
+            min-height: 0; overflow: hidden; }
+  .ask { font-size: 13px; color: var(--label-2); padding-bottom: 9px; margin-bottom: 12px;
+         border-bottom: 1px solid var(--sep); }
+  .ask b { color: var(--label); font-weight: 600; }
+  .prose { font-size: 13.5px; line-height: 1.5; margin-bottom: 10px; }
+
+  /* the waiting notice (StartingView), today's shape */
+  .waiting { border: 1px solid var(--sep); border-radius: 14px; padding: 13px 14px;
+             margin-bottom: 12px; background: var(--fill-2); }
+  .waiting .top { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .waiting .lbl { font-size: 13.5px; font-weight: 700; color: #0a58ca; }
+  .waiting .el { font-size: 12.5px; color: var(--label-2); margin-left: auto;
+                 font-variant-numeric: tabular-nums; }
+  .waiting .ttl { font-size: 14px; font-weight: 600; margin-bottom: 3px; }
+  .waiting .desc { font-size: 12.5px; line-height: 1.45; color: var(--label-2); }
+
+  /* the refusal card (proposed) */
+  .card { padding: 13px; border-radius: 14px; background: rgba(255,59,48,.05);
+          border: 1px solid rgba(255,59,48,.28); margin-bottom: 10px; }
+  .card.amber { background: rgba(255,149,0,.07); border-color: rgba(255,149,0,.30); }
+  .card .head { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
+  .card .icon { width: 22px; height: 22px; border-radius: 6px; display: grid; place-items: center;
+                font-size: 12px; background: rgba(255,59,48,.14); color: #b3261e; flex: none; }
+  .card.amber .icon { background: rgba(255,149,0,.16); color: #b26a00; }
+  .card .title { font-size: 15px; font-weight: 700; flex: 1; white-space: nowrap; overflow: hidden;
+                 text-overflow: ellipsis; }
+  .prov { font-size: 12px; color: var(--label-2); margin-bottom: 7px; letter-spacing: .04em; }
+  .why { font-size: 13.5px; font-weight: 600; line-height: 1.45; }
+  .subject { font-size: 13px; line-height: 1.45; color: var(--label-2); margin-top: 3px; }
+  .detail { font-size: 12px; line-height: 1.5; color: var(--label-2); margin-top: 8px;
+            border-top: 1px solid var(--sep); padding-top: 8px; }
+  .detail .mono { font: 11.5px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+                  word-break: break-all; }
+  .next { font-size: 12.5px; line-height: 1.5; margin-top: 8px; }
+  .btn { min-height: 42px; border-radius: 22px; display: flex; align-items: center;
+         justify-content: center; font-size: 15.5px; margin-top: 10px; }
+  .btn.primary { background: var(--blue); color: #fff; }
+  .btn.tinted { background: var(--fill); color: var(--blue); }
+  .card .foot { font-size: 12px; color: var(--label-2); margin-top: 9px; }
+
+  .tail { padding: 8px 14px 22px; }
+  .composer { display: flex; align-items: center; gap: 10px; padding: 9px 12px;
+              border: 1px solid var(--sep); border-radius: 22px; color: var(--label-3); font-size: 15px; }
+  .composer .send { margin-left: auto; width: 30px; height: 30px; border-radius: 9px;
+                    background: var(--blue); color: #fff; display: grid; place-items: center; font-size: 13px; }
+
+  /* project page piece */
+  .ptitle { padding: 0 16px 2px; font-size: 28px; font-weight: 700; letter-spacing: -.4px; }
+  .psub { padding: 0 16px 12px; display: flex; align-items: center; gap: 8px; font-size: 13.5px;
+          color: var(--label-2); }
+  .pill { font-size: 12.5px; font-weight: 600; color: var(--blue); background: rgba(0,122,255,.12);
+          border-radius: 999px; padding: 2px 9px; }
+  .srow { padding: 9px 16px 10px; border-top: 1px solid var(--sep); display: flex; align-items: center;
+          gap: 8px; font-size: 13.5px; }
+  .srow .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--red); flex: none; }
+  .srow .ttl { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .srow .st { flex: none; font-size: 12.5px; color: var(--label-2); }
+  .note { max-width: 1330px; font-size: 13.5px; line-height: 1.65; color: #55555e; margin-top: 8px; }
+  .note b { color: #16161a; }
+</style>
+
+<h1>「开工被拒」应当看得见：会话页说清为什么没跑，项目页说清缺的是什么</h1>
+<p class="lede">
+  24 小时里的真实一例（项目 <code>34bZ3i4AvgJaaoaw5E9tH</code>，会话 <code>2PLgNAQaH00wZ56CN8J03M</code>）：
+  两个 07:45 派发的任务共用一条前置「把 OpenCode 加进 InstallEngine」，它 07:45:28 落地在 main 上，
+  于是派发按 <b>P4 依赖闭包</b>把起跑基线钉到项目的集成线 <code>refs/heads/project/…</code>；
+  而这条线<b>从未被创建</b>（项目三次落地作业全部 CHECK_FAILED，工作其实都并进了 main），
+  runner 的 <code>git fetch</code> 拿到 <code>fatal: couldn't find remote ref</code>，
+  会话停在 <code>sourceState=REFUSED</code> 空转 —— 而<b>两个客户端都不读这一列</b>，
+  于是你看到的是一句永远不变的 <b>Starting</b>。三格：今天 / 我建议的会话页 / 我建议的项目页。
+</p>
+
+<div class="row">
+
+  <!-- ① now -->
+  <figure>
+    <span class="tag now">① 现在</span>
+    <div class="phone" style="height:690px">
+      <div class="status"><span>16:22</span>
+        <span class="r"><span class="bars"><i style="height:4px"></i><i style="height:6px"></i>
+          <i style="height:8px"></i><i style="height:10px"></i></span><span>5G</span><span class="batt">31</span></span>
+      </div>
+      <div class="nav">
+        <span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></span>
+        <span class="titles"><span class="t">执行任务：两端引擎牌常驻 Open…</span>
+          <span class="s"><span class="chiprun starting"><span class="spinner"></span>Starting</span>Task · Open · 37m</span></span>
+        <span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M12 16V4M8 8l4-4 4 4M5 20h14"/></svg></span>
+      </div>
+      <div class="thread">
+        <div class="ask"><b>↑ Your message</b>　请开始执行任务「两端引擎牌常驻 OpenCode 行…」</div>
+        <div class="waiting">
+          <div class="top"><span class="spinner"></span><span class="lbl">Starting…</span><span class="el">37m 12s</span></div>
+          <div class="ttl">Getting the session ready</div>
+          <div class="desc">The runner has this session, but the engine has not started your message yet.
+            Usually seconds — a long conversation can take several minutes to get going.</div>
+        </div>
+        <div class="prose" style="color:var(--label-2)">（下面什么都没有：没有引擎起过，没有事件、没有回合。）</div>
+      </div>
+      <div class="tail"><div class="composer">＋ Message…<span class="send">↑</span></div></div>
+    </div>
+    <figcaption><b>① 今天：一句不会变的 Starting</b>
+      拒绝在 07:45:43 就落库了（<code>session.source_refusal_code='BASE_REF_NOT_FOUND'</code>，
+      任务行也记了 <code>dispatch_refusal</code> + 一条评论），但会话页只看到
+      <code>sessionIsStarting()</code> 为真（<code>runnerSlots.ts:157</code>）—— 它读的是「运行中但引擎还没说话」，
+      而这里引擎永远不会说话。<code>STARTING_DESCRIPTION</code> 那句「Usually seconds」在这类等待里是错的：
+      它既不会短，也不会变。
+      <br><br><b>web 与 macOS/iOS 都一样</b>：两份客户端 grep 不到 <code>sourceState</code>/<code>sourceRefusalCode</code>，
+      没有任何一处画它。</figcaption>
+  </figure>
+
+  <!-- ② after: session page -->
+  <figure>
+    <span class="tag a">② 我建议 · 会话页</span>
+    <div class="phone" style="height:690px">
+      <div class="status"><span>16:22</span>
+        <span class="r"><span class="bars"><i style="height:4px"></i><i style="height:6px"></i>
+          <i style="height:8px"></i><i style="height:10px"></i></span><span>5G</span><span class="batt">31</span></span>
+      </div>
+      <div class="nav">
+        <span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></span>
+        <span class="titles"><span class="t">执行任务：两端引擎牌常驻 Open…</span>
+          <span class="s"><span class="chiprun refused">✕ Refused</span>Task · Ended · 37m ago</span></span>
+        <span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M12 16V4M8 8l4-4 4 4M5 20h14"/></svg></span>
+      </div>
+      <div class="thread">
+        <div class="ask"><b>↑ Your message</b>　请开始执行任务「两端引擎牌常驻 OpenCode 行…」</div>
+        <div class="card mark">
+          <div class="head">
+            <div class="icon">⚠</div>
+            <div class="title">This run never started</div>
+          </div>
+          <div class="prov">FROM ORBIT</div>
+          <div class="why">Its baseline is a branch that doesn’t exist yet — this project’s integration line
+            has not been created.</div>
+          <div class="subject"><code>BASE_REF_NOT_FOUND</code> · refs/heads/project/34bZ3i4AvgJaaoaw5E9tH</div>
+          <div class="detail">
+            <span class="mono">git: fatal: couldn't find remote ref refs/heads/project/34bZ3i4AvgJaaoaw5E9tH</span>
+          </div>
+          <div class="next">Create the branch (the first landing on the line creates it) or point the project’s
+            integration line at one that exists. Starting again before that returns the same refusal.</div>
+          <div class="btn primary">Start it again</div>
+          <div class="btn tinted">Chat about this</div>
+          <div class="foot">Ended · no engine ran · 0 turns</div>
+        </div>
+      </div>
+      <div class="tail"><div class="composer">＋ Message…<span class="send">↑</span></div></div>
+    </div>
+    <figcaption><b>② 会话页：把拒绝画成一张卡，运行也是收过尾的</b>
+      两件事一起做：<b>(a)</b> 客户端读 <code>sourceState=REFUSED</code> + <code>sourceRefusalCode</code> +
+      <code>sourceRefusalDetail</code>（码、ref、git 原话、<code>fixAction</code> 都在库里，一个字不用新造），
+      按 <code>fixAction</code> 的封闭集合出下一步（FIX_REF 这档的句子今天已经写在
+      <code>task-dispatch-refusal.ts:220</code> 的任务评论里，两边共用一句）；
+      <b>(b)</b> 控制面在拒绝赢下 CAS 的<b>同一个事务</b>里把这次运行收尾（FAILED + error，释放执行权），
+      标题栏因此是 <code>Refused/Ended</code> 而不是 Starting，列表行同理。
+      「Start it again」= 新建一次运行（SR34 的恢复路径，不是重新解析这一条）。</figcaption>
+  </figure>
+
+  <!-- ③ after: project page -->
+  <figure>
+    <span class="tag b">③ 我建议 · 项目页</span>
+    <div class="phone" style="height:690px">
+      <div class="status"><span>16:22</span>
+        <span class="r"><span class="bars"><i style="height:4px"></i><i style="height:6px"></i>
+          <i style="height:8px"></i><i style="height:10px"></i></span><span>5G</span><span class="batt">31</span></span>
+      </div>
+      <div class="nav">
+        <span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></span>
+        <span class="titles"><span class="t">OpenCode 接进安装通道…</span>
+          <span class="s">Project · Open · 2 tasks blocked</span></span>
+        <span class="platter circle"><svg class="ico" viewBox="0 0 24 24"><path d="M12 16V4M8 8l4-4 4 4M5 20h14"/></svg></span>
+      </div>
+      <div class="ptitle">OpenCode 接进安装通道</div>
+      <div class="psub"><span class="pill">Open</span><span>7 tasks · 1 done</span></div>
+      <div class="thread" style="padding-top:2px">
+        <div class="card amber mark">
+          <div class="head">
+            <div class="icon">⚠</div>
+            <div class="title">Integration line not created</div>
+          </div>
+          <div class="prov">FROM ORBIT</div>
+          <div class="why">Runs pinned to this project’s line are refused: the branch doesn’t exist, and no
+            landing has recorded it.</div>
+          <div class="subject"><code>SOURCE_UNRESOLVED</code> · refs/heads/project/34bZ3i4AvgJaaoaw5E9tH</div>
+          <div class="detail">2 starts refused at 07:45 · first landing still pending · the last three
+            landing jobs ended CHECK_FAILED</div>
+          <div class="btn primary">Open the project’s line settings</div>
+          <div class="btn tinted">Chat about this</div>
+          <div class="foot">Owner: you · coordinator is off — this stays with you</div>
+        </div>
+        <div class="srow"><span class="dot"></span><span class="ttl">web Providers 页给 OpenCode 一行：未装可 Install，装了指路</span><span class="st">Refused</span></div>
+        <div class="srow"><span class="dot"></span><span class="ttl">两端引擎牌常驻 OpenCode 行：未装只写原因，不再假装能 sign in</span><span class="st">Refused</span></div>
+        <div class="srow"><span class="dot" style="background:var(--label-3)"></span><span class="ttl">iOS/macOS 修复跳转：不可用引擎行落到 web Providers 深链</span><span class="st">Blocked</span></div>
+      </div>
+    </div>
+    <figcaption><b>③ 项目页：把「这条线不存在」变成项目层的异常</b>
+      契约 §10.3 / SR50 早就把 <code>project_blocker.kind='SOURCE_UNRESOLVED'</code> 设计好、
+      迁移 0231 也已经把它加进封闭集合 —— <b>至今没有一个地方写它</b>（文档两处实现记都点名了）。
+      把它接上：拒绝发生时落一条 blocker，项目页就有一张卡说清楚缺什么、影响哪几个任务。
+      这一步同时回答「为什么没人告诉我」：本项目的协调开关是关的，
+      TASK_DISPATCH_REFUSED 那条唤醒根本投不出去，而异常卡不依赖它。</figcaption>
+  </figure>
+</div>
+
+<p class="note">
+  <b>根因那一半（①，不在这张图上）：P4 的基线没有 P5 的护栏。</b>
+  <code>source-selector.ts:247</code> 的 P4 直接钉 <code>codebase.integrationRef</code>；
+  只有 P5（<code>:269</code>）有 <code>integrationLineHasLanding ? integrationRef : upstreamRef</code> 的两种写法。
+  契约 §4.1 的 v1.1 说明（<code>project-source-contract.md:199</code>）已经把这个道理讲全：
+  <i>项目分支要等第一条落地回执才被创建，在那之前它与 upstream 逐字节是同一棵树</i> ——
+  P4 与 P5 读的是同一条线（D5 说二者结构互斥，不是两条），这句话对 P4 同样成立。
+  所以修法是：<b>P4 在 <code>integrationLineHasLanding === false</code> 时取 <code>upstreamRef</code> 的 tip</b>，
+  <code>requiredContains</code> 不变（本例里前置的 <code>decda058</code> 就在 main 上，取 main 完全满足）。
+  这是契约变更（§4.1 的 P4 行 + v1.2 记录 + <code>source-selector.spec.ts</code> 的负向用例），按 SR17 先改文档再改代码。
+  <br><br>
+  <b>这次要不是 09-24 那个补丁，连诊断都做不了</b>：那天把拒绝记到了任务上（<code>dispatch_refusal</code> + 评论 +
+  唤醒事实），只是停在半路 —— 会话没被收尾、客户端没画、<code>SOURCE_UNRESOLVED</code> 没有写入方。
+  同一天的事故（项目 <code>34TsjwkAMVVkeEUwi2IAJ</code>）与今天是同一个形状。
+</p>
+
+<script>
+  // 与仓库里其余效果图同款的尺寸自报：渲染脚本先读 title 里的 SIZE，再按这个尺寸 2x 截图。
+  addEventListener('load', function () {
+    var r = document.body.getBoundingClientRect();
+    document.title = 'SIZE ' + Math.ceil(r.width) + 'x' + Math.ceil(r.height);
+  });
+</script>
+</html>

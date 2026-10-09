@@ -145,6 +145,19 @@ const click = async (el: HTMLElement) => {
   });
   await settle();
 };
+/** A mouse press as a browser delivers it — pointer and mouse down and up, then the click — which a
+ *  list option needs before it takes a click as a choice rather than a keyboard activation. */
+const press = async (el: HTMLElement) => {
+  await act(async () => {
+    const init = { bubbles: true, cancelable: true, button: 0, buttons: 1, detail: 1 };
+    el.dispatchEvent(new PointerEvent('pointerdown', { ...init, pointerType: 'mouse' }));
+    el.dispatchEvent(new MouseEvent('mousedown', init));
+    el.dispatchEvent(new PointerEvent('pointerup', { ...init, buttons: 0, pointerType: 'mouse' }));
+    el.dispatchEvent(new MouseEvent('mouseup', { ...init, buttons: 0 }));
+    el.dispatchEvent(new MouseEvent('click', { ...init, buttons: 0 }));
+  });
+  await settle();
+};
 
 async function openAdvanced() {
   await settle();
@@ -157,30 +170,30 @@ const field = () =>
     (el) => el.querySelector('.rd-form-label')?.textContent === 'Antigravity account',
   );
 
+/** The account picker, as its role names it. */
+const picker = () => field()?.querySelector<HTMLElement>('[role="combobox"]');
+
 /** Open the account dropdown and read its options: each account's name, then its own line. */
 async function options() {
-  await act(async () => {
-    field()!.querySelector('.ant-select-content')!.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+  await click(picker()!);
+  return [...document.body.querySelectorAll<HTMLElement>('[role="listbox"] [role="option"]')].map((o) => {
+    const status = o.querySelector('.rd-codex-account-status');
+    return { el: o, text: [status?.previousElementSibling?.textContent, status?.textContent] };
   });
-  await settle();
-  return [...document.body.querySelectorAll<HTMLElement>('.ant-select-item-option')].map((o) => ({
-    el: o,
-    text: [...o.querySelectorAll('.ant-select-item-option-content > div > div')].map((d) => d.textContent),
-  }));
 }
 
 describe('which Antigravity account a workspace runs on', () => {
   it('offers each Google account with what is left of its emptiest bucket, and saves the id picked', async () => {
     const { patches } = mount(runner(antigravity([DEFAULT, WORK])), workspace(null));
     await openAdvanced();
-    expect(field()?.querySelector('.ant-select')?.textContent).toContain('Automatic');
+    expect(picker()?.textContent).toContain('Automatic');
     const offered = await options();
     expect(offered.map((o) => o.text)).toEqual([
       ['Automatic', 'each new session starts on the account whose quota resets soonest'],
       ['Default (~/.orbit/antigravity/google)', 'gemini-weekly 72% left · signed in'],
       ['Work', 'gemini-5h 4% left · signed in'],
     ]);
-    await click(offered[2].el);
+    await press(offered[2].el);
     await click(byText('button', 'Save'));
     expect(patches).toHaveLength(1);
     expect(patches[0].antigravityAccount).toBe(WORK.id);

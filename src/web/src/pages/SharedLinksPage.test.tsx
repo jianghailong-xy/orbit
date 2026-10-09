@@ -189,6 +189,12 @@ afterEach(async () => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
 });
 
+/** The Share dialog's name, as assistive technology reads it. */
+const shareDialogName = (): string | undefined => {
+  const dialog = document.body.querySelector('[role="dialog"].share-dialog');
+  return document.getElementById(dialog?.getAttribute('aria-labelledby') ?? '')?.textContent ?? undefined;
+};
+
 describe('Settings → Shared links', { timeout: 60_000 }, () => {
   it('files every link under Active, Paused or Ended, with each tab counting its own', async () => {
     serve(LINKS);
@@ -272,9 +278,9 @@ describe('Settings → Shared links', { timeout: 60_000 }, () => {
     );
     await click([...row!.querySelectorAll('.ant-btn')].find((b) => b.textContent?.trim() === 'Settings'), 'Settings');
 
-    await vi.waitFor(() => expect(document.body.querySelector('.ant-modal.share-dialog')).not.toBeNull());
+    await vi.waitFor(() => expect(document.body.querySelector('[role="dialog"].share-dialog')).not.toBeNull());
     expect(getShareLink).toHaveBeenCalledWith('TASK', TASK.root.id);
-    expect(document.body.querySelector('.ant-modal.share-dialog .ant-modal-title')?.textContent).toBe('Share task');
+    expect(shareDialogName()).toBe('Share task');
   });
 
   it('a project row has Copy, Settings and Turn off, and its Settings opens the Share dialog on that project', async () => {
@@ -298,9 +304,9 @@ describe('Settings → Shared links', { timeout: 60_000 }, () => {
     );
     await click([...project!.querySelectorAll('.ant-btn')].find((b) => b.textContent?.trim() === 'Settings'), 'Settings');
 
-    await vi.waitFor(() => expect(document.body.querySelector('.ant-modal.share-dialog')).not.toBeNull());
+    await vi.waitFor(() => expect(document.body.querySelector('[role="dialog"].share-dialog')).not.toBeNull());
     expect(getShareLink).toHaveBeenCalledWith('PROJECT', 'P1');
-    expect(document.body.querySelector('.ant-modal.share-dialog .ant-modal-title')?.textContent).toBe('Share project');
+    expect(shareDialogName()).toBe('Share project');
   });
 
   it('Settings opens the Share dialog on that link’s session', async () => {
@@ -314,9 +320,9 @@ describe('Settings → Shared links', { timeout: 60_000 }, () => {
     const settings = [...recent!.querySelectorAll('.ant-btn')].find((b) => b.textContent?.trim() === 'Settings');
     await click(settings, 'Settings');
 
-    await vi.waitFor(() => expect(document.body.querySelector('.ant-modal.share-dialog')).not.toBeNull());
+    await vi.waitFor(() => expect(document.body.querySelector('[role="dialog"].share-dialog')).not.toBeNull());
     expect(getShareLink).toHaveBeenCalledWith('SESSION', RECENT.root.id);
-    expect(document.body.querySelector('.ant-modal.share-dialog .ant-modal-title')?.textContent).toBe('Share session');
+    expect(shareDialogName()).toBe('Share session');
   });
 
   it('a row’s Turn off asks first, then turns off that one link', async () => {

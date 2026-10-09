@@ -1,0 +1,13 @@
+{
+ "command": "unshare -n bash -c 'ip link set lo up && NO_COLOR=1 nice -n -10 node node_modules/@playwright/test/cli.js test --config docs/evidence/base-ui-migration/p2-keyboard-window/keyboard-window.config.mjs --project chromium-dark-desktop --grep '\"'\"' select-down-space-from-null '\"'\"''",
+ "cwd": "/var/tmp/p2kw-c2604b/after2",
+ "runner": "run-chunks.py (inside one mcp__orbit__bg_run job)",
+ "commit": "0d0bd2c8a3657a97632cb0b657790b029df3c5eb",
+ "webTree": "df7414507c6ffa7fa51b7cd6e3e2b8f70e13e816",
+ "startedAt": "2026-10-07T06:19:24.634927+00:00",
+ "endedAt": "2026-10-07T06:20:50.290877+00:00",
+ "exitCode": 0,
+ "outputSha256": "d023de450a52c02cce95cc8a0fdec1b4537e53b64a04a1915dc975b08cee515d",
+ "outputBytes": 7988,
+ "archive": "{\"destination\":\"/root/.orbit/worktrees/8a4a92fa-ce2f-5986-9131-9119c512dfc6/docs/evidence/base-ui-migration/p2-keyboard-window/fix-select-after-down-space-from-null\",\"stats\":{\"startTime\":\"2026-10-07T06:19:25.008Z\",\"duration\":85137.68699999999,\"expected\":40,\"skipped\":0,\"unexpected\":0,\"flaky\":0},\"artifacts\":40}"
+}

@@ -122,6 +122,38 @@ Primary implementation references:
 [serialization 1.9.0 / Kotlin 2.2](https://github.com/Kotlin/kotlinx.serialization/releases/tag/v1.9.0),
 [coroutines 1.10.2](https://github.com/Kotlin/kotlinx.coroutines/releases/tag/1.10.2).
 
+## Google sign-in (D1)
+
+The contract is `docs/google-sign-in-design.md` (§3.2, §4, §8.3); the server runs the whole OAuth
+flow. The login page asks the typed instance `GET /api/auth/methods` (the remembered instance at
+once, a typed one when typing pauses) and offers **Continue with Google** only when `google` is
+true, with the sign-up hint when `googleSignup` is also true. An older server's 404, an unreachable
+instance or an address the app would refuse leaves the password form exactly as before. The lookup
+is sent up to three times through network failures: the transport never retries, and a pooled
+connection the server has since closed (idle keep-alive) fails once when a GET reuses it.
+
+`GoogleSignIn` (`:core`) makes a 32-byte PKCE verifier and state for the instance and answers
+`<instance>/api/auth/google/start?client=native&code_challenge=S256(verifier)&client_state=state`.
+The app opens it in a Custom Tab of the default browser when that supports them, else of another
+browser that does, else in the default browser; with no browser at all it says so and forgets the
+attempt. The verifier and state live only in that process-wide object, never on disk or in saved
+state: any app can declare `orbit://`, and a ticket another app catches cannot be exchanged
+without the verifier.
+
+`GoogleSignInRedirectActivity` receives `orbit://auth/google` (VIEW + BROWSABLE) and forwards it to
+`MainActivity` with `NEW_TASK | CLEAR_TOP | SINGLE_TOP`, which closes the browser tab above it. Its
+empty task affinity keeps it from rooting a task. The answer is used only when its `state` equals
+the waiting sign-in's, and only once: a ticket is exchanged with the verifier through
+`AuthSession.loginWithGoogleTicket`, which shares `login`'s switch (old session revoked, fenced
+and purged, tokens saved and read back, then `SignedIn`); an `error` shows that code's sentence. A
+different state uses nothing and leaves the sign-in waiting. When the process was killed while the
+browser was open, the answer finds no verifier and the page asks to try again; the ticket is never
+exchanged and expires unused.
+
+Messages read a server `code` before the HTTP status, so `ACCOUNT_DISABLED` or a Google refusal is
+never shown as a wrong password; a Google exchange never blames the password at all (429 without a
+code is the exchange's rate limit).
+
 ## Fixtures and automated checks
 
 `core/src/test/resources/wire/sessions.json` ports the first two literal wire cases from
@@ -145,6 +177,11 @@ eight failure cases, repeated 401, late login/read/refresh across logout or swit
 same-account re-login, server/user isolation, persistence failures, and corrupt restore.
 Real HTTP tests check paths, bearer/client headers, exact replay body, redirects, 503 and
 socket cancellation. UI tests cover usable login/logout and activity recreation.
+`GoogleSignInTest` covers the start URL, the RFC 7636 challenge and callback parsing (ticket, error,
+another or repeated state, no sign-in waiting, other addresses); `AuthSessionTest` and
+`HttpTransportTest` cover the ticket login and `auth/methods`; `GoogleSignInFlowTest` drives the
+button's visibility, the Custom Tab or default-browser launch, the redirect activity and each
+callback outcome through `MainActivity`; `AuthMessagesTest` pins every code's message.
 
 ## Device and physical-phone evidence
 

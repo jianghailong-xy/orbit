@@ -1,0 +1,1 @@
+{"destination": "/var/tmp/p23b1/runs/ab-transfer/tip-2/collected", "stats": {"startTime": "2026-10-07T00:07:56.647Z", "duration": 363912.879, "expected": 68, "skipped": 22, "unexpected": 6, "flaky": 0}, "artifacts": 105}

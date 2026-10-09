@@ -1,0 +1,16 @@
+{
+  "disabledButtonDescription": true,
+  "tooltip": {
+    "x": 8,
+    "y": 294,
+    "width": 250,
+    "height": 100
+  },
+  "popover": {
+    "x": 8,
+    "y": 292,
+    "width": 344,
+    "height": 158
+  },
+  "horizontalOverflow": false
+}

@@ -16,7 +16,19 @@ import { TaskInputs } from './TaskInputs';
 import { LandTaskStatus, landingBadge, landingIsLive } from './LandTaskStatus';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import type { RunnerModelCatalog } from '@orbit/shared';
-import { Alert, Avatar, Button, Dropdown, Input, Modal, Popconfirm, Segmented, Select, Spin, Switch, Tooltip, Typography } from 'antd';
+import { Alert } from './ui/Alert';
+import { Avatar } from './ui/Avatar';
+import { Button } from './ui/Button';
+import { Combobox } from './ui/Combobox';
+import { Dialog } from './ui/Dialog';
+import { Menu } from './ui/Menu';
+import { Popconfirm } from './ui/Popconfirm';
+import { Segmented } from './ui/Segmented';
+import { Select } from './ui/Select';
+import { Spinner } from './ui/Spinner';
+import { Switch } from './ui/Switch';
+import { Textarea } from './ui/Textarea';
+import { Tooltip } from './ui/Tooltip';
 import { Fragment, lazy, Suspense, type MouseEvent as ReactMouseEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import Markdown from 'react-markdown';
@@ -416,7 +428,7 @@ export function ownerConfirmedTask(
  * loses the appointment they set. Saying so is cheaper than a confirmation dialog, and it is the
  * same sentence the Start at editor carries, so the two cannot disagree.
  *
- * '' means no tooltip at all — antd renders nothing for an empty title, which is right for an
+ * '' means no tooltip at all — the Tooltip renders nothing for empty content, which is right for an
  * unscheduled task with nothing standing in its way.
  *
  * Pure and exported: the hint lives inside a Tooltip, which a static render reduces to an
@@ -605,6 +617,7 @@ export function TaskDetailPanel({
   // opens, under the dialog's own key — so the panel itself asks nothing more on the way in.
   const [menuOpen, setMenuOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const moreButton = useRef<HTMLButtonElement>(null);
   const shareQ = useQuery({
     queryKey: shareLinkQueryKey('TASK', taskId),
     queryFn: () => getShareLink('TASK', taskId),
@@ -1033,7 +1046,7 @@ export function TaskDetailPanel({
   // Mirrors the composer's `/` command menu (WorkspaceView): while the caret sits right
   // after an `@token`, show owned workspaces; picking one inserts `@<name> ` (the trailing
   // space drops the token regex, so the menu auto-hides).
-  const taRef = useRef<any>(null);
+  const taRef = useRef<HTMLTextAreaElement>(null);
   const [caret, setCaret] = useState(0);
   const [mentionIndex, setMentionIndex] = useState(0);
   const [mentionDismissed, setMentionDismissed] = useState(false);
@@ -1067,7 +1080,7 @@ export function TaskDetailPanel({
     setDraft(next);
     setMentionDismissed(false);
     setTimeout(() => {
-      const ta: HTMLTextAreaElement | undefined = taRef.current?.resizableTextArea?.textArea;
+      const ta = taRef.current;
       if (ta) {
         ta.focus();
         ta.setSelectionRange(before.length, before.length);
@@ -1309,18 +1322,18 @@ export function TaskDetailPanel({
               the way into it. It replaces a disabled button reading "Running" — true, and the one
               thing a reader who wants to see it cannot act on. */}
           {entry.kind === 'OPEN_RUN' && entry.href ? (
-            <Tooltip title={entry.hint}>
+            <Tooltip content={entry.hint}>
               <Link to={entry.href}>
-                <Button icon={<ArrowRightOutlined />} type="primary">
+                <Button icon={<ArrowRightOutlined />} variant="primary">
                   {entry.label}
                 </Button>
               </Link>
             </Tooltip>
           ) : (
-            <Tooltip title={executeHint}>
+            <Tooltip content={executeHint}>
               <span style={{ display: 'inline-flex' }}>
                 <Button
-                  type="primary"
+                  variant="primary"
                   icon={<PlayCircleOutlined />}
                   loading={running}
                   disabled={executeDisabled}
@@ -1346,27 +1359,25 @@ export function TaskDetailPanel({
         <Popconfirm
           title="Delete this task?"
           description="A run still in flight is stopped. This action cannot be undone."
-          okText="Delete"
+          confirmText="Delete"
           cancelText="Cancel"
-          okButtonProps={{ danger: true, loading: deleting }}
+          danger
+          confirmLoading={deleting}
           onConfirm={onDelete}
-        >
-          <Button type="text" danger icon={<DeleteOutlined />} loading={deleting} aria-label="Delete task" />
-        </Popconfirm>
+          trigger={<Button variant="text" danger icon={<DeleteOutlined />} loading={deleting} aria-label="Delete task" />}
+        />
         {/* Two words for two links (docs/share-links-design.md §8): Copy link is the signed-in
             address, for yourself; Share… is the public one. Copy as Markdown needs neither. */}
-        <Dropdown
-          trigger={['click']}
+        <Menu
           open={menuOpen}
           onOpenChange={setMenuOpen}
-          menu={{
-            className: 'tdp-more-menu',
-            items: [
+          popupClassName="tdp-more-menu"
+          items={[
               {
                 key: 'copy-link',
                 icon: <LinkOutlined />,
                 label: 'Copy link',
-                onClick: () => {
+                onSelect: () => {
                   setMenuOpen(false);
                   void copyText(taskAppUrl(taskId)).then((ok) =>
                     ok ? message.success('Link copied') : message.error("Couldn't copy the link"),
@@ -1376,6 +1387,7 @@ export function TaskDetailPanel({
               {
                 key: 'share',
                 icon: <GlobalOutlined className={liveLink ? 'session-share-icon-live' : undefined} />,
+                textValue: 'Share…',
                 label: liveLink ? (
                   <span className="scope-menu-row">
                     Share…<span className="scope-menu-value">Live link</span>
@@ -1383,7 +1395,7 @@ export function TaskDetailPanel({
                 ) : (
                   'Share…'
                 ),
-                onClick: () => {
+                onSelect: () => {
                   setMenuOpen(false);
                   setShareOpen(true);
                 },
@@ -1393,7 +1405,7 @@ export function TaskDetailPanel({
                 icon: <FileMarkdownOutlined />,
                 label: 'Copy as Markdown',
                 disabled: !q.data,
-                onClick: () => {
+                onSelect: () => {
                   setMenuOpen(false);
                   if (!q.data) return;
                   void copyText(taskMarkdown(q.data, taskAppUrl(taskId))).then((ok) =>
@@ -1401,17 +1413,15 @@ export function TaskDetailPanel({
                   );
                 },
               },
-            ],
-          }}
-        >
-          <Button type="text" icon={<MoreOutlined />} aria-label="More actions" />
-        </Dropdown>
-        <Button type="text" icon={<CloseOutlined />} onClick={onClose} aria-label="Close" />
+          ]}
+          trigger={<Button ref={moreButton} variant="text" icon={<MoreOutlined />} aria-label="More actions" />}
+        />
+        <Button variant="text" icon={<CloseOutlined />} onClick={onClose} aria-label="Close" />
       </div>
 
       {q.isLoading ? (
         <div className="tdp-loading">
-          <Spin />
+          <Spinner />
         </div>
       ) : q.isError ? (
         <div className="tdp-empty">Failed to load task details.</div>
@@ -1449,19 +1459,17 @@ export function TaskDetailPanel({
             <div className="tdp-section-title">Details</div>
             <div className="tdp-field">
               <span className="tdp-field-label">Assignee</span>
-              <Select
+              <Combobox
                 className="tdp-assignee-select"
                 variant="borderless"
-                value={task?.assignee?.id ?? undefined}
+                value={task?.assignee?.id ?? null}
                 placeholder="Unassigned"
-                allowClear
-                showSearch
-                optionFilterProp="label"
+                clearable
                 loading={workspacesQ.isLoading || updateAssignee.isPending}
                 disabled={updateAssignee.isPending}
-                popupMatchSelectWidth={false}
+                matchTriggerWidth={false}
                 options={workspaceList.map((a) => ({ value: a.id, label: a.name }))}
-                onChange={(val) => updateAssignee.mutate(val ?? null)}
+                onValueChange={(val) => updateAssignee.mutate(val)}
               />
             </div>
             {/* The tier the coordinator suggested (model routing §3.1), with the model and effort it
@@ -1471,34 +1479,35 @@ export function TaskDetailPanel({
               <div className="tdp-field">
                 <span className="tdp-field-label">Suggested</span>
                 <div className="tdp-field-stack">
-                  <Select<ModelHintPick['value'], ModelHintPick>
+                  <Select<ModelHintPick['value']>
                     className="tdp-assignee-select"
-                    classNames={{ popup: { root: 'tdp-hint-popup' } }}
+                    popupClassName="tdp-hint-popup"
                     variant="borderless"
-                    value={q.data?.modelHint ?? undefined}
+                    value={q.data?.modelHint ?? null}
                     placeholder={NO_SUGGESTION}
                     loading={updateModelHint.isPending}
                     disabled={updateModelHint.isPending}
-                    popupMatchSelectWidth={false}
+                    matchTriggerWidth={false}
                     options={modelHintPicks}
-                    labelRender={({ value, label }) => (
+                    renderValue={(value, option) => (
                       <span className="tdp-hint-value">
                         <span className={`tdp-hint-dot is-${String(value).toLowerCase()}`} />
-                        {label}
+                        {option?.label ?? value}
                       </span>
                     )}
-                    optionRender={(option) => (
-                      <div className={`tdp-hint-option${option.data.value ? '' : ' is-none'}`}>
-                        {option.data.value && (
-                          <span className={`tdp-hint-dot is-${option.data.value.toLowerCase()}`} />
-                        )}
-                        <div>
-                          <div className="tdp-hint-option-name">{option.data.label}</div>
-                          <div className="tdp-hint-option-detail">{option.data.detail}</div>
+                    renderOption={(option) => {
+                      const pick = modelHintPicks.find((row) => row.value === option.value)!;
+                      return (
+                        <div className={`tdp-hint-option${pick.value ? '' : ' is-none'}`}>
+                          {pick.value && <span className={`tdp-hint-dot is-${pick.value.toLowerCase()}`} />}
+                          <div>
+                            <div className="tdp-hint-option-name">{pick.label}</div>
+                            <div className="tdp-hint-option-detail">{pick.detail}</div>
+                          </div>
                         </div>
-                      </div>
-                    )}
-                    onChange={(next) => {
+                      );
+                    }}
+                    onValueChange={(next) => {
                       const level = next || null;
                       if (level !== (q.data?.modelHint ?? null)) updateModelHint.mutate(level);
                     }}
@@ -1511,30 +1520,28 @@ export function TaskDetailPanel({
             )}
             <div className="tdp-field">
               <span className="tdp-field-label">Provider</span>
-              <Select
+              <Combobox
                 className="tdp-assignee-select"
                 variant="borderless"
-                value={q.data?.provider ?? undefined}
+                value={q.data?.provider ?? null}
                 // Unpinned is the normal case, so say what it actually does rather than "None".
                 placeholder={
                   assigneeWorkspace ? `Assignee's (${assigneeWorkspace.provider ?? 'claude'})` : "Assignee's"
                 }
-                allowClear
-                showSearch
-                optionFilterProp="label"
+                clearable
                 loading={providersQ.isLoading || updateRunTarget.isPending}
                 disabled={updateRunTarget.isPending}
-                popupMatchSelectWidth={false}
+                matchTriggerWidth={false}
                 options={runProviderChoices.map((choice) => ({ value: choice.slug, label: choice.label }))}
-                optionRender={(option) => {
-                  const choice = runProviderChoices.find((row) => row.slug === option.data.value)!;
+                renderOption={(option) => {
+                  const choice = runProviderChoices.find((row) => row.slug === option.value)!;
                   return <span>{choice.label}{choice.labelDetail && <small className="np-label-detail">{choice.labelDetail}</small>}{choice.unavailable && <small className="np-label-detail">{choice.unavailable} →</small>}</span>;
                 }}
-                labelRender={({ value, label }) => {
+                renderValue={(value, option) => {
                   const choice = runProviderChoices.find((row) => row.slug === value);
-                  return <span>{label}{choice?.labelDetail && <small className="np-label-detail">{choice.labelDetail}</small>}</span>;
+                  return <span>{option?.label ?? value}{choice?.labelDetail && <small className="np-label-detail">{choice.labelDetail}</small>}</span>;
                 }}
-                onChange={(val) => {
+                onValueChange={(val) => {
                   const choice = runProviderChoices.find((row) => row.slug === val);
                   if (choice?.unavailable) {
                     navigate(choice.fixHref ?? `/infrastructure?runner=${encodeId(assigneeRunner?.id ?? '')}&engine=${choice.fixEngine ?? choice.slug}`);
@@ -1546,20 +1553,18 @@ export function TaskDetailPanel({
             </div>
             <div className="tdp-field">
               <span className="tdp-field-label">Model</span>
-              <Select
+              <Combobox
                 className="tdp-assignee-select"
                 variant="borderless"
-                value={q.data?.model ?? undefined}
+                value={q.data?.model ?? null}
                 // Unpinned on an assignee with smart selection on, each run's model is picked for it.
                 placeholder={
                   smartSelection && assigneeWorkspace?.modelRouting ? SMART_SELECTION_PLACEHOLDER : 'Provider default'
                 }
-                allowClear
-                showSearch
-                optionFilterProp="label"
+                clearable
                 loading={runnersQ.isLoading || updateRunTarget.isPending}
                 disabled={updateRunTarget.isPending}
-                popupMatchSelectWidth={false}
+                matchTriggerWidth={false}
                 // A model the catalogue doesn't name (an id pinned by a workspace or the API) still
                 // has to render as itself rather than vanish from the box.
                 options={
@@ -1567,24 +1572,22 @@ export function TaskDetailPanel({
                     ? [...modelOptions, { value: q.data.model, label: q.data.model }]
                     : modelOptions
                 }
-                onChange={(val) => updateRunTarget.mutate({ model: val ?? null })}
+                onValueChange={(val) => updateRunTarget.mutate({ model: val })}
               />
             </div>
             <div className="tdp-field">
               <span className="tdp-field-label">List</span>
-              <Select
+              <Combobox
                 className="tdp-assignee-select"
                 variant="borderless"
-                value={q.data?.listId ?? undefined}
+                value={q.data?.listId ?? null}
                 placeholder="No list"
-                allowClear
-                showSearch
-                optionFilterProp="label"
+                clearable
                 loading={taskListsQ.isLoading || updateList.isPending}
                 disabled={updateList.isPending}
-                popupMatchSelectWidth={false}
+                matchTriggerWidth={false}
                 options={(taskListsQ.data ?? []).map((l) => ({ value: l.id, label: l.title }))}
-                onChange={(val) => updateList.mutate(val ?? null)}
+                onValueChange={(val) => updateList.mutate(val)}
               />
             </div>
             {/* Last of the fields that can be changed, before the read-only provenance below.
@@ -1623,15 +1626,14 @@ export function TaskDetailPanel({
                 </span>
               )}
               {hasDependencyRelations && (
-                <Segmented
+                <Segmented<'graph' | 'list'>
                   className="tdp-dependency-view"
-                  size="small"
                   value={dependencyView}
                   options={[
                     { label: 'Graph', value: 'graph' },
                     { label: 'List', value: 'list' },
                   ]}
-                  onChange={(value) => setDependencyViewOverride(value as 'graph' | 'list')}
+                  onValueChange={setDependencyViewOverride}
                   aria-label="Dependency view"
                 />
               )}
@@ -1654,9 +1656,9 @@ export function TaskDetailPanel({
               <div className="tdp-muted">No dependencies</div>
             ) : dependencyView === 'graph' ? (
               dependencyGraphQ.isLoading ? (
-                <div className="tdp-dependency-graph-loading"><Spin size="small" /></div>
+                <div className="tdp-dependency-graph-loading"><Spinner size="small" /></div>
               ) : (
-                <Suspense fallback={<div className="tdp-dependency-graph-loading"><Spin size="small" /></div>}>
+                <Suspense fallback={<div className="tdp-dependency-graph-loading"><Spinner size="small" /></div>}>
                   <LazyTaskDependencyGraph
                     graph={dependencyGraph}
                     title={task?.title ?? 'Current task'}
@@ -1693,17 +1695,16 @@ export function TaskDetailPanel({
                   : 'Graph expansion limit reached. Some branch connections remain collapsed.'}
               </div>
             )}
-            <Select
+            <Combobox
               style={{ width: '100%', marginTop: 8 }}
               placeholder="Add a prerequisite…"
               value={null}
-              showSearch
-              filterOption={false}
+              filter={false}
               onSearch={setDependencyQuery}
               loading={dependencyTasksQ.isLoading || addDependency.isPending}
-              popupMatchSelectWidth={false}
+              matchTriggerWidth={false}
               options={dependencyOptions}
-              onChange={(val) => {
+              onValueChange={(val) => {
                 if (val) addDependency.mutate(val);
                 setDependencyQuery('');
               }}
@@ -1716,7 +1717,7 @@ export function TaskDetailPanel({
                   size="small"
                   checked={task?.autoRunWhenReady ?? true}
                   loading={setAutoRun.isPending}
-                  onChange={(v) => setAutoRun.mutate(v)}
+                  onCheckedChange={(v) => setAutoRun.mutate(v)}
                 />
                 <span>Auto-run when all prerequisites finish</span>
               </div>
@@ -1906,7 +1907,7 @@ export function TaskDetailPanel({
             ))}
           </div>
         )}
-        <Input.TextArea
+        <Textarea
           ref={taRef}
           value={draft}
           onChange={(e) => {
@@ -1945,45 +1946,54 @@ export function TaskDetailPanel({
             }
           }}
         />
-        <Button type="primary" onClick={submit} loading={addComment.isPending} disabled={!draft.trim()}>
+        <Button variant="primary" onClick={submit} loading={addComment.isPending} disabled={!draft.trim()}>
           Send
         </Button>
       </div>
 
-      <Modal
+      <Dialog
         open={reopening}
         title={REOPEN_MODAL_TITLE}
-        okText={REOPEN_MODAL_OK}
-        cancelText="Back"
-        okButtonProps={{ loading: reopen.isPending }}
-        onOk={() => reopen.mutate()}
-        onCancel={() => {
+        className="tdp-reopen-dialog"
+        onClose={() => {
           reopen.reset();
           setReopening(false);
         }}
+        footer={
+          <>
+            <Button
+              onClick={() => {
+                reopen.reset();
+                setReopening(false);
+              }}
+            >
+              Back
+            </Button>
+            <Button variant="primary" loading={reopen.isPending} onClick={() => reopen.mutate()}>
+              {REOPEN_MODAL_OK}
+            </Button>
+          </>
+        }
       >
         {reopenParagraphs(task).map((paragraph) => (
-          <Typography.Paragraph
-            key={paragraph.text}
-            strong={paragraph.strong}
-            type={paragraph.strong ? undefined : 'secondary'}
-          >
-            {paragraph.text}
-          </Typography.Paragraph>
+          <p key={paragraph.text} className={`tdp-reopen-paragraph${paragraph.strong ? ' is-strong' : ''}`}>
+            {paragraph.strong ? <strong>{paragraph.text}</strong> : paragraph.text}
+          </p>
         ))}
         {/* The server's own sentence, where the press earned one. Kept inside the question rather
             than behind it: the reader is still deciding, and a refusal is part of what they are
             deciding with. */}
         {reopen.error ? (
-          <Alert
-            type="error"
-            showIcon
-            message="Task status was not changed"
-            description={(reopen.error as Error).message}
-          />
+          <Alert type="error" title="Task status was not changed" description={(reopen.error as Error).message} />
         ) : null}
-      </Modal>
-      <ShareModal open={shareOpen} onClose={() => setShareOpen(false)} kind="TASK" rootId={taskId} />
+      </Dialog>
+      <ShareModal
+        open={shareOpen}
+        onClose={() => setShareOpen(false)}
+        kind="TASK"
+        rootId={taskId}
+        returnFocus={moreButton}
+      />
     </aside>
   );
 }

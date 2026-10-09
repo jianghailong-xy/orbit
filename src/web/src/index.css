@@ -260,6 +260,9 @@ body {
   width: 360px;
   max-width: calc(100vw - 32px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));
   pointer-events: none;
+  /* One composited layer at the column's whole-pixel origin, as the body-mounted column had. A layer
+     per card starts at a pill's fractional x and rasterizes its text differently. */
+  will-change: transform;
 }
 .toast-viewport--narrow {
   top: calc(env(safe-area-inset-top, 0px) + 56px);
@@ -293,8 +296,6 @@ body {
   font-size: 14px;
   line-height: 20px;
   text-align: start;
-  /* Keep the original card's rasterization when its host enters the top layer. */
-  will-change: transform;
 }
 :root[data-theme='dark'] .toast {
   box-shadow: 0 8px 22px rgba(0, 0, 0, 0.4);
@@ -11418,7 +11419,7 @@ button.chat-jump-start:hover {
     flex-wrap: wrap;
     row-gap: 12px;
   }
-  .tdp-head > .ant-btn-icon-only {
+  .tdp-head > .orbit-button-icon-only {
     /* Ordered ahead of the actions, which come after them in the markup: with wrap, order is what
        decides which line each lands on, and these have to stay on the title's. */
     order: 1;
@@ -11434,13 +11435,13 @@ button.chat-jump-start:hover {
   .tdp-head-actions > * {
     flex: 1 1 0;
   }
-  .tdp-head-actions > .ant-btn {
+  .tdp-head-actions > .orbit-button {
     height: 40px;
   }
   /* Run now sits in a span — the Tooltip needs it to still fire while the button is disabled —
      and the running-session case in a Link. Stretch what is inside those two as well. */
-  .tdp-head-actions > a > .ant-btn,
-  .tdp-head-actions > span > .ant-btn {
+  .tdp-head-actions > a > .orbit-button,
+  .tdp-head-actions > span > .orbit-button {
     flex: 1;
     height: 40px;
   }
@@ -11661,6 +11662,9 @@ button.chat-jump-start:hover {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.tdp-input-add {
+  display: inline-block;
+}
 .tdp-field {
   display: flex;
   gap: 10px;
@@ -11697,19 +11701,28 @@ button.chat-jump-start:hover {
   min-width: 0;
   margin: -3px 0;
 }
-.tdp-assignee-select.ant-select .ant-select-content {
-  padding: 0;
+/* The value sits 6px from the arrow; the field's own line is the 13px one even where the input is
+   lifted to 16px for touch keyboards. Hovering shades that line, as it did before. */
+.tdp-assignee-select.orbit-select {
+  height: auto;
+  gap: 6px;
   font-size: 13px;
+  line-height: 1.5714285714285714;
+  cursor: text;
 }
-.tdp-assignee-select.ant-select .ant-select-content-has-value {
-  color: var(--text-1);
+.tdp-assignee-select .orbit-select-trigger {
+  gap: 6px;
 }
-.tdp-assignee-select.ant-select .ant-select-placeholder {
-  color: var(--text-3);
-}
-.tdp-assignee-select.ant-select:hover .ant-select-content {
-  background: var(--bg-hover);
+/* Hovering shades the value's line box; open with a value, that box fades shading and all. */
+.tdp-assignee-select :is(.orbit-combobox-field, .orbit-select-trigger > .orbit-choice-value) {
   border-radius: 4px;
+}
+.tdp-assignee-select:hover :is(.orbit-combobox-field, .orbit-select-trigger > .orbit-choice-value) {
+  background: var(--bg-hover);
+}
+.tdp-assignee-select .orbit-combobox-placeholder,
+.tdp-assignee-select.orbit-select[data-empty] .orbit-choice-value {
+  color: var(--text-3);
 }
 /* The Suggested tier (model routing §9): its picker with the coordinator's reason under it, and in
    the picker each tier's dot, its model and effort, and the work it is for. */
@@ -11771,6 +11784,24 @@ button.chat-jump-start:hover {
   font-size: 11.5px;
   line-height: 1.45;
   color: var(--text-2);
+}
+/* The Reopen question replaced an AntD Modal, whose line height is unitless: text of another size
+   inside keeps its own proportional line. The shared Dialog shell stays at 22px. */
+.tdp-reopen-dialog.orbit-overlay {
+  line-height: 1.5714285714285714;
+}
+/* The Reopen question's paragraphs: secondary text, and the sentence the reader is there for. */
+.tdp-reopen-paragraph {
+  margin: 0 0 1em;
+  color: var(--text-3);
+  line-height: 1.5714285714285714;
+  word-break: break-word;
+}
+.tdp-reopen-paragraph.is-strong {
+  color: var(--text-1);
+}
+.tdp-reopen-paragraph strong {
+  font-weight: 600;
 }
 /* 「Start at」editor: the label keeps the shared 76px gutter, everything the control needs —
    input, its two actions, and the line under them — stacks in the remaining column. */
@@ -11927,7 +11958,7 @@ button.chat-jump-start:hover {
   color: var(--text-3);
   font-size: 11.5px;
 }
-.tdp-dependency-view.ant-segmented {
+.tdp-dependency-view.orbit-segmented {
   flex: none;
   font-size: 12px;
 }
@@ -12955,7 +12986,6 @@ button.chat-jump-start:hover {
   padding: 12px 16px;
   border-top: 1px solid var(--border-subtle);
 }
-.tdp-compose .ant-input,
 .tdp-compose .orbit-textarea {
   flex: 1;
 }
@@ -13906,6 +13936,11 @@ button.chat-jump-start:hover {
 /* ── Share dialog (ShareModal) ─────────────────────────────────────────────────
    docs/mocks/share-links/03-share-dialog: Access, the link, Includes with counts, the Live line,
    Expires, and a foot with the views and the two buttons. */
+/* Unitless line height, as the AntD Modal this dialog replaced: smaller text inside keeps its own
+   proportional line. The shared Dialog shell stays at 22px. */
+.share-dialog.orbit-overlay {
+  line-height: 1.5714285714285714;
+}
 .share-dialog-state {
   padding: 28px 0;
   text-align: center;
@@ -13963,12 +13998,7 @@ button.chat-jump-start:hover {
   font-size: 12.5px;
   line-height: 1.5;
 }
-.share-access-menu .ant-dropdown-menu-item {
-  align-items: flex-start;
-  padding-top: 8px;
-  padding-bottom: 8px;
-}
-.share-access-menu .ant-dropdown-menu-item .ant-dropdown-menu-item-icon {
+.share-access-menu .orbit-menu-icon {
   margin-top: 3px;
 }
 .share-access-option {
@@ -14029,11 +14059,12 @@ button.chat-jump-start:hover {
 .share-layer + .share-layer {
   border-top: 1px solid var(--border-subtle);
 }
-.share-layer-check {
+/* Qualified by the checkbox's own class, whose stylesheet loads after this one. */
+.share-layer-check.orbit-choice {
   align-items: flex-start;
   min-width: 0;
 }
-.share-layer-check .ant-checkbox {
+.share-layer-check .orbit-checkbox {
   align-self: flex-start;
   margin-top: 2px;
 }
@@ -18389,6 +18420,183 @@ button.chat-jump-start:hover {
   .shared-link-actions {
     justify-content: flex-start;
   }
+}
+/* A card drawn without AntD, which components/ui has none of (docs/evidence/base-ui-migration/
+   component-contracts.md: Card → a native section and its own styles): the box, head and padding of
+   the AntD Card it sits beside on the profile page, from the same tokens. */
+.orbit-card {
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-raised);
+  margin-bottom: 16px;
+}
+.orbit-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 56px;
+  padding: 0 24px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.orbit-card-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 24px;
+  color: var(--text-1);
+}
+.orbit-card-body {
+  padding: 24px;
+}
+
+/* Profile → Sign-in methods (docs/google-sign-in-design.md §8.1): one row per way in, what it is on
+   the left and its action on the right. */
+.signin-method {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.signin-method + .signin-method {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-subtle);
+}
+.signin-method-text {
+  min-width: 0;
+}
+.signin-method-name {
+  font-weight: 500;
+  color: var(--text-1);
+}
+.signin-method-detail {
+  color: var(--text-2);
+  overflow-wrap: anywhere;
+}
+.signin-method-note {
+  margin-top: 4px;
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+/* The admin area: its sections side by side (AdminNav), and the Sign-in settings (AdminSignInPage). */
+.admin-nav {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.admin-nav-link {
+  margin-bottom: -1px;
+  padding: 8px 12px;
+  border-bottom: 2px solid transparent;
+  color: var(--text-2);
+  font-weight: 500;
+  text-decoration: none;
+}
+.admin-nav-link:hover {
+  color: var(--text-1);
+}
+.admin-nav-link.active {
+  border-bottom-color: var(--brand);
+  color: var(--brand);
+}
+.admin-nav-link:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid var(--brand);
+  outline-offset: 1px;
+}
+/* One width for every admin page, so their shared tabs stay put between them: wide enough for the
+   user list's columns. */
+.admin-page {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+.admin-page > .page-title {
+  margin-bottom: 16px;
+}
+.admin-signin {
+  max-width: 640px;
+}
+.admin-signin-fields {
+  display: grid;
+  gap: 20px;
+}
+.admin-signin-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.admin-signin-field {
+  display: grid;
+  gap: 6px;
+}
+.admin-signin-label {
+  color: var(--text-1);
+  font-weight: 500;
+}
+.admin-signin-hint {
+  color: var(--text-3);
+  font-size: 12px;
+}
+.admin-signin-note {
+  margin-top: -12px;
+  color: var(--warning);
+  font-size: 12px;
+}
+.admin-signin-policy {
+  display: grid;
+  gap: 10px;
+}
+.admin-signin-choice,
+.admin-signin-policy .admin-signin-hint {
+  display: block;
+}
+.admin-signin-warning {
+  padding: 8px 12px;
+  border: 1px solid var(--warning-border);
+  border-radius: 6px;
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+.admin-signin-redirect {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.admin-signin-redirect code {
+  min-width: 0;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--fill-muted);
+  color: var(--text-1);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+.admin-signin-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+.admin-signin-error {
+  color: var(--error);
+}
+.admin-signin-badges {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.admin-users-created {
+  white-space: nowrap;
+}
+.admin-user-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
 }
 /* Settings → Access tokens (docs/personal-access-token-design.md §9). */
 .access-tokens-page {

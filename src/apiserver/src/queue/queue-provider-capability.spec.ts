@@ -129,12 +129,13 @@ test('a runner that advertises OpenCode but not Antigravity is withheld Antigrav
 
 test('a runner that does not name Antigravity is withheld a Gemini key\'s rows too', async () => {
   // The slug is the configured row's own, so the built-in slug's predicate cannot see it; the job
-  // is an `antigravity` one all the same. Held to the same capability, on the rows dispatch resolves.
+  // is an `antigravity` one all the same. Held to the same capability, on the rows dispatch resolves:
+  // the owner's own, and a shared one only for an admin (usableProviderSql).
   const legacy = await capturedClaimCapability([AgentProvider.CLAUDE, AgentProvider.CODEX, AgentProvider.OPENCODE]);
   assert.equal(legacy.borrowedAntigravityCapability, false);
   assert.match(
     legacy.sql,
-    /OR NOT EXISTS \(\s*SELECT 1 FROM "model_provider" mp\s+WHERE mp\."slug" = s\.provider\s+AND mp\."runtime" = 'antigravity'\s+AND NOT \(s.provider = 'dsh' AND s\."provider_builtin"\)\s+AND mp\."enabled"\s+AND \(mp\."owner_id" IS NULL OR mp\."owner_id" = s\."owner_id"\)/,
+    /OR NOT EXISTS \(\s*SELECT 1 FROM "model_provider" mp\s+WHERE mp\."slug" = s\.provider\s+AND mp\."runtime" = 'antigravity'\s+AND NOT \(s.provider = 'dsh' AND s\."provider_builtin"\)\s+AND mp\."enabled"\s+AND \(mp\."owner_id" = s\."owner_id" OR \(mp\."owner_id" IS NULL AND EXISTS \(\s*SELECT 1 FROM "user" u WHERE u\."id" = s\."owner_id" AND u\."role" = 'ADMIN'\)\)\)/,
   );
   const current = await capturedClaimCapability([
     AgentProvider.CLAUDE,

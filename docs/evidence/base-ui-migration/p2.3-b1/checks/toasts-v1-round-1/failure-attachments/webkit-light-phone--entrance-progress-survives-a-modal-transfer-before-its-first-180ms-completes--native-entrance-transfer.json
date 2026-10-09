@@ -1,0 +1,15 @@
+[
+  {
+    "t": 312,
+    "opacity": 0.99324,
+    "progress": 0.7166666666666642,
+    "owner": false,
+    "delay": "0s"
+  },
+  {
+    "t": 937,
+    "opacity": 1,
+    "owner": true,
+    "delay": "-0.129s"
+  }
+]

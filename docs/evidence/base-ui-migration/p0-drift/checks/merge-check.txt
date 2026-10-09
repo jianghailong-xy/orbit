@@ -1,0 +1,794 @@
+# bg_run bgj_6a6561432c05: npm run build -w @orbit/web && npm run test -w @orbit/web
+# exit 0; stderr blocks (antd deprecation warnings and console output of passing tests) removed; full output kept by Orbit for the job
+
+> @orbit/web@0.1.0 build
+> tsc -b && vite build
+
+vite v8.3.1 building client environment for production...
+transforming...
+✓ 4236 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                                     5.99 kB │ gzip:   2.55 kB
+dist/assets/Transcript-BtITXXF3.css                 6.36 kB │ gzip:   1.80 kB
+dist/assets/TaskDependencyGraph-DLioOiRN.css       15.41 kB │ gzip:   2.56 kB
+dist/assets/index-CEnjz7lS.css                    386.29 kB │ gzip:  64.21 kB
+dist/assets/rolldown-runtime-hePW80VL.js            0.71 kB │ gzip:   0.42 kB
+dist/assets/ProjectTaskPanel-BBTlfneJ.js            1.01 kB │ gzip:   0.60 kB
+dist/assets/ProjectDependencyGraph-ElVUhFVr.js     14.24 kB │ gzip:   5.21 kB
+dist/assets/projectDependencyGraph-C7Yj51jL.js    164.99 kB │ gzip:  55.80 kB
+dist/assets/TaskDependencyGraph-lEeGEcR2.js       188.58 kB │ gzip:  60.86 kB
+dist/assets/taskDependencyGraph-B91604km.js       538.24 kB │ gzip: 176.90 kB
+dist/assets/Transcript-Vzag2pKy.js                817.98 kB │ gzip: 252.56 kB
+dist/assets/sessionExport-Dbi_2JOw.js             822.63 kB │ gzip: 197.75 kB
+dist/assets/index-CdtE5_gu.js                   1,791.35 kB │ gzip: 536.16 kB
+
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 5.24s
+
+> @orbit/web@0.1.0 test
+> vitest run --maxWorkers=2
+
+
+ RUN  v5.0.2 /root/.orbit/worktrees/e65f238b-4789-5587-b24a-cf2d708322d1/src/web
+
+ ✓ src/components/Transcript.test.tsx (119 tests) 1010ms
+   ✓ a tag block typed into a user bubble (1)
+     ✓ keeps its lines and indentation on screen, in the person’s own bubble, with nothing attached 712ms
+ ✓ src/pages/ProjectsPage.test.tsx (103 tests) 1098ms
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+ ✓ src/components/ProjectProgressStatus.test.tsx (52 tests) 1040ms
+ ✓ src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx (19 tests) 13573ms
+   ✓ the start card in WorkspaceView (6)
+     ✓ is drawn once in a coordinator conversation, beside the criteria card, through every re-read 1065ms
+     ✓ is drawn in no conversation that coordinates no project, which reads nothing for one 1055ms
+     ✓ is drawn on the coordinator’s request only: a plan with work and no request draws nothing 1145ms
+     ✓ is named Ready to start on the pinned line 426ms
+     ✓ starts the project with the settings on the card and leaves its record (narrow: false) 565ms
+     ✓ starts the project with the settings on the card and leaves its record (narrow: true) 948ms
+   ✓ the change card in WorkspaceView (1)
+     ✓ confirms the new criteria, and the record says what the confirmation changed 539ms
+   ✓ the record a confirmation leaves, in the conversation it was made in (4)
+     ✓ is drawn among the events, above what came after it, and not at the pane’s tail 323ms
+     ✓ is drawn once, through every re-read of the read it comes from 396ms
+     ✓ leads at the head of a conversation whose window begins after it was signed 710ms
+     ✓ is drawn in no conversation that coordinates no project, which reads nothing for one 724ms
+   ✓ Chat about this on the start card (3)
+     ✓ arms the composer with this plan, keeps the card up with Start the project live, and reaches no door 859ms
+     ✓ sends what was typed on Enter without starting the project (narrow: false) 680ms
+     ✓ sends what was typed on Enter without starting the project (narrow: true) 1653ms
+   ✓ a focused row that answers Enter itself, while the start card holds the bare key (1)
+     ✓ expands the row and does not start the project 936ms
+   ✓ Ask the coordinator to handle it, on the project settlement card (1)
+     ✓ sends the card’s own facts as a turn, and leaves the card where it stands 1517ms
+ ✓ src/components/AcceptanceConfirmationCard.test.tsx (41 tests) 2610ms
+   ✓ whether a coordinator conversation is drawn the card (16)
+     ✓ draws exactly one while the set is UNCONFIRMED and NOT ONE criterion is met, through every re-read 484ms
+   ✓ a delivered card that can no longer be answered (3)
+     ✓ sends the version it is drawn from, and when the door says that version moved, re-reads before offering the next 662ms
+ ✓ src/components/WorkspaceView.projectSessions.test.tsx (42 tests) 54463ms
+   ✓ project entry navigation and actions (13)
+     ✓ opens the sessions page from the entry, and the coordinator from Open Session when nobody waits or the coordinator waits (waiting=false) 1589ms
+     ✓ opens the sessions page from the entry, and the coordinator from Open Session when nobody waits or the coordinator waits (waiting=true) 1194ms
+     ✓ opens the oldest waiting member named on the second line 755ms
+     ✓ opens the project sessions page when there is no coordinator 1125ms
+     ✓ draws the progress tag as part of the entry, with the session-count hint 423ms
+     ✓ highlights a project when an already-opened session is any of its members 476ms
+     ✓ has exactly the project actions in its hover menu 680ms
+     ✓ has exactly the project actions in its context menu 622ms
+     ✓ pins and moves the coordinator from the project menu 1604ms
+     ✓ offers Unpin for a pinned coordinator 1564ms
+     ✓ opens the project itself from the project entry menu 767ms
+     ✓ exposes only Pin on a right swipe and Move on a left swipe on a phone 885ms
+     ✓ consumes the synthesized progress click after a phone swipe and closes an open swipe before navigating 597ms
+   ✓ project sessions page (20)
+     ✓ reads one DONE project detail for its title and progress when the Open sidebar has no summary 573ms
+     ✓ lists Open and Completed members across workspaces, excludes Trash and counts running members 1246ms
+     ✓ gives mixed member rows their own lifecycle actions from the open page 1341ms
+     ✓ gives mixed member rows their own lifecycle actions from the completed page 611ms
+     ✓ counts each member once when Open and Completed responses overlap during a lifecycle change 881ms
+     ✓ uses each member’s lifecycle for phone swipe buttons and full swipes from the open page 791ms
+     ✓ uses each member’s lifecycle for phone swipe buttons and full swipes from the completed page 611ms
+     ✓ uses the selected member’s fresher lifecycle for both phone buttons and the full swipe action 794ms
+     ✓ hides the project page search button while keeping the global keyboard palette 815ms
+     ✓ preserves the page in member links, browser Back and a fresh mount of the address 1645ms
+     ✓ lists all members from Completed, keeps its address in navigation and restores it on refresh 1763ms
+     ✓ has the page menu, and its back button returns to the workspace list 1069ms
+     ✓ opens the project from the page progress arrow 880ms
+     ✓ returns to the originating folder with the page back button 868ms
+     ✓ renders an empty scoped project without falling back to the workspace list 346ms
+     ✓ renders project read failures as an error on the same page 448ms
+     ✓ keeps a completed member in the project page and changes its row actions immediately 1668ms
+     ✓ keeps a restored member and changes its actions while retaining the Completed page address 812ms
+     ✓ lists and opens the opposite-view coordinator from the open page menu 1189ms
+     ✓ lists and opens the opposite-view coordinator from the completed page menu 1233ms
+   ✓ project-specific supplemental reads (5)
+     ✓ does not request extra members when the local coordinator and waiting target are available 764ms
+     ✓ only supplements projects in the current list that lack a coordinator or waiting member 1808ms
+     ✓ never reads an unpaginated cross-workspace Completed list in either view 1701ms
+     ✓ keeps the entry query stable on unrelated events and debounces project-member updates 2669ms
+     ✓ keeps the page query stable on unrelated events and debounces project-member updates 2361ms
+   ✓ the merge into main on the project sessions page (4)
+     ✓ draws the asking candidate under the progress strip, and presses its own door from there 8011ms
+     ✓ says a blocked candidate is the coordinator’s, and offers the way to it 1281ms
+     ✓ draws nothing about main while nothing is on offer 760ms
+     ✓ draws each merge already made on the timeline at its own instant, and opens its receipt 3179ms
+ ✓ src/pages/TaskListView.test.tsx (33 tests) 1027ms
+   ✓ opening one task list (6)
+     ✓ renders the first page of rows and offers the rest, instead of the whole list at once 560ms
+ ✓ src/components/CriteriaDecisionCard.test.tsx (36 tests) 3961ms
+   ✓ a card that is no longer a question (3)
+     ✓ is the whole card at 0.72, and no later rule in the stylesheet takes it back 3491ms
+   ✓ the provenance mark (2)
+     ✓ never puts the second key on screen 313ms
+ ✓ src/components/TaskDetailPanel.test.tsx (65 tests) 4143ms
+   ✓ the landing of a DONE task, apart from its status (§2.7a) (13)
+     ✓ a DONE task whose landing is QUEUED says both, apart, with the server’s facts and no new action 543ms
+     ✓ a DONE task whose landing is CHECK_FAILED says both, apart, with the server’s facts and no new action 1170ms
+     ✓ reads a CHECK_FAILED landing again on its own clock with no busy session (false) 450ms
+     ✓ reads a CONFLICT landing again on its own clock with no busy session (false) 533ms
+ ✓ src/components/ProjectAcceptanceCard.test.tsx (37 tests) 2535ms
+   ✓ ProjectAcceptanceCard (13)
+     ✓ heads the card with what it is, and says where a row's answer comes from 1230ms
+ ✓ src/components/EvidenceDecisionCard.test.tsx (34 tests) 610ms
+ ✓ src/lib/sessionProviderChoices.test.ts (62 tests) 51ms
+ ✓ src/lib/projectAttention.test.ts (61 tests) 191ms
+ ✓ src/components/WorkspaceView.coordinatorChat.test.tsx (21 tests) 22542ms
+   ✓ Chat about this in the coordinator conversation (3)
+     ✓ task-scoped, escalated: arms this composer with the item, and sends it as an ordinary turn carrying the project, the item, what failed and where it stands — through no door 5152ms
+     ✓ promotion-scoped, “It is yours · waiting” (wide): the blocked merge card offers the chat beside its press, and the send carries the candidate 2315ms
+     ✓ promotion-scoped, “It is yours · waiting” (narrow): the blocked merge card offers the chat beside its press, and the send carries the candidate 1428ms
+   ✓ the blocked merge card’s way to where its handling is shown (2)
+     ✓ “See the exception” (wide): the review gives way and the item’s own card is brought into view 1377ms
+     ✓ “See the exception” (narrow): the review gives way and the item’s own card is brought into view 1790ms
+   ✓ what the send carries is read at the send (3)
+     ✓ handed back to the coordinator after the press: says where the item stands now 892ms
+     ✓ gone from the reads since the press: goes as the card read then, and says so 746ms
+     ✓ an image alone goes too, behind the card’s facts — no door waits on a note 611ms
+   ✓ arriving before the project’s items are read (4)
+     ✓ an item: the intent goes, and the composer is armed for it 394ms
+     ✓ a blocked merge: the intent goes, and the composer is armed for the candidate 440ms
+     ✓ an item that has moved on: the intent goes, it says so once, and the merge card’s own press arms for the merge alone 624ms
+     ✓ a merge no longer blocked: the intent goes, it says so once, and the task card’s own press arms for the task alone 1490ms
+   ✓ arriving from a Chat about this pressed elsewhere (6)
+     ✓ an item: the composer arrives armed for it, and the intent goes 439ms
+     ✓ a blocked merge: the composer arrives armed for the candidate 387ms
+     ✓ brings the card it is about into view once the transcript under it has landed 797ms
+     ✓ brings the blocked merge card into view, for a press made on it elsewhere 836ms
+     ✓ a merge no longer blocked: nothing is armed about why it could not happen, and it says so 517ms
+     ✓ something that has moved on since: nothing is armed, and it says so 478ms
+   ✓ keys an armed composer and a card’s own link must not hand to a card (3)
+     ✓ an empty armed chat on ⌘/Ctrl + Enter does not merge the candidate the strip is asking about 373ms
+     ✓ Enter on an empty composer armed by the settlement card’s “Chat about this” does not start the project 618ms
+     ✓ Enter on the blocked card’s “See the exception” link does not answer the confirmation card 829ms
+ ✓ src/components/ProjectPromotionCard.test.tsx (50 tests) 486ms
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+ ✓ src/components/ApprovalPanel.test.tsx (33 tests) 837ms
+   ✓ one waiting completion decision on the session page (3)
+     ✓ puts one set of verdicts on the page, and it is the evidence card’s 392ms
+ ✓ src/lib/workspaceDefaults.test.ts (53 tests) 10ms
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+ ✓ src/components/PlanUsageIndicator.test.tsx (33 tests) 2042ms
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+ ✓ src/components/StartProjectCard.test.tsx (20 tests) 866ms
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+ ✓ src/pages/ProvidersPage.codexLogin.test.tsx (19 tests) 13914ms
+   ✓ a Codex pool of one’s own ChatGPT account (19)
+     ✓ puts an account in with the device flow: the notice, the code and its page, then the account 2095ms
+     ✓ offers a new code once the old one expired 2124ms
+     ✓ says why a sign-in did not finish, in the server’s words 2147ms
+     ✓ refuses an account the pool already holds, naming it and saying what a second sign-in is worth 2145ms
+     ✓ reads a refusal with no account named the same way, without the address 2108ms
+     ✓ adds a second account: the notice says what the pool runs on now, and the ending says how many it holds 2089ms
+ ✓ src/components/ProjectDependencyGraph.test.tsx (41 tests) 128ms
+ ✓ src/lib/watches.test.ts (42 tests) 14ms
+ ✓ src/components/DecisionRail.test.tsx (31 tests) 43ms
+ ✓ src/components/WorkspaceView.promotionPlacement.test.tsx (13 tests) 1713ms
+   ✓ the record a merge leaves, in the conversation it happened in (4)
+     ✓ is drawn among the events, at the moment it happened, and not in the pane’s card strip 419ms
+ ✓ src/components/QueuedUserTurn.test.tsx (34 tests) 771ms
+ ✓ src/components/OwnerConfirmationCard.test.tsx (22 tests) 95ms
+ ✓ src/pages/ProjectsPageToolbar.test.tsx (18 tests) 1232ms
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+ ✓ src/pages/ProviderPoolPage.whoCanUseIt.test.tsx (9 tests) 941ms
+ ✓ src/components/TasksSidePanel.test.tsx (35 tests) 42ms
+ ✓ src/lib/taskSchedule.test.ts (29 tests) 55ms
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+ ✓ src/pages/ProvidersPage.sharedPools.test.tsx (15 tests) 1396ms
+ ✓ src/components/WorkspaceView.settlementPointer.test.tsx (9 tests) 1598ms
+   ✓ the settlement question on the pinned line (8)
+     ✓ is one more in the count while the card is on screen and still a question, and opens no list 371ms
+ ✓ src/components/Transcript.backgroundWake.test.tsx (14 tests) 4431ms
+   ✓ a wake still waiting in the queued tail (1)
+     ✓ is the same line, drawn as still queued, with the queue’s line under it 4170ms
+ ✓ src/pages/SharedProjectPage.test.tsx (11 tests) 759ms
+   ✓ a project link’s public page (10)
+     ✓ keeps the app project page’s seven blocks in the app’s order, and none of the other nine 323ms
+ ✓ src/pages/ProjectCoordinatorSection.test.tsx (13 tests) 737ms
+ ✓ src/components/ProjectSettlementCard.test.tsx (35 tests) 182ms
+ ✓ src/components/TaskScheduleEditor.test.tsx (26 tests) 67ms
+ ✓ src/components/ProjectCoordinatorCard.test.tsx (37 tests) 69ms
+ ✓ src/components/RunnerEngines.test.tsx (38 tests) 65ms
+ ✓ src/components/WorkspaceView.sessionFolders.test.tsx (11 tests) 1715ms
+   ✓ folders in the session list (5)
+     ✓ draws the workspace’s folders above the list, reporting for the sessions filed in them 333ms
+ ✓ src/lib/codexResetCredit.test.ts (38 tests) 11ms
+ ✓ src/components/WorkspaceView.sessionProjects.test.tsx (19 tests) 6411ms
+   ✓ project entries in the session list (11)
+     ✓ merges Open members into one two-line session row with a project icon and progress 459ms
+     ✓ keeps Filter by Tag sessions flat 4163ms
+ ✓ src/components/TaskDetailPanel.modelRouting.test.tsx (15 tests) 1336ms
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+ ✓ src/pages/ProvidersPage.pools.test.tsx (17 tests) 1466ms
+   ✓ Account pools on /providers (17)
+     ✓ with no pool, the section is its head alone — New pool — and offers no Claude pool while fewer than two keys could join one 407ms
+ ✓ src/components/WorkspaceView.codexAccount.test.tsx (16 tests) 34580ms
+   ✓ the runner account a session runs on (16)
+     ✓ with no account picked, a new session starts on the one Automatic picks, and says which 4476ms
+     ✓ starts the new session on an account picked under Codex, and Automatic takes the pick back 4372ms
+     ✓ starts a new Claude session on the Claude account picked under Claude 4174ms
+     ✓ starts a new session on a key picked in the composer's Provider menu, and the hero says so 4168ms
+     ✓ runs a new session on OpenCode with a configured key, picked in the composer under OpenCode 4150ms
+     ✓ a live Codex session moves to another account from the Provider menu, and back onto Automatic 4110ms
+     ✓ a session pinned to an account is ticked there, and Automatic puts it back 4123ms
+     ✓ a live Claude session lists its runner's Claude accounts under Claude 4116ms
+ ✓ src/components/ProjectPanoramaHeader.test.tsx (34 tests) 109ms
+ ✓ src/components/OrbitLinkCard.test.tsx (15 tests) 341ms
+ ✓ src/components/OwnerConfirmationReview.test.tsx (19 tests) 182ms
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+ ✓ src/components/WikiArticlePage.test.tsx (11 tests) 703ms
+ ✓ src/components/ApprovalPanel.stale.test.tsx (5 tests) 8999ms
+   ✓ an approval that arrived live outlives the question it was raised for (5)
+     ✓ shows Enter on Create it and creates only that project when a question is waiting before it 446ms
+     ✓ stops offering an answer once the turn that asked has ended 4063ms
+     ✓ keeps answering for the card a live runner-hosted job is still reading 4070ms
+ ✓ src/components/WorkspaceView.modelControl.test.tsx (10 tests) 22801ms
+   ✓ the composer model control (10)
+     ✓ starts a new Codex session with the remembered model and clamps effort for that model 467ms
+     ✓ writes the model and its effort as one control, with the provider and the effort a level down 4081ms
+     ✓ leaves the session config alone when the pick is already running, and PATCHes a change once 5205ms
+     ✓ opens a level-down row on hover where the pointer can hover, and picks from it 4079ms
+     ✓ leaves the tap as the gesture where there is no hover 4089ms
+     ✓ offers a self-hosted model only the efforts it declares, and names the one it runs at 4228ms
+ ✓ src/components/WorkspaceView.taskRunHandoff.test.tsx (6 tests) 9823ms
+   ✓ sending into a run the platform has already replaced (6)
+     ✓ says when a provider pick takes effect, while the pick still stands 8829ms
+     ✓ leaves the reader alone when the pick is the provider the live run is already on 457ms
+ ✓ src/lib/wikiPlan.test.ts (26 tests) 13ms
+ ✓ src/pages/ProjectDetailPanorama.test.tsx (9 tests) 1101ms
+   ✓ ProjectDetailPage — the panorama, assembled (9)
+     ✓ lays the four blocks out in the order the reader asks for them 353ms
+ ✓ src/components/ProjectReadyToRun.test.tsx (13 tests) 414ms
+ ✓ src/components/ProjectProgressStatus.chat.test.tsx (21 tests) 222ms
+ ✓ src/pages/ProjectTasksTopology.test.tsx (19 tests) 82ms
+ ✓ src/lib/taskDependencyGraph.test.ts (30 tests) 16ms
+ ✓ src/components/WikiPlanPage.test.tsx (14 tests) 1208ms
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+ ✓ src/components/WatchRelations.test.tsx (15 tests) 455ms
+ ✓ src/lib/runnerAttention.test.ts (108 tests) 24ms
+ ✓ src/components/WorkspaceView.criteriaDecisionCard.test.tsx (4 tests) 1083ms
+   ✓ the criteria decision card in an open coordinator conversation (4)
+     ✓ is on the page once for its intent, through every re-read and after the answer elsewhere 454ms
+ ✓ src/pages/ProjectsPageProductionSnapshot.test.tsx (13 tests) 90ms
+ ✓ src/pages/RunnerDetailPage.layout.test.tsx (13 tests) 1220ms
+ ✓ src/pages/RunnerDetailPage.selfUpdate.test.tsx (19 tests) 708ms
+ ✓ src/components/WorkspaceView.taskStartWaiting.test.tsx (5 tests) 1045ms
+   ✓ a resumed run’s brief, while it waits, is drawn as its TaskStartCard (2)
+     ✓ queued behind the turn its run is working on: the card, with the queue’s line at its foot 413ms
+ ✓ src/components/WatchCard.test.tsx (9 tests) 339ms
+ ✓ src/components/WorkspaceView.queuedTurnWake.test.tsx (5 tests) 1328ms
+   ✓ a wake a watch queued, in the queued tail (3)
+     ✓ is the watch’s card with the queue’s line, and its JSON stays folded 388ms
+ ✓ src/components/ReviewCard.test.tsx (22 tests) 684ms
+ ✓ src/components/WorkspaceView.retryAttachments.test.tsx (7 tests) 2886ms
+   ✓ the card that offers to re-send the last message (2)
+     ✓ re-sends it with the attachments it was sent with, not an empty array 586ms
+     ✓ sends no attachmentIds at all for a message that had none 305ms
+   ✓ taking an undelivered message back into the composer (4)
+     ✓ brings the attachments back with the text, as chips the reader can see 353ms
+     ✓ sends them again without the reader finding the files a second time 475ms
+     ✓ hands back a re-send withdrawn from the queue, files and all 495ms
+     ✓ says nothing about files it failed to restore, because it no longer fails to 331ms
+   ✓ stopping the turn folds the queue back (1)
+     ✓ brings the queued message’s files back with its words 341ms
+ ✓ src/pages/ProjectsPage.status.test.tsx (7 tests) 867ms
+   ✓ ProjectDetailPage — recording the project’s own status (7)
+     ✓ offers the status write on the project page, and offers a REOPEN once one was written 302ms
+ ✓ src/components/WorkspaceView.commitResultMessage.test.tsx (9 tests) 1153ms
+   ✓ a finished commit reports the runner line (6)
+     ✓ shows the runner message under "Changes committed" 379ms
+ ✓ src/components/RunnerEngines.renameAccount.test.tsx (13 tests) 1539ms
+ ✓ src/components/DecisionRail.pointer.test.tsx (12 tests) 114ms
+ ✓ src/components/WorkspaceView.scrollToBottom.test.tsx (4 tests) 1319ms
+   ✓ the jump-to-bottom button (4)
+     ✓ holds a bar-opened preview through streaming and dismissal until the reader returns to the tail 557ms
+     ✓ never flashes while a streaming reply grows under the reader and the follow catches up 334ms
+ ✓ src/pages/SharedTaskPage.test.tsx (9 tests) 426ms
+ ✓ src/components/CriteriaChangeCard.test.tsx (10 tests) 152ms
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+ ✓ src/components/WikiDocPage.test.tsx (11 tests) 800ms
+ ✓ src/components/ProjectPromotionCard.chat.test.tsx (15 tests) 73ms
+ ✓ src/components/WorkspaceView.openItemDelivery.test.tsx (3 tests) 682ms
+   ✓ an exception item’s delivery, on its way into the transcript (3)
+     ✓ is drawn as the card from the snapshot, and the runner’s echo replaces it invisibly 409ms
+ ✓ src/components/WorkspaceView.evidenceHandoff.test.tsx (3 tests) 604ms
+   ✓ Chat about this on the evidence card (2)
+     ✓ arms the composer with this version, keeps the card up with Confirm done live, and reaches no door 356ms
+ ✓ src/components/BackgroundWakeSteer.test.tsx (5 tests) 4402ms
+   ✓ a wake written into the running turn, while it waits for the runner (1)
+     ✓ is the wake’s line with a steer’s state under it, and nothing to cancel or withdraw 4301ms
+ ✓ src/lib/sharedPools.test.ts (16 tests) 17ms
+ ✓ src/components/ProjectRunSettings.test.tsx (15 tests) 680ms
+ ✓ src/pages/ProjectsPage.automatic.test.tsx (7 tests) 881ms
+ ✓ src/components/WorkspaceView.retrySessionMessage.test.tsx (7 tests) 855ms
+   ✓ the failure card’s Retry, for another session’s message (7)
+     ✓ the provider-failure card asks the server to re-send it, not the owner’s send 333ms
+ ✓ src/components/WorkspaceView.sessionDeepLink.test.tsx (5 tests) 1872ms
+   ✓ a session opened at one record (4)
+     ✓ shows the page around the record, marks it, and does not stream while the window stops short of the tail 753ms
+     ✓ joins the live stream once paging down reaches the latest event 549ms
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+ ✓ src/pages/SharedLinksPage.test.tsx (10 tests) 604ms
+ ✓ src/lib/wikiReviewMode.test.ts (14 tests) 63ms
+ ✓ src/components/WorkspaceView.sessionLine.test.tsx (24 tests) 6ms
+ ✓ src/components/RunnerEngines.accounts.test.tsx (12 tests) 609ms
+ ✓ src/lib/sessionProjects.test.ts (31 tests) 13ms
+ ✓ src/components/CoordinatorQuestionCard.test.tsx (17 tests) 340ms
+ ✓ src/components/WorkspaceView.shareEntry.test.tsx (9 tests) 2106ms
+   ✓ a shared session in the session list and its conversation (9)
+     ✓ puts a globe beside the time of the row a link opens, and on no other row 414ms
+     ✓ moving a shared session to Trash first says its link pauses and comes back on restore 362ms
+ ✓ src/pages/FollowingPage.test.tsx (11 tests) 729ms
+ ✓ src/components/WorkspaceView.sessionMessageQueue.test.tsx (5 tests) 1495ms
+   ✓ another session’s message, waiting in the queue (5)
+     ✓ is the "From" card with the queue’s line, not the reader’s own bubble 612ms
+Not implemented: Window's open() method
+ ✓ src/components/RunnerEngines.claudeAccount.test.tsx (10 tests) 1225ms
+ ✓ src/components/CardHotkey.test.tsx (19 tests) 65ms
+ ✓ src/lib/wikiDocs.test.ts (13 tests) 17ms
+ ✓ src/components/WorkspaceView.sessionMenu.test.tsx (16 tests) 3701ms
+   ✓ the session row More actions menu (16)
+     ✓ contains the iOS swipe actions for open 1149ms
+     ✓ contains the iOS swipe actions for completed 447ms
+ ✓ src/components/WorkspaceView.jumpToStart.test.tsx (3 tests) 591ms
+   ✓ the way back to a session’s first message (3)
+     ✓ walks every older page in and lands at the top 403ms
+ ✓ src/components/WorkspaceView.stickyWake.test.tsx (4 tests) 651ms
+   ✓ the sticky bar over a turn a watch queued (3)
+     ✓ names it in the watch’s own words, not as the person’s question 356ms
+ ✓ src/components/WorkspaceView.modelRouting.test.tsx (7 tests) 923ms
+   ✓ the model chip on a task run smart selection picked (7)
+     ✓ marks the chip with ✦ on a light blue ground, adding no words to it 358ms
+ ✓ src/components/ShareModal.test.tsx (10 tests) 1091ms
+ ✓ src/components/DecisionRail.settlement.test.tsx (14 tests) 11ms
+ ✓ src/components/WorkspaceView.composerMenu.test.tsx (6 tests) 500ms
+   ✓ the composer + menu (2)
+     ✓ draws the native menu: command group under the thumb, media group above the rule 384ms
+ ✓ src/pages/ProjectsPage.newTask.test.tsx (3 tests) 216ms
+ ✓ src/components/WikiReviewPage.edit.test.tsx (6 tests) 821ms
+ ✓ src/lib/toast.test.tsx (18 tests) 159ms
+ ✓ src/components/TaskStartCard.test.tsx (11 tests) 259ms
+ ✓ src/pages/SharedSessionPage.test.tsx (10 tests) 549ms
+ ✓ src/lib/dshRuntime.test.ts (15 tests) 8ms
+ ✓ src/components/WorkspaceView.poolAccount.test.tsx (6 tests) 732ms
+   ✓ the status bar of a session on an account pool (6)
+     ✓ names the account the session runs on and shows its quota — not the pool 330ms
+ ✓ src/components/SessionCreatedTasksStrip.test.tsx (13 tests) 499ms
+   ✓ the collapsed row (6)
+     ✓ never wraps the title: it truncates beside the sentence, stays whole beside one task 315ms
+ ✓ src/pages/RunnerDetailPage.modelRouting.test.tsx (10 tests) 768ms
+ ✓ src/lib/sessionState.test.ts (25 tests) 7ms
+ ✓ src/pages/TaskDetailPage.test.tsx (8 tests) 85ms
+ ✓ src/pages/ProjectsPagePhone.test.tsx (7 tests) 447ms
+ ✓ src/components/Transcript.controlPlaneNote.test.tsx (11 tests) 247ms
+ ✓ src/api.test.ts (16 tests) 28ms
+ ✓ src/components/RunnerEnginesSection.test.tsx (16 tests) 47ms
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+ ✓ src/components/CriteriaDecisionCard.settled.test.tsx (12 tests) 20ms
+ ✓ src/components/WikiRunPage.test.tsx (6 tests) 341ms
+ ✓ src/lib/providerPools.test.ts (23 tests) 15ms
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+ ✓ src/pages/ProviderPoolPage.access.test.tsx (5 tests) 418ms
+ ✓ src/components/RunnerEngines.removeAccount.test.tsx (12 tests) 703ms
+ ✓ src/components/ProjectChainProgress.test.tsx (10 tests) 27ms
+ ✓ src/components/ProjectDoneSettlementCard.closeout.test.tsx (13 tests) 175ms
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+ ✓ src/components/ProjectShareControls.test.tsx (5 tests) 402ms
+ ✓ src/lib/backgroundWake.test.ts (15 tests) 7ms
+ ✓ src/components/WorkspaceView.streamOrder.test.tsx (1 test) 407ms
+   ✓ the live stream renders in the order it arrived (1)
+     ✓ keeps a tool call the model ran above the reply that explains it 406ms
+ ✓ src/components/WorkspaceView.loginPool.test.tsx (2 tests) 423ms
+   ✓ the composer account pill on a login-pool session (2)
+     ✓ names the account the session runs on — not the pool’s next one — and its own quota 327ms
+ ✓ src/lib/sessionFolders.test.ts (24 tests) 11ms
+ ✓ src/lib/taskRunHandoff.test.ts (11 tests) 5ms
+ ✓ src/pages/WikiPage.test.tsx (10 tests) 77ms
+ ✓ src/lib/wiki.test.ts (18 tests) 7ms
+ ✓ src/components/ProjectProgressStatus.handling.test.tsx (10 tests) 81ms
+ ✓ src/components/RunnerEngines.antigravityGoogle.test.tsx (14 tests) 445ms
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+ ✓ src/lib/runnerSlots.test.ts (26 tests) 4ms
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+ ✓ src/components/WatchEditor.test.tsx (8 tests) 457ms
+ ✓ src/lib/deliveredMessage.test.ts (24 tests) 6ms
+ ✓ src/lib/acceptedUserTurn.test.ts (21 tests) 6ms
+ ✓ src/components/WorkspaceView.sessionSwipe.test.tsx (3 tests) 643ms
+   ✓ session row swipes on a phone (3)
+     ✓ swiping right exposes Complete then Pin, and Complete completes the session 396ms
+ ✓ src/components/SessionReplyCard.test.tsx (8 tests) 236ms
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+ ✓ src/components/WikiSettingsPage.test.tsx (7 tests) 640ms
+ ✓ src/components/RunnerEngines.duplicateAccount.test.tsx (9 tests) 595ms
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+ ✓ src/components/ProjectBlockers.test.tsx (8 tests) 384ms
+ ✓ src/components/ProjectStartedCard.test.tsx (10 tests) 258ms
+ ✓ src/components/TasksSidePanel.workspaceStep.test.tsx (9 tests) 484ms
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+ ✓ src/components/TaskDetailPanel.share.test.tsx (4 tests) 790ms
+   ✓ the task panel’s ⋯ (4)
+     ✓ offers Copy link, Share… and Copy as Markdown — asking nothing until it is opened 349ms
+ ✓ src/pages/ProjectsPage.delete.test.tsx (4 tests) 567ms
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+ ✓ src/components/AccountPause.test.tsx (9 tests) 459ms
+ ✓ src/components/RunnerEngines.singleAccount.test.tsx (24 tests) 620ms
+ ✓ src/components/Transcript.backgroundTasks.test.tsx (7 tests) 201ms
+ ✓ src/components/CriteriaDecisionCard.sessionSwitch.test.tsx (3 tests) 34ms
+ ✓ src/components/Transcript.settledReply.test.tsx (2 tests) 462ms
+   ✓ the session page (1)
+     ✓ offers no way to put a message into the wiki 307ms
+ ✓ src/lib/wikiArticles.test.ts (13 tests) 15ms
+ ✓ src/components/WorkspaceView.projectIntent.test.tsx (4 tests) 341ms
+ ✓ src/components/WorkspaceView.retryMessage.test.tsx (2 tests) 443ms
+   ✓ the Retry button on a run that a provider outage killed (2)
+     ✓ asks the server for the words its window never held, and offers them 346ms
+ ✓ src/pages/RunnerDetailPage.codexAccount.test.tsx (6 tests) 957ms
+   ✓ which Codex account a workspace runs on (6)
+     ✓ offers each account on the runner with its own quota and sign-in, and saves the id picked 306ms
+ ✓ src/components/TasksSidePanel.projects.test.tsx (12 tests) 421ms
+ ✓ src/components/WikiEntryMarks.test.tsx (9 tests) 834ms
+ ✓ src/components/CriteriaDecisionCard.receipt.test.tsx (2 tests) 30ms
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+ ✓ src/components/ProjectDoneSettlementCard.nativeParity.test.tsx (12 tests) 289ms
+ ✓ src/pages/TaskListView.scopeMenu.test.tsx (8 tests) 426ms
+ ✓ src/components/WorkspaceView.watchingRow.test.tsx (1 test) 349ms
+   ✓ the session list over a session a watch will resume (1)
+     ✓ draws its row as Watching, in the strip’s words, and leaves a plain reply alone 348ms
+ ✓ src/components/WorkspaceView.pinnedFold.test.tsx (3 tests) 522ms
+   ✓ the Pinned section folds (3)
+     ✓ folds to its heading and back from the heading, remembering each 327ms
+ ✓ src/App.loginNext.test.tsx (7 tests) 343ms
+ ✓ src/components/RunnerSignIn.test.tsx (18 tests) 14ms
+ ✓ src/pages/TaskListView.taskUrl.test.tsx (6 tests) 707ms
+ ✓ src/components/OpenItemDeliveryCard.test.tsx (6 tests) 232ms
+ ✓ src/components/DecisionRail.exceptions.test.tsx (8 tests) 203ms
+ ✓ src/lib/taskFilters.test.ts (25 tests) 6ms
+ ✓ src/lib/orbitLink.test.ts (37 tests) 47ms
+ ✓ src/lib/paneTransition.test.ts (13 tests) 66ms
+ ✓ src/components/ProjectSections.test.tsx (8 tests) 228ms
+ ✓ src/lib/statusPalette.test.ts (3 tests) 3ms
+ ✓ src/pages/TaskListView.createdIn.test.tsx (5 tests) 457ms
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+ ✓ src/components/WikiReviewPage.test.tsx (10 tests) 38ms
+ ✓ src/lib/projectMerge.test.ts (8 tests) 5ms
+ ✓ src/components/SessionSearch.wiki.test.tsx (6 tests) 1621ms
+   ✓ ⌘K with the wiki above the sessions (5)
+     ✓ asks both endpoints for one query, and draws one group above the other 400ms
+     ✓ opens an entry at its own page, and a session at its own 309ms
+ ✓ src/lib/useControlPlane.projects.test.tsx (14 tests) 28ms
+ ✓ src/components/MergeRecoveryPanel.test.tsx (12 tests) 42ms
+ ✓ src/lib/sessionExport.test.tsx (4 tests) 106ms
+ ✓ src/components/SessionMessageCard.test.tsx (9 tests) 229ms
+ ✓ src/lib/useSessionProjectData.test.tsx (7 tests) 25ms
+ ✓ src/components/WikiEntryDrawer.test.tsx (10 tests) 42ms
+ ✓ src/pages/ProjectTaskRow.opening.test.tsx (7 tests) 209ms
+ ✓ src/pages/RunnersPage.test.tsx (6 tests) 340ms
+ ✓ src/components/WikiReviewPage.challenge.test.tsx (4 tests) 491ms
+ ✓ src/components/WorkOverviewReadiness.acceptance.test.tsx (6 tests) 5ms
+ ✓ src/pages/ProjectsPageRowSortKeysVisible.test.tsx (3 tests) 3ms
+ ✓ src/components/CardAction.test.tsx (4 tests) 9ms
+ ✓ src/components/ProjectIntegrationLine.test.tsx (12 tests) 28ms
+ ✓ src/components/AcceptanceConfirmationCard.preview.test.tsx (2 tests) 147ms
+>                     <p>
+                        ...
+                          <ChatImage src="blob:mock-..." className="md-image" alt="现状与 A 案">
+                            <Image className="md-image" src="blob:mock-..." alt="现状与 A 案" preview={{mask:<span>}}>
+                              <Image prefixCls="ant-image" preview={{...}} rootClassName="css-dev-on..." ...>
+                                <div className="ant-image ..." onClick={function onPreview} role="button" tabIndex={0} ...>
+                                  <img>
+>                                 <div className="ant-image-cover ant-image-cover-center" style={{display:undefined}}>
+                                ...
+        ...
+        ...
+
+<p> cannot contain a nested <div>.
+See this log for the ancestor stack trace.
+
+ ✓ src/components/Transcript.localArtifact.test.tsx (9 tests) 255ms
+ ✓ src/components/TaskAttributionCard.test.tsx (10 tests) 53ms
+ ✓ src/lib/runRequestResend.test.ts (7 tests) 24ms
+ ✓ src/pages/TaskListView.outsideProjects.test.tsx (8 tests) 541ms
+ ✓ src/lib/useControlPlane.pendingDecisions.test.tsx (3 tests) 2024ms
+   ✓ the pending-decision reads ride the control-plane stream (3)
+     ✓ task.changed — evidence submitted or decided — invalidates every session’s pending decisions 515ms
+     ✓ project.criteria_decisions.changed invalidates the named project’s read, and one naming none every project’s 1003ms
+     ✓ an unrelated event (provider.changed) invalidates neither read 504ms
+ ✓ src/components/TasksSidePanel.destinations.test.tsx (7 tests) 383ms
+ ✓ src/lib/markdownText.test.ts (15 tests) 7ms
+ ✓ src/pages/ProviderConnectPage.gemini.test.tsx (3 tests) 265ms
+ ✓ src/components/SessionOutputs.commitFailure.test.tsx (8 tests) 147ms
+ ✓ src/pages/SettingsPage.modelRouting.test.tsx (6 tests) 317ms
+ ✓ src/lib/codexLogin.test.ts (9 tests) 6ms
+ ✓ src/components/TaskDetailPanel.reopen.test.tsx (10 tests) 102ms
+ ✓ src/lib/planUsage.test.ts (10 tests) 9ms
+ ✓ src/lib/findMatches.test.ts (21 tests) 15ms
+ ✓ src/lib/projectAttention.doneRequest.test.ts (7 tests) 5ms
+ ✓ src/components/Transcript.referencedTask.test.tsx (8 tests) 223ms
+ ✓ src/components/WorkspaceView.projectBackLink.test.ts (8 tests) 29ms
+ ✓ src/lib/useControlPlane.watches.test.tsx (6 tests) 6045ms
+   ✓ the watches read rides the control-plane stream (6)
+     ✓ session.updated invalidates the watches, and again once the evaluation it set off can have landed 3524ms
+     ✓ an approval and a task change invalidate the watches too 1006ms
+     ✓ a watch.changed re-reads the watches at once, without the 60s poll 506ms
+     ✓ a watch.changed re-reads only the watches 504ms
+     ✓ library events leave the watches alone 504ms
+ ✓ src/components/EvidenceDecisionReceipt.test.tsx (6 tests) 18ms
+ ✓ src/components/NewSessionProviderHero.test.tsx (12 tests) 29ms
+ ✓ src/components/OrbitReferenceLinks.test.tsx (8 tests) 117ms
+ ✓ src/lib/composerRefs.test.ts (16 tests) 5ms
+ ✓ src/lib/slashCommands.test.ts (12 tests) 9ms
+ ✓ src/components/TaskDependencyGraph.test.tsx (7 tests) 7ms
+ ✓ src/components/ProjectTasksGraph.test.tsx (2 tests) 413ms
+   ✓ ProjectTasksGraph (1)
+     ✓ draws the graph on its own, with nothing for the reader to select first 395ms
+ ✓ src/lib/toastFeed.test.ts (12 tests) 5ms
+ ✓ src/components/WikiMaintenanceStatus.test.tsx (11 tests) 61ms
+ ✓ src/lib/runRequestToken.test.ts (10 tests) 10ms
+ ✓ src/lib/backgroundJobs.test.ts (11 tests) 5ms
+ ✓ src/components/ApprovalPanel.questionWrap.test.tsx (2 tests) 450ms
+   ✓ a multi-line AskUserQuestion in the generic form (1)
+     ✓ keeps its line breaks on screen 351ms
+ ✓ src/components/Transcript.streamingOrder.test.tsx (6 tests) 58ms
+ ✓ src/components/WikiContextNote.test.tsx (3 tests) 35ms
+ ✓ src/components/Transcript.antigravity.test.tsx (6 tests) 110ms
+ ✓ src/components/Transcript.inserts.test.tsx (7 tests) 63ms
+ ✓ src/lib/sessionGrouping.test.ts (12 tests) 5ms
+ ✓ src/pages/ProjectsPage.readyToClose.test.tsx (2 tests) 324ms
+ ✓ src/lib/useControlPlane.wiki.test.tsx (3 tests) 1529ms
+   ✓ the wiki reads ride the control-plane stream (3)
+     ✓ a wiki.changed re-reads the whole wiki group at once 518ms
+     ✓ a wiki.changed re-reads the wiki group, and NOT the sessions the default branch names 504ms
+     ✓ no other event re-reads the wiki 506ms
+ ✓ src/lib/theme.test.tsx (5 tests) 38ms
+ ✓ src/lib/sessionProjectLanding.test.ts (7 tests) 3ms
+ ✓ src/components/WorkspaceView.statusGlyph.test.tsx (7 tests) 29ms
+ ✓ src/components/TasksSidePanel.wiki.test.tsx (7 tests) 43ms
+ ✓ src/lib/sessionCapabilities.test.ts (19 tests) 4ms
+ ✓ src/lib/coordinatorChat.test.ts (5 tests) 4ms
+ ✓ src/components/ProjectCrossingsCard.test.tsx (9 tests) 53ms
+ ✓ src/lib/decisionReceipt.test.ts (7 tests) 4ms
+ ✓ src/components/ProjectDoneSettlementCard.test.tsx (5 tests) 19ms
+ ✓ src/lib/sessionExport.download.test.tsx (3 tests) 122ms
+ ✓ src/components/ClaudeHistoryOffer.test.tsx (9 tests) 41ms
+ ✓ src/lib/transcriptStore.test.ts (18 tests) 5ms
+ ✓ src/components/TasksSidePanel.admin.test.tsx (4 tests) 347ms
+ ✓ src/lib/referencedTask.test.ts (10 tests) 7ms
+ ✓ src/lib/transcriptPaint.test.ts (15 tests) 5ms
+ ✓ src/lib/startingAnchor.test.ts (7 tests) 8ms
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+Not implemented: Window's getComputedStyle() method: with pseudo-elements
+ ✓ src/pages/ProvidersPage.antigravity.test.tsx (2 tests) 423ms
+   ✓ Antigravity identity and readiness on the Providers page (2)
+     ✓ counts only online runners that declare support and have the CLI, and scrolls to their cards 344ms
+ ✓ src/pages/TaskRoute.test.tsx (6 tests) 104ms
+ ✓ src/lib/batchGraph.test.ts (14 tests) 5ms
+ ✓ src/components/ProjectTaskPanel.test.tsx (5 tests) 29ms
+ ✓ src/components/Transcript.thinking.test.tsx (7 tests) 58ms
+ ✓ src/components/Transcript.watchWake.test.tsx (3 tests) 198ms
+ ✓ src/components/WorkspaceView.queuedTurn.test.tsx (8 tests) 11ms
+ ✓ src/lib/liveToolOutputs.test.ts (8 tests) 4ms
+ ✓ src/components/Transcript.backgroundJobs.test.tsx (4 tests) 1041ms
+   ✓ a background-jobs note, opened (4)
+     ✓ is one row per job, under the section it was listed in, outcome and all 603ms
+ ✓ src/components/Transcript.dsh.test.tsx (4 tests) 108ms
+ ✓ src/lib/composerSendState.test.ts (9 tests) 4ms
+ ✓ src/components/TaskInputs.test.tsx (5 tests) 562ms
+   ✓ TaskInputs (5)
+     ✓ lists what every run will be given, with a count and a readable size 309ms
+ ✓ src/lib/sessionSwipe.test.ts (9 tests) 13ms
+ ✓ src/lib/searchHighlight.test.ts (14 tests) 26ms
+ ✓ src/components/WikiReviewPage.phone.test.tsx (2 tests) 155ms
+ ✓ src/lib/taskSelection.test.ts (15 tests) 19ms
+ ✓ src/components/SameOriginLink.test.tsx (7 tests) 58ms
+ ✓ src/lib/sessionLifecycleApi.test.ts (8 tests) 35ms
+ ✓ src/lib/useControlPlane.folders.test.tsx (2 tests) 1062ms
+   ✓ session folders ride the control-plane stream (2)
+     ✓ a folder.changed re-reads the folders and the session lists 549ms
+     ✓ a session moving between folders re-reads the lists, not the folders 512ms
+ ✓ src/indexCss.test.ts (2 tests) 440ms
+   ✓ index.css (2)
+     ✓ is read the way a browser reads it, so a pasted copy cannot pass 325ms
+ ✓ src/lib/streamAnchor.test.ts (5 tests) 9ms
+ ✓ src/components/WorkspaceView.decisionStrip.test.tsx (3 tests) 8ms
+ ✓ src/lib/wikiContext.test.ts (5 tests) 13ms
+ ✓ src/components/MentionDeliveryNotes.test.tsx (7 tests) 142ms
+ ✓ src/lib/steerDelivery.test.ts (6 tests) 85ms
+ ✓ src/lib/taskSorting.test.ts (7 tests) 25ms
+ ✓ src/lib/transcriptDeepLink.test.ts (5 tests) 15ms
+ ✓ src/components/Transcript.turnEnd.test.tsx (7 tests) 984ms
+   ✓ a turn_end that did not finish the turn (7)
+     ✓ leaves a visible marker instead of the 12-pixel divider 686ms
+ ✓ src/nginxConf.test.ts (5 tests) 10ms
+ ✓ src/lib/wikiHealth.test.ts (12 tests) 9ms
+ ✓ src/lib/idCodec.test.ts (12 tests) 11ms
+ ✓ src/pages/SettingsPage.test.tsx (5 tests) 619ms
+   ✓ session orchestration, one switch for the whole account (3)
+     ✓ is on for an account that never said otherwise 351ms
+ ✓ src/lib/taskOutcome.test.ts (9 tests) 9ms
+ ✓ src/lib/interruptAndSend.test.ts (4 tests) 12ms
+ ✓ src/pages/ProviderConnectPage.test.tsx (5 tests) 4616ms
+   ✓ naming a provider whose vendor is already connected (5)
+     ✓ leaves the first key of a vendor unnamed — the preset already knows what it is 4518ms
+ ✓ src/lib/tailPinning.test.ts (9 tests) 4ms
+ ✓ src/lib/wikiRollout.test.ts (7 tests) 4ms
+ ✓ src/lib/tagColor.test.ts (4 tests) 4ms
+ ✓ src/components/ui/boundary.test.ts (1 test) 9106ms
+   ✓ keeps Base UI inside Orbit components, fixtures private, and public components free of AntD 9106ms
+ ✓ src/components/WorkspaceView.exceptionPlacement.test.tsx (3 tests) 21ms
+ ✓ src/lib/sessionImport.test.ts (3 tests) 6ms
+ ✓ src/lib/scrollbarAutohide.test.ts (4 tests) 343ms
+ ✓ src/lib/sessionActivity.test.ts (8 tests) 119ms
+ ✓ src/components/ProjectProgressStatus.doneRequest.test.tsx (2 tests) 90ms
+ ✓ src/lib/backgroundShells.test.ts (5 tests) 6ms
+ ✓ src/lib/liveTaskProgress.test.ts (4 tests) 14ms
+ ✓ src/lib/plainPreview.test.ts (7 tests) 5ms
+ ✓ src/lib/thinkingDraft.test.ts (7 tests) 4ms
+ ✓ src/lib/steerDeliveryParity.test.ts (2 tests) 10ms
+ ✓ src/lib/workspaceOrder.test.ts (6 tests) 6ms
+ ✓ src/lib/clipboard.test.ts (5 tests) 56ms
+ ✓ src/lib/useDelayedFlag.test.tsx (4 tests) 33ms
+ ✓ src/pages/ProfilePage.test.tsx (3 tests) 162ms
+ ✓ src/lib/queuedTurnRestore.test.ts (4 tests) 4ms
+ ✓ src/wikiHomeLayout.test.ts (4 tests) 71ms
+ ✓ src/lib/reseedActiveSnapshot.test.ts (4 tests) 15ms
+ ✓ src/lib/eventFull.test.ts (3 tests) 4ms
+ ✓ src/components/WorkspaceView.compactingAfterInit.test.tsx (4 tests) 44ms
+ ✓ src/lib/wikiImport.test.ts (2 tests) 16ms
+ ✓ src/pages/EnrollPage.test.tsx (2 tests) 16ms
+ ✓ src/components/SessionReplyCard.queued.test.tsx (1 test) 31ms
+ ✓ src/components/TaskDependencyList.test.tsx (2 tests) 248ms
+ ✓ src/components/ApprovalPanel.dsh.test.tsx (3 tests) 97ms
+ ✓ src/lib/taskDeletion.test.ts (3 tests) 6ms
+ ✓ src/lib/providerAdmin.test.ts (4 tests) 2ms
+ ✓ src/lib/sessionDetailPolling.test.ts (4 tests) 8ms
+ ✓ src/lib/ansi.test.ts (5 tests) 3ms
+ ✓ src/lib/taskPages.test.ts (5 tests) 4ms
+ ✓ src/lib/sessionTags.test.ts (2 tests) 10ms
+ ✓ src/lib/outcomeSurfaces.contract.test.ts (1 test) 3ms
+ ✓ src/lib/turnPlacement.test.ts (2 tests) 5ms
+ ✓ src/lib/contextSeed.test.ts (3 tests) 13ms
+ ✓ src/lib/sessionTurnIntent.test.ts (6 tests) 2ms
+ ✓ src/lib/engineAccounts.test.ts (2 tests) 2ms
+ ✓ src/lib/providerGlyphs.test.ts (1 test) 3ms
+
+ Test Files  323 passed (323)
+      Tests  4065 passed (4065)
+   Start at  20:50:25
+   Duration  500.20s (import 43%, tests 35%, environment 12%, transform 9%)
+
+     Import  689 modules were evaluated 2806 times · 406.57s total, 43% of tracked time
+             ~128.52s faster with isolate: false — shared modules are evaluated once per worker instead of once per file
+             learn more: https://vitest.dev/guide/improving-performance#test-isolation
+
