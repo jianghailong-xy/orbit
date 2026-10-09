@@ -1,0 +1,78 @@
+shot infra-light.png
+shot infra-overview-light.png
+shot infra-machines-light.png
+shot infra-keys-light.png
+shot infra-gallery-light.png
+infra light: cards ["Claude Code\nReady","Codex\nReady","Kimi Code\nReady","Antigravity CLI\nReady","OpenCode\nReady","DeepSeek Harness\nReady"]
+infra light: errors [] unanswered []
+shot dialog-delete-light.png
+shot dialog-delete-light.png: "Delete DeepSeek?\n\nIt goes from all three engines it works with:\n\nClaude Code\n— 2 open sessions, 1 task pinned\nO\nOpenCode\n— not in use\nDeepSeek Harness\n— 1 open session\n\nThey keep their engine and can’t run until you switch them to another key. To pause the key instead, turn it off.\n\nCancel\nDelete key"
+shot dsh-hpc-light.png
+dsh hpc light: "DeepSeek Harness\n0.2.0-rc.2\nUses API keys\n—"
+shot dsh-old-mac-light.png
+dsh old-mac light: "DeepSeek Harness\nUpdate runner\n—\nThis runner predates DeepSeek Harness. It updates itself when no session is running on it."
+shot dsh-build-box-light.png
+dsh build-box light: "DeepSeek Harness\nNot installed — Orbit can install it here\nNot installed\n—\nInstall"
+shot dsh-mac-studio-light.png
+dsh mac-studio light: "DeepSeek Harness\nNot supported here\n—\nDeepSeek Harness 0.2.0-rc.2 runs on Linux x64 runners with Node 26 only."
+shot notsetup-dsh-light.png
+shot notsetup-opencode-light.png
+notsetup light: ["Kimi Code\nNot set up\nNo machine signed in, no key. Install on a machine or connect a key.","Antigravity CLI\nNot set up\nNo machine signed in, no key. Install on a machine or connect a key.","O\nOpenCode\nNot set up\nNo machine signed in, no key. Install on a machine or connect a key.","DeepSeek Harness\nNot set up\nNo DeepSeek key. Connect a DeepSeek key — it runs on Claude Code and OpenCode too."]
+connect light: landed on /providers/new/deepseek
+shot connect-light.png
+connect light: errors []
+shot edit-light.png
+shot dialog-turnoff-light.png
+shot dialog-turnoff-light.png: "Turn off DeepSeek?\n\nIt stops on all three engines it works with:\n\nClaude Code\n— 2 open sessions, 1 task pinned\nO\nOpenCode\n— not in use\nDeepSeek Harness\n— 1 open session\n\nThose sessions and the pinned task keep their engine and can’t run until you turn the key back on or switch them to another key — nothing falls back to a runner’s own sign-in.\n\nCancel\nTurn off"
+edit light: writes after Cancel []
+shot refused-light.png
+refused light: "Couldn't save the provider. provider \"DeepSeek\" is in use on Claude Code, DeepSeek Harness by 3 open sessions and 1 task pins; its endpoint can't change while they use it"
+shot board-infra-light.png
+shot board-infra-overview-light.png
+shot board-infra-machines-light.png
+shot board-infra-keys-light.png
+shot board-infra-gallery-light.png
+shot board-dsh-states-light.png
+shot board-connect-light.png
+shot board-edit-light.png
+shot board-dialogs-light.png
+shot board-refused-light.png
+shot infra-dark.png
+shot infra-overview-dark.png
+shot infra-machines-dark.png
+shot infra-keys-dark.png
+shot infra-gallery-dark.png
+infra dark: cards ["Claude Code\nReady","Codex\nReady","Kimi Code\nReady","Antigravity CLI\nReady","OpenCode\nReady","DeepSeek Harness\nReady"]
+infra dark: errors [] unanswered []
+shot dialog-delete-dark.png
+shot dialog-delete-dark.png: "Delete DeepSeek?\n\nIt goes from all three engines it works with:\n\nClaude Code\n— 2 open sessions, 1 task pinned\nO\nOpenCode\n— not in use\nDeepSeek Harness\n— 1 open session\n\nThey keep their engine and can’t run until you switch them to another key. To pause the key instead, turn it off.\n\nCancel\nDelete key"
+shot dsh-hpc-dark.png
+dsh hpc dark: "DeepSeek Harness\n0.2.0-rc.2\nUses API keys\n—"
+shot dsh-old-mac-dark.png
+dsh old-mac dark: "DeepSeek Harness\nUpdate runner\n—\nThis runner predates DeepSeek Harness. It updates itself when no session is running on it."
+shot dsh-build-box-dark.png
+dsh build-box dark: "DeepSeek Harness\nNot installed — Orbit can install it here\nNot installed\n—\nInstall"
+shot dsh-mac-studio-dark.png
+dsh mac-studio dark: "DeepSeek Harness\nNot supported here\n—\nDeepSeek Harness 0.2.0-rc.2 runs on Linux x64 runners with Node 26 only."
+shot notsetup-dsh-dark.png
+shot notsetup-opencode-dark.png
+notsetup dark: ["Kimi Code\nNot set up\nNo machine signed in, no key. Install on a machine or connect a key.","Antigravity CLI\nNot set up\nNo machine signed in, no key. Install on a machine or connect a key.","O\nOpenCode\nNot set up\nNo machine signed in, no key. Install on a machine or connect a key.","DeepSeek Harness\nNot set up\nNo DeepSeek key. Connect a DeepSeek key — it runs on Claude Code and OpenCode too."]
+connect dark: landed on /providers/new/deepseek
+shot connect-dark.png
+connect dark: errors []
+shot edit-dark.png
+shot dialog-turnoff-dark.png
+shot dialog-turnoff-dark.png: "Turn off DeepSeek?\n\nIt stops on all three engines it works with:\n\nClaude Code\n— 2 open sessions, 1 task pinned\nO\nOpenCode\n— not in use\nDeepSeek Harness\n— 1 open session\n\nThose sessions and the pinned task keep their engine and can’t run until you turn the key back on or switch them to another key — nothing falls back to a runner’s own sign-in.\n\nCancel\nTurn off"
+edit dark: writes after Cancel []
+shot refused-dark.png
+refused dark: "Couldn't save the provider. provider \"DeepSeek\" is in use on Claude Code, DeepSeek Harness by 3 open sessions and 1 task pins; its endpoint can't change while they use it"
+shot board-infra-dark.png
+shot board-infra-overview-dark.png
+shot board-infra-machines-dark.png
+shot board-infra-keys-dark.png
+shot board-infra-gallery-dark.png
+shot board-dsh-states-dark.png
+shot board-connect-dark.png
+shot board-edit-dark.png
+shot board-dialogs-dark.png
+shot board-refused-dark.png
