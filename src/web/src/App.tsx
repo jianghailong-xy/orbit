@@ -3,9 +3,11 @@ import { useQuery } from '@tanstack/react-query';
 import { Spin } from 'antd';
 import { getToken } from './api';
 import { encodeId } from './lib/idCodec';
+import { useManagedRunner } from './lib/managedRunner';
 import { workspacesQuery, runnersQuery } from './lib/queries';
 import { firstOpenableWorkspace } from './lib/workspaceOrder';
 import { AppShell, DocView, FlushView } from './components/AppShell';
+import { ManagedRunnerLanding } from './components/ManagedRunnerNotice';
 import { WorkspaceConsole } from './components/WorkspaceConsole';
 import { RunnerRegisterGuide } from './components/RunnerRegisterGuide';
 import { ProfilePage } from './pages/ProfilePage';
@@ -72,6 +74,12 @@ function LoginRedirect() {
 // single runner → that runner's page, where its first workspace is created; several runners →
 // Infrastructure, which lists them, since there's a machine to pick first. BootGate pre-warms both
 // queries, so on a fresh load these read straight from cache and redirect in one shot.
+//
+// An account with no runner at all, while the server offers managed runners
+// (docs/managed-runner-design.md), is shown its managed runner's state there instead — Set up, or
+// why there is none — with the registration guide a link away. That is the only landing that asks:
+// every other one makes exactly the requests it made before, and with the capability missing or
+// off this one still ends at the registration guide.
 function DefaultLanding() {
   const workspaces = useQuery(workspacesQuery());
   const runners = useQuery(runnersQuery());
@@ -79,8 +87,11 @@ function DefaultLanding() {
     workspaces.isSuccess && runners.isFetched
       ? firstOpenableWorkspace(workspaces.data)
       : undefined;
+  const listed = workspaces.isFetched && runners.isFetched;
+  const runnerList = runners.data ?? [];
+  const managed = useManagedRunner(listed && !first && runnerList.length === 0);
   if (first) return <Navigate to={`/workspaces/${encodeId(first.id)}`} replace />;
-  if (!workspaces.isFetched || !runners.isFetched) {
+  if (!listed || (runnerList.length === 0 && !managed.settled)) {
     return (
       <main className="app-main">
         <div className="app-view app-view--doc" style={{ padding: 48, textAlign: 'center' }}>
@@ -89,8 +100,13 @@ function DefaultLanding() {
       </main>
     );
   }
-  const runnerList = runners.data ?? [];
-  if (runnerList.length === 0) return <Navigate to="/runners/register" replace />;
+  if (runnerList.length === 0) {
+    return managed.managed ? (
+      <ManagedRunnerLanding managed={managed.managed} />
+    ) : (
+      <Navigate to="/runners/register" replace />
+    );
+  }
   if (runnerList.length === 1) {
     return <Navigate to={`/runners/${encodeId(runnerList[0].id)}`} replace />;
   }
