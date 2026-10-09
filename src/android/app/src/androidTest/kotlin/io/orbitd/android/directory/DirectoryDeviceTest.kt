@@ -148,12 +148,14 @@ class DirectoryDeviceTest {
                 compose.onNodeWithContentDescription("Back").assertDoesNotExist()
                 compose.onNodeWithContentDescription("Open navigation").performClick()
                 compose.onNodeWithText("Settings").performScrollTo().performClick()
-                // Settings opens on the account it is signed in as (A13's page has no "Signed in" line).
+                // Settings opens on the account it is signed in as, once its read answers (A13's page has no "Signed in" line).
+                compose.waitUntil(15_000) { compose.onAllNodesWithText("Directory fixture").fetchSemanticsNodes().isNotEmpty() }
                 compose.onNodeWithText("Directory fixture").assertIsDisplayed()
                 compose.onNodeWithText("Build information").performScrollTo().performClick()
                 compose.onNodeWithText("Source SHA").performScrollTo().assertIsDisplayed()
                 capture("build")
                 key(KeyEvent.KEYCODE_BACK)
+                compose.waitUntil(15_000) { compose.onAllNodesWithText("Directory fixture").fetchSemanticsNodes().isNotEmpty() }
                 compose.onNodeWithText("Directory fixture").assertIsDisplayed()
                 compose.onNodeWithContentDescription("Back").assertIsDisplayed()
                 key(KeyEvent.KEYCODE_BACK)

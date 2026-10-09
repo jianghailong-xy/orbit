@@ -121,8 +121,9 @@ class NavigationIncrementDeviceTest {
                 assertEquals("${server.url("/").toString().trimEnd('/')}/sessions/$review", clip)
                 // A05-4 · Complete Session: the page goes, and "Session completed" with Undo is a card under the bar.
                 compose.mainClock.advanceTimeBy(3_500)
+                awaitWritable()
                 compose.onNodeWithContentDescription("Session actions").performClick(); settle()
-                compose.onNode(hasText("Complete Session") and hasAnyAncestor(isPopup())).performClick()
+                press(hasText("Complete Session") and hasAnyAncestor(isPopup()))
                 await { exists(hasText("Session completed") and hasAnyAncestor(hasTestTag("toast"))) }
                 await { !exists(hasTestTag("transcript-list")) }
                 capture("12-completed-toast-undo")
@@ -142,10 +143,12 @@ class NavigationIncrementDeviceTest {
                     it.intent = launch
                 }
                 await { exists(hasContentDescription("Session actions") and isEnabled()) }
+                awaitWritable()
                 compose.onNodeWithContentDescription("Session actions").performClick(); settle()
                 assertEquals(listOf("Move to Open", "Delete Permanently"), menuItems())
                 capture("14-trash-menu")
-                compose.onNode(hasText("Delete Permanently") and hasAnyAncestor(isPopup())).performClick()
+                awaitWritable()
+                press(hasText("Delete Permanently") and hasAnyAncestor(isPopup()))
                 await { exists(hasText("Delete permanently?")) }
                 capture("15-delete-permanently-asked")
                 compose.onNodeWithText("Close").performClick()
@@ -154,8 +157,9 @@ class NavigationIncrementDeviceTest {
                 // A05-4 · a failure is a tinted card pinned with the server's words, then folds into a pill.
                 refuseComplete = true
                 await { exists(hasContentDescription("Options for Plain notes")) }
+                awaitWritable()
                 compose.onNodeWithContentDescription("Options for Plain notes").performScrollTo().performClick()
-                compose.onNode(hasText("Complete") and hasAnyAncestor(isDialog())).performScrollTo().performClick()
+                press(hasText("Complete") and hasAnyAncestor(isDialog()))
                 await { exists(hasText("Couldn't complete the session") and hasAnyAncestor(hasTestTag("toast"))) }
                 assertTrue(exists(hasText("The session is busy.") and hasAnyAncestor(hasTestTag("toast"))))
                 capture("16-failure-card")
@@ -242,6 +246,17 @@ class NavigationIncrementDeviceTest {
     private fun row(text: String) = hasText(text) and SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab)
     private fun exists(matcher: SemanticsMatcher) = compose.onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty()
     private fun await(condition: () -> Boolean) = compose.waitUntil(30_000, condition)
+    /** Writes are offered while the directory, and the session page's own read, are fresh: a refresh (one follows
+     * every write) holds them back for a moment. */
+    /** Presses [matcher] once it is enabled. */
+    private fun press(matcher: SemanticsMatcher) {
+        await { exists(matcher and isEnabled()) }
+        compose.onNode(matcher and isEnabled()).performScrollTo().performClick()
+    }
+    private fun awaitWritable() = await {
+        val live = app.realtime.state.value
+        live.directoryFresh && !live.directoryRefreshing && live.session?.fresh != false
+    }
     private fun menuItems() = compose.onAllNodes(hasAnyAncestor(isPopup()) and hasClickAction()).fetchSemanticsNodes()
         .mapNotNull { it.config.getOrNull(SemanticsProperties.Text)?.firstOrNull()?.text }
     private fun openDrawer() {
