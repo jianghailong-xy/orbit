@@ -6076,6 +6076,48 @@ model ProviderSlugAlias {
   @@map("provider_slug_alias")
 }
 
+/// One execution of the provider/engine migration (migration 0417, docs/provider-engine-contract.md
+/// §7.6, providers/provider-engine-migration.ts), which the API server runs when it starts. A full scan
+/// that left nothing behind is the completion marker (`complete`; one per version, a partial unique
+/// index in the migration's SQL); a later start only folds the `deepseek-harness` rows an older replica
+/// made since (`fullScan` false).
+model ProviderEngineMigrationRun {
+  id         String    @id @default(uuid(7)) @db.Uuid
+  version    Int
+  fullScan   Boolean   @map("full_scan")
+  complete   Boolean   @default(false)
+  startedAt  DateTime  @default(now()) @map("started_at") @db.Timestamptz(3)
+  finishedAt DateTime? @map("finished_at") @db.Timestamptz(3)
+  // Counts per step and action, and what was left for the next start.
+  summary    Json?
+  report     ProviderEngineMigrationReport[]
+
+  @@map("provider_engine_migration_run")
+}
+
+/// One line of a provider/engine migration run's report (migration 0417): what a step did to one row —
+/// its values before and after, never key material — or why it left it.
+model ProviderEngineMigrationReport {
+  id        BigInt                     @id @default(autoincrement())
+  runId     String                     @map("run_id") @db.Uuid
+  run       ProviderEngineMigrationRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  step      String
+  // The table the line is about, and the row in it (a preference line: the user and the key).
+  tableName String                     @map("table_name")
+  rowId     String?                    @map("row_id")
+  ownerId   String?                    @map("owner_id") @db.Uuid
+  // provider_engine_migration_report_action_check: MERGED, CONVERTED, ALIASED, REWRITTEN, NOOP,
+  // SKIPPED_CHANGED, UNRESOLVED, LEGACY_DSH_ENV_KEY, LEGACY_DSH_NO_KEY, INCONSISTENT, SAME, CHANGED.
+  action    String
+  before    Json?
+  after     Json?
+  note      String?
+  createdAt DateTime                   @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([runId, id], map: "provider_engine_migration_report_run_id_idx")
+  @@map("provider_engine_migration_report")
+}
+
 /// An account pool (migration 0265): several of one owner's Claude subscription providers, dispatched
 /// under a slug of the pool's own. That slug comes out of the same namespace as ModelProvider.slug —
 /// provider-slug.ts picks it, and the `*_dispatch_slug_guard` triggers refuse a slug the other table
