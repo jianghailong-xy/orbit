@@ -67,6 +67,12 @@ export interface RecapInput {
    * window; every other settle obeys it.
    */
   finalize?: boolean;
+  /**
+   * A pass a person asked for — POST /sessions/:id/recap. It ignores the throttle window exactly
+   * as a finalize does, and says nothing about the session being over. It obeys every other gate:
+   * the kill switch, the minimum event count, and a provider that may simply have no key.
+   */
+  force?: boolean;
 }
 
 export interface RecapOptions {
@@ -246,7 +252,9 @@ export function recapEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
 /**
  * Whether a settle at `now` may spend on a recap, read off the values a caller already has: the
  * switch, the two-minute window (which a finalize does not obey), and the minimum event count that
- * keeps one-shot sessions out of the model's queue. Null means "go ahead".
+ * keeps one-shot sessions out of the model's queue. `finalize` is any pass that ignores the window
+ * — a session's last settle, or a person's refresh — and the callers below map their own flags
+ * onto it. Null is "go ahead".
  */
 export function recapSkipReason(
   session: { recapAt: Date | null },
@@ -386,7 +394,7 @@ export async function generateRecap(input: RecapInput, opts: RecapOptions = {}):
     });
     if (!session) return { written: false, reason: 'no-session' };
     const skip = recapSkipReason(session, await countRecapEvents(input.db, input.sessionId), {
-      finalize: input.finalize,
+      finalize: input.finalize || input.force,
       now,
     });
     if (skip) return { written: false, reason: skip };
@@ -440,7 +448,7 @@ export async function recapDue(input: RecapInput, opts: { now?: Date } = {}): Pr
     });
     if (!session) return false;
     const skip = recapSkipReason(session, await countRecapEvents(input.db, input.sessionId), {
-      finalize: input.finalize,
+      finalize: input.finalize || input.force,
       now: opts.now ?? new Date(),
     });
     return skip === null;

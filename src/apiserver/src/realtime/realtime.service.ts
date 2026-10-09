@@ -32,6 +32,7 @@ import { Observable, Subject, filter, map, mergeMap } from 'rxjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { sessionEngine } from '../providers/session-engine';
 import { PushService } from '../push/push.service';
+import { enqueueRecap } from '../sessions/recap';
 import { deriveSessionCapabilities } from '../sessions/session-state';
 import { readWorktreeArtifactRequest } from '../sessions/worktree-artifact';
 import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
@@ -458,6 +459,14 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     const status = event.payload as { final?: boolean; retryAt?: string | null };
     if (event.type === RunEventType.STATUS && status.final && !status.retryAt) {
       void this.push.notifySessionSettled(runId);
+      // The same settlement, one line later, asks for the session's last recap (sessions/recap.ts):
+      // this branch is the one event per finalization — /turn-complete's failure, the runner's
+      // /finalize, the reaper's forceFinalize, a spent retry — so hooking here covers every way a
+      // session ends rather than the doors that happen to end it. `finalize` is what a settle that
+      // arrives inside the two-minute window needs: the pass ignores the window, and the write is
+      // what the session list draws next. Fire and forget, like the push above it: the pass is
+      // queued and this call returns, and nothing the pass can meet may fail a settlement.
+      void enqueueRecap({ db: this.prisma, sessionId: runId, finalize: true }).catch(() => undefined);
     }
   }
 

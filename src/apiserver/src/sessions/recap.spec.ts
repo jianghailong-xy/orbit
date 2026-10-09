@@ -240,6 +240,47 @@ test('a settle inside the throttle window writes nothing and asks nobody', async
   }
 });
 
+test('a pass a person asked for ignores the window, and nothing else', async () => {
+  const originalFetch = globalThis.fetch;
+  const originalKey = process.env.DEEPSEEK_API_KEY;
+  process.env.DEEPSEEK_API_KEY = 'test-key';
+  const { db, stored } = fakeDb({
+    session: { recapText: 'Earlier.', recapAt: new Date(NOW.getTime() - 30_000), recapEventSeq: 2 },
+    events: events(10),
+  });
+  globalThis.fetch = (() => Promise.resolve(textResponse('Refreshed by hand.'))) as typeof fetch;
+  try {
+    assert.deepEqual(await generateRecap({ db, sessionId: 's1', force: true }, { now: NOW, retries: 0 }), {
+      written: true,
+      recapText: 'Refreshed by hand.',
+      recapEventSeq: 10,
+    });
+    assert.equal(stored.recapAt, NOW);
+    assert.equal(recapSkipReason({ recapAt: NOW }, 10, { now: NOW }), 'throttled',
+      'the window it just spent is closed again for the next settle');
+    // The person's pass is still the deployment's switch and the session's own floor: a refresh
+    // buys past the two-minute wait, and nothing else.
+    const original = process.env.ORBIT_RECAP_ENABLED;
+    process.env.ORBIT_RECAP_ENABLED = '0';
+    try {
+      assert.deepEqual(await generateRecap({ db, sessionId: 's1', force: true }), {
+        written: false,
+        reason: 'disabled',
+      });
+    } finally {
+      restoreEnv('ORBIT_RECAP_ENABLED', original);
+    }
+    const thin = fakeDb({ session: { recapAt: NOW }, events: events(3) });
+    assert.deepEqual(await generateRecap({ db: thin.db, sessionId: 's1', force: true }), {
+      written: false,
+      reason: 'too-few-events',
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv('DEEPSEEK_API_KEY', originalKey);
+  }
+});
+
 test('a pass assembles the prompt, holds the 8k ceiling and compare-and-sets the cursor', async () => {
   const originalFetch = globalThis.fetch;
   const originalKey = process.env.DEEPSEEK_API_KEY;
