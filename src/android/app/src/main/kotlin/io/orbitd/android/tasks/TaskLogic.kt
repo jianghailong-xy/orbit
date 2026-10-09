@@ -854,11 +854,14 @@ object TaskDetailLogic {
     /** A tier picked by a person is their own: the coordinator's reason is cleared with it. */
     fun modelHintRequest(level: String?) = buildJsonObject { put("modelHint", level?.let(::JsonPrimitive) ?: JsonNull); put("modelHintReason", JsonNull) }
 
-    fun runRoute(session: JsonObject): JsonObject? = session.obj("route")?.takeIf { !it.text("level").isNullOrEmpty() }
+    /** The decision behind a run, when it named a tier. A route with no tier routed nothing, and with the account's switch off
+     * (the default) there is none: runs read as before routing (iOS 9fb3ae6ee). */
+    fun runRoute(session: JsonObject, smartSelection: Boolean): JsonObject? =
+        session.obj("route")?.takeIf { smartSelection && !it.text("level").isNullOrEmpty() }
     fun routePick(route: JsonObject, modelLabel: (String) -> String) =
         listOf(route.text("model")?.let(modelLabel) ?: route.text("provider").orEmpty(), route.text("effort").orEmpty()).filter { it.isNotEmpty() }.joinToString(" · ")
-    fun runModelLine(session: JsonObject, modelLabel: (String) -> String): String? {
-        val applied = runRoute(session)?.flag("applied") == true
+    fun runModelLine(session: JsonObject, smartSelection: Boolean, modelLabel: (String) -> String): String? {
+        val applied = runRoute(session, smartSelection)?.flag("applied") == true
         val ranOn = session.text("model")?.takeIf { it.isNotEmpty() } ?: if (applied) session.obj("route")?.text("model")?.takeIf { it.isNotEmpty() } else null
         ranOn ?: return null
         val ranAt = session.text("effort")?.takeIf { it.isNotEmpty() } ?: if (applied) session.obj("route")?.text("effort")?.takeIf { it.isNotEmpty() } else null

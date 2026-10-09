@@ -22,7 +22,7 @@ The correspondence below is read from source. The behaviour was then run against
 
 | iOS baseline | Android | Endpoints |
 | --- | --- | --- |
-| Settings sheet (`SettingsHome`): avatar + name header → Edit profile; Sessions (Default permission menu, Session orchestration switch); Machines & models (Runners “N of M online”, Providers); Preferences (Notifications On/Off, Appearance menu); Account (Email, Instance host[:port], Shared links “N active”, Change password, Admin only for ADMIN); Sign out asking “Sign out of <instance>?”; version line | `SettingsScreen.kt` `SettingsHome`: same groups, rows and their glyphs (`SettingsHome.systemImage` drawn as app vectors), pencil badge on the avatar, row values, in-row menus/switch, confirmation; version line plus the existing A02 Build information link. “Notifications are off · Turn on” card when the device has push but alerts are off. The status and navigation bar icons follow the account’s Appearance, not the system’s (`AccountAppearance` re-applies edge-to-edge) | `GET users/me`, `PATCH users/me/preferences` (one key per write), `GET runners`, `GET share-links` |
+| Settings sheet (`SettingsHome`): avatar + name header → Edit profile; Sessions (Default permission menu, Session orchestration switch); Machines & models (Runners “N of M online”, Providers); Preferences (Notifications On/Off, Appearance menu); Account (Email, Instance host[:port], Shared links “N active”, Change password, Admin only for ADMIN); Sign out asking “Sign out?” (A13d: no server name, as iOS 6969f7840); version line | `SettingsScreen.kt` `SettingsHome`: same groups, rows and their glyphs (`SettingsHome.systemImage` drawn as app vectors), pencil badge on the avatar, row values, in-row menus/switch, confirmation; version line plus the existing A02 Build information link. “Notifications are off · Turn on” card when the device has push but alerts are off. The status and navigation bar icons follow the account’s Appearance, not the system’s (`AccountAppearance` re-applies edge-to-edge) | `GET users/me`, `PATCH users/me/preferences` (one key per write), `GET runners`, `GET share-links` |
 | Edit profile card: photo menu (Photo library, Take photo, Choose file, Remove photo), round crop, Name + caption, Save profile (photo first, then name; a landed step stays), failure “Couldn’t save your photo/name — …” | `PersonalSettings.kt` `EditProfile`: same menu behind the camera-badged avatar (system photo picker / camera / documents); the crop is iOS `AvatarCropView` — pinch to zoom, drag to place, the circle always covered (`AvatarCrop` ported from OrbitKit with its tests), TalkBack Zoom in / Zoom out; 512 px JPEG on white; same steps and wording | `PUT/DELETE/GET users/me/avatar` (multipart `file`), `PATCH users/me` |
 | Change password page: three fields, footer outcome / “Passwords do not match” / “At least 6 characters” | `ChangePassword` | `POST auth/change-password` (wrong password is a 400, never a sign-out) |
 | Notifications page: device section; “Sent to all your devices” two switches with hints; “Always sent” list | Device section is A10’s `NotificationSettings(app.push)`; account switches and Always-sent rows here. An unconfigured FCM build reads “Unavailable”, never On | `PATCH users/me/preferences` |
@@ -322,6 +322,41 @@ Tests: `AntigravityAccountsTest` (iOS AntigravityGoogleClientTests and Antigravi
 (flat HPC payload, one window), `RunnerEnginePageTest` (Robolectric: rows, engine page, menu, sign-in card),
 `ComposerAccountsTest`, `ComposerModelTest`, `AccountCopyParityTest` (the words are the Swift sources'). Device:
 `ManagementDeviceTest.antigravityAccountsOneWindowAndTheSignInCard`, run by `scripts/management-device-test.sh`.
+
+## A13d: access tokens, smart model selection, DeepSeek balance, the runners list and confirmations (A01b A13-7/8/11/13/14/15/16)
+
+Follows main's iOS commits 90b80b42f and 86203ffb0 (A13-7), c354087cf and 9531bc1c2 (A13-8), 91316c246 (A13-11),
+d3441c702/7d06bbee0 (A13-13), 9fb3ae6ee and 614a21410 (A13-14), ba95dd340/d71fe48a3, 81b2d70a4 and 6969f7840 (A13-15),
+936ebbd3c and 96e1a1536 (A13-16). Every endpoint read here is on main (`auth/access-tokens.controller.ts`,
+`users.controller.ts` `PATCH users/me/preferences`, `providers.controller.ts` `GET providers/mine[/:id/balance]`).
+
+| Item | iOS | Android |
+| --- | --- | --- |
+| A13-7 access tokens | `AccessTokensList`, `AccessTokenRow`, `AccessTokensSettingsPage` (swipe/context menu Revoke, `orbitConfirmation`) | Settings → Account's Access tokens row ("N active"/"None") opens `AccessTokensSettings`: Active N / Revoked & expired N, the page's sentence with "New tokens are created in Settings → Access tokens on the web.", each row's name and `orbit_pat_…<hint>`, reach, expiry or the orange Never expires mark, last use; Revoke is in a working token's ⋯ menu and asks “Revoke “<name>”?” with Cancel beside it, then the list is read again. Nothing issues a token |
+| A13-8 Kimi's site | `KimiSite`, `RunnerSignInView` site buttons | Already on the project line from main's Kimi project (8f2cce602, `KimiSite.kt`): the site question, kimi.com · Mainland China / kimi.ai · International with Current, `region` only where the runner can be told, the device step naming the site, "Use <other> instead", the Engines row's site. Verified against the A01b items, not redone |
+| A13-11 runners list | no Edit button; `onMove`, swipe-to-delete with confirmation | No Edit/Done: a drag handle on every row (the Wiki plan's Edit sheet pattern, card 34bs0PdYUHHwiKHYn3rCp), one POST runners/reorder per drag; Remove… in the row's ⋯ menu, asked first; the row opens the runner; TalkBack's Move up / Move down always offered |
+| A13-13 Providers footers | `ProvidersOverview.onYourRunnersDetail/accountPoolsDetail` | "Use subscriptions signed in on your machines." / "Several accounts under one name." |
+| A13-14 smart model selection | `SettingsCopy.smartModelSelection(Hint)`, `UserPreferences.smartModelSelection`, the gates in `TaskDetailLogic`, `ComposerLogic.smartRoute`, `AgentFormContent` | Settings → Sessions' switch, glyph beside its name and the hint under it, on only for an explicit `modelRouting: true`, written alone; `LocalSmartSelection` (read with users/me by `AccountAppearance`, set at once by the switch) gates the task page (Suggested, the ✦ placeholder, the coordinator's reason, runs' ✦ tiers, would-have-picked, ⓘ) and the workspace form's Task runs |
+| A13-15 confirmations | `orbitConfirmation`: an alert on a phone, Cancel beside the press | "Sign out?"; the directory's Delete permanently, folder Delete (iOS's words) and a move to another workspace in one step (End and Move or Move, iOS's message) as dialogs with Cancel; Stop watching? keeps the watch with "Keep watching"; Revoke follows the rule |
+| A13-16 DeepSeek balance | `DeepSeekBalance`, `DeepSeekKeyPageView`, `AgentsModel.loadDeepSeekBalances` (side by side) | A DeepSeek key's row (matched by slug in `GET providers/mine`) ends with its total ("¥110.00 · $5.00", red when too low, orange Unavailable) and opens `DeepSeekKeyPage`: the balance first (Checking…, too low, Total per currency with the granted/topped-up bar, Updated, Refresh `?refresh=1`, Top up on DeepSeek; or Couldn't get the balance, Unknown, Last tried, Retry), the footnotes, then Runs on / Default model / Endpoint. The balances are read side by side |
+
+Differences from iOS, intended:
+- A13-11: a drag handle instead of iOS's long-press reorder, with Move up / Move down as TalkBack actions — the
+  coordinator's decision, consistent with the account owner's for the Wiki plan's Edit sheet (card
+  34bs0PdYUHHwiKHYn3rCp). iOS's swipe-to-delete is the row's ⋯ menu, as elsewhere in A13.
+- A13-16: iOS's "Opens platform.deepseek.com/top_up in Safari." reads "… in your browser." — the coordinator's
+  decision; Android opens the page in whatever browser the device uses.
+- A13-15: Android's confirmations were already centred dialogs, so iOS's anchoring fixes have nothing to port.
+- A13-7: Revoke is in the row's ⋯ menu (iOS's swipe and context menu).
+- A13-14: the composer's ✦ chip (A11-1) is A11c's; since the merge of the project line it reads the same
+  `LocalSmartSelection`, which Settings' switch now sets the moment the server took the change.
+
+Tests: `AccessTokensTest`, `AccessTokensLogicTest` (iOS AccessTokensListTests), `DeepSeekBalanceTest`,
+`DeepSeekBalanceLogicTest` (iOS DeepSeekBalanceTests), `SmartSelectionGateTest`, `TaskLogicTest`
+(runs' routes under the switch), `SettingsLogicTest`, `SettingsCopyParityTest` (every word in the Swift sources, the
+browser sentence excepted), `ManagementPanelTest` (footers, runners list, sign out), `DirectoryConfirmationTest`,
+`WatchScreensTest`. Device: `ManagementDeviceTest` (A13d journey and the runners list), run by
+`scripts/management-device-test.sh`.
 
 ## Remaining evidence (gaps)
 

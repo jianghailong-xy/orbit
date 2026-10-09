@@ -94,6 +94,13 @@ public enum SessionFilter {
         sessions.filter { $0.id != id }
     }
 
+    /// Leave out every session in `ids`: the rows this device is moving to Trash, which a list read
+    /// that left before the move would otherwise bring back. With none — nearly always — `sessions`
+    /// comes back as it was, uncopied.
+    public static func removing(_ ids: Set<String>, from sessions: [Session]) -> [Session] {
+        ids.isEmpty ? sessions : sessions.filter { !ids.contains($0.id) }
+    }
+
     /// Sessions belonging to one agent. The list payload nests the agent as `agent.id` (the flat
     /// `agentId` is absent there), so that's the primary key; the flat field is the fallback because
     /// `POST /sessions` answers with the reverse shape — a flat `agentId`, no nested agent — and that
