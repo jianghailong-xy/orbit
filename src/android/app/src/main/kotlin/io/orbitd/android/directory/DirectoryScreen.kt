@@ -11,6 +11,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.*
@@ -158,7 +159,12 @@ private fun SearchResultsList(query: String, api: DirectoryApi, open: (OrbitRout
 fun SessionRow(session: DirectorySession, onOpen: () -> Unit, onOptions: () -> Unit) {
     ListItem(headlineContent = { Text(session.name) }, supportingContent = {
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(session.stateLabel, color = if (session.pendingApprovals > 0) LocalOrbitColors.current.needsYou else MaterialTheme.colorScheme.onSurfaceVariant)
+            if (session.pendingApprovals == 0 && session.confirmationUnderReview != null) Row(verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                // iOS's clock glyph for a run whose report is with its reviewer, in the quiet tone (A08-1).
+                Icon(painterResource(R.drawable.ic_clock), null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(session.stateLabel, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } else Text(session.stateLabel, color = if (session.pendingApprovals > 0) LocalOrbitColors.current.needsYou else MaterialTheme.colorScheme.onSurfaceVariant)
             (session.lastUserText ?: session.lastAssistantText)?.takeIf { it.isNotBlank() }?.let { Text(it, maxLines = 2, style = MaterialTheme.typography.bodyMedium) }
             if (session.tags.isNotEmpty()) Text(session.tags.joinToString(" · ") { it.name }, style = MaterialTheme.typography.bodySmall)
             if (session.runningBgJobCount > 0) Text("${session.runningBgJobCount} background jobs", style = MaterialTheme.typography.bodySmall)

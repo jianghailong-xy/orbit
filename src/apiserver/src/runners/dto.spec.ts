@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
+import { uuidToBase62 } from '@orbit/shared';
 import { ReorderRunnersDto, StartInstallDto, StartLoginDto } from './dto';
 
 test('Antigravity can be installed and signed into', async () => {
@@ -50,24 +52,28 @@ test('StartLoginDto still rejects OpenCode, which is installed and never signed 
   assert.notEqual((await validate(dto)).length, 0);
 });
 
-test('ReorderRunnersDto accepts a unique string id list', async () => {
-  const dto = new ReorderRunnersDto();
-  dto.ids = ['runner-2', 'runner-1'];
-  assert.equal((await validate(dto)).length, 0);
+// Two runners: the UUIDs their rows key by. GET /runners hands every client the base62 spelling.
+const FIRST = '019fe1dd-3f39-7610-8e5d-507e36a4ea9b';
+const SECOND = '019fe1dd-3f39-7610-8e5d-507e36a4ea9c';
+// As the global ValidationPipe builds the body: plainToInstance first, which is where ids decode.
+const reorder = (ids: unknown) => plainToInstance(ReorderRunnersDto, { ids });
+
+test('ReorderRunnersDto decodes the public ids GET /runners hands out', async () => {
+  // Taken as plain strings, the base62 ids every client sends back matched no runner, and the
+  // service kept the stored order whatever was dragged.
+  const dto = reorder([uuidToBase62(SECOND), FIRST]);
+  assert.deepEqual(await validate(dto), []);
+  assert.deepEqual(dto.ids, [SECOND, FIRST]);
 });
 
-test('ReorderRunnersDto rejects duplicate ids', async () => {
-  const dto = new ReorderRunnersDto();
-  dto.ids = ['runner-1', 'runner-1'];
-  assert.notEqual((await validate(dto)).length, 0);
+test('ReorderRunnersDto rejects duplicate ids, in either spelling', async () => {
+  for (const ids of [[FIRST, FIRST], [uuidToBase62(FIRST), FIRST]]) {
+    assert.notEqual((await validate(reorder(ids))).length, 0, ids.join());
+  }
 });
 
-test('ReorderRunnersDto rejects non-array and non-string ids', async () => {
-  const notArray = new ReorderRunnersDto();
-  notArray.ids = 'runner-1' as unknown as string[];
-  assert.notEqual((await validate(notArray)).length, 0);
-
-  const nonString = new ReorderRunnersDto();
-  nonString.ids = ['runner-1', 2] as unknown as string[];
-  assert.notEqual((await validate(nonString)).length, 0);
+test('ReorderRunnersDto rejects a non-array, a non-string and an id in neither spelling', async () => {
+  for (const ids of ['runner-1', [FIRST, 2], ['runner-1']]) {
+    assert.notEqual((await validate(reorder(ids))).length, 0, JSON.stringify(ids));
+  }
 });

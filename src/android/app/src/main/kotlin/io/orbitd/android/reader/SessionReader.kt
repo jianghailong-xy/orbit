@@ -8,6 +8,7 @@ import androidx.compose.foundation.lazy.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clipToBounds
@@ -22,9 +23,23 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.composer.SessionComposer
+import io.orbitd.android.cards.CardFocus
+import io.orbitd.android.cards.CardReviewSheet
+import io.orbitd.android.cards.LocalSteerDeliveries
+import io.orbitd.android.cards.NeedsYouLogic
+import io.orbitd.android.cards.SessionCardsReads
+import io.orbitd.android.cards.rememberSessionCards
+import io.orbitd.android.core.cards.CardPreviews
+import io.orbitd.android.cards.ReaderSide
 import io.orbitd.android.cards.SessionCards
+import io.orbitd.android.cards.SessionNeedsYouBar
+import io.orbitd.android.cards.SessionRunStartCard
+import io.orbitd.android.cards.SessionTasksCard
 import io.orbitd.android.watch.SessionWatches
 import io.orbitd.android.core.auth.SessionHandle
+import io.orbitd.android.core.cards.OwnerReview
+import io.orbitd.android.core.cards.SessionRunStart
+import io.orbitd.android.core.net.HttpMethod
 import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.core.realtime.*
 import io.orbitd.android.directory.*
@@ -111,6 +126,24 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     }
     val transcript = state.session?.transcript
     val snapshotDetail = state.session?.snapshot?.detail
+    // What the needs-you bar counts in this conversation (iOS `ConsoleModel.openBelowRows`), and which way it lies from
+    // the reader: the cards are drawn in the rail before the tail, so they are above only once the reader is past it.
+    val belowRows = remember(state.session?.snapshot) {
+        state.session?.snapshot?.let { NeedsYouLogic.belowRows(state.session!!.id, it) }.orEmpty()
+    }
+    // A08-4: the queue's turns drawn at the transcript's end, the ones the window has not seen delivered yet.
+    val queued = remember(state.session?.snapshot?.queuedTurns, state.window.events) {
+        queuedTail(state.session?.snapshot?.queuedTurns.orEmpty(), state.window.events)
+    }
+    val queuedShown = if (transcript != null && state.window.newerAfter == null) queued.size else 0
+    val readerSide by remember(list) { derivedStateOf {
+        when (val top = topLineItem(list.layoutInfo.visibleItemsInfo, list.layoutInfo.viewportStartOffset)) {
+            null -> null
+            "tail" -> ReaderSide.ABOVE
+            else -> if (top.startsWith("queued:")) ReaderSide.ABOVE else ReaderSide.BELOW
+        }
+    } }
+    val scope = rememberCoroutineScope()
     LaunchedEffect(snapshotDetail) { snapshotDetail?.let(worktree::offer) }
     LaunchedEffect(worktree, state.denied) {
         if (!state.denied) worktree.poll { (worktree.state.value.detail ?: snapshotDetail)?.let { it.string("runStatus") ?: it.string("status") } in
@@ -120,9 +153,12 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     // header) asks for the tail again; nothing else re-anchors the bottom of a list that shrank.
     val viewport = remember(model) { TranscriptViewport() }
     var repin by remember(model) { mutableIntStateOf(0) }
-    LaunchedEffect(state.window.events, transcript?.textDrafts, transcript?.thinkingDrafts, transcript?.toolOutputs, follow, placed, repin) {
+    LaunchedEffect(state.window.events, transcript?.textDrafts, transcript?.thinkingDrafts, transcript?.toolOutputs, follow, placed, repin,
+        state.session?.snapshot?.queuedTurns) {
         if (placed && follow && !dragging && state.window.newerAfter == null && !state.loading) {
             withFrameNanos { }
+            // A reader who stopped following during that frame stays where they went: a card brought into view, a touch.
+            if (!follow || dragging) return@LaunchedEffect
             positioning = true
             list.scrollToItem((list.layoutInfo.totalItemsCount - 1).coerceAtLeast(0))
             positioning = false
@@ -133,7 +169,25 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     val taskActivity = remember(transcript?.taskProgress, state.window.events, background) {
         TaskActivity.of(transcript?.taskProgress, state.window.events, background.orEmpty())
     }
-    CompositionLocalProvider(LocalReaderResources provides resources, LocalTaskActivity provides taskActivity) {
+    // The conversation's cards, and the review a preview opens (A08-2), held outside the transcript's recyclable rows.
+    val cards = rememberSessionCards(app, handle, route.id!!)
+    val reviewStates = rememberSaveableStateHolder()
+    val discussCard: ((String) -> Unit)? = if (!composerState.loaded) null else { context ->
+        val prior = composer.state.value.draft.text
+        val text = prior + (if (prior.isBlank()) "" else "\n\n") + context
+        composer.edit(text, text.length, text.length)
+        composerFocused = true
+        composeFocus++
+    }
+    // A08-3: while a review is open the transcript does not follow its tail, so closing it returns to the card's place.
+    LaunchedEffect(cards.review) { if (cards.review != null) follow = false }
+    // How far each steer got, by its turn: the latest `user_delivery` the window holds (A08-11's wake receipt reads it).
+    val steerDeliveries = remember(state.window.events) {
+        state.window.events.filter { it.type == "user_delivery" }
+            .mapNotNull { event -> event.fields.string("turnId")?.let { turn -> event.fields.string("delivery")?.let { turn to it } } }.toMap()
+    }
+    CompositionLocalProvider(LocalReaderResources provides resources, LocalTaskActivity provides taskActivity, LocalSteerDeliveries provides steerDeliveries) {
+        SessionCardsReads(cards)
         BoxWithConstraints(Modifier.fillMaxSize()) {
         val otherInputHasKeyboard = WindowInsets.ime.getBottom(LocalDensity.current) > 0 && !composerFocused
         val composerHeight = if (otherInputHasKeyboard) 0.dp else if (maxHeight < 320.dp) maxHeight else maxHeight * 0.65f
@@ -157,7 +211,8 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                 val reconnecting = session?.fresh != true && state.window.seeded
                 Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = 16.dp),
                     verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                    Text(if (reconnecting) "Saved messages · Reconnecting…" else sessionLabel(session),
+                    Text(if (reconnecting) "Saved messages · Reconnecting…" else sessionLabel(session,
+                            data.sessions["open"]?.firstOrNull { ObjectId.same(it.id, route.id) }),
                         Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
                     // Reserve the scaled button's height even while fresh, including 200% text.
                     TextButton(onClick = model::retry, enabled = reconnecting,
@@ -165,6 +220,21 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                             .then(if (reconnecting) Modifier else Modifier.clearAndSetSemantics { })) { Text("Retry") }
                 }
                 state.error?.let { StatusMessage("Couldn't load messages", it, model::retry) }
+                // The needs-you bar, under the header and over the transcript (iOS `NeedsYouBannerView` in the console's top
+                // inset). Its press here unpins the reader and shows the waiting card, which the card rail brings into view.
+                SessionNeedsYouBar(app, handle, route.id!!, list, hidden = composerFocused && compact,
+                    below = NeedsYouLogic.below(belowRows, readerSide), open = open, onBelow = { row ->
+                        follow = false
+                        scope.launch {
+                            // The rail is the item before the queue and the tail; a card in it is brought into view once it is drawn.
+                            list.scrollToItem((list.layoutInfo.totalItemsCount - 2 - queuedShown).coerceAtLeast(0))
+                            CardFocus.request(route.id!!, row)
+                            // A08-3: a card answered in a review opens it, over the card it scrolled to (iOS 419fa780b). Evidence and
+                            // exceptions are answered in place, so the press only shows them.
+                            state.session?.let { live -> cards.shown(live).firstOrNull { it.key == row } }
+                                ?.takeIf { CardPreviews.preview(it) != null }?.let { cards.open(it.key) }
+                        }
+                    })
                 // Capture all lazy intervals in this composition, preserving A05's measurement fix.
                 val displayedRows = rows
                 val displayedWindow = state.window
@@ -198,13 +268,13 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                         }
                     }
                     item(key = "newer") { if (displayedWindow.newerAfter != null) TextButton(enabled = !displayedLoading, onClick = model::newer) { Text("Load newer messages") } }
-                    item(key = "interaction-cards") { SessionCards(openLink, discuss = if (!composerState.loaded) null else { context ->
-                        val prior = composer.state.value.draft.text
-                        val text = prior + (if (prior.isBlank()) "" else "\n\n") + context
-                        composer.edit(text, text.length, text.length)
-                        composerFocused = true
-                        composeFocus++
-                    }) }
+                    item(key = "interaction-cards") { SessionCards(cards, openLink, discuss = discussCard) }
+                    // A08-4: what is still waiting in the queue, as the turns it will be — after the decisions, before the tail.
+                    if (live != null) items(queued, key = { it.key }) { turn ->
+                        QueuedTurnRow(turn, openLink, cancelEnabled = state.session?.fresh == true && !composerState.busy) { turnId ->
+                            composer.control("turns/$turnId", HttpMethod.DELETE)
+                        }
+                    }
                     item(key = "tail") { Spacer(Modifier.height(1.dp).testTag("transcript-tail")) }
                 }
                 if (!follow || state.window.newerAfter != null) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
@@ -215,8 +285,19 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     TextButton(onClick = { follow = true; model.latest() }) { Text("Jump to latest") }
                 }
                 }
+                // A08-5: a run that never started says why, first in the band above the composer — and stays while a phone types.
+                SessionRunStartCard(app, handle, state.session?.snapshot?.detail, state.session?.fresh == true,
+                    chat = {
+                        // The composer is handed a reply about this run, in place of whatever was in it (iOS `chatAboutRefusedRun`).
+                        composer.edit(SessionRunStart.chatPrefix, SessionRunStart.chatPrefix.length, SessionRunStart.chatPrefix.length)
+                        composerFocused = true; composeFocus++
+                    },
+                    sendAgain = { composer.control("retry-message", body = JsonObject(emptyMap())) },
+                    openRunner = { runner -> open(OrbitRoute(Destination.RUNNER, runner)) })
                 SessionWatches(app, handle, route.id!!, open = open)
-                // The session's code output, folded with the rest of the chrome while a phone's composer is focused.
+                // The session's tasks — created here, or waited on by its watches (A08-6) — and its code output, folded with the rest
+                // of the chrome while a phone's composer is focused.
+                if (!(composerFocused && compact)) SessionTasksCard(app, handle, route.id!!, cards, openLink)
                 if (!(composerFocused && compact)) Box(Modifier.padding(horizontal = 16.dp)) { WorktreeBar(worktree, openLink) }
                 // Keep the composer and its activity-result launchers alive while card forms use the IME.
                 // The chip's Open task › pushes the task over this run, so Back returns to it.
@@ -225,6 +306,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
             }
         }
         }
+        if (!state.denied) CardReviewSheet(cards, reviewStates, openLink, discussCard)
         if (details && !state.denied) SessionDetails(state.session, api, openLink) { details = false }
         action?.let { DirectoryActionDialog(it, api, data.copy(fresh = data.fresh && state.session?.fresh == true), { action = it }) {
             app.realtime.refreshDirectory(); app.realtime.refreshSession()
@@ -232,10 +314,12 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     }
 }
 
-private fun sessionLabel(session: SessionState?): String {
+private fun sessionLabel(session: SessionState?, row: DirectorySession? = null): String {
     val snapshot = session?.snapshot
     return when {
         snapshot?.approvals?.isNotEmpty() == true -> "Waiting for your reply"
+        // Its report is with its reviewer (A08-1; iOS `SessionHeader`), after anything waiting on the reader.
+        row != null && row.pendingApprovals == 0 && row.confirmationUnderReview != null -> OwnerReview.underReview
         session?.error != null -> "Disconnected · Retrying"
         snapshot != null -> snapshot.detail.string("runState") ?: snapshot.detail.string("status") ?: "Session"
         else -> "Connecting…"

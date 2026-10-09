@@ -217,20 +217,21 @@ class WikiWatchTalkBackTest {
         log("double tap on the watch's row -> its record opened")
     }
 
-    /** A session's Watching strip: its line, by double tap, opens what the session waits on; a target, by double tap,
-     * opens the task's page over the session. The rest of the session page is not this check's: only the strip is judged. */
-    @Test fun sessionWatchingStrip() = journey("strip", { "orbit-session:${it.string("session")}" }) { ids ->
-        awaitTag("session-watches")
-        page("strip", steps = 6, from = "watch-strip-line", within = "session-watches")
-        activate("strip", "watch-strip-line", "Watching")
-        awaitTag("watch-strip-list")
-        log("double tap on the Watching line -> the list opened")
-        page("strip-open", steps = 6, from = "watch-strip-line", within = "session-watches")
-        val since = activate("strip-open", "watch-strip-target:${ids.string("watch")}:${ids.string("task")}", "A12 watched task")
+    /** A session's wait on a task, which since A08-6 is a row of its Tasks card (a wait on tasks alone draws no Watching strip):
+     * the card's line, by double tap, opens its rows; the task's row, by double tap, opens the task's page over the session. The
+     * rest of the session page is not this check's: only the card is judged. */
+    @Test fun sessionTasksCard() = journey("tasks-card", { "orbit-session:${it.string("session")}" }) { ids ->
+        awaitTag("session-tasks")
+        page("tasks-card", steps = 6, from = "session-tasks:line", within = "session-tasks")
+        activate("tasks-card", "session-tasks:line", "Tasks")
+        awaitTag("session-tasks:list")
+        log("double tap on the Tasks line -> its rows opened")
+        page("tasks-card-open", steps = 6, from = "session-tasks:line", within = "session-tasks")
+        val since = activate("tasks-card-open", "created-task:${ids.string("task")}", "A12 watched task")
         compose.waitUntil(15_000) { journal().any { it.string("method") == "GET" && it.string("path").startsWith("/api/tasks/${ids.string("task")}") } }
-        readBack("strip-open", "double tap on the target -> the task's page opened over the session (GET /api/tasks/…)", since)
+        readBack("tasks-card-open", "double tap on the task's row -> the task's page opened over the session (GET /api/tasks/…)", since)
         back()
-        awaitTag("session-watches")
+        awaitTag("session-tasks")
     }
 
     // MARK: the lazy-list control

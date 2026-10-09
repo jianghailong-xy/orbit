@@ -461,18 +461,20 @@ class WikiWatchDeviceTest {
         awaitTag("watch-detail:$watch")
     }
 
-    /** A session's Watching strip: what it waits on, opened to its targets, and a target opening its own page over
-     * the session; Back returns to the conversation. */
-    @Test fun aSessionsWatchingStripOpensATarget() = journey("strip", { "orbit-session:${it.string("session")}" }) { _, ids ->
-        awaitTag("session-watches")
-        press("watch-strip-line")
-        awaitTag("watch-strip-list")
-        capture("strip-open")
-        press("watch-strip-target:${ids.string("watch")}:${ids.string("task")}")
+    /** A session's wait on a task: since A08-6 (iOS 516ac3389) the task is a row of the session's Tasks card, with its eye, and a
+     * wait on tasks alone draws no Watching strip. The row opens the task's own page over the session; Back returns to the
+     * conversation. */
+    @Test fun aSessionsWatchedTaskOpensFromItsTasksCard() = journey("tasks-card", { "orbit-session:${it.string("session")}" }) { _, ids ->
+        awaitTag("session-tasks")
+        compose.onNodeWithTag("session-watches").assertDoesNotExist()
+        press("session-tasks:line")
+        awaitTag("session-tasks:list")
+        capture("tasks-card-open")
+        press("created-task:${ids.string("task")}")
         compose.waitUntil(15_000) { journal().any { it.string("method") == "GET" && it.string("path").startsWith("/api/tasks/${ids.string("task")}") } }
-        capture("strip-target")
+        capture("tasks-card-target")
         compose.onNodeWithContentDescription("Back").performClick()
-        awaitTag("session-watches")
+        awaitTag("session-tasks")
     }
 
     /** An entry the server cannot be reached for says so, with Retry, and reads once the connection is back. */

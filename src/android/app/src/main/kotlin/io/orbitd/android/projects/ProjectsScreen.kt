@@ -471,7 +471,9 @@ private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: Stri
         state.graph?.takeIf { it.objects("marks").isNotEmpty() }?.let { graph -> item(key = "graph") {
             SectionHead("Task graph", "Prerequisite → dependent"); ProjectGraph(graph, openTask)
         } }
-        blockersSection(doc, now, enabled) { dialog = ProjectDialog.Resolve(it) }
+        blockersSection(doc, now, enabled, titleFor = { id -> state.tasks.firstOrNull { ObjectId.same(it.text("id"), id) }?.text("title") }) {
+            dialog = ProjectDialog.Resolve(it)
+        }
         queueSection(state, enabled, open, run = { item ->
             val taskId = item.text("taskId") ?: return@queueSection
             val trigger = UUID.randomUUID().toString()
@@ -989,7 +991,8 @@ private fun Folded(source: String, height: Int, link: (String) -> Unit) {
     }
 }
 
-private fun LazyListScope.blockersSection(doc: JsonObject, now: Instant, enabled: Boolean, resolve: (JsonObject) -> Unit) {
+private fun LazyListScope.blockersSection(doc: JsonObject, now: Instant, enabled: Boolean, titleFor: (String) -> String? = { null },
+    resolve: (JsonObject) -> Unit) {
     val blockers = doc.obj("blockers") ?: return
     val open = blockers.objects("open")
     if (open.isEmpty()) return
@@ -1009,6 +1012,11 @@ private fun LazyListScope.blockersSection(doc: JsonObject, now: Instant, enabled
                     Text(blocker.text("requiredAction").orEmpty(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     ProjectPage.blockerPathsLine(blocker.obj("detail")?.strings("paths").orEmpty())?.let {
                         Text(it, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1) }
+                    // A refused source: its code and ref, then the tasks whose runs it refuses (A08-5).
+                    SessionRunStart.blockerSourceLines(blocker, titleFor).forEach {
+                        Text(it, Modifier.testTag("blocker:${blocker.text("id")}:source"), style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
                 OutlinedButton(onClick = { resolve(blocker) }, enabled = enabled, modifier = Modifier.testTag("blocker:${blocker.text("id")}:resolve")) {
                     Text(ProjectPage.resolveBlockerPress(blocker)) }
