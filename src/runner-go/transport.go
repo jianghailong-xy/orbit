@@ -970,6 +970,10 @@ func taskCreateHeaders(agentID, sessionID string) map[string]string {
 }
 
 type SessionMetaResponse struct {
+	// Engine is the engine the session runs on, the one its conversation belongs to. Provider carries
+	// the same engine for an older orbit resume, and is the only one a control plane older than
+	// engines sends (resumeMetaFromServer).
+	Engine           string  `json:"engine,omitempty"`
 	Provider         string  `json:"provider,omitempty"`
 	SessionUUID      string  `json:"sessionUuid"`
 	RuntimeSessionID string  `json:"runtimeSessionId,omitempty"`
