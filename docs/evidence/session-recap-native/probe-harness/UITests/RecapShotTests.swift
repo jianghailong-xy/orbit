@@ -48,6 +48,10 @@ final class RecapShotTests: ProbeCase {
     /// Whether the stub behind this pass was started with `--recaps-off`.
     private var recapsOff: Bool { ProcessInfo.processInfo.environment["RECAPS_OFF"] != nil }
 
+    /// Both passes write into one shots directory per platform, so the notes say which pass they are:
+    /// the test method's name alone would be the same file twice (see `ProbeCase.notesSuffix`).
+    override var notesSuffix: String { recapsOff ? "-off" : "-on" }
+
     private func drive(_ platform: String) {
         if recapsOff {
             listWithRecapsOff(platform)
@@ -163,8 +167,13 @@ final class RecapShotTests: ProbeCase {
     /// `me` (`UserPreferences.recaps`, absent means on), which is why this picture belongs beside
     /// the two list pictures rather than in a probe of its own.
     private func settings(_ platform: String) {
-        let app = open("\(platform)-settings-session-recaps", until: switchTitle, settings: true)
-        guard appears(app, switchTitle, timeout: 5) else { return }
+        // Waited for on the group's FIRST row, which is always on screen: the settings list is lazy,
+        // so a row below the fold is not in the tree to be waited for at all, and the switch is the
+        // fifth of its group on a phone. `band` then brings it into view (it scrolls whether or not
+        // the row exists yet).
+        let app = open("\(platform)-settings-session-recaps", until: "Default permission", settings: true)
+        band(app, element(app, containing: switchTitle), 120, 480, "\(platform)-settings-session-recaps")
+        note("\(platform): the switch itself \(appears(app, switchTitle, timeout: 5) ? "shown" : "MISSING")")
         note("\(platform): the switch's hint \(appears(app, switchHintTail, timeout: 3) ? "shown" : "MISSING")")
         // Scrolled into view, never pressed: the probe reads the switch, it does not flip it — a flip
         // would PATCH the stub's account, and the pass that photographs the OFF state is the one

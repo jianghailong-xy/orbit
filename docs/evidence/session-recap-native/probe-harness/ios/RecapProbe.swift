@@ -15,18 +15,29 @@ struct RecapProbeApp: App {
 
     var body: some Scene {
         WindowGroup {
-            CompactShell()
+            // The environment is applied OUTSIDE the sheet, exactly as OrbitiOSApp does it: there,
+            // `RootView()` carries `.environment(model)` and applies `.settingsSheet(model)` in its
+            // own body, so the sheet is presented from a view INSIDE the environment scope. With the
+            // two swapped — `.environment(model)` on the shell, the sheet attached outside it — the
+            // presented `SettingsSheet` finds no AppModel ancestor and traps in
+            // `EnvironmentValues.subscript.getter` the moment the gear is pressed (the first CI run's
+            // crash, on the Settings launch only; the list never opened a sheet).
+            ProbeRoot(model: model)
                 .environment(model)
-                // Settings is a sheet over whichever shell is showing, raised by the drawer's gear
-                // (`AppModel.settingsPresented`). The real shell attaches this at its signed-in root
-                // (OrbitiOSApp.swift's RootView, which this probe replaces), so the sheet the probe
-                // photographs is composed exactly as production composes it — the probe only brings
-                // the modifier over because the file that normally does is the one it stands in for.
-                .settingsSheet(model)
                 .task {
                     let settings = ProcessInfo.processInfo.arguments.contains("-probe.settings")
                     await ProbeArgs.land(model, settings: settings)
                 }
         }
+    }
+}
+
+/// The signed-in root the real app puts the sheet on (`RootView` in OrbitiOSApp.swift), which this
+/// probe replaces along with the file: the shell, with Settings hosted over it.
+private struct ProbeRoot: View {
+    let model: AppModel
+
+    var body: some View {
+        CompactShell().settingsSheet(model)
     }
 }
