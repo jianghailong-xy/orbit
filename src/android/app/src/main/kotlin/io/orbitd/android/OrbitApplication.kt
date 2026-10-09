@@ -22,6 +22,7 @@ import io.orbitd.android.composer.DraftTarget
 import io.orbitd.android.attachments.clearAttachmentHandoffs
 import io.orbitd.android.attachments.clearAttachmentImports
 import io.orbitd.android.navigation.ObjectId
+import io.orbitd.android.toast.OrbitToasts
 
 /** One process-wide session owns all HTTP requests and token rotations, across activity recreation. */
 open class OrbitApplication : Application() {
@@ -46,7 +47,12 @@ open class OrbitApplication : Application() {
         push.start()
         updates.start()
         clearAttachmentHandoffs(this)
+        OrbitToasts.clear()
+        var toastsFor: SessionHandle? = null
         processScope.launch { session.state.collect { state ->
+            // Another account's outcomes never show under this one (A05-4).
+            val signedIn = (state as? AuthState.SignedIn)?.handle
+            if (state is AuthState.SignedOut || signedIn != null && signedIn !== toastsFor) { OrbitToasts.clear(); toastsFor = signedIn }
             if (state is AuthState.SignedOut || composerHandle != null && state is AuthState.SignedIn && state.handle !== composerHandle) {
                 clearAttachmentImports(this@OrbitApplication)
             }

@@ -515,6 +515,28 @@ internal data class WatchSessionSummary(
         return if (active.isEmpty()) word + WatchCountCopy.SEPARATOR + what else "${WatchProjection.STRIP_LABEL} $what"
     }
 
+    /** The watches the Watching card draws (A08-6; OrbitKit `beyondTasks`): those waiting on something that is not a task. A task the
+     * session waits on is an eye in its Tasks card instead. Null when every watch waits on tasks. */
+    val beyondTasks: WatchSessionSummary? get() =
+        watches.filter { watch -> watch.targets.any { it.state != WatchTargetState.GONE && it.targetKind != WatchTargetKind.TASK } }
+            .takeIf { it.isNotEmpty() }?.let(::WatchSessionSummary)
+
+    /** The tasks the live watches wait on, for the Tasks card; [name] names a target the watch carries no title for. */
+    fun watchedTasks(now: Instant, name: (WatchTarget) -> String? = { null }): List<io.orbitd.android.cards.SessionWatchedTask> =
+        watches.flatMap { watch ->
+            val stale = WatchProjection.stripStaleLine(watch, now) != null
+            watch.targets.filter { it.state != WatchTargetState.GONE && it.targetKind == WatchTargetKind.TASK }.map { target ->
+                io.orbitd.android.cards.SessionWatchedTask(target.targetResourceId,
+                    WatchProjection.targetTitle(WatchTargetKind.TASK, target.targetResourceId, target.targetTitle ?: name(target)),
+                    target.targetStatus, stale)
+            }
+        }
+
+    /** What the Tasks card says above its rows: the unchecked reminder of each watch the Watching card doesn't draw, each once. */
+    fun taskStaleLines(now: Instant): List<String> = watches
+        .filter { watch -> watch.targets.none { it.state != WatchTargetState.GONE && it.targetKind != WatchTargetKind.TASK } }
+        .mapNotNull { WatchProjection.stripStaleLine(it, now) }.distinct()
+
     /** The oldest last look among the ACTIVE watches; null while they're all paused. */
     fun lastEvaluated(now: Instant): String? {
         if (active.isEmpty()) return null

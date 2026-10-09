@@ -42,14 +42,15 @@ const apiCases = {
   'providers/dsh-provider': [
     'P1a existing DeepSeek configuration keeps Claude for new tasks',
     'P1a historical DeepSeek model pins stay on Claude',
-    'P1a explicit Harness preset resolves dsh with dedicated API key',
+    // Renamed by the provider/engine split (T3): DeepSeek Harness is an engine on a DeepSeek key.
+    'T3 the retired Harness preset creates a DeepSeek key, which DeepSeek Harness runs on with its dedicated API key',
     'P1a dsh models use opaque runtime defaults without static fallback',
     'P1a dsh keyword collisions preserve configured providers and pools',
     'P1a new provider slugs reserve dsh without renaming old rows',
     'P1a legacy dsh provider edits preserve its runtime and slug',
-    'P1a provider history blocks cross-runtime dsh conversion',
-    'P1a dsh configuration rejects static model guesses',
-    'P1a dsh DTOs accept its runtime and HTTP probes require runtime validation',
+    'T3 a key never becomes dsh, leaves it unless that strands what uses it, and is deleted whatever its history',
+    "T3 a Harness-shaped create keeps DeepSeek's own models, and a legacy dsh row edits like any key",
+    'T3 the dsh runtime is still accepted by the DTOs, and a DeepSeek key is probed on Anthropic Messages',
     'P1a other built-in engine routes remain unchanged',
   ],
   'sessions/dsh-session-routing': [
@@ -57,7 +58,7 @@ const apiCases = {
     'dsh compatibility: inherited legacy DeepSeek task retains the configured Claude runtime',
     'dsh compatibility: legacy DeepSeek history resumes with the same Claude id model and environment',
     'dsh compatibility: existing dsh provider and pool slugs stay configured on creation and switching',
-    'dsh compatibility: Claude and Harness histories refuse cross-runtime resume and config switches',
+    'dsh compatibility: Claude and Harness histories switch between DeepSeek keys on their own engine and refuse any other',
     'dsh compatibility: a disabled existing dsh provider is unavailable instead of becoming the built-in engine',
     'dsh admission: unverified permission policies reject explicit and account-default modes before creation',
     'dsh admission: terminal Harness resume refuses an unverified permission policy without rewriting its id',

@@ -27,6 +27,7 @@ import { ModelUsage, NormalizedRunEvent, TokenUsage } from './events';
 import { SessionSourceSnapshot } from './source';
 import type { WikiMaintenanceRun } from './wiki';
 import type { WikiRepoOpCommand } from './wikiRepoOps';
+import type { ManagedRunnerSleepRequest, ManagedRunnerWorkload } from './managedRunner';
 
 /** Why an ended session cannot currently be resumed on its original runner. */
 export type SessionResumeBlockedReason =
@@ -531,6 +532,21 @@ export type ProviderBalanceRead =
  */
 export type ProviderBalance = ProviderBalanceRead & { sharedWith: ProviderBalanceSibling[] };
 
+/**
+ * GET /providers/mine/:id/usage: what uses one of the caller's own keys, per engine — its open
+ * sessions (not completed, not in Trash) and the tasks still to run whose pin names it
+ * (docs/provider-engine-contract.md §3.6). What a client shows before the key is disabled or deleted,
+ * which every one of them, on every engine, then waits on; the same count that refuses a protocol
+ * change while they use it (PROVIDER_DIALECT_IN_USE). Engines nothing uses are absent.
+ */
+export interface ProviderKeyUsage {
+  providerId: string;
+  engines: Array<{ engine: AgentProvider; sessions: number; tasks: number }>;
+  /** The totals over `engines`. */
+  sessions: number;
+  tasks: number;
+}
+
 export interface RunnerHeartbeatRequest {
   status: RunnerStatus;
   /** How many more active turns the runner can accept right now. Warm idle
@@ -593,6 +609,10 @@ export interface RunnerHeartbeatRequest {
    *  field; absent from an older one — or one rolled back to an older release — which the control
    *  plane stores as NULL, "not reported", rather than keeping what a newer binary last said. */
   selfUpdate?: RunnerSelfUpdate;
+  /** What a managed runner's instance is doing (managedRunner.ts, MANAGED_RUNNER_SLEEP_CAPABILITY).
+   *  Sent only by a managed instance that declares that capability; the control plane stores it only
+   *  from the instance the manager authorized. Absent: nothing about this runner may be put to sleep. */
+  managedWorkload?: ManagedRunnerWorkload;
 }
 
 /** What a runner's self-updater last found:
@@ -900,6 +920,10 @@ export interface RunnerHeartbeatResponse {
    *  beat, and a row named here is already RUNNING in the database. Answered via
    *  POST /runner/wiki/repo-ops/:id/{progress,fragments,result}. Absent on older control planes. */
   wikiRepoOps?: WikiRepoOpCommand[];
+  /** Present only to the authorized instance of a managed runner the manager is putting to sleep
+   *  (managedRunner.ts): with nothing to do, stop claiming, drain and exit. Absent otherwise, so
+   *  every other runner sees the response shape it always had. */
+  managedSleep?: ManagedRunnerSleepRequest;
 }
 
 /** `account/rateLimitResetCredit/consume` outcomes, spelled as the provider spells them. */

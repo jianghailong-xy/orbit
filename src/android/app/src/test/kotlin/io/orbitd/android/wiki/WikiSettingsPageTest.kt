@@ -22,6 +22,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import io.orbitd.android.toast.OrbitToasts
+import io.orbitd.android.toast.ToastHost
 
 /** Wiki settings (iOS `WikiSettingsPage`, `WikiMaintenanceForm`, `WikiSettingsView`): the review mode as one choice of
  * three, the spot checks only in Automatic, maintenance off or on — and, over a real store and an in-memory server, the
@@ -35,12 +37,12 @@ class WikiSettingsPageTest {
     private val actions = WikiSettingsActions(setMode = { calls += "mode $it" }, setSpotChecks = { calls += "spot checks $it" },
         setUp = { calls += "set up" }, turnOff = { calls += "turn off" })
 
-    @Before fun quiet() { WikiToast.text = null }
+    @Before fun quiet() { OrbitToasts.clear() }
 
     private fun space(settings: String) = Wire.json.decodeFromString(WikiSpace.serializer(),
         """{"id":"sp1","slug":"orbit","repoUrlNorm":"github.com/orbit/orbit","settings":$settings}""")
     private fun show(content: @Composable () -> Unit) {
-        compose.activityRule.scenario.onActivity { it.setContent { OrbitTheme { Box { content(); WikiToast.Host() } } } }
+        compose.activityRule.scenario.onActivity { it.setContent { OrbitTheme { Box { content(); ToastHost({}, {}, {}) } } } }
         compose.waitForIdle()
     }
     private fun says(tag: String, vararg texts: String) = texts.forEach { text ->
@@ -175,7 +177,7 @@ class WikiSettingsPageTest {
             """PATCH /api/wiki/spaces/sp1 {"maintenance":{"enabled":true,"workspaceId":"w2","provider":"anthropic","dailyRunLimit":9,"lookbackDays":15}}""",
             """PATCH /api/wiki/spaces/sp1 {"maintenance":{"enabled":true,"workspaceId":"w1","provider":"local-vllm","dailyRunLimit":8,"lookbackDays":null}}""",
         ), patches())
-        assertEquals(WikiCopy.settingsSaved, WikiToast.text)
+        assertEquals(WikiCopy.settingsSaved, OrbitToasts.feed.value.transient?.message)
         compose.onAllNodesWithTag("wiki-settings-form").assertCountEquals(0)
     }
 
@@ -256,7 +258,7 @@ class WikiSettingsPageTest {
         compose.waitForIdle()
         assertEquals(listOf("""PATCH /api/wiki/spaces/sp1 {"automaticSpotChecks":true}""", """PATCH /api/wiki/spaces/sp1 {"reviewMode":"manual"}""",
             """PATCH /api/wiki/spaces/sp1 {"maintenance":{"enabled":false}}"""), patches())
-        assertEquals(WikiCopy.settingsSaved, WikiToast.text)
+        assertEquals(WikiCopy.settingsSaved, OrbitToasts.feed.value.transient?.message)
     }
 
     @Test fun aRefusedSetUpSaysWhyAndKeepsTheForm() {
@@ -271,11 +273,12 @@ class WikiSettingsPageTest {
         compose.onNodeWithTag("wiki-settings-workspace:w1").performClick()
         compose.onNodeWithTag("wiki-settings-form-submit").assertIsEnabled().performClick()
         compose.waitForIdle()
-        compose.onNodeWithText(WikiCopy.refused).assertExists()
+        // The alert names what failed, as iOS's does (d625d9809); the server's reason is under it.
+        compose.onNodeWithText("Couldn't save the wiki settings").assertExists()
         compose.onNodeWithText("That workspace is not yours.").assertExists()
         compose.onNodeWithTag("wiki-refusal-ok").performClick()
         compose.onNodeWithTag("wiki-settings-form").assertExists()
         compose.onNodeWithTag("wiki-settings-workspace").assertTextContains("orbit · Mac mini", substring = true)
-        assertNull(WikiToast.text)
+        assertNull(OrbitToasts.feed.value.transient)
     }
 }

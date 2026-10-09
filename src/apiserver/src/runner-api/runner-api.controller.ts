@@ -9,6 +9,7 @@ import {
   Headers,
   HttpCode,
   HttpException,
+  Inject,
   Logger,
   NotFoundException,
   Optional,
@@ -369,6 +370,7 @@ import {
   sessionSourceSnapshot,
 } from '../projects/session-source';
 import { providerDispatchWhereOn } from '../providers/custom-provider';
+import { dispatchKeyRow } from '../providers/engine-provider';
 import {
   recordedEngine,
   SESSION_ENGINE_UNKNOWN_MESSAGE,
@@ -377,6 +379,13 @@ import {
 } from '../providers/session-engine';
 import { refuseManagedRunnerDeletion } from '../managed-runners/managed-runner-delete';
 import { reauthorizeManagedRunnerInstance, type ManagedRunnerInstance } from '../managed-runners/managed-runner-instance';
+import { MANAGED_RUNNER_GATE, type ManagedRunnerGate } from '../managed-runners/managed-runner-gate';
+import {
+  managedRunnerHeartbeat,
+  sanitizeManagedWorkload,
+  storedWorkloadFor,
+  type ManagedHeartbeatAnswer,
+} from '../managed-runners/managed-runner-sleep';
 
 // Must stay >= the runner's own loginRelayTimeout (login.go): the runner kills its CLI at that
 // point, so anything still marked in-flight past this window has no process behind it.
@@ -859,6 +868,13 @@ export class RunnerApiController {
      * the operations stay queued, and the space's health line says so.
      */
     @Optional() private readonly wikiRepoOps?: WikiRepoOps,
+    /**
+     * The managed runner switch (managed-runners/managed-runner-gate.ts), for the heartbeat's half of
+     * idle sleep: off — or absent, in the specs that build this controller by hand — a managed
+     * instance's workload is not stored and nothing about sleep is said or recorded. The instance
+     * binding the runner guards enforce does not depend on it.
+     */
+    @Optional() @Inject(MANAGED_RUNNER_GATE) private readonly managedGate?: ManagedRunnerGate,
   ) {}
 
   /** `orbit register` — exchange a one-time enrollment token for a runner credential. */
@@ -1052,8 +1068,16 @@ export class RunnerApiController {
     @Headers(RUNNER_CAPABILITIES_HEADER) capabilities?: string | string[],
     @Headers(RUNNER_PROVIDERS_HEADER) providerHeader?: string,
     @Headers(RUNNER_OS_HEADER) osHeader?: string,
+    /** A managed runner's authorized instance: its workload is stored and its sleep is negotiated here. */
+    @CurrentManagedRunnerInstance() managedInstance?: ManagedRunnerInstance,
   ): Promise<RunnerHeartbeatResponse> {
     const heartbeatLeaseOwner = parseLeaseGeneration(dto?.leaseOwner);
+    // Idle sleep (managed-runners/managed-runner-sleep.ts), only for an authorized managed instance
+    // while the switch is on. Its report is stored as sent, or as NULL when it sends none: a runner
+    // that stops reporting is one nothing may put to sleep. Every other runner's row is left alone.
+    const managedSleepOn = !!managedInstance && this.managedGate?.enabled === true;
+    const managedWorkload = managedSleepOn ? sanitizeManagedWorkload(dto?.managedWorkload) : null;
+    const beatAt = new Date();
     const reportedCapabilities = parseRunnerCapabilities(capabilities);
     const supportsWorktreeOps = runnerSupportsCapability(capabilities, SESSION_WORKTREE_OPS_V1);
     if ((dto?.supervisedSessionIds?.length ?? 0) > 10_000) {
@@ -1085,7 +1109,7 @@ export class RunnerApiController {
       data: {
         status: dto?.status ?? 'ONLINE',
         version: dto?.version ?? runner.version ?? undefined,
-        lastHeartbeatAt: new Date(),
+        lastHeartbeatAt: beatAt,
         // Refresh the `/` autocomplete catalog; older runners omit these (leave as-is).
         // Cast: a typed interface[] isn't structurally an InputJsonValue (no index sig).
         // Stripped (see strip-nul): these are read off the machine's disk — a command or skill
@@ -1143,8 +1167,30 @@ export class RunnerApiController {
           dto?.repos == null
             ? undefined
             : ((sanitizeRunnerRepoHealth(dto.repos) ?? []) as unknown as Prisma.InputJsonValue),
+        ...(managedSleepOn
+          ? {
+            managedWorkload: managedWorkload
+              ? (storedWorkloadFor(managedWorkload, managedInstance!, dto?.draining === true, beatAt) as unknown as Prisma.InputJsonValue)
+              : Prisma.DbNull,
+          }
+          : {}),
       },
     });
+    // Whether this instance's mapping is draining to sleep, and what it is told about it. Advisory
+    // like the relays below: a read that fails hands out this beat's work as usual, and the instance,
+    // busy, then declines the sleep it would have been asked for.
+    let managedBeat: ManagedHeartbeatAnswer = { draining: false };
+    if (managedSleepOn) {
+      try {
+        managedBeat = await managedRunnerHeartbeat(this.prisma, managedInstance!, managedWorkload, beatAt);
+      } catch (error) {
+        this.logger.warn(`runner ${runner.id}: managed sleep state not read this heartbeat (${(error as { code?: string })?.code ?? (error as Error)?.name})`);
+      }
+    }
+    // A process draining by itself, or a managed instance its manager is draining to sleep, is handed
+    // no new heartbeat work: it stays queued for the next instance, or for this one once the drain is
+    // called off.
+    const draining = dto?.draining === true || managedBeat.draining;
     // Latest provider plan-usage snapshot; older runners omit it (leave as-is). Written on its own by
     // compare-and-set, so the Codex reset block in it only moves forwards: a block relayed by another
     // process, an older read, an old process or a late heartbeat never takes a newer one back.
@@ -1174,7 +1220,7 @@ export class RunnerApiController {
         codexRateLimitResetRequest = await dispatchCodexResetCommand(this.prisma, {
           runnerId: runner.id,
           leaseOwner: heartbeatLeaseOwner,
-          draining: dto?.draining === true,
+          draining,
           capabilities: reportedCapabilities,
         });
       }
@@ -1190,7 +1236,7 @@ export class RunnerApiController {
       const claimed = (await this.integrationJobs?.dispatch({
         runnerId: runner.id,
         leaseOwner: heartbeatLeaseOwner,
-        draining: dto?.draining === true,
+        draining,
         capabilities: reportedCapabilities,
       })) ?? [];
       if (claimed.length > 0) integrationJobs = claimed;
@@ -1206,7 +1252,7 @@ export class RunnerApiController {
       const claimed = (await this.wikiRepoOps?.dispatch({
         runnerId: runner.id,
         leaseOwner: heartbeatLeaseOwner,
-        draining: dto?.draining === true,
+        draining,
         capabilities: reportedCapabilities,
       })) ?? [];
       if (claimed.length > 0) wikiRepoOps = claimed;
@@ -1424,7 +1470,7 @@ export class RunnerApiController {
         // longer dispatches git work. Claiming for it would pin the session to an epoch
         // that is about to be replaced, which is what the staleness backstop then has to
         // clean up minutes later — the successor process claims these instead.
-        if (!dto?.draining) {
+        if (!draining) {
           mergeRequests = await this.realtime.drainMergeRequests(runner.id, heartbeatLeaseOwner, runnerSupportsCapability(capabilities, SESSION_MERGE_RECOVERY_V1));
           commitRequests = await this.realtime.drainCommitRequests(runner.id, heartbeatLeaseOwner);
         }
@@ -1497,6 +1543,8 @@ export class RunnerApiController {
       // Present only when this beat claimed something, for the same reason.
       ...(integrationJobs ? { integrationJobs } : {}),
       ...(wikiRepoOps ? { wikiRepoOps } : {}),
+      // Only to the instance being drained to sleep: every other runner's response keeps its shape.
+      ...(managedBeat.sleep ? { managedSleep: managedBeat.sleep } : {}),
     };
   }
 
@@ -2620,14 +2668,14 @@ export class RunnerApiController {
       // shared pool, or a Codex pool of the owner's own login, on the gateway with a token of its own, as
       // the claim builds it. A maintenance run, as on the claim, never through a pool.
       const declaredIsBuiltin = isBuiltinProvider(declared, s.providerBuiltin);
+      // As on the claim (QueueService.buildSession): the key the slug names or a retired name of one,
+      // and a legacy built-in dsh session's default DeepSeek key when its workspace holds no key itself.
+      const keyRow = await dispatchKeyRow(
+        this.prisma, { ownerId: s.ownerId, provider: declared, providerBuiltin: s.providerBuiltin }, workspace?.env,
+      );
       const customRow = declaredIsBuiltin
-        ? null
-        : ((await this.prisma.modelProvider.findFirst({
-            where: {
-              slug: declared!,
-              ...(await usableProviderScope(this.prisma, s.ownerId)),
-            },
-          })) ??
+        ? keyRow
+        : (keyRow ??
           (maintenance
             ? null
             : ((await this.queue.resolveLoginPool(this.prisma, s, declared!)) ??
@@ -4079,14 +4127,12 @@ export class RunnerApiController {
     // credential, never the engine.
     const engine = await sessionEngine(tx, session);
     if (!engine) throw new BadRequestException(`provider not available: "${session.provider}"`);
+    // As on the claim: the key the slug names or a retired name of one, and a legacy built-in dsh
+    // session's default DeepSeek key when its workspace holds no key itself.
+    const keyRow = await dispatchKeyRow(tx, session, session.workspace?.env);
     const customRow = isBuiltinProvider(session.provider, session.providerBuiltin)
-      ? null
-      : ((await tx.modelProvider.findFirst({
-          where: {
-            slug: session.provider!,
-            ...(await usableProviderScope(tx, session.ownerId)),
-          },
-        })) ??
+      ? keyRow
+      : (keyRow ??
         (await this.queue.resolveLoginPool(tx, session, session.provider!)) ??
         (await this.queue.resolvePoolMember(tx, session, session.provider!)) ??
         (await this.queue.resolveSharedPool(tx, session, session.provider!)));
@@ -7545,15 +7591,19 @@ export class RunnerApiController {
       select: { planUsage: true, engines: true },
     });
     // Only a configured provider's slug can name a pool.
-    const pool = isBuiltinProvider(
+    const builtin = isBuiltinProvider(
       session.provider, session.providerBuiltin ?? (session.provider !== AgentProvider.DSH),
-    )
+    );
+    const pool = builtin
       ? null
       : await this.queue.accountPoolResumesAt(session.ownerId, session.provider, now);
+    // The runner's report is about its own sign-ins: it says when a session on one of them can run
+    // again, and nothing about a key, whose quota is the key's (docs/provider-engine-contract.md §4.5).
+    const onRunnerLogin = builtin && isAccountEngine(session.provider);
     const own =
       pool ??
       parseQuotaResetAt(text, now) ??
-      planUsageBlockedUntil(
+      (!onRunnerLogin ? null : planUsageBlockedUntil(
         withEnginePlanUsage(runner?.planUsage as PlanUsage | null, sanitizeRunnerEngines(runner?.engines)),
         session.provider,
         now,
@@ -7568,7 +7618,7 @@ export class RunnerApiController {
           },
           runner?.engines,
         ),
-      );
+      ));
     const at = elsewhere && (!own || elsewhere < own) ? elsewhere : own;
     return at ? new Date(at.getTime() + Math.floor(Math.random() * QUOTA_RETRY_JITTER_MS)) : null;
   }

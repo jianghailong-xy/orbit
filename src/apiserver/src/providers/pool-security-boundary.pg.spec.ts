@@ -1001,6 +1001,10 @@ suite("account pools' security boundary, on real PostgreSQL", { timeout: 600_000
     await ask(bob, 'GET', 'providers/mine/:id/balance', { id: deepseekId }, undefined, 404);
     await ask(alice, 'GET', 'providers/mine/:id/balance', { id: pub(personal) }, undefined, 400);
     await ask(alice, 'GET', 'providers/mine/:id/balance', { id: sharedId }, undefined, 404);
+    // What uses her key, per engine (the read before a key is turned off): hers alone, and no key in it.
+    await ask(alice, 'GET', 'providers/mine/:id/usage', { id: deepseekId }, undefined, 200);
+    await ask(bob, 'GET', 'providers/mine/:id/usage', { id: deepseekId }, undefined, 404);
+    await ask(alice, 'GET', 'providers/mine/:id/usage', { id: sharedId }, undefined, 404);
     assert.deepEqual(
       { ok: balance.json.ok, total: balance.json.balances?.[0]?.totalBalance },
       { ok: true, total: '110.00' },
@@ -1262,6 +1266,7 @@ exec sleep 300
       // members, which a Codex pool has none of.
       await ask(bearer, 'GET', 'providers/mine/:id/key', at, undefined, 404);
       await ask(bearer, 'GET', 'providers/mine/:id/balance', at, undefined, 404);
+      await ask(bearer, 'GET', 'providers/mine/:id/usage', at, undefined, 404);
       await ask(bearer, 'PATCH', 'providers/mine/:id', at, { label: 'Renamed' }, 404);
       await ask(bearer, 'DELETE', 'providers/mine/:id', at, undefined, 404);
       await ask(bearer, 'POST', 'providers/pools/:id/members', at, { providerId: at.id }, 404);

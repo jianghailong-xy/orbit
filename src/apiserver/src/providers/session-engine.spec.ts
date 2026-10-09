@@ -32,6 +32,8 @@ function rows(key: { runtime: string } | null, pool: { shared: boolean; engine: 
         // The owner's own pool, else a Codex pool they are one of the people of.
         pool && (args.where.ownerId ? !pool.shared : pool.engine === 'codex') ? pool : null,
     },
+    // No retired provider names (migration 0415).
+    providerSlugAlias: { findUnique: async () => null },
   };
   return { db: db as never, asked };
 }
@@ -166,7 +168,7 @@ test('T2 standing grants are judged by the session engine', async () => {
   assert.equal(await covers({ provider: 'gone-codex-key', engine: AgentProvider.CODEX }), true);
   assert.equal(await covers({ provider: 'some-key', engine: AgentProvider.CLAUDE }), false);
   // One nobody can place is asked about.
-  const unplaced = new RunnerApiController({ ...prisma, modelProvider: { findFirst: async () => null }, providerPool: { findFirst: async () => null } } as never,
+  const unplaced = new RunnerApiController({ ...prisma, modelProvider: { findFirst: async () => null }, providerPool: { findFirst: async () => null }, providerSlugAlias: { findUnique: async () => null } } as never,
     {} as never, {} as never, {} as never, {} as never, {} as never);
   assert.equal(await (unplaced as unknown as { standingGrantCovers(s: unknown, dto: unknown): Promise<boolean> }).standingGrantCovers(
     { workspaceId: 'w', ownerId: OWNER, providerBuiltin: false, provider: 'gone', engine: null },

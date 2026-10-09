@@ -149,6 +149,8 @@ function database(rows: ProviderRow[]) {
         return unexpected('modelProvider.findMany', args);
       },
     },
+    // No retired provider names hold a slug here (migration 0415).
+    providerSlugAlias: { findMany: async () => [] },
     providerPool: {
       findMany: async (args: { where: Where }) => {
         const { where } = args;

@@ -212,7 +212,7 @@ test('task model suggestions survive create, batch, update, clearing and approva
       for (const form of [buildCoordinatorInstructions('model hints', randomUUID(), enabled, true), buildCoordinatorDeliveryInstructions(randomUUID(), enabled, true)]) {
         assert.match(form, /每个任务填 modelHint（S\/M\/L\/XL）和一句 modelHintReason/);
         assert.match(form, /缺建议的任务也用 task_update 补上/);
-        assert.match(form, /引擎仍用 provider 字段指定/);
+        assert.match(form, /引擎用 engine 字段指定，provider 只决定用哪份凭据/);
       }
     }
   });

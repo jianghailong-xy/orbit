@@ -2,6 +2,7 @@ import { NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
   AgentProvider,
+  ENGINE_CLI_NAMES,
   PermissionMode,
   WIKI_MAINTENANCE_CATCH_UP,
   WIKI_MAINTENANCE_RUN,
@@ -12,6 +13,7 @@ import {
   type WikiMaintenanceRun,
 } from '@orbit/shared';
 import { wikiMaintenanceProviderProblem, wikiMaintenanceSpaceOf } from './wiki-maintenance-settings';
+import { recordedEngine } from '../providers/session-engine';
 
 /**
  * The run a Wiki maintenance session is claimed with (design §8.2, contracts/wiki.contract.json
@@ -44,7 +46,13 @@ type RunReader = Pick<Prisma.TransactionClient, 'session' | 'wikiSpace' | 'model
  */
 export async function wikiMaintenanceRunOf(
   db: RunReader,
-  session: { id: string; taskId: string | null; workspaceId: string | null; provider: string | null },
+  session: {
+    id: string;
+    taskId: string | null;
+    workspaceId: string | null;
+    engine?: string | null;
+    provider: string | null;
+  },
 ): Promise<WikiMaintenanceRun | null> {
   if (!session.taskId) return null;
   const maintained = await wikiMaintenanceSpaceOf(db, session.id);
@@ -77,6 +85,12 @@ export async function wikiMaintenanceRunOf(
       + `names '${named}'`;
   } else {
     why = (await wikiMaintenanceProviderProblem(db, maintained.ownerId, settings.provider))?.why ?? null;
+    // The run's clean start and its disallowedTools hold on Claude Code alone (design §8.2): the settings'
+    // key on another engine is not that run (docs/provider-engine-contract.md §3.5).
+    const engine = recordedEngine(session.engine) ?? AgentProvider.CLAUDE;
+    if (!why && engine !== AgentProvider.CLAUDE) {
+      why = `it runs only on Claude Code, and this session runs on ${ENGINE_CLI_NAMES[engine]}`;
+    }
   }
   return why ? { ...run, refusal: `This Wiki maintenance run did not start: ${why}.` } : run;
 }

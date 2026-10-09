@@ -365,6 +365,7 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   // ── providers: the account's own, its pools, and the pools it shares with others ───────────────
   'GET /providers/mine/:id/key': { request: (of) => ({ params: { id: of.providerId } }) },
   'GET /providers/mine/:id/balance': { request: (of) => ({ params: { id: of.providerId } }) },
+  'GET /providers/mine/:id/usage': { request: (of) => ({ params: { id: of.providerId } }) },
   'PATCH /providers/mine/:id': { request: (of) => ({ params: { id: of.providerId }, body: { label: 'renamed by the census' } }) },
   'DELETE /providers/mine/:id': { request: (of) => ({ params: { id: of.spare.providerId } }) },
   'GET /providers/pools/:id': { request: (of) => ({ params: { id: of.poolId } }) },
@@ -866,6 +867,11 @@ export const TENANT_ISOLATION_FIELD_CASES: Readonly<Record<string, TenantFieldCa
         workspaceId: of.workspaceId,
       },
     }),
+  },
+  // Two different runners, so B's own request is a reorder the route answers, not a duplicate
+  // `@ArrayUnique` refuses.
+  'POST /runners/reorder body ids[]': {
+    request: (of, mine) => ({ params: {}, body: { ids: [mine.runnerId, of.spare.runnerId] } }),
   },
 
   // ── sessions ─────────────────────────────────────────────────────────────────────────────────

@@ -3,6 +3,8 @@ import { BadRequestException, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
   AgentProvider,
+  credentialEngines,
+  isEngineCompatible,
   WIKI_CURSOR_FACT_KINDS,
   WIKI_MAINTENANCE_LIST_TITLE,
   wikiMaintenanceEndpointIsLocal,
@@ -11,7 +13,7 @@ import {
 } from '@orbit/shared';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import type { PrismaService } from '../prisma/prisma.service';
-import { adminOnlyProviderRefusal, execRuntime, isBuiltinProvider, usableProviderScope } from '../providers/custom-provider';
+import { adminOnlyProviderRefusal, isBuiltinProvider, keyCredential, usableProviderScope } from '../providers/custom-provider';
 import { currentWikiExecutorSwitch, wikiExecutorServes } from './wiki-executor-switch';
 import type { FactPosition } from './wiki-maintenance';
 
@@ -97,14 +99,19 @@ export async function wikiMaintenanceProviderProblem(
   }
   const row = await db.modelProvider.findFirst({
     where: { slug, ...(await usableProviderScope(db, ownerId)) },
-    select: { runtime: true, baseUrl: true, apiKeyEnc: true, defaultModel: true, enabled: true },
+    select: { runtime: true, presetSlug: true, baseUrl: true, apiKeyEnc: true, defaultModel: true, enabled: true },
   });
   if (row) {
     if (!row.enabled) {
       return { why: `the provider '${slug}' is turned off, and a Wiki maintenance run falls back to no other`, unavailable: true };
     }
-    const runtime = execRuntime({ declaredProvider: slug, customRow: row });
-    return runtime === AgentProvider.CLAUDE ? null : offRuntime(runtime);
+    // The run's engine is Claude Code, whatever key it spends (docs/provider-engine-contract.md §3.5): a key
+    // is one it takes when Claude Code can run it (the shared compatibility table), and is named by the
+    // engine it runs on otherwise.
+    const credential = keyCredential(row);
+    return isEngineCompatible(AgentProvider.CLAUDE, credential)
+      ? null
+      : offRuntime(credentialEngines(credential)[0] ?? row.runtime);
   }
   if (await db.providerPool.findFirst({ where: { slug, ownerId }, select: { id: true } })) {
     return {

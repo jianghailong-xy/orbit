@@ -12,12 +12,17 @@ export const TEST_ADMISSION_WEBHOOK_TOKEN = 'test-admission-webhook-token';
  * resolves, and the kubeconfig path names nothing: a test that reached a real client would fail at
  * once rather than find a cluster.
  */
-export function testManagedRunnerProfile(overrides: { lifecycle?: Partial<ManagedRunnerProfile['lifecycle']> } = {}): ManagedRunnerProfile {
+export function testManagedRunnerProfile(overrides: {
+  lifecycle?: Partial<ManagedRunnerProfile['lifecycle']>;
+  capacity?: Partial<ManagedRunnerProfile['capacity']>;
+  /** Another cluster key is another capacity pool: a test with a budget of its own names one. */
+  clusterKey?: string;
+} = {}): ManagedRunnerProfile {
   return {
     schemaVersion: 1,
     valueKind: 'actual',
     environmentId: 'orbit-mr-fake',
-    clusterKey: 'fake-cluster',
+    clusterKey: overrides.clusterKey ?? 'fake-cluster',
     resourceProfileId: 'invited-test-v1',
     kubernetes: {
       kubeconfig: '/nonexistent/orbit-managed-runner-test/kubeconfig.json',
@@ -40,6 +45,15 @@ export function testManagedRunnerProfile(overrides: { lifecycle?: Partial<Manage
       managerUsername: TEST_MANAGER_USERNAME,
       webhookTokenSha256: createHash('sha256').update(TEST_ADMISSION_WEBHOOK_TOKEN).digest('hex'),
     },
+    // Room for a thousand runners of the Pod above and two thousand of its volumes, in one pool every
+    // spec of a database shares: no test outside the capacity ones ever waits for capacity. Those
+    // name a budget, and a cluster key, of their own.
+    capacity: {
+      compute: { cpu: '1000', memory: '2000Gi', ephemeralStorage: '2000Gi', pods: 1000, attachments: 1000 },
+      storage: { usable: '41Ti', headroom: '1Ti' },
+      maxActiveUsers: 1000,
+      ...overrides.capacity,
+    },
     lifecycle: {
       maxAttempts: 3,
       backoffBaseSeconds: 5,
@@ -49,6 +63,9 @@ export function testManagedRunnerProfile(overrides: { lifecycle?: Partial<Manage
       leaseSeconds: 30,
       pollIntervalSeconds: 5,
       heartbeatFreshSeconds: 90,
+      idleSeconds: 900,
+      capacityRetrySeconds: 60,
+      drainSeconds: 600,
       ...overrides.lifecycle,
     },
   };

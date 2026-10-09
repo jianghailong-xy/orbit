@@ -61,7 +61,7 @@ cleanup() {
     wait "$emulator_pid" 2>/dev/null || true
     timeout 20 "$adb" -s "$serial" wait-for-disconnect > "$output/disconnect.txt" 2>&1 || result=1
     local deadline=$((SECONDS + 20))
-    while "$adb" devices | rg -q "^$serial[[:space:]]"; do
+    while "$adb" devices | grep -qE "^$serial[[:space:]]"; do
       if (( SECONDS >= deadline )); then result=1; break; fi
       sleep 0.25
     done
@@ -76,7 +76,7 @@ if [[ -z "$serial" ]]; then
     serial=emulator-5554
   else
     serial=emulator-5556
-    if "$adb" devices | rg -q "^$serial[[:space:]]"; then
+    if "$adb" devices | grep -qE "^$serial[[:space:]]"; then
       echo 'Port 5556 in use; pass an existing serial explicitly' >&2
       exit 1
     fi
@@ -163,8 +163,8 @@ kill -0 "$fixture_pid"
 "$adb" -s "$serial" shell run-as "$package" mkdir -p files/a08-cards
 start="$("$adb" -s "$serial" shell date +%s | tr -d '\r').000"
 test_class=io.orbitd.android.cards.CardsDeviceTest
-test_selection="${A08_TEST:-$test_class#rememberUsesExactRuleAndServerRecord,$test_class#questionKeepsCustomAnswerThroughActivityRecreation,$test_class#otherEndWinsWithoutClaimingThisPressSucceeded,$test_class#lostResponseDoesNotResendOrClaimSuccess,$test_class#permissionRevocationWithdrawsTheEntireCard,$test_class#evidenceAndOwnerDecisionsBindDisplayedRevisions,$test_class#ownerQuestionsKeepEvidenceAndAnswersWithTheirQuestion,$test_class#singleTaskShowsTheServerDestinationAndHonestFallbacks,$test_class#reassignedExceptionAfterSentRestoresNewActions,$test_class#reassignedExceptionAfterLostResponseRestoresNewActions,$test_class#dedicatedBusinessDoorsProduceSeparateRequestsAndRecordedStates,$test_class#attachmentOnlyMessageKeepsAttachmentWithoutRawJson}"
-timeout 300 "$adb" -s "$serial" shell am instrument -w -r -e class "$test_selection" "$runner" > "$output/instrumentation.txt" 2>&1
+test_selection="${A08_TEST:-$test_class#rememberUsesExactRuleAndServerRecord,$test_class#questionKeepsCustomAnswerThroughActivityRecreation,$test_class#otherEndWinsWithoutClaimingThisPressSucceeded,$test_class#lostResponseDoesNotResendOrClaimSuccess,$test_class#permissionRevocationWithdrawsTheEntireCard,$test_class#evidenceAndOwnerDecisionsBindDisplayedRevisions,$test_class#ownerQuestionsKeepEvidenceAndAnswersWithTheirQuestion,$test_class#singleTaskShowsTheServerDestinationAndHonestFallbacks,$test_class#reassignedExceptionAfterSentRestoresNewActions,$test_class#reassignedExceptionAfterLostResponseRestoresNewActions,$test_class#dedicatedBusinessDoorsProduceSeparateRequestsAndRecordedStates,$test_class#attachmentOnlyMessageKeepsAttachmentWithoutRawJson,$test_class#needsYouBarOpensWhatWaitsHere,$test_class#needsYouBarOpensTheSessionWaitingElsewhere,$test_class#ownerReceiptKeepsItsReviewAndReopensTheTask,$test_class#batchReviewShowsLevelsAndEachTaskPage,$test_class#queuedTurnsWaitAtTheEndAndCancelOnTheServer,$test_class#aRunThatNeverStartedOffersANewRun,$test_class#theTasksCardListsWhatThisConversationCreated,$test_class#aWakeTurnIsOneLineThatOpens,$test_class#aMergeCheckChangeAsksWithNoStandingYes}"
+timeout "${A08_TIMEOUT:-900}" "$adb" -s "$serial" shell am instrument -w -r -e class "$test_selection" "$runner" > "$output/instrumentation.txt" 2>&1
 pid="$(sed -n 's/.*a08_pid=\([0-9]*\).*/\1/p' "$output/instrumentation.txt" | head -1)"
 [[ -n "$pid" ]]
 "$adb" -s "$serial" logcat -d -v threadtime --pid="$pid" -T "$start" > "$output/logcat.txt"
@@ -182,13 +182,13 @@ curl --fail --silent http://127.0.0.1:18768/__stats > "$output/server-stats.json
 "$adb" -s "$serial" exec-out run-as "$package" cat files/a08-captures.tar > "$output/captures.tar"
 tar --no-same-owner -xf "$output/captures.tar" -C "$output"
 chmod -R a+rX "$output/a08-cards"
-if rg 'a08-fixture-(password|access|refresh)' "$output/logcat.txt"; then
+if grep -E 'a08-fixture-(password|access|refresh)' "$output/logcat.txt"; then
   echo 'Fixture credential marker found in logcat' >&2
   exit 1
 fi
-rg 'OK \([0-9]+ tests?\)' "$output/instrumentation.txt" >/dev/null
+grep -qE 'OK \([0-9]+ tests?\)' "$output/instrumentation.txt"
 if [[ -z "${A08_TEST:-}" ]]; then
-  rg 'OK \(1 test\)' "$output/coldPrepareFence.txt" >/dev/null
-  rg 'OK \(1 test\)' "$output/coldRestoreFence.txt" >/dev/null
+  grep -qE 'OK \(1 test\)' "$output/coldPrepareFence.txt"
+  grep -qE 'OK \(1 test\)' "$output/coldRestoreFence.txt"
 fi
-if rg 'FAILURES!!!|INSTRUMENTATION_FAILED|Process crashed|INSTRUMENTATION_STATUS_CODE: -[234]' "$output/instrumentation.txt"; then exit 1; fi
+if grep -E 'FAILURES!!!|INSTRUMENTATION_FAILED|Process crashed|INSTRUMENTATION_STATUS_CODE: -[234]' "$output/instrumentation.txt"; then exit 1; fi

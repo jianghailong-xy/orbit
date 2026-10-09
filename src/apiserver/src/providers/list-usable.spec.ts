@@ -1,10 +1,12 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
+import { encryptSecret } from './provider-crypto';
 import { ProvidersService } from './providers.service';
 
 process.env.PROVIDER_SECRET_KEY = 'test-master-key';
 
-// The shape listUsable selects: no id, no baseUrl, no apiKeyEnc — it never asks for them.
+// The shape listUsable selects: no id. The endpoint and the key are read only to say which engines the
+// key runs on, and never answered with.
 const DEEPSEEK = {
   slug: 'deepseek',
   label: 'DeepSeek',
@@ -13,6 +15,8 @@ const DEEPSEEK = {
   defaultModel: 'deepseek-v4-pro',
   presetSlug: null,
   followsPreset: false,
+  baseUrl: 'https://api.deepseek.com/anthropic',
+  apiKeyEnc: encryptSecret('sk-deepseek'),
 };
 
 const serviceFor = (
@@ -57,8 +61,10 @@ test('every built-in engine is listed alongside the configured providers', async
   // A built-in runs on itself: Antigravity is agy, not a provider borrowing some other CLI.
   assert.deepEqual(
     listed.find((p) => p.slug === 'antigravity'),
-    { slug: 'antigravity', runtime: 'antigravity', builtin: true },
+    { slug: 'antigravity', runtime: 'antigravity', engines: ['antigravity'], builtin: true },
   );
+  // The built-in dsh is DeepSeek Harness, on the caller's default DeepSeek key.
+  assert.deepEqual(listed.find((p) => p.slug === 'dsh')?.engines, ['dsh']);
 });
 
 test('a configured provider names the runtime it borrows and the models it offers', async () => {
@@ -67,8 +73,11 @@ test('a configured provider names the runtime it borrows and the models it offer
   assert.deepEqual(deepseek, {
     slug: 'deepseek',
     label: 'DeepSeek',
-    // Not 'deepseek': the slug is the name to pass, the runtime is the CLI that ends up running it.
+    // Not 'deepseek': the slug is the name to pass, the runtime is the protocol its endpoint speaks.
     runtime: 'claude',
+    // …and these are the engines that run it, the one a caller naming only the slug gets first: a DeepSeek
+    // key runs on Claude Code, OpenCode and DeepSeek Harness (docs/provider-engine-contract.md §6.3).
+    engines: ['claude', 'opencode', 'dsh'],
     models: [{ value: 'deepseek-v4-pro', label: 'DeepSeek V4 Pro' }],
     defaultModel: 'deepseek-v4-pro',
     builtin: false,
@@ -114,6 +123,7 @@ test("the caller's own account pools are listed by name, on Claude, and only the
     slug: 'claude-accounts',
     label: 'Claude accounts',
     runtime: 'claude',
+    engines: ['claude'],
     builtin: false,
   });
 });
@@ -125,8 +135,8 @@ test('a shared pool the caller is in is listed by name, on Codex', async () => {
   ]).listUsable('user-1');
 
   assert.deepEqual(listed.slice(-2), [
-    { slug: 'claude-accounts', label: 'Claude accounts', runtime: 'claude', builtin: false },
-    { slug: 'team-codex', label: 'Team Codex', runtime: 'codex', builtin: false },
+    { slug: 'claude-accounts', label: 'Claude accounts', runtime: 'claude', engines: ['claude'], builtin: false },
+    { slug: 'team-codex', label: 'Team Codex', runtime: 'codex', engines: ['codex'], builtin: false },
   ]);
 });
 

@@ -157,6 +157,8 @@ export class RunnerSessionsController {
       workspaceName?: string;
       title?: string;
       model?: string;
+      /** The engine, resolved with `provider` as on POST /sessions (providers/engine-provider.ts). */
+      engine?: string;
       provider?: string;
       permissionMode?: string;
     },
@@ -177,6 +179,8 @@ export class RunnerSessionsController {
           prompt: dto.prompt,
           title: dto.title,
           model: dto.model,
+          // Named only when the caller named one: a provider alone keeps the engine it always got.
+          ...(dto.engine !== undefined ? { engine: dto.engine } : {}),
           provider: dto.provider,
           permissionMode: dto.permissionMode,
         },

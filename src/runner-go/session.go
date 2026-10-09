@@ -615,6 +615,10 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 
 	var bufMu sync.Mutex
 	var buf []RunEvent
+	// What of buf, and of a batch being posted, the control plane has not acknowledged yet: the
+	// managed workload report's unflushed events (managed_sleep.go).
+	backlog, dropBacklog := newEventBacklog()
+	defer dropBacklog()
 	// How long each stretch of reasoning took, written onto the block that closes it (guarded by
 	// bufMu, so it sees events in the order they are buffered). See thinking_clock.go.
 	thinkClock := &thinkingClock{}
@@ -664,6 +668,8 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 				return t.postEvents(attemptCtx, sessionID, RunEventBatch{Events: events})
 			}, eventFlushRetryPolicy(&serverRejections))
 			if isLeaseOwnershipError(err) {
+				// Another process owns the session now: this batch will never be sent from here.
+				backlog.settled(len(events))
 				markOwnershipLost(err)
 				return err
 			}
@@ -672,6 +678,7 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 					logln("dropping", len(events), "events for", sessionID,
 						fmt.Sprintf("(seq %d-%d)", events[0].Seq, events[len(events)-1].Seq),
 						"after", serverRejections, "server rejections:", err)
+					backlog.settled(len(events))
 					return criticalFlushFence.recordDropped(events, err)
 				}
 				// Keep the batch available to the final flush. Requests are seq-idempotent, so
@@ -679,8 +686,10 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 				bufMu.Lock()
 				buf = append(events, buf...)
 				bufMu.Unlock()
+				return err
 			}
-			return err
+			backlog.settled(len(events))
+			return nil
 		})
 	}
 	periodicEventCtx, cancelPeriodicEvents := context.WithCancel(eventCtx)
@@ -723,6 +732,7 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 			bufMu.Lock()
 			payload = thinkClock.observe(eventType, payload, time.Now())
 			buf = append(buf, RunEvent{Seq: s, Type: eventType, TS: nowISO(), TurnID: turnID, Payload: payload})
+			backlog.buffered()
 			if coordinatorContextBoundaryEvent(eventType, payload) {
 				coordinatorContextBarrier.mark()
 			}

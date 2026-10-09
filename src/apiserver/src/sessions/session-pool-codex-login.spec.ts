@@ -48,6 +48,8 @@ function sessionRow(over: Record<string, unknown> = {}) {
     archivedAt: null,
     deletedAt: null,
     source: 'user',
+    // A Codex pool's session, on the engine it was recorded on (migration 0414).
+    engine: 'codex',
     provider: POOL_SLUG,
     model: null,
     permissionMode: null,

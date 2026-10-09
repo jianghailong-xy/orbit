@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { validate } from 'class-validator';
 import { AgentProvider } from '@orbit/shared';
-import { execRuntime, isBuiltinProvider, resolveProviderExec } from './custom-provider';
+import { isBuiltinProvider, resolveProviderExec } from './custom-provider';
+import { classifyProvider, resolvedCredentialEngines } from './engine-provider';
 import { sessionEngine } from './session-engine';
 import { CreateModelProviderDto, TestModelProviderDto, UpdateModelProviderDto } from './dto';
 import { encryptSecret } from './provider-crypto';
@@ -10,6 +11,7 @@ import { followsRuntimeCatalog, ownsModel, withPreset } from './preset-overlay';
 import { pickFreeSlug } from './provider-slug';
 import { ProvidersService } from './providers.service';
 import { poolMemberRefusal } from './pool-admission';
+import { renderRawQuery } from '../test-support/prisma-transaction-double';
 
 process.env.PROVIDER_SECRET_KEY = 'p1a-provider-fixture-secret';
 
@@ -53,6 +55,7 @@ test('P1a existing DeepSeek configuration keeps Claude for new tasks', async () 
       create: async ({ data }: { data: object }) => (saved = { ...saved, ...data }),
     },
     providerPool: { findMany: async () => [] },
+    providerSlugAlias: { findMany: async () => [] },
   });
   const created = await service.create(OWNER, createDto({ presetSlug: 'deepseek' }));
   assert.equal(created.runtime, 'claude');
@@ -81,19 +84,24 @@ test('P1a historical DeepSeek model pins stay on Claude', () => {
   }
 });
 
-test('P1a explicit Harness preset resolves dsh with dedicated API key', async () => {
+test('T3 the retired Harness preset creates a DeepSeek key, which DeepSeek Harness runs on with its dedicated API key', async () => {
   let saved = harness();
   const service = serviceFor({
     modelProvider: { findMany: async () => [], create: async ({ data }: { data: object }) => (saved = { ...saved, ...data }) },
     providerPool: { findMany: async () => [] },
+    providerSlugAlias: { findMany: async () => [] },
   });
-  const created = await service.create(OWNER, createDto({ presetSlug: 'deepseek-harness' }));
-  assert.equal(created.runtime, 'dsh');
-  assert.deepEqual(created.models, []);
-  assert.equal(created.defaultModel, null);
-  assert.equal((created as { modelsFromRuntime?: boolean }).modelsFromRuntime, true);
+  // An older client connecting "DeepSeek Harness" gets a DeepSeek key (docs/provider-engine-contract.md §3.6):
+  // the DeepSeek preset, Anthropic's protocol, DeepSeek's own model list, and the vendor's name.
+  const created = await service.create(OWNER, createDto({ presetSlug: 'deepseek-harness', label: 'DeepSeek Harness' }));
+  assert.equal(created.runtime, 'claude');
+  assert.equal(created.presetSlug, 'deepseek');
+  assert.equal(created.slug, 'deepseek');
+  assert.equal(created.label, 'DeepSeek');
+  assert.ok((created.models as unknown[]).length > 0);
+  assert.deepEqual(created.engines, [AgentProvider.CLAUDE, AgentProvider.OPENCODE, AgentProvider.DSH]);
   const exec = resolveProviderExec({
-    declaredProvider: created.slug, customRow: saved, runtimeDefaultModels: { dsh: OPAQUE_MODEL },
+    engine: AgentProvider.DSH, declaredProvider: created.slug, customRow: saved, runtimeDefaultModels: { dsh: OPAQUE_MODEL },
     workspaceEnv: { ORBIT_DSH_API_KEY: 'wrong-key', ORBIT_DSH_BASE_URL: 'https://wrong.test', EXTRA: 'kept' },
   });
   assert.equal(exec.provider, AgentProvider.DSH);
@@ -142,9 +150,22 @@ test('P1a dsh keyword collisions preserve configured providers and pools', async
   const colliding = { ...legacyDeepSeek(), slug: 'dsh' };
   assert.equal(isBuiltinProvider('dsh'), true);
   assert.equal(isBuiltinProvider('dsh', false), false);
-  assert.equal(execRuntime({ declaredProvider: 'dsh', declaredProviderBuiltin: false, customRow: colliding }), AgentProvider.CLAUDE);
-  assert.equal(execRuntime({ declaredProvider: 'dsh', declaredProviderBuiltin: false, customRow: null }), AgentProvider.CLAUDE);
-  assert.equal(execRuntime({ declaredProvider: 'dsh', declaredProviderBuiltin: true, customRow: null }), AgentProvider.DSH);
+  // A configured row or pool named `dsh` is what the slug names; the built-in one only when neither is there.
+  const deps = (db: object) => ({ db: { user: admin, ...db } as never, poolRefusal: async () => null });
+  const named = await classifyProvider(deps({ modelProvider: { findFirst: async () => colliding } }), OWNER, 'dsh', 'session');
+  assert.equal(named.kind, 'key');
+  assert.deepEqual(resolvedCredentialEngines(named), [AgentProvider.CLAUDE, AgentProvider.OPENCODE, AgentProvider.DSH]);
+  const pooled = await classifyProvider(deps({
+    modelProvider: { findFirst: async () => null },
+    providerPool: { findFirst: async () => ({ shared: false, engine: 'codex' }) },
+  }), OWNER, 'dsh', 'session');
+  assert.deepEqual(pooled, { kind: 'pool', slug: 'dsh', engine: AgentProvider.CODEX });
+  const builtin = await classifyProvider(deps({
+    modelProvider: { findFirst: async () => null },
+    providerPool: { findFirst: async () => null },
+    providerSlugAlias: { findUnique: async () => null },
+  }), OWNER, 'dsh', 'session');
+  assert.deepEqual(builtin, { kind: 'legacy-dsh' });
   const session = { provider: 'dsh', providerBuiltin: false, ownerId: OWNER };
   const rowDb = { user: admin, modelProvider: { findFirst: async () => colliding } };
   assert.equal(await sessionEngine(rowDb as never, session), AgentProvider.CLAUDE);
@@ -199,60 +220,102 @@ test('P1a legacy dsh provider edits preserve its runtime and slug', async () => 
   assert.equal((data as { runtime?: string }).runtime, undefined);
 });
 
-test('P1a provider history blocks cross-runtime dsh conversion', async () => {
-  for (const saved of [legacyDeepSeek(), harness()]) {
+test('T3 a key never becomes dsh, leaves it unless that strands what uses it, and is deleted whatever its history', async () => {
+  // Into dsh: DeepSeek Harness is an engine, not a protocol (PROVIDER_RUNTIME_DSH_RETIRED), and nothing is written.
+  {
     let wrote = false;
-    const service = serviceFor({ modelProvider: {
-      findFirst: async () => saved,
-      update: async () => { wrote = true; return saved; },
-    } });
-    await assert.rejects(() => service.update(OWNER, saved.id, {
-      runtime: saved.runtime === 'dsh' ? 'claude' : 'dsh',
-    }), /cannot change into or out of dsh/);
+    const saved = legacyDeepSeek();
+    const service = serviceFor({ modelProvider: { findFirst: async () => saved, update: async () => { wrote = true; return saved; } } });
+    await assert.rejects(() => service.update(OWNER, saved.id, { runtime: 'dsh' }),
+      (error: { response?: { code?: string } }) => error.response?.code === 'PROVIDER_RUNTIME_DSH_RETIRED');
     assert.equal(wrote, false);
   }
-  for (const history of ['session', 'task'] as const) {
-    const seen: Array<{ provider: string; ownerId?: string; providerBuiltin?: boolean }> = [];
+  // Out of dsh, judged by what uses the key: an open DeepSeek Harness session keeps a DeepSeek key on Anthropic's
+  // protocol (it still runs there), and is stranded by OpenAI's (PROVIDER_DIALECT_IN_USE, 409).
+  for (const [runtime, refused] of [['claude', false], ['codex', true]] as const) {
     let wrote = false;
-    const record = async ({ where }: { where: (typeof seen)[number] }) => { seen.push(where); return { id: 'history' }; };
     const current = harness();
-    const harnessService = serviceFor({
-      modelProvider: { findFirst: async () => current, delete: async () => { wrote = true; } },
-      session: { findFirst: history === 'session' ? record : async () => null },
-      task: { findFirst: history === 'task' ? record : async () => null },
+    const service = serviceFor({
+      modelProvider: { findFirst: async () => current, update: async ({ data }: { data: object }) => { wrote = true; return { ...current, ...data }; } },
+      $queryRaw: async (...args: unknown[]) => (renderRawQuery(args).text.includes('FROM "session"')
+        ? [{ engine: 'dsh', n: 1 }] : []),
+      $executeRaw: async () => 0,
     });
-    await assert.rejects(() => harnessService.remove(OWNER, current.id), /history and cannot be removed/);
-    assert.equal(wrote, false);
-    assert.equal(seen[0].provider, current.slug);
-    assert.equal(seen[0].ownerId, OWNER);
-    if (history === 'session') assert.equal(seen[0].providerBuiltin, false);
+    if (refused) {
+      await assert.rejects(() => service.update(OWNER, current.id, { runtime }),
+        (error: { response?: { code?: string; engines?: string[]; sessions?: number } }) =>
+          error.response?.code === 'PROVIDER_DIALECT_IN_USE'
+          && error.response.engines?.[0] === 'dsh' && error.response.sessions === 1);
+      assert.equal(wrote, false);
+    } else {
+      assert.equal((await service.update(OWNER, current.id, { runtime })).runtime, runtime);
+      assert.equal(wrote, true);
+    }
   }
+  // Deleted whatever its history: its sessions keep their engine and wait for another key.
+  let deleted = false;
+  const current = harness();
+  const harnessService = serviceFor({
+    modelProvider: { findFirst: async () => current, delete: async () => { deleted = true; } },
+    $executeRaw: async () => 0,
+  });
+  assert.deepEqual(await harnessService.remove(OWNER, current.id), { ok: true });
+  assert.equal(deleted, true);
   assert.throws(() => resolveProviderExec({ declaredProvider: 'deepseek-harness', customRow: { ...harness(), enabled: false } }), /provider is disabled/);
   assert.throws(() => resolveProviderExec({ declaredProvider: 'dsh', declaredProviderBuiltin: false,
     customRow: { ...legacyDeepSeek(), runtime: 'codex', enabled: false } }), /provider is disabled/);
 });
 
-test('P1a dsh configuration rejects static model guesses', async () => {
+test('T3 a Harness-shaped create keeps DeepSeek\'s own models, and a legacy dsh row edits like any key', async () => {
   assert.equal(poolMemberRefusal({
     ...harness(), baseUrl: 'https://api.anthropic.com', apiKeyEnc: encryptSecret('sk-ant-oat-fixture'),
   }), 'NOT_CLAUDE_RUNTIME');
-  const service = serviceFor({ modelProvider: { findFirst: async () => harness() } });
+  let saved = harness();
+  const service = serviceFor({
+    modelProvider: {
+      findFirst: async () => harness(),
+      findMany: async () => [],
+      create: async ({ data }: { data: object }) => (saved = { ...saved, ...data }),
+      update: async ({ data }: { data: object }) => ({ ...harness(), ...data }),
+    },
+    providerPool: { findMany: async () => [] },
+    providerSlugAlias: { findMany: async () => [] },
+  });
   for (const staticSelection of [
-    { defaultModel: 'deepseek-v4-pro' }, { models: [{ value: 'deepseek-v4-pro', label: 'Guessed model' }] },
+    { defaultModel: 'deepseek-v4-pro' }, { models: [{ value: 'guessed-model', label: 'Guessed model' }] },
   ]) {
-    await assert.rejects(() => service.create(OWNER, createDto({ runtime: 'dsh', ...staticSelection })), /runtime ACP catalogue/);
-    await assert.rejects(() => service.update(OWNER, 'harness-provider', staticSelection), /runtime ACP catalogue/);
+    // The models a Harness form names are not the key's: it gets DeepSeek's own list.
+    const created = await service.create(OWNER, createDto({ runtime: 'dsh', ...staticSelection }));
+    assert.equal(created.runtime, 'claude');
+    assert.ok(!(created.models as Array<{ value: string }>).some((model) => model.value === 'guessed-model'));
+    // A row still on the retired runtime takes an edit of its models like any other key.
+    await service.update(OWNER, 'harness-provider', staticSelection);
   }
 });
 
-test('P1a dsh DTOs accept its runtime and HTTP probes require runtime validation', async () => {
+test('T3 the dsh runtime is still accepted by the DTOs, and a DeepSeek key is probed on Anthropic Messages', async () => {
   for (const Dto of [CreateModelProviderDto, UpdateModelProviderDto, TestModelProviderDto]) {
     const dto = Object.assign(new Dto(), createDto({ runtime: 'dsh' }));
     assert.deepEqual(await validate(dto), []);
   }
-  await assert.rejects(() => serviceFor({}).testConnection({
-    runtime: 'dsh', baseUrl: 'https://api.deepseek.com/anthropic', apiKey: 'sk-test', model: OPAQUE_MODEL,
-  }), /requires runtime prompt validation/);
+  const seen: string[] = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async (url: string) => {
+    seen.push(String(url));
+    return new Response('{}', { status: 200 });
+  }) as typeof fetch;
+  try {
+    for (const runtime of ['dsh', 'claude']) {
+      assert.deepEqual(await serviceFor({}).testConnection({
+        runtime, baseUrl: 'https://api.deepseek.com/anthropic', apiKey: 'sk-test', model: 'deepseek-v4-pro',
+      }), { ok: true, status: 200, message: 'Connected' });
+    }
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+  assert.deepEqual(seen, [
+    'https://api.deepseek.com/anthropic/v1/messages', 'https://api.deepseek.com/anthropic/v1/messages',
+  ]);
 });
 
 test('P1a other built-in engine routes remain unchanged', () => {

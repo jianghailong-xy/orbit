@@ -126,6 +126,31 @@ func TestMCPTaskRequestConfirmationPostsTheClaimWithBothAttributionHeaders(t *te
 	}
 }
 
+func TestMCPTaskCommentPostsWithBothAttributionHeaders(t *testing.T) {
+	var gotMethod, gotPath, gotAgent, gotSession string
+	var gotBody map[string]interface{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod, gotPath = r.Method, r.URL.Path
+		gotAgent, gotSession = r.Header.Get("X-Orbit-Agent-Id"), r.Header.Get("X-Orbit-Session-Id")
+		_ = json.NewDecoder(r.Body).Decode(&gotBody)
+		w.Write([]byte(`{"id":"c1"}`))
+	}))
+	defer srv.Close()
+
+	mcp := &mcpServer{taskID: "t1", agentID: "a1", sessionID: "s1", t: NewTransport(srv.URL, "tok")}
+	res := mcp.callTool("task_comment", map[string]interface{}{"body": "looked at it"})
+	if res["isError"] == true {
+		t.Fatalf("task_comment returned an error: %#v", res["content"])
+	}
+	if gotMethod != http.MethodPost || gotPath != "/api/runner/tasks/t1/comments" || gotBody["body"] != "looked at it" {
+		t.Fatalf("task_comment sent %s %s %#v", gotMethod, gotPath, gotBody)
+	}
+	// The session is what lets the control plane record which run, and which attempt, wrote it.
+	if gotAgent != "a1" || gotSession != "s1" {
+		t.Fatalf("attribution headers = agent %q, session %q", gotAgent, gotSession)
+	}
+}
+
 func TestMCPTaskRequestConfirmationRefusesOutsideASession(t *testing.T) {
 	called := false
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -10,10 +10,26 @@ import io.orbitd.android.OrbitApplication
 import io.orbitd.android.core.cards.*
 import io.orbitd.android.text.LocalReaderResources
 import kotlinx.coroutines.CancellationException
+import io.orbitd.android.core.realtime.RunEvent
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 
 @Composable
-internal fun TranscriptCardView(card: InteractionCard, open: (String) -> Unit) {
+internal fun TranscriptCardView(card: InteractionCard, open: (String) -> Unit, event: RunEvent? = null) {
+    val ts = event?.ts
+    // A review's two turns are drawn as their own cards (A08-1), not as a list of their fields.
+    if (card.family == CardFamily.REVIEW && (card.key.endsWith(":confirmationReviewRequest") || card.key.endsWith(":confirmationReturn"))) {
+        ReviewTurnCard(card, ts, open); return
+    }
+    // A background job's news or a wakeup coming due is a line in the agent's stream (A08-11), not a card of fields.
+    if (card.family == CardFamily.BACKGROUND && card.key.endsWith(":wake")) {
+        val fields = event?.fields
+        val delivery = event?.turnId?.let { LocalSteerDeliveries.current[it] } ?: fields?.text("delivery")
+        val undelivered = delivery == "failed"
+        BackgroundWakeLine(card.source, ts, BackgroundWakeCard.steerReceipt(
+            BackgroundWakeCard.steerState(fields?.get("steer") == JsonPrimitive(true), delivery, undelivered)), undelivered)
+        return
+    }
     val resources = LocalReaderResources.current
     val app = LocalContext.current.applicationContext as? OrbitApplication
     val live = app?.realtime?.state?.collectAsState()?.value

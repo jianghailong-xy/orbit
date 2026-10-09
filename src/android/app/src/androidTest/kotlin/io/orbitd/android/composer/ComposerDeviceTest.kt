@@ -21,6 +21,7 @@ import io.orbitd.android.*
 import io.orbitd.android.attachments.importAttachment
 import io.orbitd.android.attachments.decodeAttachmentImage
 import io.orbitd.android.core.auth.AuthState
+import io.orbitd.android.core.cards.CardPreviews
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.*
 import org.junit.Assert.*
@@ -139,8 +140,13 @@ class ComposerDeviceTest {
         control("""{"discussion":true}""")
         compose.runOnIdle { app.realtime.refreshSession() }
         compose.waitUntil(10000) { app.realtime.state.value.session?.snapshot?.standing?.get("acceptanceConfirmation") is JsonObject }
-        compose.onNodeWithTag("transcript-list").performScrollToNode(hasText("Chat about this"))
+        // A08-2: the criteria card is a preview in the conversation; "Chat about this" is in the review it opens, which closes
+        // as it hands the question to the composer.
+        compose.onNodeWithTag("transcript-list").performScrollToNode(hasText(CardPreviews.viewDetailsAndAct))
+        compose.onNodeWithText(CardPreviews.viewDetailsAndAct).performClick()
+        compose.waitUntil(10000) { compose.onAllNodesWithTag("card-review").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Chat about this").performScrollTo().performClick()
+        compose.waitUntil(10000) { compose.onAllNodesWithTag("card-review").fetchSemanticsNodes().isEmpty() }
         compose.onNodeWithTag("composer-input").assertIsFocused()
         compose.waitUntil(5000) { model.state.value.draft.text.contains("fixture-criteria-seal") }
         val text = model.state.value.draft.text

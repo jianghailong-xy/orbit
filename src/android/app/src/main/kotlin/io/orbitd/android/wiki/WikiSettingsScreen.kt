@@ -32,6 +32,7 @@ import io.orbitd.android.directory.DirectoryData
 import io.orbitd.android.directory.LoadingMessage
 import io.orbitd.android.navigation.OrbitRoute
 import io.orbitd.android.ui.LocalOrbitColors
+import io.orbitd.android.toast.OrbitToasts
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
@@ -409,7 +410,7 @@ internal fun WikiSettingsScreen(store: WikiStore, route: OrbitRoute, data: Direc
     }
     val workspaceRows = wikiWorkspaceRows(reads, data)
     val workspaces = workspaceRows.map { it.option }
-    fun finish(answer: String?) { if (answer != null) notice = answer else WikiToast.show(WikiCopy.settingsSaved) }
+    fun finish(answer: String?) { if (answer != null) notice = answer else OrbitToasts.show(WikiCopy.settingsSaved) }
     val server = state.systemModel?.takeIf { state.serverExecutes }
     WikiSettingsPage(route, space, workspaceLabel = { id -> workspaces.firstOrNull { sameWikiId(it.id, id) }?.label }, server = server, busy = state.busy,
         actions = WikiSettingsActions(
@@ -431,5 +432,5 @@ internal fun WikiSettingsScreen(store: WikiStore, route: OrbitRoute, data: Direc
             answer == null
         }
     }
-    WikiRefusalAlert(notice) { notice = null }
+    WikiRefusalAlert(WikiCopy.settingsSaveFailed, notice) { notice = null }
 }

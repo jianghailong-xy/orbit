@@ -22,8 +22,8 @@ private final class ComposerPasteState {
 
 /// The composer band: everything below the transcript that belongs to the message you're about to
 /// send — the error strip, staged attachments, the background tray, the git bar, and the composer
-/// itself. ONE place owns the band's 16pt gutter, its top rule, and the 8pt rhythm between its
-/// members (web parity: `.workspace-composer` — a `border-top`-only container whose children each
+/// itself. ONE place owns the band's 16pt gutter and the 8pt rhythm between its members (web
+/// parity: `.workspace-composer` — a container with no surface and no rule whose children each
 /// carry `margin-bottom: 8px`). Before this existed every member padded itself and the
 /// stack drifted: the git bar had picked up a stray 4pt top padding nobody else had, so the gap
 /// above it was 12 where the tray's was 8, and the whole stack's top edge jumped 4pt whenever a
@@ -40,28 +40,16 @@ struct ComposerBand<Content: View>: View {
     var body: some View {
         VStack(spacing: 0) { content }
             .padding(.horizontal, 16)
-            .padding(.top, 12)
             .padding(.bottom, 10)
-            // NO surface of its own — the band is defined by its top rule alone (web parity:
-            // `.workspace-composer` sets `border-top` and nothing else). A `.bar` fill here reads as
-            // a grey panel behind the tray and the git bar, which web has nowhere; the two cards and
-            // the composer box each already carry their own fill + border, so they stand on the
-            // content backdrop exactly as they do on the web. (`.bar` used to sit on `ComposerView`,
-            // covering only the field and its footer — hoisting it to the band is what spread it.)
+            // NO surface of its own (web parity: `.workspace-composer` has none). A `.bar` fill here
+            // reads as a grey panel behind the tray and the git bar, which web has nowhere; the two
+            // cards and the composer box each already carry their own fill + border, so they stand on
+            // the content backdrop exactly as they do on the web. (`.bar` used to sit on
+            // `ComposerView`, covering only the field and its footer — hoisting it to the band is what
+            // spread it.)
             //
-            // Full-bleed hairline (so it can't be inset by the gutter above) marking where the
-            // transcript ends. Wrapped in a stack to give the rule a horizontal axis — a bare
-            // `Divider()` in a background draws as a VERTICAL line down the middle instead (same fix
-            // as the sticky question header's bottom rule). BEHIND the content, not over it: nothing
-            // in the band reaches its top edge (the 12pt padding keeps it clear), but the composer's
-            // floating `/` menu crosses it, and as an overlay the hairline drew a seam across that card.
-            .background(alignment: .top) { VStack(spacing: 0) { Divider() } }
-            // Clearance ABOVE the rule (web's `.workspace-composer { margin-top: 8px }`) — applied
-            // after the background so it pads the band outward and leaves the hairline on the
-            // content's edge. Without it the rule sat ~7pt under the last transcript row (its 6pt
-            // inset + the 1pt tail anchor) while web gives the same bubble 16 (8pt message margin +
-            // this 8), so the tail — a reply, or the working dots — read as crowding the line.
-            .padding(.top, 8)
+            // No top rule and no clearance above the first member either: what scrolls above the band
+            // fades out into it (`fadesIntoComposerBand`), and keeps that room under its own last row.
     }
 }
 
@@ -85,6 +73,30 @@ extension CGFloat {
     /// The one vertical gap between `ComposerBand` members. Read it, don't retype it — the drift it
     /// replaces was four hand-written literals that stopped agreeing.
     static let composerBandGap: CGFloat = 8
+    /// How far a scroll view fades out above the composer band — and the room it keeps clear under
+    /// its last row, so at rest nothing sits in the fade. See `fadesIntoComposerBand`.
+    static let composerBandFade: CGFloat = 20
+}
+
+extension View {
+    /// The bottom edge of a scroll view that ends at the composer band (web: the conversation's
+    /// `.workspace-sessions` mask). The band draws no rule, so a row cut off at the edge dissolves
+    /// into it instead of being sliced through. The scroll view keeps `composerBandFade` of room
+    /// under its last row, so the fade only covers rows on their way out of view. The trailing 16pt
+    /// — the rows' own inset, where the scroller runs — stays out of it, so a scroller resting at
+    /// the bottom keeps its whole knob (web keeps its scrollbar gutter out the same way).
+    func fadesIntoComposerBand() -> some View {
+        mask {
+            HStack(spacing: 0) {
+                VStack(spacing: 0) {
+                    Color.black
+                    LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
+                        .frame(height: .composerBandFade)
+                }
+                Color.black.frame(width: 16)
+            }
+        }
+    }
 }
 
 struct ComposerView: View {
@@ -115,6 +127,9 @@ struct ComposerView: View {
     @State private var showPhotoPicker = false
     @State private var showFileImporter = false
     @State private var pickedPhotos: [PhotosPickerItem] = []
+    /// Set by the first double-tap that takes a suggestion on this device: from then on the line is
+    /// the guess alone, without "Double-tap to use" after it.
+    @AppStorage("composer.suggestionDoubleTapLearned") private var suggestionDoubleTapLearned = false
     #endif
 
     // The models of the current provider, in catalog order (Opus → Haiku). The model control's
@@ -226,6 +241,18 @@ struct ComposerView: View {
         requestFocus()
     }
 
+    #if os(iOS)
+    /// A touch screen's way to take it: a double-tap on the field's line (`GrowingTextEditor`), or
+    /// VoiceOver's "Use suggestion". A light tap says it landed, and "Double-tap to use" has been
+    /// learned on this device.
+    private func useSuggestionByTouch() {
+        guard offeredSuggestion != nil else { return }
+        PlatformHaptics.tap()
+        acceptSuggestion()
+        suggestionDoubleTapLearned = true
+    }
+    #endif
+
     // Whether the composer box should draw its focused ring/shadow. macOS keys off the field's
     // @FocusState; iOS off the UITextView editor's begin/end-editing (mirrored into `composerEditing`).
     private var boxFocused: Bool {
@@ -298,7 +325,11 @@ struct ComposerView: View {
                     // The guess sits on the empty field's first line, where the placeholder would.
                     .overlay(alignment: .topLeading) {
                         if let suggestion = offeredSuggestion {
+                            #if os(iOS)
+                            PromptSuggestionLine(text: suggestion, showsDoubleTapHint: !suggestionDoubleTapLearned)
+                            #else
                             PromptSuggestionLine(text: suggestion, accept: acceptSuggestion)
+                            #endif
                         }
                     }
                     .onChange(of: console.slashToken) { _, new in
@@ -410,7 +441,8 @@ struct ComposerView: View {
     private var inputField: some View {
         #if os(iOS)
         GrowingTextEditor(text: $console.composerText, placeholder: placeholder,
-                          maxLines: 6, isEditing: $console.composerEditing.animation(Self.editingChange))
+                          maxLines: 6, isEditing: $console.composerEditing.animation(Self.editingChange),
+                          suggestion: offeredSuggestion, useSuggestion: useSuggestionByTouch)
             .frame(maxWidth: .infinity)
         #else
         TextField(placeholder, text: $console.composerText, axis: .vertical)
@@ -1316,18 +1348,37 @@ struct ComposerView: View {
 }
 
 /// The engine's guess at the next message, drawn on the empty field's first line where the
-/// placeholder would be, with Use at its end (docs/prompt-suggestions-design.md §4.1). Only Use takes
-/// the touch: a tap anywhere else on the line still lands in the field, to type something else.
+/// placeholder would be (docs/prompt-suggestions-design.md §4.1). On a Mac, Use at its end (or Tab)
+/// takes it, and only Use takes the click. A touch screen has no button: a double-tap on the line
+/// takes it (`GrowingTextEditor`), and until the first one on this device the words are followed by
+/// "Double-tap to use". Either way a tap anywhere else lands in the field, to type something else.
 private struct PromptSuggestionLine: View {
     let text: String
+    #if os(iOS)
+    let showsDoubleTapHint: Bool
+    #else
     let accept: () -> Void
+    #endif
 
     var body: some View {
-        Text(text)
-            .font(.orbitControl)
-            .foregroundStyle(Self.placeholderColor)
-            .lineLimit(1)
-            .truncationMode(.tail)
+        #if os(iOS)
+        // The words give way before the hint does, and the hint is smaller, so the line keeps the
+        // field's own line height and the words sit exactly where typed ones would.
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            words
+            if showsDoubleTapHint {
+                Text("Double-tap to use")
+                    .font(.orbitLabel)
+                    .foregroundStyle(Self.placeholderColor)
+                    .fixedSize()
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .allowsHitTesting(false)
+        // VoiceOver hears the guess from the field itself, with its "Use suggestion" action.
+        .accessibilityHidden(true)
+        #else
+        words
             .frame(maxWidth: .infinity, alignment: .leading)
             // Room for Use, which hangs over the line's end instead of setting its height: the line
             // keeps the field's own line height, so the words sit exactly where typed ones would.
@@ -1337,9 +1388,7 @@ private struct PromptSuggestionLine: View {
                 Button(action: accept) {
                     HStack(spacing: 5) {
                         Text("Use")
-                        #if os(macOS)
                         Text("⇥").foregroundStyle(.secondary)
-                        #endif
                     }
                     .font(.orbitLabel.weight(.semibold))
                     .padding(.horizontal, 11)
@@ -1352,6 +1401,15 @@ private struct PromptSuggestionLine: View {
                 .accessibilityLabel("Use suggestion: \(text)")
                 .help("Use this suggestion")
             }
+        #endif
+    }
+
+    private var words: some View {
+        Text(text)
+            .font(.orbitControl)
+            .foregroundStyle(Self.placeholderColor)
+            .lineLimit(1)
+            .truncationMode(.tail)
     }
 
     /// The field's own placeholder colour, so the guess reads as the box's grey line and not as text.
@@ -1500,6 +1558,11 @@ private struct GrowingTextEditor: UIViewRepresentable {
     let placeholder: String
     let maxLines: Int
     @Binding var isEditing: Bool
+    /// The guess the empty field offers (`PromptSuggestionLine` draws it), nil when there is none.
+    /// While there is one, a double-tap on the field takes it with `useSuggestion`, and so does
+    /// VoiceOver's "Use suggestion" action: VoiceOver's own double-tap is its "activate".
+    var suggestion: String? = nil
+    var useSuggestion: () -> Void = {}
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -1521,6 +1584,15 @@ private struct GrowingTextEditor: UIViewRepresentable {
         // scrolls within that cap once it's exceeded rather than clipping.
         view.isScrollEnabled = true
         view.placeholderLabel.font = view.font
+        // Off until a suggestion is on offer (`updateUIView`). The field's own taps wait on it then
+        // (the coordinator's delegate, below); its touches still reach it as they always have.
+        let doubleTap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.doubleTapped(_:)))
+        doubleTap.numberOfTapsRequired = 2
+        doubleTap.delaysTouchesEnded = false
+        doubleTap.isEnabled = false
+        doubleTap.delegate = context.coordinator
+        view.addGestureRecognizer(doubleTap)
+        context.coordinator.doubleTap = doubleTap
         return view
     }
 
@@ -1530,6 +1602,9 @@ private struct GrowingTextEditor: UIViewRepresentable {
         view.placeholderLabel.text = placeholder
         view.placeholderLabel.isHidden = !text.isEmpty
         view.setNeedsLayout()
+        context.coordinator.doubleTap?.isEnabled = suggestion != nil
+        view.accessibilityHint = suggestion.map { "Suggested reply: \($0)." }
+        view.accessibilityCustomActions = suggestion == nil ? nil : [context.coordinator.useAction]
         // Drive focus from the binding, but never fight the field's own responder state.
         if isEditing, !view.isFirstResponder { view.becomeFirstResponder() }
         else if !isEditing, view.isFirstResponder { view.resignFirstResponder() }
@@ -1545,9 +1620,42 @@ private struct GrowingTextEditor: UIViewRepresentable {
         return CGSize(width: width, height: ceil(min(fit.height, line * CGFloat(maxLines))))
     }
 
-    final class Coordinator: NSObject, UITextViewDelegate {
+    final class Coordinator: NSObject, UITextViewDelegate, UIGestureRecognizerDelegate {
         var parent: GrowingTextEditor
+        weak var doubleTap: UITapGestureRecognizer?
+        lazy var useAction = UIAccessibilityCustomAction(name: "Use suggestion") { [weak self] _ in
+            guard let self, self.parent.suggestion != nil else { return false }
+            self.parent.useSuggestion()
+            return true
+        }
         init(_ parent: GrowingTextEditor) { self.parent = parent }
+
+        @objc func doubleTapped(_ recognizer: UITapGestureRecognizer) {
+            guard recognizer.state == .ended, parent.suggestion != nil else { return }
+            parent.useSuggestion()
+        }
+
+        // While a guess is on offer, the field's own taps wait to see whether a second one follows. A
+        // first tap that raised the keyboard at once would lift the composer with it, and the second
+        // would land on the keyboard (typing a key or a candidate) instead of the field; a second tap
+        // the field took too would drop the caret into the words just filled in, or open the edit
+        // menu. So the keyboard comes up a double-tap interval late then. The field's own taps are not
+        // all `UITapGestureRecognizer`s — on iOS 26 its single tap is a `UITextMultiTapRecognizer`,
+        // which won the second tap on a CI run — so any of its gestures named for a tap waits too.
+        // Held back, the multi-tap still focuses the field but no longer toggles the edit menu: while a
+        // guess is on offer, Paste into the empty field is a press and hold (the loupe's, untouched).
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                               shouldBeRequiredToFailBy other: UIGestureRecognizer) -> Bool {
+            guard gestureRecognizer === doubleTap, let field = gestureRecognizer.view,
+                  other.view?.isDescendant(of: field) == true else { return false }
+            return other is UITapGestureRecognizer || NSStringFromClass(type(of: other)).contains("Tap")
+        }
+
+        // And whatever of the field's own does begin (its loupe, a scroll) never stops the double-tap.
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                               shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
+            gestureRecognizer === doubleTap
+        }
 
         func textViewDidChange(_ view: UITextView) {
             if parent.text != view.text { parent.text = view.text }

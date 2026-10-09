@@ -30,6 +30,7 @@ import {
 } from '@orbit/shared';
 import { Observable, Subject, filter, map, mergeMap } from 'rxjs';
 import { PrismaService } from '../prisma/prisma.service';
+import { sessionEngine } from '../providers/session-engine';
 import { PushService } from '../push/push.service';
 import { deriveSessionCapabilities } from '../sessions/session-state';
 import { readWorktreeArtifactRequest } from '../sessions/worktree-artifact';
@@ -961,6 +962,10 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         sourceRefusalCode: true,
         sourceRefusalDetail: true,
         lastTurnAt: true,
+        // The engine it runs on, and what the old rules derive it from for a row that has none.
+        engine: true,
+        provider: true,
+        providerBuiltin: true,
         workspace: { select: { id: true, name: true, model: true, effort: true } },
         coordinatorForProject: { select: { id: true, title: true } },
       },
@@ -999,6 +1004,9 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       lifecycleState,
       filingState,
       capabilities,
+      // The engine it runs on (docs/provider-engine-contract.md §6.1): recorded, else derived, null
+      // when nobody can tell.
+      engine: await sessionEngine(this.prisma, s),
       agentId: s.workspaceId ?? null,
       agent: s.workspace
         ? {

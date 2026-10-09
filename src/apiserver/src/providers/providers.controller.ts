@@ -63,6 +63,16 @@ export class ProvidersController {
     return this.balances.balance(user.userId, id, refresh === '1');
   }
 
+  // What uses one of the caller's own keys, per engine: its open sessions and the task pins naming it
+  // (docs/provider-engine-contract.md §3.6) — what a client shows before the key is disabled or
+  // deleted. The same read that refuses changing the protocol of a key in use. Owner-scoped: a shared
+  // row, or another user's, reads as not-found.
+  @PatScope('workspaces:read', { workspaceConfinable: false })
+  @Get('mine/:id/usage')
+  usageMine(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.providers.usage(user.userId, id);
+  }
+
   // The vendor presets' current model lists, for the connect form. Public catalogue data (no key,
   // no endpoint) that the browser can't derive: its copy is whatever shipped in the bundle, while
   // this one carries the latest models.dev refresh.

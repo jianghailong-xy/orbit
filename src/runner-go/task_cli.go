@@ -2696,8 +2696,8 @@ func cliTaskComment(args []string, in io.Reader, out io.Writer) error {
 	}
 	// In-session comments are authored by the acting agent (same ORBIT_AGENT_ID the MCP path uses);
 	// a headless comment stays runner-owner.
-	agentID, _ := cliTaskAttribution()
-	raw, err := t.commentTask(id, agentID, body)
+	agentID, sessionID := cliTaskAttribution()
+	raw, err := t.commentTask(id, agentID, sessionID, body)
 	if err != nil {
 		return fmt.Errorf("comment on task: %w", err)
 	}

@@ -63,19 +63,32 @@ test('duplicate and empty ids collapse, and an empty list never hits the databas
 test('a project that has never run anything starts where Orbit starts', async () => {
   const { prisma } = prismaStub([]);
   assert.deepEqual(await agentProviderSeed(prisma, 'a1'), DEFAULT_AGENT_PROVIDER);
-  assert.deepEqual(DEFAULT_AGENT_PROVIDER, { provider: 'claude', providerBuiltin: true });
+  assert.deepEqual(DEFAULT_AGENT_PROVIDER, { engine: 'claude', provider: 'claude', providerBuiltin: true });
 });
 
-test('a project that has run something starts there again', async () => {
-  const { prisma } = prismaStub([{ workspace_id: 'a1', provider: 'anthropic', provider_builtin: false }]);
+test('a project that has run something starts there again, on its engine and its credential', async () => {
+  const { prisma } = prismaStub([
+    { workspace_id: 'a1', engine: 'dsh', provider: 'anthropic', provider_builtin: false, owner_id: 'o1' },
+  ]);
   assert.deepEqual(await agentProviderSeed(prisma, 'a1'), {
+    engine: 'dsh',
     provider: 'anthropic',
     providerBuiltin: false,
   });
 });
 
+test('the seed of a session an older replica wrote derives its engine by the old rules', async () => {
+  const rows = [{ workspace_id: 'a1', engine: null, provider: 'anthropic', provider_builtin: false, owner_id: 'o1' }];
+  const prisma = {
+    $queryRaw: async () => rows,
+    user: { findUnique: async () => ({ role: 'USER' }) },
+    modelProvider: { findFirst: async () => ({ runtime: 'codex' }) },
+  } as never;
+  assert.deepEqual(await agentProviderSeed(prisma, 'a1'), { engine: 'codex', provider: 'anthropic', providerBuiltin: false });
+});
+
 test('workspace payloads carry the derived default, not a stored one', () => {
-  const seeds = new Map([['a1', { provider: 'codex', providerBuiltin: true }]]);
+  const seeds = new Map([['a1', { engine: 'codex' as never, provider: 'codex', providerBuiltin: true }]]);
   const [ran, neverRan] = withProviderSeed(
     // `provider` here stands in for the tombstoned column: it must not win.
     [
@@ -85,7 +98,9 @@ test('workspace payloads carry the derived default, not a stored one', () => {
     seeds,
   );
   assert.equal(ran.lastProvider, 'codex');
+  assert.equal(ran.lastEngine, 'codex');
   assert.equal(ran.provider, 'codex', 'the alias old iOS/macOS builds read agrees with it');
   assert.equal(neverRan.lastProvider, 'claude');
+  assert.equal(neverRan.lastEngine, 'claude');
   assert.equal(neverRan.providerBuiltin, true);
 });

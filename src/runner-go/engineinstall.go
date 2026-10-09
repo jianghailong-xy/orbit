@@ -189,6 +189,16 @@ func configureEngineCommandTree(cmd *exec.Cmd) { configureSessionProcessTree(cmd
 // stop waits for an install already under way. Nothing is cancelled — see the type comment.
 func (r *installRelay) stop() { r.wg.Wait() }
 
+// inFlight is 1 while an install or update runs, for the managed workload report (managed_sleep.go).
+func (r *installRelay) inFlight() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.running {
+		return 1
+	}
+	return 0
+}
+
 // installEngineNow runs one engine's recommended installer and reports what happened.
 //
 // Same command ensureEngine uses, minus the register-time consent gate: pressing Install in the
