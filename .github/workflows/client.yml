@@ -1,57 +1,22 @@
-# CI for both native client shells (src/macos + src/ios). They share OrbitKit and the OrbitApp
-# SwiftUI sources (the iOS app reuses them in place — Structure B), so changes to either shell
-# compile both platforms here:
-#
-#   • macos — macOS compile gate: `swift test`s OrbitKit on macOS (builds the `#if os(macOS)`
-#     Keychain + URLSession-SSE paths) and `swift build`s OrbitApp (SwiftUI; can't build on Linux).
-#   • ios — iOS compile gate: XcodeGen + `xcodebuild` for the Simulator (no signing). Surfaces
-#     iOS-only SDK nits in the shared SwiftUI surface.
-#
-# OrbitKit's platform-agnostic Linux tests run for every pull request in ci.yml, where they can be
-# a required check without path-filter deadlocks.
-#
-# Signed/distributable builds live in release.yml (tag-triggered). macOS runners bill at 10×, so the
-# two Xcode jobs run only on pull_request or an explicit workflow_dispatch — never plain pushes. A
-# PR touching the shared OrbitKit/OrbitApp exercises both compile gates (correct — the code is
-# shared); a PR touching only one client's own dir still runs both, which is a small, safe overpay.
+# TEMPORARY (probe branch, never merged). Gates only, on the tested commit as it stands. This branch
+# runs the client compile gates for task 34b5pNIwCilV7N1JMwfkV (native view=active, accepted head as a
+# non-cancellable placeholder) from a host that can neither dispatch a workflow nor read a run's logs
+# (no gh, no token). So a PUSH to it runs everything the dispatch would — the two Linux audits, the
+# macOS gate (OrbitKit `swift test`, then `swift build` of OrbitApp, which runs even when a test fails
+# so both answers come back) and the iOS compile gate — and a last job pushes what came back (the test
+# summary, any build errors, each job's result) to `probe/view-active-accepted-de37bf-results`, which a
+# clone reads without a token.
 name: Client CI (macOS + iOS)
 
 on:
   push:
-    branches: ["**"]        # branches only — tags are handled by release.yml
-    paths:
-      - "src/macos/**"
-      - "src/ios/**"
-      - ".github/workflows/client.yml"
-      # The nav guard's rules live outside this file, so it is listed on its own — otherwise a
-      # broken edit to it would only be discovered by the next navigation change.
-      - "scripts/ci/nav-push-gate.sh"
-  pull_request:
-    paths:
-      - "src/macos/**"
-      - "src/ios/**"
-      - ".github/workflows/client.yml"
-      - "scripts/ci/nav-push-gate.sh"
-  # Manual trigger to compile a branch on the Mac runners without opening a throwaway PR, e.g.
-  # `gh workflow run client.yml --ref <branch>`.
-  #
-  # `source_refused_probe` is the evidence probe's own switch (see the job below): off by default,
-  # so an ordinary dispatch compiles a branch and takes no pictures.
-  workflow_dispatch:
-    inputs:
-      source_refused_probe:
-        description: "Also run the source-refused evidence probe (Mac window + iPhone shots)"
-        type: boolean
-        default: false
+    branches: ["probe/view-active-accepted-de37bf"]
 
 concurrency:
   group: client-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  # Type-ramp guard: views must use the semantic tokens in Views/Typography.swift (the one file
-  # allowed to hold fixed sizes) so iOS/macOS sizing stays platform-appropriate and Dynamic Type
-  # keeps working. Hard fail — the sweep landed; add a token instead of a bare size.
   font-tokens:
     name: Font tokens (bare system(size:) audit)
     runs-on: ubuntu-latest
@@ -63,19 +28,9 @@ jobs:
                  | grep -v "Views/Typography.swift" || true)
           if [ -n "$hits" ]; then
             echo "$hits"
-            count=$(echo "$hits" | wc -l)
-            echo "::error::$count bare system(size:) call site(s) outside Views/Typography.swift — use the Font.orbit* tokens (see the Typography.swift header)"
             exit 1
-          else
-            echo "No bare system(size:) call sites outside Typography.swift."
           fi
 
-  # Navigation guard: pushes go onto the section's navigation stack (NavState/NavNode in OrbitKit)
-  # and nowhere else — no boolean push beside it, no stored selection that can disagree with what
-  # the stack shows, no flag telling the model which shell it is drawn in. Text scan only, so it
-  # runs here rather than on the 10× Mac runners; the same rules are pinned in OrbitKitTests, which
-  # a PR that cannot run `swift test` still gets held to by this job (see scripts/ci/nav-push-gate.sh
-  # for why each rule exists and what to write instead).
   nav-push:
     name: Navigation (one push mechanism per stack)
     runs-on: ubuntu-latest
@@ -86,34 +41,49 @@ jobs:
 
   macos:
     name: macOS (build + test)
-    # macOS runners bill at 10× — only on PRs or an explicit dispatch, not every branch push.
-    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v7
-      # The SwiftUI app relies on newer-Swift MainActor-isolation inference; pin latest stable
-      # Xcode so the runner's Swift compiles it (the default image's Swift rejects it).
       - name: Select latest Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: latest-stable
       - name: Toolchain
         run: swift --version && xcodebuild -version
-      # Compiles the macOS-only code in OrbitKit (Keychain token store, URLSession SSE transport)
-      # that the Linux job's `#if` guards skip.
       - name: Test OrbitKit (macOS)
+        id: test
+        continue-on-error: true
         working-directory: src/macos/OrbitKit
-        run: swift test
-      # First real compile of the SwiftUI layer (views, @Observable models, MenuBarExtra,
-      # UNUserNotificationCenter, launchctl glue). If this surfaces SDK nits, that's its job.
+        run: |
+          swift test 2>&1 | tee "$GITHUB_WORKSPACE/swift-test.log"
+          exit "${PIPESTATUS[0]}"
       - name: Build OrbitApp
+        id: build
+        continue-on-error: true
         working-directory: src/macos/OrbitApp
-        run: swift build
+        run: |
+          swift build 2>&1 | tee "$GITHUB_WORKSPACE/orbitapp-build.log"
+          exit "${PIPESTATUS[0]}"
+      - name: Summaries
+        if: always()
+        run: |
+          mkdir -p out/macos
+          grep -E "error:|Executed [0-9]+ tests|Test Suite 'All tests'" swift-test.log > out/macos/swift-test-summary.txt || true
+          grep -E "Test Suite '(AcceptedTurnPlaceholder|AcceptedTurnWiring|UserTurnRowWiring|QueuedTurnCards|SessionLifecycleAPIClient)" swift-test.log > out/macos/swift-test-review-suites.txt || true
+          grep -E "error:" orbitapp-build.log | head -300 > out/macos/orbitapp-build-errors.txt || true
+          tail -80 orbitapp-build.log > out/macos/orbitapp-build-tail.txt || true
+          echo "test=${{ steps.test.outcome }} build=${{ steps.build.outcome }}" > out/macos/outcomes.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: macos-out
+          path: out
+      - name: Fail as the gate would
+        if: steps.test.outcome != 'success' || steps.build.outcome != 'success'
+        run: exit 1
 
   ios:
     name: iOS (generate + build)
-    # macOS runners bill at 10× — only on PRs or an explicit dispatch, not every branch push.
-    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v7
@@ -128,9 +98,9 @@ jobs:
       - name: Generate Xcode project
         working-directory: src/ios
         run: xcodegen generate
-      # First real compile of the iOS app: shared SwiftUI views + @Observable models + OrbitKit,
-      # built for the simulator so no signing is needed. Surfaces any iOS-availability nits.
       - name: Build for iOS Simulator
+        id: build
+        continue-on-error: true
         working-directory: src/ios
         run: |
           xcodebuild \
@@ -139,84 +109,27 @@ jobs:
             -destination 'generic/platform=iOS Simulator' \
             -configuration Debug \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
-            build
-
-  # TEMPORARY (task 34bkMbJBijj8rD2HwWXqJ, the "this run never started" card's Mac pictures). The
-  # branch's own Mac mini has no display and no automation grant, so the Mac window's pixels can
-  # only be taken on a runner: this job builds the probe app from the real shared sources and lets
-  # `RunStartShotTests` drive and photograph it, as the crossings probe did
-  # (docs/evidence/project-crossings-native/README.md). Dispatch-only, and only when the dispatch
-  # asks for it: it costs a 90-minute Mac runner and an ordinary dispatch should not.
-  #
-  # The pictures land in `source-refused-shots` (artifact) and, because artifacts cannot be
-  # downloaded without a token, in `probe/source-refused-mac-shots-results` — the branch a clone
-  # can read, which is what `docs/evidence/source-refused-native/README.md` names.
-  source-refused-shots:
-    name: Source-refused probe (Mac window + iPhone)
-    if: github.event_name == 'workflow_dispatch' && inputs.source_refused_probe
-    runs-on: macos-26
-    timeout-minutes: 90
-    steps:
-      - uses: actions/checkout@v7
-      - name: Select latest Xcode
-        uses: maxim-lobanov/setup-xcode@v1
-        with:
-          xcode-version: latest-stable
-      - name: Install XcodeGen
-        run: brew install xcodegen
-      - name: Toolchain
-        run: swift --version && xcodebuild -version && xcodegen --version && sw_vers
-      # project.yml's `../src` paths are relative to the repository root, so the harness runs from
-      # a copy of itself placed there (the crossings probe's `.xcross-probe/`).
-      - name: Stage the harness at the repository root
-        run: |
-          mkdir -p .sr-probe
-          cp -R docs/evidence/source-refused-native/probe-harness/. .sr-probe/
-      - name: Build, drive and capture
-        id: capture
-        continue-on-error: true
-        run: |
-          bash .sr-probe/run.sh 2>&1 | tee run-output.log
+            build 2>&1 | tee "$GITHUB_WORKSPACE/ios-build.log"
           exit "${PIPESTATUS[0]}"
-      - name: Keep the build's errors and the run's output beside the shots
+      - name: Summaries
         if: always()
         run: |
-          mkdir -p .sr-probe/shots
-          cp run-output.log .sr-probe/shots/run-output.log 2>/dev/null || true
-          for log in .sr-probe/build-*.log; do
-            [ -f "$log" ] || continue
-            base=$(basename "$log" .log)
-            grep -E "error:|Test Case|Executed|\*\* TEST|\*\* BUILD" "$log" | head -400 > ".sr-probe/shots/summary-$base.txt" || true
-            tail -300 "$log" > ".sr-probe/shots/tail-$base.txt" || true
-          done
-          find .sr-probe/shots -name 'xcodebuild-*.log' -size +20M -exec gzip -9 {} \;
-          echo "capture=${{ steps.capture.outcome }}" > .sr-probe/shots/outcomes.txt
-          echo "run=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> .sr-probe/shots/outcomes.txt
-          echo "sha=${{ github.sha }}" >> .sr-probe/shots/outcomes.txt
-          # The screen the Mac window had to fit in: the window is sized against it, and the
-          # console page lays itself out taller than it (see WindowFit in the probe app).
-          { echo "== displays =="; system_profiler SPDisplaysDataType 2>/dev/null | head -40
-            osascript -e 'tell application "Finder" to get bounds of window of desktop' 2>&1
-          } >> .sr-probe/shots/outcomes.txt || true
+          mkdir -p out/ios
+          grep -E "error:|BUILD SUCCEEDED|BUILD FAILED" ios-build.log | head -300 > out/ios/ios-build-summary.txt || true
+          echo "build=${{ steps.build.outcome }}" > out/ios/outcomes.txt
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: source-refused-shots
-          path: .sr-probe/shots
-          # `.done-probe` is the marker the probe's own evidence convention reads: hidden files are
-          # excluded by default, and that one is the "it ran to the end" record.
-          include-hidden-files: true
-      - name: Fail as the capture did
-        if: steps.capture.outcome != 'success'
+          name: ios-out
+          path: out
+      - name: Fail as the gate would
+        if: steps.build.outcome != 'success'
         run: exit 1
 
-  # Artifacts need a token to download and this repository's readers do not have one: the same job
-  # the crossings probe used puts the pictures on a branch a plain `git clone` can read.
-  source-refused-publish:
-    name: Push the shots where a clone can read them
-    needs: [source-refused-shots]
-    # Guarded like the job it publishes: an ordinary dispatch must not rewrite the results branch.
-    if: always() && github.event_name == 'workflow_dispatch' && inputs.source_refused_probe
+  report:
+    name: Push the results where a clone can read them
+    needs: [font-tokens, nav-push, macos, ios]
+    if: always()
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -224,7 +137,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: out
-      - name: Push to probe/source-refused-mac-shots-results
+      - name: Push to probe/view-active-accepted-de37bf-results
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -232,7 +145,10 @@ jobs:
           {
             echo "run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
             echo "sha: ${{ github.sha }}"
-            echo "shots: ${{ needs.source-refused-shots.result }}"
+            echo "font-tokens: ${{ needs.font-tokens.result }}"
+            echo "nav-push: ${{ needs.nav-push.result }}"
+            echo "macos: ${{ needs.macos.result }}"
+            echo "ios: ${{ needs.ios.result }}"
           } > RESULTS.txt
           cat RESULTS.txt
           git init -q
@@ -240,6 +156,6 @@ jobs:
           git config user.email "probe@orbit.invalid"
           git checkout -q -b results
           git add -A
-          git commit -q -m "source-refused probe results for ${{ github.sha }} (run ${{ github.run_id }})"
+          git commit -q -m "probe results for ${{ github.sha }} (run ${{ github.run_id }})"
           git push -q -f "https://x-access-token:${TOKEN}@github.com/${{ github.repository }}.git" \
-            results:refs/heads/probe/source-refused-mac-shots-results
+            results:refs/heads/probe/view-active-accepted-de37bf-results
