@@ -196,7 +196,8 @@ class MainActivityTest {
         compose.activityRule.scenario.recreate()
         compose.onNodeWithContentDescription("Edit profile").assertIsDisplayed()
         compose.onNodeWithText("Sign out").performScrollTo().performClick()
-        compose.onNodeWithText("Sign out of example.test?").assertIsDisplayed()
+        // iOS 6969f7840 (A13-15): the question names no server.
+        compose.onNodeWithText("Sign out?").assertIsDisplayed()
         compose.onNode(hasText("Sign out") and hasAnyAncestor(isDialog())).performClick()
         awaitLogin()
         compose.onNodeWithText("Password").assertIsDisplayed()

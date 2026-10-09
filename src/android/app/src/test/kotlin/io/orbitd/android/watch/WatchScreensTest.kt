@@ -234,7 +234,8 @@ class WatchScreensTest {
         compose.onNodeWithTag("watch:W1:WATCH_CANCEL").performClick()
         compose.onNodeWithText("Stop watching?").assertIsDisplayed()
         compose.onNodeWithText("The waiting session won't be resumed, and it isn't told the watch stopped.").assertIsDisplayed()
-        compose.onNodeWithTag("watch-stop-cancel").assertTextEquals("Cancel").performClick()
+        // iOS 6969f7840 (A13-15): the press that keeps the watch says so.
+        compose.onNodeWithTag("watch-stop-cancel").assertTextEquals("Keep watching").performClick()
         compose.onAllNodesWithText("Stop watching?").assertCountEquals(0)
         assertTrue(server.lines.none { it.startsWith("POST") })
         compose.onNodeWithTag("watch:W1:WATCH_CANCEL").performClick()
