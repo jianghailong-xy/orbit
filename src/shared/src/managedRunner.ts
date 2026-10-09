@@ -32,6 +32,14 @@ export const MANAGED_RUNNER_DELETE_REFUSED = 'MANAGED_RUNNER_DELETE_REFUSED';
 export const MANAGED_RUNNER_NOT_ELIGIBLE = 'MANAGED_RUNNER_NOT_ELIGIBLE';
 
 /**
+ * An administrator disabled the owner's account: its managed runner is not provisioned, woken or
+ * kept running — a running one is put to sleep, its data kept — and every managed runner write is
+ * refused 403 with this code until the account is enabled again. The same code every other door
+ * refuses a disabled account with.
+ */
+export const ACCOUNT_DISABLED = 'ACCOUNT_DISABLED';
+
+/**
  * The managed runner is up, but none of its runtimes is installed and signed in, so it is not READY
  * and nothing chooses an engine for its first session. Signing a runtime in on the runner clears it.
  * Also the refusal of a first session asked for on a runtime the managed runner cannot run.

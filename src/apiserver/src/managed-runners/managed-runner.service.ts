@@ -28,7 +28,10 @@ import { PrismaService } from '../prisma/prisma.service';
 import {
   EVERY_ACCOUNT,
   MANAGED_RUNNER_ELIGIBILITY,
+  enabledAccountsOnly,
+  managedRunnerAccountDisabledReason,
   managedRunnerNotEligibleReason,
+  ownerAccountDisabled,
   type ManagedRunnerEligibility,
 } from './managed-runner-eligibility';
 import { MANAGED_RUNNER_GATE, managedRunnerDisabledError, type ManagedRunnerGate } from './managed-runner-gate';
@@ -62,17 +65,25 @@ export const MANAGED_RUNNER_NOT_FOUND = 'MANAGED_RUNNER_NOT_FOUND';
  *
  * Whether an account is given a mapping at all is ManagedRunnerEligibility's decision, asked by both
  * ways one is created: a sign-in and an explicit ensure.
+ *
+ * An account an administrator disabled (`User.disabledAt`) is refused every write here, 403
+ * ACCOUNT_DISABLED, after the switch and before anything is read of its mapping or written: no
+ * mapping is created, retried, woken or put to sleep for it. The manager puts what it has to sleep.
  */
 @Injectable()
 export class ManagedRunnerService implements OnModuleInit, OnModuleDestroy, ManagedRunnerSignIn {
   private readonly log = new Logger('ManagedRunners');
+  /** The rule provided under the token, or EVERY_ACCOUNT, asked only about an account that is not disabled. */
+  private readonly eligibility: ManagedRunnerEligibility;
 
   constructor(
     private readonly prisma: PrismaService,
     @Inject(MANAGED_RUNNER_GATE) private readonly gate: ManagedRunnerGate,
     @Inject(MANAGED_RUNNER_RUNTIME) private readonly runtime: ManagedRunnerRuntime | null,
-    @Optional() @Inject(MANAGED_RUNNER_ELIGIBILITY) private readonly eligibility: ManagedRunnerEligibility = EVERY_ACCOUNT,
-  ) {}
+    @Optional() @Inject(MANAGED_RUNNER_ELIGIBILITY) rule?: ManagedRunnerEligibility,
+  ) {
+    this.eligibility = enabledAccountsOnly(rule ?? EVERY_ACCOUNT, prisma);
+  }
 
   onModuleInit(): void {
     if (this.gate.enabled && this.runtime?.available) this.runtime.worker.start();
@@ -89,11 +100,14 @@ export class ManagedRunnerService implements OnModuleInit, OnModuleDestroy, Mana
       ? await this.prisma.runner.findUnique({ where: { id: mapping.runnerId }, select: { status: true, lastHeartbeatAt: true } })
       : null;
     const available = !!this.runtime?.available;
+    // Off, management is frozen and nothing more is read than the mapping and its runner.
+    const ownerDisabled = this.gate.enabled ? await ownerAccountDisabled(this.prisma, ownerId) : false;
     return managedRunnerStatus({
       enabled: this.gate.enabled,
       available,
       // Only what could still be offered is asked: an account with a mapping has had its answer.
-      eligible: !mapping && this.gate.enabled && available ? await this.eligibility.eligible(ownerId) : true,
+      eligible: !mapping && this.gate.enabled && available && !ownerDisabled ? await this.eligibility.eligible(ownerId) : true,
+      ownerDisabled,
       mapping,
       runner,
       now: new Date(),
@@ -132,6 +146,7 @@ export class ManagedRunnerService implements OnModuleInit, OnModuleDestroy, Mana
    */
   async ensure(ownerId: string, idempotencyKey: string): Promise<ManagedRunnerStatus> {
     const runtime = this.operable();
+    await this.refuseDisabledOwner(ownerId);
     const mapping = (await this.prisma.managedRunner.findUnique({ where: { ownerId } }))
       ?? (await this.createEligibleMapping(ownerId, idempotencyKey, runtime.profile));
     if (mapping.desiredState === 'DELETED' || mapping.managementState === 'DELETING' || mapping.managementState === 'DELETED') {
@@ -151,6 +166,7 @@ export class ManagedRunnerService implements OnModuleInit, OnModuleDestroy, Mana
    */
   async retry(ownerId: string, idempotencyKey: string, revision: number | undefined): Promise<ManagedRunnerStatus> {
     const runtime = this.operable();
+    await this.refuseDisabledOwner(ownerId);
     if (revision === undefined) {
       throw new BadRequestException({ code: 'MANAGED_RUNNER_REVISION_REQUIRED', message: 'A retry names the revision it was read at.' });
     }
@@ -193,6 +209,7 @@ export class ManagedRunnerService implements OnModuleInit, OnModuleDestroy, Mana
    */
   async wake(ownerId: string, idempotencyKey: string): Promise<ManagedRunnerStatus> {
     const runtime = this.operable();
+    await this.refuseDisabledOwner(ownerId);
     const mapping = await this.owned(ownerId);
     if (mapping.lastRequestKey === idempotencyKey) return this.status(ownerId);
     if (!['REQUESTED', 'WAITING_CAPACITY', 'PROVISIONING', 'STARTING', 'READY', 'DRAINING', 'SLEEPING'].includes(mapping.managementState)) {
@@ -218,6 +235,7 @@ export class ManagedRunnerService implements OnModuleInit, OnModuleDestroy, Mana
    */
   async sleep(ownerId: string, idempotencyKey: string, revision: number | undefined): Promise<ManagedRunnerStatus> {
     const runtime = this.operable();
+    await this.refuseDisabledOwner(ownerId);
     if (revision === undefined) {
       throw new BadRequestException({ code: 'MANAGED_RUNNER_REVISION_REQUIRED', message: 'A sleep names the revision it was read at.' });
     }
@@ -251,6 +269,7 @@ export class ManagedRunnerService implements OnModuleInit, OnModuleDestroy, Mana
   /** Delete: authenticated and enabled, but performed by a later version of the manager. */
   async refuseUnsupported(ownerId: string, action: 'delete'): Promise<never> {
     this.operable();
+    await this.refuseDisabledOwner(ownerId);
     await this.owned(ownerId);
     throw new ConflictException({
       code: MANAGED_RUNNER_TRANSITION_REFUSED,
@@ -263,6 +282,15 @@ export class ManagedRunnerService implements OnModuleInit, OnModuleDestroy, Mana
     if (!this.gate.enabled) throw managedRunnerDisabledError();
     if (!this.runtime?.available) throw new ServiceUnavailableException(managedRunnerUnavailableReason());
     return this.runtime;
+  }
+
+  /**
+   * A disabled account's write, refused 403 ACCOUNT_DISABLED before anything is read of its mapping
+   * or written. Read afresh from its row: JwtAuthGuard's view of the disabled accounts can be half a
+   * minute old on another replica, and this answer must not be.
+   */
+  private async refuseDisabledOwner(ownerId: string): Promise<void> {
+    if (await ownerAccountDisabled(this.prisma, ownerId)) throw new ForbiddenException(managedRunnerAccountDisabledReason());
   }
 
   /** The caller's own mapping; another account's is as absent as none. */

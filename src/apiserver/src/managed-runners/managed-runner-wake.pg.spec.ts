@@ -24,7 +24,12 @@
  * Every wake starts the next generation on the same PVC and runner row, and the woken runner claims
  * the work that woke it. Also:
  *   (7) a self-managed runner's dispatch is untouched with the switch on: its session is claimed as
- *       ever, and nothing managed is read about it beyond one unmatched update.
+ *       ever, and nothing managed is read about it beyond one unmatched update;
+ *   (8) an account an administrator disabled: its READY runner, refused at every door, is drained to
+ *       sleep by the reconcile loop without being asked anything, and stops — the kubelet's report,
+ *       the Pod deleted, the PVC kept. Then each kind of demand above, and the owner's ensure and
+ *       retry (403 ACCOUNT_DISABLED), wakes nothing and writes nothing to the mapping; enabled again,
+ *       the work that waited wakes it on the same PVC and runner row.
  *
  * Destructive only to its own disposable database.
  */
@@ -50,6 +55,7 @@ import type { ManagedRunner, PrismaClient } from '@prisma/client';
 import { json, urlencoded } from 'express';
 import { Client } from 'pg';
 
+import { DisabledAccounts } from '../auth/disabled-accounts';
 import { call, type Apiserver } from '../auth/pat-test-apiserver';
 import { generateToken, sha256 } from '../common/crypto.util';
 import { PublicIdExceptionFilter } from '../common/public-id.filter';
@@ -70,7 +76,7 @@ import { TasksService } from '../tasks/tasks.service';
 import { FakeKubeCluster } from '../test-support/fake-kube-client';
 import { installManagedRunnerAdmission } from '../test-support/managed-runner-admission.fixture';
 import { testManagedRunnerProfile } from '../test-support/managed-runner-profile.fixture';
-import type { Pod, Secret } from './kube-client';
+import type { PersistentVolumeClaim, Pod, Secret } from './kube-client';
 import { GENERATION_ANNOTATION, bootstrapCredentialOf, managedPodName, managedSecretName } from './managed-runner-resources';
 import { MANAGED_RUNNER_KUBE_CLIENT_FACTORY, MANAGED_RUNNER_RUNTIME, type ManagedRunnerRuntime } from './managed-runner-runtime';
 
@@ -465,6 +471,135 @@ test('managed runners wake on demand and sleep through the real application', {
     assert.equal(toUuid(claimed.json.sessionId), parked, 'its session is claimed as ever');
     assert.equal(await db.managedRunner.count({ where: { ownerId: user.id } }), 0, 'no mapping is created for it');
     assert.equal((await db.runner.findUniqueOrThrow({ where: { id: runnerId } })).managedWorkload, null, 'and nothing managed is stored about it');
+  });
+
+  await t.test('(8) a disabled account: drained to sleep by the loop, woken by nothing until it is enabled again', async () => {
+    const o = await owner('disabled');
+    const runnerId = o.mapping.runnerId;
+    // Work its owner left before the account was disabled: parked sessions a message, a due wakeup and
+    // a watch go to, an ended one to revive, a failed run armed for retry, and a task to watch.
+    const parked = await session(o.mapping, 'AWAITING_INPUT');
+    const scheduled = await session(o.mapping, 'AWAITING_INPUT');
+    const observer = await session(o.mapping, 'AWAITING_INPUT');
+    const ended = await session(o.mapping, 'FAILED', { finished_at: new Date(), error: 'it stopped' });
+    const retried = await session(o.mapping, 'FAILED', { retry_attempts: 1, error: 'overloaded' });
+    await sql.query(
+      `INSERT INTO "run_event"("id","session_id","seq","type","payload") VALUES (gen_random_uuid(),$1,1,'user','{"text":"do the work"}'::jsonb)`,
+      [retried],
+    );
+    const watchedTask = randomUUID();
+    await sql.query(
+      `INSERT INTO "task"("id","title","owner_id","creator_type","creator_id","updated_at","completion_criterion","status")
+       VALUES ($1,'watched work',$2,'USER',$2,now(),'EVIDENCE_JUDGMENT','DONE')`,
+      [watchedTask, o.userId],
+    );
+
+    // An administrator disables the account: its runner is refused at every door at once.
+    await sql.query(`UPDATE "user" SET disabled_at = now() WHERE id = $1`, [o.userId]);
+    const beat = await call(server, 'POST', '/api/runner/heartbeat', credentialOf(runnerId),
+      { engines: [{ engine: 'claude', installed: true, auth: 'yes' }], version: '0.1.0', managedWorkload: IDLE }, instanceHeaders(runnerId));
+    assert.equal(beat.status, 403, beat.text);
+    assert.equal(beat.json.code, 'ACCOUNT_DISABLED');
+    // The loop drains it without asking the instance anything. Its claims refused as well, the runner
+    // drains and exits on its own, and the kubelet reports the stop.
+    await until('DRAINING', async () => (await mappingOf(o.userId)).managementState === 'DRAINING');
+    const claimed = await call(server, 'GET', '/api/runner/sessions/claim', credentialOf(runnerId), undefined, instanceHeaders(runnerId));
+    assert.equal(claimed.status, 403, claimed.text);
+    assert.equal(claimed.json.code, 'ACCOUNT_DISABLED');
+    const pvc = cluster.object<PersistentVolumeClaim>('persistentvolumeclaims', o.mapping.pvcName)!;
+    cluster.stopPod(managedPodName(runnerId));
+    const asleep = await until('SLEEPING', async () => {
+      const m = await mappingOf(o.userId);
+      return m.managementState === 'SLEEPING' ? m : null;
+    });
+    assert.equal(asleep.generation, 2, 'the drained generation is retired');
+    assert.equal(asleep.desiredState, 'SLEEPING');
+    assert.equal(cluster.object<Pod>('pods', managedPodName(runnerId)), undefined, 'its Pod is deleted');
+    assert.equal(cluster.object<PersistentVolumeClaim>('persistentvolumeclaims', o.mapping.pvcName)?.metadata.uid, pvc.metadata.uid, 'its PVC is kept');
+    const rowOf = async () => (await sql.query(`SELECT row_to_json(m)::text AS row FROM managed_runner m WHERE owner_id = $1`, [o.userId])).rows[0].row as string;
+    const stored = await rowOf();
+    const mark = cluster.calls.length;
+    // Long enough asleep for its last heartbeat to read as offline.
+    await sql.query(`UPDATE runner SET last_heartbeat_at = now() - interval '10 minutes' WHERE id = $1`, [runnerId]);
+
+    // The owner's own requests reach the server only on a replica whose view of the disabled accounts is
+    // not yet half a minute old: played by holding this replica's view where it was.
+    const accounts = app!.get(DisabledAccounts);
+    const view = accounts.has.bind(accounts);
+    accounts.has = () => false;
+    try {
+      const status = await call(server, 'GET', '/api/managed-runner', o.token);
+      assert.equal(status.json.managementState, 'SLEEPING');
+      assert.equal(status.json.reason.code, 'ACCOUNT_DISABLED', 'the status says why');
+      assert.deepEqual(status.json.actions, { canEnsure: false, canWake: false, canSleep: false, canRetry: false, canDelete: false });
+      for (const [action, body] of [['ensure', {}], ['retry', { revision: asleep.revision }], ['wake', {}]] as const) {
+        const refused = await call(server, 'POST', `/api/managed-runner/${action}`, o.token, { idempotencyKey: `disabled-${action}`, ...body });
+        assert.equal(refused.status, 403, `${action}: ${refused.text}`);
+        assert.equal(refused.json.code, 'ACCOUNT_DISABLED', action);
+      }
+      // Scheduled work: a task whose run time came, started by the task scheduler's pass — first, while
+      // nothing else is queued for the runner (that pass starts no more than the runner can claim).
+      const later = await call(server, 'POST', '/api/tasks', o.token, { title: 'nightly while disabled', description: 'run at its time', assigneeId: o.mapping.defaultWorkspaceId, completionCriterion: 'EXECUTABLE', acceptanceCommand: 'true', acceptanceExpectedExitCode: 0 });
+      assert.equal(later.status, 201, later.text);
+      const nightly = toUuid(later.json.id);
+      await sql.query(`UPDATE "task" SET "run_at" = now() - interval '1 second' WHERE id = $1`, [nightly]);
+      await (app!.get(TasksService) as unknown as { dispatchDueScheduledTasks(): Promise<void> }).dispatchDueScheduledTasks();
+      assert.equal(await db.session.count({ where: { taskId: nightly } }), 1, 'its run time came: it was started');
+      // A message to a parked session: queued for its runner, as for any runner.
+      const sent = await call(server, 'POST', `/api/sessions/${parked}/turns`, o.token, { clientTurnId: randomUUID(), content: 'are you there?' });
+      assert.equal(sent.status, 201, sent.text);
+      assert.equal((await db.session.findUniqueOrThrow({ where: { id: parked } })).status, 'PENDING');
+      // An executable task: Run Now.
+      const task = await call(server, 'POST', '/api/tasks', o.token, { title: 'build while disabled', description: 'build it', assigneeId: o.mapping.defaultWorkspaceId, completionCriterion: 'EXECUTABLE', acceptanceCommand: 'true', acceptanceExpectedExitCode: 0 });
+      assert.equal(task.status, 201, task.text);
+      const ran = await call(server, 'POST', `/api/tasks/${task.json.id}/execute`, o.token, {});
+      assert.ok(ran.status === 200 || ran.status === 201, ran.text);
+      assert.equal(await db.session.count({ where: { taskId: toUuid(task.json.id) } }), 1, 'its run was created');
+      // A watch, delivered below by the application's own workers.
+      const watched = await call(server, 'POST', '/api/watches', o.token, {
+        predicateVersion: 1,
+        predicate: { kind: 'ALL', over: 'ALL_TARGETS', leaf: 'TASK_TERMINAL' },
+        targets: [{ kind: 'TASK', id: watchedTask }],
+        action: 'RESUME_SESSION',
+        observerSessionId: observer,
+      });
+      assert.equal(watched.status, 201, watched.text);
+      // A revive of an ended session: refused as offline, the way a runner that is not coming back is.
+      const revived = await call(server, 'POST', `/api/sessions/${ended}/resume`, o.token, { clientTurnId: randomUUID(), content: 'carry on' });
+      assert.equal(revived.status, 409, revived.text);
+    } finally {
+      accounts.has = view;
+    }
+    // Scheduled work: a due wakeup, delivered by its worker.
+    await sql.query(
+      `INSERT INTO "session_scheduled_wakeup" ("id", "session_id", "state", "delay_seconds", "reason", "prompt", "due_at")
+       VALUES (gen_random_uuid(), $1, 'PENDING', 60, 'check the build', 'check the build', now() - interval '1 second')`,
+      [scheduled],
+    );
+    await app!.get(ScheduledWakeupWorker).drain();
+    assert.equal((await db.session.findUniqueOrThrow({ where: { id: scheduled } })).status, 'PENDING', 'the wakeup\'s turn waits for its runner');
+    // The watch's delivery, by the application's own workers.
+    await until('the watch delivery', async () => (await db.session.findUniqueOrThrow({ where: { id: observer } })).status === 'PENDING', 60_000);
+    // Auto retry: armed and due, 45 minutes after its run failed. Not waited for as a managed runner
+    // coming back: it gives up the ordinary way, spending nothing.
+    await sql.query(`UPDATE "session" SET retry_at = now() - interval '1 second', finished_at = now() - interval '45 minutes' WHERE id = $1`, [retried]);
+    await app!.get(AutoRetryService).sweep();
+    const gaveUp = await db.session.findUniqueOrThrow({ where: { id: retried } });
+    assert.equal(gaveUp.retryAt, null);
+    assert.equal(gaveUp.retryAttempts, 1);
+    // A few passes of the loop, its sweep included: none of it woke the runner.
+    await sleep(3_000);
+    assert.equal(await rowOf(), stored, 'not a column of the mapping moved: no demand, no desired state, no step');
+    assert.deepEqual(cluster.calls.slice(mark).filter((c) => c.op === 'create' || c.op === 'dryRunCreate'), [], 'and nothing was created');
+
+    // Enabled again: the work that waited wakes it, on the same PVC and runner row.
+    await sql.query(`UPDATE "user" SET disabled_at = NULL WHERE id = $1`, [o.userId]);
+    await accounts.reload();
+    const awake = await upAndReady(o.userId, 2);
+    await assertSameIdentity(o.mapping, awake);
+    const waited = new Set((await db.session.findMany({ where: { assignedRunnerId: runnerId, status: 'PENDING' }, select: { id: true } })).map((r) => r.id));
+    for (const id of [parked, scheduled, observer]) assert.ok(waited.has(id), 'the work queued while it was disabled is still there');
+    assert.ok(waited.has(toUuid((await claim(awake.runnerId)).sessionId)), 'and the woken runner serves it');
   });
 
   await t.test('no real Kubernetes client was built or used', () => {

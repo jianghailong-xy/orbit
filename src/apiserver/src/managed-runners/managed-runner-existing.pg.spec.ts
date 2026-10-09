@@ -21,7 +21,11 @@
  *     for its runner; the retry gives up after the ordinary 30 minutes) and wakes nothing: no demand,
  *     no desired state, no capacity pool written;
  *   - a draining mapping holds nothing back while management is off: its instance still claims, is
- *     asked to stop for nothing, and its workload report is not stored.
+ *     asked to stop for nothing, and its workload report is not stored;
+ *   - an account an administrator disabled is acted on by nothing managed while management is off:
+ *     its READY mapping is not drained and its unprovisioned one not put to sleep, its runner's
+ *     credential is not replaced, and work addressed to its runner wakes nothing. Its runner is
+ *     still refused 403 ACCOUNT_DISABLED at the runner door, which holds whatever the switch says.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/managed-runners/managed-runner-existing.pg.spec.ts
  *
@@ -141,6 +145,14 @@ test('managed runners switched off with existing state: nothing is stopped, dele
     pvc_uid: randomUUID(), pv_uid: randomUUID(), volume_handle: `0001-0009-ceph-${randomUUID()}`,
     pod_uid: randomUUID(), node_name: 'node-b',
   });
+  // Accounts an administrator disabled: one whose runner was READY, one whose intent was never provisioned.
+  const disabledReady = await seed('disabled-ready', {
+    desired_state: 'RUNNING', management_state: 'READY', generation: 1, revision: 7,
+    pvc_uid: randomUUID(), pv_uid: randomUUID(), volume_handle: `0001-0009-ceph-${randomUUID()}`,
+    pod_uid: randomUUID(), node_name: 'node-c',
+  });
+  const disabledRequested = await seed('disabled-requested', { desired_state: 'RUNNING', management_state: 'REQUESTED', revision: 1 });
+  await sql.query(`UPDATE "user" SET disabled_at = now() WHERE id IN ($1, $2)`, [disabledReady.ownerId, disabledRequested.ownerId]);
 
   const snapshot = async () => ({
     mappings: (await sql.query(`SELECT row_to_json(m)::text AS row FROM managed_runner m ORDER BY id`)).rows.map((r) => r.row),
@@ -150,7 +162,7 @@ test('managed runners switched off with existing state: nothing is stopped, dele
     users: Number((await sql.query(`SELECT count(*)::int AS n FROM "user"`)).rows[0].n),
   });
   const seeded = await snapshot();
-  assert.equal(seeded.mappings.length, 5);
+  assert.equal(seeded.mappings.length, 7);
   assert.equal(seeded.pools, 0);
 
   const login = (userId: string) => jwt.signAsync({ sub: userId, email: `${userId}@example.invalid` });
@@ -195,6 +207,13 @@ test('managed runners switched off with existing state: nothing is stopped, dele
       [retried],
     );
     const queuedForDraining = await session(draining, 'PENDING');
+    // And a due wakeup on a parked session of the disabled account's runner.
+    const disabledParked = await session(disabledReady, 'AWAITING_INPUT');
+    await sql.query(
+      `INSERT INTO "session_scheduled_wakeup" ("id", "session_id", "state", "delay_seconds", "reason", "prompt", "due_at")
+       VALUES (gen_random_uuid(), $1, 'PENDING', 60, 'check the build', 'check the build', now() - interval '1 second')`,
+      [disabledParked],
+    );
     const server = await bootScrubbedApiserver(scratch, label, { DATABASE_URL: url, JWT_SECRET, ...extra });
     try {
       // The normal background workers run: the scheduled-wakeup worker's first pass is at boot, and
@@ -244,6 +263,16 @@ test('managed runners switched off with existing state: nothing is stopped, dele
         assert.equal(refused.json.code, code, who);
       }
 
+      // A disabled account's runner is refused at the runner door whatever the switch says, before its
+      // instance is considered; nothing managed is done about the account (its rows are checked below).
+      const disabledBeat = await call(server, 'POST', '/api/runner/heartbeat', disabledReady.token, {}, {
+        'x-orbit-runner-capabilities': MANAGED_RUNNER_INSTANCE_CAPABILITY,
+        [MANAGED_RUNNER_GENERATION_HEADER]: '1',
+        [MANAGED_RUNNER_POD_UID_HEADER]: disabledReady.podUid!,
+      });
+      assert.equal(disabledBeat.status, 403, disabledBeat.text);
+      assert.equal(disabledBeat.json.code, 'ACCOUNT_DISABLED');
+
       // Removing it any ordinary way is refused, with the switch off as well.
       const removed = await call(server, 'DELETE', `/api/runners/${ready.runnerId}`, owner);
       assert.equal(removed.status, 409, removed.text);
@@ -281,9 +310,9 @@ test('managed runners switched off with existing state: nothing is stopped, dele
       // auto-retry sweep runs 30 seconds after boot: wait for all three to have done their part.
       const deadline = Date.now() + 75_000;
       for (;;) {
-        const [wakeup, watch, retry] = [await statusOf(scheduled), await statusOf(observer), await statusOf(retried)];
-        if (wakeup.status === 'PENDING' && watch.status === 'PENDING' && retry.retryAt === null) break;
-        if (Date.now() > deadline) assert.fail(`the workers did not deliver: ${JSON.stringify({ wakeup, watch, retry })}`);
+        const [wakeup, watch, retry, disabledWakeup] = [await statusOf(scheduled), await statusOf(observer), await statusOf(retried), await statusOf(disabledParked)];
+        if (wakeup.status === 'PENDING' && watch.status === 'PENDING' && retry.retryAt === null && disabledWakeup.status === 'PENDING') break;
+        if (Date.now() > deadline) assert.fail(`the workers did not deliver: ${JSON.stringify({ wakeup, watch, retry, disabledWakeup })}`);
         await sleep(500);
       }
       const retry = await statusOf(retried);
