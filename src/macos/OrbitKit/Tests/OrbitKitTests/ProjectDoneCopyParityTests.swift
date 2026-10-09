@@ -164,7 +164,7 @@ final class ProjectDoneCopyParityTests: XCTestCase {
                       "the done cards' provenance badge drifted from \(ProjectDone.provenance)")
         XCTAssertTrue(card.contains(">\(ProjectDone.noGaps)</p>"),
                       "the empty gaps sentence drifted from \(ProjectDone.noGaps.debugDescription)")
-        XCTAssertTrue(card.contains("message=\"\(ProjectDone.notRecorded)\""),
+        XCTAssertTrue(card.contains("title=\"\(ProjectDone.notRecorded)\""),
                       "the refused press's title drifted from \(ProjectDone.notRecorded.debugDescription)")
     }
 

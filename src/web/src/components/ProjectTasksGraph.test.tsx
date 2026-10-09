@@ -77,8 +77,8 @@ async function mount(node: ReactElement): Promise<void> {
 
 const testid = (name: string) => container.querySelector(`[data-testid="${name}"]`);
 
-// `vi.resetModules()` above means each test re-imports this component and everything under it (antd
-// included) from cold before it can mount, which takes seconds on a loaded machine — so the case
+// `vi.resetModules()` above means each test re-imports this component and everything under it (React
+// Flow and dagre included) from cold before it can mount, which takes seconds on a loaded machine — so the case
 // budget is the suite's, not this file's. A slow import, not a hang: the assertions are unchanged.
 describe('ProjectTasksGraph', () => {
   it('draws the graph on its own, with nothing for the reader to select first', async () => {
@@ -97,7 +97,7 @@ describe('ProjectTasksGraph', () => {
     expect(legend?.title).toBe('Prerequisite → dependent · boxes are parent tasks');
 
     const titleRule =
-      styles.match(/\.pdg-section-title\.ant-typography\s*\{([^}]*)\}/)?.[1] ?? '';
+      styles.match(/\.pdg-section-title\.orbit-typography\s*\{([^}]*)\}/)?.[1] ?? '';
     const legendRule = styles.match(/\.pdg-legend\s*\{([^}]*)\}/)?.[1] ?? '';
     expect(titleRule).toContain('flex: none');
     expect(titleRule).toContain('white-space: nowrap');

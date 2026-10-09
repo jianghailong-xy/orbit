@@ -1,0 +1,109 @@
+probe: probe-start-scroll3.browser.mjs tree: ref head: 40f79c5ab4618c4718201cd13a096b66fbd5977c projects: chromium-light-desktop webkit-light-desktop started: 2026-10-09T14:05:59Z load: 10.94 8.79 6.58 10/4191 3983410
+  pw:api   scrolling into view if needed +0ms
+  pw:api   done scrolling +0ms
+PROBE ref chromium-light-desktop {"what":"reading","scrolled":[],"page":0,"surfaceTop":186,"focus":"BUTTON.ant-modal-close"}
+PROBE   {"kind":"focus","target":"BUTTON.ant-modal-close","options":{"preventScroll":true},"before":0,"after":0,"stack":"    at B (http://127.0.0.1:4461/assets/taskDependencyGraph-D9V_qvrC.js:1:14447) |     at De (http://127.0.0.1:4461/assets/taskDependencyGraph-D9V_qvrC.js:1:14780) |     at http://127.0.0.1:4461/assets/taskDependencyGraph-D9V_qvrC.js:1:15260 |     at http://127.0.0.1:4461/assets/taskDependencyGraph-D9V_qvrC.js:1:15076"}
+PROBE ref chromium-light-desktop {"what":"start card","scrolled":[],"page":0,"surfaceTop":121,"focus":"BUTTON.ant-modal-close"}
+  pw:api   element is not stable +20ms
+  pw:api retrying click action +0ms
+  pw:api   element is not stable +33ms
+  pw:api retrying click action +0ms
+  pw:api   element is not stable +29ms
+  pw:api retrying click action +0ms
+  pw:api   scrolling into view if needed +0ms
+  pw:api   done scrolling +2ms
+PROBE ref chromium-light-desktop {"what":"automatic off","scrolled":["DIV.ant-modal-wrap=115/365"],"page":0,"surfaceTop":-15,"focus":"BUTTON.ant-switch css-oc1rc0 css-var-"}
+PROBE   {"kind":"scroll","top":115,"active":"BUTTON.ant-switch css-oc1rc0 css-var-_r_0_"}
+  pw:api   scrolling into view if needed +0ms
+  pw:api   done scrolling +1ms
+PROBE ref chromium-light-desktop {"what":"automatic on","scrolled":["DIV.ant-modal-wrap=115/366"],"page":0,"surfaceTop":-15,"focus":"BUTTON.ant-switch css-oc1rc0 css-var-"}
+  pw:api   scrolling into view if needed +0ms
+  pw:api   done scrolling +1ms
+PROBE ref chromium-light-desktop {"what":"line menu open","scrolled":["DIV.ant-modal-wrap=115/366"],"page":0,"surfaceTop":-15,"focus":"INPUT.ant-select-input"}
+PROBE   {"kind":"focus","target":"INPUT.ant-select-input","options":null,"before":115,"after":115,"stack":"    at Object.current (http://127.0.0.1:4461/assets/Transcript-DEP1-J9L.js:8:18319) |     at http://127.0.0.1:4461/assets/taskDependencyGraph-D9V_qvrC.js:1:7973 |     at Uf (http://127.0.0.1:4461/assets/taskDependencyGraph-D9V_qvrC.js:34:139090) |     at http://127.0.0.1:4461/assets/taskDependencyGraph-D9V_qvrC.js:34:143820"}
+  pw:api   element is not stable +14ms
+  pw:api retrying click action +0ms
+  pw:api   element is not stable +33ms
+  pw:api retrying click action +0ms
+  pw:api   element is not stable +29ms
+  pw:api retrying click action +0ms
+  pw:api   scrolling into view if needed +0ms
+  pw:api   done scrolling +0ms
+PROBE ref chromium-light-desktop {"what":"main chosen","scrolled":["DIV.ant-modal-wrap=115/370"],"page":0,"surfaceTop":-15,"focus":"INPUT.ant-select-input"}
+  pw:api   scrolling into view if needed +0ms
+  pw:api   done scrolling +1ms
+PROBE ref chromium-light-desktop {"what":"merge check opened","scrolled":["DIV.ant-modal-wrap=115/410"],"page":0,"surfaceTop":-15,"focus":"BUTTON.start-card-row-head start-card"}
+  pw:api   element is not stable +18ms
+  pw:api retrying click action +0ms
+  pw:api   element is not stable +32ms
+  pw:api retrying click action +1ms
+  pw:api   element is not stable +28ms
+  pw:api retrying click action +0ms
+  pw:api   element is not stable +30ms
+  pw:api retrying click action +0ms
+  pw:api   scrolling into view if needed +0ms
+  pw:api   done scrolling +0ms
+PROBE ref chromium-light-desktop {"what":"check clicked","scrolled":["DIV.ant-modal-wrap=115/407"],"page":0,"surfaceTop":-15,"focus":"TEXTAREA.ant-input css-oc1rc0 ant-input"}
+PROBE ref chromium-light-desktop {"what":"check select all","scrolled":["DIV.ant-modal-wrap=115/407"],"page":0,"surfaceTop":-15,"focus":"TEXTAREA.ant-input css-oc1rc0 ant-input"}
+PROBE ref chromium-light-desktop {"what":"check typed","scrolled":["DIV.ant-modal-wrap=115/407"],"page":0,"surfaceTop":-15,"focus":"TEXTAREA.ant-input css-oc1rc0 ant-input"}
+  pw:api   scrolling into view if needed +0ms
+  pw:api   done scrolling +1ms
+PROBE ref chromium-light-desktop {"what":"count clicked","scrolled":["DIV.ant-modal-wrap=115/407"],"page":0,"surfaceTop":-15,"focus":"INPUT.ant-input-number-input"}
+PROBE ref chromium-light-desktop {"what":"count select all","scrolled":["DIV.ant-modal-wrap=115/407"],"page":0,"surfaceTop":-15,"focus":"INPUT.ant-input-number-input"}
+PROBE ref chromium-light-desktop {"what":"count typed","scrolled":["DIV.ant-modal-wrap=115/407"],"page":0,"surfaceTop":-15,"focus":"INPUT.ant-input-number-input"}
+PROBE ref chromium-light-desktop {"what":"a second later","scrolled":["DIV.ant-modal-wrap=115/407"],"page":0,"surfaceTop":-15,"focus":"INPUT.ant-input-number-input"}
+  pw:api   scrolling into view if needed +0ms
+  pw:api   done scrolling +0ms
+PROBE ref chromium-light-desktop {"what":"fill again","scrolled":["DIV.ant-modal-wrap=115/407"],"page":0,"surfaceTop":-15,"focus":"INPUT.ant-input-number-input"}
+  pw:api   scrolling into view if needed +0ms
+  pw:api   done scrolling +1ms
+PROBE ref webkit-light-desktop {"what":"reading","scrolled":[],"page":0,"surfaceTop":147,"focus":"BUTTON.ant-modal-close"}
+PROBE   {"kind":"focus","target":"BUTTON.ant-modal-close","options":{"preventScroll":true},"before":0,"after":0,"stack":"De@http://127.0.0.1:4461/assets/taskDependencyGraph-D9V_qvrC.js:1:14781 | @http://127.0.0.1:4461/assets/taskDependencyGraph-D9V_qvrC.js:1:15262 | @http://127.0.0.1:4461/assets/taskDependencyGraph-D9V_qvrC.js:1:15077 | yl@http://127.0.0.1:4461/assets/taskDependencyGraph-D9V_qvrC.js:34:95160"}
+PROBE ref webkit-light-desktop {"what":"start card","scrolled":[],"page":0,"surfaceTop":100,"focus":"BUTTON.ant-modal-close"}
+  pw:api   element is not stable +27ms
+  pw:api retrying click action +0ms
+  pw:api   scrolling into view if needed +0ms
+  pw:api   done scrolling +3ms
+PROBE ref webkit-light-desktop {"what":"automatic off","scrolled":[],"page":0,"surfaceTop":100,"focus":"BUTTON.ant-switch css-oc1rc0 css-var-"}
+  pw:api   scrolling into view if needed +0ms
+  pw:api   done scrolling +0ms
+PROBE ref webkit-light-desktop {"what":"automatic on","scrolled":[],"page":0,"surfaceTop":100,"focus":"BUTTON.ant-switch css-oc1rc0 css-var-"}
+  pw:api   scrolling into view if needed +0ms
+  pw:api   done scrolling +6ms
+PROBE ref webkit-light-desktop {"what":"line menu open","scrolled":[],"page":0,"surfaceTop":100,"focus":"INPUT.ant-select-input"}
+PROBE   {"kind":"focus","target":"INPUT.ant-select-input","options":null,"before":0,"after":0,"stack":"Uf@http://127.0.0.1:4461/assets/taskDependencyGraph-D9V_qvrC.js:34:139091 | @http://127.0.0.1:4461/assets/taskDependencyGraph-D9V_qvrC.js:34:143822 | Sn@http://127.0.0.1:4461/assets/taskDependencyGraph-D9V_qvrC.js:34:15189 | Jf@http://127.0.0.1:4461/assets/taskDependencyGraph-D9V_qvrC.js:34:140318"}
+  pw:api   element is not stable +25ms
+  pw:api retrying click action +0ms
+  pw:api   element is not stable +27ms
+  pw:api retrying click action +0ms
+  pw:api   element is not stable +33ms
+  pw:api retrying click action +0ms
+  pw:api   scrolling into view if needed +0ms
+  pw:api   done scrolling +1ms
+PROBE ref webkit-light-desktop {"what":"main chosen","scrolled":[],"page":0,"surfaceTop":100,"focus":"INPUT.ant-select-input"}
+  pw:api   scrolling into view if needed +0ms
+  pw:api   done scrolling +1ms
+PROBE ref webkit-light-desktop {"what":"merge check opened","scrolled":[],"page":0,"surfaceTop":100,"focus":"BUTTON.start-card-row-head start-card"}
+  pw:api   element is not stable +35ms
+  pw:api retrying click action +0ms
+  pw:api   element is not stable +33ms
+  pw:api retrying click action +0ms
+  pw:api   element is not stable +28ms
+  pw:api retrying click action +0ms
+  pw:api   element is not stable +28ms
+  pw:api retrying click action +0ms
+  pw:api   scrolling into view if needed +0ms
+  pw:api   done scrolling +0ms
+PROBE ref webkit-light-desktop {"what":"check clicked","scrolled":[],"page":0,"surfaceTop":100,"focus":"TEXTAREA.ant-input css-oc1rc0 ant-input"}
+PROBE ref webkit-light-desktop {"what":"check select all","scrolled":[],"page":0,"surfaceTop":100,"focus":"TEXTAREA.ant-input css-oc1rc0 ant-input"}
+PROBE ref webkit-light-desktop {"what":"check typed","scrolled":[],"page":0,"surfaceTop":100,"focus":"TEXTAREA.ant-input css-oc1rc0 ant-input"}
+  pw:api   scrolling into view if needed +0ms
+  pw:api   done scrolling +2ms
+PROBE ref webkit-light-desktop {"what":"count clicked","scrolled":[],"page":0,"surfaceTop":100,"focus":"INPUT.ant-input-number-input"}
+PROBE ref webkit-light-desktop {"what":"count select all","scrolled":[],"page":0,"surfaceTop":100,"focus":"INPUT.ant-input-number-input"}
+PROBE ref webkit-light-desktop {"what":"count typed","scrolled":[],"page":0,"surfaceTop":100,"focus":"INPUT.ant-input-number-input"}
+PROBE ref webkit-light-desktop {"what":"a second later","scrolled":[],"page":0,"surfaceTop":100,"focus":"INPUT.ant-input-number-input"}
+  pw:api   scrolling into view if needed +0ms
+  pw:api   done scrolling +1ms
+PROBE ref webkit-light-desktop {"what":"fill again","scrolled":[],"page":0,"surfaceTop":100,"focus":"INPUT.ant-input-number-input"}
+  2 passed (9.3s)

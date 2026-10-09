@@ -18,8 +18,10 @@
 /* Buttons that do not fit wrap onto the next line, each line to the end and no gap between lines,
    as the replaced footers' inline buttons did (a long confirmation on a phone). */
 .orbit-overlay-footer { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0 8px; margin-top: 12px; }
+/* Above the dialog's own content, as the replaced close was (its popup's base + 10): a dialog with no
+   title row (the project page's done and start dialogs) starts its content under it. */
 .orbit-overlay-close {
-  display: inline-flex; align-items: center; justify-content: center; position: absolute;
+  display: inline-flex; align-items: center; justify-content: center; position: absolute; z-index: 10;
   top: 12px; right: 12px; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 4px;
   color: var(--text-3); background: transparent; font-size: 16px; line-height: 1; cursor: pointer;
 }

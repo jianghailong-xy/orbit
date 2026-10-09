@@ -1,0 +1,5603 @@
+{
+ "chromium-dark-desktop :: P4.3b session decision cards › a criteria decision: refused": [
+  {
+   "step": "criteria card",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": "body",
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "approve refused",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": "body",
+   "dialogs": [],
+   "popups": [],
+   "alerts": [
+    "That decision was not recordedThe criteria in force moved after this proposal was filed."
+   ],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/7f3a91c2-1d4e-4a6b-8c9d-0e1f2a3b4c5d",
+     "body": "{\"commitToken\":\"b81c7d2e-3f4a-4b5c-9d6e-7f8091a2b3c4\",\"decision\":\"APPROVE\",\"baseSeal\":\"6b1d02e4c8a1f3d5b7e9a2c4f6081a3c5e7f9b1d3a5c7e9f1b3d5a7c9e1f3b5d\"}"
+    }
+   ]
+  }
+ ],
+ "chromium-dark-desktop :: P4.3b session decision cards › a receipt’s Reopen task: asked, refused, and back": [
+  {
+   "step": "receipt",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": "body",
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "reopen asked",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "dialog",
+    "name": "Reopen this task?"
+   },
+   "dialogs": [],
+   "popups": [
+    "Reopen this task?Reopening puts this task back to Open and changes nothing else: its history, its evidence, its dependencies and the project it is filed under s"
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "reopen refused",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "button",
+    "name": "Reopen"
+   },
+   "dialogs": [],
+   "popups": [
+    "Reopen this task?Reopening puts this task back to Open and changes nothing else: its history, its evidence, its dependencies and the project it is filed under s"
+   ],
+   "alerts": [
+    "Task status was not changedFixture: the task changed while this question was open."
+   ],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "PATCH",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsr",
+     "body": "{\"status\":\"OPEN\",\"supersededByTaskId\":null,\"terminalReason\":null}"
+    }
+   ]
+  },
+  {
+   "step": "back",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "button",
+    "name": "Reopen task"
+   },
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "chromium-dark-desktop :: P4.3b session decision cards › an evidence decision: refused, then out of date": [
+  {
+   "step": "evidence card",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": "body",
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "confirm refused",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": "body",
+   "dialogs": [],
+   "popups": [],
+   "alerts": [
+    "Not recordedThe evidence changed while this card was open."
+   ],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsp/evidence/decision",
+     "body": "{\"decidingSessionId\":\"2zwQZ2hd93IvLb59t6tsn\",\"evidenceRevision\":\"2\",\"decision\":\"CONFIRM\"}"
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "confirm refused as out of date",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "button",
+    "name": "Confirm doneEnter"
+   },
+   "dialogs": [],
+   "popups": [],
+   "alerts": [
+    "Not recorded: already answered elsewhere — this card is out of dateThis version was decided in another conversation."
+   ],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsp/evidence/decision",
+     "body": "{\"decidingSessionId\":\"2zwQZ2hd93IvLb59t6tsn\",\"evidenceRevision\":\"2\",\"decision\":\"CONFIRM\"}"
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    }
+   ]
+  }
+ ],
+ "chromium-dark-desktop :: P4.3b session decision cards › an owner confirmation: a review question answered in the owner’s own words, refused": [
+  {
+   "step": "owner card",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": "body",
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "own words typed",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "textarea",
+    "name": "Rename P1’s field now or later?"
+   },
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "field": {
+    "height": 54,
+    "value": "Now, with a note in the changelog that the cap can overshoot."
+   }
+  },
+  {
+   "step": "confirm refused",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": "body",
+   "dialogs": [],
+   "popups": [],
+   "alerts": [
+    "Not recordedThe run reported again while this card was open."
+   ],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": "{\"decision\":\"CONFIRM\",\"requestId\":\"01920000-0000-7000-8000-0000000000f1\",\"reviewRecordId\":\"rec1\",\"answers\":[{\"key\":\"n1\",\"option\":0},{\"key\":\"n2\",\"text\":\"Now, with a note in the changelog that the cap can overshoot.\"}]}"
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    }
+   ]
+  }
+ ],
+ "chromium-dark-desktop :: P4.3b session decision cards › ended coordinator questions: the records, and an answered one’s review": [
+  {
+   "step": "records",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": "body",
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "review",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "dialog",
+    "name": "Answered"
+   },
+   "dialogs": [],
+   "popups": [
+    "AnsweredFROM COORDINATORasked 11:20 AMThe notes for the overlays and the pickers both build on the shared examples page. Should the pickers notes wait for that "
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "review closed",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "button",
+    "name": "Answered11:35 AMThe notes for the overlays and the pickers both build on the sha"
+   },
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "chromium-dark-desktop :: P4.3b session decision cards › the decision strip: what waits on the reader": [
+  {
+   "step": "waiting on you, unfolded",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "button",
+    "name": "1 waiting on you▴"
+   },
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    }
+   ]
+  }
+ ],
+ "chromium-dark-desktop :: P4.3b session decision cards › the review turns: the run’s session opened from the request": [
+  {
+   "step": "review turns",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": "body",
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "run session opened",
+   "url": "/sessions/2zwQZ2hd93IvLb59t6tsu",
+   "focus": {
+    "role": "button",
+    "name": "Open task session"
+   },
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "chromium-dark-desktop :: P4.3b session decision cards › the start card in a conversation: 720px at most, More and Read all only while cut, the plan as the task graph or by level": [
+  {
+   "step": "start card",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": "body",
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    }
+   ],
+   "geometry": {
+    "card": 720,
+    "room": 788,
+    "more": [],
+    "read": [
+     "Read all 3 in full"
+    ],
+    "graph": 1,
+    "levels": 0,
+    "graphLink": [],
+    "head": "Plan · 5 tasks"
+   }
+  }
+ ],
+ "chromium-dark-desktop :: P4.3b session decision cards › the start dialog when its request no longer stands": [
+  {
+   "step": "request gone",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "dialog",
+    "name": "The plan changed after the coordinator asked, so this request no longer stands. "
+   },
+   "dialogs": [],
+   "popups": [
+    "The plan changed after the coordinator asked, so this request no longer stands. Orbit shows the card again when the coordinator asks to start the new plan."
+   ],
+   "alerts": [
+    "The plan changed after the coordinator asked, so this request no longer stands. Orbit shows the card again when the coordinator asks to start the new plan."
+   ],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tss/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tss",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tss/open-items",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "closed",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "button",
+    "name": "Open the start dialog"
+   },
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "chromium-dark-phone :: P4.3b session decision cards › a criteria decision: refused": [
+  {
+   "step": "criteria card",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "dialog",
+    "name": "A weakening change to this project’s ruler needs your decision"
+   },
+   "dialogs": [],
+   "popups": [
+    "A weakening change to this project’s ruler needs your decisionA weakening change to this project’s ruler needs your decisionFROM ORBITBase seal6b1d02e4c8a1 · un"
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "approve refused",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": "body",
+   "dialogs": [],
+   "popups": [
+    "A weakening change to this project’s ruler needs your decisionA weakening change to this project’s ruler needs your decisionFROM ORBITBase seal6b1d02e4c8a1 · un"
+   ],
+   "alerts": [
+    "That decision was not recordedThe criteria in force moved after this proposal was filed."
+   ],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/7f3a91c2-1d4e-4a6b-8c9d-0e1f2a3b4c5d",
+     "body": "{\"commitToken\":\"b81c7d2e-3f4a-4b5c-9d6e-7f8091a2b3c4\",\"decision\":\"APPROVE\",\"baseSeal\":\"6b1d02e4c8a1f3d5b7e9a2c4f6081a3c5e7f9b1d3a5c7e9f1b3d5a7c9e1f3b5d\"}"
+    }
+   ]
+  }
+ ],
+ "chromium-dark-phone :: P4.3b session decision cards › a receipt’s Reopen task: asked, refused, and back": [
+  {
+   "step": "receipt",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": "body",
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "reopen asked",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "dialog",
+    "name": "Reopen this task?"
+   },
+   "dialogs": [],
+   "popups": [
+    "Reopen this task?Reopening puts this task back to Open and changes nothing else: its history, its evidence, its dependencies and the project it is filed under s"
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "reopen refused",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "button",
+    "name": "Reopen"
+   },
+   "dialogs": [],
+   "popups": [
+    "Reopen this task?Reopening puts this task back to Open and changes nothing else: its history, its evidence, its dependencies and the project it is filed under s"
+   ],
+   "alerts": [
+    "Task status was not changedFixture: the task changed while this question was open."
+   ],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "PATCH",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsr",
+     "body": "{\"status\":\"OPEN\",\"supersededByTaskId\":null,\"terminalReason\":null}"
+    }
+   ]
+  },
+  {
+   "step": "back",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "button",
+    "name": "Reopen task"
+   },
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "chromium-dark-phone :: P4.3b session decision cards › an evidence decision: refused, then out of date": [
+  {
+   "step": "evidence card",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": "body",
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "confirm refused",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": "body",
+   "dialogs": [],
+   "popups": [],
+   "alerts": [
+    "Not recordedThe evidence changed while this card was open."
+   ],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsp/evidence/decision",
+     "body": "{\"decidingSessionId\":\"2zwQZ2hd93IvLb59t6tsn\",\"evidenceRevision\":\"2\",\"decision\":\"CONFIRM\"}"
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "confirm refused as out of date",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": "body",
+   "dialogs": [],
+   "popups": [],
+   "alerts": [
+    "Not recorded: already answered elsewhere — this card is out of dateThis version was decided in another conversation."
+   ],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsp/evidence/decision",
+     "body": "{\"decidingSessionId\":\"2zwQZ2hd93IvLb59t6tsn\",\"evidenceRevision\":\"2\",\"decision\":\"CONFIRM\"}"
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    }
+   ]
+  }
+ ],
+ "chromium-dark-phone :: P4.3b session decision cards › an owner confirmation: a review question answered in the owner’s own words, refused": [
+  {
+   "step": "owner card",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "dialog",
+    "name": "Confirm this task is done?"
+   },
+   "dialogs": [],
+   "popups": [
+    "Confirm this task is done?Confirm this task is done?FROM ORBITFile the September invoicesYou decide when this is done2zwQZ2hd93IvLb59t6tsqWHAT COUNTS AS DONE1 i"
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "own words typed",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "textarea",
+    "name": "Rename P1’s field now or later?"
+   },
+   "dialogs": [],
+   "popups": [
+    "Confirm this task is done?Confirm this task is done?FROM ORBITFile the September invoicesYou decide when this is done2zwQZ2hd93IvLb59t6tsqWHAT COUNTS AS DONE1 i"
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "field": {
+    "height": 60,
+    "value": "Now, with a note in the changelog that the cap can overshoot."
+   }
+  },
+  {
+   "step": "confirm refused",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": "body",
+   "dialogs": [],
+   "popups": [
+    "Confirm this task is done?Confirm this task is done?FROM ORBITFile the September invoicesYou decide when this is done2zwQZ2hd93IvLb59t6tsqWHAT COUNTS AS DONE1 i"
+   ],
+   "alerts": [
+    "Not recordedThe run reported again while this card was open."
+   ],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": "{\"decision\":\"CONFIRM\",\"requestId\":\"01920000-0000-7000-8000-0000000000f1\",\"reviewRecordId\":\"rec1\",\"answers\":[{\"key\":\"n1\",\"option\":0},{\"key\":\"n2\",\"text\":\"Now, with a note in the changelog that the cap can overshoot.\"}]}"
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    }
+   ]
+  }
+ ],
+ "chromium-dark-phone :: P4.3b session decision cards › ended coordinator questions: the records, and an answered one’s review": [
+  {
+   "step": "records",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": "body",
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "review",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "dialog",
+    "name": "Answered"
+   },
+   "dialogs": [],
+   "popups": [
+    "AnsweredFROM COORDINATORasked 11:20 AMThe notes for the overlays and the pickers both build on the shared examples page. Should the pickers notes wait for that "
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "review closed",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "button",
+    "name": "Answered11:35 AMThe notes for the overlays and the pickers both build on the sha"
+   },
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "chromium-dark-phone :: P4.3b session decision cards › the review turns: the run’s session opened from the request": [
+  {
+   "step": "review turns",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": "body",
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "run session opened",
+   "url": "/sessions/2zwQZ2hd93IvLb59t6tsu",
+   "focus": {
+    "role": "button",
+    "name": "Open task session"
+   },
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "chromium-dark-phone :: P4.3b session decision cards › the start card in a conversation: 720px at most, More and Read all only while cut, the plan as the task graph or by level": [
+  {
+   "step": "start card",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "dialog",
+    "name": "Start this project?"
+   },
+   "dialogs": [],
+   "popups": [
+    "Start this project?Start this project?FROM ORBITComponent usage notesThe coordinator asked just nowCoordinatorThe notes for the overlays and the pickers both bu"
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    }
+   ],
+   "geometry": {
+    "card": 342,
+    "room": 342,
+    "more": [
+     "More"
+    ],
+    "read": [
+     "Read all 3 in full"
+    ],
+    "graph": 0,
+    "levels": 1,
+    "graphLink": [
+     "Task graph ⤢"
+    ],
+    "head": "Plan · 5 tasks in 3 levels"
+   }
+  },
+  {
+   "step": "reasons opened",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "button",
+    "name": "Less"
+   },
+   "dialogs": [],
+   "popups": [
+    "Start this project?Start this project?FROM ORBITComponent usage notesThe coordinator asked just nowCoordinatorThe notes for the overlays and the pickers both bu"
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "geometry": {
+    "card": 342,
+    "room": 342,
+    "more": [
+     "Less"
+    ],
+    "read": [
+     "Read all 3 in full"
+    ],
+    "graph": 0,
+    "levels": 1,
+    "graphLink": [
+     "Task graph ⤢"
+    ],
+    "head": "Plan · 5 tasks in 3 levels"
+   }
+  },
+  {
+   "step": "task graph full screen",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "dialog",
+    "name": "Task graph"
+   },
+   "dialogs": [],
+   "popups": [
+    "Start this project?Start this project?FROM ORBITComponent usage notesThe coordinator asked just nowCoordinatorThe notes for the overlays and the pickers both bu",
+    "Task graphA · The shared examples pageBlockedB · Notes for the overlaysWaiting on 1C · Notes for the pickersWaiting on 1D · Notes for the feedback componentsWai"
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "escape in the task graph",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "button",
+    "name": "Task graph ⤢"
+   },
+   "dialogs": [],
+   "popups": [
+    "Start this project?Start this project?FROM ORBITComponent usage notesThe coordinator asked just nowCoordinatorThe notes for the overlays and the pickers both bu"
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "chromium-dark-phone :: P4.3b session decision cards › the start dialog when its request no longer stands": [
+  {
+   "step": "request gone",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "dialog",
+    "name": "Start this project?"
+   },
+   "dialogs": [],
+   "popups": [
+    "Start this project?The plan changed after the coordinator asked, so this request no longer stands. Orbit shows the card again when the coordinator asks to start"
+   ],
+   "alerts": [
+    "The plan changed after the coordinator asked, so this request no longer stands. Orbit shows the card again when the coordinator asks to start the new plan."
+   ],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tss/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tss",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tss/open-items",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "closed",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "button",
+    "name": "Open the start dialog"
+   },
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "chromium-light-desktop :: P4.3b session decision cards › a criteria decision: refused": [
+  {
+   "step": "criteria card",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": "body",
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "approve refused",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": "body",
+   "dialogs": [],
+   "popups": [],
+   "alerts": [
+    "That decision was not recordedThe criteria in force moved after this proposal was filed."
+   ],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/7f3a91c2-1d4e-4a6b-8c9d-0e1f2a3b4c5d",
+     "body": "{\"commitToken\":\"b81c7d2e-3f4a-4b5c-9d6e-7f8091a2b3c4\",\"decision\":\"APPROVE\",\"baseSeal\":\"6b1d02e4c8a1f3d5b7e9a2c4f6081a3c5e7f9b1d3a5c7e9f1b3d5a7c9e1f3b5d\"}"
+    }
+   ]
+  }
+ ],
+ "chromium-light-desktop :: P4.3b session decision cards › a receipt’s Reopen task: asked, refused, and back": [
+  {
+   "step": "receipt",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": "body",
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "reopen asked",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "dialog",
+    "name": "Reopen this task?"
+   },
+   "dialogs": [],
+   "popups": [
+    "Reopen this task?Reopening puts this task back to Open and changes nothing else: its history, its evidence, its dependencies and the project it is filed under s"
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "reopen refused",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "button",
+    "name": "Reopen"
+   },
+   "dialogs": [],
+   "popups": [
+    "Reopen this task?Reopening puts this task back to Open and changes nothing else: its history, its evidence, its dependencies and the project it is filed under s"
+   ],
+   "alerts": [
+    "Task status was not changedFixture: the task changed while this question was open."
+   ],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "PATCH",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsr",
+     "body": "{\"status\":\"OPEN\",\"supersededByTaskId\":null,\"terminalReason\":null}"
+    }
+   ]
+  },
+  {
+   "step": "back",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "button",
+    "name": "Reopen task"
+   },
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "chromium-light-desktop :: P4.3b session decision cards › an evidence decision: refused, then out of date": [
+  {
+   "step": "evidence card",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": "body",
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "confirm refused",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": "body",
+   "dialogs": [],
+   "popups": [],
+   "alerts": [
+    "Not recordedThe evidence changed while this card was open."
+   ],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsp/evidence/decision",
+     "body": "{\"decidingSessionId\":\"2zwQZ2hd93IvLb59t6tsn\",\"evidenceRevision\":\"2\",\"decision\":\"CONFIRM\"}"
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "confirm refused as out of date",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "button",
+    "name": "Confirm doneEnter"
+   },
+   "dialogs": [],
+   "popups": [],
+   "alerts": [
+    "Not recorded: already answered elsewhere — this card is out of dateThis version was decided in another conversation."
+   ],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsp/evidence/decision",
+     "body": "{\"decidingSessionId\":\"2zwQZ2hd93IvLb59t6tsn\",\"evidenceRevision\":\"2\",\"decision\":\"CONFIRM\"}"
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    }
+   ]
+  }
+ ],
+ "chromium-light-desktop :: P4.3b session decision cards › an owner confirmation: a review question answered in the owner’s own words, refused": [
+  {
+   "step": "owner card",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": "body",
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "own words typed",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "textarea",
+    "name": "Rename P1’s field now or later?"
+   },
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "field": {
+    "height": 54,
+    "value": "Now, with a note in the changelog that the cap can overshoot."
+   }
+  },
+  {
+   "step": "confirm refused",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": "body",
+   "dialogs": [],
+   "popups": [],
+   "alerts": [
+    "Not recordedThe run reported again while this card was open."
+   ],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": "{\"decision\":\"CONFIRM\",\"requestId\":\"01920000-0000-7000-8000-0000000000f1\",\"reviewRecordId\":\"rec1\",\"answers\":[{\"key\":\"n1\",\"option\":0},{\"key\":\"n2\",\"text\":\"Now, with a note in the changelog that the cap can overshoot.\"}]}"
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    }
+   ]
+  }
+ ],
+ "chromium-light-desktop :: P4.3b session decision cards › ended coordinator questions: the records, and an answered one’s review": [
+  {
+   "step": "records",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": "body",
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "review",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "dialog",
+    "name": "Answered"
+   },
+   "dialogs": [],
+   "popups": [
+    "AnsweredFROM COORDINATORasked 11:20 AMThe notes for the overlays and the pickers both build on the shared examples page. Should the pickers notes wait for that "
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "review closed",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "button",
+    "name": "Answered11:35 AMThe notes for the overlays and the pickers both build on the sha"
+   },
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "chromium-light-desktop :: P4.3b session decision cards › the decision strip: what waits on the reader": [
+  {
+   "step": "waiting on you, unfolded",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "button",
+    "name": "1 waiting on you▴"
+   },
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    }
+   ]
+  }
+ ],
+ "chromium-light-desktop :: P4.3b session decision cards › the review turns: the run’s session opened from the request": [
+  {
+   "step": "review turns",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": "body",
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "run session opened",
+   "url": "/sessions/2zwQZ2hd93IvLb59t6tsu",
+   "focus": {
+    "role": "button",
+    "name": "Open task session"
+   },
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "chromium-light-desktop :: P4.3b session decision cards › the start card in a conversation: 720px at most, More and Read all only while cut, the plan as the task graph or by level": [
+  {
+   "step": "start card",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": "body",
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    }
+   ],
+   "geometry": {
+    "card": 720,
+    "room": 788,
+    "more": [],
+    "read": [
+     "Read all 3 in full"
+    ],
+    "graph": 1,
+    "levels": 0,
+    "graphLink": [],
+    "head": "Plan · 5 tasks"
+   }
+  }
+ ],
+ "chromium-light-desktop :: P4.3b session decision cards › the start dialog when its request no longer stands": [
+  {
+   "step": "request gone",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "dialog",
+    "name": "The plan changed after the coordinator asked, so this request no longer stands. "
+   },
+   "dialogs": [],
+   "popups": [
+    "The plan changed after the coordinator asked, so this request no longer stands. Orbit shows the card again when the coordinator asks to start the new plan."
+   ],
+   "alerts": [
+    "The plan changed after the coordinator asked, so this request no longer stands. Orbit shows the card again when the coordinator asks to start the new plan."
+   ],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tss/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tss",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tss/open-items",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "closed",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "button",
+    "name": "Open the start dialog"
+   },
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "chromium-light-phone :: P4.3b session decision cards › a criteria decision: refused": [
+  {
+   "step": "criteria card",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "dialog",
+    "name": "A weakening change to this project’s ruler needs your decision"
+   },
+   "dialogs": [],
+   "popups": [
+    "A weakening change to this project’s ruler needs your decisionA weakening change to this project’s ruler needs your decisionFROM ORBITBase seal6b1d02e4c8a1 · un"
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "approve refused",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "button",
+    "name": "Approve & re-sealCtrl + Enter"
+   },
+   "dialogs": [],
+   "popups": [
+    "A weakening change to this project’s ruler needs your decisionA weakening change to this project’s ruler needs your decisionFROM ORBITBase seal6b1d02e4c8a1 · un"
+   ],
+   "alerts": [
+    "That decision was not recordedThe criteria in force moved after this proposal was filed."
+   ],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/7f3a91c2-1d4e-4a6b-8c9d-0e1f2a3b4c5d",
+     "body": "{\"commitToken\":\"b81c7d2e-3f4a-4b5c-9d6e-7f8091a2b3c4\",\"decision\":\"APPROVE\",\"baseSeal\":\"6b1d02e4c8a1f3d5b7e9a2c4f6081a3c5e7f9b1d3a5c7e9f1b3d5a7c9e1f3b5d\"}"
+    }
+   ]
+  }
+ ],
+ "chromium-light-phone :: P4.3b session decision cards › a receipt’s Reopen task: asked, refused, and back": [
+  {
+   "step": "receipt",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": "body",
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "reopen asked",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "dialog",
+    "name": "Reopen this task?"
+   },
+   "dialogs": [],
+   "popups": [
+    "Reopen this task?Reopening puts this task back to Open and changes nothing else: its history, its evidence, its dependencies and the project it is filed under s"
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "reopen refused",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "button",
+    "name": "Reopen"
+   },
+   "dialogs": [],
+   "popups": [
+    "Reopen this task?Reopening puts this task back to Open and changes nothing else: its history, its evidence, its dependencies and the project it is filed under s"
+   ],
+   "alerts": [
+    "Task status was not changedFixture: the task changed while this question was open."
+   ],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "PATCH",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsr",
+     "body": "{\"status\":\"OPEN\",\"supersededByTaskId\":null,\"terminalReason\":null}"
+    }
+   ]
+  },
+  {
+   "step": "back",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "button",
+    "name": "Reopen task"
+   },
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "chromium-light-phone :: P4.3b session decision cards › an evidence decision: refused, then out of date": [
+  {
+   "step": "evidence card",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": "body",
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "confirm refused",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": "body",
+   "dialogs": [],
+   "popups": [],
+   "alerts": [
+    "Not recordedThe evidence changed while this card was open."
+   ],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsp/evidence/decision",
+     "body": "{\"decidingSessionId\":\"2zwQZ2hd93IvLb59t6tsn\",\"evidenceRevision\":\"2\",\"decision\":\"CONFIRM\"}"
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "confirm refused as out of date",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "button",
+    "name": "Confirm doneEnter"
+   },
+   "dialogs": [],
+   "popups": [],
+   "alerts": [
+    "Not recorded: already answered elsewhere — this card is out of dateThis version was decided in another conversation."
+   ],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsp/evidence/decision",
+     "body": "{\"decidingSessionId\":\"2zwQZ2hd93IvLb59t6tsn\",\"evidenceRevision\":\"2\",\"decision\":\"CONFIRM\"}"
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    }
+   ]
+  }
+ ],
+ "chromium-light-phone :: P4.3b session decision cards › an owner confirmation: a review question answered in the owner’s own words, refused": [
+  {
+   "step": "owner card",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "dialog",
+    "name": "Confirm this task is done?"
+   },
+   "dialogs": [],
+   "popups": [
+    "Confirm this task is done?Confirm this task is done?FROM ORBITFile the September invoicesYou decide when this is done2zwQZ2hd93IvLb59t6tsqWHAT COUNTS AS DONE1 i"
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "own words typed",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "textarea",
+    "name": "Rename P1’s field now or later?"
+   },
+   "dialogs": [],
+   "popups": [
+    "Confirm this task is done?Confirm this task is done?FROM ORBITFile the September invoicesYou decide when this is done2zwQZ2hd93IvLb59t6tsqWHAT COUNTS AS DONE1 i"
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "field": {
+    "height": 60,
+    "value": "Now, with a note in the changelog that the cap can overshoot."
+   }
+  },
+  {
+   "step": "confirm refused",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": "body",
+   "dialogs": [],
+   "popups": [
+    "Confirm this task is done?Confirm this task is done?FROM ORBITFile the September invoicesYou decide when this is done2zwQZ2hd93IvLb59t6tsqWHAT COUNTS AS DONE1 i"
+   ],
+   "alerts": [
+    "Not recordedThe run reported again while this card was open."
+   ],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": "{\"decision\":\"CONFIRM\",\"requestId\":\"01920000-0000-7000-8000-0000000000f1\",\"reviewRecordId\":\"rec1\",\"answers\":[{\"key\":\"n1\",\"option\":0},{\"key\":\"n2\",\"text\":\"Now, with a note in the changelog that the cap can overshoot.\"}]}"
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    }
+   ]
+  }
+ ],
+ "chromium-light-phone :: P4.3b session decision cards › ended coordinator questions: the records, and an answered one’s review": [
+  {
+   "step": "records",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": "body",
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "review",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "dialog",
+    "name": "Answered"
+   },
+   "dialogs": [],
+   "popups": [
+    "AnsweredFROM COORDINATORasked 11:20 AMThe notes for the overlays and the pickers both build on the shared examples page. Should the pickers notes wait for that "
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "review closed",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "button",
+    "name": "Answered11:35 AMThe notes for the overlays and the pickers both build on the sha"
+   },
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "chromium-light-phone :: P4.3b session decision cards › the review turns: the run’s session opened from the request": [
+  {
+   "step": "review turns",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": "body",
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "run session opened",
+   "url": "/sessions/2zwQZ2hd93IvLb59t6tsu",
+   "focus": {
+    "role": "button",
+    "name": "Open task session"
+   },
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "chromium-light-phone :: P4.3b session decision cards › the start card in a conversation: 720px at most, More and Read all only while cut, the plan as the task graph or by level": [
+  {
+   "step": "start card",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "dialog",
+    "name": "Start this project?"
+   },
+   "dialogs": [],
+   "popups": [
+    "Start this project?Start this project?FROM ORBITComponent usage notesThe coordinator asked just nowCoordinatorThe notes for the overlays and the pickers both bu"
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    }
+   ],
+   "geometry": {
+    "card": 342,
+    "room": 342,
+    "more": [
+     "More"
+    ],
+    "read": [
+     "Read all 3 in full"
+    ],
+    "graph": 0,
+    "levels": 1,
+    "graphLink": [
+     "Task graph ⤢"
+    ],
+    "head": "Plan · 5 tasks in 3 levels"
+   }
+  },
+  {
+   "step": "reasons opened",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "button",
+    "name": "Less"
+   },
+   "dialogs": [],
+   "popups": [
+    "Start this project?Start this project?FROM ORBITComponent usage notesThe coordinator asked just nowCoordinatorThe notes for the overlays and the pickers both bu"
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "geometry": {
+    "card": 342,
+    "room": 342,
+    "more": [
+     "Less"
+    ],
+    "read": [
+     "Read all 3 in full"
+    ],
+    "graph": 0,
+    "levels": 1,
+    "graphLink": [
+     "Task graph ⤢"
+    ],
+    "head": "Plan · 5 tasks in 3 levels"
+   }
+  },
+  {
+   "step": "task graph full screen",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "dialog",
+    "name": "Task graph"
+   },
+   "dialogs": [],
+   "popups": [
+    "Start this project?Start this project?FROM ORBITComponent usage notesThe coordinator asked just nowCoordinatorThe notes for the overlays and the pickers both bu",
+    "Task graphA · The shared examples pageBlockedB · Notes for the overlaysWaiting on 1C · Notes for the pickersWaiting on 1D · Notes for the feedback componentsWai"
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "escape in the task graph",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "button",
+    "name": "Task graph ⤢"
+   },
+   "dialogs": [],
+   "popups": [
+    "Start this project?Start this project?FROM ORBITComponent usage notesThe coordinator asked just nowCoordinatorThe notes for the overlays and the pickers both bu"
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "chromium-light-phone :: P4.3b session decision cards › the start dialog when its request no longer stands": [
+  {
+   "step": "request gone",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "dialog",
+    "name": "Start this project?"
+   },
+   "dialogs": [],
+   "popups": [
+    "Start this project?The plan changed after the coordinator asked, so this request no longer stands. Orbit shows the card again when the coordinator asks to start"
+   ],
+   "alerts": [
+    "The plan changed after the coordinator asked, so this request no longer stands. Orbit shows the card again when the coordinator asks to start the new plan."
+   ],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tss/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tss",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tss/open-items",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "closed",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "button",
+    "name": "Open the start dialog"
+   },
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "webkit-dark-desktop :: P4.3b session decision cards › a criteria decision: refused": [
+  {
+   "step": "criteria card",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": "body",
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "approve refused",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "button",
+    "name": "Approve & re-seal"
+   },
+   "dialogs": [],
+   "popups": [],
+   "alerts": [
+    "That decision was not recordedThe criteria in force moved after this proposal was filed."
+   ],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/7f3a91c2-1d4e-4a6b-8c9d-0e1f2a3b4c5d",
+     "body": "{\"commitToken\":\"b81c7d2e-3f4a-4b5c-9d6e-7f8091a2b3c4\",\"decision\":\"APPROVE\",\"baseSeal\":\"6b1d02e4c8a1f3d5b7e9a2c4f6081a3c5e7f9b1d3a5c7e9f1b3d5a7c9e1f3b5d\"}"
+    }
+   ]
+  }
+ ],
+ "webkit-dark-desktop :: P4.3b session decision cards › a receipt’s Reopen task: asked, refused, and back": [
+  {
+   "step": "receipt",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": "body",
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "reopen asked",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "dialog",
+    "name": "Reopen this task?"
+   },
+   "dialogs": [],
+   "popups": [
+    "Reopen this task?Reopening puts this task back to Open and changes nothing else: its history, its evidence, its dependencies and the project it is filed under s"
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "reopen refused",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "button",
+    "name": "Reopen"
+   },
+   "dialogs": [],
+   "popups": [
+    "Reopen this task?Reopening puts this task back to Open and changes nothing else: its history, its evidence, its dependencies and the project it is filed under s"
+   ],
+   "alerts": [
+    "Task status was not changedFixture: the task changed while this question was open."
+   ],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "PATCH",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsr",
+     "body": "{\"status\":\"OPEN\",\"supersededByTaskId\":null,\"terminalReason\":null}"
+    }
+   ]
+  },
+  {
+   "step": "back",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "button",
+    "name": "Reopen task"
+   },
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "webkit-dark-desktop :: P4.3b session decision cards › an evidence decision: refused, then out of date": [
+  {
+   "step": "evidence card",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": "body",
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "confirm refused",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": "body",
+   "dialogs": [],
+   "popups": [],
+   "alerts": [
+    "Not recordedThe evidence changed while this card was open."
+   ],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsp/evidence/decision",
+     "body": "{\"decidingSessionId\":\"2zwQZ2hd93IvLb59t6tsn\",\"evidenceRevision\":\"2\",\"decision\":\"CONFIRM\"}"
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "confirm refused as out of date",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "button",
+    "name": "Confirm doneEnter"
+   },
+   "dialogs": [],
+   "popups": [],
+   "alerts": [
+    "Not recorded: already answered elsewhere — this card is out of dateThis version was decided in another conversation."
+   ],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsp/evidence/decision",
+     "body": "{\"decidingSessionId\":\"2zwQZ2hd93IvLb59t6tsn\",\"evidenceRevision\":\"2\",\"decision\":\"CONFIRM\"}"
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    }
+   ]
+  }
+ ],
+ "webkit-dark-desktop :: P4.3b session decision cards › an owner confirmation: a review question answered in the owner’s own words, refused": [
+  {
+   "step": "owner card",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": "body",
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "own words typed",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "textarea",
+    "name": "Rename P1’s field now or later?"
+   },
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "field": {
+    "height": 54,
+    "value": "Now, with a note in the changelog that the cap can overshoot."
+   }
+  },
+  {
+   "step": "confirm refused",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "button",
+    "name": "Confirm done"
+   },
+   "dialogs": [],
+   "popups": [],
+   "alerts": [
+    "Not recordedThe run reported again while this card was open."
+   ],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": "{\"decision\":\"CONFIRM\",\"requestId\":\"01920000-0000-7000-8000-0000000000f1\",\"reviewRecordId\":\"rec1\",\"answers\":[{\"key\":\"n1\",\"option\":0},{\"key\":\"n2\",\"text\":\"Now, with a note in the changelog that the cap can overshoot.\"}]}"
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    }
+   ]
+  }
+ ],
+ "webkit-dark-desktop :: P4.3b session decision cards › ended coordinator questions: the records, and an answered one’s review": [
+  {
+   "step": "records",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": "body",
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "review",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "dialog",
+    "name": "Answered"
+   },
+   "dialogs": [],
+   "popups": [
+    "AnsweredFROM COORDINATORasked 11:20 AMThe notes for the overlays and the pickers both build on the shared examples page. Should the pickers notes wait for that "
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "review closed",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "button",
+    "name": "Answered11:35 AMThe notes for the overlays and the pickers both build on the sha"
+   },
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "webkit-dark-desktop :: P4.3b session decision cards › the decision strip: what waits on the reader": [
+  {
+   "step": "waiting on you, unfolded",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "button",
+    "name": "1 waiting on you▴"
+   },
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    }
+   ]
+  }
+ ],
+ "webkit-dark-desktop :: P4.3b session decision cards › the review turns: the run’s session opened from the request": [
+  {
+   "step": "review turns",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": "body",
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "run session opened",
+   "url": "/sessions/2zwQZ2hd93IvLb59t6tsu",
+   "focus": {
+    "role": "button",
+    "name": "Open task session"
+   },
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "webkit-dark-desktop :: P4.3b session decision cards › the start card in a conversation: 720px at most, More and Read all only while cut, the plan as the task graph or by level": [
+  {
+   "step": "start card",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": "body",
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    }
+   ],
+   "geometry": {
+    "card": 720,
+    "room": 788,
+    "more": [],
+    "read": [
+     "Read all 3 in full"
+    ],
+    "graph": 1,
+    "levels": 0,
+    "graphLink": [],
+    "head": "Plan · 5 tasks"
+   }
+  }
+ ],
+ "webkit-dark-desktop :: P4.3b session decision cards › the start dialog when its request no longer stands": [
+  {
+   "step": "request gone",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "dialog",
+    "name": "The plan changed after the coordinator asked, so this request no longer stands. "
+   },
+   "dialogs": [],
+   "popups": [
+    "The plan changed after the coordinator asked, so this request no longer stands. Orbit shows the card again when the coordinator asks to start the new plan."
+   ],
+   "alerts": [
+    "The plan changed after the coordinator asked, so this request no longer stands. Orbit shows the card again when the coordinator asks to start the new plan."
+   ],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tss/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tss",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tss/open-items",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "closed",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "button",
+    "name": "Open the start dialog"
+   },
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "webkit-dark-phone :: P4.3b session decision cards › a criteria decision: refused": [
+  {
+   "step": "criteria card",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "dialog",
+    "name": "A weakening change to this project’s ruler needs your decision"
+   },
+   "dialogs": [],
+   "popups": [
+    "A weakening change to this project’s ruler needs your decisionA weakening change to this project’s ruler needs your decisionFROM ORBITBase seal6b1d02e4c8a1 · un"
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "approve refused",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": "body",
+   "dialogs": [],
+   "popups": [
+    "A weakening change to this project’s ruler needs your decisionA weakening change to this project’s ruler needs your decisionFROM ORBITBase seal6b1d02e4c8a1 · un"
+   ],
+   "alerts": [
+    "That decision was not recordedThe criteria in force moved after this proposal was filed."
+   ],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/7f3a91c2-1d4e-4a6b-8c9d-0e1f2a3b4c5d",
+     "body": "{\"commitToken\":\"b81c7d2e-3f4a-4b5c-9d6e-7f8091a2b3c4\",\"decision\":\"APPROVE\",\"baseSeal\":\"6b1d02e4c8a1f3d5b7e9a2c4f6081a3c5e7f9b1d3a5c7e9f1b3d5a7c9e1f3b5d\"}"
+    }
+   ]
+  }
+ ],
+ "webkit-dark-phone :: P4.3b session decision cards › a receipt’s Reopen task: asked, refused, and back": [
+  {
+   "step": "receipt",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": "body",
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "reopen asked",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "dialog",
+    "name": "Reopen this task?"
+   },
+   "dialogs": [],
+   "popups": [
+    "Reopen this task?Reopening puts this task back to Open and changes nothing else: its history, its evidence, its dependencies and the project it is filed under s"
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "reopen refused",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "button",
+    "name": "Reopen"
+   },
+   "dialogs": [],
+   "popups": [
+    "Reopen this task?Reopening puts this task back to Open and changes nothing else: its history, its evidence, its dependencies and the project it is filed under s"
+   ],
+   "alerts": [
+    "Task status was not changedFixture: the task changed while this question was open."
+   ],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "PATCH",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsr",
+     "body": "{\"status\":\"OPEN\",\"supersededByTaskId\":null,\"terminalReason\":null}"
+    }
+   ]
+  },
+  {
+   "step": "back",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "button",
+    "name": "Reopen task"
+   },
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "webkit-dark-phone :: P4.3b session decision cards › an evidence decision: refused, then out of date": [
+  {
+   "step": "evidence card",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": "body",
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "confirm refused",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": "body",
+   "dialogs": [],
+   "popups": [],
+   "alerts": [
+    "Not recordedThe evidence changed while this card was open."
+   ],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsp/evidence/decision",
+     "body": "{\"decidingSessionId\":\"2zwQZ2hd93IvLb59t6tsn\",\"evidenceRevision\":\"2\",\"decision\":\"CONFIRM\"}"
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "confirm refused as out of date",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "button",
+    "name": "Confirm doneEnter"
+   },
+   "dialogs": [],
+   "popups": [],
+   "alerts": [
+    "Not recorded: already answered elsewhere — this card is out of dateThis version was decided in another conversation."
+   ],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsp/evidence/decision",
+     "body": "{\"decidingSessionId\":\"2zwQZ2hd93IvLb59t6tsn\",\"evidenceRevision\":\"2\",\"decision\":\"CONFIRM\"}"
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    }
+   ]
+  }
+ ],
+ "webkit-dark-phone :: P4.3b session decision cards › an owner confirmation: a review question answered in the owner’s own words, refused": [
+  {
+   "step": "owner card",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "dialog",
+    "name": "Confirm this task is done?"
+   },
+   "dialogs": [],
+   "popups": [
+    "Confirm this task is done?Confirm this task is done?FROM ORBITFile the September invoicesYou decide when this is done2zwQZ2hd93IvLb59t6tsqWHAT COUNTS AS DONE1 i"
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "own words typed",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "textarea",
+    "name": "Rename P1’s field now or later?"
+   },
+   "dialogs": [],
+   "popups": [
+    "Confirm this task is done?Confirm this task is done?FROM ORBITFile the September invoicesYou decide when this is done2zwQZ2hd93IvLb59t6tsqWHAT COUNTS AS DONE1 i"
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "field": {
+    "height": 60,
+    "value": "Now, with a note in the changelog that the cap can overshoot."
+   }
+  },
+  {
+   "step": "confirm refused",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": "body",
+   "dialogs": [],
+   "popups": [
+    "Confirm this task is done?Confirm this task is done?FROM ORBITFile the September invoicesYou decide when this is done2zwQZ2hd93IvLb59t6tsqWHAT COUNTS AS DONE1 i"
+   ],
+   "alerts": [
+    "Not recordedThe run reported again while this card was open."
+   ],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": "{\"decision\":\"CONFIRM\",\"requestId\":\"01920000-0000-7000-8000-0000000000f1\",\"reviewRecordId\":\"rec1\",\"answers\":[{\"key\":\"n1\",\"option\":0},{\"key\":\"n2\",\"text\":\"Now, with a note in the changelog that the cap can overshoot.\"}]}"
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    }
+   ]
+  }
+ ],
+ "webkit-dark-phone :: P4.3b session decision cards › ended coordinator questions: the records, and an answered one’s review": [
+  {
+   "step": "records",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": "body",
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "review",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "dialog",
+    "name": "Answered"
+   },
+   "dialogs": [],
+   "popups": [
+    "AnsweredFROM COORDINATORasked 11:20 AMThe notes for the overlays and the pickers both build on the shared examples page. Should the pickers notes wait for that "
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "review closed",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "button",
+    "name": "Answered11:35 AMThe notes for the overlays and the pickers both build on the sha"
+   },
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "webkit-dark-phone :: P4.3b session decision cards › the review turns: the run’s session opened from the request": [
+  {
+   "step": "review turns",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": "body",
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "run session opened",
+   "url": "/sessions/2zwQZ2hd93IvLb59t6tsu",
+   "focus": {
+    "role": "button",
+    "name": "Open task session"
+   },
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "webkit-dark-phone :: P4.3b session decision cards › the start card in a conversation: 720px at most, More and Read all only while cut, the plan as the task graph or by level": [
+  {
+   "step": "start card",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "dialog",
+    "name": "Start this project?"
+   },
+   "dialogs": [],
+   "popups": [
+    "Start this project?Start this project?FROM ORBITComponent usage notesThe coordinator asked just nowCoordinatorThe notes for the overlays and the pickers both bu"
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    }
+   ],
+   "geometry": {
+    "card": 342,
+    "room": 342,
+    "more": [
+     "More"
+    ],
+    "read": [
+     "Read all 3 in full"
+    ],
+    "graph": 0,
+    "levels": 1,
+    "graphLink": [
+     "Task graph ⤢"
+    ],
+    "head": "Plan · 5 tasks in 3 levels"
+   }
+  },
+  {
+   "step": "reasons opened",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "button",
+    "name": "Less"
+   },
+   "dialogs": [],
+   "popups": [
+    "Start this project?Start this project?FROM ORBITComponent usage notesThe coordinator asked just nowCoordinatorThe notes for the overlays and the pickers both bu"
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "geometry": {
+    "card": 342,
+    "room": 342,
+    "more": [
+     "Less"
+    ],
+    "read": [
+     "Read all 3 in full"
+    ],
+    "graph": 0,
+    "levels": 1,
+    "graphLink": [
+     "Task graph ⤢"
+    ],
+    "head": "Plan · 5 tasks in 3 levels"
+   }
+  },
+  {
+   "step": "task graph full screen",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "dialog",
+    "name": "Task graph"
+   },
+   "dialogs": [],
+   "popups": [
+    "Start this project?Start this project?FROM ORBITComponent usage notesThe coordinator asked just nowCoordinatorThe notes for the overlays and the pickers both bu",
+    "Task graphA · The shared examples pageBlockedB · Notes for the overlaysWaiting on 1C · Notes for the pickersWaiting on 1D · Notes for the feedback componentsWai"
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "escape in the task graph",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "button",
+    "name": "Task graph ⤢"
+   },
+   "dialogs": [],
+   "popups": [
+    "Start this project?Start this project?FROM ORBITComponent usage notesThe coordinator asked just nowCoordinatorThe notes for the overlays and the pickers both bu"
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "webkit-dark-phone :: P4.3b session decision cards › the start dialog when its request no longer stands": [
+  {
+   "step": "request gone",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "dialog",
+    "name": "Start this project?"
+   },
+   "dialogs": [],
+   "popups": [
+    "Start this project?The plan changed after the coordinator asked, so this request no longer stands. Orbit shows the card again when the coordinator asks to start"
+   ],
+   "alerts": [
+    "The plan changed after the coordinator asked, so this request no longer stands. Orbit shows the card again when the coordinator asks to start the new plan."
+   ],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tss/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tss",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tss/open-items",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "closed",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "button",
+    "name": "Open the start dialog"
+   },
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "webkit-light-desktop :: P4.3b session decision cards › a criteria decision: refused": [
+  {
+   "step": "criteria card",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": "body",
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "approve refused",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "button",
+    "name": "Approve & re-seal"
+   },
+   "dialogs": [],
+   "popups": [],
+   "alerts": [
+    "That decision was not recordedThe criteria in force moved after this proposal was filed."
+   ],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/7f3a91c2-1d4e-4a6b-8c9d-0e1f2a3b4c5d",
+     "body": "{\"commitToken\":\"b81c7d2e-3f4a-4b5c-9d6e-7f8091a2b3c4\",\"decision\":\"APPROVE\",\"baseSeal\":\"6b1d02e4c8a1f3d5b7e9a2c4f6081a3c5e7f9b1d3a5c7e9f1b3d5a7c9e1f3b5d\"}"
+    }
+   ]
+  }
+ ],
+ "webkit-light-desktop :: P4.3b session decision cards › a receipt’s Reopen task: asked, refused, and back": [
+  {
+   "step": "receipt",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": "body",
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "reopen asked",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "dialog",
+    "name": "Reopen this task?"
+   },
+   "dialogs": [],
+   "popups": [
+    "Reopen this task?Reopening puts this task back to Open and changes nothing else: its history, its evidence, its dependencies and the project it is filed under s"
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "reopen refused",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "button",
+    "name": "Reopen"
+   },
+   "dialogs": [],
+   "popups": [
+    "Reopen this task?Reopening puts this task back to Open and changes nothing else: its history, its evidence, its dependencies and the project it is filed under s"
+   ],
+   "alerts": [
+    "Task status was not changedFixture: the task changed while this question was open."
+   ],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "PATCH",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsr",
+     "body": "{\"status\":\"OPEN\",\"supersededByTaskId\":null,\"terminalReason\":null}"
+    }
+   ]
+  },
+  {
+   "step": "back",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "button",
+    "name": "Reopen task"
+   },
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "webkit-light-desktop :: P4.3b session decision cards › an evidence decision: refused, then out of date": [
+  {
+   "step": "evidence card",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": "body",
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "confirm refused",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": "body",
+   "dialogs": [],
+   "popups": [],
+   "alerts": [
+    "Not recordedThe evidence changed while this card was open."
+   ],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsp/evidence/decision",
+     "body": "{\"decidingSessionId\":\"2zwQZ2hd93IvLb59t6tsn\",\"evidenceRevision\":\"2\",\"decision\":\"CONFIRM\"}"
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "confirm refused as out of date",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": "body",
+   "dialogs": [],
+   "popups": [],
+   "alerts": [
+    "Not recorded: already answered elsewhere — this card is out of dateThis version was decided in another conversation."
+   ],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsp/evidence/decision",
+     "body": "{\"decidingSessionId\":\"2zwQZ2hd93IvLb59t6tsn\",\"evidenceRevision\":\"2\",\"decision\":\"CONFIRM\"}"
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    }
+   ]
+  }
+ ],
+ "webkit-light-desktop :: P4.3b session decision cards › an owner confirmation: a review question answered in the owner’s own words, refused": [
+  {
+   "step": "owner card",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": "body",
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "own words typed",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "textarea",
+    "name": "Rename P1’s field now or later?"
+   },
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "field": {
+    "height": 54,
+    "value": "Now, with a note in the changelog that the cap can overshoot."
+   }
+  },
+  {
+   "step": "confirm refused",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": "body",
+   "dialogs": [],
+   "popups": [],
+   "alerts": [
+    "Not recordedThe run reported again while this card was open."
+   ],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": "{\"decision\":\"CONFIRM\",\"requestId\":\"01920000-0000-7000-8000-0000000000f1\",\"reviewRecordId\":\"rec1\",\"answers\":[{\"key\":\"n1\",\"option\":0},{\"key\":\"n2\",\"text\":\"Now, with a note in the changelog that the cap can overshoot.\"}]}"
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    }
+   ]
+  }
+ ],
+ "webkit-light-desktop :: P4.3b session decision cards › ended coordinator questions: the records, and an answered one’s review": [
+  {
+   "step": "records",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": "body",
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "review",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "dialog",
+    "name": "Answered"
+   },
+   "dialogs": [],
+   "popups": [
+    "AnsweredFROM COORDINATORasked 11:20 AMThe notes for the overlays and the pickers both build on the shared examples page. Should the pickers notes wait for that "
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "review closed",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "button",
+    "name": "Answered11:35 AMThe notes for the overlays and the pickers both build on the sha"
+   },
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "webkit-light-desktop :: P4.3b session decision cards › the decision strip: what waits on the reader": [
+  {
+   "step": "waiting on you, unfolded",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "button",
+    "name": "1 waiting on you▴"
+   },
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    }
+   ]
+  }
+ ],
+ "webkit-light-desktop :: P4.3b session decision cards › the review turns: the run’s session opened from the request": [
+  {
+   "step": "review turns",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": "body",
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "run session opened",
+   "url": "/sessions/2zwQZ2hd93IvLb59t6tsu",
+   "focus": {
+    "role": "button",
+    "name": "Open task session"
+   },
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "webkit-light-desktop :: P4.3b session decision cards › the start card in a conversation: 720px at most, More and Read all only while cut, the plan as the task graph or by level": [
+  {
+   "step": "start card",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": "body",
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    }
+   ],
+   "geometry": {
+    "card": 720,
+    "room": 788,
+    "more": [],
+    "read": [
+     "Read all 3 in full"
+    ],
+    "graph": 1,
+    "levels": 0,
+    "graphLink": [],
+    "head": "Plan · 5 tasks"
+   }
+  }
+ ],
+ "webkit-light-desktop :: P4.3b session decision cards › the start dialog when its request no longer stands": [
+  {
+   "step": "request gone",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "dialog",
+    "name": "The plan changed after the coordinator asked, so this request no longer stands. "
+   },
+   "dialogs": [],
+   "popups": [
+    "The plan changed after the coordinator asked, so this request no longer stands. Orbit shows the card again when the coordinator asks to start the new plan."
+   ],
+   "alerts": [
+    "The plan changed after the coordinator asked, so this request no longer stands. Orbit shows the card again when the coordinator asks to start the new plan."
+   ],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tss/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tss",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tss/open-items",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "closed",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "button",
+    "name": "Open the start dialog"
+   },
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "webkit-light-phone :: P4.3b session decision cards › a criteria decision: refused": [
+  {
+   "step": "criteria card",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "dialog",
+    "name": "A weakening change to this project’s ruler needs your decision"
+   },
+   "dialogs": [],
+   "popups": [
+    "A weakening change to this project’s ruler needs your decisionA weakening change to this project’s ruler needs your decisionFROM ORBITBase seal6b1d02e4c8a1 · un"
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "approve refused",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "button",
+    "name": "Approve & re-sealCtrl + Enter"
+   },
+   "dialogs": [],
+   "popups": [
+    "A weakening change to this project’s ruler needs your decisionA weakening change to this project’s ruler needs your decisionFROM ORBITBase seal6b1d02e4c8a1 · un"
+   ],
+   "alerts": [
+    "That decision was not recordedThe criteria in force moved after this proposal was filed."
+   ],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/7f3a91c2-1d4e-4a6b-8c9d-0e1f2a3b4c5d",
+     "body": "{\"commitToken\":\"b81c7d2e-3f4a-4b5c-9d6e-7f8091a2b3c4\",\"decision\":\"APPROVE\",\"baseSeal\":\"6b1d02e4c8a1f3d5b7e9a2c4f6081a3c5e7f9b1d3a5c7e9f1b3d5a7c9e1f3b5d\"}"
+    }
+   ]
+  }
+ ],
+ "webkit-light-phone :: P4.3b session decision cards › a receipt’s Reopen task: asked, refused, and back": [
+  {
+   "step": "receipt",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": "body",
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "reopen asked",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "dialog",
+    "name": "Reopen this task?"
+   },
+   "dialogs": [],
+   "popups": [
+    "Reopen this task?Reopening puts this task back to Open and changes nothing else: its history, its evidence, its dependencies and the project it is filed under s"
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "reopen refused",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "button",
+    "name": "Reopen"
+   },
+   "dialogs": [],
+   "popups": [
+    "Reopen this task?Reopening puts this task back to Open and changes nothing else: its history, its evidence, its dependencies and the project it is filed under s"
+   ],
+   "alerts": [
+    "Task status was not changedFixture: the task changed while this question was open."
+   ],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "PATCH",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsr",
+     "body": "{\"status\":\"OPEN\",\"supersededByTaskId\":null,\"terminalReason\":null}"
+    }
+   ]
+  },
+  {
+   "step": "back",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "button",
+    "name": "Reopen task"
+   },
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "webkit-light-phone :: P4.3b session decision cards › an evidence decision: refused, then out of date": [
+  {
+   "step": "evidence card",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": "body",
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "confirm refused",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": "body",
+   "dialogs": [],
+   "popups": [],
+   "alerts": [
+    "Not recordedThe evidence changed while this card was open."
+   ],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsp/evidence/decision",
+     "body": "{\"decidingSessionId\":\"2zwQZ2hd93IvLb59t6tsn\",\"evidenceRevision\":\"2\",\"decision\":\"CONFIRM\"}"
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "confirm refused as out of date",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": "body",
+   "dialogs": [],
+   "popups": [],
+   "alerts": [
+    "Not recorded: already answered elsewhere — this card is out of dateThis version was decided in another conversation."
+   ],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsp/evidence/decision",
+     "body": "{\"decidingSessionId\":\"2zwQZ2hd93IvLb59t6tsn\",\"evidenceRevision\":\"2\",\"decision\":\"CONFIRM\"}"
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    }
+   ]
+  }
+ ],
+ "webkit-light-phone :: P4.3b session decision cards › an owner confirmation: a review question answered in the owner’s own words, refused": [
+  {
+   "step": "owner card",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "dialog",
+    "name": "Confirm this task is done?"
+   },
+   "dialogs": [],
+   "popups": [
+    "Confirm this task is done?Confirm this task is done?FROM ORBITFile the September invoicesYou decide when this is done2zwQZ2hd93IvLb59t6tsqWHAT COUNTS AS DONE1 i"
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "own words typed",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "textarea",
+    "name": "Rename P1’s field now or later?"
+   },
+   "dialogs": [],
+   "popups": [
+    "Confirm this task is done?Confirm this task is done?FROM ORBITFile the September invoicesYou decide when this is done2zwQZ2hd93IvLb59t6tsqWHAT COUNTS AS DONE1 i"
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "field": {
+    "height": 60,
+    "value": "Now, with a note in the changelog that the cap can overshoot."
+   }
+  },
+  {
+   "step": "confirm refused",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "button",
+    "name": "Confirm doneEnter"
+   },
+   "dialogs": [],
+   "popups": [
+    "Confirm this task is done?Confirm this task is done?FROM ORBITFile the September invoicesYou decide when this is done2zwQZ2hd93IvLb59t6tsqWHAT COUNTS AS DONE1 i"
+   ],
+   "alerts": [
+    "Not recordedThe run reported again while this card was open."
+   ],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "POST",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": "{\"decision\":\"CONFIRM\",\"requestId\":\"01920000-0000-7000-8000-0000000000f1\",\"reviewRecordId\":\"rec1\",\"answers\":[{\"key\":\"n1\",\"option\":0},{\"key\":\"n2\",\"text\":\"Now, with a note in the changelog that the cap can overshoot.\"}]}"
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    }
+   ]
+  }
+ ],
+ "webkit-light-phone :: P4.3b session decision cards › ended coordinator questions: the records, and an answered one’s review": [
+  {
+   "step": "records",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": "body",
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "review",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "dialog",
+    "name": "Answered"
+   },
+   "dialogs": [],
+   "popups": [
+    "AnsweredFROM COORDINATORasked 11:20 AMThe notes for the overlays and the pickers both build on the shared examples page. Should the pickers notes wait for that "
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "review closed",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "button",
+    "name": "Answered11:35 AMThe notes for the overlays and the pickers both build on the sha"
+   },
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "webkit-light-phone :: P4.3b session decision cards › the review turns: the run’s session opened from the request": [
+  {
+   "step": "review turns",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": "body",
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "run session opened",
+   "url": "/sessions/2zwQZ2hd93IvLb59t6tsu",
+   "focus": {
+    "role": "button",
+    "name": "Open task session"
+   },
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "webkit-light-phone :: P4.3b session decision cards › the start card in a conversation: 720px at most, More and Read all only while cut, the plan as the task graph or by level": [
+  {
+   "step": "start card",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "dialog",
+    "name": "Start this project?"
+   },
+   "dialogs": [],
+   "popups": [
+    "Start this project?Start this project?FROM ORBITComponent usage notesThe coordinator asked just nowCoordinatorThe notes for the overlays and the pickers both bu"
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    }
+   ],
+   "geometry": {
+    "card": 342,
+    "room": 342,
+    "more": [
+     "More"
+    ],
+    "read": [
+     "Read all 3 in full"
+    ],
+    "graph": 0,
+    "levels": 1,
+    "graphLink": [
+     "Task graph ⤢"
+    ],
+    "head": "Plan · 5 tasks in 3 levels"
+   }
+  },
+  {
+   "step": "reasons opened",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "button",
+    "name": "Less"
+   },
+   "dialogs": [],
+   "popups": [
+    "Start this project?Start this project?FROM ORBITComponent usage notesThe coordinator asked just nowCoordinatorThe notes for the overlays and the pickers both bu"
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": [],
+   "geometry": {
+    "card": 342,
+    "room": 342,
+    "more": [
+     "Less"
+    ],
+    "read": [
+     "Read all 3 in full"
+    ],
+    "graph": 0,
+    "levels": 1,
+    "graphLink": [
+     "Task graph ⤢"
+    ],
+    "head": "Plan · 5 tasks in 3 levels"
+   }
+  },
+  {
+   "step": "task graph full screen",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "dialog",
+    "name": "Task graph"
+   },
+   "dialogs": [],
+   "popups": [
+    "Start this project?Start this project?FROM ORBITComponent usage notesThe coordinator asked just nowCoordinatorThe notes for the overlays and the pickers both bu",
+    "Task graphA · The shared examples pageBlockedB · Notes for the overlaysWaiting on 1C · Notes for the pickersWaiting on 1D · Notes for the feedback componentsWai"
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  },
+  {
+   "step": "escape in the task graph",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "button",
+    "name": "Task graph ⤢"
+   },
+   "dialogs": [],
+   "popups": [
+    "Start this project?Start this project?FROM ORBITComponent usage notesThe coordinator asked just nowCoordinatorThe notes for the overlays and the pickers both bu"
+   ],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ],
+ "webkit-light-phone :: P4.3b session decision cards › the start dialog when its request no longer stands": [
+  {
+   "step": "request gone",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "dialog",
+    "name": "Start this project?"
+   },
+   "dialogs": [],
+   "popups": [
+    "Start this project?The plan changed after the coordinator asked, so this request no longer stands. Orbit shows the card again when the coordinator asks to start"
+   ],
+   "alerts": [
+    "The plan changed after the coordinator asked, so this request no longer stands. Orbit shows the card again when the coordinator asks to start the new plan."
+   ],
+   "notifications": "",
+   "requests": [
+    {
+     "method": "GET",
+     "path": "/api/tasks/evidence-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/tasks/2zwQZ2hd93IvLb59t6tsq/owner-confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tso/acceptance/criteria-decisions/pending",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/open-items",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tsv/dependency-graph",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tss/acceptance/confirmation",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tss",
+     "body": null
+    },
+    {
+     "method": "GET",
+     "path": "/api/projects/2zwQZ2hd93IvLb59t6tss/open-items",
+     "body": null
+    }
+   ]
+  },
+  {
+   "step": "closed",
+   "url": "/ui-migration/p43b-cards.html",
+   "focus": {
+    "role": "button",
+    "name": "Open the start dialog"
+   },
+   "dialogs": [],
+   "popups": [],
+   "alerts": [],
+   "notifications": "",
+   "requests": []
+  }
+ ]
+}
