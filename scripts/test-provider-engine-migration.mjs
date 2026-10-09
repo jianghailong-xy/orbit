@@ -153,6 +153,10 @@ async function runAcceptance() {
     // scenarios run from below.
     const pgSources = [migrationPgSource, ...regressionPgSources];
     for (const source of pgSources) assert.ok(existsSync(path.join(root, source)), `missing required test source: ${source}`);
+    // The Prisma engine is looked up in node_modules, which a fresh worktree does not have until
+    // scripts/worktree-overlay.sh lays them out: lay them out first (run-pg-spec.sh runs it again and finds
+    // them in place).
+    process.stdout.write(runLogged('bash', ['scripts/worktree-overlay.sh'], path.join(scratch, 'overlay.log'), { timeout: 900_000 }));
     const output = runLogged('bash', ['scripts/run-pg-spec.sh', ...pgSources], path.join(scratch, 'postgres.log'), {
       env: { ...await prismaEngineEnvironment(), RUN_PG_SPEC_LOG_DIR: scratch, RUN_PG_SPEC_TEST_ISOLATION: 'none' },
       timeout: 2_700_000,
