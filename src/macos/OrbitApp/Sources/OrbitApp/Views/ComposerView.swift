@@ -1640,11 +1640,20 @@ private struct GrowingTextEditor: UIViewRepresentable {
         // would land on the keyboard (typing a key or a candidate) instead of the field; a second tap
         // the field took too would drop the caret into the words just filled in, or open the edit
         // menu. So the keyboard comes up a double-tap interval late then, and a tap on a field already
-        // being edited (the edit menu, Paste) lands as late.
+        // being edited (the edit menu, Paste) lands as late. An editing field's taps are not all
+        // `UITapGestureRecognizer`s — its tap-and-a-half selection gesture begins on the second press,
+        // and won the race on a CI run — so any of its gestures named for a tap waits too.
         func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
                                shouldBeRequiredToFailBy other: UIGestureRecognizer) -> Bool {
-            guard gestureRecognizer === doubleTap, let field = gestureRecognizer.view else { return false }
-            return other is UITapGestureRecognizer && other.view?.isDescendant(of: field) == true
+            guard gestureRecognizer === doubleTap, let field = gestureRecognizer.view,
+                  other.view?.isDescendant(of: field) == true else { return false }
+            return other is UITapGestureRecognizer || NSStringFromClass(type(of: other)).contains("Tap")
+        }
+
+        // And whatever of the field's own does begin (its loupe, a scroll) never stops the double-tap.
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                               shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
+            gestureRecognizer === doubleTap
         }
 
         func textViewDidChange(_ view: UITextView) {
