@@ -409,8 +409,11 @@ private fun ProviderChoices(model: ComposerModel, catalog: ComposerCatalog, engi
         color = MaterialTheme.colorScheme.onSurfaceVariant)
     @Composable fun row(option: ProviderOption) = TextButton(enabled = enabled && option.unavailable == null,
         onClick = { if (option.id != provider) pick(option) }, modifier = Modifier.testTag("composer-provider:${option.id}")) {
-        Text((if (option.id == provider) "✓ " else "") + option.label + (option.unavailable?.let { " · $it" } ?: ""))
-        option.detail?.let { Text("  $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        // What a sign-in is (`opencode auth`) goes under its name, as the boards' menus put it.
+        Column {
+            Text((if (option.id == provider) "✓ " else "") + option.label + (option.unavailable?.let { " · $it" } ?: ""))
+            option.detail?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        }
     }
     Row(Modifier.padding(top = 8.dp).testTag("composer-provider"), verticalAlignment = Alignment.CenterVertically) {
         Text(EngineCopy.PROVIDER, Modifier.weight(1f), fontWeight = FontWeight.SemiBold)
@@ -419,8 +422,10 @@ private fun ProviderChoices(model: ComposerModel, catalog: ComposerCatalog, engi
     if (options.none { it.id == provider } && provider.isNotEmpty()) {
         if (current.kind == CredentialKind.KEY) header(EngineCopy.THIS_SESSIONS_KEY)
         Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp).testTag("composer-provider-current"), verticalAlignment = Alignment.CenterVertically) {
-            Text(current.label, Modifier.weight(1f, fill = false), color = MaterialTheme.colorScheme.onSurfaceVariant)
-            current.detail?.let { Text("  $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            Column(Modifier.weight(1f, fill = false)) {
+                Text(current.label, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                current.detail?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            }
             gone?.let { Text("  " + if (it == EngineCopy.KEY_DELETED) "Deleted" else it, color = amber) }
         }
     }
@@ -441,8 +446,10 @@ private fun ProviderChoices(model: ComposerModel, catalog: ComposerCatalog, engi
             TextButton(enabled = enabled, onClick = {
                 if (here) model.config(buildJsonObject { put("account", "automatic") }, true) else pick(option, "automatic")
             }) {
-                Text(mark("automatic") + EngineCopy.AUTOMATIC)
-                Text("  ${EngineCopy.AUTOMATIC_DETAIL}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Column {
+                    Text(mark("automatic") + EngineCopy.AUTOMATIC)
+                    Text(EngineCopy.AUTOMATIC_DETAIL, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
             accounts.forEach { account -> TextButton(enabled = enabled && account.unavailable == null, onClick = {
                 if (here) model.config(buildJsonObject { put("account", account.id) }, true) else pick(option, account.id)
@@ -458,7 +465,8 @@ private fun ProviderChoices(model: ComposerModel, catalog: ComposerCatalog, engi
     // A Claude subscription token is the one key on Anthropic's protocol OpenCode does not run: its absence there is said.
     if (engine == ProviderEngines.OPENCODE) catalog.providers.filter { it.flag("pool") != true && it.text("runtime") == ProviderEngines.CLAUDE &&
         it["engines"] is JsonArray && catalog.providerEngines(it.text("slug")) == listOf(ProviderEngines.CLAUDE) }.mapNotNull { it.text("label") ?: it.text("slug") }.takeIf { it.isNotEmpty() }?.let {
-        Text(EngineCopy.subscriptionOnly(it), Modifier.padding(top = 8.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(EngineCopy.subscriptionOnly(it), Modifier.padding(top = 8.dp).testTag("composer-provider-note"), style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

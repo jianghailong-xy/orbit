@@ -7,6 +7,9 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Process
 import android.os.SystemClock
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -51,9 +54,7 @@ class ProviderEngineShotsTest {
 
     @Test fun a_newSessionPicksTheEngineThenTheProvider() = journey("new-session") {
         login()
-        compose.onNodeWithTag("workspace:$workspace").performClick()
-        awaitText("New session"); compose.onAllNodesWithText("New session")[0].performClick()
-        awaitTag("new-session-engine")
+        newSession()
         engine("dsh", shot = "01-new-session-engines")
         menu("02-new-session-dsh-menu", title = "DeepSeek Harness")
         // Harness enforces three modes: the others are not offered.
@@ -62,20 +63,20 @@ class ProviderEngineShotsTest {
         provider("03-new-session-dsh-provider")
         compose.onNodeWithTag("composer-provider:deepseek").assertExists(); compose.onNodeWithTag("composer-provider:deepseek-2").assertExists()
         assertTrue("no Harness row of its own", compose.onAllNodes(hasTestTag("composer-provider:dsh")).fetchSemanticsNodes().isEmpty())
-        compose.onNodeWithText("Close").performClick()
-        engine("claude"); menu(title = "Claude Code"); provider("04-new-session-claude-provider")
+        close()
+        engine("claude"); menu(title = "Claude Code"); provider("04-new-session-claude-provider", end = "04b-new-session-claude-provider-end")
         awaitText("Signed in on hpc"); awaitText("Account pools"); awaitText("API keys")
-        compose.onNodeWithText("Close").performClick()
-        engine("opencode"); menu(title = "OpenCode"); provider("05-new-session-opencode-provider")
+        close()
+        engine("opencode"); menu(title = "OpenCode")
         awaitText("Claude Max isn’t here: a subscription token runs on Claude Code only.")
-        compose.onNodeWithText("Close").performClick()
+        provider("05-new-session-opencode-provider", end = "05b-new-session-opencode-provider-end")
+        close()
         // The pick is the pair: Harness on the second DeepSeek key, sent with the first message.
         engine("dsh"); menu(title = "DeepSeek Harness"); provider()
-        compose.onNodeWithTag("composer-provider:deepseek-2").performScrollTo().performClick()
-        compose.onNodeWithText("Close").performClick()
+        compose.onNodeWithTag("composer-provider:deepseek-2").performScrollTo(); tap("composer-provider:deepseek-2")
+        close()
         compose.onNodeWithTag("composer-input").performTextInput("Look at why CI is red")
-        compose.waitUntil(15_000) { compose.onNodeWithTag("composer-send").fetchSemanticsNode().config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Disabled) == null }
-        compose.onNodeWithTag("composer-send").performClick()
+        tap("composer-send")
         compose.waitUntil(15_000) { stats()["creations"]!!.jsonArray.isNotEmpty() }
         val created = stats()["creations"]!!.jsonArray.single().jsonObject
         assertEquals("dsh", created["engine"]!!.jsonPrimitive.content)
@@ -84,13 +85,11 @@ class ProviderEngineShotsTest {
 
     @Test fun b_withoutADeepSeekKeyHarnessOffersTheConnection() = journey("no-deepseek-key") {
         login(); control("""{"noDeepSeek":true}""")
-        compose.onNodeWithTag("workspace:$workspace").performClick()
-        awaitText("New session"); compose.onAllNodesWithText("New session")[0].performClick()
-        awaitTag("new-session-engine")
-        compose.onNodeWithTag("new-session-engine").performClick()
-        awaitText("Connect a DeepSeek key →")
+        newSession()
+        tap("new-session-engine")
+        awaitText("Connect a DeepSeek key →", unmerged = true)
         capture("06-new-session-no-deepseek-key")
-        compose.onNodeWithText("Done").performClick()
+        clickText("Done")
     }
 
     @Test fun c_aHarnessSessionSwitchesBetweenItsDeepSeekKeys() = journey("composer-switch") {
@@ -98,19 +97,19 @@ class ProviderEngineShotsTest {
         open("orbit://session/$dshSession")
         awaitTag("composer-model")
         menu(title = "DeepSeek Harness"); provider("07-composer-dsh-switch")
-        compose.onNodeWithTag("composer-provider:deepseek-2").performScrollTo().performClick()
+        compose.onNodeWithTag("composer-provider:deepseek-2").performScrollTo(); tap("composer-provider:deepseek-2")
         compose.waitUntil(15_000) { stats()["calls"]!!.jsonArray.any { it.jsonObject["path"]!!.jsonPrimitive.content.endsWith("/$dshSession/config") } }
         val patch = stats()["calls"]!!.jsonArray.last { it.jsonObject["path"]!!.jsonPrimitive.content.endsWith("/$dshSession/config") }.jsonObject
         assertEquals("PATCH", patch["method"]!!.jsonPrimitive.content)
         assertEquals("dsh", patch["body"]!!.jsonObject["engine"]!!.jsonPrimitive.content)
         assertEquals("deepseek-2", patch["body"]!!.jsonObject["provider"]!!.jsonPrimitive.content)
-        compose.onNodeWithText("Close").performClick()
+        close()
         compose.runOnIdle { app.realtime.refreshSession() }
         SystemClock.sleep(1500)
         menu(title = "DeepSeek Harness"); provider()
         awaitText("✓ DeepSeek 2")
         capture("08-composer-dsh-switched")
-        compose.onNodeWithText("Close").performClick()
+        close()
     }
 
     @Test fun d_aSessionWhoseKeyIsDeletedSaysSo() = journey("composer-key-deleted") {
@@ -120,7 +119,7 @@ class ProviderEngineShotsTest {
         menu(title = "DeepSeek Harness"); provider()
         awaitText("Key deleted"); awaitText("This session's key")
         capture("09-composer-key-deleted")
-        compose.onNodeWithText("Close").performClick()
+        close()
     }
 
     @Test fun e_aTaskPinsTheEngineThenAProviderItRuns() = journey("task-pin") {
@@ -128,16 +127,16 @@ class ProviderEngineShotsTest {
         open("orbit://task/$task")
         awaitTag("task-engine")
         awaitText("Assignee's · Claude Code")
-        compose.onNodeWithTag("task-engine").performScrollTo().performClick()
+        compose.onNodeWithTag("task-engine").performScrollTo(); tap("task-engine")
         awaitText("DeepSeek Harness")
         capture("10-task-pin-engine-menu")
-        compose.onNodeWithText("DeepSeek Harness").performClick()
+        clickText("DeepSeek Harness")
         compose.waitUntil(15_000) { stats()["task"]!!.jsonObject["engine"]?.jsonPrimitive?.contentOrNull == "dsh" }
         awaitText("Engine default · DeepSeek")
-        compose.onNodeWithTag("task-provider").performScrollTo().performClick()
+        compose.onNodeWithTag("task-provider").performScrollTo(); tap("task-provider")
         awaitText("Your DeepSeek keys")
         capture("11-task-pin-provider-menu")
-        compose.onNodeWithText("DeepSeek 2").performClick()
+        clickText("DeepSeek 2")
         compose.waitUntil(15_000) { stats()["task"]!!.jsonObject["provider"]?.jsonPrimitive?.contentOrNull == "deepseek-2" }
         val pin = stats()["calls"]!!.jsonArray.last { it.jsonObject["path"]!!.jsonPrimitive.content == "/api/tasks/$task" }.jsonObject["body"]!!.jsonObject
         assertEquals("dsh", pin["engine"]!!.jsonPrimitive.content); assertEquals("deepseek-2", pin["provider"]!!.jsonPrimitive.content)
@@ -148,14 +147,14 @@ class ProviderEngineShotsTest {
 
     @Test fun f_theKeysSayTheEnginesTheyRunOn() = journey("keys") {
         login()
-        compose.onAllNodesWithContentDescription("Open navigation").onFirst().performClick()
-        awaitText("Settings"); compose.onAllNodesWithText("Settings").onFirst().performClick()
-        awaitText("Providers"); compose.onNodeWithText("Providers").performScrollTo().performClick()
+        compose.onAllNodesWithContentDescription("Open navigation").onFirst().performSemanticsAction(SemanticsActions.OnClick)
+        awaitText("Settings"); compose.onAllNodes(hasText("Settings") and hasClickAction()).onFirst().performSemanticsAction(SemanticsActions.OnClick)
+        awaitText("Providers"); compose.onNodeWithText("Providers").performScrollTo(); clickText("Providers")
         awaitText("Your API keys")
         compose.onNodeWithText("Claude Code · subscription token", useUnmergedTree = true).performScrollTo()
         awaitText("Claude Code · OpenCode · DeepSeek Harness", unmerged = true)
         capture("13-keys-engines")
-        compose.onNode(hasText("DeepSeek") and hasClickAction()).performScrollTo().performClick()
+        compose.onNode(hasText("DeepSeek") and hasClickAction()).performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
         awaitText("Works with")
         compose.onNodeWithText("Works with").performScrollTo()
         compose.onNodeWithText("Anthropic-compatible").performScrollTo()
@@ -174,34 +173,58 @@ class ProviderEngineShotsTest {
 
     // The journey's steps.
 
+    /** The workspace's New session page, its draft restored. */
+    private fun newSession() {
+        awaitTag("workspace:$workspace"); compose.onNodeWithTag("workspace:$workspace").performSemanticsAction(SemanticsActions.OnClick)
+        awaitText("New session"); compose.onAllNodes(hasText("New session") and hasClickAction()).onFirst().performSemanticsAction(SemanticsActions.OnClick)
+        awaitTag("new-session-engine")
+    }
+
     /** Opens the new session's Engine list and picks [engine], capturing the list as [shot] first. */
     private fun engine(engine: String, shot: String? = null) {
-        compose.onNodeWithTag("new-session-engine").performClick()
+        tap("new-session-engine")
         awaitTag("engine:$engine")
         shot?.let(::capture)
-        compose.onNodeWithTag("engine:$engine").performClick()
+        tap("engine:$engine")
         compose.waitUntil(15_000) { compose.onAllNodes(hasTestTag("engine-choices")).fetchSemanticsNodes().isEmpty() }
         SystemClock.sleep(500)
     }
 
     /** Opens the composer's model menu, titled by the session's engine. */
     private fun menu(shot: String? = null, title: String) {
-        compose.waitUntil(15_000) { compose.onNodeWithTag("composer-model").fetchSemanticsNode().config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Disabled) == null }
-        compose.onNodeWithTag("composer-model").performClick()
+        tap("composer-model")
         awaitTag("composer-provider")
         compose.onNodeWithTag("composer-engine-title").assertTextEquals(title)
         shot?.let(::capture)
     }
 
-    /** Scrolls the model menu to its Provider part. */
-    private fun provider(shot: String? = null) {
+    /** Scrolls the model menu to its Provider part, capturing it as [shot], then — where the list runs on — its end as [end]. */
+    private fun provider(shot: String? = null, end: String? = null) {
         compose.onNodeWithTag("composer-provider").performScrollTo()
-        compose.onAllNodes(hasTestTag("composer-provider:", substring = true)).fetchSemanticsNodes().lastOrNull()?.let {
-            compose.onAllNodes(hasTestTag("composer-provider:", substring = true)).onLast().performScrollTo()
-        }
+        compose.onAllNodes(hasTestTag("composer-provider:", substring = true)).onLast().performScrollTo()
         compose.onNodeWithTag("composer-provider").performScrollTo()
         shot?.let(::capture)
+        if (end != null) {
+            val note = compose.onAllNodes(hasTestTag("composer-provider-note")).fetchSemanticsNodes().isNotEmpty()
+            if (note) compose.onNodeWithTag("composer-provider-note").performScrollTo()
+            else compose.onAllNodes(hasTestTag("composer-provider:", substring = true)).onLast().performScrollTo()
+            capture(end)
+        }
     }
+
+    /** Taps a node once it is there and enabled, through its click action: a dialog still settling refuses injected touches. */
+    private fun tap(tag: String) {
+        awaitTag(tag)
+        compose.waitUntil(20_000) { compose.onNodeWithTag(tag).fetchSemanticsNode().config.getOrNull(SemanticsProperties.Disabled) == null }
+        compose.onNodeWithTag(tag).performSemanticsAction(SemanticsActions.OnClick)
+        compose.waitForIdle()
+    }
+    private fun clickText(text: String) {
+        compose.waitUntil(20_000) { compose.onAllNodes(hasText(text) and hasClickAction()).fetchSemanticsNodes().isNotEmpty() }
+        compose.onAllNodes(hasText(text) and hasClickAction()).onFirst().performSemanticsAction(SemanticsActions.OnClick)
+        compose.waitForIdle()
+    }
+    private fun close() = clickText("Close")
 
     private fun login() {
         instrument.sendStatus(0, Bundle().apply { putString("t9_pid", Process.myPid().toString()) })
@@ -228,7 +251,7 @@ class ProviderEngineShotsTest {
         compose.waitUntil(20_000) { compose.onAllNodesWithText(text, substring = substring, useUnmergedTree = unmerged).fetchSemanticsNodes().isNotEmpty() }
     private fun awaitTag(tag: String) = compose.waitUntil(20_000) { compose.onAllNodes(hasTestTag(tag)).fetchSemanticsNodes().isNotEmpty() }
     private fun hasTestTag(tag: String, substring: Boolean) = SemanticsMatcher("testTag starts with $tag") {
-        it.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.TestTag)?.let { value -> if (substring) value.startsWith(tag) else value == tag } == true
+        it.config.getOrNull(SemanticsProperties.TestTag)?.let { value -> if (substring) value.startsWith(tag) else value == tag } == true
     }
 
     private fun request(path: String, body: String? = null): String = (URL(server + path).openConnection() as HttpURLConnection).run {
