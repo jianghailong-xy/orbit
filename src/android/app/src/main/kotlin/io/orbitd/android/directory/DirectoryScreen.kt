@@ -215,7 +215,7 @@ fun SessionRow(session: DirectorySession, onOpen: () -> Unit, onOptions: () -> U
                 unreplied != null -> Text(unreplied, maxLines = 2, style = MaterialTheme.typography.bodyMedium)
                 recap != null -> Text(buildAnnotatedString {
                     withStyle(SpanStyle(color = MaterialTheme.colorScheme.onSurfaceVariant)) {
-                        append(SessionLineCopy.recapWithTime(recapLabel(session.recapAt, Instant.now())) + " ")
+                        append(recapLabel(session.recapAt, Instant.now()) + " ")
                     }
                     append(recap)
                 }, maxLines = 2, style = MaterialTheme.typography.bodyMedium)

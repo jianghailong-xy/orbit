@@ -146,9 +146,11 @@ class SessionRecapShotsTest {
         // the second line, not the only one), so a live session reads "Running" here. The web rule that
         // live state outranks the recap is `SessionLine`'s, which is what a project row draws and what
         // the whole macOS/iOS list draws; on this row the recap takes the preview slot either way.
+        // Asked of the ROW, not the screen: the recapped rows above keep their labels either way.
         compose.onNodeWithTag("directory-list").performScrollToNode(hasText("Rebuilding the transcript page"))
-        compose.onNodeWithText("Running", substring = true).assertIsDisplayed()
-        compose.onAllNodesWithText(label, substring = true).assertCountEquals(0)
+        compose.onNode(hasText("Rebuilding the transcript page") and hasText("Running")).assertExists()
+        compose.onAllNodes(hasText("Rebuilding the transcript page") and hasText(recap, substring = true))
+            .assertCountEquals(0)
 
         // The account's Session recaps switch, off: every recap row falls back to the raw last reply — no label, and
         // not the recap under one.

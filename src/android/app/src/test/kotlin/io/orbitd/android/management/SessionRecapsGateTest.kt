@@ -97,8 +97,15 @@ class SessionRecapsGateTest {
                 }
             }
         }
-        await("session recaps: on"); await("Session recaps")
+        // Split, not one line: "the shell's own answer never drew" and "the page never drew" are
+        // different failures, and a timeout on a shared line names neither.
+        await("session recaps: on")
+        await("Session recaps")
         compose.onNode(readySwitch()).performScrollTo().performClick()
+        // Two claims, asked one at a time: the write reaches the server (the fixture's own answer),
+        // and the shell every page reads follows it. A test that waits only for the second says
+        // nothing about which half stopped.
+        compose.waitUntil(60_000) { fixture.recaps == false }
         await("session recaps: off")
         assertEquals(false, fixture.recaps)
     }
