@@ -819,5 +819,5 @@ T2 的迁移只写列。回填结果的逐行报告由 T4 的迁移给出：它�
 
 ### 9.3 迁移编号
 
-- 2026-10-09 合入 main 时，最大的是 0411（`0411_retire_candidates_landed_by_receipt`）。
+- 2026-10-09 最后一次合入 main 时，最大的是 0412（`0412_wiki_stored_text_encoding`）。
 - 取号前按作业指导扫描 main、各 `project/*`、已推送的 `orbit/*` 分支与其它会话的工作树。
