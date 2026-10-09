@@ -204,6 +204,8 @@ import {
 } from '../lib/contextSeed';
 import { SessionOutputs } from './SessionOutputs';
 import { NewSessionProviderHero } from './NewSessionProviderHero';
+import { ManagedRunnerNotice } from './ManagedRunnerNotice';
+import { managedRunnerStatusQuery, type ManagedRunner } from '../lib/managedRunner';
 import {
   currentProviderChoice,
   engineChoiceFor,
@@ -1902,7 +1904,14 @@ export function QueuedTurnMeta({
 // WorkspaceView remounts across runner switches.
 const lastSessionByWorkspace = new Map<string, string>();
 
-export function WorkspaceView({ runner }: { runner: Runner }) {
+export function WorkspaceView({
+  runner,
+  managed = null,
+}: {
+  runner: Runner;
+  /** The managed runner, when this console's runner is it (WorkspaceConsole decides). */
+  managed?: ManagedRunner | null;
+}) {
   const { modal } = AntApp.useApp();
   const message = useToast();
   const qc = useQueryClient();
@@ -3003,18 +3012,24 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     !live &&
     !!selectedSession.startedAt &&
     !!runner.online;
-  const resumable = selectedSession
-    ? sessionCapabilityOf(selectedSession, 'canResume', legacyResumable)
-    : false;
   const selectedResumeBlockedReason = selectedSession
     ? sessionResumeBlockedReasonOf(selectedSession)
     : null;
+  // A managed runner that is asleep or on its way up comes back by itself, so work for it is not
+  // refused as offline: the server queues a message for it, and the resume of an ended session
+  // too (SessionsService.resume). Sending is what wakes it.
+  const runnerTakesWork = !!runner.online || !!managed?.display.acceptsWork;
+  const managedResumes = !!managed?.display.acceptsWork && selectedResumeBlockedReason === 'RUNNER_OFFLINE';
+  const resumable = selectedSession
+    ? sessionCapabilityOf(selectedSession, 'canResume', legacyResumable) || managedResumes
+    : false;
   const selectedResumeBlockedCopy = sessionResumeBlockedMessage(selectedResumeBlockedReason);
   // A run can still look live/resumable in cached state while a Complete/end transition has
   // already denied its same-session endpoint. Never reinterpret that denial as a fresh run.
   const sameSessionSendBlocked =
     !!selectedSession &&
     (live || resumable) &&
+    !managedResumes &&
     !sessionCapabilityOf(selectedSession, 'canSend', true);
   const sameSessionSendBlockedCopy = sessionSendBlockedMessage(selectedResumeBlockedReason);
   const selectedCanComplete = selectedSession
@@ -3391,6 +3406,16 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const pickedProvider: string = draftProvider ?? lastWorkspaceProvider;
   // The Provider-menu identity of that pick: the model space, the model seed and the menu's tick.
   const pickedChoice: string = draftChoice ?? lastWorkspaceProvider;
+  // The managed runner's default workspace has no engine for a first session until its runner has
+  // been ready with one (`initialProvider`): before that the server refuses the session with
+  // MODEL_UNAVAILABLE, so the draft offers no default engine and shows the runner's state instead.
+  const managedDraftBlocked =
+    !selected &&
+    !!managed &&
+    !managed.display.startsNewSession &&
+    !!workspaceId &&
+    !!managed.status.workspaceId &&
+    routeId(managed.status.workspaceId) === routeId(workspaceId);
   // The Codex, Claude, Antigravity or Kimi account picked for the draft on the New Session hero, scoped to
   // its workspace like the provider pick. Without one a new session starts where Automatic or its
   // workspace says.
@@ -5672,7 +5697,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         qc.setQueryData(sessionQuery(selected.id).queryKey, fresh);
         const freshReason = sessionResumeBlockedReasonOf(fresh);
         const freshLegacyResumable = !!fresh.startedAt && !!runner.online;
-        const disposition = sessionSendDispositionOf(fresh, freshLegacyResumable);
+        const disposition =
+          !!managed?.display.acceptsWork && freshReason === 'RUNNER_OFFLINE'
+            ? 'RESUME'
+            : sessionSendDispositionOf(fresh, freshLegacyResumable);
         if (disposition === 'BLOCK')
           throw new Error(
             sessionSendBlockedMessage(
@@ -5840,6 +5868,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       if (sendOperationRef.current?.clientTurnId === clientTurnId) {
         sendOperationRef.current = null;
       }
+      // Work for a managed runner that is not up asks it to wake: show that now, not at the next poll.
+      if (managed && !runner.online) qc.invalidateQueries({ queryKey: managedRunnerStatusQuery().queryKey });
       pushHistory(id, vars.shell ? `!${vars.content}` : vars.content); // record under the resolved session id, new sessions included
       // Delivered, to the run that has this task rather than to the one it was typed in. Nothing
       // about this row changed, so none of the optimistic painting below applies — the bubble is
@@ -7149,7 +7179,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     : (!!text.trim() || readyImages.length > 0) &&
       !send.isPending &&
       !uploading &&
-      runner.online &&
+      runnerTakesWork &&
+      !managedDraftBlocked &&
       !selectedTrashed &&
       !sameSessionSendBlocked &&
       !selectedMissing &&
@@ -8991,8 +9022,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       ? 'Session not found'
       : sameSessionSendBlocked
         ? sameSessionSendBlockedCopy
-        : !runner.online
-          ? 'Runner offline'
+        : managedDraftBlocked || !runnerTakesWork
+          ? (managed?.display.title ?? 'Runner offline')
           : replyTo
             ? replyTo.placeholder
             : selectedId
@@ -9017,7 +9048,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         !selectedMissing &&
         !loadingSession &&
         !sameSessionSendBlocked &&
-        runner.online === true,
+        runnerTakesWork,
       failed: !!selectedSession && sessionRunStatusOf(selectedSession) === 'FAILED',
     },
   );
@@ -10363,17 +10394,19 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               className={`workspace-sessions${localStatusCards.length ? '' : ' workspace-draft'}`}
               ref={scrollRef}
             >
-              <NewSessionProviderHero
-                current={currentDraftEngine}
-                engines={draftEngines}
-                onPick={pickDraftProvider}
-                runnerId={runner.id}
-                currentModelLabel={shownModelLabel}
-                // Nothing to choose until we know which workspace (and so which project) this runs in.
-                disabled={!pickedWorkspace}
-                note={providerSwitchNote}
-                projectIntent={projectIntent}
-              />
+              {!managedDraftBlocked && (
+                <NewSessionProviderHero
+                  current={currentDraftEngine}
+                  engines={draftEngines}
+                  onPick={pickDraftProvider}
+                  runnerId={runner.id}
+                  currentModelLabel={shownModelLabel}
+                  // Nothing to choose until we know which workspace (and so which project) this runs in.
+                  disabled={!pickedWorkspace}
+                  note={providerSwitchNote}
+                  projectIntent={projectIntent}
+                />
+              )}
               {localStatusCards.map((card) => (
                 <SessionStatusCard card={card} key={card.id} />
               ))}
@@ -10407,6 +10440,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         </div>
 
       <div className="workspace-composer">
+        {/* The managed runner's state while it is anything but ready: preparing, waiting, asleep,
+            waking, failed (with Retry), removed. */}
+        {managed && managed.display.kind !== 'available' && <ManagedRunnerNotice managed={managed} />}
         {/* What this session is waiting on: live watches it observes. A watch waits on the server,
             not in a process, so it gets its own strip rather than a row in the tray below
             (docs/watch-contract.md §9.2). Hidden when there are none. */}
@@ -11101,49 +11137,53 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 way a reference composer writes "model · effort" as one button: the model in the
                 label's colour, the effort after it in the secondary one. The menu behind it
                 (`modelMenuItems`) keeps each field's own rules. */}
-            <span className="composer-pill composer-model-pill">
-              <Dropdown
-                trigger={['click']}
-                placement="topRight"
-                disabled={!configEditable}
-                // Rows that open a level down open on hover where the pointer can hover, the way
-                // the browser's own menus do — and on a tap where it cannot, because a phone has
-                // no hover to give: one row, two gestures, decided by the pointer.
-                // They open to the right — and on a phone, where the control sits near the
-                // right edge, there is no right: shift the level back inside the screen rather
-                // than let it hang off the edge (and widen the page with it).
-                menu={{
-                  className: 'composer-model-menu',
-                  items: modelMenuItems,
-                  triggerSubMenuAction: canHover ? 'hover' : 'click',
-                  builtinPlacements: {
-                    rightTop: {
-                      points: ['tl', 'tr'],
-                      overflow: { adjustX: true, adjustY: true, shiftX: true, shiftY: true },
-                    },
-                  },
-                }}
-              >
-                <button
-                  type="button"
-                  className={`composer-model-chip${smartRoute ? ' is-smart' : ''}`}
+            {/* No model to show where a first session cannot start yet: the managed default
+                workspace before its runner was ever ready (`managedDraftBlocked`). */}
+            {!managedDraftBlocked && (
+              <span className="composer-pill composer-model-pill">
+                <Dropdown
+                  trigger={['click']}
+                  placement="topRight"
                   disabled={!configEditable}
-                  aria-label={`Model ${shownModelLabel}, effort ${shownEffortLabel}${
-                    smartRoute ? ', picked by smart selection' : ''
-                  }`}
+                  // Rows that open a level down open on hover where the pointer can hover, the way
+                  // the browser's own menus do — and on a tap where it cannot, because a phone has
+                  // no hover to give: one row, two gestures, decided by the pointer.
+                  // They open to the right — and on a phone, where the control sits near the
+                  // right edge, there is no right: shift the level back inside the screen rather
+                  // than let it hang off the edge (and widen the page with it).
+                  menu={{
+                    className: 'composer-model-menu',
+                    items: modelMenuItems,
+                    triggerSubMenuAction: canHover ? 'hover' : 'click',
+                    builtinPlacements: {
+                      rightTop: {
+                        points: ['tl', 'tr'],
+                        overflow: { adjustX: true, adjustY: true, shiftX: true, shiftY: true },
+                      },
+                    },
+                  }}
                 >
-                  {smartRoute && (
-                    <span className="composer-model-spark" aria-hidden="true">
-                      ✦
+                  <button
+                    type="button"
+                    className={`composer-model-chip${smartRoute ? ' is-smart' : ''}`}
+                    disabled={!configEditable}
+                    aria-label={`Model ${shownModelLabel}, effort ${shownEffortLabel}${
+                      smartRoute ? ', picked by smart selection' : ''
+                    }`}
+                  >
+                    {smartRoute && (
+                      <span className="composer-model-spark" aria-hidden="true">
+                        ✦
+                      </span>
+                    )}
+                    <span className="composer-model-name">{shownModelLabel}</span>
+                    <span className="composer-model-effort">
+                      {fastModeUsable && shownFastMode ? `${shownEffortLabel} · Fast` : shownEffortLabel}
                     </span>
-                  )}
-                  <span className="composer-model-name">{shownModelLabel}</span>
-                  <span className="composer-model-effort">
-                    {fastModeUsable && shownFastMode ? `${shownEffortLabel} · Fast` : shownEffortLabel}
-                  </span>
-                </button>
-              </Dropdown>
-            </span>
+                  </button>
+                </Dropdown>
+              </span>
+            )}
             {shownPool && shownPoolAccount && (
               <Tooltip title={poolAccountHelp(shownPool, shownPoolAccount)}>
                 <span className="composer-pill composer-account" data-pool-account={shownPoolAccount.member.id}>

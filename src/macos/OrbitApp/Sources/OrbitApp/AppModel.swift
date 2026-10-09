@@ -466,6 +466,9 @@ final class AppModel {
 
     /// Per-section shared stores (list + detail observe the same instance). Rebuilt per instance.
     private(set) var tasks: TasksModel?
+    /// The account's managed runner: its state in a managed workspace's console, and on Infrastructure
+    /// for an account with no runner yet. Inert without the server's capability.
+    private(set) var managedRunner: ManagedRunnerModel?
     private(set) var agents: AgentsModel?
     private(set) var runners: RunnersModel?
     private(set) var admin: AdminModel?
@@ -543,6 +546,10 @@ final class AppModel {
         sharedLinks = SharedLinksModel(baseURL: url, tokenStore: tokenStore)
         accessTokens = AccessTokensModel(baseURL: url, tokenStore: tokenStore)
         sharedPools = SharedPoolsModel(baseURL: url, tokenStore: tokenStore)
+        let managedRunnerModel = ManagedRunnerModel(baseURL: url, tokenStore: tokenStore)
+        // A managed runner set up from Infrastructure brings its runner and default workspace with it.
+        managedRunnerModel.onEnsured = { [weak self] in self?.scheduleLibraryRefresh(.agents) }
+        managedRunner = managedRunnerModel
         let watchesModel = WatchesModel(baseURL: url, tokenStore: tokenStore)
         #if os(macOS)
         // macOS has no APNs path, so a NOTIFY_USER watch that matched is announced from the refetch;
@@ -574,6 +581,7 @@ final class AppModel {
             self?.rememberDefaultPermissionMode(raw)
         }
         consoleRegistry?.accountDefaultModels = { [weak self] in self?.defaultModels ?? [:] }
+        consoleRegistry?.managedRunner = managedRunnerModel
         consoleRegistry?.seedSessionContext = { [weak self] console in
             guard let self, let session = self.session(id: console.sessionID) else { return }
             console.seedSessionContext(
@@ -857,6 +865,7 @@ final class AppModel {
         // holds its answers, and a new sign-in builds a new one anyway.
         linkCards?.removeAll()
         linkCards = nil
+        managedRunner?.reset()
         // Best-effort server-side revoke of the refresh token before we drop it locally. Capture the
         // token by value and hand it to the async call so clearing the store below can't race the read.
         if let baseURL, let api, let refreshToken = tokenStore.refreshToken(for: baseURL) {
@@ -976,6 +985,7 @@ final class AppModel {
                     self.consoleRegistry?.flush(self.focusedConsoleSessionID)
                     await self.refreshWatchesIfDue()
                     await self.projects?.refreshIfDue()
+                    await self.managedRunner?.refreshIfDue()
                 }
                 try? await Task.sleep(nanoseconds: 4_000_000_000)
             }

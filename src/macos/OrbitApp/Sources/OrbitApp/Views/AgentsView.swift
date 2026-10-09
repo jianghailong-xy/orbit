@@ -1315,7 +1315,16 @@ struct NewSessionView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if draft.localStatusCards.isEmpty {
+            if let managed = draft.managed, managed.blocksNewSession {
+                // The managed runner's default workspace before its runner was ever ready: there is
+                // no engine for a first session yet (the server would refuse it), so the runner's
+                // state stands where the engine would, and the composer below sends nothing.
+                ManagedRunnerBanner(display: managed.display, runnerID: managed.runnerID)
+                    .padding(.horizontal, 24)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    // The same room above the band as the hero it stands in for.
+                    .padding(.bottom, .composerBandFade)
+            } else if draft.localStatusCards.isEmpty {
                 VStack(spacing: 18) {
                     // Which engine runs this session is the hero — the native port of web's
                     // `NewSessionProviderHero`: the vendor's own mark, then the engine's name as the
@@ -1410,6 +1419,12 @@ struct NewSessionView: View {
             // Same band as the live console, so the draft composer and the real one are inset and
             // spaced identically.
             ComposerBand {
+                // The managed runner's state, as the live console shows it, unless it already stands
+                // in the hero's place above.
+                if let managed = draft.managed, managed.showsBanner, !managed.blocksNewSession {
+                    ManagedRunnerBanner(display: managed.display, runnerID: managed.runnerID)
+                        .padding(.bottom, .composerBandGap)
+                }
                 // createSession failures surface on the draft's statusMessage (mirrors ConsoleView).
                 if let msg = draft.statusMessage {
                     HStack {
