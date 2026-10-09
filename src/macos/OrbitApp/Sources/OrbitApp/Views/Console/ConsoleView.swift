@@ -1532,8 +1532,9 @@ private struct ScrollTracker: ViewModifier {
     /// sitting still while content is re-laid-out underneath — neither is a reader. `TailPinning`
     /// needs the difference to tell a drag up from the clamp a row that shrank forces.
     @State private var readerDriven = false
-    /// Whether anything is moving the list, SwiftUI's own animated scrolls included: the geometry is
-    /// followed only under a list at rest, so a jump is never pulled back to the tail mid-flight.
+    /// Whether the platform reports anything moving the list, SwiftUI's own animated scrolls included
+    /// where it reports them (a List's animated `scrollTo` read `idle` throughout on iOS 26): the
+    /// geometry is followed only under a list at rest. See `TailPinning.followsGeometry`.
     @State private var scrolling = false
 
     /// What the platform can say about that — see `TailPinning.ReaderEvidence`. iOS reports drags,

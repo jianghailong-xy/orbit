@@ -244,6 +244,15 @@ final class TailPinningTests: XCTestCase {
         XCTAssertTrue(follows(underHeader, from: atTail))
     }
 
+    func testTheLastFramesOfThePushAreFollowedToThePoint() {
+        // A Mac, measured frame by frame: the header's push ended with an inset of 105 → 107 that
+        // moved the offset 2pt. Left there, the transcript opened 2pt short of its tail.
+        let almostIn = TailScrollSample(offset: 276, contentHeight: 832, bottomGap: 0, topInset: 105)
+        let lastFrame = TailScrollSample(offset: 274, contentHeight: 832, bottomGap: 2, topInset: 107)
+
+        XCTAssertTrue(follows(lastFrame, from: almostIn))
+    }
+
     func testAGeometryChangeThatLeftTheTailInPlaceAsksForNothing() {
         // A streamed reply grew the rows and the follow on its publish landed in the same reading:
         // nothing is out of view, so nothing is asked — a reply streams with no second scroll.
@@ -266,8 +275,8 @@ final class TailPinningTests: XCTestCase {
     }
 
     func testNothingIsFollowedWhileTheListIsMoving() {
-        // A finger on the list, its coast, or SwiftUI carrying it to a row: whatever the geometry
-        // did meanwhile, the movement decides where the list ends up.
+        // A finger on the list, its coast, or a scroll the platform says SwiftUI is animating:
+        // whatever the geometry did meanwhile, the movement decides where the list ends up.
         XCTAssertFalse(follows(pushed, from: opened, moving: true))
         let measured = TailScrollSample(offset: 724, contentHeight: 1507, bottomGap: 44, topInset: 116)
         XCTAssertFalse(follows(measured, from: opened, moving: true))
@@ -299,5 +308,22 @@ final class TailPinningTests: XCTestCase {
         let scrolledAndPushed = TailScrollSample(offset: 642, contentHeight: 1463, bottomGap: 82, topInset: 148)
 
         XCTAssertFalse(follows(scrolledAndPushed, from: opened))
+    }
+
+    func testAJumpAwayWhosePinSurvivedIsNotFollowed() {
+        // The sticky header's jump to a question un-pins the tail on its tap, but the List animates
+        // the jump with no phase of its own and starts it slowly (1.6pt in its first frame), so that
+        // first reading is inside the slack and pins the transcript again — and nothing later in the
+        // jump un-pins it where drags are reported.
+        let atTail = TailScrollSample(offset: 724, contentHeight: 1463, bottomGap: 0, topInset: 148)
+        let firstFrame = TailScrollSample(offset: 722.4, contentHeight: 1463, bottomGap: 1.6, topInset: 148)
+        let atQuestion = TailScrollSample(offset: 300, contentHeight: 1463, bottomGap: 424, topInset: 148)
+        XCTAssertTrue(pinned(firstFrame, from: atTail, wasPinned: false, evidence: .reported))
+        XCTAssertTrue(pinned(atQuestion, from: firstFrame, evidence: .reported))
+
+        // So a pinned reading that far from the tail says nothing about where the reader is: a row
+        // measured under the question leaves them at it.
+        let measured = TailScrollSample(offset: 300, contentHeight: 1507, bottomGap: 468, topInset: 148)
+        XCTAssertFalse(follows(measured, from: atQuestion))
     }
 }

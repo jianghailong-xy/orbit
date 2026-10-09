@@ -200,7 +200,7 @@ final class TailPinningWiringTests: XCTestCase {
         XCTAssertTrue(tracker.contains("scrolling = phase != .idle"),
                       "the phase must say when SwiftUI itself is moving the list, not only the reader")
         XCTAssertTrue(tracker.contains("moving: scrolling || readerIsMoving"),
-                      "and the rule must be told, or a jump in flight is pulled back to the tail")
+                      "and the rule must be told whatever the platform reports moving the list")
         XCTAssertTrue(tracker.contains("follow()"),
                       "and the answer has to reach the transcript, which owns the scroll")
     }

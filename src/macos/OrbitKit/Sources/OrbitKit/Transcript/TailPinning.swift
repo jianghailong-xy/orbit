@@ -111,11 +111,16 @@ public enum TailPinning {
         return currentHeight != previousHeight
     }
 
-    /// Points of play in a reading of the scroll view: a tail this close counts as in place, and an
-    /// offset this far from where the geometry carried it is still the geometry's doing. A push is
-    /// not exactly the inset it answers to once both are rounded to the screen's pixels (measured on
-    /// a Mac: a 30pt header moved the offset 29).
+    /// Points of play in where the offset ends up: this far from where the geometry carried it is
+    /// still the geometry's doing. A push is not exactly the inset it answers to once both are
+    /// rounded to the screen's pixels (measured on a Mac: a 30pt header moved the offset 29).
     static let slop: Double = 2
+
+    /// Under a pixel at any scale the clients draw at (a third of a point on a 3x phone): a tail this
+    /// close is in place, and no rounding error reads as a gap. Anything more is followed to the
+    /// point — the last frame of the header's push moved a Mac's offset 2pt (274 against a tail at
+    /// 276), and a tail left that short stays short.
+    static let subpixel: Double = 0.25
 
     /// Whether a pinned transcript should be carried back to its tail because the scroll GEOMETRY
     /// changed under it while nothing was moving it: the content measured to a new height, or a bar
@@ -133,8 +138,8 @@ public enum TailPinning {
     /// every reading instead, and the push is followed frame by frame.
     ///
     /// `pinned` is the pin as `pinned(...)` decided it for `current`. `moving` is whether anything
-    /// was moving the list: a finger or its coast, or SwiftUI animating a scroll of its own — a jump
-    /// goes where it was sent and is not pulled back mid-flight.
+    /// was moving the list that the platform reported: a finger or its coast, or a scroll SwiftUI
+    /// says it is animating.
     ///
     /// The offset may move only as far as the geometry carried it: not at all while rows grow under
     /// the viewport, and down by what a bar added while it pushes. A movement past that is a scroll,
@@ -143,11 +148,19 @@ public enum TailPinning {
     /// measured in the same breath. The one other movement allowed is this rule's own re-pin landing
     /// in the same reading as the next frame of a push: what is left out of view then is no more
     /// than that frame pushed.
+    ///
+    /// And only a tail within the pin's own slack is followed. Further than that, the transcript was
+    /// carried off by a scroll or a jump, and the pin is no evidence otherwise: a List animating a
+    /// jump reports no phase of its own (measured on iOS 26: the jump-to-latest disc's glide read
+    /// `idle` from its first frame to its last, and its steps began at 1.6, 4.7, 7.7pt), so a jump up
+    /// from the tail lands its first reading inside the slack and pins the transcript again — and
+    /// nothing later in the jump has to un-pin it. A pinned transcript left out of view that way is
+    /// `stranded`, and the jump-to-latest disc is the way back.
     public static func followsGeometry(pinned: Bool,
                                        from previous: TailScrollSample,
                                        to current: TailScrollSample,
                                        moving: Bool) -> Bool {
-        guard pinned, !moving, current.bottomGap > slop else { return false }
+        guard pinned, !moving, current.bottomGap > subpixel, current.bottomGap <= nearBottom else { return false }
         let resized = current.contentHeight != previous.contentHeight
         let pushed = current.topInset - previous.topInset
         guard resized || pushed != 0 else { return false }
