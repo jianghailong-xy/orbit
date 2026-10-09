@@ -49,6 +49,17 @@ test('dsh install gate: the engine report decides whether a declaring runner can
   for (const notice of [DSH_NOT_INSTALLED_ERROR, DSH_PLATFORM_UNSUPPORTED_ERROR, DSH_VERSION_INCOMPATIBLE_ERROR]) {
     assert.ok(!notice.startsWith('DeepSeek Harness requires a newer Orbit runner'), notice);
   }
+  // The install is where the clients' runner-state hints send it (web DSH_STATE_HINT, OrbitKit DshRuntime): Infrastructure.
+  assert.equal(
+    DSH_NOT_INSTALLED_ERROR,
+    'DSH_NOT_INSTALLED: DeepSeek Harness is not installed on this runner, or the runner has not reported it yet; ' +
+      'install it from Infrastructure, then try again',
+  );
+  assert.equal(
+    DSH_VERSION_INCOMPATIBLE_ERROR,
+    'DSH_VERSION_INCOMPATIBLE: this runner has a DeepSeek Harness version Orbit does not support; ' +
+      'reinstall it from Infrastructure, then try again',
+  );
 });
 
 function claimController(snapshot: unknown) {
