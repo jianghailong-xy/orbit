@@ -441,6 +441,16 @@ func sessionEngineAuth(bin, path string, agentEnv map[string]string) authState {
 	// one answer however it is reached.
 	dir := strings.TrimSpace(envValue(envWithAgent(agentEnv), kind.varName))
 	if dir == "" {
+		// Claude Code's Default is asked with no CLAUDE_CONFIG_DIR, the way the relay signs it in, the
+		// Providers probe asks it and the session's claude is spawned. On a Mac, naming Default's own
+		// directory asks another login: the CLI keeps it in a Keychain item named by whether that
+		// variable is set at all (claudeKeychainService), so ~/.claude named outright is an item no
+		// sign-in into Default ever writes. Asked that way, every Default session on a Mac was refused
+		// as signed out while the Providers page said Signed in, and signing in again from the
+		// session's card changed nothing (a MacBook Pro runner, 2026-10-09).
+		if bin == providerClaude {
+			return probeAuthIn(ctx, bin, path, envWithAgent(agentEnv))
+		}
 		def, err := defaultAccountSlot(kind)
 		if err != nil {
 			return authUnknown
