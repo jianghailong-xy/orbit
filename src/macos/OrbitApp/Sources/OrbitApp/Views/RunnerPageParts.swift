@@ -11,8 +11,8 @@ import OrbitKit
 // `RunnerPageFormat`), where they are tested; iOS and macOS draw these same views.
 
 /// The inks the runner pages speak in: the mock's on light — the system green/orange/red read too
-/// faint on white — and the system colours on dark. The same inks the Providers pages' `PoolTone`
-/// uses; that one lives with the iOS-only pool pages, and these pages are macOS's as well.
+/// faint on white — and the system colours on dark. The same inks `PoolTone` (InfrastructureSections)
+/// uses; that one lived with the iOS-only pool pages when these were drawn, and these are macOS's too.
 enum RunnerInk {
     static let green = Color(light: Color(red: 0.141, green: 0.541, blue: 0.239), dark: .green)   // #248A3D
     static let amber = Color(light: Color(red: 0.702, green: 0.353, blue: 0), dark: .orange)      // #B35A00
@@ -346,14 +346,16 @@ struct RunnerEngineRow: View {
         .padding(.vertical, 2)
     }
 
-    /// `2.1.284 · Signed in`, the state in its colour.
+    /// `2.1.284 · Signed in`, the state in its colour — and Kimi's site after its version,
+    /// `2.1.1 · kimi.ai · Signed in`, as the web's row says it.
     private var statusLine: AttributedString {
         typealias Colour = AttributeScopes.SwiftUIAttributes.ForegroundColorAttribute
         let status = RunnerPageFormat.engineStatus(health, runner: runner)
         let version = health.installed == true ? RunnerPageFormat.engineVersion(health.version) : nil
-        var line = AttributedString(version ?? "")
+        let head = [version, health.installed == true ? RunnerPageFormat.engineSite(health) : nil].compactMap { $0 }
+        var line = AttributedString(head.joined(separator: RunnerPageCopy.RUNNER_LINE_SEPARATOR))
         if let status {
-            if version != nil { line += AttributedString(RunnerPageCopy.RUNNER_LINE_SEPARATOR) }
+            if !head.isEmpty { line += AttributedString(RunnerPageCopy.RUNNER_LINE_SEPARATOR) }
             var words = AttributedString(status.text)
             if status.tone != .muted { words[Colour.self] = RunnerInk.status(status.tone) }
             line += words

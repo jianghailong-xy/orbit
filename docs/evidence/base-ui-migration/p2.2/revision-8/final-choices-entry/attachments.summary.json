@@ -1,0 +1,783 @@
+{
+ "summaryOf": "Per-test JSON attachments of this directory, removed by the evidence slimming (docs/evidence/base-ui-migration/evidence-slimming/README.md). Each entry gives the file name, size, SHA-256 and its top-level scalar fields; the test results are in summary.json / report.summary.json and the numbers the conclusions use are in the README.",
+ "originals": "7732f14f82d4e6b4406d7d164c4b672f63aa0f56",
+ "retrieve": "git show 7732f14f82d4e6b4406d7d164c4b672f63aa0f56:docs/evidence/base-ui-migration/p2.2/revision-8/final-choices-entry/<name>",
+ "files": [
+  {
+   "name": "chromium-dark-desktop--Dialog-keeps-composition-outside-dismissal-submenu-Escape-and-keyboard-clear-within-its-owner--dialog-boundaries.json",
+   "bytes": 121,
+   "sha256": "f22247048c20e6f3c2c04169a1c26501cba2d0142a189ca289eff60e6f90217d",
+   "fields": {
+    "compositionIgnored": true,
+    "outsideClosesChild": true,
+    "submenuEscapesOneLayer": true,
+    "keyboardClear": true
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--Dialog-owns-choices-top-layer-Escape-Tab-and-theme--nested-choices.json",
+   "bytes": 171,
+   "sha256": "3d0083f25d0b8bd0c242ad8c207d1d58aabe27a28b40d94b946594d783ebcdad",
+   "fields": {
+    "legacy": false,
+    "topLayerOnly": true,
+    "portalInsideOwner": true,
+    "tabBothDirections": true,
+    "fullTabCycle": true,
+    "scrollLocked": true,
+    "returned": true
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+   "bytes": 4466,
+   "sha256": "c845766d9d215531d2f91ad282a9b10a2000cbb62d4958d7dabadcbff64b8b65",
+   "fields": {
+    "motion": "no-preference",
+    "focusReturned": true,
+    "scrollUnlocked": true
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+   "bytes": 235,
+   "sha256": "f7bd0369f2ef9df8718706b8c1c458167e494633aa68c89532a502f3a3805e6e",
+   "fields": {
+    "limitMs": 250,
+    "before": 0,
+    "after": 240,
+    "scrollHeight": 1800,
+    "viewportHeight": 900,
+    "movedAfterMs": 32.39999997615814
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+   "bytes": 2240,
+   "sha256": "d9a91ad8cdea940dad229b26fb48f68c7680c651c630433f6378f0f2dc797e7b",
+   "fields": {
+    "limitMs": 100,
+    "exitStartedAfterMs": 42.60000002384186,
+    "exitTransitionDuration": "0.2s, 0.2s",
+    "closedAfterMs": 237.70000004768372,
+    "unlockedAfterMs": 45.80000001192093,
+    "readyAfterCloseMs": 0
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+   "bytes": 967,
+   "sha256": "241a8796b64acd2412f348af778ef9f9ab1a3943bc7f9e541bd96dc0599982c1",
+   "fields": {
+    "motion": "reduce",
+    "focusReturned": true,
+    "scrollUnlocked": true
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+   "bytes": 237,
+   "sha256": "c74c24ccb94cfa8cd9f340185050be507a3c734cf93be2f81895bbf9c62ff7ab",
+   "fields": {
+    "limitMs": 250,
+    "before": 0,
+    "after": 240,
+    "scrollHeight": 1800,
+    "viewportHeight": 900,
+    "movedAfterMs": 31.600000023841858
+   }
+  },
+  {
+   "name": "chromium-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+   "bytes": 2239,
+   "sha256": "a6883e0743308580f95898e5efc9c836be462702121f913bccc46ceec1ac035e",
+   "fields": {
+    "limitMs": 100,
+    "exitStartedAfterMs": 42.80000001192093,
+    "exitTransitionDuration": "0s",
+    "closedAfterMs": 50.39999997615814,
+    "unlockedAfterMs": 51.30000001192093,
+    "readyAfterCloseMs": 0.9000000357627869
+   }
+  },
+  {
+   "name": "chromium-dark-phone--Dialog-keeps-composition-outside-dismissal-submenu-Escape-and-keyboard-clear-within-its-owner--dialog-boundaries.json",
+   "bytes": 121,
+   "sha256": "f22247048c20e6f3c2c04169a1c26501cba2d0142a189ca289eff60e6f90217d",
+   "fields": {
+    "compositionIgnored": true,
+    "outsideClosesChild": true,
+    "submenuEscapesOneLayer": true,
+    "keyboardClear": true
+   }
+  },
+  {
+   "name": "chromium-dark-phone--Dialog-owns-choices-top-layer-Escape-Tab-and-theme--nested-choices.json",
+   "bytes": 171,
+   "sha256": "3d0083f25d0b8bd0c242ad8c207d1d58aabe27a28b40d94b946594d783ebcdad",
+   "fields": {
+    "legacy": false,
+    "topLayerOnly": true,
+    "portalInsideOwner": true,
+    "tabBothDirections": true,
+    "fullTabCycle": true,
+    "scrollLocked": true,
+    "returned": true
+   }
+  },
+  {
+   "name": "chromium-dark-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+   "bytes": 4589,
+   "sha256": "b5c0159ff70c1de1fc7396d1527fb0cf1259dc7d36be15bbc82cf37bc1633eb0",
+   "fields": {
+    "motion": "no-preference",
+    "focusReturned": true,
+    "scrollUnlocked": true
+   }
+  },
+  {
+   "name": "chromium-dark-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+   "bytes": 208,
+   "sha256": "dab66716912185ca2e3b095df4284c97b255ec15365c198aef6679fbe0a940e0",
+   "fields": {
+    "limitMs": 250,
+    "before": 0,
+    "after": 3,
+    "scrollHeight": 1800,
+    "viewportHeight": 844,
+    "movedAfterMs": 8.5
+   }
+  },
+  {
+   "name": "chromium-dark-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+   "bytes": 2146,
+   "sha256": "32c6d5850599cd2efe808adeca37315a5e50a747e8da9cebccf7aa4828e6d109",
+   "fields": {
+    "limitMs": 100,
+    "exitStartedAfterMs": 42.60000002384186,
+    "exitTransitionDuration": "0.2s, 0.2s",
+    "closedAfterMs": 259.2000000476837,
+    "unlockedAfterMs": 57.80000001192093,
+    "readyAfterCloseMs": 0
+   }
+  },
+  {
+   "name": "chromium-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+   "bytes": 744,
+   "sha256": "a5918bc2b998f886a0ec7bdc19cdf8761733b7511195698fa59d2d8ddf2bf00f",
+   "fields": {
+    "motion": "reduce",
+    "focusReturned": true,
+    "scrollUnlocked": true
+   }
+  },
+  {
+   "name": "chromium-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+   "bytes": 237,
+   "sha256": "632b7ce79204f68eddccf6493ea9dba789c3a390b60749ff8c85aa74b0d08efb",
+   "fields": {
+    "limitMs": 250,
+    "before": 0,
+    "after": 58,
+    "scrollHeight": 1800,
+    "viewportHeight": 844,
+    "movedAfterMs": 30.80000001192093
+   }
+  },
+  {
+   "name": "chromium-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+   "bytes": 2226,
+   "sha256": "28c4071e926a64db9ea2c6635130debc1de26acb665780d4b3bb0ac7366a0a9d",
+   "fields": {
+    "limitMs": 100,
+    "exitStartedAfterMs": 42.90000003576279,
+    "exitTransitionDuration": "0s",
+    "closedAfterMs": 45.60000002384186,
+    "unlockedAfterMs": 58.19999998807907,
+    "readyAfterCloseMs": 12.599999964237213
+   }
+  },
+  {
+   "name": "chromium-light-desktop--Dialog-keeps-composition-outside-dismissal-submenu-Escape-and-keyboard-clear-within-its-owner--dialog-boundaries.json",
+   "bytes": 121,
+   "sha256": "f22247048c20e6f3c2c04169a1c26501cba2d0142a189ca289eff60e6f90217d",
+   "fields": {
+    "compositionIgnored": true,
+    "outsideClosesChild": true,
+    "submenuEscapesOneLayer": true,
+    "keyboardClear": true
+   }
+  },
+  {
+   "name": "chromium-light-desktop--Dialog-owns-choices-top-layer-Escape-Tab-and-theme--nested-choices.json",
+   "bytes": 171,
+   "sha256": "3d0083f25d0b8bd0c242ad8c207d1d58aabe27a28b40d94b946594d783ebcdad",
+   "fields": {
+    "legacy": false,
+    "topLayerOnly": true,
+    "portalInsideOwner": true,
+    "tabBothDirections": true,
+    "fullTabCycle": true,
+    "scrollLocked": true,
+    "returned": true
+   }
+  },
+  {
+   "name": "chromium-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+   "bytes": 4357,
+   "sha256": "27759902e3b6d609a9c2f307de1ec635f2a4b7c027d1e9bc7776e7db27595671",
+   "fields": {
+    "motion": "no-preference",
+    "focusReturned": true,
+    "scrollUnlocked": true
+   }
+  },
+  {
+   "name": "chromium-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+   "bytes": 235,
+   "sha256": "22fe52f589a18107e2423c2edf2ac9a95926139a06e9c44f5432d9f13842cd8b",
+   "fields": {
+    "limitMs": 250,
+    "before": 0,
+    "after": 240,
+    "scrollHeight": 1800,
+    "viewportHeight": 900,
+    "movedAfterMs": 26.69999998807907
+   }
+  },
+  {
+   "name": "chromium-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+   "bytes": 2171,
+   "sha256": "abb8d451cca60feca987d5f907875256a98d7f3f18f9028b93c729024df60d27",
+   "fields": {
+    "limitMs": 100,
+    "exitStartedAfterMs": 43,
+    "exitTransitionDuration": "0.2s, 0.2s",
+    "closedAfterMs": 257.5,
+    "unlockedAfterMs": 56.10000002384186,
+    "readyAfterCloseMs": 0
+   }
+  },
+  {
+   "name": "chromium-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+   "bytes": 855,
+   "sha256": "8fe00629fbc196abd50edc27e3d3b307ba0f21345904d22471ec22d2b8943dcc",
+   "fields": {
+    "motion": "reduce",
+    "focusReturned": true,
+    "scrollUnlocked": true
+   }
+  },
+  {
+   "name": "chromium-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+   "bytes": 236,
+   "sha256": "4392c90e8460b7c6a065902d2b4eef4e5d2c6197afd48986568c63ce16e0b15f",
+   "fields": {
+    "limitMs": 250,
+    "before": 0,
+    "after": 240,
+    "scrollHeight": 1800,
+    "viewportHeight": 900,
+    "movedAfterMs": 31.30000001192093
+   }
+  },
+  {
+   "name": "chromium-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+   "bytes": 2223,
+   "sha256": "1bc6bef064d0e6a4f0f4bbb8aa20db3ab093f6b7f4f77718bfc56f38236c3a18",
+   "fields": {
+    "limitMs": 100,
+    "exitStartedAfterMs": 42.39999997615814,
+    "exitTransitionDuration": "0s",
+    "closedAfterMs": 49.69999998807907,
+    "unlockedAfterMs": 50.59999996423721,
+    "readyAfterCloseMs": 0.8999999761581421
+   }
+  },
+  {
+   "name": "chromium-light-phone--Dialog-keeps-composition-outside-dismissal-submenu-Escape-and-keyboard-clear-within-its-owner--dialog-boundaries.json",
+   "bytes": 121,
+   "sha256": "f22247048c20e6f3c2c04169a1c26501cba2d0142a189ca289eff60e6f90217d",
+   "fields": {
+    "compositionIgnored": true,
+    "outsideClosesChild": true,
+    "submenuEscapesOneLayer": true,
+    "keyboardClear": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--Dialog-owns-choices-top-layer-Escape-Tab-and-theme--nested-choices.json",
+   "bytes": 171,
+   "sha256": "3d0083f25d0b8bd0c242ad8c207d1d58aabe27a28b40d94b946594d783ebcdad",
+   "fields": {
+    "legacy": false,
+    "topLayerOnly": true,
+    "portalInsideOwner": true,
+    "tabBothDirections": true,
+    "fullTabCycle": true,
+    "scrollLocked": true,
+    "returned": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+   "bytes": 4576,
+   "sha256": "7a788ba4e5aea5e7f966db15a84a28f03f1a13ed575809d0258a7a9ccc787072",
+   "fields": {
+    "motion": "no-preference",
+    "focusReturned": true,
+    "scrollUnlocked": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+   "bytes": 237,
+   "sha256": "9e381638ace00be6b3af229d3479794f5a574da051dd92fb41d78f7eab85f91a",
+   "fields": {
+    "limitMs": 250,
+    "before": 0,
+    "after": 7,
+    "scrollHeight": 1800,
+    "viewportHeight": 844,
+    "movedAfterMs": 12.599999964237213
+   }
+  },
+  {
+   "name": "chromium-light-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+   "bytes": 2114,
+   "sha256": "1ef18483f3f46959e1e13f4604cb19990aec366d5c0e862c430803529ad14d9b",
+   "fields": {
+    "limitMs": 100,
+    "exitStartedAfterMs": 42.89999997615814,
+    "exitTransitionDuration": "0.2s, 0.2s",
+    "closedAfterMs": 263,
+    "unlockedAfterMs": 61.69999998807907,
+    "readyAfterCloseMs": 0
+   }
+  },
+  {
+   "name": "chromium-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+   "bytes": 856,
+   "sha256": "99f09f6adda26f7cc159e6679c08cdea4c81825a1c541540a2d1f37092bbfb7d",
+   "fields": {
+    "motion": "reduce",
+    "focusReturned": true,
+    "scrollUnlocked": true
+   }
+  },
+  {
+   "name": "chromium-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+   "bytes": 238,
+   "sha256": "d89fb7ead5b89512aacfc2c32a8d0c1080e34f5776d9609e1ee3f70a422fe909",
+   "fields": {
+    "limitMs": 250,
+    "before": 0,
+    "after": 57,
+    "scrollHeight": 1800,
+    "viewportHeight": 844,
+    "movedAfterMs": 30.899999976158142
+   }
+  },
+  {
+   "name": "chromium-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+   "bytes": 2228,
+   "sha256": "579d7aa9fef4f0668044b65fd28c3ef46176e683160011c4035c52b26963d33f",
+   "fields": {
+    "limitMs": 100,
+    "exitStartedAfterMs": 42.59999996423721,
+    "exitTransitionDuration": "0s",
+    "closedAfterMs": 45.09999996423721,
+    "unlockedAfterMs": 58.39999997615814,
+    "readyAfterCloseMs": 13.300000011920929
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--Dialog-keeps-composition-outside-dismissal-submenu-Escape-and-keyboard-clear-within-its-owner--dialog-boundaries.json",
+   "bytes": 121,
+   "sha256": "f22247048c20e6f3c2c04169a1c26501cba2d0142a189ca289eff60e6f90217d",
+   "fields": {
+    "compositionIgnored": true,
+    "outsideClosesChild": true,
+    "submenuEscapesOneLayer": true,
+    "keyboardClear": true
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--Dialog-owns-choices-top-layer-Escape-Tab-and-theme--nested-choices.json",
+   "bytes": 171,
+   "sha256": "3d0083f25d0b8bd0c242ad8c207d1d58aabe27a28b40d94b946594d783ebcdad",
+   "fields": {
+    "legacy": false,
+    "topLayerOnly": true,
+    "portalInsideOwner": true,
+    "tabBothDirections": true,
+    "fullTabCycle": true,
+    "scrollLocked": true,
+    "returned": true
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+   "bytes": 3988,
+   "sha256": "e0dfc95919e07587b6e0ae3b266a4832b778c1eb70d592d04b9564804a5ccd82",
+   "fields": {
+    "motion": "no-preference",
+    "focusReturned": true,
+    "scrollUnlocked": true
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+   "bytes": 204,
+   "sha256": "7339555066cb93386dfebb31e0e0955bc911642d8c269866a1b2559d139d3601",
+   "fields": {
+    "limitMs": 250,
+    "before": 0,
+    "after": 15,
+    "scrollHeight": 1800,
+    "viewportHeight": 900,
+    "movedAfterMs": 29
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+   "bytes": 2055,
+   "sha256": "eb5c9cc17f572e220ec2a14c861bd14886b81debeaabc5f5477708dfacc793c0",
+   "fields": {
+    "limitMs": 100,
+    "exitStartedAfterMs": 25,
+    "exitTransitionDuration": "0.2s, 0.2s",
+    "closedAfterMs": 229,
+    "unlockedAfterMs": 30,
+    "readyAfterCloseMs": 0
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+   "bytes": 743,
+   "sha256": "d0319faece2e7f6985a7cc857af459f5cbb2b3f74f4e7374b6e5e6d4d0120698",
+   "fields": {
+    "motion": "reduce",
+    "focusReturned": true,
+    "scrollUnlocked": true
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+   "bytes": 204,
+   "sha256": "8e237a989ba31859576238d628f6960f65dbb82a164ec32497681fd3a0dfd8b0",
+   "fields": {
+    "limitMs": 250,
+    "before": 0,
+    "after": 15,
+    "scrollHeight": 1800,
+    "viewportHeight": 900,
+    "movedAfterMs": 27
+   }
+  },
+  {
+   "name": "webkit-dark-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+   "bytes": 2035,
+   "sha256": "1bf6255d19836ea72745cf65435460cefc2b3ad94afd104cd5579cf488adaa95",
+   "fields": {
+    "limitMs": 100,
+    "exitStartedAfterMs": 23,
+    "exitTransitionDuration": "0s",
+    "closedAfterMs": 25,
+    "unlockedAfterMs": 28,
+    "readyAfterCloseMs": 3
+   }
+  },
+  {
+   "name": "webkit-dark-phone--Dialog-keeps-composition-outside-dismissal-submenu-Escape-and-keyboard-clear-within-its-owner--dialog-boundaries.json",
+   "bytes": 121,
+   "sha256": "f22247048c20e6f3c2c04169a1c26501cba2d0142a189ca289eff60e6f90217d",
+   "fields": {
+    "compositionIgnored": true,
+    "outsideClosesChild": true,
+    "submenuEscapesOneLayer": true,
+    "keyboardClear": true
+   }
+  },
+  {
+   "name": "webkit-dark-phone--Dialog-owns-choices-top-layer-Escape-Tab-and-theme--nested-choices.json",
+   "bytes": 171,
+   "sha256": "3d0083f25d0b8bd0c242ad8c207d1d58aabe27a28b40d94b946594d783ebcdad",
+   "fields": {
+    "legacy": false,
+    "topLayerOnly": true,
+    "portalInsideOwner": true,
+    "tabBothDirections": true,
+    "fullTabCycle": true,
+    "scrollLocked": true,
+    "returned": true
+   }
+  },
+  {
+   "name": "webkit-dark-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+   "bytes": 4102,
+   "sha256": "8b04019b1866a14f3b49c4e3af5a2b8051d312dbc046a93abe9de02e37f5d3fc",
+   "fields": {
+    "motion": "no-preference",
+    "focusReturned": true,
+    "scrollUnlocked": true
+   }
+  },
+  {
+   "name": "webkit-dark-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+   "bytes": 205,
+   "sha256": "457e4cec4ba96d10754aba32355d04dcbe0e405ac86741c91b02476ee7a863f7",
+   "fields": {
+    "limitMs": 250,
+    "before": 0,
+    "after": 14,
+    "scrollHeight": 1800,
+    "viewportHeight": 844,
+    "movedAfterMs": 9
+   }
+  },
+  {
+   "name": "webkit-dark-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+   "bytes": 2036,
+   "sha256": "66f773263f1ef0de744decd079bd742c5d76969d1ec428a0a9ca320179017c02",
+   "fields": {
+    "limitMs": 100,
+    "exitStartedAfterMs": 25,
+    "exitTransitionDuration": "0.2s, 0.2s",
+    "closedAfterMs": 230,
+    "unlockedAfterMs": 27,
+    "readyAfterCloseMs": 0
+   }
+  },
+  {
+   "name": "webkit-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+   "bytes": 632,
+   "sha256": "88e2e636a152b31119b9a7da2d9f79cb5e6c703762d2253fd9137151d19b2c61",
+   "fields": {
+    "motion": "reduce",
+    "focusReturned": true,
+    "scrollUnlocked": true
+   }
+  },
+  {
+   "name": "webkit-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+   "bytes": 206,
+   "sha256": "2c64989b3dbb48554d34c5311e7381e91097e07b701c724fb0aa1a305bc054da",
+   "fields": {
+    "limitMs": 250,
+    "before": 0,
+    "after": 18,
+    "scrollHeight": 1800,
+    "viewportHeight": 844,
+    "movedAfterMs": 10
+   }
+  },
+  {
+   "name": "webkit-dark-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+   "bytes": 2024,
+   "sha256": "b6aab0d2935e16e3ebdb1129c3525afc0c0a64819e6d293d4e5a2081fc3be761",
+   "fields": {
+    "limitMs": 100,
+    "exitStartedAfterMs": 23,
+    "exitTransitionDuration": "0s",
+    "closedAfterMs": 25,
+    "unlockedAfterMs": 27,
+    "readyAfterCloseMs": 2
+   }
+  },
+  {
+   "name": "webkit-light-desktop--Dialog-keeps-composition-outside-dismissal-submenu-Escape-and-keyboard-clear-within-its-owner--dialog-boundaries.json",
+   "bytes": 121,
+   "sha256": "f22247048c20e6f3c2c04169a1c26501cba2d0142a189ca289eff60e6f90217d",
+   "fields": {
+    "compositionIgnored": true,
+    "outsideClosesChild": true,
+    "submenuEscapesOneLayer": true,
+    "keyboardClear": true
+   }
+  },
+  {
+   "name": "webkit-light-desktop--Dialog-owns-choices-top-layer-Escape-Tab-and-theme--nested-choices.json",
+   "bytes": 171,
+   "sha256": "3d0083f25d0b8bd0c242ad8c207d1d58aabe27a28b40d94b946594d783ebcdad",
+   "fields": {
+    "legacy": false,
+    "topLayerOnly": true,
+    "portalInsideOwner": true,
+    "tabBothDirections": true,
+    "fullTabCycle": true,
+    "scrollLocked": true,
+    "returned": true
+   }
+  },
+  {
+   "name": "webkit-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+   "bytes": 4228,
+   "sha256": "398593e50bd32c9c2721f1cfd9f34cf8b0644c1ed1e09dfc4f8222fcf1810c6b",
+   "fields": {
+    "motion": "no-preference",
+    "focusReturned": true,
+    "scrollUnlocked": true
+   }
+  },
+  {
+   "name": "webkit-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+   "bytes": 204,
+   "sha256": "7339555066cb93386dfebb31e0e0955bc911642d8c269866a1b2559d139d3601",
+   "fields": {
+    "limitMs": 250,
+    "before": 0,
+    "after": 15,
+    "scrollHeight": 1800,
+    "viewportHeight": 900,
+    "movedAfterMs": 29
+   }
+  },
+  {
+   "name": "webkit-light-desktop--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+   "bytes": 2055,
+   "sha256": "a787fd3684f0b5bf370ed9914fe0a0eaa350b78c5c33309fd0154c5b0a69a0fe",
+   "fields": {
+    "limitMs": 100,
+    "exitStartedAfterMs": 25,
+    "exitTransitionDuration": "0.2s, 0.2s",
+    "closedAfterMs": 229,
+    "unlockedAfterMs": 30,
+    "readyAfterCloseMs": 0
+   }
+  },
+  {
+   "name": "webkit-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+   "bytes": 746,
+   "sha256": "242fce10c7d6d794080603e00895604d7de12ee51d310851065df3bc6f661541",
+   "fields": {
+    "motion": "reduce",
+    "focusReturned": true,
+    "scrollUnlocked": true
+   }
+  },
+  {
+   "name": "webkit-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+   "bytes": 204,
+   "sha256": "f6a45a085b9453be6b2f51d036dd196d330f8f5576f398cce363ad606b822479",
+   "fields": {
+    "limitMs": 250,
+    "before": 0,
+    "after": 15,
+    "scrollHeight": 1800,
+    "viewportHeight": 900,
+    "movedAfterMs": 30
+   }
+  },
+  {
+   "name": "webkit-light-desktop--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+   "bytes": 2035,
+   "sha256": "a80c8394624771e0cde5881a01963a559fe61251cf7fb17030d834e389a3425b",
+   "fields": {
+    "limitMs": 100,
+    "exitStartedAfterMs": 30,
+    "exitTransitionDuration": "0s",
+    "closedAfterMs": 32,
+    "unlockedAfterMs": 35,
+    "readyAfterCloseMs": 3
+   }
+  },
+  {
+   "name": "webkit-light-phone--Dialog-keeps-composition-outside-dismissal-submenu-Escape-and-keyboard-clear-within-its-owner--dialog-boundaries.json",
+   "bytes": 121,
+   "sha256": "f22247048c20e6f3c2c04169a1c26501cba2d0142a189ca289eff60e6f90217d",
+   "fields": {
+    "compositionIgnored": true,
+    "outsideClosesChild": true,
+    "submenuEscapesOneLayer": true,
+    "keyboardClear": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--Dialog-owns-choices-top-layer-Escape-Tab-and-theme--nested-choices.json",
+   "bytes": 171,
+   "sha256": "3d0083f25d0b8bd0c242ad8c207d1d58aabe27a28b40d94b946594d783ebcdad",
+   "fields": {
+    "legacy": false,
+    "topLayerOnly": true,
+    "portalInsideOwner": true,
+    "tabBothDirections": true,
+    "fullTabCycle": true,
+    "scrollLocked": true,
+    "returned": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+   "bytes": 3865,
+   "sha256": "0b1860eb38ea691e890c9d4257f3fb22a0b7ee60cc83d60306122b480918dd3a",
+   "fields": {
+    "motion": "no-preference",
+    "focusReturned": true,
+    "scrollUnlocked": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+   "bytes": 206,
+   "sha256": "fc7336049e71942f382c42e91940a0799ad8eae1498d293b139523173de74861",
+   "fields": {
+    "limitMs": 250,
+    "before": 0,
+    "after": 47,
+    "scrollHeight": 1800,
+    "viewportHeight": 844,
+    "movedAfterMs": 19
+   }
+  },
+  {
+   "name": "webkit-light-phone--no-preference-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+   "bytes": 2036,
+   "sha256": "2ca28a28965a37e170fdaece1a840c1ab8aa0aa80a5c8009a7e9cee1c97df295",
+   "fields": {
+    "limitMs": 100,
+    "exitStartedAfterMs": 24,
+    "exitTransitionDuration": "0.2s, 0.2s",
+    "closedAfterMs": 237,
+    "unlockedAfterMs": 26,
+    "readyAfterCloseMs": 0
+   }
+  },
+  {
+   "name": "webkit-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--nested-lifecycle.json",
+   "bytes": 741,
+   "sha256": "d9cd8ca7cf4e89c64ffa074027a9114ec6febab086f4c767fa2b08d58d8d47e5",
+   "fields": {
+    "motion": "reduce",
+    "focusReturned": true,
+    "scrollUnlocked": true
+   }
+  },
+  {
+   "name": "webkit-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--page-scroll.json",
+   "bytes": 205,
+   "sha256": "60757fef7aa9f1af168419ec3225e178d808b36d063b88d6e37a486460441996",
+   "fields": {
+    "limitMs": 250,
+    "before": 0,
+    "after": 10,
+    "scrollHeight": 1800,
+    "viewportHeight": 844,
+    "movedAfterMs": 8
+   }
+  },
+  {
+   "name": "webkit-light-phone--reduce-Dialog-Popover-Select-exits-restore-one-layer-at-a-time--scroll-unlock.json",
+   "bytes": 2024,
+   "sha256": "f0688b129c8ea924e7bbea482afd371ddb44e7ac05278f198451cb5c88088099",
+   "fields": {
+    "limitMs": 100,
+    "exitStartedAfterMs": 25,
+    "exitTransitionDuration": "0s",
+    "closedAfterMs": 27,
+    "unlockedAfterMs": 28,
+    "readyAfterCloseMs": 1
+   }
+  }
+ ]
+}

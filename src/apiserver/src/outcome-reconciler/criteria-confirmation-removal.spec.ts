@@ -345,7 +345,10 @@ test('(g) the removal adds no compose service, and deletes more than it writes',
   const compose = read('docker-compose.yml');
   const services = [...(compose.match(/^services:\n([\s\S]*?)(?=^\S|\Z)/m)?.[1] ?? '')
     .matchAll(/^ {2}([a-z][a-z0-9_-]*):$/gm)].map((match) => match[1]).sort();
-  assert.deepEqual(services, ['apiserver', 'gateway', 'pgbackup', 'postgres', 'web'],
+  // wiki-worker is the wiki's server-side executor, which the account owner added on 2026-10-07
+  // (docs/wiki-server-execution-design.md §4.1), not this removal; test/compose-topology.test.mjs (l)
+  // pins its whole definition.
+  assert.deepEqual(services, ['apiserver', 'gateway', 'pgbackup', 'postgres', 'web', 'wiki-worker'],
     'the removal must add no compose service');
   assert.equal(/criteria[-_]?confirm/i.test(compose), false);
 

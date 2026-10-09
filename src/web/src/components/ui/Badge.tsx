@@ -2,7 +2,8 @@ import type { ComponentPropsWithoutRef, ReactNode } from 'react';
 import './Badge.css';
 
 export interface BadgeProps extends ComponentPropsWithoutRef<'span'> {
-  tone?: 'default' | 'info' | 'success' | 'warning' | 'error' | 'blue';
+  /** Status tones, and the preset colours (blue, green, orange, red, gold) the replaced tags drew. */
+  tone?: 'default' | 'info' | 'success' | 'warning' | 'error' | 'blue' | 'green' | 'orange' | 'red' | 'gold';
   icon?: ReactNode;
 }
 

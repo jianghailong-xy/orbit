@@ -2,9 +2,9 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { App as AntdApp } from 'antd';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { dialogDescription, openDialog } from '../components/RunnerEngines.test-helpers';
 import type { Runner } from '../components/TasksSidePanel';
 import { encodeId } from '../lib/idCodec';
 import type { RunnerAttentionInput } from '../lib/runnerAttention';
@@ -136,17 +136,15 @@ async function mount(machines: Array<ReturnType<typeof machine>>) {
   root = createRoot(host);
   act(() =>
     root!.render(
-      <AntdApp>
-        <QueryClientProvider client={qc}>
-          <MemoryRouter initialEntries={['/infrastructure']}>
-            <Probe />
-            <Routes>
-              <Route path="/infrastructure" element={<InfrastructurePage />} />
-              <Route path="/runners/:id" element={<div>machine page</div>} />
-            </Routes>
-          </MemoryRouter>
-        </QueryClientProvider>
-      </AntdApp>,
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={['/infrastructure']}>
+          <Probe />
+          <Routes>
+            <Route path="/infrastructure" element={<InfrastructurePage />} />
+            <Route path="/runners/:id" element={<div>machine page</div>} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
     ),
   );
   await settle();
@@ -168,14 +166,20 @@ const click = async (el: Element | null | undefined) => {
 };
 const button = (words: string, scope: ParentNode = document.body) =>
   [...scope.querySelectorAll<HTMLButtonElement>('button')].find((el) => el.textContent?.trim() === words) ?? null;
-/** The ⋯ of a machine's card, opened, and the item of its menu that says `words`. */
+/** The ⋯ of a machine's card, opened, and the item of its menu that says `words` (a portal, drawn a
+ *  frame or two late on a slow host). */
 const menuItem = async (name: string, words: string) => {
   await click(card(name).querySelector(`button[aria-label="More actions for ${name}"]`));
-  const item = [...document.body.querySelectorAll<HTMLElement>('.ant-dropdown:not(.ant-dropdown-hidden) .ant-dropdown-menu-item')].find(
-    (el) => el.textContent?.trim() === words,
-  );
-  if (!item) throw new Error(`${name}'s menu has no ${words}`);
-  return item;
+  let item: HTMLElement | undefined;
+  await act(async () => {
+    await vi.waitFor(() => {
+      item = [...document.body.querySelectorAll<HTMLElement>('[role="menu"] [role="menuitem"]')].find(
+        (el) => el.textContent?.trim() === words,
+      );
+      if (!item) throw new Error(`${name}'s menu has no ${words}`);
+    }, { timeout: 20_000, interval: 20 });
+  });
+  return item!;
 };
 const key = (target: Element, code: string, keyName = code) =>
   act(async () => {
@@ -228,7 +232,7 @@ describe('a machine card’s head on /infrastructure', () => {
     await mount([WIKOVA, MAC_MINI]);
     const mac = card('longdeMac-mini.local');
     expect(mac.classList.contains('offline')).toBe(true);
-    expect(mac.querySelector('.re-runner-status .ant-tag')?.textContent).toBe('Offline');
+    expect(mac.querySelector('.re-runner-status .orbit-badge')?.textContent).toBe('Offline');
     // Its hostname is its name, so the line is the version alone.
     expect(mac.querySelector('.re-runner-meta')?.textContent).toBe('v0.1.155');
     // It can't update itself either, and says so on its page — not as a line here.
@@ -291,8 +295,7 @@ describe('a machine card’s handle and ⋯ on /infrastructure', () => {
   it('renames a machine from its ⋯, empty meaning the machine’s own name', async () => {
     await mount([WIKOVA]);
     await click(await menuItem('wikova', 'Rename'));
-    const dialog = document.body.querySelector<HTMLElement>('.ant-modal')!;
-    expect(dialog.querySelector('.ant-modal-title')?.textContent).toBe('Rename machine');
+    const dialog = await openDialog('Rename machine');
     const input = dialog.querySelector<HTMLInputElement>('input')!;
     expect(input.value).toBe('wikova');
     expect(dialog.textContent).toContain('Leave empty to use the machine name (wikova).');
@@ -309,8 +312,7 @@ describe('a machine card’s handle and ⋯ on /infrastructure', () => {
   it('rotates a machine’s token from its ⋯ once asked, and shows the new one', async () => {
     await mount([WIKOVA]);
     await click(await menuItem('wikova', 'Rotate token'));
-    const confirm = document.body.querySelector<HTMLElement>('.ant-modal-confirm')!;
-    expect(confirm.textContent).toContain('Rotate token for “wikova”?');
+    const confirm = await openDialog('Rotate token for “wikova”?');
     expect(sent).toEqual([]);
     await click(button('Rotate token', confirm));
     expect(sent).toEqual([{ method: 'POST', path: `/runners/${WIKOVA.runner.id}/rotate-token` }]);
@@ -320,9 +322,8 @@ describe('a machine card’s handle and ⋯ on /infrastructure', () => {
   it('deletes a machine from its ⋯ once asked', async () => {
     await mount([WIKOVA, WORKSTATION]);
     await click(await menuItem('workstation', 'Delete'));
-    const confirm = document.body.querySelector<HTMLElement>('.ant-modal-confirm')!;
-    expect(confirm.textContent).toContain('Delete “workstation”?');
-    expect(confirm.textContent).toContain('This removes the machine from your account.');
+    const confirm = await openDialog('Delete “workstation”?');
+    expect(dialogDescription(confirm)).toContain('This removes the machine from your account.');
     expect(sent).toEqual([]);
     await click(button('Delete', confirm));
     expect(sent).toEqual([{ method: 'DELETE', path: `/runners/${WORKSTATION.runner.id}` }]);

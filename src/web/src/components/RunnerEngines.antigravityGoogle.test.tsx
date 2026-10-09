@@ -38,8 +38,11 @@ describe('Antigravity Google login across client surfaces', () => {
     container.innerHTML = renderToStaticMarkup(wrap(<RunnerEngines />, fixtures[state]));
     return container.querySelector('[data-engine="antigravity"]')!;
   }
-  /** The rows the runner's own page draws (MachineEngines, as RunnerDetailPage holds them). */
-  const machinePage = (runner: Runner) => <MachineEngines runner={runner} signIn={null} onSignIn={() => {}} machinePage />;
+  /** The rows the runner's own page draws (MachineEngines, as RunnerDetailPage holds them), with every
+   *  group of accounts folded, as the card's start. */
+  const machinePage = (runner: Runner) => (
+    <MachineEngines runner={runner} signIn={null} onSignIn={() => {}} openAccounts={[]} onFoldAccounts={() => {}} machinePage />
+  );
   function machineRow(runner: Runner) {
     const container = document.createElement('div');
     container.innerHTML = renderToStaticMarkup(wrap(machinePage(runner), runner));

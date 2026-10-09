@@ -187,6 +187,11 @@ final class SettingsStackWiringTests: XCTestCase {
         XCTAssertTrue(rows.contains("Text(SettingsCopy.smartModelSelectionHint)"))
         XCTAssertTrue(list.contains("UpdatePreferencesRequest(modelRouting: value)"))
         XCTAssertTrue(list.contains("modelRouting = p?.smartModelSelection ?? false"))
+        // And suggested replies, the same shape; absent reads as on.
+        XCTAssertTrue(rows.contains("Toggle(isOn: $promptSuggestions) {"))
+        XCTAssertTrue(rows.contains("Text(SettingsCopy.suggestedRepliesHint)"))
+        XCTAssertTrue(list.contains("UpdatePreferencesRequest(promptSuggestions: value)"))
+        XCTAssertTrue(list.contains("promptSuggestions = p?.suggestedReplies ?? true"))
         // Signing out asks first, in the shape the width calls for — `ConfirmationStyle` asks a phone
         // for an alert and a tablet for the anchored panel, and every confirmation in the app goes
         // through it rather than naming one of the two itself.

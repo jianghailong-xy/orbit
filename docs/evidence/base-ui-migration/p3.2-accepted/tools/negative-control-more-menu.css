@@ -1,0 +1,4 @@
+
+/* p32acc negative control (scratch commit, not delivered): the task panel's More menu, which only
+   task-action-menu.png shows open, gets 1px more top padding (4px -> 5px). */
+.orbit-menu.tdp-more-menu { padding-top: 5px; }

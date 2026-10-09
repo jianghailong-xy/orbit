@@ -1,0 +1,3014 @@
+{
+ "config": {
+  "argv": [
+   "/usr/local/bin/node",
+   "/root/.orbit/worktrees/3a1c46ee-9958-51c0-b844-89a44ffe9d25/node_modules/.bin/playwright",
+   "test",
+   "--config",
+   "ui-migration/overlays.config.mjs",
+   "overlays-app-frame.browser.mjs"
+  ],
+  "configFile": "/root/.orbit/worktrees/3a1c46ee-9958-51c0-b844-89a44ffe9d25/src/web/ui-migration/overlays.config.mjs",
+  "rootDir": "/root/.orbit/worktrees/3a1c46ee-9958-51c0-b844-89a44ffe9d25/src/web/ui-migration",
+  "failOnFlakyTests": false,
+  "forbidOnly": false,
+  "fullyParallel": false,
+  "globalSetup": "/root/.orbit/worktrees/3a1c46ee-9958-51c0-b844-89a44ffe9d25/src/web/ui-migration/environment.mjs",
+  "globalTeardown": null,
+  "globalTimeout": 0,
+  "grep": {},
+  "grepInvert": null,
+  "maxFailures": 0,
+  "metadata": {
+   "actualWorkers": 1
+  },
+  "preserveOutput": "always",
+  "projects": [
+   {
+    "outputDir": "/root/.orbit/worktrees/3a1c46ee-9958-51c0-b844-89a44ffe9d25/src/web/.overlays-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-desktop",
+    "name": "chromium-light-desktop",
+    "testDir": "/root/.orbit/worktrees/3a1c46ee-9958-51c0-b844-89a44ffe9d25/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "overlays*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/3a1c46ee-9958-51c0-b844-89a44ffe9d25/src/web/.overlays-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-phone",
+    "name": "chromium-light-phone",
+    "testDir": "/root/.orbit/worktrees/3a1c46ee-9958-51c0-b844-89a44ffe9d25/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "overlays*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/3a1c46ee-9958-51c0-b844-89a44ffe9d25/src/web/.overlays-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-desktop",
+    "name": "chromium-dark-desktop",
+    "testDir": "/root/.orbit/worktrees/3a1c46ee-9958-51c0-b844-89a44ffe9d25/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "overlays*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/3a1c46ee-9958-51c0-b844-89a44ffe9d25/src/web/.overlays-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-phone",
+    "name": "chromium-dark-phone",
+    "testDir": "/root/.orbit/worktrees/3a1c46ee-9958-51c0-b844-89a44ffe9d25/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "overlays*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/3a1c46ee-9958-51c0-b844-89a44ffe9d25/src/web/.overlays-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-desktop",
+    "name": "webkit-light-desktop",
+    "testDir": "/root/.orbit/worktrees/3a1c46ee-9958-51c0-b844-89a44ffe9d25/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "overlays*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/3a1c46ee-9958-51c0-b844-89a44ffe9d25/src/web/.overlays-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-phone",
+    "name": "webkit-light-phone",
+    "testDir": "/root/.orbit/worktrees/3a1c46ee-9958-51c0-b844-89a44ffe9d25/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "overlays*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/3a1c46ee-9958-51c0-b844-89a44ffe9d25/src/web/.overlays-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-desktop",
+    "name": "webkit-dark-desktop",
+    "testDir": "/root/.orbit/worktrees/3a1c46ee-9958-51c0-b844-89a44ffe9d25/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "overlays*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/root/.orbit/worktrees/3a1c46ee-9958-51c0-b844-89a44ffe9d25/src/web/.overlays-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-phone",
+    "name": "webkit-dark-phone",
+    "testDir": "/root/.orbit/worktrees/3a1c46ee-9958-51c0-b844-89a44ffe9d25/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "overlays*.browser.mjs"
+    ],
+    "timeout": 90000
+   }
+  ],
+  "quiet": false,
+  "reporter": [
+   [
+    "list",
+    null
+   ],
+   [
+    "json",
+    {
+     "outputFile": "/root/.orbit/worktrees/3a1c46ee-9958-51c0-b844-89a44ffe9d25/src/web/.overlays-results/report.json"
+    }
+   ]
+  ],
+  "reportSlowTests": {
+   "max": 5,
+   "threshold": 300000
+  },
+  "shard": null,
+  "tags": [],
+  "updateSnapshots": "none",
+  "updateSourceMethod": "patch",
+  "version": "1.63.0",
+  "workers": 1,
+  "webServer": {
+   "command": "npm run dev -- --host 127.0.0.1 --port 4176 --strictPort",
+   "cwd": "/root/.orbit/worktrees/3a1c46ee-9958-51c0-b844-89a44ffe9d25/src/web/",
+   "url": "http://127.0.0.1:4176",
+   "reuseExistingServer": false,
+   "timeout": 30000
+  }
+ },
+ "suites": [
+  {
+   "title": "overlays-app-frame.browser.mjs",
+   "file": "overlays-app-frame.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "a notice leaves the document one viewport high, with no scrollbar of its own",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1571,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:12:06.987Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "document",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-7898a134e08562102e4f",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 45,
+     "column": 1
+    },
+    {
+     "title": "Orbit dialog leaves the page where it was scrolled, before and after a notice",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2046,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:12:08.639Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "scroll-positions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-182ffc42e9b535cfd151",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 57,
+     "column": 3
+    },
+    {
+     "title": "AntD dialog leaves the page where it was scrolled, before and after a notice",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3374,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:12:10.692Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "scroll-positions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-5aca0c130ae16ab193f5",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 57,
+     "column": 3
+    },
+    {
+     "title": "Orbit right drawer leaves the page where it was scrolled, before and after a notice",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1886,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:12:14.071Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "scroll-positions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-3a4546d5ae4eaf663b57",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 57,
+     "column": 3
+    },
+    {
+     "title": "AntD right drawer leaves the page where it was scrolled, before and after a notice",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4099,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:12:15.962Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "scroll-positions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-f49e90b78ea331411d26",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 57,
+     "column": 3
+    },
+    {
+     "title": "Orbit bottom drawer leaves the page where it was scrolled, before and after a notice",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1819,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:12:20.067Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "scroll-positions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-cd7beaf0c99de62c899c",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 57,
+     "column": 3
+    },
+    {
+     "title": "AntD bottom drawer leaves the page where it was scrolled, before and after a notice",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4239,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:12:21.896Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "scroll-positions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-dfb12fc4975336324af1",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 57,
+     "column": 3
+    },
+    {
+     "title": "Orbit confirm leaves the page where it was scrolled, before and after a notice",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1897,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:12:26.140Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "scroll-positions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-446eaba6a6b2dd1254e0",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 57,
+     "column": 3
+    },
+    {
+     "title": "AntD confirm leaves the page where it was scrolled, before and after a notice",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3092,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:12:28.043Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "scroll-positions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-007e17849a629ebde139",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 57,
+     "column": 3
+    },
+    {
+     "title": "a notice leaves the document one viewport high, with no scrollbar of its own",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1495,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:12:31.645Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "document",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-562b44a2e69d73083e0d",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 45,
+     "column": 1
+    },
+    {
+     "title": "Orbit dialog leaves the page where it was scrolled, before and after a notice",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1867,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:12:33.210Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "scroll-positions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-2b6683eb80363bebaf83",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 57,
+     "column": 3
+    },
+    {
+     "title": "AntD dialog leaves the page where it was scrolled, before and after a notice",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3499,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:12:35.084Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "scroll-positions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-320bfc235efb58e431bf",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 57,
+     "column": 3
+    },
+    {
+     "title": "Orbit right drawer leaves the page where it was scrolled, before and after a notice",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1883,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:12:38.589Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "scroll-positions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-911d892a51c1c8ebb2ba",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 57,
+     "column": 3
+    },
+    {
+     "title": "AntD right drawer leaves the page where it was scrolled, before and after a notice",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4312,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:12:40.477Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "scroll-positions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-d4f68fef56225b057711",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 57,
+     "column": 3
+    },
+    {
+     "title": "Orbit bottom drawer leaves the page where it was scrolled, before and after a notice",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2026,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:12:44.795Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "scroll-positions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-079b544a441f91526a12",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 57,
+     "column": 3
+    },
+    {
+     "title": "AntD bottom drawer leaves the page where it was scrolled, before and after a notice",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4218,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:12:46.825Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "scroll-positions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-7ba112a923a3bf5b84b7",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 57,
+     "column": 3
+    },
+    {
+     "title": "Orbit confirm leaves the page where it was scrolled, before and after a notice",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1786,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:12:51.049Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "scroll-positions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-abee272cf4fee17e6eab",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 57,
+     "column": 3
+    },
+    {
+     "title": "AntD confirm leaves the page where it was scrolled, before and after a notice",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4108,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:12:52.842Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "scroll-positions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-889129975cc525504494",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 57,
+     "column": 3
+    },
+    {
+     "title": "a notice leaves the document one viewport high, with no scrollbar of its own",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1867,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:12:58.574Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "document",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-34745102a65bc9bd3f77",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 45,
+     "column": 1
+    },
+    {
+     "title": "Orbit dialog leaves the page where it was scrolled, before and after a notice",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1817,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:13:00.599Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "scroll-positions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-bff21bc991f1bf2454ea",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 57,
+     "column": 3
+    },
+    {
+     "title": "AntD dialog leaves the page where it was scrolled, before and after a notice",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3310,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:13:02.424Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "scroll-positions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-8d6b00a64a443d5e75dd",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 57,
+     "column": 3
+    },
+    {
+     "title": "Orbit right drawer leaves the page where it was scrolled, before and after a notice",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2359,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:13:05.740Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "scroll-positions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-02819c52a158f9f2e9a5",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 57,
+     "column": 3
+    },
+    {
+     "title": "AntD right drawer leaves the page where it was scrolled, before and after a notice",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4319,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:13:08.104Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "scroll-positions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-caf5fa124d6eedc01729",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 57,
+     "column": 3
+    },
+    {
+     "title": "Orbit bottom drawer leaves the page where it was scrolled, before and after a notice",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2439,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:13:12.428Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "scroll-positions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-b33e9b170e164796ea8b",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 57,
+     "column": 3
+    },
+    {
+     "title": "AntD bottom drawer leaves the page where it was scrolled, before and after a notice",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 5570,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:13:14.872Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "scroll-positions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-234c006be13c3e62f7a8",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 57,
+     "column": 3
+    },
+    {
+     "title": "Orbit confirm leaves the page where it was scrolled, before and after a notice",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2200,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:13:20.447Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "scroll-positions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-7d4665fe902f66ed7564",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 57,
+     "column": 3
+    },
+    {
+     "title": "AntD confirm leaves the page where it was scrolled, before and after a notice",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3396,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:13:22.652Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "scroll-positions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-927094490213ed6fa4dc",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 57,
+     "column": 3
+    },
+    {
+     "title": "a notice leaves the document one viewport high, with no scrollbar of its own",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1580,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:13:27.022Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "document",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-530ab0370ce23c4071a6",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 45,
+     "column": 1
+    },
+    {
+     "title": "Orbit dialog leaves the page where it was scrolled, before and after a notice",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2258,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:13:28.697Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "scroll-positions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-7b1dbff19bf2b15e8c89",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 57,
+     "column": 3
+    },
+    {
+     "title": "AntD dialog leaves the page where it was scrolled, before and after a notice",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3285,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:13:30.962Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "scroll-positions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-7c2ab72b727103ac8f00",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 57,
+     "column": 3
+    },
+    {
+     "title": "Orbit right drawer leaves the page where it was scrolled, before and after a notice",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1997,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:13:34.258Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "scroll-positions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-82181af872dc71c2a58f",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 57,
+     "column": 3
+    },
+    {
+     "title": "AntD right drawer leaves the page where it was scrolled, before and after a notice",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4411,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:13:36.266Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "scroll-positions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-2ce41a438f4b55317d57",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 57,
+     "column": 3
+    },
+    {
+     "title": "Orbit bottom drawer leaves the page where it was scrolled, before and after a notice",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2359,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:13:40.683Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "scroll-positions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-cdf132df5c4bb99baa80",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 57,
+     "column": 3
+    },
+    {
+     "title": "AntD bottom drawer leaves the page where it was scrolled, before and after a notice",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4441,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:13:43.055Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "scroll-positions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-d1beba8efc55f22ee4b9",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 57,
+     "column": 3
+    },
+    {
+     "title": "Orbit confirm leaves the page where it was scrolled, before and after a notice",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2873,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:13:47.505Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "scroll-positions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-8bc208e4b7e535e1a399",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 57,
+     "column": 3
+    },
+    {
+     "title": "AntD confirm leaves the page where it was scrolled, before and after a notice",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4114,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:13:50.428Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "scroll-positions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-6f59e5f62c407b5225df",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 57,
+     "column": 3
+    },
+    {
+     "title": "a notice leaves the document one viewport high, with no scrollbar of its own",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1915,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:13:55.191Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "document",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-b27c7c0f85a81c31768f",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 45,
+     "column": 1
+    },
+    {
+     "title": "Orbit dialog leaves the page where it was scrolled, before and after a notice",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2731,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:13:57.252Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "scroll-positions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-88dabea84bce4d243515",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 57,
+     "column": 3
+    },
+    {
+     "title": "AntD dialog leaves the page where it was scrolled, before and after a notice",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 5153,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:13:59.991Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "scroll-positions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-db2f46b9265953adc9c6",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 57,
+     "column": 3
+    },
+    {
+     "title": "Orbit right drawer leaves the page where it was scrolled, before and after a notice",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4076,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:14:05.150Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "scroll-positions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-49f18f61bb71aef22976",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 57,
+     "column": 3
+    },
+    {
+     "title": "AntD right drawer leaves the page where it was scrolled, before and after a notice",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 5673,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:14:09.237Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "scroll-positions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-8ebad1966b08c51bb8e9",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 57,
+     "column": 3
+    },
+    {
+     "title": "Orbit bottom drawer leaves the page where it was scrolled, before and after a notice",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3964,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:14:14.915Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "scroll-positions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-e623536ba8109ca699e2",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 57,
+     "column": 3
+    },
+    {
+     "title": "AntD bottom drawer leaves the page where it was scrolled, before and after a notice",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 5089,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:14:18.969Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "scroll-positions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-a73d01e57efb5b485c68",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 57,
+     "column": 3
+    },
+    {
+     "title": "Orbit confirm leaves the page where it was scrolled, before and after a notice",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3816,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:14:24.064Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "scroll-positions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-9317a4e9331c8b3a256a",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 57,
+     "column": 3
+    },
+    {
+     "title": "AntD confirm leaves the page where it was scrolled, before and after a notice",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 5856,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:14:27.886Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "scroll-positions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-30420c4b5bed34389371",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 57,
+     "column": 3
+    },
+    {
+     "title": "a notice leaves the document one viewport high, with no scrollbar of its own",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2137,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:14:34.444Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "document",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-f839fb3b8682c0b77f1e",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 45,
+     "column": 1
+    },
+    {
+     "title": "Orbit dialog leaves the page where it was scrolled, before and after a notice",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2205,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:14:36.728Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "scroll-positions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-f234452a15e11f71242c",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 57,
+     "column": 3
+    },
+    {
+     "title": "AntD dialog leaves the page where it was scrolled, before and after a notice",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3772,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:14:38.939Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "scroll-positions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-150801b7ace8ff82e1b4",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 57,
+     "column": 3
+    },
+    {
+     "title": "Orbit right drawer leaves the page where it was scrolled, before and after a notice",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2576,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:14:42.740Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "scroll-positions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-5b45b9103c4c65ca17c3",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 57,
+     "column": 3
+    },
+    {
+     "title": "AntD right drawer leaves the page where it was scrolled, before and after a notice",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4353,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:14:45.323Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "scroll-positions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-d7552a309aee7c65590a",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 57,
+     "column": 3
+    },
+    {
+     "title": "Orbit bottom drawer leaves the page where it was scrolled, before and after a notice",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1950,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:14:49.681Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "scroll-positions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-d6605c58497e92975469",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 57,
+     "column": 3
+    },
+    {
+     "title": "AntD bottom drawer leaves the page where it was scrolled, before and after a notice",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 5041,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:14:51.637Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "scroll-positions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-40b0984a0ddd8c291265",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 57,
+     "column": 3
+    },
+    {
+     "title": "Orbit confirm leaves the page where it was scrolled, before and after a notice",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2248,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:14:56.684Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "scroll-positions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-4e1de2ac202a98640e5b",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 57,
+     "column": 3
+    },
+    {
+     "title": "AntD confirm leaves the page where it was scrolled, before and after a notice",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3712,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:14:58.940Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "scroll-positions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-f7544dac17c2f243ab7b",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 57,
+     "column": 3
+    },
+    {
+     "title": "a notice leaves the document one viewport high, with no scrollbar of its own",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1598,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:15:03.474Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "document",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-20b1b56e10186467d829",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 45,
+     "column": 1
+    },
+    {
+     "title": "Orbit dialog leaves the page where it was scrolled, before and after a notice",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2179,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:15:05.156Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "scroll-positions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-4c7c0536bcab5bc8624e",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 57,
+     "column": 3
+    },
+    {
+     "title": "AntD dialog leaves the page where it was scrolled, before and after a notice",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3653,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:15:07.342Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "scroll-positions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-8f8497a9c1638cf261c2",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 57,
+     "column": 3
+    },
+    {
+     "title": "Orbit right drawer leaves the page where it was scrolled, before and after a notice",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2844,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:15:11.006Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "scroll-positions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-13485e54c5d535dc32c2",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 57,
+     "column": 3
+    },
+    {
+     "title": "AntD right drawer leaves the page where it was scrolled, before and after a notice",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4826,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:15:13.857Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "scroll-positions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-2b65cbf9b123bc0470af",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 57,
+     "column": 3
+    },
+    {
+     "title": "Orbit bottom drawer leaves the page where it was scrolled, before and after a notice",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2646,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:15:18.690Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "scroll-positions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-605f097c7d7ffb0043d8",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 57,
+     "column": 3
+    },
+    {
+     "title": "AntD bottom drawer leaves the page where it was scrolled, before and after a notice",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 5441,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:15:21.343Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "scroll-positions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-e50c0618d581856775bb",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 57,
+     "column": 3
+    },
+    {
+     "title": "Orbit confirm leaves the page where it was scrolled, before and after a notice",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 5999,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:15:26.792Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "scroll-positions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-8dd793e5d64cbb7d3e9e",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 57,
+     "column": 3
+    },
+    {
+     "title": "AntD confirm leaves the page where it was scrolled, before and after a notice",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4106,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:15:32.820Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "scroll-positions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-3923df32d79626433093",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 57,
+     "column": 3
+    },
+    {
+     "title": "a notice leaves the document one viewport high, with no scrollbar of its own",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1784,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:15:37.670Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "document",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-f79fb1c4a773a4c2bc3f",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 45,
+     "column": 1
+    },
+    {
+     "title": "Orbit dialog leaves the page where it was scrolled, before and after a notice",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2291,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:15:39.582Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "scroll-positions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-e5aefc63fcfca337af4a",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 57,
+     "column": 3
+    },
+    {
+     "title": "AntD dialog leaves the page where it was scrolled, before and after a notice",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 6979,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:15:41.881Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "scroll-positions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-57a6fdc2f375f606b069",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 57,
+     "column": 3
+    },
+    {
+     "title": "Orbit right drawer leaves the page where it was scrolled, before and after a notice",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2982,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:15:48.867Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "scroll-positions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-566a5f82a4fc67c450cc",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 57,
+     "column": 3
+    },
+    {
+     "title": "AntD right drawer leaves the page where it was scrolled, before and after a notice",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 5560,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:15:51.856Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "scroll-positions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-6158207c71e58e898531",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 57,
+     "column": 3
+    },
+    {
+     "title": "Orbit bottom drawer leaves the page where it was scrolled, before and after a notice",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2693,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:15:57.429Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "scroll-positions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-d97ed8d03df30ce06478",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 57,
+     "column": 3
+    },
+    {
+     "title": "AntD bottom drawer leaves the page where it was scrolled, before and after a notice",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4958,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:16:00.128Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "scroll-positions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-d2d2a5f5c8fa95f3d503",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 57,
+     "column": 3
+    },
+    {
+     "title": "Orbit confirm leaves the page where it was scrolled, before and after a notice",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3608,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:16:05.091Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "scroll-positions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-651e8ed5c2cc79b1048f",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 57,
+     "column": 3
+    },
+    {
+     "title": "AntD confirm leaves the page where it was scrolled, before and after a notice",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4866,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-09T00:16:08.704Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "scroll-positions",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "42fadf780194109882d4-4f6e091b5026aa11ebbb",
+     "file": "overlays-app-frame.browser.mjs",
+     "line": 57,
+     "column": 3
+    }
+   ]
+  }
+ ],
+ "errors": [],
+ "stats": {
+  "startTime": "2026-10-09T00:12:05.477Z",
+  "duration": 248452.03399999999,
+  "expected": 72,
+  "skipped": 0,
+  "unexpected": 0,
+  "flaky": 0
+ }
+}

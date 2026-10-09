@@ -479,9 +479,11 @@ public final class APIClient: @unchecked Sendable {
     }
 
     /// Every link this account has made — Active, Paused and Ended alike — for Settings → Shared
-    /// links. Web parity: `listShareLinks`.
+    /// links, of every kind this build draws: a server lists only the kinds a client names, so a
+    /// build that predates a kind is never handed one it cannot decode. Web parity: `listShareLinks`.
     public func shareLinks() async throws -> [ShareLink] {
-        let list: ShareLinkList = try await get("share-links")
+        let kinds = ShareRootKind.allCases.map(\.rawValue).joined(separator: ",")
+        let list: ShareLinkList = try await get("share-links", query: [URLQueryItem(name: "kind", value: kinds)])
         return list.links
     }
 
@@ -807,6 +809,12 @@ public final class APIClient: @unchecked Sendable {
         try await get("projects/\(projectID)/integration")
     }
 
+    /// The owner's Retry on a job the integration view says can be retried (`retryable`): the
+    /// silent generation ends and the next one is queued. Answers the integration view read again.
+    public func retryIntegrationJob(_ projectID: String, jobID: String) async throws -> ProjectIntegrationView {
+        try await postEmpty("projects/\(projectID)/integration/jobs/\(jobID)/retry")
+    }
+
     /// One page of the project's top-level tasks, newest first.
     public func projectTaskPage(_ projectID: String, cursor: String? = nil,
                                 limit: Int = 100) async throws -> ProjectTaskPage {
@@ -1091,6 +1099,16 @@ public final class APIClient: @unchecked Sendable {
     public func wikiHealth(spaceID: String) async throws -> WikiSpaceHealth {
         try await get("wiki/spaces/\(spaceID)/health")
     }
+    /// `GET /wiki/spaces/:id/jobs`: the space's newest server runs with their calls — what Activity's Runs band
+    /// and a run's page draw (contract `jobs.read`, P9).
+    public func wikiJobs(spaceID: String) async throws -> WikiJobsRead {
+        try await get("wiki/spaces/\(spaceID)/jobs")
+    }
+    /// `GET /wiki/system-model`: the deployment's System model — its name and state, never its address or key —
+    /// and whether the server executes this account's wiki (contract `systemModel.read`).
+    public func wikiSystemModel() async throws -> WikiSystemModelStatus {
+        try await get("wiki/system-model")
+    }
     /// `GET /wiki/spaces/:id/articles`: the category directory — categories → topics → each topic's
     /// article and its subtopic parts (contract `articles.reads.directory`).
     public func wikiArticleDirectory(spaceID: String) async throws -> WikiArticleDirectory {
@@ -1210,6 +1228,14 @@ public final class APIClient: @unchecked Sendable {
     /// (no key/baseUrl). Merged into the composer and agent Runtime picker alongside built-ins.
     public func providers() async throws -> [ConfiguredProvider] { try await get("providers") }
     public func personalProviders() async throws -> [ConfiguredProvider] { try await get("providers/mine") }
+
+    /// The whole DeepSeek account's balance behind one of the account's own DeepSeek keys (GET
+    /// /api/providers/mine/:id/balance), read by the server with the stored key, which never comes here.
+    /// `refresh` asks DeepSeek again instead of taking the server's last read; the server lets that
+    /// through at most once per 10 s for a key.
+    public func providerBalance(_ id: String, refresh: Bool = false) async throws -> ProviderBalance {
+        try await get("providers/mine/\(id)/balance", query: refresh ? [URLQueryItem(name: "refresh", value: "1")] : [])
+    }
 
     /// The caller's account pools (GET /api/providers/pools), which the catalogue above doesn't
     /// list: each with its members, their own quota and where each stands. A pool this build can't
@@ -1412,10 +1438,11 @@ public final class APIClient: @unchecked Sendable {
     }
     public func startRunnerLogin(_ id: String, engine: LoginEngine,
                                  account: String? = nil,
-                                 accountName: String? = nil) async throws -> RunnerLoginState {
+                                 accountName: String? = nil,
+                                 region: String? = nil) async throws -> RunnerLoginState {
         try await post("runners/\(id)/login",
                        body: StartLoginRequest(engine: engine, account: account,
-                                               accountName: accountName))
+                                               accountName: accountName, region: region))
     }
     /// Hand the runner the authorization code the sign-in page gave the user (claude's paste-back
     /// flow). Useless without the PKCE verifier that never leaves the runner process.

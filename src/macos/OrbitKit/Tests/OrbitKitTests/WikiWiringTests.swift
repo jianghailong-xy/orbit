@@ -299,6 +299,9 @@ final class WikiWiringTests: XCTestCase {
                               "Button(action: actions.openActivity)", "WikiActivityGlyph(waiting: waiting)",
                               ".accessibilityLabel(WikiCopy.activity)",
                               ".accessibilityValue(waiting > 0 ? WikiCopy.waitingOnYou(waiting) : \"\")",
+                              "Button(action: actions.openShare)", "WikiShareGlyph(live: shareLive)",
+                              ".accessibilityLabel(SharePanelCopy.share)",
+                              ".accessibilityValue(shareLive ? SharePanelCopy.liveLink : \"\")",
                               "Button(action: actions.openSettings)", "Image(systemName: \"gearshape\")"],
                     "the home's bar")
         let glyph = code(try slice(try source("Views/WikiView.swift"),
@@ -312,6 +315,17 @@ final class WikiWiringTests: XCTestCase {
         XCTAssertTrue(home.contains("waiting: wiki.waiting,"), "the badge is the drawer's number, from the same model")
         XCTAssertTrue(home.contains("besideContents: rowNavigation == .selection,"), "the detail pane's home has no head")
         XCTAssertTrue(home.contains("openActivity: { open(.wikiActivity) },"))
+        // The globe opens the one Share panel on the space, and says whether the space has a link open.
+        XCTAssertTrue(home.contains("openShare: { sharing = true },"))
+        XCTAssertTrue(home.contains("ShareSheet(kind: .wiki, rootID: space.id, baseURL: baseURL, tokenStore: model.tokenStore)"))
+        XCTAssertTrue(home.contains("shareLive: shareRead?.link.map { $0.state != .ended } ?? false,"))
+        let globe = code(try slice(try source("Views/WikiView.swift"), from: "struct WikiShareGlyph: View {",
+                                   to: "let wikiMenuIconsDrawAmber"))
+        assertOrder(globe, ["if live {", "Image(systemName: \"globe\").foregroundStyle(Color.green)", "} else {"],
+                    "the Share globe")
+        let quiet = try XCTUnwrap(globe.components(separatedBy: "} else {").last)
+        XCTAssertTrue(quiet.contains("Image(systemName: \"globe\")"), "with no link open, the globe is still there")
+        XCTAssertFalse(quiet.contains(".foregroundStyle("), "with no link open, the globe is the bar's own colour")
         XCTAssertTrue(home.contains("case .push:      model.push(node)"))
         XCTAssertTrue(home.contains("case .selection: model.nav.replaceTop(with: node)"))
     }
@@ -350,6 +364,9 @@ final class WikiWiringTests: XCTestCase {
                               to: "private var newRows: Int")
         assertOrder(bands, ["case .status:", "case .reviewBanner, .planBanners, .otherPlanBanners:",
                             "ForEach(banners.filter { $0.band == band }) { banner in",
+                            "case .runs:", "WikiRunsLogic.shown(serverExecutes: content.health?.serverExecutes == true, jobs: jobs)",
+                            "runsHeader", "Button { actions.openJob(job.id) } label: {",
+                            "WikiRunListRow(row: WikiRunsLogic.row(job, now: now))", "rows.empty(WikiRunsCopy.none)",
                             "case .recentDecisions:", "case .recentlyChanged:",
                             "WikiCopy.newSinceLastLooked(newRows)", "rows.changeRow(item, new: isNew(item.at))",
                             "rows.runRow(changesetId, origin: origin, at: at, changes: items.count, new: isNew(at))",
@@ -361,6 +378,17 @@ final class WikiWiringTests: XCTestCase {
         let screen = try slice(view, from: "struct WikiActivityView: View {", to: "private func name(of space:")
         assertOrder(screen, [".task(id: wiki.currentSpace?.slug) {", "seen = wiki.seenBefore(slug)", "wiki.moveSeen(slug)",
                              "await wiki.loadOtherPlans()"], "the stamp, read before it moves")
+        // The server's runs are read with the page, and again every few seconds while one is on its way.
+        assertOrder(screen, ["TimelineView(.periodic(from: .now, by: wiki.jobsUnderWay ? 5 : 60)) { context in",
+                             "seen: seen, jobs: wiki.currentJobs, now: context.date, actions: actions(wiki))",
+                             "await wiki.loadOtherPlans()", "await wiki.loadJobs()",
+                             "while !Task.isCancelled, wiki.jobsUnderWay {", "try? await Task.sleep(for: .seconds(5))",
+                             ".refreshable {"], "Activity's runs, read and read again")
+        XCTAssertTrue(view.contains("openJob: { id in model.push(.wikiJob(jobID: id)) }"), "a run's row opens its page")
+        let header = try slice(page, from: "private var runsHeader: some View {", to: "private var newRows: Int")
+        assertOrder(header, ["Text(WikiRunsCopy.runs)", "if let model = content.health?.systemModel {",
+                             "Text(WikiRunsCopy.systemModelLabel(model.model))", "WikiModelStateText(model: model)"],
+                    "the Runs band's head: the System model and its state, never where it answers")
         XCTAssertTrue(view.contains("WikiSpaceLogic.activityBanners(spaces: wiki.spaces, current: space, plans: plans,"))
         XCTAssertTrue(view.contains("case .review:\n            model.push(.wikiReview)"), "the first banner opens Review")
         XCTAssertFalse(view.contains("async let"), "no sibling async let in OrbitApp (d22b276cc)")
@@ -377,6 +405,64 @@ final class WikiWiringTests: XCTestCase {
         let others = try slice(model, from: "func loadOtherPlans() async {", to: "func loadPlanVersion(")
         XCTAssertFalse(others.contains("async let"), "the other spaces' plans read side by side without async let")
         XCTAssertTrue(others.contains("$0.id != current && ($0.planWaiting ?? 0) > 0"))
+    }
+
+    /// A server run's page (mock 35 ⑤): pushed from Activity's Runs band in both shells; where it stands and the
+    /// line under its log, then its calls — each one's state, how long it waited and ran, its tokens and its error
+    /// — read again while the run is on its way. A server run has no task and no session, so nothing on the page
+    /// opens one; the run is read from the space's jobs, matched by its storage key.
+    func testAServerRunHasItsOwnPageAndLinksToNoSession() throws {
+        let view = code(try source("Views/WikiJobView.swift"))
+        let page = try slice(view, from: "struct WikiJobPage: View {", to: "struct WikiJobView: View {")
+        assertOrder(page, ["let row = WikiRunsLogic.row(job, now: now)", "Text(wikiRunStateLine(row, font: .orbitProse))", "Text(row.when)",
+                           "Text(WikiRunsLogic.foot(job))", "if !job.requests.isEmpty {", "ForEach(job.requests) { call in",
+                           "WikiCallListRow(row: WikiRunsLogic.callRow(call, now: now))", "Text(WikiRunsCopy.callsTitle)",
+                           "Text(\"\\(job.calls.total)\")", ".navigationTitle(row.kind)"], "a run's page")
+        let call = try slice(view, from: "struct WikiCallListRow: View {", to: "struct WikiJobPage: View {")
+        assertOrder(call, ["Text(row.call)", "Text(row.state)", "[row.retries, row.line.isEmpty ? nil : row.line]",
+                           "if let error = row.error {", "Text(error)"], "a call's row")
+        let line = try slice(view, from: "func wikiRunStateLine(_ row: WikiRunRow, font: Font) -> AttributedString {",
+                             to: "struct WikiRunListRow: View {")
+        for piece in ["= font.weight(.semibold)", "case .warn: line[Colour.self] = Color.orange",
+                      "case .error: line[Colour.self] = Color.red", "line += AttributedString(\" · \\(row.text)\")"] {
+            XCTAssertTrue(line.contains(piece), "a run's state line lost \(piece)")
+        }
+        let screen = try slice(view, from: "struct WikiJobView: View {", to: "\n}\n")
+        assertOrder(screen, ["if let job = wiki.job(jobID) {", "TimelineView(.periodic(from: .now, by: 5)) { context in",
+                             "WikiJobPage(job: job, now: context.date)", ".task(id: jobID) {", "await wiki.loadJobs()",
+                             "while !Task.isCancelled, wiki.jobsUnderWay {", ".refreshable { await wiki.loadJobs() }"],
+                    "the run read, and read again while it is on its way")
+        for link in ["openSession", ".session(", "taskDetail", "openFromConversation"] {
+            XCTAssertFalse(view.contains(link), "a server run links to no session or task (\(link))")
+        }
+        let shell = code(try source("Views/CompactShell.swift"))
+        XCTAssertTrue(shell.contains("case .wikiJob(let jobID):     WikiJobView(jobID: jobID)"), "the phone pushes the run's page")
+        let screens = code(try source("Views/WikiScreens.swift"))
+        let pane = try slice(screens, from: "struct WikiDetailPane: View {", to: "struct WikiDisabledNote: View {")
+        assertOrder(pane, ["model.nav.selectedWikiRunID", "WikiRunView(changesetID: run)", "model.nav.selectedWikiJobID",
+                           "WikiJobView(jobID: job).id(job)"], "the wide shells' detail pane")
+        let model = code(try source("WikiModel.swift"))
+        let jobs = try slice(model, from: "func loadJobs() async {", to: "func loadSystemModel() async {")
+        assertOrder(jobs, ["guard let space = currentSpace else {", "try await api.wikiJobs(spaceID: space.id)",
+                           "guard currentSpace?.id == space.id else { return }",
+                           "} catch APIError.http(let status, _) where status == 404 {",
+                           "PublicID.storageKey(jobs.spaceId) == PublicID.storageKey(space.id)",
+                           "PublicID.storageKey($0.id) == PublicID.storageKey(id)",
+                           "$0.state == .queued || $0.state == .running || $0.state == .waiting"], "the space's runs")
+        let system = try slice(model, from: "func loadSystemModel() async {", to: "func loadReview() async {")
+        assertOrder(system, ["try await api.wikiSystemModel()", "} catch APIError.http(let status, _) where status == 404 {",
+                             "systemModel?.executor?.serverExecutes == true ? systemModel : nil"],
+                    "the System model, the settings page's only while the server runs the wiki")
+        // The plan's empty card reads the same switch, which is what names the System model under Draft plan
+        // (owner's call 2026-10-08): the screen reads it with the plan, and hands it to the page.
+        XCTAssertTrue(system.contains("var serverExecutes: Bool {"), "the model derives whether the server executes the wiki")
+        let docScreens = code(try source("Views/WikiDocScreens.swift"))
+        let planScreen = try slice(docScreens, from: "struct WikiPlanScreen: View {", to: "private func content(_ wiki: WikiModel) -> some View {")
+        assertOrder(planScreen, ["await wiki.loadPlan()", "await wiki.loadDocsDirectory()", "await wiki.loadSystemModel()"],
+                    "the plan screen reads the executor switch with its own reads")
+        XCTAssertTrue(docScreens.contains("serverExecutes: wiki.serverExecutes"), "the plan page is handed the executor switch")
+        let planView = code(try source("Views/WikiPlanView.swift"))
+        XCTAssertTrue(planView.contains("serverExecutes: serverExecutes"), "the empty card's line is the server's while it drafts")
     }
 
     /// Coming into the Wiki from another section opens the space bound to the workspace the reader was in,
@@ -481,6 +567,47 @@ final class WikiWiringTests: XCTestCase {
         XCTAssertTrue(page.contains("WikiLogic.clampedIndex(index, count: visible.count)"))
         let screens = code(try source("Views/WikiScreens.swift"))
         XCTAssertTrue(screens.contains("await wiki.decide(card, action, reason: reason)"))
+    }
+
+    /// A decide's answer is read, not dropped. The server answers 200 for an op it could not apply too —
+    /// recorded `conflict` (the entry moved past it, or is no longer active) or `withdrawn` — and that
+    /// comes back as the refusal: the card is not put in `answered`, the queue is read again, and the
+    /// caller says it where it says any refusal, never "Accepted" (`WikiDecisionRefusalTests`).
+    func testADecideReadsWhatTheServerRecorded() throws {
+        let model = code(try source("WikiModel.swift"))
+        let decide = try slice(model, from: "func decide(_ card: WikiLogic.ReviewCard,", to: "func loadEntriesNamed(")
+        XCTAssertFalse(decide.contains("_ = try await api.decideWikiChangeset("), "a decide drops the server's answer")
+        XCTAssertTrue(decide.contains("answer = try await api.decideWikiChangeset("))
+        let refused = try slice(decide, from: "if let refusal = WikiLogic.decisionRefusal(", to: "answered.insert(card.op.id)")
+        assertOrder(refused, ["WikiLogic.recordedDecision(answer, opID: card.op.id)", "op: card.op.op, action: action)",
+                              "await reloadAfterWrite()", "return refusal", "answered.insert(card.op.id)"],
+                    "a refusal the server recorded, ahead of the card leaving the queue")
+    }
+
+    /// Edit's form and a challenge's Amend form keep a refusal in the form, beside the words it is about —
+    /// one the server recorded as much as one it threw — and float only an answer that landed. The page's
+    /// alert is no place for it: the form's sheet is over the page.
+    func testReviewsFormsKeepTheirRefusalInTheForm() throws {
+        let screens = code(try source("Views/WikiScreens.swift"))
+        let view = try slice(screens, from: "struct WikiReviewView: View {", to: "private struct WikiChallengeAmendForm: View {")
+        for (sheet, action) in [(".sheet(item: $editing) { card in", ".edit"), (".sheet(item: $amending) { card in", ".amend")] {
+            let answer = try slice(view, from: sheet, to: "return answer")
+            assertOrder(answer, ["let answer = await wiki.decide(card, \(action), edited: edited)",
+                                 "if answer == nil { landed(card, action: \(action), renamed: edited.title) }",
+                                 "return answer"], "the \(action) form's answer")
+            XCTAssertFalse(answer.contains("finish("), "the \(action) form's refusal goes to the page's alert")
+        }
+        let amendStart = try XCTUnwrap(screens.range(of: "private struct WikiChallengeAmendForm: View {"))
+        let editStart = try XCTUnwrap(screens.range(of: "private struct WikiProposalForm: View {"))
+        let forms = ["a challenge's Amend": String(screens[amendStart.lowerBound..<editStart.lowerBound]),
+                     "Edit's": String(screens[editStart.lowerBound...])]
+        for (name, form) in forms {
+            XCTAssertTrue(form.contains("let submit: (WikiEntryChanges) async -> String?"), "\(name) form")
+            XCTAssertTrue(form.contains("@State private var refusal: String?"), "\(name) form")
+            assertOrder(form, ["if let refusal {", "Text(refusal)", ".foregroundStyle(.red)"], "\(name) form's refusal")
+            let submitted = try slice(form, from: "refusal = await submit(", to: "if refusal == nil { dismiss() }")
+            XCTAssertTrue(submitted.contains("saving = false"), "\(name) form stays open on a refusal")
+        }
     }
 
     /// Alerts say which write failed, while their message remains the server's reason.

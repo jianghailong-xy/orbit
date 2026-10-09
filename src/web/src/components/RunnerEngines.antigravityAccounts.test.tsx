@@ -6,8 +6,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { PlanUsageBucket, RunnerEngineAccount, RunnerEngineHealth } from '@orbit/shared';
-import { MachineEngines, RunnerEngines, summaryOf } from './RunnerEngines';
-import { openRunnerMenu, clickRunnerMenuItem } from './RunnerEngines.test-helpers';
+import { MachineEngines, RunnerEngines, accountsGroup, summaryOf } from './RunnerEngines';
+import { openRunnerMenu, clickRunnerMenuItem, openRunnerCards } from './RunnerEngines.test-helpers';
 import type { Runner } from './TasksSidePanel';
 
 /**
@@ -131,7 +131,7 @@ afterEach(() => {
 });
 
 function mount(r: Runner) {
-  localStorage.setItem('orbit:providers-expanded-runners', JSON.stringify([r.id]));
+  openRunnerCards([r]);
   apiMock.mockImplementation(async (path: string, options?: { method?: string }) => {
     if (path === '/runners') return [r];
     if (path.endsWith('/login') && (options?.method ?? 'GET') === 'GET') {
@@ -159,7 +159,8 @@ function mount(r: Runner) {
 const all = (el: ParentNode, selector: string) => [...el.querySelectorAll<HTMLElement>(selector)];
 const engineRow = (page: ParentNode) => page.querySelector<HTMLElement>('[data-engine="antigravity"]')!;
 const accountRows = (page: ParentNode) => all(page, '.re-acct');
-const tags = (row: Element) => all(row, '.ant-tag').map((tag) => tag.textContent?.trim());
+/** What a row says of its state: the words in its status slot (a status label is text, with no role). */
+const tags = (row: Element) => all(row, '.re-status').map((status) => status.textContent?.trim()).filter(Boolean);
 const labelOf = (b: Element) => b.textContent?.trim() || b.getAttribute('aria-label');
 const buttons = (row: Element) => all(row, ':scope > .re-act button').map(labelOf);
 const button = (el: ParentNode, label: string) => {
@@ -275,7 +276,7 @@ describe('two Google accounts on one runner', () => {
     let ok: HTMLButtonElement | undefined;
     await act(async () => {
       await vi.waitFor(() => {
-        ok = all(document, '.ant-popconfirm button').find((b) => b.textContent?.trim() === 'Remove') as HTMLButtonElement;
+        ok = all(document, '[role="dialog"] button').find((b) => b.textContent?.trim() === 'Remove') as HTMLButtonElement;
         expect(ok).toBeDefined();
       }, { timeout: 20_000, interval: 20 });
     });
@@ -362,13 +363,21 @@ describe('a runner that runs agy on its Gemini key', () => {
 });
 
 describe('the runner page’s Antigravity rows', () => {
-  /** What the runner's own page draws: the card's rows, as MachineEngines lays them out there. */
+  /** What the runner's own page draws: the card's rows, as MachineEngines lays them out there — its
+   *  Antigravity accounts open, as the card's are (openRunnerCards). */
   const machinePage = (r: Runner) => {
     const box = document.createElement('div');
     box.innerHTML = renderToStaticMarkup(
       <QueryClientProvider client={new QueryClient()}>
         <MemoryRouter>
-          <MachineEngines runner={r} signIn={null} onSignIn={() => {}} machinePage />
+          <MachineEngines
+            runner={r}
+            signIn={null}
+            onSignIn={() => {}}
+            openAccounts={[accountsGroup(r.id, 'antigravity')]}
+            onFoldAccounts={() => {}}
+            machinePage
+          />
         </MemoryRouter>
       </QueryClientProvider>,
     );

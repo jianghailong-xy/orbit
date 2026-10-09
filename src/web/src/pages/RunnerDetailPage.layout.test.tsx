@@ -4,7 +4,6 @@ import { resolve } from 'node:path';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { App as AntdApp } from 'antd';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { Runner } from '../components/TasksSidePanel';
@@ -89,7 +88,7 @@ beforeAll(() => {
       return { ok: true, json: async () => ({ version: published }) };
     }),
   );
-  // antd's Select measures its box, and jsdom ships no layout to measure.
+  // The Actions menu measures its button, and jsdom ships no layout to measure.
   vi.stubGlobal(
     'ResizeObserver',
     class {
@@ -166,17 +165,15 @@ async function mount(m: Machine, counts: Array<{ workspaceId: string; running: n
   root = createRoot(host);
   act(() =>
     root!.render(
-      <AntdApp>
-        <QueryClientProvider client={qc}>
-          <MemoryRouter initialEntries={[`/runners/${RUNNER_ID}`]}>
-            <Routes>
-              <Route path="/runners/:id" element={<RunnerDetailPage />} />
-              <Route path="*" element={<Arrived />} />
-            </Routes>
-            <ToastViewport />
-          </MemoryRouter>
-        </QueryClientProvider>
-      </AntdApp>,
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={[`/runners/${RUNNER_ID}`]}>
+          <Routes>
+            <Route path="/runners/:id" element={<RunnerDetailPage />} />
+            <Route path="*" element={<Arrived />} />
+          </Routes>
+          <ToastViewport />
+        </MemoryRouter>
+      </QueryClientProvider>,
     ),
   );
   await settle();
@@ -201,6 +198,22 @@ const click = async (el: HTMLElement) => {
   await act(async () => el.click());
   await settle();
 };
+/** A mouse press as a browser delivers it — pointer and mouse down and up, then the click — which a
+ *  list option needs before it takes a click as a choice rather than a keyboard activation. */
+const press = async (el: HTMLElement) => {
+  await act(async () => {
+    const init = { bubbles: true, cancelable: true, button: 0, buttons: 1, detail: 1 };
+    el.dispatchEvent(new PointerEvent('pointerdown', { ...init, pointerType: 'mouse' }));
+    el.dispatchEvent(new MouseEvent('mousedown', init));
+    el.dispatchEvent(new PointerEvent('pointerup', { ...init, buttons: 0, pointerType: 'mouse' }));
+    el.dispatchEvent(new MouseEvent('mouseup', { ...init, buttons: 0 }));
+    el.dispatchEvent(new MouseEvent('click', { ...init, buttons: 0 }));
+  });
+  await settle();
+};
+/** A dialog's name and description, as assistive technology reads them. */
+const nameOf = (el: Element) => text(document.getElementById(el.getAttribute('aria-labelledby') ?? ''));
+const descriptionOf = (el: Element) => text(document.getElementById(el.getAttribute('aria-describedby') ?? ''));
 const button = (label: string, within: ParentNode = document.body) => {
   const found = $$('button', within).find((b) => text(b) === label);
   if (!found) throw new Error(`no button reading "${label}"`);
@@ -223,8 +236,8 @@ const about = () =>
     return [text($('.rd-kv-label', row)), text(value), note];
   });
 
-/** Types into an antd InputNumber the way a person does: the text changes, then focus leaves or
- *  Enter is pressed. */
+/** Types into a number field the way a person does: the text changes, then focus leaves or Enter is
+ *  pressed. */
 async function typeNumber(input: HTMLInputElement, value: string, finish: 'blur' | 'enter') {
   await act(async () => {
     input.focus();
@@ -243,11 +256,8 @@ async function typeNumber(input: HTMLInputElement, value: string, finish: 'blur'
 
 /** Opens Keep Free and reads what it offers. */
 async function keepFreeOptions() {
-  await act(async () => {
-    $('.rd-keep-free .ant-select-content').dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
-  });
-  await settle();
-  return $$('.ant-select-item-option');
+  await click($('[role="combobox"][aria-label="Keep Free"]'));
+  return $$('[role="listbox"] [role="option"]');
 }
 
 describe('a runner’s page, laid out as web.png', () => {
@@ -349,9 +359,9 @@ describe('a runner’s page, laid out as web.png', () => {
 
     // Repair: asks first, in a session merge bar's words, then repairs through the first workspace.
     await click(button('Repair'));
-    const confirm = $('.ant-modal-confirm');
-    expect(text($('.ant-modal-confirm-title', confirm))).toBe('Clean up this checkout?');
-    expect(text($('.ant-modal-confirm-content', confirm))).toContain('Orbit will save everything /srv/app currently holds');
+    const confirm = $('[role="alertdialog"]');
+    expect(nameOf(confirm)).toBe('Clean up this checkout?');
+    expect(descriptionOf(confirm)).toContain('Orbit will save everything /srv/app currently holds');
     await click(button('Save and clean up', confirm));
     expect(sent.at(-1)).toEqual({ method: 'POST', path: '/workspaces/ws-app/repo-cleanup' });
 
@@ -379,7 +389,7 @@ describe('a runner’s page, laid out as web.png', () => {
     expect(text($('.rd-keep-free'))).toBe('Off');
     const offered = await keepFreeOptions();
     expect(offered.map(text)).toEqual(['Off', '10 GB', '20 GB', '50 GB']);
-    await click(offered[2]);
+    await press(offered[2]);
     expect(sent.at(-1)).toEqual({ method: 'PATCH', path: `/runners/${RUNNER_ID}`, body: { minFreeDiskMb: 20480 } });
     expect(sent).toHaveLength(3);
   });
@@ -389,7 +399,7 @@ describe('a runner’s page, laid out as web.png', () => {
     expect(text($('.rd-keep-free'))).toBe('15 GB');
     const offered = await keepFreeOptions();
     expect(offered.map(text)).toEqual(['Off', '10 GB', '15 GB', '20 GB', '50 GB']);
-    await click(offered[0]);
+    await press(offered[0]);
     expect(sent).toEqual([{ method: 'PATCH', path: `/runners/${RUNNER_ID}`, body: { minFreeDiskMb: null } }]);
   });
 
@@ -417,7 +427,7 @@ describe('a runner’s page, laid out as web.png', () => {
     ]);
     expect(text($('.rd-about .rd-hint'))).toBe('Runs as root, so sessions here can’t use Bypass permissions.');
     await click(button('Rename', $('.rd-about')));
-    expect(text($('.ant-modal-title'))).toBe('Rename runner');
+    expect(nameOf($('[role="dialog"]'))).toBe('Rename runner');
   });
 
   it('says a root runner behind the release installs it when idle, and a regular user can’t update itself', async () => {
@@ -437,12 +447,12 @@ describe('a runner’s page, laid out as web.png', () => {
   it('keeps Rename, Rotate token and Delete in Actions — Max Concurrent moved to Capacity', async () => {
     const { sent } = await mount(machine('real wikova'));
     await click(button('Actions'));
-    const menu = $('.ant-dropdown-menu');
-    expect($$('.ant-dropdown-menu-item', menu).map(text)).toEqual(['Rename', 'Rotate token', 'Delete']);
+    const menu = $('[role="menu"]');
+    expect($$('[role="menuitem"]', menu).map(text)).toEqual(['Rename', 'Rotate token', 'Delete']);
     // Rotate token asks, then shows the new token once — the Runners list's own dialogs.
-    await click($$('.ant-dropdown-menu-item', menu)[1]);
-    const confirm = $('.ant-modal-confirm');
-    expect(text($('.ant-modal-confirm-title', confirm))).toBe('Rotate token for “wikova”?');
+    await click($$('[role="menuitem"]', menu)[1]);
+    const confirm = $('[role="alertdialog"]');
+    expect(nameOf(confirm)).toBe('Rotate token for “wikova”?');
     await click(button('Rotate token', confirm));
     expect(sent).toEqual([{ method: 'POST', path: `/runners/${RUNNER_ID}/rotate-token` }]);
     expect(text($('.runner-token-box'))).toBe('orbit_rt_fresh');

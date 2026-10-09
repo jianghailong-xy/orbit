@@ -18,7 +18,6 @@ import { pendingCriteriaDecisionsQuery } from '../lib/queries';
 import { ACCEPTANCE_PLAN_CHANGE_PREFIX } from './AcceptanceConfirmationCard';
 import { ENTER_HINT } from './CardHotkey';
 import { OWNER_SEND_BACK_ACTION } from './OwnerConfirmationCard';
-import { SETTLEMENT_DELEGATE_ACTION } from './ProjectSettlementCard';
 import type { ProjectOpenItemRow } from '@orbit/shared';
 import {
   CRITERIA_CHANGE_TITLE,
@@ -201,10 +200,6 @@ class FakeEventSource {
 /** Every path the page asked the api for, in order. */
 const requested: string[] = [];
 const unstubbed: string[] = [];
-/** Whether the coordinating conversation's project document carries a projection that is STILL
- *  withholding — the fourth read the settlement card turns on, and the state its second press is
- *  drawn in. Off by default: the card is not what most cases here are about. */
-let settlementHeld = false;
 /** The standing the confirmation door serves: `UNCONFIRMED` for most cases, and a case that is
  *  about the RECORD sets one with a confirmation on it. Reset per case like every other stub. */
 let confirmationStanding: StandardSetConfirmationStanding = STANDING;
@@ -275,7 +270,6 @@ beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   FakeEventSource.open = [];
   requested.length = 0;
-  settlementHeld = false;
   unstubbed.length = 0;
   confirmationStanding = STANDING;
   projectStartedAt = null;
@@ -385,28 +379,6 @@ beforeEach(() => {
         startedAt: projectStartedAt,
         _count: { tasks: 1 },
         acceptanceCriteriaItems: CRITERIA,
-        // A project LOOKING finished while the derivation still withholds: every criterion met,
-        // none with a merge receipt, and a set the owner has stood behind. Drawn only for the case
-        // that is about that card — the projection is the fourth read it turns on.
-        ...(settlementHeld
-          ? {
-              derivedDone: {
-                status: 'OPEN',
-                done: false,
-                withheld: ['CRITERION_UNLANDED'],
-                criteria: [{
-                  definitionId: 'c1',
-                  satisfied: true,
-                  landing: 'UNKNOWN',
-                  independence: 'INDEPENDENT',
-                  conflicts: [],
-                  remedy: null,
-                  withheld: ['CRITERION_UNLANDED'],
-                }],
-                confirmation: 'CONFIRMED',
-              },
-            }
-          : {}),
       });
     }
     // The open items the coordinator question card reads (§5.2): no question is open in any of these
@@ -414,7 +386,7 @@ beforeEach(() => {
     if (path === `/projects/${PROJECT_PUBLIC}/open-items`) {
       return reply({ needsYou: [], withCoordinator: [], startRequest: startRow });
     }
-    // The plan the start card sums up in a line: two tasks, the second after the first.
+    // The plan the start card lists by level: two tasks, the second after the first.
     if (path === `/projects/${PROJECT_PUBLIC}/dependency-graph`) {
       return reply({
         marks: [
@@ -646,8 +618,9 @@ describe('the start card in WorkspaceView', { timeout: 60_000 }, () => {
     await openSettlementReview();
     const card = (): HTMLElement => reviewForm()!.querySelector<HTMLElement>('.start-card')!;
     expect(reviewForm()!.querySelectorAll('.settlement-card.start-card')).toHaveLength(1);
-    // The plan in one line, off the dependency graph.
-    expect(card().querySelector('.start-card-plan')?.textContent).toContain('A starts now · B after A');
+    // The plan by level, off the dependency graph: A starts with the project, B after it.
+    expect([...card().querySelectorAll('.start-card-level')].map((level) => level.textContent))
+      .toEqual(['1Athe sealNow', '2Bthe card']);
     // One setting changed on the card before the press: at most 5 tasks, not the suggested 3.
     const count5 = card().querySelector<HTMLInputElement>('.start-card-count input')!;
     await act(async () => {
@@ -1075,46 +1048,25 @@ describe('a focused row that answers Enter itself, while the start card holds th
 });
 
 /**
- * The OTHER settlement card's second press — the project's, not the criteria set's. It is the one
- * press on that card that is not a decision: the agent that owns the project is this conversation,
- * so the hand-over is a turn in it, and whether that turn is actually sent (rather than arming a
- * composer and waiting for a sentence) is a fact about the page the two live on.
+ * The project settlement card's hand-over press is not drawn in a conversation any more.
+ *
+ * "Ask the coordinator to handle it" was the second press of the card the coordinator conversation
+ * drew while a project looked finished; the owner's ruling of 2026-10-07 04:20Z took that card —
+ * and so both its presses — out of the conversation. What the page draws for a project in that
+ * state is asserted in `ProjectDoneConversation.test.tsx` (and, for the condition itself, in
+ * `ProjectWhyNotDoneGate.test.tsx`); this file's case for it would have nothing to press.
  */
-describe('Ask the coordinator to handle it, on the project settlement card', { timeout: 60_000 }, () => {
-  it('sends the card’s own facts as a turn, and leaves the card where it stands', async () => {
-    settlementHeld = true;
-    // Started: "why is it not done?" is asked only of a project somebody started — an unstarted
-    // one is the start card's question (`settlementHeldOnProject`).
+describe('the project settlement card is not drawn in a conversation', { timeout: 60_000 }, () => {
+  it('draws no settlement card for a project that looks finished, and sends nothing', async () => {
     projectStartedAt = '2026-09-11T03:00:00.000Z';
     await mount(`/sessions/${COORDINATOR_PUBLIC}`);
     await waitForUi(() => {
-      expect(count('.project-settlement')).toBe(1);
+      expect(count('.project-settlement')).toBe(0);
     });
-    const card = (): HTMLElement => mounted().querySelector<HTMLElement>('.project-settlement')!;
-    const actions = (): HTMLButtonElement[] => [
-      ...card().querySelectorAll<HTMLButtonElement>('.project-settlement-actions button'),
-    ];
-    // One press and it is not a question: this project's set is confirmed, so the only thing on the
-    // card that can move is the work, and the work is this conversation's.
-    expect(actions().map(labelOf)).toEqual([SETTLEMENT_DELEGATE_ACTION]);
-    expect(sendTurnMock, 'the page sent something before the press').not.toHaveBeenCalled();
-
-    await act(async () => {
-      actions()[0]!.click();
-    });
-
-    await waitForUi(() => {
-      expect(sendTurnMock).toHaveBeenCalledTimes(1);
-    });
-    const [session, content] = sendTurnMock.mock.calls[0]!;
-    // To this conversation, which is the one that coordinates the project the card is about.
-    expect(session).toBe(COORDINATOR_PUBLIC);
-    // The facts ARE the message: they name what is withheld and what would clear it, so the agent
-    // reads the card's own account of the project rather than a sentence about it.
-    expect(content).toContain('Orbit has not recorded it done');
-    expect(content).toContain('land the branch, or record the merge with merge_receipt');
-    // The card is not an answer to anything, so it stays where it was.
-    expect(count('.project-settlement'), 'the card went away when it handed the work over').toBe(1);
+    expect(count('.project-why-not-done')).toBe(0);
+    expect(mounted().textContent, 'the old question is not on the page at all')
+      .not.toContain('Why is this project not done?');
+    expect(sendTurnMock, 'the page sent something on its own').not.toHaveBeenCalled();
   });
 });
 

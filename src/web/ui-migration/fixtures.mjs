@@ -142,6 +142,10 @@ export async function installFixtures(page, { theme = 'light', scenario = 'defau
     }
     if (method === 'POST' && path === '/api/auth/change-password') return json({ ok: true });
     if (method === 'GET' && path === '/api/auth/setup-status') return json({ needsSetup: false });
+    // main 558a8ba1f (feat(auth): link and unlink Google from the profile page, ... (S4)) made the profile
+    // page read GET /auth/methods. The server's default answer: Google sign-in is off until an
+    // administrator turns it on, so the password alone (SignInProvidersService.methods()).
+    if (method === 'GET' && path === '/api/auth/methods') return json({ password: true, google: false, googleSignup: false });
     if (method === 'GET' && path === '/api/runners') return json([RUNNER]);
     if (method === 'GET' && path === '/api/workspaces') return json([WORKSPACE]);
     if (method === 'GET' && path === '/api/providers') return json([]);
@@ -186,6 +190,11 @@ export async function installFixtures(page, { theme = 'light', scenario = 'defau
     if (method === 'GET' && path === '/api/wiki/review') return json([]);
     if (method === 'GET' && path === `/api/wiki/spaces/${space.id}/articles`) return json({ spaceId: space.id, categories: [{ key: 'clients', title: 'Clients & UI', topics: [{ slug: 'ui-migration', title: 'UI migration', description: null, category: 'clients', article: null, parts: [] }] }], uncategorized: [] });
     if (method === 'GET' && path === `/api/wiki/spaces/${space.id}/docs`) return json({ spaceId: space.id, plan: null, docs: { total: 0, written: 0 }, categories: [] });
+    // main 2ba6765d9 (docs(mocks): add wiki share mock for share-links, which also adds WikiShareButton to the
+    // Wiki head) made every Wiki page read GET /wiki/spaces/:id/share. The server's answer for a space nobody
+    // has shared (ShareLinksService.current): no link, and wikiShareCounts over the /docs directory above —
+    // no written documents, so no footnotes.
+    if (method === 'GET' && path === `/api/wiki/spaces/${space.id}/share`) return json({ link: null, counts: { documents: 0, footnotes: 0 } });
     if (method === 'GET' && path === `/api/wiki/spaces/${space.id}/plan`) return json({ spaceId: space.id, confirmed: null, draft: null, proposals: [], job: null });
     if (method === 'GET' && path === `/api/wiki/entries/${entries[0].id}`) return json({ ...entries[0], sources: [], history: [], exposure: [] });
     unhandled.push(`${method} ${path}${searchParams.size ? `?${searchParams}` : ''}`);

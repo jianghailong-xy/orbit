@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { App as AntApp } from 'antd';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
@@ -197,12 +196,10 @@ describe('a Codex pool, as its owner and as somebody they added read it', { time
       root.render(
         <QueryClientProvider client={client}>
           <MemoryRouter initialEntries={[at]}>
-            <AntApp>
-              <Routes>
-                <Route path="/infrastructure" element={<InfrastructurePage />} />
-                <Route path="/providers/pools/:id" element={<ProviderPoolPage />} />
-              </Routes>
-            </AntApp>
+            <Routes>
+              <Route path="/infrastructure" element={<InfrastructurePage />} />
+              <Route path="/providers/pools/:id" element={<ProviderPoolPage />} />
+            </Routes>
           </MemoryRouter>
         </QueryClientProvider>,
       );
@@ -232,9 +229,18 @@ describe('a Codex pool, as its owner and as somebody they added read it', { time
   const labelled = (label: string, scope: ParentNode = document.body) =>
     Array.from(scope.querySelectorAll<HTMLElement>('[aria-label]')).filter((el) => el.getAttribute('aria-label') === label);
   const dialog = () => {
-    const dialogs = document.body.querySelectorAll<HTMLElement>('.ant-modal');
+    const dialogs = document.body.querySelectorAll<HTMLElement>('[role="dialog"]');
     return dialogs[dialogs.length - 1] ?? null;
   };
+  /** A dialog's name and description, as assistive technology reads them. */
+  const nameOf = (el: Element | null | undefined) =>
+    el ? text(document.getElementById(el.getAttribute('aria-labelledby') ?? '')) : null;
+  const descriptionOf = (el: Element) => document.getElementById(el.getAttribute('aria-describedby') ?? '');
+  /** The radio in `scope` whose label begins with `words`. */
+  const radio = (words: string, scope: ParentNode) =>
+    Array.from(scope.querySelectorAll<HTMLElement>('label'))
+      .find((label) => label.textContent?.startsWith(words))
+      ?.querySelector<HTMLElement>('[role="radio"]');
   const click = async (el: Element | null | undefined) => {
     if (!el) throw new Error('nothing to click');
     await act(async () => {
@@ -252,13 +258,9 @@ describe('a Codex pool, as its owner and as somebody they added read it', { time
     await settle();
   };
   /** The setting "Who can use it" shows, and a press on the other one. */
-  const setting = () => text(who().querySelector('.ant-segmented-item-selected'));
+  const setting = () => text(who().querySelector('[role="radio"][aria-checked="true"]'));
   const pick = async (words: string) =>
-    click(
-      Array.from(who().querySelectorAll('.ant-segmented-item'))
-        .find((el) => el.textContent === words)
-        ?.querySelector('input'),
-    );
+    click(Array.from(who().querySelectorAll('[role="radio"]')).find((el) => el.textContent === words));
 
   beforeEach(() => {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -384,7 +386,7 @@ describe('a Codex pool, as its owner and as somebody they added read it', { time
     expect(text(who().querySelector('.pool-rule-h'))).toBe(
       'Off: only you put keys in. A key they add runs everyone’s sessions here, theirs first.',
     );
-    expect(who().querySelector('button.ant-switch')?.getAttribute('aria-checked')).toBe('true');
+    expect(who().querySelector('[role="switch"][aria-label="They can add their own API keys"]')?.getAttribute('aria-checked')).toBe('true');
     expect(text(who().querySelector('.who-foot'))).toBe(
       'Your ChatGPT accounts run everyone’s sessions here. The people you add start on them, and fall to the API keys when none can run. OpenAI’s terms treat account sharing as a violation — an account used that way can be suspended.',
     );
@@ -395,7 +397,7 @@ describe('a Codex pool, as its owner and as somebody they added read it', { time
 
     // Taking somebody out is a press away, and asks first.
     await click(labelled('Manage Lin Wei')[0]);
-    const items = Array.from(document.body.querySelectorAll('.ant-dropdown-menu-item')).map((el) => el.textContent);
+    const items = Array.from(document.body.querySelectorAll('[role="menu"] [role="menuitem"]')).map((el) => el.textContent);
     expect(items).toEqual(['Remove from pool']);
   });
 
@@ -435,7 +437,7 @@ describe('a Codex pool, as its owner and as somebody they added read it', { time
 
     expect(text(who().querySelector('.re-runner'))).toBe('Who can use it3');
     expect(text(who().querySelector('.pool-head-note'))).toBe('Set by jianghailong · share of this month’s API key use');
-    expect(who().querySelector('.ant-segmented')).toBeNull();
+    expect(who().querySelector('[role="radiogroup"]')).toBeNull();
     expect(who().querySelector('.pool-rule')).toBeNull();
     expect(who().querySelector('.who-foot')).toBeNull();
     expect(
@@ -457,25 +459,25 @@ describe('a Codex pool, as its owner and as somebody they added read it', { time
   it('asks first what kind of account goes in, and goes on to that kind’s own dialog (03-1)', async () => {
     await mount(PAGE);
     await click(button('Add account'));
-    expect(text(dialog()?.querySelector('.ant-modal-title'))).toBe('Add an account to Codex Pool');
+    expect(nameOf(dialog())).toBe('Add an account to Codex Pool');
     const kinds = Array.from(dialog()!.querySelectorAll<HTMLElement>('.add-kind'));
-    expect(kinds.map((kind) => text(kind.querySelector('.ant-radio-label')))).toEqual([
+    expect(kinds.map((kind) => text(kind))).toEqual([
       'Sign in with ChatGPTAnother ChatGPT account of yours. Everyone in the pool runs on it once you share the pool — until then, your sessions alone.',
       'Paste an OpenAI API keyAn organization or project key. Everyone who can use this pool runs on it, up to a monthly limit you set.',
     ]);
-    expect(kinds.map((kind) => kind.querySelector<HTMLInputElement>('input')?.checked)).toEqual([true, false]);
+    expect(kinds.map((kind) => kind.querySelector('[role="radio"]')?.getAttribute('aria-checked'))).toEqual(['true', 'false']);
     expect(button('Cancel', dialog()!)).not.toBeNull();
     await click(button('Continue', dialog()!));
-    expect(text(dialog()?.querySelector('.ant-modal-title'))).toBe('Sign in with ChatGPT');
+    expect(nameOf(dialog())).toBe('Sign in with ChatGPT');
     expect(text(dialog()?.querySelector('.pa-lead'))).toBe(
       'Sign in with another ChatGPT account of yours to add it to Codex Pool. It runs on 2 accounts now.',
     );
     await click(button('Cancel', dialog()!));
 
     await click(button('Add account'));
-    await click(dialog()!.querySelector('input[type="radio"][value="key"]'));
+    await click(radio('Paste an OpenAI API key', dialog()!));
     await click(button('Continue', dialog()!));
-    expect(text(dialog()?.querySelector('.ant-modal-title'))).toBe('Add a key to Codex Pool');
+    expect(nameOf(dialog())).toBe('Add a key to Codex Pool');
     // Nothing went to the server on the way.
     expect(sent).toEqual([]);
   });
@@ -485,7 +487,7 @@ describe('a Codex pool, as its owner and as somebody they added read it', { time
     await mount(PAGE);
     await pick('Me and people I add');
     const modal = dialog()!;
-    expect(text(modal.querySelector('.ant-modal-title'))).toBe('Share Codex Pool');
+    expect(nameOf(modal)).toBe('Share Codex Pool');
     expect(text(modal.querySelector('.np-field-l'))).toBe('Emails of their Orbit accounts');
     expect(Array.from(modal.querySelectorAll('.pa-facts li')).map((li) => li.textContent)).toEqual([
       'They see Codex Pool on their Infrastructure page and in the session picker, and can start sessions on it.',
@@ -493,15 +495,15 @@ describe('a Codex pool, as its owner and as somebody they added read it', { time
       'They can sign in ChatGPT accounts of their own, which then run everyone’s sessions here too — theirs and yours — until they take them out again.',
       'Everyone sees each person’s share of this month’s API key use.',
     ]);
-    expect(text(modal.querySelector('.ant-checkbox-wrapper'))).toBe('They can add their own API keys');
-    expect(modal.querySelector<HTMLInputElement>('.ant-checkbox-input')?.checked).toBe(true);
+    expect(text(modal.querySelector('[role="checkbox"]')?.closest('label'))).toBe('They can add their own API keys');
+    expect(modal.querySelector('[role="checkbox"]')?.getAttribute('aria-checked')).toBe('true');
     // Still what it was: who can use it is its people, and nobody is in it yet.
     expect(setting()).toBe('Just me');
     expect(button('Share', modal)?.disabled).toBe(true);
 
     await type(modal.querySelector<HTMLInputElement>('.pool-share-emails input'), 'zhang.min@orbitd.io,');
     await type(modal.querySelector<HTMLInputElement>('.pool-share-emails input'), 'lin.wei@orbitd.io');
-    await click(modal.querySelector('.ant-checkbox-input'));
+    await click(modal.querySelector('[role="checkbox"]'));
     await click(button('Share', modal));
     expect(sent).toEqual([
       { method: 'POST', path: `${AT}/people`, body: { email: 'zhang.min@orbitd.io' } },
@@ -515,7 +517,7 @@ describe('a Codex pool, as its owner and as somebody they added read it', { time
     await mount(PAGE);
     await pick('Me and people I add');
     const modal = dialog()!;
-    expect(text(modal.querySelector('.ant-modal-title'))).toBe('Share Codex Pool');
+    expect(nameOf(modal)).toBe('Share Codex Pool');
     expect(modal.querySelector('.pa-risk')).toBeNull();
     expect(Array.from(modal.querySelectorAll('.pa-facts li')).map((li) => li.textContent)).toEqual([
       'They see Codex Pool on their Infrastructure page and in the session picker, and can start sessions on it.',
@@ -523,7 +525,7 @@ describe('a Codex pool, as its owner and as somebody they added read it', { time
       'They can sign in ChatGPT accounts of their own, which then run everyone’s sessions here too — theirs and yours — until they take them out again.',
       'Everyone sees each person’s share of this month’s API key use.',
     ]);
-    expect(Array.from(modal.querySelectorAll('.ant-modal-footer button')).map((el) => el.textContent)).toEqual([
+    expect(Array.from(modal.querySelectorAll('.orbit-overlay-footer button')).map((el) => el.textContent)).toEqual([
       'Cancel',
       'Share',
     ]);
@@ -537,32 +539,32 @@ describe('a Codex pool, as its owner and as somebody they added read it', { time
     await mount(PAGE);
     await pick('Me and people I add');
     const modal = dialog()!;
-    expect(text(modal.querySelector('.ant-modal-title'))).toBe('Share Codex Pool');
+    expect(nameOf(modal)).toBe('Share Codex Pool');
     expect(modal.querySelector('.pa-facts')).toBeNull();
-    expect(modal.querySelector('.ant-checkbox-wrapper')).toBeNull();
+    expect(modal.querySelector('[role="checkbox"]')).toBeNull();
     expect(text(modal.querySelector('.pa-risk'))).toBe(
       'Codex Pool has no API key yet. They’ll see it but can’t start a session until it has one, and no ChatGPT account is signed in either.',
     );
-    expect(Array.from(modal.querySelectorAll('.ant-modal-footer button')).map((el) => el.textContent)).toEqual([
+    expect(Array.from(modal.querySelectorAll('.orbit-overlay-footer button')).map((el) => el.textContent)).toEqual([
       'Cancel',
       'Share anyway',
       'Add an API key first',
     ]);
     await click(button('Add an API key first', modal));
-    expect(text(dialog()?.querySelector('.ant-modal-title'))).toBe('Add a key to Codex Pool');
+    expect(nameOf(dialog())).toBe('Add a key to Codex Pool');
   });
 
   it('asks before making a shared pool just its owner’s: who loses it, which keys go with them, what stays (03-5)', async () => {
     await mount(PAGE);
     await pick('Just me');
-    const confirm = document.body.querySelector<HTMLElement>('.ant-modal-confirm')!;
-    expect(text(confirm.querySelector('.ant-modal-confirm-title'))).toBe('Make Codex Pool just yours?');
-    expect(text(confirm.querySelector('.ant-modal-confirm-content'))).toBe(
+    const confirm = document.body.querySelector<HTMLElement>('[role="alertdialog"]')!;
+    expect(nameOf(confirm)).toBe('Make Codex Pool just yours?');
+    expect(text(descriptionOf(confirm))).toBe(
       'Zhang Min and Lin Wei lose it at once, and their sessions on it stop. zm-proj leaves with Zhang Min, because a key goes with whoever added it. Your ChatGPT accounts and orbit-org-1 stay.',
     );
-    expect(text(confirm.querySelector('.ant-modal-confirm-content b'))).toBe('zm-proj leaves with Zhang Min');
+    expect(text(descriptionOf(confirm)?.querySelector('b'))).toBe('zm-proj leaves with Zhang Min');
     expect(button('Cancel', confirm)).not.toBeNull();
-    expect(button('Make it just mine', confirm)?.classList.contains('ant-btn-dangerous')).toBe(true);
+    expect(button('Make it just mine', confirm)?.classList.contains('orbit-button-danger')).toBe(true);
     expect(sent).toEqual([]);
     await click(button('Make it just mine', confirm));
     expect(sent).toEqual([

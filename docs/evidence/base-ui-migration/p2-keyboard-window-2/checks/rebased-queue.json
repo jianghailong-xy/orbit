@@ -1,0 +1,13 @@
+{
+ "command": "cd /root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370 && bash docs/evidence/base-ui-migration/p2-keyboard-window-2/rebased-queue.sh",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_835ce08ba998",
+ "cwd": "/root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370",
+ "commit": "78288a379b10b372fe2189e126561bd494ac8acf",
+ "webTree": "d8ae59f026644577041afea38b5994da1eef0f9f",
+ "outputLastWritten": "2026-10-08T04:40:54.041656+00:00",
+ "exitCode": 0,
+ "outputSha256": "69d4d386e572cac2fd106677043d61450482993578d36ba79b01873d6e342f9f",
+ "outputBytes": 7174,
+ "note": "The queue of checks rerun on the branch rebased onto origin/main c7efa24cb, one at a time with 6 GB free (each step has its own record: checks/prod-rebased-*, checks/held-frames-rebased-*). Its last step, pilot-repeat.sh, ran the pilot test behind the one screenshot difference five times with these components (final) and five times with Overlay.tsx, Select.tsx and Menu.tsx as on the base (prefix, worktree only, rebuilt, then put back and rebuilt): the close icon of chromium-light-desktop shows edge state 7aa8bad0b12c 4x and dfda445e9451 1x with these components, dfda445e9451 3x and 7aa8bad0b12c 2x with the base ones; chromium-dark-desktop f7fd0a03439b 5x, and 4x plus 58d9c0284bbd 1x. Both trees show both states: run-to-run noise."
+}

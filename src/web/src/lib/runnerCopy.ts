@@ -83,6 +83,9 @@ export const RUNNER_ENGINE_SIGNED_OUT = 'Signed out';
 export const RUNNER_ENGINE_NOT_INSTALLED = 'Not installed';
 export const RUNNER_ENGINE_UP_TO_DATE = 'up to date';
 export const RUNNER_ENGINE_NO_QUOTA = 'No quota reported';
+/** A Kimi login whose plan carries no quota limit: its quota was read and held no window at all —
+ *  not a read that failed or never ran (RUNNER_ENGINE_NO_QUOTA). */
+export const RUNNER_ENGINE_NO_QUOTA_LIMIT = 'No quota limit';
 export const RUNNER_SIGN_IN = 'Sign In';
 export const RUNNER_UPDATE_ENGINES_NOW = 'Update Engines Now';
 export const RUNNER_REFRESH_MODEL_LISTS = 'Refresh Model Lists';
@@ -90,6 +93,20 @@ export const RUNNER_ENGINES_FOOTER =
   'Orbit keeps these CLIs updated every 30 min. Sign-ins live on this machine — a session spends ' +
   'that subscription, nothing to paste.';
 export const RUNNER_ENGINES_OFFLINE_FOOTER = 'Signing in and updating need the runner online.';
+
+/** Under a signed-in account whose login lapses within three days — when Claude Code itself starts
+ *  warning ("Your login expires in 3 days · run /login to renew") — with the button that signs it in
+ *  again before it does. */
+export const RUNNER_ENGINE_RENEW = 'Renew';
+export function runnerEngineLoginExpires(count: number, unit: string): string {
+  return `Login expires in ${count} ${unit}`;
+}
+/** Under a signed-out account: what its being signed out costs. */
+export const RUNNER_ENGINE_ACCOUNT_SIGNED_OUT_NOTE = 'Sessions can’t use this account until you sign in again.';
+/** The same, for an engine's only account on that machine. */
+export function runnerEngineSignedOutAlone(engine: string): string {
+  return `Sessions on this runner can’t use ${engine} until you sign in again.`;
+}
 
 export function runnerEnginesChecked(when: string): string {
   return `Checked ${when}`;

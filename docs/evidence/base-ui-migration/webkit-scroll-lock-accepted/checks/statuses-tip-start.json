@@ -1,0 +1,55 @@
+{
+ "runs": [
+  {
+   "label": "batch-branch-head-d49a8749b",
+   "report": "docs/evidence/base-ui-migration/webkit-scroll-lock/runs/p0-standard.report.summary.json",
+   "stats": {
+    "expected": 92,
+    "unexpected": 9,
+    "flaky": 0,
+    "skipped": 11
+   },
+   "tests": 112,
+   "unexpected": [
+    "webkit-dark-desktop | pages.browser.mjs | profile",
+    "webkit-dark-desktop | pages.browser.mjs | session",
+    "webkit-dark-desktop | pages.browser.mjs | settings",
+    "webkit-dark-phone | pages.browser.mjs | profile",
+    "webkit-dark-phone | pages.browser.mjs | session",
+    "webkit-dark-phone | pages.browser.mjs | settings",
+    "webkit-light-desktop | pages.browser.mjs | profile",
+    "webkit-light-desktop | pages.browser.mjs | session",
+    "webkit-light-desktop | pages.browser.mjs | settings"
+   ]
+  },
+  {
+   "label": "tip-start-b2568f28d",
+   "report": "/mnt/data/tmp/34cfhmpygHQdZxRznyVH9/runs/tip-start/report.json",
+   "stats": {
+    "expected": 92,
+    "unexpected": 9,
+    "flaky": 0,
+    "skipped": 11
+   },
+   "tests": 112,
+   "unexpected": [
+    "webkit-dark-desktop | pages.browser.mjs | profile",
+    "webkit-dark-desktop | pages.browser.mjs | session",
+    "webkit-dark-desktop | pages.browser.mjs | settings",
+    "webkit-dark-phone | pages.browser.mjs | profile",
+    "webkit-dark-phone | pages.browser.mjs | session",
+    "webkit-dark-phone | pages.browser.mjs | settings",
+    "webkit-light-desktop | pages.browser.mjs | profile",
+    "webkit-light-desktop | pages.browser.mjs | session",
+    "webkit-light-desktop | pages.browser.mjs | settings"
+   ]
+  }
+ ],
+ "againstFirst": [
+  {
+   "label": "tip-start-b2568f28d",
+   "sameTests": true,
+   "differentStatuses": []
+  }
+ ]
+}

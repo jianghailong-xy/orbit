@@ -96,7 +96,7 @@ export async function settingsScenario({ page, expect, capture }) {
   await page.goto(PATHS.settings);
   await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
   await expect(page.getByText('Default permission mode', { exact: true })).toBeVisible();
-  await capture('settings', { card: '.ant-card', switch: '[role="switch"]', select: '.ant-select', theme: '.ant-segmented' });
+  await capture('settings', { card: '.orbit-card', switch: '[role="switch"]', select: '.orbit-select', theme: '.orbit-segmented' });
   const firstSwitch = page.getByRole('switch').first();
   const previous = await firstSwitch.getAttribute('aria-checked');
   await firstSwitch.click();
@@ -110,11 +110,9 @@ export async function settingsScenario({ page, expect, capture }) {
 export async function profileScenario({ page, expect, capture, measure }) {
   await page.goto(PATHS.profile);
   await expect(page.getByRole('heading', { name: 'Profile', exact: true })).toBeVisible();
-  // antd can retain its zero-width, opacity:0 leaving spinner in the accessibility
-  // tree after saving; its aria-label prefixes the button name even when it is idle.
-  const save = page.getByRole('button', { name: /^(?:loading )?Save$/ });
+  const save = page.getByRole('button', { name: 'Save', exact: true });
   await expect(save).toBeDisabled();
-  await capture('profile', { card: '.ant-card', disabledButton: save, name: 'input[autocomplete="name"]' });
+  await capture('profile', { card: '.orbit-card', disabledButton: save, name: 'input[autocomplete="name"]' });
   const name = page.locator('input[autocomplete="name"]');
   await measure('profile-name-input', async () => {
     await name.fill('Baseline Reviewer Updated');
@@ -127,7 +125,7 @@ export async function profileScenario({ page, expect, capture, measure }) {
   await page.getByRole('button', { name: 'Change password', exact: true }).click();
   await expect(page.getByText('Enter your current password', { exact: true })).toBeVisible();
   await expect(page.getByText('Enter a new password', { exact: true })).toBeVisible();
-  await capture('profile-validation', { field: '.ant-form-item-has-error', error: '.ant-form-item-explain-error' });
+  await capture('profile-validation', { field: '.orbit-field[data-help]', error: '.orbit-field-error' });
 }
 
 export async function pageScenarios(context) {

@@ -54,7 +54,11 @@ async function open(): Promise<void> {
   await settle();
 }
 
-const form = () => [...container!.querySelectorAll<HTMLElement>('.ant-card')].find((card) => card.textContent?.startsWith('Change password'))!;
+/** The Change password card: a region named by its title. */
+const form = () =>
+  [...container!.querySelectorAll<HTMLElement>('section[aria-labelledby]')].find(
+    (card) => document.getElementById(card.getAttribute('aria-labelledby')!)?.textContent === 'Change password',
+  )!;
 
 async function type(input: HTMLInputElement, value: string): Promise<void> {
   await act(async () => {
@@ -71,10 +75,12 @@ async function click(element: Element | null | undefined): Promise<void> {
   await settle();
 }
 
+/** The checkbox its label names. */
 const checkbox = () =>
-  [...form().querySelectorAll<HTMLElement>('.ant-checkbox-wrapper')]
-    .find((label) => label.textContent === 'Also revoke all my access tokens')
-    ?.querySelector<HTMLInputElement>('input[type="checkbox"]');
+  [...form().querySelectorAll<HTMLElement>('[role="checkbox"]')].find(
+    (box) => box.closest('label')?.textContent === 'Also revoke all my access tokens',
+  );
+const ticked = () => checkbox()?.getAttribute('aria-checked') === 'true';
 
 async function changePassword(): Promise<void> {
   const [current, next, confirm] = [...form().querySelectorAll<HTMLInputElement>('input[type="password"]')];
@@ -132,7 +138,8 @@ afterEach(async () => {
 describe('Profile → Change password → Also revoke all my access tokens', { timeout: 60_000 }, () => {
   it('is offered unticked, says what ticking it does, and left alone the request revokes nothing', async () => {
     await open();
-    expect(checkbox()?.checked).toBe(false);
+    expect(checkbox()).toBeTruthy();
+    expect(ticked()).toBe(false);
     expect(form().textContent).toContain('Scripts and the orbit CLI using them stop working at once. Unticked, they keep working.');
 
     await changePassword();
@@ -148,7 +155,7 @@ describe('Profile → Change password → Also revoke all my access tokens', { t
     revoked = 3;
     await open();
     await click(checkbox());
-    expect(checkbox()?.checked).toBe(true);
+    expect(ticked()).toBe(true);
 
     await changePassword();
     expect(sent()).toEqual({
@@ -158,7 +165,7 @@ describe('Profile → Change password → Also revoke all my access tokens', { t
     expect(toast.success).toHaveBeenCalledWith('Password changed', '3 access tokens revoked');
     expect(client.getQueryState(['access-tokens'])?.isInvalidated).toBe(true);
     // The form starts over, the box unticked again.
-    expect(checkbox()?.checked).toBe(false);
+    expect(ticked()).toBe(false);
   });
 
   it('ticked with no token to revoke, it says only that the password changed', async () => {

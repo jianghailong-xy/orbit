@@ -2,6 +2,8 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  HttpException,
+  HttpStatus,
   Injectable,
   Logger,
   NotFoundException,
@@ -15,6 +17,7 @@ import { SharedRateLimiter } from '../shared/public-surface.guard';
 import { USER_NAME_MAX_CHARS } from '../users/dto';
 import { type AccountSignInMethods, SIGN_IN_METHODS_SELECT, signInMethodsOf } from '../users/sign-in-methods';
 import { AuthService } from './auth.service';
+import { accountDisabled } from './disabled-accounts';
 import type { GoogleClient } from './google-auth.controller';
 import {
   GoogleOAuthClient,
@@ -31,8 +34,8 @@ export const GOOGLE_TICKET_TTL_MS = 2 * 60_000;
 /**
  * How many sign-ins may be waiting on Google at once, across the deployment (§7.4). /start writes a
  * row for anyone who asks, so the table is bounded here rather than by the rate limit alone: past it
- * a start is refused 503 until rows end or are swept. Far above what people signing in reach — each
- * is one row for at most ten minutes — so only a flood meets it.
+ * a start is refused (GOOGLE_SIGN_IN_BUSY, §4.1; a link 503) until rows end or are swept. Far above
+ * what people signing in reach — each is one row for at most ten minutes — so only a flood meets it.
  */
 export const GOOGLE_PENDING_FLOW_CAP = 10_000;
 /**
@@ -43,6 +46,11 @@ export const GOOGLE_START_RATE_LIMIT = { max: 30, windowMs: 60_000 };
 export const GOOGLE_EXCHANGE_RATE_LIMIT = { max: 30, windowMs: 60_000 };
 /** The longest `client_state` a native client may have handed back. */
 export const GOOGLE_CLIENT_STATE_MAX = 512;
+
+/** A `client_state` /start takes, and so the only kind it hands back: one string of at most GOOGLE_CLIENT_STATE_MAX characters. */
+export function isGoogleClientState(value: unknown): value is string {
+  return typeof value === 'string' && value.length <= GOOGLE_CLIENT_STATE_MAX;
+}
 
 /** A PKCE S256 challenge: 43 base64url characters, the unpadded sha256 (RFC 7636 §4.2). */
 const S256_CHALLENGE = /^[A-Za-z0-9_-]{43}$/;
@@ -59,6 +67,13 @@ export type GoogleCallbackError =
   | 'GOOGLE_EXCHANGE_FAILED'
   | 'GOOGLE_EMAIL_UNVERIFIED'
   | 'GOOGLE_NOT_CONFIGURED';
+
+/**
+ * Why /start sends the client back instead of on to Google (§4.1): Google sign-in is off, a challenge
+ * or `client_state` it cannot take, this address's budget spent, or the flows in flight at their cap
+ * (§7.4).
+ */
+export type GoogleStartRefusal = 'GOOGLE_NOT_CONFIGURED' | 'GOOGLE_BAD_REQUEST' | 'GOOGLE_RATE_LIMITED' | 'GOOGLE_SIGN_IN_BUSY';
 
 /** Who the callback answers: the client that started the flow, as the flow recorded it. */
 export interface GoogleReturnTo {
@@ -208,9 +223,13 @@ interface SignedInUser {
   name: string;
 }
 
-/** An account whose email is the Google one in some letter case, and whether a Google account is linked to it. */
+/**
+ * An account whose email is the Google one in some letter case, whether a Google account is linked to
+ * it, and whether an administrator has disabled it.
+ */
 interface EmailMatch extends SignedInUser {
   linked: boolean;
+  disabled: boolean;
 }
 
 /**
@@ -254,23 +273,24 @@ export class GoogleLoginService {
 
   /**
    * §4.1: open a flow for `client` and answer where to send the browser, with the binding cookie's
-   * value. Null while Google sign-in is off, before anything is checked or written: the client is
-   * sent back with GOOGLE_NOT_CONFIGURED, as before there was a flow.
+   * value — or why not, with nothing written: GOOGLE_NOT_CONFIGURED while Google sign-in is off,
+   * before anything is checked, as before there was a flow; GOOGLE_BAD_REQUEST for a challenge or
+   * `client_state` it cannot take; GOOGLE_RATE_LIMITED and GOOGLE_SIGN_IN_BUSY for the budget and the
+   * cap (§7.4). The browser came here by a navigation, so the client is sent back with the code
+   * rather than refused with a body nothing would read.
    */
   async start(input: {
     client: GoogleClient;
     codeChallenge?: unknown;
     clientState?: unknown;
     visitor: string;
-  }): Promise<{ authorizationUrl: string; binding: string } | null> {
+  }): Promise<{ authorizationUrl: string; binding: string } | { refused: GoogleStartRefusal }> {
     const clientId = await this.signIn.googleClientId();
-    if (clientId === null) return null;
+    if (clientId === null) return { refused: 'GOOGLE_NOT_CONFIGURED' };
     const { codeChallenge, clientState } = input;
-    if (typeof codeChallenge !== 'string' || !S256_CHALLENGE.test(codeChallenge)) {
-      throw new BadRequestException('code_challenge must be an S256 challenge: 43 base64url characters');
-    }
-    if (clientState !== undefined && (typeof clientState !== 'string' || clientState.length > GOOGLE_CLIENT_STATE_MAX)) {
-      throw new BadRequestException(`client_state must be one string of at most ${GOOGLE_CLIENT_STATE_MAX} characters`);
+    if (typeof codeChallenge !== 'string' || !S256_CHALLENGE.test(codeChallenge)
+      || (clientState !== undefined && !isGoogleClientState(clientState))) {
+      return { refused: 'GOOGLE_BAD_REQUEST' };
     }
     return this.open(clientId, input.visitor, {
       intent: 'LOGIN',
@@ -279,6 +299,12 @@ export class GoogleLoginService {
       // Only a native client is handed it back (§4.2); the Web's targets are fixed paths.
       clientState: input.client === 'native' ? (clientState ?? null) : null,
       linkUserId: null,
+    }).catch((error: unknown) => {
+      // open's two refusals, which the profile page's link answers as they are (startLink).
+      if (!(error instanceof HttpException)) throw error;
+      if (error.getStatus() === HttpStatus.TOO_MANY_REQUESTS) return { refused: 'GOOGLE_RATE_LIMITED' as const };
+      if (error.getStatus() === HttpStatus.SERVICE_UNAVAILABLE) return { refused: 'GOOGLE_SIGN_IN_BUSY' as const };
+      throw error;
     });
   }
 
@@ -469,8 +495,8 @@ export class GoogleLoginService {
     if (matches.length > 1) throw refused('GOOGLE_EMAIL_AMBIGUOUS');
     if (matches.length === 1) {
       const [match] = matches;
-      // ACCOUNT_DISABLED, the first answer for a matched account, is X1's (§5.5): it goes here,
-      // before any other.
+      // A disabled account (§5.5) is the first answer, before any other.
+      if (match.disabled) throw accountDisabled();
       if (match.linked) throw refused('GOOGLE_ACCOUNT_MISMATCH');
       if (!googleIsAuthoritative(identity)) throw refused('GOOGLE_EMAIL_NOT_AUTHORITATIVE');
       return this.link(identity, match);
@@ -482,8 +508,8 @@ export class GoogleLoginService {
 
   /**
    * Open a flow (§4.1) — a sign-in's or a link's — and answer where to send the browser, with the
-   * binding cookie's value. Budgeted per address, after the sweep, and refused 503 past the cap of
-   * flows in flight (§7.4).
+   * binding cookie's value. Budgeted per address (429) and refused 503 past the cap of flows in
+   * flight (§7.4), both before anything is written: the sweep comes with the row it makes room for.
    */
   private async open(
     clientId: string,
@@ -491,7 +517,7 @@ export class GoogleLoginService {
     flow: { intent: GoogleIntent; client: 'WEB' | 'NATIVE'; clientChallenge: string; clientState: string | null; linkUserId: string | null },
   ): Promise<{ authorizationUrl: string; binding: string }> {
     this.startLimiter.take(visitor);
-    await this.sweep();
+    // Rows past their end are not counted, swept or not.
     const pending = await this.prisma.oAuthLoginFlow.count({ where: { status: 'PENDING', expiresAt: { gt: new Date() } } });
     if (pending >= GOOGLE_PENDING_FLOW_CAP) {
       throw new ServiceUnavailableException({
@@ -499,6 +525,7 @@ export class GoogleLoginService {
         message: 'Too many Google sign-ins are in progress on this server — try again in a few minutes',
       });
     }
+    await this.sweep();
     const state = generateToken(32);
     const nonce = generateToken(32);
     const binding = generateToken(32);
@@ -524,7 +551,7 @@ export class GoogleLoginService {
     return { authorizationUrl, binding };
   }
 
-  /** The rows past their end, swept on every start (§7.4). */
+  /** The rows past their end, swept by every start that opens a flow (§7.4). */
   private async sweep(): Promise<void> {
     await this.prisma.oAuthLoginFlow.deleteMany({ where: { expiresAt: { lt: new Date() } } });
   }
@@ -570,8 +597,8 @@ export class GoogleLoginService {
       include: { user: true },
     });
     if (!linked) return null;
-    // ACCOUNT_DISABLED, case 1's other answer, is X1's (§5.5): a disabled account is refused here,
-    // before its identity is touched.
+    // Case 1's other answer (§5.5): a disabled account is refused before its identity is touched.
+    if (linked.user.disabledAt) throw accountDisabled();
     await this.prisma.userIdentity.update({
       where: { id: linked.id },
       data: { email: identity.email, hostedDomain: identity.hd, lastSignInAt: new Date() },
@@ -580,14 +607,16 @@ export class GoogleLoginService {
   }
 
   /**
-   * §5.2 cases 3 and 4: the accounts whose email is this one in any letter case, and whether each
-   * has a Google account linked. Matched on lower(email) because the email's unique index is on the
-   * address as written (migration 0392); two rows are enough to know there is more than one.
+   * §5.2 cases 3 and 4: the accounts whose email is this one in any letter case, whether each has a
+   * Google account linked, and whether it is disabled (§5.5). Matched on lower(email) because the
+   * email's unique index is on the address as written (migration 0392); two rows are enough to know
+   * there is more than one.
    */
   private usersByEmail(email: string): Promise<EmailMatch[]> {
     return this.prisma.$queryRaw<EmailMatch[]>`
       SELECT u."id", u."email", u."name",
-        EXISTS (SELECT 1 FROM "user_identity" i WHERE i."user_id" = u."id" AND i."provider" = ${GOOGLE}) AS "linked"
+        EXISTS (SELECT 1 FROM "user_identity" i WHERE i."user_id" = u."id" AND i."provider" = ${GOOGLE}) AS "linked",
+        u."disabled_at" IS NOT NULL AS "disabled"
       FROM "user" u WHERE lower(u."email") = lower(${email})
       LIMIT 2`;
   }

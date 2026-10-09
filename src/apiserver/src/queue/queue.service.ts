@@ -58,6 +58,7 @@ import {
   normalizeEffortForRuntimeModel,
 } from '../common/runtime-provider';
 import { worktreeOperationFenceSql } from '../common/session-inbox-fence';
+import { engineNamingJob } from '../sessions/naming';
 import {
   batchActiveTurns,
   runnerActiveTurns,
@@ -77,6 +78,7 @@ import {
 } from '../runner-api/runner-provider-support';
 import { ALWAYS_ALLOWED_TOOLS, resolvePermissionMode } from '../common/permission-mode';
 import { orchestrationEnabled } from '../common/orchestration-switch';
+import { claimPromptSuggestions } from '../common/prompt-suggestions-switch';
 import { dispatchAllowedTools } from '../common/permission-rules';
 import {
   loggedRetry,
@@ -186,8 +188,8 @@ export class QueueService {
       select: {
         id: true, ownerId: true, provider: true, providerBuiltin: true, error: true, model: true,
         codexAccount: true, codexAccountPinned: true, claudeAccount: true, claudeAccountPinned: true,
-        antigravityAccount: true, antigravityAccountPinned: true,
-        workspace: { select: { env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true } },
+        antigravityAccount: true, antigravityAccountPinned: true, kimiAccount: true, kimiAccountPinned: true,
+        workspace: { select: { env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true } },
         assignedRunner: { select: { engines: true, accountPauses: true, planUsage: true, capabilities: true } },
       },
     });
@@ -566,6 +568,8 @@ export class QueueService {
     claudeAccountPinned: boolean;
     antigravityAccount: string | null;
     antigravityAccountPinned: boolean;
+    kimiAccount: string | null;
+    kimiAccountPinned: boolean;
     workspace: ({ env: unknown } & WorkspaceAccountChoices) | null;
     assignedRunner: { engines: unknown; accountNames: unknown; accountPauses?: unknown; planUsage: unknown; capabilities: string[] } | null;
   }): Promise<WorkspaceAccountChoices> {
@@ -574,6 +578,7 @@ export class QueueService {
       codexAccount: session.codexAccount ?? workspace?.codexAccount,
       claudeAccount: session.claudeAccount ?? workspace?.claudeAccount,
       antigravityAccount: session.antigravityAccount ?? workspace?.antigravityAccount,
+      kimiAccount: session.kimiAccount ?? workspace?.kimiAccount,
     };
     const engine = isAccountEngine(session.provider) ? session.provider : null;
     const runner = session.assignedRunner;
@@ -752,11 +757,14 @@ export class QueueService {
     // owner is in, which dispatches through the pool gateway; each on a token minted for this claim.
     const declaredIsBuiltin = isBuiltinProvider(declared, declaredProviderBuiltin);
     // A maintenance run is never dispatched through a pool: it has no member to fall back on (its refusal says so).
+    const configuredRow = declaredIsBuiltin
+      ? null
+      : await this.prisma.modelProvider.findFirst({
+          where: { slug: declared!, ...(await usableProviderScope(this.prisma, session.ownerId)) },
+        });
     const customRow = declaredIsBuiltin
       ? null
-      : ((await this.prisma.modelProvider.findFirst({
-          where: { slug: declared!, ...(await usableProviderScope(this.prisma, session.ownerId)) },
-        })) ??
+      : (configuredRow ??
         (maintenance
           ? null
           : ((await this.resolveLoginPool(this.prisma, session, declared!, true)) ??
@@ -786,6 +794,7 @@ export class QueueService {
         codexAccount: accounts.codexAccount,
         claudeAccount: accounts.claudeAccount,
         antigravityAccount: accounts.antigravityAccount,
+        kimiAccount: accounts.kimiAccount,
         runnerEngines: session.assignedRunner?.engines,
       });
     let exec = resolveExec(session.model);
@@ -854,6 +863,8 @@ export class QueueService {
     // and that absence is the compatibility guarantee, not an omission: it is exactly the payload
     // every runner has always received, so nothing about their behaviour changes (SR46).
     const source = sessionSourceSnapshot(session, await this.sourceBinding(session.sourceCodebaseId));
+    // A session nothing else will name is named by the engine about to run it (engineNamingJob).
+    const naming = maintenance ? undefined : engineNamingJob(session, provider, configuredRow);
     // A maintenance session's run goes on top: its guardrails, and the clean start the runner reads it by.
     return withWikiMaintenanceRun({
       sessionId: session.id,
@@ -945,6 +956,16 @@ export class QueueService {
         fastMode:
           session.fastMode &&
           fastModeAvailable(provider, exec.model, session.assignedRunner?.modelCatalog as RunnerModelCatalog | null),
+        // The engine's guess at the person's next message after each turn — decided here, on the
+        // endpoint this claim actually resolved (common/prompt-suggestions-switch.ts).
+        promptSuggestions: claimPromptSuggestions({
+          owner: session.owner,
+          provider,
+          runSource: session.runSource,
+          spawnDepth: session.spawnDepth,
+          maintenance,
+          env: exec.env,
+        }),
         // Per-session effort wins; otherwise use the workspace's effort setting.
         // An OpenCode variant is model-defined, so it is only checkable once the assigned
         // runner's catalog is known — an account default carried over from another runtime
@@ -961,6 +982,7 @@ export class QueueService {
         env: exec.env,
       },
       source,
+      ...(naming ? { naming } : {}),
     }, maintenance);
   }
 

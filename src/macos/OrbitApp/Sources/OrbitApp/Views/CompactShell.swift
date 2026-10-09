@@ -370,6 +370,7 @@ private struct CompactSections: View {
                         case .wikiActivity:           WikiActivityView()
                         case .wikiSettings:           WikiSettingsView()
                         case .wikiRun(let changesetID): WikiRunView(changesetID: changesetID)
+                        case .wikiJob(let jobID):     WikiJobView(jobID: jobID)
                         case .wikiArticle(let topic, let part):
                             WikiArticleScreen(address: WikiArticleAddress(topic: topic, part: part))
                         case .wikiBrowse:             WikiBrowseScreen()
@@ -387,8 +388,8 @@ private struct CompactSections: View {
                     }
             }
 
-        // RUNNERS — the Infrastructure page → a machine's record → an engine's or its name's page, and a
-        // pool's page. Same single stack as Agents: the rows carry their own destination and push it, so a
+        // RUNNERS — the Infrastructure page → a machine's record → an engine's or its name's page, a
+        // pool's page, and a DeepSeek key's. Same single stack as Agents: the rows carry their own destination and push it, so a
         // deep link (`.runner(id)`) and a row tap are one navigation.
         // The section isn't in the drawer rail, so it is only ever entered by that deep link or an
         // engine's way to its fix (`AppModel.openRunnerEngine`) — neither of which is a `List`
@@ -405,6 +406,7 @@ private struct CompactSections: View {
                         case .runnerName(let runnerID):   RunnerNamePage(runnerID: runnerID)
                         case .accountPool(let poolID):    AccountPoolSettingsPage(poolID: poolID)
                         case .sharedPool(let poolID):     SharedPoolSettingsPage(poolID: poolID)
+                        case .providerDetail(let providerID): ProviderDetailSettingsPage(providerID: providerID)
                         default:                          EmptyView()
                         }
                     }

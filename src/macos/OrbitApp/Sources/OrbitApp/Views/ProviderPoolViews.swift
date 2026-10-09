@@ -1698,6 +1698,247 @@ private struct AccountRow: View {
     }
 }
 
+// MARK: - A DeepSeek key
+
+/// A DeepSeek key's page, read-only: the whole DeepSeek account's balance first — the server asks
+/// DeepSeek with the stored key, which never comes to the phone — then where the key runs. What the
+/// balance comes to, and every word of it, is `DeepSeekBalance`'s; no state but DeepSeek's own answer
+/// draws an amount. Changing the key happens on the web.
+struct DeepSeekKeyPageView: View {
+    let key: ConfiguredProvider
+    /// The balance as last read; nil until the first answer.
+    let reading: ProviderBalanceReading?
+    /// Ask DeepSeek again.
+    let refresh: () async -> Void
+    @State private var refreshing = false
+
+    var body: some View {
+        let state = DeepSeekBalance.state(reading)
+        Form {
+            Section {
+                balance(state)
+            } header: {
+                SettingsHeader(DeepSeekBalance.title)
+            } footer: {
+                footer(state)
+            }
+            Section {
+                LabeledContent(DeepSeekBalance.runsOn, value: DeepSeekBalance.engine(of: key))
+                if let model = key.defaultModel, !model.isEmpty {
+                    LabeledContent(DeepSeekBalance.defaultModel, value: model)
+                }
+                if let host = DeepSeekBalance.endpointHost(key) {
+                    LabeledContent(DeepSeekBalance.endpoint, value: host)
+                }
+            } header: {
+                SettingsHeader(DeepSeekBalance.providerHeader)
+            } footer: {
+                Text(ProvidersOverview.editOnWeb)
+            }
+        }
+        .navigationTitle(key.label)
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    @ViewBuilder private func balance(_ state: DeepSeekBalance.State) -> some View {
+        switch state {
+        case .loading:
+            HStack(spacing: 10) {
+                ProgressView()
+                Text(DeepSeekBalance.checking)
+                    .foregroundStyle(.secondary)
+            }
+        case .read(let balances, let low, let fetchedAt, _):
+            if low {
+                BalanceAlert(icon: "exclamationmark.circle.fill", tone: .danger, title: DeepSeekBalance.lowTitle,
+                             detail: DeepSeekBalance.lowDetail)
+            }
+            ForEach(Array(balances.enumerated()), id: \.element.currency) { index, amount in
+                BalanceAmountRow(amount: amount, first: index == 0, low: low)
+            }
+            TimelineView(.everyMinute) { context in
+                LabeledContent(DeepSeekBalance.updated, value: DeepSeekBalance.ago(fetchedAt, now: context.date))
+            }
+            refreshButton(DeepSeekBalance.refresh)
+            if low {
+                Link(destination: DeepSeekBalance.topUpURL) {
+                    Text("\(DeepSeekBalance.topUp) ↗")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
+                }
+                .buttonStyle(.borderedProminent)
+                .buttonBorderShape(.roundedRectangle(radius: 14))
+            } else {
+                Link(destination: DeepSeekBalance.topUpURL) {
+                    Label(DeepSeekBalance.topUp, systemImage: "arrow.up.right.square")
+                }
+            }
+        case .failed(let failure, let message, let triedAt):
+            BalanceAlert(icon: "exclamationmark.triangle.fill", tone: .warning, title: DeepSeekBalance.failedTitle,
+                         detail: DeepSeekBalance.detail(failure, message: message))
+            LabeledContent(DeepSeekBalance.balance, value: DeepSeekBalance.unknown)
+            if let triedAt {
+                TimelineView(.everyMinute) { context in
+                    LabeledContent(DeepSeekBalance.lastTried, value: DeepSeekBalance.ago(triedAt, now: context.date))
+                }
+            }
+            refreshButton(DeepSeekBalance.retry)
+        }
+    }
+
+    private func refreshButton(_ title: String) -> some View {
+        Button {
+            guard !refreshing else { return }
+            refreshing = true
+            Task {
+                await refresh()
+                refreshing = false
+            }
+        } label: {
+            HStack {
+                Label(title, systemImage: "arrow.clockwise")
+                if refreshing {
+                    Spacer()
+                    ProgressView()
+                }
+            }
+        }
+        .disabled(refreshing)
+    }
+
+    /// Whose balance this is, in words: the whole account's, not what anything spent — and, while there
+    /// is no balance, that none is drawn.
+    @ViewBuilder private func footer(_ state: DeepSeekBalance.State) -> some View {
+        switch state {
+        case .loading:
+            EmptyView()
+        case .failed:
+            Text(DeepSeekBalance.noAmountYet)
+        case .read(let balances, let low, _, let sharedWith):
+            VStack(alignment: .leading, spacing: 10) {
+                Text(low ? "\(DeepSeekBalance.opensInSafari) \(DeepSeekBalance.note)" : DeepSeekBalance.note)
+                if balances.count > 1 {
+                    Text(DeepSeekBalance.multiCurrency)
+                }
+                if let same = DeepSeekBalance.sameAccount(sharedWith) {
+                    Text(same.lead) + Text(same.names).bold() + Text(same.tail)
+                }
+            }
+        }
+    }
+}
+
+/// One currency of the balance: its total, then how much of it was granted and how much topped up.
+private struct BalanceAmountRow: View {
+    let amount: ProviderBalanceAmount
+    let first: Bool
+    let low: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 0) {
+                if first {
+                    Text(DeepSeekBalance.total)
+                        .font(.orbitListSubtitle)
+                        .foregroundStyle(.secondary)
+                }
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(DeepSeekBalance.amount(amount.totalBalance, currency: amount.currency))
+                        .font((first ? Font.largeTitle : Font.title).weight(.semibold))
+                        .monospacedDigit()
+                        .foregroundStyle(low ? PoolTone.color(.danger) : Color.primary)
+                    Text(amount.currency)
+                        .font(.orbitListSubtitle)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            BalanceSplitBar(split: DeepSeekBalance.split(amount))
+            HStack {
+                BalanceLegend(tint: Color.accentColor.opacity(0.35), label: DeepSeekBalance.granted,
+                              value: DeepSeekBalance.amount(amount.grantedBalance, currency: amount.currency))
+                Spacer(minLength: 8)
+                BalanceLegend(tint: Color.accentColor, label: DeepSeekBalance.toppedUp,
+                              value: DeepSeekBalance.amount(amount.toppedUpBalance, currency: amount.currency))
+            }
+        }
+        .padding(.vertical, 6)
+    }
+}
+
+/// The granted and topped-up shares of one currency, side by side in one bar; an empty bar when
+/// DeepSeek's two parts add up to nothing.
+private struct BalanceSplitBar: View {
+    let split: DeepSeekBalance.Split?
+
+    var body: some View {
+        GeometryReader { geometry in
+            HStack(spacing: 0) {
+                if let split {
+                    Rectangle()
+                        .fill(Color.accentColor.opacity(0.35))
+                        .frame(width: geometry.size.width * split.granted)
+                    Rectangle()
+                        .fill(Color.accentColor)
+                        .frame(width: geometry.size.width * split.toppedUp)
+                }
+            }
+            .frame(width: geometry.size.width, height: 6, alignment: .leading)
+            .background(Color.primary.opacity(0.08))
+            .clipShape(Capsule())
+        }
+        .frame(height: 6)
+    }
+}
+
+/// A legend entry under the bar: its colour, what it is and how much.
+private struct BalanceLegend: View {
+    let tint: Color
+    let label: String
+    let value: String
+
+    var body: some View {
+        HStack(spacing: 6) {
+            RoundedRectangle(cornerRadius: 2)
+                .fill(tint)
+                .frame(width: 8, height: 8)
+            Text(label)
+                .foregroundStyle(.secondary)
+            Text(value)
+                .fontWeight(.semibold)
+                .monospacedDigit()
+        }
+        .font(.orbitListSubtitle)
+    }
+}
+
+/// The balance's alert, at the top of its section: why there is no balance, or that the one there
+/// is can't pay for another request — in the tone it is, over a wash of it.
+private struct BalanceAlert: View {
+    let icon: String
+    let tone: PoolStatus.Tone
+    let title: String
+    let detail: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: icon)
+                .font(.title3)
+                .foregroundStyle(PoolTone.color(tone))
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.headline)
+                    .foregroundStyle(PoolTone.color(tone))
+                Text(detail)
+                    .font(.orbitListSubtitle)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 4)
+        .listRowBackground(PoolTone.color(tone).opacity(0.14))
+    }
+}
+
 // MARK: - Parts
 
 /// A section's heading — with how many it holds, where that is said ("Accounts 2") — and a few words at

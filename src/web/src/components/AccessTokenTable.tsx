@@ -1,4 +1,4 @@
-import { Button, Popconfirm, Table, Tag, type TableColumnsType } from 'antd';
+import type { ReactNode } from 'react';
 import type { AccessToken } from '../api';
 import {
   CREATED_VIA,
@@ -9,6 +9,10 @@ import {
   untilLine,
 } from '../lib/accessTokens';
 import { ago } from '../lib/watches';
+import { Badge } from './ui/Badge';
+import { Button } from './ui/Button';
+import { Popconfirm } from './ui/Popconfirm';
+import { TableScroll } from './ui/Table';
 
 /** Which workspaces a token reaches: all of them, or those it is confined to. */
 function workspacesLine(token: AccessToken): string {
@@ -40,33 +44,27 @@ export function AccessTokenTable({
   revokingId?: string | null;
   emptyText: string;
 }) {
-  const columns: TableColumnsType<AccessToken> = [
+  const columns: { title: string; cell: (token: AccessToken) => ReactNode; end?: boolean }[] = [
     {
       title: 'Name',
-      key: 'name',
-      render: (_, token) => (
+      cell: (token) => (
         <>
           <div className="access-token-title">{token.name}</div>
           <div className="access-token-sub access-token-hint">orbit_pat_…{token.tokenHint}</div>
         </>
       ),
     },
-    {
-      title: 'Access',
-      key: 'scopes',
-      render: (_, token) => <span title={token.scopes.join(', ')}>{scopeSummary(token.scopes)}</span>,
-    },
-    { title: 'Workspaces', key: 'workspaces', render: (_, token) => workspacesLine(token) },
+    { title: 'Access', cell: (token) => <span title={token.scopes.join(', ')}>{scopeSummary(token.scopes)}</span> },
+    { title: 'Workspaces', cell: workspacesLine },
     {
       title: 'Expires',
-      key: 'expires',
-      render: (_, token) =>
+      cell: (token) =>
         token.state !== 'ACTIVE' ? (
           <span className="access-token-ended-line">{endedLine(token)}</span>
         ) : token.expiresAt === null ? (
-          <Tag color="warning" className="access-token-never">
+          <Badge tone="warning" className="access-token-never">
             {NEVER_EXPIRES}
-          </Tag>
+          </Badge>
         ) : (
           <>
             <div>{fullDate(token.expiresAt)}</div>
@@ -76,8 +74,7 @@ export function AccessTokenTable({
     },
     {
       title: 'Last used',
-      key: 'used',
-      render: (_, token) =>
+      cell: (token) =>
         token.lastUsedAt ? (
           <>
             <div>{ago(token.lastUsedAt, now)}</div>
@@ -91,8 +88,7 @@ export function AccessTokenTable({
     },
     {
       title: 'Created',
-      key: 'created',
-      render: (_, token) => (
+      cell: (token) => (
         <>
           <div>{fullDate(token.createdAt)}</div>
           <div className="access-token-sub">{CREATED_VIA[token.createdVia]}</div>
@@ -103,35 +99,58 @@ export function AccessTokenTable({
   if (onRevoke) {
     columns.push({
       title: '',
-      key: 'actions',
-      align: 'right',
-      render: (_, token) =>
+      end: true,
+      cell: (token) =>
         token.state === 'ACTIVE' && (
           <Popconfirm
+            trigger={
+              <Button size="small" danger loading={revokingId === token.id}>
+                Revoke
+              </Button>
+            }
             title={`Revoke “${token.name}”?`}
             description="Anything using it stops working at once. This can’t be undone."
-            okText="Revoke"
-            okButtonProps={{ danger: true }}
+            confirmText="Revoke"
+            danger
             cancelText="Cancel"
             onConfirm={() => onRevoke(token)}
-          >
-            <Button size="small" danger loading={revokingId === token.id}>
-              Revoke
-            </Button>
-          </Popconfirm>
+          />
         ),
     });
   }
+  const end = { textAlign: 'right' } as const;
   return (
-    <Table<AccessToken>
-      className="access-token-table"
-      rowKey="id"
-      dataSource={[...tokens]}
-      columns={columns}
-      pagination={false}
-      scroll={{ x: 'max-content' }}
-      locale={{ emptyText }}
-      rowClassName={(token) => (token.state === 'ACTIVE' ? '' : 'access-token-ended')}
-    />
+    <TableScroll>
+      <table className="orbit-table access-token-table">
+        <thead>
+          <tr>
+            {columns.map((column, index) => (
+              <th key={index} scope="col" style={column.end ? end : undefined}>
+                {column.title}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {tokens.length === 0 ? (
+            <tr className="orbit-table-empty">
+              <td colSpan={columns.length}>
+                <div>{emptyText}</div>
+              </td>
+            </tr>
+          ) : (
+            tokens.map((token) => (
+              <tr key={token.id} className={token.state === 'ACTIVE' ? undefined : 'access-token-ended'}>
+                {columns.map((column, index) => (
+                  <td key={index} style={column.end ? end : undefined}>
+                    {column.cell(token)}
+                  </td>
+                ))}
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </TableScroll>
   );
 }

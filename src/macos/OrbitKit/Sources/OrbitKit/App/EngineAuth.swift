@@ -58,8 +58,8 @@ public enum EngineAuth {
         /// A runner that cannot relay Google sign-in can use a Gemini API key in Infrastructure.
         case connectGemini
         /// Any other slug is a control-plane–configured provider, i.e. an API key to fix. These
-        /// clients have no Providers screen, so the card says where the key lives rather than
-        /// offering an action it can't perform.
+        /// clients have no key editor (their Infrastructure page only lists the keys), so the card
+        /// says where the key lives rather than offering an action it can't perform.
         case apiKey(slug: String)
     }
 

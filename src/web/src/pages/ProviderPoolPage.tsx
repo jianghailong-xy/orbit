@@ -3,7 +3,6 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { AgentProvider } from '@orbit/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { KeyOutlined, PlusOutlined } from '@ant-design/icons';
-import { Button, Modal, Popconfirm, Radio, Spin } from 'antd';
 import { api } from '../api';
 import {
   availabilityOf,
@@ -15,6 +14,11 @@ import {
 import { CodexSignInModal } from '../components/CodexSignIn';
 import { ProviderTile } from '../components/ProviderGallery';
 import { AddKeyModal, ReplaceKeyModal, WhoCanUseItCard } from '../components/SharedPool';
+import { Button } from '../components/ui/Button';
+import { Dialog } from '../components/ui/Dialog';
+import { Popconfirm } from '../components/ui/Popconfirm';
+import { Radio, RadioGroup } from '../components/ui/Radio';
+import { Spinner } from '../components/ui/Spinner';
 import { codexLoginPath, isLoginPool, loginName, poolLogins, type CodexLogin } from '../lib/codexLogin';
 import { encodeId, routeId } from '../lib/idCodec';
 import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
@@ -84,7 +88,7 @@ export function ProviderPoolPage() {
   if (pools.isPending || shared.isPending || access.isLoading) {
     return (
       <div style={{ padding: 48, textAlign: 'center' }}>
-        <Spin />
+        <Spinner />
       </div>
     );
   }
@@ -120,7 +124,7 @@ export function ProviderPoolPage() {
             quota resets soonest, so none of it goes unused, and stays on it until that one runs out.
           </div>
         </div>
-        <Button type="primary" disabled={keys.isPending} onClick={() => setAdding(true)}>
+        <Button variant="primary" disabled={keys.isPending} onClick={() => setAdding(true)}>
           Add account
         </Button>
       </div>
@@ -139,11 +143,12 @@ export function ProviderPoolPage() {
           title={`Delete ${pool.label}?`}
           description="Its accounts stay as they are — only the pool goes."
           onConfirm={() => removePool.mutate()}
-        >
-          <Button danger loading={removePool.isPending}>
-            Delete pool
-          </Button>
-        </Popconfirm>
+          trigger={
+            <Button danger loading={removePool.isPending}>
+              Delete pool
+            </Button>
+          }
+        />
       </div>
 
       {adding && <PoolAccountsModal rows={keys.data ?? []} pool={pool} onClose={() => setAdding(false)} />}
@@ -300,7 +305,7 @@ function CodexPoolPage({
             (migration 0371). A pool whose people are not read yet signs its owner straight in. */}
         {(mayAddAccount || mayAddKey) && (
           <Button
-            type="primary"
+            variant="primary"
             icon={<PlusOutlined />}
             onClick={() =>
               setDialog(
@@ -354,14 +359,15 @@ function CodexPoolPage({
         <Popconfirm
           title={mine ? `Delete ${pool.label}?` : `Leave ${pool.label}?`}
           description={outNote}
-          okText={mine ? 'Delete' : 'Leave'}
-          okButtonProps={{ danger: true }}
+          confirmText={mine ? 'Delete' : 'Leave'}
+          danger
           onConfirm={() => goOut.mutate()}
-        >
-          <Button danger loading={goOut.isPending}>
-            {mine ? 'Delete pool' : 'Leave pool'}
-          </Button>
-        </Popconfirm>
+          trigger={
+            <Button danger loading={goOut.isPending}>
+              {mine ? 'Delete pool' : 'Leave pool'}
+            </Button>
+          }
+        />
         <span className="pool-danger-note">{outNote}</span>
       </div>
 
@@ -408,25 +414,27 @@ function AddAccountModal({
 }) {
   const [kind, setKind] = useState<'chatgpt' | 'key'>('chatgpt');
   return (
-    <Modal
+    <Dialog
       open
       width={500}
+      className="pool-dialog"
       title={`Add an account to ${pool.label}`}
-      onCancel={onClose}
+      onClose={onClose}
       footer={
         <>
           <Button onClick={onClose}>Cancel</Button>
-          <Button type="primary" onClick={() => onContinue(kind)}>
+          <Button variant="primary" onClick={() => onContinue(kind)}>
             Continue
           </Button>
         </>
       }
     >
-      <Radio.Group
+      <RadioGroup<'chatgpt' | 'key'>
         name="add-account-kind"
         className="add-kinds"
+        aria-label="What to add"
         value={kind}
-        onChange={(e) => setKind(e.target.value as 'chatgpt' | 'key')}
+        onValueChange={setKind}
       >
         <Radio value="chatgpt" className="add-kind">
           <ProviderTile slug="openai" label="ChatGPT" size={24} />
@@ -459,7 +467,7 @@ function AddAccountModal({
             </span>
           </span>
         </Radio>
-      </Radio.Group>
-    </Modal>
+      </RadioGroup>
+    </Dialog>
   );
 }

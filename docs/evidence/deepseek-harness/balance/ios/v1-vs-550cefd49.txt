@@ -1,0 +1,159 @@
+v1 = 5550dbff6: probe results for 1d226459dfb6a19b922551686966c006e68a8c1b (run 37444789565)
+v2 = 9c5a7ffff: probe results for 07070d4ef1c23c48ea8c0b700c87da36f49d0c6b (run 37549244981)
+5550dbff6 tests: Executed 2 tests, with 0 failures (0 unexpected) in 334.748 (334.770) seconds ** TEST SUCCEEDED **
+9c5a7ffff tests: Executed 2 tests, with 0 failures (0 unexpected) in 423.555 (423.566) seconds ** TEST SUCCEEDED **
+== accessibility trees (addresses and pid taken out)
+DIFF tree-deepseek-dark.txt: 2 line(s) changed:
+   v1 line 65: Other, 0xADDR, {{299.3, 605.3}, {3.0, 265.7}}
+   v2 line 65: Other, 0xADDR, {{299.3, 649.7}, {3.0, 221.3}}
+   inside: Other, 0xADDR, {{272.3, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+   v1 line 67: Other, 0xADDR, {{299.3, 605.3}, {3.0, 265.7}}
+   v2 line 67: Other, 0xADDR, {{299.3, 649.7}, {3.0, 221.3}}
+   inside: Other, 0xADDR, {{272.3, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+DIFF tree-deepseek-light.txt: 2 line(s) changed:
+   v1 line 65: Other, 0xADDR, {{299.3, 605.3}, {3.0, 265.7}}
+   v2 line 65: Other, 0xADDR, {{299.3, 649.7}, {3.0, 221.3}}
+   inside: Other, 0xADDR, {{272.3, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+   v1 line 67: Other, 0xADDR, {{299.3, 605.3}, {3.0, 265.7}}
+   v2 line 67: Other, 0xADDR, {{299.3, 649.7}, {3.0, 221.3}}
+   inside: Other, 0xADDR, {{272.3, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+DIFF tree-harness-dark.txt: 2 line(s) changed:
+   v1 line 65: Other, 0xADDR, {{299.3, 605.3}, {3.0, 265.7}}
+   v2 line 65: Other, 0xADDR, {{299.3, 649.7}, {3.0, 221.3}}
+   inside: Other, 0xADDR, {{272.3, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+   v1 line 67: Other, 0xADDR, {{299.3, 605.3}, {3.0, 265.7}}
+   v2 line 67: Other, 0xADDR, {{299.3, 649.7}, {3.0, 221.3}}
+   inside: Other, 0xADDR, {{272.3, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+DIFF tree-harness-light.txt: 2 line(s) changed:
+   v1 line 65: Other, 0xADDR, {{299.3, 605.3}, {3.0, 265.7}}
+   v2 line 65: Other, 0xADDR, {{299.3, 649.7}, {3.0, 221.3}}
+   inside: Other, 0xADDR, {{272.3, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+   v1 line 67: Other, 0xADDR, {{299.3, 605.3}, {3.0, 265.7}}
+   v2 line 67: Other, 0xADDR, {{299.3, 649.7}, {3.0, 221.3}}
+   inside: Other, 0xADDR, {{272.3, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+DIFF tree-key-rejected-dark.txt: 2 line(s) changed:
+   v1 line 65: Other, 0xADDR, {{299.3, 605.3}, {3.0, 265.7}}
+   v2 line 65: Other, 0xADDR, {{299.3, 649.7}, {3.0, 221.3}}
+   inside: Other, 0xADDR, {{272.3, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+   v1 line 67: Other, 0xADDR, {{299.3, 605.3}, {3.0, 265.7}}
+   v2 line 67: Other, 0xADDR, {{299.3, 649.7}, {3.0, 221.3}}
+   inside: Other, 0xADDR, {{272.3, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+DIFF tree-key-rejected-light.txt: 2 line(s) changed:
+   v1 line 65: Other, 0xADDR, {{299.3, 605.3}, {3.0, 265.7}}
+   v2 line 65: Other, 0xADDR, {{299.3, 649.7}, {3.0, 221.3}}
+   inside: Other, 0xADDR, {{272.3, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+   v1 line 67: Other, 0xADDR, {{299.3, 605.3}, {3.0, 265.7}}
+   v2 line 67: Other, 0xADDR, {{299.3, 649.7}, {3.0, 221.3}}
+   inside: Other, 0xADDR, {{272.3, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+DIFF tree-low-dark.txt: 2 line(s) changed:
+   v1 line 65: Other, 0xADDR, {{299.3, 605.3}, {3.0, 265.7}}
+   v2 line 65: Other, 0xADDR, {{299.3, 649.7}, {3.0, 221.3}}
+   inside: Other, 0xADDR, {{272.3, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+   v1 line 67: Other, 0xADDR, {{299.3, 605.3}, {3.0, 265.7}}
+   v2 line 67: Other, 0xADDR, {{299.3, 649.7}, {3.0, 221.3}}
+   inside: Other, 0xADDR, {{272.3, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+DIFF tree-low-light.txt: 2 line(s) changed:
+   v1 line 65: Other, 0xADDR, {{299.3, 605.3}, {3.0, 265.7}}
+   v2 line 65: Other, 0xADDR, {{299.3, 649.7}, {3.0, 221.3}}
+   inside: Other, 0xADDR, {{272.3, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+   v1 line 67: Other, 0xADDR, {{299.3, 605.3}, {3.0, 265.7}}
+   v2 line 67: Other, 0xADDR, {{299.3, 649.7}, {3.0, 221.3}}
+   inside: Other, 0xADDR, {{272.3, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+DIFF tree-multi-dark.txt: 3 line(s) changed:
+   v1 line 65: Other, 0xADDR, {{299.3, 605.3}, {3.0, 265.7}}
+   v2 line 65: Other, 0xADDR, {{299.3, 649.7}, {3.0, 221.3}}
+   inside: Other, 0xADDR, {{272.3, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+   v1 line 67: Other, 0xADDR, {{299.3, 605.3}, {3.0, 265.7}}
+   v2 line 67: Other, 0xADDR, {{299.3, 649.7}, {3.0, 221.3}}
+   inside: Other, 0xADDR, {{272.3, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+   v1 line 174: StaticText, 0xADDR, {{16.0, 436.7}, {370.0, 52.0}}, label: 'Updated, 1 min ago'
+   v2 line 174: StaticText, 0xADDR, {{16.0, 436.7}, {370.0, 52.0}}, label: 'Updated, 2 min ago'
+   inside: StaticText, 0xADDR, {{32.0, 452.5}, {66.0, 20.3}}, label: 'Updated'
+DIFF tree-multi-light.txt: 2 line(s) changed:
+   v1 line 65: Other, 0xADDR, {{299.3, 605.3}, {3.0, 265.7}}
+   v2 line 65: Other, 0xADDR, {{299.3, 649.7}, {3.0, 221.3}}
+   inside: Other, 0xADDR, {{272.3, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+   v1 line 67: Other, 0xADDR, {{299.3, 605.3}, {3.0, 265.7}}
+   v2 line 67: Other, 0xADDR, {{299.3, 649.7}, {3.0, 221.3}}
+   inside: Other, 0xADDR, {{272.3, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+DIFF tree-network-dark.txt: 2 line(s) changed:
+   v1 line 65: Other, 0xADDR, {{299.3, 605.3}, {3.0, 265.7}}
+   v2 line 65: Other, 0xADDR, {{299.3, 649.7}, {3.0, 221.3}}
+   inside: Other, 0xADDR, {{272.3, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+   v1 line 67: Other, 0xADDR, {{299.3, 605.3}, {3.0, 265.7}}
+   v2 line 67: Other, 0xADDR, {{299.3, 649.7}, {3.0, 221.3}}
+   inside: Other, 0xADDR, {{272.3, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+DIFF tree-network-light.txt: 3 line(s) changed:
+   v1 line 65: Other, 0xADDR, {{299.3, 605.3}, {3.0, 265.7}}
+   v2 line 65: Other, 0xADDR, {{299.3, 649.7}, {3.0, 221.3}}
+   inside: Other, 0xADDR, {{272.3, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+   v1 line 67: Other, 0xADDR, {{299.3, 605.3}, {3.0, 265.7}}
+   v2 line 67: Other, 0xADDR, {{299.3, 649.7}, {3.0, 221.3}}
+   inside: Other, 0xADDR, {{272.3, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+   v1 line 167: StaticText, 0xADDR, {{16.0, 343.7}, {370.0, 52.0}}, label: 'Last tried, Just now'
+   v2 line 167: StaticText, 0xADDR, {{16.0, 343.7}, {370.0, 52.0}}, label: 'Last tried, 1 min ago'
+   inside: StaticText, 0xADDR, {{32.0, 359.5}, {71.7, 20.3}}, label: 'Last tried'
+DIFF tree-providers-dark.txt: 2 line(s) changed:
+   v1 line 65: Other, 0xADDR, {{299.3, 605.3}, {3.0, 265.7}}
+   v2 line 65: Other, 0xADDR, {{299.3, 649.7}, {3.0, 221.3}}
+   inside: Other, 0xADDR, {{272.3, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+   v1 line 67: Other, 0xADDR, {{299.3, 605.3}, {3.0, 265.7}}
+   v2 line 67: Other, 0xADDR, {{299.3, 649.7}, {3.0, 221.3}}
+   inside: Other, 0xADDR, {{272.3, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+DIFF tree-providers-light.txt: 4 line(s) changed:
+   v1 line 65: Other, 0xADDR, {{299.3, 605.3}, {3.0, 265.7}}
+   v2 line 65: Other, 0xADDR, {{299.3, 649.7}, {3.0, 221.3}}
+   inside: Other, 0xADDR, {{272.3, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+   v1 line 67: Other, 0xADDR, {{299.3, 605.3}, {3.0, 265.7}}
+   v2 line 67: Other, 0xADDR, {{299.3, 649.7}, {3.0, 221.3}}
+   inside: Other, 0xADDR, {{272.3, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+   v1 line 212: Other, 0xADDR, {{396.0, 319.3}, {3.0, 489.7}}
+   v2 line 212: Other, 0xADDR, {{396.0, 808.0}, {3.0, 7.0}}
+   inside: Other, 0xADDR, {{369.0, 132.0}, {30.0, 680.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+   v1 line 214: Other, 0xADDR, {{396.0, 319.3}, {3.0, 489.7}}
+   v2 line 214: Other, 0xADDR, {{396.0, 808.0}, {3.0, 7.0}}
+   inside: Other, 0xADDR, {{369.0, 132.0}, {30.0, 680.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+DIFF tree-providers-states-dark.txt: 2 line(s) changed:
+   v1 line 65: Other, 0xADDR, {{299.3, 605.3}, {3.0, 265.7}}
+   v2 line 65: Other, 0xADDR, {{299.3, 649.7}, {3.0, 221.3}}
+   inside: Other, 0xADDR, {{272.3, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+   v1 line 67: Other, 0xADDR, {{299.3, 605.3}, {3.0, 265.7}}
+   v2 line 67: Other, 0xADDR, {{299.3, 649.7}, {3.0, 221.3}}
+   inside: Other, 0xADDR, {{272.3, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+DIFF tree-providers-states-light.txt: 4 line(s) changed:
+   v1 line 65: Other, 0xADDR, {{299.3, 605.3}, {3.0, 265.7}}
+   v2 line 65: Other, 0xADDR, {{299.3, 649.7}, {3.0, 221.3}}
+   inside: Other, 0xADDR, {{272.3, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+   v1 line 67: Other, 0xADDR, {{299.3, 605.3}, {3.0, 265.7}}
+   v2 line 67: Other, 0xADDR, {{299.3, 649.7}, {3.0, 221.3}}
+   inside: Other, 0xADDR, {{272.3, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+   v1 line 229: Other, 0xADDR, {{396.0, 249.0}, {3.0, 560.0}}
+   v2 line 229: Other, 0xADDR, {{396.0, 808.0}, {3.0, 7.0}}
+   inside: Other, 0xADDR, {{369.0, 132.0}, {30.0, 680.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+   v1 line 231: Other, 0xADDR, {{396.0, 249.0}, {3.0, 560.0}}
+   v2 line 231: Other, 0xADDR, {{396.0, 808.0}, {3.0, 7.0}}
+   inside: Other, 0xADDR, {{369.0, 132.0}, {30.0, 680.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+== balance requests the app sent (clock taken out, as a multiset)
+same 63 requests, refresh=1 presses: 2
+== pictures
+19 pictures in /var/tmp/ds-balance-ios-cmp/v1/dsb-shots/ios, 19 in /var/tmp/ds-balance-ios-cmp/v2/dsb-shots/ios
+same ios-01-providers-dark.png
+same ios-01-providers-light.png
+same ios-02-deepseek-dark.png
+same ios-02-deepseek-light.png
+same ios-02b-deepseek-refreshed-light.png
+same ios-03-deepseek-harness-dark.png
+same ios-03-deepseek-harness-light.png
+same ios-04-providers-states-dark.png
+same ios-04-providers-states-light.png
+same ios-05-low-dark.png
+same ios-05-low-light.png
+same ios-06-key-rejected-dark.png
+same ios-06-key-rejected-light.png
+same ios-07-network-dark.png
+DIFF ios-07-network-light.png: 3789 px differ (3437 by >16), box (896, 1090, 1108, 1137), of 1206x2622
+DIFF ios-08-multi-currency-dark.png: 744 px differ (612 by >16), box (889, 1370, 1108, 1407), of 1206x2622
+same ios-08-multi-currency-light.png
+DIFF ios-09-loading-dark.png: 1147 px differ (868 by >16), box (96, 565, 155, 624), of 1206x2622
+DIFF ios-09-loading-light.png: 799 px differ (370 by >16), box (122, 565, 155, 624), of 1206x2622
+15 of 19 pictures pixel-identical

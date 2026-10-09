@@ -114,6 +114,12 @@ public struct DeliveredDecisionCard: Identifiable, Equatable, Sendable {
         /// One question the project's coordinator put to its owner (§5.2 R7), by the item the
         /// answer door takes — the same address the push payload and the Needs-you bar carry.
         case coordinatorQuestion(itemID: String)
+        /// The record such a question became once it ended — answered, here or at another end, or
+        /// withdrawn (§5.2 R10, R12; `CoordinatorQuestions.receipts`): drawn where it ended, in
+        /// place of the question's card. Carries the record itself, for `criteriaDecisionReceipt`'s
+        /// reason: the read serves the newest fifty, and one falling out of that window is not a
+        /// reason to take it out of the conversation it was asked in.
+        case coordinatorQuestionRecord(record: ProjectClosedQuestion)
         /// One exception that became the owner's without anybody asking, by the item the
         /// hand-back door takes (§7.5, mock 5's right column). The same address the push payload
         /// and the Needs-you banner carry, so a press that names the item lands on this row.
@@ -199,6 +205,8 @@ public struct DeliveredDecisionCard: Identifiable, Equatable, Sendable {
         case .promotionReceipt(let promotion):
             return "promotion-receipt-\(promotion.promotionId)"
         case .coordinatorQuestion(let itemID):    return "question-\(itemID)"
+        case .coordinatorQuestionRecord(let record):
+            return CoordinatorQuestions.Receipt(record: record).id
         // The exception cards' ids, in the web's own spelling too: `open-item-<itemId>` is what
         // `ProjectProgressStatus.tsx` gives the two exception cards, and `fuse-<itemId>` is what
         // the pause card gives itself.
@@ -349,11 +357,11 @@ public enum DeliveryAnchor {
         // arrival, kept because these two are questions still waiting on the reader: dropping one
         // for a bad stamp would take away the only thing on screen that can be pressed.
         //
-        // All FIVE receipts are placed by the door's own clock rather than here —
+        // All the receipts are placed by the door's own clock rather than here —
         // `CriteriaDecisions.receipts`, `EvidenceDecisions.receipts`,
-        // `AcceptanceConfirmations.receipt`, `OwnerConfirmations.receipts` and
-        // `PromotionCards.receipts`: a record has no arrival of its own on a device that was not
-        // there. They answer the same question this switch asks — where a row delivered RIGHT NOW
+        // `AcceptanceConfirmations.receipt`, `OwnerConfirmations.receipts`,
+        // `PromotionCards.receipts` and `CoordinatorQuestions.receipts`: a record has no arrival of
+        // its own on a device that was not there. They answer the same question this switch asks — where a row delivered RIGHT NOW
         // would go — and none of them is delivered that way. The last of them arrived here first,
         // and the owner's iOS screenshot of 2026-09-20 is what that cost: three records stacked
         // under the newest row.
@@ -369,8 +377,8 @@ public enum DeliveryAnchor {
              .startProject, .projectDone, .projectNotDone, .criteriaChange,
              .acceptanceConfirmationReceipt,
              .evidenceDecision, .ownerDecisionReceipt, .evidenceDecisionReceipt,
-             .promotionApproval, .promotionReceipt, .coordinatorQuestion, .escalatedItem,
-             .fusePause:
+             .promotionApproval, .promotionReceipt, .coordinatorQuestion,
+             .coordinatorQuestionRecord, .escalatedItem, .fusePause:
             return items.last?.id
         }
     }

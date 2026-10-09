@@ -2,9 +2,9 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { App as AntdApp } from 'antd';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { dialogName, openDialog } from '../components/RunnerEngines.test-helpers';
 import type { Runner } from '../components/TasksSidePanel';
 import { encodeId } from '../lib/idCodec';
 import type { ProviderRow } from '../lib/providerAdmin';
@@ -133,17 +133,15 @@ async function mount(at = '/infrastructure') {
   root = createRoot(host);
   act(() =>
     root!.render(
-      <AntdApp>
-        <QueryClientProvider client={qc}>
-          <MemoryRouter initialEntries={[at]}>
-            <Probe />
-            <Routes>
-              <Route path="/infrastructure" element={<InfrastructurePage />} />
-              <Route path="*" element={<div>elsewhere</div>} />
-            </Routes>
-          </MemoryRouter>
-        </QueryClientProvider>
-      </AntdApp>,
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={[at]}>
+          <Probe />
+          <Routes>
+            <Route path="/infrastructure" element={<InfrastructurePage />} />
+            <Route path="*" element={<div>elsewhere</div>} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
     ),
   );
   await settle();
@@ -161,9 +159,17 @@ const button = (words: string, scope: ParentNode = document.body) =>
   [...scope.querySelectorAll<HTMLButtonElement>('button')].find((el) => text(el) === words) ?? null;
 const sectionHead = (title: string) =>
   [...document.body.querySelectorAll<HTMLElement>('.re-sec-head')].find((el) => text(el.querySelector('h3')) === title) ?? null;
+/** The items of the menu `trigger` opens, once its portal is drawn (a frame or two late on a slow host). */
 const openMenu = async (trigger: Element | null) => {
   await click(trigger);
-  return [...document.body.querySelectorAll<HTMLElement>('.ant-dropdown:not(.ant-dropdown-hidden) .ant-dropdown-menu-item')];
+  let items: HTMLElement[] = [];
+  await act(async () => {
+    await vi.waitFor(() => {
+      items = [...document.body.querySelectorAll<HTMLElement>('[role="menu"] [role="menuitem"]')];
+      if (items.length === 0) throw new Error('no menu is open');
+    }, { timeout: 20_000, interval: 20 });
+  });
+  return items;
 };
 const card = (name: string) =>
   [...document.body.querySelectorAll<HTMLElement>('.re-runner-card')].find((el) => text(el.querySelector('.re-runner')) === name)!;
@@ -216,7 +222,7 @@ describe('/infrastructure', () => {
     await mount();
     await click((await openMenu(button('Add')))[2]);
     // The dialog the pools' own New pool opens.
-    expect(text(document.body.querySelector('.ant-modal-title'))).toBe('New account pool');
+    expect(await openDialog('New account pool')).not.toBeNull();
     expect(path).toBe('/infrastructure');
   });
 
@@ -245,8 +251,9 @@ describe('/infrastructure', () => {
 
     await click(button('Delete', row));
     expect(sent).toEqual([]);
-    const confirm = [...document.body.querySelectorAll<HTMLElement>('.ant-popover:not(.ant-popover-hidden)')].pop()!;
-    expect(text(confirm.querySelector('.ant-popconfirm-title'))).toBe('Delete Anthropic?');
+    // The question is a dialog named by itself, anchored to the row's Delete.
+    const confirm = [...document.body.querySelectorAll<HTMLElement>('[role="dialog"]')].pop()!;
+    expect(dialogName(confirm)).toBe('Delete Anthropic?');
     await click(button('OK', confirm));
     expect(sent).toEqual([{ method: 'DELETE', path: `/providers/mine/${ANTHROPIC.id}` }]);
 

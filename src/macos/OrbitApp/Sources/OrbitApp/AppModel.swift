@@ -2500,6 +2500,14 @@ final class AppModel {
         }
     }
 
+    /// Retry, on a landing job the server judged timed out, from the page's job list
+    /// (`ProjectLandingJobsSheet`): its silent generation ends and the next one is queued. Throws
+    /// what the server answered, for the job's row to say; the page reads its line again itself.
+    func retryIntegrationJob(_ projectID: String, jobID: String) async throws {
+        guard let api else { throw APIError.notConfigured }
+        _ = try await api.retryIntegrationJob(projectID, jobID: jobID)
+    }
+
     /// One poll of the page's merge into main. Kept apart from `loadProjectSessions` so the
     /// sessions are on screen before the promotion reads answer; another project's merge is
     /// dropped the moment the address changes, never shown under this one.

@@ -1,0 +1,17 @@
+{
+ "command": "unshare -n bash -c 'ip link set lo up && cd src/web && P32_SNAPSHOTS=/var/tmp/kw2-246921c8/pilot/final-1-shots P32_OUTPUT=/var/tmp/kw2-246921c8/runs/pilot-final-1 NO_COLOR=1 nice -n -10 npx playwright test -c ui-migration/pilot.config.mjs ui-migration/pilot.browser.mjs --update-snapshots=all'",
+ "commit": "25f13640b93fd92d9b59e2f4ff3645cf5cf73b2a",
+ "webTree": "d0a53fc0735666a86981095e9efa200b8a80d62c",
+ "dirtyWeb": "",
+ "startedAt": "2026-10-07T23:28:33Z",
+ "endedAt": "2026-10-07T23:31:44+00:00",
+ "loadAverage": {
+  "start": "9.70 8.97 7.95",
+  "end": [
+   "8.98",
+   "8.71",
+   "8.02"
+  ]
+ },
+ "exitCode": 0
+}

@@ -1,5 +1,6 @@
-/* Compact segmented control, as the replaced one measured: 2px track, 4px track radius,
-   2px item radius, 20px items with 7px label padding; hover/active wash under the label. */
+/* Segmented control, as the replaced one measured: 2px track; compact (the rules below without a
+   size) 4px track radius, 2px item radius, 20px items with 7px label padding; middle 6px track
+   radius, 4px item radius, 28px items with 11px label padding; hover/active wash under the label. */
 .orbit-segmented {
   display: inline-block; box-sizing: border-box; margin: 0; padding: 2px;
   color: var(--text-2); background: var(--orbit-segmented-track); border-radius: var(--orbit-radius-sm);
@@ -31,5 +32,8 @@
   will-change: transform, width;
 }
 .orbit-segmented-group[data-motion] .orbit-segmented-item[data-checked] { background: transparent; box-shadow: none; }
+.orbit-segmented[data-size='middle'] { border-radius: var(--orbit-radius); }
+.orbit-segmented[data-size='middle'] :is(.orbit-segmented-item, .orbit-segmented-thumb) { border-radius: var(--orbit-radius-sm); }
+.orbit-segmented[data-size='middle'] .orbit-segmented-label { min-height: 28px; padding: 0 11px; line-height: 28px; }
 .orbit-segmented-group[data-motion] .orbit-segmented-item:not([data-checked])::after { background-color: transparent; }
 @media (prefers-reduced-motion: reduce) { .orbit-segmented, .orbit-segmented-item, .orbit-segmented-item::after { transition: none; } }

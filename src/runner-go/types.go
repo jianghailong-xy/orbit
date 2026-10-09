@@ -163,6 +163,9 @@ type EngineHealthReport struct {
 	// Antigravity only: selected credentials and the quota read made with its Google auth probe.
 	AuthSource string     `json:"authSource,omitempty"` // "google" | "env_key"
 	PlanUsage  *PlanUsage `json:"planUsage,omitempty"`
+	// Kimi only: the site its own login is on, "mainland-cn" (kimi.com) or "global" (kimi.ai).
+	// Omitted when it has none (kimi_region.go).
+	KimiRegion string `json:"kimiRegion,omitempty"`
 	// What the updater last did to this engine. Nil until it has run once — which the UI shows
 	// as "not reported yet", never as a problem.
 	Update *EngineUpdateReport `json:"update,omitempty"`
@@ -197,6 +200,13 @@ type EngineAccountReport struct {
 	// cxa1_ and the first 8 hex digits of the account's fingerprint, when this runner has read
 	// one for it; omitted otherwise. Codex only.
 	FingerprintPrefix string `json:"fingerprintPrefix,omitempty"`
+	// When a signed-in account's login lapses, RFC 3339: the CLI's own expiry for it, which the
+	// clients warn about ahead of time as Claude Code does. Omitted where the CLI recorded none.
+	// Claude only.
+	LoginExpiresAt string `json:"loginExpiresAt,omitempty"`
+	// The site this account's login is on, "mainland-cn" (kimi.com) or "global" (kimi.ai); omitted
+	// when it has none (kimi_region.go). Kimi only: the engine's own kimiRegion stays Default's.
+	KimiRegion string `json:"kimiRegion,omitempty"`
 }
 
 // EngineUpdateReport is the updater's last word on one engine, carried alongside that engine's
@@ -392,6 +402,73 @@ type HeartbeatResponse struct {
 	// named here is nobody else's to do. Nil from older control planes and whenever this beat
 	// claimed nothing; nothing acts on it until this binary declares integration-job/v1.
 	IntegrationJobs []IntegrationJobCommand `json:"integrationJobs,omitempty"`
+	// Repository operations this process has just claimed: the wiki's pipelines run on the server,
+	// which holds no repository, so a step that needs to know what the repository says asks this
+	// machine (docs/wiki-server-execution-design.md §7). Each entry is already RUNNING in the
+	// control plane, claimed for this leaseOwner. At most two per beat. Nil from older control
+	// planes and whenever this beat claimed nothing; nothing acts on it until this binary declares
+	// wiki-repo-op/v1.
+	WikiRepoOps []WikiRepoOpCommand `json:"wikiRepoOps,omitempty"`
+}
+
+// WikiRepoOpCommand mirrors @orbit/shared: one claimed repository operation — what to read, at which
+// commit, in which checkout, under the lease its result is fenced to (contract `repoOps`, design §7).
+type WikiRepoOpCommand struct {
+	ID   string `json:"id"`
+	Kind string `json:"kind"`
+	// Echoed back on every renewal, fragment and result; a write under a generation that has moved is
+	// refused STALE_CLAIM, which is how a takeover retires the process it took over from.
+	ClaimGeneration int64  `json:"claimGeneration"`
+	LeaseOwner      string `json:"leaseOwner"`
+	// The checkout to read, as the workspace stores it; `~` is expanded here.
+	WorkDir string `json:"workDir"`
+	// The space's repository as it is recorded, for the check every operation makes before it reads.
+	RepoURLNorm   string `json:"repoUrlNorm"`
+	RootCommitSha string `json:"rootCommitSha"`
+	// What the kind reads: a read's items, a diff's two commits, a snapshot's skip sha.
+	Input map[string]interface{} `json:"input"`
+}
+
+// WikiRepoOpProgressRequest is the lease renewal of a long operation (POST
+// /runner/wiki/repo-ops/:id/progress).
+type WikiRepoOpProgressRequest struct {
+	ClaimGeneration int64  `json:"claimGeneration"`
+	LeaseOwner      string `json:"leaseOwner"`
+}
+
+// WikiRepoOpFragmentRequest carries one piece of a snapshot too large for one request body (POST
+// /runner/wiki/repo-ops/:id/fragments). The server reassembles the pieces by ordinal, hashes the whole
+// and compares it with the digest the result names.
+type WikiRepoOpFragmentRequest struct {
+	ClaimGeneration int64  `json:"claimGeneration"`
+	LeaseOwner      string `json:"leaseOwner"`
+	Sha             string `json:"sha"`
+	Index           int    `json:"index"`
+	Total           int    `json:"total"`
+	Content         string `json:"content"`
+}
+
+// WikiRepoOpFragmentResponse is the running count of staged pieces; informational, never a receipt.
+type WikiRepoOpFragmentResponse struct {
+	Accepted bool `json:"accepted"`
+	Received int  `json:"received"`
+}
+
+// WikiRepoOpResultRequest is what one repository operation came to (POST
+// /runner/wiki/repo-ops/:id/result).
+type WikiRepoOpResultRequest struct {
+	ClaimGeneration int64                  `json:"claimGeneration"`
+	LeaseOwner      string                 `json:"leaseOwner"`
+	State           string                 `json:"state"`
+	Result          map[string]interface{} `json:"result,omitempty"`
+	Error           string                 `json:"error,omitempty"`
+}
+
+// WikiRepoOpResultResponse says whether the result was taken; a 409 means this process's claim had
+// already moved on and it must stop.
+type WikiRepoOpResultResponse struct {
+	Accepted bool   `json:"accepted"`
+	State    string `json:"state"`
 }
 
 // IntegrationJobCommand mirrors @orbit/shared: one claimed integration job, carrying everything
@@ -494,12 +571,16 @@ type IntegrationJobResultRequest struct {
 	AheadOfUpstream *int   `json:"aheadOfUpstream,omitempty"`
 	// With NOTHING_TO_LAND: whether the source tip is an ancestor of the upstream, as this runner
 	// measured it. Absent on every other answer, which the control plane reads as "not measured".
-	SourceOnUpstream *bool                    `json:"sourceOnUpstream,omitempty"`
-	FilesChanged     *int                     `json:"filesChanged,omitempty"`
-	Checks           []IntegrationCheckResult `json:"checks,omitempty"`
-	Conflicts        []string                 `json:"conflicts,omitempty"`
-	ErrorCode        string                   `json:"errorCode,omitempty"`
-	ErrorDetail      map[string]any           `json:"errorDetail,omitempty"`
+	SourceOnUpstream *bool `json:"sourceOnUpstream,omitempty"`
+	// With NOTHING_TO_LAND: true when the branch carried commits of its own and the rebase found every
+	// one of them already in the base, false when it carried none. Absent on every other answer, and
+	// from an older runner, which the control plane reads as "not measured".
+	SourceFullyApplied *bool                    `json:"sourceFullyApplied,omitempty"`
+	FilesChanged       *int                     `json:"filesChanged,omitempty"`
+	Checks             []IntegrationCheckResult `json:"checks,omitempty"`
+	Conflicts          []string                 `json:"conflicts,omitempty"`
+	ErrorCode          string                   `json:"errorCode,omitempty"`
+	ErrorDetail        map[string]any           `json:"errorDetail,omitempty"`
 }
 
 // IntegrationJobResultResponse is the control plane's answer: whether it took the result.
@@ -576,6 +657,9 @@ type LoginCommand struct {
 	Account string `json:"account,omitempty"`
 	// Sign in a NEW Codex account: the runner adds a slot under this name and signs into that.
 	AccountName string `json:"accountName,omitempty"`
+	// Kimi only: the site to sign in on, "mainland-cn" (kimi.com) or "global" (kimi.ai). Empty is
+	// a bare `kimi login`, which goes wherever the CLI decides — what every start was before it.
+	Region string `json:"region,omitempty"`
 }
 
 // CodexAccountRemoveCommand mirrors @orbit/shared: the Codex account slot the control plane asked
@@ -658,6 +742,14 @@ type ImportResultRequest struct {
 	Ok         bool   `json:"ok,omitempty"`
 	Error      string `json:"error,omitempty"`
 	Title      string `json:"title,omitempty"`
+}
+
+// SessionNamingRequest reports the title an engine gave its session. Replaces is the title the
+// claim carried: the control plane renames the session only while it still reads exactly that, so
+// a rename the person made in the meantime stands.
+type SessionNamingRequest struct {
+	Replaces string `json:"replaces"`
+	Title    string `json:"title"`
 }
 
 // ImportResultResponse is the control plane's receipt: applied=false on a replayed ok (the
@@ -848,8 +940,13 @@ type AgentExecConfig struct {
 	// FastMode asks Claude Code for its fast lane — the same thing `/fast` turns on
 	// interactively. Unlike Effort it is not a flag: it is a settings key, and one the
 	// engine reads once at startup (claude_spawn.go), so it moves only across a re-spawn.
-	FastMode     bool                   `json:"fastMode"`
-	MaxTurns     *int                   `json:"maxTurns"`
+	FastMode bool `json:"fastMode"`
+	// PromptSuggestions asks Claude Code to predict the person's next message after each turn
+	// (`--prompt-suggestions`), which this runner files as a prompt_suggestion event. The
+	// control plane decides it per session; absent is off, so an older control plane never turns
+	// it on. A spawn flag like FastMode's settings key: it moves only across a re-spawn.
+	PromptSuggestions bool                   `json:"promptSuggestions,omitempty"`
+	MaxTurns          *int                   `json:"maxTurns"`
 	MaxBudgetUsd *float64               `json:"maxBudgetUsd"`
 	McpConfig    map[string]interface{} `json:"mcpConfig"`
 	// Custom env vars injected into the coding-engine process.
@@ -946,6 +1043,22 @@ type ClaimedSession struct {
 	// clean for (wiki_maintenance_session.go). A runner is handed one only once it declares
 	// wiki-maintenance-run/v1.
 	WikiMaintenance *WikiMaintenanceRun `json:"wikiMaintenance,omitempty"`
+	// Naming asks this runner to name the session through the engine running it, once its opening
+	// turn is underway (session_naming.go). The control plane sends it only while the session still
+	// carries the title cut from its prompt, it holds no key it could name the session with itself,
+	// and the engine has a way to answer from inside the process already running — Claude Code's
+	// generate_session_title, a Codex side thread. Absent from an older control plane, which names
+	// sessions itself or not at all.
+	Naming *SessionNamingJob `json:"naming,omitempty"`
+}
+
+// SessionNamingJob is what to name a session by. Description is the session's opening request,
+// already bounded; Instructions is Orbit's naming prompt, for an engine that takes a prompt of
+// Orbit's — the Codex side thread. Claude Code's generate_session_title brings a prompt of its own
+// and reads Description alone.
+type SessionNamingJob struct {
+	Description  string `json:"description"`
+	Instructions string `json:"instructions"`
 }
 
 // SessionSource is the frozen SOURCE snapshot: the INTENT (which repository, which line), frozen
@@ -1374,6 +1487,9 @@ const (
 	// Interactive sessions (Route B)
 	evUser    = "user"
 	evTurnEnd = "turn_end"
+	// What the person will probably type next, predicted by Claude Code after a turn ended
+	// (claude_prompt_suggestion.go). Durable, and filed against the turn it follows.
+	evPromptSuggestion = "prompt_suggestion"
 	// How far a user message got on its way into the engine's conversation: enqueued ->
 	// written -> acknowledged, or failed with a reason (claude_delivery.go). The `user`
 	// event that opens a turn carries its own first state; this reports every one after.

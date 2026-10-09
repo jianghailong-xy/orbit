@@ -51,8 +51,10 @@ import type {
   WikiPlanState,
   WikiPlanVersion,
   WikiPlanVersionSummary,
+  WikiJobsRead,
   WikiSearchRow,
   WikiSpaceHealth,
+  WikiSystemModelRead,
 } from '@orbit/shared';
 import type {
   WikiChangeset,
@@ -186,6 +188,10 @@ export interface UserPreferences {
   /** Smart model selection for the whole account — the Suggested tiers and the Agent switch that
    *  routes task runs onto them. Absent means OFF; only turning it on has to be written. */
   modelRouting?: boolean;
+  /** Whether Claude sessions offer the next message you would probably type once a turn ends
+   *  (lib/promptSuggestion). Each one is a request on the session's account, read when its engine
+   *  starts. Absent means on; only opting out is ever written. */
+  promptSuggestions?: boolean;
 }
 
 /** How an account signs in (docs/google-sign-in-design.md §6): a password, and the Google account linked. */
@@ -1028,6 +1034,50 @@ export const wikiHealthQuery = (spaceId: string | null) =>
     queryFn: () => api<WikiSpaceHealth>(`/wiki/spaces/${encodeURIComponent(spaceId!)}/health`),
     enabled: spaceId !== null,
     staleTime: 30_000,
+  });
+
+/**
+ * The deployment's System model and the executor switch as it stands for this account (`GET /api/wiki/system-model`,
+ * contracts `systemModel.read` and `jobs.executor.read`): what the wiki settings page reads to draw the System model
+ * instead of the provider. `null` is a control plane from before the read (a 404 that is not the wiki being off),
+ * which runs nothing on the server — the page is then what it always was.
+ */
+export const wikiSystemModelQuery = () =>
+  queryOptions({
+    queryKey: ['wiki', 'system-model'] as const,
+    queryFn: async (): Promise<WikiSystemModelRead | null> => {
+      try {
+        return await api<WikiSystemModelRead>('/wiki/system-model');
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 404 && !isWikiDisabled(error)) return null;
+        throw error;
+      }
+    },
+    staleTime: 15_000,
+  });
+
+/**
+ * A space's server runs and their calls (`GET /api/wiki/spaces/:id/jobs`, contract `jobs.read`): what Activity's
+ * Runs card and its call logs draw. Read again every few seconds while a run is on its way, since the worker moves
+ * it on without a wiki write to announce it. `null` is a control plane from before the read.
+ */
+export const wikiJobsQuery = (spaceId: string | null) =>
+  queryOptions({
+    queryKey: ['wiki', 'space', spaceId, 'jobs'] as const,
+    queryFn: async (): Promise<WikiJobsRead | null> => {
+      try {
+        return await api<WikiJobsRead>(`/wiki/spaces/${encodeURIComponent(spaceId!)}/jobs`);
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 404 && !isWikiDisabled(error)) return null;
+        throw error;
+      }
+    },
+    enabled: spaceId !== null,
+    staleTime: 5_000,
+    refetchInterval: (query) =>
+      (query.state.data?.jobs ?? []).some((job) => job.state === 'queued' || job.state === 'running' || job.state === 'waiting')
+        ? 5_000
+        : false,
   });
 
 /** A space's newest entries of every kind, newest record first: what Activity and the status line read. */

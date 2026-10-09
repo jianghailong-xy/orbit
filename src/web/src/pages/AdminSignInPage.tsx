@@ -8,17 +8,20 @@ import { Input } from '../components/ui/Input';
 import { Radio, RadioGroup } from '../components/ui/Radio';
 import { Spinner } from '../components/ui/Spinner';
 import { Switch } from '../components/ui/Switch';
+import '../components/ui/Card.css';
 import { copyText } from '../lib/clipboard';
 import { authMethodsQuery } from '../lib/googleLink';
 import { useToast } from '../lib/toast';
 
 type SignupPolicy = 'EXISTING_ACCOUNTS' | 'OPEN';
 
-/** `GET` and `PUT /admin/sign-in/google` (docs/google-sign-in-design.md §6, §7.1): never the secret, only whether one is saved. */
+/** `GET` and `PUT /admin/sign-in/google` (docs/google-sign-in-design.md §6, §7.1): never the secret, only whether one is saved and whether it still decrypts. */
 export interface GoogleSignInSettings {
   enabled: boolean;
   clientId: string;
   hasSecret: boolean;
+  /** A secret is saved and `PROVIDER_SECRET_KEY` can no longer decrypt it: Google sign-in is not working. */
+  secretUnreadable: boolean;
   signupPolicy: SignupPolicy;
   /** What to register in the Google Cloud console as the client's authorized redirect URI. */
   redirectUri: string;
@@ -29,6 +32,13 @@ export const SIGN_IN_SETTINGS_TITLE = 'Google sign-in';
 export const OPEN_SIGNUP_WARNING =
   'Any Google account can create an account on this server: its first sign-in opens a member account with no password.';
 export const INCOMPLETE_WARNING = 'Google sign-in stays off until both the client ID and the client secret are saved.';
+/**
+ * Said when the saved secret no longer decrypts (§7.1): the switch may read on, but nobody can sign in
+ * with Google until the secret is entered again. Entering the secret is the fix, so say so.
+ */
+export const SECRET_UNREADABLE_WARNING =
+  'The saved client secret can no longer be decrypted, usually because PROVIDER_SECRET_KEY changed. '
+  + 'Google sign-in is not working: paste the client secret again and save.';
 
 export const googleSignInSettingsQuery = () =>
   queryOptions({
@@ -41,8 +51,9 @@ export const googleSignInSettingsQuery = () =>
  * server signs people in with, and who may sign up through it. The client secret goes in and never
  * comes back: the field is always empty, says whether one is saved, and a save that leaves it empty
  * keeps the saved one. Google sign-in is on only when it is switched on and both the client ID and the
- * secret are saved. Every save answers the setting as the server now holds it, which is what the page
- * shows from then on.
+ * secret are saved — and the saved secret still decrypts: one `PROVIDER_SECRET_KEY` rotation leaves the
+ * row in place, and the page says so and asks for the secret again instead of showing On. Every save
+ * answers the setting as the server now holds it, which is what the page shows from then on.
  */
 export function AdminSignInPage() {
   const message = useToast();
@@ -100,7 +111,7 @@ export function AdminSignInPage() {
     || clientId.trim() !== settings.clientId
     || signupPolicy !== settings.signupPolicy
     || secret.trim() !== '';
-  const on = settings.enabled && settings.clientId !== '' && settings.hasSecret;
+  const on = settings.enabled && settings.clientId !== '' && settings.hasSecret && !settings.secretUnreadable;
   const incomplete = enabled && (clientId.trim() === '' || (!settings.hasSecret && secret.trim() === ''));
 
   const submit = (event: FormEvent) => {
@@ -126,6 +137,12 @@ export function AdminSignInPage() {
           <Badge tone={on ? 'success' : 'default'}>{on ? 'On' : 'Off'}</Badge>
         </div>
         <div className="orbit-card-body admin-signin-fields">
+          {settings.secretUnreadable && (
+            <div className="admin-signin-warning" role="alert">
+              {SECRET_UNREADABLE_WARNING}
+            </div>
+          )}
+
           <div className="admin-signin-row">
             <div>
               <div className="admin-signin-label" id={ids.enabled}>
@@ -163,15 +180,23 @@ export function AdminSignInPage() {
               id={ids.secret}
               type="password"
               value={secret}
-              placeholder={settings.hasSecret ? 'Saved — enter a new one to replace it' : 'Paste the client secret'}
+              placeholder={
+                settings.secretUnreadable
+                  ? 'Not readable — paste the client secret again'
+                  : settings.hasSecret
+                    ? 'Saved — enter a new one to replace it'
+                    : 'Paste the client secret'
+              }
               autoComplete="new-password"
               spellCheck={false}
               onChange={(e) => setSecret(e.target.value)}
             />
             <div className="admin-signin-hint">
-              {settings.hasSecret
-                ? 'A secret is saved. It is never shown again; leave this empty to keep it.'
-                : 'No secret is saved yet. Once saved, it is never shown again.'}
+              {settings.secretUnreadable
+                ? 'The saved secret cannot be decrypted. Paste the client secret again to replace it.'
+                : settings.hasSecret
+                  ? 'A secret is saved. It is never shown again; leave this empty to keep it.'
+                  : 'No secret is saved yet. Once saved, it is never shown again.'}
             </div>
           </div>
 

@@ -274,9 +274,10 @@ const CASES: Case[] = [
     name: 'a wake a watch queued',
     row: { turnId: 'turn-watch', content: WAKE, createdAt: TS, authoredByOrbit: true },
     echo: { text: WAKE },
-    root: '.watch-wake-wrap',
+    // The background line's classes (`.bgwake-row`, `.bgwake-queued`…) under a root of the watch's own.
+    root: '.watch-wake',
     queuedMark: '.watch-wake.is-queued',
-    slot: '.watch-wake-queued',
+    slot: '.bgwake-queued',
     // A wake's Cancel: withdrawing it is for good, so it says so (WorkspaceView.queuedTurnWake).
     actions: ['Withdraw wake'],
     acceptable: true,

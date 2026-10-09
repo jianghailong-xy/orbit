@@ -20,7 +20,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 enum class AuthMessage {
-    INVALID_ADDRESS, INVALID_CREDENTIALS, NETWORK, STORAGE, SERVER,
+    INVALID_ADDRESS, INVALID_CREDENTIALS, NETWORK, STORAGE, SERVER, UNEXPECTED,
     GOOGLE_FAILED, GOOGLE_UNAVAILABLE, GOOGLE_INTERRUPTED, GOOGLE_STATE_MISMATCH,
     // Refusals the server names by code (docs/google-sign-in-design.md §4.1–4.3, §5.2, §5.5).
     ACCOUNT_DISABLED, SETUP_REQUIRED, GOOGLE_NOT_CONFIGURED, GOOGLE_RATE_LIMITED, GOOGLE_SIGN_IN_BUSY,
@@ -30,12 +30,18 @@ enum class AuthMessage {
 }
 
 class AuthViewModel(application: Application) : AndroidViewModel(application) {
-    private val session = (application as OrbitApplication).session
-    private val google = (application as OrbitApplication).googleSignIn
+    private val app = application as OrbitApplication
+    private val session = app.session
+    private val google = app.googleSignIn
     val state = session.state
     private val mutableMessage = MutableStateFlow<AuthMessage?>(null)
     val message = mutableMessage.asStateFlow()
     private var attempt = 0
+    private val mutableGoogleBusy = MutableStateFlow(false)
+    /** A Google sign-in this page started is open in the browser, or its ticket is being traded (iOS `googleBusy`). */
+    val googleBusy = mutableGoogleBusy.asStateFlow()
+    private var googleStep: GoogleStep? = null
+        set(value) { field = value; mutableGoogleBusy.value = value != null }
 
     init {
         viewModelScope.launch {
@@ -55,10 +61,14 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun logout() {
-        ++attempt
+        val mine = ++attempt
         mutableMessage.value = null
+        googleStep = null
         viewModelScope.launch {
-            try { session.logout() } catch (error: Exception) { mutableMessage.value = messageFor(error) }
+            try {
+                app.push.beforeSignOut()
+                if (mine == attempt) session.logout()
+            } catch (error: Exception) { if (mine == attempt) mutableMessage.value = messageFor(error) }
         }
     }
 
@@ -71,8 +81,18 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         catch (_: Exception) { null }
     }
 
+    /** The email the last password sign-in on the instance at [address] used (A03c), for the login page to prefill. */
+    suspend fun rememberedEmail(address: String): String? {
+        val server = try {
+            ServerAddress.parse(address, allowLoopbackHttp = BuildConfig.DEBUG)
+        } catch (_: InvalidServerAddress) { return null }
+        return session.rememberedEmail(server)
+    }
+
     /** Opens the instance's Google sign-in with [open]; its answer comes back to [handleGoogleCallback]. */
     fun continueWithGoogle(address: String, open: (String) -> Boolean) {
+        // A second press before the button has redrawn as disabled: one sign-in at a time (iOS fbe1c83af).
+        if (googleStep != null || state.value is AuthState.SigningIn) return
         ++attempt
         mutableMessage.value = null
         val server = try {
@@ -81,45 +101,77 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
             mutableMessage.value = AuthMessage.INVALID_ADDRESS
             return
         }
+        googleStep = GoogleStep.BROWSER
         if (!open(google.begin(server))) {
             google.abandon()
+            googleStep = null
             mutableMessage.value = AuthMessage.GOOGLE_UNAVAILABLE
         }
+    }
+
+    /**
+     * The app is in front again. With no answer from the browser (its tab was closed, as closing iOS's sheet ends a sign-in),
+     * Google can be started again. The sign-in stays waiting until then, so an answer that still comes is taken.
+     */
+    fun onResumed() {
+        if (googleStep == GoogleStep.BROWSER) googleStep = null
     }
 
     /** An address the app was opened with: a Google sign-in's answer finishes the sign-in this process started. */
     fun handleGoogleCallback(uri: String) {
         val failure = when (val callback = google.complete(uri)) {
             GoogleCallback.NotGoogle -> return
-            is GoogleCallback.Ticket -> return signIn(::googleMessageFor) {
-                session.loginWithGoogleTicket(callback.server, callback.ticket, callback.codeVerifier)
+            is GoogleCallback.Ticket -> {
+                googleStep = GoogleStep.EXCHANGE
+                return signIn(::googleMessageFor, done = { if (googleStep == GoogleStep.EXCHANGE) googleStep = null }) {
+                    session.loginWithGoogleTicket(callback.server, callback.ticket, callback.codeVerifier)
+                }
             }
             GoogleCallback.Interrupted -> AuthMessage.GOOGLE_INTERRUPTED
             GoogleCallback.StateMismatch -> AuthMessage.GOOGLE_STATE_MISMATCH
             is GoogleCallback.Refused -> refusalMessage(callback.code) ?: AuthMessage.GOOGLE_FAILED
         }
         ++attempt
+        googleStep = null
         mutableMessage.value = failure
     }
 
-    private fun signIn(describe: (Exception) -> AuthMessage, block: suspend () -> Unit) {
+    private fun signIn(describe: (Exception) -> AuthMessage, done: () -> Unit = {}, block: suspend () -> Unit) {
         val mine = ++attempt
         mutableMessage.value = null
         viewModelScope.launch {
-            try { block() }
+            try {
+                // A login switches accounts: the previous login's push binding goes first, and a newer attempt
+                // that started while it went owns the screen.
+                app.push.beforeSignOut()
+                if (mine == attempt) block()
+            }
             catch (_: CancellationException) { /* Superseded or cancelled. */ }
             catch (error: Exception) { if (mine == attempt) mutableMessage.value = describe(error) }
+            finally { done() }
         }
     }
 }
 
-/** Why signing in or restoring failed: a code the server names comes first, so no refusal reads as a wrong password. */
+/** Where a Google sign-in this page started stands: open in the browser, or its ticket being traded. */
+private enum class GoogleStep { BROWSER, EXCHANGE }
+
+/**
+ * Why signing in or restoring failed: a code the server names comes first, so no refusal reads as a wrong password; then, as
+ * iOS LoginFailure.message says it (40a70be24), the server turning the form down, the server out of reach, the server broken,
+ * or an answer that is no Orbit sign-in.
+ */
 internal fun messageFor(error: Exception): AuthMessage = when (error) {
     is InvalidServerAddress -> AuthMessage.INVALID_ADDRESS
     is SecureStorageException -> AuthMessage.STORAGE
-    is ApiError -> refusalMessage(error.code) ?: if (error.status == 401) AuthMessage.INVALID_CREDENTIALS else AuthMessage.SERVER
+    is ApiError -> refusalMessage(error.code) ?: when (error.status) {
+        // 400 is the server refusing the form itself, such as an email it can't read as one.
+        400, 401, 403, 422 -> AuthMessage.INVALID_CREDENTIALS
+        in 500..599 -> AuthMessage.SERVER
+        else -> AuthMessage.UNEXPECTED
+    }
     is NetworkException -> AuthMessage.NETWORK
-    else -> AuthMessage.SERVER
+    else -> AuthMessage.UNEXPECTED
 }
 
 /** Why a Google ticket's exchange failed (§4.3). Never that the password is wrong: none was asked for. */

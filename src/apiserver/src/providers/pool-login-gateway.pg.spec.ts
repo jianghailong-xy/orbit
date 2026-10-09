@@ -9,11 +9,12 @@
  *      (fixtures/codex-gateway-recording.json) reaches the backend in the shape the official codex CLI
  *      sends a ChatGPT login's turn there (fixtures/codex-chatgpt-backend-recording.json, recorded by
  *      runner-go codex_chatgpt_backend_recording_test.go): the same path, the login as
- *      `Authorization: Bearer` and `ChatGPT-Account-ID`, codex's body byte for byte and in the CLI's own
- *      shape, every other header as codex sent it. The backend's recorded stream comes back byte for byte,
- *      window headers and all; its usage goes into the ledger for that session and hour, and its window
- *      reading onto the account. The claim hands the runner the gateway and a token, and nothing of the
- *      login.
+ *      `Authorization: Bearer` and `ChatGPT-Account-ID`, and codex's body in the CLI's own shape — the
+ *      built-in provider's `guardian_credits_requested` field added and the body zstd-compressed, plus
+ *      its `version` and `x-codex-routing-hint` headers — with every other header as codex sent it. The
+ *      backend's recorded stream comes back byte for byte, window headers and all; its usage goes into
+ *      the ledger for that session and hour, and its window reading onto the account. The claim hands the
+ *      runner the gateway and a token, and nothing of the login.
  *  (2) A token is refused (401) once its session ended, moved to another provider or is not its person's,
  *      it expired or was revoked, or its pool was deleted; a good one reaches nothing but POST /responses
  *      (403) — and none of it reaches the backend. A session whose account the pool no longer holds keeps
@@ -448,29 +449,40 @@ suite("a login pool's gateway, end to end on real PostgreSQL", { timeout: 600_00
     assert.equal(sent.headers.authorization, `Bearer ${pool.login.access}`);
     assert.equal(cliHeaders['chatgpt-account-id'], CLI.account);
     assert.equal(sent.headers['chatgpt-account-id'], pool.accountId);
-    // Codex's body as it sent it — and that body is the CLI's own request, field for field.
-    assert.ok(sent.body.equals(SESSION_BODY), 'the body the backend got is not the body codex sent');
+    // The backend body: codex's own, in the CLI's built-in-provider shape — zstd-compressed, and carrying
+    // the metadata field a configured provider omits.
     assert.equal(cliHeaders['content-encoding'], 'zstd');
+    assert.equal(sent.headers['content-encoding'], 'zstd');
+    const backendBody = JSON.parse(zstdDecompressSync(sent.body).toString('utf8')) as Record<string, unknown>;
     const cliBody = JSON.parse(zstdDecompressSync(Buffer.from(cli.bodyBase64, 'base64')).toString('utf8')) as Record<string, unknown>;
-    const sessionBody = JSON.parse(SESSION_BODY.toString('utf8')) as Record<string, unknown>;
-    assert.deepEqual(Object.keys(sessionBody).sort(), Object.keys(cliBody).sort());
+    assert.deepEqual(Object.keys(backendBody).sort(), Object.keys(cliBody).sort());
     for (const field of ['model', 'instructions', 'store', 'stream', 'include', 'tool_choice', 'parallel_tool_calls', 'reasoning']) {
-      assert.deepEqual(sessionBody[field], cliBody[field], `the request's ${field} is not the CLI's`);
+      assert.deepEqual(backendBody[field], cliBody[field], `the request's ${field} is not the CLI's`);
     }
-    // Every other header as codex sent it, none added — and, against the CLI's: only what the CLI adds as
-    // the built-in provider (its version, its routing hint, its compression) is not there.
+    assert.equal(
+      (backendBody.client_metadata as Record<string, unknown>).guardian_credits_requested,
+      (cliBody.client_metadata as Record<string, unknown>).guardian_credits_requested,
+      "the backend body does not carry the CLI's guardian_credits_requested",
+    );
+    // Every other header as codex sent it, plus the three the built-in provider adds — which now match the
+    // CLI's own, so nothing separates the two requests but the credential and the account.
     for (const [name, value] of Object.entries(codexHeaders(null))) {
       assert.equal(sent.headers[name], value, `codex's ${name} header did not arrive as sent`);
     }
+    const builtin = ['content-encoding', 'version', 'x-codex-routing-hint'].sort();
     const transport = new Set(['host', 'connection', 'content-length', 'authorization', 'chatgpt-account-id']);
     assert.deepEqual(
-      Object.keys(sent.headers).filter((name) => !(name in codexHeaders(null)) && !transport.has(name)),
-      [],
-      'the gateway added headers codex did not send',
+      Object.keys(sent.headers).filter((name) => !(name in codexHeaders(null)) && !transport.has(name)).sort(),
+      builtin,
+      'the gateway added headers that are not the built-in provider\'s',
     );
+    for (const name of ['version', 'x-codex-routing-hint']) {
+      assert.equal(sent.headers[name], cliHeaders[name], `the gateway's ${name} is not the CLI's`);
+    }
     assert.deepEqual(
       Object.keys(cliHeaders).filter((name) => !(name in sent.headers)).sort(),
-      ['content-encoding', 'version', 'x-codex-routing-hint'],
+      [],
+      'a header the CLI sends the backend is missing from what the gateway sent',
     );
     assert.ok(!JSON.stringify(sent.headers).includes(token), 'the session token went on to the backend');
 
@@ -520,15 +532,14 @@ suite("a login pool's gateway, end to end on real PostgreSQL", { timeout: 600_00
     assert.equal((await ask(token)).status, 200);
     seen.length = 0;
 
-    // Outside the path list: refused, whatever the token — every other path the CLI itself asks a ChatGPT
-    // backend for included.
+    // Outside the path list: refused, whatever the token. The CLI's own backend calls the gateway does
+    // forward are (2b); these are the ones it never does.
     for (const [method, urlPath] of [
       ['GET', '/api/gw/codex/responses'],
       ['POST', '/api/gw/codex/responses/compact'],
       ['GET', '/api/gw/codex/models'],
       ['POST', '/api/gw/codex/models'],
       ['POST', '/api/gw/codex/analytics-events/events'],
-      ['GET', '/api/gw/codex/wham/accounts/check'],
       ['POST', '/api/gw/codex/chat/completions'],
       ['POST', '/api/gw/codex/backend-api/codex/responses'],
       ['POST', '/api/gw/codex'],
@@ -594,6 +605,60 @@ suite("a login pool's gateway, end to end on real PostgreSQL", { timeout: 600_00
     await providers.removePool(owner.id, next.id);
     await refused(nextToken, 'its pool was deleted');
     assert.equal(seen.filter((request) => request.headers.authorization === `Bearer ${next.login.access}`).length, 1);
+  });
+
+  await t.test('(2b) a login token reaches the ChatGPT backend calls the CLI makes for itself — routing, settings, plugins, the models, the apps MCP and analytics — on the login and the account, not the turn\'s shape', async () => {
+    const pool = await world('Startup');
+    const session = await pool.sessionOf();
+    const token = tokenOf(await claim(owner, session));
+    const routing = {
+      accounts: [{ id: pool.accountId, name: null, plan_type: 'plus', structure: 'personal', workspace_backend_origin: 'NO_CONSTRAINT', account_routing_override: 'NO_CONSTRAINT', profile_picture_url: null }],
+      account_ordering: [pool.accountId], default_account_id: pool.accountId,
+    };
+    const mcp = Buffer.from('{"jsonrpc":"2.0","id":0,"method":"initialize","params":{}}');
+    const events = Buffer.from('{"events":[]}');
+    // The paths the CLI asks the backend for itself (fixtures/codex-chatgpt-startup-recording.json), with
+    // what the recorder answers and where each lands upstream — the backend root, not the codex base.
+    const calls: Array<{ method: string; path: string; upstream: string; body?: Buffer; answer: Scripted }> = [
+      { method: 'GET', path: '/wham/accounts/check', upstream: '/backend-api/wham/accounts/check', answer: jsonAnswer(200, routing) },
+      { method: 'GET', path: '/wham/settings/user', upstream: '/backend-api/wham/settings/user', answer: jsonAnswer(200, { settings: {} }) },
+      { method: 'GET', path: '/codex/models', upstream: '/backend-api/codex/models', answer: jsonAnswer(200, { models: [] }) },
+      { method: 'GET', path: '/ps/plugins/list', upstream: '/backend-api/ps/plugins/list', answer: jsonAnswer(200, { plugins: [] }) },
+      { method: 'GET', path: '/ps/plugins/suggested/codex', upstream: '/backend-api/ps/plugins/suggested/codex', answer: jsonAnswer(200, { suggested: [] }) },
+      { method: 'GET', path: '/ps/plugins/installed', upstream: '/backend-api/ps/plugins/installed', answer: jsonAnswer(200, { installed: [] }) },
+      { method: 'GET', path: '/plugins/featured', upstream: '/backend-api/plugins/featured', answer: jsonAnswer(200, { featured: [] }) },
+      { method: 'POST', path: '/ps/mcp', upstream: '/backend-api/ps/mcp', body: mcp, answer: jsonAnswer(200, { jsonrpc: '2.0', id: 0, result: {} }) },
+      { method: 'POST', path: '/codex/analytics-events/events', upstream: '/backend-api/codex/analytics-events/events', body: events, answer: jsonAnswer(200, { ok: true }) },
+    ];
+    for (const call of calls) {
+      seen.length = 0;
+      script.length = 0;
+      backend = null;
+      script.push(call.answer);
+      const got = await exchange(base, call.method, `/api/gw/codex${call.path}`, codexHeaders(token), call.body);
+      assert.equal(got.status, 200, `${call.method} ${call.path}: ${got.body.toString('utf8')}`);
+      const [sent, ...more] = backendRequests();
+      assert.deepEqual(more, [], `${call.method} ${call.path}: one request became more than one upstream`);
+      assert.equal(sent.method, call.method, call.path);
+      assert.equal(sent.url, call.upstream, `${call.path} did not land on the backend root`);
+      // The login's own pair in place of the session token, whatever codex sent.
+      assert.equal(sent.headers.authorization, `Bearer ${pool.login.access}`, `${call.path}: not the login's credential`);
+      assert.equal(sent.headers['chatgpt-account-id'], pool.accountId, `${call.path}: not the account's`);
+      assert.ok(!JSON.stringify(sent.headers).includes(token), `${call.path}: the session token went upstream`);
+      // The body goes as codex sent it: the turn's built-in-provider shape (zstd, routing hint) is the
+      // turn's alone.
+      assert.equal(sent.headers['content-encoding'], undefined, `${call.path}: the turn's zstd shape was applied`);
+      assert.equal(sent.headers['x-codex-routing-hint'], undefined, `${call.path}`);
+      if (call.body) assert.equal(sent.body.toString('utf8'), call.body.toString('utf8'), `${call.path}: the body was changed`);
+      else assert.equal(sent.body.length, 0, `${call.path}: a body appeared`);
+    }
+    // A path off the list still reaches nothing, on a login token as on any other (the API-key side's list).
+    seen.length = 0;
+    script.length = 0;
+    const refused = await exchange(base, 'GET', '/api/gw/codex/analytics-events/events', codexHeaders(token));
+    assert.equal(refused.status, 403);
+    assert.equal(errorOf(refused).code, 'orbit_gateway_path_not_allowed');
+    assert.equal(seen.length, 0, 'a refused path reached the backend');
   });
 
   await t.test('(3) usage_limit_reached: answered as it came, asked once, the account spent until its reset; the session is told, waits for the reset, and stays on its account', async () => {
@@ -700,7 +765,11 @@ suite("a login pool's gateway, end to end on real PostgreSQL", { timeout: 600_00
     assert.equal(refused.headers.authorization, `Bearer ${pool.login.access}`);
     assert.equal(resent.headers.authorization, `Bearer ${fresh.access}`);
     assert.equal(resent.headers['chatgpt-account-id'], pool.accountId);
-    assert.ok(resent.body.equals(SESSION_BODY));
+    // The retry carries the same built-in-provider shape the first attempt did: the gateway's own body.
+    assert.equal(refused.headers['content-encoding'], 'zstd');
+    assert.ok(resent.body.equals(refused.body), 'the retry body is not the one the first attempt sent');
+    const resentBody = JSON.parse(zstdDecompressSync(resent.body).toString('utf8')) as Record<string, unknown>;
+    assert.equal((resentBody.client_metadata as Record<string, unknown>).guardian_credits_requested, 'true');
 
     // The refresh is the CLI's, field for field, on the stored refresh token.
     const [refresh, ...moreRefreshes] = tokenRequests();

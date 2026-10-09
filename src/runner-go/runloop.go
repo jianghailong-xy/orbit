@@ -799,7 +799,8 @@ type worktreeCommandRelease manualWorktreeOperationKey
 
 // runnerAgentList is this machine's agents as `GET /runner/me` last listed them. The slash-asset
 // and repo-health scans cover their workDirs, and a plan-usage probe keeps polling its provider
-// while idle only if one of them runs that provider.
+// while idle if one of them runs that provider, as it does while that engine is signed in here
+// (idleUsage).
 type runnerAgentList struct {
 	mu     sync.Mutex
 	agents []RunnerAgent
@@ -834,6 +835,16 @@ func (l *runnerAgentList) providerConfigured(provider string) bool {
 		}
 	}
 	return false
+}
+
+// idleUsage is whether an idle runner keeps reading provider's usage: while one of its workspaces runs
+// provider (configured), or while the engine probe finds that engine signed in here at all. A
+// workspace's provider is only the one its last session ran on, so the first alone left a machine
+// whose workspaces last ran something else reading an engine only while one of its sessions ran
+// there — and since the reading lives in this process, every restart took it, leaving the runner
+// page to say "No quota reported" over a signed-in login (Codex on HPC, 2026-10-09).
+func idleUsage(provider string, configured func(string) bool, engines *engineHealthProbe) func() bool {
+	return func() bool { return configured(provider) || engines.signedIn(provider) }
 }
 
 // runLoop returns true only when it drained because a newer runner release was
@@ -993,10 +1004,15 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		}
 	}()
 
+	// Which engines are installed and signed in here (started below). Made before the quota probes,
+	// since they read by it while idle.
+	engineHealth := &engineHealthProbe{}
+
 	// Provider quota for this machine's logins, refreshed in the background so the
 	// heartbeat attaches the latest snapshot without ever blocking on external calls.
 	// Each probe refreshes quickly while active and slowly while an agent for that
-	// provider exists, so idle reset windows do not leave stale UI gauges behind.
+	// provider exists or the engine is signed in here (idleUsage), so idle reset
+	// windows do not leave stale UI gauges behind.
 	activeProviderCount := func(provider string) int {
 		return pool.providerCount(provider, true)
 	}
@@ -1005,15 +1021,20 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// environment selects — and every added account's own.
 	claudeUsage := newClaudeAccountUsage()
 	claudeActive := func() int { return activeProviderCount(providerClaude) }
-	claudeIdle := func() bool { return providerConfigured(providerClaude) }
+	claudeIdle := idleUsage(providerClaude, providerConfigured, engineHealth)
 	go claudeUsage.run(loopCtx, claudeActive, claudeIdle)
 	// Codex keeps one snapshot per account slot: Default's — its usage probe, which the reset steps
 	// read through too — and every added slot's own.
 	codexUsage := newCodexAccountUsage(t.leaseOwner)
 	codexUsageProbe := codexUsage.def
 	codexActive := func() int { return activeProviderCount(providerCodex) }
-	codexIdle := func() bool { return providerConfigured(providerCodex) }
+	codexIdle := idleUsage(providerCodex, providerConfigured, engineHealth)
 	go codexUsage.run(loopCtx, codexActive, codexIdle)
+	// Kimi Code keeps one snapshot per account as Claude does: Default's and every added account's own.
+	kimiUsage := newKimiAccountUsage()
+	kimiActive := func() int { return activeProviderCount(providerKimi) }
+	kimiIdle := idleUsage(providerKimi, providerConfigured, engineHealth)
+	go kimiUsage.run(loopCtx, kimiActive, kimiIdle)
 
 	// Runtime model catalogs and effective defaults, reported by the runtimes themselves. Catalogs
 	// change rarely and are expensive to discover; defaults are cheap config reads that users may
@@ -1034,7 +1055,6 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// engine's new models are in the list seconds later rather than at the next hourly tick.
 	//
 	// The engine probe (started below) is what tells a signed-out engine's empty list from a failure.
-	engineHealth := &engineHealthProbe{}
 	refreshModelCatalog := coalescingRefresh(func() {
 		catalog, signedOut := readModelCatalog(loopCtx, catalogRuntimes, engineHealth.signedOut, logln)
 		modelSnapshotMu.Lock()
@@ -1181,6 +1201,9 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		// plane, but the heartbeat that carries it is at-least-once: without this, a redelivery
 		// after a slow claim would stage a second worktree for the same job.
 		integratingNow := map[string]bool{}
+		// Repository operations this process has in flight, for the same reason: the claim is exclusive
+		// in the control plane, but a redelivered heartbeat must not start the same snapshot twice.
+		repoOpsNow := map[string]bool{}
 		// The one browser-less sign-in this runner may have in flight — it writes the machine's
 		// single credentials file, so it guards itself rather than keying off a request id.
 		runHeartbeatTicks(hbStop, ticker.C, hbNow, func() {
@@ -1197,7 +1220,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				Status: "ONLINE", Version: version,
 				LeaseOwner: t.leaseOwner, Draining: draining,
 				Commands: cmds, Skills: skills,
-				PlanUsage:            combinePlanUsage(claudeUsage.snapshot(), codexUsage.snapshot()),
+				PlanUsage:            combinePlanUsage(claudeUsage.snapshot(), codexUsage.snapshot(), kimiUsage.snapshot()),
 				ModelCatalog:         modelCatalog,
 				RuntimeDefaultModels: runtimeDefaultModels,
 				Engines:              withCodexAccountFingerprints(engineHealth.snapshotNow(), codexUsage),
@@ -1316,6 +1339,35 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 					}()
 					runIntegrationJobAndReport(t, job)
 				}(job)
+			}
+			// The wiki's repository operations (contracts/wiki.contract.json `repoOps`, design §7):
+			// reading a checkout for a pipeline that runs on the server. Its own goroutine and the same
+			// join as the integration jobs above, because a snapshot of a large repository is minutes of
+			// git — and because none of this takes a session slot.
+			for _, op := range resp.WikiRepoOps {
+				if op.LeaseOwner != "" && t.leaseOwner != "" && op.LeaseOwner != t.leaseOwner {
+					logln("ignoring repository operation claimed for another process:", op.ID)
+					continue
+				}
+				mergeMu.Lock()
+				busy := repoOpsNow[op.ID]
+				if !busy {
+					repoOpsNow[op.ID] = true
+				}
+				mergeMu.Unlock()
+				if busy {
+					continue
+				}
+				heartbeatOps.Add(1)
+				go func(op WikiRepoOpCommand) {
+					defer heartbeatOps.Done()
+					defer func() {
+						mergeMu.Lock()
+						delete(repoOpsNow, op.ID)
+						mergeMu.Unlock()
+					}()
+					runWikiRepoOpAndReport(t, op)
+				}(op)
 			}
 			// Honor "merge to main" requests: merge each session's branch into main on
 			// our local repo and report the outcome. Each runs once (guarded against the
@@ -1580,7 +1632,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 					logln("account-remove: unknown engine", rr.Engine)
 				} else {
 					res := AccountRemoveResultRequest{Engine: rr.Engine, Account: rr.Account, Attempt: rr.Attempt, Status: "done"}
-					if err := removeAccount(kind, claudeUsage, codexUsage, rr.Account, kind.liveDirs(pool.sessionIDs())); err != nil {
+					if err := removeAccount(kind, claudeUsage, codexUsage, kimiUsage, rr.Account, kind.liveDirs(pool.sessionIDs())); err != nil {
 						res.Status, res.Message = "failed", firstLine(err.Error())
 					} else {
 						// Re-probe this engine and beat at once, so the account leaves the page's list
@@ -1596,7 +1648,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				}
 			} else if rr := resp.CodexAccountRemoveRequest; rr != nil {
 				res := AccountRemoveResultRequest{Engine: providerCodex, Account: rr.Account, Attempt: rr.Attempt, Status: "done"}
-				if err := removeAccount(codexAccountKind, claudeUsage, codexUsage, rr.Account, codexSessionAccountHomes(pool.sessionIDs())); err != nil {
+				if err := removeAccount(codexAccountKind, claudeUsage, codexUsage, kimiUsage, rr.Account, codexSessionAccountHomes(pool.sessionIDs())); err != nil {
 					res.Status, res.Message = "failed", firstLine(err.Error())
 				} else {
 					go func() {

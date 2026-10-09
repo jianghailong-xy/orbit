@@ -67,6 +67,9 @@ public enum NavNode: Hashable, Sendable {
     /// subscriptions, read-only here, or a shared pool of OpenAI API keys, which is run from its page.
     case accountPool(poolID: String)
     case sharedPool(poolID: String)
+    /// One of the account's own API keys, read-only, pushed from Infrastructure's API keys: a DeepSeek
+    /// key's page, its account balance first (`DeepSeekBalance`). Changing a key happens on the web.
+    case providerDetail(providerID: String)
     case userDetail(userID: String)
     /// One project's page, pushed from the Projects list — or over a phone's conversation or a
     /// project's sessions page, so the back swipe returns there.
@@ -93,6 +96,9 @@ public enum NavNode: Hashable, Sendable {
     /// One run: what a maintenance run, an import or a session's proposal applied at once, pushed
     /// from its row in Recently changed.
     case wikiRun(changesetID: String)
+    /// One of the server's runs (mock 35 ⑤, P9): its call log, pushed from its row in Activity's Runs, or
+    /// from the status line's View run for a run the server's job made — which has no session to open.
+    case wikiJob(jobID: String)
     /// One of a topic's articles — its own (part 0) or a subtopic article — pushed from the Contents
     /// sheet, Browse by category or the A–Z index.
     case wikiArticle(topic: String, part: Int)
@@ -300,6 +306,12 @@ public struct NavState: Equatable, Sendable {
     /// The run the Wiki pane shows, when a run's page is on top.
     public var selectedWikiRunID: String? {
         guard case .wikiRun(let id) = path.last else { return nil }
+        return id
+    }
+
+    /// The server's run the Wiki pane shows, when its page is on top.
+    public var selectedWikiJobID: String? {
+        guard case .wikiJob(let id) = path.last else { return nil }
         return id
     }
 

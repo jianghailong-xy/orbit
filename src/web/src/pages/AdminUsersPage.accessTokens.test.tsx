@@ -2,7 +2,6 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { App as AntdApp } from 'antd';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AccessToken } from '../api';
@@ -70,12 +69,17 @@ async function click(element: Element | null | undefined, what: string): Promise
 
 const button = (within: ParentNode, label: string) =>
   [...within.querySelectorAll<HTMLElement>('button')].find((b) => b.textContent?.trim() === label);
+/** A dialog's accessible name: the title it is labelled by. */
+const nameOf = (d: Element) => document.getElementById(d.getAttribute('aria-labelledby') ?? '')?.textContent;
 const dialog = () =>
-  [...document.body.querySelectorAll<HTMLElement>('.ant-modal')].find((modal) =>
-    modal.querySelector('.ant-modal-title')?.textContent?.startsWith('Access tokens'));
-const tokenRows = () =>
-  [...dialog()!.querySelectorAll<HTMLElement>('.ant-table-row')].map((row) =>
-    [...row.querySelectorAll('td')].map((cell) => cell.textContent?.trim() ?? ''));
+  [...document.body.querySelectorAll<HTMLElement>('[role="dialog"]')].find((d) => nameOf(d)?.startsWith('Access tokens'));
+/** The token table's rows in the dialog (its body's rows, less the one that says it is empty). */
+const tokenTableRows = () =>
+  [...dialog()!.querySelectorAll<HTMLTableRowElement>('tbody tr')].filter((row) => row.cells.length > 1);
+const tokenRows = () => tokenTableRows().map((row) => [...row.cells].map((cell) => cell.textContent?.trim() ?? ''));
+/** An open popover or dialog by its accessible name (the title it is labelled by). */
+const named = (name: string) =>
+  [...document.body.querySelectorAll<HTMLElement>('[role="dialog"]')].find((d) => nameOf(d) === name);
 
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -131,9 +135,7 @@ describe('Admin → Users → access tokens', { timeout: 60_000 }, () => {
       next.render(
         <MemoryRouter initialEntries={['/admin']}>
           <QueryClientProvider client={client}>
-            <AntdApp>
-              <AdminUsersPage />
-            </AntdApp>
+            <AdminUsersPage />
           </QueryClientProvider>
         </MemoryRouter>,
       );
@@ -141,21 +143,23 @@ describe('Admin → Users → access tokens', { timeout: 60_000 }, () => {
     await vi.waitFor(() => expect(container!.textContent).toContain('dev@example.test'));
     await settle();
 
-    const dev = [...container.querySelectorAll<HTMLElement>('.ant-table-row')].find((row) => row.textContent?.includes('dev@example.test'))!;
+    const dev = [...container.querySelectorAll<HTMLElement>('tbody tr')].find((row) => row.textContent?.includes('dev@example.test'))!;
     await click(button(dev, 'Access tokens'), 'Access tokens');
-    await vi.waitFor(() => expect(dialog()?.querySelector('.ant-table-row')).toBeTruthy());
+    await vi.waitFor(() => expect(dialog() && tokenTableRows().length).toBeTruthy());
     expect(listUserAccessTokens).toHaveBeenCalledWith('U2');
-    expect(dialog()!.querySelector('.ant-modal-title')?.textContent).toBe('Access tokens — dev@example.test');
+    expect(nameOf(dialog()!)).toBe('Access tokens — dev@example.test');
     // The user's own workspaces, by name, which only the server could tell an administrator.
     expect(tokenRows().map((row) => [row[0], row[2], row[6]])).toEqual([
       ['deploy botorbit_pat_…1001', 'dev-box', 'Revoke'],
       ['old laptoporbit_pat_…2002', 'dev-box', ''],
     ]);
 
-    const deploy = [...dialog()!.querySelectorAll<HTMLElement>('.ant-table-row')][0];
+    const deploy = tokenTableRows()[0];
     await click(button(deploy, 'Revoke'), 'Revoke');
-    const asked = document.body.querySelector('.ant-popconfirm');
-    expect(asked?.querySelector('.ant-popconfirm-title')?.textContent).toBe('Revoke “deploy bot”?');
+    const asked = named('Revoke “deploy bot”?');
+    expect(asked).toBeTruthy();
+    // Asked inside the users dialog, not beside it.
+    expect(dialog()!.contains(asked!)).toBe(true);
     await click(button(asked!, 'Revoke'), 'Revoke (confirm)');
 
     expect(revokeUserAccessToken).toHaveBeenCalledWith('U2', 'T1001');

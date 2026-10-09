@@ -37,7 +37,7 @@ public enum SettingsHome {
     }
 
     public enum Row: String, CaseIterable, Sendable {
-        case defaultPermission, orchestration, modelRouting
+        case defaultPermission, orchestration, modelRouting, promptSuggestions
         case infrastructure
         case notifications, appearance
         case email, instance, sharedLinks, accessTokens, changePassword, admin
@@ -55,7 +55,7 @@ public enum SettingsHome {
     /// The rows a group shows, in order. Admin is role-gated, like its section everywhere else.
     public static func rows(_ group: Group, isAdmin: Bool) -> [Row] {
         switch group {
-        case .sessions:    return [.defaultPermission, .orchestration, .modelRouting]
+        case .sessions:    return [.defaultPermission, .orchestration, .modelRouting, .promptSuggestions]
         case .machines:    return [.infrastructure]
         case .preferences: return [.notifications, .appearance]
         case .account:
@@ -69,6 +69,7 @@ public enum SettingsHome {
         case .defaultPermission: return "Default permission"
         case .orchestration:     return "Session orchestration"
         case .modelRouting:      return SettingsCopy.smartModelSelection
+        case .promptSuggestions: return SettingsCopy.suggestedReplies
         case .infrastructure:    return AppSection.runners.title
         case .notifications:     return "Notifications"
         case .appearance:        return "Appearance"
@@ -87,6 +88,7 @@ public enum SettingsHome {
         case .defaultPermission: return "hand.raised"
         case .orchestration:     return "point.3.connected.trianglepath.dotted"
         case .modelRouting:      return "sparkles"
+        case .promptSuggestions: return "text.bubble"
         case .infrastructure:    return AppSection.runners.systemImage
         case .notifications:     return "bell"
         case .appearance:        return "circle.lefthalf.filled"
@@ -100,8 +102,9 @@ public enum SettingsHome {
     }
 
     /// The page a row opens. Nil for the rows that are answered in place: the two pickers, which
-    /// are menus on the row itself, the orchestration and smart model selection switches — each one
-    /// for the whole account, so the row is the switch — and the two lines that only say something.
+    /// are menus on the row itself, the orchestration, smart model selection and suggested replies
+    /// switches — each one for the whole account, so the row is the switch — and the two lines that
+    /// only say something.
     public static func page(_ row: Row) -> SettingsPage? {
         switch row {
         case .infrastructure: return .infrastructure
@@ -110,7 +113,8 @@ public enum SettingsHome {
         case .accessTokens:   return .accessTokens
         case .changePassword: return .changePassword
         case .admin:          return .admin
-        case .defaultPermission, .orchestration, .modelRouting, .appearance, .email, .instance:
+        case .defaultPermission, .orchestration, .modelRouting, .promptSuggestions, .appearance, .email,
+             .instance:
             return nil
         }
     }
@@ -290,6 +294,13 @@ public enum SettingsCopy {
     /// the switch, with the hint under its name, since nothing else on the list says what it does.
     public static let smartModelSelection = "Smart model selection"
     public static let smartModelSelectionHint = "Coordinators suggest a tier for each task, and Agents you turn this on for run their tasks on that tier's model and effort. Off: tasks run exactly as before."
+
+    // MARK: Suggested replies (the web page's Session defaults card)
+
+    /// The account's switch for the engine's guess at the next message, on unless turned off. On iOS
+    /// the row is the switch, with the hint under its name, as smart model selection's is.
+    public static let suggestedReplies = "Suggested replies"
+    public static let suggestedRepliesHint = "When a Claude turn ends, the empty message box offers what you'd probably type next. Each suggestion is one more request on that session's Claude account."
 
     // MARK: Change password (the web's Profile page)
 

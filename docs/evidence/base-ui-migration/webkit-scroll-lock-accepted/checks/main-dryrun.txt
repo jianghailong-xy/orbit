@@ -1,0 +1,43 @@
+registration 821e2d501d59983cbcc5e7407571b2a4f13e0b53; origin/main f339640dfbebb94d71e7e0dcc8b16bf83678203e; origin/project/34ZZeq0e3IR65GVm2kAs7 b2568f28d8bb87d12eec762d1f810562503ed2d9; 2026-10-09T03:05:09Z
+the project tip is in origin/main
+git merge-tree --write-tree 821e2d501d59983cbcc5e7407571b2a4f13e0b53 origin/main: exit 0, tree c8fc262d58e88f03fbe2e674936b46992d0b427b
+## main since the project tip b2568f28d8bb87d12eec762d1f810562503ed2d9
+f339640df 2026-10-09T10:38:49+08:00 Update claude_account_slot_test.go and 4 more files
+cb621c3ff 2026-10-09T10:32:55+08:00 docs(contract): revision 14 wording — the owner's screenshot, and records read in order
+66d38fc7c 2026-10-09T10:32:55+08:00 docs(evidence): answered and withdrawn coordinator questions on iPhone and the web
+eb76c7267 2026-10-09T10:32:55+08:00 style(web): let a record's option text fill its row, so the note box spans it
+02c669222 2026-10-09T10:32:55+08:00 fix(clients): draw ended questions in the order they were answered
+3ff232299 2026-10-09T10:32:55+08:00 feat(clients): an answered or withdrawn coordinator question keeps what it asked
+a82760cf7 2026-10-09T10:32:55+08:00 feat(open-items): read back the coordinator questions that have ended
+953e6b588 2026-10-09T10:13:58+08:00 Merge refs/heads/project/34ZZeq0e3IR65GVm2kAs7 into refs/heads/main
+ 55 files changed, 2778 insertions(+), 137 deletions(-)
+## main's changed files under src/web, src/shared
+M	src/shared/src/project-progress.ts
+M	src/web/src/components/CoordinatorQuestionCard.test.tsx
+M	src/web/src/components/CoordinatorQuestionCard.tsx
+A	src/web/src/components/CoordinatorQuestionRecord.test.tsx
+M	src/web/src/components/WorkspaceView.tsx
+M	src/web/src/index.css
+## touches this registration or the layer under its screenshots? (empty = no)
+docs/evidence/base-ui-migration: []
+src/web/ui-migration: []
+src/web/src/components/ui: []
+src/web/src/lib/toast.tsx: []
+src/web/src/components/ToastViewport.tsx: []
+src/web/src/pages/SettingsPage.tsx: []
+src/web/src/pages/ProfilePage.tsx: []
+src/web/package.json: []
+package-lock.json: []
+## index.css rules main adds or changes (selector lines)
++.review-card-preview.answered-question-card ;+.answered-question-head ;+.answered-question-icon ;+.answered-question-card.is-withdrawn .answered-question-icon ;+.answered-question-heading ;+.answered
+-question-time ;+.answered-question-lead ;+.answered-question-answer ;+.answered-question-tick ;+.answered-question-note ;+.answered-question-waiting ;+.answered-question-withdrew ;+.answered-question
+-reason ;+.answered-question-open ;+.answered-question-provenance ;+.answered-question-provenance .criteria-provenance ;+.answered-question-asked ;+.answered-question-option ;+.answered-question-optio
+n.is-chosen ;+.answered-question-mark ;+.answered-question-option.is-chosen .answered-question-mark ;+.answered-question-option-text ;+.answered-question-recommended ;+.answered-question-words ;+.answ
+ered-question-words.is-free ;+.answered-question-words-label ;+.card-actions.answered-question-footer ;+.answered-question-footer-line ;+.answered-question-footer-line > .anticon-check-circle ;+.answe
+red-question-footer-line > .anticon-rollback ;+.answered-question-footer-detail ;+.answered-question-footer-detail.is-waiting ;
+## the merged tree against the registration commit, src/ only
+ 22 files changed, 2713 insertions(+), 136 deletions(-)
+scratch merge commit 5376c49da614a822aaa2488f54994e6b8189b3f9 (tree c8fc262d58e88f03fbe2e674936b46992d0b427b)
+exit 0
+step main-merge exit 0
+done 2026-10-09T03:13:27Z

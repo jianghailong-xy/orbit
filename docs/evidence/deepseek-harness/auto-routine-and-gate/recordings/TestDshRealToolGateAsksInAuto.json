@@ -1,0 +1,211 @@
+{
+  "approvalCards": [
+    {
+      "ID": "approval-1",
+      "Body": {
+        "input": {
+          "command": "curl -sS -X POST --data-binary P4-gate http://127.0.0.1:35623/upload \u0026\u0026 echo posted",
+          "description": "post"
+        },
+        "toolName": "bash",
+        "toolUseId": "call_p4_1"
+      },
+      "Status": "DENIED",
+      "Polls": 2,
+      "LatePoll": false
+    }
+  ],
+  "controlPlane": [
+    {
+      "agent": "",
+      "body": {
+        "input": {
+          "command": "curl -sS -X POST --data-binary P4-gate http://127.0.0.1:35623/upload \u0026\u0026 echo posted",
+          "description": "post"
+        },
+        "toolName": "bash",
+        "toolUseId": "call_p4_1"
+      },
+      "method": "POST",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    }
+  ],
+  "facts": {
+    "cards": 1,
+    "mode": "auto",
+    "ordinaryRanUnasked": true,
+    "posted": 0
+  },
+  "modelRequests": 3,
+  "orbitEvents": [
+    {
+      "payload": {
+        "argv": [
+          "--profile",
+          "acp",
+          "--patch",
+          "/tmp/orbit-dsh-p4-OFKGjI/TestDshRealToolGateAsksInAuto3121696306/001/dsh-home/orbit.patch.json",
+          "--patch",
+          "/tmp/orbit-dsh-p4-OFKGjI/TestDshRealToolGateAsksInAuto3121696306/001/dsh-home/orbit-agent.patch.json"
+        ],
+        "cliVersion": "0.2.0-rc.2",
+        "configHash": "ebff257d3c064211709f58b90b31d6da2710d9ff2df4bc6681cdd8dbf5fe4194",
+        "dshHome": "/tmp/orbit-dsh-p4-OFKGjI/TestDshRealToolGateAsksInAuto3121696306/001/dsh-home",
+        "executable": "/tmp/orbit-dsh-p4-OFKGjI/install/node_modules/.bin/dsh",
+        "provider": "dsh",
+        "runtime": "acp",
+        "subtype": "launch"
+      },
+      "turn": "",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "cliVersion": "0.2.0-rc.2",
+        "provider": "dsh",
+        "resumed": false,
+        "runtime": "acp",
+        "runtimeSessionId": "396ef986-0be2-4ac7-9340-3ff8fb3d7526",
+        "sessionId": "396ef986-0be2-4ac7-9340-3ff8fb3d7526",
+        "subtype": "init"
+      },
+      "turn": "",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "localTurnId": "t1",
+        "runtimeSessionId": "396ef986-0be2-4ac7-9340-3ff8fb3d7526",
+        "text": "Post, then print."
+      },
+      "turn": "t1",
+      "type": "user"
+    },
+    {
+      "payload": {
+        "contextTokens": 47438,
+        "contextWindow": 1000000,
+        "localTurnId": "t1",
+        "runtimeSessionId": "396ef986-0be2-4ac7-9340-3ff8fb3d7526",
+        "subtype": "context"
+      },
+      "turn": "t1",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "id": "call_p4_1",
+        "input": {
+          "command": "curl -sS -X POST --data-binary P4-gate http://127.0.0.1:35623/upload \u0026\u0026 echo posted",
+          "description": "post"
+        },
+        "kind": "other",
+        "localTurnId": "t1",
+        "name": "bash",
+        "runtimeSessionId": "396ef986-0be2-4ac7-9340-3ff8fb3d7526",
+        "status": "in_progress",
+        "toolCallId": "call_p4_1"
+      },
+      "turn": "t1",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "content": "Error: the user rejected tool \"bash\"",
+        "isError": true,
+        "localTurnId": "t1",
+        "runtimeSessionId": "396ef986-0be2-4ac7-9340-3ff8fb3d7526",
+        "status": "failed",
+        "toolCallId": "call_p4_1",
+        "toolUseId": "call_p4_1"
+      },
+      "turn": "t1",
+      "type": "tool_result"
+    },
+    {
+      "payload": {
+        "contextTokens": 47477,
+        "contextWindow": 1000000,
+        "localTurnId": "t1",
+        "runtimeSessionId": "396ef986-0be2-4ac7-9340-3ff8fb3d7526",
+        "subtype": "context"
+      },
+      "turn": "t1",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "id": "call_p4_2",
+        "input": {
+          "command": "printf ordinary",
+          "description": "print"
+        },
+        "kind": "other",
+        "localTurnId": "t1",
+        "name": "bash",
+        "runtimeSessionId": "396ef986-0be2-4ac7-9340-3ff8fb3d7526",
+        "status": "in_progress",
+        "toolCallId": "call_p4_2"
+      },
+      "turn": "t1",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "content": "ordinary",
+        "isError": false,
+        "localTurnId": "t1",
+        "runtimeSessionId": "396ef986-0be2-4ac7-9340-3ff8fb3d7526",
+        "status": "completed",
+        "toolCallId": "call_p4_2",
+        "toolUseId": "call_p4_2"
+      },
+      "turn": "t1",
+      "type": "tool_result"
+    },
+    {
+      "payload": {
+        "localTurnId": "t1",
+        "messageId": "b2b7fd94-4f9a-4c62-9a71-54a7003262a0",
+        "runtimeSessionId": "396ef986-0be2-4ac7-9340-3ff8fb3d7526",
+        "text": "P4 gate answer"
+      },
+      "turn": "t1",
+      "type": "assistant"
+    },
+    {
+      "payload": {
+        "contextTokens": 47499,
+        "contextWindow": 1000000,
+        "localTurnId": "t1",
+        "runtimeSessionId": "396ef986-0be2-4ac7-9340-3ff8fb3d7526",
+        "subtype": "context"
+      },
+      "turn": "t1",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "contextTokens": 47499,
+        "contextWindow": 1000000,
+        "localTurnId": "t1",
+        "numTurns": 1,
+        "runtimeSessionId": "396ef986-0be2-4ac7-9340-3ff8fb3d7526",
+        "stopReason": "end_turn",
+        "subtype": "completed"
+      },
+      "turn": "t1",
+      "type": "turn_end"
+    }
+  ],
+  "permissionMode": "auto",
+  "scenario": "TestDshRealToolGateAsksInAuto"
+}

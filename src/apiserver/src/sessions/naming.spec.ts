@@ -7,6 +7,7 @@ import {
   TITLE_BEAUTIFY_CONCURRENCY,
   titleFromAttachments,
 } from './naming';
+import type { HeldKey } from '../providers/held-key';
 
 const flush = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
 
@@ -239,6 +240,131 @@ test('queued title beautification bounds concurrent DeepSeek calls', async () =>
       await flush();
     }
     await settlement;
+    globalThis.fetch = originalFetch;
+    restoreEnv('DEEPSEEK_API_KEY', originalKey);
+  }
+});
+
+test('with no DeepSeek key and no key of its own, nothing is asked', async () => {
+  const originalFetch = globalThis.fetch;
+  const originalKey = process.env.DEEPSEEK_API_KEY;
+  let calls = 0;
+  delete process.env.DEEPSEEK_API_KEY;
+  globalThis.fetch = (() => {
+    calls += 1;
+    return Promise.resolve(namingResponse('never'));
+  }) as typeof fetch;
+
+  try {
+    assert.deepEqual(await beautifySession({ prompt: 'Fix login timeout' }, { timeoutMs: 100, retries: 0 }), { tags: [] });
+    assert.deepEqual(await enqueueBeautifySession({ prompt: 'Fix login timeout' }, { timeoutMs: 100, retries: 0 }), {
+      tags: [],
+    });
+    assert.equal(calls, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv('DEEPSEEK_API_KEY', originalKey);
+  }
+});
+
+test("a session's own key is asked in its dialect, and the answer is read out of whatever surrounds it", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalKey = process.env.DEEPSEEK_API_KEY;
+  delete process.env.DEEPSEEK_API_KEY;
+  const cases: Array<{
+    key: HeldKey;
+    url: string;
+    reply: unknown;
+    check: (headers: Record<string, string>, body: Record<string, unknown>) => void;
+    naming: { title: string; tags: string[] };
+  }> = [
+    {
+      key: { dialect: 'anthropic', baseUrl: 'https://api.deepseek.com/anthropic/', apiKey: 'sk-ds', model: 'deepseek-v4-pro' },
+      url: 'https://api.deepseek.com/anthropic/v1/messages',
+      // A thinking model's thoughts are a block of their own, and may well contain braces.
+      reply: {
+        content: [
+          { type: 'thinking', thinking: 'maybe {"title":"no"}' },
+          { type: 'text', text: '{"title":"登录超时","tags":["登录"]}' },
+        ],
+      },
+      check: (headers, body) => {
+        assert.equal(headers.Authorization, 'Bearer sk-ds');
+        assert.equal(headers['anthropic-version'], '2023-06-01');
+        assert.equal(body.model, 'deepseek-v4-pro');
+        assert.match(String(body.system), /The user's existing tags: 登录\./);
+        assert.deepEqual(body.messages, [{ role: 'user', content: '修复登录超时' }]);
+      },
+      naming: { title: '登录超时', tags: ['登录'] },
+    },
+    {
+      key: { dialect: 'openai', baseUrl: 'https://api.openai.com/v1', apiKey: 'sk-oa', model: 'gpt-5.5-codex' },
+      url: 'https://api.openai.com/v1/responses',
+      reply: {
+        output: [
+          { type: 'reasoning', summary: [] },
+          { type: 'message', content: [{ type: 'output_text', text: '```json\n{"title":"Login timeout","tags":["auth"]}\n```' }] },
+        ],
+      },
+      check: (headers, body) => {
+        assert.equal(headers.Authorization, 'Bearer sk-oa');
+        assert.equal(body.model, 'gpt-5.5-codex');
+        assert.match(String(body.instructions), /JSON object/);
+        assert.equal(body.input, '修复登录超时');
+      },
+      naming: { title: 'Login timeout', tags: ['auth'] },
+    },
+    {
+      key: { dialect: 'openai-compatible', baseUrl: 'https://api.moonshot.ai/v1', apiKey: 'sk-moon', model: 'kimi-k2.6' },
+      url: 'https://api.moonshot.ai/v1/chat/completions',
+      reply: { choices: [{ message: { content: 'Sure: {"title":"Login\\n timeout","tags":[]}' } }] },
+      check: (headers, body) => {
+        assert.equal(headers.Authorization, 'Bearer sk-moon');
+        assert.equal((body.messages as { role: string }[]).map((m) => m.role).join(','), 'system,user');
+      },
+      // A title is one line, whatever the model wrote.
+      naming: { title: 'Login timeout', tags: [] },
+    },
+    {
+      key: {
+        dialect: 'gemini',
+        baseUrl: 'https://generativelanguage.googleapis.com',
+        apiKey: 'AIza-g',
+        model: 'gemini-3.1-pro-preview',
+      },
+      url: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro-preview:generateContent',
+      reply: {
+        candidates: [
+          { content: { parts: [{ text: 'thinking {', thought: true }, { text: '{"title":"Login timeout","tags":["auth"]}' }] } },
+        ],
+      },
+      check: (headers, body) => {
+        assert.equal(headers['x-goog-api-key'], 'AIza-g');
+        assert.equal(headers.Authorization, undefined);
+        assert.deepEqual(body.contents, [{ role: 'user', parts: [{ text: '修复登录超时' }] }]);
+      },
+      naming: { title: 'Login timeout', tags: ['auth'] },
+    },
+  ];
+
+  try {
+    for (const c of cases) {
+      let seen: { url: string; init: RequestInit } | undefined;
+      globalThis.fetch = ((input, init) => {
+        seen = { url: String(input), init: init! };
+        return Promise.resolve({ ok: true, json: async () => c.reply } as Response);
+      }) as typeof fetch;
+      const naming = await beautifySession(
+        { prompt: '修复登录超时', knownTags: ['登录'], key: c.key },
+        { timeoutMs: 100, retries: 0 },
+      );
+      assert.deepEqual(naming, c.naming, c.key.dialect);
+      assert.equal(seen!.url, c.url);
+      // The key's endpoint is wherever its owner typed: no redirect is followed off it.
+      assert.equal(seen!.init.redirect, 'manual');
+      c.check(seen!.init.headers as Record<string, string>, JSON.parse(String(seen!.init.body)) as Record<string, unknown>);
+    }
+  } finally {
     globalThis.fetch = originalFetch;
     restoreEnv('DEEPSEEK_API_KEY', originalKey);
   }

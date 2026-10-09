@@ -201,6 +201,15 @@ export interface AuthErrorHelp {
   retryDisabled?: boolean;
   /** What that re-send would say, so the card can show it rather than make the user trust it. */
   retryText?: string;
+  /**
+   * Go and find out what it would say, when what the card holds is not the reader's own to send.
+   * Another session's words are re-sent by the server's own chooser — see `AutoRetryHelp`'s, whose
+   * rule and reason this is a second instance of — and only its answer can promise what the press
+   * carries, or that it carries anything at all.
+   */
+  onNeedRetryText?: () => void;
+  /** Whether the window holds words of the reader's to send, like `AutoRetryHelp`'s. */
+  retryWordsAreTheReaders?: boolean;
   /** Open Infrastructure — the other way back in, and the only one when the rejected credential is
    *  a configured key rather than a login on the runner. */
   onUseApiKey?: () => void;
@@ -437,8 +446,8 @@ type TextNode = {
   seq: number;
   text: string;
   // Thinking only: how long the stretch took, and how many adjacent blocks were folded into this
-  // one row. Both are known only while it streams (see lib/thinkingDraft) — a reload has neither,
-  // so the row states its size alone.
+  // one row. The duration is the one the runner stored on each block (see lib/thinkingDraft); a
+  // block an older runner stored has none, and its row states its size alone.
   thinkingMs?: number;
   blocks?: number;
   // Wall-clock of the source event — carried for user turns to show a relative
@@ -1919,6 +1928,15 @@ const RELAY_LOGIN = new Set(['claude', 'codex', 'kimi', 'antigravity']);
  */
 function AuthErrorCard({ message, seq }: { message: string; seq?: number }) {
   const help = useContext(AuthErrorCtx);
+  // A press that would be the server's own re-send is a promise only the server makes, and the
+  // window's last bubble can be somebody else's — so this card asks for the answer rather than
+  // quoting the bubble (the same rule, and the same hook, as the quota card's). Above the branches
+  // below, which return early.
+  const retryIsTheServers = !!help?.onNeedRetryText && help?.retryWordsAreTheReaders === false;
+  const onNeedRetryText = help?.onNeedRetryText;
+  useEffect(() => {
+    if (retryIsTheServers) onNeedRetryText?.();
+  }, [retryIsTheServers, onNeedRetryText]);
   const provider = help?.provider;
   const local = !!provider && LOCAL_LOGIN.has(provider);
   const relayable = !!provider && RELAY_LOGIN.has(provider);
@@ -2024,6 +2042,13 @@ export interface AutoRetryHelp {
    */
   onNeedRetryText?: () => void;
   /**
+   * Whether the window holds words of the reader's to send — the only ones a press may promise
+   * from the window. False when it holds another session's message (whose press is the server's
+   * own re-send, so the card asks for that answer instead) or none at all — the same condition
+   * `onNeedRetryText` exists for.
+   */
+  retryWordsAreTheReaders?: boolean;
+  /**
    * Nothing of anybody's waits to go out — not the person's words, and not a reply or confirmation
    * turn the sweep re-sends on its own (`getSessionRetryMessage.nothingToResend`). The card swaps
    * its verb for the platform's continue (`CONTINUE_MESSAGE`): sent by hand now, or by the server
@@ -2128,9 +2153,12 @@ function AutoRetryCard({
     return () => clearInterval(t);
   }, [retryAt?.getTime()]);
 
-  // Asked once, and only by a card that has a button to offer and no words for it — a stale card
-  // and the share page's contextless one need nothing (see `onNeedRetryText`).
-  const needsRetryText = live && !help?.retryText && !!help?.onNeedRetryText;
+  // Asked once, and only by a card that cannot promise alone: the window has no words of the
+  // reader's — none at all, or another session's. Only the server's chooser says what such a press
+  // carries, and it may say "nothing at all" (which is what the Continue card is for). A stale
+  // card and the share page's contextless one need nothing.
+  const needsRetryText = live && !!help?.onNeedRetryText
+    && help?.retryWordsAreTheReaders === false;
   useEffect(() => {
     if (needsRetryText) help?.onNeedRetryText?.();
   }, [needsRetryText]);
@@ -3176,8 +3204,9 @@ function ControlPlaneNote({ kind, text }: { kind: string; text: string }) {
 /**
  * A settled stretch of reasoning, folded. What the row says while shut is the whole question: a
  * bare "Thinking" told a reader nothing about whether opening it was worth it, and a turn stacks
- * ten of them. The duration comes from having watched it stream (lib/thinkingDraft); a reloaded
- * block has only its size, and states that rather than nothing.
+ * ten of them. The duration is the one the runner stored on the block (lib/thinkingDraft), so a
+ * reload states it too; a block an older runner stored has only its size, and states that rather
+ * than nothing.
  */
 function Thinking({ text, seq, ms, blocks }: { text: string; seq?: number; ms?: number; blocks?: number }) {
   const exp = useContext(ExportCtx);

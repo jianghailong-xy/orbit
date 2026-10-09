@@ -60,7 +60,7 @@ export interface EnginePreflightRunner {
   capabilities?: readonly string[];
 }
 
-function bringsOwnEnvCredential(engine: LoginEngine, workspaceEnv: unknown): boolean {
+export function bringsOwnEnvCredential(engine: LoginEngine, workspaceEnv: unknown): boolean {
   if (!workspaceEnv || typeof workspaceEnv !== 'object') return false;
   const env = workspaceEnv as Record<string, unknown>;
   const has = (key: string) => typeof env[key] === 'string' && env[key].trim() !== '';
@@ -193,7 +193,8 @@ export function signedOutEngineRefusal(args: {
   /** The workspace's custom environment, which the runner layers onto the engine process. */
   workspaceEnv?: unknown;
   /** The accounts this session's workspace pins it to, one per engine that keeps accounts
-   *  (Workspace.codexAccount / claudeAccount / antigravityAccount). Absent or null is Default. */
+   *  (Workspace.codexAccount / claudeAccount / antigravityAccount / kimiAccount). Absent or null is
+   *  Default. */
   accounts?: WorkspaceAccountChoices | null;
   runner: EnginePreflightRunner;
   nowMs?: number;

@@ -43,6 +43,9 @@ public enum RunnerPageCopy {
     public static let RUNNER_ENGINE_NOT_INSTALLED = "Not installed"
     public static let RUNNER_ENGINE_UP_TO_DATE = "up to date"
     public static let RUNNER_ENGINE_NO_QUOTA = "No quota reported"
+    /// A Kimi login whose plan carries no quota limit: its quota was read and held no window at all —
+    /// not a read that failed or never ran (RUNNER_ENGINE_NO_QUOTA).
+    public static let RUNNER_ENGINE_NO_QUOTA_LIMIT = "No quota limit"
     public static let RUNNER_SIGN_IN = "Sign In"
     public static let RUNNER_UPDATE_ENGINES_NOW = "Update Engines Now"
     public static let RUNNER_REFRESH_MODEL_LISTS = "Refresh Model Lists"
@@ -50,6 +53,15 @@ public enum RunnerPageCopy {
         "Orbit keeps these CLIs updated every 30 min. Sign-ins live on this machine — a session spends "
         + "that subscription, nothing to paste."
     public static let RUNNER_ENGINES_OFFLINE_FOOTER = "Signing in and updating need the runner online."
+
+    public static let RUNNER_ENGINE_RENEW = "Renew"
+    public static func runnerEngineLoginExpires(count: Int, unit: String) -> String {
+        "Login expires in \(count) \(unit)"
+    }
+    public static let RUNNER_ENGINE_ACCOUNT_SIGNED_OUT_NOTE = "Sessions can’t use this account until you sign in again."
+    public static func runnerEngineSignedOutAlone(engine: String) -> String {
+        "Sessions on this runner can’t use \(engine) until you sign in again."
+    }
 
     public static func runnerEnginesChecked(when: String) -> String { "Checked \(when)" }
     public static func runnerEnginesReported(when: String) -> String { "Reported \(when)" }

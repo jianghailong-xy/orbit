@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -113,6 +114,54 @@ func TestBuildFilePatchesTruncatesOversize(t *testing.T) {
 	out := buildFilePatches(files, map[string]string{"big.txt": big})
 	if len(out) != 1 || !out[0].Truncated || out[0].Patch != "" {
 		t.Fatalf("oversize file should be marked truncated with no patch text, got %+v", out)
+	}
+}
+
+// wideWorktree returns a session checkout whose diff against its base is wider than
+// maxChangedFiles allows.
+func wideWorktree(t *testing.T, session string) *Worktree {
+	t.Helper()
+	wt := sessionWorktree(t, session)
+	for i := 0; i <= maxChangedFiles; i++ {
+		name := filepath.Join(wt.Path, fmt.Sprintf("wide-%05d.txt", i))
+		if err := os.WriteFile(name, []byte("x\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return wt
+}
+
+// A diff that spans more files than the cap is a moved base rather than this session's work:
+// the payload carries the first maxChangedFiles entries and no patch text at all. This is the
+// shape that keeps turn-complete under the control plane's 10MB JSON body limit — on 2026-10-08
+// a session whose merge made its live diff 39,501 files wide had every completion answered 413,
+// so its turn was never ACKed and the inbox lease re-delivered it every five minutes.
+func TestLiveDiffCapsWideDiffs(t *testing.T) {
+	wt := wideWorktree(t, "sWideLive")
+
+	files, patches := liveDiff(wt)
+	if len(files) != maxChangedFiles {
+		t.Fatalf("a diff wider than the cap should report exactly %d files, got %d", maxChangedFiles, len(files))
+	}
+	if len(patches) != 0 {
+		t.Fatalf("a diff over the cap should ship no patches, got %d", len(patches))
+	}
+}
+
+// The finalize payload is built from the committed branch but goes to the control plane through
+// the same body limit, so it carries the same bound (see TestLiveDiffCapsWideDiffs).
+func TestFinalizeCapsWideDiffs(t *testing.T) {
+	wt := wideWorktree(t, "sWideFinalize")
+
+	files, patches, err := finalizeWorktree(wt, false)
+	if err != nil {
+		t.Fatalf("finalize: %v", err)
+	}
+	if len(files) != maxChangedFiles {
+		t.Fatalf("finalize over the cap should report exactly %d files, got %d", maxChangedFiles, len(files))
+	}
+	if len(patches) != 0 {
+		t.Fatalf("finalize over the cap should ship no patches, got %d", len(patches))
 	}
 }
 

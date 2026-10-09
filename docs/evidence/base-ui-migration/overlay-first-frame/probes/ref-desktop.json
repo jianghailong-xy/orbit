@@ -1,0 +1,867 @@
+[
+ {
+  "label": "ref",
+  "size": "desktop",
+  "sample": "multiple",
+  "query": "owner=dialog",
+  "settledBox": [
+   404,
+   260,
+   250,
+   136
+  ],
+  "frames": [
+   {
+    "frame": 0,
+    "raf": [
+     784,
+     360,
+     250,
+     136
+    ],
+    "produced": [
+     404,
+     260,
+     250,
+     136
+    ],
+    "owner": {
+     "x": 380,
+     "y": 100,
+     "scrollLeft": 0,
+     "scrollTop": 0
+    },
+    "pictureMatch": 1
+   },
+   {
+    "frame": 1,
+    "raf": [
+     404,
+     260,
+     250,
+     136
+    ],
+    "produced": [
+     404,
+     260,
+     250,
+     136
+    ],
+    "owner": {
+     "x": 380,
+     "y": 100,
+     "scrollLeft": 0,
+     "scrollTop": 0
+    },
+    "pictureMatch": 1
+   },
+   {
+    "frame": 2,
+    "raf": [
+     404,
+     260,
+     250,
+     136
+    ],
+    "produced": [
+     404,
+     260,
+     250,
+     136
+    ],
+    "owner": {
+     "x": 380,
+     "y": 100,
+     "scrollLeft": 0,
+     "scrollTop": 0
+    },
+    "pictureMatch": 1
+   },
+   {
+    "frame": 3,
+    "raf": [
+     404,
+     260,
+     250,
+     136
+    ],
+    "produced": [
+     404,
+     260,
+     250,
+     136
+    ],
+    "owner": {
+     "x": 380,
+     "y": 100,
+     "scrollLeft": 0,
+     "scrollTop": 0
+    },
+    "pictureMatch": 1
+   },
+   {
+    "frame": 4,
+    "raf": [
+     404,
+     260,
+     250,
+     136
+    ],
+    "produced": [
+     404,
+     260,
+     250,
+     136
+    ],
+    "owner": {
+     "x": 380,
+     "y": 100,
+     "scrollLeft": 0,
+     "scrollTop": 0
+    },
+    "pictureMatch": 1
+   },
+   {
+    "frame": 5,
+    "raf": [
+     404,
+     260,
+     250,
+     136
+    ],
+    "produced": [
+     404,
+     260,
+     250,
+     136
+    ],
+    "owner": {
+     "x": 380,
+     "y": 100,
+     "scrollLeft": 0,
+     "scrollTop": 0
+    },
+    "pictureMatch": 1
+   },
+   {
+    "frame": 6,
+    "raf": [
+     404,
+     260,
+     250,
+     136
+    ],
+    "produced": [
+     404,
+     260,
+     250,
+     136
+    ],
+    "owner": {
+     "x": 380,
+     "y": 100,
+     "scrollLeft": 0,
+     "scrollTop": 0
+    },
+    "pictureMatch": 1
+   },
+   {
+    "frame": 7,
+    "raf": [
+     404,
+     260,
+     250,
+     136
+    ],
+    "produced": [
+     404,
+     260,
+     250,
+     136
+    ],
+    "owner": {
+     "x": 380,
+     "y": 100,
+     "scrollLeft": 0,
+     "scrollTop": 0
+    },
+    "pictureMatch": 1
+   }
+  ]
+ },
+ {
+  "label": "ref",
+  "size": "desktop",
+  "sample": "attachment",
+  "query": "owner=dialog",
+  "settledBox": [
+   404,
+   268,
+   130.0625,
+   177
+  ],
+  "frames": [
+   {
+    "frame": 0,
+    "raf": [
+     784,
+     368,
+     130.0625,
+     177
+    ],
+    "produced": [
+     404,
+     268,
+     130.0625,
+     177
+    ],
+    "owner": {
+     "x": 380,
+     "y": 100,
+     "scrollLeft": 0,
+     "scrollTop": 0
+    },
+    "pictureMatch": 1
+   },
+   {
+    "frame": 1,
+    "raf": [
+     404,
+     268,
+     130.0625,
+     177
+    ],
+    "produced": [
+     404,
+     268,
+     130.0625,
+     177
+    ],
+    "owner": {
+     "x": 380,
+     "y": 100,
+     "scrollLeft": 0,
+     "scrollTop": 0
+    },
+    "pictureMatch": 1
+   },
+   {
+    "frame": 2,
+    "raf": [
+     404,
+     268,
+     130.0625,
+     177
+    ],
+    "produced": [
+     404,
+     268,
+     130.0625,
+     177
+    ],
+    "owner": {
+     "x": 380,
+     "y": 100,
+     "scrollLeft": 0,
+     "scrollTop": 0
+    },
+    "pictureMatch": 1
+   },
+   {
+    "frame": 3,
+    "raf": [
+     404,
+     268,
+     130.0625,
+     177
+    ],
+    "produced": [
+     404,
+     268,
+     130.0625,
+     177
+    ],
+    "owner": {
+     "x": 380,
+     "y": 100,
+     "scrollLeft": 0,
+     "scrollTop": 0
+    },
+    "pictureMatch": 1
+   },
+   {
+    "frame": 4,
+    "raf": [
+     404,
+     268,
+     130.0625,
+     177
+    ],
+    "produced": [
+     404,
+     268,
+     130.0625,
+     177
+    ],
+    "owner": {
+     "x": 380,
+     "y": 100,
+     "scrollLeft": 0,
+     "scrollTop": 0
+    },
+    "pictureMatch": 1
+   },
+   {
+    "frame": 5,
+    "raf": [
+     404,
+     268,
+     130.0625,
+     177
+    ],
+    "produced": [
+     404,
+     268,
+     130.0625,
+     177
+    ],
+    "owner": {
+     "x": 380,
+     "y": 100,
+     "scrollLeft": 0,
+     "scrollTop": 0
+    },
+    "pictureMatch": 1
+   },
+   {
+    "frame": 6,
+    "raf": [
+     404,
+     268,
+     130.0625,
+     177
+    ],
+    "produced": [
+     404,
+     268,
+     130.0625,
+     177
+    ],
+    "owner": {
+     "x": 380,
+     "y": 100,
+     "scrollLeft": 0,
+     "scrollTop": 0
+    },
+    "pictureMatch": 1
+   },
+   {
+    "frame": 7,
+    "raf": [
+     404,
+     268,
+     130.0625,
+     177
+    ],
+    "produced": [
+     404,
+     268,
+     130.0625,
+     177
+    ],
+    "owner": {
+     "x": 380,
+     "y": 100,
+     "scrollLeft": 0,
+     "scrollTop": 0
+    },
+    "pictureMatch": 1
+   }
+  ]
+ },
+ {
+  "label": "ref",
+  "size": "desktop",
+  "sample": "multiple",
+  "query": "",
+  "settledBox": [
+   24,
+   176,
+   250,
+   136
+  ],
+  "frames": [
+   {
+    "frame": 0,
+    "raf": [
+     24,
+     176,
+     250,
+     136
+    ],
+    "produced": [
+     24,
+     176,
+     250,
+     136
+    ],
+    "owner": null,
+    "pictureMatch": 1
+   },
+   {
+    "frame": 1,
+    "raf": [
+     24,
+     176,
+     250,
+     136
+    ],
+    "produced": [
+     24,
+     176,
+     250,
+     136
+    ],
+    "owner": null,
+    "pictureMatch": 1
+   },
+   {
+    "frame": 2,
+    "raf": [
+     24,
+     176,
+     250,
+     136
+    ],
+    "produced": [
+     24,
+     176,
+     250,
+     136
+    ],
+    "owner": null,
+    "pictureMatch": 1
+   },
+   {
+    "frame": 3,
+    "raf": [
+     24,
+     176,
+     250,
+     136
+    ],
+    "produced": [
+     24,
+     176,
+     250,
+     136
+    ],
+    "owner": null,
+    "pictureMatch": 1
+   },
+   {
+    "frame": 4,
+    "raf": [
+     24,
+     176,
+     250,
+     136
+    ],
+    "produced": [
+     24,
+     176,
+     250,
+     136
+    ],
+    "owner": null,
+    "pictureMatch": 1
+   },
+   {
+    "frame": 5,
+    "raf": [
+     24,
+     176,
+     250,
+     136
+    ],
+    "produced": [
+     24,
+     176,
+     250,
+     136
+    ],
+    "owner": null,
+    "pictureMatch": 1
+   },
+   {
+    "frame": 6,
+    "raf": [
+     24,
+     176,
+     250,
+     136
+    ],
+    "produced": [
+     24,
+     176,
+     250,
+     136
+    ],
+    "owner": null,
+    "pictureMatch": 1
+   },
+   {
+    "frame": 7,
+    "raf": [
+     24,
+     176,
+     250,
+     136
+    ],
+    "produced": [
+     24,
+     176,
+     250,
+     136
+    ],
+    "owner": null,
+    "pictureMatch": 1
+   }
+  ]
+ },
+ {
+  "label": "ref",
+  "size": "desktop",
+  "sample": "attachment",
+  "query": "",
+  "settledBox": [
+   24,
+   184,
+   130.0625,
+   177
+  ],
+  "frames": [
+   {
+    "frame": 0,
+    "raf": [
+     24,
+     184,
+     130.0625,
+     177
+    ],
+    "produced": [
+     24,
+     184,
+     130.0625,
+     177
+    ],
+    "owner": null,
+    "pictureMatch": 1
+   },
+   {
+    "frame": 1,
+    "raf": [
+     24,
+     184,
+     130.0625,
+     177
+    ],
+    "produced": [
+     24,
+     184,
+     130.0625,
+     177
+    ],
+    "owner": null,
+    "pictureMatch": 1
+   },
+   {
+    "frame": 2,
+    "raf": [
+     24,
+     184,
+     130.0625,
+     177
+    ],
+    "produced": [
+     24,
+     184,
+     130.0625,
+     177
+    ],
+    "owner": null,
+    "pictureMatch": 1
+   },
+   {
+    "frame": 3,
+    "raf": [
+     24,
+     184,
+     130.0625,
+     177
+    ],
+    "produced": [
+     24,
+     184,
+     130.0625,
+     177
+    ],
+    "owner": null,
+    "pictureMatch": 1
+   },
+   {
+    "frame": 4,
+    "raf": [
+     24,
+     184,
+     130.0625,
+     177
+    ],
+    "produced": [
+     24,
+     184,
+     130.0625,
+     177
+    ],
+    "owner": null,
+    "pictureMatch": 1
+   },
+   {
+    "frame": 5,
+    "raf": [
+     24,
+     184,
+     130.0625,
+     177
+    ],
+    "produced": [
+     24,
+     184,
+     130.0625,
+     177
+    ],
+    "owner": null,
+    "pictureMatch": 1
+   },
+   {
+    "frame": 6,
+    "raf": [
+     24,
+     184,
+     130.0625,
+     177
+    ],
+    "produced": [
+     24,
+     184,
+     130.0625,
+     177
+    ],
+    "owner": null,
+    "pictureMatch": 1
+   },
+   {
+    "frame": 7,
+    "raf": [
+     24,
+     184,
+     130.0625,
+     177
+    ],
+    "produced": [
+     24,
+     184,
+     130.0625,
+     177
+    ],
+    "owner": null,
+    "pictureMatch": 1
+   }
+  ]
+ },
+ {
+  "label": "ref",
+  "size": "desktop",
+  "sample": "expiry",
+  "query": "owner=dialog&anchor=right",
+  "settledBox": [
+   1030,
+   40,
+   250,
+   104
+  ],
+  "frames": [
+   {
+    "frame": 0,
+    "raf": null,
+    "produced": [
+     1398,
+     140,
+     250,
+     104
+    ],
+    "owner": {
+     "x": 380,
+     "y": 100,
+     "scrollLeft": 0,
+     "scrollTop": 0
+    },
+    "pictureMatch": 0
+   },
+   {
+    "frame": 1,
+    "raf": [
+     1398,
+     140,
+     250,
+     104
+    ],
+    "produced": [
+     1030,
+     40,
+     250,
+     104
+    ],
+    "owner": {
+     "x": 28,
+     "y": 100,
+     "scrollLeft": 352,
+     "scrollTop": 0
+    },
+    "pictureMatch": 1
+   },
+   {
+    "frame": 2,
+    "raf": [
+     1030,
+     40,
+     250,
+     104
+    ],
+    "produced": [
+     1030,
+     40,
+     250,
+     104
+    ],
+    "owner": {
+     "x": 52,
+     "y": 100,
+     "scrollLeft": 328,
+     "scrollTop": 0
+    },
+    "pictureMatch": 1
+   },
+   {
+    "frame": 3,
+    "raf": [
+     1030,
+     40,
+     250,
+     104
+    ],
+    "produced": [
+     1030,
+     40,
+     250,
+     104
+    ],
+    "owner": {
+     "x": 64,
+     "y": 100,
+     "scrollLeft": 316,
+     "scrollTop": 0
+    },
+    "pictureMatch": 1
+   },
+   {
+    "frame": 4,
+    "raf": [
+     1030,
+     40,
+     250,
+     104
+    ],
+    "produced": [
+     1030,
+     40,
+     250,
+     104
+    ],
+    "owner": {
+     "x": 76,
+     "y": 100,
+     "scrollLeft": 304,
+     "scrollTop": 0
+    },
+    "pictureMatch": 1
+   },
+   {
+    "frame": 5,
+    "raf": [
+     1030,
+     40,
+     250,
+     104
+    ],
+    "produced": [
+     1030,
+     40,
+     250,
+     104
+    ],
+    "owner": {
+     "x": 88,
+     "y": 100,
+     "scrollLeft": 292,
+     "scrollTop": 0
+    },
+    "pictureMatch": 1
+   },
+   {
+    "frame": 6,
+    "raf": [
+     1030,
+     40,
+     250,
+     104
+    ],
+    "produced": [
+     1030,
+     40,
+     250,
+     104
+    ],
+    "owner": {
+     "x": 100,
+     "y": 100,
+     "scrollLeft": 280,
+     "scrollTop": 0
+    },
+    "pictureMatch": 1
+   },
+   {
+    "frame": 7,
+    "raf": [
+     1030,
+     40,
+     250,
+     104
+    ],
+    "produced": [
+     1030,
+     40,
+     250,
+     104
+    ],
+    "owner": {
+     "x": 112,
+     "y": 100,
+     "scrollLeft": 268,
+     "scrollTop": 0
+    },
+    "pictureMatch": 1
+   }
+  ]
+ }
+]

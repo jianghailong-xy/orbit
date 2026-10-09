@@ -106,6 +106,8 @@ export const WIKI_DOC_SECTION_NOT_WRITTEN = 'Not written yet — Wiki maintenanc
 
 /** The footnote card (mock 23 ⑥) and the footnotes under the text (mock 23 ⑦). */
 export const WIKI_DOC_FOOTNOTES = 'Footnotes';
+/** Whose words a person's comment is, on a public wiki link's card: the Owner's (share-links §6). */
+export const WIKI_OWNER_COMMENT = 'Owner’s comment';
 export const WIKI_VIA_ENTRY = 'Via entry';
 export const WIKI_NO_QUOTE_GIVEN = '— no quote given';
 /** The entries under the document (mock 23 ⑧): the ones its quotes came through. */
@@ -177,7 +179,7 @@ export function wikiQuoteCounts(footnotes: ReadonlyArray<Pick<WikiDocFootnoteVie
  * The tags after the category (mock 23 ②): its sections, its footnotes, and what the footnotes quote —
  * `9 sections · 45 footnotes · 14 session quotes · 30 code & doc quotes · 1 note`.
  */
-export function wikiDocTags(doc: Pick<WikiDocView, 'sections' | 'footnotes'>): string[] {
+export function wikiDocTags(doc: { sections: readonly unknown[]; footnotes: ReadonlyArray<Pick<WikiDocFootnoteView, 'kind'>> }): string[] {
   const tags = [plural(doc.sections.length, 'section', 'sections')];
   if (doc.footnotes.length > 0) tags.push(plural(doc.footnotes.length, 'footnote', 'footnotes'), ...wikiQuoteCounts(doc.footnotes));
   return tags;

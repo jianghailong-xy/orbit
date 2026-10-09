@@ -136,6 +136,9 @@ final class WikiCopyParityTests: XCTestCase {
             ("WIKI_DECIDED_RECONFIRMED", WikiCopy.decidedReconfirmed),
             ("WIKI_DECIDED_AMENDED", WikiCopy.decidedAmended),
             ("WIKI_DECIDE_FAILED", WikiCopy.decideFailed),
+            ("WIKI_DECIDE_CONFLICT", WikiCopy.conflictRefused),
+            ("WIKI_DECIDE_INACTIVE", WikiCopy.inactiveRefused),
+            ("WIKI_DECIDE_WITHDRAWN", WikiCopy.withdrawnRefused),
             ("WIKI_SETTINGS_SAVED", WikiCopy.settingsSaved),
             ("WIKI_ACCEPT_NOTE", WikiCopy.acceptNote),
             ("WIKI_WEB_DERIVED_NOTE", WikiCopy.webDerivedNote),
@@ -190,6 +193,26 @@ final class WikiCopyParityTests: XCTestCase {
         XCTAssertEqual(WikiLogic.decidedToast(op: .challenge, action: .reconfirm), "Re-confirmed")
         XCTAssertEqual(WikiLogic.decidedToast(op: .challenge, action: .amend), "Amended")
         XCTAssertEqual(WikiLogic.decidedToast(op: .challenge, action: .retire), "Retired")
+    }
+
+    /// An answer the server recorded without applying it is a refusal, by the same rule at both ends —
+    /// the web's `wikiDecisionRefusal` case by case — and Review says it where it says a refusal.
+    func testARefusedAnswerIsTheWebsRefusal() throws {
+        let web = try source(Self.lib)
+        for line in ["return answer?.ops?.find((one) => one.id === opId)?.decision ?? null;",
+                     "case 'conflict': return op === 'challenge' ? WIKI_DECIDE_INACTIVE : WIKI_DECIDE_CONFLICT;",
+                     "case 'withdrawn': return op === 'challenge' && action === 'retire' ? null : WIKI_DECIDE_WITHDRAWN;"] {
+            assertSays(web, line, in: Self.lib)
+        }
+        XCTAssertEqual(WikiLogic.decisionRefusal(.conflict, op: .amend, action: .accept), WikiCopy.conflictRefused)
+        XCTAssertEqual(WikiLogic.decisionRefusal(.conflict, op: .challenge, action: .reconfirm), WikiCopy.inactiveRefused)
+        XCTAssertEqual(WikiLogic.decisionRefusal(.withdrawn, op: .add, action: .accept), WikiCopy.withdrawnRefused)
+        XCTAssertNil(WikiLogic.decisionRefusal(.withdrawn, op: .challenge, action: .retire))
+        XCTAssertNil(WikiLogic.decisionRefusal(.accepted, op: .amend, action: .accept))
+        let review = try source(Self.review)
+        assertSays(review, "const refusal = wikiDecisionRefusal(wikiRecordedDecision(answer, op.id), op.op, action);",
+                   in: Self.review)
+        assertSays(review, "if (refusal) toast.error(WIKI_DECIDE_FAILED, refusal);", in: Self.review)
     }
 
     /// The sentences built around a value, each the same expression at both ends.
@@ -359,9 +382,10 @@ final class WikiCopyParityTests: XCTestCase {
     // MARK: Activity
 
     /// Activity's blocks are the web's, in its order (mock 31 ②): the status line under the title, the
-    /// proposals' banner into Review, the space's plan banners, the other spaces' that wait, then Recent
-    /// decisions, Recently changed and Agents used the wiki — the desktop's Review and Plan cards, which a
-    /// phone hides, aside. The native page iterates `WikiLogic.ActivityBand`.
+    /// proposals' banner into Review, the space's plan banners, the other spaces' that wait, the server's
+    /// runs after Review and Plan (mock 35 ④), then Recent decisions, Recently changed and Agents used the
+    /// wiki — the desktop's Review and Plan cards, which a phone hides, aside. The native page iterates
+    /// `WikiLogic.ActivityBand`.
     func testActivityIsTheWebsInItsOrder() throws {
         let page = try source(Self.activity)
         let body = try slice(page, from: "<div className=\"wk-act\">", to: "export function WikiActivityButton")
@@ -369,17 +393,20 @@ final class WikiCopyParityTests: XCTestCase {
                            "<Link className=\"wk-banner\" to={WIKI_REVIEW_PATH} data-waiting={wikiProposalsWaiting(spaces)}>",
                            "<WikiPlanBanners space={space} />",
                            "<WikiPlanBanners key={row.id} space={row} elsewhere={names.get(row.id) ?? row.title} />",
+                           "<WikiPlanCard space={space} />", "<WikiRunsCard space={space} />",
                            "title={WIKI_RECENT_DECISIONS}", "title={WIKI_RECENTLY_CHANGED}", "<UsageCard space={detail.data} />"],
                     "Activity's blocks")
-        XCTAssertEqual(WikiLogic.ActivityBand.allCases, [.status, .reviewBanner, .planBanners, .otherPlanBanners,
+        XCTAssertEqual(WikiLogic.ActivityBand.allCases, [.status, .reviewBanner, .planBanners, .otherPlanBanners, .runs,
                                                          .recentDecisions, .recentlyChanged, .agentsUsed])
         XCTAssertEqual(WikiLogic.ActivityBand.allCases.compactMap(\.title),
-                       [WikiCopy.recentDecisions, WikiCopy.recentlyChanged, WikiCopy.agentsUsed])
+                       [WikiRunsCopy.runs, WikiCopy.recentDecisions, WikiCopy.recentlyChanged, WikiCopy.agentsUsed])
         // A phone draws the banners and hides the desktop's two cards.
         let css = try source(Self.css)
         for rule in [".wk-banner { display: flex; }", ".wk-review-card { display: none; }", ".wk-plan-card { display: none; }"] {
             assertSays(css, rule, in: Self.css)
         }
+        // The Runs card is no desktop card: a phone draws it as the native band is drawn.
+        XCTAssertFalse(css.contains(".wk-jobs-card { display: none; }"), "a phone keeps the Runs card")
         // The first banner: every space's proposals, the others' shares on its line; the other spaces' plans
         // that wait come after the space's own.
         assertSays(page, "const proposals = wikiProposalsBanner(spaces, space.id, names);", in: Self.activity)
@@ -734,8 +761,8 @@ final class WikiCopyParityTests: XCTestCase {
         assertSays(review, "op === 'supersede' ? 'AMEND' : op.toUpperCase()", in: Self.review)
         // The toast a landed answer floats: its outcome in the answer's words, the entry under it.
         assertSays(review, "toast.success(wikiDecidedToast(op.op, action), about ?? undefined);", in: Self.review)
-        assertSays(review, "decided(decision.action);", in: Self.review)
-        assertSays(review, "decided('edit', edited.title ?? title);", in: Self.review)
+        assertSays(review, "decided(decision.action, answer);", in: Self.review)
+        assertSays(review, "decided('edit', answer, edited.title ?? title);", in: Self.review)
         assertSays(review, "toast.error(WIKI_DECIDE_FAILED, error instanceof Error ? error.message : undefined);",
                    in: Self.review)
         // What a card is about, and the anchors it lists: the draft's, else the named entry's.

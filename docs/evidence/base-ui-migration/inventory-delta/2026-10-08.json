@@ -1,0 +1,118 @@
+{
+ "schemaVersion": 1,
+ "kind": "antd-inventory-delta",
+ "date": "2026-10-08",
+ "task": "34broktJh4EJXI1eiF7Jm",
+ "amends": "2026-10-07d.json",
+ "statusMeaning": {
+  "amended": "重述已登记条目（amends 所指记录中的同一路径）的当前事实，owner 不变；added 相对该条目计算。它不是归属所必需（原条目已给出 owner），所以 verify-record.mjs 第 3 项（拿掉新增/改动或重新归属的条目后的反向对照）不适用。"
+ },
+ "decision": {
+  "by": "coordinator",
+  "session": "34b245G3NiwgVVUj2JFJw",
+  "date": "2026-10-08",
+  "subject": "ChoicesFixture.tsx 新增的 antd Drawer 导入，owner 仍为 P6"
+ },
+ "scan": {
+  "commit": "a663d19ca9b77a3736a472eddf0da5cc697078ed",
+  "scopeHash": "7fc54456c2ce36182735a30f0fc8ed1bd41f0c3600f4e1c5780799bc51da1a80",
+  "command": "node src/web/scripts/audit-antd.mjs --json",
+  "counts": {
+   "scannedFiles": 744,
+   "productionFiles": 371,
+   "testFiles": 371,
+   "antdProductionFiles": 79,
+   "antdTestFiles": 64,
+   "antSelectorTestFiles": 42,
+   "antClassTestFiles": 47,
+   "iconProductionFiles": 109,
+   "iconTestFiles": 0,
+   "relevantSourceFiles": 275,
+   "hitLines": {
+    "ant-class": 306,
+    "ant-design-support": 19,
+    "ant-selector": 284,
+    "antd-reference": 297,
+    "icon-class": 79,
+    "icon-reference": 120,
+    "imperative-confirm": 12,
+    "imperative-feedback": 221,
+    "internal-ref": 4,
+    "provider": 76,
+    "rc-support": 231,
+    "ref-focus": 28,
+    "theme": 2,
+    "use-app": 9,
+    "use-token": 1
+   },
+   "retirementBlockingFiles": 195
+  }
+ },
+ "files": {
+  "src/web/src/components/ui/__fixtures__/ChoicesFixture.tsx": {
+   "status": "amended",
+   "category": "production",
+   "types": [
+    "antd-import",
+    "antd-provider"
+   ],
+   "p01Owner": null,
+   "antdImports": [
+    "App",
+    "Button",
+    "ConfigProvider",
+    "Drawer",
+    "Dropdown",
+    "Modal",
+    "Popconfirm",
+    "Popover",
+    "Select",
+    "Tooltip"
+   ],
+   "hitKinds": {
+    "antd-reference": 2,
+    "provider": 1
+   },
+   "added": {
+    "antdImports": [
+     "Drawer"
+    ],
+    "hitKinds": {}
+   },
+   "introducedBy": [
+    {
+     "commit": "1a70fbb902d6b24453a57994f782a40546d67c94",
+     "short": "1a70fbb90",
+     "date": "2026-10-04",
+     "subject": "feat(web): add Orbit menus, popovers and choice controls",
+     "line": "project"
+    },
+    {
+     "commit": "f74f4251f8f976ba42bc3e3b0f89c38dc29071a0",
+     "short": "f74f4251f",
+     "date": "2026-10-07",
+     "subject": "test(web): probe the remaining popup opening windows against the old AntD components",
+     "line": "project"
+    },
+    {
+     "commit": "f24f01f88a0e36d1fab6ff2cf845f7e2c6e7f778",
+     "short": "f24f01f88",
+     "date": "2026-10-08",
+     "subject": "test(web): check that every popup is drawn where it settles from its first frame",
+     "line": "project"
+    }
+   ],
+   "owner": "P6",
+   "reason": "ui-migration 浏览器对照用的 AntD 参照样例（P2.2），故意导入 antd 渲染旧实现；antd 移除时须一并删除或改为只渲染 Orbit 组件。f74f4251f 为 P2 跟进（第 2 批窗口）的 Popconfirm 打开窗口基线加入 antd Popconfirm，作旧实现参照，随该样例由 P6 处理。f24f01f88 为浮层第一帧位置检查加入 antd Drawer，作「抽屉内」位置的旧实现参照，随该样例由 P6 处理。",
+   "basis": "协调者 2026-10-08 判定（本任务会话收到的消息）：按 2026-10-07d.json 的先例补记录，status amended，owner 仍是 P6。"
+  }
+ },
+ "css": [],
+ "summary": {
+  "files": 1,
+  "cssLines": 0,
+  "owners": {
+   "P6": 1
+  }
+ }
+}

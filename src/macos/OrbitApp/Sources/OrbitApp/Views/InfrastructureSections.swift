@@ -347,22 +347,6 @@ struct PoolRowLabel: View {
     }
 }
 
-/// A small capitalised tag: NEXT, ADMIN — and SHARED, in the brand colour.
-struct PoolChip: View {
-    let text: String
-    var brand = false
-
-    var body: some View {
-        Text(text)
-            .font(.orbitMeta.weight(.bold))
-            .foregroundStyle(brand ? Color.accentColor : Color.secondary)
-            .padding(.horizontal, 5)
-            .padding(.vertical, 1)
-            .background(brand ? Color.accentColor.opacity(0.12) : Color.primary.opacity(0.065),
-                        in: RoundedRectangle(cornerRadius: 5, style: .continuous))
-    }
-}
-
 /// The colours a pool's status words and people are drawn in: web's tag colours, in the effect mock's
 /// inks on light (system green/orange/red on their own washes read too faint) and the system colours on
 /// dark.
@@ -386,9 +370,13 @@ enum PoolTone {
 // MARK: - API keys
 
 /// The account's own keys, each with the model a session on it starts on — and Disabled for one that is
-/// switched off. Keys are added and changed on the web.
+/// switched off. A DeepSeek key's row ends with its account's balance, and opens the key's page where
+/// there is one to open (`open` set) — not on the Mac. Keys are added and changed on the web.
 struct InfrastructureKeysSection: View {
     let keys: [ConfiguredProvider]
+    /// Each DeepSeek key's balance by provider id, as last read.
+    var balances: [String: ProviderBalanceReading] = [:]
+    var open: ((NavNode) -> Void)? = nil
 
     var body: some View {
         Section {
@@ -396,29 +384,55 @@ struct InfrastructureKeysSection: View {
                 Text(ProvidersOverview.noKeys).foregroundStyle(.secondary)
             }
             ForEach(keys) { key in
-                LabeledContent {
-                    if key.enabled == false {
-                        Text(Infrastructure.disabled)
-                    }
-                } label: {
-                    HStack(spacing: 12) {
-                        ProviderMark(provider: key.slug, size: 26, brandKey: key.presetSlug, label: key.label)
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(Infrastructure.keyLabel(key.label, presetSlug: key.presetSlug))
-                                .lineLimit(1)
-                            if let model = Infrastructure.defaultModel(key) {
-                                Text(model)
-                                    .font(.orbitListSubtitle)
-                                    .foregroundStyle(.secondary)
+                if let id = DeepSeekBalance.key(for: key, mine: keys)?.providerID {
+                    if let open {
+                        Button { open(.providerDetail(providerID: id)) } label: {
+                            HStack(spacing: 8) {
+                                row(key, balance: balances[id])
+                                RunnerChevron()
                             }
+                            .foregroundStyle(Color.primary)
+                            .contentShape(Rectangle())
                         }
+                        .runnerRowButtonStyle()
+                    } else {
+                        row(key, balance: balances[id])
                     }
+                } else {
+                    row(key, balance: nil)
                 }
             }
         } header: {
             RunnerSectionHeader(ProvidersOverview.apiKeys)
         } footer: {
             Text(ProvidersOverview.apiKeysDetail + " " + ProvidersOverview.editOnWeb)
+        }
+    }
+
+    /// A key's name over its model, and at its end Disabled — or, for a DeepSeek key that is on, its
+    /// account's balance once one is read, in the tone of what it comes to.
+    private func row(_ key: ConfiguredProvider, balance: ProviderBalanceReading?) -> some View {
+        LabeledContent {
+            if key.enabled == false {
+                Text(Infrastructure.disabled)
+            } else if let balance, let value = DeepSeekBalance.rowValue(DeepSeekBalance.state(balance)) {
+                Text(value.label)
+                    .foregroundStyle(PoolTone.color(value.tone))
+                    .monospacedDigit()
+            }
+        } label: {
+            HStack(spacing: 12) {
+                ProviderMark(provider: key.slug, size: 26, brandKey: key.presetSlug, label: key.label)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(Infrastructure.keyLabel(key.label, presetSlug: key.presetSlug))
+                        .lineLimit(1)
+                    if let model = Infrastructure.defaultModel(key) {
+                        Text(model)
+                            .font(.orbitListSubtitle)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
         }
     }
 }
