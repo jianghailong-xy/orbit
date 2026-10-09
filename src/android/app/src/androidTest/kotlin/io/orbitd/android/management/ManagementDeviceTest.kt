@@ -140,7 +140,9 @@ class ManagementDeviceTest {
                 click(hasText("Refresh") and hasClickAction())
                 await("Updated fixture")
                 click(hasText("Sign out") and hasClickAction())
-                await("Sign out of ${server.url("/").host}:${server.port}?")
+                // iOS 6969f7840 (A13-15): "Sign out?", no server name, Cancel beside it.
+                await("Sign out?")
+                compose.onNode(hasText("Cancel") and hasAnyAncestor(isDialog())).assertExists()
                 capture("sign-out-confirm")
                 compose.onNode(hasText("Sign out") and hasAnyAncestor(isDialog())).performClick()
                 compose.waitUntil(10_000) { app.session.state.value is AuthState.SignedOut }

@@ -167,6 +167,25 @@ class ManagementPanelTest {
         compose.waitUntil(60_000) { fixture.removedRunners == setOf(fixture.RUNNER_TWO) }
     }
 
+    /** Sign out asks "Sign out?" — no server name — with Cancel beside it (iOS 6969f7840, A13-15). */
+    @Test fun signingOutAsksSignOutWithCancelBesideIt() {
+        val api = api()
+        var signedOut = 0
+        compose.setContent {
+            SettingsScreen(api, io.orbitd.android.navigation.OrbitRoute(io.orbitd.android.navigation.Destination.SETTINGS), revision, {}, {},
+                logout = { signedOut++ }, changed = {}, workspaceDeleted = {}, deviceAlerts = { true }, notifications = {}, about = {})
+        }
+        await("Fixture")
+        compose.onNode(hasText("Sign out") and hasClickAction()).performScrollTo().performClick()
+        compose.onNodeWithText("Sign out?").assertExists()
+        compose.onAllNodesWithText("Sign out of", substring = true).assertCountEquals(0)
+        compose.onNode(hasText("Cancel") and hasClickAction() and hasAnyAncestor(isDialog())).performClick()
+        compose.runOnIdle { assertEquals(0, signedOut) }
+        compose.onNode(hasText("Sign out") and hasClickAction()).performScrollTo().performClick()
+        compose.onNode(hasText("Sign out") and hasClickAction() and hasAnyAncestor(isDialog())).performClick()
+        compose.runOnIdle { assertEquals(1, signedOut) }
+    }
+
     private fun hasCustomAction(label: String) = SemanticsMatcher("has custom action $label") { node ->
         node.config.getOrNull(SemanticsActions.CustomActions)?.any { action -> action.label == label } == true
     }

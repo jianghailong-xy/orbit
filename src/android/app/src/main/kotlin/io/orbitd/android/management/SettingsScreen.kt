@@ -78,7 +78,8 @@ internal fun settingsInstanceName(server: String): String? = server.toHttpUrlOrN
     if (it.port == HttpUrl.defaultPort(it.scheme)) it.host else "${it.host}:${it.port}"
 }
 
-internal fun settingsSignOutTitle(instance: String?) = instance?.let { "Sign out of $it?" } ?: "Sign out?"
+/** SettingsHome.signOutTitle: no server name — the instance is the app's business, and the account is on the screen behind it. */
+internal const val SETTINGS_SIGN_OUT_TITLE = "Sign out?"
 
 /** The account, then SettingsHome's groups, then Sign out and the build — iOS's Settings list. */
 @Composable
@@ -186,7 +187,7 @@ private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) 
             textAlign = TextAlign.Center, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         TextButton(onClick = { open(OrbitRoute(Destination.BUILD)) }, Modifier.align(Alignment.CenterHorizontally)) { Text("Build information") }
     }
-    if (signingOut) AlertDialog(onDismissRequest = { signingOut = false }, title = { Text(settingsSignOutTitle(instance)) },
+    if (signingOut) AlertDialog(onDismissRequest = { signingOut = false }, title = { Text(SETTINGS_SIGN_OUT_TITLE) },
         confirmButton = { TextButton(onClick = { signingOut = false; logout() }) { Text("Sign out", color = MaterialTheme.colorScheme.error) } },
         dismissButton = { TextButton(onClick = { signingOut = false }) { Text("Cancel") } })
 }
