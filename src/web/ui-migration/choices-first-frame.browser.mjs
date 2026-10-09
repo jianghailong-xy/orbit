@@ -35,8 +35,8 @@ const button = (page) => region(page).getByRole('button').first();
 // Each kind: its fixture sample, its anchor and popup surface when they are not the sample's first button
 // and .sample-surface, and how it opens. A menu opened from the keyboard is placed without the extra
 // render a pointer opening gets, so both are sampled; the replaced Dropdown opened on a click. Against
-// the replaced submenu only its top edge is compared: it starts 4px further out and is at least as wide
-// as its trigger, which the replaced one was not (differences that predate this check).
+// the replaced submenu only its top edge is compared here; its side, x and width are compared with the
+// replaced one's by choices-submenu-geometry.
 const choiceAnchor = { orbit: '.sample-choice', antd: '.sample-choice' };
 const kinds = {
   menu: { sample: 'attachment', openings: { pointer: (page, info) => press(info, button(page)),

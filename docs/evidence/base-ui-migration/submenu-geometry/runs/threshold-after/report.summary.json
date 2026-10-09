@@ -1,0 +1,369 @@
+{
+ "config": {
+  "argv": [
+   "/usr/local/bin/node",
+   "/mnt/data/tmp/34cC5ZWY0xCWquFuz3rNY/before/node_modules/.bin/playwright",
+   "test",
+   "--config",
+   "/mnt/data/tmp/34cC5ZWY0xCWquFuz3rNY/probe-before/tree.config.mjs",
+   "--project",
+   "chromium-light-desktop",
+   "--project",
+   "chromium-light-phone",
+   "--project",
+   "webkit-light-desktop",
+   "--project",
+   "webkit-light-phone"
+  ],
+  "configFile": "/mnt/data/tmp/34cC5ZWY0xCWquFuz3rNY/probe-before/tree.config.mjs",
+  "rootDir": "/mnt/data/tmp/34cC5ZWY0xCWquFuz3rNY/probe-before",
+  "failOnFlakyTests": false,
+  "forbidOnly": false,
+  "fullyParallel": false,
+  "globalSetup": "/mnt/data/tmp/34cC5ZWY0xCWquFuz3rNY/before/src/web/ui-migration/environment.mjs",
+  "globalTeardown": null,
+  "globalTimeout": 0,
+  "grep": {},
+  "grepInvert": null,
+  "maxFailures": 0,
+  "metadata": {
+   "actualWorkers": 1
+  },
+  "preserveOutput": "always",
+  "projects": [
+   {
+    "outputDir": "/mnt/data/tmp/34cC5ZWY0xCWquFuz3rNY/runs/threshold-after/results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-desktop",
+    "name": "chromium-light-desktop",
+    "testDir": "/mnt/data/tmp/34cC5ZWY0xCWquFuz3rNY/probe-before",
+    "testIgnore": [],
+    "testMatch": [
+     "threshold.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34cC5ZWY0xCWquFuz3rNY/runs/threshold-after/results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-phone",
+    "name": "chromium-light-phone",
+    "testDir": "/mnt/data/tmp/34cC5ZWY0xCWquFuz3rNY/probe-before",
+    "testIgnore": [],
+    "testMatch": [
+     "threshold.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34cC5ZWY0xCWquFuz3rNY/runs/threshold-after/results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-desktop",
+    "name": "chromium-dark-desktop",
+    "testDir": "/mnt/data/tmp/34cC5ZWY0xCWquFuz3rNY/probe-before",
+    "testIgnore": [],
+    "testMatch": [
+     "threshold.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34cC5ZWY0xCWquFuz3rNY/runs/threshold-after/results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-phone",
+    "name": "chromium-dark-phone",
+    "testDir": "/mnt/data/tmp/34cC5ZWY0xCWquFuz3rNY/probe-before",
+    "testIgnore": [],
+    "testMatch": [
+     "threshold.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34cC5ZWY0xCWquFuz3rNY/runs/threshold-after/results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-desktop",
+    "name": "webkit-light-desktop",
+    "testDir": "/mnt/data/tmp/34cC5ZWY0xCWquFuz3rNY/probe-before",
+    "testIgnore": [],
+    "testMatch": [
+     "threshold.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34cC5ZWY0xCWquFuz3rNY/runs/threshold-after/results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-phone",
+    "name": "webkit-light-phone",
+    "testDir": "/mnt/data/tmp/34cC5ZWY0xCWquFuz3rNY/probe-before",
+    "testIgnore": [],
+    "testMatch": [
+     "threshold.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34cC5ZWY0xCWquFuz3rNY/runs/threshold-after/results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-desktop",
+    "name": "webkit-dark-desktop",
+    "testDir": "/mnt/data/tmp/34cC5ZWY0xCWquFuz3rNY/probe-before",
+    "testIgnore": [],
+    "testMatch": [
+     "threshold.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34cC5ZWY0xCWquFuz3rNY/runs/threshold-after/results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-phone",
+    "name": "webkit-dark-phone",
+    "testDir": "/mnt/data/tmp/34cC5ZWY0xCWquFuz3rNY/probe-before",
+    "testIgnore": [],
+    "testMatch": [
+     "threshold.browser.mjs"
+    ],
+    "timeout": 90000
+   }
+  ],
+  "quiet": false,
+  "reporter": [
+   [
+    "list",
+    null
+   ],
+   [
+    "json",
+    {
+     "outputFile": "/mnt/data/tmp/34cC5ZWY0xCWquFuz3rNY/runs/threshold-after/results/report.json"
+    }
+   ]
+  ],
+  "reportSlowTests": {
+   "max": 5,
+   "threshold": 300000
+  },
+  "shard": null,
+  "tags": [],
+  "updateSnapshots": "none",
+  "updateSourceMethod": "patch",
+  "version": "1.63.0",
+  "workers": 1,
+  "webServer": {
+   "command": "npm run dev -- --host 127.0.0.1 --port 4177 --strictPort",
+   "cwd": "/mnt/data/tmp/34cC5ZWY0xCWquFuz3rNY/before/src/web/",
+   "url": "http://127.0.0.1:4177",
+   "reuseExistingServer": false,
+   "timeout": 30000
+  }
+ },
+ "suites": [
+  {
+   "title": "threshold.browser.mjs",
+   "file": "threshold.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "flip threshold",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 1200000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 33196,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T23:51:24.481Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "threshold",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "b0a3ac8d59817b1176c8-275867f16913a02c12ea",
+     "file": "threshold.browser.mjs",
+     "line": 55,
+     "column": 1
+    },
+    {
+     "title": "flip threshold",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 1200000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 31393,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T23:52:02.196Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "threshold",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "b0a3ac8d59817b1176c8-edc033322731ef46fc5a",
+     "file": "threshold.browser.mjs",
+     "line": 55,
+     "column": 1
+    },
+    {
+     "title": "flip threshold",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 1200000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 28888,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T23:52:35.630Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "threshold",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "b0a3ac8d59817b1176c8-4f9b8e8ee7cd3affb9c5",
+     "file": "threshold.browser.mjs",
+     "line": 55,
+     "column": 1
+    },
+    {
+     "title": "flip threshold",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 1200000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 31074,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-08T23:53:06.747Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "threshold",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "b0a3ac8d59817b1176c8-a2b18dba9a55870e1c0f",
+     "file": "threshold.browser.mjs",
+     "line": 55,
+     "column": 1
+    }
+   ]
+  }
+ ],
+ "errors": [],
+ "stats": {
+  "startTime": "2026-10-08T23:51:15.340Z",
+  "duration": 143112.495,
+  "expected": 4,
+  "skipped": 0,
+  "unexpected": 0,
+  "flaky": 0
+ }
+}
