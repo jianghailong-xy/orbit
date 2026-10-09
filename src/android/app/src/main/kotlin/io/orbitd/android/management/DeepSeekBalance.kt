@@ -18,6 +18,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import io.orbitd.android.composer.ProviderEngines
 import io.orbitd.android.navigation.ObjectId
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.coroutineScope
@@ -62,8 +63,6 @@ internal object DeepSeekBalance {
     const val NO_AMOUNT_YET = "No amount is shown until DeepSeek answers."
     /** What to do about a rejected key from a phone, which can't change one. */
     const val CHANGE_KEY_ON_WEB = "Change the key on the web, then retry."
-    const val PROVIDER_HEADER = "Provider"
-    const val RUNS_ON = "Runs on"
     const val DEFAULT_MODEL = "Default model"
     const val ENDPOINT = "Endpoint"
     /** ProvidersOverview's: the key page's footer, and the page when the key has gone. */
@@ -173,17 +172,15 @@ internal object DeepSeekBalance {
         return if (hours < 24) "$hours h ago" else "${hours / 24} d ago"
     }
 
-    /** The engine a DeepSeek key's sessions run on, as Providers names it. */
-    fun engine(provider: JsonObject) = when (provider.str("runtime")) { "dsh" -> "DeepSeek Harness"; "codex" -> "Codex"; else -> "Claude Code" }
-
     /** The host a key's endpoint is on — `api.deepseek.com` — which is all of it a phone's row has room for. */
     fun endpointHost(provider: JsonObject): String? = provider.str("baseUrl")?.let { runCatching { URI(it).host }.getOrNull() }
 }
 
-/** ProvidersOverview.keyLine: the line under a key's name — its default model, or, for a DeepSeek Harness key, whose models come
- * from the runtime itself and which has no default, where it runs. */
-internal fun providerKeyLine(key: JsonObject): String? =
-    key.str("defaultModel")?.takeIf { it.isNotEmpty() } ?: if (key.str("runtime") == "dsh") "Runs on DeepSeek Harness" else null
+/** ProvidersOverview.keyLine: the line under a key's name — its default model, by the name its model list gives it. Where the key
+ * runs is the line under it (KeyEngines.line): a key runs on every engine its protocol allows, never on one of them. */
+internal fun providerKeyLine(key: JsonObject): String? = key.str("defaultModel")?.takeIf { it.isNotEmpty() }?.let { model ->
+    key.list("models").firstOrNull { it.str("value") == model }?.str("label")?.takeIf { it.isNotEmpty() } ?: model
+}
 
 /** Each DeepSeek key's balance among [mine], read side by side and handed to [each] as it comes, so a slow key holds up no other
  * (iOS 96e1a1536). */
@@ -265,9 +262,17 @@ internal fun DeepSeekKeyPage(api: ManagementApi, revision: Long, providerId: Str
                 }
             }
         }
-        FormSection(DeepSeekBalance.PROVIDER_HEADER, footer = DeepSeekBalance.EDIT_ON_WEB) {
-            BalanceValueRow(DeepSeekBalance.RUNS_ON, DeepSeekBalance.engine(provider))
-            provider.str("defaultModel")?.takeIf { it.isNotEmpty() }?.let { HorizontalDivider(); BalanceValueRow(DeepSeekBalance.DEFAULT_MODEL, it) }
+        // Every engine the key runs on, then the key itself (board 2): one key, one page, whichever engine a session spends it on.
+        val engines = KeyEngines.engines(provider).map(ProviderEngines::cliName)
+        if (engines.isNotEmpty()) FormSection(KeyEngines.WORKS_WITH, footer = KeyEngines.WORKS_WITH_FOOTER) {
+            engines.forEachIndexed { index, name ->
+                if (index > 0) HorizontalDivider()
+                Text(name, Modifier.padding(vertical = 10.dp))
+            }
+        }
+        FormSection(KeyEngines.KEY, footer = KeyEngines.footer(engines)) {
+            BalanceValueRow(KeyEngines.PROTOCOL, KeyEngines.protocol(provider.str("runtime")))
+            providerKeyLine(provider)?.let { HorizontalDivider(); BalanceValueRow(DeepSeekBalance.DEFAULT_MODEL, it) }
             DeepSeekBalance.endpointHost(provider)?.let { HorizontalDivider(); BalanceValueRow(DeepSeekBalance.ENDPOINT, it) }
         }
         Spacer(Modifier.height(48.dp))

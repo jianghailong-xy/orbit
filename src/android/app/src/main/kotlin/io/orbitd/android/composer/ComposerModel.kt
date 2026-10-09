@@ -242,12 +242,21 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
             finally { mutable.update { it.copy(catalogLoading = false) } }
         }
     }
-    fun config(values: JsonObject, accountOnly: Boolean = false) {
+    /** A provider is never written without its engine (docs/provider-engine-contract.md §3.5, §6.1): the session's own, which a
+     * switch never changes, or — for a draft — the engine the provider was picked under, else the provider's default. */
+    private fun withEngine(values: JsonObject, detail: JsonObject): JsonObject {
+        val provider = values.text("provider") ?: return values
+        if (values["engine"] != null) return values
+        val engine = (if (target == null) detail.text("engine") else null) ?: state.value.catalog?.providerEngines(provider)?.firstOrNull() ?: return values
+        return JsonObject(values + ("engine" to JsonPrimitive(engine)))
+    }
+    fun config(requested: JsonObject, accountOnly: Boolean = false) {
         if (state.value.busy || state.value.waiting || state.value.draft.pending != null || state.value.draft.createdSessionId != null) return
         mutable.update { it.copy(busy = true, error = null) }
         launch {
             try {
                 val detail = api.detail()
+                val values = withEngine(requested, detail)
                 if (target != null || terminal(detail) && !accountOnly) {
                     mutable.update {
                         val config = it.draft.resumeConfig

@@ -49,10 +49,11 @@ class DeepSeekBalanceTest {
 
     @Before fun start() {
         fixture.reset()
-        fixture.providerCatalog = """[{"slug":"deepseek","label":"DeepSeek","runtime":"claude","defaultModel":"deepseek-chat"},
-            {"slug":"dsh","label":"DeepSeek Harness","runtime":"dsh"},{"slug":"openai","label":"OpenAI","runtime":"codex","defaultModel":"gpt-5"}]"""
+        fixture.providerCatalog = """[{"slug":"deepseek","label":"DeepSeek","runtime":"claude","defaultModel":"deepseek-chat","engines":["claude","opencode","dsh"]},
+            {"slug":"dsh","label":"DeepSeek Harness","runtime":"dsh","engines":["dsh","claude","opencode"]},
+            {"slug":"openai","label":"OpenAI","runtime":"codex","defaultModel":"gpt-5","engines":["codex","opencode"]}]"""
         fixture.providersMine = """[{"id":"$deepseek","slug":"deepseek","label":"DeepSeek","runtime":"claude","presetSlug":"deepseek",
-              "baseUrl":"https://api.deepseek.com/anthropic","hasApiKey":true,"defaultModel":"deepseek-chat"},
+              "baseUrl":"https://api.deepseek.com/anthropic","hasApiKey":true,"defaultModel":"deepseek-chat","engines":["claude","opencode","dsh"]},
             {"id":"$harness","slug":"dsh","label":"DeepSeek Harness","runtime":"dsh","presetSlug":"deepseek-harness","baseUrl":"https://api.deepseek.com/anthropic","hasApiKey":true},
             {"id":"${ManagementFixture.KEY_OPENAI}","slug":"openai","label":"OpenAI","runtime":"codex","presetSlug":"openai","baseUrl":"https://api.openai.com/v1","hasApiKey":true}]"""
         fixture.balances[deepseek] = read(two)
@@ -75,7 +76,11 @@ class DeepSeekBalanceTest {
         providers(null, opened)
         await("¥110.00 · $5.00")
         await("Unavailable")
-        compose.onNodeWithText("Runs on DeepSeek Harness", useUnmergedTree = true).assertExists()
+        // Each key says every engine it runs on, the not-yet-migrated Harness key included: no key is named after one engine.
+        compose.onNodeWithText("Claude Code · OpenCode · DeepSeek Harness", useUnmergedTree = true).assertExists()
+        compose.onNodeWithText("DeepSeek Harness · Claude Code · OpenCode", useUnmergedTree = true).assertExists()
+        compose.onNodeWithText("Codex · OpenCode", useUnmergedTree = true).assertExists()
+        compose.onAllNodesWithText("Runs on", substring = true, useUnmergedTree = true).assertCountEquals(0)
         compose.onNodeWithText("gpt-5", useUnmergedTree = true).assertExists()
         assertTrue("both DeepSeek keys' balances are asked", fixture.calls.containsAll(listOf("GET providers/mine/$deepseek/balance", "GET providers/mine/$harness/balance")))
         assertFalse("no balance for a key that isn't DeepSeek's", fixture.calls.any { it.contains(ManagementFixture.KEY_OPENAI) })
@@ -95,6 +100,7 @@ class DeepSeekBalanceTest {
         await("¥110.00 · $5.00")
     }
 
+    /** Board 2: the balance first, then every engine the key works with, then the key itself — its protocol, never an engine. */
     @Test fun theKeysPageShowsTheWholeAccountsBalanceFirstThenWhereTheKeyRuns() {
         providers("key:$deepseek")
         await("DeepSeek account balance")
@@ -107,10 +113,15 @@ class DeepSeekBalanceTest {
         compose.onNodeWithText("Each currency is a separate balance; DeepSeek doesn't convert between them.").assertExists()
         compose.onNodeWithText("The balance of the whole DeepSeek account this key belongs to", substring = true).assertExists()
         compose.onNodeWithText("Top up on DeepSeek ↗").assertExists()
-        compose.onNodeWithText("Claude Code").assertExists()
+        compose.onNodeWithText("Works with").assertExists()
+        listOf("Claude Code", "OpenCode", "DeepSeek Harness").forEach { compose.onNodeWithText(it).assertExists() }
+        compose.onNodeWithText("Pick it for a session on any of these in the composer's model menu → Provider.").assertExists()
+        compose.onNodeWithText("Anthropic-compatible").assertExists()
+        compose.onAllNodesWithText("Runs on", substring = true).assertCountEquals(0)
         compose.onNodeWithText("deepseek-chat").assertExists()
         compose.onNodeWithText("api.deepseek.com").assertExists()
-        compose.onNodeWithText("Adding or changing a key happens on the web.").assertExists()
+        compose.onNodeWithText("Adding or changing a key happens on the web. Turning it off there stops it on Claude Code, OpenCode and DeepSeek Harness.")
+            .performScrollTo().assertExists()
         compose.onNode(hasText("Refresh", substring = true) and hasClickAction()).performScrollTo().performClick()
         compose.waitUntil(60_000) { fixture.queries.contains("GET providers/mine/$deepseek/balance?refresh=1") }
         assertEquals("DeepSeek", settingsTitle("providers", "key:$deepseek"))
