@@ -12,24 +12,31 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.unit.dp
+import io.orbitd.android.OrbitApplication
 import io.orbitd.android.R
 import io.orbitd.android.navigation.*
 import io.orbitd.android.ui.LocalOrbitColors
+import io.orbitd.android.watch.WatchSessionSummary
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 
+/** [revision] re-reads the project rows' progress after a control event; [watching] is every session parked on a watch that will
+ * resume it, which a project row's line says. */
 @Composable
-fun DirectoryScreen(route: OrbitRoute, data: DirectoryData, api: DirectoryApi,
-    open: (OrbitRoute) -> Unit, refresh: () -> Unit) {
+internal fun DirectoryScreen(route: OrbitRoute, data: DirectoryData, api: DirectoryApi,
+    open: (OrbitRoute) -> Unit, refresh: () -> Unit, revision: Long = 0L, watching: Map<String, WatchSessionSummary> = emptyMap()) {
     var view by rememberSaveable { mutableStateOf(SessionView.entries.firstOrNull { it.query == route.sessionView } ?: SessionView.OPEN) }
     var grouping by rememberSaveable { mutableStateOf(Grouping.RECENCY) }
     var tag by rememberSaveable { mutableStateOf<String?>(null) }
     var query by rememberSaveable { mutableStateOf("") }
     var action by remember { mutableStateOf<DirectoryDialog?>(null) }
+    var projectMenu by remember { mutableStateOf<SessionProjectRow?>(null) }
+    val sidebar by rememberProjectSidebar(api, revision)
     val folder = data.folders.firstOrNull { ObjectId.same(it.id, route.id) }
     val workspace = route.workspaceId ?: route.id.orEmpty()
     val isFolder = route.destination == Destination.FOLDER
@@ -43,11 +50,26 @@ fun DirectoryScreen(route: OrbitRoute, data: DirectoryData, api: DirectoryApi,
             SearchResultsList(query, api, open)
         } else {
             val sessions = data.sessions[view.query].orEmpty()
-            val groups = directoryGroups(visibleSessions(sessions, data.folders, workspace,
+            // A05-6: in Open and Completed, a project's members are one row in its coordinator's place. Its coordinator may be in another
+            // workspace, and so may members whose words the row borrows; what the row counts and shows moving is this workspace's.
+            val listing = if (!SessionProjectGrouping.listShowsProjects(view, byTag = tag != null || grouping == Grouping.TAG)) null else {
+                val runner = data.workspaces.firstOrNull { ObjectId.same(it.id, workspace) }?.runnerId
+                SessionProjectGrouping.listing(sessions.filter { ObjectId.same(it.workspace, workspace) }, data.folders.filter { ObjectId.same(it.workspaceId, workspace) },
+                    sidebar, view, byTag = false, folderId = if (isFolder) route.id else null,
+                    runnerOffline = data.runners.firstOrNull { ObjectId.same(it.id, runner) }?.online == false,
+                    coordinators = (sessions + data.sessions[SessionView.OPEN.query].orEmpty()).filter { it.projectMembership?.isCoordinator == true },
+                    // The view's own list across every workspace (iOS: the account's Open list, or the scope's `allSessions`).
+                    contentSessions = sessions,
+                    watching = watching)
+            }
+            val projects = listing?.projects.orEmpty().associateBy { it.projectId }
+            val groups = directoryGroups(listing?.entries?.map { it.groupingSession } ?: visibleSessions(sessions, data.folders, workspace,
                 if (isFolder) route.id else null, view, tag, grouping == Grouping.TAG), view, grouping)
+            // A folder counts a project's members where their coordinator is filed.
+            val counted = listing?.assigned ?: sessions
             val folders = if (isFolder || view == SessionView.TRASH || tag != null || grouping == Grouping.TAG) emptyList() else data.folders.filter { f ->
                 ObjectId.same(f.workspaceId, workspace) && (view == SessionView.OPEN && tag == null ||
-                    sessions.any { ObjectId.same(it.folderId, f.id) && (tag == null || it.tags.any { t -> ObjectId.same(t.id, tag) }) })
+                    counted.any { ObjectId.same(it.folderId, f.id) && (tag == null || it.tags.any { t -> ObjectId.same(t.id, tag) }) })
             }.sortedBy { it.name.lowercase() }
             LazyColumn(Modifier.fillMaxSize().testTag("directory-list"), state = rememberLazyListState(), contentPadding = PaddingValues(bottom = 24.dp)) {
                 item {
@@ -81,7 +103,7 @@ fun DirectoryScreen(route: OrbitRoute, data: DirectoryData, api: DirectoryApi,
                         }
                     }
                     items(folders, key = { "folder:${it.id}" }) { f ->
-                        val children = sessions.filter { ObjectId.same(it.folderId, f.id) }
+                        val children = counted.filter { ObjectId.same(it.folderId, f.id) }
                         ListItem(headlineContent = { Text(f.name) }, leadingContent = { Icon(painterResource(R.drawable.ic_folder), null) },
                             supportingContent = { Text("${children.size} sessions · ${children.sumOf { it.pendingApprovals }} need you · ${children.count { it.runState == "RUNNING" || it.status == "RUNNING" }} running") },
                             trailingContent = { IconButton(onClick = { action = DirectoryDialog.EditFolder(f) }) { Icon(painterResource(R.drawable.ic_more), "Options for ${f.name}") } },
@@ -90,7 +112,11 @@ fun DirectoryScreen(route: OrbitRoute, data: DirectoryData, api: DirectoryApi,
                     groups.forEach { group ->
                         item(key = "heading:${group.id}") { SectionHeading(group.title) }
                         items(group.sessions, key = { it.id }) { session ->
-                            SessionRow(session, { open(OrbitRoute(Destination.SESSION, session.id, workspace, if (isFolder) route.id else null)) },
+                            val project = projects[session.id]
+                            if (project != null) SessionProjectRowView(project, { open(OrbitRoute(Destination.PROJECT_SESSIONS, project.projectId, workspace, origin = Origin.LIST)) }) {
+                                projectMenu = project
+                            }
+                            else SessionRow(session, { open(OrbitRoute(Destination.SESSION, session.id, workspace, if (isFolder) route.id else null)) },
                                 { action = DirectoryDialog.SessionMenu(session, view) })
                         }
                     }
@@ -103,6 +129,15 @@ fun DirectoryScreen(route: OrbitRoute, data: DirectoryData, api: DirectoryApi,
         }
     }
     action?.let { DirectoryActionDialog(it, api, data, setDialog = { action = it }, onChanged = refresh) }
+    val processScope = (LocalContext.current.applicationContext as OrbitApplication).processScope
+    projectMenu?.let { row ->
+        ProjectRowMenu(row, data.fresh, close = { projectMenu = null },
+            openSession = { id -> open(OrbitRoute(Destination.SESSION, id, workspace, if (isFolder) route.id else null)) },
+            openSessions = { open(OrbitRoute(Destination.PROJECT_SESSIONS, row.projectId, workspace, origin = Origin.LIST)) },
+            openProject = { open(OrbitRoute(Destination.PROJECT, row.projectId)) },
+            pin = { coordinator -> SessionActions(api, processScope) { refresh() }.pin(coordinator.id, coordinator.pinnedAt == null) },
+            move = { coordinator -> action = DirectoryDialog.Move(coordinator) })
+    }
 }
 
 @Composable

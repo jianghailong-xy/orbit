@@ -91,7 +91,9 @@ object NeedsYouLogic {
     fun needsYou(row: JsonObject): Boolean =
         ((row.number("pendingApprovals") ?: 0) > 0 && row.text("waitingKind") != "START_REQUEST") || ownerItems(row).isNotEmpty()
 
-    fun ownerItems(row: JsonObject): List<OwnerItem> = row.objects("ownerItems").mapNotNull { item ->
+    fun ownerItems(row: JsonObject): List<OwnerItem> = ownerItems(row.objects("ownerItems"))
+
+    fun ownerItems(items: List<JsonObject>): List<OwnerItem> = items.mapNotNull { item ->
         OwnerItem(item.text("itemId") ?: return@mapNotNull null, item.text("kind") ?: "UNKNOWN",
             item.text("title").orEmpty(), item.text("since").orEmpty())
     }
@@ -116,6 +118,11 @@ object NeedsYouLogic {
         "FUSE_PAUSED" -> "Paused"
         else -> null
     }
+
+    /** The word of the item that has waited longest, for a row the server says waits on one of the four (OrbitKit
+     * `oldestItemWord`); null when none is a kind this build knows. An unparseable instant sorts last, as for the bar. */
+    fun oldestItemWord(items: List<OwnerItem>): String? = items.mapNotNull { item -> kindWord(item.kind)?.let { it to (parse(item.since) ?: Instant.MAX) } }
+        .fold(null as Pair<String, Instant>?) { oldest, next -> if (oldest == null || next.second < oldest.second) next else oldest }?.first
 
     /** "Approve merge to main · Integration line": which of the four, and which project. */
     fun ownerItemText(item: OwnerItem, project: String?): String {
