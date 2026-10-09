@@ -203,8 +203,8 @@ describe('a wake turn in the transcript', () => {
     const tail = line().querySelector('.bgwake-tail')!;
     expect(tail, 'the failure’s tail is drawn').not.toBeNull();
     expect(fold().contains(tail), 'why it failed is what woke anybody: not behind the fold').toBe(false);
-    expect(row().querySelector('.bgwake-details-label')?.textContent).toBe('任务详情');
-    expect(tail.querySelector('.bgwake-output-label')?.textContent).toBe('输出末尾');
+    expect(row().querySelector('.bgwake-details-label')?.textContent).toBe('Job details');
+    expect(tail.querySelector('.bgwake-output-label')?.textContent).toBe('Output tail');
     const output = tail.querySelector<HTMLDetailsElement>('details.bgwake-output')!;
     const toggle = output.querySelector('summary')!;
     expect(output.open).toBe(false);
@@ -228,7 +228,7 @@ describe('a wake turn in the transcript', () => {
     const output = line().querySelector<HTMLDetailsElement>('details.bgwake-output')!;
     expect(output.open).toBe(false);
     expect(output.querySelector('.bgwake-output-preview')?.textContent).toBe(json);
-    expect(output.querySelector('.bgwake-output-expand')?.textContent).toBe('展开输出');
+    expect(output.querySelector('.bgwake-output-expand')?.textContent).toBe('Show full output');
     await act(async () => { output.querySelector('summary')!.click(); });
     expect(output.open).toBe(true);
     expect(output.querySelector('.bgwake-output-full')?.textContent).toBe(json);

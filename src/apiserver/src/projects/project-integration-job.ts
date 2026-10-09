@@ -894,7 +894,7 @@ export type DoneTaskSource =
   | { userId: string; sessionId?: never };
 
 /** H1's reason for the generation queued after a task was reopened for delivery work. */
-export const REOPEN_LANDING_HANDLING_REASON = '退回返工后的新一代落地';
+export const REOPEN_LANDING_HANDLING_REASON = 'A new landing generation after the task was reopened for rework';
 
 /** The columns a landing needs from the task's own work session. */
 const WORK_SESSION_SELECT = LANDING_WORK_SESSION_SELECT;

@@ -789,10 +789,6 @@ function CriteriaEvidence({ criteria }: { criteria: ProjectCriterionStanding[] }
           `${settled} settled by the work filed under them · ` +
           `${noReceipt} with no merge receipt`}
       </p>
-      <p className="project-status-evidence-tally">
-        {`共 ${criteria.length} 条标准 · ${settled} 条的工作已按各自判据结算 · ` +
-          `${noReceipt} 条没有合并回执可证`}
-      </p>
       <ul>
         {criteria.map((c) => (
           <li key={c.id}>
@@ -809,11 +805,6 @@ function CriteriaEvidence({ criteria }: { criteria: ProjectCriterionStanding[] }
         branch. “No merge receipt” means Orbit holds no receipt proving that work landed — a merge
         it never saw leaves none behind, so this is the absence of evidence rather than a finding
         about where the work is.
-      </p>
-      <p className="project-status-evidence-note">
-        「已结算」是在任务各自的工作区里判定的，与成果有没有进入主干无关；「没有合并回执」表示
-        Orbit 手上没有能证明它落地的回执——Orbit 没看见的那次合并本来就不留回执，所以这是证据缺席，
-        不是对成果的结论。
       </p>
     </div>
   );
@@ -958,16 +949,12 @@ function ProjectStatusActions({
               Nothing decides this for you. Recording it is a claim you are making about the goal,
               not a conclusion Orbit reached — so here is everything Orbit can put beside it.
             </Typography.Paragraph>
-            <Typography.Paragraph type="secondary">
-              这一条没有任何机制会替你判定：按下即是你在为这个目标作出主张，而不是 Orbit
-              得出的结论——下面是 Orbit 能摆出来的全部依据。
-            </Typography.Paragraph>
             {criteria.length > 0 ? (
               <CriteriaEvidence criteria={criteria} />
             ) : (
               <Typography.Paragraph type="secondary">
                 This project states no acceptance criteria, so there is nothing to put beside the
-                claim.（这个项目没有声明验收标准，主张旁边没有可摆的依据。）
+                claim.
               </Typography.Paragraph>
             )}
           </>
@@ -979,18 +966,10 @@ function ProjectStatusActions({
               nothing runs them by itself, and Run is refused — but a run already going is not
               stopped, and nothing is deleted.
             </Typography.Paragraph>
-            <Typography.Paragraph type="secondary">
-              这表示不再追求这个目标。它不评价项目有没有达成当初声明的条件。此后项目下的任务不再启动——不会自动运行，手动 Run 也会被拒绝；但已经在跑的不会被中断，也不会删除任何东西。
-            </Typography.Paragraph>
             {unfinished === null ? null : (
-              <>
-                <Typography.Paragraph strong>
-                  {`${unfinished} unfinished ${unfinished === 1 ? 'task stays' : 'tasks stay'} filed under it and won’t start.`}
-                </Typography.Paragraph>
-                <Typography.Paragraph type="secondary">
-                  {`项目下还有 ${unfinished} 个任务没有结束，它们会留在原地，不会再启动。`}
-                </Typography.Paragraph>
-              </>
+              <Typography.Paragraph strong>
+                {`${unfinished} unfinished ${unfinished === 1 ? 'task stays' : 'tasks stay'} filed under it and won’t start.`}
+              </Typography.Paragraph>
             )}
           </>
         ) : press === 'OPEN' ? (
@@ -999,9 +978,6 @@ function ProjectStatusActions({
               Reopening puts this project back to Open, so its tasks can start again, and changes
               nothing else: its tasks, its stated criteria and its history stay as they are. It is
               how a status written by mistake is taken back, so it asks once and asks for nothing.
-            </Typography.Paragraph>
-            <Typography.Paragraph type="secondary">
-              重开只是把项目改回 Open，项目下的任务因此可以重新启动；其余一概不动：任务、验收标准与历史都保持原样。写错了就是靠它纠回来，所以只问一次，不要求任何依据。
             </Typography.Paragraph>
           </>
         ) : null}
