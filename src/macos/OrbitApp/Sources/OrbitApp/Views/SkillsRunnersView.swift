@@ -84,19 +84,22 @@ struct RunnersListView: View {
         @Bindable var model = model
         if let runners = model.runners {
             let lists = InfrastructureLists(model)
+            // An account with no runner at all, while the server offers managed runners: its managed
+            // runner — Set up, or why there is none — above the machines, as the web's default landing
+            // shows it (`ManagedRunnerLogic.onboarding`). Add Runner stays where it is.
+            let managed = runners.loadState.hasLoaded
+                ? ManagedRunnerLogic.onboarding(model.managedRunner?.display, runnerCount: runners.runners.count)
+                : nil
             // Runners' stack projection — the record on top — and only where there is a detail
             // column to select into.
             List(selection: rowNavigation == .selection ? $model.selectedRunnerID : nil) {
-                // An account with no runner at all, while the server offers managed runners: its
-                // managed runner — Set up, or why there is none — above the machines, as the web's
-                // default landing shows it (`ManagedRunnerLogic.onboarding`). Add Runner stays below.
-                if runners.loadState.hasLoaded,
-                   let managed = ManagedRunnerLogic.onboarding(model.managedRunner?.display,
-                                                               runnerCount: runners.runners.count) {
+                #if os(iOS)
+                if let managed {
                     Section {
                         ManagedRunnerBanner(display: managed, runnerID: model.managedRunner?.status?.runnerId)
                     }
                 }
+                #endif
                 if lists.settled {
                     let attention = lists.attention
                     if !attention.isEmpty {
@@ -124,6 +127,17 @@ struct RunnersListView: View {
                                           open: opensPools ? push : nil)
             }
             .orbitRevealSurface()   // macOS: reveal the unified `orbitSurface`
+            #if os(macOS)
+            // A Mac list row is a table row that does not follow the banner's height as its buttons
+            // come in, so there the managed runner stands above the list instead of in it.
+            .safeAreaInset(edge: .top, spacing: 0) {
+                if let managed {
+                    ManagedRunnerBanner(display: managed, runnerID: model.managedRunner?.status?.runnerId)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                }
+            }
+            #endif
             .modifier(RunnersLoadOverlay(runners: runners, isEmpty: runners.runners.isEmpty,
                                          failedTitle: "Machines couldn't be loaded",
                                          emptyTitle: nil, systemImage: "desktopcomputer"))

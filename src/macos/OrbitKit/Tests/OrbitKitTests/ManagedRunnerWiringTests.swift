@@ -141,9 +141,20 @@ final class ManagedRunnerWiringTests: XCTestCase {
 
     func testInfrastructureShowsItOnlyToAnAccountWithNoRunner() throws {
         let list = code(try source("Views/SkillsRunnersView.swift"))
-        let page = try slice(list, from: "struct RunnersListView: View {", to: "RunnerAddSection { addingRunner = true }")
-        XCTAssertTrue(flat(page).contains("ManagedRunnerLogic.onboarding(model.managedRunner?.display, runnerCount: runners.runners.count)"))
-        XCTAssertTrue(page.contains("if runners.loadState.hasLoaded,"))
+        let page = try slice(list, from: "struct RunnersListView: View {", to: ".modifier(RunnersLoadOverlay(")
+        XCTAssertTrue(flat(page).contains("let managed = runners.loadState.hasLoaded ? ManagedRunnerLogic.onboarding(model.managedRunner?.display, runnerCount: runners.runners.count) : nil"))
+        // In the list on iOS; above it on the Mac, whose table rows do not follow the banner's height.
+        let ios = try slice(page, from: "#if os(iOS)", to: "#endif")
+        XCTAssertTrue(ios.contains("ManagedRunnerBanner(display: managed"))
+        let mac = try slice(page, from: "#if os(macOS)", to: "#endif")
+        XCTAssertTrue(mac.contains(".safeAreaInset(edge: .top, spacing: 0) {"))
+        XCTAssertTrue(mac.contains("ManagedRunnerBanner(display: managed"))
+    }
+
+    func testABlockedDraftShowsNoModelInTheComposer() throws {
+        let composer = code(try source("Views/ComposerView.swift"))
+        let toolbar = try slice(composer, from: "private var toolbar: some View {", to: "sendControls\n")
+        XCTAssertTrue(toolbar.contains("if console.managed?.blocksNewSession != true { modelMenu }"))
     }
 
     func testRetryCallsTheServersRetryWithTheRevisionItRead() throws {

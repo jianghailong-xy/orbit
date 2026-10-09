@@ -22,7 +22,7 @@ struct ManagedRunnerBanner: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline, spacing: 7) {
+            HStack(alignment: .center, spacing: 7) {
                 if display.moving {
                     ProgressView().controlSize(.small)
                 } else {
@@ -33,7 +33,6 @@ struct ManagedRunnerBanner: View {
                 Text(display.title).font(.orbitProse.bold())
             }
             Text(display.detail).font(.orbitLabel).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
             if let error = model.managedRunner?.errorText {
                 Text(error).font(.orbitLabel).foregroundStyle(.red)
             }
