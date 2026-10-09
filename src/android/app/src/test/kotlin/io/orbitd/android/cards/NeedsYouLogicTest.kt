@@ -226,6 +226,21 @@ class NeedsYouLogicTest {
         assertEquals("8 waiting below", NeedsYouLogic.below(counted, ReaderSide.BELOW)?.text)
     }
 
+    /** A revision waiting for the paused coordinator, or sent to it, is not asking the owner (project 34cygPTQe5LPUT7tdUAzG): the
+     * corpus has one of each, both drawn, and the bar counts neither — without today's evidence card, no evidence at all. */
+    @Test fun aRevisionWaitingForTheCoordinatorOrSentToItIsNotCounted() {
+        val queue = corpus.obj("snapshot")!!.obj("standing")!!.obj("evidenceDecisions")!!
+        val queued = (queue.objects("waitingOnCoordinator") + queue.objects("sentToCoordinator"))
+            .map { "evidence:${it.text("taskId")}:${it.text("evidenceRevision")}" }
+        assertEquals(queued.toSet(), CardCatalog.session(corpus.text("sessionId")!!, snapshot())
+            .filter { it.family == CardFamily.COORDINATOR_QUEUE }.map { it.key }.toSet())
+        val counted = rows(snapshot())
+        assertTrue(counted.none { it.rowId in queued })
+        val alone = rows(snapshot { standing -> standing["evidenceDecisions"] = JsonObject(queue + ("pending" to JsonArray(emptyList()))) })
+        assertTrue(alone.none { it.rowId.startsWith("evidence:") })
+        assertEquals(counted.size - 1, alone.size)
+    }
+
     /** Under review the card can still be pressed, but it is not asking the owner yet (contract §5 N1). */
     @Test fun aConfirmationUnderReviewIsNotCounted() {
         val counted = rows(snapshot { standing ->

@@ -175,13 +175,19 @@ fun SessionCards(cards: SessionCardsModel, open: (String) -> Unit, discuss: ((St
                 val preview = CardPreviews.preview(card)
                 val fresh = cards.fresh(session, card)
                 val result = results[card.key]?.takeIf { it.binding == card.binding } ?: CardActionState()
-                val submit = { verb: CardVerb, input: CardInput -> cards.actions.submit(cards.handle, card, verb, input); Unit }
+                // Decide it myself opens a revision waiting for the coordinator into its evidence card, here in place, and that
+                // card is what is pressed (`CoordinatorQueue`).
+                var decidingMyself by rememberSaveable { mutableStateOf(false) }
+                val drawn = (if (decidingMyself) CoordinatorQueue.decideMyself(card) else null) ?: card
+                val submit = { verb: CardVerb, input: CardInput ->
+                    if (verb == CardVerb.DECIDE_MYSELF) decidingMyself = true else cards.actions.submit(cards.handle, drawn, verb, input); Unit }
                 when {
                     // A08-2: a long decision is a compact preview here, answered in its full-height review.
                     preview != null -> CardPreviewView(card, preview) { cards.open(card.key) }
                     // A11b hook: the coordinator's request draws the start card (iOS `StartProjectCardView`), not the generic card.
                     card.family == CardFamily.START -> CoordinatorStartCard(card, session.snapshot?.standing.orEmpty(), fresh, result, open, discuss, submit)
-                    else -> BusinessCard(card, fresh, result, open, discuss, submit)
+                    CoordinatorQueue.isSent(card) -> SentToCoordinatorLine(card)
+                    else -> BusinessCard(drawn, fresh, result, open, discuss, submit)
                 }
             }
         } }
@@ -212,6 +218,17 @@ fun SessionCards(cards: SessionCardsModel, open: (String) -> Unit, discuss: ((St
                 CardFields(job, listOf("status", "command", "description", "latestOutput", "output", "outputTail", "exitCode", "killReason"), open)
             }
         }
+    }
+}
+
+/** A revision that waited for its coordinator and has been handed to it (`CoordinatorQueue`): one line where its card was, saying
+ * when (iOS's capsule). */
+@Composable
+private fun SentToCoordinatorLine(card: InteractionCard) {
+    Box(Modifier.fillMaxWidth().testTag(card.key), contentAlignment = Alignment.Center) {
+        Text(CoordinatorQueue.sentLine(card.source.text("deliveredAt")?.let { OwnerReview.receiptTime(it) }),
+            Modifier.background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(50)).padding(horizontal = 12.dp, vertical = 6.dp),
+            style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

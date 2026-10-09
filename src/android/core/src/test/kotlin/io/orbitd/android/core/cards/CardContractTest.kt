@@ -120,6 +120,85 @@ class CardContractTest {
             .forEach { assertNull(CardDiscussion.context(it)) }
     }
 
+    // A revision waiting for a paused coordinator, and one sent to it once back (project 34cygPTQe5LPUT7tdUAzG, `CoordinatorQueue`).
+
+    private val queue get() = fixture().obj("snapshot")!!.obj("standing")!!.obj("evidenceDecisions")!!
+    private fun withQueue(edited: JsonObject): JsonObject {
+        val source = fixture().obj("snapshot")!!
+        return JsonObject(source + ("standing" to JsonObject(source.obj("standing")!! + ("evidenceDecisions" to edited))))
+    }
+    private fun waiting(cards: List<InteractionCard> = cardList()) =
+        cards.single { it.family == CardFamily.COORDINATOR_QUEUE && !CoordinatorQueue.isSent(it) }
+
+    /** Both groups the pending read added are read off the corpus, each under its evidence card's own address; a server that sends
+     * neither, or null for them, has no such card and nothing else moves. */
+    @Test fun theCoordinatorsWaitingAndSentRevisionsAreRead() {
+        val cards = cardList()
+        val row = queue.objects("waitingOnCoordinator").single()
+        val waiting = waiting(cards)
+        assertEquals("evidence:${row.text("taskId")}:2", waiting.key)
+        assertEquals(CoordinatorQueue.title, waiting.title)
+        assertEquals(row, waiting.source)
+        assertEquals(row.text("taskId"), waiting.objectId)
+        assertEquals(fixture().text("projectId"), waiting.projectId)
+        assertEquals("2:${fixture().text("sessionId")}", waiting.binding)
+        // What it says of the coordinator is read off the coordinator's own session.
+        assertEquals(snapshot().detail.text("runState"), waiting.context.obj("coordinator")!!.text("runState"))
+        val sentRow = queue.objects("sentToCoordinator").single()
+        val sent = cards.single(CoordinatorQueue::isSent)
+        assertEquals("evidence:${sentRow.text("taskId")}:1", sent.key)
+        assertEquals("2026-10-04T00:05:00.000Z", sent.source.text("deliveredAt"))
+        assertTrue(sent.actions.isEmpty())
+        assertEquals("today's card is still the one evidence card", "evidence:${fixture().text("taskId")}:7",
+            cards.single { it.family == CardFamily.EVIDENCE }.key)
+        val older = cardList(withQueue(JsonObject(queue - "waitingOnCoordinator" - "sentToCoordinator")))
+        val nulls = cardList(withQueue(JsonObject(queue + ("waitingOnCoordinator" to JsonNull) + ("sentToCoordinator" to JsonNull))))
+        for (read in listOf(older, nulls)) assertEquals(cards.filter { it.family != CardFamily.COORDINATOR_QUEUE }, read)
+    }
+
+    /** It asks nothing: its one press is Decide it myself, which builds no request; a row the door would not take from this reader
+     * offers not even that, and neither does a sent one. */
+    @Test fun aWaitingRevisionHasNoDecisionUntilDecideItMyself() {
+        val waiting = waiting()
+        assertEquals(listOf(CardVerb.DECIDE_MYSELF), waiting.actions)
+        assertEquals("Decide it myself", CardVerb.DECIDE_MYSELF.label)
+        assertThrows(IllegalArgumentException::class.java) { CardRequests.build(waiting, CardVerb.CONFIRM_EVIDENCE) }
+        assertThrows(IllegalArgumentException::class.java) { CardRequests.build(waiting, CardVerb.SEND_BACK, CardInput(text = "Why")) }
+        assertThrows(IllegalStateException::class.java) { CardRequests.build(waiting, CardVerb.DECIDE_MYSELF) }
+        assertNull(CoordinatorQueue.decideMyself(cardList().single(CoordinatorQueue::isSent)))
+        assertNull("a copy that no longer asks opens nothing", CoordinatorQueue.decideMyself(waiting.copy(actions = emptyList())))
+        val row = queue.objects("waitingOnCoordinator").single()
+        listOf("independence" to "independent", "decidability" to "decidable").forEach { (field, flag) ->
+            val blocked = JsonObject(row + (field to buildJsonObject { put(flag, false) }))
+            val card = waiting(cardList(withQueue(JsonObject(queue + ("waitingOnCoordinator" to JsonArray(listOf(blocked)))))))
+            assertTrue(field, card.actions.isEmpty())
+            assertNull(field, CoordinatorQueue.decideMyself(card))
+        }
+    }
+
+    /** Decide it myself opens today's evidence card under the same address and version: Confirm done posts the corpus's evidence
+     * request as the same deciding session, and Chat about this sends it back with the owner's words. */
+    @Test fun decideItMyselfPostsTodaysDecisionAsTheSameDecidingSession() {
+        val waiting = waiting()
+        val opened = CoordinatorQueue.decideMyself(waiting)!!
+        assertEquals(CardFamily.EVIDENCE, opened.family)
+        assertEquals(listOf(CardVerb.CONFIRM_EVIDENCE, CardVerb.SEND_BACK), opened.actions)
+        assertEquals(waiting.key, opened.key); assertEquals(waiting.binding, opened.binding)
+        assertTrue(CoordinatorQueue.isDecidingMyself(opened)); assertFalse(CoordinatorQueue.isDecidingMyself(waiting))
+        val confirm = CardRequests.build(opened, CardVerb.CONFIRM_EVIDENCE)
+        assertEquals(HttpMethod.POST, confirm.method)
+        assertEquals(listOf("tasks", waiting.objectId, "evidence", "decision"), confirm.path)
+        val body = Wire.json.parseToJsonElement(confirm.body!!.decodeToString()).jsonObject
+        assertEquals(buildJsonObject { put("decidingSessionId", queue.text("decidingSessionId")); put("evidenceRevision", "2"); put("decision", "CONFIRM") }, body)
+        val today = fixture().objects("requests").single { it.text("verb") == "CONFIRM_EVIDENCE" }.obj("body")!!
+        assertEquals("the request today's card posts, field for field", today.keys, body.keys)
+        assertEquals(today.text("decidingSessionId"), body.text("decidingSessionId"))
+        assertThrows(IllegalArgumentException::class.java) { CardRequests.build(opened, CardVerb.SEND_BACK) }
+        val back = Wire.json.parseToJsonElement(CardRequests.build(opened, CardVerb.SEND_BACK, CardInput(text = " Rerun the spec ")).body!!.decodeToString()).jsonObject
+        assertEquals(buildJsonObject { put("decidingSessionId", queue.text("decidingSessionId")); put("evidenceRevision", "2")
+            put("decision", "SEND_BACK"); put("note", "Rerun the spec") }, back)
+    }
+
     @Test fun exceptionDiscussionRetainsItemIdentityWithoutChangingItsActions() {
         val card = cardList().single { it.objectId == "x1" }
         val context = CardDiscussion.context(card)!!

@@ -352,6 +352,7 @@ import {
   DECISION_SENDING_BACK_PREFIX,
   EvidenceDecisionReceipt,
   SessionEvidenceDecisionCard,
+  coordinatorQueueRows,
   evidenceDecisionCardRows,
   evidenceDecisionRefusal,
   sendEvidenceDecision,
@@ -5610,14 +5611,17 @@ export function WorkspaceView({
     if (replyTo.target.kind === 'planChange' || replyTo.target.kind === 'coordinatorChat') return;
     // An evidence version: the row leaving the pending read is what says it was answered elsewhere
     // or displaced by a newer revision — the two refusals the door gives. Read off the same queue
-    // the card is drawn from, and only once that read has come back, for the reason below.
+    // the card is drawn from, and only once that read has come back, for the reason below. A
+    // version waiting for the coordinator is still the reader's to send back from the card they
+    // opened (`Decide it myself`), so its place in that queue counts as being there.
     if (replyTo.target.kind === 'evidenceDecision') {
       const read = pendingDecisions.data;
       if (!read) return;
       const address = decisionRowKey(replyTo.target);
-      const still = evidenceDecisionCardRows(
-        read, selectedSession?.projectId ?? null, selectedId,
-      ).some((row) => decisionRowKey(row) === address);
+      const still = [
+        ...evidenceDecisionCardRows(read, selectedSession?.projectId ?? null, selectedId),
+        ...coordinatorQueueRows(read, selectedSession?.projectId ?? null, selectedId),
+      ].some((row) => decisionRowKey(row) === address);
       if (!still) setReplyTo(null);
       return;
     }
@@ -10281,6 +10285,7 @@ export function WorkspaceView({
                   key={`evidence:${selectedId}`}
                   sessionId={selectedId}
                   projectId={selectedSession?.projectId ?? null}
+                  coordinator={selectedSession}
                   onSendBack={startEvidenceSendBack}
                 />
               )}

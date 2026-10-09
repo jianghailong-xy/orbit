@@ -9885,6 +9885,123 @@ button.chat-jump-start:hover {
 .evidence-decision-receipt-mark {
   color: var(--success-solid);
 }
+/* A version waiting for its paused coordinator (`QueuedEvidenceCard`): folded, in the neutral
+   frame the exception card wears while the coordinator is handling it, because nobody is being
+   asked anything yet. Two classes, for the reason the receipt's rule gives. */
+.approval-card.evidence-queued {
+  border-color: var(--border);
+  background: var(--bg-raised);
+}
+.evidence-queued .approval-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-subtle);
+  border-bottom-color: var(--border-subtle);
+}
+.evidence-queued-mark {
+  color: var(--text-3);
+}
+.evidence-queued-time {
+  flex: none;
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-3);
+}
+.evidence-queued-body {
+  padding-top: 8px;
+  padding-bottom: 10px;
+}
+.evidence-queued-title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  font-weight: 600;
+  line-height: 1.45;
+}
+/* Why it waits: amber while the coordinator is paused, the note's grey once it is back. The same
+   line heads the card a reader opens from here, in the warning box below. */
+.evidence-queued-pause {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+.evidence-queued-pause.is-paused {
+  color: var(--warning);
+}
+.evidence-queued-pause .anticon {
+  flex: none;
+}
+.evidence-queued-note {
+  margin-top: 2px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+/* The card's one way in, on a row of its own: text in the brand colour, as the open-item card's
+   own presses are, under a hairline. */
+.evidence-queued-decide {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  margin-top: 10px;
+  padding: 8px 0 0;
+  border: none;
+  border-top: 1px solid var(--border-subtle);
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--brand);
+  text-align: start;
+  cursor: pointer;
+}
+.evidence-queued-decide:hover {
+  text-decoration: underline;
+}
+.evidence-queued-decide:focus-visible {
+  outline: 2px solid var(--orbit-focus-color);
+  outline-offset: 2px;
+}
+.evidence-queued-caret {
+  font-size: 11px;
+}
+/* The card that version opens into says why it waits before anything else. */
+.evidence-queued-notice {
+  margin-top: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--warning-border);
+  border-radius: 8px;
+  background: var(--warning-bg);
+}
+.evidence-queued-notice .evidence-queued-pause {
+  margin-top: 0;
+}
+/* Handed to the coordinator: the conversation's one-line pill, as a merge's line is drawn. */
+.evidence-sent {
+  display: flex;
+  justify-content: center;
+}
+.evidence-sent-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  margin: 6px auto;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: var(--bg-hover);
+  color: var(--text-2);
+  font-size: 13px;
+}
 /* ── The owner-confirmation card ──────────────────────────────────────────────────────────
    `OwnerConfirmationCard.tsx`: an OWNER_CONFIRMED task's run has ended its turn, and its owner is
    asked to confirm it done or send it back. The evidence card's frame, with the two facts a person
