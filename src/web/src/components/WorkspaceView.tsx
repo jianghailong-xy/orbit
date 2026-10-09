@@ -959,6 +959,22 @@ const fmtTime = (d?: string): string => {
 // plain tool names (Bash, Read, Edit) pass through unchanged.
 const fmtTool = (name: string): string => name.replace(/^mcp__[^_]+__/, '');
 
+// "5:38 PM" today, "Wed, Aug 6, 5:38 PM" beyond it — a bare clock time on another day misleads
+// (the same call the transcript's turn foot makes).
+const fmtClock = (at: Date): string => {
+  const time = at.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  return at.toDateString() === new Date().toDateString()
+    ? time
+    : `${at.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}, ${time}`;
+};
+
+// The recap's prefix: what the line is, and when the server wrote it (Session.recapAt). A recap
+// that arrived with no time on it — an older control plane — keeps the word without one.
+const recapLabel = (recapAt?: string | null): string => {
+  const at = recapAt ? new Date(recapAt) : null;
+  return at && !Number.isNaN(at.getTime()) ? `Recap · ${fmtClock(at)}` : 'Recap';
+};
+
 // The runner's own sentence about a finished commit — which background jobs were live in the
 // checkout while it committed, and what it did about them (commitResultMessage). Trimmed because a
 // whitespace-only value would otherwise draw an empty detail row; null and blank both mean "the
@@ -1020,6 +1036,8 @@ const parkedWorkLabel = (s: any): ParkedWork | null => {
 type SessionLine = {
   text: string;
   tone: 'preview' | 'running' | 'approval' | 'queued' | 'background' | 'watching' | 'review';
+  /** A muted prefix naming what the line is, before `text` — the recap's "Recap · 5:38 PM". */
+  label?: string;
 };
 // The line for a message of YOURS the workspace hasn't answered yet. Prefixed, because the preview
 // line is otherwise the workspace's voice: unmarked, a message you sent and a reply to it read
@@ -1140,6 +1158,11 @@ export const sessionLine = (s: any, live: boolean, watching?: SessionWatching | 
   // landed — outranks the previous turn's reply: it's the newer of the two, and it's what the
   // session is left waiting on. The server only keeps lastUserText while it stands unanswered.
   if (s.lastUserText) return sentLine(s.lastUserText);
+  // The rolling recap (0418) takes the place of the reply preview it used to show: the sentence
+  // the server wrote about the session, not the raw last reply flattened down to one line. Only
+  // here — below every live line above — so a working session still says what it is doing.
+  if (typeof s.recapText === 'string' && s.recapText.trim())
+    return { label: recapLabel(s.recapAt), text: s.recapText.trim(), tone: 'preview' };
   if (s.lastAssistantText) return { text: plainPreview(s.lastAssistantText), tone: 'preview' };
   // Nothing to preview at all (a run that died before even its user turn was recorded, or an older
   // row from before the server kept the pending message): say what happened rather than nothing.
@@ -9568,6 +9591,13 @@ export function WorkspaceView({
                               <div
                                 className={`session-preview${line.tone === 'preview' ? '' : ` tone-${line.tone}`}`}
                               >
+                                {/* The label and the space after it are drawn together, so a line
+                                    with no label carries no separator of its own. */}
+                                {line.label && (
+                                  <>
+                                    <span className="session-preview-label">{line.label}</span>{' '}
+                                  </>
+                                )}
                                 {line.text}
                               </div>
                             </div>

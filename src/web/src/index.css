@@ -5234,6 +5234,11 @@ html[data-theme='dark'] .session-tag-chip {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* What kind of line this is, before its text — the recap's "Recap · 5:38 PM". Muted like the
+   row's time so it reads as the line's header and not as part of the sentence it introduces. */
+.session-preview-label {
+  color: var(--text-3);
+}
 /* Live status line (in place of a reply, while the agent works). Colour matches the
    status glyph: blue = running, amber = waiting on you, grey = queued, a background
    process the agent left up (which outlives the turn but isn't the agent working), or a

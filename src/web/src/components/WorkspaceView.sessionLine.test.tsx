@@ -372,3 +372,98 @@ describe('sessionLine over a session parked on a watch', () => {
     expect(sessionLine(parked, false, watching)).toEqual({ text: 'Nothing for you to do until it lands.', tone: 'preview' });
   });
 });
+
+/**
+ * The rolling recap (Session.recapText, 0418): the sentence the server wrote about the session
+ * takes the place of the raw last reply the row used to flatten — and only that place. A session
+ * still working, still waiting on you, or holding a message you just sent keeps its own line.
+ */
+describe('sessionLine over a session with a recap', () => {
+  const clock = (at: Date) => at.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  // Written now, so the label is a bare clock time: the date only joins it on another day.
+  const written = new Date();
+  const recapText = 'Moved the recap onto the list row; the three states are covered by tests.';
+  const parked = {
+    status: 'AWAITING_INPUT',
+    engineTurnActive: false,
+    pendingApprovals: 0,
+    recapText,
+    recapAt: written.toISOString(),
+    lastAssistantText: 'Committed the row change.',
+  };
+
+  it('shows the recap and when it was written, in place of the last reply', () => {
+    expect(sessionLine(parked, true)).toEqual({
+      label: `Recap · ${clock(written)}`,
+      text: recapText,
+      tone: 'preview',
+    });
+  });
+
+  it('dates the label once the recap is from another day', () => {
+    const old = new Date(2026, 7, 6, 17, 38); // Aug 6, local: a bare clock time would mislead
+    const day = old.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+    expect(sessionLine({ ...parked, recapAt: old.toISOString() }, true)).toEqual({
+      label: `Recap · ${day}, ${clock(old)}`,
+      text: recapText,
+      tone: 'preview',
+    });
+  });
+
+  it('keeps the label and drops only the time when the payload carries no recapAt', () => {
+    expect(sessionLine({ ...parked, recapAt: null }, true)).toEqual({
+      label: 'Recap',
+      text: recapText,
+      tone: 'preview',
+    });
+  });
+
+  it('falls back to the reply when there is no recap', () => {
+    expect(sessionLine({ ...parked, recapText: null }, true)).toEqual({
+      text: 'Committed the row change.',
+      tone: 'preview',
+    });
+    // Blank is not a line: the server never stores one, and drawing it would leave an empty
+    // label over nothing.
+    expect(sessionLine({ ...parked, recapText: '   ' }, true)).toEqual({
+      text: 'Committed the row change.',
+      tone: 'preview',
+    });
+  });
+
+  it('keeps its line in Trash, where no live state is left to outrank it', () => {
+    expect(sessionLine(parked, false)).toEqual({
+      label: `Recap · ${clock(written)}`,
+      text: recapText,
+      tone: 'preview',
+    });
+  });
+
+  it('never hides work that is still happening behind it', () => {
+    // Working: the tool in flight is what the row is about.
+    expect(
+      sessionLine(
+        { ...parked, status: 'RUNNING', engineStartedAt: '2026-10-02T05:00:00Z', lastToolUse: 'Bash' },
+        true,
+      ),
+    ).toEqual({ text: 'Running Bash…', tone: 'running' });
+
+    // Waiting on you, a background process the session left up, a watch that will resume it, and
+    // the message you sent that has no answer yet — each is newer than the recap.
+    expect(sessionLine({ ...parked, pendingApprovals: 1 }, true)).toEqual({
+      text: 'Waiting for approval',
+      tone: 'approval',
+    });
+    expect(sessionLine({ ...parked, runningBgCount: 1 }, true)).toEqual({
+      text: 'Background process running…',
+      tone: 'background',
+    });
+    expect(
+      sessionLine(parked, true, { word: 'Watching 1 target', line: 'Watching Fix the login redirect' }),
+    ).toEqual({ text: 'Watching Fix the login redirect', tone: 'watching' });
+    expect(sessionLine({ ...parked, lastUserText: 'and now the footer?' }, true)).toEqual({
+      text: 'You: and now the footer?',
+      tone: 'preview',
+    });
+  });
+});
