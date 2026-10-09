@@ -42,6 +42,16 @@ package main
 //     ORBIT_RECORD_CODEX_CHATGPT_FIXTURE=$PWD/../apiserver/src/providers/fixtures/codex-chatgpt-backend-recording.json \
 //     go test -run TestRealCodexOnAChatGPTLogin -count=1 .
 //
+// With ORBIT_RECORD_CODEX_CHATGPT_STARTUP_FIXTURE=<file> it writes, separately, the ChatGPT-backend
+// calls codex makes for itself around the turn — workspace routing, the plugin and settings reads, the
+// model list, the analytics — which the login gateway's own allowed paths (codex-login-gateway.ts
+// loginGatewayAllows) are held to. That fixture is codex-version-independent of the turn's and can be
+// re-recorded on its own (the checked-in turn fixture is pinned to 0.158 and must not be disturbed):
+//
+//   env -u ORBIT_SESSION_ID -u ORBIT_TASK_ID -u ORBIT_AGENT_ID \
+//     ORBIT_RECORD_CODEX_CHATGPT_STARTUP_FIXTURE=$PWD/../apiserver/src/providers/fixtures/codex-chatgpt-startup-recording.json \
+//     go test -run TestRealCodexOnAChatGPTLogin -count=1 .
+//
 // It skips without a `codex` on PATH.
 
 import (
@@ -64,6 +74,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -173,6 +184,17 @@ type chatgptRecording struct {
 		chatgptRecordedExchange
 		Codex recordedCodexVerdict `json:"codex"`
 	} `json:"rateLimit"`
+}
+
+// The ChatGPT backend calls a codex signed in with a ChatGPT login makes for itself around a turn —
+// workspace routing, the plugin and settings reads, the model list, the turn's analytics — recorded
+// apart from the turn so the gateway's own path list (codex-login-gateway.ts loginGatewayAllows) can be
+// held to what the CLI actually asks for.
+type chatgptStartupRecording struct {
+	Note    string                    `json:"note"`
+	Codex   string                    `json:"codex"`
+	Account string                    `json:"account"`
+	Startup []chatgptRecordedExchange `json:"startup"`
 }
 
 // chatgptRecorder stands where https://chatgpt.com/backend-api and the token endpoint stand, keeping
@@ -503,6 +525,22 @@ func (rec *chatgptRecorder) exchanges(method, path string) []chatgptRecordedExch
 	return found
 }
 
+// The ChatGPT-backend calls codex made for itself: everything but the token endpoint and the turn's own
+// requests (the websocket probe included), in the order they arrived.
+func (rec *chatgptRecorder) startup() []chatgptRecordedExchange {
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	var found []chatgptRecordedExchange
+	for _, exchange := range rec.seen {
+		path := strings.SplitN(exchange.Request.Path, "?", 2)[0]
+		if path == "/oauth/token" || strings.HasPrefix(path, "/backend-api/codex/responses") {
+			continue
+		}
+		found = append(found, exchange)
+	}
+	return found
+}
+
 func TestRealCodexOnAChatGPTLogin(t *testing.T) {
 	t.Parallel()
 	exe, err := exec.LookPath("codex")
@@ -586,6 +624,40 @@ func TestRealCodexOnAChatGPTLogin(t *testing.T) {
 		if waited := limited[i].at.Sub(limited[i-1].at); waited < 2*time.Second {
 			t.Fatalf("codex asked again %v after a 429 whose retry-after named 2s", waited)
 		}
+	}
+
+	// What codex asks the ChatGPT backend for itself, around the turn — the paths the login gateway's own
+	// list (codex-login-gateway.ts loginGatewayAllows) exists to forward. Asserted here so a codex that
+	// stopped asking for them is noticed rather than leaving that list unmeasured.
+	startup := turnRec.startup()
+	if !slices.ContainsFunc(startup, func(exchange chatgptRecordedExchange) bool {
+		return strings.SplitN(exchange.Request.Path, "?", 2)[0] == "/backend-api/wham/accounts/check"
+	}) {
+		var paths []string
+		for _, exchange := range startup {
+			paths = append(paths, exchange.Request.Path)
+		}
+		t.Fatalf("codex never asked for the workspace routing among %v", paths)
+	}
+	if startupTarget := os.Getenv("ORBIT_RECORD_CODEX_CHATGPT_STARTUP_FIXTURE"); startupTarget != "" {
+		version, _ := exec.Command(exe, "--version").Output()
+		recording := chatgptStartupRecording{
+			Note: "Written by src/runner-go/codex_chatgpt_backend_recording_test.go from a real codex app-server " +
+				"signed in with a fake ChatGPT login against a recorder: the calls it makes for itself around a " +
+				"turn. Read by src/apiserver/src/providers/codex-login-gateway.spec.ts, which holds the gateway's " +
+				"own allowed paths (loginGatewayAllows) to it. Re-record on a codex upgrade.",
+			Codex:   strings.TrimSpace(string(version)),
+			Account: recordedChatGPTAccount,
+			Startup: startup,
+		}
+		data, err := json.MarshalIndent(recording, "", "  ")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(startupTarget, append(data, '\n'), 0o644); err != nil {
+			t.Fatalf("writing the startup fixture: %v", err)
+		}
+		t.Logf("recorded %s's startup to %s", recording.Codex, startupTarget)
 	}
 
 	target := os.Getenv("ORBIT_RECORD_CODEX_CHATGPT_FIXTURE")
