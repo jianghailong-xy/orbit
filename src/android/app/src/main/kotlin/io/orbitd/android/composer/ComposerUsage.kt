@@ -13,6 +13,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.core.realtime.SessionState
+import io.orbitd.android.management.ManagementApi
 import io.orbitd.android.management.usageRows
 import kotlinx.serialization.json.*
 
@@ -82,6 +83,16 @@ fun ComposerUsage(model: ComposerModel, state: ComposerState, detail: JsonObject
                         Text(if (credit.flag("unlimited") == true) "Credits: unlimited" else "Credits: ${credit.text("balance") ?: "unreported"}")
                     }
                 }
+            }
+            // The runner's own Codex sign-in carries earned reset credits: the card under its windows (iOS CodexResetCreditCard), read
+            // off the runner as the card last re-read it — and not drawn for an account with none (A07-9).
+            val runner = state.catalog?.runner
+            val reset = runner?.text("id")?.let { id -> remember(id) { CodexResetModel(ManagementApi(model.auth, model.handle), id).also { it.runner = runner } } }
+            val resetBlock = CodexReset.block(detail, state.catalog?.copy(runner = reset?.runner ?: runner ?: JsonObject(emptyMap()))?.usage(detail))
+            if (reset != null && resetBlock != null && CodexReset.visible(resetBlock)) {
+                HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                CodexResetCreditCard(reset, resetBlock, CodexReset.accountOverride(detail, model.target != null, state.draft.resumeConfig.text("account")),
+                    model.target?.workspaceId ?: detail.text("agentId") ?: (detail["workspace"] as? JsonObject)?.text("id"))
             }
         }
     }, confirmButton = { TextButton(onClick = { expanded = false }) { Text("Close") } })
