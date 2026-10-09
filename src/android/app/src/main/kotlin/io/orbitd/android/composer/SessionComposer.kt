@@ -48,6 +48,7 @@ import io.orbitd.android.attachments.*
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.net.HttpMethod
 import io.orbitd.android.core.realtime.SessionState
+import io.orbitd.android.management.EngineAccounts
 import io.orbitd.android.management.LocalSmartSelection
 import io.orbitd.android.management.RunnerPage
 import io.orbitd.android.management.personalPermissions
@@ -57,7 +58,7 @@ import kotlinx.serialization.json.*
 
 @Composable
 fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: String, session: SessionState?, target: DraftTarget? = null, focusRequest: Int = 0,
-    inputFocusChanged: (Boolean) -> Unit = {}, openTask: ((String) -> Unit)? = null) {
+    inputFocusChanged: (Boolean) -> Unit = {}, openTask: ((String) -> Unit)? = null, openRunner: ((runner: String, engine: String) -> Unit)? = null) {
     val model = remember(app, handle, sessionId) { app.composer(handle, sessionId, target) }
     val state by model.state.collectAsState()
     val context = LocalContext.current
@@ -201,7 +202,7 @@ fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: Str
                         if (target == null) DropdownMenuItem(text = { Text("Queued messages (${session?.snapshot?.queuedTurns?.size ?: 0})") }, onClick = { menu = false; queued = true })
                         // A pick held for this session travels with the re-send, which would otherwise run on what it already has.
                         if (target == null) DropdownMenuItem(text = { Text("Retry last failed message") }, enabled = usable && !state.busy,
-                            onClick = { menu = false; model.control("retry-message", body = retryIdentity(draft.resumeConfig)) })
+                            onClick = { menu = false; model.retryFailed() })
                         if (detail.text("retryAt") != null) DropdownMenuItem(text = { Text("Cancel automatic retry") }, enabled = usable && !state.busy,
                             onClick = { menu = false; model.control("auto-retry", HttpMethod.DELETE) })
                     }
@@ -242,7 +243,8 @@ fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: Str
             }
         }, confirmButton = { TextButton(onClick = { slashScope = null }) { Text("Close") } })
     }
-    if (models && session?.accessDenied != true) ModelChoices(model, state, effective, usable, smart, detail.text("taskId"), openTask) { models = false }
+    if (models && session?.accessDenied != true) ModelChoices(model, state, effective, usable, smart, detail.text("taskId"), openTask,
+        openRunner) { models = false }
     if (queued) AlertDialog(onDismissRequest = { queued = false }, title = { Text("Queued messages") }, text = {
         Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
             if (session?.fresh != true) Text("Reconnect to check the queue.")
@@ -323,6 +325,19 @@ internal fun ModelChip(name: String, effort: String, smart: Boolean, enabled: Bo
     }
 }
 
+/** One account in its engine's section of the Provider list (iOS `accountRowLabel`): its name, and under it its own quota — "5h 12%",
+ * what an Antigravity bucket has left, "gemini-5h 4% left" — or what Automatic does, or why it can't take the session. */
+@Composable
+private fun AccountRow(name: String, detail: String?, enabled: Boolean, nearLimit: Boolean = false, spoken: String? = null, press: () -> Unit) {
+    TextButton(enabled = enabled, onClick = press, modifier = if (spoken == null) Modifier else Modifier.semantics { contentDescription = spoken }) {
+        Column(Modifier.fillMaxWidth()) {
+            Text(name)
+            detail?.let { Text(it, style = MaterialTheme.typography.bodySmall,
+                color = if (nearLimit) LocalOrbitColors.current.needsYou else MaterialTheme.colorScheme.onSurfaceVariant) }
+        }
+    }
+}
+
 /** What the chip's menu opens on for a task run on smart selection's pick (iOS 6826eed7e, 7c49be60a): the tier it picked, its first
  * reason, and the note — a sentence an item, as a phone's menu cuts an item at its third line. */
 @Composable
@@ -335,22 +350,25 @@ internal fun SmartRouteNote(route: JsonObject) = Column(Modifier.testTag("compos
 }
 
 @Composable
-private fun ModelChoices(model: ComposerModel, state: ComposerState, detail: JsonObject, usable: Boolean, smart: JsonObject?, taskId: String?,
-    openTask: ((String) -> Unit)?, close: () -> Unit) {
+private fun ModelChoices(model: ComposerModel, state: ComposerState, detail: JsonObject, usable: Boolean, smart: JsonObject?,
+    taskId: String?, openTask: ((String) -> Unit)?, openRunner: ((String, String) -> Unit)?, close: () -> Unit) {
     val catalog = state.catalog
     val provider = detail.text("provider") ?: ""
-    // The session's engine, which nothing here changes (contract §3.5): the menu is titled by it, and every row below is its.
+    // The session's engine, which nothing here changes (contract §3.5): the menu opens on it, and every row below is its.
     val engine = catalog?.engineOf(detail) ?: ProviderEngines.sessionEngine(detail.text("engine") ?: detail.text("lastEngine"), provider, emptyList())
     val chosen = detail.text("model") ?: ""
     val enabled = usable && !state.busy && catalog != null && state.draft.pending == null
     fun change(key: String, value: String) { model.config(buildJsonObject { put(key, value) }) }
-    AlertDialog(onDismissRequest = close, title = { Text(ProviderEngines.cliName(engine), Modifier.testTag("composer-engine-title")) }, text = {
+    AlertDialog(onDismissRequest = close, title = { Text("Model and account") }, text = {
         Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+            // The engine this session runs on for good (iOS 0557592f8), over everything below that picks for the next turn.
+            Text(ProviderEngines.cliName(engine), Modifier.testTag("composer-engine-title"), fontWeight = FontWeight.SemiBold, maxLines = 1,
+                overflow = TextOverflow.Ellipsis)
+            HorizontalDivider(Modifier.padding(vertical = 8.dp))
             // A task run on smart selection's pick opens on why it is this model, and on where to fix the model for every run.
             smart?.let { SmartRouteNote(it); HorizontalDivider(Modifier.padding(vertical = 8.dp)) }
             if (state.catalogLoading) CircularProgressIndicator()
             state.catalogError?.let { Text(it); TextButton(onClick = model::loadCatalog) { Text("Retry model catalog") } }
-            Text("Current: ${catalog?.current(engine, provider)?.label ?: provider} · $chosen")
             val rows = catalog?.models(engine, provider).orEmpty()
             rows.forEach { row ->
                 TextButton(enabled = enabled, onClick = {
@@ -377,7 +395,8 @@ private fun ModelChoices(model: ComposerModel, state: ComposerState, detail: Jso
             if (catalog?.fast(engine, provider, chosen) == true) TextButton(enabled = enabled, onClick = { model.config(buildJsonObject { put("fastMode", detail.flag("fastMode") != true) }) }) {
                 Text(if (detail.flag("fastMode") == true) "Speed: Fast" else "Speed: Standard")
             }
-            if (catalog != null) ProviderChoices(model, catalog, engine, provider, detail, enabled)
+            if (catalog != null) ProviderChoices(model, catalog, engine, provider, detail, enabled,
+                fix = openRunner?.let { open -> { engine: String -> catalog.runner.text("id")?.let { runner -> close(); open(runner, engine) } } })
             // …and ends on the task, pushed over this run, so Back returns to it.
             if (smart != null && taskId != null && openTask != null) {
                 HorizontalDivider(Modifier.padding(vertical = 8.dp))
@@ -389,14 +408,18 @@ private fun ModelChoices(model: ComposerModel, state: ComposerState, detail: Jso
 
 /**
  * The Provider part of the menu (boards 4 ④⑤ and 5): only the credentials the session's [engine] runs, grouped by where they come
- * from — the runner's own sign-in (its accounts, where it keeps several), or OpenCode's own configuration there; the account pools;
- * the keys. Picking one moves the session's credential and never its engine. A session whose key the menu no longer lists — turned
- * off, deleted — shows it first, under its own heading, saying what became of it; a credential below fixes the session.
+ * from — the runner's own sign-in (its accounts, where it keeps several: Automatic first with what it does, then each with its own
+ * quota, iOS 9ee358083), or OpenCode's own configuration there; the account pools; the keys. Picking one moves the session's
+ * credential and never its engine. A row this runner can't run says why and, where the engine's page on the runner fixes that,
+ * goes there ([fix], iOS d2737d665). A session whose key the menu no longer lists — turned off, deleted — shows it first, under
+ * its own heading, saying what became of it; a credential below fixes the session.
  */
 @Composable
-private fun ProviderChoices(model: ComposerModel, catalog: ComposerCatalog, engine: String, provider: String, detail: JsonObject, enabled: Boolean) {
-    val options = catalog.credentials(engine)
-    val current = catalog.current(engine, provider)
+private fun ProviderChoices(model: ComposerModel, catalog: ComposerCatalog, engine: String, provider: String, detail: JsonObject, enabled: Boolean,
+    fix: ((engine: String) -> Unit)?) {
+    val antigravityKey = catalog.antigravityKeyAvailable(detail)
+    val options = catalog.credentials(engine, antigravityKey)
+    val current = catalog.current(engine, provider, antigravityKey)
     val gone = catalog.gone(engine, provider)
     val runnerName = RunnerPage.displayName(catalog.runner)
     val amber = LocalOrbitColors.current.needsYou
@@ -407,12 +430,19 @@ private fun ProviderChoices(model: ComposerModel, catalog: ComposerCatalog, engi
     })
     @Composable fun header(text: String) = Text(text, Modifier.padding(top = 8.dp), style = MaterialTheme.typography.labelMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant)
-    @Composable fun row(option: ProviderOption) = TextButton(enabled = enabled && option.unavailable == null,
-        onClick = { if (option.id != provider) pick(option) }, modifier = Modifier.testTag("composer-provider:${option.id}")) {
-        // What a sign-in is (`opencode auth`) goes under its name, as the boards' menus put it.
-        Column {
-            Text((if (option.id == provider) "✓ " else "") + option.label + (option.unavailable?.let { " · $it" } ?: ""))
-            option.detail?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+    @Composable fun row(option: ProviderOption) {
+        // The one the session is on is the list's own caption, whatever stops it; any other this runner can't run says why.
+        val here = option.id == provider
+        val blocked = option.unavailable != null && !here
+        val repair = option.fixEngine?.takeIf { blocked && fix != null }
+        TextButton(enabled = enabled && (!blocked || repair != null), onClick = { if (repair != null) fix?.invoke(repair) else if (!here) pick(option) },
+            modifier = Modifier.testTag("composer-provider:${option.id}")) {
+            // What a sign-in is (`opencode auth`, a Google account) goes under its name, as the boards' menus put it.
+            Column {
+                Text(if (blocked) "${option.label} — ${option.unavailable}" + (option.fixEngine?.let { ProviderChoices.fixSuffix(it, option.unavailable) } ?: "")
+                    else (if (here) "✓ " else "") + option.label)
+                option.detail?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            }
         }
     }
     Row(Modifier.padding(top = 8.dp).testTag("composer-provider"), verticalAlignment = Alignment.CenterVertically) {
@@ -437,27 +467,26 @@ private fun ProviderChoices(model: ComposerModel, catalog: ComposerCatalog, engi
             // moves between — a draft starts on any of them, a session moves only where the runner carries it across; a draft on
             // another credential of this engine lands on the one picked.
             val here = option.id == provider
-            val accounts = if (option.kind != CredentialKind.LOGIN || option.unavailable != null) emptyList()
+            val accounts = if (option.kind != CredentialKind.LOGIN || option.unavailable != null && !here) emptyList()
                 else catalog.accountChoices(engine).takeIf { it.size >= 2 && (model.target != null || here && catalog.movesAccounts(engine)) }.orEmpty()
             if (accounts.isEmpty()) { row(option); return@forEach }
-            // The account this session (or draft) says it is on: a pick held here, else the session's own.
-            val shown = if (here) detail.text("account") ?: detail.text("${engine}Account") else null
+            // The account this session (or draft) is on: a pick held here, else its own (a draft's: its workspace's), else Default,
+            // which dispatch resolves a sign-in with no account named to.
+            val shown = if (here) detail.text("account") ?: detail.text("${engine}Account") ?: EngineAccounts.DEFAULT else null
             fun mark(account: String) = if (shown == account) "✓ " else ""
-            TextButton(enabled = enabled, onClick = {
-                if (here) model.config(buildJsonObject { put("account", "automatic") }, true) else pick(option, "automatic")
-            }) {
-                Column {
-                    Text(mark("automatic") + EngineCopy.AUTOMATIC)
-                    Text(EngineCopy.AUTOMATIC_DETAIL, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            fun take(account: String) = if (here) model.config(buildJsonObject { put("account", account) }, true) else pick(option, account)
+            AccountRow(mark(EngineAccounts.AUTOMATIC) + EngineCopy.AUTOMATIC, EngineCopy.AUTOMATIC_DETAIL, enabled,
+                spoken = "Automatic: starts on the ${ProviderEngines.cliName(engine)} account whose quota resets soonest, and switches when it hits its limit") {
+                take(EngineAccounts.AUTOMATIC)
+            }
+            accounts.forEach { account ->
+                // Its own quota under it: "5h 12%", or what an Antigravity bucket has left, "gemini-5h 4% left". A signed-out account is a
+                // request for its sign-in, on the runner's page for the engine.
+                AccountRow(mark(account.id) + account.label, account.unavailable?.let { "$it, sign in →" } ?: account.quota,
+                    enabled && (account.unavailable == null || fix != null), nearLimit = account.nearLimit && account.unavailable == null) {
+                    if (account.unavailable == null) take(account.id) else fix?.invoke(engine)
                 }
             }
-            accounts.forEach { account -> TextButton(enabled = enabled && account.unavailable == null, onClick = {
-                if (here) model.config(buildJsonObject { put("account", account.id) }, true) else pick(option, account.id)
-            }) {
-                Text(mark(account.id) + account.label + (account.unavailable?.let { " · $it" } ?: ""))
-                // Its own quota beside it: "5h 12%", or what an Antigravity bucket has left, "gemini-5h 4% left".
-                account.quota?.let { Text(" · $it", color = if (account.nearLimit) amber else Color.Unspecified) }
-            } }
         }
     }
     options.filter { it.kind == CredentialKind.POOL }.takeIf { it.isNotEmpty() }?.let { pools -> header(EngineCopy.ACCOUNT_POOLS); pools.forEach { row(it) } }
@@ -477,7 +506,8 @@ private fun ProviderChoices(model: ComposerModel, catalog: ComposerCatalog, engi
  * the web, instead.
  */
 @Composable
-internal fun EngineChoices(model: ComposerModel, state: ComposerState, detail: JsonObject, server: String, close: () -> Unit) {
+internal fun EngineChoices(model: ComposerModel, state: ComposerState, detail: JsonObject, server: String,
+    openRunner: ((runner: String, engine: String) -> Unit)? = null, close: () -> Unit) {
     val catalog = state.catalog
     val uri = LocalUriHandler.current
     val current = catalog?.engineOf(detail)
@@ -487,17 +517,20 @@ internal fun EngineChoices(model: ComposerModel, state: ComposerState, detail: J
         Column(Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState()).testTag("engine-choices")) {
             if (state.catalogLoading) CircularProgressIndicator()
             state.catalogError?.let { Text(it); TextButton(onClick = model::loadCatalog) { Text("Retry model catalog") } }
-            if (catalog != null) catalog.engines(preferred).forEach { option ->
+            if (catalog != null) catalog.engines(preferred, catalog.antigravityKeyAvailable(detail)).forEach { option ->
                 val connect = option.unavailable == EngineCopy.CONNECT_DEEPSEEK_KEY
                 val landing = option.landing
+                // An engine this runner can't run goes to the runner's page for it, where that fixes it (iOS d2737d665).
+                val repair = option.fixEngine?.takeIf { openRunner != null }
                 val secondary = when {
                     connect -> "${EngineCopy.CONNECT_DEEPSEEK_KEY} →"
-                    option.unavailable != null -> option.unavailable
+                    option.unavailable != null -> option.unavailable + (option.fixEngine?.let { ProviderChoices.fixSuffix(it, option.unavailable) } ?: "")
                     landing != null -> catalog.modelLabel(option.engine, landing.id, catalog.defaultModel(option.engine, landing.id))
                     else -> ""
                 }
-                Row(Modifier.fillMaxWidth().clickable(enabled = connect || option.unavailable == null && !state.busy, role = Role.Button) {
+                Row(Modifier.fillMaxWidth().clickable(enabled = connect || repair != null || option.unavailable == null && !state.busy, role = Role.Button) {
                     if (connect) runCatching { uri.openUri(server.trimEnd('/') + EngineCopy.DEEPSEEK_CONNECT_PATH) }
+                    else if (repair != null) catalog.runner.text("id")?.let { runner -> openRunner?.invoke(runner, repair) }
                     else if (landing != null && option.engine != current) model.config(buildJsonObject {
                         put("engine", option.engine); put("provider", landing.id)
                         val next = catalog.defaultModel(option.engine, landing.id)

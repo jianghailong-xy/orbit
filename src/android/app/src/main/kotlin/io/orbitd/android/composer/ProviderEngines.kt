@@ -128,10 +128,11 @@ object ProviderEngines {
     fun defaultEngineOf(provider: String?, rows: List<JsonObject>): String? = providerEngines(provider, rows).firstOrNull()
 
     /** An account pool read as a provider row: it runs on the engine it was made on and nowhere else — Claude Code for one's own
-     * unless it says otherwise, Codex for a shared one ([fallback]) — with that engine's catalogue as its model space. */
-    fun poolRow(row: JsonObject, fallback: String): JsonObject = (row.text("engine") ?: fallback).let { engine ->
+     * unless it says otherwise, Codex for a shared one ([fallback]) — with that engine's catalogue as its model space. [shared]
+     * marks one shared with the account, whose members are keys picked for it rather than its own accounts. */
+    fun poolRow(row: JsonObject, fallback: String, shared: Boolean = false): JsonObject = (row.text("engine") ?: fallback).let { engine ->
         JsonObject(row + mapOf("runtime" to JsonPrimitive(engine), "engines" to JsonArray(listOf(JsonPrimitive(engine))),
-            "pool" to JsonPrimitive(true), "modelsFromRuntime" to JsonPrimitive(true)))
+            "pool" to JsonPrimitive(true), "modelsFromRuntime" to JsonPrimitive(true), "sharedPool" to JsonPrimitive(shared)))
     }
 
     /** The engine a session (or a draft, or a workspace's next session) runs on: the one recorded, which never changes — else the

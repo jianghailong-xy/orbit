@@ -146,11 +146,7 @@ object SessionRunStart {
     }
 
     /** OrbitKit `EngineAuth.antigravityRepair`: the failures the Antigravity repair card answers. */
-    fun antigravityRepair(message: String) =
-        message.startsWith("Failed to authenticate: Antigravity runs on an API key (GEMINI_API_KEY), and neither this session nor the runner has one") ||
-            message == "Antigravity requires a newer Orbit runner; update this runner first" ||
-            message.contains("Antigravity isn't installed") || message.contains("Antigravity CLI isn't installed") ||
-            message.contains("Antigravity CLI (\"agy\") not found")
+    fun antigravityRepair(message: String) = AntigravityRepair.of(message) != null
 
     private val dshKeyRejected = listOf("invalid api key", "api key is invalid", "authentication_error", "authentication fails", "unauthorized",
         "status 401", "status code 401", "http 401", "revoked api key", "api key has been revoked", "invalid credentials")

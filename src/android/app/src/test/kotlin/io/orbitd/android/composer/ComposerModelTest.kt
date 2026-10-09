@@ -544,11 +544,11 @@ class ComposerModelTest {
         ended.detail = """{"id":"s","status":"FAILED","engine":"dsh","provider":"deepseek","capabilities":{"canSend":false,"canResume":true}}"""
         revived.config(pick("deepseek-2")); runCurrent()
         assertEquals("deepseek-2", revived.state.value.draft.resumeConfig.text("provider"))
-        assertEquals(buildJsonObject { put("provider", "deepseek-2"); put("engine", "dsh") }, retryIdentity(revived.state.value.draft.resumeConfig))
+        assertEquals(buildJsonObject { put("provider", "deepseek-2"); put("engine", "dsh") }, revived.retryIdentity())
         revived.edit("again", 0, 0); revived.send(); runCurrent()
         val resumed = Wire.json.parseToJsonElement(ended.sends.values.single()).jsonObject
         assertEquals("dsh", resumed.text("engine")); assertEquals("deepseek-2", resumed.text("provider"))
         assertEquals(1, ended.calls.count { it.path.last() == "resume" && it.method == HttpMethod.POST })
-        assertEquals(JsonObject(emptyMap()), retryIdentity(buildJsonObject { put("model", "x") }))
+        assertEquals(JsonObject(emptyMap()), retryIdentityOf(buildJsonObject { put("model", "x") }))
     }
 }

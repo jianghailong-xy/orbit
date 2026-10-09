@@ -63,7 +63,7 @@ def runner():
             {'engine': 'opencode', 'installed': True, 'version': '1.18.35'},
             {'engine': 'antigravity', 'installed': True, 'version': '1.3.2', 'auth': 'yes', 'authSource': 'google'},
             {'engine': 'dsh', 'installed': True, 'version': '0.2.0-rc.2', 'dsh': {'versionCompatible': True}}],
-        'antigravity': {'supported': True, 'installed': True, 'envKeyAvailable': False, 'authSource': 'google', 'googleLogin': 'available'},
+        'antigravity': {'supported': True, 'installed': True, 'envKeyAvailable': True, 'authSource': 'google', 'googleLogin': 'available'},
         'runtimeDefaultModels': {'claude': 'claude-opus-5-5', 'codex': 'gpt-5.6-sol', 'dsh': 'deepseek-v4-pro',
                                  'antigravity': 'gemini-3.8-flash'},
         'modelCatalog': {

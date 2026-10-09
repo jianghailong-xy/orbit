@@ -408,16 +408,16 @@ class RealStackDeviceTest {
         val before = get("/projects/$id/promotions/current").jsonObject
         record("promotion before", "${before.text("promotionId")} ${before.text("state")} ${before.text("sourceSha")}")
         signIn(); open("orbit-project:$id"); awaitTag("project-detail"); awaitIn("project-detail", main.text("title")!!)
-        awaitScrollTo("project-detail", hasTestTag("open-item:${item.text("id")}")); compose.onNodeWithTag("open-item:${item.text("id")}").performClick()
+        // A11-4: the project's open items are in the toolbar's sheet; the merge's item opens its line in the coordinator conversation.
+        tap("project-open-items"); awaitTag("open-item:${item.text("id")}"); compose.onNodeWithTag("open-item:${item.text("id")}").performClick()
         awaitTag("interaction-cards")
         compose.waitUntil(30_000) { runCatching { compose.onNodeWithTag("promotion:$promotion").assertIsDisplayed() }.isSuccess }
         capture("stack-merge-card")
-        // A08-2: the merge is a preview in the conversation; Merge is pressed in the review it opens.
+        // A11-9: the merge is one line in the conversation; Merge to main is pressed in the review it opens (iOS: no second ask).
         tap("promotion:$promotion:preview"); awaitTag("card-review")
         compose.waitUntil(30_000) { compose.onAllNodes(hasTestTag("promotion:$promotion:CONFIRM_MERGE") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
         capture("stack-merge-review")
         compose.onNodeWithTag("promotion:$promotion:CONFIRM_MERGE").performClick()
-        awaitTag("confirm:CONFIRM_MERGE"); capture("stack-merge-confirm"); compose.onNodeWithTag("confirm:CONFIRM_MERGE").performClick()
         fun state() = runCatching { get("/projects/$id/promotions/current").jsonObject }.getOrNull()
             ?.takeIf { it.text("promotionId") == promotion }?.text("state")
             ?: if (get("/projects/$id/promotions/merged").toString().contains(promotion)) "MERGED (listed under merged)" else "not current"

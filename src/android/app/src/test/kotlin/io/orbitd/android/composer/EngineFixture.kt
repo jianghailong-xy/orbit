@@ -19,6 +19,7 @@ internal object EngineFixture {
           {"engine":"antigravity","installed":true,"auth":"yes","authSource":"google"},
           {"engine":"opencode","installed":true},
           {"engine":"dsh","installed":true,"dsh":{"versionCompatible":true}}],
+        "antigravity":{"supported":true,"installed":true,"envKeyAvailable":true,"authSource":"google","googleLogin":"available"},
         "runtimeDefaultModels":{"claude":"claude-opus-5-5","dsh":"deepseek-v4-pro"},
         "modelCatalog":{
           "claude":[{"value":"claude-opus-5-5","label":"Opus 5.5","fastMode":true}],

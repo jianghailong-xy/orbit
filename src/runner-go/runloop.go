@@ -1407,7 +1407,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 						delete(repoOpsNow, op.ID)
 						mergeMu.Unlock()
 					}()
-					runWikiRepoOpAndReport(t, op)
+					runWikiRepoOpAndReport(loopCtx, t, op)
 				}(op)
 			}
 			// Honor "merge to main" requests: merge each session's branch into main on

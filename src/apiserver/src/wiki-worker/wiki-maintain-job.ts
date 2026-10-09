@@ -170,7 +170,12 @@ export interface WikiMaintainReport {
     waitingForNextRun: number;
     adopted?: { ops: number; verified: number; failed: number };
   };
-  anchors?: { entries: number; changed: number; missing: number };
+  /**
+   * The anchors step's counts (contract `maintenance.job.server.anchors`): the entries whose checks this run
+   * wrote, and — of them — those left changed or missing; `skipped` the entries every anchor of which was
+   * already checked at the run's commit, which were neither sent nor written.
+   */
+  anchors?: { entries: number; changed: number; missing: number; skipped: number };
   docs?: WikiMaintainDocsReport;
   tokens: { input: number; output: number; calls: number };
   seconds: number;
@@ -904,6 +909,14 @@ class WikiMaintainRun {
    * for its index, a symbol without a baseline adopted a page-mate's region as its own, and a type
    * that no longer matched was refused and failed the run. Every check the report carries also names
    * its anchor (type, path, symbol, sha), and `recordAnchorChecks` writes it only on that anchor.
+   *
+   * AN ENTRY ALREADY CHECKED AT THIS COMMIT IS NOT CHECKED AGAIN (2026-10-10, `anchorRules.verify.skip`).
+   * A check's answer depends on the anchor and the commit alone, so an entry every one of whose anchors was
+   * last checked on exactly this snapshot commit — what the list leaves the run (`anchorsDueAt`) — owes
+   * nothing: it is not sent to the runner, not written, and counted in `skipped` alone. A run that replays
+   * after a REPO_OP_WAIT, or one on a space whose main has not moved, re-checks nothing rather than the
+   * whole space's anchors. One anchor last checked elsewhere, or never, re-checks the entry whole, as
+   * always. What the counts mean is the contract's (`maintenance.job.server.anchors`).
    */
   private async anchors(): Promise<void> {
     const { job } = this.jobContext;
@@ -911,12 +924,16 @@ class WikiMaintainRun {
     let entries = 0;
     let changed = 0;
     let missing = 0;
+    let skipped = 0;
     let refused = 0;
     let failed = 0;
     for (;;) {
-      const page = await listWikiAnchorsForJob(this.deps.prisma, { ownerId: job.ownerId, spaceId: job.spaceId, after, limit: WIKI_ANCHOR_RULES.listEntriesMax });
+      const page = await listWikiAnchorsForJob(this.deps.prisma, {
+        ownerId: job.ownerId, spaceId: job.spaceId, after, limit: WIKI_ANCHOR_RULES.listEntriesMax, checkedAt: this.snapshot?.sha ?? '',
+      });
       if (page.entries.length === 0) break;
       after = page.next;
+      skipped += page.entries.filter((entry) => entry.anchors.length === 0).length;
       const wanted = page.entries.filter((entry) => entry.anchors.length > 0);
       if (wanted.length > 0) {
         // One flat list for the operation: the runner echoes each check's place in this list, so
@@ -997,11 +1014,12 @@ class WikiMaintainRun {
       }
       if (after === null) break;
     }
-    this.report.anchors = { entries, changed, missing };
+    this.report.anchors = { entries, changed, missing, skipped };
     if (failed > 0 || refused > 0) {
       throw new WikiJobContentError(`git could not check ${failed} anchor(s), and the server refused ${refused} entr(ies)`);
     }
-    this.jobContext.log(`re-checked the anchors of ${entries} entr(ies): ${changed} changed, ${missing} missing`);
+    this.jobContext.log(`re-checked the anchors of ${entries} entr(ies): ${changed} changed, ${missing} missing; `
+      + `left ${skipped} entr(ies) alone: every anchor of theirs was already checked at this commit`);
   }
 
   // ── The documents ─────────────────────────────────────────────────────────────────────────────

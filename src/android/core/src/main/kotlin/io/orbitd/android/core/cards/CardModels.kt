@@ -258,6 +258,9 @@ object CardCatalog {
         }
         (standing["promotion"] as? JsonObject)?.let { row ->
             val promotion = row.text("promotionId") ?: return@let
+            // One line per moment (iOS 6b4bef713): a candidate is a card while it asks, merges or is blocked. A merge that happened is
+            // the record the merged read draws, and one still being checked or already answered asks nothing.
+            if (PromotionCards.stage(row) !in setOf(PromotionStage.ASKING_YOU, PromotionStage.MERGING, PromotionStage.BLOCKED)) return@let
             val actions = when (row.text("state")) {
                 "READY" -> if (row.text("sourceSha") != null) listOf(CardVerb.CONFIRM_MERGE, CardVerb.DECLINE_MERGE) else emptyList()
                 "CONFIRMED", "RECHECKING" -> listOf(CardVerb.CANCEL_MERGE)

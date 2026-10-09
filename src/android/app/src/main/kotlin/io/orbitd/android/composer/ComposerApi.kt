@@ -31,7 +31,7 @@ class ComposerApi(private val auth: OrbitApi, private val handle: SessionHandle,
         val pools = read(listOf("providers", "pools")).jsonArray.filterIsInstance<JsonObject>()
         val shared = read(listOf("providers", "shared-pools")).jsonArray.filterIsInstance<JsonObject>()
         val rows = (providers + pools.map { ProviderEngines.poolRow(it, ProviderEngines.CLAUDE) } +
-            shared.map { ProviderEngines.poolRow(it, ProviderEngines.CODEX) }).distinctBy { it.text("slug") }
+            shared.map { ProviderEngines.poolRow(it, ProviderEngines.CODEX, shared = true) }).distinctBy { it.text("slug") }
         // A session whose key the list no longer has: the account's own keys, turned-off ones included, say whether it was turned
         // off or deleted.
         val provider = detail.text("provider")

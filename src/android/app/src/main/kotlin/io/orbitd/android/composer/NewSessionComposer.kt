@@ -27,6 +27,8 @@ fun NewSessionComposer(app: OrbitApplication, handle: SessionHandle, route: Orbi
     var retry by remember { mutableIntStateOf(0) }
     // Held outside the workspace's read, which a directory refresh briefly clears: the engine list stays open across one.
     var choosingEngine by remember(target) { mutableStateOf(false) }
+    // Where an engine or a credential that can't run here is fixed: the runner's page for that engine.
+    val openRunner = { runner: String, engine: String -> open(OrbitRoute(Destination.RUNNER, runner, recordId = "engine:$engine")) }
     LaunchedEffect(handle, target, data.fresh, retry) {
         detail = null
         if (!data.fresh) return@LaunchedEffect
@@ -58,13 +60,13 @@ fun NewSessionComposer(app: OrbitApplication, handle: SessionHandle, route: Orbi
                     Text("${ProviderEngines.cliName(engine)} ⌄", style = MaterialTheme.typography.titleMedium)
                 }
             }
-            if (choosingEngine) EngineChoices(model, state, effective, handle.account.server) { choosingEngine = false }
+            if (choosingEngine) EngineChoices(model, state, effective, handle.account.server, openRunner) { choosingEngine = false }
         }
         Spacer(Modifier.weight(1f))
         val current = detail
         val fresh = data.fresh && current != null && current.flag("enabled") != false
         val session = current?.let { SessionState(target.key, snapshot = SessionSnapshot(it, emptyList(), emptyList(), emptyList(), emptyMap()), fresh = fresh) }
-        Box(Modifier.heightIn(max = composerHeight)) { SessionComposer(app, handle, target.key, session, target) }
+        Box(Modifier.heightIn(max = composerHeight)) { SessionComposer(app, handle, target.key, session, target, openRunner = openRunner) }
       }
     }
 }
