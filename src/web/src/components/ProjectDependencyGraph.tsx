@@ -759,11 +759,15 @@ const MINIMAP_MIN_UNITS = 20;
  *
  * Exported for tests: which of the two readings a project gets is the decision this view now makes
  * in place of refusing to draw, and it is decidable on numbers alone.
+ *
+ * `alwaysFit` is the start card's picture (`embedded`): it is drawn only when the whole plan fits
+ * legibly (`startPlanGraphFits`), so the frontier reading would only ever move a fitting plan.
  */
 export function planProjectGraphViewport(
   overview: ProjectGraphOverview,
   canvas: { width: number; height: number },
   padding: number,
+  alwaysFit = false,
 ): { viewport: Viewport; fitted: boolean } | null {
   // React Flow reports 0x0 until it has measured; a plan made against that would centre on nothing.
   if (canvas.width <= 0 || canvas.height <= 0 || overview.unitCount === 0) return null;
@@ -776,7 +780,7 @@ export function planProjectGraphViewport(
     1,
     padding,
   );
-  if (fitted.zoom >= MIN_FIT_ZOOM || !overview.frontier) return { viewport: fitted, fitted: true };
+  if (alwaysFit || fitted.zoom >= MIN_FIT_ZOOM || !overview.frontier) return { viewport: fitted, fitted: true };
 
   return {
     viewport: {
@@ -798,14 +802,44 @@ export function planProjectGraphViewport(
  *
  * Exported for tests: it is a rule about a number, and a rule about a number is worth asserting on
  * rather than eyeballing at one window size.
+ *
+ * The start card's picture takes a higher ceiling (`EMBEDDED_STRIP_CEILING`): it is drawn top to
+ * bottom, so it is tall rather than wide, and there is no task list under it to push away.
  */
 export function planStripHeight(
   bounds: { width: number; height: number },
   canvasWidth: number,
+  ceiling = 520,
 ): number | undefined {
   if (canvasWidth <= 0 || bounds.width <= 0) return undefined;
   const zoom = Math.min(1, (canvasWidth * 0.88) / bounds.width);
-  return Math.round(Math.min(520, Math.max(240, bounds.height * zoom + 48)));
+  return Math.round(Math.min(ceiling, Math.max(240, bounds.height * zoom + 48)));
+}
+
+/** How tall the start card's picture of the plan may grow. */
+export const EMBEDDED_STRIP_CEILING = 760;
+
+/** The fit the canvas gives a strip that is not full screen. */
+const STRIP_PADDING = 0.12;
+
+/**
+ * Whether the start card draws its plan as this graph: laid out top to bottom, the whole plan
+ * fitted into a strip `width` wide lands at `MIN_FIT_ZOOM` or above — the same line this view
+ * draws between fitting a plan and opening on its frontier. Below it the card lists the plan by
+ * level and offers this graph full screen instead. A folded or truncated read is never drawn on
+ * the card: its marks stand for more tasks than a fitted picture shows.
+ */
+export function startPlanGraphFits(data: ProjectDependencyGraphResponse, width: number): boolean {
+  if (width <= 0 || data.folded || data.truncated) return false;
+  // What the canvas itself lays out, with nothing opened yet.
+  const none = new Set<string>();
+  const layout = layoutProjectDependencyGraph(expandRunMarks(foldSettledMarks(data, none), none), 'TB');
+  const overview = projectGraphOverview(layout);
+  if (overview.unitCount === 0) return false;
+  const height = planStripHeight(overview.bounds, width, EMBEDDED_STRIP_CEILING);
+  if (height === undefined) return false;
+  const { zoom } = getViewportForBounds(overview.bounds, width, height, MIN_ZOOM, 1, STRIP_PADDING);
+  return zoom >= MIN_FIT_ZOOM;
 }
 
 /**
@@ -823,6 +857,7 @@ function ProjectCanvas({
   summary,
   focusMarkId,
   onHover,
+  embedded = false,
 }: {
   elements: ReturnType<typeof buildProjectFlowElements>;
   overview: ProjectGraphOverview;
@@ -832,15 +867,17 @@ function ProjectCanvas({
   /** A mark to keep under the reader after the canvas re-lays itself out around it. */
   focusMarkId: string | null;
   onHover: (markId: string | null) => void;
+  /** The start card's picture (`ProjectDependencyGraph`'s `embedded`). */
+  embedded?: boolean;
 }) {
   const { setCenter, setViewport, getZoom } = useReactFlow();
   const width = useStore((state) => state.width);
   const height = useStore((state) => state.height);
   const zoom = useStore((state) => state.transform[2]);
-  const padding = fullScreen ? 0.2 : 0.12;
+  const padding = fullScreen ? 0.2 : STRIP_PADDING;
   const plan = useMemo(
-    () => planProjectGraphViewport(overview, { width, height }, padding),
-    [height, overview, padding, width],
+    () => planProjectGraphViewport(overview, { width, height }, padding, embedded),
+    [embedded, height, overview, padding, width],
   );
   // Once the fit control has actually zoomed out, stop instructing the reader to do it. The old
   // static hint stayed behind over the whole-plan overview (as in the phone screenshot).
@@ -851,9 +888,10 @@ function ProjectCanvas({
   // Applied once, when the canvas first knows its own size, and never again. Re-running it would
   // haul a reader who had panned somewhere back to the frontier for resizing their window — or,
   // worse, for opening a fold, which makes the graph wider and would therefore re-decide the whole
-  // viewport underneath the very thing they clicked.
+  // viewport underneath the very thing they clicked. A picture nobody can pan is the exception:
+  // it is refitted to whatever size its card now has.
   const appliedRef = useRef<string | null>(null);
-  const planKey = `${fullScreen ? 'full' : 'inline'}:${vertical ? 'TB' : 'LR'}`;
+  const planKey = `${fullScreen ? 'full' : 'inline'}:${vertical ? 'TB' : 'LR'}${embedded ? `:${width}x${height}` : ''}`;
   useLayoutEffect(() => {
     if (!plan || appliedRef.current === planKey) return;
     appliedRef.current = planKey;
@@ -888,6 +926,13 @@ function ProjectCanvas({
       nodesDraggable={false}
       nodesConnectable={false}
       elementsSelectable={false}
+      // On the start card the graph is a picture in a scrolling conversation: the wheel scrolls
+      // the conversation past it, and moving around it is what full screen is for.
+      zoomOnScroll={!embedded}
+      zoomOnPinch={!embedded}
+      zoomOnDoubleClick={!embedded}
+      panOnDrag={!embedded}
+      preventScrolling={!embedded}
       onNodeMouseEnter={(_, node) => onHover(node.id)}
       onNodeMouseLeave={() => onHover(null)}
       proOptions={{ hideAttribution: true }}
@@ -907,7 +952,9 @@ function ProjectCanvas({
           and things snap to them". Nothing here is draggable (`nodesDraggable={false}`), so on a
           canvas this size it is several thousand high-frequency marks encoding nothing, over the
           one drawing they sit behind. */}
-      {panel && (
+      {/* The start card's picture says neither: its section head already counts the tasks, and
+          it is drawn only when the whole plan fits, so it has no zoom to control either. */}
+      {panel && !embedded && (
         // Said where the reader is looking. Two different things are worth saying and they are
         // both about scale: that these marks stand for more tasks than they look like, and that
         // what is on screen is a part of something bigger than the canvas.
@@ -915,7 +962,7 @@ function ProjectCanvas({
           {panel}
         </Panel>
       )}
-      <Controls showInteractive={false} fitViewOptions={{ padding, maxZoom: 1 }} />
+      {!embedded && <Controls showInteractive={false} fitViewOptions={{ padding, maxZoom: 1 }} />}
       {fullScreen && overview.unitCount > MINIMAP_MIN_UNITS && (
         <MiniMap
           pannable
@@ -943,6 +990,7 @@ function ProjectFlow(props: {
   summary: string | null;
   focusMarkId: string | null;
   onHover: (markId: string | null) => void;
+  embedded?: boolean;
 }) {
   return (
     <ReactFlowProvider>
@@ -954,18 +1002,33 @@ function ProjectFlow(props: {
 /**
  * `data` draws a graph already in hand — a public project page's, which its link carries — instead
  * of reading the project's own; nothing is fetched then.
+ *
+ * The start card draws the same graph two more ways (docs/mocks/start-card-web-width, board 02):
+ * `embedded`, its picture of a plan that fits — top to bottom (`direction`), fitted, deaf to the
+ * wheel — and `fullScreenOnly`, the full-screen graph its "Task graph" opens for a plan that does
+ * not, which closes through `onClose`.
  */
 export function ProjectDependencyGraph({
   projectId,
   data,
+  direction,
+  embedded = false,
+  fullScreenOnly = false,
+  onClose,
 }: {
   projectId: string;
   data?: ProjectDependencyGraphResponse;
+  /** Which way dependencies advance; by default down a phone and across anything wider. */
+  direction?: 'LR' | 'TB';
+  embedded?: boolean;
+  fullScreenOnly?: boolean;
+  onClose?: () => void;
 }) {
-  const [fullScreen, setFullScreen] = useState(false);
+  const [fullScreen, setFullScreen] = useState(fullScreenOnly);
   // A portrait phone has far more height than width. Advancing dependencies down the canvas there
   // turns the old tiny horizontal ribbon into a readable plan that uses the modal's long axis.
-  const vertical = useMediaQuery('(max-width: 640px)');
+  const narrow = useMediaQuery('(max-width: 640px)');
+  const vertical = direction ? direction === 'TB' : narrow;
   // Which folded runs the reader has opened. Kept here rather than in the marks so that a refetch
   // — a status changing somewhere — does not close what someone was reading.
   const [expandedRunIds, setExpandedRunIds] = useState<ReadonlySet<string>>(new Set());
@@ -974,9 +1037,16 @@ export function ProjectDependencyGraph({
   // The mark under the pointer, if any. Kept out here so both canvases answer a hover the same way.
   const [hoverMarkId, setHoverMarkId] = useState<string | null>(null);
   // A task opened from a mark opens over this page, which stays mounted — so a full-screen canvas
-  // has to get out of the way of the task it just opened.
+  // has to get out of the way of the task it just opened. Only a move away does that: a canvas
+  // opened straight to full screen is open the moment it mounts.
   const { pathname } = useLocation();
-  useEffect(() => setFullScreen(false), [pathname]);
+  const openedAt = useRef(pathname);
+  useEffect(() => {
+    if (pathname === openedAt.current) return;
+    openedAt.current = pathname;
+    setFullScreen(false);
+    onClose?.();
+  }, [onClose, pathname]);
   const query = useQuery({ ...projectDependencyGraphQuery(projectId), enabled: !data });
   const graph = data
     ? { data, isLoading: false, isError: false as const, error: null, refetch: query.refetch }
@@ -1045,8 +1115,10 @@ export function ProjectDependencyGraph({
     return () => observer.disconnect();
   }, [view]);
   const stripHeight = useMemo(
-    () => (view ? planStripHeight(view.overview.bounds, stripWidth) : undefined),
-    [stripWidth, view],
+    () => (view
+      ? planStripHeight(view.overview.bounds, stripWidth, embedded ? EMBEDDED_STRIP_CEILING : undefined)
+      : undefined),
+    [embedded, stripWidth, view],
   );
 
   if (graph.isLoading) {
@@ -1077,42 +1149,48 @@ export function ProjectDependencyGraph({
 
   return (
     <GraphProjectCtx.Provider value={projectId}>
-      <div
-        ref={stripRef}
-        className={`tdg-canvas pdg-canvas${vertical ? ' is-vertical' : ''}`}
-        style={stripHeight ? { height: stripHeight } : undefined}
-        data-testid="project-dependency-graph"
-      >
-        <Tooltip title="Open full-screen graph">
-          <button
-            type="button"
-            className="tdg-maximize"
-            onClick={() => setFullScreen(true)}
-            aria-label="Open project task graph full screen"
-          >
-            <FullscreenOutlined />
-          </button>
-        </Tooltip>
-        {/* Only one canvas is mounted at a time: two React Flow instances over the same elements
-            would both measure and both fit, for a picture the reader cannot see. */}
-        {!fullScreen && (
-          <ProjectFlow
-            elements={elements}
-            overview={view.overview}
-            summary={view.summary}
-            focusMarkId={focusMarkId}
-            fullScreen={false}
-            vertical={vertical}
-            onHover={setHoverMarkId}
-          />
-        )}
-      </div>
+      {fullScreenOnly ? null : (
+        <div
+          ref={stripRef}
+          className={`tdg-canvas pdg-canvas${vertical ? ' is-vertical' : ''}`}
+          style={stripHeight ? { height: stripHeight } : undefined}
+          data-testid="project-dependency-graph"
+        >
+          <Tooltip title="Open full-screen graph">
+            <button
+              type="button"
+              className="tdg-maximize"
+              onClick={() => setFullScreen(true)}
+              aria-label="Open project task graph full screen"
+            >
+              <FullscreenOutlined />
+            </button>
+          </Tooltip>
+          {/* Only one canvas is mounted at a time: two React Flow instances over the same elements
+              would both measure and both fit, for a picture the reader cannot see. */}
+          {!fullScreen && (
+            <ProjectFlow
+              elements={elements}
+              overview={view.overview}
+              summary={view.summary}
+              focusMarkId={focusMarkId}
+              fullScreen={false}
+              vertical={vertical}
+              onHover={setHoverMarkId}
+              embedded={embedded}
+            />
+          )}
+        </div>
+      )}
       <Modal
         className="tdg-modal"
         open={fullScreen}
-        onCancel={() => setFullScreen(false)}
+        onCancel={() => {
+          setFullScreen(false);
+          onClose?.();
+        }}
         footer={null}
-        width={vertical ? '100vw' : 'calc(100vw - 48px)'}
+        width={narrow ? '100vw' : 'calc(100vw - 48px)'}
         title="Task graph"
         destroyOnClose
       >
@@ -1128,7 +1206,8 @@ export function ProjectDependencyGraph({
           />
         </div>
       </Modal>
-      {graph.data?.truncated ? (
+      {/* Opened from the start card, the list it would point at is the card's own, above. */}
+      {graph.data?.truncated && !fullScreenOnly ? (
         <Alert
           style={{ marginTop: 8 }}
           type="warning"

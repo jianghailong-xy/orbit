@@ -282,6 +282,8 @@ public enum StartProject {
     public static let howItRuns = "How it runs"
     /// The link under the plan, to the tasks it names.
     public static let viewTasks = "View tasks ›"
+    /// Beside it, while the plan is drawn as levels: the project page's task graph, full screen.
+    public static let taskGraph = "Task graph"
     public static let action = "Start the project"
     /// What the armed composer asks for, once "Chat about this" has handed the reply to it.
     public static let chatPlaceholder = "What should change before it starts?"
@@ -608,6 +610,27 @@ public enum StartProject {
             },
             evidenceJudged: planned.filter { $0.completionCriterion == "EVIDENCE_JUDGMENT" }.count,
             startsNow: (levels?.first ?? []).filter(\.now).map(\.label))
+    }
+
+    /// The shrink below which the card lists the plan by level rather than drawing it: the browser's
+    /// `MIN_FIT_ZOOM`, the line its project page draws between fitting a plan and opening on its
+    /// frontier (docs/mocks/start-card-web-width, board 02, approved 2026-10-09).
+    public static let planGraphMinFit = 0.7
+
+    /// The plan as the project page's task graph, laid out top to bottom for a card
+    /// `availableWidth` points wide — or nil, and the card lists the plan by level with the graph
+    /// one press away, when the whole of it would have to shrink below `planGraphMinFit`, or the
+    /// read folded or cut the plan short: those marks stand for more tasks than a picture shows.
+    public static func planGraph(_ graph: ProjectDependencyGraph?, availableWidth: Double)
+        -> (layout: ProjectGraph.Layout, edges: [ProjectGraphEdge], scale: Double)? {
+        guard let graph, availableWidth > 0, !graph.truncated,
+              !graph.marks.contains(where: { $0.kind != .task }) else { return nil }
+        let prepared = ProjectGraph.prepare(graph, expanded: [])
+        guard !prepared.marks.isEmpty else { return nil }
+        let layout = ProjectGraph.layout(marks: prepared.marks, edges: prepared.edges, direction: .topToBottom,
+                                         availableWidth: availableWidth)
+        let scale = layout.fit(width: availableWidth)
+        return scale >= planGraphMinFit ? (layout, prepared.edges, scale) : nil
     }
 
     // MARK: the press

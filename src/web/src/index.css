@@ -10458,11 +10458,25 @@ button.chat-jump-start:hover {
    `StartProjectCard.tsx`: the settlement card's shell, answering three questions in order — what
    done is (the criteria), how much is delegated and what still comes to the owner (How it runs),
    and the plan by level — with Start held at the bottom of the scroll and a line under it saying
-   what the press does. Mocks: docs/mocks/start-card-redesign (v2, approved 2026-10-07). */
+   what the press does. Mocks: docs/mocks/start-card-redesign (v2, approved 2026-10-07); its width,
+   its toggles and the plan as a graph: docs/mocks/start-card-web-width (approved 2026-10-09). */
 /* On a phone the start card rises as a sheet (`ProjectStartDialog`), whose own title already asks
    the card's question: the card does not ask it twice. */
 .start-card-sheet .settlement-card-head {
   display: none;
+}
+/* In a conversation as wide as the window, the card keeps the width it was drawn for: a form whose
+   settings sit beside their names, and criteria a reader can follow from line to line. Narrower
+   conversations, the project page's dialog and the phone's sheet are under the cap already. */
+.start-card {
+  max-width: 720px;
+}
+/* The plan as the project page's task graph (`StartPlanGraph`), drawn only while it fits. */
+.start-card-graph {
+  margin: 2px 0 6px;
+}
+.start-card-graph-link {
+  margin-left: 14px;
 }
 .start-card-section {
   display: flex;
