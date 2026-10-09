@@ -90,6 +90,45 @@ func runDir(sessionID string) string { return filepath.Join(runsDir(), decodeSes
 // CODEX_HOME selects the partition; see resolveCodexStateDir.
 func codexStateRoot() string { return filepath.Join(machineHome(), "codex-state") }
 
+// privateProbeDir is an empty working directory beneath the runner's private home, for a CLI the
+// runner starts for itself — a model-catalog read, a token refresh — rather than for a session.
+// Such a process has no workspace, and the directory it would otherwise inherit is the runner's own:
+// `/` under launchd. No coding CLI should start there. Claude Code lists the whole tree below its
+// working directory as it starts: 2.1.294 read 24,832 directories from `/` for one `/model` lookup,
+// and on a Mac every protected folder that walk reached (Downloads, Photos, network volumes…) had
+// macOS ask the user, in the runner's name, for access — every hour, from the model-catalog
+// refresh. OpenCode merges project config walking up from it, so nothing above it may be writable
+// by another account either.
+func privateProbeDir(name string) (string, error) {
+	home := machineHome()
+	if runtime.GOOS != "windows" {
+		info, err := os.Lstat(home)
+		if err != nil {
+			return "", fmt.Errorf("inspect runner home: %w", err)
+		}
+		if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() || info.Mode().Perm()&0o077 != 0 {
+			return "", fmt.Errorf("runner home %s is not a private directory", home)
+		}
+	}
+	dir := filepath.Join(home, name)
+	if err := os.Mkdir(dir, 0o700); err != nil && !os.IsExist(err) {
+		return "", fmt.Errorf("create private probe directory: %w", err)
+	}
+	info, err := os.Lstat(dir)
+	if err != nil {
+		return "", fmt.Errorf("inspect private probe directory: %w", err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+		return "", fmt.Errorf("probe directory %s is not a private directory", dir)
+	}
+	if runtime.GOOS != "windows" {
+		if err := os.Chmod(dir, 0o700); err != nil {
+			return "", fmt.Errorf("secure private probe directory: %w", err)
+		}
+	}
+	return dir, nil
+}
+
 func loadConfig() *RunnerConfig {
 	// This is intentionally read-only. ORBIT_HOME is inherited by agent shells,
 	// so an agent-safe command must not chmod an arbitrary environment-selected

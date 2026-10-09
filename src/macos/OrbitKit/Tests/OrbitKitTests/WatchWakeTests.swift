@@ -115,16 +115,19 @@ final class WatchWakeTests: XCTestCase {
         // A title where this client holds one — a phone card full of ids names nothing.
         XCTAssertEqual(WatchWakeCard.changedLine(shown.shown[0], name: "Land the redirect fix"),
                        "Task Land the redirect fix is now DONE")
+        // Where it holds none, the END of the id: the start of a UUIDv7 is the minute it was made in,
+        // so the owner's phone read "Task 01a11e30" for a task every sibling of that minute shared.
         XCTAssertEqual(
-            WatchWakeCard.changedLine(WatchWakeTarget(kind: .session, id: "0195c0de-1111", status: "ENDED")),
-            "Session 0195c0de is now ENDED")
+            WatchWakeCard.changedLine(WatchWakeTarget(kind: .session, id: "01a11e30-5f2c-7d41-9b2e-8c3f4a5b6c7d",
+                                                      status: "ENDED")),
+            "Session 4a5b6c7d is now ENDED")
     }
 
-    func testTheCardSaysNobodyTypedItAndKeepsTheOriginalBehindAFold() throws {
+    func testTheFoldSaysNobodyTypedItAndKeepsTheOriginalBehindIt() throws {
         let wake = try XCTUnwrap(WatchWakeText.parse(F.matchWake(generation: 3)))
-        XCTAssertEqual(WatchWakeCard.meta(wake, ts: F.ago(240), now: now),
-                       "Queued by a watch, not typed by you · generation 3 · 4m ago")
-        // An end has no generation, and a card with no timestamp says neither.
+        // When is on the line itself, so the fold says only who queued it.
+        XCTAssertEqual(WatchWakeCard.meta(wake), "Queued by a watch, not typed by you · generation 3")
+        // An end has no generation.
         let expired = try XCTUnwrap(WatchWakeText.parse(F.expiryWake()))
         XCTAssertEqual(WatchWakeCard.meta(expired), "Queued by a watch, not typed by you")
         XCTAssertEqual(WatchWakeCard.rawSummary, "What the agent received")
@@ -133,7 +136,7 @@ final class WatchWakeTests: XCTestCase {
     }
 
     /// Withdrawing a wake is not Cancel: nothing folds back into the composer and nothing sends it
-    /// again, so the action says what it does and the line under it says what follows.
+    /// again, so the action says what it does and the confirmation it asks for says what follows.
     func testTheQueuedFootSaysWhatWithdrawingCosts() {
         XCTAssertEqual(WatchWakeQueue.status, "Queued for next turn")
         XCTAssertEqual(WatchWakeQueue.withdraw, "Withdraw wake")
@@ -141,6 +144,55 @@ final class WatchWakeTests: XCTestCase {
                        "If withdrawn, this session is not woken this time, and the watch won't send it again.")
         XCTAssertEqual(WatchWakeQueue.confirmTitle, "Withdraw this wake?")
         XCTAssertEqual(WatchWakeQueue.keep, "Keep it queued")
+    }
+
+    // MARK: the line the card became
+
+    /// The screenshot this line answers (2026-10-09): one task done, drawn as a card between two halves
+    /// of the agent's answer. As a line it is the task's name and how it came out, in the watch's eye.
+    func testALoneTargetIsTheLinesNameAndItsStatusTheClosingWord() throws {
+        let wake = try XCTUnwrap(WatchWakeText.parse(F.matchWake(changed: [F.change(id: "T1", status: "DONE")])))
+        XCTAssertEqual(WatchWakeCard.lineName(wake, name: "Keep the question once it is answered"),
+                       "Keep the question once it is answered")
+        XCTAssertEqual(WatchWakeCard.lineName(wake), "Task T1", "no title held: its kind and id")
+        XCTAssertEqual(WatchWakeCard.lineName(wake, name: ""), "Task T1", "an empty title is none")
+        XCTAssertEqual(WatchWakeCard.lineStatus(wake), "DONE")
+        XCTAssertFalse(WatchWakeCard.isFailed(wake), "done is no failure")
+        // A lone target is the line itself: nothing of it stays out of the fold.
+        XCTAssertTrue(WatchWakeCard.failures(wake).shown.isEmpty)
+        XCTAssertEqual(WatchWakeCard.details, "详情")
+    }
+
+    /// The fixture's Match: one task FAILED. The line takes the error tone a failed job's line takes.
+    func testAFailedTargetTakesTheErrorTone() throws {
+        let wake = try XCTUnwrap(WatchWakeText.parse(F.matchWake()))
+        XCTAssertTrue(WatchWakeCard.isFailed(wake))
+        XCTAssertEqual(WatchWakeCard.lineStatus(wake), "FAILED")
+        // A watch that ran out, or lost its targets, failed at nothing.
+        for end in [F.expiryWake(), F.endWake("REVOKED"), F.endWake("UNRESOLVABLE")] {
+            let ended = try XCTUnwrap(WatchWakeText.parse(end))
+            XCTAssertFalse(WatchWakeCard.isFailed(ended), "\(ended.kind)")
+            XCTAssertNil(WatchWakeCard.lineName(ended), "\(ended.kind) names no target")
+            XCTAssertNil(WatchWakeCard.lineStatus(ended), "\(ended.kind) closes on no word")
+        }
+    }
+
+    /// Several targets: counted on the line, the failures kept out of the fold — up to the card's
+    /// count, with how many more.
+    func testSeveralTargetsAreCountedAndTheirFailuresStayInView() throws {
+        let changed = (0..<8).map { F.change(id: "T\($0)", status: $0 == 1 ? "DONE" : "FAILED") }
+        let wake = try XCTUnwrap(WatchWakeText.parse(F.matchWake(changed: changed)))
+        XCTAssertEqual(WatchWakeCard.lineName(wake, name: "ignored for several"), "8 tasks")
+        XCTAssertEqual(WatchWakeCard.lineStatus(wake), "7 of 8 failed")
+        let failures = WatchWakeCard.failures(wake)
+        XCTAssertEqual(failures.shown.map(\.id), ["T0", "T2", "T3", "T4", "T5"])
+        XCTAssertEqual(failures.more, 2)
+        // None failed: nothing stays out, and the line closes on no word.
+        let done = try XCTUnwrap(WatchWakeText.parse(F.matchWake(changed: [
+            F.change(id: "T1", status: "DONE"), F.change(id: "T2", status: "DONE"),
+        ])))
+        XCTAssertTrue(WatchWakeCard.failures(done).shown.isEmpty)
+        XCTAssertNil(WatchWakeCard.lineStatus(done))
     }
 
     // MARK: the card a watch reads as

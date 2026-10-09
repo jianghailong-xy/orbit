@@ -10,9 +10,11 @@ import Foundation
 /// The web twin is `src/web/src/lib/thinkingDraft.ts`; the wording is deliberately identical, so a
 /// reader moving between the clients reads the same row.
 ///
-/// Duration comes from the runner's own event clock (`RunEvent.ts` on the first `thinking_delta`
-/// and on the durable `thinking` that closes the block) rather than from `Date()`, so it stays a
-/// pure function of the stream and a reload of a persisted transcript reports the same number.
+/// Duration is the runner's: it times the stretch and stores the result on the durable `thinking`
+/// that closes it (`thinkingMs`), which is all a transcript read back from the server still has —
+/// `thinking_delta` is never stored. A block an older runner stored has no such figure; for it the
+/// runner's own event clock (`RunEvent.ts` on the first `thinking_delta` and on the closing event)
+/// stands in, when this client watched the stretch stream, rather than `Date()`.
 public enum ThinkingSummary {
     /// The runner stamps `2026-09-15T17:51:52.123Z`; a formatter without `.withFractionalSeconds`
     /// returns nil for exactly that shape, so both are tried — which is what `RelativeTime.parse`
@@ -52,10 +54,13 @@ public enum ThinkingSummary {
 
     /// The whole row for a settled stretch: `Thought for 1m 47s · 3 blocks · 21k chars`. The block
     /// count appears only when blocks were folded together, and the duration only when the clock
-    /// that measured it survived.
-    public static func settledLabel(chars: Int, blocks: Int, startedTs: String?, finishedTs: String?) -> String {
+    /// that measured it survived — the runner's stored `thinkingMs` first, the watched span after.
+    public static func settledLabel(chars: Int, blocks: Int, startedTs: String?, finishedTs: String?,
+                                    thinkingMs: Int? = nil) -> String {
         var parts: [String] = []
-        if let seconds = elapsed(from: startedTs, to: finishedTs) {
+        if let ms = thinkingMs, ms > 0 {
+            parts.append("Thought for \(duration(Double(ms) / 1000))")
+        } else if let seconds = elapsed(from: startedTs, to: finishedTs) {
             parts.append("Thought for \(duration(seconds))")
         } else {
             parts.append("Thought")

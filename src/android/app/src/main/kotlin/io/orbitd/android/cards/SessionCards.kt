@@ -17,6 +17,7 @@ import io.orbitd.android.core.auth.AuthState
 import io.orbitd.android.core.cards.*
 import io.orbitd.android.text.LocalReaderResources
 import io.orbitd.android.navigation.ObjectId
+import io.orbitd.android.projects.CoordinatorDoneCard
 import io.orbitd.android.projects.CoordinatorStartCard
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
@@ -94,6 +95,11 @@ fun SessionCards(open: (String) -> Unit, discuss: ((String) -> Unit)? = null) {
                 if (card.family == CardFamily.START) CoordinatorStartCard(card, session.snapshot?.standing.orEmpty(), fresh, result, open, discuss, submit)
                 else BusinessCard(card, fresh, result, open, discuss, submit)
             }
+        } }
+        // A11c: the project's closing card, whole, in the conversation that coordinates the project (iOS `ProjectDoneCardView`: a
+        // session's `projectId` is set on coordinators alone).
+        session.snapshot?.detail?.let { detail -> detail.text("projectId")?.let { coordinated ->
+            CoordinatorDoneCard(app, resources.handle, session.id, coordinated, detail, session.snapshot?.standing.orEmpty(), session.fresh)
         } }
         merged.filter { it.text("state") == "MERGED" }.forEach { receipt ->
             Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = MaterialTheme.shapes.medium) {

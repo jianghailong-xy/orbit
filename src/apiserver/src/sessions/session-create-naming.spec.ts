@@ -388,3 +388,29 @@ test('a library at the ceiling stops growing but still files the session under k
     restoreEnv('DEEPSEEK_API_KEY', originalKey);
   }
 });
+
+test("with no DeepSeek key, a session on an engine's own sign-in is left for its runner to name", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalKey = process.env.DEEPSEEK_API_KEY;
+  let fetches = 0;
+  delete process.env.DEEPSEEK_API_KEY;
+  globalThis.fetch = (() => {
+    fetches += 1;
+    return Promise.resolve(deepSeekResponse('never'));
+  }) as typeof fetch;
+  const fixture = makeService();
+
+  try {
+    // The project's last run was on the runner's own Codex sign-in, which the server holds no key for.
+    const session = await withDeadline(fixture.service.create('owner-1', { prompt: 'Fix login timeout', workspaceId: 'workspace-1' }));
+    for (let i = 0; i < 5; i++) await flush();
+
+    assert.equal(session.title, 'Fix login timeout');
+    assert.equal(fetches, 0);
+    assert.deepEqual(fixture.updates, []);
+    assert.deepEqual(fixture.realtimeEvents, ['created']);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv('DEEPSEEK_API_KEY', originalKey);
+  }
+});

@@ -31,8 +31,8 @@
 -- -------------------------
 -- 0411: main and this project's line stood at 0408_kimi_account when this was written (2026-10-09),
 -- no origin branch held a later number, and one worktree on this host held 0409 and 0410 (a branch not
--- yet pushed), so 0409 and 0410 are left to it. Every statement can run twice: ADD COLUMN IF NOT EXISTS,
--- and the constraint added only when absent.
+-- yet pushed, since landed on main), so 0409 and 0410 were left to it. Every statement can run twice:
+-- ADD COLUMN IF NOT EXISTS, and the constraint added only when absent.
 -- ══════════════════════════════════════════════════════════════════════════════════════════════════
 
 ALTER TABLE "wiki_repo_file" ADD COLUMN IF NOT EXISTS "content_encoding" TEXT NOT NULL DEFAULT 'text';

@@ -310,6 +310,7 @@ import { bgLaunchConfirmed, bgLaunchKind } from './bg-launch-receipt';
 import { enginePhaseAfter, enginePhaseSinceAfter, engineTurnActiveAfter } from './engine-turn';
 import { hasSessionActivity } from './session-activity';
 import { stripNul } from './strip-nul';
+import { SessionNamingDto } from './session-naming';
 import { normalizeToolOutputEvent } from './tool-output';
 import {
   deriveTaskCompletionStatus,
@@ -4358,6 +4359,24 @@ export class RunnerApiController {
       (tx) => scheduleWakeup(tx, sessionId, dto),
       loggedRetry(this.logger, 'runnerApi.scheduledWakeup'),
     );
+  }
+
+  /**
+   * The title the engine running a session gave it, when its claim asked for one
+   * (ClaimedSession.naming, engineNamingJob). It lands only while the session still carries the title
+   * that claim did, so a rename made in the meantime stands; a miss is not an error.
+   */
+  @UseGuards(RunnerAuthGuard)
+  @Post('sessions/:id/naming')
+  @HttpCode(200)
+  async sessionNaming(
+    @CurrentRunner() runner: { id: string },
+    @Param('id', PublicIdPipe) sessionId: string,
+    @Body() dto: SessionNamingDto,
+  ): Promise<{ applied: boolean }> {
+    await this.assertSessionOwnership(sessionId, runner.id);
+    if (!this.sessions) throw new Error('SessionsService is unavailable');
+    return { applied: await this.sessions.applyEngineTitle(sessionId, stripNul(dto.replaces), stripNul(dto.title)) };
   }
 
   /** A single interactive turn finished; retain or release its active-turn slot. */

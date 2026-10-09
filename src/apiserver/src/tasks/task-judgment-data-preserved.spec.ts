@@ -2128,6 +2128,22 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // trigger, enum or type is created — so it is not another writer of the DONE fence. No INSERT,
       // UPDATE or DELETE: nothing is backfilled.
       '0408_kimi_account',
+      // Why a promotion candidate is BLOCKED (0409): one nullable TEXT with no default on
+      // `project_promotion` (`blocked_reason`) and one CHECK holding it to ALREADY_LANDED, CHECK_FAILED,
+      // CONFLICT or ERROR, which every stored row satisfies because the column reads NULL in it. Only
+      // `project_promotion` is altered: `task`, `project` and `project_acceptance_*` are not named, none
+      // of the six preserved triggers/functions is, and no function, trigger, enum, type or index is
+      // created, replaced or dropped — so it is not another writer of the DONE fence. No INSERT, UPDATE
+      // or DELETE: nothing is backfilled.
+      '0409_promotion_blocked_reason',
+      // A landing that pushed nothing because the target already had the work (0410): one nullable
+      // BOOLEAN with no default and no constraint on `project_integration_job`
+      // (`source_fully_applied`), 0346's `source_on_upstream` exactly. Only that table is altered: no
+      // `task`, `project` or `project_acceptance_*` object nor any of the six preserved
+      // triggers/functions is named, and no function, trigger, enum, type, index or constraint is
+      // created, replaced or dropped — so it is not another writer of the DONE fence. No INSERT,
+      // UPDATE or DELETE: every stored job reads NULL.
+      '0410_integration_job_source_fully_applied',
       // The read cache keeps a file byte for byte (0411): one TEXT NOT NULL DEFAULT 'text' on `wiki_repo_file`
       // (`content_encoding`, `text` or `base64` for a file with a U+0000 in it), catalog-only as a constant default
       // is, and one CHECK holding it to the two — `base64` only on a row with a text — added only when absent. No

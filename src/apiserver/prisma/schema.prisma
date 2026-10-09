@@ -2863,6 +2863,11 @@ model ProjectIntegrationJob {
   /// an ancestor of the upstream (migration 0346). The only fact on which §1.4 lets such an answer
   /// out of a criterion's roll-up; NULL is "not measured" and withholds.
   sourceOnUpstream Boolean? @map("source_on_upstream")
+  /// The runner's measurement, taken when it answers NOTHING_TO_LAND, of whether the branch carried
+  /// commits of its own that the base already had, every one of them (migration 0410): TRUE says the
+  /// work is on the target and nothing was pushed because nothing was missing, FALSE says the branch
+  /// carried nothing. NULL is "not measured", read exactly as before the column existed.
+  sourceFullyApplied Boolean? @map("source_fully_applied")
 
   /// `[{ name, command, expectedExitCode, exitCode, timedOut, durationMs, outputTail }]`.
   checks      Json     @default("[]")
@@ -2968,6 +2973,11 @@ model ProjectPromotion {
 
   checks    Json     @default("[]")
   conflicts String[] @default([])
+  /// Why the last job blocked this candidate: ALREADY_LANDED, CHECK_FAILED, CONFLICT or ERROR
+  /// (migration 0409, a CHECK), written with BLOCKED and cleared when its check is queued again. NULL
+  /// on a candidate blocked before the column existed, whose reason is still read off `checks` and
+  /// `conflicts`.
+  blockedReason String? @map("blocked_reason")
 
   state      String  @default("CHECKING")
   checkJobId String? @map("check_job_id") @db.Uuid

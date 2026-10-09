@@ -116,8 +116,10 @@ struct UserTurnRow: View {
         } else if let wake = WatchWakeText.parse(b.text) {
             // A turn a watch queued is the watch's to show, not a message the user typed: it opens
             // with a raw UUID and carries the whole payload the agent read (web parity: NodeView).
+            // It is a line in the agent's stream, as a background job's news is, dashed while queued.
             WatchWakeCardView(wake: wake, text: b.text, ts: b.ts,
-                              undelivered: undelivered, onWithdraw: cancel)
+                              undelivered: undelivered, onWithdraw: cancel,
+                              queued: queued != nil)
         } else if let background = BackgroundWakeText.parse(wakeNote) {
             // A turn the control plane opened for a background job's news, or for a wakeup
             // coming due, is nobody's message either: the block IS the turn, so it is read off

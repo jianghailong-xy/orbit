@@ -1,0 +1,134 @@
+{
+ "webkit-light-desktop/settings-saved.png": {
+  "differentPixels": 2735,
+  "maxChannelDelta": 222,
+  "pixelsBeyond2": 1020,
+  "pixelsAtMost2": 1715,
+  "allDifferencesBox": {
+   "x": 1100,
+   "y": 2,
+   "width": 180,
+   "height": 80
+  },
+  "clustersBeyond2": [
+   {
+    "box": {
+     "x": 1156,
+     "y": 28,
+     "width": 92,
+     "height": 14
+    },
+    "pixels": 699,
+    "maxChannelDelta": 222
+   },
+   {
+    "box": {
+     "x": 1119,
+     "y": 16,
+     "width": 30,
+     "height": 35
+    },
+    "pixels": 224,
+    "maxChannelDelta": 216
+   },
+   {
+    "box": {
+     "x": 1249,
+     "y": 16,
+     "width": 16,
+     "height": 35
+    },
+    "pixels": 97,
+    "maxChannelDelta": 18
+   }
+  ]
+ },
+ "webkit-dark-desktop/settings-saved.png": {
+  "differentPixels": 2114,
+  "maxChannelDelta": 165,
+  "pixelsBeyond2": 1014,
+  "pixelsAtMost2": 1100,
+  "allDifferencesBox": {
+   "x": 1102,
+   "y": 5,
+   "width": 178,
+   "height": 74
+  },
+  "clustersBeyond2": [
+   {
+    "box": {
+     "x": 1156,
+     "y": 28,
+     "width": 92,
+     "height": 14
+    },
+    "pixels": 697,
+    "maxChannelDelta": 165
+   },
+   {
+    "box": {
+     "x": 1119,
+     "y": 16,
+     "width": 30,
+     "height": 36
+    },
+    "pixels": 221,
+    "maxChannelDelta": 132
+   },
+   {
+    "box": {
+     "x": 1249,
+     "y": 16,
+     "width": 16,
+     "height": 36
+    },
+    "pixels": 96,
+    "maxChannelDelta": 22
+   }
+  ]
+ },
+ "webkit-dark-phone/settings-saved.png": {
+  "differentPixels": 2183,
+  "maxChannelDelta": 164,
+  "pixelsBeyond2": 1012,
+  "pixelsAtMost2": 1171,
+  "allDifferencesBox": {
+   "x": 105,
+   "y": 44,
+   "width": 181,
+   "height": 80
+  },
+  "clustersBeyond2": [
+   {
+    "box": {
+     "x": 160,
+     "y": 68,
+     "width": 91,
+     "height": 14
+    },
+    "pixels": 691,
+    "maxChannelDelta": 164
+   },
+   {
+    "box": {
+     "x": 122,
+     "y": 56,
+     "width": 30,
+     "height": 36
+    },
+    "pixels": 226,
+    "maxChannelDelta": 132
+   },
+   {
+    "box": {
+     "x": 253,
+     "y": 56,
+     "width": 16,
+     "height": 36
+    },
+    "pixels": 95,
+    "maxChannelDelta": 22
+   }
+  ]
+ }
+}

@@ -446,8 +446,8 @@ type TextNode = {
   seq: number;
   text: string;
   // Thinking only: how long the stretch took, and how many adjacent blocks were folded into this
-  // one row. Both are known only while it streams (see lib/thinkingDraft) — a reload has neither,
-  // so the row states its size alone.
+  // one row. The duration is the one the runner stored on each block (see lib/thinkingDraft); a
+  // block an older runner stored has none, and its row states its size alone.
   thinkingMs?: number;
   blocks?: number;
   // Wall-clock of the source event — carried for user turns to show a relative
@@ -3204,8 +3204,9 @@ function ControlPlaneNote({ kind, text }: { kind: string; text: string }) {
 /**
  * A settled stretch of reasoning, folded. What the row says while shut is the whole question: a
  * bare "Thinking" told a reader nothing about whether opening it was worth it, and a turn stacks
- * ten of them. The duration comes from having watched it stream (lib/thinkingDraft); a reloaded
- * block has only its size, and states that rather than nothing.
+ * ten of them. The duration is the one the runner stored on the block (lib/thinkingDraft), so a
+ * reload states it too; a block an older runner stored has only its size, and states that rather
+ * than nothing.
  */
 function Thinking({ text, seq, ms, blocks }: { text: string; seq?: number; ms?: number; blocks?: number }) {
   const exp = useContext(ExportCtx);

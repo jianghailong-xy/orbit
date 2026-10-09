@@ -63,6 +63,7 @@
 - `GET /shared/:token`：返回 `{kind, include, sharedAt, root}`。
   - 会话根：保留旧字段（title、各状态字段、createdAt、workspaceName），另加 `events` = 尾部一页、`hasMore`，旧页面照样能渲染。
 - `GET /shared/:token/events?before=&limit=`：翻页。`GET /shared/:token/events/:seq`：取单条全文。
+  - `GET /shared/:token/events?after=&limit=`：某条之后的新事件，从旧到新；响应里的 `after` 是下一页的游标，到最新时为 null。同时带上根页的头部字段（title、各状态字段等）的当前值，公开页跟随进行中的会话时，一次请求就能拿到新内容和新状态。
   - 这两条只对会话根生效。范围内的其他会话走 `/shared/:token/sessions/:sessionId/...`，形状相同。
 - `GET /shared/:token/tasks/:taskId`：项目链接内的任务页，要求 Task pages 已勾选，且任务属于该项目。
 - `GET /shared/:token/sessions/:sessionId`（以及 `/events`）：范围内的对话记录。要求勾了 Conversations，并且会话是范围内任务的 Run，或本项目的协调会话。会话在回收站 → 404。
@@ -88,6 +89,8 @@
 - **项目页**：app 项目页的 16 个区块只保留 7 个，顺序不变：Header（去掉三个动作）→ Work overview（去掉横幅；Coordinator 卡整张不出现，勾了 Conversations 时换成一行「Coordinator conversation ›」）→ Goal → Task graph → Chain progress → Acceptance criteria（文案一字不改）→ Tasks（去掉 New task 和判据摘录）。手机宽度沿用 web 手机布局。
 - **任务页**：区块顺序照 app 的任务面板：Header（结果 + 判定方式 + 时间）→ Dependencies → Description → Acceptance → Runs → Comments（要勾选）。Runs 只列状态、时间和时长；勾了 Conversations 才出现「View conversation ›」，否则写「Conversation not shared」。
 - **对话页**：现有 Transcript 组件不改，只接一个「按范围解析链接」的 resolver。页头显示会话状态；Download HTML 保留。
+  - 会话还在进行时，页面跟随新内容（`events?after=`）：Queued / Running 每 4 秒拉一次；Awaiting reply / Interrupted 每 30 秒一次；刚拉到新内容的下一次也是 4 秒。会话结束或已 Completed、又没有新内容时停止。
+  - 后台标签页不拉，回到前台立刻补上。读者停在底部时跟到最新，往上翻着时位置不动。
 
 ## 8. 入口与文案（英文 UI）
 

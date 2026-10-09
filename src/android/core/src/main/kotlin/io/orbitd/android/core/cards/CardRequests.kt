@@ -82,7 +82,10 @@ object CardRequests {
             CardVerb.CANCEL_TASK -> request(listOf("tasks", required("taskId")), buildJsonObject { put("status", "CANCELLED") }, HttpMethod.PATCH)
             CardVerb.CONFIRM_MERGE -> request(projectPath("promotions", card.objectId, "confirm"), buildJsonObject { put("sourceSha", required("sourceSha")) })
             CardVerb.DECLINE_MERGE -> request(projectPath("promotions", card.objectId, "decline"))
-            CardVerb.CANCEL_MERGE -> request(projectPath("promotions", card.objectId, "cancel"))
+            CardVerb.CANCEL_MERGE -> {
+                require(PromotionCards.cancellable(row)) { "This merge is already being pushed and cannot be called back." }
+                request(projectPath("promotions", card.objectId, "cancel"))
+            }
             CardVerb.WIKI_ACCEPT, CardVerb.WIKI_EDIT, CardVerb.WIKI_REJECT, CardVerb.WIKI_RECONFIRM, CardVerb.WIKI_AMEND, CardVerb.WIKI_RETIRE -> request(listOf("wiki", "changesets", required("changesetId"), "decide"), buildJsonObject {
                 putJsonArray("decisions") { add(buildJsonObject {
                     put("opId", card.objectId)

@@ -420,7 +420,8 @@ struct ThinkingView: View {
     private var rowLabel: String {
         block.isFinalized
             ? ThinkingSummary.settledLabel(chars: block.text.count, blocks: block.blocks,
-                                           startedTs: block.startedTs, finishedTs: block.finishedTs)
+                                           startedTs: block.startedTs, finishedTs: block.finishedTs,
+                                           thinkingMs: block.thinkingMs)
             : "Thinking…"
     }
 }

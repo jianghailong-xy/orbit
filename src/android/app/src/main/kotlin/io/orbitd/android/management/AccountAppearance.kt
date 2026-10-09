@@ -17,8 +17,12 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 
 val LocalAppearanceChanged = staticCompositionLocalOf<(String) -> Unit> { {} }
+/** The account's smart model selection switch (`preferences.modelRouting`; off unless the owner turned it on), read with the theme
+ * from the same `users/me`: what the composer's ✦ is gated on (OrbitKit `ComposerLogic.smartRoute`). */
+val LocalSmartSelection = compositionLocalOf { false }
 
 // androidx.activity's own defaults for the navigation bar's scrim (EdgeToEdge.kt).
 private val LightScrim = Color.argb(0xe6, 0xFF, 0xFF, 0xFF)
@@ -33,6 +37,7 @@ fun AccountAppearance(app: OrbitApplication, content: @Composable () -> Unit) {
         .collectAsState(null to 0L)
     val revision = if (live.first === handle) live.second else 0L
     var theme by remember(handle) { mutableStateOf("system") }
+    var smartSelection by remember(handle) { mutableStateOf(false) }
     var appearanceVersion by remember(handle) { mutableLongStateOf(0L) }
     var resume by remember { mutableIntStateOf(0) }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -47,6 +52,7 @@ fun AccountAppearance(app: OrbitApplication, content: @Composable () -> Unit) {
             try {
                 val user = ManagementApi(app.session, handle).get("users/me") as JsonObject
                 if (version == appearanceVersion) theme = (user["preferences"] as? JsonObject)?.text("theme") ?: "system"
+                smartSelection = (user["preferences"] as? JsonObject)?.get("modelRouting") == JsonPrimitive(true)
             } catch (cancel: CancellationException) { throw cancel }
             catch (_: Exception) { /* Keep this account's last known preference until the next refresh. */ }
         }
@@ -61,7 +67,7 @@ fun AccountAppearance(app: OrbitApplication, content: @Composable () -> Unit) {
             navigationBarStyle = SystemBarStyle.auto(LightScrim, DarkScrim) { dark })
         onDispose { }
     }
-    CompositionLocalProvider(LocalAppearanceChanged provides { appearanceVersion++; theme = it }) {
+    CompositionLocalProvider(LocalAppearanceChanged provides { appearanceVersion++; theme = it }, LocalSmartSelection provides smartSelection) {
         OrbitTheme(darkTheme = dark, content = content)
     }
 }
