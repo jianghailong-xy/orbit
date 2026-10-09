@@ -602,7 +602,12 @@ func refreshClaudeToken(ctx context.Context, configDir string) error {
 	// login holding a spent one, so a runner shutting down or an account being removed lets it end.
 	cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), claudeTokenRefreshTimeout)
 	defer cancel()
+	dir, err := privateProbeDir(claudeProbeDirName)
+	if err != nil {
+		return err
+	}
 	cmd := exec.CommandContext(cctx, "claude", claudeTokenRefreshArgs...)
+	cmd.Dir = dir
 	cmd.Env = envWithAgent(nil)
 	if configDir != "" {
 		cmd.Env = envWithValue(cmd.Env, "CLAUDE_CONFIG_DIR", configDir)

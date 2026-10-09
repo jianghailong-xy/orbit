@@ -571,12 +571,16 @@ type IntegrationJobResultRequest struct {
 	AheadOfUpstream *int   `json:"aheadOfUpstream,omitempty"`
 	// With NOTHING_TO_LAND: whether the source tip is an ancestor of the upstream, as this runner
 	// measured it. Absent on every other answer, which the control plane reads as "not measured".
-	SourceOnUpstream *bool                    `json:"sourceOnUpstream,omitempty"`
-	FilesChanged     *int                     `json:"filesChanged,omitempty"`
-	Checks           []IntegrationCheckResult `json:"checks,omitempty"`
-	Conflicts        []string                 `json:"conflicts,omitempty"`
-	ErrorCode        string                   `json:"errorCode,omitempty"`
-	ErrorDetail      map[string]any           `json:"errorDetail,omitempty"`
+	SourceOnUpstream *bool `json:"sourceOnUpstream,omitempty"`
+	// With NOTHING_TO_LAND: true when the branch carried commits of its own and the rebase found every
+	// one of them already in the base, false when it carried none. Absent on every other answer, and
+	// from an older runner, which the control plane reads as "not measured".
+	SourceFullyApplied *bool                    `json:"sourceFullyApplied,omitempty"`
+	FilesChanged       *int                     `json:"filesChanged,omitempty"`
+	Checks             []IntegrationCheckResult `json:"checks,omitempty"`
+	Conflicts          []string                 `json:"conflicts,omitempty"`
+	ErrorCode          string                   `json:"errorCode,omitempty"`
+	ErrorDetail        map[string]any           `json:"errorDetail,omitempty"`
 }
 
 // IntegrationJobResultResponse is the control plane's answer: whether it took the result.
@@ -738,6 +742,14 @@ type ImportResultRequest struct {
 	Ok         bool   `json:"ok,omitempty"`
 	Error      string `json:"error,omitempty"`
 	Title      string `json:"title,omitempty"`
+}
+
+// SessionNamingRequest reports the title an engine gave its session. Replaces is the title the
+// claim carried: the control plane renames the session only while it still reads exactly that, so
+// a rename the person made in the meantime stands.
+type SessionNamingRequest struct {
+	Replaces string `json:"replaces"`
+	Title    string `json:"title"`
 }
 
 // ImportResultResponse is the control plane's receipt: applied=false on a replayed ok (the
@@ -1031,6 +1043,22 @@ type ClaimedSession struct {
 	// clean for (wiki_maintenance_session.go). A runner is handed one only once it declares
 	// wiki-maintenance-run/v1.
 	WikiMaintenance *WikiMaintenanceRun `json:"wikiMaintenance,omitempty"`
+	// Naming asks this runner to name the session through the engine running it, once its opening
+	// turn is underway (session_naming.go). The control plane sends it only while the session still
+	// carries the title cut from its prompt, it holds no key it could name the session with itself,
+	// and the engine has a way to answer from inside the process already running — Claude Code's
+	// generate_session_title, a Codex side thread. Absent from an older control plane, which names
+	// sessions itself or not at all.
+	Naming *SessionNamingJob `json:"naming,omitempty"`
+}
+
+// SessionNamingJob is what to name a session by. Description is the session's opening request,
+// already bounded; Instructions is Orbit's naming prompt, for an engine that takes a prompt of
+// Orbit's — the Codex side thread. Claude Code's generate_session_title brings a prompt of its own
+// and reads Description alone.
+type SessionNamingJob struct {
+	Description  string `json:"description"`
+	Instructions string `json:"instructions"`
 }
 
 // SessionSource is the frozen SOURCE snapshot: the INTENT (which repository, which line), frozen

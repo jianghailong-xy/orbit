@@ -215,9 +215,11 @@ import {
 import { BackgroundShellsTray } from './BackgroundShellsTray';
 import { SessionCreatedTasksStrip } from './SessionCreatedTasksStrip';
 import { SessionWatchBadges, SessionWatchStrip } from './WatchRelations';
+import { WatchWakeNamesCtx } from './WatchWakeCard';
 import { OrbitLinkCardsProvider } from './OrbitLinkCard';
 import {
   ago,
+  sameResourceId,
   sessionWatching,
   watchingCountWord,
   watchingSessions,
@@ -871,9 +873,10 @@ const JUMP_TO_START_PAGES = 30;
 // same). The follow a content update triggers lands just after the rows grew, and the gap read in
 // between — the normal state while a reply streams — must not flash the button.
 const STRANDED_AFTER_MS = 400;
-// What the sticky bar calls a turn the person typed. A watch's wake carries its own label on its card
-// instead (`data-sticky-label`), since saying this above a card reading "not typed by you" is the
-// screen contradicting itself — which is what the account owner photographed on 2026-09-17.
+// What the sticky bar calls a turn the person typed. A card the control plane draws for a turn nobody
+// typed carries its own label instead (`data-sticky-label`), since saying this above a card reading
+// "not typed by you" is the screen contradicting itself — which is what the account owner
+// photographed on 2026-09-17, over a watch's wake.
 const STICKY_LABEL = 'Your question';
 // How long a cached /background scan stays fresh. `/background` scans the session's whole
 // tool-event history, so re-opening a session (or scrubbing the list) within this window paints
@@ -1186,6 +1189,46 @@ export function SessionTitleRow({
       )}
       <span className="session-time">{fmtTime(s.lastTurnAt ?? s.createdAt)}</span>
       <CoordinatorBadge projectId={s.projectId} />
+    </div>
+  );
+}
+
+/** Rename… on a session row: the title in a field where the row's two lines were, drawn as a
+ * folder's Rename… is. The header editor's rules: Return or leaving the field hands back the trimmed
+ * title — unchanged text too, as the header does — and Esc or an emptied field hands back null. */
+function SessionRowRename({ title, onDone }: { title: string; onDone: (title: string | null) => void }) {
+  const [draft, setDraft] = useState(title);
+  const cancelled = useRef(false);
+  return (
+    <div className="session-rename">
+      <input
+        className="folder-name-input"
+        autoFocus
+        maxLength={200}
+        aria-label="Session title"
+        value={draft}
+        onFocus={(e) => {
+          // All of it selected (typing replaces it), with its head in view: Chromium keeps the field
+          // scrolled to the end it focused at, whichever way the selection runs.
+          const el = e.currentTarget;
+          el.setSelectionRange(0, el.value.length, 'backward');
+          el.scrollLeft = 0;
+        }}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.nativeEvent.isComposing) return; // let the IME (e.g. pinyin) keep Enter
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            e.currentTarget.blur();
+          } else if (e.key === 'Escape') {
+            e.preventDefault();
+            cancelled.current = true;
+            e.currentTarget.blur();
+          }
+        }}
+        onBlur={() => onDone(cancelled.current ? null : draft.trim() || null)}
+      />
+      <span className="session-folder-hint">{FOLDER_COPY.editHint}</span>
     </div>
   );
 }
@@ -1789,7 +1832,7 @@ function StopSquareIcon({ className }: { className?: string }) {
   );
 }
 
-/** What withdrawing a queued wake costs: said beside the action, and again when it asks to confirm. */
+/** What withdrawing a queued wake costs, said when the action asks to confirm. */
 const WAKE_WITHDRAW_CONSEQUENCE =
   "If withdrawn, this session is not woken this time, and the watch won't send it again.";
 
@@ -1810,7 +1853,8 @@ const WAKE_WITHDRAW_CONSEQUENCE =
  *
  * A wake a watch queued leaves through the same door, but it was never anyone's to take back:
  * withdrawing it dead-letters the watch's delivery (WAKE_WITHDRAWN), so the session is not woken
- * and the watch does not send it again. The action says what it does, and the line what follows.
+ * and the watch does not send it again. The action says what it does, and the confirmation it asks
+ * for says what follows — not this line, which sits under the wake's one-line event.
  */
 export function QueuedTurnMeta({
   placement,
@@ -1837,11 +1881,7 @@ export function QueuedTurnMeta({
     : placement === 'steer'
       ? steerDeliveryState(undefined).label
       : 'Queued for next turn';
-  const why = delivery != null
-    ? deliveryFailureExplanation(deliveryCode, deliveryReason)
-    : wake && placement === 'queued'
-      ? WAKE_WITHDRAW_CONSEQUENCE
-      : undefined;
+  const why = delivery != null ? deliveryFailureExplanation(deliveryCode, deliveryReason) : undefined;
   return (
     <span className="chat-queued-meta" title={deliveryReason}>
       <span className={`chat-queued-tag${delivery != null ? ' chat-queued-tag-failed' : ''}`}>
@@ -2037,6 +2077,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     localStorage.setItem(PINNED_COLLAPSED_KEY, next ? '1' : '0');
   };
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null); // session row whose action menu is open
+  // The session row whose Rename… field is open (SessionRowRename), from its ⋯ or a held press.
+  const [renamingId, setRenamingId] = useState<string | null>(null);
   // Touch swipe actions for session rows: on mobile the row's actions sit behind a swipe,
   // laid out like the iOS list (lib/sessionSwipe) — swipe right
   // for Complete / Move to Open + Pin, swipe left for Delete.
@@ -2537,12 +2579,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         .map((card) => card.getAttribute('data-open-item'))
         .join(' '),
     );
-    // A turn a watch or the control plane queued is one of these too — it is where the answer under
-    // it starts, so it is where the bar has to point — but it is no bubble and nobody typed it, so
-    // its card hands over what to call it (`data-sticky-label` / `data-sticky-text`). Its queued
-    // twin in the tail is skipped like any queued turn: it hasn't been asked yet. A background
-    // job's news or a wakeup coming due is not one: it is a line inside the answer the agent is
-    // still giving (BackgroundWakeCard), so it carries no label and the bar keeps the question.
+    // A turn the control plane queued is one of these too — it is where the answer under it starts,
+    // so it is where the bar has to point — but it is no bubble and nobody typed it, so its card
+    // hands over what to call it (`data-sticky-label` / `data-sticky-text`). Its queued twin in the
+    // tail is skipped like any queued turn: it hasn't been asked yet. A watch's wake, a background
+    // job's news or a wakeup coming due is not one: it is a line inside the answer the agent is still
+    // giving (WatchWakeCard, BackgroundWakeCard), so it carries no label and the bar keeps the question.
     const bubbles = Array.from(
       el.querySelectorAll<HTMLElement>('.chat-user:not(.chat-queued), [data-sticky-label]:not(.is-queued)'),
     ).filter((b) => !b.closest('.chat-subagent')); // ignore prompts nested in a sub-workspace transcript
@@ -5459,6 +5501,21 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     ...sessionCreatedTasksQuery(selectedId ?? ''),
     enabled: Boolean(selectedId) && !selectedTrashed,
   });
+  // What a watch's wake line calls the targets it names (WatchWakeCard), by either spelling of their
+  // ids: the title the watch itself carries for each target, else the row this conversation's Tasks
+  // card holds for it. Both reads are already on this page for the strips above the composer.
+  const wakeTargetName = useCallback(
+    (watchId: string, target: { kind: string; id: string }): string | undefined => {
+      const watches = Array.isArray(watchesForHeaderQ.data) ? (watchesForHeaderQ.data as WatchView[]) : [];
+      const watched = watches
+        .find((w) => sameResourceId(w.id, watchId))
+        ?.targets.find((t) => sameResourceId(t.targetResourceId, target.id));
+      if (watched?.targetTitle) return watched.targetTitle;
+      if (target.kind !== 'TASK') return undefined;
+      return createdTasks.data?.items.find((row) => sameResourceId(row.id, target.id))?.title;
+    },
+    [watchesForHeaderQ.data, createdTasks.data],
+  );
 
   // Allow/deny a pending tool-permission request; optimistically drop it (the
   // approval_resolved SSE also removes it), re-fetching to resync on failure.
@@ -6336,17 +6393,23 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       onOk: () => purgeMut.mutate(session),
     });
   };
-  // Double-click the header title to rename. Optimistically patch the title into every
-  // cached session list (the header reads `selected.title` off that list, not the detail
-  // query) so the new name shows instantly; reconcile or roll back on settle.
+  // Double-click the header title (or Rename… in a ⋯) to rename. Optimistically patch the title into
+  // every cached session list (the header reads `selected.title` off that list, not the detail
+  // query) — a project's sessions page included, where a row can be renamed too — so the new name
+  // shows instantly; reconcile or roll back on settle.
   const renameMut = useMutation({
     mutationFn: ({ id, title }: { id: string; title: string }) => renameSession(id, title),
-    onMutate: ({ id, title }) =>
-      qc.setQueriesData<any[]>({ queryKey: ['sessions'] }, (old) =>
-        Array.isArray(old) ? old.map((s) => (s.id === id ? { ...s, title } : s)) : old,
-      ),
+    onMutate: ({ id, title }) => {
+      const patch = (old: any[] | undefined) =>
+        Array.isArray(old) ? old.map((s) => (s.id === id ? { ...s, title } : s)) : old;
+      qc.setQueriesData<any[]>({ queryKey: ['sessions'] }, patch);
+      qc.setQueriesData<any[]>({ queryKey: ['project-sessions'] }, patch);
+    },
     onError: (e: Error) => message.error("Couldn't rename the session", e.message),
-    onSettled: () => qc.invalidateQueries({ queryKey: ['sessions'] }),
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: ['sessions'] });
+      void qc.invalidateQueries({ queryKey: ['project-sessions'] });
+    },
   });
   // Pin/unpin a session to the top of the list. Optimistically flip pinnedAt in every cached
   // list (mirrors renameMut) so the row jumps immediately; reconcile on settle.
@@ -9293,21 +9356,36 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                       : isSessionLive(actionSession) ? 'Ends the run and moves to Completed' : undefined
                     : action === 'restore' && !canRestoreRow ? 'Move to Open unavailable right now' : undefined,
                 });
+                // Rename… opens a field rather than acting, so it is no swipe action (as on iOS) and
+                // sits with the other … items. A trashed session's title isn't edited (the header's
+                // isn't either).
                 const menuItems: MenuProps['items'] = memberView === 'trash'
                   ? [menuItem('restore'), { type: 'divider' }, menuItem('purge')]
                   : [
                       ...swipeActions.leading.map(menuItem),
                       { type: 'divider' },
+                      { key: 'rename', icon: <EditOutlined />, label: 'Rename…' },
                       menuItem('share'),
                       ...(movable ? [menuItem('move')] : []),
                       { type: 'divider' },
                       menuItem('delete'),
                     ];
+                const runMenuAction = (key: string): void => {
+                  if (key === 'rename') setRenamingId(s.id);
+                  else runSwipeAction(key as SwipeAction, s);
+                };
+                const renaming = renamingId === s.id;
                 return (
                   <div
-                    className={`session-row${openable ? '' : ' no-open'}${s.id === selectedId ? ' active' : ''}${menuOpenId === s.id ? ' menu-open' : ''}`}
+                    className={`session-row${openable ? '' : ' no-open'}${s.id === selectedId ? ' active' : ''}${menuOpenId === s.id ? ' menu-open' : ''}${renaming ? ' renaming' : ''}`}
                     key={s.id}
+                    // While it is renamed, a press anywhere else on the row keeps the field's focus
+                    // (leaving the field saves), and a click there doesn't open the row.
+                    onMouseDown={(e) => {
+                      if (renaming && !(e.target instanceof HTMLInputElement)) e.preventDefault();
+                    }}
                     onClick={() => {
+                      if (renaming) return;
                       if (swipeClickGuard.current) {
                         swipeClickGuard.current = false;
                         return; // this click merely ends a swipe
@@ -9322,7 +9400,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                           navigate(sessionPath(s.id), { state: stampFromList() }),
                         );
                     }}
-                    onTouchStart={(e) => onRowTouchStart(e, actionSession, canFullSwipe)}
+                    onTouchStart={(e) => { if (!renaming) onRowTouchStart(e, actionSession, canFullSwipe); }}
                     onTouchMove={onRowTouchMove}
                     onTouchEnd={onRowTouchEnd}
                     onTouchCancel={onRowTouchCancel}
@@ -9339,7 +9417,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                           onClick: ({ key, domEvent }) => {
                             domEvent.stopPropagation();
                             setPressMenu(null);
-                            runSwipeAction(key as SwipeAction, s);
+                            runMenuAction(key);
                           },
                         }}
                       >
@@ -9382,24 +9460,36 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                         <StatusIcon session={actionSession} watching={watching?.word} />
                       </span>
                       <div className="session-main">
-                        <SessionTitleRow session={s} hoverTipOpen={hoverTipOpen} />
-                        {/* Tags lead the second line and the reply preview follows them. They sat
-                            beside the title as bare colour dots until the naming pass started
-                            writing semantic ones ("登录", "性能"): a dot cannot show a word, so the
-                            meaning lived only in a tooltip. Here they read at a glance and the
-                            preview yields, being the echo of a reply rather than the handle you
-                            file the session under. */}
-                        <div className="session-sub">
-                          <SessionTagChips
-                            tags={s.tags as SessionTagRef[] | null | undefined}
-                            tooltipOpen={hoverTipOpen}
+                        {renaming ? (
+                          <SessionRowRename
+                            title={s.title ?? ''}
+                            onDone={(title) => {
+                              setRenamingId(null);
+                              if (title) renameMut.mutate({ id: s.id, title });
+                            }}
                           />
-                          <div
-                            className={`session-preview${line.tone === 'preview' ? '' : ` tone-${line.tone}`}`}
-                          >
-                            {line.text}
-                          </div>
-                        </div>
+                        ) : (
+                          <>
+                            <SessionTitleRow session={s} hoverTipOpen={hoverTipOpen} />
+                            {/* Tags lead the second line and the reply preview follows them. They sat
+                                beside the title as bare colour dots until the naming pass started
+                                writing semantic ones ("登录", "性能"): a dot cannot show a word, so the
+                                meaning lived only in a tooltip. Here they read at a glance and the
+                                preview yields, being the echo of a reply rather than the handle you
+                                file the session under. */}
+                            <div className="session-sub">
+                              <SessionTagChips
+                                tags={s.tags as SessionTagRef[] | null | undefined}
+                                tooltipOpen={hoverTipOpen}
+                              />
+                              <div
+                                className={`session-preview${line.tone === 'preview' ? '' : ` tone-${line.tone}`}`}
+                              >
+                                {line.text}
+                              </div>
+                            </div>
+                          </>
+                        )}
                       </div>
                     </div>
                     <div className="session-right">
@@ -9419,7 +9509,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                             onClick: ({ key, domEvent }) => {
                               domEvent.stopPropagation();
                               setMenuOpenId(null);
-                              runSwipeAction(key as SwipeAction, s);
+                              runMenuAction(key);
                             },
                           }}
                         >
@@ -9536,9 +9626,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                     onChange={(e) => setTitleDraft(e.target.value)}
                     onFocus={(e) => {
                       // Select all (double-click-to-rename = type replaces), but anchor the
-                      // caret at the START so a long title shows its head, not its tail.
+                      // caret at the START so a long title shows its head, not its tail. The
+                      // anchor alone doesn't scroll: Chromium keeps the field at the end it
+                      // focused at.
                       const el = e.currentTarget;
                       el.setSelectionRange(0, el.value.length, 'backward');
+                      el.scrollLeft = 0;
                     }}
                     onKeyDown={(e) => {
                       if (e.nativeEvent.isComposing) return; // let the IME (e.g. pinyin) keep Enter
@@ -9691,6 +9784,16 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                                 },
                               },
                               {
+                                key: 'rename',
+                                icon: <EditOutlined />,
+                                label: 'Rename…',
+                                onClick: () => {
+                                  setHeaderMenuOpen(false);
+                                  setTitleDraft(selected.title);
+                                  setEditingTitle(true);
+                                },
+                              },
+                              {
                                 key: 'move',
                                 icon: <FolderOutlined />,
                                 label: MOVE_COPY.action,
@@ -9708,6 +9811,18 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                                   onClick: () => {
                                     setHeaderMenuOpen(false);
                                     requestComplete(selected);
+                                  },
+                                },
+                                // The same editor a double-click on the title opens, which nothing
+                                // on screen announces.
+                                {
+                                  key: 'rename',
+                                  icon: <EditOutlined />,
+                                  label: 'Rename…',
+                                  onClick: () => {
+                                    setHeaderMenuOpen(false);
+                                    setTitleDraft(selected.title);
+                                    setEditingTitle(true);
                                   },
                                 },
                                 // Filing it, beside the other move it can make (§2).
@@ -9870,6 +9985,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             </div>
           ) : selectedId ? (
             <div className="workspace-sessions" ref={scrollRef}>
+              <WatchWakeNamesCtx.Provider value={wakeTargetName}>
               {/* A tail-first transcript always has more above it: while a page is in flight this
                   says so, and otherwise it is the way to the first message, which scrolling alone
                   never reaches (see jumpToStart). Pinned to the top of the viewport rather than
@@ -10237,6 +10353,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   )}
                 </div>
               )}
+              </WatchWakeNamesCtx.Provider>
             </div>
           ) : composing ? (
             // The provider hero is centered as a hero only while it's alone: .workspace-draft is a

@@ -39,6 +39,7 @@ function candidate(overrides: Partial<ProjectPromotionView> = {}): ProjectPromot
     taskIds: ['t1', 't2'],
     checks: [],
     conflicts: [],
+    blockedReason: null,
     upstreamShaChecked: null,
     landsTreeSha: null,
     landsAs: 'MERGE_COMMIT',
@@ -109,13 +110,46 @@ describe('the page card’s lines', () => {
     expect(promotionChecksSummary(candidate({ checks: [green] }))).toEqual({ text: '✓ Checks passed · no conflicts', clean: true });
     expect(promotionChecksSummary(candidate({ checks: [{ ...green, exitCode: 1 }], conflicts: ['a.go'] })).text)
       .toBe('✕ Checks failed · 1 file conflict with main');
-    expect(promotionBlockedLine(candidate({ state: 'BLOCKED', conflicts: ['a', 'b', 'c', 'd'] })))
+    expect(promotionBlockedLine(candidate({ state: 'BLOCKED', blockedReason: 'CONFLICT', conflicts: ['a', 'b', 'c', 'd'] })))
       .toBe('4 files conflict with main: a, b, c and 1 more');
-    expect(promotionBlockedLine(candidate({ state: 'BLOCKED' }))).toBe('the checks on the combined tree did not pass');
+    expect(promotionBlockedLine(candidate({ state: 'BLOCKED', blockedReason: 'CHECK_FAILED' })))
+      .toBe('the checks on the combined tree did not pass');
     expect(promotionMergingStatus(candidate({ state: 'RECHECKING', execution: { state: 'RUNNING', phase: 'CHECK', startedAt: 'x' } })))
       .toBe('main moved since the check — re-checking the combined tree');
     expect(promotionMergingStatus(candidate({ state: 'CONFIRMED', execution: { state: 'QUEUED', phase: null, startedAt: 'x' } })))
       .toBe('confirmed — queued to merge into main');
+  });
+});
+
+describe('why a blocked merge is blocked', () => {
+  // 2026-10-09: the check found the project branch already on main and blocked the candidate with no
+  // checks and no conflicts, and the card said a check had failed. No check had run.
+  it('says there is nothing to merge when the branch is already on main, not that a check failed', () => {
+    const nothing = candidate({ state: 'BLOCKED', blockedReason: 'ALREADY_LANDED', checks: [], conflicts: [] });
+    expect(promotionBlockedLine(nothing)).toBe('nothing to merge — project/34ZurCP3bv9yLXGVyUGnx is already on main');
+    expect(promotionBlockedReason(nothing)).toBe('nothing to merge');
+    expect(promotionEventLine(nothing)).toEqual({ text: 'Can’t merge into main yet · nothing to merge', tone: 'blocked' });
+  });
+
+  it('says an error stopped it when the job never reached a verdict, not that a check failed', () => {
+    const errored = candidate({ state: 'BLOCKED', blockedReason: 'ERROR', checks: [], conflicts: [] });
+    expect(promotionBlockedLine(errored)).toBe('the merge stopped on an error — no check failed');
+    expect(promotionBlockedReason(errored)).toBe('check errored');
+    expect(promotionEventLine(errored)).toEqual({ text: 'Can’t merge into main yet · check errored', tone: 'blocked' });
+  });
+
+  it('reads a block recorded before its reason was, the way it always did', () => {
+    const older = candidate({ state: 'BLOCKED', blockedReason: null });
+    expect(promotionBlockedLine(older)).toBe('the checks on the combined tree did not pass');
+    expect(promotionBlockedReason(older)).toBe('checks failed');
+    const olderConflict = candidate({ state: 'BLOCKED', blockedReason: null, conflicts: ['a.go'] });
+    expect(promotionBlockedLine(olderConflict)).toBe('1 file conflict with main: a.go');
+    expect(promotionBlockedReason(olderConflict)).toBe('1 file conflict');
+    // A server from before the field existed sends none at all.
+    const unrecorded = candidate({ state: 'BLOCKED' });
+    delete (unrecorded as Partial<ProjectPromotionView>).blockedReason;
+    expect(promotionBlockedLine(unrecorded)).toBe('the checks on the combined tree did not pass');
+    expect(promotionBlockedReason(unrecorded)).toBe('checks failed');
   });
 });
 
@@ -185,9 +219,9 @@ describe('the coordinator conversation’s one line', () => {
   it('is orange only while it waits on the reader', () => {
     expect(promotionEventLine(candidate())).toEqual({ text: 'Merge into main is waiting for you', tone: 'needsYou' });
     expect(promotionEventLine(candidate({ state: 'CONFIRMED' }))).toEqual({ text: 'Merge into main confirmed', tone: 'working' });
-    expect(promotionEventLine(candidate({ state: 'BLOCKED', conflicts: ['a.go', 'b.go'] })))
+    expect(promotionEventLine(candidate({ state: 'BLOCKED', blockedReason: 'CONFLICT', conflicts: ['a.go', 'b.go'] })))
       .toEqual({ text: 'Can’t merge into main yet · 2 files conflict', tone: 'blocked' });
-    expect(promotionBlockedReason(candidate({ state: 'BLOCKED' }))).toBe('checks failed');
+    expect(promotionBlockedReason(candidate({ state: 'BLOCKED', blockedReason: 'CHECK_FAILED' }))).toBe('checks failed');
     expect(promotionEventLine(null)).toEqual({ text: NO_LONGER_ON_OFFER, tone: 'quiet' });
     expect(promotionEventLine(candidate({ state: 'DECLINED' })).tone).toBe('quiet');
   });

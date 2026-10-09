@@ -29,10 +29,12 @@ import {
   PROMOTION_NOT_READY,
   PROMOTION_OWNER_ONLY,
   ProjectPromotionView,
+  PromotionBlockedReason,
   PromotionRow,
   PromotionState,
   automaticConfirmationRefusal,
   medianMs,
+  promotionBlockedReasonFor,
   promotionConfirmRefusal,
   promotionDedupeKey,
   promotionItemTitle,
@@ -1037,7 +1039,8 @@ export async function applyPromotionJobResult(
         },
       };
     }
-    return blockPromotion(tx, promotion.id, checks, input.conflicts, now, input.sourceSha);
+    return blockPromotion(tx, promotion.id, checks, input.conflicts, now, input.sourceSha,
+      promotionBlockedReasonFor(input.state));
   }
 
   // LAND_PROMOTION.
@@ -1074,7 +1077,8 @@ export async function applyPromotionJobResult(
     await closePromotionItems(tx, promotion.projectId, promotion.id, 'RESOLVED');
     return { promotionId: promotion.id, state: 'MERGED', receiptIds, openApproval: null };
   }
-  return blockPromotion(tx, promotion.id, checks, input.conflicts, now, input.sourceSha);
+  return blockPromotion(tx, promotion.id, checks, input.conflicts, now, input.sourceSha,
+    promotionBlockedReasonFor(input.state));
 }
 
 /**
@@ -1142,6 +1146,9 @@ async function blockPromotion(
   conflicts: string[],
   now: Date,
   sourceSha: string | null,
+  /** What the job answered (0409). The card says it; `checks` and `conflicts` cannot, since both
+   *  are empty when there was nothing to merge and when the job errored before any check ran. */
+  reason: PromotionBlockedReason | null,
 ): Promise<PromotionJobOutcome> {
   await tx.projectPromotion.update({
     where: { id: promotionId },
@@ -1152,6 +1159,7 @@ async function blockPromotion(
       ...(sourceSha ? { sourceSha } : {}),
       checks,
       conflicts: conflicts.slice(0, 200),
+      blockedReason: reason,
       decidedAt: now,
     },
   });
@@ -1194,7 +1202,8 @@ export async function requeuePromotionCheck(
   });
   await tx.projectPromotion.update({
     where: { id: promotion.id },
-    data: { state: 'CHECKING' satisfies PromotionState, checkJobId: jobId, decidedAt: null },
+    // Asking again, so nothing blocks it any more: a check that fails again records its own reason.
+    data: { state: 'CHECKING' satisfies PromotionState, checkJobId: jobId, decidedAt: null, blockedReason: null },
   });
   const queued = await tx.projectIntegrationJob.findUniqueOrThrow({
     where: { id: jobId },

@@ -153,6 +153,7 @@ import {
   enqueueBeautifySession,
   MAX_KNOWN_TAGS_PROMPTED,
   makeBranchName,
+  sanitizeTitle,
   titleFromAttachments,
   titleFromPrompt,
 } from './naming';
@@ -190,6 +191,7 @@ import {
   usableProviderScope,
 } from '../providers/custom-provider';
 import { ownsModel } from '../providers/preset-overlay';
+import { sessionHeldKey } from '../providers/held-key';
 import {
   newTerminalResumeHandoffOwner,
   pendingWorktreeOperationMayBeExecuting,
@@ -1367,10 +1369,10 @@ export class SessionsService {
       this.realtime.publishWorkspaceChanged(session.id, session.workspaceId, false);
     }
     // Only unnamed sessions need cosmetic naming. Task runs and user-supplied titles never call
-    // DeepSeek, and neither does a session with no words to read — its file names stand.
+    // a model, and neither does a session with no words to read — its file names stand.
     // The branch is deliberately left as-is when the display title is later improved.
     if (!hasExplicitTitle && !attachmentsAlone) {
-      void this.beautifySessionLater(ownerId, session.id, dto.prompt, title);
+      void this.beautifySessionLater(session, dto.prompt, title);
     }
     // Title ownership/provenance is an internal synchronization mechanism, not a public setting.
     const {
@@ -1653,18 +1655,23 @@ export class SessionsService {
 
   /**
    * Background naming for a session that started with a prompt-derived title: a cleaner display
-   * title, plus a couple of semantic tags to file it under. The shared bounded queue prevents a
-   * create burst from fan-out calling DeepSeek. Swap the title only while it is still the exact
-   * fallback we wrote, so a user rename (or any concurrent change) is never clobbered. Re-publishes
-   * the session so live clients pick up both. Fire-and-forget: never awaited, swallows all errors.
+   * title, plus a couple of semantic tags to file it under. Asked of DeepSeek on the server's key
+   * when one is configured; otherwise of the session's own provider, when the server holds its key
+   * (sessionHeldKey). A session on an engine's own sign-in has no key here, and is named by its runner
+   * through that engine instead (the claim's `naming`). The shared bounded queue prevents a create
+   * burst from fanning out calls. Swap the title only while it is still the exact fallback we wrote,
+   * so a user rename (or any concurrent change) is never clobbered. Re-publishes the session so live
+   * clients pick up both. Fire-and-forget: never awaited, swallows all errors.
    */
   private async beautifySessionLater(
-    ownerId: string,
-    sessionId: string,
+    session: { id: string; ownerId: string; provider: string; providerBuiltin: boolean; model: string | null },
     prompt: string,
     fallbackTitle: string,
   ): Promise<void> {
+    const { id: sessionId, ownerId } = session;
     try {
+      const key = process.env.DEEPSEEK_API_KEY?.trim() ? undefined : await sessionHeldKey(this.prisma, session);
+      if (key === null) return;
       // The owner's own vocabulary, offered to the model as reuse candidates. System tags are
       // colors ("Red"), not semantics, so they are never candidates and are never auto-applied.
       const known = await this.prisma.sessionTag.findMany({
@@ -1676,6 +1683,7 @@ export class SessionsService {
       const { title, tags } = await enqueueBeautifySession({
         prompt,
         knownTags: known.map((t) => t.name),
+        key,
       });
       let changed = false;
       if (title && title !== fallbackTitle) {
@@ -1692,6 +1700,24 @@ export class SessionsService {
     } catch {
       // best-effort; the raw fallback title simply stays
     }
+  }
+
+  /**
+   * The title the engine running a session gave it (POST /runner/sessions/:id/naming): set only while
+   * the session still reads `replaces` — the title its claim carried — and no project owns its title,
+   * the same compare-and-set beautifySessionLater makes, so a rename made in the meantime stands.
+   * Returns whether it landed, after announcing it.
+   */
+  async applyEngineTitle(sessionId: string, replaces: string, title: string): Promise<boolean> {
+    const named = sanitizeTitle(title);
+    if (!named || named === replaces) return false;
+    const res = await this.prisma.session.updateMany({
+      where: { id: sessionId, title: replaces, titleManagedByProject: false },
+      data: { title: named },
+    });
+    if (res.count === 0) return false;
+    this.realtime.publishSessionUpdated(sessionId);
+    return true;
   }
 
   /**
@@ -3719,9 +3745,40 @@ export class SessionsService {
    *
    * `events` is the transcript's TAIL page — the newest `limit` (default 200) — with `hasMore`,
    * not the whole history: a coordinator's transcript is megabytes, and the anonymous door was
-   * handing all of it to whoever asked. Older events page in over getSharedEventPage.
+   * handing all of it to whoever asked. Older events page in over getSharedEventPage, and newer
+   * ones over getSharedEventsAfter.
    */
   async getSharedTranscript(sessionId: string, opts: { limit?: number; maxPayload?: number } = {}) {
+    const head = await this.sharedHead(sessionId);
+    // A share is another historical transcript reader, so it observes the same replay contract as
+    // the authenticated page/SSE paths. In particular, do not expose live-only rows accidentally
+    // persisted by an older API during a rolling deployment (or spend a public response on their
+    // repeated foreground-shell snapshots). The page query is the owner's own (eventPage).
+    const { events, hasMore } = await this.eventPage(sessionId, opts);
+    return { ...head, events, hasMore };
+  }
+
+  /**
+   * What a shared session has added since `after`, a seq its public page already holds, and how it
+   * stands now: the root's header fields with the events just newer than that seq, oldest first,
+   * and `after` the cursor to the rest, null once they reach the newest. A page following a live
+   * session asks this every few seconds, so one read both grows its tail and redraws its state.
+   *
+   * The header is read first. A run that ends between the two reads is then still running in this
+   * answer, and the page asks once more; read the other way round, the answer could say the run is
+   * over while its last events are not in it.
+   */
+  async getSharedEventsAfter(
+    sessionId: string,
+    opts: { after: number; limit?: number; maxPayload?: number },
+  ) {
+    const head = await this.sharedHead(sessionId);
+    return { ...head, ...(await this.eventPageAfter(sessionId, opts)) };
+  }
+
+  /** A shared session's header — what its public page says of it above the transcript — and nothing
+   *  else about it (see getSharedTranscript). A trashed session is the link's 404. */
+  private async sharedHead(sessionId: string) {
     const session = await this.prisma.session.findFirst({
       where: { id: sessionId, deletedAt: null },
       select: {
@@ -3738,11 +3795,6 @@ export class SessionsService {
     });
     if (!session) throw linkNotFound();
     const stateful = withSessionState(session);
-    // A share is another historical transcript reader, so it observes the same replay contract as
-    // the authenticated page/SSE paths. In particular, do not expose live-only rows accidentally
-    // persisted by an older API during a rolling deployment (or spend a public response on their
-    // repeated foreground-shell snapshots). The page query is the owner's own (eventPage).
-    const { events, hasMore } = await this.eventPage(session.id, opts);
     return {
       title: session.title,
       workspaceName: session.workspace?.name ?? null,
@@ -3753,8 +3805,6 @@ export class SessionsService {
       lifecycleState: stateful.lifecycleState,
       filingState: stateful.filingState,
       createdAt: session.createdAt,
-      events,
-      hasMore,
     };
   }
 
@@ -3944,18 +3994,9 @@ export class SessionsService {
       select: { id: true },
     });
     if (!session) throw new NotFoundException('session not found');
-    const take = Math.min(Math.max(Math.trunc(opts.limit ?? 200), 1), 500);
     const after = Math.trunc(opts.after);
-    const [rows, older] = await Promise.all([
-      this.prisma.$queryRaw<PageRow[]>`
-        SELECT seq, type, payload, turn_id AS "turnId", created_at AS "createdAt"
-        FROM run_event
-        WHERE session_id = ${id}::uuid
-          AND seq > ${after}
-          AND ${replayableEventSql}
-        ORDER BY seq ASC
-        LIMIT ${take + 1}
-      `,
+    const [newer, older] = await Promise.all([
+      this.eventPageAfter(id, opts),
       this.prisma.$queryRaw<{ found: boolean }[]>`
         SELECT EXISTS (
           SELECT 1 FROM run_event
@@ -3965,13 +4006,36 @@ export class SessionsService {
         ) AS "found"
       `,
     ]);
-    const hasNewer = rows.length > take;
-    const events = hasNewer ? rows.slice(0, take) : rows;
     const hasOlder = older[0]?.found === true;
     return {
-      events: events.map((e) => toPageEvent(e, opts.maxPayload)),
+      events: newer.events,
       hasMore: hasOlder,
-      before: hasOlder ? (events[0]?.seq ?? after + 1) : null,
+      before: hasOlder ? (newer.events[0]?.seq ?? after + 1) : null,
+      after: newer.after,
+    };
+  }
+
+  /** getEventPageAfter's newer half, for a session the caller has already resolved — by owner there,
+   *  by share link in getSharedEventsAfter: `limit` events with seq above `after`, oldest first, and
+   *  the cursor to the page after them, null once they reach the newest event. */
+  private async eventPageAfter(
+    id: string,
+    opts: { after: number; limit?: number; maxPayload?: number },
+  ): Promise<Pick<TranscriptPage, 'events' | 'after'>> {
+    const take = Math.min(Math.max(Math.trunc(opts.limit ?? 200), 1), 500);
+    const rows = await this.prisma.$queryRaw<PageRow[]>`
+      SELECT seq, type, payload, turn_id AS "turnId", created_at AS "createdAt"
+      FROM run_event
+      WHERE session_id = ${id}::uuid
+        AND seq > ${Math.trunc(opts.after)}
+        AND ${replayableEventSql}
+      ORDER BY seq ASC
+      LIMIT ${take + 1}
+    `;
+    const hasNewer = rows.length > take;
+    const events = hasNewer ? rows.slice(0, take) : rows;
+    return {
+      events: events.map((e) => toPageEvent(e, opts.maxPayload)),
       after: hasNewer ? events[events.length - 1].seq : null,
     };
   }

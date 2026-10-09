@@ -33,6 +33,7 @@ import {
   openItemKindForJobState,
   queueLandingBehindTheWork,
   shortBranchName,
+  workBranchEndedOn,
 } from '../projects/project-integration-job';
 import {
   ownerHoldOnHandledItems,
@@ -661,8 +662,18 @@ export async function applyIntegrationJobResult(
       ? await readLandingWorkSessions(tx, job.taskId)
       : [];
 
+    // J-S4's NOTHING_TO_LAND about a branch that DID carry commits of the task's own, every one of
+    // which the target already had (`sourceFullyApplied`, 0410). It pushed nothing, like every
+    // NOTHING_TO_LAND. Unlike the empty branch's, it says the task's work IS on the target: the
+    // positive answer ALREADY_LANDED gives, measured on the commits' changes rather than on the tip.
+    // So it is held to the same two rules: an answer taken before the work stopped moving is not
+    // written down (J-T1e), and an answer about a branch the work did not end on lands nothing of it
+    // (§2.6). When it speaks for the task's work, it is followed by what follows a landing.
+    const fullyApplied = job.kind === 'LAND_TASK' && state === 'NOTHING_TO_LAND'
+      && body.sourceFullyApplied === true;
+
     if (job.kind === 'LAND_TASK' && job.taskId
-        && state === 'ALREADY_LANDED' && landingJudgedTooEarly(job.claimedAt, work)) {
+        && (state === 'ALREADY_LANDED' || fullyApplied) && landingJudgedTooEarly(job.claimedAt, work)) {
       // Not written down as final, and NOT without a trace: the row goes back to the queue it came
       // from, clearing the claim, and the line will be handed it again — which, by the claim guard
       // above, is the first heartbeat after this task's work has stopped moving. Nothing follows
@@ -714,17 +725,27 @@ export async function applyIntegrationJobResult(
     const ownWork = wroteNothingOfItsOwn && job.taskId
       ? await workSessionsReportingWork(tx, job.taskId)
       : [];
+    // A positive answer about a branch the task's work did not end on (§2.6): it says nothing about
+    // that work, which is owed a landing of its own (queued below, once this job is written).
+    const leftWorkBehind = job.kind === 'LAND_TASK' && (state === 'ALREADY_LANDED' || fullyApplied)
+      && landingLeftWorkBehind(job, work);
+    // A fully applied branch holds its own session's reported work, and that work is the work the
+    // line measured on the target: only work reported on ANOTHER branch keeps its receipt back.
+    const workElsewhere = ownWork.filter((branch) => branch !== shortBranchName(job.sourceRef));
     // The states a receipt is written for: a landing, whose receipt says the work is on the target,
     // and a no-commit answer where the task has no work of its own anywhere — where that is exactly
-    // what the receipt has to say for the dependents waiting on it.
+    // what the receipt has to say for the dependents waiting on it. A fully applied answer says the
+    // first in the second's spelling: the work is on the target, and nothing moved, when the branch
+    // it measured is where all of the task's work is and where it ended.
     //
     // Read off `effectiveState` and not off what the runner called it: an answer downgraded above is
     // NOT a landing, however it was spelled — and the incident's own row is exactly the downgraded
     // one, so a receipt written there is the false claim all of this exists to stop.
     const receiptState: 'LANDED' | 'ALREADY_LANDED' | 'NOTHING_TO_LAND' | null =
       jobLanded(effectiveState) ? effectiveState
-        : wroteNothingOfItsOwn && ownWork.length === 0 ? 'NOTHING_TO_LAND'
-          : null;
+        : fullyApplied ? (workElsewhere.length === 0 && !leftWorkBehind ? 'NOTHING_TO_LAND' : null)
+          : wroteNothingOfItsOwn && ownWork.length === 0 ? 'NOTHING_TO_LAND'
+            : null;
     // §3.4, J-T1e one level up: a candidate's subject is a BRANCH, so the task it is about is the one
     // its session belongs to — and the same two questions are asked of that task's work before the
     // check may freeze the tip it resolved as the commit the owner will be shown. A `TASK_BRANCH`
@@ -798,11 +819,18 @@ export async function applyIntegrationJobResult(
           taskId: job.taskId,
           authorType: job.task.assigneeId ? CreatorType.AGENT : job.task.creatorType,
           authorId: job.task.assigneeId ?? job.task.creatorId,
-          body: nothingToLandComment({
-            branch: shortBranchName(job.sourceRef),
-            targetBranch: shortBranchName(job.targetRef),
-            branchesWithWork: ownWork,
-          }),
+          body: fullyApplied
+            ? fullyAppliedComment({
+              branch: shortBranchName(job.sourceRef),
+              targetBranch: shortBranchName(job.targetRef),
+              branchesWithWork: workElsewhere,
+              endedOn: leftWorkBehind ? workBranchEndedOn(work)?.branch ?? null : null,
+            })
+            : nothingToLandComment({
+              branch: shortBranchName(job.sourceRef),
+              targetBranch: shortBranchName(job.targetRef),
+              branchesWithWork: ownWork,
+            }),
         },
       });
     }
@@ -865,6 +893,8 @@ export async function applyIntegrationJobResult(
         // The runner's measurement and nothing else (0346): only a boolean it sent is written, so a
         // row an older runner answered keeps NULL — "not measured" — which §1.4 withholds on.
         sourceOnUpstream: typeof body.sourceOnUpstream === 'boolean' ? body.sourceOnUpstream : undefined,
+        // The same for the other measurement a NOTHING_TO_LAND carries (0410).
+        sourceFullyApplied: typeof body.sourceFullyApplied === 'boolean' ? body.sourceFullyApplied : undefined,
         checks: checks as unknown as Prisma.InputJsonValue,
         conflicts: (body.conflicts ?? []).slice(0, 200),
         errorCode: body.errorCode ?? undefined,
@@ -881,8 +911,6 @@ export async function applyIntegrationJobResult(
     // branch the work ended on, and it is written here, after that state (J3's one-inflight-landing
     // index only has room for it once this row has stopped being the live one) and in the same
     // transaction (a landing owed and not recorded is the bug this whole rule is about).
-    const leftWorkBehind = job.kind === 'LAND_TASK' && state === 'ALREADY_LANDED'
-      && landingLeftWorkBehind(job, work);
     if (leftWorkBehind && job.taskId) {
       await queueLandingBehindTheWork(tx, {
         ownerId: job.ownerId,
@@ -986,8 +1014,10 @@ export async function applyIntegrationJobResult(
     // generation's item, and this landing is what closes it. An answer about a branch the work did
     // NOT end on is not that landing: it says nothing about the work, and the item it would close can
     // be the only record that the work has not reached the line — the landing owed for it failed, and
-    // a generation of the work is owed only one (§2.3 J-T1e, `landingBehindTheWorkKey`).
-    if (jobLanded(effectiveState) && job.taskId && !leftWorkBehind) {
+    // a generation of the work is owed only one (§2.3 J-T1e, `landingBehindTheWorkKey`). A fully
+    // applied answer that speaks for the work (its receipt state is set) is that landing too: the work
+    // is on the target, and nothing was pushed because nothing was missing.
+    if ((jobLanded(effectiveState) || (fullyApplied && receiptState !== null)) && job.taskId && !leftWorkBehind) {
       // §4.7 H2 first: the items the coordinator's rerun was handling are HANDLED in its name, and
       // only then does the landing answer whatever else is open about the task (LANDED, by the
       // platform) — including an item the clock gave the owner while the rerun ran.
@@ -1076,6 +1106,32 @@ function nothingToLandComment(input: {
   return `**集成线：没有可落的提交（系统自动记录）**\n\n`
     + `集成线拿到本任务的分支 \`${input.branch}\`，它相对该会话的起点没有任何提交`
     + `（0 轮就结束、或没有提交的会话会留下这样的空分支）。落地作业没有写成「已落地」，也没有推送任何东西。\n\n`
+    + where;
+}
+
+/**
+ * What the task is told when the line found every commit of the branch it was handed already on the
+ * target (0410). This is the same visible signal, because nothing was pushed here either. The branch
+ * DID carry the task's work, so the empty branch's words would be false. This says where the work is:
+ * on the target, or, when the receipt was kept back, what kept it back.
+ */
+function fullyAppliedComment(input: {
+  branch: string;
+  targetBranch: string;
+  branchesWithWork: string[];
+  /** The branch the task's work ended on, when that is not the one the line was handed. */
+  endedOn: string | null;
+}): string {
+  const where = input.endedOn !== null
+    ? `本任务的工作最后结束在分支 \`${input.endedOn}\` 上，不是集成线拿到的这一条；这次没有写回执。`
+    : input.branchesWithWork.length > 0
+      ? `本任务另有工作在分支 \`${input.branchesWithWork.join('`、`')}\` 上，集成线没有拿到；`
+        + `那部分交付目前不在 \`${input.targetBranch}\` 上，因此没有写回执。`
+      : `本任务的工作已经在 \`${input.targetBranch}\` 上。`;
+  return `**集成线：分支上的提交已在目标上（系统自动记录）**\n\n`
+    + `集成线拿到本任务的分支 \`${input.branch}\`，它带着本任务自己的提交，`
+    + `但这些改动 \`${input.targetBranch}\` 上都已经有了（rebase 时每个提交都因为补丁内容已在上游而被跳过）。`
+    + `落地作业没有写成「已落地」，也没有推送任何东西。\n\n`
     + where;
 }
 
