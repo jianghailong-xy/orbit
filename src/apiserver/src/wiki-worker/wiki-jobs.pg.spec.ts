@@ -15,7 +15,9 @@
  *   6. a job of a kind this build runs no pipeline for stays queued;
  *   7. the retry limit (`jobs.retry.limit`, 2026-10-09): an error the build did not expect ends the job at its third
  *      attempt and its plan job with it; an infra failure ends it at its tenth, and its maintenance run with it; and a
- *      job the lease sweep puts back at the limit is ended by the next pass, never run again, its calls cancelled.
+ *      job the lease sweep puts back at the limit is ended by the next pass, never run again, its calls cancelled;
+ *   8. the stop (design §5.4): a job its worker stops lets its lease out to now whatever its pipeline ends with once
+ *      stopped — never settled, never counted as an error the build did not expect — and asks the model nothing new.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/wiki-worker/wiki-jobs.pg.spec.ts
  *
@@ -622,4 +624,39 @@ test('a job the lease sweep puts back at the limit is ended by the next pass and
   assert.deepEqual(await planJobRow(h, planJobId), { state: 'ended', outcome: 'failed', error: ended.error, job_id: jobId });
   const request = await h.prisma.wikiModelRequest.findUniqueOrThrow({ where: { id: call.id } });
   assert.equal(request.state, 'cancelled', 'no model time is spent on a call nobody will read');
+});
+
+// ── 8. the stop (design §5.4) ───────────────────────────────────────────────────────────────────
+
+test('a job its worker stops lets its lease out to now, whatever its pipeline ends with once stopped, and asks the model nothing new', { skip, timeout: 60_000 }, async () => {
+  const h = await boot();
+  await reset(h);
+  await modelUp(h);
+  // A pipeline waiting when the worker stops, which then does what a stopping pipeline still may: the next call of a
+  // fan-out, and the end the documents' build gives when it sees the stop between two sections.
+  let asked = '';
+  const { executor } = worker(h, {
+    runners: {
+      docs_build: async (context) => {
+        await new Promise<void>((resolve) => context.signal.addEventListener('abort', () => resolve(), { once: true }));
+        asked = await context.ask('docs_write', 'after-the-stop', { system: 's', prompt: 'p', maxTokens: 10 })
+          .then(() => 'answered', (error: Error) => error.name);
+        throw new Error('the build was stopped: the worker is shutting down');
+      },
+    },
+  });
+  // One attempt short of the limit an error the build did not expect is held to: the stop must not count as one.
+  const { jobId, planJobId } = await buildJob(h, h.owner.spaceId, { attempts: UNEXPECTED_MAX_ATTEMPTS - 1 });
+  assert.equal(await executor.runOnce(), 1);
+  await executor.onModuleDestroy();
+  const row = await jobRow(h, jobId);
+  const { rows: [lease] } = await h.sql.query<{ let_out: boolean | null }>('SELECT "lease_deadline_at" <= now() AS "let_out" FROM "wiki_job" WHERE "id" = $1', [jobId]);
+  assert.deepEqual(
+    {
+      state: row.state, letOut: lease.let_out, attempts: row.attempts, failureKind: row.failure_kind, error: row.error,
+      asked, requests: await h.prisma.wikiModelRequest.count({ where: { jobId } }), planJob: (await planJobRow(h, planJobId)).state,
+    },
+    { state: 'running', letOut: true, attempts: UNEXPECTED_MAX_ATTEMPTS - 1, failureKind: null, error: null, asked: 'WikiModelWaitCancelled', requests: 0, planJob: 'made' },
+    'the lease is let out to now, nothing is settled or counted, and the call after the stop never reached the queue',
+  );
 });

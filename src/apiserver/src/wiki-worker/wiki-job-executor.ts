@@ -59,6 +59,17 @@ export class WikiJobParked extends Error {
   }
 }
 
+/**
+ * Whether an error is the worker stopping (design §5.4): a model call's or a repository operation's wait the
+ * shutdown cut short, or whatever a step ends with once the job's signal is aborted — the work's own verdict
+ * (WikiJobContentError) excepted. A loop that asks again, or rewords what went wrong, lets it through as it is:
+ * it is no failure to retry or to report, and the executor lets the job's lease out to now for the next process.
+ */
+export function isWikiJobCancellation(error: unknown, signal?: AbortSignal): boolean {
+  if (error instanceof WikiModelWaitCancelled || error instanceof WikiRepoOpWaitCancelled) return true;
+  return signal?.aborted === true && !(error instanceof WikiJobContentError);
+}
+
 /** What running one job is handed: its own row, its cancel, and the queue. */
 export interface WikiJobContext {
   job: ClaimedWikiJob;
@@ -227,8 +238,9 @@ export class WikiJobExecutor implements OnApplicationBootstrap, OnModuleDestroy 
   /** One job: its kind's runner, its lease renewed while it runs, and what its end leaves on the row. */
   private async run(job: ClaimedWikiJob, controller: AbortController): Promise<void> {
     const renewMs = this.options.renewMs ?? WIKI_JOB.renewSeconds * 1000;
+    let renewing: Promise<void> = Promise.resolve();
     const renew = setInterval(() => {
-      void renewWikiJobLease(this.prisma, {
+      renewing = renewWikiJobLease(this.prisma, {
         id: job.id, generation: job.leaseGeneration, leaseMs: this.options.leaseMs ?? WIKI_JOB.leaseSeconds * 1000,
       }).then((held) => {
         if (held) return;
@@ -247,22 +259,27 @@ export class WikiJobExecutor implements OnApplicationBootstrap, OnModuleDestroy 
       if (settled) this.log.log(`job ${job.id} (${job.kind}) succeeded`);
       else this.log.warn(`job ${job.id} finished after its lease was taken over: its end is dropped`);
     } catch (error) {
-      await this.settleFailure(job, error);
+      // No renewal may land after the end is written: one still in flight would take back the lease a stop lets out.
+      clearInterval(renew);
+      await renewing;
+      await this.settleFailure(job, error, controller.signal);
     } finally {
       clearInterval(renew);
     }
   }
 
   /** What a failed job leaves: a requeue (the platform's), an end (the work's), or a lease out to now. */
-  private async settleFailure(job: ClaimedWikiJob, error: unknown): Promise<void> {
+  private async settleFailure(job: ClaimedWikiJob, error: unknown, signal: AbortSignal): Promise<void> {
     if (error instanceof WikiJobParked) {
       // Its row already says where it is (waiting, or queued again): this run settles nothing.
       this.log.log(`job ${job.id} (${job.kind}): ${error.message}`);
       return;
     }
-    if (error instanceof WikiModelWaitCancelled || error instanceof WikiRepoOpWaitCancelled) {
-      // SIGTERM: the job was cancelled with us. Let its lease out to now so the next process takes it over
-      // at once (design §5.4); its requests were let go the same way by the queue's own shutdown.
+    if (isWikiJobCancellation(error, signal)) {
+      // SIGTERM: the job was cancelled with us — a wait cut short, or what its pipeline ended with once stopped. Let
+      // its lease out to now so the next process takes it over at once (design §5.4); its requests were let go the
+      // same way by the queue's own shutdown. Nothing is counted here: the sweep that takes it over counts the
+      // attempt, as it counts any lease that ran out.
       await releaseWikiJobLease(this.prisma, { id: job.id, generation: job.leaseGeneration });
       return;
     }
@@ -313,6 +330,8 @@ export class WikiJobExecutor implements OnApplicationBootstrap, OnModuleDestroy 
     call: WikiModelRequestCall,
     signal: AbortSignal,
   ): Promise<WikiModelRequestRead> {
+    // A stopping worker asks the model nothing new (design §5.4): the call is the replay's to make, in the next process.
+    if (signal.aborted) throw new WikiModelWaitCancelled();
     const enqueued = await enqueueWikiModelRequest(this.prisma, {
       id: randomUUID(),
       jobId: job.id,

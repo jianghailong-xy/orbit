@@ -24,7 +24,9 @@
  *   6. an anchor verdict whose echo names another anchor than the one at its index fails the run as
  *      content: the run refuses to lay a verdict on a guess;
  *   7. the documents step with a confirmed plan: it reads the plan through its read, where a section's projects are
- *      { id, title }, and the section's material is found by the project's id (2026-10-09: 22P02, nothing written).
+ *      { id, title }, and the section's material is found by the project's id (2026-10-09: 22P02, nothing written);
+ *   8. a worker that stops while the documents step waits for a read: the job lets its lease out to now (design
+ *      §5.4) — the run not settled, no REPO_OP_FAILED, no read asked again — and the next worker takes it over.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/wiki-worker/wiki-maintain-job.pg.spec.ts
  *
@@ -360,13 +362,17 @@ async function clearWork(h: Harness): Promise<void> {
   await modelUp(h);
 }
 
-/** The runner this spec plays: every queued repository operation is answered at once, by kind. */
-async function runRepoOps(h: Harness, over: { failSnapshot?: boolean; checkAnchor?: (anchor: Record<string, unknown>) => Record<string, unknown> } = {}): Promise<number> {
+/**
+ * The runner this spec plays: every queued repository operation is answered at once, by kind — but a read, under
+ * `holdReads`, which stays queued as on a runner whose fetch hangs.
+ */
+async function runRepoOps(h: Harness, over: { failSnapshot?: boolean; holdReads?: boolean; checkAnchor?: (anchor: Record<string, unknown>) => Record<string, unknown> } = {}): Promise<number> {
   const rows = await h.sql.query<{ id: string; kind: string; input: Record<string, unknown> }>(
     `SELECT "id", "kind", "input" FROM "wiki_repo_op" WHERE "owner_id" = $1 AND "state" = 'queued' ORDER BY "created_at"`,
     [h.ownerId],
   ).then((result) => result.rows);
   for (const row of rows) {
+    if (over.holdReads === true && row.kind === 'read') continue;
     if (over.failSnapshot === true && row.kind === 'snapshot') {
       await h.sql.query(`UPDATE "wiki_repo_op" SET "state"='failed', "error"='the machine went away', "ended_at"=now() WHERE "id"=$1`, [row.id]);
       continue;
@@ -401,7 +407,7 @@ async function pass(
   h: Harness,
   which: { queue: WikiModelRequestQueue; executor: WikiJobExecutor },
   done: () => Promise<boolean>,
-  over: { failSnapshot?: boolean; checkAnchor?: (anchor: Record<string, unknown>) => Record<string, unknown> } = {},
+  over: { failSnapshot?: boolean; holdReads?: boolean; checkAnchor?: (anchor: Record<string, unknown>) => Record<string, unknown> } = {},
   rounds = 400,
 ): Promise<void> {
   for (let i = 0; i < rounds; i += 1) {
@@ -960,4 +966,75 @@ test('a refusal of the run\'s own ends it failed, counts it against the space an
   assert.ok(run.endedAt);
   const cursor = await h.prisma.wikiCursor.findFirstOrThrow({ where: { spaceId: fx.spaceId, source: 'facts' } });
   assert.equal(cursor.consecutiveFailures, 1, 'a failure of the work is counted against the space');
+});
+
+// ── Stopping (2026-10-09) ───────────────────────────────────────────────────────────────────────
+
+/** The job's row as a stop leaves it: whether its lease was let out, and what it counted and said. */
+async function jobLease(h: Harness, jobId: string): Promise<{ state: string; let_out: boolean | null; attempts: number; failure_kind: string | null; error: string | null }> {
+  return (await h.sql.query(
+    'SELECT "state", "lease_deadline_at" <= now() AS "let_out", "attempts", "failure_kind", "error" FROM "wiki_job" WHERE "id" = $1', [jobId],
+  )).rows[0];
+}
+
+async function repoOpsOf(h: Harness, jobId: string): Promise<Array<{ id: string; kind: string }>> {
+  return (await h.sql.query<{ id: string; kind: string }>('SELECT "id", "kind" FROM "wiki_repo_op" WHERE "job_id" = $1 ORDER BY "created_at", "id"', [jobId])).rows;
+}
+
+test('a worker that stops while the documents step waits for a read lets the lease out to now: the run is not settled, no REPO_OP_FAILED, no read asked again (design §5.4)', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const fx = await fixture(h);
+  // No dossiers: the run goes through to the documents step, which is where it reads files.
+  h.maintenance.dossierPage = (async () => ({ ...(pageOf(fx) as Record<string, unknown>), facts: 0, dossiers: [] })) as unknown as WikiMaintenance['dossierPage'];
+  // The plan its owner confirmed: one document, its overview and a section of the code the step reads through the runner.
+  const empty = { docs: [], code: [], contracts: [], sessions: null };
+  await h.prisma.wikiPlan.create({
+    data: {
+      spaceId: fx.spaceId, ownerId: h.ownerId, version: 1, status: 'confirmed', origin: 'owner', authorUserId: h.ownerId,
+      confirmedByUserId: h.ownerId, confirmedAt: new Date(), docsMin: 1, docsMax: 10, gate: {},
+      categories: [{ key: 'dev', title: 'Development', question: 'How it works', forAgents: true }],
+      docs: {
+        create: [{
+          position: 0, category: 'dev', slug: 'app', title: '应用', question: '应用怎么启动？',
+          audience: ['新加入的开发者'], scopeIn: ['入口'], lengthMin: 400, lengthMax: 4000,
+          sections: {
+            create: [
+              { position: 0, key: 'overview', title: '总览', kind: 'overview', covers: '这篇讲应用怎么启动。', length: 300, sources: empty },
+              { position: 1, key: 'main', title: '入口', kind: 'flow', covers: 'main 做什么。', length: 400, sources: { ...empty, code: [{ path: 'src/app.go', symbols: ['main'] }] } },
+            ],
+          },
+        }],
+      },
+    },
+  });
+  h.model.answer = (hit) => writerAnswer(hit.prompt);
+  const first = worker(h, { repoWaitMs: 60_000 });
+  // Run until the documents step waits on its read: the runner answers everything else, and never that.
+  await pass(h, first, async () => (await repoOpsOf(h, fx.jobId)).some((op) => op.kind === 'read'), { holdReads: true });
+  const before = await repoOpsOf(h, fx.jobId);
+
+  // SIGTERM: the worker stops, and the read's wait is cancelled with it.
+  await first.executor.onModuleDestroy();
+  await first.queue.onModuleDestroy();
+  await delay(300);
+  const run = await runRow(h, fx.runId);
+  assert.deepEqual(
+    {
+      ...(await jobLease(h, fx.jobId)),
+      run: run.outcome,
+      docs: (run.report as { docs?: { error?: string } } | null)?.docs?.error ?? null,
+      asked: (await repoOpsOf(h, fx.jobId)).slice(before.length).map((op) => op.kind),
+    },
+    { state: 'running', let_out: true, attempts: 0, failure_kind: null, error: null, run: null, docs: null, asked: [] },
+    'the job lets its lease out to now — the run not settled, nothing counted, no REPO_OP_FAILED — and asks the runner for nothing more',
+  );
+
+  // The next worker takes the job over, the attempt the stop cut short counted as the lease sweep counts one, and
+  // its replay finishes the run.
+  await pass(h, worker(h), async () => ['succeeded', 'failed'].includes((await jobOf(h, fx.jobId)).state));
+  const ended = await jobOf(h, fx.jobId);
+  assert.equal(ended.state, 'succeeded', ended.error ?? '');
+  assert.equal((await jobLease(h, fx.jobId)).attempts, 1, 'the lost attempt, counted once');
+  assert.equal((await runRow(h, fx.runId)).outcome, 'succeeded');
 });

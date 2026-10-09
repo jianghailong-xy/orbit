@@ -1076,7 +1076,8 @@ export interface WikiRepoFilesRequest {
  * one at a time — after which the answer is read back from the cache. Every requested path has an entry;
  * one the runner answered `missing` or `too_large` reads as null text through `wikiRepoFileText`.
  *
- * A wait that runs out, and an operation that failed, are the caller's to word: they throw.
+ * A wait that runs out, and an operation that failed, are the caller's to word: they throw. A signal that is aborted
+ * asks the runner for nothing more: `WikiRepoOpWaitCancelled`, before the next operation is written.
  */
 export async function readWikiRepoFiles(
   request: WikiRepoFilesRequest,
@@ -1115,6 +1116,8 @@ export async function readWikiRepoFiles(
   if (pack.length > 0) packs.push(pack);
 
   for (const one of packs) {
+    // A stopping worker asks the runner for nothing more (design §5.4): the read is the next process's replay's.
+    if (request.signal?.aborted) throw new WikiRepoOpWaitCancelled(null);
     const items = one.map((path) => (request.wholeFile
       ? { path }
       : { path, maxChars: Math.min(request.sizeOf?.(path) ?? WIKI_REPO_OPS.boundedChars, WIKI_REPO_OPS.boundedChars) }));
@@ -1169,10 +1172,15 @@ export class WikiRepoOpWaitTimedOut extends Error {
   }
 }
 
-/** The waiter's own signal ended the wait (the worker is stopping); the row is still whatever it was. */
+/**
+ * The waiter's own signal ended the wait (the worker is stopping); the row is still whatever it was. With no
+ * operation, the signal came before one was asked, and none was.
+ */
 export class WikiRepoOpWaitCancelled extends Error {
-  constructor(readonly opId: string) {
-    super(`the wait for the repository operation ${opId} was cancelled`);
+  constructor(readonly opId: string | null) {
+    super(opId === null
+      ? 'the worker is stopping: no repository operation was asked'
+      : `the wait for the repository operation ${opId} was cancelled`);
     this.name = 'WikiRepoOpWaitCancelled';
   }
 }

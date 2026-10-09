@@ -21,8 +21,7 @@ import { finishWikiMaintenanceJob } from '../wiki/wiki-maintenance-run';
 import { stripNul } from '../runner-api/strip-nul';
 import type { WikiPlans } from '../wiki/wiki-plan';
 import { WikiRefusalError, type WikiPrincipal, type WikiService } from '../wiki/wiki.service';
-import { WikiJobContentError, WikiJobInfraError, type WikiJobContext, type WikiJobRunner } from './wiki-job-executor';
-import { WikiModelWaitCancelled } from './wiki-model-queue.service';
+import { isWikiJobCancellation, WikiJobContentError, WikiJobInfraError, type WikiJobContext, type WikiJobRunner } from './wiki-job-executor';
 import {
   buildWikiMaintainOps,
   mergeWikiMaintainBuilt,
@@ -325,7 +324,7 @@ class WikiMaintainRun {
     } catch (error) {
       // The worker is stopping: the job is not the run's to end here. Its lease is let out to now by the
       // executor and the next process starts the run again, and nothing is counted against the space.
-      if (isCancellation(error)) throw error;
+      if (isWikiJobCancellation(error, this.jobContext.signal)) throw error;
       stop = asStop(error);
     }
     this.report.seconds = Math.trunc((Date.now() - this.started) / 1000);
@@ -402,7 +401,7 @@ class WikiMaintainRun {
       await this.docs();
       return null;
     } catch (error) {
-      if (isCancellation(error)) throw error;
+      if (isWikiJobCancellation(error, this.jobContext.signal)) throw error;
       return asStop(error, step);
     }
   }
@@ -493,6 +492,8 @@ class WikiMaintainRun {
   private async operation(kind: WikiRepoOpKind, input: Record<string, unknown>, what: string): Promise<WikiRepoOpWait> {
     const timeoutMs = this.deps.repoWaitMs ?? WIKI_MAINTAIN_JOB.repoWaitSeconds * 1000;
     const { job } = this.jobContext;
+    // A stopping worker asks the runner for nothing more (design §5.4).
+    if (this.jobContext.signal.aborted) throw new WikiRepoOpWaitCancelled(null);
     try {
       const { id } = await this.deps.repoOps.enqueueWikiRepoOp({ jobId: job.id, kind, input });
       return await waitForWikiRepoOp(this.deps.prisma, { id, ownerId: job.ownerId, timeoutMs, wake: this.deps.repoWake, signal: this.jobContext.signal });
@@ -1010,6 +1011,8 @@ class WikiMaintainRun {
     try {
       await this.writeDocs(report);
     } catch (error) {
+      // The worker stopping is not the documents' failure to report: the run is the next process's to finish.
+      if (isWikiJobCancellation(error, this.jobContext.signal)) throw error;
       report.error = cutRunes((error as Error).message, 600);
       this.jobContext.log(`documents: ${(error as Error).message} — the run goes on; the next run takes them up again`);
     }
@@ -1208,7 +1211,8 @@ class WikiMaintainRun {
   /**
    * Files read whole at a commit, through the space's runner, asked again when the read failed — cache first,
    * as the documents' build reads (`readWikiRepoFiles`, repoOps.cache): what the space holds is served as it
-   * is, and only the rest becomes one `read` operation, packed by the snapshot's sizes.
+   * is, and only the rest becomes one `read` operation, packed by the snapshot's sizes. The worker stopping is
+   * no failed read: it is thrown as it is.
    */
   private async readFiles(sha: string, paths: readonly string[], sizes: ReadonlyMap<string, number>): Promise<Map<string, WikiRepoFileRead | null>> {
     const what = `${paths.length === 1 ? paths[0] : `${paths.length} files`} at ${sha.slice(0, 12)}`;
@@ -1230,6 +1234,8 @@ class WikiMaintainRun {
           signal: this.jobContext.signal,
         });
       } catch (error) {
+        // Not asked again and not reworded: the executor lets the job's lease out to now (design §5.4).
+        if (isWikiJobCancellation(error, this.jobContext.signal)) throw error;
         last = (error as Error)?.message ?? String(error);
       }
     }
@@ -1396,6 +1402,7 @@ class WikiMaintainRun {
         text = (await this.ask(WIKI_MAINTAIN_JOB.steps.planProposal, `proposal-${round}`, PLAN_SYSTEM_PROMPT,
           problems.length > 0 ? prompt + wikiMaintainProposalRedo(problems) : prompt, WIKI_MAINTAIN_JOB.planMaxTokens)).text;
       } catch (error) {
+        if (isWikiJobCancellation(error, this.jobContext.signal)) throw error;
         out.error = cutRunes((error as Error).message, 400);
         return out;
       }
@@ -1617,11 +1624,6 @@ export function wikiMaintainEndpointIsLocal(baseUrl: string): boolean {
     return false;
   }
   return host.endsWith('.local') || host.endsWith('.internal') || host.endsWith('.lan');
-}
-
-/** Whether an error is the worker stopping: a model call or a repository wait the shutdown aborted. */
-function isCancellation(error: unknown): boolean {
-  return error instanceof WikiModelWaitCancelled || error instanceof WikiRepoOpWaitCancelled;
 }
 
 /** One error as a stop: a WikiJobInfraError is the platform's, everything else the run's. */
