@@ -154,6 +154,12 @@ function Samples() {
   </section>;
 }
 
+/** A control that gives way to what it opens, as a card's "Not yet" gives way to its note. */
+function GivesWay() {
+  const [pressed, setPressed] = useState(false);
+  return pressed ? <p>The note goes here.</p> : <Button onClick={() => setPressed(true)}>Not yet</Button>;
+}
+
 function Content() {
   const { resolved } = useThemeMode();
   const [open, setOpen] = useState('');
@@ -195,6 +201,7 @@ function Content() {
         </form>
       </Dialog>
       <Dialog open={open === 'Long dialog'} onClose={close} title="Long dialog" footer={<Button onClick={close}>Done long</Button>}>
+        <GivesWay />
         {Array.from({ length: 45 }, (_, i) => <p key={i}>Paragraph {i + 1}: fixed scrollable dialog content.</p>)}
       </Dialog>
       <div className="overlays-fixture-spacer">Page scroll target</div>
