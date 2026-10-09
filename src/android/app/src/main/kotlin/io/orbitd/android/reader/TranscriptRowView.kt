@@ -57,7 +57,7 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
             if (fullResult == null && row.result?.truncated == true) fullResult = model.full(row.result.seq)
             if (copy) {
                 val source = if (tool) fullResult ?: row.result ?: fullEvent ?: event else fullEvent ?: event
-                val value = source.body().ifBlank { source.fields["input"]?.toString() ?: source.payload.toString() }
+                val value = (if (source.type == "user") source.personWords() else source.body()).ifBlank { source.fields["input"]?.toString() ?: source.payload.toString() }
                 if (value.length > COPY_TEXT_LIMIT) copyOverflow = value else clipboard.setText(AnnotatedString(value))
             }
         } catch (cancel: CancellationException) { throw cancel }
@@ -152,9 +152,12 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
             cards.forEach { TranscriptCardView(it, open) }
             val atts = (shown.fields["attachments"] as? JsonArray).orEmpty().filterIsInstance<JsonObject>()
             val attachmentOnly = shown.type == "user" && shown.body().isBlank() && atts.isNotEmpty()
-            if (cards.isEmpty() && !attachmentOnly) MarkdownText(shown.body().ifBlank { shown.payload.toString() }, open = open)
+            // What delivery appended is not the person's: their bubble holds their words, the card the rest.
+            val note = shown.fields.string("controlPlaneNote")?.takeIf { it.isNotBlank() }
+            val words = if (shown.type == "user") shown.personWords() else shown.body()
+            if (cards.isEmpty() && !attachmentOnly) { if (note == null || words.isNotBlank()) MarkdownText(words.ifBlank { shown.payload.toString() }, open = open) }
             else if (shown.body().isNotBlank()) DetailFold("Orbit attached") { MarkdownText(shown.body(), open = open) }
-            shown.fields.string("controlPlaneNote")?.let { note -> DetailFold("Orbit context") { MarkdownText(note, open = open) } }
+            note?.let { AttachedNoteCard(it.trim()) }
             atts.forEach { attachment -> attachment.string("id")?.let { id ->
                 val name = attachment.string("name") ?: "Attachment"
                 if (attachment.string("mime")?.startsWith("image/") == true) TranscriptImage("orbit-attachment:$id", name, open)
