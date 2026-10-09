@@ -189,6 +189,23 @@ class TaskLogicTest {
         assertEquals(listOf("w1"), live.map { it.text("id") }); assertEquals(1, ended)
     }
 
+    /** ModelRoutingLogicTests after iOS 9fb3ae6ee: with the account's switch off (the default) a run has no route, and what it ran on
+     * is its own row's — a pick it never took is not said; on, the applied pick fills in for a run not claimed yet. */
+    @Test fun aRunsRouteIsReadOnlyWhileTheAccountsSwitchIsOn() {
+        val routed = json("""{"id":"s1","route":{"level":"M","applied":true,"model":"claude-sonnet-5-5","effort":"medium"}}""")
+        val shadow = json("""{"id":"s2","model":"claude-opus-5-5","effort":"high","route":{"level":"L","applied":false,"model":"claude-sonnet-5-5"}}""")
+        val noTier = json("""{"id":"s3","route":{"level":"","applied":true,"model":"x"}}""")
+        assertNull(TaskDetailLogic.runRoute(routed, smartSelection = false))
+        assertNull(TaskDetailLogic.runRoute(shadow, smartSelection = false))
+        assertEquals("M", TaskDetailLogic.runRoute(routed, smartSelection = true)?.text("level"))
+        assertNull("a route with no tier routed nothing", TaskDetailLogic.runRoute(noTier, smartSelection = true))
+        val name: (String) -> String = { it }
+        assertNull("off: nothing the run's own row doesn't say", TaskDetailLogic.runModelLine(routed, smartSelection = false, modelLabel = name))
+        assertEquals("claude-sonnet-5-5 · medium", TaskDetailLogic.runModelLine(routed, smartSelection = true, modelLabel = name))
+        assertEquals("claude-opus-5-5 · high", TaskDetailLogic.runModelLine(shadow, smartSelection = false, modelLabel = name))
+        assertEquals("claude-opus-5-5 · high", TaskDetailLogic.runModelLine(shadow, smartSelection = true, modelLabel = name))
+    }
+
     @Test fun smallWordsAndNumbers() {
         assertEquals("512 B", TaskDetailLogic.humanSize(512)); assertEquals("2 KB", TaskDetailLogic.humanSize(2048)); assertEquals("1.5 MB", TaskDetailLogic.humanSize(1572864))
         assertTrue(TaskDetailLogic.folds("x".repeat(601))); assertTrue(TaskDetailLogic.folds((1..11).joinToString("\n"))); assertFalse(TaskDetailLogic.folds("short"))

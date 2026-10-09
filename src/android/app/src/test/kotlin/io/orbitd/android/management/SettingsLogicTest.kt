@@ -20,6 +20,17 @@ class SettingsLogicTest {
         assertEquals("Share task", settingsTitle("share", "TASK:abc"))
     }
 
+    /** UserPreferences.smartModelSelection: on only for an explicit true; absent, or anything but a boolean, is off. */
+    @Test fun smartModelSelectionIsOnOnlyForAnExplicitTrue() {
+        fun prefs(json: String) = Json.parseToJsonElement(json).jsonObject
+        assertTrue(smartModelSelection(prefs("""{"modelRouting":true}""")))
+        assertFalse(smartModelSelection(prefs("""{"modelRouting":false}""")))
+        assertFalse(smartModelSelection(prefs("""{"theme":"dark"}""")))
+        assertFalse(smartModelSelection(prefs("""{"modelRouting":"true"}""")))
+        assertFalse(smartModelSelection(prefs("""{"modelRouting":1}""")))
+        assertFalse(smartModelSelection(null))
+    }
+
     @Test fun profileSavesThePhotoFirstThenTheNameOnlyWhenEitherChanged() {
         assertFalse(profileCanSave("  ", "Ada", ProfilePhoto.Removed))
         assertFalse(profileCanSave(" Ada ", "Ada", ProfilePhoto.Unchanged))

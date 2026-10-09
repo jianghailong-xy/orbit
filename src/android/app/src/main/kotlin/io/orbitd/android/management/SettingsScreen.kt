@@ -78,6 +78,15 @@ internal fun settingsSharedLinksValue(active: Int): String = if (active > 0) "$a
 /** SettingsHome.accessTokensValue: "3 active" — the tokens that still work. */
 internal fun settingsAccessTokensValue(active: Int): String = if (active > 0) "$active active" else "None"
 
+/** SettingsCopy's smart model selection switch: the one switch on the list whose name doesn't say what it does, so the web's hint
+ * goes under it. */
+internal const val SMART_MODEL_SELECTION = "Smart model selection"
+internal const val SMART_MODEL_SELECTION_HINT = "Coordinators suggest a tier for each task, and Agents you turn this on for run their tasks on that tier's model and effort. Off: tasks run exactly as before."
+
+/** UserPreferences.smartModelSelection: on only for an explicit boolean true; absent, or anything else, reads as off. */
+internal fun smartModelSelection(preferences: JsonObject?): Boolean =
+    (preferences?.get("modelRouting") as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull == true
+
 /** The server as the sign-in screen asked for it: the host, and the port when it is not the scheme's own. */
 internal fun settingsInstanceName(server: String): String? = server.toHttpUrlOrNull()?.let {
     if (it.port == HttpUrl.defaultPort(it.scheme)) it.host else "${it.host}:${it.port}"
@@ -91,6 +100,7 @@ internal const val SETTINGS_SIGN_OUT_TITLE = "Sign out?"
 private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) -> Unit, logout: () -> Unit,
     deviceAlerts: () -> Boolean?) {
     val appearance = LocalAppearanceChanged.current
+    val smartSelectionChanged = LocalSmartSelectionChanged.current
     val record = remember(api) { PersonalRecord { api.get("users/me") } }
     PersonalRecordLifecycle(record, revision)
     val scope = rememberCoroutineScope()
@@ -129,8 +139,13 @@ private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) 
     fun page(id: String) = open(OrbitRoute(Destination.SETTINGS, id))
     fun preference(key: String, value: JsonPrimitive) {
         scope.launch {
-            if (record.mutate { api.patch("users/me/preferences", buildJsonObject { put(key, value) }) } && key == "theme")
-                appearance(((record.value as? JsonObject)?.get("preferences") as? JsonObject)?.text("theme")?.ifBlank { null } ?: "system")
+            if (!record.mutate { api.patch("users/me/preferences", buildJsonObject { put(key, value) }) }) return@launch
+            // What the server now has, read back after the write, is what the whole app follows.
+            val saved = (record.value as? JsonObject)?.get("preferences") as? JsonObject
+            when (key) {
+                "theme" -> appearance(saved?.text("theme")?.ifBlank { null } ?: "system")
+                "modelRouting" -> smartSelectionChanged(smartModelSelection(saved))
+            }
         }
     }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp)) {
@@ -167,6 +182,9 @@ private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) 
             // The engine's guess at the next message after a Claude turn (docs/prompt-suggestions-design.md); absent means on.
             SettingsSwitch("Suggested replies", R.drawable.ic_suggestion, (preferences["promptSuggestions"] as? JsonPrimitive)?.booleanOrNull != false,
                 record.ready) { preference("promptSuggestions", JsonPrimitive(it)) }
+            // Off unless the account turned it on; written alone (iOS 9fb3ae6ee), its glyph beside its name (614a21410).
+            SettingsSwitch(SMART_MODEL_SELECTION, R.drawable.ic_sparkles, smartModelSelection(preferences), record.ready,
+                hint = SMART_MODEL_SELECTION_HINT) { preference("modelRouting", JsonPrimitive(it)) }
         }
         SettingsGroup("Machines & models") {
             SettingsLink("Runners", R.drawable.ic_runner, runners) { page("runners") }
@@ -250,8 +268,9 @@ private fun SettingsPicker(title: String, icon: Int, current: String, options: L
 }
 
 @Composable
-private fun SettingsSwitch(title: String, icon: Int, checked: Boolean, enabled: Boolean, change: (Boolean) -> Unit) {
+private fun SettingsSwitch(title: String, icon: Int, checked: Boolean, enabled: Boolean, hint: String? = null, change: (Boolean) -> Unit) {
     ListItem(headlineContent = { Text(title) }, colors = settingsRowColors(), leadingContent = { SettingsIcon(icon) },
+        supportingContent = hint?.let { { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) } },
         trailingContent = { Switch(checked = checked, onCheckedChange = null, enabled = enabled) },
         modifier = Modifier.toggleable(value = checked, enabled = enabled, role = Role.Switch, onValueChange = change))
 }
