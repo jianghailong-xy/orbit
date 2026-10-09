@@ -671,8 +671,9 @@ class ManagementDeviceTest {
                 activate("Runners", "talkback-settings-runners", report, problems); await("Controlled remote")
                 report.appendLine("double tap Runners -> the runners list opened")
                 page("runners-list", report, problems)
-                activate("Controlled remote", "talkback-runners-row", report, problems); await("Max Concurrent")
-                report.appendLine("double tap Controlled remote -> the runner page opened")
+                // The row's own words: its ⋯ button is "More for Controlled remote", so the name alone also matches the button.
+                activate("ci-runner-01", "talkback-runners-row", report, problems); await("Max Concurrent")
+                report.appendLine("double tap the Controlled remote row (ci-runner-01) -> the runner page opened")
                 page("runner", report, problems)
                 activate("Increase Max Concurrent", "talkback-runner-capacity", report, problems)
                 compose.waitUntil(10_000) { calls.any { it == "PATCH /api/runners/$runnerId" } }
