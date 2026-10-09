@@ -5,7 +5,8 @@
      desktop / 390-wide phone, 3x), fed by src/web/ui-migration's fixtures plus a sidebar shaped like the owner's
      screenshot. "现在" is main d55e9900b; "改后" is the same tree with the proposal in it (WorkspaceView.tsx +
      index.css, ~80 lines; frame ③ flips a mock-only switch for the alternative order). Dashed outlines and numbers
-     are drawn on top. Kit: /var/tmp/session-rename-mock (patch/apply.py = the proposal as code; capture.mjs; gen.py;
+     are drawn on top. Decided 2026-10-09 (按建议落地: ②, ⑨, ④) and implemented; the implementation renders the 改后
+     frames identically apart from the running row's spinner angle. Kit: /var/tmp/session-rename-mock (patch/apply.py = the proposal as code; capture.mjs; gen.py;
      render.mjs). -->
 <html lang="zh">
 <head>
@@ -172,7 +173,7 @@
           <tr><td>改名中</td><td>点这一行不会打开会话；⋯ 和时间收起；手机上不能左右滑</td></tr>
           <tr><td>哪些行有</td><td>Open、Completed 的会话都有；<b>Trash 没有</b>（和标题栏、iOS / macOS 一致）；项目那一行没有（它显示的是项目名）</td></tr>
           <tr><td>正在运行的会话</td><td>照样能改，不打断运行（改名不碰 runner）</td></tr>
-          <tr><td>自动起的名字</td><td>只在新建会话时生成一次，之后不会盖掉你改的名字</td></tr>
+          <tr><td>自动起的名字</td><td>只会替换从第一句话截出来的默认标题；你改过的名字不会被它盖掉</td></tr>
           <tr><td>失败</td><td>改回原名，并提示 <span class="ui">Couldn't rename the session</span></td></tr>
         </table>
       </div>
@@ -185,7 +186,7 @@
           <li><b>不改</b>：服务器（<code>PATCH /sessions/:id</code> 已有：去首尾空格、拒绝空的和超过 200 字的、只有本人能改、推送 <code>session.updated</code>）；iOS、macOS、Android（都已经有）。</li>
         </ul>
         <div class="ask zh">
-          <b>待你定</b>（绿色是我的推荐）
+          <b>已定（2026-10-09）：按推荐。</b>三项都取绿色那一项，已照此实现；实现跑出来的画面和上面「改后」各帧一致（只有运行中那一行的转圈图标转到的角度不同）。
           <ol>
             <li>行菜单里放哪：<span class="rec">和 Share… / Move… 一组（②）</span>／放第一个，同 iOS / macOS（③）</li>
             <li>标题栏 ⋮ 也加 Rename…：<span class="rec">加（⑨）</span>／不加，只留双击</li>

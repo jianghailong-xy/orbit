@@ -300,6 +300,7 @@ describe('a shared session in the session list and its conversation', { timeout:
     const rows = drawn(menu);
     expect(rows.slice(rows.indexOf('Complete'))).toEqual([
       'Complete',
+      'Rename…',
       'Move…',
       '─',
       'Copy link',

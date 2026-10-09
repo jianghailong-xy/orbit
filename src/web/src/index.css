@@ -5689,6 +5689,23 @@ html[data-theme='dark'] .session-tag-chip {
     display: flex;
   }
 }
+/* A session row's Rename…: the field takes the title's line and its hint the preview's, so the row
+   keeps its height and its status icon; the ⋯ steps aside until the field closes. */
+.session-rename {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.session-row.renaming {
+  cursor: default;
+  /* A touch phone's rows take no selection (held press, above); the field must. */
+  -webkit-user-select: text;
+  user-select: text;
+}
+.session-row.renaming .session-right {
+  display: none;
+}
 /* New Folder… and Rename…: the name is typed where the folder's name goes. */
 .session-folder-edit {
   display: flex;
