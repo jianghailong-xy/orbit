@@ -9,8 +9,15 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
+import io.orbitd.android.OrbitApplication
 import io.orbitd.android.core.protocol.SessionAction
 import io.orbitd.android.navigation.ObjectId
+import io.orbitd.android.projects.failureReason
+import io.orbitd.android.toast.OrbitToasts
+import io.orbitd.android.toast.ToastGlyph
+import io.orbitd.android.toast.ToastTone
+import io.orbitd.android.toast.toastTitle
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.*
@@ -19,7 +26,6 @@ sealed interface DirectoryDialog {
     data class SessionMenu(val session: DirectorySession, val view: SessionView) : DirectoryDialog
     data class Rename(val session: DirectorySession) : DirectoryDialog
     data class Purge(val session: DirectorySession) : DirectoryDialog
-    data class Deleted(val session: DirectorySession) : DirectoryDialog
     data class Tags(val session: DirectorySession) : DirectoryDialog
     data class Move(val session: DirectorySession) : DirectoryDialog
     data class EndToMove(val session: DirectorySession) : DirectoryDialog
@@ -37,18 +43,23 @@ fun DirectoryActionDialog(dialog: DirectoryDialog, api: DirectoryApi, data: Dire
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     val canWrite = !busy && data.fresh
+    // Complete, Move to Open, Move to Trash, Rename and a folder move close the dialog at once; the toast says how they
+    // went (A05-4), so their requests run in the app's scope rather than this dialog's.
+    val app = LocalContext.current.applicationContext as OrbitApplication
+    val changed by rememberUpdatedState(onChanged)
+    val actions = remember(api) { SessionActions(api, app.processScope) { changed() } }
     var draft by remember { mutableStateOf(when (dialog) {
         is DirectoryDialog.Rename -> dialog.session.title.orEmpty()
         is DirectoryDialog.EditFolder -> dialog.folder.name
         else -> ""
     }) }
-    fun perform(next: DirectoryDialog? = null, block: suspend () -> Unit) {
+    fun perform(next: DirectoryDialog? = null, describe: (Exception) -> String = ::directoryError, block: suspend () -> Unit) {
         if (busy) return
         busy = true; error = null
         scope.launch {
             try { block(); onChanged(); setDialog(next) }
             catch (cancel: CancellationException) { throw cancel }
-            catch (failure: Exception) { error = directoryError(failure) }
+            catch (failure: Exception) { error = describe(failure) }
             finally { busy = false }
         }
     }
@@ -56,7 +67,6 @@ fun DirectoryActionDialog(dialog: DirectoryDialog, api: DirectoryApi, data: Dire
         is DirectoryDialog.SessionMenu -> dialog.session.name
         is DirectoryDialog.Rename -> "Rename session"
         is DirectoryDialog.Purge -> "Delete permanently?"
-        is DirectoryDialog.Deleted -> "Moved to Trash"
         is DirectoryDialog.Tags -> "Tags"
         is DirectoryDialog.Move -> "Move session"
         is DirectoryDialog.EndToMove -> "End session before moving?"
@@ -84,7 +94,8 @@ fun DirectoryActionDialog(dialog: DirectoryDialog, api: DirectoryApi, data: Dire
                         val positive = if (dialog.view == SessionView.OPEN) SessionAction.COMPLETE else SessionAction.RESTORE
                         val allowed = data.fresh && s.capabilities?.allows(positive) == true
                         ActionButton(if (positive == SessionAction.COMPLETE) "Complete" else "Move to Open", !busy && allowed) {
-                            perform { if (positive == SessionAction.COMPLETE) api.complete(s.id) else api.restore(s.id) }
+                            setDialog(null)
+                            if (positive == SessionAction.COMPLETE) actions.complete(s.id, s.title) else actions.restore(s.id, s.title)
                         }
                         if (!allowed) Text("This action isn't available in the current session state.", style = MaterialTheme.typography.bodySmall)
                         if (dialog.view != SessionView.TRASH) {
@@ -93,20 +104,16 @@ fun DirectoryActionDialog(dialog: DirectoryDialog, api: DirectoryApi, data: Dire
                         }
                         ActionButton(if (dialog.view == SessionView.TRASH) "Delete Permanently…" else "Move to Trash", canWrite) {
                             if (dialog.view == SessionView.TRASH) setDialog(DirectoryDialog.Purge(s))
-                            else perform(DirectoryDialog.Deleted(s)) { api.delete(s.id, false) }
+                            else { setDialog(null); actions.trash(s.id, s.title) }
                         }
                     }
                     is DirectoryDialog.Rename -> {
                         OutlinedTextField(draft, { draft = it }, Modifier.fillMaxWidth(), label = { Text("Session name") })
-                        ActionButton("Save", canWrite && draft.isNotBlank()) { perform { api.rename(dialog.session.id, draft) } }
+                        ActionButton("Save", canWrite && draft.isNotBlank()) { setDialog(null); actions.rename(dialog.session.id, dialog.session.title, draft) }
                     }
                     is DirectoryDialog.Purge -> {
                         Text("This session and its full transcript will be permanently deleted. This can't be undone.")
                         ActionButton("Delete Permanently", canWrite) { perform { api.delete(dialog.session.id, true) } }
-                    }
-                    is DirectoryDialog.Deleted -> {
-                        Text("${dialog.session.name} is in Trash.")
-                        ActionButton("Undo", canWrite) { perform { api.restore(dialog.session.id) } }
                     }
                     is DirectoryDialog.Tags -> {
                         var selected by remember { mutableStateOf(dialog.session.tags.map { it.id }.toSet()) }
@@ -133,8 +140,8 @@ fun DirectoryActionDialog(dialog: DirectoryDialog, api: DirectoryApi, data: Dire
                         Text("The sessions in ${dialog.folder.name} will return to their workspace. Sessions won't be deleted.")
                         ActionButton("Delete folder", canWrite) { perform { api.deleteFolder(dialog.folder.id) } }
                     }
-                    is DirectoryDialog.Move -> MoveChoices(dialog.session, api, canWrite, setDialog) { workspace, folder ->
-                        perform { api.move(dialog.session.id, workspace, folder) }
+                    is DirectoryDialog.Move -> MoveChoices(dialog.session, api, canWrite, setDialog) { folder, from ->
+                        setDialog(null); actions.file(dialog.session.id, dialog.session.title, folder, from)
                     }
                     is DirectoryDialog.EndToMove -> {
                         Text("End this session first. Its worktree changes stay in the original workspace.")
@@ -145,7 +152,13 @@ fun DirectoryActionDialog(dialog: DirectoryDialog, api: DirectoryApi, data: Dire
                         Text(if (dialog.target.conversation == "rebuilt") "The conversation will be rebuilt from Orbit's record on the new runner." else "The conversation will continue on this runner.")
                         if (!dialog.target.runnerOnline) Text("The runner is offline. The next message will wait for it.")
                         dialog.targets.branch?.let { Text("Worktree changes stay on $it (${dialog.targets.changedFiles} changed files).") }
-                        ActionButton("Move", canWrite) { perform { api.move(dialog.session.id, dialog.target.workspaceId, dialog.folder?.id) } }
+                        ActionButton("Move", canWrite) {
+                            perform(describe = { "Couldn't move the session\n${failureReason(it)}" }) {
+                                api.move(dialog.session.id, dialog.target.workspaceId, dialog.folder?.id)
+                                OrbitToasts.show("Moved to ${dialog.target.name}", toastTitle(dialog.session.title), dialog.session.id,
+                                    tone = ToastTone.INFO, glyph = ToastGlyph.FOLDER)
+                            }
+                        }
                     }
                     is DirectoryDialog.Share -> io.orbitd.android.management.SessionSharePanel(dialog.session.id)
                 }
@@ -153,9 +166,11 @@ fun DirectoryActionDialog(dialog: DirectoryDialog, api: DirectoryApi, data: Dire
         })
 }
 
+/** Where a session can go: a folder of its workspace (or none) — [file] with the folder and the one it leaves — or another
+ * workspace, which asks first. */
 @Composable
 private fun MoveChoices(session: DirectorySession, api: DirectoryApi, enabled: Boolean,
-    setDialog: (DirectoryDialog?) -> Unit, move: (String?, String?) -> Unit) {
+    setDialog: (DirectoryDialog?) -> Unit, file: (MoveFolder?, MoveFolder?) -> Unit) {
     var targets by remember { mutableStateOf<MoveTargets?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var retry by remember { mutableIntStateOf(0) }
@@ -169,8 +184,9 @@ private fun MoveChoices(session: DirectorySession, api: DirectoryApi, enabled: B
     if (targets == null && error == null) LoadingMessage("Loading destinations…")
     targets?.let { result ->
         Text("In this workspace", style = MaterialTheme.typography.titleMedium)
-        ActionButton("No folder", enabled && result.folderId != null) { move(null, null) }
-        result.folders.forEach { folder -> ActionButton("${folder.name} (${folder.sessionCount})", enabled && !ObjectId.same(folder.id, result.folderId)) { move(null, folder.id) } }
+        val current = result.folders.firstOrNull { ObjectId.same(it.id, result.folderId) }
+        ActionButton("No folder", enabled && result.folderId != null) { file(null, current) }
+        result.folders.forEach { folder -> ActionButton("${folder.name} (${folder.sessionCount})", enabled && !ObjectId.same(folder.id, result.folderId)) { file(folder, current) } }
         Text("Move to another workspace", style = MaterialTheme.typography.titleMedium)
         result.reason?.let { Text(it) }
         if (result.needsEnd) ActionButton("End session…", enabled) { setDialog(DirectoryDialog.EndToMove(session)) }

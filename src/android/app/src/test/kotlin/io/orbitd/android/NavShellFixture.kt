@@ -28,12 +28,17 @@ internal object NavShell {
     /** The lifecycle and run of each session, which the session writes move. */
     @Volatile var lifecycle: Map<String, String> = emptyMap()
     @Volatile var running: Set<String> = emptySet()
+    /** Sessions whose run has ended: nothing is left to stop. The rest wait for input, which iOS counts as live. */
+    @Volatile var ended: Set<String> = emptySet()
     /** A write answered with this status and message instead of 200. */
     @Volatile var refuse: Pair<Int, String>? = null
+    /** What the runner answers a merge of [PLAIN]'s worktree with: `merged`, or `conflict`; null before any merge. */
+    @Volatile var mergeAnswer = "merged"
+    @Volatile var mergeStatus: String? = null
 
     fun reset() {
-        calls.clear(); refuse = null
-        lifecycle = mapOf(SESSION to "OPEN", PLAIN to "OPEN"); running = emptySet()
+        calls.clear(); refuse = null; mergeAnswer = "merged"; mergeStatus = null
+        lifecycle = mapOf(SESSION to "OPEN", PLAIN to "OPEN"); running = emptySet(); ended = emptySet()
     }
 
     val workspaces = """[
@@ -44,10 +49,15 @@ internal object NavShell {
     private fun session(id: String): String {
         val title = if (id == SESSION) "Review navigation" else "Plain notes"
         val state = lifecycle[id] ?: "OPEN"
-        val live = id in running
-        val linked = if (id == SESSION) ""","taskId":"$TASK","projectId":"$PROJECT"""" else ""
-        return """{"id":"$id","title":"$title","status":"${if (live) "RUNNING" else "AWAITING_INPUT"}",
-            "runState":"${if (live) "RUNNING" else "AWAITING_INPUT"}","lifecycleState":"$state",
+        val run = when (id) { in running -> "RUNNING"; in ended -> "ENDED"; else -> "AWAITING_INPUT" }
+        val linked = if (id == SESSION) ""","taskId":"$TASK","projectId":"$PROJECT"""" else
+            // Plain notes works in a worktree with one committed change: its bar offers Merge to main.
+            ""","isolationStatus":"worktree","branch":"orbit/plain-notes-a05c","worktreeDirty":false,"mergeTargets":["main"],
+            "changedFiles":[{"path":"notes.md","additions":3,"deletions":1,"status":"M"}],"mergeTarget":"main"""" +
+                (mergeStatus?.let { ""","mergeStatus":"$it"""" } ?: "") +
+                (if (mergeStatus == "conflict") ""","mergeError":"CONFLICT (content): notes.md"""" else "")
+        return """{"id":"$id","title":"$title","status":"${if (run == "ENDED") "CANCELLED" else run}",
+            "runState":"$run","lifecycleState":"$state",
             "agent":{"id":"$ALPHA","name":"Alpha"},"agentId":"$ALPHA","createdAt":"2026-10-08T08:00:00Z","lastTurnAt":"2026-10-09T01:00:00Z",
             "capabilities":{"canComplete":${state == "OPEN"},"canRestore":${state != "OPEN"}},"tags":[],"pendingApprovals":0$linked}"""
     }
@@ -81,6 +91,7 @@ internal object NavShell {
             id != null && api.path.last() == "restore" -> { lifecycle = lifecycle + (id to "OPEN"); ok("{}") }
             id != null && api.path.size == 2 && method == "DELETE" -> { lifecycle = lifecycle + (id to "TRASH"); ok("{}") }
             id != null && api.path.last() == "page" -> ok("""{"events":[],"hasMore":false,"lastSeq":0,"latestSeq":0}""")
+            id != null && api.path.last() == "merge" -> { mergeStatus = mergeAnswer; ok("{}") }
             path == "tasks/page" -> ok("""{"items":[$task],"nextCursor":null}""")
             path == "tasks/$TASK" -> ok(task)
             path.startsWith("tasks/") -> ok("{}")

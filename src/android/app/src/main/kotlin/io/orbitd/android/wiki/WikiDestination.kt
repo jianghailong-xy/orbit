@@ -17,6 +17,7 @@ import io.orbitd.android.OrbitApplication
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.directory.DirectoryData
 import io.orbitd.android.navigation.*
+import io.orbitd.android.toast.OrbitToasts
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filter
@@ -78,7 +79,7 @@ fun WikiDestination(app: OrbitApplication, handle: SessionHandle, route: OrbitRo
     val nav = remember(store, open, navigate) {
         WikiNav(open, navigate, handle.account.server) { raw ->
             try { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(raw))) }
-            catch (_: ActivityNotFoundException) { WikiToast.show("No application can open this link.") }
+            catch (_: ActivityNotFoundException) { OrbitToasts.show("No application can open this link.") }
         }
     }
     Column(Modifier.fillMaxSize().testTag("wiki-destination")) {
@@ -99,7 +100,6 @@ fun WikiDestination(app: OrbitApplication, handle: SessionHandle, route: OrbitRo
             Destination.WIKI_PLAN, Destination.WIKI_PLAN_DOC, Destination.WIKI_PLAN_SECTION -> WikiPlanScreen(store, route, data, nav)
             else -> Unit
         }
-        WikiToast.Host()
       }
     }
 }

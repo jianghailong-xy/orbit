@@ -96,6 +96,11 @@ class DirectoryDeviceTest {
                     completed && live.directoryFresh && !live.directoryRefreshing &&
                         live.directory?.sessions?.get("completed")?.any { it["id"]?.jsonPrimitive?.content == sessionId } == true
                 }
+                // The outcome is the app's toast (A05-4): "Session completed" with Undo, a card under the bar for six seconds.
+                compose.waitUntil(10_000) { compose.onAllNodes(hasText("Session completed") and hasAnyAncestor(hasTestTag("toast"))).fetchSemanticsNodes().isNotEmpty() }
+                capture("completed-toast")
+                compose.mainClock.advanceTimeBy(6_500)
+                compose.waitUntil(10_000) { compose.onAllNodes(hasAnyAncestor(hasTestTag("toast"))).fetchSemanticsNodes().isEmpty() }
                 directoryScrollTo("Completed")
                 compose.onNodeWithText("Completed").performClick()
                 directoryScrollTo("Review navigation")

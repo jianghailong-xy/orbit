@@ -278,7 +278,7 @@ class WikiWatchLiveTest {
     }
 
     /** The Accepted toast, as opposed to any other line that mentions accepting. */
-    private val acceptedToast = hasText(ACCEPTED) and hasAnyAncestor(hasTestTag("wiki-toast"))
+    private val acceptedToast = hasText(ACCEPTED) and hasAnyAncestor(hasTestTag("toast"))
 
     // MARK: the owner's journeys
 
@@ -376,7 +376,7 @@ class WikiWatchLiveTest {
             compose.onNodeWithTag("wiki-entry-form-summary").performTextReplacement(newSummary)
             capture("j4-edit-form")
             press("wiki-entry-form-save")
-            val saved = awaitAny(20_000, hasText(SAVED) and hasAnyAncestor(hasTestTag("wiki-toast")))
+            val saved = awaitAny(20_000, hasText(SAVED) and hasAnyAncestor(hasTestTag("toast")))
             capture("j4-saved")
             eventually("the entry is at revision ${revision + 1} with the new title and summary", owner, "wiki/entries/$entry?include=history") {
                 it.obj?.i("currentRevision") == revision + 1 && it.obj?.s("title") == newTitle && it.obj?.s("summary") == newSummary

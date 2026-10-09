@@ -31,6 +31,9 @@ import io.orbitd.android.auth.openInSignInBrowser
 import io.orbitd.android.core.BuildIdentity
 import io.orbitd.android.core.auth.AuthState
 import io.orbitd.android.reader.SessionReader
+import io.orbitd.android.reader.WorktreeModel
+import io.orbitd.android.toast.OrbitToasts
+import io.orbitd.android.toast.ToastHost
 import io.orbitd.android.tasks.TasksScreen
 import io.orbitd.android.projects.ProjectsScreen
 import io.orbitd.android.wiki.PageBar
@@ -276,6 +279,25 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                         }
                         }
                     }
+                    // A05-4: the app's one toast surface, under the bar and over every page, so an outcome outlives the
+                    // page that asked for it. A toast that names a session opens it — unless it is the page showing —
+                    // and following it takes the toast down.
+                    fun openSession(id: String) {
+                        if (route.destination != Destination.SESSION || !ObjectId.same(route.id, id)) open(OrbitRoute(Destination.SESSION, id, origin = Origin.LINK))
+                    }
+                    ToastHost(open = { toast -> OrbitToasts.dismiss(toast.id); toast.sessionId?.let(::openSession) },
+                        undo = { toast ->
+                            OrbitToasts.dismiss(toast.id)
+                            toast.sessionId?.let { SessionActions(api, app.processScope) { app.realtime.refreshDirectory(); app.realtime.refreshSession() }.restore(it, toast.subtitle) }
+                        },
+                        resolve = { toast ->
+                            val session = toast.sessionId; val conflict = toast.mergeConflict
+                            OrbitToasts.dismiss(toast.id)
+                            if (session != null && conflict != null) {
+                                openSession(session)
+                                WorktreeModel(api, session, app.processScope).resolveInSession(conflict.branch, conflict.target)
+                            }
+                        }, modifier = Modifier.widthIn(max = 560.dp))
                 }
             }
         }
