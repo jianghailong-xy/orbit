@@ -11137,49 +11137,53 @@ export function WorkspaceView({
                 way a reference composer writes "model · effort" as one button: the model in the
                 label's colour, the effort after it in the secondary one. The menu behind it
                 (`modelMenuItems`) keeps each field's own rules. */}
-            <span className="composer-pill composer-model-pill">
-              <Dropdown
-                trigger={['click']}
-                placement="topRight"
-                disabled={!configEditable}
-                // Rows that open a level down open on hover where the pointer can hover, the way
-                // the browser's own menus do — and on a tap where it cannot, because a phone has
-                // no hover to give: one row, two gestures, decided by the pointer.
-                // They open to the right — and on a phone, where the control sits near the
-                // right edge, there is no right: shift the level back inside the screen rather
-                // than let it hang off the edge (and widen the page with it).
-                menu={{
-                  className: 'composer-model-menu',
-                  items: modelMenuItems,
-                  triggerSubMenuAction: canHover ? 'hover' : 'click',
-                  builtinPlacements: {
-                    rightTop: {
-                      points: ['tl', 'tr'],
-                      overflow: { adjustX: true, adjustY: true, shiftX: true, shiftY: true },
-                    },
-                  },
-                }}
-              >
-                <button
-                  type="button"
-                  className={`composer-model-chip${smartRoute ? ' is-smart' : ''}`}
+            {/* No model to show where a first session cannot start yet: the managed default
+                workspace before its runner was ever ready (`managedDraftBlocked`). */}
+            {!managedDraftBlocked && (
+              <span className="composer-pill composer-model-pill">
+                <Dropdown
+                  trigger={['click']}
+                  placement="topRight"
                   disabled={!configEditable}
-                  aria-label={`Model ${shownModelLabel}, effort ${shownEffortLabel}${
-                    smartRoute ? ', picked by smart selection' : ''
-                  }`}
+                  // Rows that open a level down open on hover where the pointer can hover, the way
+                  // the browser's own menus do — and on a tap where it cannot, because a phone has
+                  // no hover to give: one row, two gestures, decided by the pointer.
+                  // They open to the right — and on a phone, where the control sits near the
+                  // right edge, there is no right: shift the level back inside the screen rather
+                  // than let it hang off the edge (and widen the page with it).
+                  menu={{
+                    className: 'composer-model-menu',
+                    items: modelMenuItems,
+                    triggerSubMenuAction: canHover ? 'hover' : 'click',
+                    builtinPlacements: {
+                      rightTop: {
+                        points: ['tl', 'tr'],
+                        overflow: { adjustX: true, adjustY: true, shiftX: true, shiftY: true },
+                      },
+                    },
+                  }}
                 >
-                  {smartRoute && (
-                    <span className="composer-model-spark" aria-hidden="true">
-                      ✦
+                  <button
+                    type="button"
+                    className={`composer-model-chip${smartRoute ? ' is-smart' : ''}`}
+                    disabled={!configEditable}
+                    aria-label={`Model ${shownModelLabel}, effort ${shownEffortLabel}${
+                      smartRoute ? ', picked by smart selection' : ''
+                    }`}
+                  >
+                    {smartRoute && (
+                      <span className="composer-model-spark" aria-hidden="true">
+                        ✦
+                      </span>
+                    )}
+                    <span className="composer-model-name">{shownModelLabel}</span>
+                    <span className="composer-model-effort">
+                      {fastModeUsable && shownFastMode ? `${shownEffortLabel} · Fast` : shownEffortLabel}
                     </span>
-                  )}
-                  <span className="composer-model-name">{shownModelLabel}</span>
-                  <span className="composer-model-effort">
-                    {fastModeUsable && shownFastMode ? `${shownEffortLabel} · Fast` : shownEffortLabel}
-                  </span>
-                </button>
-              </Dropdown>
-            </span>
+                  </button>
+                </Dropdown>
+              </span>
+            )}
             {shownPool && shownPoolAccount && (
               <Tooltip title={poolAccountHelp(shownPool, shownPoolAccount)}>
                 <span className="composer-pill composer-account" data-pool-account={shownPoolAccount.member.id}>

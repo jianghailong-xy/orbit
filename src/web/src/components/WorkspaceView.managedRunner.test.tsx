@@ -262,6 +262,7 @@ describe('a managed workspace in the console', () => {
     expect(composer().placeholder).toBe('Send this workspace a task…');
     expect(mounted().textContent?.toLowerCase()).not.toContain('register');
     expect(mounted().querySelector('.np-hero')).toBeTruthy();
+    expect(mounted().querySelector('.composer-model-chip')).toBeTruthy();
 
     await type('Pick up where we left off');
     await waitForUi(() => expect(sendButton().disabled).toBe(false));
@@ -277,7 +278,9 @@ describe('a managed workspace in the console', () => {
     server = { capabilities: capability('switched on'), statuses: [state('preparing: starting')], lastProvider: 'claude' };
     await open(MANAGED_WORKSPACE);
     await waitForUi(() => expect(noticeTitle()).toBe('Preparing your managed runner'));
+    // Neither the engine hero nor the composer's model control: no default that would be refused.
     expect(mounted().querySelector('.np-hero')).toBeNull();
+    expect(mounted().querySelector('.composer-model-chip')).toBeNull();
     expect(composer().placeholder).toBe('Preparing your managed runner');
     await type('Hello');
     expect(sendButton().disabled).toBe(true);
@@ -294,6 +297,7 @@ describe('a managed workspace in the console', () => {
     const link = [...notice()!.querySelectorAll('a')].find((a) => a.textContent === 'Open Infrastructure');
     expect(link?.getAttribute('href')).toBe(`/infrastructure?runner=${encodeId(MANAGED_RUNNER)}`);
     expect(mounted().querySelector('.np-hero')).toBeNull();
+    expect(mounted().querySelector('.composer-model-chip')).toBeNull();
     await type('Hello');
     expect(sendButton().disabled).toBe(true);
   });
