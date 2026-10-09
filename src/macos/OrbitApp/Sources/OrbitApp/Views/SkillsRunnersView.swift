@@ -87,6 +87,16 @@ struct RunnersListView: View {
             // Runners' stack projection — the record on top — and only where there is a detail
             // column to select into.
             List(selection: rowNavigation == .selection ? $model.selectedRunnerID : nil) {
+                // An account with no runner at all, while the server offers managed runners: its
+                // managed runner — Set up, or why there is none — above the machines, as the web's
+                // default landing shows it (`ManagedRunnerLogic.onboarding`). Add Runner stays below.
+                if runners.loadState.hasLoaded,
+                   let managed = ManagedRunnerLogic.onboarding(model.managedRunner?.display,
+                                                               runnerCount: runners.runners.count) {
+                    Section {
+                        ManagedRunnerBanner(display: managed, runnerID: model.managedRunner?.status?.runnerId)
+                    }
+                }
                 if lists.settled {
                     let attention = lists.attention
                     if !attention.isEmpty {
