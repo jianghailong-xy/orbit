@@ -29,7 +29,12 @@
  *      run not settled, no REPO_OP_FAILED, no read asked again, nothing counted, and the health line still reads the
  *      run under way with no failure — and the next worker takes it over;
  *   9. the plan proposal (2026-10-09, run 28ea4f5c): a new design document's sections named as the proposal prompt
- *      lists them, `##` and all, are found in the document as the runner finds them, and the proposal is stored.
+ *      lists them, `##` and all, are found in the document as the runner finds them, and the proposal is stored;
+ *  10. the anchors' batch (2026-10-10): a page is `listEntriesMax` entries — the most one `anchors` repository
+ *      operation carries, four times what the default page sent — so 400 entries are two operations and not
+ *      eight, each inside `RepoOps.operationBytes`; and
+ *  11. a page of 201 entries: every entry keeps its own check across the page boundary and the report-sized
+ *      writes a page this size is recorded in, and the page's tail entry is written like the rest.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/wiki-worker/wiki-maintain-job.pg.spec.ts
  *
@@ -60,7 +65,7 @@ import { WikiHealth } from '../wiki/wiki-health';
 import { WikiPlans } from '../wiki/wiki-plan';
 import { WikiRefusalError, WikiService, type WikiPrincipal } from '../wiki/wiki.service';
 import { WikiRepoOps } from './wiki-repo-ops';
-import { WIKI_REPO_OP_CAPABILITY } from '@orbit/shared';
+import { WIKI_ANCHOR_RULES, WIKI_LIMITS, WIKI_REPO_OP_CAPABILITY, WIKI_REPO_OPS } from '@orbit/shared';
 import { WikiJobExecutor, WIKI_JOB_RUNNERS, type WikiJobRunner } from './wiki-job-executor';
 import { WIKI_JOB_HANDED_BACK } from './wiki-jobs';
 import { WikiModelRequestQueue } from './wiki-model-queue.service';
@@ -958,6 +963,127 @@ test('the anchors step records each entry\'s checks on its own anchors — a pag
   const report = (await runRow(h, fx.runId)).report as Record<string, unknown>;
   const anchors = report.anchors as Record<string, number>;
   assert.deepEqual(anchors, { entries: 2, changed: 0, missing: 1 }, 'one entry verified, the broken one out as missing');
+});
+
+/** The `anchors` operations of a run, in the order they were enqueued: how many anchors each carried, how many bytes, and when it ran. */
+async function anchorsOps(h: Harness): Promise<Array<{ anchors: number; bytes: number; createdAt: string; endedAt: string }>> {
+  return h.sql.query<{ anchors: number; bytes: number; createdAt: string; endedAt: string }>(
+    `SELECT jsonb_array_length("input"->'anchors') AS "anchors",
+            octet_length("input"::text) AS "bytes",
+            "created_at" AS "createdAt", "ended_at" AS "endedAt"
+       FROM "wiki_repo_op" WHERE "owner_id" = $1 AND "kind" = 'anchors' AND "state" = 'succeeded'
+      ORDER BY "created_at", "id"`, [h.ownerId],
+  ).then((result) => result.rows.map((row) => ({ anchors: Number(row.anchors), bytes: Number(row.bytes), createdAt: row.createdAt, endedAt: row.endedAt })));
+}
+
+test('the anchors step puts listEntriesMax entries in one repository operation: 400 entries are two operations, not eight', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const fx = await fixture(h);
+  // No dossiers: the run proposes nothing, and the anchors step is what this case is about.
+  h.maintenance.dossierPage = (async () => ({ ...(pageOf(fx) as Record<string, unknown>), facts: 0, dossiers: [] })) as unknown as WikiMaintenance['dossierPage'];
+  // 400 live entries, one path anchor each: a page of the list's default size (50) sent these out as
+  // eight repository operations, each one a wait for the runner's next heartbeat.
+  const count = 400;
+  await h.prisma.wikiEntry.createMany({
+    data: Array.from({ length: count }, (_, i) => ({
+      ownerId: h.ownerId, spaceId: fx.spaceId, kind: 'concept', title: `anchored ${i}`, summary: 'a live entry',
+      status: 'active', trust: 'auto', currentRevision: 1, fields: { definition: 'x', boundaries: 'y' }, topics: [],
+      anchors: [{ type: 'path', path: ANCHOR_REPO.file }],
+    })),
+  });
+
+  const which = worker(h);
+  await pass(h, which, async () => (await jobOf(h, fx.jobId)).state === 'succeeded', { checkAnchor: checkAnchorAgainstRepo });
+
+  const job = await jobOf(h, fx.jobId);
+  assert.equal(job.state, 'succeeded', `the anchors step must not fail: ${job.error ?? ''}`);
+  const ops = await anchorsOps(h);
+  assert.equal(ops.length, Math.ceil(count / WIKI_ANCHOR_RULES.listEntriesMax), 'the page is the batch: 400 entries fill two operations');
+  assert.deepEqual(ops.map((op) => op.anchors), [WIKI_ANCHOR_RULES.listEntriesMax, count - WIKI_ANCHOR_RULES.listEntriesMax], 'each operation carries one anchor an entry, in page order');
+  for (const op of ops) {
+    // What one operation may carry: a page's entries at `listMaxItems` anchors each, and a payload well
+    // inside what a read is packed to (`operationBytes`). A page of path anchors is a few hundred
+    // milliseconds of git on the runner, far inside the 300 s the run waits for it.
+    assert.ok(op.anchors <= WIKI_ANCHOR_RULES.listEntriesMax * WIKI_LIMITS.listMaxItems, `an operation carries at most a page's anchors: ${op.anchors}`);
+    assert.ok(op.bytes < WIKI_REPO_OPS.operationBytes, `an operation's payload stays inside operationBytes: ${op.bytes} bytes`);
+  }
+  // One at a time: the second operation was enqueued only after the first had settled (the runner's
+  // concurrent fetches of one checkout take no lock of their own until 97b8de07f ships).
+  assert.ok(Date.parse(ops[1]!.createdAt) >= Date.parse(ops[0]!.endedAt), `no second operation while one is in flight: ${ops.map((op) => `${op.createdAt}->${op.endedAt}`).join(', ')}`);
+  // Every one of the 400 entries was checked through those two operations.
+  const verified = await h.prisma.wikiEntry.count({ where: { ownerId: h.ownerId, spaceId: fx.spaceId, anchorState: 'verified' } });
+  assert.equal(verified, count, 'no entry is left out by the page boundary');
+  const report = (await runRow(h, fx.runId)).report as Record<string, unknown>;
+  assert.deepEqual(report.anchors, { entries: count, changed: 0, missing: 0 }, 'the report counts every entry once');
+});
+
+test('every entry of a page keeps its own check across the page and the report boundaries, and the page\'s tail is written', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const fx = await fixture(h);
+  h.maintenance.dossierPage = (async () => ({ ...(pageOf(fx) as Record<string, unknown>), facts: 0, dossiers: [] })) as unknown as WikiMaintenance['dossierPage'];
+  // 201 entries: the page boundary falls between the 200th and the 201st, and a page this size is written
+  // back in five reports (four of fifty and a tail of one) — each entry's checks must arrive at its own
+  // anchors however the page and its writes are split.
+  const count = 201;
+  // Ids of this case's own (`fade...`, and no other case's): the anchors list orders by id, so the
+  // page boundary and every expected verdict below are read off the entries' own order.
+  const idOf = (i: number): string => `fade0000-0000-4000-8000-${String(i).padStart(12, '0')}`;
+  const pathOf = (i: number): string => `src/entry-${String(i).padStart(3, '0')}.go`;
+  const symbolOf = (i: number): string => `sym${i}`;
+  const ownBaselineOf = (i: number): string => createHash('sha256').update(`a baseline entry ${i} named`).digest('hex');
+  const gone = new Set([3, 197]);
+  await h.prisma.wikiEntry.createMany({
+    data: Array.from({ length: count }, (_, i) => ({
+      ownerId: h.ownerId, spaceId: fx.spaceId, id: idOf(i), kind: 'concept', title: `anchored ${i}`, summary: 'a live entry',
+      status: 'active', trust: 'auto', currentRevision: 1, fields: { definition: 'x', boundaries: 'y' }, topics: [],
+      anchors: [
+        { type: 'path', path: pathOf(i) },
+        ...(i % 4 === 0 ? [{ type: 'symbol', path: pathOf(i), symbol: symbolOf(i), ...(i % 8 === 0 ? { regionSha256: ownBaselineOf(i) } : {}) }] : []),
+      ],
+    })),
+  });
+  // The runner this case plays: a path is there unless it is one of the gone ones, and a symbol's region
+  // hashes from its own name — so a verdict laid on a page-mate, or a check written to the wrong entry,
+  // shows as the wrong region rather than passing.
+  const checkAnchorOf = (anchor: Record<string, unknown>): Record<string, unknown> => {
+    if (anchor.type === 'path') return { ...anchor, state: gone.has(Number(/entry-(\d+)\.go/u.exec(String(anchor.path))?.[1] ?? -1)) ? 'missing' : 'verified' };
+    return { ...anchor, state: 'verified', regionSha256: ANCHOR_REPO.regionOf(String(anchor.symbol ?? '')) };
+  };
+
+  const which = worker(h);
+  await pass(h, which, async () => (await jobOf(h, fx.jobId)).state === 'succeeded', { checkAnchor: checkAnchorOf });
+
+  const job = await jobOf(h, fx.jobId);
+  assert.equal(job.state, 'succeeded', `the anchors step must not fail: ${job.error ?? ''}`);
+  const ops = await anchorsOps(h);
+  assert.equal(ops.length, 2, '201 entries are two operations');
+  assert.equal(ops[0]!.anchors, count - 1 + 50, 'the first operation carries a full page: the 200 entries\' paths and the 50 symbols of those among them that carry one');
+  assert.equal(ops[1]!.anchors, 1 + 1, 'the second operation carries the page\'s tail entry and its symbol');
+
+  const entries = await h.prisma.wikiEntry.findMany({ where: { ownerId: h.ownerId, spaceId: fx.spaceId }, orderBy: { id: 'asc' } });
+  assert.equal(entries.length, count);
+  let changed = 0;
+  let missing = 0;
+  for (const [i, entry] of entries.entries()) {
+    const anchors = entry.anchors as Array<Record<string, unknown> & { check?: Record<string, unknown> }>;
+    assert.equal(anchors.length, i % 4 === 0 ? 2 : 1, `entry ${i} keeps its own anchors`);
+    assert.equal(anchors[0]!.check?.state, gone.has(i) ? 'missing' : 'verified', `entry ${i}'s path is its own verdict`);
+    if (anchors.length === 2) {
+      const own = i % 8 === 0;
+      assert.equal(anchors[1]!.check?.state, own ? 'changed' : 'verified', `entry ${i}'s symbol is held to ${own ? 'its own' : 'the found'} region`);
+      assert.equal(anchors[1]!.check?.regionSha256, ANCHOR_REPO.regionOf(symbolOf(i)), `entry ${i}'s symbol check carries its own region`);
+      if (own) assert.equal(anchors[1]!.check?.baselineSha256, undefined, 'an entry that named its own baseline keeps it');
+      else assert.equal(anchors[1]!.check?.baselineSha256, ANCHOR_REPO.regionOf(symbolOf(i)), 'an entry with no baseline adopts the region its own check found');
+      if (own) changed += 1;
+    }
+    if (gone.has(i)) missing += 1;
+  }
+  assert.equal(changed, Math.ceil(count / 8), 'every entry that named its own baseline reads changed');
+  assert.equal(missing, gone.size);
+  const report = (await runRow(h, fx.runId)).report as Record<string, unknown>;
+  assert.deepEqual(report.anchors, { entries: count, changed, missing }, 'the counts are the entries\', whatever report a chunk fell in');
 });
 
 test('anchor verdicts that name anchors no entry asked for fail the run: nothing is laid on a guess', { skip }, async () => {
