@@ -4,7 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { dialogName, openDialog } from '../components/RunnerEngines.test-helpers';
+import { openDialog } from '../components/RunnerEngines.test-helpers';
 import type { Runner } from '../components/TasksSidePanel';
 import { encodeId } from '../lib/idCodec';
 import type { ProviderRow } from '../lib/providerAdmin';
@@ -30,6 +30,7 @@ const ANTHROPIC: ProviderRow = {
   slug: 'anthropic-1',
   label: 'Anthropic',
   runtime: 'claude',
+  engines: ['claude', 'opencode'] as ProviderRow['engines'],
   baseUrl: 'https://api.anthropic.com',
   models: [],
   defaultModel: null,
@@ -93,6 +94,7 @@ beforeEach(() => {
     }
     if (p === '/runners') return runners;
     if (p === '/providers/mine') return keys;
+    if (p.endsWith('/usage')) return { providerId: p.split('/')[3], engines: [], sessions: 0, tasks: 0 };
     if (p.endsWith('/login')) return { status: null, engine: null, url: null, userCode: null, message: null, account: null };
     return [];
   }) as typeof api);
@@ -148,6 +150,14 @@ async function mount(at = '/infrastructure') {
 }
 
 const text = (el: Element | null | undefined) => el?.textContent?.replace(/\s+/g, ' ').trim();
+/** An element's words, without the monograms drawn on its marks (OpenCode's "O"). */
+const words = (el: Element | null | undefined) => {
+  if (!el) return null;
+  const copy = el.cloneNode(true) as Element;
+  copy.querySelectorAll('.provider-tile').forEach((tile) => tile.remove());
+  return copy.textContent?.replace(/\s+/g, ' ').trim() ?? null;
+};
+
 const click = async (el: Element | null | undefined) => {
   if (!el) throw new Error('nothing to click');
   await act(async () => {
@@ -244,17 +254,20 @@ describe('/infrastructure', () => {
 
   it('keeps the gallery under the keys there are, edits a key on its page, and deletes one once asked', async () => {
     await mount();
-    const row = document.body.querySelector<HTMLElement>('.provider-keys tbody tr')!;
+    const row = document.body.querySelector<HTMLElement>('.provider-keys tbody tr.prov-key')!;
     expect(text(row.querySelector('.prov-cell-name'))).toBe('Anthropic');
     expect(text(document.body.querySelector('.provider-more h3'))).toBe('Connect another provider');
     expect(document.body.querySelector('.provider-more a[href="/providers/new/openai"]')).not.toBeNull();
 
     await click(button('Delete', row));
     expect(sent).toEqual([]);
-    // The question is a dialog named by itself, anchored to the row's Delete.
-    const confirm = [...document.body.querySelectorAll<HTMLElement>('[role="dialog"]')].pop()!;
-    expect(dialogName(confirm)).toBe('Delete Anthropic?');
-    await click(button('OK', confirm));
+    // The question is a dialog named by itself, saying what the key goes from — here, nothing uses it.
+    const confirm = await openDialog('Delete Anthropic?');
+    await act(async () => {
+      await vi.waitFor(() => expect(text(confirm)).toContain('Nothing uses it right now.'));
+    });
+    expect([...confirm.querySelectorAll('.key-impact-row')].map(words)).toEqual(['Claude Code — not in use', 'OpenCode — not in use']);
+    await click(button('Delete key', confirm));
     expect(sent).toEqual([{ method: 'DELETE', path: `/providers/mine/${ANTHROPIC.id}` }]);
 
     await click(button('Edit', row));
