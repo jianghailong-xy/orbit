@@ -168,8 +168,8 @@ internal fun topLineItem(items: List<LazyListItemInfo>, top: Int): String? =
 /** Scroll state the header derives from, mutated per frame without recomposing; only the named question redraws. */
 private class QuestionRuler { var anchor: String? = null }
 
-/** Whether the header was last shown, and its last measured height: what the list is scrolled by when it comes or goes. */
-private class HeaderShift { var shown = false; var height = 0f }
+/** Whether the header was last shown, whether it has shown yet, and its last measured height: what the list is scrolled by when it comes or goes. */
+private class HeaderShift { var shown = false; var seen = false; var height = 0f }
 
 /**
  * The sticky "↑ Your question" header (iOS `ConsoleView.stickyQuestion`, web's `.chat-sticky-question`):
@@ -193,15 +193,18 @@ internal fun StickyQuestion(rows: List<TranscriptRow>, list: LazyListState, hidd
     }
     val row = questions.row(stuck)
     // In the list's flow, as on iOS, so a jump lands below the header rather than under it. Its coming and going
-    // moves the list's top by its height, though, so the list is scrolled by as much in the same frame: the line
-    // being read stays where it was (A06's prepend guarantee) instead of jumping by a header.
+    // moves the list's top by its height, though, so the list is scrolled by as much before the frame is laid out:
+    // the line being read stays where it was (A06's prepend guarantee) instead of jumping by a header. An effect
+    // rather than a SideEffect: a scroll while the frame's compositions are still being applied measures list
+    // items that are not applied yet, and the composition breaks.
     val shift = remember(list) { HeaderShift() }
     val shown = !hidden && row != null
-    SideEffect {
-        if (shown != shift.shown) {
-            shift.shown = shown
-            if (shift.height > 0f) list.dispatchRawDelta(if (shown) shift.height else -shift.height)
-        }
+    LaunchedEffect(shift, shown) {
+        if (shown == shift.shown) return@LaunchedEffect
+        shift.shown = shown
+        // Its first showing is the reader settling where it opened: a place it restores was saved with the header up.
+        if (shown && !shift.seen) { shift.seen = true; return@LaunchedEffect }
+        if (shift.height > 0f) list.dispatchRawDelta(if (shown) shift.height else -shift.height)
     }
     if (hidden || row == null) return
     val (label, text) = remember(row) { StickySummary.of(row.event) }
