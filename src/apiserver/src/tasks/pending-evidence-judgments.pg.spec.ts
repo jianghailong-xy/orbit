@@ -253,6 +253,10 @@ interface QueueView {
   /** Optional for the same reason the rest of this view is: this spec has to be able to FAIL
    *  against a build whose read has one group, rather than not compile against it. */
   waitingOnYou?: RowView[];
+  /** Revisions waiting for the coordinator this session is — read for that conversation only. */
+  waitingOnCoordinator?: RowView[];
+  /** Revisions that waited and were then delivered to this session: receipts, not questions. */
+  sentToCoordinator?: Array<{ taskId?: string }>;
   /** The decisions recorded FROM the reading session: receipts, not questions. */
   decided?: DecidedView[];
 }
@@ -275,18 +279,23 @@ const QUEUE_FIELDS = [
   'oldestAgeSeconds',
   'pending',
   'waitingOnYou',
+  'waitingOnCoordinator',
+  'sentToCoordinator',
   'decided',
 ] as const;
 
+/** The arrays that are not groups: they ask this reader nothing — what it has already answered,
+ *  and what was handed to it after waiting for it — so they are named out here. */
+const RECEIPTS = new Set(['decided', 'sentToCoordinator']);
+
 /** Every group the read returns, whatever it is called — read off the object rather than from a
- *  list of the two names this spec knows. A third group added back under a third name is then
- *  caught by the assertions below instead of quietly becoming the next place to broadcast from.
- *  `decided` is the one array that is not a group: it asks this reader nothing, being what the
- *  reader has already answered, so it is named out here and pinned by assertions of its own. */
+ *  list of the names this spec knows. A further group added under a further name is then caught by
+ *  the assertions below instead of quietly becoming the next place to broadcast from. The receipts
+ *  are pinned by assertions of their own. */
 function groupsOf(view: QueueView): Array<[string, RowView[]]> {
   const groups: Array<[string, RowView[]]> = [];
   for (const [name, value] of Object.entries(view)) {
-    if (name !== 'decided' && Array.isArray(value)) groups.push([name, value as RowView[]]);
+    if (!RECEIPTS.has(name) && Array.isArray(value)) groups.push([name, value as RowView[]]);
   }
   return groups;
 }
@@ -409,10 +418,14 @@ suite('the pending-decision queue is derived from the facts, not delivered to an
     const read = await readPendingEvidenceJudgments(db, f.ownerId, session);
 
     assert.deepEqual(Object.keys(read).sort(), [...QUEUE_FIELDS].sort());
-    // Two of those seven are groups, `decided` is this reader's receipts, and the other four
-    // describe the read itself.
+    // Three of those nine are groups — the third, `waitingOnCoordinator`, read only for the
+    // conversation an Automatic project is coordinated from and empty here, where no project is —
+    // `decided` and `sentToCoordinator` are this reader's receipts, and the other four describe the
+    // read itself.
     assert.deepEqual(groupsOf(read as QueueView).map(([name]) => name).sort(),
-      ['pending', 'waitingOnYou']);
+      ['pending', 'waitingOnCoordinator', 'waitingOnYou']);
+    assert.deepEqual(read.waitingOnCoordinator, []);
+    assert.deepEqual(read.sentToCoordinator, []);
   });
 
   // (ii) -----------------------------------------------------------------------------------------

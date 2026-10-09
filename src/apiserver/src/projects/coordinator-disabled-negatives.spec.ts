@@ -341,9 +341,15 @@ const WIRED: readonly WiredWakeFact[] = [
     // has decided to the project the task moved into (`TasksService.handOverMovedEvidence`), through
     // the same door and producer. Its own control is a target whose switch is off: the revision is
     // recorded there, its coordinator told nothing and nothing opened.
+    //
+    // Since 2026-10-09 a third builds it again: a revision that waited for a paused coordinator is
+    // handed over once that coordinator is back (`CoordinatorEvidenceQueueService`), through the same
+    // producer. Its control is a project switched off while the revision waited: when the coordinator
+    // is back nothing is claimed or handed over, nothing is opened, and the refused row is the only one.
     event: 'COMPLETION_EVIDENCE_REVISED',
     producedBy: [
       'projects/completion-input.ts#completionEvidenceRevisedFact',
+      'projects/coordinator-evidence-queue.service.ts#deliverWaiting',
       'tasks/task-completion-evidence.service.ts#submit',
       'tasks/tasks.service.ts#handOverMovedEvidence',
     ],
@@ -359,6 +365,10 @@ const WIRED: readonly WiredWakeFact[] = [
       {
         spec: 'tasks/task-move-evidence-handover.pg.spec.ts',
         test: '(e) a target that is not Automatic records the handed-over revision, tells its coordinator nothing, and asks the owner',
+      },
+      {
+        spec: 'projects/evidence-waits-for-coordinator.pg.spec.ts',
+        test: 'switched off, a waiting revision goes to the owner, and the coordinator is not handed it when it is back',
       },
     ],
   },
