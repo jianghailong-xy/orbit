@@ -11,6 +11,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.MainActivity
 import io.orbitd.android.TestOrbitApplication
@@ -38,7 +40,9 @@ class StickyQuestionHeaderTest {
     private val jumped = mutableListOf<String>()
     private lateinit var list: LazyListState
 
-    private fun show(hidden: Boolean = false) {
+    private var hidden by androidx.compose.runtime.mutableStateOf(false)
+
+    private fun show() {
         compose.runOnUiThread { compose.activity.setContent { MaterialTheme {
             list = androidx.compose.foundation.lazy.rememberLazyListState()
             Column(Modifier.fillMaxSize()) {
@@ -72,9 +76,13 @@ class StickyQuestionHeaderTest {
     }
 
     @Test fun foldsAwayWhileTheComposerHoldsTheKeyboard() {
-        show(hidden = true)
+        show()
         scrollTo(rows.size + 1)
+        header.assertCountEquals(1)
+        compose.runOnIdle { hidden = true }
         header.assertCountEquals(0)
+        compose.runOnIdle { hidden = false }
+        named("↑ Your question", "Second question")
     }
 
     private fun named(label: String, line: String) {
