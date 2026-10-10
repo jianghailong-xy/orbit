@@ -4,6 +4,9 @@
 # and member S2 the server has recapped, whose member S3 has only a reply, and a session S4 in no
 # project, all in one workspace:
 #
+#   (`projectId` is the coordinator's own relation, as the server serves it: only S1 carries it, and
+#   every member carries `projectMembership` — the shape the apps' coordinator badge reads.)
+#
 #   S1  P1's COORDINATOR, parked: recapText + recapAt (minutes old) + lastAssistantText — the chat
 #       page photographed, the project row's line, the sessions page's coordinator row and the
 #       project page's coordinator card.
@@ -110,11 +113,9 @@ SESSIONS = {
     "S1": session("S1", COORD_TITLE, 4, projectId=PROJECT, projectTitle=PROJECT_TITLE,
                   projectMembership=membership("COORDINATOR"), lastAssistantText=COORD_REPLY,
                   recapText=COORD_RECAP, recapAt=COORD_RECAP_AT),
-    "S2": session("S2", MEMBER_TITLE, 38, projectId=PROJECT, projectTitle=PROJECT_TITLE,
-                  projectMembership=membership("TASK"), lastAssistantText=MEMBER_REPLY,
+    "S2": session("S2", MEMBER_TITLE, 38, projectMembership=membership("TASK"), lastAssistantText=MEMBER_REPLY,
                   recapText=MEMBER_RECAP, recapAt=MEMBER_RECAP_AT),
-    "S3": session("S3", PLAIN_TITLE, 90, projectId=PROJECT, projectTitle=PROJECT_TITLE,
-                  projectMembership=membership("TASK"), lastAssistantText=PLAIN_REPLY),
+    "S3": session("S3", PLAIN_TITLE, 90, projectMembership=membership("TASK"), lastAssistantText=PLAIN_REPLY),
     "S4": session("S4", OTHER_TITLE, 20, lastAssistantText=OTHER_REPLY,
                   recapText=OTHER_RECAP, recapAt=OTHER_RECAP_AT),
 }

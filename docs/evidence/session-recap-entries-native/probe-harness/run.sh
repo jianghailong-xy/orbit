@@ -75,6 +75,8 @@ for test in json.load(open(manifest)):
         ext = os.path.splitext(a["exportedFileName"])[1]
         # Pictures by their attachment name; texts (notes, trees, the request log) are named with
         # their extension already. A file the runner managed to write itself is kept.
+        if ext == ".txt" and not name.endswith(".txt"):
+            name += ".txt"
         target = os.path.join(out, name + ".png" if ext == ".png" else name)
         if ext in (".png", ".txt") and not os.path.exists(target):
             shutil.copy(os.path.join(base, a["exportedFileName"]), target)

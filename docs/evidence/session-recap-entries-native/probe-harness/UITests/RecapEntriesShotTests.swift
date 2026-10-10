@@ -152,8 +152,19 @@ final class RecapEntriesShotTests: ProbeCase {
 
     private func projectPage(_ platform: String) {
         let name = "\(platform)-project-\(mode)"
-        let app = open("project", name, until: coordTitle)
-        let line = element(app, containing: recapsOff ? coordReply : coordRecap)
+        let app = open("project", name, until: project)
+        let words = recapsOff ? coordReply : coordRecap
+        // The card's line once the page's reads have answered, looked up again after the wait: a
+        // Mac text is found by its value only once it is drawn, and a lookup made before that is a
+        // label query that never matches one (the first run's Mac pass scrolled the card away
+        // hunting for it). On the phone the card may sit below the fold of a lazy list, where it is
+        // not in the tree at all until `bring` scrolls to it.
+        #if os(macOS)
+        _ = appears(app, words, timeout: 30)
+        #else
+        _ = appears(app, words, timeout: 8)
+        #endif
+        let line = element(app, containing: words)
         // The card under the page's header: brought into the window's upper half, scrolling the
         // page's own column (the Mac's detail pane is the right two thirds with the source list folded).
         bring(app, line, between: 100, and: 600, name)

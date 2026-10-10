@@ -69,8 +69,9 @@ internal object RecapEntriesServer {
     }
 
     private fun ago(minutes: Long) = Instant.now().minusSeconds(minutes * 60).toString()
-    private fun member(role: String) =
-        """"projectId":"$LAUNCH","projectMembership":{"projectId":"$LAUNCH","projectTitle":"Launch","projectStatus":"OPEN","role":"$role"}"""
+    /** A member's relation to Launch; `projectId` is the coordinator's own, as the server serves it. */
+    private fun member(role: String) = (if (role == "COORDINATOR") """"projectId":"$LAUNCH",""" else "") +
+        """"projectMembership":{"projectId":"$LAUNCH","projectTitle":"Launch","projectStatus":"OPEN","role":"$role"}"""
     private fun row(id: String, title: String, extra: String, lastTurnAt: String) =
         """{"id":"$id","title":"$title","status":"AWAITING_INPUT","runState":"AWAITING_INPUT","lifecycleState":"OPEN",
             "agent":{"id":"$ALPHA","name":"Alpha"},"agentId":"$ALPHA","createdAt":"${ago(600)}","lastTurnAt":"$lastTurnAt","pendingApprovals":0,

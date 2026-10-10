@@ -47,7 +47,7 @@ enum ProbeArgs {
                 // The drawer's project row: P1's sessions page as the stack's root, over the
                 // workspace of its coordinator (`AppModel.openProjectSessions`). iOS only — the Mac
                 // has no project sessions page, and the drawer is AppModel's iOS block.
-                model.openDrawerDestination(.project("P1"), inColumn: false)
+                model.openDrawerDestination(.project(projectID: "P1"), inColumn: false)
             #endif
             case "project":
                 // P1's page, as a link, a notification or ⌘K puts it on screen.
