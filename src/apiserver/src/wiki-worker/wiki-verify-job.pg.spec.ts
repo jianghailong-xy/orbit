@@ -17,7 +17,11 @@
  *   5. a NUL in the model's answer (2026-10-09): written as \u0000 inside the verdict's JSON, the verdict is
  *      recorded with the NUL left out (contract `jobs.serverWrites`); written raw, the answer is kept as it came
  *      (`modelQueue.answerEncoding`) and its JSON does not read — a control character in a string, which Go's
- *      decoder refuses too — so it is reported as nothing, the op keeps waiting, and the job goes on.
+ *      decoder refuses too — so it is reported as nothing, the op keeps waiting, and the job goes on;
+ *   6. a worker stopped while the model answers the third of a session's four ops hands the job back, and the next one
+ *      finishes it: the report the replay ends with is the whole job's (contract `jobs.carry`) — the two verdicts
+ *      recorded before the stop counted with the two after it, every call once — exactly what the same job reports when
+ *      nothing stops it.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/wiki-worker/wiki-verify-job.pg.spec.ts
  *
@@ -42,7 +46,7 @@ import type { PushService } from '../push/push.service';
 import type { RealtimeService } from '../realtime/realtime.service';
 import { WikiService, type WikiPrincipal } from '../wiki/wiki.service';
 import { WikiJobExecutor, WIKI_JOB_RUNNERS, type WikiJobRunner } from './wiki-job-executor';
-import { claimWikiJobs, reclaimExpiredWikiJobs } from './wiki-jobs';
+import { claimWikiJobs, reclaimExpiredWikiJobs, WIKI_JOB_HANDED_BACK } from './wiki-jobs';
 import { WikiModelRequestQueue } from './wiki-model-queue.service';
 import { WikiModelStatusProbe } from './wiki-model-status';
 import { readWikiSystemModel, type WikiSystemModelConfig } from './wiki-system-model';
@@ -66,6 +70,8 @@ interface FakeModel {
   hits: Hit[];
   /** Every call's system prompt, so the verifier's own can be read back. */
   systems: string[];
+  /** Waited for before a call is answered: a case holds a call here while it stops the worker. */
+  before: (hit: Hit) => Promise<void>;
   close: () => Promise<void>;
 }
 
@@ -78,6 +84,7 @@ async function fakeModel(): Promise<FakeModel> {
     answer: (): string => '{"verdict": "supported", "reason": "The record says exactly this."}',
     hits,
     systems,
+    before: async () => undefined,
     close: async () => undefined,
   } as FakeModel;
   const server = createServer((request: IncomingMessage, response: ServerResponse) => {
@@ -85,7 +92,7 @@ async function fakeModel(): Promise<FakeModel> {
     request.on('data', (chunk: Buffer) => {
       body += chunk.toString();
     });
-    request.on('end', () => {
+    request.on('end', () => void (async () => {
       if (request.url === '/health') {
         response.writeHead(200, { 'content-type': 'application/json' });
         response.end('{}');
@@ -102,6 +109,7 @@ async function fakeModel(): Promise<FakeModel> {
       }
       hits.push({ prompt });
       systems.push(system);
+      await state.before({ prompt });
       const event = (name: string, data: unknown) => `event: ${name}\ndata: ${JSON.stringify(data)}\n\n`;
       const write = (what: string) => {
         try {
@@ -120,7 +128,7 @@ async function fakeModel(): Promise<FakeModel> {
       } catch {
         /* the call was abandoned */
       }
-    });
+    })());
   });
   server.on('connection', (socket: Socket) => {
     sockets.add(socket);
@@ -246,7 +254,7 @@ function worker(h: Harness): { queue: WikiModelRequestQueue; executor: WikiJobEx
     h.prisma as unknown as PrismaService, config_,
     new WikiModelStatusProbe(h.prisma as unknown as PrismaService, config_), undefined, options,
   );
-  const runners: Record<string, WikiJobRunner> = { ...WIKI_JOB_RUNNERS, verify: wikiVerifyJobRunner(h.service, MODEL) };
+  const runners: Record<string, WikiJobRunner> = { ...WIKI_JOB_RUNNERS, verify: wikiVerifyJobRunner(h.service, MODEL, h.prisma as unknown as PrismaService) };
   const executor = new WikiJobExecutor(h.prisma as unknown as PrismaService, queue, options, runners);
   live.push({ queue, executor });
   return { queue, executor };
@@ -268,6 +276,7 @@ async function clearWork(h: Harness): Promise<void> {
   h.model.hits.length = 0;
   h.model.systems.length = 0;
   h.model.answer = () => '{"verdict": "supported", "reason": "The record says exactly this."}';
+  h.model.before = async () => undefined;
   await modelUp(h);
 }
 
@@ -582,3 +591,76 @@ test('the lease this harness claims under outlives a two-second stall: the sweep
   process.env.ORBIT_WIKI_EXECUTOR = 'runner';
 });
 
+
+// ── 6. a worker stopped mid-job: the report is the whole job's ───────────────────────────────────
+
+/** How many of a session's ops have their verdict recorded. */
+async function verdicts(h: Harness, sessionId: string): Promise<number> {
+  const { rows } = await h.sql.query<{ n: number }>(
+    `SELECT count(*)::int AS n FROM "wiki_changeset_op" o JOIN "wiki_changeset" c ON c."id" = o."changeset_id"
+      WHERE c."session_id" = $1 AND o."verification_verdict" IS NOT NULL`, [sessionId]);
+  return rows[0].n;
+}
+
+test('a worker stopped after two verdicts hands the job back, and the report the replay ends with is the whole job\'s', { skip, timeout: 90_000 }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  process.env.ORBIT_WIKI_EXECUTOR = 'server';
+  const titles = ['The first op is verified', 'The second op is verified', 'The third op is held', 'The fourth op is left'];
+
+  // What the job reports when nothing stops it: a session of four ops, verified straight through.
+  const straight = await fixture(h);
+  for (const title of titles) await propose(h, straight, title);
+  const [whole] = await jobs(h, straight.sessionId);
+  const through = await settle(h, whole.id);
+  assert.equal(through.state, 'succeeded', `${through.state}: ${through.error}`);
+
+  // The same session again, in a space of its own: two verdicts recorded, the third op's call held while the worker stops.
+  const stopped = await fixture(h);
+  for (const title of titles) await propose(h, stopped, title);
+  const [job] = await jobs(h, stopped.sessionId);
+  let holding = false;
+  let release: () => void = () => undefined;
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  h.model.before = async (hit) => {
+    if (!hit.prompt.includes('Title: The third op is held')) return;
+    holding = true;
+    await released;
+  };
+  const one = worker(h);
+  await pass(h, one, async () => holding && (await verdicts(h, stopped.sessionId)) === 2);
+  // SIGTERM: the job's wait for the held call is cancelled and the job is handed back; the call is let go with it.
+  await one.executor.onModuleDestroy();
+  await one.queue.onModuleDestroy();
+  release();
+  h.model.before = async () => undefined;
+  const { rows: [back] } = await h.sql.query<{ state: string; attempts: number; error: string | null }>(
+    'SELECT "state", "attempts", "error" FROM "wiki_job" WHERE "id" = $1', [job.id]);
+  assert.deepEqual(back, { state: 'queued', attempts: 0, error: WIKI_JOB_HANDED_BACK }, 'the job is handed back, nothing counted');
+
+  // The next worker takes it over: the list no longer holds the two ops that have their verdicts, and it verifies the rest.
+  const done = await settle(h, job.id);
+  assert.equal(done.state, 'succeeded', `${done.state}: ${done.error}`);
+  assert.equal(await verdicts(h, stopped.sessionId), 4);
+  const report = done.report as Record<string, unknown>;
+  // What the same job reports when nothing stops it, to the verdict and the token.
+  const { spaceId: _stoppedSpace, ...stoppedTotals } = report;
+  const { spaceId: _straightSpace, ...straightTotals } = through.report as Record<string, unknown>;
+  assert.deepEqual(stoppedTotals, straightTotals, 'the stopped job reports what the straight one does');
+  assert.deepEqual(
+    [report.looked, report.verified, report.supported, report.failed, report.stopped],
+    [4, 4, 4, 0, null],
+    'every op of the session, the two verified before the stop included, once',
+  );
+  // The usage is the job's calls', each once: the call the stop cut off was asked again under its own row.
+  const requests = await h.prisma.wikiModelRequest.findMany({ where: { jobId: job.id }, select: { state: true, inputTokens: true, outputTokens: true } });
+  assert.equal(requests.length, 4, JSON.stringify(requests));
+  assert.ok(requests.every((request) => request.state === 'succeeded'), JSON.stringify(requests));
+  assert.deepEqual(report.usage, {
+    inputTokens: requests.reduce((total, request) => total + (request.inputTokens ?? 0), 0),
+    outputTokens: requests.reduce((total, request) => total + (request.outputTokens ?? 0), 0),
+  });
+  process.env.ORBIT_WIKI_EXECUTOR = 'runner';
+});

@@ -1212,7 +1212,8 @@ JSON 里是 `articles.serverExecution`、`articles.job` 与 `jobs.kindRuns.artic
 - **怎么结束**：拿起的主题全部写成或无变化就成功，报告就是 runner 的 summary（seeded、ref 与 refWhy、各主题的结果、written / unchanged /
   failed、调用数、token、校验统计）。有主题没写成（调用以作业自己的原因结束，或写入被拒，包括 `WIKI_ARTICLE_STALE`）：其余主题照常写完，
   然后作业以 content 失败结束，报告留在作业行上——和命令以非 0 退出一样，下一个作业按当时的条目重写。平台的失败（请求等待超限、数据库）
-  按 infra 处理；worker 停机不算失败，作业交还、不计次（§24.3）。两种情况重放时都从计划重新开始。
+  按 infra 处理；worker 停机不算失败，作业交还、不计次（§24.3）。两种情况重放时都从计划重新开始；报告仍是整个作业的：交还前写成的
+  主题、种下的默认主题和写入时的 ref 随作业行带到重放（§24.10），每个主题算一次，调用数和 token 按作业的全部请求算、每个一次。
 - **runner 门**：见 §18.6 与 §18.7。
 
 ## 19. 维护作业：由事实建任务、`orbit wiki maintain` 与 `orbit wiki check`（判据 3）
@@ -2006,7 +2007,8 @@ JSON 里是 `docs.build.server`、`jobs.kindRuns.docs_build` 与 `plan.jobs.serv
   拿起的节全部写成或无变化：plan 作业以 succeeded 结束，带写的版本和 `WikiPlanBuildReport`；作业成功，报告是这次构建的 summary。
   有节没写成：其余节照常写完，plan 作业以失败结束（`<n> sections were left unwritten`），作业以 content 失败结束、报告留在行上——
   和命令以非 0 退出一样。平台的失败（runner 不在、读取或请求等待超限、worker 停机）两者都不结束：作业稍后重放，已写的节靠指纹原样不动。
-  重放时发现 plan 作业已经结束，就按那个结束回答。
+  重放时发现 plan 作业已经结束，就按那个结束回答。作业和 plan 作业的报告都是整个构建的（§24.10）：交还前写成的节随作业行带到重放，
+  重放按指纹判它无变化，报告里仍算 written，每节一次；调用数和 token 按作业的全部请求算，seconds 从作业第一次被领取算起。
 - **runner 门**：对这样的账号，文档在 runner 门上的路由（`writerState`、`writerDoc`、`material`、`write`、`affected`、`withdraw`）
   对维护会话一律回 `WIKI_SERVER_EXECUTES`，什么都不读；plan 作业的路由对所有会话也都这样回，生成作业的会话在内（21.10）——所以旧
   runner 的 `orbit wiki docs build` 和维护运行的文档步骤都问不到会话的模型。别的会话照旧是 `WIKI_NOT_MAINTENANCE_SESSION`。runner 模式下
@@ -2123,7 +2125,7 @@ JSON 里是 `jobs` 一节；设计见 `docs/wiki-server-execution-design.md` §5
 - `wiki_job`：`id`、`owner_id`、`space_id`（复合外键到 `wiki_space`，随空间删除而删）、`kind`、`input`（JSONB，作业自己的材料，
   从不含地址和 key）、`priority`（默认 0，owner 主动发起的高于后台维护；同一空间里维护优先、文章最多让一轮，见 §24.2）、
   `state`、`waiting_for`、`attempts`、`next_attempt_at`、租约三列（`lease_owner` / `lease_generation` / `lease_deadline_at`）、
-  `progress`、`report`、`error`、`failure_kind`、
+  `progress`、`report`（作业结束时写报告；结束之前只暂存之前的尝试做完、重放不会再做的部分 `{ carry }`，§24.10）、`error`、`failure_kind`、
   `created_at` / `updated_at` / `started_at` / `ended_at`。
 - `state`：`queued` / `running` / `waiting` / `succeeded` / `failed` / `cancelled`；`waiting_for`：`repo` / `model`（只在 waiting 时非空，
   且此时不占租约）；`failure_kind`：`infra` / `content`。本期还没有代码把作业置为 `waiting`：作业在等模型请求时保持 `running` 并续租，
@@ -2189,6 +2191,8 @@ JSON 里是 `jobs` 一节；设计见 `docs/wiki-server-execution-design.md` §5
   丢掉的租约，`attempts + 1` 再退避：2026-10-09 生产部署了 4 次，docs_build 79620f23 被打断 3 次；06:56Z 接手时它还在 30 秒的退避里，同空间
   priority 0 的文章作业先被领走，它多等了 40 多分钟。停在仓库操作上等待的作业被停机打断时同样交还（§26.6）。只有被停机打断的那次
   尝试能交还：worker 崩溃，或者交还没写进库就退出的，租约自然过期，照旧由回收计次、退避（§24.2）。
+- 交还前做完的、重放不会再做的部分（写成的主题和节、记下的结论、推进游标之前的流水线）在做完时就已暂存在作业行的 `report` 里
+  （`{ carry }`），重放结束时并进报告：报告是整个作业的，不只是接回之后那一段（§24.10）。
 - 交还的原因在读者那里：交还只写作业行，不写运行行和游标，`consecutive_failures` 不动，健康行不会因此变成 failing（维护作业的运行仍算
   进行中）；Activity 的 Runs 卡把它画成排队中的一行和它排在第几，`nextAttemptAt` 为空，不显示「retrying in」，排队的行也不显示 `error`；
   `orbit wiki import` 等待时把它当作「its last try said: …」打印，`attempts` 不变，部署不会让命令以「has failed 3 times」放弃等待。
@@ -2366,6 +2370,49 @@ op 在等），于是旧版 `orbit wiki verify` 读到空列表就正常退出�
 - **触发器的双保险**：清扫跑完之前，以及在清扫失败（数据库抖动，清扫是尽力而为的启动动作，不挡住启动）的情况下，维护触发器只在
   `onServer` 为真时才查 `unfinishedMaintainJob`（`wiki-maintenance-run.ts`）：一个再也没人执行的服务端作业，不得堵住空间的
   runner 路径任务。这是事故的另一半——只取消作业不改触发器，回退后空间可能在一段时间里两条路径都没有维护。
+
+### 24.10 报告汇总整个作业：交还与重放（`jobs.carry`，2026-10-10）
+
+作业的 `report` 是整个作业的，不是最后一次尝试的。worker 停机交还（§24.3）、infra 放回队列（§24.4）、租约过期被接管（§24.2）、
+停在仓库操作上（§26.6），作业都从计划重新跑，而计划里已经没有之前的尝试做完的部分：写完的主题不再 changed，写完的节靠指纹 unchanged，
+有了结论的 op 不再等核实，游标已经越过读过的会话。在此之前 report 只算最后那次尝试：生产 canary（P10，2026-10-10）上 articles 3f3a8f90
+报 15 个主题、250 篇，按请求行数实际是 20 个主题、370 篇；f917aef5 报 11 个主题、217 篇，实际 15 个、300 篇。每次部署都交还正在跑的
+作业，Activity 里这些运行的数字因此经常偏小。
+
+- **暂存在 `report` 里**（`jobs.carry.where`）：作业没结束时，`report` 只放 `{ carry }`——之前的尝试做完、重放不会再做的部分。没有任何读
+  在作业结束前显示它：Activity 的作业读根本不读 `report`（§24.8），导入的读只对导入作业返回它，而导入作业什么都不暂存；作业结束时报告
+  覆盖它。所以不加列、不加迁移。`progress` 不行：docs_build、plan、导入的进度上报每次整个覆盖它，Activity 的列表读也每次都读它。
+  正在跑的尝试随做随写：每做完一项写一次，按领取代数比较并交换（和 `progress` 一样），不带 U+0000。下一次尝试开始时读出，结束时并进
+  报告。同一次尝试里并行写成的几节，写入一个接一个（`wikiJobCarryWriter`），后写的不会被先写的覆盖；流水线等写入落库才往下走，所以
+  停机打断时没有写到一半的。成功、content 失败时报告覆盖它；重试上限结束和回退清扫取消时清空——这两种结束以前就没有报告。
+- **各种作业带什么**（`jobs.carry.kinds`）：
+  - `articles`：写成或发现已写成的主题（各篇和统计照原样）、种下的默认主题数、写入时的 ref。报告里每个主题一次，按计划的顺序；本次
+    尝试又拿起的主题以本次为准；本次没有要写的主题时，ref 用之前的。没写成的主题不带：它仍是 changed，重放会再拿起。
+  - `verify`：服务端记下的结论，按结论计数——这些 op 不在重放读的列表里了。`looked`、`verified` 和各结论数加上带过来的；没有结论的 op
+    不带，重放会再问。
+  - `docs_build`：写成的节（各节的结果照原样）和每篇最后一次写入的回答。重放按指纹判为 unchanged、而指纹正是之前写入时那个的节，
+    算回 written，每节一次；plan 作业的构建报告（`plan.jobs.buildReport`）同样是整个构建的。
+  - `maintain`：游标推进写成之后，这次尝试读的会话、dossier、抽出的条目、记下和拒绝的 op、游标动没动（重放从推进后的游标读，不再读
+    这些）；每一条记下的结论（运行自己的和收养的）；文档步写成的节、拿起的节和原因、撤回的路径和句子、存下的 plan 提议、在文档步
+    花的时间。锚点不进 `carry`：重放在同一提交上把之前检查过的条目算作 skipped，报告从条目本身读回——检查时间晚于运行第一次开始的，
+    就是这次运行查的（同一空间同时只有一次运行，服务端执行的账号没有别人记锚点检查），算作检查过、不算 skipped。
+  - `import`、`plan_draft` / `plan_revise`、`smoke` 不带：导入的输入固定，重放把每条 note 再读一遍（请求复用），提议同一批 op、用
+    同一个幂等键，报告本来就是整个作业的；plan 作业的材料第一次就存在 plan 作业上，重放问同样的问题、从第一轮重走一遍（请求复用），
+    tokens 本来就按作业的全部请求算，seconds 从 plan 作业开始算；smoke 只调一次。
+- **calls 与 usage**：从作业自己的 `wiki_model_request` 行算，每行一次。重放碰上之前的尝试建的行，不会再建，所以复用的请求不重复计；
+  之前的尝试发出、重放没有再问的请求也算。`articles` 算答过的请求；`docs_build` 和 `maintain` 还算以调用自己的原因失败的（被拒、超出
+  预算），不算等待超限失败的（那是平台的，重放换下一个 attempt 再问）。`maintain` 的 `tokens` 是运行的每一次模型调用、每次一回，文档步
+  的 `docs.tokens` 是其中文档各步和 plan 提议的。在此之前，文档步的调用在运行的 tokens 里算了两遍，核实的第二遍也按 `looked` 计了次
+  （那一遍的请求和第一遍同一个单元，队列以「already exists with a different call」拒绝，并没有问模型）。
+- **未变、失败照旧**：没做完的数（失败的主题和节、没给出结论的 op、等下一次运行的）是最后一次尝试的；带过来的只有做完的部分，所以作业
+  的成败不变，写出的内容也不变。
+- **seconds**：`docs_build` 的 seconds 从作业第一次被领取算到结束，`maintain` 的从运行第一次开始算起，和 plan 作业一样；`maintain`
+  文档步的 `docs.seconds` 是各次尝试在文档步花的时间之和。
+- **维护运行欠的文章**：`finishWikiMaintenanceJob` 按运行的报告判断这次运行是否记下过 op（`articles.regeneration`），读的是整个运行的
+  报告：op 在交还前记下、重放什么都没记的运行，结束时照样排文章作业，和没被打断的运行一样。
+- **pg spec**：`wiki-articles-job`、`wiki-verify-job`、`wiki-docs-build-job` 各一个，`wiki-maintain-job` 三个（停在文档步、停在运行自己的
+  两个结论之间、停在两次锚点操作之间）：在中途让 worker 停机交还，下一个 worker 接回跑完，报告和同样形状的空间上一口气跑完的作业一致
+  （停在两个结论之间的那个只比流水线：重放不再核实运行自己剩下的 op）。
 
 ## 25. 模型请求队列 `wiki_model_request`（服务端执行 P1b）
 
@@ -2632,8 +2679,9 @@ JSON 里是 `maintenance.job.server` 和 `jobs.kindRuns.maintain`；迁移 `0407
    `maintenance.job.server.rules.anchorDiffsMax` 个，一次一个）；每条 git 锚点都仍然成立的条目这一轮整条不进操作——不送 runner、不写回；
    有一条不成立就整条照旧。报告里的 `anchors`
    计的是这一轮写下检查的条目：`entries` 是写下的条数，`changed` / `missing` 是其中写完后判成 changed / missing 的条数；跳过的条目
-   不计入这三项，只计 `skipped`（条目数，同一提交上查过的和之后没动过的合在一起），所以一次重放可以报 `entries` 0、space 的全部条目都在
-   `skipped` 里，main 动过的一轮在 `entries` 里只计这一轮不得不重查的条目。diff 不计入报告，它们是这次运行 `kind` 为 `diff` 的
+   不计入这三项，只计 `skipped`（条目数，同一提交上查过的和之后没动过的合在一起），所以同一提交上的第二次运行报 `entries` 0、space 的
+   全部条目都在 `skipped` 里，main 动过的一轮在 `entries` 里只计这一轮不得不重查的条目。同一次运行被交还、重放时不同：之前的尝试写下
+   检查的条目是这次运行的，重放在同一提交上不再查它们，报告仍计入 `entries`（检查时间晚于运行第一次开始，§24.10），不计入 `skipped`。diff 不计入报告，它们是这次运行 `kind` 为 `diff` 的
    `wiki_repo_op` 行，正如检查是 `kind` 为 `anchors` 的行。按 canary 的 19 轮回放，一轮从约 763 秒（11,565 条锚点、40 次操作）降到约
    44 秒（平均重查约 400 个条目、538 条锚点，约 2.7 次 `anchors` 操作加 3.7 次 `diff`）；一次 REPO_OP_WAIT 之后的重放、或两轮之间
    main 没动时，`anchors` 仓库操作减到 0。
@@ -2661,7 +2709,8 @@ JSON 里是 `maintenance.job.server` 和 `jobs.kindRuns.maintain`；迁移 `0407
    结论一样）。
    再用 P6 的门（`proposeServer`）检查，最多三轮把两道检查报的错回给模型。
 10. **结束**：写报告与 token 合计，`finishWikiMaintenanceJob` 推进游标、写运行行、按 owner 2026-10-08 的决定调用
-    `queueWikiArticlesAfterRun`——只有成功、记下了 op、且不在追赶期才排文章作业（§24）。
+    `queueWikiArticlesAfterRun`——只有成功、记下了 op、且不在追赶期才排文章作业（§24）。报告是整个运行的（§24.10）：被交还、重放过的
+    运行，之前的尝试读的、记下的、核实的、检查的、写成的都算在内，token 是运行的每一次调用、每次一回。
 
 ### 27.4 失败与恢复（设计 §5.5）
 
