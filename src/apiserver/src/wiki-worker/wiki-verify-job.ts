@@ -82,7 +82,8 @@ export interface WikiVerifyTarget {
   jobId?: string | null;
   /**
    * The adoption door (contract `reviewModes.verification.adoption`, P8): the ops of the space's *ended*
-   * sessions, whose proposing session nobody is left to run a verifier in.
+   * sessions, whose proposing session nobody is left to run a verifier in — and, the server's maintenance run
+   * adopting as its job, of the space's ended jobs other than its own. Its verdicts are reported as adopted.
    */
   adopt?: boolean;
   /** Verify at most this many ops; 0 or undefined is every one of them. */
@@ -173,7 +174,7 @@ export async function verifyWikiOps(
       if (max > 0 && report.looked >= max) return report;
       report.looked += 1;
       const unit = target.refused ? `${item.opId}#retry` : item.opId;
-      const stop = await verifyOneOp(context, wiki, principal, model, item, unit, target.refused?.get(item.opId) ?? '', report, target.recorded);
+      const stop = await verifyOneOp(context, wiki, principal, model, item, unit, target.refused?.get(item.opId) ?? '', report, target.adopt === true, target.recorded);
       if (stop) return report;
     }
     if (page.next === null) return report;
@@ -183,8 +184,9 @@ export async function verifyWikiOps(
 
 /**
  * Ask about one op, under `unit`, and report what the model said. `refused` is why its last answer was not a verdict,
- * when an earlier pass asked: the prompt says so, and names the numbers a duplicate may give. Answers whether the pass
- * must stop — the server says the space left Automatic, and nothing after that would be recorded.
+ * when an earlier pass asked: the prompt says so, and names the numbers a duplicate may give. `adopt` reports the verdict
+ * of an op the adoption list gave as adopted, which is what lets the server find it. Answers whether the pass must stop
+ * — the server says the space left Automatic, and nothing after that would be recorded.
  */
 async function verifyOneOp(
   context: WikiJobContext,
@@ -195,6 +197,7 @@ async function verifyOneOp(
   unit: string,
   refused: string,
   report: WikiVerifyReport,
+  adopt: boolean,
   recorded?: (verdict: string) => Promise<void>,
 ): Promise<boolean> {
   const candidates = wikiVerifyCandidates(item);
@@ -234,7 +237,7 @@ async function verifyOneOp(
     model,
     ...(parsed.verdict.duplicateOf === null ? {} : { duplicateOf: parsed.verdict.duplicateOf }),
   };
-  const done = await writeVerdict(wiki, principal, context.job.spaceId, verdict);
+  const done = await writeVerdict(wiki, principal, context.job.spaceId, verdict, adopt);
   const outcome = done.outcomes[0];
   if (!outcome) {
     fail('the server recorded nothing for it');
@@ -282,17 +285,21 @@ async function readPage(
   }
 }
 
-/** Record one verdict through the server's own writer, and answer what it did. */
+/**
+ * Record one verdict through the server's own writer, and answer what it did. An adopted op's is reported as adopted
+ * (`verification.adoption`): it is none of the caller's own, and the writer finds it among what the caller may adopt.
+ */
 async function writeVerdict(
   wiki: WikiService,
   principal: WikiPrincipal,
   spaceId: string,
   verdict: Record<string, unknown>,
+  adopt: boolean,
 ): Promise<Awaited<ReturnType<WikiService['recordVerifications']>>> {
   try {
     // What the model wrote goes to the shared writer without any U+0000 (contract `jobs.serverWrites`): Postgres keeps
     // none, and a model may copy one out of the code it was shown — the runner gate drops it from a report the same way.
-    return await wiki.recordVerifications(principal, spaceId, [stripNul(verdict)]);
+    return await wiki.recordVerifications(principal, spaceId, [stripNul(verdict)], { adopt });
   } catch (error) {
     throw asContent(error, 'the verdict could not be recorded');
   }

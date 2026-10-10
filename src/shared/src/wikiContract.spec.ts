@@ -663,6 +663,18 @@ describe('wiki contract', () => {
     // The report counts them apart from the run's own ops.
     const adopted: NonNullable<NonNullable<WikiMaintenanceReport['verification']>['adopted']> = { ops: 0, verified: 0, failed: 0 };
     expect(CONTRACT.maintenance.job.report).toMatch(new RegExp(`adopted \\{${Object.keys(adopted).join(', ')}\\}`, 'u'));
+    // The server's own run adopts as its wiki job, and besides what ended sessions left, what the space's ended runs left
+    // (2026-10-11): never its own job's, never a job's that has not ended, never another space's. The writer holds it, and a
+    // session's run on the runner door adopts what it always did.
+    expect(adoption.who).toMatch(/The server's own maintenance run \(maintenance\.job\.server, 2026-10-11\) adopts as its wiki job/u);
+    expect(adoption.who).toMatch(/whose job succeeded, failed or was cancelled and is not the adopting one/u);
+    expect(adoption.who).toMatch(/never those of a job still queued, running or waiting; never another space's/u);
+    expect(adoption.who).toMatch(/records a verdict for such an op from the space's maintain job alone/u);
+    expect(adoption.who).toMatch(/A session's run adopts exactly what it did before: its list holds no job's op/u);
+    for (const state of ['succeeded', 'failed', 'cancelled']) expect(WIKI_JOB_STATES).toContain(state);
+    expect(adoption.run).toMatch(/a server run's once its job has ended \(maintenance\.job\.server\.verify\)/u);
+    expect(adoption.run).toMatch(/one list, the ended sessions' ops and the ended jobs' together, oldest first/u);
+    expect(verification.who.maintenance).toMatch(/what the space's ended runs left waiting/u);
   });
 
   it('leaves an op the verification got no verdict for to the next run, and fails nothing', () => {
@@ -1816,6 +1828,11 @@ describe('wiki contract', () => {
     expect(server.verify).toMatch(/^The run's own ops are its job's \(identity\), whichever attempt recorded them/u);
     expect(server.verify).toMatch(/under a unit of its own, <opId>#retry, as the extraction's retry is asked under <sessionId>#retry/u);
     expect(server.verify).toMatch(/Its prompt is the runner's second pass's, byte for byte/u);
+    // What both passes leave without a verdict is the space's next server run's to adopt once the job has ended (2026-10-11),
+    // where no later run used to take it up.
+    expect(server.verify).toMatch(/once the job has ended the space's next server run adopts it \(reviewModes\.verification\.adoption\.who\)/u);
+    expect(server.verify).not.toMatch(/adoption takes no ended job's ops/u);
+    expect(server.identity).toMatch(/the space's next run adopts what it left waiting through it once the job has ended/u);
     expect(server.skip).toMatch(/catch-up active or paused/u);
     expect(server.failureKinds).toMatch(/nothing is counted/u);
   });
