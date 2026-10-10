@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { HttpException, NotFoundException } from '@nestjs/common';
 import {
+  WIKI_ANCHOR_RULES,
   WIKI_MAINTAIN_JOB,
   WIKI_MAINTENANCE_JOB,
   WIKI_REPO_OPS,
@@ -169,7 +170,12 @@ export interface WikiMaintainReport {
     waitingForNextRun: number;
     adopted?: { ops: number; verified: number; failed: number };
   };
-  anchors?: { entries: number; changed: number; missing: number };
+  /**
+   * The anchors step's counts (contract `maintenance.job.server.anchors`): the entries whose checks this run
+   * wrote, and — of them — those left changed or missing; `skipped` the entries every anchor of which was
+   * already checked at the run's commit, which were neither sent nor written.
+   */
+  anchors?: { entries: number; changed: number; missing: number; skipped: number };
   docs?: WikiMaintainDocsReport;
   tokens: { input: number; output: number; calls: number };
   seconds: number;
@@ -877,9 +883,24 @@ class WikiMaintainRun {
   }
 
   /**
-   * Re-check the space's anchors (`anchorRules.verify`): one page of the entries that carry one, the checks
-   * as one `wiki_repo_op` the space's runner executes, and each entry's result written back through the
-   * server's own writer.
+   * Re-check the space's anchors (`anchorRules.verify`): a page of the entries that carry one — the most the
+   * anchors list names, `listEntriesMax` — the page's checks as one `wiki_repo_op` the space's runner
+   * executes, and each entry's result written back through the server's own writer in reports of at most
+   * `reportEntriesMax` entries.
+   *
+   * WHY A PAGE IS THE FULL `listEntriesMax` (2026-10-10, the canary's 30-minute rounds). An operation costs
+   * about what its wait costs however few anchors it carries: the runner claims it at its next heartbeat (30 s,
+   * so ~15 s on average), fetches origin/main (~4 s), and answers. The checks themselves are cheap — measured
+   * on this repository, a path anchor's `cat-file -e` is ~1.4 ms, a commit anchor's `merge-base --is-ancestor`
+   * ~1.7 ms, a symbol anchor's `grep` ~35 ms, and a production space carries path and commit anchors and no
+   * symbols. At the list's default page of 50 entries, the canary's 7,600-7,700 anchors (some 4,400 entries,
+   * ~1.7 anchors an entry) went out as ~88 operations, one at a time, and took about 30 minutes. A page of
+   * `listEntriesMax` (200) entries puts the same anchors in ~22 operations: ~250-350 anchors and 20-40 KB of
+   * JSON each, a few hundred milliseconds of git, and ~20 s an operation end to end — ~8 minutes a round. Even
+   * a page whose every entry carries `limits.listMaxItems` (20) anchors — 4,000 anchors, ~500-800 KB, still far
+   * inside `repoOps.operationBytes` — is a few seconds of git, well inside the 300 s the run waits for one
+   * operation (`maintenance.job.server.rules.repoWaitSeconds`). Operations are sent one at a time, and stay
+   * that way while the runner's own fetch lock is one release away (97b8de07f, runner 0.1.228).
    *
    * The page's anchors reach the runner as ONE flat list, so the index the runner echoes is the
    * anchor's place in THAT list — renumbered here as the list is built — and the checks come back
@@ -888,6 +909,14 @@ class WikiMaintainRun {
    * for its index, a symbol without a baseline adopted a page-mate's region as its own, and a type
    * that no longer matched was refused and failed the run. Every check the report carries also names
    * its anchor (type, path, symbol, sha), and `recordAnchorChecks` writes it only on that anchor.
+   *
+   * AN ENTRY ALREADY CHECKED AT THIS COMMIT IS NOT CHECKED AGAIN (2026-10-10, `anchorRules.verify.skip`).
+   * A check's answer depends on the anchor and the commit alone, so an entry every one of whose anchors was
+   * last checked on exactly this snapshot commit — what the list leaves the run (`anchorsDueAt`) — owes
+   * nothing: it is not sent to the runner, not written, and counted in `skipped` alone. A run that replays
+   * after a REPO_OP_WAIT, or one on a space whose main has not moved, re-checks nothing rather than the
+   * whole space's anchors. One anchor last checked elsewhere, or never, re-checks the entry whole, as
+   * always. What the counts mean is the contract's (`maintenance.job.server.anchors`).
    */
   private async anchors(): Promise<void> {
     const { job } = this.jobContext;
@@ -895,12 +924,16 @@ class WikiMaintainRun {
     let entries = 0;
     let changed = 0;
     let missing = 0;
+    let skipped = 0;
     let refused = 0;
     let failed = 0;
     for (;;) {
-      const page = await listWikiAnchorsForJob(this.deps.prisma, { ownerId: job.ownerId, spaceId: job.spaceId, after, limit: null });
+      const page = await listWikiAnchorsForJob(this.deps.prisma, {
+        ownerId: job.ownerId, spaceId: job.spaceId, after, limit: WIKI_ANCHOR_RULES.listEntriesMax, checkedAt: this.snapshot?.sha ?? '',
+      });
       if (page.entries.length === 0) break;
       after = page.next;
+      skipped += page.entries.filter((entry) => entry.anchors.length === 0).length;
       const wanted = page.entries.filter((entry) => entry.anchors.length > 0);
       if (wanted.length > 0) {
         // One flat list for the operation: the runner echoes each check's place in this list, so
@@ -948,40 +981,45 @@ class WikiMaintainRun {
         if (unanswered > 0) {
           throw new WikiJobContentError(`the anchor checks answered ${unanswered} of the ${flat.length} anchor(s) asked for: the run refuses to guess whose the rest were`);
         }
-        const report = {
-          ref: String(answer.sha ?? this.snapshot?.sha ?? ''),
-          entries: wanted.map((entry, entryAt) => ({
-            entryId: entry.entryId,
-            revision: entry.revision,
-            checks: entry.anchors.flatMap((anchor) => {
-              const check = byEntry[entryAt]!.get(anchor.index);
-              return check ? [check] : [];
-            }),
-          })),
-        };
-        const written = await this.deps.wiki.recordAnchorChecks(
-          { ownerId: job.ownerId, sessionId: null, jobId: job.id },
-          job.spaceId,
-          report,
-        );
-        for (const outcome of written.outcomes) {
-          if (outcome.status !== 'recorded') {
-            if (outcome.status === 'refused') refused += 1;
-            else failed += 1;
-            continue;
+        // The page is written back in reports of at most `reportEntriesMax` entries, the most
+        // `recordAnchorChecks` takes (`anchorReportShape`) — what one page of the list's default size
+        // used to be. Each entry is recorded on its own, so what is written and what is counted below
+        // do not depend on where the page's reports fall.
+        const ref = String(answer.sha ?? this.snapshot?.sha ?? '');
+        const reported = wanted.map((entry, entryAt) => ({
+          entryId: entry.entryId,
+          revision: entry.revision,
+          checks: entry.anchors.flatMap((anchor) => {
+            const check = byEntry[entryAt]!.get(anchor.index);
+            return check ? [check] : [];
+          }),
+        }));
+        for (let from = 0; from < reported.length; from += WIKI_ANCHOR_RULES.reportEntriesMax) {
+          const written = await this.deps.wiki.recordAnchorChecks(
+            { ownerId: job.ownerId, sessionId: null, jobId: job.id },
+            job.spaceId,
+            { ref, entries: reported.slice(from, from + WIKI_ANCHOR_RULES.reportEntriesMax) },
+          );
+          for (const outcome of written.outcomes) {
+            if (outcome.status !== 'recorded') {
+              if (outcome.status === 'refused') refused += 1;
+              else failed += 1;
+              continue;
+            }
+            entries += 1;
+            if (outcome.anchorState === 'changed') changed += 1;
+            if (outcome.anchorState === 'missing') missing += 1;
           }
-          entries += 1;
-          if (outcome.anchorState === 'changed') changed += 1;
-          if (outcome.anchorState === 'missing') missing += 1;
         }
       }
       if (after === null) break;
     }
-    this.report.anchors = { entries, changed, missing };
+    this.report.anchors = { entries, changed, missing, skipped };
     if (failed > 0 || refused > 0) {
       throw new WikiJobContentError(`git could not check ${failed} anchor(s), and the server refused ${refused} entr(ies)`);
     }
-    this.jobContext.log(`re-checked the anchors of ${entries} entr(ies): ${changed} changed, ${missing} missing`);
+    this.jobContext.log(`re-checked the anchors of ${entries} entr(ies): ${changed} changed, ${missing} missing; `
+      + `left ${skipped} entr(ies) alone: every anchor of theirs was already checked at this commit`);
   }
 
   // ── The documents ─────────────────────────────────────────────────────────────────────────────

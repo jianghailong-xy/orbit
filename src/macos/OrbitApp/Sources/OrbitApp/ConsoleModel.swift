@@ -1126,6 +1126,11 @@ final class ConsoleModel {
     /// web's 60s `refetchInterval` on the console's runners query, so the plan-usage gauge keeps up
     /// with the turns running here instead of waiting for a reconnect.
     private var runnerPollTask: Task<Void, Never>?
+    /// The evidence read's re-read every 20 s while a version can wait for this conversation's
+    /// coordinator, or does (`EvidenceDecisions.rereadsQueue`) — web's 20 s `refetchInterval` on the
+    /// same read. Nothing on this session's row moves when a version is queued for it, handed to it
+    /// or decided by it, so nothing else here would re-read it.
+    private var evidencePollTask: Task<Void, Never>?
 
     /// Begin the live SSE loop if it isn't already running. Idempotent (re-focusing the same session
     /// is a no-op) and inert for a draft/session-less console.
@@ -1139,6 +1144,16 @@ final class ConsoleModel {
                 try? await Task.sleep(nanoseconds: 60_000_000_000)
                 guard let self, !Task.isCancelled else { return }
                 await self.refreshRunner()
+            }
+        }
+        evidencePollTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 20_000_000_000)
+                guard let self, !Task.isCancelled else { return }
+                if EvidenceDecisions.rereadsQueue(self.evidenceDecisions, coordinates: self.projectID != nil,
+                                                  pause: self.coordinatorPause) {
+                    await self.refreshEvidenceDecisions()
+                }
             }
         }
     }
@@ -1157,6 +1172,8 @@ final class ConsoleModel {
         createdTasksPollTask = nil
         runnerPollTask?.cancel()
         runnerPollTask = nil
+        evidencePollTask?.cancel()
+        evidencePollTask = nil
         codexResetPollTask?.cancel()
         codexResetPollTask = nil
         codexResetPollingOperationID = nil
@@ -1436,9 +1453,10 @@ final class ConsoleModel {
             // and a bar left hanging over it is an offer to answer nothing. A read that has not come
             // back leaves the standing `unread` — "this device cannot say" rather than "there is
             // nothing to answer" — so a reason somebody is mid-sentence over is not thrown away by
-            // one failed poll.
+            // one failed poll. Nor is one typed against a version that waits for the coordinator:
+            // it was opened with Decide it myself, and is still the reader's to send back.
             let standing = evidenceStanding(row.taskId, row.evidenceRevision)
-            if !EvidenceDecisions.isOpen(standing) { replyContext = nil }
+            if !EvidenceDecisions.holdsReply(standing) { replyContext = nil }
         case .planChange, .ownerItem:
             // Nothing answers either of these another way: no call is pending on them, so there is
             // no question that can go out from under the reader mid-sentence — and a sentence about
@@ -1957,6 +1975,9 @@ final class ConsoleModel {
         guard let session, session.id == sessionID else { return }
         serverStatus = session.effectiveRunStatus
         sessionError = session.error
+        // Why a version waiting for this conversation is waiting: its own run state, error and armed
+        // retry, which only this row carries.
+        coordinatorPause = EvidenceDecisions.coordinatorPause(session)
         sessionSourceState = session.sourceState
         sessionSourceRefusalCode = session.sourceRefusalCode
         sessionSourceRefusalDetail = session.sourceRefusalDetail
@@ -3540,6 +3561,16 @@ final class ConsoleModel {
     /// the same reason. A card is drawn only for the rows `EvidenceDecisions.cardRows` keeps: this
     /// project's, and ones the door would take an answer to from here.
     private(set) var evidenceDecisions: EvidenceDecisionQueue?
+    /// Where this conversation stands as the coordinator its project's queued evidence waits for —
+    /// paused, or back — read off its own row each time the row is adopted (`adoptServerSnapshot`):
+    /// the line every waiting version carries (`EvidenceDecisions.pauseLine`). Paused for a reason
+    /// nobody knows until a row arrives.
+    private(set) var coordinatorPause: CoordinatorPause = .paused(window: nil, retryAt: nil)
+    /// The evidence versions this conversation has drawn as a card the reader could press — asked
+    /// here in `pending`, or opened with Decide it myself — by card id. A card for any other version
+    /// is let go of once the read stops listing it (`EvidenceDecisions.letsGo`): it only ever waited
+    /// for the coordinator, and nobody was asked it.
+    private var engagedEvidence: Set<String> = []
     /// Whether the account owner has confirmed the standard set as it stands.
     private(set) var acceptanceConfirmation: StandardSetConfirmationStanding?
     /// What this project still owes somebody a decision about (contract §4.8), or nil while the
@@ -3715,6 +3746,9 @@ final class ConsoleModel {
                 return nil
             case .criteriaChange:
                 return waiting(CriteriaChanges.isOpen(acceptanceConfirmation), question: true)
+            // A version waiting for the coordinator, folded, and one handed to it, drawn as one line,
+            // are not open: nobody is asking the reader yet, so the bar neither counts nor points at
+            // either (`EvidenceDecisions.isOpen`).
             case .evidenceDecision(let taskID, let evidenceRevision):
                 return waiting(EvidenceDecisions.isOpen(evidenceStanding(taskID, evidenceRevision)),
                                question: true)
@@ -4547,11 +4581,38 @@ final class ConsoleModel {
         if let queue = try? await api.pendingEvidenceDecisions(decidingSessionID: sessionID) {
             evidenceDecisions = queue
             for row in EvidenceDecisions.cardRows(queue: queue, projectId: projectID, sessionId: sessionID) {
+                let kind = DeliveredDecisionCard.Kind.evidenceDecision(taskID: row.taskId,
+                                                                       evidenceRevision: row.evidenceRevision)
+                engagedEvidence.insert(DeliveredDecisionCard(kind: kind).id)
+                deliver(kind)
+            }
+            // The versions this conversation's coordinator holds or is owed, in the slot today's
+            // card goes in and the same kind of card: one per version, which the card draws as one
+            // line once it is handed over, folded while it waits, and as the question it is if it
+            // becomes the reader's (`EvidenceDecisions.standing`), keeping its place throughout.
+            for sent in EvidenceDecisions.sentRows(queue: queue, projectId: projectID) {
+                deliver(.evidenceDecision(taskID: sent.taskId, evidenceRevision: sent.evidenceRevision))
+            }
+            for row in EvidenceDecisions.coordinatorQueueRows(queue: queue, projectId: projectID,
+                                                              sessionId: sessionID) {
                 deliver(.evidenceDecision(taskID: row.taskId, evidenceRevision: row.evidenceRevision))
+            }
+            decisionCards.removeAll { card in
+                guard case .evidenceDecision(let taskID, let evidenceRevision) = card.kind else { return false }
+                return EvidenceDecisions.letsGo(evidenceStanding(taskID, evidenceRevision),
+                                                engaged: engagedEvidence.contains(card.id))
             }
             adoptEvidenceReceipts(queue)
             lastEvidenceRead = Date()
         }
+    }
+
+    /// Decide it myself: the reader opened a version that waits for the coordinator, to decide it
+    /// here. Remembered, so a card the reader has opened stays to say what became of its version
+    /// rather than vanishing from under them (`EvidenceDecisions.letsGo`).
+    func openedEvidence(_ taskID: String, _ evidenceRevision: String) {
+        engagedEvidence.insert(DeliveredDecisionCard(
+            kind: .evidenceDecision(taskID: taskID, evidenceRevision: evidenceRevision)).id)
     }
 
     /// Answer one revision of a task's evidence at the decision door, FROM this session and with

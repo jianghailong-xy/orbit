@@ -29,7 +29,20 @@
  *      run not settled, no REPO_OP_FAILED, no read asked again, nothing counted, and the health line still reads the
  *      run under way with no failure — and the next worker takes it over;
  *   9. the plan proposal (2026-10-09, run 28ea4f5c): a new design document's sections named as the proposal prompt
- *      lists them, `##` and all, are found in the document as the runner finds them, and the proposal is stored.
+ *      lists them, `##` and all, are found in the document as the runner finds them, and the proposal is stored;
+ *  10. the anchors' batch (2026-10-10): a page is `listEntriesMax` entries — the most one `anchors` repository
+ *      operation carries, four times what the default page sent — so 400 entries are two operations and not
+ *      eight, each inside `RepoOps.operationBytes`; and
+ *  11. a page of 201 entries: every entry keeps its own check across the page boundary and the report-sized
+ *      writes a page this size is recorded in, and the page's tail entry is written like the rest;
+ *  12. a second run on the commit an earlier run checked (2026-10-10, `anchorRules.verify.skip`): the same space
+ *      run again on the same snapshot sends the runner no anchor at all, writes nothing, and reports the entries
+ *      it left alone under `skipped` — the replay after a REPO_OP_WAIT, which used to re-check all ~7,700 anchors;
+ *  13. a snapshot that moved re-checks every entry, and its checks carry the commit that just moved;
+ *  14. a mixed page: only the entries that still owe a check at this commit go out — one checked here, one
+ *      unchecked, one that names its own baseline (a Re-confirm's shape, which no rule can prove holds), one whose
+ *      check adopted its region;
+ *  15. a symbol whose baseline the owner's Re-confirm moved is re-checked, though its check stands on this commit.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/wiki-worker/wiki-maintain-job.pg.spec.ts
  *
@@ -45,10 +58,11 @@ import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { after, afterEach, test } from 'node:test';
 
-import type { PrismaClient } from '@prisma/client';
+import type { Prisma, PrismaClient } from '@prisma/client';
 import { Client } from 'pg';
 
 import { encodeCursorToken, WikiMaintenance } from '../wiki/wiki-maintenance';
+import { rebaselinedAnchors } from '../wiki/wiki-anchors';
 import { wikiDocsAffected } from '../wiki/wiki-docs-affected';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -60,7 +74,7 @@ import { WikiHealth } from '../wiki/wiki-health';
 import { WikiPlans } from '../wiki/wiki-plan';
 import { WikiRefusalError, WikiService, type WikiPrincipal } from '../wiki/wiki.service';
 import { WikiRepoOps } from './wiki-repo-ops';
-import { WIKI_REPO_OP_CAPABILITY } from '@orbit/shared';
+import { WIKI_ANCHOR_RULES, WIKI_LIMITS, WIKI_REPO_OP_CAPABILITY, WIKI_REPO_OPS } from '@orbit/shared';
 import { WikiJobExecutor, WIKI_JOB_RUNNERS, type WikiJobRunner } from './wiki-job-executor';
 import { WIKI_JOB_HANDED_BACK } from './wiki-jobs';
 import { WikiModelRequestQueue } from './wiki-model-queue.service';
@@ -403,6 +417,8 @@ async function clearWork(h: Harness): Promise<void> {
 interface RunnerPlay {
   failSnapshot?: boolean;
   holdReads?: boolean;
+  /** The commit the runner says origin/main is at: the spec's own, unless a case has moved it. */
+  snapshotSha?: string;
   checkAnchor?: (anchor: Record<string, unknown>) => Record<string, unknown>;
   /** Files whose reads are answered with their text — and cached, as the result route caches a read. */
   files?: Record<string, string>;
@@ -426,15 +442,16 @@ async function runRepoOps(h: Harness, over: RunnerPlay = {}): Promise<number> {
       continue;
     }
     const input = row.input ?? {};
+    const head = over.snapshotSha ?? REPO.sha;
     const result = row.kind === 'snapshot'
-      ? { sha: REPO.sha }
+      ? { sha: head }
       : row.kind === 'read'
         ? { read: { sha: REPO.sha, items: await readItems(h, row.space_id, input, over.files ?? {}), chars: 12 } }
         : row.kind === 'diff'
           ? { diff: { from: String(input.from ?? ''), to: String(input.to ?? ''), files: over.diff?.files ?? [], docs: over.diff?.docs ?? [] } }
           : {
               anchors: {
-                sha: REPO.sha,
+                sha: head,
                 anchors: (Array.isArray(input.anchors) ? input.anchors : []).map(
                   (anchor: Record<string, unknown>) => over.checkAnchor?.(anchor) ?? {
                     ...anchor,
@@ -957,7 +974,328 @@ test('the anchors step records each entry\'s checks on its own anchors — a pag
 
   const report = (await runRow(h, fx.runId)).report as Record<string, unknown>;
   const anchors = report.anchors as Record<string, number>;
-  assert.deepEqual(anchors, { entries: 2, changed: 0, missing: 1 }, 'one entry verified, the broken one out as missing');
+  assert.deepEqual(anchors, { entries: 2, changed: 0, missing: 1, skipped: 0 }, 'one entry verified, the broken one out as missing');
+});
+
+/** The `anchors` operations of a run, in the order they were enqueued: how many anchors each carried, how many bytes, and when it ran. */
+async function anchorsOps(h: Harness): Promise<Array<{ anchors: number; bytes: number; createdAt: string; endedAt: string }>> {
+  return h.sql.query<{ anchors: number; bytes: number; createdAt: string; endedAt: string }>(
+    `SELECT jsonb_array_length("input"->'anchors') AS "anchors",
+            octet_length("input"::text) AS "bytes",
+            "created_at" AS "createdAt", "ended_at" AS "endedAt"
+       FROM "wiki_repo_op" WHERE "owner_id" = $1 AND "kind" = 'anchors' AND "state" = 'succeeded'
+      ORDER BY "created_at", "id"`, [h.ownerId],
+  ).then((result) => result.rows.map((row) => ({ anchors: Number(row.anchors), bytes: Number(row.bytes), createdAt: row.createdAt, endedAt: row.endedAt })));
+}
+
+test('the anchors step puts listEntriesMax entries in one repository operation: 400 entries are two operations, not eight', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const fx = await fixture(h);
+  // No dossiers: the run proposes nothing, and the anchors step is what this case is about.
+  h.maintenance.dossierPage = (async () => ({ ...(pageOf(fx) as Record<string, unknown>), facts: 0, dossiers: [] })) as unknown as WikiMaintenance['dossierPage'];
+  // 400 live entries, one path anchor each: a page of the list's default size (50) sent these out as
+  // eight repository operations, each one a wait for the runner's next heartbeat.
+  const count = 400;
+  await h.prisma.wikiEntry.createMany({
+    data: Array.from({ length: count }, (_, i) => ({
+      ownerId: h.ownerId, spaceId: fx.spaceId, kind: 'concept', title: `anchored ${i}`, summary: 'a live entry',
+      status: 'active', trust: 'auto', currentRevision: 1, fields: { definition: 'x', boundaries: 'y' }, topics: [],
+      anchors: [{ type: 'path', path: ANCHOR_REPO.file }],
+    })),
+  });
+
+  const which = worker(h);
+  await pass(h, which, async () => (await jobOf(h, fx.jobId)).state === 'succeeded', { checkAnchor: checkAnchorAgainstRepo });
+
+  const job = await jobOf(h, fx.jobId);
+  assert.equal(job.state, 'succeeded', `the anchors step must not fail: ${job.error ?? ''}`);
+  const ops = await anchorsOps(h);
+  assert.equal(ops.length, Math.ceil(count / WIKI_ANCHOR_RULES.listEntriesMax), 'the page is the batch: 400 entries fill two operations');
+  assert.deepEqual(ops.map((op) => op.anchors), [WIKI_ANCHOR_RULES.listEntriesMax, count - WIKI_ANCHOR_RULES.listEntriesMax], 'each operation carries one anchor an entry, in page order');
+  for (const op of ops) {
+    // What one operation may carry: a page's entries at `listMaxItems` anchors each, and a payload well
+    // inside what a read is packed to (`operationBytes`). A page of path anchors is a few hundred
+    // milliseconds of git on the runner, far inside the 300 s the run waits for it.
+    assert.ok(op.anchors <= WIKI_ANCHOR_RULES.listEntriesMax * WIKI_LIMITS.listMaxItems, `an operation carries at most a page's anchors: ${op.anchors}`);
+    assert.ok(op.bytes < WIKI_REPO_OPS.operationBytes, `an operation's payload stays inside operationBytes: ${op.bytes} bytes`);
+  }
+  // One at a time: the second operation was enqueued only after the first had settled (the runner's
+  // concurrent fetches of one checkout take no lock of their own until 97b8de07f ships).
+  assert.ok(Date.parse(ops[1]!.createdAt) >= Date.parse(ops[0]!.endedAt), `no second operation while one is in flight: ${ops.map((op) => `${op.createdAt}->${op.endedAt}`).join(', ')}`);
+  // Every one of the 400 entries was checked through those two operations.
+  const verified = await h.prisma.wikiEntry.count({ where: { ownerId: h.ownerId, spaceId: fx.spaceId, anchorState: 'verified' } });
+  assert.equal(verified, count, 'no entry is left out by the page boundary');
+  const report = (await runRow(h, fx.runId)).report as Record<string, unknown>;
+  assert.deepEqual(report.anchors, { entries: count, changed: 0, missing: 0, skipped: 0 }, 'the report counts every entry once');
+});
+
+test('every entry of a page keeps its own check across the page and the report boundaries, and the page\'s tail is written', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const fx = await fixture(h);
+  h.maintenance.dossierPage = (async () => ({ ...(pageOf(fx) as Record<string, unknown>), facts: 0, dossiers: [] })) as unknown as WikiMaintenance['dossierPage'];
+  // 201 entries: the page boundary falls between the 200th and the 201st, and a page this size is written
+  // back in five reports (four of fifty and a tail of one) — each entry's checks must arrive at its own
+  // anchors however the page and its writes are split.
+  const count = 201;
+  // Ids of this case's own (`fade...`, and no other case's): the anchors list orders by id, so the
+  // page boundary and every expected verdict below are read off the entries' own order.
+  const idOf = (i: number): string => `fade0000-0000-4000-8000-${String(i).padStart(12, '0')}`;
+  const pathOf = (i: number): string => `src/entry-${String(i).padStart(3, '0')}.go`;
+  const symbolOf = (i: number): string => `sym${i}`;
+  const ownBaselineOf = (i: number): string => createHash('sha256').update(`a baseline entry ${i} named`).digest('hex');
+  const gone = new Set([3, 197]);
+  await h.prisma.wikiEntry.createMany({
+    data: Array.from({ length: count }, (_, i) => ({
+      ownerId: h.ownerId, spaceId: fx.spaceId, id: idOf(i), kind: 'concept', title: `anchored ${i}`, summary: 'a live entry',
+      status: 'active', trust: 'auto', currentRevision: 1, fields: { definition: 'x', boundaries: 'y' }, topics: [],
+      anchors: [
+        { type: 'path', path: pathOf(i) },
+        ...(i % 4 === 0 ? [{ type: 'symbol', path: pathOf(i), symbol: symbolOf(i), ...(i % 8 === 0 ? { regionSha256: ownBaselineOf(i) } : {}) }] : []),
+      ],
+    })),
+  });
+  // The runner this case plays: a path is there unless it is one of the gone ones, and a symbol's region
+  // hashes from its own name — so a verdict laid on a page-mate, or a check written to the wrong entry,
+  // shows as the wrong region rather than passing.
+  const checkAnchorOf = (anchor: Record<string, unknown>): Record<string, unknown> => {
+    if (anchor.type === 'path') return { ...anchor, state: gone.has(Number(/entry-(\d+)\.go/u.exec(String(anchor.path))?.[1] ?? -1)) ? 'missing' : 'verified' };
+    return { ...anchor, state: 'verified', regionSha256: ANCHOR_REPO.regionOf(String(anchor.symbol ?? '')) };
+  };
+
+  const which = worker(h);
+  await pass(h, which, async () => (await jobOf(h, fx.jobId)).state === 'succeeded', { checkAnchor: checkAnchorOf });
+
+  const job = await jobOf(h, fx.jobId);
+  assert.equal(job.state, 'succeeded', `the anchors step must not fail: ${job.error ?? ''}`);
+  const ops = await anchorsOps(h);
+  assert.equal(ops.length, 2, '201 entries are two operations');
+  assert.equal(ops[0]!.anchors, count - 1 + 50, 'the first operation carries a full page: the 200 entries\' paths and the 50 symbols of those among them that carry one');
+  assert.equal(ops[1]!.anchors, 1 + 1, 'the second operation carries the page\'s tail entry and its symbol');
+
+  const entries = await h.prisma.wikiEntry.findMany({ where: { ownerId: h.ownerId, spaceId: fx.spaceId }, orderBy: { id: 'asc' } });
+  assert.equal(entries.length, count);
+  let changed = 0;
+  let missing = 0;
+  for (const [i, entry] of entries.entries()) {
+    const anchors = entry.anchors as Array<Record<string, unknown> & { check?: Record<string, unknown> }>;
+    assert.equal(anchors.length, i % 4 === 0 ? 2 : 1, `entry ${i} keeps its own anchors`);
+    assert.equal(anchors[0]!.check?.state, gone.has(i) ? 'missing' : 'verified', `entry ${i}'s path is its own verdict`);
+    if (anchors.length === 2) {
+      const own = i % 8 === 0;
+      assert.equal(anchors[1]!.check?.state, own ? 'changed' : 'verified', `entry ${i}'s symbol is held to ${own ? 'its own' : 'the found'} region`);
+      assert.equal(anchors[1]!.check?.regionSha256, ANCHOR_REPO.regionOf(symbolOf(i)), `entry ${i}'s symbol check carries its own region`);
+      if (own) assert.equal(anchors[1]!.check?.baselineSha256, undefined, 'an entry that named its own baseline keeps it');
+      else assert.equal(anchors[1]!.check?.baselineSha256, ANCHOR_REPO.regionOf(symbolOf(i)), 'an entry with no baseline adopts the region its own check found');
+      if (own) changed += 1;
+    }
+    if (gone.has(i)) missing += 1;
+  }
+  assert.equal(changed, Math.ceil(count / 8), 'every entry that named its own baseline reads changed');
+  assert.equal(missing, gone.size);
+  const report = (await runRow(h, fx.runId)).report as Record<string, unknown>;
+  assert.deepEqual(report.anchors, { entries: count, changed, missing, skipped: 0 }, 'the counts are the entries\', whatever report a chunk fell in');
+});
+
+// ── A commit an earlier run already checked owes nothing (2026-10-10, `anchorRules.verify.skip`) ─
+
+/**
+ * A second maintenance run of the same space, as the trigger would make one beside the first: its own run row and
+ * its own queued job, over the same entries and the same checkout. A replay after a `REPO_OP_WAIT` is this second
+ * run, run again on the same commit — which is the case these run, and what the canary's replayed runs paid for.
+ */
+async function runAgain(h: Harness, fx: Fixture): Promise<{ runId: string; jobId: string }> {
+  const runId = randomUUID();
+  const jobId = randomUUID();
+  await h.prisma.wikiMaintenanceRun.create({
+    data: { id: runId, spaceId: fx.spaceId, ownerId: h.ownerId, jobId, due: 'backlog', backlog: 0, pendingSessions: 0 },
+  });
+  await h.prisma.wikiJob.create({ data: { id: jobId, ownerId: h.ownerId, spaceId: fx.spaceId, kind: 'maintain', input: { runId }, state: 'queued' } });
+  return { runId, jobId };
+}
+
+/** One entry's anchors as its row holds them, checks and all: what "nothing was written again" is read from. */
+async function entryAnchors(h: Harness, entryId: string): Promise<unknown> {
+  return (await h.prisma.wikiEntry.findFirstOrThrow({ where: { id: entryId }, select: { anchors: true } })).anchors;
+}
+
+/** What one run of a page's entries reports under `anchors`. */
+async function anchorsReport(h: Harness, runId: string): Promise<Record<string, number>> {
+  return ((await runRow(h, runId)).report as { anchors: Record<string, number> }).anchors;
+}
+
+/** The anchors one operation carried, as the runner was handed them. */
+async function anchorsSent(h: Harness, jobId: string): Promise<number> {
+  return h.sql.query<{ anchors: number }>(
+    `SELECT jsonb_array_length("input"->'anchors') AS "anchors" FROM "wiki_repo_op"
+      WHERE "job_id" = $1 AND "kind" = 'anchors'`, [jobId],
+  ).then((result) => result.rows.reduce((total, row) => total + Number(row.anchors), 0));
+}
+
+/** Three entries' ids of one case's own (`feed…`, and no other case's): entries outlive a case, and the anchors
+ * list orders by id — so two cases seeding the same anchors need two sets of ids. */
+function groupOf(group: string): string[] {
+  return [1, 2, 3].map((n) => `${group}-0000-4000-8000-${String(n).padStart(12, '0')}`);
+}
+
+/** Three entries whose anchors are the shape a first check leaves them in: a path and a commit, a symbol that
+ * named no baseline (its check adopts the region it found), and another path. Nothing names a baseline of its own,
+ * which is the one shape a later run on the same commit may leave alone. */
+async function onceEntries(h: Harness, spaceId: string, ids: string[]): Promise<void> {
+  await h.prisma.wikiEntry.createMany({
+    data: [
+      [{ type: 'path', path: ANCHOR_REPO.file }, { type: 'commit', sha: ANCHOR_REPO.commit }],
+      [{ type: 'symbol', path: ANCHOR_REPO.file, symbol: 'main' }],
+      [{ type: 'path', path: ANCHOR_REPO.file }],
+    ].map((anchors, i) => ({
+      id: ids[i]!, ownerId: h.ownerId, spaceId, kind: 'concept', title: `once ${i}`, summary: 'a live entry',
+      status: 'active', trust: 'auto', currentRevision: 1, fields: { definition: 'x', boundaries: 'y' }, topics: [], anchors,
+    })),
+  });
+}
+
+test('a second run on the commit an earlier run checked re-checks nothing: no anchors operation, no write at all', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const fx = await fixture(h);
+  // No dossiers: the anchors step is what this case is about.
+  h.maintenance.dossierPage = (async () => ({ ...(pageOf(fx) as Record<string, unknown>), facts: 0, dossiers: [] })) as unknown as WikiMaintenance['dossierPage'];
+  const once = groupOf('feed0001');
+  await onceEntries(h, fx.spaceId, once);
+
+  const which = worker(h);
+  await pass(h, which, async () => (await jobOf(h, fx.jobId)).state === 'succeeded', { checkAnchor: checkAnchorAgainstRepo });
+  assert.equal((await jobOf(h, fx.jobId)).state, 'succeeded', (await jobOf(h, fx.jobId)).error ?? '');
+  assert.deepEqual((await repoOpsOf(h, fx.jobId)).map((op) => op.kind), ['snapshot', 'anchors'], 'the first run checks them once');
+  assert.equal(await anchorsSent(h, fx.jobId), 4, 'every anchor of the three entries went out');
+  assert.equal((await anchorsReport(h, fx.runId)).entries, 3, 'nothing was checked at this commit before this run');
+  const written = await Promise.all(once.map((id) => entryAnchors(h, id)));
+
+  // The same space, the same snapshot commit: the second run a replay makes, and the round after a round whose
+  // origin/main has not moved.
+  const again = await runAgain(h, fx);
+  const second = worker(h);
+  await pass(h, second, async () => (await jobOf(h, again.jobId)).state === 'succeeded', { checkAnchor: checkAnchorAgainstRepo });
+
+  const job = await jobOf(h, again.jobId);
+  assert.equal(job.state, 'succeeded', job.error ?? '');
+  assert.deepEqual((await repoOpsOf(h, again.jobId)).map((op) => op.kind), ['snapshot'],
+    'every entry was already checked at this commit: the runner is handed no anchors at all');
+  assert.deepEqual(await Promise.all(once.map((id) => entryAnchors(h, id))), written, 'and not one check was written again');
+  assert.deepEqual(await anchorsReport(h, again.runId), { entries: 0, changed: 0, missing: 0, skipped: 3 },
+    'entries counts what the run wrote; what it left alone is skipped and nothing else');
+});
+
+test('a snapshot that moved re-checks every entry, and the checks carry the commit they were made on', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const fx = await fixture(h);
+  h.maintenance.dossierPage = (async () => ({ ...(pageOf(fx) as Record<string, unknown>), facts: 0, dossiers: [] })) as unknown as WikiMaintenance['dossierPage'];
+  const once = groupOf('feed0011');
+  await onceEntries(h, fx.spaceId, once);
+
+  const which = worker(h);
+  await pass(h, which, async () => (await jobOf(h, fx.jobId)).state === 'succeeded', { checkAnchor: checkAnchorAgainstRepo });
+  const before = await Promise.all(once.map((id) => entryAnchors(h, id)));
+
+  // origin/main moved: the space's snapshot is the new commit, and the runner answers from it.
+  const moved = 'f'.repeat(40);
+  await h.sql.query('UPDATE "wiki_repo_snapshot" SET "sha" = $2 WHERE "space_id" = $1', [fx.spaceId, moved]);
+  const again = await runAgain(h, fx);
+  const second = worker(h);
+  await pass(h, second, async () => (await jobOf(h, again.jobId)).state === 'succeeded', { checkAnchor: checkAnchorAgainstRepo, snapshotSha: moved });
+
+  const job = await jobOf(h, again.jobId);
+  assert.equal(job.state, 'succeeded', job.error ?? '');
+  assert.deepEqual((await repoOpsOf(h, again.jobId)).map((op) => op.kind), ['snapshot', 'anchors'],
+    'a check made on another commit is not this commit\'s answer: the whole page goes out again');
+  assert.equal(await anchorsSent(h, again.jobId), 4, 'every anchor of it');
+  assert.deepEqual(await anchorsReport(h, again.runId), { entries: 3, changed: 0, missing: 0, skipped: 0 }, 'nothing was already checked at the moved commit');
+  const after = await Promise.all(once.map((id) => entryAnchors(h, id)));
+  for (const [i, anchors] of after.entries()) {
+    for (const anchor of anchors as Array<{ check?: { ref?: string | null } }>) {
+      assert.equal(anchor.check?.ref, moved, `entry ${i}'s check was made on the commit that just moved`);
+    }
+  }
+  assert.notDeepEqual(after, before, 'so what is written moved with it');
+});
+
+test('a page is checked entry by entry: only the entries that still owe a check at this commit go out', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const fx = await fixture(h);
+  h.maintenance.dossierPage = (async () => ({ ...(pageOf(fx) as Record<string, unknown>), facts: 0, dossiers: [] })) as unknown as WikiMaintenance['dossierPage'];
+  // Four entries, in id order: checked at this commit (skipped); never checked (sent); a symbol that names its
+  // own baseline, checked at this commit and verified there — the shape a Re-confirm leaves, which no rule can
+  // prove still holds, so it goes out too; and a symbol whose check adopted the region it found (skipped).
+  const ids = ['feed0002-0000-4000-8000-000000000001', 'feed0002-0000-4000-8000-000000000002', 'feed0002-0000-4000-8000-000000000003', 'feed0002-0000-4000-8000-000000000004'];
+  const at = '2026-10-01T00:00:00.000Z';
+  const serveRegion = ANCHOR_REPO.regionOf('serve');
+  await h.prisma.wikiEntry.createMany({
+    data: [
+      [{ type: 'path', path: ANCHOR_REPO.file, check: { state: 'verified', ref: REPO.sha, at } }],
+      [{ type: 'path', path: ANCHOR_REPO.file }],
+      [{ type: 'symbol', path: ANCHOR_REPO.file, symbol: 'serve', regionSha256: serveRegion, check: { state: 'verified', ref: REPO.sha, at, regionSha256: serveRegion } }],
+      [{ type: 'symbol', path: ANCHOR_REPO.file, symbol: 'main', check: { state: 'verified', ref: REPO.sha, at, regionSha256: ANCHOR_REPO.regionOf('main'), baselineSha256: ANCHOR_REPO.regionOf('main') } }],
+    ].map((anchors, i) => ({
+      id: ids[i]!, ownerId: h.ownerId, spaceId: fx.spaceId, kind: 'concept', title: `mixed ${i}`, summary: 'a live entry',
+      status: 'active', trust: 'auto', currentRevision: 1, fields: { definition: 'x', boundaries: 'y' }, topics: [], anchors,
+    })),
+  });
+  const before = await Promise.all(ids.map((id) => entryAnchors(h, id)));
+
+  const which = worker(h);
+  await pass(h, which, async () => (await jobOf(h, fx.jobId)).state === 'succeeded', { checkAnchor: checkAnchorAgainstRepo });
+
+  const job = await jobOf(h, fx.jobId);
+  assert.equal(job.state, 'succeeded', job.error ?? '');
+  assert.equal(await anchorsSent(h, fx.jobId), 2, 'the unchecked path and the symbol that names its own baseline go out; the two already checked here do not');
+  assert.deepEqual(await anchorsReport(h, fx.runId), { entries: 2, changed: 0, missing: 0, skipped: 2 },
+    'two entries written, two left alone');
+  const after = await Promise.all(ids.map((id) => entryAnchors(h, id)));
+  assert.deepEqual(after[0], before[0], 'the entry checked at this commit is not written again');
+  assert.deepEqual(after[3], before[3], 'and neither is the one whose check adopted its own region');
+  assert.notDeepEqual(after[1], before[1], 'the entry that had no check got one');
+  assert.notDeepEqual(after[2], before[2], 'and the one that names its own baseline was checked again, though its check stood on this commit');
+});
+
+test('a baseline the owner\'s Re-confirm moved is re-checked, though its check stands on this very commit', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const fx = await fixture(h);
+  h.maintenance.dossierPage = (async () => ({ ...(pageOf(fx) as Record<string, unknown>), facts: 0, dossiers: [] })) as unknown as WikiMaintenance['dossierPage'];
+  // The symbol was found changed at this commit, and the owner re-confirmed: `rebaselinedAnchors` is the
+  // transform the service applies for it (wiki.service.ts, the reconfirm answer), and it leaves exactly what a
+  // plain check leaves — the anchor naming the region that check found, checked and verified, ref unchanged.
+  const serveRegion = ANCHOR_REPO.regionOf('serve');
+  const reconfirmed = rebaselinedAnchors([{
+    type: 'symbol', path: ANCHOR_REPO.file, symbol: 'serve', regionSha256: 'c'.repeat(64),
+    check: { state: 'changed', ref: REPO.sha, at: '2026-10-01T00:00:00.000Z', regionSha256: serveRegion },
+  }]);
+  assert.equal(reconfirmed.changed, true, 'the re-confirm moved the baseline');
+  assert.equal((reconfirmed.anchors[0] as { regionSha256?: string }).regionSha256, serveRegion, 'to the region the check found');
+  assert.equal(reconfirmed.anchors[0]!.check?.ref, REPO.sha, 'and its check still stands on this very commit');
+  const [id] = ['feed0003-0000-4000-8000-000000000001'];
+  await h.prisma.wikiEntry.create({
+    data: {
+      id, ownerId: h.ownerId, spaceId: fx.spaceId, kind: 'concept', title: 'reconfirmed', summary: 'a live entry',
+      status: 'active', trust: 'auto', currentRevision: 1, fields: { definition: 'x', boundaries: 'y' }, topics: [],
+      anchors: reconfirmed.anchors as unknown as Prisma.InputJsonValue,
+    },
+  });
+
+  const which = worker(h);
+  await pass(h, which, async () => (await jobOf(h, fx.jobId)).state === 'succeeded', { checkAnchor: checkAnchorAgainstRepo });
+
+  const job = await jobOf(h, fx.jobId);
+  assert.equal(job.state, 'succeeded', job.error ?? '');
+  assert.equal(await anchorsSent(h, fx.jobId), 1, 'the anchor a re-confirm re-baselined is checked again');
+  assert.deepEqual(await anchorsReport(h, fx.runId), { entries: 1, changed: 0, missing: 0, skipped: 0 }, 'and counted as written, not as skipped');
+  const anchors = (await entryAnchors(h, id)) as Array<{ check?: { state?: string; ref?: string | null; at?: string | null; regionSha256?: string } }>;
+  assert.equal(anchors[0]!.check?.state, 'verified');
+  assert.equal(anchors[0]!.check?.ref, REPO.sha);
+  assert.notEqual(anchors[0]!.check?.at, '2026-10-01T00:00:00.000Z', 'the check is this run\'s, not the one the re-confirm kept');
 });
 
 test('anchor verdicts that name anchors no entry asked for fail the run: nothing is laid on a guess', { skip }, async () => {

@@ -30,6 +30,7 @@ import {
 import { Image } from 'antd';
 import { ReferenceLink, referenceUrlTransform } from '../lib/markdownLinks';
 import { formatThinkingDuration, formatThinkingSize } from '../lib/thinkingDraft';
+import { quotaWindowKind } from '../lib/quotaWindow';
 import { Fragment, createContext, isValidElement, memo, useContext, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
 import {
@@ -2093,19 +2094,18 @@ const MAX_ATTEMPTS: Record<AutoRetryVariant, number> = {
   apiError: MAX_API_ERROR_RETRIES,
 };
 
-/** The window that ran out, in the runtime's own terms. Keyed on the whole phrase the runtime
- *  uses ("hit your weekly limit"), not on "weekly limit" loose in the text: naming the wrong
- *  window tells the user to wait days for a quota that comes back in hours. Codex names no
- *  window at all, and falls through to the generic wording.
+/** The window that ran out, in the runtime's own terms (`quotaWindowKind`, which the evidence
+ *  card's pause line reads too). Codex names no window at all, and falls through to the generic
+ *  wording.
  *
  *  The runtime calls its 5-hour window a "session limit", but here that reads as a limit on the
  *  Orbit session the card is sitting in — the one noun this product uses for something else
  *  entirely. Titled by its length instead; the runtime's own phrasing survives in the body. */
 function quotaWindow(message: string): { title: string; what: string } {
-  const m = message.toLowerCase();
-  if (m.includes('hit your session limit'))
+  const kind = quotaWindowKind(message);
+  if (kind === 'FIVE_HOUR')
     return { title: '5-hour limit reached', what: 'The 5-hour quota' };
-  if (m.includes('hit your weekly limit'))
+  if (kind === 'WEEKLY')
     return { title: 'Weekly limit reached', what: 'The weekly quota' };
   return { title: 'Usage limit reached', what: 'The quota' };
 }

@@ -61,6 +61,8 @@ class SessionCardsModel internal constructor(val handle: SessionHandle, val sess
     val review: String? get() = reviewKey.value
     /** What this window pressed in the open review: the press its receipt answers to. */
     var pressed by mutableStateOf<CardVerb?>(null); internal set
+    /** The merge whose receipt is open (A11-9), from its line in the conversation. */
+    var receipt by mutableStateOf<JsonObject?>(null)
     fun open(key: String) { pressed = null; reviewKey.value = key }
     fun close() { reviewKey.value = null; pressed = null }
 
@@ -165,7 +167,9 @@ fun SessionCards(cards: SessionCardsModel, open: (String) -> Unit, discuss: ((St
             if (!session.fresh) Text("Reconnecting · actions are unavailable until the server is checked.", style = MaterialTheme.typography.bodySmall)
         }
         val focus = CardFocus.pending(session.id)
-        shown.forEach { card -> key(cards.handle, card.key, card.binding) {
+        // A merge that happened is its record's line below, not a candidate that is no longer on offer (iOS closes its card).
+        val mergedIds = cards.merged.mapNotNull { it.text("promotionId") }.toSet()
+        shown.filterNot { it.family == CardFamily.PROMOTION && it.status == CardPreviews.stale && it.objectId in mergedIds }.forEach { card -> key(cards.handle, card.key, card.binding) {
             // A11 hook: the card a project page opened this conversation onto is brought into view once drawn.
             val requester = remember { BringIntoViewRequester() }
             if (focus != null && CardFocus.matches(focus, card.key)) LaunchedEffect(focus, card.key) {
@@ -175,13 +179,23 @@ fun SessionCards(cards: SessionCardsModel, open: (String) -> Unit, discuss: ((St
                 val preview = CardPreviews.preview(card)
                 val fresh = cards.fresh(session, card)
                 val result = results[card.key]?.takeIf { it.binding == card.binding } ?: CardActionState()
-                val submit = { verb: CardVerb, input: CardInput -> cards.actions.submit(cards.handle, card, verb, input); Unit }
+                // Decide it myself opens a revision waiting for the coordinator into its evidence card, here in place, and that
+                // card is what is pressed (`CoordinatorQueue`).
+                var decidingMyself by rememberSaveable { mutableStateOf(false) }
+                val drawn = (if (decidingMyself) CoordinatorQueue.decideMyself(card) else null) ?: card
+                val submit = { verb: CardVerb, input: CardInput ->
+                    if (verb == CardVerb.DECIDE_MYSELF) decidingMyself = true else cards.actions.submit(cards.handle, drawn, verb, input); Unit }
                 when {
+                    // A11-9: the merge into main is one line where it happened; its card is on the project's sessions page, and the line
+                    // opens the same review (iOS `PromotionEventLine`, 6b4bef713) — the conversation's way into a review, as a preview is.
+                    card.family == CardFamily.PROMOTION -> PromotionEventLine(card.source.takeUnless { card.status == CardPreviews.stale },
+                        "${card.key}:preview", Modifier.testTag(card.key)) { cards.open(card.key) }
                     // A08-2: a long decision is a compact preview here, answered in its full-height review.
                     preview != null -> CardPreviewView(card, preview) { cards.open(card.key) }
                     // A11b hook: the coordinator's request draws the start card (iOS `StartProjectCardView`), not the generic card.
                     card.family == CardFamily.START -> CoordinatorStartCard(card, session.snapshot?.standing.orEmpty(), fresh, result, open, discuss, submit)
-                    else -> BusinessCard(card, fresh, result, open, discuss, submit)
+                    CoordinatorQueue.isSent(card) -> SentToCoordinatorLine(card)
+                    else -> BusinessCard(drawn, fresh, result, open, discuss, submit)
                 }
             }
         } }
@@ -198,13 +212,9 @@ fun SessionCards(cards: SessionCardsModel, open: (String) -> Unit, discuss: ((St
                 CoordinatorDoneCard(app, cards.handle, session.id, coordinated, detail, session.snapshot?.standing.orEmpty(), session.fresh)
             }
         } }
-        cards.merged.filter { it.text("state") == "MERGED" }.forEach { receipt ->
-            Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = MaterialTheme.shapes.medium) {
-                Column(Modifier.fillMaxWidth().padding(12.dp)) {
-                    Text("Merged", style = MaterialTheme.typography.titleSmall)
-                    CardFields(receipt, listOf("sourceRef", "sourceSha", "upstreamRef", "tasks", "merged"), open)
-                }
-            }
+        // A11-9: each merge the project made is one line, opening its receipt (iOS `PromotionReceiptLine`).
+        PromotionCards.receipts(cards.merged).forEach { receipt ->
+            PromotionReceiptLine(receipt.promotion, "${receipt.id}:line", Modifier.testTag(receipt.id)) { cards.receipt = receipt.promotion }
         }
         // A08-6: what this conversation created is the Tasks card above the composer (`SessionTasksCard`), with what its watches wait on.
         session.snapshot?.background?.forEach { job ->
@@ -212,6 +222,17 @@ fun SessionCards(cards: SessionCardsModel, open: (String) -> Unit, discuss: ((St
                 CardFields(job, listOf("status", "command", "description", "latestOutput", "output", "outputTail", "exitCode", "killReason"), open)
             }
         }
+    }
+}
+
+/** A revision that waited for its coordinator and has been handed to it (`CoordinatorQueue`): one line where its card was, saying
+ * when (iOS's capsule). */
+@Composable
+private fun SentToCoordinatorLine(card: InteractionCard) {
+    Box(Modifier.fillMaxWidth().testTag(card.key), contentAlignment = Alignment.Center) {
+        Text(CoordinatorQueue.sentLine(card.source.text("deliveredAt")?.let { OwnerReview.receiptTime(it) }),
+            Modifier.background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(50)).padding(horizontal = 12.dp, vertical = 6.dp),
+            style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -313,11 +334,38 @@ fun CardReviewSheet(cards: SessionCardsModel, states: SaveableStateHolder, open:
                     val submit = { verb: CardVerb, input: CardInput -> cards.pressed = verb; cards.actions.submit(cards.handle, card, verb, input); Unit }
                     if (card.family == CardFamily.START) Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
                         CoordinatorStartCard(card, session.snapshot?.standing.orEmpty(), fresh, result, open, talk, submit)
-                    } else BusinessCard(card, fresh, result, open, talk, submit, review = true)
+                    } else if (card.family == CardFamily.PROMOTION) PromotionCardReview(cards, session, card, fresh, result)
+                    else BusinessCard(card, fresh, result, open, talk, submit, review = true)
                 }
             }
         }
     }
+}
+
+/** The merge review as the conversation opens it (A11-9; iOS `PromotionReviewSheet` with the console as its source): the candidate as
+ * this conversation last read it, the project's criteria and open items beside it, and its presses through this conversation's
+ * doors. A decline that went through closes it. */
+@Composable
+private fun PromotionCardReview(cards: SessionCardsModel, session: SessionState, card: InteractionCard, fresh: Boolean, result: CardActionState) {
+    val standing = session.snapshot?.standing.orEmpty()
+    val criteria = (standing["project"] as? JsonObject)?.objects("acceptanceCriteriaItems").orEmpty()
+    val met = criteria.takeIf { it.isNotEmpty() }?.let { items -> items.count { (it["satisfied"] as? JsonPrimitive)?.booleanOrNull == true } to items.size }
+    var declined by remember(card.key) { mutableStateOf(false) }
+    LaunchedEffect(declined, result.settled) { if (declined && result.settled) cards.close() }
+    fun press(verb: CardVerb) {
+        if (verb == CardVerb.DECLINE_MERGE) declined = true
+        cards.actions.submit(cards.handle, card, verb, CardInput())
+    }
+    PromotionReview(card.source.takeUnless { card.status == CardPreviews.stale }, met, PromotionCards.holder(card.objectId, standing["openItems"] as? JsonObject),
+        acting = result.busy, error = result.message?.takeIf { !result.busy && !result.settled }, tag = card.key,
+        enabled = fresh && !result.uncertain && !result.settled,
+        confirm = { press(CardVerb.CONFIRM_MERGE) }, decline = { press(CardVerb.DECLINE_MERGE) }, cancel = { press(CardVerb.CANCEL_MERGE) })
+}
+
+/** The receipt a merge's line in this conversation opens (A11-9), hosted beside the review so the rail's rows cannot dismiss it. */
+@Composable
+fun CardReceiptSheet(cards: SessionCardsModel) {
+    cards.receipt?.let { PromotionReceiptSheet(it) { cards.receipt = null } }
 }
 
 @Composable

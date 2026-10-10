@@ -252,9 +252,11 @@ describe.each(ONE_ACCOUNT)('one Codex account — %s', (_, accountsOf) => {
 
       // No account rows: none of the marks an account row or its group head carries...
       expect(page.querySelectorAll('.re-acct, .re-grp, .re-rail, .re-chip')).toHaveLength(0);
-      // ...and no row of any other kind either: the card is its head and one row per engine.
+      // ...and no row of any other kind either: the card is its head and one row per engine,
+      // DeepSeek Harness's last.
       expect([...page.querySelector('.re-card')!.children].map((el) => el.className)).toEqual([
         're-head',
+        're-row',
         're-row',
         're-row',
         're-row',

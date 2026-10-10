@@ -58,7 +58,13 @@ fun BusinessCard(card: InteractionCard, fresh: Boolean, result: CardActionState 
         }, reason = reason)
     fun send(verb: CardVerb) { submit(verb, if (verb == CardVerb.RETRY_TASK) input.copy(triggerId = UUID.randomUUID().toString()) else input) }
     val body: @Composable ColumnScope.() -> Unit = {
-        if (!review) Text(card.title, style = MaterialTheme.typography.titleMedium)
+        // A revision waiting for the coordinator says when it was submitted, beside its title (`CoordinatorQueue`).
+        val submitted = card.source.text("submittedAt")?.takeIf { card.family == CardFamily.COORDINATOR_QUEUE || CoordinatorQueue.isDecidingMyself(card) }
+            ?.let { OwnerReview.receiptTime(it) }
+        if (!review && submitted != null) Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            Text(card.title, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+            Text(submitted, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        } else if (!review) Text(card.title, style = MaterialTheme.typography.titleMedium)
         Text("From Orbit", style = MaterialTheme.typography.labelSmall)
         card.status?.let { Text(it, style = MaterialTheme.typography.labelMedium) }
         if (batchPreview != null) BatchReviewBody(card, open, batchPage) { batchPage = it }
@@ -120,13 +126,11 @@ fun BusinessCard(card: InteractionCard, fresh: Boolean, result: CardActionState 
         result.response?.takeIf { it.text("code") in setOf("TASK_ALREADY_RUNNING", "TASK_RUN_PIN_CONFLICT", "TASK_RUN_PROVIDER_SWITCH_CONFIRMATION_REQUIRED") }
             ?.text("conflictingSessionId")?.takeIf { it.isNotBlank() }?.let { LinkButton("Open the run", "orbit-session:$it", open) }
         if (result.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
-        // A merge under way: its dead press says how far its job got, beside the Cancel it still offers (iOS `mergingActionLabel`).
-        if (card.family == CardFamily.PROMOTION && PromotionCards.isMerging(card.source)) OutlinedButton(onClick = {}, enabled = false,
-            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("${card.key}:merging")) { Text(PromotionCards.mergingActionLabel(card.source)) }
         // Reopen task is pressed in the review's box (iOS `OwnerConfirmationReviewBarView`), not among the card's buttons.
         card.actions.filter { it != CardVerb.REOPEN_TASK }.forEach { verb ->
             val requiresNote = verb in setOf(CardVerb.SEND_BACK, CardVerb.CHAT, CardVerb.MARK_HANDLED)
-            val valid = runCatching { CardRequests.build(card, verb, input.copy(triggerId = "validation")) }.isSuccess
+            // Decide it myself sends nothing: it opens the waiting revision's decision here (`CoordinatorQueue.decideMyself`).
+            val valid = verb == CardVerb.DECIDE_MYSELF || runCatching { CardRequests.build(card, verb, input.copy(triggerId = "validation")) }.isSuccess
             val label = if (verb == CardVerb.REMEMBER) {
                 val rules = ApprovalRules.remember(card.source.text("toolName") ?: "", card.source.obj("input") ?: JsonObject(emptyMap()))
                 "Allow & remember " + rules.joinToString(", ") { it.ruleContent?.removeSuffix(":*") ?: it.toolName }

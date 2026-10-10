@@ -1160,6 +1160,11 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// process runs as, so it is resolved once rather than on every beat.
 	machineReposRoot := reposRoot()
 
+	// Before the heartbeat, which is what claims work: a result an earlier process of this image ran
+	// and could not deliver is offered to the control plane first, so a job this machine is holding a
+	// finished answer for is settled rather than claimed and run again (integration_result_spool.go).
+	replaySpooledIntegrationResults(loopCtx, t)
+
 	// Heartbeat every 30s; honor server-requested cancellations.
 	hbStop := make(chan struct{})
 	hbDone := make(chan struct{})
@@ -1373,7 +1378,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 						delete(integratingNow, job.JobID)
 						mergeMu.Unlock()
 					}()
-					runIntegrationJobAndReport(t, job)
+					runIntegrationJobAndReport(loopCtx, t, job)
 				}(job)
 			}
 			// The wiki's repository operations (contracts/wiki.contract.json `repoOps`, design §7):
@@ -1402,7 +1407,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 						delete(repoOpsNow, op.ID)
 						mergeMu.Unlock()
 					}()
-					runWikiRepoOpAndReport(t, op)
+					runWikiRepoOpAndReport(loopCtx, t, op)
 				}(op)
 			}
 			// Honor "merge to main" requests: merge each session's branch into main on

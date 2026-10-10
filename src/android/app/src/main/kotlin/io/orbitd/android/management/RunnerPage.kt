@@ -291,7 +291,7 @@ internal object RunnerPage {
 
     fun engineName(engine: String) = when (engine) {
         "claude" -> "Claude Code"; "codex" -> "Codex"; "kimi" -> "Kimi Code"
-        "opencode" -> "OpenCode"; "antigravity" -> "Antigravity"; else -> engine
+        "opencode" -> "OpenCode"; "antigravity" -> "Antigravity"; "dsh" -> "DeepSeek Harness"; else -> engine
     }
     /** The CLI's name where an update of it is named (runnerEngines.ts ENGINE_CLI_NAME): Antigravity's is still its CLI's. */
     private fun cliName(engine: String) = if (engine == "antigravity") "Antigravity CLI" else engineName(engine)
