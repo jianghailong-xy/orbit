@@ -226,6 +226,13 @@ func prepareDshAgentConfigAt(input DshLaunchInput, agent *DshAgentOverlay, execu
 		return DshLaunchSpec{}, errors.New("DSH_CONFIG_CONFLICT: cannot persist session identity")
 	}
 	env := dshBaseEnv()
+	// The session's Go and npm caches: the runner-owned root every engine's sessions share, rather
+	// than the $HOME/.cache the workspace-write sandbox leaves read-only, or a directory the agent
+	// invents when its build fails there (cache_root.go). A catalogue probe is no session and runs
+	// no toolchain, so it is handed none of this; it is exactly the launch without an agent overlay.
+	if agent != nil {
+		env = append(env, runnerCacheEnv()...)
+	}
 	// DSH_AGENTS_HOME keeps the runner user's ~/.agents skills out, as P2 keeps their profile out:
 	// a session discovers its workspace's AGENTS.md and project skills only.
 	env = append(env, "DSH_HOME="+home, "DSH_AGENTS_HOME="+filepath.Join(home, "agents"), "DSH_PERMISSION_MODE="+input.FileMode,
