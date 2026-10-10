@@ -1,0 +1,4 @@
+scope=project main branch rows, light and dark; controlled HTTP fixture; not a deployment
+started_utc=2026-10-10T17:20:50Z
+exit_code=0
+finished_utc=2026-10-10T17:22:04Z

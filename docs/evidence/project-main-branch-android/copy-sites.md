@@ -80,3 +80,51 @@ there or cut at the call (the iOS session 1LjlqEqhttdBp2DPjlfeQb was told which,
   rather than the Swift until OrbitKit declares them.
 
 Every main-worded constant is still held to its Swift literal.
+
+## Emulator screenshots against 02-ios.png
+
+`MainBranchDeviceTest` (src/android/app/src/androidTest/…/projects/) drives the real app on emulator-5554
+(API 36, sdk_gphone64_x86_64, 1080×2400 @420dpi) over its own MockWebServer fixture — five projects in
+acme/payments-api, whose coordination workspace reported develop, master and release/2.4 — and
+`src/android/scripts/main-branch-device-test.sh` runs it light then dark under the device lock. Each board
+in `compare/` puts the iOS frame (cut from 02-ios.png by `kit/compare.py`) beside the Android light and dark
+screenshots of the same moment:
+
+| Board | 02-ios frame | Android |
+|---|---|---|
+| `01-start-card-main-branch` | ① 1, 2 | The coordinator's request (sessions page → Review and start): Main branch `master ›` under Tasks land on, on its suggestion; Automatic says "merges into master" |
+| `03-picker` | ① 3, 4 | The picker: Branches in payments-api, develop / master ✓ / release/2.4, the hint under the list |
+| `05-typed` | ① 5 | `release/3.0` typed: "Use “release/3.0”" |
+| `06-second-project-last-choice` | ② 6 | The second project (owner's Start…): `master` and "Your last choice for acme/payments-api" |
+| `07-picker-last-chosen` | ② 7 | `master  last chosen ✓` |
+| `edge-e-no-repository` | ② edge e | No repository: no row, the sentences say main |
+| `08-how-it-runs` | ③ 8, 9 | How it runs: Main branch `master ›` with "…New projects in acme/payments-api start with your last choice.", "Directly into master" and its hint; the lanes say master; the Automatic hint |
+| `10-locked`, `11-integration-row` | ③ 10, E→11 | Locked: `🔒 project/…`, Main branch `🔒 master`, the lock sentence moved under it; the row under the title: "3 commits ahead of master … synced with master …" (one screen holds both) |
+| `12-line-menu` | ④ 12 | Tasks land on's menu: "Directly into master / …Every merge into master asks you." |
+| `13-automatic-off` | ④ 13–15 | Automatic off: "…when the branch goes into master.", "Merging the branch into master"; the merge check opened: "…and again before master." |
+
+What the fixture received (`device-run/writes-*.txt`, the same in both passes): the request's start with
+`"upstreamRef":"refs/heads/release/3.0"` and `"requestId":"item-1"`; the second project's start with
+`"upstreamRef":"refs/heads/master"`; the no-repository start with no `upstreamRef`; How it runs'
+`PATCH …/integration {"upstreamRef":"refs/heads/develop"}`, after which the row read develop.
+`device-run/identity-*.txt`: `sha=abc7729acabef6c86ad50edb097cc9e103d6dad6`, `dirty=false`.
+
+Not drawn on the emulator: the conversation's own card (`CoordinatorStartCard`, its preview and review
+sheet). It is the same `StartProjectCard`; `MainBranchCardTest.theConversationsCardPressesTheBranchItShows`
+covers it over the session reads, and the core `RealtimeStoreTest` cases cover the read it is drawn from.
+
+## Runs (HPC, runner workstation-gpu)
+
+- Android gate on abc7729ac (clean tree): `gradlew test lintDebug assembleDebug :app:assembleDebugAndroidTest`
+  — BUILD SUCCESSFUL in 6m 51s; app unit tests 1244/1244 (debug) and 1244/1244 (release), core 205/205,
+  lint clean. New cases: `MainBranchTest` 15 (initial order, what a press and a pick write, the integration
+  read's fields, every sentence at master and at main), `MainBranchCopyTest` 6 (held to the web source),
+  `MainBranchCardTest` 9 (Compose: the row, the picker, typed names, no repository, stale, the
+  conversation's press, How it runs' write and lock), core `RealtimeStoreTest` 3 (the conversation reads the
+  integration only while unstarted; a failed read leaves it fresh).
+- The same suite with the iOS task's Swift (its commit 150409495's `src/macos`, byte for byte, over
+  abc7729ac): `gradlew :core:test :app:testDebugUnitTest` — BUILD SUCCESSFUL, app 1244/1244, core 205/205,
+  `StartProjectCardCopyTest`, `ProjectCopyParityTest`, `SessionProjectCopyParityTest`,
+  `SessionLineCopyParityTest` all green: the two deliveries hold together whichever lands first.
+- Emulator: `main-branch-device-test.sh` on the abc7729ac APKs — light OK (1 test), dark OK (1 test),
+  exit 0 (`device-run/`).
