@@ -1,0 +1,73 @@
+# TEMPORARY evidence probe (see README.md). The iOS app's own shared sources and shells, with this
+# probe's entry point in place of OrbitiOSApp.
+name: IpadProbe
+options:
+  bundleIdPrefix: io.orbitd
+  deploymentTarget:
+    iOS: "17.0"
+packages:
+  OrbitKit:
+    path: ../src/macos/OrbitKit
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: "-"
+    DEVELOPMENT_TEAM: ""
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
+targets:
+  IpadProbe:
+    type: application
+    platform: iOS
+    sources:
+      - path: ios
+      - path: ../src/ios/Support/Assets.xcassets
+      - path: ../src/ios/Sources
+        name: Shell
+        excludes:
+          - "OrbitiOSApp.swift"
+      - path: ../src/macos/OrbitApp/Sources/OrbitApp
+        name: Shared
+        excludes:
+          - "OrbitApp.swift"
+          - "HotKeyManager.swift"
+          - "UpdaterModel.swift"
+          - "RunnerControl.swift"
+          - "Views/RunnerControlPane.swift"
+          - "Views/MenuBarContent.swift"
+    dependencies:
+      - package: OrbitKit
+        product: OrbitKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.orbitd.ipadprobe
+        PRODUCT_NAME: IpadProbe
+        # Only the plain-http exception for the stub on localhost; the rest is generated.
+        INFOPLIST_FILE: Info.plist
+        GENERATE_INFOPLIST_FILE: YES
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationPortrait"
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+  IpadProbeUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [UITests]
+    dependencies:
+      - target: IpadProbe
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.orbitd.ipadprobe.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TARGETED_DEVICE_FAMILY: "1,2"
+schemes:
+  IpadProbe:
+    build:
+      targets:
+        IpadProbe: all
+        IpadProbeUITests: [test]
+    test:
+      targets:
+        - IpadProbeUITests
