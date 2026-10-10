@@ -320,5 +320,5 @@ test('a bulk run carries the list instructions the single-task Run would have', 
   await service.batchExecute('owner-1', ['task-0']);
 
   assert.equal(prompts.length, 1);
-  assert.match(prompts[0], /作业指导（本任务列表通用）：\n须去重、断点续传，并按 Content-Length 校验。/);
+  assert.match(prompts[0], /List instructions \(the same for every task in this list\):\n须去重、断点续传，并按 Content-Length 校验。/);
 });

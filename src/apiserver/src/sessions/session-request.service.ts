@@ -416,8 +416,13 @@ export class SessionRequestService {
     });
     const body = [
       why === 'ENDED'
-        ? `会话「${asker.title}」发出的会话间请求有了结局，但它在那之前已经结束；平台不会为了送回信去复活一段已经结束的对话，所以把结局记在这里。`
-        : `会话「${asker.title}」发出的会话间请求有了结局，回信原本留到它的下一轮补上；但它已经停下，不会再有下一轮（它等着的自动重试被放弃了，或会话已经结束）。平台不会为了送回信去复活一段对话，所以把结局记在这里。`,
+        ? `The session-to-session request that session “${asker.title}” sent has an outcome, but that session `
+          + 'had ended before it came; Orbit does not revive a conversation that has ended just to deliver a reply, '
+          + 'so the outcome is recorded here.'
+        : `The session-to-session request that session “${asker.title}” sent has an outcome, and the reply was `
+          + 'being held for its next turn; but the session has stopped and will have no next turn (the auto-retry '
+          + 'it was waiting for was abandoned, or the session has ended). Orbit does not revive a conversation just '
+          + 'to deliver a reply, so the outcome is recorded here.',
       '',
       sessionReplyBlock(request, recipient),
     ].join('\n');

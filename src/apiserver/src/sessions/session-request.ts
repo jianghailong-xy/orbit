@@ -1363,12 +1363,22 @@ async function recipientsOf(
 
 /** What took an UNDELIVERED request off the recipient's queue, as the asker is told it. */
 const UNDELIVERED_BECAUSE: Record<string, string> = {
-  INTERRUPTED: '这条请求没有送到：对方被打断时它还在队列里，随队列一起被清掉了。对方从没看到它。',
-  WITHDRAWN: '这条请求没有送到：它还在对方的队列里时，被账号 owner 撤回了。对方从没看到它。',
-  DRAINED: '这条请求没有送到：对方正在跑的那一轮失败了，排队中的消息随队列一起被清掉（平台会重试失败的那一轮，但不会重发这条请求）。对方从没看到它。',
-  STEER_UNCONFIRMED: '这条请求没有送到：它本要插进对方正在跑的那一轮，但对方的引擎没有确认收到它——没能写进去，或者那一轮在它送达前就结束了。对方很可能没看到它，需要的话请重新发送。',
-  NOT_RESENT: '这条请求没有送到：承载它的那一轮在对方的引擎收到它之前就失败了，之后对方的会话由另一条消息接着跑下去，失败的那一轮不会再重发。对方从没看到它，需要的话请重新发送。',
-  LOST_IN_FLIGHT: '这条请求没有送到：对方的 runner 领走它之后，那一轮随对方的 run 一起结束了，平台的自动重试找不回这一轮，不会重发它。需要的话请重新发送。',
+  INTERRUPTED: "This request was not delivered: it was still in the recipient's queue when the recipient was "
+    + 'interrupted, and was cleared along with the queue. The recipient never saw it.',
+  WITHDRAWN: 'This request was not delivered: the account owner withdrew it while it was still in the '
+    + "recipient's queue. The recipient never saw it.",
+  DRAINED: 'This request was not delivered: the turn the recipient was running failed, and the queued messages '
+    + 'were cleared along with the queue (Orbit retries the failed turn, but does not resend this request). '
+    + 'The recipient never saw it.',
+  STEER_UNCONFIRMED: 'This request was not delivered: it was meant to join the turn the recipient was running, '
+    + "but the recipient's engine never confirmed receiving it — it could not be written in, or that turn ended "
+    + 'before it arrived. The recipient most likely never saw it; send it again if you still need it.',
+  NOT_RESENT: "This request was not delivered: the turn carrying it failed before the recipient's engine received "
+    + "it, the recipient's session then carried on with another message, and the failed turn will not be resent. "
+    + 'The recipient never saw it; send it again if you still need it.',
+  LOST_IN_FLIGHT: "This request was not delivered: after the recipient's runner took it, that turn ended together "
+    + "with the recipient's run, and Orbit's auto-retry cannot recover that turn, so it will not be resent. "
+    + 'Send it again if you still need it.',
 };
 
 /**
@@ -1378,7 +1388,7 @@ const UNDELIVERED_BECAUSE: Record<string, string> = {
  * included (`appendSessionRepliesContext`). A reply turn of its own says nothing of the kind: the
  * blocks are all that turn is.
  */
-const STEERED_REPLY_HEAD = '你正在工作，所以这条回信加进了你当前这一轮，没有为它另开一轮。';
+const STEERED_REPLY_HEAD = 'You are working, so this reply was added to the turn you are in; no turn was opened for it.';
 
 /**
  * §4.2: one outcome, as the asker reads it. `turnKind` is the delivering turn's: a steer's block says
@@ -1395,31 +1405,34 @@ export function sessionReplyBlock(
     `from-title="${attribute(recipient?.title ?? '')}"`,
     `outcome="${request.state}"`,
   ];
-  const lines = [...(turnKind === 'steer' ? [STEERED_REPLY_HEAD] : []), `你问的是：${request.requestPreview}`];
+  const lines = [...(turnKind === 'steer' ? [STEERED_REPLY_HEAD] : []), `You asked: ${request.requestPreview}`];
   const options = readStoredOptions(request.options);
   const excerpt = request.excerpt ? clip(request.excerpt, EXCERPT_BLOCK_CHARS) : null;
   switch (request.state) {
     case 'REPLIED':
       if (request.replyOption != null) {
         const chosen = options?.[request.replyOption];
-        lines.push(`选择：${request.replyOption}. ${chosen?.label ?? ''}`.trimEnd());
+        lines.push(`Chose: ${request.replyOption}. ${chosen?.label ?? ''}`.trimEnd());
       }
-      if (request.replyText) lines.push(`回复：${request.replyText}`);
+      if (request.replyText) lines.push(`Reply: ${request.replyText}`);
       break;
     case 'NO_REPLY':
-      lines.push('对方空闲下来时没有回复（NO_REPLY）。下面是它最后一段输出，不是正式回复：');
-      lines.push(excerpt ?? '（没有输出）');
+      lines.push('The recipient went idle without replying (NO_REPLY). Below is its last output, not a formal reply:');
+      lines.push(excerpt ?? '(no output)');
       break;
     case 'RECIPIENT_ENDED':
-      lines.push(`对方的会话已经结束（${request.closeReason ?? 'ENDED'}），没有回复。下面是它最后一段输出，不是正式回复：`);
-      lines.push(excerpt ?? '（没有输出）');
+      lines.push(
+        `The recipient's session has ended (${request.closeReason ?? 'ENDED'}) without replying. `
+        + 'Below is its last output, not a formal reply:',
+      );
+      lines.push(excerpt ?? '(no output)');
       break;
     case 'EXPIRED':
       lines.push(
-        `到截止时间 ${isoSeconds(request.replyBy)} 仍未回复（EXPIRED）。对方当时的状态：${request.closeReason ?? '未知'}。`
-        + '下面是它当时最后一段输出，不是正式回复：',
+        `No reply by the deadline, ${isoSeconds(request.replyBy)} (EXPIRED). The recipient's state at the time: `
+        + `${request.closeReason ?? 'unknown'}. Below is its last output at that time, not a formal reply:`,
       );
-      lines.push(excerpt ?? '（没有输出）');
+      lines.push(excerpt ?? '(no output)');
       break;
     case 'UNDELIVERED':
       lines.push(UNDELIVERED_BECAUSE[request.closeReason ?? ''] ?? UNDELIVERED_BECAUSE.INTERRUPTED);
