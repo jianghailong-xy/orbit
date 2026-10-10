@@ -25,7 +25,11 @@
  *       chosen; the project document carries the last choice; no repository means none of them;
  *   (8) a coordinator's start request keeps the main branch it suggests, names it on the card's
  *       line, is refused one with no repository, and a start answering it marks a main branch the
- *       owner did not take.
+ *       owner did not take;
+ *   (9) the branches leave out this account's project branches — the integration ref of each of
+ *       its projects on a project branch — and nothing else: not the main branch a project lands
+ *       straight onto, not a branch only named `project/…`, not another account's; with none left
+ *       they are null.
  *
  * WHAT IS REAL
  * ------------
@@ -841,5 +845,43 @@ test('a project’s main branch is chosen by its owner, remembered per account a
     assert.equal((await openItems.list(nowhere.ownerId, nowhere.projectId)).startRequest?.detailLine,
       'Directly into main · Automatic on · 2 tasks at a time · no merge check',
       'a request that suggests no main branch reads as it always has');
+  });
+
+  // ═══ (9) the account's own project branches ════════════════════════════════════════════════
+
+  await t.test('(9) the branches leave out this account’s project branches, and nothing else', async () => {
+    const lister = await account('lister');
+    // A project of this account on a project branch: the branch its landings leave behind in the
+    // coordination workspace's checkout.
+    const branched = await project(lister, 'on-its-branch', REPO_URL);
+    assert.equal((await configure(branched, { line: 'PROJECT_BRANCH', upstreamRef: 'refs/heads/master' })).status, 200);
+    const projectBranch = `project/${branched.publicId}`;
+    assert.equal((await bindingOf(branched))?.integration_ref, `refs/heads/${projectBranch}`);
+    // One straight onto master, whose integration ref is master itself.
+    const straight = await project(lister, 'straight-onto-master', REPO_URL);
+    assert.equal((await configure(straight, { line: 'MAIN', upstreamRef: 'refs/heads/master' })).status, 200);
+    const straightRow = await bindingOf(straight);
+    assert.equal(straightRow?.upstream_ref, 'refs/heads/master');
+    assert.equal(straightRow?.integration_ref, 'refs/heads/master');
+    // And another account's project on a project branch.
+    const stranger = await account('lister-stranger');
+    const theirs = await project(stranger, 'theirs-on-its-branch', REPO_URL);
+    assert.equal((await configure(theirs, { line: 'PROJECT_BRANCH' })).status, 200);
+    const theirBranch = `project/${theirs.publicId}`;
+
+    // The coordinator's own session is the newest in its workspace: what its runner reports there.
+    const report = async (f: Fixture, names: string[]) => {
+      await prisma.session.update({ where: { id: f.sessionId }, data: { mergeTargets: names } });
+      return (await integrationOf(f)).branches as { names: string[] } | null;
+    };
+    const next = await project(lister, 'the-next-project', REPO_URL);
+    assert.deepEqual((await report(next, ['master', projectBranch, 'project/notes', 'orbit/x']))?.names,
+      ['master', 'project/notes'], 'master stays, and a branch only named project/… stays');
+    // Another account's project branch is one more branch here, and this account's is one there.
+    assert.deepEqual((await report(next, ['master', theirBranch]))?.names, ['master', theirBranch]);
+    assert.deepEqual((await report(theirs, ['main', theirBranch, projectBranch]))?.names,
+      ['main', projectBranch]);
+    // Nothing left reads as nothing reported.
+    assert.equal(await report(next, [projectBranch, 'orbit/x']), null);
   });
 });

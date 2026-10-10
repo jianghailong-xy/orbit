@@ -5,6 +5,7 @@ import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.net.ApiRequest
 import io.orbitd.android.core.protocol.ProtocolException
 import io.orbitd.android.core.protocol.Wire
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -63,6 +64,14 @@ internal class RealtimeRest(private val api: OrbitApi) {
             )
             paths.map { (key, path) -> async { key to get(handle, listOf("projects", project) + path) } }
                 .awaitAll().forEach { (key, value) -> standing[key] = value }
+            // The start card's Main branch row: the project's repository, the branches it can be chosen from and this account's last
+            // choice there. Read only while nobody has started the project — the one time a start card can ask — so the card is
+            // drawn with it rather than drawn on main and moved. A read that fails draws no row, and the start keeps the main
+            // branch the project stands on.
+            val document = standing["project"] as? JsonObject
+            if (document != null && document["startedAt"] is JsonNull) try {
+                standing["integration"] = get(handle, listOf("projects", project, "integration"))
+            } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { }
         }
         SessionSnapshot(detail, approvals.await(), queue.await(), background.await(), standing)
     }

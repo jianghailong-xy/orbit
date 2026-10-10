@@ -30,9 +30,11 @@ data class EvidenceDecision(val decidingSessionId: String, val evidenceRevision:
 data class CriteriaDecision(val commitToken: String, val decision: String, val baseSeal: String)
 @Serializable
 data class OwnerAnswer(val key: String, val option: Int? = null, val text: String? = null)
+/** `upstreamRef` is the project's main branch as a full `refs/heads/…` ref: the owner's choice on a press, a suggestion on a
+ * coordinator's request, and absent when the card offered none (the project keeps the one it stands on). */
 @Serializable
 data class ProjectStartSettings(val line: String, val automatic: Boolean, val maxConcurrentTasks: Int,
-    val mergeCheckCommand: String?, val projectBranchName: String? = null)
+    val mergeCheckCommand: String?, val projectBranchName: String? = null, val upstreamRef: String? = null)
 
 enum class CardFamily {
     TOOL, QUESTION, PLAN, CREATE, BATCH, DAG, BLOCKER, PROVIDER,
@@ -273,7 +275,7 @@ object CardCatalog {
             }
             // While it merges, the card says where the merge's own job stands (`PromotionCards`).
             val merging = PromotionCards.isMerging(row)
-            add(InteractionCard("promotion:$promotion", CardFamily.PROMOTION, if (merging) PromotionCards.mergingTitle(row) else "Merge to ${row.text("upstreamRef") ?: "main"}", row,
+            add(InteractionCard("promotion:$promotion", CardFamily.PROMOTION, if (merging) PromotionCards.mergingTitle(row) else PromotionCards.mergeTo(PromotionCards.mainBranch(row)), row,
                 session, project, promotion, "${row.text("sourceSha")}:${row.text("state")}", actions, if (merging) PromotionCards.mergingStatusLine(row) else row.text("state")))
         }
     }

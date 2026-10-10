@@ -72,6 +72,7 @@ import {
 } from './project-open-item';
 import { escalatesAt } from './open-item-escalation.service';
 import { canonicalJson } from './canonical-json';
+import { mainBranchOf } from './project-criterion-landing';
 import {
   RetryableLandingFailureClass,
   SkippedMergeCheckRecord,
@@ -384,6 +385,8 @@ export interface ProjectOpenItems {
   doneRequest: OpenItemRow | null;
   settled: OpenItemRow[];
   closedQuestions: ProjectClosedQuestion<Date>[];
+  /** The main branch a row's merge into main goes into; null with no repository bound. */
+  mainBranch: string | null;
 }
 
 /** How far back `settled` reaches, and how many it holds at most (§4.7 H5): enough for the card a
@@ -2714,6 +2717,7 @@ export class ProjectOpenItemService {
     const deliveredAt = new Map(
       turns.map((turn) => [`${turn.sessionId}:${turn.clientTurnId}`, turn.deliveredAt]),
     );
+    const mainBranch = mainBranchOf(await readProjectCodebase(this.prisma, projectId));
     const view = rows.map((row): OpenItemRow => {
       const [sent] = row.deliveries;
       const handed = sent ? deliveredAt.get(`${sent.sessionId}:${sent.clientTurnId}`) ?? null : null;
@@ -2795,6 +2799,7 @@ export class ProjectOpenItemService {
           state: 'OPEN',
           handledBy: handledBy.get(row.id) ?? [],
           handoverNote: row.handoverNote,
+          mainBranch,
         }),
         primaryAction: primaryAction({
           kind: row.kind,
@@ -2887,6 +2892,7 @@ export class ProjectOpenItemService {
       doneRequest: view.find((row) => row.kind === DONE_REQUEST_KIND) ?? null,
       settled: settledView,
       closedQuestions: await this.closedQuestions(projectId),
+      mainBranch,
     };
   }
 

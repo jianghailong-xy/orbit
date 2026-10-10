@@ -1095,6 +1095,11 @@ const OWNER_ITEM_WORDS: Record<string, string> = {
   FUSE_PAUSED: OWNER_ITEM_PAUSED,
 };
 
+/** The words above for an item whose project's main branch is `main` by name (the item's
+ *  `mainBranch`): a merge approval names the branch it merges into. */
+const ownerItemWords = (main: string): Record<string, string> =>
+  ({ ...OWNER_ITEM_WORDS, PROMOTION_APPROVAL: `Approve merge to ${main}` });
+
 /**
  * The item a row names: the oldest one it can name, which is the same item the needs-you bar above
  * the list points at. Mirrors `NeedsYouLogic.oldestItemWord` — an unparseable instant sorts last
@@ -1103,7 +1108,7 @@ const OWNER_ITEM_WORDS: Record<string, string> = {
 const ownerItemWord = (s: any): string | null => {
   let oldest: { word: string; at: number } | null = null;
   for (const item of s.ownerItems ?? []) {
-    const word = OWNER_ITEM_WORDS[item?.kind];
+    const word = ownerItemWords(mainBranchName(item?.mainBranch))[item?.kind];
     if (!word) continue;
     const at = Date.parse(item?.since ?? '');
     const key = Number.isNaN(at) ? Number.MAX_SAFE_INTEGER : at;
@@ -5377,11 +5382,14 @@ export function WorkspaceView({
   // presses no door: the coordinator reads it and acts with the doors it has, and the card's own
   // presses stay where they were.
   const chatProjectTitle = selectedSession?.projectTitle ?? null;
+  // The project's main branch, which an item's re-check of the merge into main names: the open-items
+  // read its rows come from carries it.
+  const chatMain = mainBranchName(openItems.data?.mainBranch);
   // The card's facts as they read at `now`: at the press, for the bar, and again at the send.
   const coordinatorChatContext = useCallback(
     (subject: CoordinatorChatSubject, projectId: string, now: number): string =>
       subject.kind === 'item'
-        ? openItemChatContext({ projectTitle: chatProjectTitle, projectId, row: subject.row, now })
+        ? openItemChatContext({ projectTitle: chatProjectTitle, projectId, row: subject.row, now, main: chatMain })
         : promotionChatContext({
             projectTitle: chatProjectTitle,
             projectId,
@@ -5389,7 +5397,7 @@ export function WorkspaceView({
             item: subject.item,
             now,
           }),
-    [chatProjectTitle],
+    [chatMain, chatProjectTitle],
   );
   const startCoordinatorChat = useCallback(
     (subject: CoordinatorChatSubject) => {
