@@ -1,0 +1,166 @@
+==> iPhone 22452A91-4697-4369-8812-53ADB77EB73B
+==> stub ready on 127.0.0.1:8765 (pid 36386, after 3s)
+==> ios
+Test Case '-[AqcProbeUITests.QuestionCardShotTests test1OneQuestion]' started.
+Test Case '-[AqcProbeUITests.QuestionCardShotTests test1OneQuestion]' passed (197.830 seconds).
+Test Case '-[AqcProbeUITests.QuestionCardShotTests test2TwoQuestions]' started.
+Test Case '-[AqcProbeUITests.QuestionCardShotTests test2TwoQuestions]' passed (138.646 seconds).
+Test Case '-[AqcProbeUITests.QuestionCardShotTests test3TypedAnswer]' started.
+Test Case '-[AqcProbeUITests.QuestionCardShotTests test3TypedAnswer]' passed (116.499 seconds).
+Test Case '-[AqcProbeUITests.QuestionCardShotTests test4MultipleChoice]' started.
+Test Case '-[AqcProbeUITests.QuestionCardShotTests test4MultipleChoice]' passed (121.312 seconds).
+Test Case '-[AqcProbeUITests.QuestionCardShotTests test5ReplyInChat]' started.
+Test Case '-[AqcProbeUITests.QuestionCardShotTests test5ReplyInChat]' passed (113.813 seconds).
+Test Case '-[AqcProbeUITests.QuestionCardShotTests test6BashCard]' started.
+Test Case '-[AqcProbeUITests.QuestionCardShotTests test6BashCard]' passed (43.837 seconds).
+	 Executed 6 tests, with 0 failures (0 unexpected) in 731.936 (731.944) seconds
+	 Executed 6 tests, with 0 failures (0 unexpected) in 731.936 (731.946) seconds
+	 Executed 6 tests, with 0 failures (0 unexpected) in 731.936 (731.949) seconds
+** TEST SUCCEEDED **
+==> stub ready on 127.0.0.1:8765 (pid 82152, after 2s)
+==> mac
+Test Case '-[AqcMacProbeUITests.QuestionCardShotTests test1OneQuestion]' started.
+Test Case '-[AqcMacProbeUITests.QuestionCardShotTests test1OneQuestion]' passed (58.898 seconds).
+Test Case '-[AqcMacProbeUITests.QuestionCardShotTests test2TwoQuestions]' started.
+Test Case '-[AqcMacProbeUITests.QuestionCardShotTests test2TwoQuestions]' passed (46.157 seconds).
+Test Case '-[AqcMacProbeUITests.QuestionCardShotTests test3TypedAnswer]' started.
+Test Case '-[AqcMacProbeUITests.QuestionCardShotTests test3TypedAnswer]' passed (48.270 seconds).
+Test Case '-[AqcMacProbeUITests.QuestionCardShotTests test4MultipleChoice]' started.
+Test Case '-[AqcMacProbeUITests.QuestionCardShotTests test4MultipleChoice]' passed (21.351 seconds).
+Test Case '-[AqcMacProbeUITests.QuestionCardShotTests test5ReplyInChat]' started.
+Test Case '-[AqcMacProbeUITests.QuestionCardShotTests test5ReplyInChat]' passed (81.780 seconds).
+Test Case '-[AqcMacProbeUITests.QuestionCardShotTests test6BashCard]' started.
+Test Case '-[AqcMacProbeUITests.QuestionCardShotTests test6BashCard]' passed (19.564 seconds).
+	 Executed 6 tests, with 0 failures (0 unexpected) in 276.020 (276.032) seconds
+	 Executed 6 tests, with 0 failures (0 unexpected) in 276.020 (276.035) seconds
+	 Executed 6 tests, with 0 failures (0 unexpected) in 276.020 (276.037) seconds
+** TEST SUCCEEDED **
+/Users/runner/work/_temp/tree/.aqc-probe/run.sh: line 78: 82152 Terminated: 15          python3 -u stub.py 8765 "$1" > "$1.out" 2>&1
+/Users/runner/work/_temp/tree/.aqc-probe/shots/ios:
+total 22336
+drwxr-xr-x  78 runner  staff    2496 Oct 10 04:48 .
+drwxr-xr-x   4 runner  staff     128 Oct 10 04:14 ..
+-rw-r--r--   1 runner  staff  513280 Oct 10 04:26 1-one-question-a-as-opened.png
+-rw-r--r--   1 runner  staff  550479 Oct 10 04:26 1-one-question-b-card.png
+-rw-r--r--   1 runner  staff  403055 Oct 10 04:28 1-one-question-c-tapped.png
+-rw-r--r--   1 runner  staff  403055 Oct 10 04:28 1-one-question-d-tapped-lower.png
+-rw-r--r--   1 runner  staff  539412 Oct 10 04:29 2-two-questions-a-as-opened.png
+-rw-r--r--   1 runner  staff  550669 Oct 10 04:29 2-two-questions-b-card.png
+-rw-r--r--   1 runner  staff  403678 Oct 10 04:31 2-two-questions-c-tapped.png
+-rw-r--r--   1 runner  staff  403678 Oct 10 04:31 2-two-questions-d-tapped-lower.png
+-rw-r--r--   1 runner  staff  530973 Oct 10 04:31 3-typed-answer-a-as-opened.png
+-rw-r--r--   1 runner  staff  549704 Oct 10 04:31 3-typed-answer-b-card.png
+-rw-r--r--   1 runner  staff  398993 Oct 10 04:33 3-typed-answer-c-tapped.png
+-rw-r--r--   1 runner  staff  398993 Oct 10 04:33 3-typed-answer-d-tapped-lower.png
+-rw-r--r--   1 runner  staff  316547 Oct 10 04:33 4-multiple-choice-a-as-opened.png
+-rw-r--r--   1 runner  staff  316547 Oct 10 04:33 4-multiple-choice-b-card.png
+-rw-r--r--   1 runner  staff  235954 Oct 10 04:35 4-multiple-choice-c-tapped.png
+-rw-r--r--   1 runner  staff  395825 Oct 10 04:35 4-multiple-choice-d-tapped-lower.png
+-rw-r--r--   1 runner  staff  510465 Oct 10 04:35 5-reply-in-chat-a-as-opened.png
+-rw-r--r--   1 runner  staff  538582 Oct 10 04:35 5-reply-in-chat-b-card.png
+-rw-r--r--   1 runner  staff  401596 Oct 10 04:36 5-reply-in-chat-c-tapped.png
+-rw-r--r--   1 runner  staff  401596 Oct 10 04:37 5-reply-in-chat-d-tapped-lower.png
+-rw-r--r--   1 runner  staff  187838 Oct 10 04:37 6-bash-card-a-as-opened.png
+-rw-r--r--   1 runner  staff  187838 Oct 10 04:37 6-bash-card-b-card.png
+-rw-r--r--   1 runner  staff  276489 Oct 10 04:37 6-bash-card-c-tapped.png
+-rw-r--r--   1 runner  staff  435280 Oct 10 04:37 6-bash-card-d-tapped-lower.png
+drwxr-xr-x  56 runner  staff    1792 Oct 10 04:38 attachments
+-rw-r--r--   1 runner  staff     262 Oct 10 04:38 Complete Issue Description.txt
+-rw-r--r--   1 runner  staff   16714 Oct 10 04:38 missing-band-1-one-question-row-tapped
+-rw-r--r--@  1 runner  staff   16714 Oct 10 04:28 missing-band-1-one-question-row-tapped.txt
+-rw-r--r--   1 runner  staff   16719 Oct 10 04:38 missing-band-2-two-questions-row-tapped
+-rw-r--r--@  1 runner  staff   16719 Oct 10 04:31 missing-band-2-two-questions-row-tapped.txt
+-rw-r--r--   1 runner  staff   16692 Oct 10 04:38 missing-band-3-typed-answer-row-tapped
+-rw-r--r--@  1 runner  staff   16692 Oct 10 04:33 missing-band-3-typed-answer-row-tapped.txt
+-rw-r--r--   1 runner  staff   16235 Oct 10 04:38 missing-band-4-multiple-choice-row-tapped
+-rw-r--r--@  1 runner  staff   16235 Oct 10 04:35 missing-band-4-multiple-choice-row-tapped.txt
+-rw-r--r--   1 runner  staff   16696 Oct 10 04:38 missing-band-5-reply-in-chat-row-tapped
+-rw-r--r--@  1 runner  staff   16696 Oct 10 04:36 missing-band-5-reply-in-chat-row-tapped.txt
+-rw-r--r--   1 runner  staff    1524 Oct 10 04:48 not-served.txt
+-rw-r--r--   1 runner  staff     744 Oct 10 04:38 QuestionCardShotTeststest1OneQuestion-notes
+-rw-r--r--@  1 runner  staff     744 Oct 10 04:28 QuestionCardShotTeststest1OneQuestion-notes.txt
+-rw-r--r--   1 runner  staff     748 Oct 10 04:38 QuestionCardShotTeststest2TwoQuestions-notes
+-rw-r--r--@  1 runner  staff     748 Oct 10 04:31 QuestionCardShotTeststest2TwoQuestions-notes.txt
+-rw-r--r--   1 runner  staff     744 Oct 10 04:38 QuestionCardShotTeststest3TypedAnswer-notes
+-rw-r--r--@  1 runner  staff     744 Oct 10 04:33 QuestionCardShotTeststest3TypedAnswer-notes.txt
+-rw-r--r--   1 runner  staff     754 Oct 10 04:38 QuestionCardShotTeststest4MultipleChoice-notes
+-rw-r--r--@  1 runner  staff     754 Oct 10 04:35 QuestionCardShotTeststest4MultipleChoice-notes.txt
+-rw-r--r--   1 runner  staff     746 Oct 10 04:38 QuestionCardShotTeststest5ReplyInChat-notes
+-rw-r--r--@  1 runner  staff     746 Oct 10 04:37 QuestionCardShotTeststest5ReplyInChat-notes.txt
+-rw-r--r--   1 runner  staff     695 Oct 10 04:38 QuestionCardShotTeststest6BashCard-notes
+-rw-r--r--@  1 runner  staff     695 Oct 10 04:37 QuestionCardShotTeststest6BashCard-notes.txt
+-rw-r--r--   1 runner  staff   29868 Oct 10 04:37 requests.log
+-rw-r--r--   1 runner  staff      49 Oct 10 04:17 requests.log.out
+-rw-r--r--   1 runner  staff   16422 Oct 10 04:38 tree-1-one-question-as-opened
+-rw-r--r--@  1 runner  staff   16422 Oct 10 04:26 tree-1-one-question-as-opened.txt
+-rw-r--r--   1 runner  staff   16714 Oct 10 04:38 tree-1-one-question-tapped
+-rw-r--r--@  1 runner  staff   16714 Oct 10 04:28 tree-1-one-question-tapped.txt
+-rw-r--r--   1 runner  staff   17136 Oct 10 04:38 tree-2-two-questions-as-opened
+-rw-r--r--@  1 runner  staff   17136 Oct 10 04:29 tree-2-two-questions-as-opened.txt
+-rw-r--r--   1 runner  staff   16719 Oct 10 04:38 tree-2-two-questions-tapped
+-rw-r--r--@  1 runner  staff   16719 Oct 10 04:31 tree-2-two-questions-tapped.txt
+-rw-r--r--   1 runner  staff   16424 Oct 10 04:38 tree-3-typed-answer-as-opened
+-rw-r--r--@  1 runner  staff   16424 Oct 10 04:31 tree-3-typed-answer-as-opened.txt
+-rw-r--r--   1 runner  staff   16692 Oct 10 04:38 tree-3-typed-answer-tapped
+-rw-r--r--@  1 runner  staff   16692 Oct 10 04:33 tree-3-typed-answer-tapped.txt
+-rw-r--r--   1 runner  staff   18578 Oct 10 04:38 tree-4-multiple-choice-as-opened
+-rw-r--r--@  1 runner  staff   18578 Oct 10 04:33 tree-4-multiple-choice-as-opened.txt
+-rw-r--r--   1 runner  staff   16235 Oct 10 04:38 tree-4-multiple-choice-tapped
+-rw-r--r--@  1 runner  staff   16235 Oct 10 04:35 tree-4-multiple-choice-tapped.txt
+-rw-r--r--   1 runner  staff   17180 Oct 10 04:38 tree-5-reply-in-chat-as-opened
+-rw-r--r--@  1 runner  staff   17180 Oct 10 04:35 tree-5-reply-in-chat-as-opened.txt
+-rw-r--r--   1 runner  staff   16696 Oct 10 04:38 tree-5-reply-in-chat-tapped
+-rw-r--r--@  1 runner  staff   16696 Oct 10 04:36 tree-5-reply-in-chat-tapped.txt
+-rw-r--r--   1 runner  staff   16033 Oct 10 04:38 tree-6-bash-card-as-opened
+-rw-r--r--@  1 runner  staff   16033 Oct 10 04:37 tree-6-bash-card-as-opened.txt
+-rw-r--r--   1 runner  staff   16748 Oct 10 04:38 tree-6-bash-card-tapped
+-rw-r--r--@  1 runner  staff   16748 Oct 10 04:37 tree-6-bash-card-tapped.txt
+-rw-r--r--   1 runner  staff  765361 Oct 10 04:38 xcodebuild-ios.log
+
+/Users/runner/work/_temp/tree/.aqc-probe/shots/mac:
+total 8016
+drwxr-xr-x  45 runner  staff    1440 Oct 10 04:48 .
+drwxr-xr-x   4 runner  staff     128 Oct 10 04:14 ..
+-rw-r--r--   1 runner  staff  163590 Oct 10 04:48 1-one-question-a-as-opened.png
+-rw-r--r--   1 runner  staff  163392 Oct 10 04:48 1-one-question-b-card.png
+-rw-r--r--   1 runner  staff  171563 Oct 10 04:48 2-two-questions-a-as-opened.png
+-rw-r--r--   1 runner  staff  171542 Oct 10 04:48 2-two-questions-b-card.png
+-rw-r--r--   1 runner  staff  167304 Oct 10 04:48 3-typed-answer-a-as-opened.png
+-rw-r--r--   1 runner  staff  167259 Oct 10 04:48 3-typed-answer-b-card.png
+-rw-r--r--   1 runner  staff  147296 Oct 10 04:48 4-multiple-choice-a-as-opened.png
+-rw-r--r--   1 runner  staff  147296 Oct 10 04:48 4-multiple-choice-b-card.png
+-rw-r--r--   1 runner  staff  125004 Oct 10 04:48 4-multiple-choice-c-tapped.png
+-rw-r--r--   1 runner  staff  124748 Oct 10 04:48 4-multiple-choice-d-tapped-lower.png
+-rw-r--r--   1 runner  staff  161109 Oct 10 04:48 5-reply-in-chat-a-as-opened.png
+-rw-r--r--   1 runner  staff  155159 Oct 10 04:48 5-reply-in-chat-b-card.png
+-rw-r--r--   1 runner  staff  155304 Oct 10 04:48 5-reply-in-chat-c-tapped.png
+-rw-r--r--   1 runner  staff  155187 Oct 10 04:48 5-reply-in-chat-d-tapped-lower.png
+-rw-r--r--   1 runner  staff  109129 Oct 10 04:48 6-bash-card-a-as-opened.png
+-rw-r--r--   1 runner  staff  109129 Oct 10 04:48 6-bash-card-b-card.png
+-rw-r--r--   1 runner  staff  137908 Oct 10 04:48 6-bash-card-c-tapped.png
+-rw-r--r--   1 runner  staff  135651 Oct 10 04:48 6-bash-card-d-tapped-lower.png
+drwxr-xr-x  41 runner  staff    1312 Oct 10 04:48 attachments
+-rw-r--r--   1 runner  staff   28910 Oct 10 04:48 missing-band-1-one-question-row
+-rw-r--r--   1 runner  staff   29401 Oct 10 04:48 missing-band-2-two-questions-row
+-rw-r--r--   1 runner  staff   28891 Oct 10 04:48 missing-band-3-typed-answer-row
+-rw-r--r--   1 runner  staff   28833 Oct 10 04:48 missing-band-5-reply-in-chat-row
+-rw-r--r--   1 runner  staff   28867 Oct 10 04:48 missing-band-5-reply-in-chat-row-tapped
+-rw-r--r--   1 runner  staff    1346 Oct 10 04:48 not-served.txt
+-rw-r--r--   1 runner  staff     423 Oct 10 04:48 QuestionCardShotTeststest1OneQuestion-notes
+-rw-r--r--   1 runner  staff     427 Oct 10 04:48 QuestionCardShotTeststest2TwoQuestions-notes
+-rw-r--r--   1 runner  staff     419 Oct 10 04:48 QuestionCardShotTeststest3TypedAnswer-notes
+-rw-r--r--   1 runner  staff     482 Oct 10 04:48 QuestionCardShotTeststest4MultipleChoice-notes
+-rw-r--r--   1 runner  staff     506 Oct 10 04:48 QuestionCardShotTeststest5ReplyInChat-notes
+-rw-r--r--   1 runner  staff     440 Oct 10 04:48 QuestionCardShotTeststest6BashCard-notes
+-rw-r--r--   1 runner  staff   17426 Oct 10 04:48 requests.log
+-rw-r--r--   1 runner  staff      49 Oct 10 04:38 requests.log.out
+-rw-r--r--   1 runner  staff   28909 Oct 10 04:48 tree-1-one-question-as-opened
+-rw-r--r--   1 runner  staff   29401 Oct 10 04:48 tree-2-two-questions-as-opened
+-rw-r--r--   1 runner  staff   28891 Oct 10 04:48 tree-3-typed-answer-as-opened
+-rw-r--r--   1 runner  staff   28840 Oct 10 04:48 tree-4-multiple-choice-as-opened
+-rw-r--r--   1 runner  staff   27497 Oct 10 04:48 tree-4-multiple-choice-tapped
+-rw-r--r--   1 runner  staff   28870 Oct 10 04:48 tree-5-reply-in-chat-as-opened
+-rw-r--r--   1 runner  staff   28867 Oct 10 04:48 tree-5-reply-in-chat-tapped
+-rw-r--r--   1 runner  staff   27486 Oct 10 04:48 tree-6-bash-card-as-opened
+-rw-r--r--   1 runner  staff   28294 Oct 10 04:48 tree-6-bash-card-tapped
+-rw-r--r--   1 runner  staff  914762 Oct 10 04:48 xcodebuild-mac.log

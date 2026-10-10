@@ -1,0 +1,5 @@
+1-one-question as opened, row: 48 label="" value="Question" frame=(707.0, 304.0, 57.0, 14.0) hittable=true
+1-one-question-row: in view after 0 drag(s) at (707.0, 304.0, 57.0, 14.0)
+1-one-question card, row: 48 label="" value="Question" frame=(707.0, 304.0, 57.0, 14.0) hittable=true
+1-one-question-row-tapped: never in the band 150.0–330.0; last frame (707.0, 334.0, 57.0, 14.0)
+1-one-question tapped, row: 48 label="" value="Question" frame=(707.0, 334.0, 57.0, 14.0) hittable=true

@@ -1,0 +1,16 @@
+Test Case '-[AqcMacProbeUITests.QuestionCardShotTests test1OneQuestion]' started.
+Test Case '-[AqcMacProbeUITests.QuestionCardShotTests test1OneQuestion]' passed (50.836 seconds).
+Test Case '-[AqcMacProbeUITests.QuestionCardShotTests test2TwoQuestions]' started.
+Test Case '-[AqcMacProbeUITests.QuestionCardShotTests test2TwoQuestions]' passed (46.047 seconds).
+Test Case '-[AqcMacProbeUITests.QuestionCardShotTests test3TypedAnswer]' started.
+Test Case '-[AqcMacProbeUITests.QuestionCardShotTests test3TypedAnswer]' passed (45.357 seconds).
+Test Case '-[AqcMacProbeUITests.QuestionCardShotTests test4MultipleChoice]' started.
+Test Case '-[AqcMacProbeUITests.QuestionCardShotTests test4MultipleChoice]' passed (16.598 seconds).
+Test Case '-[AqcMacProbeUITests.QuestionCardShotTests test5ReplyInChat]' started.
+Test Case '-[AqcMacProbeUITests.QuestionCardShotTests test5ReplyInChat]' passed (46.155 seconds).
+Test Case '-[AqcMacProbeUITests.QuestionCardShotTests test6BashCard]' started.
+Test Case '-[AqcMacProbeUITests.QuestionCardShotTests test6BashCard]' passed (21.758 seconds).
+	 Executed 6 tests, with 0 failures (0 unexpected) in 226.750 (226.760) seconds
+	 Executed 6 tests, with 0 failures (0 unexpected) in 226.750 (226.761) seconds
+	 Executed 6 tests, with 0 failures (0 unexpected) in 226.750 (226.764) seconds
+** TEST SUCCEEDED **

@@ -1,0 +1,5 @@
+4-multiple-choice as opened, row: 48 label="" value="Question" frame=(707.0, 248.0, 57.0, 14.0) hittable=true
+4-multiple-choice-row: in view after 0 drag(s) at (707.0, 248.0, 57.0, 14.0)
+4-multiple-choice card, row: 48 label="" value="Question" frame=(707.0, 248.0, 57.0, 14.0) hittable=true
+4-multiple-choice-row-tapped: in view after 1 drag(s) at (707.0, 304.0, 57.0, 14.0)
+4-multiple-choice tapped, row: 48 label="" value="Question" frame=(707.0, 304.0, 57.0, 14.0) hittable=true

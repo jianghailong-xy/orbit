@@ -1,0 +1,5 @@
+5-reply-in-chat as opened, row: 48 label="" value="Question" frame=(707.0, 133.0, 57.0, 14.0) hittable=true
+5-reply-in-chat-row: never in the band 150.0–330.0; last frame (707.0, 102.0, 57.0, 14.0)
+5-reply-in-chat card, row: 48 label="" value="Question" frame=(707.0, 102.0, 57.0, 14.0) hittable=true
+5-reply-in-chat-row-tapped: never in the band 150.0–330.0; last frame (707.0, 102.0, 57.0, 14.0)
+5-reply-in-chat tapped, row: 48 label="" value="Question" frame=(707.0, 102.0, 57.0, 14.0) hittable=true

@@ -1,0 +1,5 @@
+2-two-questions as opened, row: 48 label="" value="Question" frame=(707.0, 304.0, 57.0, 14.0) hittable=true
+2-two-questions-row: in view after 0 drag(s) at (707.0, 304.0, 57.0, 14.0)
+2-two-questions card, row: 48 label="" value="Question" frame=(707.0, 304.0, 57.0, 14.0) hittable=true
+2-two-questions-row-tapped: never in the band 150.0–330.0; last frame (707.0, 333.0, 57.0, 14.0)
+2-two-questions tapped, row: 48 label="" value="Question" frame=(707.0, 333.0, 57.0, 14.0) hittable=true

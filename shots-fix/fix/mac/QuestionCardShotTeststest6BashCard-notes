@@ -1,0 +1,5 @@
+6-bash-card as opened, row: 48 label="" value="Bash" frame=(707.0, 238.0, 29.0, 14.0) hittable=true
+6-bash-card-row: in view after 0 drag(s) at (707.0, 238.0, 29.0, 14.0)
+6-bash-card card, row: 48 label="" value="Bash" frame=(707.0, 238.0, 29.0, 14.0) hittable=true
+6-bash-card-row-tapped: in view after 0 drag(s) at (707.0, 238.0, 29.0, 14.0)
+6-bash-card tapped, row: 48 label="" value="Bash" frame=(707.0, 238.0, 29.0, 14.0) hittable=true

@@ -1,0 +1,4 @@
+1-one-question as opened, row: 48 label="" value="Question" frame=(707.0, -105.0, 57.0, 14.0) hittable=false
+1-one-question-row: never in the band 150.0–330.0; last frame (707.0, -105.0, 57.0, 14.0)
+1-one-question card, row: 48 label="" value="Question" frame=(707.0, -105.0, 57.0, 14.0) hittable=false
+1-one-question: the row is not hittable: 48 label="" value="Question" frame=(707.0, -105.0, 57.0, 14.0) hittable=false

@@ -1,0 +1,192 @@
+Attributes: Application, 0x1184ea6c0, pid: 53045, label: 'AqcProbe'
+Element subtree:
+ →Application, 0x1184ea6c0, pid: 53045, label: 'AqcProbe'
+    Window (Main), 0x1184e9cc0, {{0.0, 0.0}, {402.0, 874.0}}
+      Other, 0x1184e9900, {{0.0, 0.0}, {402.0, 874.0}}
+        Other, 0x1184e9e00, {{0.0, 0.0}, {402.0, 874.0}}
+          Other, 0x1184ea580, {{0.0, 0.0}, {402.0, 874.0}}
+            Other, 0x1184ead00, {{0.0, 0.0}, {402.0, 874.0}}
+              StaticText, 0x1184eae40, {{22.0, 84.8}, {52.3, 26.3}}, label: 'Orbit'
+              Button, 0x1184eaf80, {{251.7, 76.0}, {44.0, 44.0}}, identifier: 'magnifyingglass', label: 'Search sessions'
+              CollectionView, 0x1184eb0c0, {{0.0, 128.0}, {305.7, 746.0}}
+                Other, 0x1184eb5c0, {{0.0, -1364.0}, {305.7, 3206.0}}
+                Cell, 0x1184eb840, {{0.0, 128.0}, {305.3, 44.3}}
+                  Other, 0x1184eb700, {{0.0, 128.0}, {305.3, 44.3}}
+                    Other, 0x1184f4780, {{0.0, 128.0}, {305.3, 44.3}}
+                      Other, 0x1184f4000, {{0.0, 128.0}, {305.3, 44.3}}
+                  Other, 0x1184f6940, {{0.0, 128.0}, {305.3, 44.3}}
+                    Other, 0x1184f6e40, {{0.0, 128.0}, {305.3, 44.3}}
+                      Other, 0x1184f6d00, {{0.0, 128.0}, {305.3, 44.3}}
+                        Button, 0x1184f6580, {{0.0, 128.0}, {305.3, 44.3}}, label: 'Projects'
+                          Image, 0x106e83700, {{26.3, 142.3}, {15.3, 15.3}}, identifier: 'square.grid.2x2', label: 'Grid View'
+                          StaticText, 0x117d0fd40, {{58.0, 140.0}, {62.3, 20.3}}, label: 'Projects'
+                Cell, 0x117d0fe80, {{0.0, 172.3}, {305.3, 44.3}}
+                  Other, 0x117d0fac0, {{0.0, 172.3}, {305.3, 44.3}}
+                    Other, 0x117d0fc00, {{0.0, 172.3}, {305.3, 44.3}}
+                      Other, 0x117d0f700, {{0.0, 172.3}, {305.3, 44.3}}
+                  Other, 0x117d0f840, {{0.0, 172.3}, {305.3, 44.3}}
+                    Other, 0x117d0f5c0, {{0.0, 172.3}, {305.3, 44.3}}
+                      Other, 0x117d0f980, {{0.0, 172.3}, {305.3, 44.3}}
+                        Button, 0x117d0e800, {{0.0, 172.3}, {305.3, 44.3}}, label: 'Tasks'
+                          Image, 0x117d0e940, {{24.7, 186.0}, {18.7, 17.0}}, identifier: 'checklist', label: 'checklist'
+                          StaticText, 0x117d0ea80, {{58.0, 184.3}, {43.0, 20.3}}, label: 'Tasks'
+                Cell, 0x117d0ebc0, {{0.0, 216.7}, {305.3, 44.3}}
+                  Other, 0x117d0ed00, {{0.0, 216.7}, {305.3, 44.3}}
+                    Other, 0x117d0ee40, {{0.0, 216.7}, {305.3, 44.3}}
+                      Other, 0x117d0ef80, {{0.0, 216.7}, {305.3, 44.3}}
+                  Other, 0x117d0f0c0, {{0.0, 216.7}, {305.3, 44.3}}
+                    Other, 0x117d0f200, {{0.0, 216.7}, {305.3, 44.3}}
+                      Other, 0x117d0f340, {{0.0, 216.7}, {305.3, 44.3}}
+                        Button, 0x117d0f480, {{0.0, 216.7}, {305.3, 44.3}}, label: 'Wiki'
+                          Image, 0x1184e4000, {{27.0, 230.0}, {14.0, 18.0}}, identifier: 'book.closed', label: 'book.closed'
+                          StaticText, 0x1184e4140, {{58.0, 228.7}, {32.7, 20.3}}, label: 'Wiki'
+                Cell, 0x1184e4280, {{0.0, 261.0}, {305.3, 44.7}}
+                  Other, 0x1184e43c0, {{0.0, 261.0}, {305.3, 44.7}}
+                    Other, 0x1184e4500, {{0.0, 261.0}, {305.3, 44.7}}
+                      Other, 0x1184e4640, {{0.0, 261.0}, {305.3, 44.7}}
+                  Other, 0x1184e4780, {{0.0, 261.0}, {305.3, 44.7}}
+                    Other, 0x1184e48c0, {{0.0, 261.0}, {305.3, 44.7}}
+                      Other, 0x1184e4a00, {{0.0, 261.0}, {305.3, 44.7}}
+                        StaticText, 0x1184e4b40, {{0.0, 261.0}, {305.3, 44.7}}, label: 'Workspaces'
+                Cell, 0x1184e4c80, {{0.0, 305.7}, {305.3, 44.3}}
+                  Other, 0x1184e4dc0, {{0.0, 305.7}, {305.3, 44.3}}
+                    Other, 0x1184e4f00, {{0.0, 305.7}, {305.3, 44.3}}
+                      Other, 0x1184e5040, {{0.0, 305.7}, {305.3, 44.3}}
+                  Other, 0x1184e5180, {{0.0, 305.7}, {305.3, 44.3}}
+                    Other, 0x1184e52c0, {{0.0, 305.7}, {305.3, 44.3}}
+                      Other, 0x1184e5400, {{0.0, 305.7}, {305.3, 44.3}}
+                        Button, 0x1184e5540, {{0.0, 305.7}, {305.3, 44.3}}, label: 'orbit,  · hpc'
+                          Other, 0x1184e5680, {{24.7, 320.0}, {19.0, 15.3}}, label: 'Runner offline'
+                            Image, 0x1184e57c0, {{24.7, 320.0}, {19.0, 15.3}}, identifier: 'folder', label: 'Move'
+                          StaticText, 0x1184e5900, {{58.0, 317.7}, {35.3, 20.3}}, label: 'orbit'
+                          StaticText, 0x1184e5a40, {{93.3, 317.7}, {42.0, 20.3}}, label: ' · hpc'
+                Other, 0x1184e5b80, {{272.3, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                  Other, 0x1184e5cc0, {{299.3, 649.7}, {3.0, 221.3}}
+                Other, 0x1184e5e00, {{272.3, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                  Other, 0x1184e5f40, {{299.3, 649.7}, {3.0, 221.3}}
+              Button, 0x1184e6080, {{10.0, 788.7}, {165.0, 43.0}}, label: 'New session'
+                Image, 0x1184e61c0, {{31.0, 801.0}, {18.3, 18.3}}, identifier: 'square.and.pencil', label: 'Compose'
+                StaticText, 0x1184e6300, {{57.0, 799.8}, {100.0, 20.3}}, label: 'New session'
+              Button, 0x1184e6440, {{251.7, 788.0}, {44.0, 44.0}}, identifier: 'gearshape', label: 'Settings'
+              Other, 0x1184e6580, {{0.0, 0.0}, {402.0, 874.0}}
+                NavigationBar, 0x1184e66c0, {{0.0, 62.0}, {402.0, 54.0}}, identifier: '_TtGC7SwiftUI32NavigationStackHosting'
+                  Button, 0x1184e6800, {{16.0, 62.0}, {44.0, 44.0}}, identifier: 'BackButton', label: 'Back'
+                  Other, 0x1184e6940, {{80.0, 66.7}, {242.0, 34.7}}
+                    Other, 0x1184e6a80, {{80.0, 66.7}, {242.0, 34.7}}
+                      Button, 0x1184e6bc0, {{80.0, 66.7}, {242.0, 34.7}}, label: 'Two questions, Waiting for your reply · Open · 2m ago'
+                        StaticText, 0x1184e6d00, {{143.3, 66.7}, {115.3, 20.3}}, label: 'Two questions'
+                        StaticText, 0x1184e6e40, {{101.5, 88.0}, {199.0, 13.3}}, label: 'Waiting for your reply · Open · 2m ago'
+                  Other, 0x1184e6f80, {{346.0, 66.0}, {36.0, 36.0}}, label: 'Session actions'
+                    Other, 0x1184e70c0, {{346.0, 66.0}, {36.0, 36.0}}
+                      Button, 0x1184e7200, {{350.0, 66.0}, {28.0, 36.0}}, label: 'Session actions'
+                        Button, 0x1184e7340, {{350.0, 66.0}, {28.0, 36.0}}
+                          Image, 0x1184e7480, {{354.0, 82.0}, {20.0, 4.3}}, identifier: 'ellipsis', label: 'More'
+                Other, 0x1184e75c0, {{0.0, 0.0}, {402.0, 874.0}}
+                  Other, 0x1184e7700, {{0.0, 0.0}, {402.0, 874.0}}
+                    Other, 0x1184e7840, {{0.0, 0.0}, {402.0, 874.0}}
+                      Other, 0x1184e7980, {{0.0, 0.0}, {402.0, 874.0}}
+                        Other, 0x1184e7ac0, {{0.0, 116.0}, {402.0, 623.0}}
+                        CollectionView, 0x1184e7c00, {{0.0, 0.0}, {402.0, 739.0}}
+                          Other, 0x1184e7d40, {{0.0, -1362.0}, {402.0, 3385.0}}
+                          Other, 0x1184e7e80, {{0.0, 0.0}, {402.0, 739.0}}
+                            Other, 0x11892c000, {{0.0, 0.0}, {402.0, 170.8}}
+                          Other, 0x11892c140, {{0.0, 0.0}, {402.0, 739.0}}
+                          Cell, 0x11892c280, {{0.0, 116.0}, {402.0, 97.0}}
+                            Other, 0x11892c3c0, {{0.0, 116.0}, {402.0, 97.0}}
+                              Other, 0x11892c500, {{0.0, 116.0}, {402.0, 97.0}}
+                                Other, 0x11892c640, {{0.0, 116.0}, {402.0, 97.0}}
+                            Other, 0x11892c780, {{0.0, 116.0}, {402.0, 97.0}}
+                              Other, 0x11892c8c0, {{0.0, 116.0}, {402.0, 97.0}}
+                                Other, 0x11892ca00, {{0.0, 116.0}, {402.0, 97.0}}
+                                  TextView, 0x11892cb40, {{117.0, 130.0}, {257.0, 50.0}}, value: On the iPad, a swi...
+                                    TextView, 0x11892cc80, {{117.0, 130.0}, {257.0, 49.3}}, label: 'On the iPad, a swipe from the left edge does nothing.'
+                                    Other, 0x11892cdc0, {{341.0, 130.0}, {30.0, 50.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                                      Other, 0x11892cf00, {{368.0, 133.0}, {3.0, 44.0}}
+                                    Other, 0x11892d040, {{117.0, 152.0}, {257.0, 25.0}}, label: 'Horizontal scroll bar, 1 page', value: 0%
+                                      Other, 0x11892d180, {{120.0, 174.0}, {251.0, 3.0}}
+                                  Button, 0x11892d2c0, {{312.7, 191.7}, {28.0, 15.0}}, identifier: 'doc.on.doc', label: 'Copy'
+                                  StaticText, 0x11892d400, {{346.7, 192.3}, {39.3, 13.3}}, label: '6m ago'
+                          Cell, 0x11892d540, {{0.0, 213.0}, {402.0, 116.0}}
+                            Other, 0x11892d680, {{0.0, 213.0}, {402.0, 116.0}}
+                              Other, 0x11892d7c0, {{0.0, 213.0}, {402.0, 116.0}}
+                                Other, 0x11892d900, {{0.0, 213.0}, {402.0, 116.0}}
+                            Other, 0x11892da40, {{0.0, 213.0}, {402.0, 116.0}}
+                              Other, 0x11892db80, {{0.0, 213.0}, {402.0, 116.0}}
+                                Other, 0x11892dcc0, {{0.0, 213.0}, {402.0, 116.0}}
+                                  TextView, 0x11892de00, {{16.0, 219.0}, {361.0, 104.0}}, value: Two places on the ...
+                                    TextView, 0x11892df40, {{16.0, 219.0}, {361.0, 103.9}}, label: 'Two places on the iPad ignore the swipe today, and on a list page they want different things from the same gesture — so I’m asking before I change either.'
+                                    Other, 0x11892e080, {{344.0, 219.0}, {30.0, 104.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                                      Other, 0x11892e1c0, {{371.0, 222.0}, {3.0, 98.0}}
+                                    Other, 0x11892e300, {{16.0, 290.0}, {361.0, 30.0}}, label: 'Horizontal scroll bar, 1 page', value: 0%
+                                      Other, 0x11892e440, {{19.0, 317.0}, {355.0, 3.0}}
+                          Cell, 0x11892e580, {{0.0, 329.0}, {402.0, 133.0}}
+                            Other, 0x11892e6c0, {{0.0, 329.0}, {402.0, 133.0}}
+                              Other, 0x11892e800, {{0.0, 329.0}, {402.0, 133.0}}
+                                Other, 0x11892e940, {{0.0, 329.0}, {402.0, 133.0}}
+                            Other, 0x11892ea80, {{0.0, 329.0}, {402.0, 133.0}}
+                              Other, 0x11892ebc0, {{0.0, 329.0}, {402.0, 133.0}}
+                                Other, 0x11892ed00, {{0.0, 329.0}, {402.0, 133.0}}
+                                  Image, 0x11892ee40, {{29.0, 346.3}, {5.7, 9.7}}, identifier: 'chevron.right', label: 'Forward'
+                                  Image, 0x11892ef80, {{47.0, 345.7}, {11.0, 11.0}}, identifier: 'questionmark.circle', label: 'questionmark.circle'
+                                  StaticText, 0x11892f0c0, {{69.3, 343.2}, {64.3, 15.7}}, label: 'Question'
+                                  StaticText, 0x11892f200, {{140.7, 343.2}, {134.7, 15.7}}, label: 'Swipe right  ·  Top-left'
+                                  Image, 0x11892f340, {{283.3, 344.7}, {13.0, 13.0}}, identifier: 'checkmark.circle.fill', label: 'Selected', Selected
+                                  StaticText, 0x11892f480, {{27.0, 367.0}, {343.0, 15.7}}, label: 'On iPad, what should a swipe right from the left edge do? Today there are two places on the iPad where the swipe does nothing: (1) the hidden sidebar only opens from the toolbar button; (2) the in-column pages with a Back button (a folder's page, a project's sessions page, a task opened over its project, a runner's engine or name page) only go back from that button. On the iPhone the same swipe opens the drawer on a list page and goes back on a pushed page.'
+                                  Image, 0x11892f5c0, {{28.0, 390.0}, {13.0, 13.0}}, identifier: 'checkmark.circle.fill', label: 'Selected', Selected
+                                  StaticText, 0x11892f700, {{48.0, 385.7}, {159.7, 19.3}}, label: 'Open the sidebar only'
+                                  StaticText, 0x11892f840, {{27.0, 412.0}, {345.0, 15.7}}, label: 'When a project page is opened from the session list (or from a folder), swiping from the left edge will go back to that list. What should the top-left button be on that page?'
+                                  Image, 0x11892f980, {{28.0, 435.0}, {13.0, 13.0}}, identifier: 'checkmark.circle.fill', label: 'Selected', Selected
+                                  StaticText, 0x11892fac0, {{48.0, 430.7}, {172.0, 19.3}}, label: '‹ Back (Recommended)'
+                          Cell, 0x11892fc00, {{0.0, 462.0}, {402.0, 62.0}}
+                            Other, 0x11892fd40, {{0.0, 462.0}, {402.0, 62.0}}
+                              Other, 0x11892fe80, {{0.0, 462.0}, {402.0, 62.0}}
+                                Other, 0x11891c000, {{0.0, 462.0}, {402.0, 62.0}}
+                            Other, 0x11891c140, {{0.0, 462.0}, {402.0, 62.0}}
+                              Other, 0x11891c280, {{0.0, 462.0}, {402.0, 62.0}}
+                                Other, 0x11891c3c0, {{0.0, 462.0}, {402.0, 62.0}}
+                                  TextView, 0x11891c500, {{16.0, 468.0}, {358.0, 50.0}}, value: The sidebar only, ...
+                                    TextView, 0x11891c640, {{16.0, 468.0}, {358.0, 49.3}}, label: 'The sidebar only, and ‹ Back on a project page opened from the list. Starting with the sidebar.'
+                                    Other, 0x11891c780, {{341.0, 468.0}, {30.0, 50.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                                      Other, 0x11891c8c0, {{368.0, 471.0}, {3.0, 44.0}}
+                                    Other, 0x11891ca00, {{16.0, 490.0}, {358.0, 25.0}}, label: 'Horizontal scroll bar, 1 page', value: 0%
+                                      Other, 0x11891cb40, {{19.0, 512.0}, {352.0, 3.0}}
+                          Cell, 0x11891cc80, {{0.0, 524.0}, {402.0, 21.0}}
+                            Other, 0x11891cdc0, {{0.0, 524.0}, {402.0, 21.0}}
+                              Other, 0x11891cf00, {{0.0, 524.0}, {402.0, 21.0}}
+                                Other, 0x11891d040, {{0.0, 524.0}, {402.0, 21.0}}
+                            Other, 0x11891d180, {{0.0, 524.0}, {402.0, 21.0}}
+                              Other, 0x11891d2c0, {{0.0, 524.0}, {402.0, 21.0}}
+                                Other, 0x11891d400, {{0.0, 524.0}, {402.0, 21.0}}
+                                  Other, 0x11891d540, {{0.0, 524.0}, {402.0, 21.0}}
+                          Other, 0x11891d680, {{369.0, 116.0}, {30.0, 623.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                            Other, 0x11891d7c0, {{396.0, 755.0}, {3.0, 15.0}}
+                          Other, 0x11891d900, {{369.0, 116.0}, {30.0, 623.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                            Other, 0x11891da40, {{396.0, 755.0}, {3.0, 15.0}}
+                        Other, 0x11891db80, {{201.0, 739.0}, {0.0, 0.0}}
+                        TextView, 0x11891dcc0, {{32.0, 754.0}, {338.0, 22.0}}
+                          StaticText, 0x11891de00, {{32.0, 754.0}, {338.0, 20.3}}, label: 'Message…'
+                          Other, 0x11891df40, {{337.0, 754.0}, {30.0, 22.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                            Other, 0x11891e080, {{364.0, 737.0}, {3.0, 36.0}}
+                          Other, 0x11891e1c0, {{32.0, 762.0}, {338.0, 11.0}}, label: 'Horizontal scroll bar, 1 page', value: 0%
+                            Other, 0x11891e300, {{35.0, 770.0}, {332.0, 3.0}}
+                        Button, 0x11891e440, {{24.0, 790.0}, {32.0, 32.0}}, label: 'Add'
+                          Button, 0x11891e580, {{24.0, 790.0}, {32.0, 32.0}}
+                            Image, 0x11891e6c0, {{24.0, 790.0}, {32.0, 32.0}}, identifier: 'plus', label: 'Add'
+                        Button, 0x11891e800, {{64.0, 797.0}, {51.0, 18.0}}, label: 'Default'
+                          Button, 0x11891e940, {{64.0, 797.0}, {51.0, 18.0}}
+                            StaticText, 0x11891ea80, {{64.0, 797.0}, {51.0, 18.0}}, label: 'Default'
+                        Button, 0x11891ebc0, {{216.0, 797.0}, {98.0, 18.0}}, label: 'Model Opus 5.5, effort Max'
+                          Button, 0x11891ed00, {{216.0, 797.0}, {98.0, 18.0}}
+                            StaticText, 0x11891ee40, {{216.0, 797.0}, {64.3, 18.0}}, label: 'Opus 5.5'
+                            StaticText, 0x11891ef80, {{285.3, 797.0}, {28.7, 18.0}}, label: 'Max'
+                        Button, 0x11891f0c0, {{322.1, 798.1}, {15.8, 15.8}}, label: 'Context window not reported yet · 1M window'
+                        Button, 0x11891f200, {{346.0, 790.0}, {32.0, 32.0}}, identifier: 'arrow.up.circle.fill', label: 'Arrow Up Circle', Disabled
+                Other, 0x11891f340, {{0.0, 0.0}, {402.0, 874.0}}
+                  Other, 0x11891f480, {{0.0, 0.0}, {402.0, 874.0}}
+Path to element:
+ →Application, 0x1184ea6c0, pid: 53045, label: 'AqcProbe'
+Query chain:
+ →Find: Target Application 'io.orbitd.aqcprobe'
+  Output: {
+    Application, 0x11891f5c0, pid: 53045, label: 'AqcProbe'
+  }
