@@ -74,9 +74,9 @@ import { WikiHealth } from '../wiki/wiki-health';
 import { WikiPlans } from '../wiki/wiki-plan';
 import { WikiRefusalError, WikiService, type WikiPrincipal } from '../wiki/wiki.service';
 import { WikiRepoOps } from './wiki-repo-ops';
-import { WIKI_ANCHOR_RULES, WIKI_LIMITS, WIKI_REPO_OP_CAPABILITY, WIKI_REPO_OPS } from '@orbit/shared';
+import { WIKI_ANCHOR_RULES, WIKI_JOB, WIKI_LIMITS, WIKI_REPO_OP_CAPABILITY, WIKI_REPO_OPS } from '@orbit/shared';
 import { WikiJobExecutor, WIKI_JOB_RUNNERS, type WikiJobRunner } from './wiki-job-executor';
-import { WIKI_JOB_HANDED_BACK } from './wiki-jobs';
+import { claimWikiJobs, reclaimExpiredWikiJobs, WIKI_JOB_HANDED_BACK } from './wiki-jobs';
 import { WikiModelRequestQueue } from './wiki-model-queue.service';
 import { WikiModelStatusProbe } from './wiki-model-status';
 import { readWikiSystemModel, type WikiSystemModelConfig } from './wiki-system-model';
@@ -371,9 +371,22 @@ afterEach(async () => {
   }
 });
 
+/**
+ * The lease this spec's worker claims under: the deployment's own — the same lease and renewal every claim
+ * outside a spec gets. No case of this spec is about a lease running out, so the harness must not claim under
+ * a shortened one: the 400 ms it used to be is what made these cases red at load 40–65. A stall of the event
+ * loop longer than the row's lease leaves the job take-over-able the moment the loop comes back, and the sweep
+ * of the next pass runs it a second time — the case then reads the second attempt's work. And the stall a
+ * loaded host produces here is not a fraction of a second: a run at load 39 had one of 24 s (2026-10-10).
+ * wiki-jobs.pg.spec.ts is the one file that claims under a short lease on purpose: there the lease is the
+ * subject. The last two cases of this file pin this margin the deterministic way.
+ */
+const HARNESS_LEASE_MS = WIKI_JOB.leaseSeconds * 1000;
+const HARNESS_RENEW_MS = WIKI_JOB.renewSeconds * 1000;
+
 /** The worker under test, its kind map the one the worker module builds — with this spec's services. */
 function worker(h: Harness, over: { repoWaitMs?: number } = {}): { queue: WikiModelRequestQueue; executor: WikiJobExecutor } {
-  const options = { leaseMs: 400, renewMs: 100, partialMs: 40, pollMs: 30 };
+  const options = { leaseMs: HARNESS_LEASE_MS, renewMs: HARNESS_RENEW_MS, partialMs: 40, pollMs: 30 };
   const config_ = config(h);
   const queue = new WikiModelRequestQueue(
     h.prisma as unknown as PrismaService, config_,
@@ -506,6 +519,17 @@ async function pass(
   }
   const ops = await h.sql.query(`SELECT "kind","state","error" FROM "wiki_repo_op" WHERE "owner_id" = $1 ORDER BY "created_at"`, [h.ownerId]);
   assert.fail(`the worker did not finish: ${JSON.stringify(await jobRows(h))} repo ops ${JSON.stringify(ops.rows)}`);
+}
+
+/**
+ * Block the event loop for `ms` (the loaded host's own stall, here on demand): no timer of this process fires
+ * while it runs, which is what a busy machine does to the lease renewals of a worker on it.
+ */
+function stallEventLoop(ms: number): void {
+  const until = Date.now() + ms;
+  while (Date.now() < until) {
+    /* the loop is the point */
+  }
 }
 
 interface JobRow {
@@ -1531,4 +1555,61 @@ test('a worker that stops while the documents step waits for a read hands the jo
   assert.equal(ended.state, 'succeeded', ended.error ?? '');
   assert.equal((await jobAfterStop(h, fx.jobId)).attempts, 0, 'the stop counted nothing');
   assert.equal((await runRow(h, fx.runId)).outcome, 'succeeded');
+});
+
+// ── The lease outliving a stall (2026-10-10) ─────────────────────────────────────────────────────
+
+test('the lease this harness claims under outlives a two-second stall: the sweep finds nothing to take over', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const fx = await fixture(h);
+  // The claim this spec's worker makes, made by hand so the sweep can be run in the same synchronous window
+  // the loop resumes in — the call the next pass makes a moment later. Under the 400 ms lease this harness
+  // used to claim under, the stall below spent it and that sweep took the job over: the row came back
+  // 'queued', its attempt counted, LEASE_EXPIRED. The mechanism's own cases are wiki-jobs.pg.spec.ts's; what
+  // this pins is the lease THIS spec's worker claims under.
+  const [claimed] = await claimWikiJobs(h.prisma as unknown as PrismaService, {
+    workerId: randomUUID(), kinds: ['maintain'], owners: [h.ownerId], limit: 1, leaseMs: HARNESS_LEASE_MS,
+  });
+  assert.equal(claimed?.id, fx.jobId, 'the fixture\'s job was not the one claimed');
+  stallEventLoop(2_000);
+  assert.deepEqual(
+    await reclaimExpiredWikiJobs(h.prisma as unknown as PrismaService, 4), [],
+    'a two-second stall spent the lease: the next pass would take the job over mid-run',
+  );
+  const { rows: [row] } = await h.sql.query<{ state: string; attempts: number; failure_kind: string | null }>(
+    'SELECT "state", "attempts", "failure_kind" FROM "wiki_job" WHERE "id" = $1', [fx.jobId],
+  );
+  assert.deepEqual(row, { state: 'running', attempts: 0, failure_kind: null }, 'the stall cost the job its attempt');
+});
+
+test('a run whose event loop is blocked for two seconds keeps its lease: nothing is taken over and one attempt does all the writing', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const fx = await fixture(h);
+  h.model.answer = extractor(fx, 2);
+  h.maintenance.dossierPage = (async () => pageOf(fx)) as unknown as WikiMaintenance['dossierPage'];
+
+  const which = worker(h);
+  // The stall a loaded host produces by itself, here on demand: the run is claimed and under way — its lease
+  // is held and its renewal is armed — and for two seconds no timer of this process fires. Spent right after
+  // the claim, before the loop's next pass, nothing else of this process is waiting on a database answer
+  // either, so what the block can spend is the lease and nothing else. Under the 400 ms lease this spec used
+  // to claim with, the lease was spent by the time the loop came back and the pass that followed could take
+  // the job over mid-run — the case above runs that sweep by hand and shows the row it leaves (queued,
+  // attempts 1, LEASE_EXPIRED); here the lease outlasts the stall, so one attempt does all of it.
+  await which.executor.runOnce();
+  stallEventLoop(2_000);
+  await pass(h, which, async () => (await jobOf(h, fx.jobId)).state === 'succeeded');
+
+  const { rows: [job] } = await h.sql.query<{ attempts: number; failure_kind: string | null; error: string | null }>(
+    'SELECT "attempts", "failure_kind", "error" FROM "wiki_job" WHERE "id" = $1', [fx.jobId],
+  );
+  assert.deepEqual(job, { attempts: 0, failure_kind: null, error: null }, 'the lease did not outlive the stall: the job was taken over');
+  // And the one attempt is the whole run: its cursor advanced and nothing counted against the space.
+  const run = await runRow(h, fx.runId);
+  assert.equal(run.outcome, 'succeeded', run.error ?? '');
+  const cursor = await h.prisma.wikiCursor.findFirstOrThrow({ where: { spaceId: fx.spaceId, source: 'facts' } });
+  assert.equal(cursor.positionRef, fx.position.ref);
+  assert.equal(cursor.consecutiveFailures, 0);
 });
