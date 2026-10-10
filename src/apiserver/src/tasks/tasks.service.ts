@@ -10405,8 +10405,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       await this.recordListEvent(
         before.listId,
         'completion_reverted',
-        `任务「${before.title}」(${uuidToBase62(id)}) 从 DONE 被退回 ${dto.status}` +
-          (checks > 0 ? `，此前有 ${checks} 次验收记录` : '，此前没有验收记录'),
+        `Task “${before.title}” (${uuidToBase62(id)}) was reverted from DONE to ${dto.status}` +
+          (checks > 0 ? `; ${checks} verification(s) were on record before` : '; no verification was on record before'),
       );
     }
     // Last, after auto-dispatch and aggregate recomputation, so the fetched overlays reflect the
@@ -11355,22 +11355,22 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         await this.recordListEvent(
           listId,
           'quota_hold',
-          `${e.quota} 个就绪任务被配额挡住` +
-            (e.resumesAt ? `，最早 ${e.resumesAt.toISOString()} 恢复` : '，没有拿到恢复时间'),
+          `${e.quota} ready task(s) held back by quota` +
+            (e.resumesAt ? `, resuming at ${e.resumesAt.toISOString()} at the earliest` : ', with no resume time given'),
         );
       }
       if (e.disk > 0) {
         await this.recordListEvent(
           listId,
           'disk_hold',
-          `${e.disk} 个就绪任务被磁盘下限挡住 —— 空间要由人来腾，不会自己恢复`,
+          `${e.disk} ready task(s) held back by the disk floor — a person has to free up space; it does not recover on its own`,
         );
       }
       if (e.cap > 0) {
         await this.recordListEvent(
           listId,
           'cap_hold',
-          `${e.cap} 个就绪任务因为本列表已到并发上限而没被物化 —— auto-run 要等队列消化到上限以下才恢复`,
+          `${e.cap} ready task(s) not materialised because this list is at its concurrency cap — auto-run resumes only once the queue drains below the cap`,
         );
       }
     }
@@ -11653,7 +11653,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       try {
         const task = await this.prisma.task.create({
           data: {
-            title: `[FOREMAN] ${list.title} — 停滞 ${list.minutes} 分钟`.slice(0, 200),
+            title: `[FOREMAN] ${list.title} — stalled ${list.minutes} min`.slice(0, 200),
             description: this.buildForemanBrief(list.title, list.minutes),
             ownerId: list.ownerId,
             listId: list.id,
@@ -11693,7 +11693,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         await this.recordListEvent(
           list.id,
           'foreman_filed',
-          `停滞约 ${list.minutes} 分钟，已自动派出协调任务 ${uuidToBase62(task.id)} 去诊断`,
+          `Stalled for about ${list.minutes} min; coordinating task ${uuidToBase62(task.id)} was dispatched automatically to diagnose it`,
         );
       } catch (e) {
         this.logger.warn(
@@ -11745,19 +11745,19 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    */
   private buildForemanBrief(title: string, minutes: number): string {
     return (
-      `任务列表「${title}」已停滞约 ${minutes} 分钟：仍有未完成的任务，但没有任何任务在运行，也没有新的运行被发起。\n\n` +
-      `请诊断原因并处理，然后结束本次运行。这是一次性的协调任务，不要保持长时间运行或轮询。\n\n` +
-      `建议的排查顺序：\n` +
-      `1. 用 tasklist_get / task_list 查看该列表的任务状态分布，找出卡在哪一层。` +
-      `**先看 failuresByCause**：它把已发生的失败按"真正坏了什么"归了类（quota / infrastructure / ` +
-      `contentFilter / unattributed）。这几类没有一类是靠改作业指导能修的——先看归因，再决定动哪个杠杆，` +
-      `不要一上来就怀疑 prompt 写得不好。\n` +
-      `2. 常见原因：前置任务永远不会完成、负责的 workspace 未绑定 runner、provider 配额耗尽、磁盘低于下限、上一次运行的会话仍占着任务却已无进展。\n` +
-      `3. 能在列表策略层面解决的（并发上限、暂停、作业指导），直接调整；需要改任务或依赖的，用 task_update / 依赖相关工具处理。\n` +
-      `4. 如果原因不在系统内（例如需要人清理磁盘、重新登录、补充配额），用 task_comment 写清结论和所需的人工动作。\n\n` +
-      `完成后请用 task_evidence_submit 提交判断与所做改动的证据信封（claim / criterion / checks / gaps，`
-      + `checks 至少一条要能解析到本任务会话下的行）；不要用评论代替证据，也不要写 ` +
-      `status=DONE，本任务的 status 由它声明的 completionCriterion 求值产生。`
+      `Task list “${title}” has been stalled for about ${minutes} min: it still has unfinished tasks, but none of them is running and no new run has been started.\n\n` +
+      `Diagnose why and deal with it, then end this run. This is a one-off coordinating task: do not keep running or polling.\n\n` +
+      `Suggested order:\n` +
+      `1. Use tasklist_get / task_list to see how the list's tasks are spread across statuses and find the layer where they are stuck. ` +
+      `**Read failuresByCause first**: it sorts the failures that have happened by "what actually broke" (quota / infrastructure / ` +
+      `contentFilter / unattributed). Not one of these is fixed by changing the instructions — read the attribution first, then decide which lever to pull; ` +
+      `do not start by suspecting the prompt is badly written.\n` +
+      `2. Common causes: a prerequisite that will never finish, an assigned workspace with no runner bound, an exhausted provider quota, disk below the floor, a session from the last run still holding the task while making no progress.\n` +
+      `3. Whatever can be fixed at the list's policy level (concurrency cap, pause, instructions), adjust directly; whatever needs a task or a dependency changed, handle with task_update / the dependency tools.\n` +
+      `4. If the cause lies outside the system (for example a person has to clean up disk, sign in again or top up quota), write the conclusion and the manual action needed with task_comment.\n\n` +
+      `When you are done, submit an evidence envelope of your judgment and the changes you made with task_evidence_submit (claim / criterion / checks / gaps; `
+      + `at least one check has to resolve to a row under this task's sessions). Do not use a comment in place of evidence, and do not write ` +
+      `status=DONE: this task's status is derived from the completionCriterion it declares.`
     );
   }
 
@@ -13607,10 +13607,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // still failed.
     const publicTaskId = uuidToBase62(delivery.taskId);
     const prompt =
-      `你在任务「${comment.taskTitle}」(${publicTaskId}) 的评论区被 @ 提到。\n\n` +
-      `评论内容：\n${comment.body}\n\n` +
-      `请用 task_get(taskId: "${publicTaskId}") 查看该任务的完整信息与历史评论，` +
-      `并用 task_comment(taskId: "${publicTaskId}", body: ...) 在该任务下回复。`;
+      `You were @-mentioned in the comments of task “${comment.taskTitle}” (${publicTaskId}).\n\n` +
+      `The comment:\n${comment.body}\n\n` +
+      `Use task_get(taskId: "${publicTaskId}") to read the task in full with its comment history, ` +
+      `and task_comment(taskId: "${publicTaskId}", body: ...) to reply under the task.`;
 
     // Step 0: where this is going. A remembered binding wins, then the agent's own live run on the
     // task, then a new conversation.
@@ -13841,7 +13841,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       {
         prompt,
         workspaceId: delivery.workspaceId,
-        title: `回应评论：${taskTitle}`,
+        title: `Comment reply: ${taskTitle}`,
         // The MENTIONED AGENT's own seed, never the task's. This session is not running the task,
         // and pinning it to the task's engine would answer a comment on a runtime the agent was
         // never configured for.
@@ -14681,7 +14681,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       kind: 'RUN',
       plan: planned,
       taskId: task.id,
-      title: `执行任务：${task.title}`,
+      title: `Task: ${task.title}`,
       prompt,
       workspaceId: task.assignee!.id,
       runnerId: task.assignee!.runnerId!,
@@ -15236,7 +15236,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         : null;
       planned.items.push({
         taskId: t.id,
-        title: `执行任务：${t.title}`,
+        title: `Task: ${t.title}`,
         prompt,
         workspaceId: workspace.id,
         runnerId: workspace.runnerId,

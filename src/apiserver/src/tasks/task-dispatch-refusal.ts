@@ -323,21 +323,21 @@ function dispatchRefusalComment(
   const missing = refusal.missing.map(({ sha }) => {
     const prerequisite = landedBy.get(sha);
     return prerequisite
-      ? `- \`${sha}\`，前置「${prerequisite.title}」（${uuidToBase62(prerequisite.id)}）落地的提交`
+      ? `- \`${sha}\`, the landed commit of prerequisite “${prerequisite.title}” (${uuidToBase62(prerequisite.id)})`
       : `- \`${sha}\``;
   });
   return (
     `<!-- orbit:${DISPATCH_REFUSED_SIGNAL_CODE} -->\n`
-    + '**开工被拒（系统自动记录）**\n\n'
-    + '这次开工没有变成一次运行：runner 在启动引擎之前拒绝了它，没有引擎被拉起，任务状态没有被改动。'
-    + '拒绝发生在哪一级看拒绝码——解析这次起跑的 ref 失败，或解析通过之后检出被拒。\n'
-    + '拒绝记在任务的 dispatchRefusal 上，并投递给项目的协调会话（协调开关关掉时投递会被拒，拒绝本身仍在）。\n\n'
-    + `拒绝码：${refusal.code}（处置：${refusal.fixAction}）\n`
-    + (base ? `钉住的提交：${base}\n` : '')
-    + (missing.length > 0 ? `它不包含的前置落地提交：\n${missing.join('\n')}\n` : '')
-    + `\n下一步：${dispatchRefusalNextStep(refusal)}\n\n`
-    + `runner 的原话：\n${refusal.code}: ${refusal.reason}\n\n`
-    + `信号来源：${DISPATCH_REFUSED_SIGNAL_CODE}`
+    + '**Start refused (recorded by Orbit)**\n\n'
+    + `This start did not become a run: the runner refused it before starting an engine, so no engine was started and the task's status was not changed. `
+    + 'The refusal code says which gate refused it — resolving the ref this run starts from failed, or the checkout was refused after resolution passed.\n'
+    + `The refusal is recorded on the task's dispatchRefusal and delivered to the project's coordinator session (with the coordinator switched off the delivery is refused, but the refusal itself stays).\n\n`
+    + `Refusal code: ${refusal.code} (fix: ${refusal.fixAction})\n`
+    + (base ? `Pinned commit: ${base}\n` : '')
+    + (missing.length > 0 ? `Landed prerequisite commits it does not contain:\n${missing.join('\n')}\n` : '')
+    + `\nNext step: ${dispatchRefusalNextStep(refusal)}\n\n`
+    + `The runner's own words:\n${refusal.code}: ${refusal.reason}\n\n`
+    + `Signal source: ${DISPATCH_REFUSED_SIGNAL_CODE}`
   );
 }
 

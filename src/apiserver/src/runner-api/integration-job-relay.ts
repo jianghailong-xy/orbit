@@ -1100,12 +1100,12 @@ function nothingToLandComment(input: {
   branchesWithWork: string[];
 }): string {
   const where = input.branchesWithWork.length > 0
-    ? `本任务自己的工作在分支 \`${input.branchesWithWork.join('`、`')}\` 上，集成线拿到的是另一个分支；`
-      + `这份交付目前不在 \`${input.targetBranch}\` 上，因此也没有写回执。`
-    : '本任务没有任何会话报告过工作，因此确实没有东西可落。';
-  return `**集成线：没有可落的提交（系统自动记录）**\n\n`
-    + `集成线拿到本任务的分支 \`${input.branch}\`，它相对该会话的起点没有任何提交`
-    + `（0 轮就结束、或没有提交的会话会留下这样的空分支）。落地作业没有写成「已落地」，也没有推送任何东西。\n\n`
+    ? `This task's own work is on \`${input.branchesWithWork.join('`, `')}\`, and the integration line was handed a different branch; `
+      + `that delivery is not on \`${input.targetBranch}\` yet, so no receipt was written either.`
+    : 'No session of this task ever reported work, so there really is nothing to land.';
+  return `**Integration line: no commits to land (recorded by Orbit)**\n\n`
+    + `The integration line was handed this task's branch \`${input.branch}\`, which has no commits since that session's starting point `
+    + `(a session that ended after 0 turns, or one that never committed, leaves an empty branch like this). The landing job did not record it as landed, and pushed nothing.\n\n`
     + where;
 }
 
@@ -1123,15 +1123,15 @@ function fullyAppliedComment(input: {
   endedOn: string | null;
 }): string {
   const where = input.endedOn !== null
-    ? `本任务的工作最后结束在分支 \`${input.endedOn}\` 上，不是集成线拿到的这一条；这次没有写回执。`
+    ? `This task's work last ended on branch \`${input.endedOn}\`, not on the one the integration line was handed; no receipt was written this time.`
     : input.branchesWithWork.length > 0
-      ? `本任务另有工作在分支 \`${input.branchesWithWork.join('`、`')}\` 上，集成线没有拿到；`
-        + `那部分交付目前不在 \`${input.targetBranch}\` 上，因此没有写回执。`
-      : `本任务的工作已经在 \`${input.targetBranch}\` 上。`;
-  return `**集成线：分支上的提交已在目标上（系统自动记录）**\n\n`
-    + `集成线拿到本任务的分支 \`${input.branch}\`，它带着本任务自己的提交，`
-    + `但这些改动 \`${input.targetBranch}\` 上都已经有了（rebase 时每个提交都因为补丁内容已在上游而被跳过）。`
-    + `落地作业没有写成「已落地」，也没有推送任何东西。\n\n`
+      ? `This task has other work on \`${input.branchesWithWork.join('`, `')}\`, which the integration line was not handed; `
+        + `that part of the delivery is not on \`${input.targetBranch}\` yet, so no receipt was written.`
+      : `This task's work is already on \`${input.targetBranch}\`.`;
+  return `**Integration line: the branch's commits are already on the target (recorded by Orbit)**\n\n`
+    + `The integration line was handed this task's branch \`${input.branch}\`, which carries this task's own commits, `
+    + `but \`${input.targetBranch}\` already has every one of these changes (during the rebase each commit was skipped because its patch was already upstream). `
+    + `The landing job did not record it as landed, and pushed nothing.\n\n`
     + where;
 }
 

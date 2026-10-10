@@ -600,9 +600,9 @@ test('(b) a revision quoting the criterion the move took back is decided by nobo
       assert.ok(runSays.includes(w.title));
       assert.ok(runSays.includes(uuidToBase62(w.projectB)), 'the run is not told where the task went');
       assert.ok(runSays.includes(`key ${criterionKeyOf(w.criterionA)}`), 'the withdrawn quote is not named');
-      assert.ok(runSays.includes('移动时已经收回'), 'the run is not told the criterion was taken back');
-      assert.ok(runSays.includes(`key：${criterionKeyOf(w.criterionB)}`), 'the criterion to quote is not named');
-      assert.ok(runSays.includes(`「${WANTS_B}」`), 'the criterion to quote is not given word for word');
+      assert.ok(runSays.includes('was taken back by the move'), 'the run is not told the criterion was taken back');
+      assert.ok(runSays.includes(`key: ${criterionKeyOf(w.criterionB)}`), 'the criterion to quote is not named');
+      assert.ok(runSays.includes(`“${WANTS_B}”`), 'the criterion to quote is not given word for word');
       assert.ok(runSays.includes('task_evidence_submit'));
 
       // B's coordinator: one message, not a decision request, saying the task arrived owing a new one.
@@ -612,7 +612,7 @@ test('(b) a revision quoting the criterion the move took back is decided by nobo
       assert.equal(toB!.sendIntent, 'NEXT_TURN');
       const coordinatorSays = toB!.content ?? '';
       assert.ok(coordinatorSays.includes(w.title));
-      assert.ok(coordinatorSays.includes('要重交'));
+      assert.ok(coordinatorSays.includes('to be submitted again'));
       assert.ok(coordinatorSays.includes(`key ${criterionKeyOf(w.criterionB)}`));
       assert.ok(coordinatorSays.includes(uuidToBase62(w.run)), 'it is not told the run was told');
       assert.ok(!coordinatorSays.includes('evidenceRevision 传'), 'it was asked to decide a revision nobody can');
@@ -667,9 +667,9 @@ test('(c) with no target criterion the standard is the task own criteria, and a 
       const says = toB!.content ?? '';
       // The standard is the task's own criteria, quoted under the task's own id.
       assert.ok(says.includes(`key ${uuidToBase62(w.task)}`), 'the key to quote is not the task\'s own id');
-      assert.ok(says.includes(`「${OWN}」`), 'the task\'s own criteria are not given word for word');
+      assert.ok(says.includes(`“${OWN}”`), 'the task\'s own criteria are not given word for word');
       // And nobody will file it unless the coordinator acts.
-      assert.ok(says.includes('没有运行中的会话'));
+      assert.ok(says.includes('has no running session'));
       assert.ok(says.includes('task_start'));
     } finally {
       await stack.db.$disconnect();
