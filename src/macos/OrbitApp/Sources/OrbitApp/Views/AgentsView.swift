@@ -829,8 +829,13 @@ struct AgentPanes: View {
                           accountSessions: app.sessions, allSessions: agents.allSessions,
                           folders: app.sessionFolders, projects: app.projects?.sidebarProjects ?? [],
                           watches: app.watches?.summaries ?? [:], view: view, groupByTag: groupByTag,
-                          searching: isSearching, runnerOffline: agents.runnerIsOffline(agent.runnerId))
+                          searching: isSearching, runnerOffline: agents.runnerIsOffline(agent.runnerId),
+                          recaps: accountShowsRecaps)
     }
+
+    /// The account's Session recaps switch, off only when explicitly turned off (`AppModel.user`
+    /// carries the preferences). Read here so a toggle regroups the list into the lines it asks for.
+    private var accountShowsRecaps: Bool { app.user?.preferences?.showRecaps ?? true }
 
     /// The whole grouping, from its inputs alone: static, so it cannot read a fact the memo's key
     /// does not carry.
@@ -887,7 +892,8 @@ struct AgentPanes: View {
                                       watching: Dictionary(watched.compactMap { session in
                                           inputs.watch(for: session.id).map { (session.id, $0) }
                                       }, uniquingKeysWith: { _, latest in latest }),
-                                      line: { lines.line(for: $0, watching: inputs.watch(for: $0.id)) })
+                                      line: { lines.line(for: $0, watching: inputs.watch(for: $0.id),
+                                                         recaps: inputs.recaps) })
     }
 
     private func projectRow(_ row: SessionProjectRow) -> some View {
@@ -1563,9 +1569,22 @@ struct AgentSessionRow: View {
     @Environment(AppModel.self) private var app
     /// The live watches that will resume this session: what a parked row says it's doing instead.
     private var watching: WatchSessionSummary? { app.watches?.summary(for: session.id) }
-    // Second line: the last-reply / live-state preview (mirrors the web Agent console). `live` mirrors
-    // web's `openable` — false on the Trash tab (a deleted session isn't live), true elsewhere.
-    private var line: SessionLine { SessionLine.make(for: session, live: !deleted, watching: watching) }
+    // Second line: the recap / last-reply / live-state preview (mirrors the web Agent console).
+    // `live` mirrors web's `openable` — false on the Trash tab (a deleted session isn't live), true
+    // elsewhere — and `recaps` is the account's Session recaps switch, read from the same `me` every
+    // other preference comes from (absent means on).
+    private var line: SessionLine {
+        SessionLine.make(for: session, live: !deleted, watching: watching,
+                         recaps: app.user?.preferences?.showRecaps ?? true)
+    }
+
+    /// The second line as one text run: the recap's muted label, a space, then the line. Built by
+    /// concatenation (not an HStack) so the label and the text truncate together as one line, the
+    /// way web's inline spans do. Lines with no label — all but the recap — are the text alone.
+    private var lineText: Text {
+        guard let label = line.label else { return Text(line.text) }
+        return Text("\(label) ").foregroundStyle(.tertiary) + Text(line.text)
+    }
 
     var body: some View {
         #if os(iOS)
@@ -1596,7 +1615,7 @@ struct AgentSessionRow: View {
                     }
                     HStack(spacing: 7) {
                         SessionCoordinatorBadge(session: session)
-                        Text(line.text).font(.orbitListSubtitle)
+                        lineText.font(.orbitListSubtitle)
                             .foregroundStyle(lineColor(line.tone)).lineLimit(1)
                     }
                 }
@@ -1647,7 +1666,7 @@ struct AgentSessionRow: View {
                         // Only one chip is visual; VoiceOver still hears the complete filing context.
                         .accessibilityLabel("Tags: \(tags.map(\.name).joined(separator: ", "))")
                 }
-                Text(line.text)
+                lineText
                     .font(.orbitListSubtitle)
                     .foregroundStyle(lineColor(line.tone))
                     .lineLimit(1)
@@ -1683,7 +1702,7 @@ struct AgentSessionRow: View {
                 if let tags = session.tags, !tags.isEmpty {
                     SessionTagChips(tags: tags)
                 }
-                Text(line.text).font(.orbitListSubtitle).foregroundStyle(lineColor(line.tone)).lineLimit(1)
+                lineText.font(.orbitListSubtitle).foregroundStyle(lineColor(line.tone)).lineLimit(1)
             }
         }
         .padding(.vertical, 2)

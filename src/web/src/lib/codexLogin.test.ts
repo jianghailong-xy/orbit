@@ -2,7 +2,7 @@ import { AgentProvider } from '@orbit/shared';
 import { describe, expect, it } from 'vitest';
 import { loginLine, loginSpentUntil, withLogin, type CodexLogin } from './codexLogin';
 import { poolsAsProviders, type ProviderPool } from './providerPools';
-import { providerChoices } from './sessionProviderChoices';
+import { engineProviders } from './sessionProviderChoices';
 
 /**
  * A Codex pool of one's own ChatGPT accounts, as every reader of the pool list gets it: each account it
@@ -129,14 +129,14 @@ describe('a pool of one’s own ChatGPT account in the pickers', () => {
     const drawn = withLogin(pool(account()), NOW);
     const [provider] = poolsAsProviders([drawn]);
     expect(provider).toMatchObject({ slug: 'my-codex', runtime: AgentProvider.CODEX, presetSlug: 'openai', modelsFromRuntime: true });
-    const choice = providerChoices([provider], null, undefined, null, [drawn]).find((c) => c.slug === 'my-codex');
+    const choice = engineProviders(AgentProvider.CODEX, { configured: [provider], engineHealth: null, pools: [drawn] }).find((c) => c.slug === 'my-codex');
     expect(choice).toMatchObject({ kind: 'pool', poolSize: 1 });
     expect(choice?.unavailable).toBeUndefined();
   });
 
   it('is greyed out while nobody is signed in, pointing at its page', () => {
     const drawn = withLogin(pool(null), NOW);
-    const choice = providerChoices(poolsAsProviders([drawn]), null, undefined, null, [drawn]).find(
+    const choice = engineProviders(AgentProvider.CODEX, { configured: poolsAsProviders([drawn]), engineHealth: null, pools: [drawn] }).find(
       (c) => c.slug === 'my-codex',
     );
     expect(choice).toMatchObject({ unavailable: 'Not signed in', fixHref: '/providers/pools/p1' });
@@ -148,7 +148,7 @@ describe('a pool of one’s own ChatGPT account in the pickers', () => {
       { engine: 'claude', installed: true, auth: 'yes' },
       { engine: 'codex', installed: false, auth: 'no' },
     ] as never;
-    const choice = providerChoices(poolsAsProviders([drawn]), null, undefined, health, [drawn]).find(
+    const choice = engineProviders(AgentProvider.CODEX, { configured: poolsAsProviders([drawn]), engineHealth: health, pools: [drawn] }).find(
       (c) => c.slug === 'my-codex',
     );
     expect(choice).toMatchObject({ unavailable: 'Not installed', fixEngine: AgentProvider.CODEX });
