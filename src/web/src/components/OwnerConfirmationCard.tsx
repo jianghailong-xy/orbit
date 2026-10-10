@@ -18,6 +18,7 @@ import { Alert } from './ui/Alert';
 import { useLocation } from 'react-router-dom';
 import { api } from '../api';
 import { markdownToPlainLines } from '../lib/markdownText';
+import { DEFAULT_MAIN_BRANCH, mainBranchName } from '../lib/projectStart';
 import { ownerConfirmationQuery } from '../lib/queries';
 import { CardActionButton, CardActions } from './CardAction';
 import { ENTER_HINT, useDecisionCardKeys } from './CardHotkey';
@@ -231,6 +232,19 @@ export const IF_CONFIRMED_DOES_NOT_MERGE = 'confirming doesn’t merge it';
 export const IF_CONFIRMED_LINE_THEN_OWNER = 'Goes onto the integration line; merging into main asks you again';
 export const IF_CONFIRMED_AUTO_MAIN = 'Lands on main by itself if the checks pass';
 export const IF_CONFIRMED_ENDS_SESSION = 'Ends this session';
+/** The four above that name main, said of the project's main branch (`ifConfirmed.mainBranch`). */
+export function ifConfirmedNotOn(main: string = DEFAULT_MAIN_BRANCH): string {
+  return `Not on ${main} yet`;
+}
+export function ifConfirmedNoRecordOn(main: string = DEFAULT_MAIN_BRANCH): string {
+  return `No record of this branch on ${main}`;
+}
+export function ifConfirmedLineThenOwner(main: string = DEFAULT_MAIN_BRANCH): string {
+  return `Goes onto the integration line; merging into ${main} asks you again`;
+}
+export function ifConfirmedAutoMain(main: string = DEFAULT_MAIN_BRANCH): string {
+  return `Lands on ${main} by itself if the checks pass`;
+}
 
 /** One row of the block: its symbol, its first line, the branch's added lines said after it in the
  *  diff's green, and a quieter second line. */
@@ -282,10 +296,11 @@ export function ifConfirmedRows(ifConfirmed: OwnerConfirmationIfConfirmed | null
     });
   }
   const { branch, landing, endsSession } = ifConfirmed;
+  const main = mainBranchName(ifConfirmed.mainBranch);
   if (branch && (branch.onMain === 'NO' || branch.onMain === 'UNKNOWN')) {
     rows.push({
       kind: 'BRANCH',
-      lead: branch.onMain === 'NO' ? IF_CONFIRMED_NOT_ON_MAIN : IF_CONFIRMED_NO_RECORD_ON_MAIN,
+      lead: branch.onMain === 'NO' ? ifConfirmedNotOn(main) : ifConfirmedNoRecordOn(main),
       added: branch.onMain === 'NO' && branch.linesAdded > 0 ? `+${branch.linesAdded.toLocaleString('en-US')}` : null,
       detail: landing === 'NONE' || landing === 'LINE_THEN_OWNER'
         ? `${branch.name} — ${IF_CONFIRMED_DOES_NOT_MERGE}`
@@ -295,7 +310,7 @@ export function ifConfirmedRows(ifConfirmed: OwnerConfirmationIfConfirmed | null
   if (landing === 'LINE_THEN_OWNER' || landing === 'AUTO_MAIN') {
     rows.push({
       kind: 'LANDING',
-      lead: landing === 'LINE_THEN_OWNER' ? IF_CONFIRMED_LINE_THEN_OWNER : IF_CONFIRMED_AUTO_MAIN,
+      lead: landing === 'LINE_THEN_OWNER' ? ifConfirmedLineThenOwner(main) : ifConfirmedAutoMain(main),
       added: null,
       detail: null,
     });

@@ -55,6 +55,14 @@ describe('where the conversation’s exception cards come from', () => {
     expect(view).toContain('main={coordinatedMain} />');
   });
 
+  it('tells the coordinator a card’s merge by the main branch the open-items read names', () => {
+    const view = source();
+    expect(view, 'the chat context is not told which branch a re-check’s merge goes into').toContain(
+      'const chatMain = mainBranchName(openItems.data?.mainBranch);',
+    );
+    expect(view).toContain('openItemChatContext({ projectTitle: chatProjectTitle, projectId, row: subject.row, now, main: chatMain })');
+  });
+
   it('hands them to the transcript as inserts, and keeps no block of its own', () => {
     const view = source();
     expect(view, 'the pane stopped inserting anything into the conversation').toContain(

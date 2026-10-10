@@ -9112,6 +9112,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         jobId: null,
         checksRunningForMs: null,
         landTask: null,
+        // A task in no project lands on no project's main branch.
+        mainBranch: null,
       },
       ...supersession,
     };

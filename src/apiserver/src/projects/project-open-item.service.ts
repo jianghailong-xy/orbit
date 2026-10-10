@@ -72,6 +72,7 @@ import {
 } from './project-open-item';
 import { escalatesAt } from './open-item-escalation.service';
 import { canonicalJson } from './canonical-json';
+import { mainBranchOf } from './project-criterion-landing';
 import {
   RetryableLandingFailureClass,
   SkippedMergeCheckRecord,
@@ -384,6 +385,8 @@ export interface ProjectOpenItems {
   doneRequest: OpenItemRow | null;
   settled: OpenItemRow[];
   closedQuestions: ProjectClosedQuestion<Date>[];
+  /** The main branch a row's merge into main goes into; null with no repository bound. */
+  mainBranch: string | null;
 }
 
 /** How far back `settled` reaches, and how many it holds at most (§4.7 H5): enough for the card a
@@ -2887,6 +2890,7 @@ export class ProjectOpenItemService {
       doneRequest: view.find((row) => row.kind === DONE_REQUEST_KIND) ?? null,
       settled: settledView,
       closedQuestions: await this.closedQuestions(projectId),
+      mainBranch: mainBranchOf(await readProjectCodebase(this.prisma, projectId)),
     };
   }
 

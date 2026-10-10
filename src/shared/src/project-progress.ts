@@ -321,6 +321,12 @@ export interface TaskIntegrationView<Instant = string> {
   checksRunningForMs: number | null;
   /** Null when no LAND_TASK exists; absent only on servers predating the unified read model. */
   landTask?: LandTaskIntegrationView<Instant> | null;
+  /**
+   * The project's main branch by name — `project_codebase.upstream_ref` without `refs/heads/` — that
+   * `ON_UPSTREAM` is on. Null when the task is in no project or its project has no repository
+   * bound. Absent from an older server.
+   */
+  mainBranch?: string | null;
 }
 
 /**
@@ -696,6 +702,11 @@ export interface ProjectOpenItemsView<Instant = string> {
    * the reason `startRequest` is. Absent from a server that predates done requests.
    */
   doneRequest?: ProjectOpenItemRow<Instant> | null;
+  /**
+   * The project's main branch by name — `project_codebase.upstream_ref` without `refs/heads/` — which
+   * a row's merge into main is a merge into. Null when the project has no repository bound.
+   */
+  mainBranch?: string | null;
 }
 
 /**
@@ -1118,6 +1129,12 @@ export interface SessionOwnerItem<Instant = string> {
   since: Instant;
   /** The short reason for an escalated item, derived from its raw kind. */
   need?: string;
+  /**
+   * The item's project's main branch by name — `project_codebase.upstream_ref` without
+   * `refs/heads/` — which a merge approval asks to merge into. Null when the project has no
+   * repository bound.
+   */
+  mainBranch?: string | null;
 }
 
 /**

@@ -74,4 +74,10 @@ export interface OwnerConfirmationIfConfirmed {
   landing?: OwnerConfirmationLanding;
   /** Null when no run of the task is open for the DONE to end. */
   endsSession?: OwnerConfirmationEndsSession | null;
+  /**
+   * The project's main branch by name — `project_codebase.upstream_ref` without `refs/heads/` — that
+   * the branch and landing rows say "main" of. Null when the task is in no project or its project
+   * has no repository bound, and the rows say main.
+   */
+  mainBranch?: string | null;
 }

@@ -77,6 +77,32 @@ describe('sessionLine', () => {
     });
   });
 
+  /** A merge approval asks to merge into the project's main branch, which the item names. */
+  it('names the branch a merge approval merges into, main as before', () => {
+    const waiting = {
+      status: 'AWAITING_INPUT',
+      engineTurnActive: false,
+      projectId: 'p_1',
+      waitingKind: 'OWNER_ITEM',
+      pendingApprovals: 1,
+    };
+    const approval = { itemId: 'i3', kind: 'PROMOTION_APPROVAL', title: 'Approve merge to main',
+                       since: '2026-09-22T00:19:41Z' };
+    expect(sessionLine({ ...waiting, ownerItems: [{ ...approval, mainBranch: 'master' }] }, true)).toEqual({
+      text: 'Approve merge to master',
+      tone: 'approval',
+    });
+    // Main by name, no repository bound (null) and an older server (absent) read as they always did.
+    for (const mainBranch of ['main', null, undefined]) {
+      expect(statusLabel({ ...waiting, ownerItems: [{ ...approval, mainBranch }] }), String(mainBranch))
+        .toBe('Approve merge to main');
+    }
+    // Only the merge names a branch.
+    const escalated = { itemId: 'i1', kind: 'ESCALATED', title: 'Task failed: 000_00022',
+                        since: '2026-09-22T00:19:41Z', mainBranch: 'master' };
+    expect(statusLabel({ ...waiting, ownerItems: [escalated] })).toBe('Escalated to you');
+  });
+
   it('names the project closing signals in the session row', () => {
     const parked = { status: 'AWAITING_INPUT', pendingApprovals: 1, projectId: 'p_1' };
     expect(sessionLine({ ...parked, waitingKind: 'DONE_REQUEST' }, true)).toEqual({

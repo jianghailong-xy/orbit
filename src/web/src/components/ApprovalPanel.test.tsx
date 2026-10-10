@@ -288,6 +288,17 @@ describe('merge-check skip approval', () => {
   it('says what is not being skipped when it is declined', () => {
     expect(decliningPrefix('orbit_integration_skip_merge_check')).toBe('Checking it after all: ');
   });
+
+  it('says every merge into the project’s main branch is still checked, main as before', () => {
+    const note = (html: string) => /<p class="create-criteria-note">([\s\S]*?)<\/p>/.exec(html)?.[1];
+    const said = (main: string) => 'Once, and only this landing: the project’s check command is unchanged, '
+      + `and the next landing and every merge into ${main} are checked as before.`;
+    expect(note(render(skip({ input: { mainBranch: 'master' } })))).toBe(said('master'));
+    // Main by name, no repository bound (null) and a runner that predates the field (absent).
+    for (const input of [{ mainBranch: 'main' }, { mainBranch: null }, {}]) {
+      expect(note(render(skip({ input }))), JSON.stringify(input)).toBe(said('main'));
+    }
+  });
 });
 
 describe('blocker resolution approval', () => {

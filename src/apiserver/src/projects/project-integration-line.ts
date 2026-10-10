@@ -155,6 +155,29 @@ export async function readProjectIntegrationLines(
   prisma: Pick<PrismaService, 'projectCodebase'>,
   projectIds: readonly string[],
 ): Promise<Map<string, ProjectListIntegration<Date>>> {
+  const lines = new Map<string, ProjectListIntegration<Date>>();
+  for (const [projectId, { integration }] of await readProjectListBindings(prisma, projectIds)) {
+    if (integration) lines.set(projectId, integration);
+  }
+  return lines;
+}
+
+/** What a list row reads off a project's binding: its line, null until somebody decided one, and
+ *  its main branch by name, which it has either way. */
+export interface ProjectListBinding {
+  integration: ProjectListIntegration<Date> | null;
+  mainBranch: string;
+}
+
+/**
+ * The statement behind `readProjectIntegrationLines`, for the rows that also name the project's
+ * main branch (`mainBranch` on `GET /projects` and `GET /projects/sidebar`). A project with no
+ * binding is absent: it has no repository, and its row's words say main.
+ */
+export async function readProjectListBindings(
+  prisma: Pick<PrismaService, 'projectCodebase'>,
+  projectIds: readonly string[],
+): Promise<Map<string, ProjectListBinding>> {
   if (projectIds.length === 0) return new Map();
   const rows = await prisma.projectCodebase.findMany({
     where: { projectId: { in: [...projectIds] }, slot: 'primary' },
@@ -171,12 +194,14 @@ export async function readProjectIntegrationLines(
       },
     },
   });
-  const lines = new Map<string, ProjectListIntegration<Date>>();
+  const bindings = new Map<string, ProjectListBinding>();
   for (const row of rows) {
+    const binding: ProjectListBinding = { integration: null, mainBranch: branchName(row.upstreamRef) };
+    bindings.set(row.projectId, binding);
     const line = decidedLine(row);
     if (!line) continue;
     const lead = oldestInFlight(row.integrationJobs ?? []);
-    lines.set(row.projectId, {
+    binding.integration = {
       line,
       ref: branchName(row.integrationRef),
       activeJobCount: row._count.integrationJobs,
@@ -195,9 +220,9 @@ export async function readProjectIntegrationLines(
           }),
         },
       } : {}),
-    });
+    };
   }
-  return lines;
+  return bindings;
 }
 
 /** `readProjectIntegrationView`'s ORDER BY over a project's active jobs, in memory: running first,

@@ -11,6 +11,7 @@ import type {
 } from '@orbit/shared';
 import {
   landingBranchesFor,
+  mainBranchOf,
   taskLanding,
   type LandingBranches,
   type LandingReceiptFacts,
@@ -47,7 +48,8 @@ export interface DependentReleaseReader {
 
 const log = new Logger('OwnerConfirmationIfConfirmed');
 
-/** The four items for the run `sessionId` is waiting with. `releases` absent leaves out the first. */
+/** The four items for the run `sessionId` is waiting with, and the main branch they name. `releases`
+ *  absent leaves out the first. */
 export async function readIfConfirmed(
   db: Prisma.TransactionClient,
   input: { ownerId: string; taskId: string; sessionId: string },
@@ -76,6 +78,8 @@ export async function readIfConfirmed(
   if (branch !== undefined) ifConfirmed.branch = branch;
   const endsSession = await read('endsSession', () => readEndsSession(db, input));
   if (endsSession !== undefined) ifConfirmed.endsSession = endsSession;
+  const mainBranch = await read('mainBranch', () => readMainBranch(db, input));
+  if (mainBranch !== undefined) ifConfirmed.mainBranch = mainBranch;
   return ifConfirmed;
 }
 
@@ -229,4 +233,14 @@ async function readEndsSession(
     select: { id: true, runningBgJobs: true },
   });
   return session ? { sessionId: session.id, runningBgJobs: session.runningBgJobs.length } : null;
+}
+
+/** The main branch the branch and landing rows name: the task's project's upstream, or null when
+ *  the task is in no project or its project has no repository bound. */
+async function readMainBranch(
+  db: Prisma.TransactionClient,
+  { ownerId, taskId }: { ownerId: string; taskId: string },
+): Promise<string | null> {
+  const task = await db.task.findFirst({ where: { id: taskId, ownerId }, select: { projectId: true } });
+  return task?.projectId ? mainBranchOf(await readProjectCodebase(db, task.projectId)) : null;
 }
