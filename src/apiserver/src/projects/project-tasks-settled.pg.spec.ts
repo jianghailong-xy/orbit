@@ -283,7 +283,7 @@ test('empty merge evidence makes the judgment open merge work and stores no PASS
       // run and the verdict, so the opening tells the session to record what main contains and
       // hand the per-criterion reading to the account owner in a comment.
       assert.match(session.prompt ?? '', /project_merge_evidence/);
-      assert.match(session.prompt ?? '', /没有任何东西会判定这些验收标准/);
+      assert.match(session.prompt ?? '', /Nothing in Orbit judges these acceptance criteria/);
       assert.equal((session.prompt ?? '').includes('acceptance run'), false);
 
       assert.equal(

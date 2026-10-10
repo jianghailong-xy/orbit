@@ -353,7 +353,8 @@ export interface WikiDocShown {
 
 /**
  * The checkout at the one commit a run reads (`wikiDocRepo`). `show` is `git show <sha>:<path>` — a directory
- * shows as git shows a tree — and `under` is every file under a directory, in git's order.
+ * shows as git shows a tree, and a path that is neither but holds a wildcard as git shows a pathspec: an empty
+ * file — and `under` is every file under a directory, in git's order.
  */
 export interface WikiDocRepo {
   readonly sha: string;

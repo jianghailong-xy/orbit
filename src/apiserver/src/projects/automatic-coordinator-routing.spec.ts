@@ -106,7 +106,7 @@ test('a delivery review asks the coordinator to decide, names every door, and sa
   }
   // Revision 13 (§4.6): a review the coordinator took up is not handed to the owner on a clock.
   assert.ok(!message.includes('exceptionEscalationSeconds'), 'the review still threatens the escalation clock');
-  assert.ok(!message.includes('合并到 main'), 'a review is not an order to merge');
+  assert.ok(!message.includes('merge into main'), 'a review is not an order to merge');
   // The rerun door is offered for what it accepts: a conflict is never rerun.
   assert.match(message, /冲突不能重跑/);
 
