@@ -1,0 +1,114 @@
+04:03:38.355 stub on 127.0.0.1:8765
+04:04:13.930 "GET /api/auth/methods" 200 auth=-
+04:12:40.328 "POST /__reset" 200 auth=-
+04:13:08.126 "GET /api/auth/methods" 200 auth=-
+04:13:13.613 === shot 1-password-card-light
+04:13:13.620 "POST /__mark" 200 auth=-
+04:13:17.902 "POST /__reset" 200 auth=-
+04:13:21.711 "GET /api/auth/methods" 200 auth=-
+04:13:25.676 === shot 1-password-card-dark
+04:13:25.677 "POST /__mark" 200 auth=-
+04:13:27.883 "POST /__reset" 200 auth=-
+04:13:30.936 "GET /api/auth/methods" 200 auth=-
+04:13:34.448 === shot 1b-unknown-card-light
+04:13:34.449 "POST /__mark" 200 auth=-
+04:13:36.933 "POST /__reset" 200 auth=-
+04:13:46.811 "GET /api/auth/methods" 200 auth=-
+04:13:50.210 === shot 2-google-card-light
+04:13:50.221 "POST /__mark" 200 auth=-
+04:13:52.745 "POST /__reset" 200 auth=-
+04:13:56.486 "GET /api/auth/methods" 200 auth=-
+04:14:00.452 === shot 2-google-card-dark
+04:14:00.454 "POST /__mark" 200 auth=-
+04:14:03.393 "POST /__reset" 200 auth=-
+04:14:03.442 "POST /__set" 200 auth=-
+04:14:13.086 "GET /api/auth/methods" held 8s
+04:14:15.203 === shot 2b-google-card-asking-light
+04:14:15.207 "POST /__mark" 200 auth=-
+04:14:21.535 "GET /api/auth/methods" 200 auth=-
+04:14:22.949 === shot 2c-google-card-answered-light
+04:14:22.949 "POST /__mark" 200 auth=-
+04:14:24.925 "POST /__reset" 200 auth=-
+04:14:25.054 "POST /__set" 200 auth=-
+04:14:28.586 "GET /api/auth/methods" 200 auth=-
+04:14:32.912 === shot 2d-google-card-server-without-google-light
+04:14:32.919 "POST /__mark" 200 auth=-
+04:14:35.937 "POST /__reset" 200 auth=-
+04:14:40.654 "GET /api/auth/methods" 200 auth=-
+04:14:48.727 === shot 3-another-account-light
+04:14:48.732 "POST /__mark" 200 auth=-
+04:14:52.452 === shot 3b-back-to-the-card-light
+04:14:52.473 "POST /__mark" 200 auth=-
+04:14:54.259 "POST /__reset" 200 auth=-
+04:14:57.822 "GET /api/auth/methods" 200 auth=-
+04:15:03.701 === shot 3-another-account-dark
+04:15:03.703 "POST /__mark" 200 auth=-
+04:15:08.851 "POST /__reset" 200 auth=-
+04:15:12.109 "GET /api/auth/methods" 200 auth=-
+04:15:19.011 === shot 4-long-press-light
+04:15:19.035 "POST /__mark" 200 auth=-
+04:15:26.582 === shot 4b-removed-light
+04:15:26.586 "POST /__mark" 200 auth=-
+04:15:28.840 "POST /__reset" 200 auth=-
+04:15:33.516 "GET /api/auth/methods" 200 auth=-
+04:15:36.625 === shot 4c-removed-then-relaunched-light
+04:15:36.625 "POST /__mark" 200 auth=-
+04:15:38.586 "POST /__reset" 200 auth=-
+04:15:43.441 "GET /api/auth/methods" 200 auth=-
+04:15:50.186 === shot 4-long-press-dark
+04:15:50.187 "POST /__mark" 200 auth=-
+04:15:52.183 "POST /__reset" 200 auth=-
+04:15:56.394 "GET /api/auth/methods" 200 auth=-
+04:16:05.618 === shot 5-keyboard-up-light
+04:16:05.671 "POST /__mark" 200 auth=-
+04:16:13.952 "POST /__reset" 200 auth=-
+04:16:19.143 "GET /api/auth/methods" 200 auth=-
+04:16:24.981 === shot 5-keyboard-up-dark
+04:16:24.983 "POST /__mark" 200 auth=-
+04:16:29.834 "POST /__reset" 200 auth=-
+04:16:32.933 "GET /api/auth/methods" 200 auth=-
+04:16:39.730 === shot 6-server-sheet-light
+04:16:39.748 "POST /__mark" 200 auth=-
+04:16:46.720 "GET /api/auth/methods" 200 auth=-
+04:16:49.891 === shot 6b-another-domain-light
+04:16:49.891 "POST /__mark" 200 auth=-
+04:17:00.168 "GET /api/auth/methods" 200 auth=-
+04:17:03.379 === shot 6c-back-to-the-first-domain-light
+04:17:03.394 "POST /__mark" 200 auth=-
+04:17:05.340 "POST /__reset" 200 auth=-
+04:17:08.443 "GET /api/auth/methods" 200 auth=-
+04:17:14.215 === shot 6-server-sheet-dark
+04:17:14.226 "POST /__mark" 200 auth=-
+04:17:16.211 "POST /__reset" 200 auth=-
+04:17:19.237 "GET /api/auth/methods" 200 auth=-
+04:17:23.117 === shot 7a-empty-form-with-the-pre-card-email-light
+04:17:23.118 "POST /__mark" 200 auth=-
+04:17:27.518 login attempt email=alex@example.com password_ok=False
+04:17:27.521 "POST /api/auth/login" 401 auth=-
+04:17:28.762 === shot 7b-failed-sign-in-remembers-nothing-light
+04:17:28.762 "POST /__mark" 200 auth=-
+04:17:32.860 login attempt email=alex@example.com password_ok=True
+04:17:32.861 "POST /api/auth/login" 200 auth=-
+04:17:32.908 "GET /api/users/me" 200 auth=bearer
+04:17:32.916 "GET /api/users/me/avatar" 200 auth=bearer
+04:17:36.700 "GET /api/auth/methods" 200 auth=-
+04:17:36.711 "POST /api/auth/logout" 204 auth=-
+04:17:38.859 === shot 7c-after-sign-out-light
+04:17:38.872 "POST /__mark" 200 auth=-
+04:17:46.343 login attempt email=bob@example.com password_ok=False
+04:17:46.350 "POST /api/auth/login" 401 auth=-
+04:17:47.619 === shot 7d-failed-sign-in-as-someone-else-light
+04:17:47.619 "POST /__mark" 200 auth=-
+04:17:51.686 === shot 7e-the-card-unchanged-light
+04:17:51.687 "POST /__mark" 200 auth=-
+04:17:55.102 login attempt email=alex@example.com password_ok=True
+04:17:55.103 "POST /api/auth/login" 200 auth=-
+04:17:55.124 "GET /api/users/me" 200 auth=bearer
+04:17:56.342 === shot 7f-signed-in-from-the-card-light
+04:17:56.345 "POST /__mark" 200 auth=-
+04:17:58.415 "GET /api/auth/methods" 200 auth=-
+04:17:58.425 "POST /api/auth/logout" 204 auth=-
+04:17:59.686 "POST /__reset" 200 auth=-
+04:18:04.161 "GET /api/auth/methods" 200 auth=-
+04:18:06.969 === shot 7g-relaunched-light
+04:18:06.970 "POST /__mark" 200 auth=-

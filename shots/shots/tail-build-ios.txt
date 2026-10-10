@@ -1,0 +1,300 @@
+    t =    16.13s Tap "Save" Button
+    t =    16.13s     Wait for io.orbitd.lraprobe to idle
+    t =    16.13s     Find the "Save" Button
+    t =    16.23s     Check for interrupting elements affecting "Save" Button
+    t =    16.30s     Synthesize event
+    t =    16.75s     Wait for io.orbitd.lraprobe to idle
+    t =    18.47s Checking existence of `Any (First Match)`
+    t =    18.52s Checking existence of `Any (First Match)`
+    t =    20.93s Added attachment named '6b-another-domain-light'
+    t =    20.93s Double tap Any (First Match)
+    t =    20.93s     Wait for io.orbitd.lraprobe to idle
+    t =    20.94s     Find the Any (First Match)
+    t =    20.99s     Check for interrupting elements affecting "Orbit" Other
+    t =    21.09s     Synthesize event
+    t =    21.52s     Wait for io.orbitd.lraprobe to idle
+    t =    21.55s Checking existence of `Any (First Match)`
+    t =    23.50s Get all elements bound by index for: Descendants matching type TextField
+    t =    23.56s Checking existence of `TextField (Element at index 0)`
+    t =    23.64s Find the TextField (Element at index 0)
+    t =    23.76s Checking existence of `TextField (Element at index 1)`
+    t =    23.86s Find the TextField (Element at index 1)
+    t =    23.96s Waiting 5.0s for "orbitd.io" TextField to exist
+    t =    25.00s     Checking `Expect predicate `existsNoRetry == 1` for object "orbitd.io" TextField`
+    t =    25.00s         Checking existence of `"orbitd.io" TextField`
+    t =    25.09s Checking existence of `"orbitd.io" TextField`
+    t =    25.16s Find the "orbitd.io" TextField
+    t =    25.25s Find the "orbitd.io" TextField
+    t =    25.33s Find the "orbitd.io" TextField
+    t =    25.43s Find the "orbitd.io" TextField
+    t =    25.55s Find the "orbitd.io" TextField
+    t =    25.67s Tap "orbitd.io" TextField
+    t =    25.67s     Wait for io.orbitd.lraprobe to idle
+    t =    25.68s     Find the "orbitd.io" TextField
+    t =    25.79s     Check for interrupting elements affecting "orbitd.io" TextField
+    t =    25.91s     Synthesize event
+    t =    26.28s     Wait for io.orbitd.lraprobe to idle
+    t =    26.30s Type '...' into "orbitd.io" TextField
+    t =    26.30s     Wait for io.orbitd.lraprobe to idle
+    t =    26.68s     Find the "orbitd.io" TextField
+    t =    26.76s     Check for interrupting elements affecting "orbitd.io" TextField
+    t =    26.82s     Synthesize event
+    t =    27.93s     Wait for io.orbitd.lraprobe to idle
+    t =    28.05s Get all elements bound by index for: Elements matching predicate 'label == "Save"'
+    t =    28.21s Checking existence of `Button (Element at index 0)`
+    t =    28.29s Find the Button (Element at index 0)
+    t =    28.39s Waiting 10.0s for "Save" Button to exist
+    t =    29.40s     Checking `Expect predicate `existsNoRetry == 1` for object "Save" Button`
+    t =    29.40s         Checking existence of `"Save" Button`
+    t =    29.58s Tap "Save" Button
+    t =    29.59s     Wait for io.orbitd.lraprobe to idle
+    t =    29.59s     Find the "Save" Button
+    t =    29.70s     Check for interrupting elements affecting "Save" Button
+    t =    29.83s     Synthesize event
+    t =    30.29s     Wait for io.orbitd.lraprobe to idle
+    t =    32.02s Checking existence of `Any (First Match)`
+    t =    34.39s Added attachment named '6c-back-to-the-first-domain-light'
+    t =    34.39s Terminate io.orbitd.lraprobe:29184
+    t =    35.53s Open io.orbitd.lraprobe
+    t =    35.53s     Launch io.orbitd.lraprobe
+2026-10-10 04:17:05.402 xcodebuild[4272:18045] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-10 04:17:05.402 xcodebuild[4272:18045] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =    36.74s         Setting up automation session
+    t =    38.31s         Wait for io.orbitd.lraprobe to idle
+    t =    39.86s Checking existence of `Any (First Match)`
+    t =    41.41s Double tap Any (First Match)
+    t =    41.41s     Wait for io.orbitd.lraprobe to idle
+    t =    41.41s     Find the Any (First Match)
+    t =    41.44s     Check for interrupting elements affecting "Orbit" Other
+    t =    41.49s     Synthesize event
+    t =    41.83s     Wait for io.orbitd.lraprobe to idle
+    t =    41.92s Checking existence of `Any (First Match)`
+    t =    45.23s Added attachment named '6-server-sheet-dark'
+    t =    45.23s Terminate io.orbitd.lraprobe:30792
+    t =    46.30s Tear Down
+    t =    46.30s     Added attachment named 'LoginShotTeststest6ServerSheetByDoubleTap-notes.txt'
+Test Case '-[LraProbeUITests.LoginShotTests test6ServerSheetByDoubleTap]' passed (46.363 seconds).
+Test Case '-[LraProbeUITests.LoginShotTests test7SignInIsRememberedAndAFailedOneChangesNothing]' started.
+    t =     0.00s Start Test at 2026-10-10 04:17:16.170
+    t =     0.04s Set Up
+2026-10-10 04:17:16.267 xcodebuild[4272:18045] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-10 04:17:16.268 xcodebuild[4272:18045] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     0.04s Open io.orbitd.lraprobe
+    t =     0.04s     Launch io.orbitd.lraprobe
+    t =     1.04s         Setting up automation session
+    t =     2.64s         Wait for io.orbitd.lraprobe to idle
+    t =     4.36s Checking existence of `Any (First Match)`
+    t =     7.73s Added attachment named '7a-empty-form-with-the-pre-card-email-light'
+    t =     7.74s Checking existence of `TextField (First Match)`
+    t =     7.78s Find the TextField (First Match)
+    t =     7.80s Find the "you@example.com" TextField
+    t =     7.85s Find the "you@example.com" TextField
+    t =     7.89s Find the "you@example.com" TextField
+    t =     7.93s Find the "you@example.com" TextField
+    t =     7.96s Tap SecureTextField (First Match)
+    t =     7.96s     Wait for io.orbitd.lraprobe to idle
+    t =     7.96s     Find the SecureTextField (First Match)
+    t =     7.99s     Check for interrupting elements affecting "Enter your password" SecureTextField
+    t =     8.03s     Synthesize event
+    t =     8.33s     Wait for io.orbitd.lraprobe to idle
+    t =     8.85s Type '<redacted>' into "Enter your password" SecureTextField
+    t =     8.85s     Wait for io.orbitd.lraprobe to idle
+    t =     9.11s     Find the "Enter your password" SecureTextField
+    t =     9.29s     Check for interrupting elements affecting "Enter your password" SecureTextField
+    t =     9.36s     Synthesize event
+    t =     9.81s     Wait for io.orbitd.lraprobe to idle
+    t =     9.81s Get all elements bound by index for: Elements matching predicate 'label == "Sign In"'
+    t =     9.88s Checking existence of `Button (Element at index 0)`
+    t =     9.91s Find the Button (Element at index 0)
+    t =    10.00s Waiting 10.0s for "Sign In" Button to exist
+    t =    11.01s     Checking `Expect predicate `existsNoRetry == 1` for object "Sign In" Button`
+    t =    11.01s         Checking existence of `"Sign In" Button`
+    t =    11.06s Tap "Sign In" Button
+    t =    11.06s     Wait for io.orbitd.lraprobe to idle
+    t =    11.06s     Find the "Sign In" Button
+    t =    11.12s     Check for interrupting elements affecting "Sign In" Button
+    t =    11.19s     Synthesize event
+    t =    11.51s     Wait for io.orbitd.lraprobe to idle
+    t =    11.52s Checking existence of `Any (First Match)`
+    t =    13.34s Added attachment named '7b-failed-sign-in-remembers-nothing-light'
+    t =    13.35s Checking existence of `Any (First Match)`
+    t =    13.53s Checking existence of `Any (First Match)`
+    t =    13.69s Tap "Enter your password" SecureTextField
+    t =    13.69s     Wait for io.orbitd.lraprobe to idle
+    t =    13.69s     Find the "Enter your password" SecureTextField
+    t =    13.74s     Check for interrupting elements affecting "Enter your password" SecureTextField
+    t =    13.79s     Synthesize event
+    t =    14.09s     Wait for io.orbitd.lraprobe to idle
+    t =    14.11s Type '...' into "Enter your password" SecureTextField
+    t =    14.11s     Wait for io.orbitd.lraprobe to idle
+    t =    14.11s     Find the "Enter your password" SecureTextField
+    t =    14.25s     Check for interrupting elements affecting "Enter your password" SecureTextField
+    t =    14.36s     Synthesize event
+    t =    15.12s     Wait for io.orbitd.lraprobe to idle
+    t =    15.21s Get all elements bound by index for: Elements matching predicate 'label == "Sign In"'
+    t =    15.31s Checking existence of `Button (Element at index 0)`
+    t =    15.36s Find the Button (Element at index 0)
+    t =    15.43s Waiting 10.0s for "Sign In" Button to exist
+    t =    16.44s     Checking `Expect predicate `existsNoRetry == 1` for object "Sign In" Button`
+    t =    16.44s         Checking existence of `"Sign In" Button`
+    t =    16.48s Tap "Sign In" Button
+    t =    16.48s     Wait for io.orbitd.lraprobe to idle
+    t =    16.48s     Find the "Sign In" Button
+    t =    16.54s     Check for interrupting elements affecting "Sign In" Button
+    t =    16.57s     Synthesize event
+    t =    16.88s     Wait for io.orbitd.lraprobe to idle
+    t =    17.11s Checking existence of `Any (First Match)`
+    t =    19.14s Get all elements bound by index for: Elements matching predicate 'label == "Sign out"'
+    t =    19.16s Checking existence of `Button (Element at index 0)`
+    t =    19.19s Find the Button (Element at index 0)
+    t =    19.25s Waiting 10.0s for "Sign out" Button to exist
+    t =    20.28s     Checking `Expect predicate `existsNoRetry == 1` for object "Sign out" Button`
+    t =    20.28s         Checking existence of `"Sign out" Button`
+    t =    20.30s Tap "Sign out" Button
+    t =    20.30s     Wait for io.orbitd.lraprobe to idle
+    t =    20.30s     Find the "Sign out" Button
+    t =    20.32s     Check for interrupting elements affecting "Sign out" Button
+    t =    20.34s     Synthesize event
+    t =    20.64s     Wait for io.orbitd.lraprobe to idle
+    t =    20.64s Checking existence of `Any (First Match)`
+    t =    23.46s Added attachment named '7c-after-sign-out-light'
+    t =    23.47s Checking existence of `Any (First Match)`
+    t =    23.52s Find the Any (First Match)
+    t =    23.58s Find the "Alex Morgan, alex@example.com, 127.0.0.1:8765" Other
+    t =    23.62s Find the "Alex Morgan, alex@example.com, 127.0.0.1:8765" Other
+    t =    23.67s Find the "Alex Morgan, alex@example.com, 127.0.0.1:8765" Other
+    t =    23.71s Find the "Alex Morgan, alex@example.com, 127.0.0.1:8765" Other
+    t =    23.77s Get all elements bound by index for: Elements matching predicate 'label == "Use another account"'
+    t =    23.79s Checking existence of `Button (Element at index 0)`
+    t =    23.82s Find the Button (Element at index 0)
+    t =    23.87s Waiting 10.0s for "Use another account" Button to exist
+    t =    24.89s     Checking `Expect predicate `existsNoRetry == 1` for object "Use another account" Button`
+    t =    24.89s         Checking existence of `"Use another account" Button`
+    t =    24.96s Tap "Use another account" Button
+    t =    24.96s     Wait for io.orbitd.lraprobe to idle
+    t =    24.97s     Find the "Use another account" Button
+    t =    25.00s     Check for interrupting elements affecting "Use another account" Button
+    t =    25.04s     Synthesize event
+    t =    25.35s     Wait for io.orbitd.lraprobe to idle
+    t =    25.36s Tap TextField (First Match)
+    t =    25.36s     Wait for io.orbitd.lraprobe to idle
+    t =    25.36s     Find the TextField (First Match)
+    t =    25.47s     Check for interrupting elements affecting "you@example.com" TextField
+    t =    25.54s     Synthesize event
+    t =    25.86s     Wait for io.orbitd.lraprobe to idle
+    t =    26.33s Type 'bob@example.com' into "you@example.com" TextField
+    t =    26.33s     Wait for io.orbitd.lraprobe to idle
+    t =    26.36s     Find the "you@example.com" TextField
+    t =    26.60s     Check for interrupting elements affecting "you@example.com" TextField
+    t =    26.65s     Synthesize event
+    t =    27.13s     Wait for io.orbitd.lraprobe to idle
+    t =    27.13s Tap "Enter your password" SecureTextField
+    t =    27.13s     Wait for io.orbitd.lraprobe to idle
+    t =    27.14s     Find the "Enter your password" SecureTextField
+    t =    27.36s     Check for interrupting elements affecting "Enter your password" SecureTextField
+    t =    27.42s     Synthesize event
+    t =    27.74s     Wait for io.orbitd.lraprobe to idle
+    t =    28.16s Type '<redacted>' into "Enter your password" SecureTextField
+    t =    28.16s     Wait for io.orbitd.lraprobe to idle
+    t =    28.16s     Find the "Enter your password" SecureTextField
+    t =    28.23s     Check for interrupting elements affecting "Enter your password" SecureTextField
+    t =    28.28s     Synthesize event
+    t =    28.75s     Wait for io.orbitd.lraprobe to idle
+    t =    28.75s Get all elements bound by index for: Elements matching predicate 'label == "Sign In"'
+    t =    28.79s Checking existence of `Button (Element at index 0)`
+    t =    28.82s Find the Button (Element at index 0)
+    t =    28.89s Waiting 10.0s for "Sign In" Button to exist
+    t =    29.92s     Checking `Expect predicate `existsNoRetry == 1` for object "Sign In" Button`
+    t =    29.93s         Checking existence of `"Sign In" Button`
+    t =    29.97s Tap "Sign In" Button
+    t =    29.97s     Wait for io.orbitd.lraprobe to idle
+    t =    29.97s     Find the "Sign In" Button
+    t =    30.01s     Check for interrupting elements affecting "Sign In" Button
+    t =    30.05s     Synthesize event
+    t =    30.36s     Wait for io.orbitd.lraprobe to idle
+    t =    30.36s Checking existence of `Any (First Match)`
+    t =    32.22s Added attachment named '7d-failed-sign-in-as-someone-else-light'
+    t =    32.22s Get all elements bound by index for: Elements matching predicate 'label == "Sign in as Alex Morgan"'
+    t =    32.26s Checking existence of `Button (Element at index 0)`
+    t =    32.30s Find the Button (Element at index 0)
+    t =    32.37s Waiting 10.0s for "Sign in as Alex Morgan" Button to exist
+    t =    33.39s     Checking `Expect predicate `existsNoRetry == 1` for object "Sign in as Alex Morgan" Button`
+    t =    33.39s         Checking existence of `"Sign in as Alex Morgan" Button`
+    t =    33.44s Tap "Sign in as Alex Morgan" Button
+    t =    33.44s     Wait for io.orbitd.lraprobe to idle
+    t =    33.44s     Find the "Sign in as Alex Morgan" Button
+    t =    33.52s     Check for interrupting elements affecting "Sign in as Alex Morgan" Button
+    t =    33.58s     Synthesize event
+    t =    33.88s     Wait for io.orbitd.lraprobe to idle
+    t =    33.89s Checking existence of `Any (First Match)`
+    t =    36.27s Added attachment named '7e-the-card-unchanged-light'
+    t =    36.27s Checking existence of `Any (First Match)`
+    t =    36.34s Tap SecureTextField (First Match)
+    t =    36.34s     Wait for io.orbitd.lraprobe to idle
+    t =    36.34s     Find the SecureTextField (First Match)
+    t =    36.39s     Check for interrupting elements affecting "Enter your password" SecureTextField
+    t =    36.43s     Synthesize event
+    t =    36.75s     Wait for io.orbitd.lraprobe to idle
+    t =    36.75s Type '<redacted>' into "Enter your password" SecureTextField
+    t =    36.75s     Wait for io.orbitd.lraprobe to idle
+    t =    36.75s     Find the "Enter your password" SecureTextField
+    t =    36.87s     Check for interrupting elements affecting "Enter your password" SecureTextField
+    t =    36.97s     Synthesize event
+    t =    37.40s     Wait for io.orbitd.lraprobe to idle
+    t =    37.48s Get all elements bound by index for: Elements matching predicate 'label == "Sign In"'
+    t =    37.53s Checking existence of `Button (Element at index 0)`
+    t =    37.58s Find the Button (Element at index 0)
+    t =    37.64s Waiting 10.0s for "Sign In" Button to exist
+    t =    38.67s     Checking `Expect predicate `existsNoRetry == 1` for object "Sign In" Button`
+    t =    38.67s         Checking existence of `"Sign In" Button`
+    t =    38.72s Tap "Sign In" Button
+    t =    38.72s     Wait for io.orbitd.lraprobe to idle
+    t =    38.73s     Find the "Sign In" Button
+    t =    38.78s     Check for interrupting elements affecting "Sign In" Button
+    t =    38.84s     Synthesize event
+    t =    39.13s     Wait for io.orbitd.lraprobe to idle
+    t =    39.13s Checking existence of `Any (First Match)`
+    t =    40.92s Added attachment named '7f-signed-in-from-the-card-light'
+    t =    40.92s Get all elements bound by index for: Elements matching predicate 'label == "Sign out"'
+    t =    40.95s Checking existence of `Button (Element at index 0)`
+    t =    40.96s Find the Button (Element at index 0)
+    t =    40.98s Waiting 10.0s for "Sign out" Button to exist
+    t =    42.03s     Checking `Expect predicate `existsNoRetry == 1` for object "Sign out" Button`
+    t =    42.03s         Checking existence of `"Sign out" Button`
+    t =    42.05s Tap "Sign out" Button
+    t =    42.05s     Wait for io.orbitd.lraprobe to idle
+    t =    42.06s     Find the "Sign out" Button
+    t =    42.07s     Check for interrupting elements affecting "Sign out" Button
+    t =    42.08s     Synthesize event
+    t =    42.39s     Wait for io.orbitd.lraprobe to idle
+    t =    42.40s Checking existence of `Any (First Match)`
+    t =    42.42s Terminate io.orbitd.lraprobe:31338
+    t =    43.52s Open io.orbitd.lraprobe
+    t =    43.52s     Launch io.orbitd.lraprobe
+2026-10-10 04:17:59.698 xcodebuild[4272:18045] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-10 04:17:59.698 xcodebuild[4272:18045] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =    45.34s         Setting up automation session
+    t =    47.42s         Wait for io.orbitd.lraprobe to idle
+    t =    49.21s Checking existence of `Any (First Match)`
+    t =    51.59s Added attachment named '7g-relaunched-light'
+    t =    51.59s Terminate io.orbitd.lraprobe:33569
+    t =    52.68s Added attachment named 'requests-at-the-end.log'
+    t =    52.69s Tear Down
+    t =    52.70s     Added attachment named 'LoginShotTeststest7SignInIsRememberedAndAFailedOneChangesNothing-notes.txt'
+Test Case '-[LraProbeUITests.LoginShotTests test7SignInIsRememberedAndAFailedOneChangesNothing]' passed (52.849 seconds).
+Test Suite 'LoginShotTests' passed at 2026-10-10 04:18:09.020.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 331.139 (331.165) seconds
+Test Suite 'LraProbeUITests.xctest' passed at 2026-10-10 04:18:09.021.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 331.139 (331.167) seconds
+Test Suite 'All tests' passed at 2026-10-10 04:18:09.023.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 331.139 (331.169) seconds
+2026-10-10 04:18:10.822 xcodebuild[4272:18045] [MT] IDETestOperationsObserverDebug: 395.328 elapsed -- Testing started completed.
+2026-10-10 04:18:10.823 xcodebuild[4272:18045] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-10 04:18:10.823 xcodebuild[4272:18045] [MT] IDETestOperationsObserverDebug: 395.328 sec, +395.328 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/runner/work/orbit/orbit/.lra-probe/results/ios.xcresult
+
+** TEST SUCCEEDED **
+
+Testing started

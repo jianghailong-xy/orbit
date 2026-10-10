@@ -1,0 +1,20 @@
+Test Case '-[LraProbeUITests.LoginShotTests test1PasswordCard]' started.
+Test Case '-[LraProbeUITests.LoginShotTests test1PasswordCard]' passed (58.919 seconds).
+Test Case '-[LraProbeUITests.LoginShotTests test2GoogleCard]' started.
+Test Case '-[LraProbeUITests.LoginShotTests test2GoogleCard]' passed (59.006 seconds).
+Test Case '-[LraProbeUITests.LoginShotTests test3UseAnotherAccount]' started.
+Test Case '-[LraProbeUITests.LoginShotTests test3UseAnotherAccount]' passed (33.004 seconds).
+Test Case '-[LraProbeUITests.LoginShotTests test4LongPress]' started.
+Test Case '-[LraProbeUITests.LoginShotTests test4LongPress]' passed (43.305 seconds).
+Test Case '-[LraProbeUITests.LoginShotTests test5KeyboardUp]' started.
+Test Case '-[LraProbeUITests.LoginShotTests test5KeyboardUp]' passed (37.694 seconds).
+Test Case '-[LraProbeUITests.LoginShotTests test6ServerSheetByDoubleTap]' started.
+Test Case '-[LraProbeUITests.LoginShotTests test6ServerSheetByDoubleTap]' passed (46.363 seconds).
+Test Case '-[LraProbeUITests.LoginShotTests test7SignInIsRememberedAndAFailedOneChangesNothing]' started.
+    t =    13.34s Added attachment named '7b-failed-sign-in-remembers-nothing-light'
+    t =    32.22s Added attachment named '7d-failed-sign-in-as-someone-else-light'
+Test Case '-[LraProbeUITests.LoginShotTests test7SignInIsRememberedAndAFailedOneChangesNothing]' passed (52.849 seconds).
+	 Executed 7 tests, with 0 failures (0 unexpected) in 331.139 (331.165) seconds
+	 Executed 7 tests, with 0 failures (0 unexpected) in 331.139 (331.167) seconds
+	 Executed 7 tests, with 0 failures (0 unexpected) in 331.139 (331.169) seconds
+** TEST SUCCEEDED **

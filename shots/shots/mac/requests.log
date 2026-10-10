@@ -1,0 +1,18 @@
+04:18:17.301 stub on 127.0.0.1:8765
+04:18:54.482 "GET /api/auth/methods" 200 auth=-
+04:22:15.873 "POST /__reset" 200 auth=-
+04:22:18.449 "GET /api/auth/methods" 200 auth=-
+04:22:23.807 === shot 8-mac-password-card-light
+04:22:23.830 "POST /__mark" 200 auth=-
+04:22:25.566 "POST /__reset" 200 auth=-
+04:22:26.264 "GET /api/auth/methods" 200 auth=-
+04:22:30.748 === shot 8-mac-password-card-dark
+04:22:30.748 "POST /__mark" 200 auth=-
+04:22:32.455 "POST /__reset" 200 auth=-
+04:22:32.953 "GET /api/auth/methods" 200 auth=-
+04:22:36.740 === shot 8b-mac-google-card-light
+04:22:36.759 "POST /__mark" 200 auth=-
+04:22:39.885 === shot 8c-mac-right-click-light
+04:22:39.909 "POST /__mark" 200 auth=-
+04:22:43.164 === shot 8d-mac-removed-light
+04:22:43.165 "POST /__mark" 200 auth=-

@@ -1,0 +1,300 @@
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --entitlements /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Intermediates.noindex/LraProbe.build/Debug/LraMacProbe.build/LraMacProbe.app.xcent --timestamp\=none --generate-entitlement-der /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbe.app
+
+RegisterExecutionPolicyException /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbe.app (in target 'LraMacProbe' from project 'LraProbe')
+    cd /Users/runner/work/orbit/orbit/.lra-probe
+    builtin-RegisterExecutionPolicyException /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbe.app
+
+Validate /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbe.app (in target 'LraMacProbe' from project 'LraProbe')
+    cd /Users/runner/work/orbit/orbit/.lra-probe
+    builtin-validationUtility /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbe.app -no-validate-extension -infoplist-subpath Contents/Info.plist
+
+Touch /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbe.app (in target 'LraMacProbe' from project 'LraProbe')
+    cd /Users/runner/work/orbit/orbit/.lra-probe
+    /usr/bin/touch -c /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbe.app
+
+RegisterWithLaunchServices /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbe.app (in target 'LraMacProbe' from project 'LraProbe')
+    cd /Users/runner/work/orbit/orbit/.lra-probe
+    /System/Library/Frameworks/CoreServices.framework/Versions/Current/Frameworks/LaunchServices.framework/Versions/Current/Support/lsregister -f -R -trusted /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbe.app
+
+ProcessInfoPlistFile /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app/Contents/PlugIns/LraMacProbeUITests.xctest/Contents/Info.plist /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Intermediates.noindex/LraProbe.build/Debug/LraMacProbeUITests.build/empty-LraMacProbeUITests.plist (in target 'LraMacProbeUITests' from project 'LraProbe')
+    cd /Users/runner/work/orbit/orbit/.lra-probe
+    builtin-infoPlistUtility /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Intermediates.noindex/LraProbe.build/Debug/LraMacProbeUITests.build/empty-LraMacProbeUITests.plist -producttype com.apple.product-type.bundle.ui-testing -expandbuildsettings -platform macosx -additionalcontentfile /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Intermediates.noindex/LraProbe.build/Debug/LraMacProbeUITests.build/ProductTypeInfoPlistAdditions.plist -o /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app/Contents/PlugIns/LraMacProbeUITests.xctest/Contents/Info.plist
+
+Ld /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app/Contents/PlugIns/LraMacProbeUITests.xctest/Contents/MacOS/LraMacProbeUITests normal (in target 'LraMacProbeUITests' from project 'LraProbe')
+    cd /Users/runner/work/orbit/orbit/.lra-probe
+    /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -Xlinker -reproducible -target arm64-apple-macos14.0 -bundle -isysroot /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk -O0 -L/Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Intermediates.noindex/EagerLinkingTBDs/Debug -L/Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug -L/Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib -F/Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Intermediates.noindex/EagerLinkingTBDs/Debug -F/Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug -iframework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks -filelist /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Intermediates.noindex/LraProbe.build/Debug/LraMacProbeUITests.build/Objects-normal/arm64/LraMacProbeUITests.LinkFileList -Xlinker -rpath -Xlinker /usr/lib/swift -Xlinker -rpath -Xlinker @loader_path/../Frameworks -Xlinker -rpath -Xlinker @executable_path/Frameworks -Xlinker -rpath -Xlinker @loader_path/Frameworks -Xlinker -object_path_lto -Xlinker /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Intermediates.noindex/LraProbe.build/Debug/LraMacProbeUITests.build/Objects-normal/arm64/LraMacProbeUITests_lto.o -rdynamic -Xlinker -no_deduplicate -Xlinker -dependency_info -Xlinker /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Intermediates.noindex/LraProbe.build/Debug/LraMacProbeUITests.build/Objects-normal/arm64/LraMacProbeUITests_dependency_info.dat -fobjc-link-runtime -L/Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/macosx -L/usr/lib/swift -Xlinker -add_ast_path -Xlinker /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Intermediates.noindex/LraProbe.build/Debug/LraMacProbeUITests.build/Objects-normal/arm64/LraMacProbeUITests.swiftmodule @/Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Intermediates.noindex/LraProbe.build/Debug/LraMacProbeUITests.build/Objects-normal/arm64/LraMacProbeUITests-linker-args.resp -Xlinker -needed_framework -Xlinker XCTest -framework XCTest -Xlinker -needed-lXCTestSwiftSupport -lXCTestSwiftSupport -Xlinker -no_adhoc_codesign -o /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app/Contents/PlugIns/LraMacProbeUITests.xctest/Contents/MacOS/LraMacProbeUITests
+
+CopySwiftLibs /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app/Contents/PlugIns/LraMacProbeUITests.xctest (in target 'LraMacProbeUITests' from project 'LraProbe')
+    cd /Users/runner/work/orbit/orbit/.lra-probe
+    builtin-swiftStdLibTool --copy --verbose --sign - --scan-executable /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app/Contents/PlugIns/LraMacProbeUITests.xctest/Contents/MacOS/LraMacProbeUITests --scan-folder /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app/Contents/PlugIns/LraMacProbeUITests.xctest/Contents/Frameworks --scan-folder /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app/Contents/PlugIns/LraMacProbeUITests.xctest/Contents/PlugIns --scan-folder /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app/Contents/PlugIns/LraMacProbeUITests.xctest/Contents/Library/SystemExtensions --scan-folder /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app/Contents/PlugIns/LraMacProbeUITests.xctest/Contents/Extensions --platform macosx --toolchain /var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-v17.6.109.0.IOthvc/Metal.xctoolchain --toolchain /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --destination /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app/Contents/PlugIns/LraMacProbeUITests.xctest/Contents/Frameworks --strip-bitcode --scan-executable /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib/libXCTestSwiftSupport.dylib --strip-bitcode-tool /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/bitcode_strip --emit-dependency-info /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Intermediates.noindex/LraProbe.build/Debug/LraMacProbeUITests.build/SwiftStdLibToolInputDependencies.dep --filter-for-swift-os --back-deploy-swift-span
+
+ExtractAppIntentsMetadata (in target 'LraMacProbeUITests' from project 'LraProbe')
+    cd /Users/runner/work/orbit/orbit/.lra-probe
+    /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsmetadataprocessor --toolchain-dir /var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-v17.6.109.0.IOthvc/Metal.xctoolchain --module-name LraMacProbeUITests --sdk-root /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk --xcode-version 17F113 --platform-family macOS --deployment-target 14.0 --bundle-identifier io.orbitd.lramacprobe.uitests --output /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app/Contents/PlugIns/LraMacProbeUITests.xctest/Contents/Resources --target-triple arm64-apple-macos14.0 --binary-file /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app/Contents/PlugIns/LraMacProbeUITests.xctest/Contents/MacOS/LraMacProbeUITests --dependency-file /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Intermediates.noindex/LraProbe.build/Debug/LraMacProbeUITests.build/Objects-normal/arm64/LraMacProbeUITests_dependency_info.dat --stringsdata-file /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Intermediates.noindex/LraProbe.build/Debug/LraMacProbeUITests.build/Objects-normal/arm64/ExtractedAppShortcutsMetadata.stringsdata --source-file-list /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Intermediates.noindex/LraProbe.build/Debug/LraMacProbeUITests.build/Objects-normal/arm64/LraMacProbeUITests.SwiftFileList --metadata-file-list /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Intermediates.noindex/LraProbe.build/Debug/LraMacProbeUITests.build/LraMacProbeUITests.DependencyMetadataFileList --static-metadata-file-list /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Intermediates.noindex/LraProbe.build/Debug/LraMacProbeUITests.build/LraMacProbeUITests.DependencyStaticMetadataFileList --swift-const-vals-list /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Intermediates.noindex/LraProbe.build/Debug/LraMacProbeUITests.build/Objects-normal/arm64/LraMacProbeUITests.SwiftConstValuesFileList --compile-time-extraction --deployment-aware-processing --validate-assistant-intents --no-app-shortcuts-localization
+2026-10-10 04:22:07.689 appintentsmetadataprocessor[48016:126821] Starting appintentsmetadataprocessor export
+2026-10-10 04:22:07.692 appintentsmetadataprocessor[48016:126821] warning: Metadata extraction skipped. No AppIntents.framework dependency found.
+
+MkDir /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app (in target 'LraMacProbeUITests' from project 'LraProbe')
+    cd /Users/runner/work/orbit/orbit/.lra-probe
+    /bin/mkdir -p /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app
+
+CopyAndPreserveArchs /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app/Contents/MacOS/LraMacProbeUITests-Runner (in target 'LraMacProbeUITests' from project 'LraProbe')
+    cd /Users/runner/work/orbit/orbit/.lra-probe
+    /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/lipo /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Xcode/Agents/XCTRunner.app/Contents/MacOS/XCTRunner -output /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app/Contents/MacOS/LraMacProbeUITests-Runner -extract arm64
+
+CopyPlistFile /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app/Contents/Info.plist /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Xcode/Agents/XCTRunner.app/Contents/Info.plist (in target 'LraMacProbeUITests' from project 'LraProbe')
+    cd /Users/runner/work/orbit/orbit/.lra-probe
+    builtin-copyPlist --validate --convert xml1 --macro-expansion WRAPPEDPRODUCTNAME LraMacProbeUITests-Runner --macro-expansion WRAPPEDPRODUCTBUNDLEIDENTIFIER io.orbitd.lramacprobe.uitests.xctrunner --macro-expansion TESTPRODUCTNAME LraMacProbeUITests --macro-expansion TESTPRODUCTBUNDLEIDENTIFIER io.orbitd.lramacprobe.uitests --copy-value UIDeviceFamily /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app/Contents/PlugIns/LraMacProbeUITests.xctest/Contents/Info.plist --outdir /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app/Contents -- /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Xcode/Agents/XCTRunner.app/Contents/Info.plist
+
+Copy /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app/Contents/PkgInfo /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Xcode/Agents/XCTRunner.app/Contents/PkgInfo (in target 'LraMacProbeUITests' from project 'LraProbe')
+    cd /Users/runner/work/orbit/orbit/.lra-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Xcode/Agents/XCTRunner.app/Contents/PkgInfo /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app/Contents
+
+Copy /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app/Contents/Frameworks/libXCTestSwiftSupport.dylib /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib/libXCTestSwiftSupport.dylib (in target 'LraMacProbeUITests' from project 'LraProbe')
+    cd /Users/runner/work/orbit/orbit/.lra-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib/libXCTestSwiftSupport.dylib /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app/Contents/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app/Contents/Frameworks/XCUnit.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks/XCUnit.framework (in target 'LraMacProbeUITests' from project 'LraProbe')
+    cd /Users/runner/work/orbit/orbit/.lra-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks/XCUnit.framework /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app/Contents/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app/Contents/Frameworks/XCUIAutomation.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/XCUIAutomation.framework (in target 'LraMacProbeUITests' from project 'LraProbe')
+    cd /Users/runner/work/orbit/orbit/.lra-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/XCUIAutomation.framework /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app/Contents/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app/Contents/Frameworks/XCTestSupport.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks/XCTestSupport.framework (in target 'LraMacProbeUITests' from project 'LraProbe')
+    cd /Users/runner/work/orbit/orbit/.lra-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks/XCTestSupport.framework /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app/Contents/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app/Contents/Frameworks/XCTestCore.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks/XCTestCore.framework (in target 'LraMacProbeUITests' from project 'LraProbe')
+    cd /Users/runner/work/orbit/orbit/.lra-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks/XCTestCore.framework /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app/Contents/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app/Contents/Frameworks/XCTest.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/XCTest.framework (in target 'LraMacProbeUITests' from project 'LraProbe')
+    cd /Users/runner/work/orbit/orbit/.lra-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/XCTest.framework /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app/Contents/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app/Contents/Frameworks/XCTAutomationSupport.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks/XCTAutomationSupport.framework (in target 'LraMacProbeUITests' from project 'LraProbe')
+    cd /Users/runner/work/orbit/orbit/.lra-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks/XCTAutomationSupport.framework /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app/Contents/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app/Contents/Frameworks/Testing.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/Testing.framework (in target 'LraMacProbeUITests' from project 'LraProbe')
+    cd /Users/runner/work/orbit/orbit/.lra-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/Testing.framework /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app/Contents/Frameworks
+
+CodeSign /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app/Contents/Frameworks/libXCTestSwiftSupport.dylib (in target 'LraMacProbeUITests' from project 'LraProbe')
+    cd /Users/runner/work/orbit/orbit/.lra-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app/Contents/Frameworks/libXCTestSwiftSupport.dylib
+/Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app/Contents/Frameworks/libXCTestSwiftSupport.dylib: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app/Contents/Frameworks/XCUnit.framework (in target 'LraMacProbeUITests' from project 'LraProbe')
+    cd /Users/runner/work/orbit/orbit/.lra-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app/Contents/Frameworks/XCUnit.framework
+/Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app/Contents/Frameworks/XCUnit.framework: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app/Contents/Frameworks/XCUIAutomation.framework (in target 'LraMacProbeUITests' from project 'LraProbe')
+    cd /Users/runner/work/orbit/orbit/.lra-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app/Contents/Frameworks/XCUIAutomation.framework
+/Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app/Contents/Frameworks/XCUIAutomation.framework: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app/Contents/Frameworks/XCTestSupport.framework (in target 'LraMacProbeUITests' from project 'LraProbe')
+    cd /Users/runner/work/orbit/orbit/.lra-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app/Contents/Frameworks/XCTestSupport.framework
+/Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app/Contents/Frameworks/XCTestSupport.framework: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app/Contents/Frameworks/XCTestCore.framework (in target 'LraMacProbeUITests' from project 'LraProbe')
+    cd /Users/runner/work/orbit/orbit/.lra-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app/Contents/Frameworks/XCTestCore.framework
+/Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app/Contents/Frameworks/XCTestCore.framework: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app/Contents/Frameworks/XCTest.framework (in target 'LraMacProbeUITests' from project 'LraProbe')
+    cd /Users/runner/work/orbit/orbit/.lra-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app/Contents/Frameworks/XCTest.framework
+/Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app/Contents/Frameworks/XCTest.framework: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app/Contents/Frameworks/XCTAutomationSupport.framework (in target 'LraMacProbeUITests' from project 'LraProbe')
+    cd /Users/runner/work/orbit/orbit/.lra-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app/Contents/Frameworks/XCTAutomationSupport.framework
+/Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app/Contents/Frameworks/XCTAutomationSupport.framework: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app/Contents/Frameworks/Testing.framework (in target 'LraMacProbeUITests' from project 'LraProbe')
+    cd /Users/runner/work/orbit/orbit/.lra-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app/Contents/Frameworks/Testing.framework
+/Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app/Contents/Frameworks/Testing.framework: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app/Contents/PlugIns/LraMacProbeUITests.xctest (in target 'LraMacProbeUITests' from project 'LraProbe')
+    cd /Users/runner/work/orbit/orbit/.lra-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --entitlements /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Intermediates.noindex/LraProbe.build/Debug/LraMacProbeUITests.build/LraMacProbeUITests.xctest.xcent --timestamp\=none --generate-entitlement-der /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app/Contents/PlugIns/LraMacProbeUITests.xctest
+
+RegisterExecutionPolicyException /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app/Contents/PlugIns/LraMacProbeUITests.xctest (in target 'LraMacProbeUITests' from project 'LraProbe')
+    cd /Users/runner/work/orbit/orbit/.lra-probe
+    builtin-RegisterExecutionPolicyException /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app/Contents/PlugIns/LraMacProbeUITests.xctest
+
+Touch /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app/Contents/PlugIns/LraMacProbeUITests.xctest (in target 'LraMacProbeUITests' from project 'LraProbe')
+    cd /Users/runner/work/orbit/orbit/.lra-probe
+    /usr/bin/touch -c /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app/Contents/PlugIns/LraMacProbeUITests.xctest
+
+CodeSign /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app (in target 'LraMacProbeUITests' from project 'LraProbe')
+    cd /Users/runner/work/orbit/orbit/.lra-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --entitlements /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Intermediates.noindex/LraProbe.build/Debug/LraMacProbeUITests.build/LraMacProbeUITests.xctest.xcent --timestamp\=none --generate-entitlement-der /Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app
+/Users/runner/work/orbit/orbit/.lra-probe/.dd-mac/Build/Products/Debug/LraMacProbeUITests-Runner.app: replacing existing signature
+
+2026-10-10 04:22:12.988549+0000 LraMacProbeUITests-Runner[48044:126971] [Default] Running tests...
+Test Suite 'All tests' started at 2026-10-10 04:22:14.074.
+Test Suite 'LraMacProbeUITests.xctest' started at 2026-10-10 04:22:14.074.
+Test Suite 'LoginShotTests' started at 2026-10-10 04:22:14.074.
+Test Case '-[LraMacProbeUITests.LoginShotTests test8MacWindow]' started.
+    t =     0.00s Start Test at 2026-10-10 04:22:14.075
+    t =     1.27s Set Up
+    t =     1.81s Open io.orbitd.lramacprobe
+    t =     1.81s     Launch io.orbitd.lramacprobe
+2026-10-10 04:22:16.360 xcodebuild[36549:100314] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-10 04:22:16.360 xcodebuild[36549:100314] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     3.63s         Wait for accessibility to load
+    t =     5.08s         Setting up automation session
+    t =     5.11s         Wait for io.orbitd.lramacprobe to idle
+    t =     5.12s Checking existence of `"Allow" Button`
+    t =     5.20s Checking existence of `"Allow" Button`
+    t =     5.20s Click "Allow" Button
+    t =     5.21s     Wait for com.apple.UserNotificationCenter to idle
+    t =     5.21s     Find the "Allow" Button
+    t =     5.21s     Check for interrupting elements affecting "action-button-1" Button
+    t =     5.22s     Open com.apple.UserNotificationCenter
+    t =     5.22s         Activate com.apple.UserNotificationCenter
+    t =     5.22s             Wait for com.apple.UserNotificationCenter to idle
+    t =     5.24s     Synthesize event
+    t =     5.66s     Wait for com.apple.UserNotificationCenter to idle
+    t =     5.66s Waiting 20.0s for Window (First Match) to exist
+    t =     6.68s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =     6.68s         Checking existence of `Window (First Match)`
+    t =     6.69s Checking existence of `Any (First Match)`
+    t =    10.37s Checking existence of `Window (First Match)`
+    t =    10.37s Checking existence of `Window (First Match)`
+    t =    10.38s Find the Window (First Match)
+    t =    10.44s Added attachment named '8-mac-password-card-light'
+    t =    10.44s Terminate io.orbitd.lramacprobe:48068
+    t =    11.49s Open io.orbitd.lramacprobe
+    t =    11.49s     Launch io.orbitd.lramacprobe
+2026-10-10 04:22:25.572 xcodebuild[36549:100314] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-10 04:22:25.572 xcodebuild[36549:100314] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =    12.00s         Wait for accessibility to load
+    t =    12.45s         Setting up automation session
+    t =    12.46s         Wait for io.orbitd.lramacprobe to idle
+    t =    12.47s Checking existence of `"Allow" Button`
+    t =    12.49s Checking existence of `"Allow" Button`
+    t =    12.55s Checking existence of `"Don't Allow" Button`
+    t =    12.56s Checking existence of `"Don't Allow" Button`
+    t =    12.57s Checking existence of `"OK" Button`
+    t =    12.58s Checking existence of `"OK" Button`
+    t =    12.60s Waiting 20.0s for Window (First Match) to exist
+    t =    13.63s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =    13.63s         Checking existence of `Window (First Match)`
+    t =    13.64s Checking existence of `Any (First Match)`
+    t =    17.28s Checking existence of `Window (First Match)`
+    t =    17.29s Checking existence of `Window (First Match)`
+    t =    17.29s Find the Window (First Match)
+    t =    17.33s Added attachment named '8-mac-password-card-dark'
+    t =    17.33s Terminate io.orbitd.lramacprobe:49095
+    t =    18.38s Open io.orbitd.lramacprobe
+    t =    18.38s     Launch io.orbitd.lramacprobe
+2026-10-10 04:22:32.460 xcodebuild[36549:100314] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-10 04:22:32.460 xcodebuild[36549:100314] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =    18.81s         Wait for accessibility to load
+    t =    19.05s         Setting up automation session
+    t =    19.05s         Wait for io.orbitd.lramacprobe to idle
+    t =    19.06s Checking existence of `"Allow" Button`
+    t =    19.07s Checking existence of `"Allow" Button`
+    t =    19.08s Checking existence of `"Don't Allow" Button`
+    t =    19.09s Checking existence of `"Don't Allow" Button`
+    t =    19.10s Checking existence of `"OK" Button`
+    t =    19.11s Checking existence of `"OK" Button`
+    t =    19.12s Waiting 20.0s for Window (First Match) to exist
+    t =    20.13s     Checking `Expect predicate `existsNoRetry == 1` for object Window (First Match)`
+    t =    20.13s         Checking existence of `Window (First Match)`
+    t =    20.14s Checking existence of `Any (First Match)`
+    t =    23.29s Checking existence of `Window (First Match)`
+    t =    23.30s Checking existence of `Window (First Match)`
+    t =    23.30s Find the Window (First Match)
+    t =    23.35s Added attachment named '8b-mac-google-card-light'
+    t =    23.35s Right click Any (First Match)
+    t =    23.35s     Wait for io.orbitd.lramacprobe to idle
+    t =    23.35s     Find the Any (First Match)
+    t =    23.36s     Check for interrupting elements affecting "Alex Morgan, alex@example.com, 127.0.0.1:8765" Other
+    t =    23.39s     Synthesize event
+    t =    23.77s     Wait for io.orbitd.lramacprobe to idle
+    t =    23.77s Waiting 8.0s for MenuItem (First Match) to exist
+    t =    24.79s     Checking `Expect predicate `existsNoRetry == 1` for object MenuItem (First Match)`
+    t =    24.80s         Checking existence of `MenuItem (First Match)`
+    t =    26.44s Checking existence of `Window (First Match)`
+    t =    26.50s Added attachment named '8c-mac-right-click-light'
+    t =    26.50s Click MenuItem (First Match)
+    t =    26.50s     Wait for io.orbitd.lramacprobe to idle
+    t =    26.50s     Find the MenuItem (First Match)
+    t =    26.51s     Check for interrupting elements affecting "trash" MenuItem
+    t =    26.51s     Synthesize event
+    t =    26.52s         Checking existence of `"trash" MenuItem`
+    t =    26.58s         Hover menu item 'Remove from this device'
+    t =    26.58s             Wait for io.orbitd.lramacprobe to idle
+    t =    26.58s             Find the "trash" MenuItem
+    t =    26.60s             Check for interrupting elements affecting "trash" MenuItem
+    t =    26.60s             Synthesize event
+    t =    26.82s             Wait for io.orbitd.lramacprobe to idle
+    t =    26.82s         Find the "trash" MenuItem
+    t =    27.50s     Wait for io.orbitd.lramacprobe to idle
+    t =    29.70s Checking existence of `Window (First Match)`
+    t =    29.71s Checking existence of `Window (First Match)`
+    t =    29.71s Find the Window (First Match)
+    t =    29.74s Added attachment named '8d-mac-removed-light'
+    t =    29.74s Checking existence of `Any (First Match)`
+    t =    29.78s Terminate io.orbitd.lramacprobe:49479
+    t =    30.85s Tear Down
+    t =    30.85s     Added attachment named 'LoginShotTeststest8MacWindow-notes.txt'
+Test Case '-[LraMacProbeUITests.LoginShotTests test8MacWindow]' passed (30.939 seconds).
+Test Suite 'LoginShotTests' passed at 2026-10-10 04:22:45.016.
+	 Executed 1 test, with 0 failures (0 unexpected) in 30.939 (30.941) seconds
+Test Suite 'LraMacProbeUITests.xctest' passed at 2026-10-10 04:22:45.016.
+	 Executed 1 test, with 0 failures (0 unexpected) in 30.939 (30.942) seconds
+Test Suite 'All tests' passed at 2026-10-10 04:22:45.016.
+	 Executed 1 test, with 0 failures (0 unexpected) in 30.939 (30.943) seconds
+2026-10-10 04:22:45.559 xcodebuild[36549:100314] [MT] IDETestOperationsObserverDebug: 37.283 elapsed -- Testing started completed.
+2026-10-10 04:22:45.559 xcodebuild[36549:100314] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-10 04:22:45.559 xcodebuild[36549:100314] [MT] IDETestOperationsObserverDebug: 37.283 sec, +37.283 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/runner/work/orbit/orbit/.lra-probe/results/mac.xcresult
+
+** TEST SUCCEEDED **
+
+Testing started

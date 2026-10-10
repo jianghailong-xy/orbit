@@ -1,0 +1,2 @@
+another-light: email field 49 label="" value="you@example.com" frame=(40.0, 409.0, 322.0, 22.0) hittable=true
+another-dark: email field 49 label="" value="you@example.com" frame=(40.0, 409.0, 322.0, 22.0) hittable=true

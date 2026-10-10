@@ -1,0 +1,104 @@
+==> iPhone 22452A91-4697-4369-8812-53ADB77EB73B
+    iPhone 17 Pro (22452A91-4697-4369-8812-53ADB77EB73B) (Shutdown) 
+==> stub ready on 127.0.0.1:8765 (pid 3377, after 2s)
+==> ios
+==> host shot 5-keyboard-up-light
+==> host shot 5-keyboard-up-dark
+Test Case '-[LraProbeUITests.LoginShotTests test1PasswordCard]' started.
+Test Case '-[LraProbeUITests.LoginShotTests test1PasswordCard]' passed (58.919 seconds).
+Test Case '-[LraProbeUITests.LoginShotTests test2GoogleCard]' started.
+Test Case '-[LraProbeUITests.LoginShotTests test2GoogleCard]' passed (59.006 seconds).
+Test Case '-[LraProbeUITests.LoginShotTests test3UseAnotherAccount]' started.
+Test Case '-[LraProbeUITests.LoginShotTests test3UseAnotherAccount]' passed (33.004 seconds).
+Test Case '-[LraProbeUITests.LoginShotTests test4LongPress]' started.
+Test Case '-[LraProbeUITests.LoginShotTests test4LongPress]' passed (43.305 seconds).
+Test Case '-[LraProbeUITests.LoginShotTests test5KeyboardUp]' started.
+Test Case '-[LraProbeUITests.LoginShotTests test5KeyboardUp]' passed (37.694 seconds).
+Test Case '-[LraProbeUITests.LoginShotTests test6ServerSheetByDoubleTap]' started.
+Test Case '-[LraProbeUITests.LoginShotTests test6ServerSheetByDoubleTap]' passed (46.363 seconds).
+Test Case '-[LraProbeUITests.LoginShotTests test7SignInIsRememberedAndAFailedOneChangesNothing]' started.
+Test Case '-[LraProbeUITests.LoginShotTests test7SignInIsRememberedAndAFailedOneChangesNothing]' passed (52.849 seconds).
+	 Executed 7 tests, with 0 failures (0 unexpected) in 331.139 (331.165) seconds
+	 Executed 7 tests, with 0 failures (0 unexpected) in 331.139 (331.167) seconds
+	 Executed 7 tests, with 0 failures (0 unexpected) in 331.139 (331.169) seconds
+** TEST SUCCEEDED **
+==> stub ready on 127.0.0.1:8765 (pid 34348, after 6s)
+==> mac
+Test Case '-[LraMacProbeUITests.LoginShotTests test8MacWindow]' started.
+Test Case '-[LraMacProbeUITests.LoginShotTests test8MacWindow]' passed (30.939 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 30.939 (30.941) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 30.939 (30.942) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 30.939 (30.943) seconds
+** TEST SUCCEEDED **
+.lra-probe/run.sh: line 98: 34348 Terminated: 15          python3 -u stub.py 8765 "$1" > "$1.out" 2>&1
+/Users/runner/work/orbit/orbit/.lra-probe/shots/ios:
+total 64864
+drwxr-xr-x  53 runner  staff     1696 Oct 10 04:22 .
+drwxr-xr-x   4 runner  staff      128 Oct 10 04:00 ..
+-rw-r--r--   1 runner  staff   770367 Oct 10 04:13 1-password-card-dark.png
+-rw-r--r--   1 runner  staff  1457960 Oct 10 04:13 1-password-card-light.png
+-rw-r--r--   1 runner  staff  1445552 Oct 10 04:13 1b-unknown-card-light.png
+-rw-r--r--   1 runner  staff   768757 Oct 10 04:14 2-google-card-dark.png
+-rw-r--r--   1 runner  staff  1437097 Oct 10 04:13 2-google-card-light.png
+-rw-r--r--   1 runner  staff  1431375 Oct 10 04:14 2b-google-card-asking-light.png
+-rw-r--r--   1 runner  staff  1437097 Oct 10 04:14 2c-google-card-answered-light.png
+-rw-r--r--   1 runner  staff  1451538 Oct 10 04:14 2d-google-card-server-without-google-light.png
+-rw-r--r--   1 runner  staff   775314 Oct 10 04:15 3-another-account-dark.png
+-rw-r--r--   1 runner  staff  1430120 Oct 10 04:14 3-another-account-light.png
+-rw-r--r--   1 runner  staff  1457960 Oct 10 04:14 3b-back-to-the-card-light.png
+-rw-r--r--   1 runner  staff   740592 Oct 10 04:15 4-long-press-dark.png
+-rw-r--r--   1 runner  staff  1453020 Oct 10 04:15 4-long-press-light.png
+-rw-r--r--   1 runner  staff  1425835 Oct 10 04:15 4b-removed-light.png
+-rw-r--r--   1 runner  staff  1425835 Oct 10 04:15 4c-removed-then-relaunched-light.png
+-rw-r--r--@  1 runner  staff   711756 Oct 10 04:16 5-keyboard-up-dark.png
+-rw-r--r--@  1 runner  staff  1297519 Oct 10 04:16 5-keyboard-up-light.png
+-rw-r--r--   1 runner  staff   274798 Oct 10 04:17 6-server-sheet-dark.png
+-rw-r--r--   1 runner  staff   493982 Oct 10 04:16 6-server-sheet-light.png
+-rw-r--r--   1 runner  staff  1435142 Oct 10 04:16 6b-another-domain-light.png
+-rw-r--r--   1 runner  staff  1457960 Oct 10 04:17 6c-back-to-the-first-domain-light.png
+-rw-r--r--   1 runner  staff  1426286 Oct 10 04:17 7a-empty-form-with-the-pre-card-email-light.png
+-rw-r--r--   1 runner  staff  1077741 Oct 10 04:17 7b-failed-sign-in-remembers-nothing-light.png
+-rw-r--r--   1 runner  staff  1457960 Oct 10 04:17 7c-after-sign-out-light.png
+-rw-r--r--   1 runner  staff  1089200 Oct 10 04:17 7d-failed-sign-in-as-someone-else-light.png
+-rw-r--r--   1 runner  staff  1218431 Oct 10 04:17 7e-the-card-unchanged-light.png
+-rw-r--r--   1 runner  staff    74740 Oct 10 04:17 7f-signed-in-from-the-card-light.png
+-rw-r--r--   1 runner  staff  1457960 Oct 10 04:18 7g-relaunched-light.png
+drwxr-xr-x  38 runner  staff     1216 Oct 10 04:18 attachments
+-rw-r--r--   1 runner  staff      314 Oct 10 04:18 LoginShotTeststest1PasswordCard-notes
+-rw-r--r--@  1 runner  staff      314 Oct 10 04:13 LoginShotTeststest1PasswordCard-notes.txt
+-rw-r--r--   1 runner  staff        0 Oct 10 04:18 LoginShotTeststest2GoogleCard-notes
+-rw-r--r--@  1 runner  staff        0 Oct 10 04:14 LoginShotTeststest2GoogleCard-notes.txt
+-rw-r--r--   1 runner  staff      218 Oct 10 04:18 LoginShotTeststest3UseAnotherAccount-notes
+-rw-r--r--@  1 runner  staff      218 Oct 10 04:15 LoginShotTeststest3UseAnotherAccount-notes.txt
+-rw-r--r--   1 runner  staff      114 Oct 10 04:18 LoginShotTeststest4LongPress-notes
+-rw-r--r--@  1 runner  staff      114 Oct 10 04:15 LoginShotTeststest4LongPress-notes.txt
+-rw-r--r--   1 runner  staff      588 Oct 10 04:18 LoginShotTeststest5KeyboardUp-notes
+-rw-r--r--@  1 runner  staff      588 Oct 10 04:16 LoginShotTeststest5KeyboardUp-notes.txt
+-rw-r--r--   1 runner  staff      318 Oct 10 04:18 LoginShotTeststest6ServerSheetByDoubleTap-notes
+-rw-r--r--@  1 runner  staff      318 Oct 10 04:17 LoginShotTeststest6ServerSheetByDoubleTap-notes.txt
+-rw-r--r--   1 runner  staff      335 Oct 10 04:18 LoginShotTeststest7SignInIsRememberedAndAFailedOneChangesNothing-notes
+-rw-r--r--@  1 runner  staff      335 Oct 10 04:18 LoginShotTeststest7SignInIsRememberedAndAFailedOneChangesNothing-notes.txt
+-rw-r--r--   1 runner  staff        0 Oct 10 04:22 not-served.txt
+-rw-r--r--   1 runner  staff     5130 Oct 10 04:18 requests-at-the-end
+-rw-r--r--@  1 runner  staff     5130 Oct 10 04:18 requests-at-the-end.log
+-rw-r--r--   1 runner  staff     5130 Oct 10 04:18 requests.log
+-rw-r--r--   1 runner  staff        0 Oct 10 04:03 requests.log.out
+-rw-r--r--   1 runner  staff     2602 Oct 10 04:18 tree-password-light
+-rw-r--r--@  1 runner  staff     2602 Oct 10 04:13 tree-password-light.txt
+-rw-r--r--   1 runner  staff   693350 Oct 10 04:18 xcodebuild-ios.log
+
+/Users/runner/work/orbit/orbit/.lra-probe/shots/mac:
+total 5304
+drwxr-xr-x  13 runner  staff     416 Oct 10 04:22 .
+drwxr-xr-x   4 runner  staff     128 Oct 10 04:00 ..
+-rw-r--r--   1 runner  staff  272930 Oct 10 04:22 8-mac-password-card-dark.png
+-rw-r--r--   1 runner  staff  439406 Oct 10 04:22 8-mac-password-card-light.png
+-rw-r--r--   1 runner  staff  424000 Oct 10 04:22 8b-mac-google-card-light.png
+-rw-r--r--   1 runner  staff  494354 Oct 10 04:22 8c-mac-right-click-light.png
+-rw-r--r--   1 runner  staff  429985 Oct 10 04:22 8d-mac-removed-light.png
+drwxr-xr-x   9 runner  staff     288 Oct 10 04:22 attachments
+-rw-r--r--   1 runner  staff      70 Oct 10 04:22 LoginShotTeststest8MacWindow-notes
+-rw-r--r--   1 runner  staff       0 Oct 10 04:22 not-served.txt
+-rw-r--r--   1 runner  staff     775 Oct 10 04:22 requests.log
+-rw-r--r--   1 runner  staff       0 Oct 10 04:18 requests.log.out
+-rw-r--r--   1 runner  staff  637033 Oct 10 04:22 xcodebuild-mac.log

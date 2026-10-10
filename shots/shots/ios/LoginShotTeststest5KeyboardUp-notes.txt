@@ -1,0 +1,4 @@
+5-keyboard-up-light: taken by the simulator (1297519 bytes)
+keyboard-light: card 1 label="Alex Morgan, alex@example.com, 127.0.0.1:8765" value="" frame=(24.0, 143.66666666666666, 354.0, 79.33333333333334) hittable=true keyboard 19 label="" value="" frame=(0.0, 583.0, 402.0, 233.0) hittable=true
+5-keyboard-up-dark: taken by the simulator (711756 bytes)
+keyboard-dark: card 1 label="Alex Morgan, alex@example.com, 127.0.0.1:8765" value="" frame=(24.0, 143.66666666666666, 354.0, 79.33333333333334) hittable=true keyboard 19 label="" value="" frame=(0.0, 583.0, 402.0, 233.0) hittable=true
