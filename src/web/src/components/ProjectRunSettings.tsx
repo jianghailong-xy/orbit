@@ -33,6 +33,7 @@ import {
   runLineLocked,
   runLineMain,
   runLineMainHint,
+  runMainBranchLocked,
   runMainBranchRemembers,
   runMergeCheckHint,
   runMergeCheckMissing,
@@ -297,9 +298,6 @@ export function ProjectRunSettings({
   // with no repository. Pausing is about the project as it stands, so its sentence names that one.
   const main = draft.upstream ?? DEFAULT_MAIN_BRANCH;
   const repository = view.repository || null;
-  const locked = view.locked
-    ? runLineLocked(view.startedAt ? ago(view.startedAt, now) : null, main)
-    : null;
 
   return (
     <section className="project-open-items project-run-settings" aria-label={START_HOW_IT_RUNS}>
@@ -340,7 +338,8 @@ export function ProjectRunSettings({
                 <Radio value="PROJECT_BRANCH">
                   <b>{RUN_LINE_PROJECT_BRANCH}</b> · <code className="start-card-branch" title={branch}>{shortBranch(branch)}</code>
                   {/* What each line means, while it can still be chosen. Once it is locked the choice
-                      is history, and the sentence under the main branch says why it cannot move. */}
+                      is history, and the sentence under the two — or under Main branch, on a project
+                      that shows one — says why it cannot move. */}
                   {view.locked ? null : (
                     <div className="project-integration-setting-hint">{RUN_LINE_PROJECT_BRANCH_HINT}</div>
                   )}
@@ -352,8 +351,10 @@ export function ProjectRunSettings({
                   )}
                 </Radio>
               </RadioGroup>
-              {locked && repository === null ? (
-                <div className="project-integration-setting-hint">{locked}</div>
+              {view.locked && repository === null ? (
+                <div className="project-integration-setting-hint">
+                  {runLineLocked(view.startedAt ? ago(view.startedAt, now) : null)}
+                </div>
               ) : null}
             </div>
           </div>
@@ -374,7 +375,9 @@ export function ProjectRunSettings({
                   onChange={(upstream) => set({ upstream })}
                 />
                 <div className="project-integration-setting-hint">
-                  {locked ?? `${RUN_MAIN_BRANCH_HINT} ${runMainBranchRemembers(repository)}`}
+                  {view.locked
+                    ? runMainBranchLocked(view.startedAt ? ago(view.startedAt, now) : null, main)
+                    : `${RUN_MAIN_BRANCH_HINT} ${runMainBranchRemembers(repository)}`}
                 </div>
               </div>
             </div>

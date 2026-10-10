@@ -272,8 +272,8 @@ describe('How it runs — the line', () => {
     const row = settingRow(node, 'Tasks land on').textContent ?? '';
     expect(row).toContain(runLineLocked('2h ago'));
     expect(row).toContain(
-      'This project started integrating 2h ago, so the line it lands on and its main branch can no '
-      + 'longer change. Merge it into main, or give up the branch, to start another.',
+      'This project started integrating 2h ago, so the line it lands on can no longer change. '
+      + 'Merge it into main, or give up the branch, to start another.',
     );
   });
 

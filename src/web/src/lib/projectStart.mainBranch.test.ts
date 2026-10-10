@@ -25,6 +25,7 @@ import {
   runLineLocked,
   runLineMain,
   runLineMainHint,
+  runMainBranchLocked,
   runMainBranchRemembers,
   runMergeCheckHint,
   runNoMergeCheckWarning,
@@ -39,8 +40,9 @@ import {
  * Every sentence of the settings band that says where work goes names the project's main branch
  * (board ②⑨⑩): the 16 here, and the integration row's two (`ProjectIntegrationLine.test.tsx`). For
  * a project on `main` each reads word for word as it did before — the old text is written out below
- * as it stood — save the locked sentence, whose half sentence "and its main branch" is the one
- * change the contract allows.
+ * as it stood — save the locked sentence under Main branch, whose half sentence "and its main
+ * branch" is the one change the contract allows. The constants keep the old words, which OrbitKit's
+ * copy-parity tests read; each function, at main, says its constant's words.
  */
 
 /** The 16, each as a function of the main branch, with the words it said before there was one. */
@@ -75,7 +77,7 @@ const SENTENCES: Array<[string, (main?: string) => string, string]> = [
   ['what comes to the owner: each merge', startEachMergeInto, 'Each merge into main'],
   ['the line mid-sentence', (main) => runLineInSentence('MAIN', main), 'directly into main'],
   ['what Pause stops', runPauseHint, 'Stops new tasks, wake-ups and merges into main. Running tasks finish.'],
-  ['why the line is locked', (main) => runLineLocked('2h ago', main),
+  ['why the line is locked', (main) => runMainBranchLocked('2h ago', main),
     'This project started integrating 2h ago, so the line it lands on can no longer change. Merge it '
     + 'into main, or give up the branch, to start another.'],
 ];
@@ -90,7 +92,7 @@ describe('the main branch, in the words of the settings band', () => {
       expect(say(), what).toBe(now);
       expect(say(DEFAULT_MAIN_BRANCH), what).toBe(now);
     }
-    // The constants keep their names, at main, for whatever reads them by name.
+    // The constants still say them of main, word for word, for the native copy-parity tests.
     expect([
       RUN_LINE_MAIN, RUN_LINE_MAIN_HINT, RUN_AUTOMATIC_HINT_PROJECT_BRANCH, RUN_AUTOMATIC_HINT_MAIN,
       RUN_MERGE_CHECK_HINT, RUN_NO_MERGE_CHECK_WARNING, RUN_AUTOMATIC_ON_CHECKED, RUN_AUTOMATIC_ON_UNCHECKED,
@@ -107,11 +109,20 @@ describe('the main branch, in the words of the settings band', () => {
       expect(say('master'), what).toBe(now.replaceAll(/\bmain\b/gu, 'master').replace('its master branch', 'its main branch'));
     }
     expect(runLineMain('master')).toBe('Directly into master');
-    expect(runLineLocked(null, 'master')).toBe(
+    expect(runMainBranchLocked(null, 'master')).toBe(
       'This project started integrating, so the line it lands on and its main branch can no longer '
       + 'change. Merge it into master, or give up the branch, to start another.');
     expect(runAutomaticHint('MAIN', 'develop')).toContain(
       'Merging into develop always asks you — a project that lands directly on develop never merges by itself.');
+  });
+
+  it('keeps the line’s own lock sentence, for a project with no Main branch row, as it always read', () => {
+    expect(runLineLocked('2h ago')).toBe(
+      'This project started integrating 2h ago, so the line it lands on can no longer change. Merge it '
+      + 'into main, or give up the branch, to start another.');
+    expect(runLineLocked(null)).toBe(
+      'This project started integrating, so the line it lands on can no longer change. Merge it into '
+      + 'main, or give up the branch, to start another.');
   });
 
   it('lists what comes to the owner by the project’s main branch', () => {

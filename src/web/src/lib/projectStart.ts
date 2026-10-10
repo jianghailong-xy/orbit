@@ -159,7 +159,9 @@ export const RUN_LINE_PROJECT_BRANCH_HINT =
  * (`project_codebase.upstream_ref`). `main` until the owner chooses another — never probed, never
  * `master` by guess (contract L6) — and every sentence here that says where work goes names the
  * project's own, so a project on `master` reads "Directly into master" and one on `main` reads
- * exactly as it always did.
+ * exactly as it always did. Each such sentence is a function of the branch, beside the constant
+ * that says it of main: the constants are the words the native copy-parity tests read, and
+ * `projectStart.mainBranch.test.ts` holds every function, at main, to its constant word for word.
  */
 export const DEFAULT_MAIN_BRANCH = 'main';
 export const RUN_MAIN_BRANCH = 'Main branch';
@@ -206,59 +208,82 @@ export function startMainBranch(
   );
 }
 
+export const RUN_LINE_MAIN = 'Directly into main';
+export const RUN_LINE_MAIN_HINT = 'For a single task or an urgent fix. Every merge into main asks you.';
+/** The two above, said of the project's main branch. */
 export function runLineMain(main: string = DEFAULT_MAIN_BRANCH): string {
   return `Directly into ${main}`;
 }
 export function runLineMainHint(main: string = DEFAULT_MAIN_BRANCH): string {
   return `For a single task or an urgent fix. Every merge into ${main} asks you.`;
 }
-export const RUN_LINE_MAIN = runLineMain();
-export const RUN_LINE_MAIN_HINT = runLineMainHint();
 export const RUN_AUTOMATIC = 'Automatic';
 /** What Automatic means, on a project branch: the coordinator runs the project, merges included. */
-function automaticHintProjectBranch(main: string): string {
-  return 'The coordinator runs it for you: it decides when each task is done, handles conflicts and '
-    + `failed checks, and merges the branch into ${main} once the merge check passes — with a receipt `
-    + 'you can revert. The criteria and anything irreversible stay yours.';
-}
+export const RUN_AUTOMATIC_HINT_PROJECT_BRANCH =
+  'The coordinator runs it for you: it decides when each task is done, handles conflicts and '
+  + 'failed checks, and merges the branch into main once the merge check passes — with a receipt '
+  + 'you can revert. The criteria and anything irreversible stay yours.';
 /** …and directly into main, where the merging half is the one thing it never does by itself. */
-function automaticHintMain(main: string): string {
-  return 'The coordinator runs it for you: it decides when each task is done and handles conflicts and '
-    + `failed checks. Merging into ${main} always asks you — a project that lands directly on ${main} `
-    + 'never merges by itself. The criteria and anything irreversible stay yours.';
-}
-export const RUN_AUTOMATIC_HINT_PROJECT_BRANCH = automaticHintProjectBranch(DEFAULT_MAIN_BRANCH);
-export const RUN_AUTOMATIC_HINT_MAIN = automaticHintMain(DEFAULT_MAIN_BRANCH);
+export const RUN_AUTOMATIC_HINT_MAIN =
+  'The coordinator runs it for you: it decides when each task is done and handles conflicts and '
+  + 'failed checks. Merging into main always asks you — a project that lands directly on main '
+  + 'never merges by itself. The criteria and anything irreversible stay yours.';
 export const RUN_SWITCH_ON = 'On';
 export const RUN_SWITCH_OFF = 'Off';
 export const RUN_AT_MOST = 'At most';
 export const RUN_MERGE_CHECK = 'Merge check';
+export const RUN_MERGE_CHECK_HINT =
+  'Runs on the combined tree before anything lands — on the project branch and again before main.';
 export function runMergeCheckHint(main: string = DEFAULT_MAIN_BRANCH): string {
   return `Runs on the combined tree before anything lands — on the project branch and again before ${main}.`;
 }
-export const RUN_MERGE_CHECK_HINT = runMergeCheckHint();
 export const RUN_MERGE_CHECK_PLACEHOLDER = 'No check — work lands once it rebases cleanly';
 /** The merge check's row on the start card, folded to its value, and what an empty one means. */
 export const RUN_MERGE_CHECK_SET = 'Set';
 export const RUN_MERGE_CHECK_NONE = 'None';
 export const RUN_MERGE_CHECK_NONE_SAYS = 'Work lands once it rebases cleanly.';
 /** Said under an empty merge check while Automatic would merge the branch into main unchecked. */
+export const RUN_NO_MERGE_CHECK_WARNING =
+  'No merge check: with Automatic on, the branch merges into main with nothing run on the '
+  + 'combined tree.';
 export function runNoMergeCheckWarning(main: string = DEFAULT_MAIN_BRANCH): string {
   return `No merge check: with Automatic on, the branch merges into ${main} with nothing run on the `
     + 'combined tree.';
 }
-export const RUN_NO_MERGE_CHECK_WARNING = runNoMergeCheckWarning();
 
-/** The Automatic sentence for the line chosen: the merge half follows the line. */
+/** The Automatic sentence for the line chosen: the merge half follows the line, and names the
+ *  project's main branch — the two constants above, for a project on main. */
 export function runAutomaticHint(
   line: ProjectStartSettings['line'],
   main: string = DEFAULT_MAIN_BRANCH,
 ): string {
   return line === 'MAIN' ? automaticHintMain(main) : automaticHintProjectBranch(main);
 }
+function automaticHintProjectBranch(main: string): string {
+  return 'The coordinator runs it for you: it decides when each task is done, handles conflicts and '
+    + `failed checks, and merges the branch into ${main} once the merge check passes — with a receipt `
+    + 'you can revert. The criteria and anything irreversible stay yours.';
+}
+function automaticHintMain(main: string): string {
+  return 'The coordinator runs it for you: it decides when each task is done and handles conflicts and '
+    + `failed checks. Merging into ${main} always asks you — a project that lands directly on ${main} `
+    + 'never merges by itself. The criteria and anything irreversible stay yours.';
+}
 
 /** The start card's one sentence under the switch: who decides what, for the line and merge check
  *  chosen. What still comes to the owner is the list beneath it (`startComesToYou`). */
+export const RUN_AUTOMATIC_ON_CHECKED =
+  'The coordinator decides when each task is done and merges into main once the merge check '
+  + 'passes — with a receipt you can revert.';
+export const RUN_AUTOMATIC_ON_UNCHECKED =
+  'The coordinator decides when each task is done and merges into main by itself — with a receipt '
+  + 'you can revert.';
+export const RUN_AUTOMATIC_ON_MAIN =
+  'The coordinator decides when each task is done. Each merge into main still asks you.';
+export const RUN_AUTOMATIC_OFF = 'You decide when each task is done and when the branch goes into main.';
+export const RUN_AUTOMATIC_OFF_MAIN = 'You decide when each task is done, and each merge into main asks you.';
+
+/** The five above, said of the project's main branch. */
 export function runAutomaticSays(
   automatic: boolean,
   line: ProjectStartSettings['line'],
@@ -277,11 +302,6 @@ export function runAutomaticSays(
     : `The coordinator decides when each task is done and merges into ${main} by itself — with a receipt `
       + 'you can revert.';
 }
-export const RUN_AUTOMATIC_ON_CHECKED = runAutomaticSays(true, 'PROJECT_BRANCH', true);
-export const RUN_AUTOMATIC_ON_UNCHECKED = runAutomaticSays(true, 'PROJECT_BRANCH', false);
-export const RUN_AUTOMATIC_ON_MAIN = runAutomaticSays(true, 'MAIN', false);
-export const RUN_AUTOMATIC_OFF = runAutomaticSays(false, 'PROJECT_BRANCH', false);
-export const RUN_AUTOMATIC_OFF_MAIN = runAutomaticSays(false, 'MAIN', false);
 
 /** Said under the switch when Automatic is on and the project has no coordinator to run it yet:
  *  the start opens one (`POST /projects/:id/start`). */
@@ -295,14 +315,15 @@ export const START_DECIDE_DONE = 'Whether each task is done';
 export const START_YOU_CONFIRM = 'you confirm it';
 export const START_PROBLEMS = 'Problems along the way';
 export const START_PROBLEMS_DETAIL = 'conflicts, failed checks';
+export const START_MERGING_INTO_MAIN = 'Merging the branch into main';
+export const START_EACH_MERGE_INTO_MAIN = 'Each merge into main';
+/** The two above, said of the project's main branch. */
 export function startMergingInto(main: string = DEFAULT_MAIN_BRANCH): string {
   return `Merging the branch into ${main}`;
 }
 export function startEachMergeInto(main: string = DEFAULT_MAIN_BRANCH): string {
   return `Each merge into ${main}`;
 }
-export const START_MERGING_INTO_MAIN = startMergingInto();
-export const START_EACH_MERGE_INTO_MAIN = startEachMergeInto();
 export const START_CRITERIA_CHANGES = 'Any change to the criteria';
 
 /** "11 reviews": the evidence the owner decides on when Automatic is off. */
@@ -455,17 +476,24 @@ export const RUN_SAVE = 'Save';
 /** What a Save the doors did not take says, over the door's own message. */
 export const RUN_NOT_SAVED = 'These settings were not saved';
 export const RUN_PAUSE = 'Pause project';
+export const RUN_PAUSE_HINT = 'Stops new tasks, wake-ups and merges into main. Running tasks finish.';
 export function runPauseHint(main: string = DEFAULT_MAIN_BRANCH): string {
   return `Stops new tasks, wake-ups and merges into ${main}. Running tasks finish.`;
 }
-export const RUN_PAUSE_HINT = runPauseHint();
 export const RUN_RESUME = 'Resume project';
 export const RUN_NOT_PAUSED = 'The project was not paused';
 export const RUN_NOT_RESUMED = 'The project was not resumed';
 
-/** Why Tasks land on and Main branch are read-only: the line started integrating — `since` is "2h
- *  ago" — and moving either would orphan what already landed on it. */
-export function runLineLocked(since: string | null, main: string = DEFAULT_MAIN_BRANCH): string {
+/** Why Tasks land on is read-only: the line started integrating — `since` is "2h ago" — and moving
+ *  it would orphan what already landed on it. */
+export function runLineLocked(since: string | null): string {
+  return `This project started integrating${since ? ` ${since}` : ''}, so the line it lands on can `
+    + 'no longer change. Merge it into main, or give up the branch, to start another.';
+}
+
+/** The same, said under Main branch on a project that has one to show: the line and its main branch
+ *  lock together, and the branch it merges into is the project's own. */
+export function runMainBranchLocked(since: string | null, main: string = DEFAULT_MAIN_BRANCH): string {
   return `This project started integrating${since ? ` ${since}` : ''}, so the line it lands on and its `
     + `main branch can no longer change. Merge it into ${main}, or give up the branch, to start another.`;
 }
