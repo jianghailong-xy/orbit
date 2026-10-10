@@ -30,10 +30,13 @@ import {
   runMergeCheckHint,
   runNoMergeCheckWarning,
   runPauseHint,
+  runSettingsLine,
+  runSettingsParts,
   startComesToYou,
   startEachMergeInto,
   startMainBranch,
   startMergingInto,
+  startRequestSummary,
 } from './projectStart';
 
 /**
@@ -173,5 +176,25 @@ describe('the main branch a start opens with', () => {
     // A server that predates the memory says nothing of it, and a read that failed says nothing at all.
     expect(startMainBranch('refs/heads/master', null)).toBe('master');
     expect(startMainBranch(undefined, null)).toBe('main');
+  });
+});
+
+describe('the start’s own lines, by the main branch the start names', () => {
+  const direct = { line: 'MAIN' as const, automatic: false, maxConcurrentTasks: 1, mergeCheckCommand: null };
+
+  it('says Directly into main and directly into main word for word as before when no branch is named', () => {
+    expect(runSettingsParts(direct)[0]).toEqual({ key: 'line', text: RUN_LINE_MAIN, differs: false });
+    expect(runSettingsLine(direct)).toBe('Directly into main · Automatic off · 1 task at a time · no merge check');
+    expect(startRequestSummary(direct)).toBe('The coordinator asked · directly into main · Automatic off · at most 1 at a time');
+    expect(runSettingsLine({ ...direct, upstreamRef: 'refs/heads/main' })).toBe(runSettingsLine(direct));
+  });
+
+  it('names master in the settings a start left and in the request’s row, for a start on master', () => {
+    const onMaster = { ...direct, upstreamRef: 'refs/heads/master' };
+    expect(runSettingsParts(onMaster, ['line'])[0]).toEqual({ key: 'line', text: 'Directly into master', differs: true });
+    expect(runSettingsLine(onMaster)).toBe('Directly into master · Automatic off · 1 task at a time · no merge check');
+    expect(startRequestSummary(onMaster)).toBe('The coordinator asked · directly into master · Automatic off · at most 1 at a time');
+    // A project branch names no main branch, whatever the start recorded.
+    expect(runSettingsLine({ ...onMaster, line: 'PROJECT_BRANCH' })).toBe('A project branch · Automatic off · 1 task at a time · no merge check');
   });
 });

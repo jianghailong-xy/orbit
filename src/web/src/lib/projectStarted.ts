@@ -69,6 +69,8 @@ function settingsOf(value: unknown): ProjectStartSettings | null {
     automatic: settings.automatic,
     maxConcurrentTasks: settings.maxConcurrentTasks as number,
     mergeCheckCommand: (settings.mergeCheckCommand as string | null) ?? null,
+    // The main branch the start recorded, which the settings line's Directly into names.
+    ...(typeof settings.upstreamRef === 'string' ? { upstreamRef: settings.upstreamRef } : {}),
   };
 }
 

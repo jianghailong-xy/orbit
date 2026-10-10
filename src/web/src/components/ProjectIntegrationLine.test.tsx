@@ -177,6 +177,16 @@ describe('the line names the project’s main branch (board ⑪)', () => {
     expect(text).not.toContain('main');
   });
 
+  it('says where a current landing’s receipt put its work on the project’s main branch', () => {
+    const integration = current('QUEUED');
+    integration.state = 'ON_UPSTREAM';
+    const landTasks = [{ taskId: 'task19', taskTitle: 'Landing visibility', integration }];
+    expect(words(render(view({ landTasks })))).toContain('Its work is on main by an existing receipt.');
+    const text = words(render(view({ upstreamRef: 'master', landTasks })));
+    expect(text).toContain('Its work is on master by an existing receipt.');
+    expect(text).not.toContain('main');
+  });
+
   it('says the coordinator’s suggestion goes directly into the main branch the start opens with', () => {
     const undecided = view({ line: null, lineAbsentReason: 'NOT_DECIDED', ref: null, upstreamRef: null, locked: false });
     const suggesting = (upstreamRef?: string) => ({

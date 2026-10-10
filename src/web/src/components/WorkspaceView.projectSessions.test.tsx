@@ -842,6 +842,35 @@ describe('project sessions page', { timeout: 60_000 }, () => {
     await until(() => expect(document.querySelector('.start-card-dialog')).not.toBeNull());
   });
 
+  it('says the suggestion goes directly into the main branch the start card opens with', async () => {
+    projects = [project({ startedAt: null, attention: { ownerItems: [], coordinatorItems: null, startRequest: { waitingSince: '2026-10-04T08:00:00Z' } } })];
+    const asking = (settings: Record<string, unknown>) => ({
+      itemId: 'start-1', kind: 'START_REQUEST', title: 'Start this project?', detailLine: '', waitingSince: '2026-10-04T08:00:00Z',
+      assignee: 'OWNER', assigneeReason: 'OWNER_ONLY',
+      startRequest: {
+        settings: { line: 'MAIN', automatic: false, maxConcurrentTasks: 1, mergeCheckCommand: null, ...settings },
+        why: 'One task.', criteriaDigest: 'sha256:abc', planDigest: 'plan', repository: null, warnings: [],
+      },
+    });
+    const suggestion = (): string | null | undefined =>
+      page()?.querySelector<HTMLElement>('.session-project-start-suggestion')?.textContent;
+    startRequest = asking({ upstreamRef: 'refs/heads/master' });
+    await mount();
+    await openSessions();
+    await until(() => expect(suggestion()).toBe('Directly into master · Automatic off · 1 at a time'));
+    await unmount();
+    // The owner's last choice for the repository outranks a suggestion that names none, as on the card.
+    startRequest = asking({});
+    integrationView = {
+      line: null, lineAbsentReason: 'NOT_DECIDED', ref: null, upstreamRef: 'main', upstreamChosenAt: null,
+      lastMainBranch: { branch: 'develop', repository: 'acme/payments-api', chosenAt: '2026-10-03T08:00:00Z' },
+      integratingCount: 0, queuedCount: 0, inFlight: null,
+    };
+    await mount();
+    await openSessions();
+    await until(() => expect(suggestion()).toBe('Directly into develop · Automatic off · 1 at a time'));
+  });
+
   it('reads no open items for a project already started, and draws no start', async () => {
     projects = [project({ startedAt: '2026-10-02T00:00:00Z' })];
     await mount();

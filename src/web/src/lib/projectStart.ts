@@ -453,11 +453,16 @@ export function runLineInSentence(
 }
 
 /** The request's row under its title: who asked, and what it suggests — "The coordinator asked · a
- *  project branch · Automatic on · at most 3 at a time". */
-export function startRequestSummary(settings: ProjectStartSettings): string {
+ *  project branch · Automatic on · at most 3 at a time". Directly into the main branch the start
+ *  opens with (`startMainBranch`), which a page holding no integration read takes from the
+ *  suggestion alone. */
+export function startRequestSummary(
+  settings: ProjectStartSettings,
+  main: string = mainBranchName(settings.upstreamRef),
+): string {
   return [
     START_ROW_ASKED,
-    runLineInSentence(settings.line),
+    runLineInSentence(settings.line, main),
     `${RUN_AUTOMATIC} ${settings.automatic ? 'on' : 'off'}`,
     `at most ${settings.maxConcurrentTasks} at a time`,
   ].join(' · ');
@@ -526,7 +531,8 @@ export interface RunSettingsPart {
 }
 
 /** The settings a start left the project with, in card order: the line, Automatic, concurrency and
- *  the merge check — "project/34Wvw… · Automatic on · 3 tasks at a time · merge check set". */
+ *  the merge check — "project/34Wvw… · Automatic on · 3 tasks at a time · merge check set". Directly
+ *  into the main branch the start recorded, main when it recorded none. */
 export function runSettingsParts(
   settings: ProjectStartSettings,
   differs: readonly ProjectStartSettingKey[] = [],
@@ -536,7 +542,7 @@ export function runSettingsParts(
     {
       key: 'line',
       text: settings.line === 'MAIN'
-        ? RUN_LINE_MAIN
+        ? runLineMain(mainBranchName(settings.upstreamRef))
         : settings.projectBranchName
           ? shortBranch(settings.projectBranchName)
           : RUN_LINE_PROJECT_BRANCH,

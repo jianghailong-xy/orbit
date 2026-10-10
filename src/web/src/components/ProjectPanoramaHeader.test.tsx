@@ -6,10 +6,14 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ProjectIntegrationJob, ProjectIntegrationView } from '@orbit/shared';
 import {
+  JOB_PHASES,
+  JOB_WORDS,
   PANORAMA_BUCKETS,
   ProjectPanoramaHeader,
   ProjectPanoramaCard,
   integrationLanes,
+  jobPhases,
+  jobWords,
   landingClock,
   landingClockTime,
   landingJobLines,
@@ -832,5 +836,70 @@ describe('the landing row’s styles', () => {
     expect(css).toMatch(/\.project-landing-timed-out \.project-landing-clock \{\s*color: var\(--warning\);/);
     // The spin is a running row's only, and a timed-out row is never drawn as one.
     expect(css).not.toMatch(/\.project-landing-timed-out[^{]*\{[^}]*animation/);
+  });
+});
+
+describe('the project’s main branch, by name', () => {
+  // Work landed on the project's own branch and on its main branch, so all three lanes are drawn.
+  const landed = panorama({ done: 3, integrating: 1, onIntegrationLine: 1, onUpstream: 1, doneNotIntegrated: 0 });
+
+  function header(upstreamRef: string) {
+    const qc = newClient();
+    qc.setQueryData(panoramaKey, landed);
+    qc.setQueryData(integrationKey, integration({ upstreamRef, inFlight: null, integratingCount: 0 }));
+    return render(qc);
+  }
+
+  it('says main in the lanes word for word as before for a project on main', () => {
+    const lanes = integrationLanes(landed.buckets, 'PROJECT_BRANCH');
+    expect(lanes.find((lane) => lane.key === 'onIntegrationLine')?.footnote).toBe('not on main yet');
+    expect(lanes.find((lane) => lane.key === 'onUpstream')).toMatchObject({ label: 'On main', footnote: 'landed on main' });
+    expect(integrationLanes(landed.buckets, 'PROJECT_BRANCH', 'main')).toEqual(lanes);
+    const html = header('main');
+    for (const words of ['On main', 'landed on main', 'not on main yet']) expect(html).toContain(words);
+  });
+
+  it('names master in the lanes, off the integration read, for a project on master', () => {
+    const lanes = integrationLanes(landed.buckets, 'PROJECT_BRANCH', 'master');
+    expect(lanes.find((lane) => lane.key === 'onIntegrationLine')?.footnote).toBe('not on master yet');
+    expect(lanes.find((lane) => lane.key === 'onUpstream')).toMatchObject({ label: 'On master', footnote: 'landed on master' });
+    const html = header('master');
+    for (const words of ['On master', 'landed on master', 'not on master yet']) expect(html).toContain(words);
+    expect(html).not.toContain('on main');
+    // A public page carries no read that names the branch, and says main.
+    const shared = renderToStaticMarkup(
+      <MemoryRouter><ProjectPanoramaCard panorama={landed} integrationLine="PROJECT_BRANCH" banners={false} /></MemoryRouter>,
+    );
+    expect(shared).toContain('On main');
+  });
+
+  it('names the branch a merge goes into and a sync takes in, and nothing else', () => {
+    expect(jobWords()).toEqual(JOB_WORDS);
+    expect(jobWords('main')).toEqual({ LAND_TASK: 'Landing', CHECK_PROMOTION: 'Merge check', LAND_PROMOTION: 'Merge to main' });
+    expect(jobWords('master')).toEqual({ ...JOB_WORDS, LAND_PROMOTION: 'Merge to master' });
+    expect(jobPhases()).toEqual(JOB_PHASES);
+    expect(jobPhases('main').MAIN_SYNC).toBe('syncing main');
+    expect(jobPhases('master')).toEqual({ ...JOB_PHASES, MAIN_SYNC: 'syncing master' });
+  });
+
+  it('says the landing row’s merge and sync of master for a project on master, and of main as before', () => {
+    const merging = (upstreamRef: string) => integration({ upstreamRef, inFlight: {
+      taskTitle: null, kind: 'LAND_PROMOTION', phase: null, state: 'QUEUED', startedAt: instant(NOW - 60_000), heartbeatAt: null,
+    } });
+    const syncing = (upstreamRef: string) => integration({ upstreamRef, inFlight: {
+      taskTitle: 'T2', kind: 'LAND_TASK', phase: 'MAIN_SYNC', state: 'RUNNING', startedAt: instant(NOW - 60_000),
+      heartbeatAt: instant(NOW - 5_000),
+    } });
+    expect(landingLine(merging('main'), NOW, { updatedAt: NOW })?.word).toBe('Merge to main');
+    expect(landingLine(merging('master'), NOW, { updatedAt: NOW })?.word).toBe('Merge to master');
+    expect(landingLine(syncing('main'), NOW, { updatedAt: NOW })?.state).toBe('syncing main');
+    expect(landingLine(syncing('master'), NOW, { updatedAt: NOW })?.state).toBe('syncing master');
+    // The list the row opens says the same, and so does a timed-out job's "stopped at".
+    const onMaster = (jobs: ProjectIntegrationJob[]) => ({ ...listing(jobs), upstreamRef: 'master' });
+    expect(landingJobLines(onMaster([merge()]), NOW, { updatedAt: NOW })[0].line.word).toBe('Merge to master');
+    expect(landingJobLines(onMaster([job({ phase: 'MAIN_SYNC' })]), NOW, { updatedAt: NOW })[0].detail)
+      .toBe('Runner workstation-gpu took it at 20:07 · stopped at syncing master · no push recorded');
+    expect(landingJobLines(listing([job({ phase: 'MAIN_SYNC' })]), NOW, { updatedAt: NOW })[0].detail)
+      .toBe('Runner workstation-gpu took it at 20:07 · stopped at syncing main · no push recorded');
   });
 });

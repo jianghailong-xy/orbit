@@ -47,6 +47,14 @@ describe('where the conversation’s exception cards come from', () => {
     );
   });
 
+  it('hands each card the project’s main branch, off the promotion reads the pane already holds', () => {
+    const view = source();
+    expect(view, 'the cards are not told which branch a re-check’s merge goes into').toContain(
+      'currentPromotion.data?.upstreamRef ?? mergedPromotions.data?.[0]?.upstreamRef',
+    );
+    expect(view).toContain('main={coordinatedMain} />');
+  });
+
   it('hands them to the transcript as inserts, and keeps no block of its own', () => {
     const view = source();
     expect(view, 'the pane stopped inserting anything into the conversation').toContain(

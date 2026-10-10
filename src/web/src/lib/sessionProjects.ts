@@ -11,6 +11,7 @@ import {
 import type { SessionFolder } from '../api';
 import { JOB_PHASES, JOB_WORDS } from '../components/ProjectPanoramaHeader';
 import { elapsedLabel, type SidebarProject } from './projectAttention';
+import { mainBranchName, runLineMain } from './projectStart';
 import type { SessionListView } from './queries';
 import { sessionFolderListing, type FolderSessionReadings, type SessionFolderRow } from './sessionFolders';
 import type { GroupableSession } from './sessionGrouping';
@@ -84,8 +85,13 @@ export const SESSION_PROJECT_COPY = {
   // A project nobody has started, and its start row (docs/mocks/project-start-sessions-page).
   pageNotStarted: (tasks: number) => `Not started · ${tasks} ${tasks === 1 ? 'task' : 'tasks'}`,
   startAsked: (ago: string) => `asked ${ago}`,
-  startSuggestion: (settings: Pick<ProjectStartSettings, 'line' | 'automatic' | 'maxConcurrentTasks'>) =>
-    `${settings.line === 'MAIN' ? 'Directly into main' : 'Project branch'} · Automatic ${settings.automatic ? 'on' : 'off'} · ${settings.maxConcurrentTasks} at a time`,
+  /** Directly into the main branch the start opens with (`startMainBranch`), or the suggestion's own
+   *  where no integration read is at hand. */
+  startSuggestion: (
+    settings: Pick<ProjectStartSettings, 'line' | 'automatic' | 'maxConcurrentTasks' | 'upstreamRef'>,
+    main: string = mainBranchName(settings.upstreamRef),
+  ) =>
+    `${settings.line === 'MAIN' ? runLineMain(main) : 'Project branch'} · Automatic ${settings.automatic ? 'on' : 'off'} · ${settings.maxConcurrentTasks} at a time`,
   startReview: 'Review and start',
   startNotAsked: 'The coordinator hasn’t asked yet',
   startHint: 'Opens the start card: the criteria, the plan and how it runs.',
