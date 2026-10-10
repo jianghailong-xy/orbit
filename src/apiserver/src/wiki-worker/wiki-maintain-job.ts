@@ -1033,9 +1033,10 @@ class WikiMaintainRun {
   // ── Verification and anchors ──────────────────────────────────────────────────────────────────
 
   /**
-   * Verify the run's own ops in an automatic space, then adopt what ended sessions left waiting. The run's own are its
-   * job's (`maintenance.job.server.verify`), whichever attempt recorded them: a replay after a stop in this step records
-   * none itself — its dossiers are behind the cursor — and the ops the stop left waiting are nobody else's to verify.
+   * Verify the run's own ops in an automatic space, then adopt what ended sessions and ended runs left waiting. The run's
+   * own are its job's (`maintenance.job.server.verify`), whichever attempt recorded them: a replay after a stop in this
+   * step records none itself — its dossiers are behind the cursor — and the ops the stop left waiting are nobody else's
+   * to verify while the job has not ended.
    */
   private async verify(): Promise<void> {
     if (this.context.reviewMode !== 'automatic') return;
@@ -1045,7 +1046,8 @@ class WikiMaintainRun {
 
   /**
    * Verify the run's own ops still waiting for their verdict, in two passes at most — the second under each op's
-   * retry unit (`verifyWikiOps`); what still has no verdict fails nothing.
+   * retry unit (`verifyWikiOps`); what still has no verdict fails nothing, and once this job has ended the space's next
+   * run adopts it ({@link adopt}).
    */
   private async verifyOwn(): Promise<void> {
     const result = { verified: 0, failed: 0, waitingForNextRun: 0 };
@@ -1073,8 +1075,9 @@ class WikiMaintainRun {
   }
 
   /**
-   * Verify what ended sessions left waiting for their verification in the space — at most `rules.adoptOpsMax`
-   * of them, oldest first, after the run's own. One left without a verdict waits for the next run.
+   * Verify what ended sessions and the space's ended runs — their jobs, never this one — left waiting for their
+   * verification in the space (`reviewModes.verification.adoption`): at most `rules.adoptOpsMax` of them, oldest first,
+   * after the run's own. One left without a verdict waits for the next run.
    */
   private async adopt(): Promise<void> {
     const { job } = this.jobContext;
@@ -1088,7 +1091,7 @@ class WikiMaintainRun {
     this.report.verification ??= { verified: 0, failed: 0, waitingForNextRun: 0 };
     this.report.verification.adopted = { ops: summary.looked, verified: summary.verified, failed: summary.failed };
     this.report.verification.waitingForNextRun += summary.failed;
-    this.jobContext.log(`adopted ${summary.looked} op(s) ended sessions left waiting for their verification: ${summary.verified} verified, `
+    this.jobContext.log(`adopted ${summary.looked} op(s) ended sessions and runs left waiting for their verification: ${summary.verified} verified, `
       + `${summary.failed} without a verdict, which wait for the next run`);
   }
 
