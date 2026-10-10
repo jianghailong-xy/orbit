@@ -28,7 +28,8 @@ import {
   ToolOutlined,
   WarningFilled,
 } from '@ant-design/icons';
-import { Image } from 'antd';
+import { Image } from './ui/Image';
+import { ImagePreview, type ImagePreviewItem } from './ui/ImagePreview';
 import { ReferenceLink, referenceUrlTransform } from '../lib/markdownLinks';
 import { formatThinkingDuration, formatThinkingSize } from '../lib/thinkingDraft';
 import { checkDuration } from '../lib/checkDuration';
@@ -392,23 +393,23 @@ function useFullPayload(seq: number, truncated: boolean | undefined, want: boole
 // slide. When this context is absent (the composer's unsent previews, the static
 // HTML export) ChatImage falls back to its own standalone single-image preview.
 type PreviewRegistry = {
-  register: (key: string, order: number, src: string) => void;
+  register: (key: string, order: number, src: string, alt: string) => void;
   unregister: (key: string) => void;
   open: (key: string) => void;
 };
 const ImagePreviewContext = createContext<PreviewRegistry | null>(null);
 
 function ImagePreviewProvider({ children }: { children: ReactNode }) {
-  const entries = useRef(new Map<string, { order: number; src: string }>());
-  const [state, setState] = useState<{ visible: boolean; current: number; items: string[] }>({
-    visible: false,
+  const entries = useRef(new Map<string, { order: number; item: ImagePreviewItem }>());
+  const [state, setState] = useState<{ open: boolean; current: number; items: ImagePreviewItem[] }>({
+    open: false,
     current: 0,
     items: [],
   });
   const registry = useMemo<PreviewRegistry>(
     () => ({
-      register: (key, order, src) => {
-        entries.current.set(key, { order, src });
+      register: (key, order, src, alt) => {
+        entries.current.set(key, { order, item: { src, alt } });
       },
       unregister: (key) => {
         entries.current.delete(key);
@@ -419,7 +420,7 @@ function ImagePreviewProvider({ children }: { children: ReactNode }) {
         const sorted = [...entries.current.entries()].sort((a, b) => a[1].order - b[1].order);
         const current = sorted.findIndex(([k]) => k === key);
         if (current < 0) return;
-        setState({ visible: true, current, items: sorted.map(([, v]) => v.src) });
+        setState({ open: true, current, items: sorted.map(([, v]) => v.item) });
       },
     }),
     [],
@@ -427,14 +428,13 @@ function ImagePreviewProvider({ children }: { children: ReactNode }) {
   return (
     <ImagePreviewContext.Provider value={registry}>
       {children}
-      <Image.PreviewGroup
+      <ImagePreview
+        group
+        open={state.open}
         items={state.items}
-        preview={{
-          visible: state.visible,
-          current: state.current,
-          onVisibleChange: (v) => setState((s) => ({ ...s, visible: v })),
-          onChange: (current) => setState((s) => ({ ...s, current })),
-        }}
+        current={state.current}
+        onCurrentChange={(current) => setState((s) => ({ ...s, current }))}
+        onClose={() => setState((s) => ({ ...s, open: false }))}
       />
     </ImagePreviewContext.Provider>
   );
@@ -2785,7 +2785,7 @@ export function AttachmentFile({ id, name }: { id: string; name?: string }) {
   );
 }
 
-// A user-sent image: click to open AntD's full-screen preview (zoom/rotate, ESC to close).
+// A user-sent image: click to open the full-screen preview (zoom/rotate, ESC to close).
 // The displayed src is already the full-resolution image (just CSS-constrained to 220px),
 // so the lightbox shows it at native size with no extra fetch. The hover mask is the
 // click affordance — without it a bare <img> gives no hint it's interactive.
@@ -2806,7 +2806,7 @@ export function ChatImage({
 }) {
   const exp = useContext(ExportCtx);
   const registry = useContext(ImagePreviewContext);
-  // Static export: AntD's Image lightbox is JS-driven and inert in a saved file — render a
+  // Static export: the preview is JS-driven and inert in a saved file — render a
   // plain <img> (the src is already the full-resolution data URL).
   if (exp) return <img className={className} src={src} alt={alt} />;
   // In the transcript: join the shared left/right pager (see ImagePreviewProvider).
@@ -2815,19 +2815,17 @@ export function ChatImage({
       <GroupedChatImage registry={registry} previewKey={previewKey} order={order} src={src} className={className} alt={alt} />
     );
   }
-  // Standalone (the composer's unsent previews): AntD's own single-image lightbox.
+  // Standalone (the composer's unsent previews): its own single-image preview.
   return (
     <Image
       className={className}
       src={src}
       alt={alt}
-      preview={{
-        mask: (
-          <span className="chat-image-mask">
-            <EyeOutlined /> Preview
-          </span>
-        ),
-      }}
+      cover={
+        <span className="chat-image-mask">
+          <EyeOutlined /> Preview
+        </span>
+      }
     />
   );
 }
@@ -2851,9 +2849,9 @@ function GroupedChatImage({
   alt: string;
 }) {
   useEffect(() => {
-    registry.register(previewKey, order, src);
+    registry.register(previewKey, order, src, alt);
     return () => registry.unregister(previewKey);
-  }, [registry, previewKey, order, src]);
+  }, [registry, previewKey, order, src, alt]);
   return (
     <button type="button" className="chat-image-btn" onClick={() => registry.open(previewKey)}>
       <img className={className} src={src} alt={alt} />

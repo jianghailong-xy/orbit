@@ -77,7 +77,12 @@ def answered(*pairs):
 ASKING = ("Two places on the iPad ignore the swipe today, and on a list page they want different things from the "
           "same gesture — so I'm asking before I change either.")
 
-# id → (title, questions, result, isError, the answer after it)
+BASH_OUT = "\n".join("ok   %-34s %d.%02ds" % (name, 1 + i // 3, (i * 37) % 100) for i, name in enumerate([
+    "QuestionRecordsTests", "QuestionCardWiringTests", "ToolDisplayTests", "TranscriptReducerTests",
+    "TranscriptRowsTests", "ApprovalsTests", "ConsoleLogicTests", "MarkdownBlocksTests"]))
+
+# id → (title, questions, result, isError, the answer after it); Q6 is a folded Bash card instead, so
+# the same click can be photographed on a card the change does not draw.
 SESSIONS = {
     "Q1": ("iPad edge swipe", [SWIPE], answered((SWIPE_Q, "Both, like the iPhone (Recommended)")), False,
            "Both, then. The sidebar first: on a list page an edge swipe opens it, and a left swipe on it closes it."),
@@ -89,6 +94,7 @@ SESSIONS = {
            "List pages only, then: the edge swipe opens the sidebar there, and Back stays a button."),
     "Q4": ("Multiple choice", [CLIENTS], answered((CLIENTS_Q, "Web,iOS and macOS")), False,
            "iOS, macOS and the web, then. Android waits until it has per-tool cards."),
+    "Q6": ("Shell output", None, BASH_OUT, False, "All eight suites pass."),
     "Q5": ("Reply in chat", [SWIPE],
            "Before I pick: does the left swipe still close the sidebar once it's open?", True,
            "It does: once the sidebar is open, a left swipe anywhere on it closes it, as the drawer does on the iPhone."),
@@ -105,6 +111,14 @@ def events(sid):
         out.append({"seq": seq, "type": typ, "ts": ago(minutes), "turnId": "t1", "payload": payload})
 
     add("user", {"text": "On the iPad, a swipe from the left edge does nothing."}, 6)
+    if questions is None:
+        add("assistant", {"text": "Running the question suites first.", "messageId": "m1"}, 5)
+        add("tool_use", {"id": "toolu_b", "name": "Bash",
+                         "input": {"command": "swift test --filter Question", "description": "Run the question suites"}}, 5)
+        add("tool_result", {"toolUseId": "toolu_b", "content": result, "isError": False}, 4)
+        add("assistant", {"text": after, "messageId": "m2"}, 4)
+        add("result", {"subtype": "success", "result": "done"}, 4)
+        return out
     add("assistant", {"text": ASKING, "messageId": "m1"}, 5)
     add("tool_use", {"id": "toolu_q", "name": "AskUserQuestion", "input": {"questions": questions}}, 5)
     add("tool_result", {"toolUseId": "toolu_q", "content": result, "isError": is_error}, 2)
