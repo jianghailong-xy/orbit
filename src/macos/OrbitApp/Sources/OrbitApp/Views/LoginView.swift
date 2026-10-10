@@ -2,7 +2,9 @@ import SwiftUI
 import OrbitKit
 
 /// Brand + email + password. The server address stays off the page (it defaults to orbitd.io and
-/// remembers the last one); triple-tapping the logo opens the hidden server sheet for self-hosters.
+/// remembers the last one); double-tapping the logo opens the hidden server sheet for self-hosters.
+/// Where the domain remembers its last account, a card takes the Email field's place, with only the
+/// way that account got in last time under it (docs/mocks/login-remember-account/).
 struct LoginView: View {
     @Environment(AppModel.self) private var model
     @FocusState private var focus: Field?
@@ -21,45 +23,59 @@ struct LoginView: View {
         #endif
     }
 
+    /// The domain's last account, drawn in place of the Email field; nil for the full form.
+    private var card: RememberedAccount? {
+        model.usesAnotherAccount ? nil : model.rememberedAccount
+    }
+
     var body: some View {
         @Bindable var model = model
+        // Under a card, only the way its account got in last time; the full form offers them all.
+        let ways = LoginWaysIn.offered(card: card?.method, methods: model.signInMethods,
+                                       answered: model.signInMethodsAnswered)
         GeometryReader { geo in
             ScrollView {
                 VStack(spacing: 0) {
                     header
                     VStack(spacing: 12) {
-                        LoginField(label: "Email", focused: focus == .email) {
-                            // Verbatim: a LocalizedStringKey would turn the address into a blue link.
-                            TextField("Email", text: $model.email, prompt: Text(verbatim: "you@example.com"))
-                                .textContentType(.username)
-                                #if os(iOS)
-                                .keyboardType(.emailAddress)
-                                .textInputAutocapitalization(.never)
-                                #endif
-                                .autocorrectionDisabled()
-                                .focused($focus, equals: .email)
-                                .submitLabel(.next)
-                                .onSubmit { focus = .password }
+                        if let card {
+                            accountCard(card)
+                        } else {
+                            LoginField(label: "Email", focused: focus == .email) {
+                                // Verbatim: a LocalizedStringKey would turn the address into a blue link.
+                                TextField("Email", text: $model.email, prompt: Text(verbatim: "you@example.com"))
+                                    .textContentType(.username)
+                                    #if os(iOS)
+                                    .keyboardType(.emailAddress)
+                                    .textInputAutocapitalization(.never)
+                                    #endif
+                                    .autocorrectionDisabled()
+                                    .focused($focus, equals: .email)
+                                    .submitLabel(.next)
+                                    .onSubmit { focus = .password }
+                            }
                         }
-                        LoginField(label: "Password", focused: focus == .password) {
-                            HStack(spacing: 8) {
-                                Group {
-                                    if showsPassword {
-                                        TextField("Enter your password", text: $model.password)
-                                    } else {
-                                        SecureField("Enter your password", text: $model.password)
+                        if ways.password {
+                            LoginField(label: "Password", focused: focus == .password) {
+                                HStack(spacing: 8) {
+                                    Group {
+                                        if showsPassword {
+                                            TextField("Enter your password", text: $model.password)
+                                        } else {
+                                            SecureField("Enter your password", text: $model.password)
+                                        }
                                     }
+                                    .textContentType(.password)
+                                    .focused($focus, equals: .password)
+                                    .submitLabel(.go)
+                                    .onSubmit(submit)
+                                    Button { showsPassword.toggle() } label: {
+                                        Image(systemName: showsPassword ? "eye.slash" : "eye")
+                                    }
+                                    .buttonStyle(.plain)
+                                    .foregroundStyle(.secondary)
+                                    .accessibilityLabel(showsPassword ? "Hide password" : "Show password")
                                 }
-                                .textContentType(.password)
-                                .focused($focus, equals: .password)
-                                .submitLabel(.go)
-                                .onSubmit(submit)
-                                Button { showsPassword.toggle() } label: {
-                                    Image(systemName: showsPassword ? "eye.slash" : "eye")
-                                }
-                                .buttonStyle(.plain)
-                                .foregroundStyle(.secondary)
-                                .accessibilityLabel(showsPassword ? "Hide password" : "Show password")
                             }
                         }
 
@@ -68,16 +84,33 @@ struct LoginView: View {
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
 
-                        Button(action: submit) {
-                            Text(model.busy ? "Signing in…" : "Sign In")
+                        if ways.password {
+                            Button(action: submit) {
+                                Text(model.busy ? "Signing in…" : "Sign In")
+                            }
+                            .buttonStyle(SignInButtonStyle())
+                            .keyboardShortcut(.return)
+                            .disabled(model.busy || model.googleBusy || model.email.isEmpty || model.password.isEmpty)
+                            .padding(.top, 8)
                         }
-                        .buttonStyle(SignInButtonStyle())
-                        .keyboardShortcut(.return)
-                        .disabled(model.busy || model.googleBusy || model.email.isEmpty || model.password.isEmpty)
-                        .padding(.top, 8)
 
-                        if model.signInMethods.google {
+                        if ways.or {
+                            orRule
+                        }
+                        if ways.google {
                             googleSignIn
+                        }
+
+                        if card != nil {
+                            Button("Use another account") { model.useAnotherAccount() }
+                                .buttonStyle(.borderless)
+                                .padding(.top, 8)
+                        } else if let remembered = model.rememberedAccount {
+                            // A String, not a key: the name may be an email, which a key would draw as a link.
+                            let signInAs = "Sign in as \(remembered.displayName)"
+                            Button(signInAs) { model.useRememberedAccount() }
+                                .buttonStyle(.borderless)
+                                .padding(.top, 8)
                         }
                     }
                     .padding(.top, compact ? 24 : 36)
@@ -102,15 +135,20 @@ struct LoginView: View {
         .task(id: model.instanceField) { await model.loadSignInMethods() }
     }
 
-    /// Continue with Google, under the form, for a server that offers it (docs/google-sign-in-design.md
-    /// §8.2) — and, where Google opens new accounts, the line that says so.
-    @ViewBuilder private var googleSignIn: some View {
+    /// "or", between the password and Google when both are offered.
+    private var orRule: some View {
         HStack(spacing: 12) {
             Rectangle().fill(.quaternary).frame(height: 1)
             Text("or").font(.orbitLabel).foregroundStyle(.secondary)
             Rectangle().fill(.quaternary).frame(height: 1)
         }
         .padding(.vertical, 4)
+    }
+
+    /// Continue with Google, under the form, for a server that offers it (docs/google-sign-in-design.md
+    /// §8.2) — and, where Google opens new accounts, the line that says so to someone the page doesn't
+    /// already know.
+    @ViewBuilder private var googleSignIn: some View {
         Button {
             Task { await model.loginWithGoogle() }
         } label: {
@@ -125,7 +163,7 @@ struct LoginView: View {
         }
         .buttonStyle(GoogleButtonStyle())
         .disabled(model.busy || model.googleBusy)
-        if model.signInMethods.googleSignup {
+        if model.signInMethods.googleSignup, card == nil {
             Text("New to Orbit? Continue with Google to create an account.")
                 .font(.orbitLabel)
                 .foregroundStyle(.secondary)
@@ -166,13 +204,75 @@ struct LoginView: View {
     private func logo(_ size: CGFloat) -> some View {
         OrbitAppIcon(size: size)
             .shadow(color: Color.accentColor.opacity(0.28), radius: size / 6, y: size / 10)
-            .onTapGesture(count: 3) { serverSheet = true }
+            .onTapGesture(count: 2) { serverSheet = true }
             .accessibilityLabel("Orbit")
             .accessibilityAction(named: "Change server") { serverSheet = true }
     }
 
+    /// The card, with the one thing it does besides being read: a long press (a right click on the
+    /// Mac, an action in VoiceOver) forgets its account on this device.
+    private func accountCard(_ account: RememberedAccount) -> some View {
+        AccountCard(account: account, photo: model.rememberedPhoto,
+                    domain: SettingsHome.instanceName(ServerURL.normalize(model.instanceField)) ?? model.instanceField)
+            .contextMenu {
+                Button(role: .destructive) { model.forgetRememberedAccount() } label: {
+                    Label("Remove from this device", systemImage: "trash")
+                }
+            }
+            .accessibilityAction(named: "Remove from this device") { model.forgetRememberedAccount() }
+    }
+
     private func submit() {
         Task { await model.login() }
+    }
+}
+
+/// The domain's last account in the Email field's place, in LoginField's shape and fill: its photo
+/// (else its initial), its name, its email and the domain it belongs to. Not a button. The email is
+/// still the system's username — a text field nobody can edit — so Password AutoFill offers this
+/// account's password.
+private struct AccountCard: View {
+    let account: RememberedAccount
+    let photo: PlatformImage?
+    let domain: String
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: 14, style: .continuous)
+        HStack(spacing: 12) {
+            if let photo {
+                AvatarPhoto(image: photo, diameter: 40)
+            } else {
+                AvatarMonogram(name: account.displayName, diameter: 40)
+            }
+            VStack(alignment: .leading, spacing: 1) {
+                Text(account.displayName)
+                    .font(.headline)
+                    .lineLimit(1)
+                TextField("Email", text: .constant(account.email))
+                    .textContentType(.username)
+                    .textFieldStyle(.plain)
+                    .font(.orbitLabel)
+                    .foregroundStyle(.secondary)
+                    .allowsHitTesting(false)
+                HStack(spacing: 4) {
+                    Image(systemName: "globe").imageScale(.small)
+                    Text(domain).lineLimit(1)
+                }
+                .font(.orbitLabel)
+                .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(shape.fill(Color.secondary.opacity(0.1)))
+        .contentShape(shape)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityText)
+    }
+
+    private var accessibilityText: String {
+        "\(account.displayName), \(account.email), \(domain)"
     }
 }
 
@@ -306,7 +406,7 @@ private extension Color {
     }
 }
 
-/// The hidden server picker behind the logo's triple tap.
+/// The hidden server picker behind the logo's double tap.
 private struct ServerSheet: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss

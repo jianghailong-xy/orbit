@@ -88,13 +88,19 @@ final class GoogleSignInWiringTests: XCTestCase {
     func testTheLoginPageOffersGoogleOnlyWhereItsServerDoes() throws {
         let view = try loginView()
         let google = try slice(view, from: "@ViewBuilder private var googleSignIn: some View {", to: "\n    }\n")
-        // Drawn in one place, and only inside the server's yes.
+        // Drawn in one place, and only where the page offers Google. Under a remembered account's card
+        // as in the full form, that is decided by `LoginWaysIn.offered` from the server's answer — and
+        // never without its yes (RememberedAccountTests.testGoogleIsNeverOfferedWithoutTheServersYes).
         XCTAssertEqual(try count(#"\bgoogleSignIn\b"#, in: view), 2)
-        XCTAssertEqual(try count(#"if model\.signInMethods\.google \{\s*googleSignIn\s*\}"#, in: view), 1)
+        XCTAssertEqual(try count(#"if ways\.google \{\s*googleSignIn\s*\}"#, in: view), 1)
+        XCTAssertEqual(try count(#"\bways\b"#, in: view), try count(#"if ways\.\w+ \{"#, in: view) + 1,
+                       "`ways` is read only by the ifs that draw what it offers")
+        XCTAssertTrue(view.contains("let ways = LoginWaysIn.offered(card: card?.method, methods: model.signInMethods,\n"
+                                    + "                                       answered: model.signInMethodsAnswered)"))
         XCTAssertEqual(try count("Continue with Google", in: view), try count("Continue with Google", in: google))
         XCTAssertTrue(google.contains("Task { await model.loginWithGoogle() }"))
-        // The sign-up line only where Google opens accounts.
-        XCTAssertEqual(try count(#"if model\.signInMethods\.googleSignup \{\s*Text\("New to Orbit\? Continue with Google to create an account\."\)"#,
+        // The sign-up line only where Google opens accounts, and not under a card: that account is known.
+        XCTAssertEqual(try count(#"if model\.signInMethods\.googleSignup, card == nil \{\s*Text\("New to Orbit\? Continue with Google to create an account\."\)"#,
                                  in: google), 1)
     }
 
@@ -111,6 +117,11 @@ final class GoogleSignInWiringTests: XCTestCase {
         XCTAssertTrue(load.contains("?? .passwordOnly"))
         XCTAssertTrue(load.contains("if url != signInMethodsServer { signInMethods = .passwordOnly }"))
         XCTAssertTrue(load.contains("guard ServerURL.normalize(instanceField) == url else { return }"))
+        // Answered by that server only once its answer is the page's (a Google card's slot waits for it).
+        XCTAssertTrue(load.contains("guard ServerURL.normalize(instanceField) == url else { return }\n"
+                                    + "        signInMethods = methods\n        signInMethodsAnsweredBy = url"))
+        let answered = try appModel("var signInMethodsAnswered: Bool {")
+        XCTAssertTrue(answered.contains("signInMethodsAnsweredBy == ServerURL.normalize(instanceField)"))
     }
 
     func testGoogleSignsInTheWayThePasswordDoes() throws {

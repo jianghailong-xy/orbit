@@ -31,7 +31,10 @@ final class AppModel {
     // auth / instance
     var signedIn = false
     static let defaultInstance = "orbitd.io"
-    var instanceField = AppModel.defaultInstance
+    var instanceField = AppModel.defaultInstance {
+        // Another server from the hidden Server sheet: the page shows that domain's account, if any.
+        didSet { if instanceField != oldValue { showRememberedAccount() } }
+    }
     var email = ""
     var password = ""
     var errorText: String?
@@ -44,10 +47,30 @@ final class AppModel {
     private(set) var signInMethods = SignInMethods.passwordOnly
     /// The server `signInMethods` was asked of.
     @ObservationIgnored private var signInMethodsServer: URL?
+    /// The server whose answer `signInMethods` is, once one has come back.
+    private var signInMethodsAnsweredBy: URL?
+    /// Whether `signInMethods` is the page's own server's answer yet: a remembered Google account's
+    /// card leaves its button's place empty until it is.
+    var signInMethodsAnswered: Bool {
+        signInMethodsAnsweredBy != nil && signInMethodsAnsweredBy == ServerURL.normalize(instanceField)
+    }
+    /// The login page's domain's last account (docs/mocks/login-remember-account/), drawn as a card in
+    /// place of the Email field. Written at each sign-in and while signed in; Sign out and a 401 leave
+    /// it. Nil when the domain has none.
+    private(set) var rememberedAccount: RememberedAccount?
+    /// Its photo as this device keeps it: nil when it has none, or the file was purged (the card then
+    /// draws the initial).
+    private(set) var rememberedPhoto: PlatformImage?
+    /// "Use another account": the full form in place of the card, with "Sign in as …" to go back.
+    private(set) var usesAnotherAccount = false
+    private let rememberedAccounts = RememberedAccounts.standard()
 
     // data
     var user: User? {
-        didSet { refreshAvatar() }
+        didSet {
+            refreshAvatar()
+            rememberUser()
+        }
     }
     private var pendingDefaultModels: [String: String] = [:]
     @ObservationIgnored private var defaultModelWrite: Task<Void, Never>?
@@ -437,8 +460,6 @@ final class AppModel {
     private var eventWrittenRows: Set<String> = []
 
     private static let instanceKey = "orbit.instance"
-    /// The email of the last successful sign-in, prefilled on the login page.
-    private static let emailKey = "orbit.email"
     /// Remembers the last agent you selected so a cold launch lands there instead of always the
     /// first agent in the list. Read in `loadAgentsThenLand`, written by `selectedAgentID`'s didSet.
     private static let lastAgentKey = "orbit.lastAgent"
@@ -450,7 +471,6 @@ final class AppModel {
         tokenStore = InMemoryTokenStore()
         #endif
 
-        email = UserDefaults.standard.string(forKey: Self.emailKey) ?? ""
         // Restore the last instance; if its token is still in the Keychain, skip the login screen —
         // and draw the first frame from what the last run left rather than from nothing.
         if let saved = UserDefaults.standard.string(forKey: Self.instanceKey),
@@ -462,6 +482,7 @@ final class AppModel {
                 restoreLaunchSnapshot()
             }
         }
+        showRememberedAccount()
     }
 
     /// Per-section shared stores (list + detail observe the same instance). Rebuilt per instance.
@@ -691,6 +712,7 @@ final class AppModel {
             if let version = account.avatarUpdatedAt {
                 avatarImageKey = "\(account.id)|\(version)"
                 avatarImage = PlatformImage(data: jpeg)
+                if let baseURL { rememberedAccounts.keepPhoto(jpeg, version: version, on: baseURL) }
             }
             user = account
             return nil
@@ -723,10 +745,15 @@ final class AppModel {
         // Never another account's photo under this one's name while the new one loads.
         if avatarImageKey?.hasPrefix("\(user.id)|") != true { avatarImage = nil }
         avatarImageKey = key
+        let server = baseURL
         Task {
             do {
                 let data = try await api.avatar()
-                if avatarImageKey == key { avatarImage = PlatformImage(data: data) }
+                if avatarImageKey == key {
+                    avatarImage = PlatformImage(data: data)
+                    // The login card's copy, beside the account it belongs to.
+                    if let server { rememberedAccounts.keepPhoto(data, version: version, on: server) }
+                }
             } catch {
                 if avatarImageKey == key { avatarImageKey = nil }
             }
@@ -763,8 +790,8 @@ final class AppModel {
             _ = try await api!.login(email: email, password: password)
             // Remember only what signed in, so a mistyped server or email never sticks.
             UserDefaults.standard.set(instanceField, forKey: Self.instanceKey)
-            UserDefaults.standard.set(email, forKey: Self.emailKey)
             user = try? await api!.me()
+            rememberSignIn(.password)
             password = ""
             signedIn = true
         } catch {
@@ -787,6 +814,7 @@ final class AppModel {
         // The server changed while this one was asked: the answer isn't the page's any more.
         guard ServerURL.normalize(instanceField) == url else { return }
         signInMethods = methods
+        signInMethodsAnsweredBy = url
     }
 
     /// Continue with Google (docs/google-sign-in-design.md §8.2): the server's Google sign-in in the
@@ -813,6 +841,7 @@ final class AppModel {
             _ = try await GoogleSignIn.signIn(api: api!) { try await sheet.authenticate($0) }
             UserDefaults.standard.set(instanceField, forKey: Self.instanceKey)
             user = try? await api!.me()
+            rememberSignIn(.google)
             password = ""
             signedIn = true
         } catch GoogleSignInError.cancelled {
@@ -833,6 +862,57 @@ final class AppModel {
             .first { $0.activationState == .foregroundActive }
         return scene?.windows.first(where: { $0.isKeyWindow }) ?? scene?.windows.first
         #endif
+    }
+
+    // MARK: the remembered account (docs/mocks/login-remember-account/)
+
+    /// Put the login page on its domain's account: the card when there is one, else the empty form,
+    /// which the pre-card email still fills until the first sign-in under the cards.
+    private func showRememberedAccount() {
+        let server = ServerURL.normalize(instanceField)
+        rememberedAccount = server.flatMap(rememberedAccounts.account(on:))
+        rememberedPhoto = server.flatMap(rememberedAccounts.photo(on:)).flatMap(PlatformImage.init(data:))
+        usesAnotherAccount = false
+        email = rememberedAccounts.email(toShowOn: server)
+    }
+
+    /// "Use another account": the full form, its Email empty, for the same domain. Nothing is forgotten.
+    func useAnotherAccount() {
+        usesAnotherAccount = true
+        email = ""
+        password = ""
+        errorText = nil
+    }
+
+    /// "Sign in as …": back to the card.
+    func useRememberedAccount() {
+        showRememberedAccount()
+        password = ""
+        errorText = nil
+    }
+
+    /// "Remove from this device": the domain's account and its photo are forgotten, and the page is
+    /// the empty form.
+    func forgetRememberedAccount() {
+        if let server = ServerURL.normalize(instanceField) { rememberedAccounts.forget(on: server) }
+        showRememberedAccount()
+        email = ""
+        password = ""
+        errorText = nil
+    }
+
+    /// A sign-in on the page's server succeeded: its account is that domain's now, got in by `method`.
+    /// Email and name are `/users/me`'s; a password sign-in whose read failed keeps the email typed.
+    private func rememberSignIn(_ method: RememberedAccount.Method) {
+        guard let baseURL, let signedInAs = user?.email ?? (method == .password ? email : nil) else { return }
+        rememberedAccounts.signedIn(on: baseURL, email: signedInAs, name: user?.name, method: method)
+    }
+
+    /// While signed in, the domain's account follows `user`: its name, its email, and whether it still
+    /// has a photo. The way in stays as the last sign-in recorded it.
+    private func rememberUser() {
+        guard signedIn, let baseURL, let user else { return }
+        rememberedAccounts.keep(user, on: baseURL)
     }
 
     func logout() {
@@ -903,6 +983,8 @@ final class AppModel {
         lastBadge = nil
         didWriteBadge = false
         lastNeedsYou = nil
+        // Sign out and a 401 keep the domain's account: the page opens on its card.
+        showRememberedAccount()
     }
 
     /// Reset navigation to the signed-out baseline. Navigation itself is one value, so this is

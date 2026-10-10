@@ -285,7 +285,9 @@ final class SettingsStackWiringTests: XCTestCase {
         XCTAssertTrue(avatar.contains("if let photo = model.avatarImage {"))
 
         let model = code(try appSource("AppModel.swift"))
-        XCTAssertTrue(model.contains("didSet { refreshAvatar() }"), "a new account fetches its photo")
+        // `user`'s didSet also keeps the login page's remembered account (RememberedAccountWiringTests).
+        let user = try slice(model, from: "var user: User? {", to: "\n    }\n")
+        XCTAssertTrue(user.contains("didSet {\n            refreshAvatar()"), "a new account fetches its photo")
         let saveAvatar = try slice(model, from: "func saveAvatar(_ jpeg: Data) async -> String? {", to: "func removeAvatar(")
         XCTAssertTrue(saveAvatar.contains("let account = try await api.setAvatar(jpeg: jpeg)"))
         XCTAssertTrue(saveAvatar.contains("avatarImage = PlatformImage(data: jpeg)"), "what was sent is what is shown")
