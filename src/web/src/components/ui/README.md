@@ -67,7 +67,7 @@ P4.1（登录、初始化、个人资料、设置）按页面实际需要补齐�
 
 - Dialog：`onClose` 是关闭请求，业务更新 open；默认宽度520px、顶部100px，宽度上限 100vw−32px；<=767px时保留旧弹窗108px顶部和8px边距（上限 100vw−16px）。宽度按视口宽度计，弹层视口出现滚动条时对话框宽度不变；滚动到底止于对话框下缘，与被替换对话框相同。footer 完全由调用方提供，原生表单使用 Button 的 type/form 属性。默认无自动 OK/Cancel。放不下一行的按钮换到下一行，每行靠右、行间无间隙，同被替换对话框里行内排列的按钮（P4.3a：手机上的长确认按钮）。
 - Drawer：相同关闭和焦点约定，`placement="right"`（默认）或 `"bottom"`；width/height 支持 CSS 尺寸，默认378px，底部可用 height="auto"。headerActions 放置已有最大化等动作。复用 Base Dialog，因为现有 Drawer 没有滑动关闭或吸附点；不新增手势。
-- 默认支持 Esc、单击/单指轻点遮罩和 Close 按钮；内部按下、外部释放不关闭。Dialog 的 Close 叠在正文之上（z-index 10，同被替换对话框的关闭按钮高出其弹层基准 10）：没有标题行的对话框（P4.3b 的项目完成、启动项目：title 传 null，由业务样式收起空的标题行）正文从顶上开始，与它重叠。`closeOnEscape`、`closeOnOutsideClick`、`closable` 分别控制三种关闭方式。busy 阻止关闭请求并禁用 Close；调用方负责自己的提交按钮。隐藏 Close 时应提供可访问的退出按钮。
+- 默认支持 Esc、单击/单指轻点遮罩和 Close 按钮；内部按下、外部释放不关闭。Dialog 的 Close 叠在正文之上（z-index 10，同被替换对话框的关闭按钮高出其弹层基准 10）：没有标题行的对话框（P4.3b 的项目完成、启动项目：title 传 null，由业务样式收起空的标题行）正文从顶上开始，与它重叠。`closeOnEscape`、`closeOnOutsideClick`、`closable` 分别控制三种关闭方式。busy 阻止关闭请求并禁用 Close；调用方负责自己的提交按钮。隐藏 Close 时应提供可访问的退出按钮。Dialog 的 Close 悬停底色同被替换对话框（明 6%、暗 12%，`--orbit-dialog-close-hover-bg`），比控件共用的悬停底色（4%/8%）深一级，按下时仍是共用的按下底色；Drawer 的 Close 未改。
 - 默认聚焦弹层容器，避免手机打开时自动弹出软键盘；initialFocus 可指定原生 ref。默认返回先前焦点；从菜单、触摸入口或会卸载的节点打开时，传 `returnFocus` 指向稳定的触发按钮。不能通过读取第三方 DOM 找触发器。弹层里有焦点的控件消失时（卡片换掉自己的内容，如完成问句的 Not yet），Base UI 把焦点交回弹层容器；容器取得焦点一律不滚动，与首次聚焦相同，所以高于屏幕的对话框不会因此跳到容器顶部（P4.3b）。
 - 默认关闭后卸载正文；`keepMounted` 适用于需保留未提交表单值的场景，关闭时隐藏且退出可访问树。业务页面迁移时明确选择其现有生命周期。
 - ConfirmDialog：`width`（P4.3a，默认 416，协调者“开始新的协调者”提问用 480，让两个较长的回答留在一行）；`kind="success"`（P4.2）是只需确认的通知：成功图标、只有确认键并默认聚焦它（管理员新建用户后显示一次性密码）；默认 `kind="confirm"`。`onConfirm` 返回 Promise 时自动 pending，成功调用 `onClose(true)`；取消/Esc 调用 `onClose(false)`；遮罩不关闭。默认聚焦 Cancel。提交期间按钮/取消/Esc均被锁住，同一事件轮内的重复提交也会被阻止。throw/reject 会保留弹窗，以 role=alert 显示错误并恢复重试/取消；业务已经有 toast 时仍由业务保留。必须返回 mutateAsync/请求 Promise，不能用返回 void 的 mutate 冒充可等待提交。
@@ -144,7 +144,7 @@ P2.2 提供 `Menu`、`Popover`、`Tooltip`、`Select`、`Combobox` 和 `MultiSel
 - `Select` 与 `Combobox` 共用字符串 `value | null`、`options` 和 `onValueChange`。空字符串是有效选择（账号 Automatic）；null 表示未选择/显式清除。options 为 `{value,label,disabled?,title?}` 或 `{label,options}` 分组（`title`，P4.3a：可检索列表中选项的原生悬停提示）；label 为搜索/无障碍文本，复杂展示使用 `renderOption/renderValue`。支持 small/middle、outlined/borderless、disabled/loading、placeholder/clearable、emptyContent、showArrow 和 matchTriggerWidth。
 - 需要文本检索时使用 `Combobox`；默认按 label 忽略大小写匹配。修改查询和 Esc 不清掉已选值；显式清除才回调 null。远端搜索设置 `filter={false}` 与 `onSearch`，由业务处理请求/过期响应；`value={null}` 可用于选择后重置的动作入口。已选标签通过 aria-describedby 暴露给辅助技术。ref 分别指向 Select 按钮和 Combobox 输入框，name 支持原生表单值。
 
-P3.2 试点据真实页面补齐：Select 家族根类名为 `.orbit-select`（原 `.orbit-choice` 与 Checkbox/Radio 的标签类同名，两份样式同时加载时互相套用边框与内边距）；loading 时在箭头位置显示旋转弧形图标，可搜索的 Combobox 打开时显示放大镜，与被替换的选择器一致；Combobox 的占位文字画在输入框旁（按文字宽度裁切），输入框在 ≤960px 提为 16px 时占位仍保持字段字号；Select 只在值真正改变时回调 `onValueChange`，重选当前项只关闭列表。
+P3.2 试点据真实页面补齐：Select 家族根类名为 `.orbit-select`（原 `.orbit-choice` 与 Checkbox/Radio 的标签类同名，两份样式同时加载时互相套用边框与内边距）；loading 时在箭头位置显示旋转弧形图标，可搜索的 Combobox 打开时显示放大镜，与被替换的选择器一致；Combobox 的占位文字画在输入框旁（按文字宽度裁切），输入框在 ≤960px 提为 16px 时占位仍保持字段字号；Select 只在值真正改变时回调 `onValueChange`，重选当前项只关闭列表。没有选项持有 value（null 或不在选项中）时，用指针打开即高亮第一个可用选项，Enter 选它（被替换选择器的 defaultActiveFirstOption）；键盘打开沿用 Base UI：↓/Enter/Space 在第一项，↑ 在最后一项（`Select.test.tsx` 锁定）；有值时高亮当前值。
 
 Combobox 的值、占位与搜索输入框放在同一个行盒 `.orbit-combobox-field` 中（与被替换选择器的 content 盒相同）：行高来自隐藏的不换行空格，同时给控件提供文字基线；输入框由 inset 撑满而非百分比高度（后者使输入文字低1px）；打开且有值时整个行盒（含业务的悬停底色）一起淡化到 .25。未选值时打开即高亮第一项，Enter 选它（旧选择器的 defaultActiveFirstOption）。
 
