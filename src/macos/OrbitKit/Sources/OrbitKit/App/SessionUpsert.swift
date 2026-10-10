@@ -177,6 +177,8 @@ public extension Session {
                 capabilities: capabilities ?? self.capabilities,
                 agentId: agentId ?? self.agentId,
                 assignedRunnerId: assignedRunnerId,
+                // A session's engine never changes, and no summary or event carries it: the row's.
+                engine: engine,
                 provider: provider,
                 pendingApprovals: pendingApprovals ?? self.pendingApprovals,
                 waitingKind: waitingKind ?? self.waitingKind,

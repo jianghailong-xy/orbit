@@ -28,8 +28,14 @@ public enum TaskDetailCopy {
     // MARK: details
 
     public static let assigneeLabel = "Assignee"
+    /// The engine pin, above the Provider pin (board 6 ①): the CLI the task's runs use.
+    public static let engineLabel = "Engine"
     public static let providerLabel = "Provider"
     public static let modelLabel = "Model"
+    /// The Engine field's unpinned choice: the assignee workspace's engine.
+    public static let assigneesEngine = "Assignee's"
+    /// The Provider field's unpinned choice: the engine's own default credential (board 6 ②).
+    public static let engineDefault = "Engine default"
     public static let listLabel = "List"
     public static let startAtLabel = "Start at"
     public static let createdByLabel = "Created by"
