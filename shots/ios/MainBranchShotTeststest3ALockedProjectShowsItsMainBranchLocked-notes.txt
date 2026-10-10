@@ -1,0 +1,6 @@
+11-facts: shows "ahead of master at last measurement"
+11-facts: shows "synced with master"
+10-locked: shows "Tasks land on"
+10-locked: in view after 0 move(s) at (32.0, 443.3333333333333, 318.0, 69.66666666666669)
+10-locked: shows "and its main branch can no longer change. Merge it into master, or give up the branch"
+10-locked: no "so the line it lands on can no longer change"

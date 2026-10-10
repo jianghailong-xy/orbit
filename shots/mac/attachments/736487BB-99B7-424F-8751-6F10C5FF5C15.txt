@@ -1,0 +1,7 @@
+no-repository: no window after launch; pressing ⌘N
+no-repository: 1 window(s)
+e-start-row: in view after 0 move(s) at (317.0, 196.0, 660.0, 37.0)
+e-start-card: shows "Tasks land on"
+e-merge-check: in view after 0 move(s) at (308.0, 556.0, 377.0, 17.0)
+e-no-row: no "Main branch"
+e-main: shows "merges into main by itself"

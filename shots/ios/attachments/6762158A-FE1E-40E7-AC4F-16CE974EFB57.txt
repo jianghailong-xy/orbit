@@ -1,0 +1,7 @@
+01-preview: in view after 0 move(s) at (0.0, 367.3333333333333, 402.0, 130.0)
+01-card: shows "Tasks land on"
+01-row: in view after 3 move(s) at (28.0, 486.33333333333326, 346.0, 20.333333333333258)
+01-card: shows "merges into master once the merge check passes"
+01-card: no "Your last choice for"
+01-start: in view after 0 move(s) at (16.0, 707.0, 370.0, 34.33333333333337)
+start bodies: ["17:51:18 BODY /api/projects/P5/start {\"automatic\": true, \"criteriaDigest\": \"5d1a09c3be427777777777777777777777777777777777777777777777777777\", \"line\": \"PROJECT_BRANCH\", \"maxConcurrentTasks\": 2, \"mergeCheckCommand\": \"make test\", \"requestId\": \"I5\", \"upstreamRef\": \"refs/heads/master\"}"]

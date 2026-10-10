@@ -1,0 +1,21 @@
+start: no window after launch; pressing ⌘N
+start: 1 window(s)
+start-row: in view after 0 move(s) at (317.0, 196.0, 660.0, 37.0)
+start-card: shows "Tasks land on"
+main-branch-row: in view after 1 move(s) at (308.0, 515.0, 377.0, 17.0)
+02-last-choice: shows "Your last choice for acme/payments-api"
+02-last-choice: shows "merges into master once the merge check"
+03-picker: shows "Branches in payments-api"
+03-picker: shows "last chosen"
+03-picker: shows "Tasks start from it, and the project’s work ends up on it."
+05-typed: shows "Use “release/3.0”"
+05-refused: no "Use “a..b”"
+06-picked: shows "merges into develop once the merge check"
+06-picked: no "Your last choice for"
+06-picked-row: in view after 0 move(s) at (308.0, 515.0, 377.0, 17.0)
+15-merge-check: in view after 0 move(s) at (308.0, 553.0, 377.0, 17.0)
+15-merge-check: shows "on the project branch and again before develop."
+start-press: in view after 1 move(s) at (296.0, 695.0, 123.0, 24.0)
+start bodies: ["17:44:12 BODY /api/projects/P2/start {\"automatic\": true, \"criteriaDigest\": \"5d1a09c3be427777777777777777777777777777777777777777777777777777\", \"line\": \"PROJECT_BRANCH\", \"maxConcurrentTasks\": 2, \"mergeCheckCommand\": \"make test\", \"requestId\": null, \"upstreamRef\": \"refs/heads/develop\"}"]
+07-started: shows "Tasks land on"
+07-started-row: in view after 0 move(s) at (317.0, 330.0, 660.0, 17.0)

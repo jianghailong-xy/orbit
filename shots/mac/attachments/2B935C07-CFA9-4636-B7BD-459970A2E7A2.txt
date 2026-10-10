@@ -1,0 +1,2 @@
+conversation: no window after launch; pressing ⌘N
+conversation: 1 window(s)

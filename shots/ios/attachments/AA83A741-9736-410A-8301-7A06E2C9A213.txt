@@ -1,0 +1,26 @@
+start-row: in view after 0 move(s) at (16.0, 271.66666666666663, 370.0, 69.66666666666669)
+start-card: shows "Tasks land on"
+main-branch-row: in view after 2 move(s) at (42.16666666666666, 502.6666666666667, 318.33333333333337, 20.333333333333314)
+02-last-choice: shows "Your last choice for acme/payments-api"
+02-last-choice: shows "merges into master once the merge check"
+03-picker: shows "Branches in payments-api"
+03-picker: shows "last chosen"
+03-picker: shows "Tasks start from it, and the project’s work ends up on it."
+05-typed: shows "Use “release/3.0”"
+05-refused: no "Use “a..b”"
+06-picked: shows "merges into develop once the merge check"
+06-picked: no "Your last choice for"
+06-picked-row: in view after 0 move(s) at (42.16666666666666, 502.6666666666667, 318.33333333333337, 20.333333333333314)
+13-automatic: in view after 0 move(s) at (299.5, 231.66666666666663, 61.0, 28.0)
+13-off: shows "You decide when each task is done and when the branch goes into develop."
+14-comes-to-you: shows "Merging the branch into develop"
+15-merge-check: in view after 0 move(s) at (42.16666666666666, 591.3333333333333, 318.33333333333337, 20.333333333333258)
+15-merge-check: shows "on the project branch and again before develop."
+13-frame: in view after 1 move(s) at (71.0, 310.66666666666674, 222.33333333333326, 18.0)
+12-line: in view after 0 move(s) at (220.16666666666666, 380.0, 140.33333333333334, 20.333333333333258)
+12-menu: shows "Directly into develop"
+12-directly: shows "Each merge into develop"
+start-press: in view after 1 move(s) at (30.166666666666657, 865.0, 342.33333333333337, 34.33333333333337)
+start bodies: ["17:53:24 BODY /api/projects/P2/start {\"automatic\": false, \"criteriaDigest\": \"5d1a09c3be427777777777777777777777777777777777777777777777777777\", \"line\": \"MAIN\", \"maxConcurrentTasks\": 2, \"mergeCheckCommand\": \"make test\", \"requestId\": null, \"upstreamRef\": \"refs/heads/develop\"}"]
+07-started: shows "Tasks land on"
+07-started-row: in view after 0 move(s) at (32.0, 527.6666666666667, 338.0, 20.33333333333337)

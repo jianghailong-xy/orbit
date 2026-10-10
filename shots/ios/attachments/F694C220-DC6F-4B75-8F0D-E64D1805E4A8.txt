@@ -1,0 +1,11 @@
+08-row: in view after 0 move(s) at (32.0, 527.6666666666667, 338.0, 20.33333333333337)
+08-how-it-runs: shows "New projects in acme/payments-api start with your last choice."
+09-line: shows "Directly into master"
+09-automatic: shows "merges the branch into master once the merge check passes"
+08-picker: shows "Branches in payments-api"
+08-picker: shows "last chosen"
+integration bodies: ["17:53:51 BODY /api/projects/P1/integration {\"upstreamRef\": \"refs/heads/develop\"}"]
+08-picked: shows "Directly into develop"
+08-picked-row: in view after 0 move(s) at (32.0, 527.6666666666667, 338.0, 20.33333333333337)
+09-pause: in view after 4 move(s) at (32.0, 521.0, 104.0, 20.33333333333337)
+09-pause: shows "Stops new tasks, wake-ups and merges into develop. Running tasks finish."

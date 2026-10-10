@@ -1,0 +1,300 @@
+    t =    27.81s Find the "Main branch, master" Button
+    t =    27.98s Find the Window (First Match)
+    t =    27.98s Checking existence of `Any (First Match)`
+    t =    28.11s Checking existence of `StaticText (First Match)`
+    t =    28.17s Checking existence of `StaticText (First Match)`
+    t =    28.23s Checking existence of `Any (First Match)`
+    t =    28.32s Checking existence of `Any (First Match)`
+    t =    28.39s Checking existence of `Any (First Match)`
+    t =    28.50s Checking existence of `StaticText (First Match)`
+    t =    28.61s Checking existence of `StaticText (First Match)`
+    t =    28.70s Find the "Main branch, master" Button
+    t =    28.92s Added attachment named 'mac-08-how-it-runs'
+    t =    28.93s Click "Main branch, master" Button
+    t =    28.93s     Wait for io.orbitd.mainbranchmacprobe to idle
+    t =    28.94s     Find the "Main branch, master" Button
+    t =    29.12s     Check for interrupting elements affecting "Main branch, master" Button
+    t =    29.15s     Synthesize event
+    t =    29.69s     Wait for io.orbitd.mainbranchmacprobe to idle
+    t =    29.79s Checking existence of `Any (First Match)`
+    t =    30.19s Checking existence of `Any (First Match)`
+    t =    30.44s Checking existence of `Any (First Match)`
+    t =    30.60s Checking existence of `Any (First Match)`
+    t =    30.79s Added attachment named 'mac-08-picker'
+    t =    30.79s Waiting 10.0s for Button (First Match) to exist
+    t =    31.85s     Checking `Expect predicate `existsNoRetry == 1` for object Button (First Match)`
+    t =    31.85s         Checking existence of `Button (First Match)`
+    t =    31.94s Click Button (First Match)
+    t =    31.94s     Wait for io.orbitd.mainbranchmacprobe to idle
+    t =    31.94s     Find the Button (First Match)
+    t =    31.99s     Check for interrupting elements affecting "develop" Button
+    t =    32.01s     Synthesize event
+    t =    32.35s     Wait for io.orbitd.mainbranchmacprobe to idle
+    t =    36.06s Checking existence of `Any (First Match)`
+    t =    36.13s Checking existence of `Any (First Match)`
+    t =    36.18s Get all elements bound by index for: Elements matching predicate 'label BEGINSWITH "Main branch"'
+    t =    36.30s Checking existence of `Button (Element at index 0)`
+    t =    36.38s Find the Button (Element at index 0)
+    t =    36.52s Checking existence of `"Main branch, develop" Button`
+    t =    36.62s Find the "Main branch, develop" Button
+    t =    36.74s Get all elements bound by index for: Elements matching predicate 'label BEGINSWITH "Main branch"'
+    t =    36.83s Checking existence of `Button (Element at index 0)`
+    t =    36.92s Find the Button (Element at index 0)
+    t =    37.04s Checking existence of `"Main branch, develop" Button`
+    t =    37.17s Find the "Main branch, develop" Button
+    t =    37.30s Checking existence of `"Main branch, develop" Button`
+    t =    37.39s Find the "Main branch, develop" Button
+    t =    37.49s Find the Window (First Match)
+    t =    37.59s Find the "Main branch, develop" Button
+    t =    37.71s Added attachment named 'mac-08-picked-develop'
+    t =    37.71s Checking existence of `Button (First Match)`
+    t =    37.76s Find the Button (First Match)
+    t =    37.81s Find the Window (First Match)
+    t =    37.81s Hover over "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<MainBranchMacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<MainBranchMacProbe.AppModel>>>, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<MainBranchMacProbe.UpdaterModel>>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window[0.70, 0.50]
+    t =    37.81s     Wait for io.orbitd.mainbranchmacprobe to idle
+    t =    37.81s     Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<MainBranchMacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<MainBranchMacProbe.AppModel>>>, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<MainBranchMacProbe.UpdaterModel>>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    37.82s     Check for interrupting elements affecting "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<MainBranchMacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<MainBranchMacProbe.AppModel>>>, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<MainBranchMacProbe.UpdaterModel>>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    37.83s     Synthesize event
+    t =    37.83s         Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<MainBranchMacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<MainBranchMacProbe.AppModel>>>, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<MainBranchMacProbe.UpdaterModel>>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    37.84s         Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<MainBranchMacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<MainBranchMacProbe.AppModel>>>, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<MainBranchMacProbe.UpdaterModel>>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    37.97s     Wait for io.orbitd.mainbranchmacprobe to idle
+    t =    37.97s Scroll "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<MainBranchMacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<MainBranchMacProbe.AppModel>>>, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<MainBranchMacProbe.UpdaterModel>>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window[0.70, 0.50] by dx: 0.00, dy: -102.50
+    t =    37.97s     Wait for io.orbitd.mainbranchmacprobe to idle
+    t =    37.97s     Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<MainBranchMacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<MainBranchMacProbe.AppModel>>>, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<MainBranchMacProbe.UpdaterModel>>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    37.98s     Check for interrupting elements affecting "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<MainBranchMacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<MainBranchMacProbe.AppModel>>>, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<MainBranchMacProbe.UpdaterModel>>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    37.99s     Synthesize event
+    t =    37.99s         Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<MainBranchMacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<MainBranchMacProbe.AppModel>>>, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<MainBranchMacProbe.UpdaterModel>>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    38.00s         Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<MainBranchMacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<MainBranchMacProbe.AppModel>>>, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<MainBranchMacProbe.UpdaterModel>>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    38.24s     Wait for io.orbitd.mainbranchmacprobe to idle
+    t =    39.07s Checking existence of `"Pause project" Button`
+    t =    39.14s Find the "Pause project" Button
+    t =    39.20s Find the "SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<SwiftUI.ModifiedContent<MainBranchMacProbe.MainView, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<MainBranchMacProbe.AppModel>>>, SwiftUI._EnvironmentKeyWritingModifier<Swift.Optional<MainBranchMacProbe.UpdaterModel>>>, SwiftUI._FlexFrameLayout>, SwiftUI._TaskModifier2>-1-AppWindow-1" Window
+    t =    39.21s Checking existence of `Any (First Match)`
+    t =    39.30s Checking existence of `StaticText (First Match)`
+    t =    39.35s Checking existence of `StaticText (First Match)`
+    t =    39.43s Added attachment named 'mac-09-pause'
+    t =    39.44s Tear Down
+    t =    39.44s     Added attachment named 'MainBranchShotTeststest2HowItRunsWritesAPickAtOnce-notes.txt'
+Test Case '-[MainBranchMacProbeUITests.MainBranchShotTests test2HowItRunsWritesAPickAtOnce]' passed (39.700 seconds).
+Test Case '-[MainBranchMacProbeUITests.MainBranchShotTests test3ALockedProjectShowsItsMainBranchLocked]' started.
+    t =     0.00s Start Test at 2026-10-10 17:44:58.746
+    t =     0.10s Set Up
+    t =     0.10s Open io.orbitd.mainbranchmacprobe
+    t =     0.11s     Launch io.orbitd.mainbranchmacprobe
+    t =     0.11s         Terminate io.orbitd.mainbranchmacprobe:20349
+2026-10-10 17:44:59.862 xcodebuild[3452:16667] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-10 17:44:59.862 xcodebuild[3452:16667] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     1.91s         Wait for accessibility to load
+    t =     1.91s         Setting up automation session
+    t =     1.93s         Wait for io.orbitd.mainbranchmacprobe to idle
+    t =     1.94s Get number of matches for: Descendants matching type Window
+    t =     2.55s Get number of matches for: Descendants matching type Window
+    t =     3.07s Get number of matches for: Descendants matching type Window
+    t =     3.60s Get number of matches for: Descendants matching type Window
+    t =     4.12s Get number of matches for: Descendants matching type Window
+    t =     4.65s Get number of matches for: Descendants matching type Window
+    t =     5.16s Get number of matches for: Descendants matching type Window
+    t =     5.69s Get number of matches for: Descendants matching type Window
+    t =     6.21s Get number of matches for: Descendants matching type Window
+    t =     6.73s Get number of matches for: Descendants matching type Window
+    t =     7.26s Get number of matches for: Descendants matching type Window
+    t =     7.78s Get number of matches for: Descendants matching type Window
+    t =     8.30s Get number of matches for: Descendants matching type Window
+    t =     8.83s Get number of matches for: Descendants matching type Window
+    t =     9.35s Get number of matches for: Descendants matching type Window
+    t =     9.88s Get number of matches for: Descendants matching type Window
+    t =    10.40s Get number of matches for: Descendants matching type Window
+    t =    10.94s Get number of matches for: Descendants matching type Window
+    t =    11.46s Get number of matches for: Descendants matching type Window
+    t =    11.98s Get number of matches for: Descendants matching type Window
+    t =    12.52s Get number of matches for: Descendants matching type Window
+    t =    13.06s Get number of matches for: Descendants matching type Window
+    t =    13.58s Get number of matches for: Descendants matching type Window
+    t =    14.12s Get number of matches for: Descendants matching type Window
+    t =    14.65s Get number of matches for: Descendants matching type Window
+    t =    15.18s Get number of matches for: Descendants matching type Window
+    t =    15.71s Get number of matches for: Descendants matching type Window
+    t =    16.26s Get number of matches for: Descendants matching type Window
+    t =    16.79s Get number of matches for: Descendants matching type Window
+    t =    17.34s Requesting snapshot of accessibility hierarchy for app with pid 22053
+    t =    17.41s Requesting snapshot of accessibility hierarchy for app with pid 22053
+    t =    17.50s Added attachment named 'no-window-locked.txt'
+    t =    17.51s Type 'n' key with modifiers '⌘' (0x10)
+    t =    17.51s     Wait for io.orbitd.mainbranchmacprobe to idle
+    t =    17.51s     Find the Target Application 'io.orbitd.mainbranchmacprobe'
+    t =    17.54s     Check for interrupting elements affecting "MainBranchMacProbe" Application
+    t =    17.54s     Synthesize event
+    t =    18.46s     Wait for io.orbitd.mainbranchmacprobe to idle
+    t =    18.47s Get number of matches for: Descendants matching type Window
+    t =    18.65s Get number of matches for: Descendants matching type Window
+    t =    18.70s Checking existence of `Any (First Match)`
+    t =    18.87s Checking existence of `StaticText (First Match)`
+    t =    18.98s Checking existence of `Any (First Match)`
+    t =    19.57s Checking existence of `Any (First Match)`
+    t =    19.75s Checking existence of `StaticText (First Match)`
+    t =    19.84s Checking existence of `Any (First Match)`
+    t =    20.42s Checking existence of `Any (First Match)`
+    t =    20.68s Checking existence of `StaticText (First Match)`
+    t =    20.83s Checking existence of `StaticText (First Match)`
+    t =    22.93s Checking existence of `Any (First Match)`
+    t =    23.27s Checking existence of `StaticText (First Match)`
+    t =    23.44s Checking existence of `StaticText (First Match)`
+    t =    23.54s Checking existence of `Any (First Match)`
+    t =    23.74s Checking existence of `StaticText (First Match)`
+    t =    23.85s Checking existence of `StaticText (First Match)`
+    t =    24.04s Added attachment named 'mac-11-header-facts'
+    t =    24.05s Checking existence of `Any (First Match)`
+    t =    24.29s Checking existence of `StaticText (First Match)`
+    t =    24.42s Checking existence of `StaticText (First Match)`
+    t =    24.57s Checking existence of `Any (First Match)`
+    t =    24.80s Checking existence of `StaticText (First Match)`
+    t =    24.91s Checking existence of `Any (First Match)`
+    t =    25.16s Checking existence of `StaticText (First Match)`
+    t =    25.30s Checking existence of `StaticText (First Match)`
+    t =    25.38s Checking existence of `StaticText (First Match)`
+    t =    25.49s Find the StaticText (First Match)
+    t =    25.61s Find the Window (First Match)
+    t =    25.62s Checking existence of `Any (First Match)`
+    t =    25.75s Checking existence of `StaticText (First Match)`
+    t =    25.84s Checking existence of `StaticText (First Match)`
+    t =    25.91s Checking existence of `Any (First Match)`
+    t =    26.06s Checking existence of `StaticText (First Match)`
+    t =    26.20s Checking existence of `Any (First Match)`
+    t =    26.38s Get all elements bound by index for: Elements matching predicate 'label BEGINSWITH "Main branch"'
+    t =    26.62s Added attachment named 'mac-10-locked'
+    t =    26.62s Tear Down
+    t =    26.62s     Added attachment named 'MainBranchShotTeststest3ALockedProjectShowsItsMainBranchLocked-notes.txt'
+Test Case '-[MainBranchMacProbeUITests.MainBranchShotTests test3ALockedProjectShowsItsMainBranchLocked]' passed (26.874 seconds).
+Test Case '-[MainBranchMacProbeUITests.MainBranchShotTests test4AProjectWithNoRepositoryHasNoMainBranchRow]' started.
+    t =     0.00s Start Test at 2026-10-10 17:45:25.620
+    t =     0.21s Set Up
+    t =     0.23s Open io.orbitd.mainbranchmacprobe
+    t =     0.23s     Launch io.orbitd.mainbranchmacprobe
+    t =     0.23s         Terminate io.orbitd.mainbranchmacprobe:22053
+2026-10-10 17:45:26.874 xcodebuild[3452:16667] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-10 17:45:26.874 xcodebuild[3452:16667] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     2.01s         Wait for accessibility to load
+    t =     2.18s         Setting up automation session
+    t =     2.22s         Wait for io.orbitd.mainbranchmacprobe to idle
+    t =     2.23s Get number of matches for: Descendants matching type Window
+    t =     2.87s Get number of matches for: Descendants matching type Window
+    t =     3.42s Get number of matches for: Descendants matching type Window
+    t =     3.96s Get number of matches for: Descendants matching type Window
+    t =     4.49s Get number of matches for: Descendants matching type Window
+    t =     5.03s Get number of matches for: Descendants matching type Window
+    t =     5.58s Get number of matches for: Descendants matching type Window
+    t =     6.14s Get number of matches for: Descendants matching type Window
+    t =     6.67s Get number of matches for: Descendants matching type Window
+    t =     7.23s Get number of matches for: Descendants matching type Window
+    t =     7.76s Get number of matches for: Descendants matching type Window
+    t =     8.30s Get number of matches for: Descendants matching type Window
+    t =     8.84s Get number of matches for: Descendants matching type Window
+    t =     9.39s Get number of matches for: Descendants matching type Window
+    t =     9.93s Get number of matches for: Descendants matching type Window
+    t =    10.47s Get number of matches for: Descendants matching type Window
+    t =    11.00s Get number of matches for: Descendants matching type Window
+    t =    11.52s Get number of matches for: Descendants matching type Window
+    t =    12.05s Get number of matches for: Descendants matching type Window
+    t =    12.59s Get number of matches for: Descendants matching type Window
+    t =    13.13s Get number of matches for: Descendants matching type Window
+    t =    13.67s Get number of matches for: Descendants matching type Window
+    t =    14.20s Get number of matches for: Descendants matching type Window
+    t =    14.75s Get number of matches for: Descendants matching type Window
+    t =    15.28s Get number of matches for: Descendants matching type Window
+    t =    15.84s Get number of matches for: Descendants matching type Window
+    t =    16.38s Get number of matches for: Descendants matching type Window
+    t =    16.92s Get number of matches for: Descendants matching type Window
+    t =    17.45s Requesting snapshot of accessibility hierarchy for app with pid 23782
+    t =    17.50s Requesting snapshot of accessibility hierarchy for app with pid 23782
+    t =    17.54s Added attachment named 'no-window-no-repository.txt'
+    t =    17.54s Type 'n' key with modifiers '⌘' (0x10)
+    t =    17.55s     Wait for io.orbitd.mainbranchmacprobe to idle
+    t =    17.55s     Find the Target Application 'io.orbitd.mainbranchmacprobe'
+    t =    17.58s     Check for interrupting elements affecting "MainBranchMacProbe" Application
+    t =    17.58s     Synthesize event
+    t =    18.28s     Wait for io.orbitd.mainbranchmacprobe to idle
+    t =    18.28s Get number of matches for: Descendants matching type Window
+    t =    18.39s Get number of matches for: Descendants matching type Window
+    t =    18.44s Checking existence of `Any (First Match)`
+    t =    18.56s Checking existence of `StaticText (First Match)`
+    t =    18.61s Checking existence of `Any (First Match)`
+    t =    19.18s Checking existence of `Any (First Match)`
+    t =    19.25s Checking existence of `StaticText (First Match)`
+    t =    19.32s Checking existence of `Any (First Match)`
+    t =    19.91s Checking existence of `Any (First Match)`
+    t =    20.02s Checking existence of `StaticText (First Match)`
+    t =    20.10s Checking existence of `Any (First Match)`
+    t =    20.69s Checking existence of `Any (First Match)`
+    t =    21.25s Checking existence of `StaticText (First Match)`
+    t =    21.36s Checking existence of `StaticText (First Match)`
+    t =    23.49s Get all elements bound by index for: Elements matching predicate 'label BEGINSWITH "Start…"'
+    t =    23.72s Checking existence of `Button (Element at index 0)`
+    t =    23.85s Find the Button (Element at index 0)
+    t =    24.04s Checking existence of `"Start…, not asked yet" Button`
+    t =    24.15s Find the "Start…, not asked yet" Button
+    t =    24.31s Get all elements bound by index for: Elements matching predicate 'label BEGINSWITH "Start…"'
+    t =    24.43s Checking existence of `Button (Element at index 0)`
+    t =    24.56s Find the Button (Element at index 0)
+    t =    24.76s Checking existence of `"Start…, not asked yet" Button`
+    t =    25.00s Find the "Start…, not asked yet" Button
+    t =    25.23s Checking existence of `"Start…, not asked yet" Button`
+    t =    25.39s Find the "Start…, not asked yet" Button
+    t =    25.49s Find the Window (First Match)
+    t =    25.50s Click "Start…, not asked yet" Button
+    t =    25.50s     Wait for io.orbitd.mainbranchmacprobe to idle
+    t =    25.50s     Find the "Start…, not asked yet" Button
+    t =    25.59s     Check for interrupting elements affecting "Start…, not asked yet" Button
+    t =    25.63s     Synthesize event
+    t =    26.07s     Wait for io.orbitd.mainbranchmacprobe to idle
+    t =    26.22s Checking existence of `Any (First Match)`
+    t =    26.53s Checking existence of `StaticText (First Match)`
+    t =    26.62s Checking existence of `StaticText (First Match)`
+    t =    26.67s Get all elements bound by index for: Elements matching predicate 'label BEGINSWITH "Merge check"'
+    t =    26.80s Checking existence of `Button (Element at index 0)`
+    t =    26.93s Find the Button (Element at index 0)
+    t =    27.19s Checking existence of `"Merge check, None" Button`
+    t =    27.40s Find the "Merge check, None" Button
+    t =    27.63s Get all elements bound by index for: Elements matching predicate 'label BEGINSWITH "Merge check"'
+    t =    27.77s Checking existence of `Button (Element at index 0)`
+    t =    27.97s Find the Button (Element at index 0)
+    t =    28.12s Checking existence of `"Merge check, None" Button`
+    t =    28.30s Find the "Merge check, None" Button
+    t =    28.50s Checking existence of `"Merge check, None" Button`
+    t =    28.71s Find the "Merge check, None" Button
+    t =    28.85s Find the Window (First Match)
+    t =    28.85s Checking existence of `Any (First Match)`
+    t =    28.95s Checking existence of `StaticText (First Match)`
+    t =    29.11s Checking existence of `Any (First Match)`
+    t =    29.21s Checking existence of `Any (First Match)`
+    t =    29.35s Checking existence of `StaticText (First Match)`
+    t =    29.40s Checking existence of `StaticText (First Match)`
+    t =    29.48s Added attachment named 'mac-e-no-repository'
+    t =    29.49s Tear Down
+    t =    29.49s     Added attachment named 'MainBranchShotTeststest4AProjectWithNoRepositoryHasNoMainBranchRow-notes.txt'
+Test Case '-[MainBranchMacProbeUITests.MainBranchShotTests test4AProjectWithNoRepositoryHasNoMainBranchRow]' passed (29.776 seconds).
+Test Suite 'MainBranchShotTests' failed at 2026-10-10 17:45:55.397.
+	 Executed 5 tests, with 8 failures (0 unexpected) in 320.713 (320.720) seconds
+Test Suite 'MainBranchMacProbeUITests.xctest' failed at 2026-10-10 17:45:55.403.
+	 Executed 5 tests, with 8 failures (0 unexpected) in 320.713 (320.727) seconds
+Test Suite 'All tests' failed at 2026-10-10 17:45:55.404.
+	 Executed 5 tests, with 8 failures (0 unexpected) in 320.713 (320.729) seconds
+2026-10-10 17:46:00.659 xcodebuild[3452:16667] [MT] IDETestOperationsObserverDebug: 332.268 elapsed -- Testing started completed.
+2026-10-10 17:46:00.659 xcodebuild[3452:16667] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-10 17:46:00.659 xcodebuild[3452:16667] [MT] IDETestOperationsObserverDebug: 332.268 sec, +332.268 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/runner/work/orbit/orbit/.mb-probe/results/mac.xcresult
+
+Failing tests:
+	MainBranchShotTests.test0TheConversationsCardOpensOnTheSuggestedMainBranchAndStartsOnIt()
+	MainBranchShotTests.test0TheConversationsCardOpensOnTheSuggestedMainBranchAndStartsOnIt()
+	MainBranchShotTests.test1TheStartCardOpensOnTheLastChoiceAndSendsWhatIsPicked()
+	MainBranchShotTests.test1TheStartCardOpensOnTheLastChoiceAndSendsWhatIsPicked()
+	MainBranchShotTests.test1TheStartCardOpensOnTheLastChoiceAndSendsWhatIsPicked()
+	MainBranchShotTests.test1TheStartCardOpensOnTheLastChoiceAndSendsWhatIsPicked()
+	MainBranchShotTests.test1TheStartCardOpensOnTheLastChoiceAndSendsWhatIsPicked()
+	MainBranchShotTests.test1TheStartCardOpensOnTheLastChoiceAndSendsWhatIsPicked()
+
+** TEST FAILED **
+
+Testing started

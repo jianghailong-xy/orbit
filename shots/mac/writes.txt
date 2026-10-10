@@ -1,0 +1,9 @@
+17:40:37 "POST /__reset HTTP/1.1" 200 -
+17:41:46 "POST /__reset HTTP/1.1" 200 -
+17:44:12 BODY /api/projects/P2/start {"automatic": true, "criteriaDigest": "5d1a09c3be427777777777777777777777777777777777777777777777777777", "line": "PROJECT_BRANCH", "maxConcurrentTasks": 2, "mergeCheckCommand": "make test", "requestId": null, "upstreamRef": "refs/heads/develop"}
+17:44:12 "POST /api/projects/P2/start HTTP/1.1" 201 -
+17:44:19 "POST /__reset HTTP/1.1" 200 -
+17:44:51 BODY /api/projects/P1/integration {"upstreamRef": "refs/heads/develop"}
+17:44:51 "PATCH /api/projects/P1/integration HTTP/1.1" 200 -
+17:44:58 "POST /__reset HTTP/1.1" 200 -
+17:45:25 "POST /__reset HTTP/1.1" 200 -

@@ -1,0 +1,14 @@
+Test Case '-[MainBranchProbeUITests.MainBranchShotTests test0TheConversationsCardOpensOnTheSuggestedMainBranchAndStartsOnIt]' started.
+Test Case '-[MainBranchProbeUITests.MainBranchShotTests test0TheConversationsCardOpensOnTheSuggestedMainBranchAndStartsOnIt]' passed (63.771 seconds).
+Test Case '-[MainBranchProbeUITests.MainBranchShotTests test1TheStartCardOpensOnTheLastChoiceAndSendsWhatIsPicked]' started.
+Test Case '-[MainBranchProbeUITests.MainBranchShotTests test1TheStartCardOpensOnTheLastChoiceAndSendsWhatIsPicked]' passed (126.182 seconds).
+Test Case '-[MainBranchProbeUITests.MainBranchShotTests test2HowItRunsWritesAPickAtOnce]' started.
+Test Case '-[MainBranchProbeUITests.MainBranchShotTests test2HowItRunsWritesAPickAtOnce]' passed (40.082 seconds).
+Test Case '-[MainBranchProbeUITests.MainBranchShotTests test3ALockedProjectShowsItsMainBranchLocked]' started.
+Test Case '-[MainBranchProbeUITests.MainBranchShotTests test3ALockedProjectShowsItsMainBranchLocked]' passed (12.063 seconds).
+Test Case '-[MainBranchProbeUITests.MainBranchShotTests test4AProjectWithNoRepositoryHasNoMainBranchRow]' started.
+Test Case '-[MainBranchProbeUITests.MainBranchShotTests test4AProjectWithNoRepositoryHasNoMainBranchRow]' passed (16.392 seconds).
+	 Executed 5 tests, with 0 failures (0 unexpected) in 258.488 (258.503) seconds
+	 Executed 5 tests, with 0 failures (0 unexpected) in 258.488 (258.504) seconds
+	 Executed 5 tests, with 0 failures (0 unexpected) in 258.488 (258.506) seconds
+** TEST SUCCEEDED **

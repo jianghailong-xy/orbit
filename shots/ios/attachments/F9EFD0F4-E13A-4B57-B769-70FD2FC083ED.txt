@@ -1,0 +1,5 @@
+e-start-row: in view after 0 move(s) at (16.0, 271.66666666666663, 370.0, 69.66666666666669)
+e-start-card: shows "Tasks land on"
+e-merge-check: in view after 1 move(s) at (42.16666666666666, 578.3333333333333, 318.33333333333337, 20.333333333333258)
+e-no-row: no "Main branch"
+e-main: shows "merges into main by itself"

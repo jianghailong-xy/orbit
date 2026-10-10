@@ -1,0 +1,22 @@
+Test Case '-[MainBranchMacProbeUITests.MainBranchShotTests test0TheConversationsCardOpensOnTheSuggestedMainBranchAndStartsOnIt]' started.
+/Users/runner/work/orbit/orbit/.mb-probe/UITests/MainBranchShotTests.swift:36: error: -[MainBranchMacProbeUITests.MainBranchShotTests test0TheConversationsCardOpensOnTheSuggestedMainBranchAndStartsOnIt] : failed - 01-card: "Tasks land on" never showed
+/Users/runner/work/orbit/orbit/.mb-probe/UITests/MainBranchShotTests.swift:23: error: -[MainBranchMacProbeUITests.MainBranchShotTests test0TheConversationsCardOpensOnTheSuggestedMainBranchAndStartsOnIt] : failed - 01-row: no button beginning "Main branch"
+Test Case '-[MainBranchMacProbeUITests.MainBranchShotTests test0TheConversationsCardOpensOnTheSuggestedMainBranchAndStartsOnIt]' failed (70.668 seconds).
+Test Case '-[MainBranchMacProbeUITests.MainBranchShotTests test1TheStartCardOpensOnTheLastChoiceAndSendsWhatIsPicked]' started.
+/Users/runner/work/orbit/orbit/.mb-probe/UITests/MainBranchShotTests.swift:179: error: -[MainBranchMacProbeUITests.MainBranchShotTests test1TheStartCardOpensOnTheLastChoiceAndSendsWhatIsPicked] : failed - 13: no Automatic switch
+/Users/runner/work/orbit/orbit/.mb-probe/UITests/MainBranchShotTests.swift:36: error: -[MainBranchMacProbeUITests.MainBranchShotTests test1TheStartCardOpensOnTheLastChoiceAndSendsWhatIsPicked] : failed - 13-off: "You decide when each task is done and when the branch goes into develop." never showed
+/Users/runner/work/orbit/orbit/.mb-probe/UITests/MainBranchShotTests.swift:36: error: -[MainBranchMacProbeUITests.MainBranchShotTests test1TheStartCardOpensOnTheLastChoiceAndSendsWhatIsPicked] : failed - 14-comes-to-you: "Merging the branch into develop" never showed
+/Users/runner/work/orbit/orbit/.mb-probe/UITests/MainBranchShotTests.swift:23: error: -[MainBranchMacProbeUITests.MainBranchShotTests test1TheStartCardOpensOnTheLastChoiceAndSendsWhatIsPicked] : failed - 12-line: no button beginning "A project branch"
+/Users/runner/work/orbit/orbit/.mb-probe/UITests/MainBranchShotTests.swift:36: error: -[MainBranchMacProbeUITests.MainBranchShotTests test1TheStartCardOpensOnTheLastChoiceAndSendsWhatIsPicked] : failed - 12-directly: "Each merge into develop" never showed
+/Users/runner/work/orbit/orbit/.mb-probe/UITests/MainBranchShotTests.swift:217: error: -[MainBranchMacProbeUITests.MainBranchShotTests test1TheStartCardOpensOnTheLastChoiceAndSendsWhatIsPicked] : XCTAssertTrue failed - Start did not send the card's other settings: ["17:44:12 BODY /api/projects/P2/start {\"automatic\": true, \"criteriaDigest\": \"5d1a09c3be427777777777777777777777777777777777777777777777777777\", \"line\": \"PROJECT_BRANCH\", \"maxConcurrentTasks\": 2, \"mergeCheckCommand\": \"make test\", \"requestId\": null, \"upstreamRef\": \"refs/heads/develop\"}"]
+Test Case '-[MainBranchMacProbeUITests.MainBranchShotTests test1TheStartCardOpensOnTheLastChoiceAndSendsWhatIsPicked]' failed (153.696 seconds).
+Test Case '-[MainBranchMacProbeUITests.MainBranchShotTests test2HowItRunsWritesAPickAtOnce]' started.
+Test Case '-[MainBranchMacProbeUITests.MainBranchShotTests test2HowItRunsWritesAPickAtOnce]' passed (39.700 seconds).
+Test Case '-[MainBranchMacProbeUITests.MainBranchShotTests test3ALockedProjectShowsItsMainBranchLocked]' started.
+Test Case '-[MainBranchMacProbeUITests.MainBranchShotTests test3ALockedProjectShowsItsMainBranchLocked]' passed (26.874 seconds).
+Test Case '-[MainBranchMacProbeUITests.MainBranchShotTests test4AProjectWithNoRepositoryHasNoMainBranchRow]' started.
+Test Case '-[MainBranchMacProbeUITests.MainBranchShotTests test4AProjectWithNoRepositoryHasNoMainBranchRow]' passed (29.776 seconds).
+	 Executed 5 tests, with 8 failures (0 unexpected) in 320.713 (320.720) seconds
+	 Executed 5 tests, with 8 failures (0 unexpected) in 320.713 (320.727) seconds
+	 Executed 5 tests, with 8 failures (0 unexpected) in 320.713 (320.729) seconds
+** TEST FAILED **

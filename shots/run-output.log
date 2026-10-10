@@ -1,0 +1,98 @@
+==> iPhone 22452A91-4697-4369-8812-53ADB77EB73B
+==> stub ready on 127.0.0.1:8765 (pid 3178, after 5s); {"line": "PROJECT_BRANCH", "lineAbsentReason": null, "ref": "project/34cfQ7mPaYm
+==> mac
+Test Case '-[MainBranchMacProbeUITests.MainBranchShotTests test0TheConversationsCardOpensOnTheSuggestedMainBranchAndStartsOnIt]' started.
+/Users/runner/work/orbit/orbit/.mb-probe/UITests/MainBranchShotTests.swift:36: error: -[MainBranchMacProbeUITests.MainBranchShotTests test0TheConversationsCardOpensOnTheSuggestedMainBranchAndStartsOnIt] : failed - 01-card: "Tasks land on" never showed
+/Users/runner/work/orbit/orbit/.mb-probe/UITests/MainBranchShotTests.swift:23: error: -[MainBranchMacProbeUITests.MainBranchShotTests test0TheConversationsCardOpensOnTheSuggestedMainBranchAndStartsOnIt] : failed - 01-row: no button beginning "Main branch"
+Test Case '-[MainBranchMacProbeUITests.MainBranchShotTests test0TheConversationsCardOpensOnTheSuggestedMainBranchAndStartsOnIt]' failed (70.668 seconds).
+Test Case '-[MainBranchMacProbeUITests.MainBranchShotTests test1TheStartCardOpensOnTheLastChoiceAndSendsWhatIsPicked]' started.
+/Users/runner/work/orbit/orbit/.mb-probe/UITests/MainBranchShotTests.swift:179: error: -[MainBranchMacProbeUITests.MainBranchShotTests test1TheStartCardOpensOnTheLastChoiceAndSendsWhatIsPicked] : failed - 13: no Automatic switch
+/Users/runner/work/orbit/orbit/.mb-probe/UITests/MainBranchShotTests.swift:36: error: -[MainBranchMacProbeUITests.MainBranchShotTests test1TheStartCardOpensOnTheLastChoiceAndSendsWhatIsPicked] : failed - 13-off: "You decide when each task is done and when the branch goes into develop." never showed
+/Users/runner/work/orbit/orbit/.mb-probe/UITests/MainBranchShotTests.swift:36: error: -[MainBranchMacProbeUITests.MainBranchShotTests test1TheStartCardOpensOnTheLastChoiceAndSendsWhatIsPicked] : failed - 14-comes-to-you: "Merging the branch into develop" never showed
+/Users/runner/work/orbit/orbit/.mb-probe/UITests/MainBranchShotTests.swift:23: error: -[MainBranchMacProbeUITests.MainBranchShotTests test1TheStartCardOpensOnTheLastChoiceAndSendsWhatIsPicked] : failed - 12-line: no button beginning "A project branch"
+/Users/runner/work/orbit/orbit/.mb-probe/UITests/MainBranchShotTests.swift:36: error: -[MainBranchMacProbeUITests.MainBranchShotTests test1TheStartCardOpensOnTheLastChoiceAndSendsWhatIsPicked] : failed - 12-directly: "Each merge into develop" never showed
+/Users/runner/work/orbit/orbit/.mb-probe/UITests/MainBranchShotTests.swift:217: error: -[MainBranchMacProbeUITests.MainBranchShotTests test1TheStartCardOpensOnTheLastChoiceAndSendsWhatIsPicked] : XCTAssertTrue failed - Start did not send the card's other settings: ["17:44:12 BODY /api/projects/P2/start {\"automatic\": true, \"criteriaDigest\": \"5d1a09c3be427777777777777777777777777777777777777777777777777777\", \"line\": \"PROJECT_BRANCH\", \"maxConcurrentTasks\": 2, \"mergeCheckCommand\": \"make test\", \"requestId\": null, \"upstreamRef\": \"refs/heads/develop\"}"]
+Test Case '-[MainBranchMacProbeUITests.MainBranchShotTests test1TheStartCardOpensOnTheLastChoiceAndSendsWhatIsPicked]' failed (153.696 seconds).
+Test Case '-[MainBranchMacProbeUITests.MainBranchShotTests test2HowItRunsWritesAPickAtOnce]' started.
+Test Case '-[MainBranchMacProbeUITests.MainBranchShotTests test2HowItRunsWritesAPickAtOnce]' passed (39.700 seconds).
+Test Case '-[MainBranchMacProbeUITests.MainBranchShotTests test3ALockedProjectShowsItsMainBranchLocked]' started.
+Test Case '-[MainBranchMacProbeUITests.MainBranchShotTests test3ALockedProjectShowsItsMainBranchLocked]' passed (26.874 seconds).
+Test Case '-[MainBranchMacProbeUITests.MainBranchShotTests test4AProjectWithNoRepositoryHasNoMainBranchRow]' started.
+Test Case '-[MainBranchMacProbeUITests.MainBranchShotTests test4AProjectWithNoRepositoryHasNoMainBranchRow]' passed (29.776 seconds).
+	 Executed 5 tests, with 8 failures (0 unexpected) in 320.713 (320.720) seconds
+	 Executed 5 tests, with 8 failures (0 unexpected) in 320.713 (320.727) seconds
+	 Executed 5 tests, with 8 failures (0 unexpected) in 320.713 (320.729) seconds
+** TEST FAILED **
+==> stub ready on 127.0.0.1:8765 (pid 26449, after 2s); {"line": "PROJECT_BRANCH", "lineAbsentReason": null, "ref": "project/34cfQ7mPaYm
+==> ios
+Test Case '-[MainBranchProbeUITests.MainBranchShotTests test0TheConversationsCardOpensOnTheSuggestedMainBranchAndStartsOnIt]' started.
+Test Case '-[MainBranchProbeUITests.MainBranchShotTests test0TheConversationsCardOpensOnTheSuggestedMainBranchAndStartsOnIt]' passed (63.771 seconds).
+Test Case '-[MainBranchProbeUITests.MainBranchShotTests test1TheStartCardOpensOnTheLastChoiceAndSendsWhatIsPicked]' started.
+Test Case '-[MainBranchProbeUITests.MainBranchShotTests test1TheStartCardOpensOnTheLastChoiceAndSendsWhatIsPicked]' passed (126.182 seconds).
+Test Case '-[MainBranchProbeUITests.MainBranchShotTests test2HowItRunsWritesAPickAtOnce]' started.
+Test Case '-[MainBranchProbeUITests.MainBranchShotTests test2HowItRunsWritesAPickAtOnce]' passed (40.082 seconds).
+Test Case '-[MainBranchProbeUITests.MainBranchShotTests test3ALockedProjectShowsItsMainBranchLocked]' started.
+Test Case '-[MainBranchProbeUITests.MainBranchShotTests test3ALockedProjectShowsItsMainBranchLocked]' passed (12.063 seconds).
+Test Case '-[MainBranchProbeUITests.MainBranchShotTests test4AProjectWithNoRepositoryHasNoMainBranchRow]' started.
+Test Case '-[MainBranchProbeUITests.MainBranchShotTests test4AProjectWithNoRepositoryHasNoMainBranchRow]' passed (16.392 seconds).
+	 Executed 5 tests, with 0 failures (0 unexpected) in 258.488 (258.503) seconds
+	 Executed 5 tests, with 0 failures (0 unexpected) in 258.488 (258.504) seconds
+	 Executed 5 tests, with 0 failures (0 unexpected) in 258.488 (258.506) seconds
+** TEST SUCCEEDED **
+.mb-probe/run.sh: line 84: 26449 Terminated: 15          python3 -u stub.py 8765 "$1" > "$1.out" 2>&1
+/Users/runner/work/orbit/orbit/.mb-probe/shots/ios:
+total 12632
+drwxr-xr-x  29 runner  staff     928 Oct 10 17:55 .
+drwxr-xr-x   4 runner  staff     128 Oct 10 17:32 ..
+drwxr-xr-x  29 runner  staff     928 Oct 10 17:55 attachments
+-rw-r--r--   1 runner  staff  589843 Oct 10 17:51 ios-01-conversation-card.png
+-rw-r--r--   1 runner  staff  343706 Oct 10 17:51 ios-02-start-last-choice.png
+-rw-r--r--   1 runner  staff  527472 Oct 10 17:51 ios-03-picker-last-chosen.png
+-rw-r--r--   1 runner  staff  184550 Oct 10 17:52 ios-05-picker-typed.png
+-rw-r--r--   1 runner  staff  340715 Oct 10 17:52 ios-06-picked-develop.png
+-rw-r--r--   1 runner  staff  291320 Oct 10 17:53 ios-07-started-how-it-runs.png
+-rw-r--r--   1 runner  staff  301911 Oct 10 17:53 ios-08-how-it-runs.png
+-rw-r--r--   1 runner  staff  304386 Oct 10 17:53 ios-08-picked-develop.png
+-rw-r--r--   1 runner  staff  452487 Oct 10 17:53 ios-08-picker.png
+-rw-r--r--   1 runner  staff  362604 Oct 10 17:54 ios-09-pause.png
+-rw-r--r--   1 runner  staff  299951 Oct 10 17:54 ios-10-locked.png
+-rw-r--r--   1 runner  staff  299934 Oct 10 17:54 ios-11-header-facts.png
+-rw-r--r--   1 runner  staff  305339 Oct 10 17:53 ios-12-directly-into-develop.png
+-rw-r--r--   1 runner  staff  433266 Oct 10 17:53 ios-12-line-menu.png
+-rw-r--r--   1 runner  staff  305851 Oct 10 17:53 ios-13-automatic-off.png
+-rw-r--r--   1 runner  staff  321816 Oct 10 17:54 ios-e-no-repository.png
+-rw-r--r--@  1 runner  staff     698 Oct 10 17:51 MainBranchShotTeststest0TheConversationsCardOpensOnTheSuggestedMainBranchAndStartsOnIt-notes.txt
+-rw-r--r--@  1 runner  staff    2069 Oct 10 17:53 MainBranchShotTeststest1TheStartCardOpensOnTheLastChoiceAndSendsWhatIsPicked-notes.txt
+-rw-r--r--@  1 runner  staff     778 Oct 10 17:54 MainBranchShotTeststest2HowItRunsWritesAPickAtOnce-notes.txt
+-rw-r--r--@  1 runner  staff     379 Oct 10 17:54 MainBranchShotTeststest3ALockedProjectShowsItsMainBranchLocked-notes.txt
+-rw-r--r--@  1 runner  staff     319 Oct 10 17:54 MainBranchShotTeststest4AProjectWithNoRepositoryHasNoMainBranchRow-notes.txt
+-rw-r--r--   1 runner  staff    1498 Oct 10 17:55 not-served.txt
+-rw-r--r--   1 runner  staff   27513 Oct 10 17:54 requests.log
+-rw-r--r--   1 runner  staff      49 Oct 10 17:46 requests.log.out
+-rw-r--r--   1 runner  staff    1008 Oct 10 17:55 writes.txt
+-rw-r--r--   1 runner  staff  701887 Oct 10 17:55 xcodebuild-ios.log
+
+/Users/runner/work/orbit/orbit/.mb-probe/shots/mac:
+total 6280
+drwxr-xr-x  22 runner  staff     704 Oct 10 17:55 .
+drwxr-xr-x   4 runner  staff     128 Oct 10 17:32 ..
+drwxr-xr-x  95 runner  staff    3040 Oct 10 17:46 attachments
+-rw-r--r--   1 runner  staff  203281 Oct 10 17:46 mac-02-start-last-choice.png
+-rw-r--r--   1 runner  staff  191007 Oct 10 17:46 mac-03-picker-last-chosen.png
+-rw-r--r--   1 runner  staff  188802 Oct 10 17:46 mac-05-picker-typed.png
+-rw-r--r--   1 runner  staff  200975 Oct 10 17:46 mac-06-picked-develop.png
+-rw-r--r--   1 runner  staff  142670 Oct 10 17:46 mac-07-started-how-it-runs.png
+-rw-r--r--   1 runner  staff  142798 Oct 10 17:46 mac-08-how-it-runs.png
+-rw-r--r--   1 runner  staff  143852 Oct 10 17:46 mac-08-picked-develop.png
+-rw-r--r--   1 runner  staff  161855 Oct 10 17:46 mac-08-picker.png
+-rw-r--r--   1 runner  staff  139081 Oct 10 17:46 mac-09-pause.png
+-rw-r--r--   1 runner  staff  140432 Oct 10 17:46 mac-10-locked.png
+-rw-r--r--   1 runner  staff  140476 Oct 10 17:46 mac-11-header-facts.png
+-rw-r--r--   1 runner  staff  205984 Oct 10 17:46 mac-12-directly-into-develop.png
+-rw-r--r--   1 runner  staff  206035 Oct 10 17:46 mac-13-automatic-off.png
+-rw-r--r--   1 runner  staff  199268 Oct 10 17:46 mac-e-no-repository.png
+-rw-r--r--   1 runner  staff    1498 Oct 10 17:55 not-served.txt
+-rw-r--r--   1 runner  staff   25373 Oct 10 17:45 requests.log
+-rw-r--r--   1 runner  staff      49 Oct 10 17:35 requests.log.out
+-rw-r--r--   1 runner  staff     680 Oct 10 17:55 writes.txt
+-rw-r--r--   1 runner  staff  735110 Oct 10 17:46 xcodebuild-mac.log

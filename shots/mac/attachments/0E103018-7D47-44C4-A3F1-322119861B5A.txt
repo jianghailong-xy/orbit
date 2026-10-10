@@ -1,0 +1,1 @@
+XCTAssertTrue failed - Start did not send the card's other settings: ["17:44:12 BODY /api/projects/P2/start {\"automatic\": true, \"criteriaDigest\": \"5d1a09c3be427777777777777777777777777777777777777777777777777777\", \"line\": \"PROJECT_BRANCH\", \"maxConcurrentTasks\": 2, \"mergeCheckCommand\": \"make test\", \"requestId\": null, \"upstreamRef\": \"refs/heads/develop\"}"]

@@ -1,0 +1,300 @@
+    t =   105.55s     Find the "A project branch" Button
+    t =   105.78s     Check for interrupting elements affecting "A project branch" Button
+    t =   105.95s     Synthesize event
+    t =   106.29s     Wait for io.orbitd.mainbranchprobe to idle
+    t =   109.03s Checking existence of `Any (First Match)`
+    t =   109.60s Added attachment named 'ios-12-line-menu'
+    t =   109.60s Waiting 5.0s for Button (First Match) to exist
+    t =   110.63s     Checking `Expect predicate `existsNoRetry == 1` for object Button (First Match)`
+    t =   110.63s         Checking existence of `Button (First Match)`
+    t =   110.78s Tap Button (First Match)
+    t =   110.78s     Wait for io.orbitd.mainbranchprobe to idle
+    t =   110.79s     Find the Button (First Match)
+    t =   110.96s     Check for interrupting elements affecting "Directly into develop" Button
+    t =   111.12s     Synthesize event
+    t =   111.43s     Wait for io.orbitd.mainbranchprobe to idle
+    t =   114.25s Checking existence of `Any (First Match)`
+    t =   114.76s Added attachment named 'ios-12-directly-into-develop'
+    t =   114.76s Get all elements bound by index for: Elements matching predicate 'label BEGINSWITH "Start the project"'
+    t =   114.93s Checking existence of `Button (Element at index 0)`
+    t =   115.04s Find the Button (Element at index 0)
+    t =   115.20s Checking existence of `"Start the project" Button`
+    t =   115.32s Find the "Start the project" Button
+    t =   115.48s Get all elements bound by index for: Elements matching predicate 'label BEGINSWITH "Start the project"'
+    t =   115.64s Checking existence of `Button (Element at index 0)`
+    t =   115.82s Find the Button (Element at index 0)
+    t =   115.98s Checking existence of `"Start the project" Button`
+    t =   116.19s Find the "Start the project" Button
+    t =   116.36s Checking existence of `"Start the project" Button`
+    t =   116.59s Find the "Start the project" Button
+    t =   116.80s Find the Window (First Match)
+    t =   116.82s Press Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =   116.82s     Wait for io.orbitd.mainbranchprobe to idle
+    t =   116.82s     Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =   116.83s     Check for interrupting elements affecting Window
+    t =   117.01s     Synthesize event
+    t =   117.02s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =   117.04s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =   117.07s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =   117.10s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =   117.12s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =   118.58s     Wait for io.orbitd.mainbranchprobe to idle
+    t =   119.54s Checking existence of `"Start the project" Button`
+    t =   119.66s Find the "Start the project" Button
+    t =   119.79s Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =   119.80s Tap "Start the project" Button
+    t =   119.80s     Wait for io.orbitd.mainbranchprobe to idle
+    t =   119.81s     Find the "Start the project" Button
+    t =   119.94s     Check for interrupting elements affecting "Start the project" Button
+    t =   120.07s     Synthesize event
+    t =   120.42s     Wait for io.orbitd.mainbranchprobe to idle
+    t =   123.51s Checking existence of `Any (First Match)`
+    t =   123.87s Get all elements bound by index for: Elements matching predicate 'label BEGINSWITH "Main branch"'
+    t =   123.98s Checking existence of `Button (Element at index 0)`
+    t =   124.21s Find the Button (Element at index 0)
+    t =   124.42s Checking existence of `"Main branch, develop" Button`
+    t =   124.57s Find the "Main branch, develop" Button
+    t =   124.73s Get all elements bound by index for: Elements matching predicate 'label BEGINSWITH "Main branch"'
+    t =   124.85s Checking existence of `Button (Element at index 0)`
+    t =   124.97s Find the Button (Element at index 0)
+    t =   125.08s Checking existence of `"Main branch, develop" Button`
+    t =   125.17s Find the "Main branch, develop" Button
+    t =   125.27s Checking existence of `"Main branch, develop" Button`
+    t =   125.42s Find the "Main branch, develop" Button
+    t =   125.53s Find the Window (First Match)
+    t =   125.55s Find the "Main branch, develop" Button
+    t =   125.82s Added attachment named 'ios-07-started-how-it-runs'
+    t =   125.84s Tear Down
+    t =   125.84s     Added attachment named 'MainBranchShotTeststest1TheStartCardOpensOnTheLastChoiceAndSendsWhatIsPicked-notes.txt'
+Test Case '-[MainBranchProbeUITests.MainBranchShotTests test1TheStartCardOpensOnTheLastChoiceAndSendsWhatIsPicked]' passed (126.182 seconds).
+Test Case '-[MainBranchProbeUITests.MainBranchShotTests test2HowItRunsWritesAPickAtOnce]' started.
+    t =     0.00s Start Test at 2026-10-10 17:53:30.714
+    t =     0.08s Set Up
+    t =     0.10s Open io.orbitd.mainbranchprobe
+    t =     0.10s     Launch io.orbitd.mainbranchprobe
+    t =     0.10s         Terminate io.orbitd.mainbranchprobe:42128
+2026-10-10 17:53:32.654 xcodebuild[26469:79337] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-10 17:53:32.654 xcodebuild[26469:79337] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     3.25s         Setting up automation session
+    t =     6.52s         Wait for io.orbitd.mainbranchprobe to idle
+    t =     9.91s Checking existence of `Any (First Match)`
+    t =    12.20s Get all elements bound by index for: Elements matching predicate 'label BEGINSWITH "Main branch"'
+    t =    12.47s Checking existence of `Button (Element at index 0)`
+    t =    12.59s Find the Button (Element at index 0)
+    t =    12.70s Checking existence of `"Main branch, master" Button`
+    t =    12.79s Find the "Main branch, master" Button
+    t =    12.95s Get all elements bound by index for: Elements matching predicate 'label BEGINSWITH "Main branch"'
+    t =    13.03s Checking existence of `Button (Element at index 0)`
+    t =    13.12s Find the Button (Element at index 0)
+    t =    13.27s Checking existence of `"Main branch, master" Button`
+    t =    13.39s Find the "Main branch, master" Button
+    t =    13.50s Checking existence of `"Main branch, master" Button`
+    t =    13.59s Find the "Main branch, master" Button
+    t =    13.70s Find the Window (First Match)
+    t =    13.71s Checking existence of `Any (First Match)`
+    t =    14.03s Checking existence of `Any (First Match)`
+    t =    14.24s Checking existence of `Any (First Match)`
+    t =    14.54s Find the "Main branch, master" Button
+    t =    14.87s Added attachment named 'ios-08-how-it-runs'
+    t =    14.89s Tap "Main branch, master" Button
+    t =    14.89s     Wait for io.orbitd.mainbranchprobe to idle
+    t =    14.90s     Find the "Main branch, master" Button
+    t =    15.02s     Check for interrupting elements affecting "Main branch, master" Button
+    t =    15.17s     Synthesize event
+    t =    15.50s     Wait for io.orbitd.mainbranchprobe to idle
+    t =    15.80s Checking existence of `Any (First Match)`
+    t =    16.93s Checking existence of `Any (First Match)`
+    t =    17.77s Added attachment named 'ios-08-picker'
+    t =    17.78s Waiting 10.0s for Button (First Match) to exist
+    t =    18.82s     Checking `Expect predicate `existsNoRetry == 1` for object Button (First Match)`
+    t =    18.83s         Checking existence of `Button (First Match)`
+    t =    19.51s Tap Button (First Match)
+    t =    19.51s     Wait for io.orbitd.mainbranchprobe to idle
+    t =    19.52s     Find the Button (First Match)
+    t =    20.36s     Check for interrupting elements affecting "develop" Button
+    t =    20.46s     Synthesize event
+    t =    20.77s     Wait for io.orbitd.mainbranchprobe to idle
+    t =    24.93s Checking existence of `Any (First Match)`
+    t =    25.11s Get all elements bound by index for: Elements matching predicate 'label BEGINSWITH "Main branch"'
+    t =    25.20s Checking existence of `Button (Element at index 0)`
+    t =    25.30s Find the Button (Element at index 0)
+    t =    25.44s Checking existence of `"Main branch, develop" Button`
+    t =    25.56s Find the "Main branch, develop" Button
+    t =    25.69s Get all elements bound by index for: Elements matching predicate 'label BEGINSWITH "Main branch"'
+    t =    25.77s Checking existence of `Button (Element at index 0)`
+    t =    25.87s Find the Button (Element at index 0)
+    t =    26.02s Checking existence of `"Main branch, develop" Button`
+    t =    26.11s Find the "Main branch, develop" Button
+    t =    26.22s Checking existence of `"Main branch, develop" Button`
+    t =    26.30s Find the "Main branch, develop" Button
+    t =    26.38s Find the Window (First Match)
+    t =    26.40s Find the "Main branch, develop" Button
+    t =    26.70s Added attachment named 'ios-08-picked-develop'
+    t =    26.70s Checking existence of `Button (First Match)`
+    t =    26.96s Find the Window (First Match)
+    t =    27.01s Press Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =    27.01s     Wait for io.orbitd.mainbranchprobe to idle
+    t =    27.01s     Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    27.02s     Check for interrupting elements affecting Window
+    t =    27.13s     Synthesize event
+    t =    27.13s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    27.14s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    27.16s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    27.17s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    27.19s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    28.66s     Wait for io.orbitd.mainbranchprobe to idle
+    t =    29.50s Checking existence of `Button (First Match)`
+    t =    29.85s Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    29.86s Press Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =    29.86s     Wait for io.orbitd.mainbranchprobe to idle
+    t =    29.86s     Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    29.87s     Check for interrupting elements affecting Window
+    t =    29.95s     Synthesize event
+    t =    29.95s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    29.97s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    29.98s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    30.01s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    30.02s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    31.49s     Wait for io.orbitd.mainbranchprobe to idle
+    t =    32.30s Checking existence of `Button (First Match)`
+    t =    32.62s Find the Button (First Match)
+    t =    32.95s Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    32.98s Press Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =    32.98s     Wait for io.orbitd.mainbranchprobe to idle
+    t =    32.98s     Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    32.99s     Check for interrupting elements affecting Window
+    t =    33.09s     Synthesize event
+    t =    33.09s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    33.11s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    33.13s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    33.14s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    33.17s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    34.63s     Wait for io.orbitd.mainbranchprobe to idle
+    t =    35.45s Checking existence of `"Pause project" Button`
+    t =    35.75s Find the "Pause project" Button
+    t =    36.02s Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    36.03s Press Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =    36.03s     Wait for io.orbitd.mainbranchprobe to idle
+    t =    36.04s     Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    36.05s     Check for interrupting elements affecting Window
+    t =    36.19s     Synthesize event
+    t =    36.19s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    36.21s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    36.24s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    36.27s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    36.29s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    37.75s     Wait for io.orbitd.mainbranchprobe to idle
+    t =    38.58s Checking existence of `"Pause project" Button`
+    t =    38.85s Find the "Pause project" Button
+    t =    39.21s Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    39.23s Checking existence of `Any (First Match)`
+    t =    39.80s Added attachment named 'ios-09-pause'
+    t =    39.80s Tear Down
+    t =    39.80s     Added attachment named 'MainBranchShotTeststest2HowItRunsWritesAPickAtOnce-notes.txt'
+Test Case '-[MainBranchProbeUITests.MainBranchShotTests test2HowItRunsWritesAPickAtOnce]' passed (40.082 seconds).
+Test Case '-[MainBranchProbeUITests.MainBranchShotTests test3ALockedProjectShowsItsMainBranchLocked]' started.
+    t =     0.00s Start Test at 2026-10-10 17:54:10.795
+    t =     0.09s Set Up
+    t =     0.10s Open io.orbitd.mainbranchprobe
+    t =     0.10s     Launch io.orbitd.mainbranchprobe
+    t =     0.10s         Terminate io.orbitd.mainbranchprobe:47292
+2026-10-10 17:54:11.926 xcodebuild[26469:79337] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-10 17:54:11.927 xcodebuild[26469:79337] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     1.61s         Setting up automation session
+    t =     4.01s         Wait for io.orbitd.mainbranchprobe to idle
+    t =     6.71s Checking existence of `Any (First Match)`
+    t =     9.01s Checking existence of `Any (First Match)`
+    t =     9.38s Checking existence of `Any (First Match)`
+    t =     9.92s Added attachment named 'ios-11-header-facts'
+    t =     9.93s Checking existence of `Any (First Match)`
+    t =    10.28s Checking existence of `Any (First Match)`
+    t =    10.50s Checking existence of `Any (First Match)`
+    t =    10.72s Find the Any (First Match)
+    t =    11.00s Find the Window (First Match)
+    t =    11.02s Checking existence of `Any (First Match)`
+    t =    11.27s Checking existence of `Any (First Match)`
+    t =    11.53s Get all elements bound by index for: Elements matching predicate 'label BEGINSWITH "Main branch"'
+    t =    11.84s Added attachment named 'ios-10-locked'
+    t =    11.84s Tear Down
+    t =    11.84s     Added attachment named 'MainBranchShotTeststest3ALockedProjectShowsItsMainBranchLocked-notes.txt'
+Test Case '-[MainBranchProbeUITests.MainBranchShotTests test3ALockedProjectShowsItsMainBranchLocked]' passed (12.063 seconds).
+Test Case '-[MainBranchProbeUITests.MainBranchShotTests test4AProjectWithNoRepositoryHasNoMainBranchRow]' started.
+    t =     0.00s Start Test at 2026-10-10 17:54:22.857
+    t =     0.04s Set Up
+    t =     0.05s Open io.orbitd.mainbranchprobe
+    t =     0.05s     Launch io.orbitd.mainbranchprobe
+    t =     0.05s         Terminate io.orbitd.mainbranchprobe:49328
+2026-10-10 17:54:23.937 xcodebuild[26469:79337] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-10 17:54:23.937 xcodebuild[26469:79337] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     1.98s         Setting up automation session
+    t =     3.45s         Wait for io.orbitd.mainbranchprobe to idle
+    t =     5.69s Checking existence of `Any (First Match)`
+    t =     7.96s Get all elements bound by index for: Elements matching predicate 'label BEGINSWITH "Start…"'
+    t =     8.17s Checking existence of `Button (Element at index 0)`
+    t =     8.27s Find the Button (Element at index 0)
+    t =     8.37s Checking existence of `"Start…, not asked yet" Button`
+    t =     8.46s Find the "Start…, not asked yet" Button
+    t =     8.59s Get all elements bound by index for: Elements matching predicate 'label BEGINSWITH "Start…"'
+    t =     8.68s Checking existence of `Button (Element at index 0)`
+    t =     8.78s Find the Button (Element at index 0)
+    t =     8.90s Checking existence of `"Start…, not asked yet" Button`
+    t =     8.99s Find the "Start…, not asked yet" Button
+    t =     9.11s Checking existence of `"Start…, not asked yet" Button`
+    t =     9.19s Find the "Start…, not asked yet" Button
+    t =     9.30s Find the Window (First Match)
+    t =     9.32s Tap "Start…, not asked yet" Button
+    t =     9.32s     Wait for io.orbitd.mainbranchprobe to idle
+    t =     9.32s     Find the "Start…, not asked yet" Button
+    t =     9.42s     Check for interrupting elements affecting "Start…, not asked yet" Button
+    t =     9.49s     Synthesize event
+    t =     9.79s     Wait for io.orbitd.mainbranchprobe to idle
+    t =    10.12s Checking existence of `Any (First Match)`
+    t =    10.82s Get all elements bound by index for: Elements matching predicate 'label BEGINSWITH "Merge check"'
+    t =    10.99s Checking existence of `Button (Element at index 0)`
+    t =    11.16s Find the Button (Element at index 0)
+    t =    11.31s Checking existence of `"Merge check, None" Button`
+    t =    11.43s Find the "Merge check, None" Button
+    t =    11.54s Get all elements bound by index for: Elements matching predicate 'label BEGINSWITH "Merge check"'
+    t =    11.65s Checking existence of `Button (Element at index 0)`
+    t =    11.75s Find the Button (Element at index 0)
+    t =    11.86s Checking existence of `"Merge check, None" Button`
+    t =    11.99s Find the "Merge check, None" Button
+    t =    12.10s Checking existence of `"Merge check, None" Button`
+    t =    12.22s Find the "Merge check, None" Button
+    t =    12.32s Find the Window (First Match)
+    t =    12.33s Press Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =    12.33s     Wait for io.orbitd.mainbranchprobe to idle
+    t =    12.33s     Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    12.34s     Check for interrupting elements affecting Window
+    t =    12.43s     Synthesize event
+    t =    12.43s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    12.45s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    12.46s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    12.48s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    12.50s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    13.96s     Wait for io.orbitd.mainbranchprobe to idle
+    t =    14.93s Checking existence of `"Merge check, None" Button`
+    t =    15.09s Find the "Merge check, None" Button
+    t =    15.24s Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    15.25s Checking existence of `Any (First Match)`
+    t =    15.57s Checking existence of `Any (First Match)`
+    t =    16.14s Added attachment named 'ios-e-no-repository'
+    t =    16.14s Tear Down
+    t =    16.14s     Added attachment named 'MainBranchShotTeststest4AProjectWithNoRepositoryHasNoMainBranchRow-notes.txt'
+Test Case '-[MainBranchProbeUITests.MainBranchShotTests test4AProjectWithNoRepositoryHasNoMainBranchRow]' passed (16.392 seconds).
+Test Suite 'MainBranchShotTests' passed at 2026-10-10 17:54:39.249.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 258.488 (258.503) seconds
+Test Suite 'MainBranchProbeUITests.xctest' passed at 2026-10-10 17:54:39.250.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 258.488 (258.504) seconds
+Test Suite 'All tests' passed at 2026-10-10 17:54:39.251.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 258.488 (258.506) seconds
+2026-10-10 17:55:14.020 xcodebuild[26469:79337] [MT] IDETestOperationsObserverDebug: 324.815 elapsed -- Testing started completed.
+2026-10-10 17:55:14.021 xcodebuild[26469:79337] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-10 17:55:14.021 xcodebuild[26469:79337] [MT] IDETestOperationsObserverDebug: 324.815 sec, +324.815 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/runner/work/orbit/orbit/.mb-probe/results/ios.xcresult
+
+** TEST SUCCEEDED **
+
+Testing started
