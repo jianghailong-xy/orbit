@@ -75,11 +75,11 @@ class DshRuntimeTest {
     }
 
     @Test fun eachRepairSaysWhatStopsTheSessionAndWhereItIsFixed() {
-        assertEquals("DeepSeek Harness needs an API key", DshRuntime.Repair.NEEDS_KEY.title("wikova"))
-        assertEquals("This session has no DeepSeek Harness key to run on. Add or re-enable the key in Infrastructure, then send your message again.",
+        assertEquals("DeepSeek Harness needs a DeepSeek key", DshRuntime.Repair.NEEDS_KEY.title("wikova"))
+        assertEquals("This session has no DeepSeek key to run on. Add or re-enable a DeepSeek key in Infrastructure, then send your message again.",
             DshRuntime.Repair.NEEDS_KEY.detail)
         assertEquals("DeepSeek rejected this API key", DshRuntime.Repair.INVALID_KEY.title(null))
-        assertEquals("Update the key in Infrastructure, then send your message again. Connecting a key does not check it — the first request does.",
+        assertEquals("Update the DeepSeek key in Infrastructure, then send your message again.",
             DshRuntime.Repair.INVALID_KEY.detail)
         assertEquals("Waiting for a newer runner", DshRuntime.Repair.UPDATE_RUNNER.title("wikova"))
         assertEquals("DeepSeek Harness isn't installed on “wikova”", DshRuntime.Repair.NOT_INSTALLED.title("wikova"))

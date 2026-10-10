@@ -194,8 +194,8 @@ class ComposerModelTest {
     @Test fun catalogUsesRealListContractAndRuntimeCapabilities() = runTest {
         val rig = Rig(this); val model = rig.start(); model.loadCatalog(); runCurrent()
         val catalog = model.state.value.catalog!!
-        assertEquals("live-model", catalog.models("codex").single().text("value"))
-        assertEquals(listOf("low", "high"), catalog.models("codex").single().strings("reasoningLevels"))
+        assertEquals("live-model", catalog.models("codex", "codex").single().text("value"))
+        assertEquals(listOf("low", "high"), catalog.efforts("codex", "codex", "live-model"))
         assertEquals("no", catalog.accounts("codex").last().text("auth"))
         assertFalse(rig.calls.any { it.path == listOf("runners", "r") })
         model.config(buildJsonObject { put("model", "live-model") }); runCurrent()
@@ -226,8 +226,8 @@ class ComposerModelTest {
         assertEquals(listOf("host"),catalog.slashItems("claude","agent").map { it.text("name") })
         assertTrue(catalog.slashItems("codex","agent").isEmpty())
         assertEquals(listOf("kimi"),catalog.slashItems("kimi",null).map { it.text("name") })
-        assertFalse("auto" in catalog.permissions("claude","claude-opus-5"))
-        assertFalse("bypassPermissions" in catalog.permissions("claude","claude-opus-5"))
+        assertFalse("auto" in catalog.permissions("claude","claude","claude-opus-5"))
+        assertFalse("bypassPermissions" in catalog.permissions("claude","claude","claude-opus-5"))
     }
 
     @Test fun shellUsesSameSwiftPostContractIncludingCarriedAttachments() = runTest {
@@ -412,5 +412,143 @@ class ComposerModelTest {
         assertArrayEquals(requests[0].body,requests[1].body)
         m.close();val cold=rig.cold();assertEquals(prior,cold.state.value.draft.pending)
         println("unknown then 413: original endpoint/body/clientTurnId retained across retry and cold restoration")
+    }
+
+    // The provider/engine split (docs/provider-engine-contract.md; boards 4–5): every pick is asked of the session's engine.
+
+    /** A session's engine is the one it recorded, never changed by a pick; a draft's is its pick, else the workspace's last where
+     * it runs the provider beside it, else that provider's default. */
+    @Test fun theEngineIsTheSessionsOwnOrTheDraftsPick() {
+        val catalog = EngineFixture.catalog()
+        fun engine(detail: String) = catalog.engineOf(EngineFixture.obj(detail))
+        assertEquals("dsh", engine("""{"engine":"dsh","provider":"deepseek"}"""))
+        assertEquals("an unrecorded session is its provider's default", "claude", engine("""{"provider":"deepseek"}"""))
+        assertEquals("dsh", engine("""{"lastEngine":"dsh","provider":"deepseek-2"}"""))
+        assertEquals("a picked key Harness doesn't run leaves the workspace's engine behind", "claude", engine("""{"lastEngine":"dsh","provider":"glm"}"""))
+        assertEquals("opencode", engine("""{"provider":"opencode"}"""))
+        assertEquals("claude", engine("""{"provider":"a-deleted-key"}"""))
+    }
+
+    /** The Provider menu lists only what the engine runs, grouped: its own sign-in (or OpenCode's own configuration), its pools,
+     * its keys. Harness lists every DeepSeek key and no row of its own; no engine lists another engine's credential. */
+    @Test fun theProviderMenuGroupsTheEnginesCredentialsAndHarnessTakesEveryDeepSeekKey() {
+        val catalog = EngineFixture.catalog()
+        fun menu(engine: String) = catalog.credentials(engine).map { it.id to it.kind }
+        assertEquals(listOf("claude" to CredentialKind.LOGIN, "claude-accounts" to CredentialKind.POOL, "deepseek" to CredentialKind.KEY,
+            "deepseek-2" to CredentialKind.KEY, "glm" to CredentialKind.KEY, "claude-max" to CredentialKind.KEY), menu("claude"))
+        assertEquals(listOf("deepseek" to CredentialKind.KEY, "deepseek-2" to CredentialKind.KEY), menu("dsh"))
+        assertEquals(listOf("opencode" to CredentialKind.OPENCODE, "deepseek" to CredentialKind.KEY, "deepseek-2" to CredentialKind.KEY,
+            "glm" to CredentialKind.KEY, "gemini" to CredentialKind.KEY, "moonshot" to CredentialKind.KEY), menu("opencode"))
+        assertEquals(listOf("codex" to CredentialKind.LOGIN), menu("codex"))
+        assertEquals(listOf("antigravity" to CredentialKind.LOGIN, "gemini" to CredentialKind.KEY), menu("antigravity"))
+        // Never a separate Harness row: no credential is called dsh, and the keys keep their own names under every engine.
+        assertTrue(ProviderEngines.ALL_ENGINES.flatMap { catalog.credentials(it) }.none { it.id == "dsh" || it.id == "deepseek-harness" })
+        assertEquals(listOf("DeepSeek", "DeepSeek 2"), catalog.credentials("dsh").map { it.label })
+        assertEquals(EngineCopy.OPENCODE_OWN, catalog.credentials("opencode").first().label)
+        assertEquals(EngineCopy.OPENCODE_OWN_DETAIL, catalog.credentials("opencode").first().detail)
+        // A CLI this machine lacks is the reason under every credential of it, its keys' included.
+        assertEquals(listOf("Not installed", "Not installed"), catalog.credentials("kimi").map { it.unavailable })
+        // Harness on a runner that predates it: its keys stay listed, with why.
+        val old = EngineFixture.catalog(runner = """{"id":"r","engines":[]}""")
+        assertEquals(listOf("Update runner", "Update runner"), old.credentials("dsh").map { it.unavailable })
+    }
+
+    /** The New Session's Engine list: every engine in ALL_ENGINES order, each landing where it can — the draft's pick or the
+     * workspace's last first — and Harness with no DeepSeek key offering the connection instead. */
+    @Test fun theNewSessionsEnginesLandWhereTheyCanAndHarnessOffersTheConnection() {
+        val catalog = EngineFixture.catalog()
+        val engines = catalog.engines(listOf("dsh" to "deepseek-2"))
+        assertEquals(listOf("Claude Code", "Codex", "Kimi Code", "Antigravity CLI", "OpenCode", "DeepSeek Harness"), engines.map { it.label })
+        assertEquals("deepseek-2", engines.last().landing?.id)
+        assertEquals("deepseek", catalog.engines().last().landing?.id)
+        assertEquals("claude", engines.first().landing?.id)
+        assertEquals("Not installed", engines.single { it.engine == "kimi" }.unavailable)
+        assertEquals("opencode", engines.single { it.engine == "opencode" }.landing?.id)
+        assertEquals("DeepSeek V4 Pro", catalog.modelLabel("dsh", "deepseek-2", catalog.defaultModel("dsh", "deepseek-2")))
+        assertEquals("Managed by OpenCode", catalog.modelLabel("opencode", "opencode", catalog.defaultModel("opencode", "opencode")))
+        // No DeepSeek key yet: Harness is still a row, which connects one; a runner that predates Harness has no row for it.
+        val keyless = EngineFixture.catalog(keys = "[]")
+        val harness = keyless.engines().single { it.engine == "dsh" }
+        assertNull(harness.landing); assertEquals(EngineCopy.CONNECT_DEEPSEEK_KEY, harness.unavailable)
+        assertTrue(EngineFixture.catalog(runner = """{"id":"r"}""", keys = "[]").engines().none { it.engine == "dsh" })
+    }
+
+    /** Harness enforces Default, Auto and Don't Ask alone, as the server does at admission (shared DSH_PERMISSION_MODES): the rest
+     * are not offered, whichever DeepSeek key it spends. The same key on Claude Code offers Claude Code's. */
+    @Test fun harnessOffersOnlyTheModesItEnforces() {
+        val catalog = EngineFixture.catalog()
+        assertEquals(listOf("default", "auto", "dontAsk"), catalog.permissions("dsh", "deepseek", "deepseek-v4-pro"))
+        assertEquals(listOf("default", "auto", "dontAsk"), catalog.permissions("dsh", "deepseek-2", "deepseek-v4-flash"))
+        assertEquals(listOf("default", "auto", "dontAsk"), catalog.permissions("dsh", "dsh", ""))
+        assertEquals(listOf("default", "acceptEdits", "plan", "auto", "dontAsk", "bypassPermissions"), catalog.permissions("claude", "deepseek", "deepseek-v4-pro"))
+        val root = EngineFixture.catalog(runner = EngineFixture.RUNNER.replace("\"runsAsRoot\":false", "\"runsAsRoot\":true"))
+        assertFalse("bypassPermissions" in root.permissions("claude", "claude", "claude-opus-5-5"))
+        assertEquals(listOf("default", "auto", "dontAsk"), root.permissions("dsh", "deepseek", "deepseek-v4-pro"))
+    }
+
+    /** The model space, efforts, fast lane and slash commands are the pair's and the engine's, never the slug's: one DeepSeek key is
+     * Harness's ACP catalogue under Harness and its own table under Claude Code and OpenCode. */
+    @Test fun modelsEffortsFastAndSlashAreAskedOfTheEngine() {
+        val catalog = EngineFixture.catalog()
+        assertEquals(listOf("deepseek-v4-pro", "deepseek-v4-flash"), catalog.models("dsh", "deepseek").map { it.text("value") })
+        assertEquals(listOf("high", "max"), catalog.efforts("dsh", "deepseek", "deepseek-v4-pro"))
+        assertEquals(listOf("high"), catalog.efforts("claude", "deepseek", "deepseek-v4-pro"))
+        assertEquals("OpenCode describes a key's model itself", emptyList<String>(), catalog.efforts("opencode", "deepseek", "deepseek-v4-pro"))
+        assertEquals(listOf("claude-opus-5-5"), catalog.models("claude", "claude-max").map { it.text("value") })
+        assertEquals("glm-5.2", catalog.defaultModel("claude", "glm"))
+        assertEquals("deepseek-v4-pro", catalog.defaultModel("dsh", "deepseek-2"))
+        assertEquals("", catalog.defaultModel("opencode", "opencode"))
+        assertTrue(catalog.fast("codex", "codex", "gpt-5.6-sol")); assertTrue(catalog.fast("claude", "claude", "claude-opus-5-5"))
+        assertFalse(catalog.fast("opencode", "opencode", "anthropic/claude-sonnet"))
+        assertEquals(listOf("review"), catalog.slashItems("claude", null).map { it.text("name") })
+        assertTrue("Harness takes no runner slash commands, whichever key", catalog.slashItems("dsh", null).isEmpty())
+        assertEquals(listOf("kimi-only"), catalog.slashItems("kimi", null).map { it.text("name") })
+    }
+
+    /** A session whose key the menu no longer lists says what became of it, and never changes engine: turned off or deleted; the
+     * legacy built-in `dsh` is its workspace's key. */
+    @Test fun aSessionWhoseKeyIsGoneSaysWhatBecameOfIt() {
+        val catalog = EngineFixture.catalog(own = listOf(EngineFixture.obj("""{"slug":"old-deepseek","label":"Old DeepSeek","enabled":false}""")))
+        assertEquals(EngineCopy.TURNED_OFF, catalog.gone("dsh", "old-deepseek"))
+        assertEquals("Old DeepSeek", catalog.current("dsh", "old-deepseek").label)
+        assertEquals(EngineCopy.KEY_DELETED, catalog.gone("dsh", "deleted-key"))
+        assertNull(catalog.gone("dsh", "deepseek"))
+        assertNull(catalog.gone("dsh", "dsh"))
+        assertEquals(EngineCopy.WORKSPACE_KEY, catalog.current("dsh", "dsh").label)
+        assertNull("unread, nothing is claimed", EngineFixture.catalog().gone("dsh", "deleted-key"))
+    }
+
+    /** New, switch, resume and retry each carry the engine with the provider (contract §3.5, §6.1): a draft's pick is the pair, a
+     * live session's PATCH names its own engine beside the new key, an ended one holds the pair for the message that revives it. */
+    @Test fun theEngineTravelsWithTheProviderOnCreateSwitchResumeAndRetry() = runTest {
+        fun pick(provider: String) = buildJsonObject { put("provider", provider); put("engine", "dsh"); put("model", "deepseek-v4-pro"); put("effort", "") }
+        val create = Rig(this); create.start(); val target = DraftTarget("w")
+        val draft = ComposerModel(create.session, create.handle, target.key, backgroundScope, target); runCurrent()
+        draft.config(pick("deepseek-2")); runCurrent()
+        draft.edit("on Harness", 0, 0); draft.send(); runCurrent()
+        val created = Wire.json.parseToJsonElement(create.calls.single { it.path == listOf("sessions") && it.method == HttpMethod.POST }.body!!.decodeToString()).jsonObject
+        assertEquals("dsh", created.text("engine")); assertEquals("deepseek-2", created.text("provider")); assertEquals("deepseek-v4-pro", created.text("model"))
+
+        val live = Rig(this); val session = live.start()
+        live.detail = """{"id":"s","status":"AWAITING_INPUT","assignedRunnerId":"r","engine":"dsh","provider":"deepseek","capabilities":{"canSend":true,"canResume":false}}"""
+        session.config(pick("deepseek-2")); runCurrent()
+        val patch = live.calls.last { it.path == listOf("sessions", "s", "config") }
+        assertEquals(HttpMethod.PATCH, patch.method)
+        assertEquals(pick("deepseek-2"), Wire.json.parseToJsonElement(patch.body!!.decodeToString()).jsonObject)
+        // Whoever names only the provider, the model sends it beside the session's own engine.
+        session.config(buildJsonObject { put("provider", "deepseek") }); runCurrent()
+        val bare = live.calls.last { it.path == listOf("sessions", "s", "config") }
+        assertEquals(buildJsonObject { put("provider", "deepseek"); put("engine", "dsh") }, Wire.json.parseToJsonElement(bare.body!!.decodeToString()).jsonObject)
+
+        val ended = Rig(this); val revived = ended.start()
+        ended.detail = """{"id":"s","status":"FAILED","engine":"dsh","provider":"deepseek","capabilities":{"canSend":false,"canResume":true}}"""
+        revived.config(pick("deepseek-2")); runCurrent()
+        assertEquals("deepseek-2", revived.state.value.draft.resumeConfig.text("provider"))
+        assertEquals(buildJsonObject { put("provider", "deepseek-2"); put("engine", "dsh") }, revived.retryIdentity())
+        revived.edit("again", 0, 0); revived.send(); runCurrent()
+        val resumed = Wire.json.parseToJsonElement(ended.sends.values.single()).jsonObject
+        assertEquals("dsh", resumed.text("engine")); assertEquals("deepseek-2", resumed.text("provider"))
+        assertEquals(1, ended.calls.count { it.path.last() == "resume" && it.method == HttpMethod.POST })
+        assertEquals(JsonObject(emptyMap()), retryIdentityOf(buildJsonObject { put("model", "x") }))
     }
 }

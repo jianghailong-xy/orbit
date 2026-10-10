@@ -1,0 +1,8 @@
+serial=emulator-5554
+ro.product.model=sdk_gphone64_x86_64
+ro.build.version.release=16
+ro.build.version.sdk=36
+ro.build.fingerprint=google/sdk_gphone64_x86_64/emu64xa:16/BE2A.250530.026.F3/13894323:userdebug/dev-keys
+Physical size: 1080x2400
+Physical density: 420
+1.0

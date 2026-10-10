@@ -250,4 +250,23 @@ class RunnerPageTest {
         assertEquals(listOf("b", "c"), RunnerDrag("gone", listOf("b", "c"), 0f).moved(160f, heights).order)
         assertEquals(listOf("b", "c"), RunnerDrag("gone", listOf("b", "c"), 0f).moved(-160f, heights).order)
     }
+
+    /** DeepSeek Harness on a machine (board 1 ⑤): last among its engines, by its CLI's name, saying it uses API keys — it has no
+     * sign-in, every session runs on a DeepSeek key — or why it can't run there, as the server admits it. */
+    @Test fun harnessIsAnEngineThatUsesApiKeys() {
+        fun runner(health: String, capabilities: String = "\"provider:dsh\"") = Json.parseToJsonElement(
+            """{"id":"r","capabilities":[$capabilities],"engines":[$health,{"engine":"claude","installed":true,"auth":"yes"}]}""").jsonObject
+        val ready = runner("""{"engine":"dsh","installed":true,"version":"0.2.0-rc.2","dsh":{"versionCompatible":true}}""")
+        assertEquals(listOf("claude", "antigravity", "dsh"), RunnerPage.engines(ready).map { it.str("engine") })
+        val harness = RunnerPage.engines(ready).last()
+        assertEquals("DeepSeek Harness", RunnerPage.engineName("dsh"))
+        assertEquals(RunnerCopy.USES_API_KEYS to "muted", RunnerPage.engineStatus(harness, ready))
+        assertFalse("nothing to sign in", RunnerPage.needsSignIn(harness))
+        fun status(health: String, capabilities: String = "\"provider:dsh\"") = runner(health, capabilities).let { r ->
+            RunnerPage.engineStatus(RunnerPage.engines(r).single { it.str("engine") == "dsh" }, r)?.first }
+        assertEquals("Update runner", status("""{"engine":"dsh","installed":true}""", capabilities = ""))
+        assertEquals("Not supported here", status("""{"engine":"dsh","installed":false,"installationError":"DSH_PLATFORM_UNSUPPORTED: darwin"}"""))
+        assertEquals("Not installed", status("""{"engine":"dsh","installed":false}"""))
+        assertEquals("Unsupported version", status("""{"engine":"dsh","installed":true,"dsh":{"versionCompatible":false}}"""))
+    }
 }
