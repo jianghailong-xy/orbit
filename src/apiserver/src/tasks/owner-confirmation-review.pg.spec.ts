@@ -878,7 +878,7 @@ suite('OWNER_CONFIRMED: the reviewer reviews first, the owner still decides', { 
     const olderDecision = await db.taskOwnerDecision.findUniqueOrThrow({ where: { id: olderReceipt.id } });
     assert.deepEqual(olderDecision.answers, [{ key: 'n1', option: 0, text: null, source: 'NOT_SHOWN' }]);
     const olderComment = await db.taskComment.findUniqueOrThrow({ where: { id: ownerAnswersCommentId(olderReceipt.id) } });
-    assert.match(olderComment.body, /owner 的 app 没有显示这个问题/);
+    assert.match(olderComment.body, /the owner's app did not show this question/);
 
     // A send-back is never refused for a review, and records the state it was made in.
     const sentBack = await filedRun('sent back while under review');

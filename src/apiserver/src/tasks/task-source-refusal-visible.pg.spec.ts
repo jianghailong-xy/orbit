@@ -606,9 +606,9 @@ test('(a) a start whose integration line does not exist is refused at resolution
       assert.ok(refusalNotesForTask[0]!.body.includes(`refs/heads/${f.branch}`),
         'the note does not name the ref that was not there');
       assert.ok(refusalNotesForTask[0]!.body.includes(resolution.stderr));
-      assert.ok(!refusalNotesForTask[0]!.body.includes('在检出时'),
+      assert.ok(!refusalNotesForTask[0]!.body.includes('refused it at checkout'),
         'the note tells the reader the checkout refused this start');
-      assert.ok(!notes.some((note) => note.body.includes('可重新运行本任务重试')),
+      assert.ok(!notes.some((note) => note.body.includes('Run this task again to retry')),
         'the timeline still tells whoever reads it to run the task again');
 
       // And the coordinator is told: one wake, delivered to the standing conversation, whose one

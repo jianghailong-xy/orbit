@@ -399,6 +399,19 @@ beforeEach(() => {
         limits: { maxTasks: 500, maxMarks: 500 },
       });
     }
+    // The line the start card's Main branch row reads: a repository nothing has bound yet, whose
+    // owner never chose a main branch for it, so the card opens on main.
+    if (path === `/projects/${PROJECT_PUBLIC}/integration`) {
+      return reply({
+        line: null, lineAbsentReason: 'NOT_DECIDED', ref: null, upstreamRef: null, upstreamChosenAt: null,
+        lastMainBranch: null, source: null, locked: false, startedAt: null,
+        mergeCheckCommand: null, mergeCheckCommandAbsentReason: 'NOT_CONFIGURED', mergeCheckTimeoutSeconds: null,
+        escalationSeconds: 7_200, repository: 'example/orbit', branches: null,
+        commitsAheadOfUpstream: null, commitsAheadOfUpstreamAbsentReason: 'NO_LANDING_YET',
+        lastUpstreamSyncAt: null, lastUpstreamSyncAbsentReason: 'NEVER_SYNCED',
+        integratingCount: 0, queuedCount: 0, mergeCheckOnTip: 'UNKNOWN', inFlight: null,
+      });
+    }
     // Nothing is waiting to be merged into main either: the promotion card reads this door
     // wherever a conversation coordinates a project, and null is the ordinary answer —
     // no candidate, no card (contract §3.6).

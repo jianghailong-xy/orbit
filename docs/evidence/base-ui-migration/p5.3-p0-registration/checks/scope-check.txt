@@ -1,0 +1,48 @@
+registration 0cede69fb208cebb1dbc86a5ee86f46dcc71f21c, parent e83d71958d20674429e6df4bf67b3345544a4a18, head 58cfe507b471276a8520058a2a55158a181f44e1
+## files the registration commit changes
+M	docs/evidence/base-ui-migration/p0-drift/README.md
+A	docs/evidence/base-ui-migration/p0-drift/accepted/before/chromium-dark-phone/session-attachment-menu.png
+A	docs/evidence/base-ui-migration/p0-drift/accepted/before/chromium-light-desktop/session-attachment-staged.png
+A	docs/evidence/base-ui-migration/p0-drift/accepted/before/chromium-light-phone/session-attachment-menu.png
+A	docs/evidence/base-ui-migration/p0-drift/accepted/before/chromium-light-phone/session-attachment-staged.png
+A	docs/evidence/base-ui-migration/p0-drift/accepted/before/webkit-dark-phone/session-attachment-menu.png
+A	docs/evidence/base-ui-migration/p0-drift/accepted/before/webkit-light-desktop/session-attachment-staged.png
+A	docs/evidence/base-ui-migration/p0-drift/accepted/before/webkit-light-phone/session-attachment-menu.png
+A	docs/evidence/base-ui-migration/p0-drift/accepted/before/webkit-light-phone/session-attachment-staged.png
+M	docs/evidence/base-ui-migration/p0-drift/accepted/registry.json
+A	docs/evidence/base-ui-migration/p0-drift/accepted/screenshots/chromium-dark-phone/session-attachment-menu.png
+A	docs/evidence/base-ui-migration/p0-drift/accepted/screenshots/chromium-light-desktop/session-attachment-staged.png
+A	docs/evidence/base-ui-migration/p0-drift/accepted/screenshots/chromium-light-phone/session-attachment-menu.png
+A	docs/evidence/base-ui-migration/p0-drift/accepted/screenshots/chromium-light-phone/session-attachment-staged.png
+A	docs/evidence/base-ui-migration/p0-drift/accepted/screenshots/webkit-dark-phone/session-attachment-menu.png
+A	docs/evidence/base-ui-migration/p0-drift/accepted/screenshots/webkit-light-desktop/session-attachment-staged.png
+A	docs/evidence/base-ui-migration/p0-drift/accepted/screenshots/webkit-light-phone/session-attachment-menu.png
+A	docs/evidence/base-ui-migration/p0-drift/accepted/screenshots/webkit-light-phone/session-attachment-staged.png
+outside p0-drift/accepted/ and p0-drift/README.md: []
+## p0-drift/README.md lines the registration changes
++| P5.3（[34Za39Ov1yysHZaYL6wgJ](orbit-task:34Za39Ov1yysHZaYL6wgJ)）第 1 版证据，`evidenceDigest` `6f0931cc…01c2`，CONFIRM，文档 [p5.3/README.md](.
++P5.3：暗色 4 个项目（桌面、手机）的 session-attachment-staged 有同样的输入框轮廓差（单通道差 ≤40），WebKit 桌面的 session-a
+## catching up with main: the registration's parent e83d71958d20674429e6df4bf67b3345544a4a18 (origin/main) contains the project tip a167c2ff0e5bc728f2766f34c90a799c7e6a74a0
+contains: yes (9274d5242 6fa5196e5 a167c2ff0)
+main's changes beyond the tip, a167c2ff0e5bc728f2766f34c90a799c7e6a74a0..e83d71958d20674429e6df4bf67b3345544a4a18:  25 files changed, 178 insertions(+), 189 deletions(-)
+  docs: 1 files
+  src/apiserver: 23 files
+  src/web: 1 files
+  under src/web, src/shared, the lockfile or docs/evidence: [src/web/src/copyLanguage.test.ts ]
+## protected paths, a167c2ff0e5bc728f2766f34c90a799c7e6a74a0..HEAD (empty = unchanged)
+docs/evidence/base-ui-migration/p0.2: []
+docs/evidence/base-ui-migration/p0-drift/reference: []
+src/web/ui-migration: []
+src/web/package.json: []
+## product code changed by this task's commits, e83d71958d20674429e6df4bf67b3345544a4a18..HEAD (empty = none)
+src: []
+## known-failures and comparator options at HEAD (unchanged from a167c2ff0e5bc728f2766f34c90a799c7e6a74a0)
+src/web/ui-migration/known-failures.browser.mjs 062d66b73336f948136ad479d84022aad4005e21 -> 062d66b73336f948136ad479d84022aad4005e21
+src/web/ui-migration/playwright.config.mjs 312d06102ce9cc1a50b45605ae5f32c6a1cb0818 -> 312d06102ce9cc1a50b45605ae5f32c6a1cb0818
+src/web/ui-migration/expected-screenshots.mjs f23f37f2294bbc268cb65476bf09a2f0de1bae56 -> f23f37f2294bbc268cb65476bf09a2f0de1bae56
+16:  expect: { timeout: 15_000, toHaveScreenshot: { animations: 'disabled', caret: 'hide', scale: 'css', maxDiffPixels: 0 } },
+## accepted layer: entries other than P5.3's unchanged
+other entries identical
+## commits after the registration (each touches only docs/evidence/base-ui-migration/p5.3-p0-registration/)
+58cfe507b docs(evidence): P5.3 P0 registration: same-commit originals, verification, final rounds, negative controls
+outside p5.3-p0-registration after the registration: []

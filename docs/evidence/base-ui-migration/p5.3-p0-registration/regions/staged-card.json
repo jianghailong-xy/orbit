@@ -1,0 +1,210 @@
+{
+ "chromium-light-desktop/session-attachment-staged.png": {
+  "cardBorderBox": {
+   "x0": 621,
+   "y0": 736,
+   "x1": 1259,
+   "y1": 883,
+   "radius": 24
+  },
+  "differentPixels": 24835,
+  "maxChannelDelta": 53,
+  "insideCard": {
+   "pixels": 90932,
+   "differentPixels": 0,
+   "maxChannelDelta": 0
+  },
+  "borderRing": {
+   "pixels": 3032,
+   "differentPixels": 1502,
+   "maxChannelDelta": 53
+  },
+  "outsideCard": {
+   "pixels": 1058036,
+   "differentPixels": 23333,
+   "maxChannelDelta": 52
+  }
+ },
+ "webkit-light-desktop/session-attachment-staged.png": {
+  "cardBorderBox": {
+   "x0": 621,
+   "y0": 736,
+   "x1": 1259,
+   "y1": 883,
+   "radius": 24
+  },
+  "differentPixels": 26633,
+  "maxChannelDelta": 53,
+  "insideCard": {
+   "pixels": 90932,
+   "differentPixels": 0,
+   "maxChannelDelta": 0
+  },
+  "borderRing": {
+   "pixels": 3032,
+   "differentPixels": 1510,
+   "maxChannelDelta": 53
+  },
+  "outsideCard": {
+   "pixels": 1058036,
+   "differentPixels": 25123,
+   "maxChannelDelta": 53
+  }
+ },
+ "chromium-light-phone/session-attachment-staged.png": {
+  "cardBorderBox": {
+   "x0": 14,
+   "y0": 680,
+   "x1": 375,
+   "y1": 827,
+   "radius": 24
+  },
+  "differentPixels": 15311,
+  "maxChannelDelta": 53,
+  "insideCard": {
+   "pixels": 51044,
+   "differentPixels": 7,
+   "maxChannelDelta": 2
+  },
+  "borderRing": {
+   "pixels": 1924,
+   "differentPixels": 948,
+   "maxChannelDelta": 53
+  },
+  "outsideCard": {
+   "pixels": 276192,
+   "differentPixels": 14356,
+   "maxChannelDelta": 52
+  }
+ },
+ "webkit-light-phone/session-attachment-staged.png": {
+  "cardBorderBox": {
+   "x0": 14,
+   "y0": 680,
+   "x1": 375,
+   "y1": 827,
+   "radius": 24
+  },
+  "differentPixels": 16075,
+  "maxChannelDelta": 53,
+  "insideCard": {
+   "pixels": 51044,
+   "differentPixels": 0,
+   "maxChannelDelta": 0
+  },
+  "borderRing": {
+   "pixels": 1924,
+   "differentPixels": 956,
+   "maxChannelDelta": 53
+  },
+  "outsideCard": {
+   "pixels": 276192,
+   "differentPixels": 15119,
+   "maxChannelDelta": 53
+  }
+ },
+ "chromium-dark-desktop/session-attachment-staged.png": {
+  "cardBorderBox": {
+   "x0": 621,
+   "y0": 736,
+   "x1": 1259,
+   "y1": 883,
+   "radius": 24
+  },
+  "differentPixels": 16261,
+  "maxChannelDelta": 40,
+  "insideCard": {
+   "pixels": 90932,
+   "differentPixels": 0,
+   "maxChannelDelta": 0
+  },
+  "borderRing": {
+   "pixels": 3032,
+   "differentPixels": 1502,
+   "maxChannelDelta": 40
+  },
+  "outsideCard": {
+   "pixels": 1058036,
+   "differentPixels": 14759,
+   "maxChannelDelta": 39
+  }
+ },
+ "webkit-dark-desktop/session-attachment-staged.png": {
+  "cardBorderBox": {
+   "x0": 621,
+   "y0": 736,
+   "x1": 1259,
+   "y1": 883,
+   "radius": 24
+  },
+  "differentPixels": 11457,
+  "maxChannelDelta": 40,
+  "insideCard": {
+   "pixels": 90932,
+   "differentPixels": 0,
+   "maxChannelDelta": 0
+  },
+  "borderRing": {
+   "pixels": 3032,
+   "differentPixels": 1510,
+   "maxChannelDelta": 40
+  },
+  "outsideCard": {
+   "pixels": 1058036,
+   "differentPixels": 9947,
+   "maxChannelDelta": 40
+  }
+ },
+ "chromium-dark-phone/session-attachment-staged.png": {
+  "cardBorderBox": {
+   "x0": 14,
+   "y0": 680,
+   "x1": 375,
+   "y1": 827,
+   "radius": 24
+  },
+  "differentPixels": 9782,
+  "maxChannelDelta": 40,
+  "insideCard": {
+   "pixels": 51044,
+   "differentPixels": 7,
+   "maxChannelDelta": 1
+  },
+  "borderRing": {
+   "pixels": 1924,
+   "differentPixels": 948,
+   "maxChannelDelta": 40
+  },
+  "outsideCard": {
+   "pixels": 276192,
+   "differentPixels": 8827,
+   "maxChannelDelta": 39
+  }
+ },
+ "webkit-dark-phone/session-attachment-staged.png": {
+  "cardBorderBox": {
+   "x0": 14,
+   "y0": 680,
+   "x1": 375,
+   "y1": 827,
+   "radius": 24
+  },
+  "differentPixels": 7856,
+  "maxChannelDelta": 40,
+  "insideCard": {
+   "pixels": 51044,
+   "differentPixels": 0,
+   "maxChannelDelta": 0
+  },
+  "borderRing": {
+   "pixels": 1924,
+   "differentPixels": 956,
+   "maxChannelDelta": 40
+  },
+  "outsideCard": {
+   "pixels": 276192,
+   "differentPixels": 6900,
+   "maxChannelDelta": 40
+  }
+ }
+}

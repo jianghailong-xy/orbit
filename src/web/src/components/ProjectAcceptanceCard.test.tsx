@@ -916,3 +916,38 @@ describe('criteriaPreview', () => {
     expect(criteriaPreview(many, false)).toHaveLength(CRITERIA_PREVIEW);
   });
 });
+
+describe('ProjectAcceptanceCard on where met work landed, by the project’s main branch', () => {
+  const ON_BRANCH: AcceptanceCriterionItem = {
+    ...criterion(5, 'Met on the project branch first'),
+    satisfied: true,
+    unmet: [],
+    landing: 'ON_INTEGRATION_LINE',
+  };
+  const landings = (integration: Record<string, unknown>) => {
+    const qc = client();
+    seed(qc, [MET_CRITERION, ON_BRANCH], { integration });
+    const html = criteriaList(paint(qc));
+    return {
+      landed: accessibleText(rowFor(html, MET_CRITERION.text)),
+      onBranch: accessibleText(rowFor(html, ON_BRANCH.text)),
+    };
+  };
+
+  it('says on main and not on main yet word for word as before for a project on main', () => {
+    const rows = landings({ ref: 'project/p', upstreamRef: 'main' });
+    expect(rows.landed).toContain('on main');
+    expect(rows.onBranch).toContain('on project/p');
+    expect(rows.onBranch).toContain('not on main yet');
+    // A document that predates the main branch says main too.
+    expect(landings({ ref: 'project/p' }).onBranch).toContain('not on main yet');
+  });
+
+  it('names master for a project on master, off the document the page holds', () => {
+    const rows = landings({ ref: 'project/p', upstreamRef: 'master' });
+    expect(rows.landed).toContain('on master');
+    expect(rows.landed).not.toContain('on main');
+    expect(rows.onBranch).toContain('not on master yet');
+    expect(rows.onBranch).not.toContain('main');
+  });
+});

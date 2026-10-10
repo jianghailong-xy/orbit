@@ -610,7 +610,7 @@ test('(a) a start whose pinned commit lacks the prerequisite\'s landed commit is
       assert.ok(refusalNotes[0]!.body.includes(dispatchRefusalNextStep(refusal)));
       assert.ok(refusalNotes[0]!.body.includes(p.landedSha!));
       assert.ok(refusalNotes[0]!.body.includes(uuidToBase62(p.taskId)));
-      assert.ok(!notes.some((note) => note.body.includes('可重新运行本任务重试')),
+      assert.ok(!notes.some((note) => note.body.includes('Run this task again to retry')),
         'the timeline still tells whoever reads it to run the task again');
 
       // And the coordinator is told: one wake, delivered to the standing conversation, whose one
@@ -796,7 +796,7 @@ test('a run that fails for any other reason is not taken for a refused start',
 
       assert.equal(await refusalOf(stack.db, dependent), null, 'an engine failure was recorded as a refused start');
       const notes = await timeline(stack.db, dependent);
-      assert.ok(notes.some((note) => note.body.startsWith('**执行失败（系统自动记录）**')),
+      assert.ok(notes.some((note) => note.body.startsWith('**Run failed (recorded by Orbit)**')),
         'the ordinary failure note is gone');
       assert.ok(!notes.some((note) => note.body.includes(`orbit:${DISPATCH_REFUSED_SIGNAL_CODE}`)));
       assert.deepEqual(await refusalWakes(stack.db, f.projectId), []);

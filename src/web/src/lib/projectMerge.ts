@@ -1,5 +1,6 @@
 import type { ProjectIntegrationInFlight, ProjectLandTask, ProjectPromotionView } from '@orbit/shared';
-import { JOB_PHASES } from '../components/ProjectPanoramaHeader';
+import { jobPhases } from '../components/ProjectPanoramaHeader';
+import { mainBranchName } from './projectStart';
 import { sessionTimeSections, type GroupableSession } from './sessionGrouping';
 
 /**
@@ -12,7 +13,9 @@ import { sessionTimeSections, type GroupableSession } from './sessionGrouping';
  * `ProjectTimeline` word for word — `ProjectMergeCopyParityTests` reads this file.
  */
 
-/** A branch as a person says it: `main`, not `refs/heads/main`. */
+/** A branch as a person says it: `main`, not `refs/heads/main`. The branch a candidate merges into is
+ *  the project's main branch, and every sentence here names it the one way the project page does,
+ *  `mainBranchName(promotion.upstreamRef)`. */
 function shortRef(ref: string): string {
   return ref.startsWith('refs/heads/') ? ref.slice('refs/heads/'.length) : ref;
 }
@@ -75,7 +78,7 @@ export function mergeCardShape(
 /** The card's heading on the sessions view. The branch is the line under it — the view is the
  *  project's own, so the heading says only what is being asked of main. */
 export function promotionPageTitle(promotion: ProjectPromotionView): string {
-  const into = shortRef(promotion.upstreamRef);
+  const into = mainBranchName(promotion.upstreamRef);
   switch (stage(promotion)) {
     case 'asking':
       return `Merge into ${into}?`;
@@ -112,7 +115,7 @@ export function promotionTaskTitles(
 export function promotionBranchLine(promotion: ProjectPromotionView): string {
   const branch = shortRef(promotion.sourceRef);
   if (promotion.commitsAhead == null) return branch;
-  return `${branch} · ${plural(promotion.commitsAhead, 'commit')} ahead of ${shortRef(promotion.upstreamRef)}`;
+  return `${branch} · ${plural(promotion.commitsAhead, 'commit')} ahead of ${mainBranchName(promotion.upstreamRef)}`;
 }
 
 /** `✓ Checks passed · no conflicts` — the proof the asking card is drawn on, in one line. */
@@ -125,7 +128,7 @@ export function promotionChecksSummary(promotion: ProjectPromotionView): { text:
       ? 'Checks timed out'
       : promotion.checks.every(passed) ? '✓ Checks passed' : '✕ Checks failed';
   const upstream = promotion.conflicts.length > 0
-    ? `${plural(promotion.conflicts.length, 'file')} conflict with ${shortRef(promotion.upstreamRef)}`
+    ? `${plural(promotion.conflicts.length, 'file')} conflict with ${mainBranchName(promotion.upstreamRef)}`
     : 'no conflicts';
   return {
     text: `${checks} · ${upstream}`,
@@ -164,7 +167,7 @@ export function promotionBlockedBy(
   const job = holding?.integration.landTask;
   if (!holding || !job) return null;
   const state = job.state === 'RUNNING'
-    ? (job.phase ? JOB_PHASES[job.phase] ?? 'running' : 'running')
+    ? (job.phase ? jobPhases(mainBranchName(promotion.upstreamRef))[job.phase] ?? 'running' : 'running')
     : 'queued';
   const parts = [
     `“${holding.taskTitle}” is landing on the project line`,
@@ -184,18 +187,18 @@ export function promotionBlockedBy(
  */
 export function promotionBlockedLine(promotion: ProjectPromotionView): string {
   if (promotion.blockedReason === 'ALREADY_LANDED') {
-    return `nothing to merge — ${shortRef(promotion.sourceRef)} is already on ${shortRef(promotion.upstreamRef)}`;
+    return `nothing to merge — ${shortRef(promotion.sourceRef)} is already on ${mainBranchName(promotion.upstreamRef)}`;
   }
   if (promotion.blockedReason === 'ERROR') return 'the merge stopped on an error — no check failed';
   if (promotion.conflicts.length === 0) return 'the checks on the combined tree did not pass';
   const n = promotion.conflicts.length;
   const files = promotion.conflicts.slice(0, 3).join(', ');
-  return `${plural(n, 'file')} conflict with ${shortRef(promotion.upstreamRef)}: ${files}${n > 3 ? ` and ${n - 3} more` : ''}`;
+  return `${plural(n, 'file')} conflict with ${mainBranchName(promotion.upstreamRef)}: ${files}${n > 3 ? ` and ${n - 3} more` : ''}`;
 }
 
 /** B's status, by the merge job's own phase. */
 export function promotionMergingStatus(promotion: ProjectPromotionView): string {
-  const into = shortRef(promotion.upstreamRef);
+  const into = mainBranchName(promotion.upstreamRef);
   const execution = promotion.execution;
   if (execution?.state === 'QUEUED') return `confirmed — queued to merge into ${into}`;
   if (execution?.state !== 'RUNNING') return 'confirmed — waiting for merge execution';
@@ -238,7 +241,7 @@ export function promotionEventLine(
   if (!promotion || at === null) return { text: NO_LONGER_ON_OFFER, tone: 'quiet' };
   switch (at) {
     case 'asking':
-      return { text: `Merge into ${shortRef(promotion.upstreamRef)} is waiting for you`, tone: 'needsYou' };
+      return { text: `Merge into ${mainBranchName(promotion.upstreamRef)} is waiting for you`, tone: 'needsYou' };
     case 'merging':
       return { text: promotionPageTitle(promotion), tone: 'working' };
     case 'blocked':
@@ -252,7 +255,7 @@ export function promotionEventLine(
  *  ` · automatically` when nobody pressed Merge. */
 export function promotionReceiptLine(promotion: ProjectPromotionView): string {
   return [
-    `✓ Merged into ${shortRef(promotion.upstreamRef)}`,
+    `✓ Merged into ${mainBranchName(promotion.upstreamRef)}`,
     promotion.merged ? promotion.merged.sha.slice(0, 7) : null,
     plural(promotion.taskIds.length, 'task'),
     promotion.merged?.automatic ? 'automatically' : null,
@@ -263,7 +266,7 @@ export function promotionReceiptLine(promotion: ProjectPromotionView): string {
 
 /** The timeline row's heading; the check mark is the row's icon. */
 export function promotionTimelineTitle(promotion: ProjectPromotionView): string {
-  return `Merged into ${shortRef(promotion.upstreamRef)}`;
+  return `Merged into ${mainBranchName(promotion.upstreamRef)}`;
 }
 
 /** The timeline row's second line: `8d5a868 · 2 tasks · by you`, or `· automatically`. */

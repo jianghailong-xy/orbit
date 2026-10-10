@@ -7,7 +7,9 @@ import {
   RUN_LINE_DECIDED_AT_START,
   RUN_LINE_SUGGESTED,
   RUN_TASKS_LAND_ON,
+  mainBranchName,
   runLineInSentence,
+  startMainBranch,
 } from '../lib/projectStart';
 import { projectIntegrationQuery, projectOpenItemsQuery } from '../lib/queries';
 import { ago } from '../lib/watches';
@@ -103,7 +105,8 @@ export function ProjectIntegrationLine({
   const view = integration.data;
   if (!view.line) {
     if (started !== false) return null;
-    const suggested = items.data?.startRequest?.startRequest?.settings.line ?? null;
+    const suggestion = items.data?.startRequest?.startRequest?.settings ?? null;
+    const suggested = suggestion?.line ?? null;
     return (
       <div className="project-integration">
         <div className="project-integration-row">
@@ -115,7 +118,8 @@ export function ProjectIntegrationLine({
               {suggested ? (
                 <>
                   {` — ${RUN_LINE_SUGGESTED} `}
-                  <b>{runLineInSentence(suggested)}</b>
+                  {/* Directly into the main branch the start card opens with. */}
+                  <b>{runLineInSentence(suggested, startMainBranch(suggestion?.upstreamRef, view))}</b>
                 </>
               ) : null}
             </span>
@@ -128,6 +132,7 @@ export function ProjectIntegrationLine({
   const branchLine = view.line === 'PROJECT_BRANCH';
   const tip = TIP_STATE[view.mergeCheckOnTip] ?? TIP_STATE.UNKNOWN;
   const ahead = view.commitsAheadOfUpstream;
+  const main = mainBranchName(view.upstreamRef);
 
   return (
     <div className="project-integration">
@@ -149,14 +154,14 @@ export function ProjectIntegrationLine({
             <>
               <Separator />
               <span>
-                <b>{ahead}</b> commit{ahead === 1 ? '' : 's'} ahead of main at last measurement
+                <b>{ahead}</b> commit{ahead === 1 ? '' : 's'} ahead of {main} at last measurement
               </span>
             </>
           ) : null}
           {branchLine && view.lastUpstreamSyncAt ? (
             <>
               <Separator />
-              <span>synced with main {ago(view.lastUpstreamSyncAt, Date.now())}</span>
+              <span>synced with {main} {ago(view.lastUpstreamSyncAt, Date.now())}</span>
             </>
           ) : null}
 
@@ -181,7 +186,7 @@ export function ProjectIntegrationLine({
               <Link className="project-land-task-title" to={projectTaskPath(projectId, task.taskId)}>
                 {task.taskTitle}
               </Link>
-              <LandTaskStatus integration={task.integration} />
+              <LandTaskStatus integration={task.integration} main={main} />
             </div>
           ))}
         </div>

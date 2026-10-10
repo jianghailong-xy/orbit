@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { TaskIntegrationView } from '@orbit/shared';
-import { LandTaskStatus } from './LandTaskStatus';
+import { LandTaskStatus, landingBadge } from './LandTaskStatus';
 
 /**
  * The two silences of a landing, which read the same only if a page lets them: a runner that has
@@ -75,5 +75,41 @@ describe('a landing attempt, on the task that owns it', () => {
       <LandTaskStatus integration={integration(job({ waitMs: 143_600 }))} now={NOW} />,
     );
     expect(html).toContain('<dt>Queue wait</dt><dd>2m</dd>');
+  });
+});
+
+describe('where a landing’s work is, by the project’s main branch', () => {
+  const receipted = (state: TaskIntegrationView['state']): TaskIntegrationView => ({
+    state, since: '2026-10-08T05:00:00Z', handler: null, openItemId: null, jobId: null, checksRunningForMs: null,
+  });
+  const syncing: TaskIntegrationView = {
+    ...receipted('RUNNING'),
+    landTask: {
+      jobId: 'j1', state: 'CONFLICT', phase: 'MAIN_SYNC', generation: '2', queuedAt: '2026-10-08T05:50:00Z',
+      startedAt: '2026-10-08T05:51:00Z', heartbeatAt: '2026-10-08T05:52:00Z', finishedAt: '2026-10-08T05:53:00Z',
+      targetRef: 'refs/heads/project/p', waitMs: 0, blockingReason: null,
+    },
+  };
+
+  it('says On main and stopped while syncing main word for word as before for a project on main', () => {
+    expect(landingBadge(receipted('ON_UPSTREAM'))).toEqual({ label: 'On main', tone: 'green' });
+    expect(landingBadge(receipted('ON_UPSTREAM'), 'main')).toEqual({ label: 'On main', tone: 'green' });
+    expect(renderToStaticMarkup(<LandTaskStatus integration={syncing} />))
+      .toContain('<span class="land-task-step">stopped while syncing main</span>');
+  });
+
+  it('names master for a project on master', () => {
+    expect(landingBadge(receipted('ON_UPSTREAM'), 'master')).toEqual({ label: 'On master', tone: 'green' });
+    expect(renderToStaticMarkup(<LandTaskStatus integration={receipted('ON_UPSTREAM')} main="master" />))
+      .toContain('On master');
+    expect(renderToStaticMarkup(<LandTaskStatus integration={syncing} main="master" />))
+      .toContain('<span class="land-task-step">stopped while syncing master</span>');
+    // A newer attempt over a receipt says where the receipt put the work.
+    const reattempt: TaskIntegrationView = { ...syncing, state: 'ON_UPSTREAM' };
+    const words = (html: string) => html.replace(/<!-- -->/gu, '');
+    expect(words(renderToStaticMarkup(<LandTaskStatus integration={reattempt} />)))
+      .toContain('Its work is on main by an existing receipt.');
+    expect(words(renderToStaticMarkup(<LandTaskStatus integration={reattempt} main="master" />)))
+      .toContain('Its work is on master by an existing receipt.');
   });
 });

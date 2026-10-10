@@ -374,7 +374,9 @@ import {
   START_PROJECT_INTENT,
   START_ROW_OWN,
   confirmedChangesProjectKey,
+  mainBranchName,
   projectStarted,
+  startMainBranch,
   startPageRow,
   type SettlementQuestion,
   type StartPageRow,
@@ -639,6 +641,9 @@ interface ComposerSendVars {
 const ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_FILE_BYTES = 25 * 1024 * 1024;
+// What a staged picture's thumbnail is called when its file has no name. The thumbnail is the button that opens the
+// picture in the viewer and is named by the file; the picture itself stays decorative (`alt=""`).
+const PREVIEW_IMAGE_LABEL = 'Preview image';
 
 // Compact byte size for a staged file chip ("12 KB", "3.4 MB").
 const fmtBytes = (n: number): string => {
@@ -1320,6 +1325,10 @@ function SessionProjectStartRow({ start, projectId }: { start: StartPageRow; pro
   const [open, setOpen] = useState(false);
   const asked = start.kind === 'asked' ? start.row : null;
   const settings = asked?.startRequest?.settings ?? null;
+  // The integration read the landing line beside it holds (one query key): what the suggestion's
+  // Directly into names is the main branch the start card opens with.
+  const integration = useQuery(projectIntegrationQuery(projectId));
+  const standing = integration.data && typeof integration.data === 'object' ? integration.data : null;
   return (
     <div className="session-project-start">
       {asked ? (
@@ -1332,7 +1341,9 @@ function SessionProjectStartRow({ start, projectId }: { start: StartPageRow; pro
             </span>
           </div>
           {settings ? (
-            <div className="session-project-start-suggestion">{SESSION_PROJECT_COPY.startSuggestion(settings)}</div>
+            <div className="session-project-start-suggestion">
+              {SESSION_PROJECT_COPY.startSuggestion(settings, startMainBranch(settings.upstreamRef, standing))}
+            </div>
           ) : null}
         </div>
       ) : (
@@ -5413,6 +5424,12 @@ export function WorkspaceView({
     [navigate, selectedId, startCoordinatorChat],
   );
 
+  // The project's main branch, which a card's rerun of a merge check names: the two promotion reads
+  // above carry it — the candidate on offer, else the newest merge.
+  const coordinatedMain = mainBranchName(
+    currentPromotion.data?.upstreamRef ?? mergedPromotions.data?.[0]?.upstreamRef,
+  );
+
   // The exceptions this project still owes somebody, drawn into the transcript at the moment each
   // became the owner's (`exceptionCardRows`) instead of as a block under it — where a card that
   // happened thirty-four minutes ago sat under the newest message saying `waiting 34m`, which is
@@ -5433,10 +5450,11 @@ export function WorkspaceView({
           anchor,
           moment: row.escalatedAt ?? row.waitingSince,
           key: `open-item:${row.itemId}`,
-          element: <ItemAsCard projectId={coordinatedProjectId} row={row} now={Date.now()} onChat={chatAboutThis} />,
+          element: <ItemAsCard projectId={coordinatedProjectId} row={row} now={Date.now()} onChat={chatAboutThis}
+            main={coordinatedMain} />,
         }];
       }),
-    [chatAboutThis, coordinatedProjectId, openItems.data, openItems.dataUpdatedAt, transcriptEvents],
+    [chatAboutThis, coordinatedMain, coordinatedProjectId, openItems.data, openItems.dataUpdatedAt, transcriptEvents],
   );
 
   // Which of those cards the owner answers by pressing — an exception that became theirs, the pause
@@ -11005,6 +11023,7 @@ export function WorkspaceView({
                         className="composer-attach-thumb"
                         src={im.previewUrl}
                         alt=""
+                        label={im.name || PREVIEW_IMAGE_LABEL}
                         cover={<EyeOutlined className="composer-attach-eye" />}
                       />
                     ) : (

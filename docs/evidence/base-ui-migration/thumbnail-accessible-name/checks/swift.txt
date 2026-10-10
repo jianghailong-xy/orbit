@@ -1,0 +1,8 @@
+# docker run --rm --memory=4g --memory-swap=6g --oom-score-adj=1000 -v <v1/del>:/repo -w /repo/src/macos/OrbitKit swift:6.1 swift test -j 4 --scratch-path /repo/.swift-build
+# on the delivery checkout v1/del, after round f1. The head, and the suite's summary lines:
+
+head: 01713ca80794e84e570378824d1632c5076ee314
+	 Executed 3669 tests, with 5 tests skipped and 0 failures (0 unexpected) in 39.129 (39.129) seconds
+	 Executed 3669 tests, with 5 tests skipped and 0 failures (0 unexpected) in 39.129 (39.129) seconds
+error or failed lines: 0
+exit=0

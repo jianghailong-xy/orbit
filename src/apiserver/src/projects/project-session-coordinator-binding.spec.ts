@@ -288,9 +288,9 @@ test('promotion tells the current turn its coordinator role without rewriting it
     created.coordinatorInstructions,
     buildCoordinatorInstructions('Crawl', PROJECT_ID, false),
   );
-  assert.match(created.coordinatorInstructions, /不是用来替它干活/);
-  assert.match(created.coordinatorInstructions, /先读再说/);
-  assert.match(created.coordinatorInstructions, /账号所有者通道记录/);
+  assert.match(created.coordinatorInstructions, /not for doing their work yourself/);
+  assert.match(created.coordinatorInstructions, /Read first/);
+  assert.match(created.coordinatorInstructions, /recorded through the account owner’s channel/);
 });
 
 // The runner door refuses `coordinatorEnabled`, so a project recorded from a session is created
@@ -493,7 +493,7 @@ test('a second project from the same session gets its OWN coordinator, in the sa
 
   // And the caller is told it was NOT promoted. Saying nothing would be read as the promotion,
   // since that is what recording a project from a session has always meant.
-  assert.match(result.coordinatorInstructions, /协调会话不是你/);
+  assert.match(result.coordinatorInstructions, /you are not its coordinator session/);
   for (const coordinatorEnabled of [false, true]) {
     assert.notEqual(
       result.coordinatorInstructions,

@@ -556,7 +556,7 @@ test('finished work off main is handed to the standing coordinator, and no sessi
         'the message left out the merge order, which is the only reason it is worth sending',
       );
       assert.match(
-        said[0]!.content ?? '', /这是一条通知，不是打断/,
+        said[0]!.content ?? '', /This is a notification, not an interruption/,
         'the message does not say it is a notification, which is the one thing about the carrier '
           + 'its reader cannot check for itself',
       );

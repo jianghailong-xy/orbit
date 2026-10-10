@@ -60,11 +60,13 @@ final class ProjectMergeCopyParityTests: XCTestCase {
             "'checks failed'",
             "'by you'",
             "'automatically'",
-            "`✓ Merged into ${shortRef(promotion.upstreamRef)}`",
-            "`Merged into ${shortRef(promotion.upstreamRef)}`",
+            // The branch it goes into is the project's main branch, named the one way the project page
+            // names it.
+            "`✓ Merged into ${mainBranchName(promotion.upstreamRef)}`",
+            "`Merged into ${mainBranchName(promotion.upstreamRef)}`",
             "'the checks on the combined tree did not pass'",
             // Why a blocked merge is blocked, when the job said so (0409).
-            "`nothing to merge — ${shortRef(promotion.sourceRef)} is already on ${shortRef(promotion.upstreamRef)}`",
+            "`nothing to merge — ${shortRef(promotion.sourceRef)} is already on ${mainBranchName(promotion.upstreamRef)}`",
             "'the merge stopped on an error — no check failed'",
             "'nothing to merge'",
             "'check errored'",

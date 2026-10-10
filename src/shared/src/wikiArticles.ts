@@ -93,7 +93,7 @@ export interface WikiDefaultTopic {
 export const WIKI_DEFAULT_TOPICS: readonly WikiDefaultTopic[] = [
   {
     slug: 'sessions',
-    title: '会话',
+    title: 'Sessions',
     category: 'platform',
     description: 'Sessions: lifecycle, messages, turns, steer and interrupt, delivery, attachments, session merge and commit.',
     pathPrefixes: [
@@ -106,7 +106,7 @@ export const WIKI_DEFAULT_TOPICS: readonly WikiDefaultTopic[] = [
   },
   {
     slug: 'tasks',
-    title: '任务与派发',
+    title: 'Tasks & dispatch',
     category: 'platform',
     description: 'Tasks and task lists: completion criteria, acceptance, dependencies, dispatch, retries, evidence.',
     pathPrefixes: [
@@ -117,7 +117,7 @@ export const WIKI_DEFAULT_TOPICS: readonly WikiDefaultTopic[] = [
   },
   {
     slug: 'projects',
-    title: '项目与落地',
+    title: 'Projects & landing',
     category: 'platform',
     description: 'Projects and coordinators: the integration line, landing and promotion to main, blockers, open items, the outcome reconciler.',
     pathPrefixes: [
@@ -131,7 +131,7 @@ export const WIKI_DEFAULT_TOPICS: readonly WikiDefaultTopic[] = [
   },
   {
     slug: 'watches-wakeups',
-    title: 'Watch 与唤醒',
+    title: 'Watches & wakeups',
     category: 'platform',
     description: 'Watches, scheduled wakeups, awaits and the notifications they send to sessions.',
     pathPrefixes: [
@@ -176,7 +176,7 @@ export const WIKI_DEFAULT_TOPICS: readonly WikiDefaultTopic[] = [
   },
   {
     slug: 'engines-providers',
-    title: '引擎与模型提供方',
+    title: 'Engines & model providers',
     category: 'runner',
     description: 'Coding engines and model providers: Claude Code, Codex, Kimi, OpenCode, vLLM, models, effort, quotas and rate limits.',
     pathPrefixes: [
@@ -196,7 +196,7 @@ export const WIKI_DEFAULT_TOPICS: readonly WikiDefaultTopic[] = [
   },
   {
     slug: 'agent-tooling',
-    title: 'Agent 工具与环境',
+    title: 'Agent tools & environment',
     category: 'runner',
     description: 'How agents work here: Bash tool quirks, MCP tools and the orbit CLI, subagents, context and the agents\' memory.',
     pathPrefixes: [
@@ -214,7 +214,7 @@ export const WIKI_DEFAULT_TOPICS: readonly WikiDefaultTopic[] = [
   },
   {
     slug: 'web-client',
-    title: 'Web 客户端',
+    title: 'Web client',
     category: 'clients',
     description: 'The web client: React, antd, vitest, layout.',
     pathPrefixes: [
@@ -223,7 +223,7 @@ export const WIKI_DEFAULT_TOPICS: readonly WikiDefaultTopic[] = [
   },
   {
     slug: 'apple-clients',
-    title: 'iOS 与 macOS 客户端',
+    title: 'iOS & macOS clients',
     category: 'clients',
     description: 'The iOS and macOS clients and OrbitKit: SwiftUI, Xcode, TestFlight builds.',
     pathPrefixes: [
@@ -236,7 +236,7 @@ export const WIKI_DEFAULT_TOPICS: readonly WikiDefaultTopic[] = [
   },
   {
     slug: 'realtime-push',
-    title: '实时流与推送',
+    title: 'Realtime streams & push',
     category: 'clients',
     description: 'Realtime streams, server-sent events and push notifications.',
     pathPrefixes: [
@@ -248,7 +248,7 @@ export const WIKI_DEFAULT_TOPICS: readonly WikiDefaultTopic[] = [
   },
   {
     slug: 'ui-design',
-    title: 'UI 设计',
+    title: 'UI design',
     category: 'clients',
     description: 'UI and UX design: mockups, screenshots, layout rules, the copy in the UI.',
     pathPrefixes: [
@@ -258,7 +258,7 @@ export const WIKI_DEFAULT_TOPICS: readonly WikiDefaultTopic[] = [
   },
   {
     slug: 'database',
-    title: '数据库与 Prisma',
+    title: 'Database & Prisma',
     category: 'data',
     description: 'PostgreSQL and Prisma: schema, migrations, queries, performance, locks, backups, the write inventory.',
     pathPrefixes: [
@@ -278,7 +278,7 @@ export const WIKI_DEFAULT_TOPICS: readonly WikiDefaultTopic[] = [
   },
   {
     slug: 'auth-workspaces',
-    title: '账号与工作区',
+    title: 'Accounts & workspaces',
     category: 'data',
     description: 'Auth, users, accounts, workspaces, share links and permissions.',
     pathPrefixes: [
@@ -291,7 +291,7 @@ export const WIKI_DEFAULT_TOPICS: readonly WikiDefaultTopic[] = [
   },
   {
     slug: 'shared-contracts',
-    title: '共享包与契约',
+    title: 'Shared package & contracts',
     category: 'data',
     description: 'The shared package and the contracts: codecs, ids, protocol definitions.',
     pathPrefixes: [
@@ -302,7 +302,7 @@ export const WIKI_DEFAULT_TOPICS: readonly WikiDefaultTopic[] = [
   },
   {
     slug: 'security',
-    title: '安全与密钥',
+    title: 'Security & secrets',
     category: 'data',
     description: 'Secrets, keys, redaction and the handling of credentials.',
     pathPrefixes: [
@@ -312,7 +312,7 @@ export const WIKI_DEFAULT_TOPICS: readonly WikiDefaultTopic[] = [
   },
   {
     slug: 'git-worktrees',
-    title: 'Git 与 worktree',
+    title: 'Git & worktrees',
     category: 'engineering',
     description: 'Git and worktrees: branches, merges, rebases, cherry-picks, stash, worktree overlays and node_modules.',
     pathPrefixes: [
@@ -326,7 +326,7 @@ export const WIKI_DEFAULT_TOPICS: readonly WikiDefaultTopic[] = [
   },
   {
     slug: 'testing',
-    title: '测试',
+    title: 'Testing',
     category: 'engineering',
     description: 'Tests: pg specs, node:test, vitest, go test, fixtures, flakes and acceptance scripts.',
     pathPrefixes: [
@@ -344,7 +344,7 @@ export const WIKI_DEFAULT_TOPICS: readonly WikiDefaultTopic[] = [
   },
   {
     slug: 'ci-release',
-    title: 'CI 与发版',
+    title: 'CI & releases',
     category: 'engineering',
     description: 'CI and releases: GitHub Actions, tags, versions, signing, notarization, TestFlight.',
     pathPrefixes: [
@@ -360,7 +360,7 @@ export const WIKI_DEFAULT_TOPICS: readonly WikiDefaultTopic[] = [
   },
   {
     slug: 'deploy-ops',
-    title: '部署与运维',
+    title: 'Deployment & operations',
     category: 'engineering',
     description: 'Deployment and the host: docker compose, upgrade, gateway, disk, memory, systemd, logs.',
     pathPrefixes: [
@@ -375,7 +375,7 @@ export const WIKI_DEFAULT_TOPICS: readonly WikiDefaultTopic[] = [
   },
   {
     slug: 'observability',
-    title: '可观测性',
+    title: 'Observability',
     category: 'engineering',
     description: 'Metrics, logs, dashboards and diagnosing production incidents.',
     pathPrefixes: [
@@ -385,7 +385,7 @@ export const WIKI_DEFAULT_TOPICS: readonly WikiDefaultTopic[] = [
   },
   {
     slug: 'workflow-owner',
-    title: '与 owner 协作',
+    title: 'Working with the owner',
     category: 'collaboration',
     description: 'How the owner wants work done: communication, language, confirmations, scope, reporting.',
     pathPrefixes: [

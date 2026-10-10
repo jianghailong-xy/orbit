@@ -1,0 +1,16 @@
+# Standard P0 (ui-migration/playwright.config.mjs, expected screenshots = P0.2 originals + registered layers) on the delivery
+# 01713ca80 and on the reference 8b245fb69 (the delivery with the fix reverted), round f1.
+failing tests: delivery 6, reference 6; same tests: True; same first lines: True
+
+delivery chromium-dark-phone :: session | session-attachment-menu.png 925 px | Error: expect(page).toHaveScreenshot(expected) failed
+delivery chromium-light-desktop :: session | session-attachment-staged.png 1382 px | Error: expect(page).toHaveScreenshot(expected) failed
+delivery chromium-light-phone :: session | session-attachment-menu.png 1045 px | Error: expect(page).toHaveScreenshot(expected) failed
+delivery webkit-dark-phone :: session | session-attachment-menu.png 834 px | Error: expect(page).toHaveScreenshot(expected) failed
+delivery webkit-light-desktop :: session | session-attachment-staged.png 1388 px | Error: expect(page).toHaveScreenshot(expected) failed
+delivery webkit-light-phone :: session | session-attachment-menu.png 958 px | Error: expect(page).toHaveScreenshot(expected) failed
+reference chromium-dark-phone :: session | session-attachment-menu.png 925 px | Error: expect(page).toHaveScreenshot(expected) failed
+reference chromium-light-desktop :: session | session-attachment-staged.png 1382 px | Error: expect(page).toHaveScreenshot(expected) failed
+reference chromium-light-phone :: session | session-attachment-menu.png 1045 px | Error: expect(page).toHaveScreenshot(expected) failed
+reference webkit-dark-phone :: session | session-attachment-menu.png 834 px | Error: expect(page).toHaveScreenshot(expected) failed
+reference webkit-light-desktop :: session | session-attachment-staged.png 1388 px | Error: expect(page).toHaveScreenshot(expected) failed
+reference webkit-light-phone :: session | session-attachment-menu.png 958 px | Error: expect(page).toHaveScreenshot(expected) failed

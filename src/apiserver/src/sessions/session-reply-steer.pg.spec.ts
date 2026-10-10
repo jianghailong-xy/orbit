@@ -87,7 +87,7 @@ const HOUR = 60 * 60 * 1000;
 const ROUTING = [SESSION_CURRENT_WORK_ROUTING_V1];
 
 /** How a block delivered by a steer says it joined the turn the asker is in. */
-const STEER_HEAD = '你正在工作，所以这条回信加进了你当前这一轮，没有为它另开一轮。';
+const STEER_HEAD = 'You are working, so this reply was added to the turn you are in; no turn was opened for it.';
 
 /** A collaborator whose every method answers nothing: the broadcasts a turn's enqueue fires. */
 const silent = (): unknown =>
@@ -376,7 +376,7 @@ test('an outcome handed back to an asker running a turn is written into that tur
     assert.equal(handed.turnId, steer.id);
     assert.equal(handed.targetTurnId, running);
     assert.equal(blocksFor(handed.content, request.id), 1);
-    assert.match(handed.content, /回复：yes, shard 3 is migrated/);
+    assert.match(handed.content, /Reply: yes, shard 3 is migrated/);
     assert.ok(handed.content.includes(STEER_HEAD), handed.content);
     assert.equal(handed.content, active.content);
     assert.equal(handed.content, queued.content);
@@ -595,7 +595,7 @@ test('an outcome handed back to an asker running a turn is written into that tur
     const back = await deliver(asker);
     assert.equal(back.turnId, again.id);
     assert.equal(blocksFor(back.content, request.id), 1);
-    assert.match(back.content, /回复：take it/);
+    assert.match(back.content, /Reply: take it/);
   });
 
   // ── 31. an interrupt ────────────────────────────────────────────────────────────────────────────
@@ -687,7 +687,7 @@ test('an outcome handed back to an asker running a turn is written into that tur
     assert.equal(back.turnId, resent[0].id);
     assert.ok(back.content.startsWith('keep rebuilding the index'), back.content);
     assert.equal(blocksFor(back.content, request.id), 1);
-    assert.match(back.content, /回复：rebuilt/);
+    assert.match(back.content, /Reply: rebuilt/);
     assert.equal((await requestRow(request.id)).replyClientTurnId, resent[0].clientTurnId);
   });
 });
