@@ -47,6 +47,16 @@ async function open(): Promise<void> {
   await settle();
 }
 
+/** Waits for Base UI to move focus onto the first item. It does so a frame after the menu opens, after the footer's
+ *  field has taken focus with autoFocus, so a fixed number of ticks can end before it (on a loaded host it did, and
+ *  the late focus then took the keys a test typed into the field). */
+async function itemFocused(): Promise<void> {
+  for (let tick = 0; tick < 200 && document.activeElement?.getAttribute('role') !== 'menuitem'; tick += 1) {
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 10)));
+  }
+  expect(document.activeElement?.getAttribute('role')).toBe('menuitem');
+}
+
 /** One key pressed where focus is; returns whether something took it from its target (preventDefault). */
 async function press(key: string): Promise<boolean> {
   let taken = false;
@@ -114,8 +124,10 @@ describe('Menu footer', () => {
   it('keeps the letters and arrows typed in it, where the items would have taken them', async () => {
     await render(<Search items={branches} />);
     await open();
+    await itemFocused();
     const before = highlighted();
     await act(async () => search()!.focus());
+    expect(document.activeElement).toBe(search());
     for (const key of ['d', 'r', ' ', 'ArrowDown', 'ArrowUp', 'Home', 'End', 'Enter']) {
       expect(await press(key), key).toBe(false);
       expect(highlighted(), key).toBe(before);
@@ -128,6 +140,7 @@ describe('Menu footer', () => {
   it('without it, the same letter is the items\' typeahead (the reference)', async () => {
     await render(<Search items={branches} />);
     await open();
+    await itemFocused();
     expect(await press('d')).toBe(true);
     expect(highlighted()).toBe('develop');
   });
@@ -139,7 +152,7 @@ describe('Menu footer', () => {
       trigger().dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
       trigger().dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail: 0 }));
     });
-    await settle();
+    await itemFocused();
     expect(trigger().getAttribute('aria-expanded')).toBe('true');
     expect(highlighted()).toBe('main');
     expect(document.activeElement?.textContent).toBe('main');
@@ -149,6 +162,7 @@ describe('Menu footer', () => {
   it('lets Escape close the menu, focus going back to its button', async () => {
     await render(<Search items={branches} />);
     await open();
+    await itemFocused();
     await act(async () => search()!.focus());
     await press('Escape');
     expect(trigger().getAttribute('aria-expanded')).toBe('false');
