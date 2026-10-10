@@ -43,6 +43,10 @@ on:
         description: "Also run the source-refused evidence probe (Mac window + iPhone shots)"
         type: boolean
         default: false
+      ios_http_ip_probe:
+        description: "Also run the iOS http://ip ATS probe (simulator, A/B against no ATS keys)"
+        type: boolean
+        default: false
 
 concurrency:
   group: client-${{ github.ref }}
@@ -140,6 +144,44 @@ jobs:
             -configuration Debug \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
             build
+
+  # Whether the iPhone app can sign in to a self-hosted server at an address the operator types in
+  # (http://<ip>) is not a question a compile can answer: since iOS 17 the OS applies ATS to IP
+  # literals again, and the exceptions that answer for it live in src/ios/Support/Info.plist. This
+  # probe builds a one-request app carrying that very file and reads URLSession's answer back from
+  # a simulator, A/B against the same app with no ATS keys — that arm must be refused with
+  # NSURLErrorDomain -1022, which is what proves the other arm's 200 comes from the exceptions.
+  # Dispatch-only and off by default: it costs a Mac runner, and only an edit to the ATS block can
+  # change its answer. Method and readings: docs/evidence/ios-http-ip/README.md.
+  ios-http-ip-probe:
+    name: iOS http://ip ATS probe (simulator)
+    if: github.event_name == 'workflow_dispatch' && inputs.ios_http_ip_probe
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - name: Select latest Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Toolchain
+        run: swift --version && xcodebuild -version && xcodegen --version && sw_vers
+      - name: Run the A/B probe
+        id: probe
+        continue-on-error: true
+        run: |
+          bash docs/evidence/ios-http-ip/probe-harness/run.sh 2>&1 | tee probe-output.log
+          exit "${PIPESTATUS[0]}"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ios-http-ip-probe
+          path: docs/evidence/ios-http-ip/probe-harness/results
+      - name: Fail as the probe did
+        if: steps.probe.outcome != 'success'
+        run: exit 1
 
   # TEMPORARY (task 34bkMbJBijj8rD2HwWXqJ, the "this run never started" card's Mac pictures). The
   # branch's own Mac mini has no display and no automation grant, so the Mac window's pixels can
