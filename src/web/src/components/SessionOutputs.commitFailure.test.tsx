@@ -2,7 +2,6 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { App as AntApp } from 'antd';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { SessionDetail } from '../api';
@@ -58,13 +57,11 @@ async function mount(detail: SessionDetail, onResolveCommitInSession?: () => voi
     root!.render(
       <QueryClientProvider client={client}>
         <MemoryRouter>
-          <AntApp>
-            <SessionOutputs
-              detail={detail}
-              onCommit={() => undefined}
-              onResolveCommitInSession={onResolveCommitInSession}
-            />
-          </AntApp>
+          <SessionOutputs
+            detail={detail}
+            onCommit={() => undefined}
+            onResolveCommitInSession={onResolveCommitInSession}
+          />
         </MemoryRouter>
       </QueryClientProvider>,
     );

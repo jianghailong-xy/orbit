@@ -4,7 +4,6 @@ import { resolve } from 'node:path';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { App as AntApp } from 'antd';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Runner } from './TasksSidePanel';
@@ -161,11 +160,9 @@ async function mount(ready: () => void = () => expect(projectRows()).toHaveLengt
     nextRoot.render(
       <QueryClientProvider client={nextClient}>
         <MemoryRouter initialEntries={[`/sessions/${LOOSE.id}`]}>
-          <AntApp>
-            <WorkspaceView runner={RUNNER} />
-            <SessionSearch />
-            <LocationProbe />
-          </AntApp>
+          <WorkspaceView runner={RUNNER} />
+          <SessionSearch />
+          <LocationProbe />
         </MemoryRouter>
       </QueryClientProvider>,
     );
@@ -178,11 +175,15 @@ async function click(element: Element | null | undefined, what: string): Promise
   await act(async () => element!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
   await settle();
 }
+/** The menus' plain items, open or on their way out (a row that opens a submenu is not one). Submenus use their
+ *  own portal, outside their parent menu's element. */
 const menuItem = (label: string): HTMLElement | undefined =>
-  // Submenus use their own portal, outside the dropdown's root element.
-  [...document.querySelectorAll<HTMLElement>('.ant-dropdown-menu-item')].find(
+  [...document.querySelectorAll<HTMLElement>('[role="menu"] [role="menuitem"]:not([aria-haspopup])')].find(
     (el) => el.textContent?.trim().startsWith(label),
   );
+/** A row that opens a submenu. */
+const submenuRows = (): HTMLElement[] =>
+  [...document.querySelectorAll<HTMLElement>('[role="menu"] [role="menuitem"][aria-haspopup]')];
 async function chooseView(label: string): Promise<void> {
   await click(mounted().querySelector('.session-scope-menu'), 'the view menu');
   await until(() => expect(menuItem(label)).toBeTruthy());
@@ -401,8 +402,8 @@ describe('project entries in the session list', { timeout: 60_000 }, () => {
   it('keeps Filter by Tag sessions flat', async () => {
     await mount();
     await click(mounted().querySelector('.session-scope-menu'), 'the view menu');
-    await until(() => expect(document.querySelector('.ant-dropdown-menu-submenu-title')).not.toBeNull());
-    const filter = [...document.querySelectorAll<HTMLElement>('.ant-dropdown-menu-submenu-title')].find((el) => el.textContent?.startsWith('Filter by Tag'));
+    await until(() => expect(submenuRows()).not.toHaveLength(0));
+    const filter = submenuRows().find((el) => el.textContent?.startsWith('Filter by Tag'));
     expect(filter, 'Filter by Tag is on screen').toBeTruthy();
     await act(async () => {
       filter!.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, relatedTarget: document.body }));

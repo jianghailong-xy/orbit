@@ -1084,22 +1084,31 @@ button.toast--pill:focus-visible {
   font-weight: 500;
   color: var(--text-1);
 }
-.ant-dropdown-menu.tp-account-menu {
+/* 280px as the replaced menu was, even on a phone, where its trigger is wider. */
+.tp-account-menu.orbit-menu {
   width: 280px;
+  min-width: 0;
   max-width: calc(100vw - 16px);
 }
-.tp-account-menu .ant-dropdown-menu-item,
-.tp-account-menu .ant-dropdown-menu-submenu-title {
-  display: flex;
-  align-items: center;
+.tp-account-menu .orbit-menu-item {
   min-height: 44px;
 }
-.tp-account-menu .ant-dropdown-menu-title-content {
-  flex: 1;
-  min-width: 0;
-}
-.tp-account-menu .ant-dropdown-menu-item.tp-account-profile {
+.tp-account-menu .orbit-menu-item.tp-account-profile {
   min-height: 64px;
+}
+/* The Appearance row as the replaced submenu title drew it: the row ends 24px in, and its arrow — 12px, in
+   the icon colour — sits 8px from the row's end, out of the flow, centred as the replaced arrow's line box put it. */
+.tp-account-menu .orbit-menu-item[aria-haspopup] {
+  position: relative;
+  padding-right: 24px;
+}
+.tp-account-menu .orbit-menu-submenu-icon {
+  position: absolute;
+  top: calc(50% - 5.5px);
+  right: 8px;
+  margin: 0;
+  color: var(--text-3);
+  font-size: 12px;
 }
 .tp-account-profile-content {
   display: flex;
@@ -1139,8 +1148,9 @@ button.toast--pill:focus-visible {
 .tp-account-current-theme {
   margin-left: auto;
 }
-.tp-account-menu .ant-dropdown-menu-item-danger,
-.tp-account-menu .ant-dropdown-menu-item-danger .ant-dropdown-menu-item-icon {
+/* Log out: the label in the menu's own danger colour, its icon in --error, as the replaced menu drew them (the
+   page rule reached only the icon there). */
+.tp-account-menu .orbit-menu-item[data-danger] .orbit-menu-icon {
   color: var(--error);
 }
 
@@ -3884,8 +3894,14 @@ html[data-theme='dark'] .session-tag-chip {
   font-weight: 400;
   color: var(--text-3);
 }
-.wt-diff-drawer .ant-drawer-body {
+.wt-diff-drawer.orbit-drawer > .orbit-overlay-body {
   padding: 0;
+}
+/* The replaced drawer's header passed its unitless 1.5 down: the title's 12px note keeps an 18px line and the
+   Maximize button a 26px box, so the header stays 59px tall. */
+.wt-diff-drawer > .orbit-overlay-header,
+.wt-diff-drawer .orbit-overlay-title {
+  line-height: 1.5;
 }
 .wt-diff-body {
   display: flex;
@@ -4097,24 +4113,21 @@ html[data-theme='dark'] .session-tag-chip {
   border-radius: 4px;
   padding: 0 4px;
 }
-/* The merge-target dropdown popup: height-capped, and searchable for long branch lists. The panel
-   itself carries the elevated surface (antd theme tokens, set inline), so the antd menu inside it is
-   flattened to just the scrollable list of branches. */
-.wt-merge-menu-panel {
-  overflow: hidden;
+/* The merge-target dropdown popup: height-capped, and searchable for long branch lists. The branches
+   scroll in the menu's own list box; the search is its footer, under them. */
+.wt-merge-menu.orbit-menu {
   min-width: 208px;
+}
+.wt-merge-menu .orbit-menu-list {
+  max-height: 300px;
 }
 .wt-merge-menu-search {
   padding: 6px;
-}
-.wt-merge-menu-list.ant-dropdown-menu {
-  max-height: 300px;
-  overflow-y: auto;
-  box-shadow: none;
-  border-radius: 0;
+  border-top: 1px solid var(--border-subtle);
 }
 .wt-merge-menu-empty {
   padding: 12px 8px;
+  color: var(--text-3);
   text-align: center;
   font-size: 12px;
 }
@@ -14350,7 +14363,7 @@ button.chat-jump-start:hover {
 .wt-diff-view .diff-del .diff-text {
   color: var(--text-1);
 }
-/* Maximize / Restore toggle in the drawer header (sits in AntD's `extra` slot, left of ✕). */
+/* Maximize / Restore toggle at the end of the drawer header, after the title. */
 .wt-diff-max-btn {
   display: inline-flex;
   align-items: center;
@@ -17514,14 +17527,20 @@ button.chat-jump-start:hover {
 }
 
 /* ── ⌘K session search palette ──────────────────────────────────────────────
-   A command palette, so it sits high on the screen (Modal `top`) and owns its own
-   chrome: no antd title bar, no footer buttons, body padding stripped. The three
+   A command palette, so it sits high on the screen (88px down, not a dialog's 100px) and
+   owns its own chrome: no title row, no close button, no footer, no padding. The three
    regions — input, results, hint bar — mirror the session list's own vocabulary so a
    result row reads the same as the row it will navigate to. */
-.ssearch-modal .ant-modal-container {
+.orbit-dialog-viewport:has(> .ssearch-modal) {
+  padding-top: 88px;
+}
+.ssearch-modal.orbit-dialog {
   padding: 0;
   overflow: hidden;
   border-radius: 12px;
+}
+.ssearch-modal > .orbit-overlay-header {
+  display: none;
 }
 .ssearch-head {
   display: flex;
@@ -17561,8 +17580,8 @@ button.chat-jump-start:hover {
 }
 /* One highlight, driven by the keyboard cursor — hover sets that cursor rather than painting a
    second, competing highlight, so mouse and keyboard can never disagree about the Enter target.
-   Brand tint rather than --bg-hover: in dark the modal surface IS --bg-hover (AntD's
-   colorBgElevated is pinned to the same #343437), so a hover-grey cursor was invisible there. */
+   Brand tint rather than --bg-hover: in dark the dialog surface IS --bg-hover (its elevated
+   background is pinned to the same #343437), so a hover-grey cursor was invisible there. */
 .ssearch-row.active {
   background: var(--brand-tint);
 }
@@ -17783,7 +17802,7 @@ button.chat-jump-start:hover {
 }
 
 /* the open list */
-.np-pop .ant-popover-container {
+.np-pop.orbit-popover {
   padding: 6px;
 }
 /* Wide enough for the longest engine name (Antigravity CLI, DeepSeek Harness) beside the model it
@@ -20179,6 +20198,12 @@ div.landing-jobs-open {
 .wk-pl-section-dialog.orbit-overlay,
 .wk-setup-dialog.orbit-overlay,
 .watch-editor-dialog.orbit-overlay {
+  line-height: 1.5714285714285714;
+}
+/* And for the session search palette, the Move dialog and the reset credit confirmation (P5.1). */
+.ssearch-modal.orbit-overlay,
+.move-dialog.orbit-overlay,
+.cu-rc-confirm-dialog.orbit-overlay {
   line-height: 1.5714285714285714;
 }
 .watch-card {
