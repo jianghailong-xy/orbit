@@ -431,6 +431,15 @@ describe('sessionLine over a session with a recap', () => {
     });
   });
 
+  // The account's Session recaps switch (Settings): off, the same row falls through to the reply
+  // it showed before the recap existed. The third argument is this session as an observer.
+  it('falls back to the reply when the account turned recaps off', () => {
+    expect(sessionLine(parked, true, null, false)).toEqual({
+      text: 'Committed the row change.',
+      tone: 'preview',
+    });
+  });
+
   it('keeps its line in Trash, where no live state is left to outrank it', () => {
     expect(sessionLine(parked, false)).toEqual({
       label: `Recap · ${clock(written)}`,

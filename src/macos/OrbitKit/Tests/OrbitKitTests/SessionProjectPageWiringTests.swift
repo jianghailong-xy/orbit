@@ -62,7 +62,10 @@ final class SessionProjectPageWiringTests: XCTestCase {
                      "byTag: inputs.byTag, searching: inputs.searching,",
                      "runnerOffline: inputs.runnerOffline,",
                      "let coordinators = inputs.allSessions.filter(isCoordinator) + inputs.accountSessions.filter(isCoordinator)",
-                     "line: { lines.line(for: $0, watching: inputs.watch(for: $0.id)) }",
+                     // The line the project row is composed from reads the account's recaps switch
+                     // (the grouping's inputs carry it, so a toggle regroups).
+                     "line: { lines.line(for: $0, watching: inputs.watch(for: $0.id),",
+                     "recaps: inputs.recaps) }",
                      "coordinators: coordinators,",
                      "contentSessions: inputs.view == .open ? inputs.accountSessions : inputs.allSessions"] {
             XCTAssertTrue(listing.contains(part), "the workspace grouping carries `\(part)`")

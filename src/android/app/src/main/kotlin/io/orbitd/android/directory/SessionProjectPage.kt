@@ -26,8 +26,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.*
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.R
@@ -87,7 +91,12 @@ internal fun SessionProjectRowView(row: SessionProjectRow, onOpen: () -> Unit, o
         supportingContent = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                 ProjectProgressChip(row.taskCounts, row.runningCount, row.status)
-                Text(row.line.text, Modifier.testTag("project-row-line"), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                // The line, with the recap's muted label when it has one (web draws it in the row's quiet tone).
+                Text(row.line.label?.let { label -> buildAnnotatedString {
+                        withStyle(SpanStyle(color = MaterialTheme.colorScheme.onSurfaceVariant)) { append("$label ") }
+                        append(row.line.text)
+                    } } ?: AnnotatedString(row.line.text),
+                    Modifier.testTag("project-row-line"), maxLines = 1, overflow = TextOverflow.Ellipsis,
                     style = MaterialTheme.typography.bodyMedium, color = lineColor(row.line.tone))
             }
         },

@@ -1,0 +1,300 @@
+ExtractAppIntentsMetadata (in target 'RecapProbe' from project 'RecapProbe')
+    cd /Users/runner/work/orbit/orbit/.recap-probe
+    /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsmetadataprocessor --toolchain-dir /var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-v17.6.109.0.3spG8H/Metal.xctoolchain --module-name RecapProbe --sdk-root /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk --xcode-version 17F113 --platform-family iOS --deployment-target 17.0 --bundle-identifier io.orbitd.recapprobe --output /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbe.app --target-triple arm64-apple-ios17.0-simulator --binary-file /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbe.app/RecapProbe --dependency-file /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Intermediates.noindex/RecapProbe.build/Debug-iphonesimulator/RecapProbe.build/Objects-normal/arm64/RecapProbe_dependency_info.dat --stringsdata-file /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Intermediates.noindex/RecapProbe.build/Debug-iphonesimulator/RecapProbe.build/Objects-normal/arm64/ExtractedAppShortcutsMetadata.stringsdata --source-file-list /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Intermediates.noindex/RecapProbe.build/Debug-iphonesimulator/RecapProbe.build/Objects-normal/arm64/RecapProbe.SwiftFileList --metadata-file-list /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Intermediates.noindex/RecapProbe.build/Debug-iphonesimulator/RecapProbe.build/RecapProbe.DependencyMetadataFileList --static-metadata-file-list /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Intermediates.noindex/RecapProbe.build/Debug-iphonesimulator/RecapProbe.build/RecapProbe.DependencyStaticMetadataFileList --swift-const-vals-list /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Intermediates.noindex/RecapProbe.build/Debug-iphonesimulator/RecapProbe.build/Objects-normal/arm64/RecapProbe.SwiftConstValuesFileList --compile-time-extraction --deployment-aware-processing --validate-assistant-intents --no-app-shortcuts-localization
+2026-10-09 22:26:50.244 appintentsmetadataprocessor[30559:85414] Starting appintentsmetadataprocessor export
+2026-10-09 22:26:50.258 appintentsmetadataprocessor[30559:85414] warning: Metadata extraction skipped. No AppIntents.framework dependency found.
+
+CopySwiftLibs /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbe.app (in target 'RecapProbe' from project 'RecapProbe')
+    cd /Users/runner/work/orbit/orbit/.recap-probe
+    builtin-swiftStdLibTool --copy --verbose --sign - --scan-executable /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbe.app/RecapProbe.debug.dylib --scan-folder /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbe.app/Frameworks --scan-folder /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbe.app/PlugIns --scan-folder /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbe.app/SystemExtensions --scan-folder /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbe.app/Extensions --platform iphonesimulator --toolchain /var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-v17.6.109.0.3spG8H/Metal.xctoolchain --toolchain /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --destination /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbe.app/Frameworks --strip-bitcode --strip-bitcode-tool /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/bitcode_strip --emit-dependency-info /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Intermediates.noindex/RecapProbe.build/Debug-iphonesimulator/RecapProbe.build/SwiftStdLibToolInputDependencies.dep --filter-for-swift-os
+
+AppIntentsSSUTraining (in target 'RecapProbe' from project 'RecapProbe')
+    cd /Users/runner/work/orbit/orbit/.recap-probe
+    /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsnltrainingprocessor --infoplist-path /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbe.app/Info.plist --temp-dir-path /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Intermediates.noindex/RecapProbe.build/Debug-iphonesimulator/RecapProbe.build/ssu --bundle-id io.orbitd.recapprobe --product-path /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbe.app --extracted-metadata-path /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbe.app/Metadata.appintents --metadata-file-list /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Intermediates.noindex/RecapProbe.build/Debug-iphonesimulator/RecapProbe.build/RecapProbe.DependencyMetadataFileList --source-file /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbe.app/Info.plist --archive-ssu-assets
+2026-10-09 22:26:50.310 appintentsnltrainingprocessor[30560:85416] Parsing options for appintentsnltrainingprocessor
+2026-10-09 22:26:50.311 appintentsnltrainingprocessor[30560:85416] Starting AppIntents SSU YAML Generation
+2026-10-09 22:26:50.315 appintentsnltrainingprocessor[30560:85416] No AppShortcuts found - Skipping.
+
+CodeSign /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbe.app/RecapProbe.debug.dylib (in target 'RecapProbe' from project 'RecapProbe')
+    cd /Users/runner/work/orbit/orbit/.recap-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --generate-entitlement-der /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbe.app/RecapProbe.debug.dylib
+
+CodeSign /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbe.app/__preview.dylib (in target 'RecapProbe' from project 'RecapProbe')
+    cd /Users/runner/work/orbit/orbit/.recap-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --generate-entitlement-der /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbe.app/__preview.dylib
+
+CodeSign /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbe.app (in target 'RecapProbe' from project 'RecapProbe')
+    cd /Users/runner/work/orbit/orbit/.recap-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --generate-entitlement-der /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbe.app
+
+RegisterExecutionPolicyException /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbe.app (in target 'RecapProbe' from project 'RecapProbe')
+    cd /Users/runner/work/orbit/orbit/.recap-probe
+    builtin-RegisterExecutionPolicyException /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbe.app
+
+Validate /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbe.app (in target 'RecapProbe' from project 'RecapProbe')
+    cd /Users/runner/work/orbit/orbit/.recap-probe
+    builtin-validationUtility /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbe.app -shallow-bundle -infoplist-subpath Info.plist
+
+Touch /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbe.app (in target 'RecapProbe' from project 'RecapProbe')
+    cd /Users/runner/work/orbit/orbit/.recap-probe
+    /usr/bin/touch -c /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbe.app
+
+Ld /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbeUITests-Runner.app/PlugIns/RecapProbeUITests.xctest/RecapProbeUITests normal (in target 'RecapProbeUITests' from project 'RecapProbe')
+    cd /Users/runner/work/orbit/orbit/.recap-probe
+    /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -Xlinker -reproducible -target arm64-apple-ios17.0-simulator -bundle -isysroot /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk -O0 -L/Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Intermediates.noindex/EagerLinkingTBDs/Debug-iphonesimulator -L/Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator -L/Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib -F/Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Intermediates.noindex/EagerLinkingTBDs/Debug-iphonesimulator -F/Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator -iframework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks -iframework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk/Developer/Library/Frameworks -filelist /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Intermediates.noindex/RecapProbe.build/Debug-iphonesimulator/RecapProbeUITests.build/Objects-normal/arm64/RecapProbeUITests.LinkFileList -Xlinker -rpath -Xlinker /usr/lib/swift -Xlinker -rpath -Xlinker @loader_path/Frameworks -Xlinker -rpath -Xlinker @executable_path/Frameworks -Xlinker -dead_strip -Xlinker -object_path_lto -Xlinker /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Intermediates.noindex/RecapProbe.build/Debug-iphonesimulator/RecapProbeUITests.build/Objects-normal/arm64/RecapProbeUITests_lto.o -rdynamic -Xlinker -no_deduplicate -Xlinker -objc_abi_version -Xlinker 2 -Xlinker -dependency_info -Xlinker /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Intermediates.noindex/RecapProbe.build/Debug-iphonesimulator/RecapProbeUITests.build/Objects-normal/arm64/RecapProbeUITests_dependency_info.dat -fobjc-link-runtime -L/Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/iphonesimulator -L/usr/lib/swift -Xlinker -add_ast_path -Xlinker /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Intermediates.noindex/RecapProbe.build/Debug-iphonesimulator/RecapProbeUITests.build/Objects-normal/arm64/RecapProbeUITests.swiftmodule @/Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Intermediates.noindex/RecapProbe.build/Debug-iphonesimulator/RecapProbeUITests.build/Objects-normal/arm64/RecapProbeUITests-linker-args.resp -Xlinker -needed_framework -Xlinker XCTest -framework XCTest -Xlinker -needed-lXCTestSwiftSupport -lXCTestSwiftSupport -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __entitlements -Xlinker /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Intermediates.noindex/RecapProbe.build/Debug-iphonesimulator/RecapProbeUITests.build/RecapProbeUITests.xctest-Simulated.xcent -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __ents_der -Xlinker /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Intermediates.noindex/RecapProbe.build/Debug-iphonesimulator/RecapProbeUITests.build/RecapProbeUITests.xctest-Simulated.xcent.der -Xlinker -no_adhoc_codesign -o /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbeUITests-Runner.app/PlugIns/RecapProbeUITests.xctest/RecapProbeUITests
+
+ProcessInfoPlistFile /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbeUITests-Runner.app/PlugIns/RecapProbeUITests.xctest/Info.plist /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Intermediates.noindex/RecapProbe.build/Debug-iphonesimulator/RecapProbeUITests.build/empty-RecapProbeUITests.plist (in target 'RecapProbeUITests' from project 'RecapProbe')
+    cd /Users/runner/work/orbit/orbit/.recap-probe
+    builtin-infoPlistUtility /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Intermediates.noindex/RecapProbe.build/Debug-iphonesimulator/RecapProbeUITests.build/empty-RecapProbeUITests.plist -producttype com.apple.product-type.bundle.ui-testing -expandbuildsettings -format binary -platform iphonesimulator -additionalcontentfile /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Intermediates.noindex/RecapProbe.build/Debug-iphonesimulator/RecapProbeUITests.build/ProductTypeInfoPlistAdditions.plist -o /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbeUITests-Runner.app/PlugIns/RecapProbeUITests.xctest/Info.plist
+
+CopySwiftLibs /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbeUITests-Runner.app/PlugIns/RecapProbeUITests.xctest (in target 'RecapProbeUITests' from project 'RecapProbe')
+    cd /Users/runner/work/orbit/orbit/.recap-probe
+    builtin-swiftStdLibTool --copy --verbose --sign - --scan-executable /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbeUITests-Runner.app/PlugIns/RecapProbeUITests.xctest/RecapProbeUITests --scan-folder /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbeUITests-Runner.app/PlugIns/RecapProbeUITests.xctest/Frameworks --scan-folder /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbeUITests-Runner.app/PlugIns/RecapProbeUITests.xctest/PlugIns --scan-folder /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbeUITests-Runner.app/PlugIns/RecapProbeUITests.xctest/SystemExtensions --scan-folder /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbeUITests-Runner.app/PlugIns/RecapProbeUITests.xctest/Extensions --platform iphonesimulator --toolchain /var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-v17.6.109.0.3spG8H/Metal.xctoolchain --toolchain /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --destination /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbeUITests-Runner.app/PlugIns/RecapProbeUITests.xctest/Frameworks --strip-bitcode --scan-executable /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/libXCTestSwiftSupport.dylib --strip-bitcode-tool /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/bitcode_strip --emit-dependency-info /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Intermediates.noindex/RecapProbe.build/Debug-iphonesimulator/RecapProbeUITests.build/SwiftStdLibToolInputDependencies.dep --filter-for-swift-os
+
+ExtractAppIntentsMetadata (in target 'RecapProbeUITests' from project 'RecapProbe')
+    cd /Users/runner/work/orbit/orbit/.recap-probe
+    /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsmetadataprocessor --toolchain-dir /var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-v17.6.109.0.3spG8H/Metal.xctoolchain --module-name RecapProbeUITests --sdk-root /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk --xcode-version 17F113 --platform-family iOS --deployment-target 17.0 --bundle-identifier io.orbitd.recapprobe.uitests --output /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbeUITests-Runner.app/PlugIns/RecapProbeUITests.xctest --target-triple arm64-apple-ios17.0-simulator --binary-file /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbeUITests-Runner.app/PlugIns/RecapProbeUITests.xctest/RecapProbeUITests --dependency-file /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Intermediates.noindex/RecapProbe.build/Debug-iphonesimulator/RecapProbeUITests.build/Objects-normal/arm64/RecapProbeUITests_dependency_info.dat --stringsdata-file /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Intermediates.noindex/RecapProbe.build/Debug-iphonesimulator/RecapProbeUITests.build/Objects-normal/arm64/ExtractedAppShortcutsMetadata.stringsdata --source-file-list /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Intermediates.noindex/RecapProbe.build/Debug-iphonesimulator/RecapProbeUITests.build/Objects-normal/arm64/RecapProbeUITests.SwiftFileList --metadata-file-list /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Intermediates.noindex/RecapProbe.build/Debug-iphonesimulator/RecapProbeUITests.build/RecapProbeUITests.DependencyMetadataFileList --static-metadata-file-list /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Intermediates.noindex/RecapProbe.build/Debug-iphonesimulator/RecapProbeUITests.build/RecapProbeUITests.DependencyStaticMetadataFileList --swift-const-vals-list /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Intermediates.noindex/RecapProbe.build/Debug-iphonesimulator/RecapProbeUITests.build/Objects-normal/arm64/RecapProbeUITests.SwiftConstValuesFileList --compile-time-extraction --deployment-aware-processing --validate-assistant-intents --no-app-shortcuts-localization
+2026-10-09 22:26:51.074 appintentsmetadataprocessor[30570:85469] Starting appintentsmetadataprocessor export
+2026-10-09 22:26:51.076 appintentsmetadataprocessor[30570:85469] warning: Metadata extraction skipped. No AppIntents.framework dependency found.
+
+AppIntentsSSUTraining (in target 'RecapProbeUITests' from project 'RecapProbe')
+    cd /Users/runner/work/orbit/orbit/.recap-probe
+    /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsnltrainingprocessor --infoplist-path /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbeUITests-Runner.app/PlugIns/RecapProbeUITests.xctest/Info.plist --temp-dir-path /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Intermediates.noindex/RecapProbe.build/Debug-iphonesimulator/RecapProbeUITests.build/ssu --bundle-id io.orbitd.recapprobe.uitests --product-path /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbeUITests-Runner.app/PlugIns/RecapProbeUITests.xctest --extracted-metadata-path /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbeUITests-Runner.app/PlugIns/RecapProbeUITests.xctest/Metadata.appintents --metadata-file-list /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Intermediates.noindex/RecapProbe.build/Debug-iphonesimulator/RecapProbeUITests.build/RecapProbeUITests.DependencyMetadataFileList --source-file /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbeUITests-Runner.app/PlugIns/RecapProbeUITests.xctest/Info.plist --archive-ssu-assets
+2026-10-09 22:26:51.091 appintentsnltrainingprocessor[30571:85470] Parsing options for appintentsnltrainingprocessor
+2026-10-09 22:26:51.092 appintentsnltrainingprocessor[30571:85470] Starting AppIntents SSU YAML Generation
+2026-10-09 22:26:51.092 appintentsnltrainingprocessor[30571:85470] No AppShortcuts found - Skipping.
+
+MkDir /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbeUITests-Runner.app (in target 'RecapProbeUITests' from project 'RecapProbe')
+    cd /Users/runner/work/orbit/orbit/.recap-probe
+    /bin/mkdir -p /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbeUITests-Runner.app
+
+CopyAndPreserveArchs /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbeUITests-Runner.app/RecapProbeUITests-Runner (in target 'RecapProbeUITests' from project 'RecapProbe')
+    cd /Users/runner/work/orbit/orbit/.recap-probe
+    /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/lipo /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Xcode/Agents/XCTRunner.app/XCTRunner -output /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbeUITests-Runner.app/RecapProbeUITests-Runner -extract arm64
+
+CopyPlistFile /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbeUITests-Runner.app/Info.plist /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Xcode/Agents/XCTRunner.app/Info.plist (in target 'RecapProbeUITests' from project 'RecapProbe')
+    cd /Users/runner/work/orbit/orbit/.recap-probe
+    builtin-copyPlist --validate --convert xml1 --macro-expansion WRAPPEDPRODUCTNAME RecapProbeUITests-Runner --macro-expansion WRAPPEDPRODUCTBUNDLEIDENTIFIER io.orbitd.recapprobe.uitests.xctrunner --macro-expansion TESTPRODUCTNAME RecapProbeUITests --macro-expansion TESTPRODUCTBUNDLEIDENTIFIER io.orbitd.recapprobe.uitests --copy-value UIDeviceFamily /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbeUITests-Runner.app/PlugIns/RecapProbeUITests.xctest/Info.plist --outdir /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbeUITests-Runner.app -- /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Xcode/Agents/XCTRunner.app/Info.plist
+
+Copy /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbeUITests-Runner.app/PkgInfo /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Xcode/Agents/XCTRunner.app/PkgInfo (in target 'RecapProbeUITests' from project 'RecapProbe')
+    cd /Users/runner/work/orbit/orbit/.recap-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Xcode/Agents/XCTRunner.app/PkgInfo /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbeUITests-Runner.app
+
+Copy /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbeUITests-Runner.app/Frameworks/libXCTestSwiftSupport.dylib /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/libXCTestSwiftSupport.dylib (in target 'RecapProbeUITests' from project 'RecapProbe')
+    cd /Users/runner/work/orbit/orbit/.recap-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/libXCTestSwiftSupport.dylib /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbeUITests-Runner.app/Frameworks/XCUnit.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCUnit.framework (in target 'RecapProbeUITests' from project 'RecapProbe')
+    cd /Users/runner/work/orbit/orbit/.recap-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCUnit.framework /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbeUITests-Runner.app/Frameworks/XCUIAutomation.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/XCUIAutomation.framework (in target 'RecapProbeUITests' from project 'RecapProbe')
+    cd /Users/runner/work/orbit/orbit/.recap-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/XCUIAutomation.framework /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbeUITests-Runner.app/Frameworks/XCTestSupport.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTestSupport.framework (in target 'RecapProbeUITests' from project 'RecapProbe')
+    cd /Users/runner/work/orbit/orbit/.recap-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTestSupport.framework /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbeUITests-Runner.app/Frameworks/XCTestCore.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTestCore.framework (in target 'RecapProbeUITests' from project 'RecapProbe')
+    cd /Users/runner/work/orbit/orbit/.recap-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTestCore.framework /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbeUITests-Runner.app/Frameworks/XCTest.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/XCTest.framework (in target 'RecapProbeUITests' from project 'RecapProbe')
+    cd /Users/runner/work/orbit/orbit/.recap-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/XCTest.framework /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbeUITests-Runner.app/Frameworks/XCTAutomationSupport.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTAutomationSupport.framework (in target 'RecapProbeUITests' from project 'RecapProbe')
+    cd /Users/runner/work/orbit/orbit/.recap-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTAutomationSupport.framework /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbeUITests-Runner.app/Frameworks/Testing.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/Testing.framework (in target 'RecapProbeUITests' from project 'RecapProbe')
+    cd /Users/runner/work/orbit/orbit/.recap-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/Testing.framework /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbeUITests-Runner.app/Frameworks
+
+CodeSign /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbeUITests-Runner.app/PlugIns/RecapProbeUITests.xctest (in target 'RecapProbeUITests' from project 'RecapProbe')
+    cd /Users/runner/work/orbit/orbit/.recap-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --generate-entitlement-der /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbeUITests-Runner.app/PlugIns/RecapProbeUITests.xctest
+
+CodeSign /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbeUITests-Runner.app (in target 'RecapProbeUITests' from project 'RecapProbe')
+    cd /Users/runner/work/orbit/orbit/.recap-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --generate-entitlement-der /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbeUITests-Runner.app
+/Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbeUITests-Runner.app: replacing existing signature
+
+RegisterExecutionPolicyException /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbeUITests-Runner.app/PlugIns/RecapProbeUITests.xctest (in target 'RecapProbeUITests' from project 'RecapProbe')
+    cd /Users/runner/work/orbit/orbit/.recap-probe
+    builtin-RegisterExecutionPolicyException /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbeUITests-Runner.app/PlugIns/RecapProbeUITests.xctest
+
+Touch /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbeUITests-Runner.app/PlugIns/RecapProbeUITests.xctest (in target 'RecapProbeUITests' from project 'RecapProbe')
+    cd /Users/runner/work/orbit/orbit/.recap-probe
+    /usr/bin/touch -c /Users/runner/work/orbit/orbit/.recap-probe/.dd-ios/Build/Products/Debug-iphonesimulator/RecapProbeUITests-Runner.app/PlugIns/RecapProbeUITests.xctest
+
+2026-10-09 22:27:15.784802+0000 RecapProbeUITests-Runner[31283:87327] [Default] Running tests...
+objc[31283]: Class UIAccessibilityLoaderWebShared is implemented in both /Library/Developer/CoreSimulator/Volumes/iOS_23F77/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebCore.axbundle/WebCore (0x107c28310) and /Library/Developer/CoreSimulator/Volumes/iOS_23F77/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebKit.axbundle/WebKit (0x108554398). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+    t =      nans Interface orientation changed to Portrait
+Test Suite 'All tests' started at 2026-10-09 22:27:23.443.
+Test Suite 'RecapProbeUITests.xctest' started at 2026-10-09 22:27:23.443.
+Test Suite 'RecapShotTests' started at 2026-10-09 22:27:23.444.
+Test Case '-[RecapProbeUITests.RecapShotTests testIPhoneShowsTheRecapOnTheSessionList]' started.
+    t =     0.00s Start Test at 2026-10-09 22:27:23.445
+    t =     1.06s Set Up
+    t =     9.48s Open io.orbitd.recapprobe
+    t =     9.48s     Launch io.orbitd.recapprobe
+2026-10-09 22:27:33.638 xcodebuild[18977:58459] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-09 22:27:33.638 xcodebuild[18977:58459] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =    31.09s         Setting up automation session
+    t =    32.99s         Wait for io.orbitd.recapprobe to idle
+    t =    35.89s Checking existence of `Any (First Match)`
+    t =    38.24s Checking existence of `Any (First Match)`
+    t =    38.42s Checking existence of `Any (First Match)`
+    t =    38.60s Checking existence of `Any (First Match)`
+    t =    39.37s Checking existence of `Any (First Match)`
+    t =    40.05s Checking existence of `Any (First Match)`
+    t =    40.81s Checking existence of `Any (First Match)`
+    t =    41.47s Checking existence of `Any (First Match)`
+    t =    42.19s Checking existence of `Any (First Match)`
+    t =    42.92s Checking existence of `Any (First Match)`
+    t =    43.58s Checking existence of `Any (First Match)`
+    t =    44.30s Checking existence of `Any (First Match)`
+    t =    44.44s Checking existence of `Any (First Match)`
+    t =    44.60s Checking existence of `Any (First Match)`
+    t =    45.27s Checking existence of `Any (First Match)`
+    t =    45.95s Checking existence of `Any (First Match)`
+    t =    46.67s Checking existence of `Any (First Match)`
+    t =    47.32s Checking existence of `Any (First Match)`
+    t =    48.06s Checking existence of `Any (First Match)`
+    t =    48.77s Checking existence of `Any (First Match)`
+    t =    49.42s Checking existence of `Any (First Match)`
+    t =    50.10s Checking existence of `Any (First Match)`
+    t =    50.23s Checking existence of `Any (First Match)`
+    t =    50.90s Checking existence of `Any (First Match)`
+    t =    51.57s Checking existence of `Any (First Match)`
+    t =    52.27s Checking existence of `Any (First Match)`
+    t =    52.94s Checking existence of `Any (First Match)`
+    t =    53.67s Checking existence of `Any (First Match)`
+    t =    54.34s Checking existence of `Any (First Match)`
+    t =    55.00s Checking existence of `Any (First Match)`
+    t =    55.67s Checking existence of `Any (First Match)`
+    t =    57.03s Checking existence of `Window (First Match)`
+    t =    57.27s Added attachment named 'ios-list-with-recap'
+    t =    57.32s Requesting snapshot of accessibility hierarchy for app with pid 33861
+    t =    57.75s Requesting snapshot of accessibility hierarchy for app with pid 33861
+    t =    57.86s Added attachment named 'tree-ios-list-with-recap.txt'
+    t =    57.87s Terminate io.orbitd.recapprobe:33861
+    t =    58.92s Open io.orbitd.recapprobe
+    t =    58.92s     Launch io.orbitd.recapprobe
+2026-10-09 22:28:22.378 xcodebuild[18977:58459] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-09 22:28:22.378 xcodebuild[18977:58459] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =    59.98s         Setting up automation session
+    t =    62.86s         Wait for io.orbitd.recapprobe to idle
+    t =    65.47s Checking existence of `Any (First Match)`
+    t =    66.42s Checking existence of `Any (First Match)`
+    t =    67.12s Checking existence of `Any (First Match)`
+    t =    67.84s Checking existence of `Any (First Match)`
+    t =    71.17s Checking existence of `Window (First Match)`
+    t =    71.18s Checking existence of `Any (First Match)`
+    t =    71.72s Find the Any (First Match)
+    t =    72.35s Find the Window (First Match)
+    t =    72.39s Press Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =    72.39s     Wait for io.orbitd.recapprobe to idle
+    t =    72.39s     Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    72.42s     Check for interrupting elements affecting Window
+    t =    72.59s     Synthesize event
+    t =    72.59s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    72.62s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    72.64s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    72.66s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    72.68s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    74.30s     Wait for io.orbitd.recapprobe to idle
+    t =    75.46s Checking existence of `"Session recaps, Session lists show the one-line summary the server writes for each conversation, in place of its raw last reply. Off: the raw last reply." Switch`
+    t =    76.11s Find the "Session recaps, Session lists show the one-line summary the server writes for each conversation, in place of its raw last reply. Off: the raw last reply." Switch
+    t =    76.70s Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    76.72s Press Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =    76.72s     Wait for io.orbitd.recapprobe to idle
+    t =    76.72s     Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    76.75s     Check for interrupting elements affecting Window
+    t =    76.96s     Synthesize event
+    t =    76.96s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    77.00s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    77.03s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    77.06s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    77.11s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    78.61s     Wait for io.orbitd.recapprobe to idle
+    t =    79.48s Checking existence of `"Session recaps, Session lists show the one-line summary the server writes for each conversation, in place of its raw last reply. Off: the raw last reply." Switch`
+    t =    80.58s Find the "Session recaps, Session lists show the one-line summary the server writes for each conversation, in place of its raw last reply. Off: the raw last reply." Switch
+    t =    81.08s Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    81.12s Press Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =    81.12s     Wait for io.orbitd.recapprobe to idle
+    t =    81.12s     Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    81.16s     Check for interrupting elements affecting Window
+    t =    81.32s     Synthesize event
+    t =    81.32s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    81.39s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    81.42s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    81.62s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    81.69s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    83.17s     Wait for io.orbitd.recapprobe to idle
+    t =    84.34s Checking existence of `"Session recaps, Session lists show the one-line summary the server writes for each conversation, in place of its raw last reply. Off: the raw last reply." Switch`
+    t =    85.12s Find the "Session recaps, Session lists show the one-line summary the server writes for each conversation, in place of its raw last reply. Off: the raw last reply." Switch
+    t =    86.07s Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    86.08s Press Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {402.0, 874.0}}[0.50, 0.62] -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =    86.08s     Wait for io.orbitd.recapprobe to idle
+    t =    86.09s     Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    86.10s     Check for interrupting elements affecting Window
+    t =    86.29s     Synthesize event
+    t =    86.29s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    86.33s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    86.39s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    86.42s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    86.45s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    87.96s     Wait for io.orbitd.recapprobe to idle
+    t =    88.78s Checking existence of `"Session recaps, Session lists show the one-line summary the server writes for each conversation, in place of its raw last reply. Off: the raw last reply." Switch`
+    t =    89.37s Find the "Session recaps, Session lists show the one-line summary the server writes for each conversation, in place of its raw last reply. Off: the raw last reply." Switch
+    t =    89.99s Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    90.05s Checking existence of `Any (First Match)`
+    t =    90.80s Checking existence of `Any (First Match)`
+    t =    91.42s Checking existence of `Window (First Match)`
+    t =    91.43s Checking existence of `Any (First Match)`
+    t =    91.87s Find the Any (First Match)
+    t =    92.37s Find the Window (First Match)
+    t =    93.59s Checking existence of `Window (First Match)`
+    t =    93.86s Added attachment named 'ios-settings-session-recaps'
+    t =    93.86s Requesting snapshot of accessibility hierarchy for app with pid 35481
+    t =    94.83s Requesting snapshot of accessibility hierarchy for app with pid 35481
+    t =    95.09s Added attachment named 'tree-ios-settings-session-recaps.txt'
+    t =    95.09s Terminate io.orbitd.recapprobe:35481
+    t =    96.13s Added attachment named 'ios-requests.txt'
+    t =    96.14s Tear Down
+    t =    96.14s     Added attachment named 'RecapShotTeststestIPhoneShowsTheRecapOnTheSessionList-on-notes.txt'
+Test Case '-[RecapProbeUITests.RecapShotTests testIPhoneShowsTheRecapOnTheSessionList]' passed (96.926 seconds).
+Test Suite 'RecapShotTests' passed at 2026-10-09 22:29:00.372.
+	 Executed 1 test, with 0 failures (0 unexpected) in 96.926 (96.929) seconds
+Test Suite 'RecapProbeUITests.xctest' passed at 2026-10-09 22:29:00.375.
+	 Executed 1 test, with 0 failures (0 unexpected) in 96.926 (96.931) seconds
+Test Suite 'All tests' passed at 2026-10-09 22:29:00.375.
+	 Executed 1 test, with 0 failures (0 unexpected) in 96.926 (96.933) seconds
+2026-10-09 22:29:35.259 xcodebuild[18977:58459] [MT] IDETestOperationsObserverDebug: 163.692 elapsed -- Testing started completed.
+2026-10-09 22:29:35.260 xcodebuild[18977:58459] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-09 22:29:35.260 xcodebuild[18977:58459] [MT] IDETestOperationsObserverDebug: 163.692 sec, +163.692 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/runner/work/orbit/orbit/.recap-probe/results/ios-on.xcresult
+
+** TEST SUCCEEDED **
+
+Testing started
