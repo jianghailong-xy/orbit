@@ -405,8 +405,13 @@ describe('project entries in the session list', { timeout: 60_000 }, () => {
     await until(() => expect(submenuRows()).not.toHaveLength(0));
     const filter = submenuRows().find((el) => el.textContent?.startsWith('Filter by Tag'));
     expect(filter, 'Filter by Tag is on screen').toBeTruthy();
+    // A mouse coming to rest on the row, as the browser reports it: its pointer events, then the mouse events after them.
     await act(async () => {
+      filter!.dispatchEvent(new PointerEvent('pointerover', { bubbles: true, pointerType: 'mouse', relatedTarget: document.body }));
+      filter!.dispatchEvent(new PointerEvent('pointerenter', { pointerType: 'mouse', relatedTarget: document.body }));
       filter!.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, relatedTarget: document.body }));
+      filter!.dispatchEvent(new MouseEvent('mouseenter', { relatedTarget: document.body }));
+      filter!.dispatchEvent(new MouseEvent('mousemove', { bubbles: true }));
     });
     await until(() => expect(menuItem('Release')).toBeTruthy());
     await click(menuItem('Release'), 'the Release tag');

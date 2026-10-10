@@ -51,7 +51,7 @@ const skip = !URL;
 const CAPACITY = 'Selected model is at capacity. Please try a different model.';
 /** The last thing the agent said before it — what `session.error` recorded instead. */
 const REPLY = '代码核验结果与预期一致。现在再点名跑 ledger spec 本身，补齐验收要求。';
-const FAILURE_NOTE = '**执行失败（系统自动记录）**';
+const FAILURE_NOTE = '**Run failed (recorded by Orbit)**';
 
 /** The production wiring, over one client and with no seam in the path under test. */
 function connect(url: string): { db: PrismaClient; api: RunnerApiController } {

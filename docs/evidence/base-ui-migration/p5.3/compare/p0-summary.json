@@ -1,0 +1,774 @@
+{
+ "beyond": [
+  {
+   "clusters": [
+    [
+     [
+      597,
+      1279
+     ],
+     [
+      724,
+      899
+     ],
+     16251,
+     40
+    ],
+    [
+     [
+      638,
+      651
+     ],
+     [
+      725,
+      727
+     ],
+     10,
+     1
+    ]
+   ],
+   "max": 40,
+   "pixels": 16261,
+   "shot": "chromium-dark-desktop/session-attachment-staged.png"
+  },
+  {
+   "clusters": [
+    [
+     [
+      82,
+      107
+     ],
+     [
+      565,
+      576
+     ],
+     214,
+     158
+    ],
+    [
+     [
+      82,
+      127
+     ],
+     [
+      607,
+      622
+     ],
+     423,
+     158
+    ],
+    [
+     [
+      39,
+      55
+     ],
+     [
+      657,
+      674
+     ],
+     149,
+     87
+    ],
+    [
+     [
+      81,
+      117
+     ],
+     [
+      659,
+      670
+     ],
+     316,
+     158
+    ],
+    [
+     [
+      106,
+      117
+     ],
+     [
+      659,
+      661
+     ],
+     24,
+     158
+    ],
+    [
+     [
+      81,
+      111
+     ],
+     [
+      701,
+      712
+     ],
+     299,
+     158
+    ]
+   ],
+   "max": 158,
+   "pixels": 2071,
+   "shot": "chromium-dark-phone/session-attachment-menu.png"
+  },
+  {
+   "clusters": [
+    [
+     [
+      0,
+      389
+     ],
+     [
+      668,
+      843
+     ],
+     9772,
+     40
+    ],
+    [
+     [
+      31,
+      44
+     ],
+     [
+      669,
+      671
+     ],
+     10,
+     1
+    ]
+   ],
+   "max": 40,
+   "pixels": 9782,
+   "shot": "chromium-dark-phone/session-attachment-staged.png"
+  },
+  {
+   "clusters": [
+    [
+     [
+      597,
+      1279
+     ],
+     [
+      724,
+      899
+     ],
+     24825,
+     53
+    ],
+    [
+     [
+      638,
+      651
+     ],
+     [
+      725,
+      727
+     ],
+     10,
+     1
+    ]
+   ],
+   "max": 53,
+   "pixels": 24835,
+   "shot": "chromium-light-desktop/session-attachment-staged.png"
+  },
+  {
+   "clusters": [
+    [
+     [
+      82,
+      107
+     ],
+     [
+      565,
+      576
+     ],
+     215,
+     224
+    ],
+    [
+     [
+      82,
+      127
+     ],
+     [
+      607,
+      622
+     ],
+     425,
+     224
+    ],
+    [
+     [
+      39,
+      55
+     ],
+     [
+      657,
+      674
+     ],
+     143,
+     117
+    ],
+    [
+     [
+      81,
+      117
+     ],
+     [
+      659,
+      670
+     ],
+     317,
+     224
+    ],
+    [
+     [
+      106,
+      117
+     ],
+     [
+      659,
+      661
+     ],
+     24,
+     224
+    ],
+    [
+     [
+      81,
+      111
+     ],
+     [
+      701,
+      712
+     ],
+     300,
+     224
+    ]
+   ],
+   "max": 224,
+   "pixels": 2073,
+   "shot": "chromium-light-phone/session-attachment-menu.png"
+  },
+  {
+   "clusters": [
+    [
+     [
+      0,
+      389
+     ],
+     [
+      668,
+      843
+     ],
+     15301,
+     53
+    ],
+    [
+     [
+      31,
+      44
+     ],
+     [
+      669,
+      671
+     ],
+     10,
+     1
+    ]
+   ],
+   "max": 53,
+   "pixels": 15311,
+   "shot": "chromium-light-phone/session-attachment-staged.png"
+  },
+  {
+   "clusters": [
+    [
+     [
+      286,
+      289
+     ],
+     [
+      23,
+      23
+     ],
+     2,
+     3
+    ]
+   ],
+   "max": 3,
+   "pixels": 2,
+   "shot": "chromium-light-phone/task-action-focus.png"
+  },
+  {
+   "clusters": [
+    [
+     [
+      610,
+      1270
+     ],
+     [
+      733,
+      899
+     ],
+     11457,
+     40
+    ]
+   ],
+   "max": 40,
+   "pixels": 11457,
+   "shot": "webkit-dark-desktop/session-attachment-staged.png"
+  },
+  {
+   "clusters": [
+    [
+     [
+      31,
+      35
+     ],
+     [
+      546,
+      551
+     ],
+     6,
+     1
+    ],
+    [
+     [
+      265,
+      270
+     ],
+     [
+      546,
+      551
+     ],
+     7,
+     1
+    ],
+    [
+     [
+      26,
+      26
+     ],
+     [
+      560,
+      560
+     ],
+     1,
+     1
+    ],
+    [
+     [
+      275,
+      275
+     ],
+     [
+      560,
+      560
+     ],
+     1,
+     1
+    ],
+    [
+     [
+      82,
+      107
+     ],
+     [
+      566,
+      577
+     ],
+     210,
+     158
+    ],
+    [
+     [
+      82,
+      127
+     ],
+     [
+      608,
+      622
+     ],
+     411,
+     158
+    ]
+   ],
+   "max": 158,
+   "pixels": 2039,
+   "shot": "webkit-dark-phone/session-attachment-menu.png"
+  },
+  {
+   "clusters": [
+    [
+     [
+      3,
+      386
+     ],
+     [
+      677,
+      843
+     ],
+     7856,
+     40
+    ]
+   ],
+   "max": 40,
+   "pixels": 7856,
+   "shot": "webkit-dark-phone/session-attachment-staged.png"
+  },
+  {
+   "clusters": [
+    [
+     [
+      592,
+      1279
+     ],
+     [
+      719,
+      899
+     ],
+     26612,
+     53
+    ],
+    [
+     [
+      633,
+      653
+     ],
+     [
+      720,
+      723
+     ],
+     20,
+     1
+    ],
+    [
+     [
+      641,
+      641
+     ],
+     [
+      721,
+      721
+     ],
+     1,
+     1
+    ]
+   ],
+   "max": 53,
+   "pixels": 26633,
+   "shot": "webkit-light-desktop/session-attachment-staged.png"
+  },
+  {
+   "clusters": [
+    [
+     [
+      31,
+      36
+     ],
+     [
+      546,
+      551
+     ],
+     4,
+     1
+    ],
+    [
+     [
+      265,
+      271
+     ],
+     [
+      546,
+      553
+     ],
+     6,
+     1
+    ],
+    [
+     [
+      82,
+      107
+     ],
+     [
+      566,
+      577
+     ],
+     211,
+     224
+    ],
+    [
+     [
+      82,
+      127
+     ],
+     [
+      608,
+      622
+     ],
+     412,
+     224
+    ],
+    [
+     [
+      39,
+      55
+     ],
+     [
+      657,
+      674
+     ],
+     143,
+     117
+    ],
+    [
+     [
+      81,
+      117
+     ],
+     [
+      659,
+      670
+     ],
+     321,
+     224
+    ]
+   ],
+   "max": 224,
+   "pixels": 2035,
+   "shot": "webkit-light-phone/session-attachment-menu.png"
+  },
+  {
+   "clusters": [
+    [
+     [
+      0,
+      389
+     ],
+     [
+      663,
+      843
+     ],
+     16054,
+     53
+    ],
+    [
+     [
+      26,
+      46
+     ],
+     [
+      664,
+      667
+     ],
+     20,
+     1
+    ],
+    [
+     [
+      34,
+      34
+     ],
+     [
+      665,
+      665
+     ],
+     1,
+     1
+    ]
+   ],
+   "max": 53,
+   "pixels": 16075,
+   "shot": "webkit-light-phone/session-attachment-staged.png"
+  }
+ ],
+ "missing": [],
+ "screenshots": {
+  "antialias": 9,
+  "beyond": 13,
+  "identical": 230,
+  "missing": 0
+ },
+ "styleDeltas": {
+  "chromium-dark-phone/session-attachment-menu": {
+   "file": {
+    "fontSize": [
+     "14px",
+     "17px"
+    ],
+    "lineHeight": [
+     "22px",
+     "26.7143px"
+    ]
+   }
+  },
+  "chromium-light-phone/session-attachment-menu": {
+   "file": {
+    "fontSize": [
+     "14px",
+     "17px"
+    ],
+    "lineHeight": [
+     "22px",
+     "26.7143px"
+    ]
+   }
+  },
+  "webkit-dark-desktop/session-attachment-menu": {
+   "file": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "menu": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "trigger": {
+    "lineHeight": [
+     "25.142857px",
+     "25.142879px"
+    ]
+   }
+  },
+  "webkit-dark-desktop/session-idle": {
+   "attachment": {
+    "lineHeight": [
+     "25.142857px",
+     "25.142879px"
+    ]
+   }
+  },
+  "webkit-dark-phone/session-attachment-menu": {
+   "file": {
+    "fontSize": [
+     "14px",
+     "17px"
+    ],
+    "lineHeight": [
+     "22px",
+     "26.71431px"
+    ]
+   },
+   "menu": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "trigger": {
+    "lineHeight": [
+     "25.142857px",
+     "25.142879px"
+    ]
+   }
+  },
+  "webkit-dark-phone/session-idle": {
+   "attachment": {
+    "lineHeight": [
+     "25.142857px",
+     "25.142879px"
+    ]
+   }
+  },
+  "webkit-light-desktop/session-attachment-menu": {
+   "file": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "menu": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "trigger": {
+    "lineHeight": [
+     "25.142857px",
+     "25.142879px"
+    ]
+   }
+  },
+  "webkit-light-desktop/session-idle": {
+   "attachment": {
+    "lineHeight": [
+     "25.142857px",
+     "25.142879px"
+    ]
+   }
+  },
+  "webkit-light-phone/session-attachment-menu": {
+   "file": {
+    "fontSize": [
+     "14px",
+     "17px"
+    ],
+    "lineHeight": [
+     "22px",
+     "26.71431px"
+    ]
+   },
+   "menu": {
+    "lineHeight": [
+     "22px",
+     "22.000019px"
+    ]
+   },
+   "trigger": {
+    "lineHeight": [
+     "25.142857px",
+     "25.142879px"
+    ]
+   }
+  },
+  "webkit-light-phone/session-idle": {
+   "attachment": {
+    "lineHeight": [
+     "25.142857px",
+     "25.142879px"
+    ]
+   }
+  }
+ },
+ "tests": {
+  "notPassedDel": [
+   "chromium-dark-desktop :: record browser performance baseline",
+   "chromium-dark-phone :: both sides of existing 600, 640 and 960px rules",
+   "chromium-dark-phone :: record browser performance baseline",
+   "chromium-light-phone :: both sides of existing 600, 640 and 960px rules",
+   "chromium-light-phone :: record browser performance baseline",
+   "webkit-dark-desktop :: record browser performance baseline",
+   "webkit-dark-phone :: both sides of existing 600, 640 and 960px rules",
+   "webkit-dark-phone :: record browser performance baseline",
+   "webkit-light-desktop :: record browser performance baseline",
+   "webkit-light-phone :: both sides of existing 600, 640 and 960px rules",
+   "webkit-light-phone :: record browser performance baseline"
+  ],
+  "notPassedRef": [
+   "chromium-dark-desktop :: record browser performance baseline",
+   "chromium-dark-phone :: both sides of existing 600, 640 and 960px rules",
+   "chromium-dark-phone :: record browser performance baseline",
+   "chromium-light-phone :: both sides of existing 600, 640 and 960px rules",
+   "chromium-light-phone :: record browser performance baseline",
+   "webkit-dark-desktop :: record browser performance baseline",
+   "webkit-dark-phone :: both sides of existing 600, 640 and 960px rules",
+   "webkit-dark-phone :: record browser performance baseline",
+   "webkit-light-desktop :: record browser performance baseline",
+   "webkit-light-phone :: both sides of existing 600, 640 and 960px rules",
+   "webkit-light-phone :: record browser performance baseline"
+  ],
+  "total": 112
+ },
+ "traces": {
+  "differing": {},
+  "equal": 0,
+  "total": 0
+ }
+}

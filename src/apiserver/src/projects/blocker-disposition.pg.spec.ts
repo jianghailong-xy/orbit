@@ -603,7 +603,7 @@ const messagesTo = async (db: PrismaClient, sessionId: string) =>
 
 const blockerNoticesTo = (db: PrismaClient, sessionId: string) =>
   db.conversationTurn.count({
-    where: { sessionId, content: { contains: '需要账号所有者裁决' } },
+    where: { sessionId, content: { contains: 'needs the account owner’s ruling' } },
   });
 
 /** The delivery reviews filed on one project — the coordinator's half of `blocker-disposition.ts` §4. */
@@ -758,7 +758,7 @@ test('four deliveries a machine may not settle — an argued exemption and a mov
         assert.equal(spent[0]?.outcome, 'CONSUMED', `${which}: the fact took the wrong terminal`);
         const told = await toldTo(stack.db, one.f.coordinatorSessionId);
         assert.equal(told.length, 1, `${which}: the coordinator was not handed exactly one message`);
-        assert.ok(told.every((text) => !text.includes('合并到 main')),
+        assert.ok(told.every((text) => !text.includes('merge into main')),
           `${which}: a delivery that had to stop still told the coordinator to merge it`);
 
         if (isRulerCase(which)) {
@@ -929,7 +929,7 @@ test('the file set is the input: two deliveries in one project, with one declara
         'the stopped delivery started the other half of this pair');
       const strayedTold = await toldTo(stack.db, f.coordinatorSessionId);
       assert.equal(strayedTold.length, 1, 'the coordinator was not handed the review');
-      assert.ok(!strayedTold[0]!.includes('合并到 main'),
+      assert.ok(!strayedTold[0]!.includes('merge into main'),
         'the stopped delivery told the coordinator to merge it anyway');
       assert.equal(await blockerNoticesTo(stack.db, f.coordinatorSessionId), 0,
         'the review was relayed to the coordinator as the owner’s decision');
@@ -1040,7 +1040,7 @@ test('a switched-off coordinator stops nothing and raises nothing: each of the f
       const [stopped] = criterionFor(stack, control.f, control.criterionKey);
       assert.equal(stopped?.outcome, 'CONSUMED', 'the control fact was not delivered');
       const told = await toldTo(stack.db, control.f.coordinatorSessionId);
-      assert.ok(told.every((text) => !text.includes('合并到 main')),
+      assert.ok(told.every((text) => !text.includes('merge into main')),
         'the control told its coordinator to merge a delivery that had to stop');
       assert.equal(
         stopped?.review?.reason, EXPECTED_REVIEW.SCOPE,
