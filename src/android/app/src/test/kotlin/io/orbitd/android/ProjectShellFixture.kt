@@ -123,8 +123,9 @@ internal object ProjectShell {
         val method = api.method.name
         if (path == "auth/login") return@HttpTransport ok("""{"accessToken":"a05d-access","refreshToken":"a05d-refresh","user":{"id":"u1","email":"owner@a05d.test","name":"Owner"}}""")
         val query = api.query.joinToString("&") { (k, v) -> "$k=$v" }
-        calls += "$method $path" + if (query.isEmpty()) "" else "?$query"
+        // The body before the call: requests arrive off the test's thread, and a test that has seen a write's call reads its body next.
         api.body?.let { bodies["$method $path"] = it.decodeToString() }
+        calls += "$method $path" + if (query.isEmpty()) "" else "?$query"
         val view = api.query.firstOrNull { it.first == "view" }?.second ?: "open"
         val scoped = api.query.firstOrNull { it.first == "projectId" }?.second?.let { id -> ids.firstOrNull { ObjectId.same(it, id) } }
         when {

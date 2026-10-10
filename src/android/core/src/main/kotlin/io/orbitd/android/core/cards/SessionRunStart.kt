@@ -148,20 +148,8 @@ object SessionRunStart {
     /** OrbitKit `EngineAuth.antigravityRepair`: the failures the Antigravity repair card answers. */
     fun antigravityRepair(message: String) = AntigravityRepair.of(message) != null
 
-    private val dshKeyRejected = listOf("invalid api key", "api key is invalid", "authentication_error", "authentication fails", "unauthorized",
-        "status 401", "status code 401", "http 401", "revoked api key", "api key has been revoked", "invalid credentials")
-
     /** OrbitKit `DshRuntime.repair`: the failures the DeepSeek Harness repair card answers. */
-    fun dshRepair(message: String): Boolean {
-        if (message.startsWith("DSH_REQUEST_FAILED")) return false
-        if (listOf("DSH_CREDENTIAL_MISSING", "DSH_CREDENTIAL_INVALID", "DSH_NOT_INSTALLED", "DSH_PLATFORM_UNSUPPORTED", "DSH_NODE_UNSUPPORTED")
-                .any { message.contains(it) }) return true
-        if (message.startsWith("DeepSeek Harness requires a newer Orbit runner")) return true
-        val lower = message.lowercase()
-        if (!lower.startsWith("dsh ")) return false
-        if (lower.contains("no api key") || lower.contains("missing api key")) return true
-        return dshKeyRejected.any { lower.contains(it) } || Regex("api key(?:: *\\S+)? is invalid").containsMatchIn(lower)
-    }
+    fun dshRepair(message: String) = DshRuntime.repair(message) != null
 
     /** The project blocker's lines for a refused source (OrbitKit `ProjectPage.blockerSourceLines`): its code and ref on one line, then
      * the tasks it refuses, each by its title on the page or its id. Nothing for any other kind. */
