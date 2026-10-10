@@ -111,8 +111,12 @@ class ComposerDeviceTest {
         awaitText("Fixture Two"); appClick("Fixture Two")
         compose.waitUntil(5000) { stats()["config"]!!.jsonObject["model"]?.jsonPrimitive?.content == "fixture-model-2" }
         ready()
-        compose.onNodeWithText("Second account").performScrollTo().performClick()
-        compose.waitUntil(5000) { stats()["config"]!!.jsonObject["account"]?.jsonPrimitive?.content == "1a2b3c4d" }
+        // Pressed through its click action once pressable, as appClick does: the menu re-lays out when the model change is read back
+        // (Fixture Two has no Effort section), and a touch injected meanwhile can land between rows.
+        val second = hasText("Second account") and hasClickAction()
+        compose.waitUntil(10000) { compose.onAllNodes(second and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(second).performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
+        compose.waitUntil(10000) { stats()["config"]!!.jsonObject["account"]?.jsonPrimitive?.content == "1a2b3c4d" }
         // The menu's rows are pressable again once the move the fixture just took is settled in the app and the session read again.
         val expired = hasText("Expired account") and hasText("Not signed in, sign in →")
         compose.waitUntil(10000) { compose.onAllNodes(expired and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
