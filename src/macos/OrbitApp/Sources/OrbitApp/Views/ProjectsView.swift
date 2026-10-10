@@ -525,6 +525,14 @@ struct ProjectDetailView: View {
                         MergeCheckEditor(store: store, view: view,
                                          automatic: store.document?.coordinatorEnabled ?? false)
                     }
+                case .mainBranch:
+                    // Written the moment it is picked, as Tasks land on is: How it runs has no Save.
+                    if let view = store.integration, let main = RunSettings.storedMainBranch(view) {
+                        MainBranchPicker(current: main, branches: view.branches,
+                                         remembered: view.lastMainBranch?.branch) { name in
+                            Task { notice = await store.updateIntegration(RunSettings.mainBranchWrite(view, to: name)) }
+                        }
+                    }
                 case .landingJobs:
                     // The page's own integration read, which its refreshes keep current; a task
                     // opens over the page, as its rows' tasks do, once the sheet is down.
@@ -610,9 +618,11 @@ struct ProjectDetailView: View {
             } else if let view = store.integration, view.line == nil, document.started == false {
                 // A project nobody has started: the start decides where its tasks land — and, once
                 // its coordinator has asked, which line the coordinator suggests.
+                let suggestion = store.openItems?.startRequest?.startRequest?.settings
                 Label {
                     Text(RunSettings.undecidedLine(
-                        suggested: store.openItems?.startRequest?.startRequest?.settings.line))
+                        suggested: suggestion?.line,
+                        main: StartProject.mainBranch(suggested: suggestion?.upstreamRef, standing: view)))
                 } icon: {
                     Image(systemName: "arrow.triangle.branch")
                 }
@@ -784,7 +794,11 @@ struct ProjectDetailView: View {
                     Text(StartProject.title).font(.orbitSubtext.weight(.semibold))
                 }
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(row.startRequest.map { StartProject.requestSummary($0.settings) } ?? row.detailLine)
+                    // Directly into the main branch the start card opens with.
+                    Text(row.startRequest.map {
+                        StartProject.requestSummary($0.settings, main: StartProject.mainBranch(
+                            suggested: $0.settings.upstreamRef, standing: store.integration))
+                    } ?? row.detailLine)
                         .font(.orbitLabel).foregroundStyle(.secondary)
                     Text("\(ProjectPage.who(row)) · \(ProjectPage.waitingLabel(row, now: now))")
                         .font(.orbitMeta)
@@ -1227,13 +1241,15 @@ struct ProjectDetailView: View {
             Section {
                 if let view = store.integration {
                     lineSetting(store, view, document: document, now: now)
+                    mainBranchSetting(store, view, now: now)
                     automaticSetting(store, view, document: document)
                     atMostSetting(store, document: document)
                     mergeCheckSetting(store, view, document: document)
                     if let seconds = view.escalationSeconds {
                         escalationSetting(store, view, seconds: seconds)
                     }
-                    pauseSetting(store, document: document, now: now)
+                    pauseSetting(store, document: document,
+                                 main: RunSettings.storedMainBranch(view) ?? RunSettings.defaultMainBranch, now: now)
                 } else if store.integrationUnread {
                     Text(RunSettings.notLoaded).font(.orbitLabel).foregroundStyle(.red)
                 } else {
@@ -1246,34 +1262,39 @@ struct ProjectDetailView: View {
     }
 
     /// Tasks land on: while nothing has landed, the two lines to choose from, each with what choosing
-    /// it means; once something has, the line it is on, locked, and why it can no longer move.
+    /// it means; once something has, the line it is on, locked, and why it can no longer move — said
+    /// here only on a project with no Main branch row: one that has the row says it under that row,
+    /// since the two lock together.
     @ViewBuilder
     private func lineSetting(_ store: ProjectDetailModel, _ view: ProjectIntegrationView,
                              document: ProjectDocument, now: Date) -> some View {
         let branch = view.line == .projectBranch ? (view.ref ?? "project/\(document.id)") : "project/\(document.id)"
+        let main = RunSettings.storedMainBranch(view) ?? RunSettings.defaultMainBranch
         if view.locked {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 8) {
                     Text(RunSettings.tasksLandOn)
                     Spacer(minLength: 8)
-                    Label(view.line == .main ? RunSettings.lineMain : RunSettings.shortBranch(branch),
+                    Label(view.line == .main ? RunSettings.lineMain(main) : RunSettings.shortBranch(branch),
                           systemImage: "lock.fill")
                         .labelStyle(.titleAndIcon)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
-                Text(RunSettings.lineLocked(since: view.startedAt.flatMap { RelativeTime.ago($0, now: now) }))
-                    .font(.orbitLabel)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                if RunSettings.storedMainBranch(view) == nil {
+                    Text(RunSettings.lineLocked(since: view.startedAt.flatMap { RelativeTime.ago($0, now: now) }))
+                        .font(.orbitLabel)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         } else {
             VStack(alignment: .leading, spacing: 8) {
                 Text(RunSettings.tasksLandOn)
                 lineOption(store, view, .projectBranch, title: RunSettings.lineProjectBranch,
                            branch: RunSettings.shortBranch(branch), hint: RunSettings.lineProjectBranchHint)
-                lineOption(store, view, .main, title: RunSettings.lineMain, branch: nil,
-                           hint: RunSettings.lineMainHint)
+                lineOption(store, view, .main, title: RunSettings.lineMain(main), branch: nil,
+                           hint: RunSettings.lineMainHint(main))
             }
         }
     }
@@ -1305,6 +1326,54 @@ struct ProjectDetailView: View {
         .disabled(store.busy)
     }
 
+    /// Main branch (board ③ ⑧ ⑩): which branch "main" is for this project — where its tasks start
+    /// from and its work ends up — picked on the start card's sheet and written the moment it is
+    /// picked, as Tasks land on is (How it runs has no Save). It locks with the line once anything
+    /// has integrated, and the sentence saying why moves under it. A project with no repository has
+    /// no branch to name, and no row.
+    @ViewBuilder
+    private func mainBranchSetting(_ store: ProjectDetailModel, _ view: ProjectIntegrationView,
+                                   now: Date) -> some View {
+        if let main = RunSettings.storedMainBranch(view),
+           let note = RunSettings.mainBranchNote(view, since: view.startedAt.flatMap { RelativeTime.ago($0, now: now) }) {
+            VStack(alignment: .leading, spacing: 4) {
+                if view.locked {
+                    HStack(spacing: 8) {
+                        Text(RunSettings.mainBranch)
+                        Spacer(minLength: 8)
+                        Label(main, systemImage: "lock.fill")
+                            .labelStyle(.titleAndIcon)
+                            .font(.orbitProse.monospaced())
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                } else {
+                    Button { pageSheet = .mainBranch } label: {
+                        HStack(spacing: 8) {
+                            Text(RunSettings.mainBranch).foregroundStyle(Color.primary)
+                            Spacer(minLength: 8)
+                            Text(main)
+                                .font(.orbitProse.monospaced())
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                            Image(systemName: "chevron.forward")
+                                .font(.orbitMeta.weight(.semibold))
+                                .foregroundStyle(.tertiary)
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(store.busy)
+                }
+                Text(note)
+                    .font(.orbitLabel)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
     /// Automatic, moved here from the coordinator card, with the start card's sentence for the line
     /// the project is on — or a project branch while none is. It writes `automatic` and nothing
     /// else: switching it off no longer stops the project (Pause project does).
@@ -1321,7 +1390,8 @@ struct ProjectDetailView: View {
                     .toggleStyle(.switch)
                     .disabled(store.busy || document.configRevision == nil || document.coordinatorEnabled == nil)
             }
-            Text(RunSettings.automaticHint(view.line == .main ? .main : .projectBranch))
+            Text(RunSettings.automaticHint(view.line == .main ? .main : .projectBranch,
+                                           main: RunSettings.storedMainBranch(view) ?? RunSettings.defaultMainBranch))
                 .font(.orbitLabel)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -1355,6 +1425,7 @@ struct ProjectDetailView: View {
         let missing = RunSettings.mergeCheckMissing(onLine: view.line,
                                                     automatic: document.coordinatorEnabled ?? false,
                                                     mergeCheckCommand: view.mergeCheckCommand)
+        let main = RunSettings.storedMainBranch(view) ?? RunSettings.defaultMainBranch
         return Button { pageSheet = .mergeCheck } label: {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 8) {
@@ -1369,12 +1440,12 @@ struct ProjectDetailView: View {
                 } else {
                     Text(RunSettings.mergeCheckPlaceholder).font(.orbitLabel).foregroundStyle(.secondary)
                 }
-                Text(RunSettings.mergeCheckHint)
+                Text(RunSettings.mergeCheckHint(main))
                     .font(.orbitLabel)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 if missing {
-                    Text("⚠ \(RunSettings.noMergeCheckWarning)")
+                    Text("⚠ \(RunSettings.noMergeCheckWarning(main))")
                         .font(.orbitLabel)
                         .foregroundStyle(Color.orange)
                         .fixedSize(horizontal: false, vertical: true)
@@ -1409,8 +1480,9 @@ struct ProjectDetailView: View {
     }
 
     /// Pause project, or Resume project: a press, not a setting — it stops the project moving at
-    /// once, and says since when it has been paused.
-    private func pauseSetting(_ store: ProjectDetailModel, document: ProjectDocument,
+    /// once, and says since when it has been paused, and that it stops merges into the main branch
+    /// the project stands on.
+    private func pauseSetting(_ store: ProjectDetailModel, document: ProjectDocument, main: String,
                               now: Date) -> some View {
         let paused = document.pausedAt != nil
         return VStack(alignment: .leading, spacing: 4) {
@@ -1419,7 +1491,7 @@ struct ProjectDetailView: View {
             }
             .buttonStyle(.borderless)
             .disabled(store.busy)
-            Text(RunSettings.pauseFootnote(pausedAt: document.pausedAt, now: now))
+            Text(RunSettings.pauseFootnote(pausedAt: document.pausedAt, now: now, main: main))
                 .font(.orbitLabel)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -2145,6 +2217,8 @@ private enum ProjectPageSheet: String, Identifiable {
     case done
     /// How it runs' merge check, where a command has room.
     case mergeCheck
+    /// How it runs' main branch: the branches to pick from, and a name typed.
+    case mainBranch
     /// The jobs the Work overview's landing row counts, from a press on that row.
     case landingJobs
 
@@ -2197,7 +2271,7 @@ struct OwnerStartProjectSheet: View {
                                                         graph: store.graph)
             let request = StartProject.ownerRequest(settings: settings,
                                                     criteriaDigest: standing.currentVersion.digest)
-            let draft = edited ?? StartSettingsDraft(settings)
+            let draft = edited ?? StartSettingsDraft(settings, standing: store.integration)
             StartProjectCard(
                 projectID: document.id,
                 projectTitle: document.title,
@@ -2213,6 +2287,8 @@ struct OwnerStartProjectSheet: View {
                 hasCoordinator: document.coordinatorSessionId != nil,
                 escalationSeconds: document.integration?.escalationSeconds
                     ?? StartProject.defaultEscalationSeconds,
+                branches: store.integration?.branches,
+                lastMainBranch: store.integration?.lastMainBranch,
                 draft: draft,
                 // A project started at another end meanwhile is the door's to refuse, 409, and the
                 // card says so over the door's words.
@@ -2359,6 +2435,7 @@ private struct MergeCheckEditor: View {
     var body: some View {
         let missing = RunSettings.mergeCheckMissing(onLine: view.line, automatic: automatic,
                                                     mergeCheckCommand: command)
+        let main = RunSettings.storedMainBranch(view) ?? RunSettings.defaultMainBranch
         NavigationStack {
             Form {
                 Section {
@@ -2370,9 +2447,9 @@ private struct MergeCheckEditor: View {
                         #endif
                 } footer: {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(RunSettings.mergeCheckHint)
+                        Text(RunSettings.mergeCheckHint(main))
                         if missing {
-                            Text("⚠ \(RunSettings.noMergeCheckWarning)").foregroundStyle(Color.orange)
+                            Text("⚠ \(RunSettings.noMergeCheckWarning(main))").foregroundStyle(Color.orange)
                         }
                         if let refused {
                             Text(refused).foregroundStyle(Color.red)

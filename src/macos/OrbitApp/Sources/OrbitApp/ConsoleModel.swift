@@ -3783,6 +3783,13 @@ final class ConsoleModel {
     /// The project's plan, as the start card says it in one line (`StartProject.planView`). Read only
     /// while a start card is on screen.
     private(set) var projectGraph: ProjectDependencyGraph?
+    /// The project's repository and main branch as they stand, this account's last choice for that
+    /// repository, and the branches the start card's Main branch row offers — read while a start card
+    /// is asked for, and before it is delivered: a card drawn before the read answered would open on
+    /// a main branch the answer then moves (web's `SessionStartProjectCard`, which waits for it). A
+    /// read that fails leaves the last answer standing; with none, the card offers no main branch and
+    /// the start keeps the one the project stands on.
+    private(set) var startIntegration: ProjectIntegrationView?
     /// The owner's edits to the start card's settings, by the request they were made on — a new
     /// request arrives with its own suggestions (web's `edited`). Kept here rather than in the
     /// card: a row the List recycles is a new view, and edits it held would be gone.
@@ -4160,7 +4167,12 @@ final class ConsoleModel {
         }
         // The start card: asked only once the coordinator has asked to start this project and the
         // plan passed Orbit's ready check — the open START_REQUEST the open-items read above serves
-        // — and never inferred from the project holding a task.
+        // — and never inferred from the project holding a task. Its main branch is read first, so
+        // the card opens on the branch it will keep.
+        if StartProject.live(openItems: openItems, started: projectStarted) != nil,
+           let integration = try? await api.projectIntegration(projectID) {
+            startIntegration = integration
+        }
         adoptStartRequest()
         // And the closing card: "Is this project done?" once the coordinator asks — or its receipt
         // once the project is recorded done — and otherwise why it is not done yet.
@@ -4205,6 +4217,7 @@ final class ConsoleModel {
             decisionCards.removeAll { $0.id == id }
             startRequestRow = nil
             projectGraph = nil
+            startIntegration = nil
         }
     }
 
@@ -4218,13 +4231,14 @@ final class ConsoleModel {
     }
 
     /// The start card's settings as the owner has left them: their edits on this request, or the
-    /// coordinator's suggestion with Automatic on (`StartSettingsDraft(_:)`).
+    /// coordinator's suggestion with Automatic on, on the main branch the integration read puts first
+    /// (`StartSettingsDraft(_:standing:)`).
     func startDraft(for row: ProjectOpenItemRow) -> StartSettingsDraft {
         if let draft = startDrafts[row.itemId] { return draft }
         guard let request = row.startRequest else {
             return StartSettingsDraft(line: .projectBranch, automatic: true, maxConcurrentTasks: 3)
         }
-        return StartSettingsDraft(request.settings)
+        return StartSettingsDraft(request.settings, standing: startIntegration)
     }
 
     func setStartDraft(_ draft: StartSettingsDraft, for itemID: String) {

@@ -2546,6 +2546,8 @@ private struct StartProjectCardView: View {
                 plan: StartProject.planView(graph: console.projectGraph,
                                             fallbackCount: console.projectTaskCount),
                 escalationSeconds: console.projectEscalationSeconds,
+                branches: console.startIntegration?.branches,
+                lastMainBranch: console.startIntegration?.lastMainBranch,
                 draft: console.startDraft(for: row),
                 standing: standing,
                 onDraft: { console.setStartDraft($0, for: itemID) },
@@ -2657,6 +2659,12 @@ struct StartProjectCard: View {
     var hasCoordinator: Bool = true
     /// How long a problem waits on the coordinator before it reaches the owner.
     var escalationSeconds: Int = StartProject.defaultEscalationSeconds
+    /// What the Main branch picker offers: the branches the runner reported for the coordination
+    /// workspace's checkout, or nil for none.
+    var branches: ProjectBranchCandidates? = nil
+    /// The branch the owner last chose for this repository, which the picker tags and the row says
+    /// it came from.
+    var lastMainBranch: ProjectLastMainBranch? = nil
     /// The settings as the owner has left them.
     let draft: StartSettingsDraft
     let standing: StartProject.Standing
@@ -2685,6 +2693,7 @@ struct StartProjectCard: View {
     @State private var planWidth: CGFloat = 0
     @State private var graphOpen = false
     @State private var graphExpanded: Set<String> = []
+    @State private var mainBranchPickerOpen = false
 
     /// Whether a coordinator asked for this card.
     private var asked: Bool { askedAt != nil }
@@ -2813,6 +2822,11 @@ struct StartProjectCard: View {
             automaticRow(editable: editable)
             Divider()
             lineRow(editable: editable)
+            // A project with no repository has no branch to name, and no row.
+            if let upstream = draft.upstream {
+                Divider()
+                mainBranchRow(upstream, editable: editable)
+            }
             Divider()
             mergeCheckRow(editable: editable)
             Divider()
@@ -2846,7 +2860,7 @@ struct StartProjectCard: View {
                     .disabled(!editable)
             }
             Text(RunSettings.automaticSays(automatic: draft.automatic, line: draft.line,
-                                           hasMergeCheck: draft.hasMergeCheck))
+                                           hasMergeCheck: draft.hasMergeCheck, main: draft.main))
                 .font(.orbitLabel).foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
             if opensCoordinator {
@@ -2864,7 +2878,7 @@ struct StartProjectCard: View {
         let items = StartProject.comesToYou(automatic: draft.automatic, line: draft.line,
                                             ownerConfirmed: plan.ownerConfirmed,
                                             evidenceJudged: plan.evidenceJudged,
-                                            escalationSeconds: escalationSeconds)
+                                            escalationSeconds: escalationSeconds, main: draft.main)
         return VStack(alignment: .leading, spacing: 5) {
             Text(StartProject.comesToYou)
                 .font(.orbitMeta.weight(.semibold)).foregroundStyle(Color.blue)
@@ -2899,12 +2913,12 @@ struct StartProjectCard: View {
                     Text("\(StartProject.branch(request, projectID: projectID)) — \(RunSettings.lineProjectBranchHint)")
                 }
                 Toggle(isOn: lineBinding(.main, draft)) {
-                    Text(RunSettings.lineMain)
-                    Text(RunSettings.lineMainHint)
+                    Text(RunSettings.lineMain(draft.main))
+                    Text(RunSettings.lineMainHint(draft.main))
                 }
             } label: {
                 HStack(spacing: 4) {
-                    Text(draft.line == .main ? RunSettings.lineMain : RunSettings.lineProjectBranch)
+                    Text(draft.line == .main ? RunSettings.lineMain(draft.main) : RunSettings.lineProjectBranch)
                         .lineLimit(1)
                     // macOS draws its own disclosure mark beside a borderless menu's title.
                     #if os(iOS)
@@ -2923,6 +2937,45 @@ struct StartProjectCard: View {
             .disabled(!editable)
         }
         .startRow()
+    }
+
+    /// Which branch "main" is for this project: where its tasks start from and its work ends up.
+    /// Under the line, because the two are one decision and lock together. Picked on a sheet — the
+    /// Merge into picker's shape — and, while it shows the branch the owner chose last for this
+    /// repository, said where it came from.
+    private func mainBranchRow(_ upstream: String, editable: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Button {
+                PlatformHaptics.tap()
+                mainBranchPickerOpen = true
+            } label: {
+                HStack(spacing: 8) {
+                    Text(RunSettings.mainBranch).font(.orbitProse).foregroundStyle(.primary)
+                    Spacer(minLength: 8)
+                    Text(upstream)
+                        .font(.orbitProse.monospaced())
+                        .foregroundStyle(editable ? AnyShapeStyle(.secondary) : AnyShapeStyle(.tertiary))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Image(systemName: "chevron.right").font(.orbitMeta).foregroundStyle(.tertiary)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(!editable)
+            if let note = RunSettings.lastChoiceNote(upstream: upstream, lastMainBranch: lastMainBranch) {
+                Text(note)
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .startRow()
+        .sheet(isPresented: $mainBranchPickerOpen) {
+            MainBranchPicker(current: upstream, branches: branches,
+                             remembered: lastMainBranch?.branch) { name in
+                update { $0.upstream = name }
+            }
+        }
     }
 
     private func lineBinding(_ line: IntegrationLine, _ draft: StartSettingsDraft) -> Binding<Bool> {
@@ -2965,7 +3018,7 @@ struct StartProjectCard: View {
                     .textInputAutocapitalization(.never)
                     #endif
                     .disabled(!editable)
-                Text(RunSettings.mergeCheckHint)
+                Text(RunSettings.mergeCheckHint(draft.main))
                     .font(.orbitLabel).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else if !draft.hasMergeCheck {
