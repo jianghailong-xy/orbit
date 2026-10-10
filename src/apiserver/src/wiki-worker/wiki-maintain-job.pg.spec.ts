@@ -47,10 +47,17 @@
  *      reads a round, one at a time): eleven written sections on three commits whose files the diffs name, around
  *      them a commit the snapshot does not reach, an empty diff, the head and a section with no file, a file deleted
  *      and one renamed — the same sections are written again and the same paths withdrawn as the reads section by
- *      section gave, one `diff` a commit, and the files are read with one `read` a commit and one at the head
- *      instead of one a section at each end, each operation asked once the one before it has settled;
+ *      section gave (the rename by its old path since 18), one `diff` a commit, and the files are read with one
+ *      `read` a commit and one at the head instead of one a section at each end, each operation asked once the one
+ *      before it has settled;
  *  17. a commit whose files are more than `RepoOps.operationBytes` is read in the fewest operations that limit
- *      allows, at the commit and at the head alike.
+ *      allows, at the commit and at the head alike;
+ *  18. a rename and a deletion as the runner's comparison takes them (2026-10-10, `wikiGitChanges`), on the repository
+ *      of wiki_maintain_docs_test.go's TestWikiMaintainWritesOnlyTheSectionsItsEntriesAndOriginMainTouched: a section
+ *      citing only a renamed file's old path, and one citing only a deleted file, are the repository's — each file read
+ *      at the section's commit, where it still is — and the rename is withdrawn by its old path, `to` where it went;
+ *  19. a rename that changed the file as well, and a deleted file no sentence cites: the sections citing either end of
+ *      the rename and the one citing the deleted file are written again, and the old path is withdrawn, the new not.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/wiki-worker/wiki-maintain-job.pg.spec.ts
  *
@@ -921,7 +928,13 @@ const FAR = commitNamed('far');
 /** A commit origin/main changed nothing since: its diff is empty. */
 const STILL = commitNamed('still');
 const BIG = commitNamed('big');
-const COMMIT_NAMES = new Map([[C1, 'c1'], [C2, 'c2'], [C3, 'c3'], [FAR, 'far'], [STILL, 'still'], [BIG, 'big'], [REPO.sha, 'head']]);
+/** The commit wiki_maintain_docs_test.go's documents were written at (`f.first`). */
+const FIRST = commitNamed('first');
+/** A commit origin/main has since renamed a file at, changing it too, and deleted another. */
+const RENAMED = commitNamed('renamed');
+const COMMIT_NAMES = new Map([
+  [C1, 'c1'], [C2, 'c2'], [C3, 'c3'], [FAR, 'far'], [STILL, 'still'], [BIG, 'big'], [FIRST, 'first'], [RENAMED, 'renamed'], [REPO.sha, 'head'],
+]);
 
 function commitName(sha: string): string {
   return COMMIT_NAMES.get(sha) ?? sha;
@@ -941,6 +954,8 @@ interface ComparedSection {
   key: string;
   sha: string;
   docs?: string[];
+  /** The section of its design documents it takes: `Part` unless named; null for the whole document. */
+  heading?: string | null;
   code?: string[];
   /** A file its written sentence cites in a footnote: a withdrawal of that path takes the sentence back. */
   cites?: string;
@@ -990,7 +1005,7 @@ async function runComparison(h: Harness, which: ComparisonCase): Promise<Compari
             create: doc.sections.map((section, at) => ({
               position: at, key: section.key, title: section.key, kind: 'flow', covers: `${section.key} 讲什么。`, length: 400,
               sources: {
-                docs: (section.docs ?? []).map((path) => ({ path, section: 'Part' })),
+                docs: (section.docs ?? []).map((path) => ({ path, section: section.heading === undefined ? 'Part' : section.heading })),
                 code: (section.code ?? []).map((path) => ({ path, symbols: [] })),
                 contracts: [],
                 sessions: null,
@@ -1235,9 +1250,9 @@ test('the documents step writes again the same sections and withdraws the same p
     repoSha: REPO.sha,
     paths: [
       { path: 'docs/c1/gone.md', change: 'deleted' },
-      // A rename as the server's comparison has always read it: the diff's `path` — where the file went — as the path
-      // gone. Pinned as it stands: reading by commit does not move it.
-      { path: 'src/c2/new.go', change: 'renamed', to: 'src/c2/old.go' },
+      // A rename by its old path, where the file went as `to` — the runner's `wikiGitChanges` (2026-10-10). Until then the
+      // server withdrew the diff's `path`, where the file went, `to` where it came from.
+      { path: 'src/c2/old.go', change: 'renamed', to: 'src/c2/new.go' },
     ],
   }]);
   // One diff a commit the snapshot reaches, in the order of their shas; none at the head and none for the commit the
@@ -1257,9 +1272,10 @@ test('the documents step reads the files it compares with one read a commit and 
     + Object.entries(reads).map(([commit, packs]) => `${commit} ${packs.length} (${packs.map((pack) => pack.length).join('+')} files)`).join(', '));
   t.diagnostic(`every operation, in order: ${seen.ops.map((op) => (op.kind === 'diff' ? `diff ${commitName(op.from)}` : op.kind === 'read' ? `read ${commitName(op.sha)}×${op.paths.length}` : op.kind)).join(', ')}`);
   // Eleven sections on three commits: each commit's files in one read there, every file at the head in one read
-  // there. s12's file is not in its commit's diff, and the deleted file and the directory have nothing to read.
+  // there. s12's file is not in its commit's diff, and the directory has nothing to read. The deleted file is read at
+  // c1, where it still is, as the runner reads it there; the head does not have it.
   assert.deepEqual(reads, {
-    c1: [['docs/c1/s1.md', 'docs/c1/s2.md', 'docs/c1/s3.md', 'docs/c1/s4.md']],
+    c1: [['docs/c1/gone.md', 'docs/c1/s1.md', 'docs/c1/s2.md', 'docs/c1/s3.md', 'docs/c1/s4.md']],
     c2: [['docs/c2/s5.md', 'docs/c2/s6.md', 'docs/c2/s7.md', 'docs/c2/s8.md']],
     c3: [['docs/c3/s10.md', 'docs/c3/s11.md', 'docs/c3/s9.md']],
     head: [[
@@ -1293,6 +1309,143 @@ test('a commit whose files pass operationBytes is read in the fewest operations 
   assert.deepEqual(reads, {
     big: [[path('p1'), path('p2')], [path('p3'), path('p4')], [path('p5')]],
     head: [[path('p1'), path('p2')], [path('p3'), path('p4')], [path('p5')]],
+  });
+  assertOneAtATime(seen);
+});
+
+// ── A rename and a deletion, as the runner's comparison takes them (2026-10-10) ───────────────
+
+/** What a comparison case's run left, as its diagnostics say it: what it wrote again, withdrew and read. */
+function diagnoseComparison(t: { diagnostic: (message: string) => void }, seen: ComparisonSeen): void {
+  t.diagnostic(`written again: ${seen.rewritten.join(', ')}`);
+  t.diagnostic(`withdrawn: ${JSON.stringify(seen.withdrawals)}`);
+  t.diagnostic(`docs report: ${JSON.stringify({ affected: seen.docs.affected, withdrawn: seen.docs.withdrawn, sections: seen.docs.sections, error: seen.docs.error ?? null })}`);
+  t.diagnostic(`reads: ${JSON.stringify(readsByCommit(seen))}`);
+}
+
+const RUNNER_DESIGN_BEFORE = '# Runner 设计\n\n## 1. 传输\n\nrunner 通过出站 HTTP 轮询服务器，不需要入站端口。\n\n## 2. 投递\n\n一轮 turn 先落库再投递，至少投递一次。\n';
+const RUNNER_DESIGN_AFTER = '# Runner 设计\n\n## 1. 传输\n\nrunner 通过出站 HTTP 轮询服务器，不需要入站端口。\n\n## 2. 投递\n\n一轮 turn 先落库再投递，至少投递一次，按 turn id 幂等。\n';
+const RUNNER_DISPATCH = '# 派发\n\n## 概要\n\n讲派发怎么把会话交给 runner。\n';
+
+/**
+ * The repository's half of wiki_maintain_docs_test.go's TestWikiMaintainWritesOnlyTheSectionsItsEntriesAndOriginMainTouched,
+ * its files and sections as they are there: the documents were written at the first commit, and origin/main has since
+ * changed the design document's section 2 (section 1 is as it was), deleted docs/old.md and renamed docs/moved.md to
+ * docs/dispatch.md, unchanged — the names its diff gives, in git's order. s3 cites only the deleted file and s4 only the
+ * renamed one's old path, each with a sentence that cites it in a footnote. The Go test's s5 is its entries' to write,
+ * not the repository's, and has no place here.
+ */
+test('a section citing only a renamed file\'s old path, and one citing a deleted file, are the repository\'s, and the rename is withdrawn by its old path, as the runner has them', { skip }, async (t) => {
+  const h = await boot();
+  const seen = await runComparison(h, {
+    docs: [{
+      slug: 'runner',
+      sections: [
+        { key: 's1', sha: FIRST, docs: ['docs/design.md'], heading: '1. 传输' },
+        { key: 's2', sha: FIRST, docs: ['docs/design.md'], heading: '2. 投递' },
+        { key: 's3', sha: FIRST, docs: ['docs/old.md'], heading: null, cites: 'docs/old.md' },
+        { key: 's4', sha: FIRST, docs: ['docs/moved.md'], heading: null, cites: 'docs/moved.md' },
+      ],
+    }],
+    head: { 'docs/design.md': RUNNER_DESIGN_AFTER, 'docs/dispatch.md': RUNNER_DISPATCH },
+    at: {
+      [FIRST]: {
+        'docs/design.md': RUNNER_DESIGN_BEFORE,
+        'docs/old.md': '# 旧设计\n\n## 概要\n\n这份文档讲旧的领取方式。\n',
+        'docs/moved.md': RUNNER_DISPATCH,
+      },
+    },
+    commits: [FIRST, REPO.sha],
+    diffs: {
+      [FIRST]: {
+        files: [
+          { status: 'M', path: 'docs/design.md' },
+          { status: 'R100', from: 'docs/moved.md', path: 'docs/dispatch.md' },
+          { status: 'D', path: 'docs/old.md' },
+        ],
+        docs: ['docs/dispatch.md'],
+      },
+    },
+  });
+  diagnoseComparison(t, seen);
+  assert.equal(seen.outcome, 'succeeded');
+  assert.equal(seen.docs.error, undefined, `the documents step: ${String(seen.docs.error)}`);
+  // The Go test's: s2, s3 and s4 by the repository (it writes s5 too, by its entries) — not s1, whose section did not
+  // change. s3 and s4 are the repository's, not stale: their file was at their commit and is not at the head.
+  assert.deepEqual(seen.rewritten, ['runner#s2', 'runner#s3', 'runner#s4']);
+  assert.deepEqual(seen.docs.affected, { byEntries: 0, byRepo: 3, stale: 0, unwritten: 0, total: 3 });
+  // Withdrawn once, at the head, deleted and renamed as git says: the Go test's
+  // [{"change":"renamed","path":"docs/moved.md","to":"docs/dispatch.md"},{"change":"deleted","path":"docs/old.md"}].
+  assert.deepEqual(seen.withdrawals, [{
+    repoSha: REPO.sha,
+    paths: [
+      { path: 'docs/moved.md', change: 'renamed', to: 'docs/dispatch.md' },
+      { path: 'docs/old.md', change: 'deleted' },
+    ],
+  }]);
+  assert.deepEqual(seen.docs.withdrawn, { paths: 2, sentences: 2 });
+  // The deleted file and the renamed one's old path are read at the first commit, where they still are, in its one
+  // read; the head has neither, and its one read is the design document.
+  assert.deepEqual(readsByCommit(seen), {
+    first: [['docs/design.md', 'docs/moved.md', 'docs/old.md']],
+    head: [['docs/design.md']],
+  });
+  assertOneAtATime(seen);
+});
+
+test('a rename that changed the file as well, and a deleted file no sentence cites: either end\'s section and the deleted file\'s are the repository\'s, and only the old path is withdrawn', { skip }, async (t) => {
+  const h = await boot();
+  const seen = await runComparison(h, {
+    docs: [{
+      slug: 'epsilon',
+      sections: [
+        { key: 'm1', sha: RENAMED, code: ['src/m/old.go'] },
+        { key: 'm2', sha: RENAMED, code: ['src/m/new.go'] },
+        { key: 'd1', sha: RENAMED, docs: ['docs/d/gone.md'] },
+      ],
+    }],
+    head: {
+      'src/m/new.go': 'package m\n\n// Serve answers the port the runner polls, and its health check.\nfunc Serve() {}\n\n'
+        + '// Port is the port Serve answers.\nfunc Port() int { return 9000 }\n\n// Close stops answering.\nfunc Close() {}\n',
+    },
+    at: {
+      [RENAMED]: {
+        'src/m/old.go': 'package m\n\n// Serve answers the port the runner polls.\nfunc Serve() {}\n\n'
+          + '// Port is the port Serve answers.\nfunc Port() int { return 9000 }\n\n// Close stops answering.\nfunc Close() {}\n',
+        'docs/d/gone.md': partDoc('d1', 'written', 'written'),
+      },
+    },
+    commits: [RENAMED, REPO.sha],
+    diffs: {
+      [RENAMED]: {
+        files: [
+          { status: 'D', path: 'docs/d/gone.md' },
+          // Changed as it moved: git still pairs the two ends, 67% alike (`git diff --name-status -M` on these two texts).
+          { status: 'R067', from: 'src/m/old.go', path: 'src/m/new.go' },
+        ],
+        docs: [],
+      },
+    },
+  });
+  diagnoseComparison(t, seen);
+  assert.equal(seen.outcome, 'succeeded');
+  assert.equal(seen.docs.error, undefined, `the documents step: ${String(seen.docs.error)}`);
+  // m1's file was at its commit, under its old path, and is not at the head under it; m2's was not at its commit and is
+  // at the head; d1's was at its commit and is gone. No sentence cites any of them, so none is stale.
+  assert.deepEqual(seen.rewritten, ['epsilon#d1', 'epsilon#m1', 'epsilon#m2']);
+  assert.deepEqual(seen.docs.affected, { byEntries: 0, byRepo: 3, stale: 0, unwritten: 0, total: 3 });
+  assert.deepEqual(seen.withdrawals, [{
+    repoSha: REPO.sha,
+    paths: [
+      { path: 'docs/d/gone.md', change: 'deleted' },
+      { path: 'src/m/old.go', change: 'renamed', to: 'src/m/new.go' },
+    ],
+  }]);
+  assert.deepEqual(seen.docs.withdrawn, { paths: 2, sentences: 0 });
+  // At the commit, the deleted file and the old path, as they were there; at the head, the new path.
+  assert.deepEqual(readsByCommit(seen), {
+    renamed: [['docs/d/gone.md', 'src/m/old.go']],
+    head: [['src/m/new.go']],
   });
   assertOneAtATime(seen);
 });
