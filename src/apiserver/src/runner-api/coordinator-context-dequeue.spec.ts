@@ -423,8 +423,8 @@ test('a re-delivered promoted turn keeps the coordinator role around its continu
 
   const content = (await dequeue(SESSION_ID, RUNNER_ID, LEASE_GENERATION))?.content ?? '';
 
-  assert.match(content, /^\[系统\]/);
+  assert.match(content, /^\[Orbit\]/);
   assert.match(content, /<\/orbit_project_coordinator_context>$/);
-  assert.match(content, /runner 重启而中断/);
+  assert.match(content, /interrupted because its runner restarted/);
   assert.match(content, /不是用来替它干活/);
 });

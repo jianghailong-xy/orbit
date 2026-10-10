@@ -9,8 +9,9 @@ import Foundation
 // it worth the most: the task's id sits in the opening tag, where a reader could see it and not tap
 // it.
 //
-// The block has one wording and has never been reworded (unlike background-jobs, which is read in
-// two), so a reworded field is read as no field at all and the note keeps the shape it has always
+// The block has two wordings: the English it is written in since the copy became English (2026-10),
+// and the Chinese every older transcript holds. Both are read, label for label, and nothing else: a
+// field reworded beyond them is read as no field at all and the note keeps the shape it has always
 // had. That is the intended failure: a card missing the row a reader came for is worse than the
 // text.
 //
@@ -29,7 +30,7 @@ public struct ReferencedTask: Equatable, Sendable {
     public let title: String
     /// `DONE` | `OPEN` | `FAILED` | … — the lifecycle name, never translated.
     public let status: String
-    /// What the status line said after it: `验收任务`, `协调任务`.
+    /// What the status line said after it: `verification task`, `coordinating task` (`验收任务`, `协调任务`).
     public let suffixes: [String]
     /// The list it is filed under, or the block's own words for being in none.
     public let list: String
@@ -73,10 +74,11 @@ public enum ReferencedTaskText {
     /// The whole block, tag to tag, with the id the opening tag carries.
     static let blockPattern = "<referenced-task id=\"([^\"\\n]*)\">\\n([\\s\\S]*?)\\n<\\/referenced-task>"
     /// A field line: two spaces, the label, and the value. The narration line matches no label.
-    static let fieldPattern = "^ {2}(标题|状态|所属|运行) +(.*)$"
-    /// `(无列表) · 负责 orbit` — greedy, so a list whose own title says it keeps it.
-    static let placePattern = "^(.*) · 负责 (.*)$"
-    static let runsPattern = "^共 (\\d+) 次，其中执行过 turn 的 (\\d+) 次；最近一次：(.*)$"
+    static let fieldPattern = "^ {2}(Title|Status|List|Runs|标题|状态|所属|运行) +(.*)$"
+    /// `(no list) · assignee orbit` — greedy, so a list whose own title says it keeps it.
+    static let placePattern = "^(.*) · (?:assignee|负责) (.*)$"
+    /// `1 in total, 1 of them took a turn; last: …`, or `共 1 次，其中执行过 turn 的 1 次；最近一次：…`.
+    static let runsPattern = "^(?:共 )?(\\d+)(?: in total, | 次，其中执行过 turn 的 )(\\d+)(?: of them took a turn; last: | 次；最近一次：)(.*)$"
     /// What the status line hangs its suffixes off, and what a card hangs them off in turn.
     static let suffix = " · "
 
@@ -123,12 +125,12 @@ public enum ReferencedTaskText {
                   let label = groups[1], let value = groups[2] else { continue }
             fields[label] = value
         }
-        let status = (fields["状态"] ?? "").components(separatedBy: suffix)
-        guard let title = fields["标题"], !title.isEmpty,
+        let status = (fields["Status"] ?? fields["状态"] ?? "").components(separatedBy: suffix)
+        guard let title = fields["Title"] ?? fields["标题"], !title.isEmpty,
               let first = status.first, !first.isEmpty,
-              let place = place.groups(fields["所属"] ?? ""),
+              let place = place.groups(fields["List"] ?? fields["所属"] ?? ""),
               let list = place[1], let assignee = place[2],
-              let counted = runs.groups(fields["运行"] ?? ""),
+              let counted = runs.groups(fields["Runs"] ?? fields["运行"] ?? ""),
               let all = counted[1].flatMap(Int.init), let executed = counted[2].flatMap(Int.init),
               let lastRun = counted[3] else { return nil }
         return ReferencedTask(id: id, title: title, status: first,

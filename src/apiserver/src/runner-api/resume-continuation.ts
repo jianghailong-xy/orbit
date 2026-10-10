@@ -25,11 +25,12 @@ const MAX_QUOTED = 1000;
  */
 export function buildResumeContinuation(original: string | null | undefined): string {
   const head =
-    '[系统] 你正在处理的上一条消息因所在 runner 重启而中断，之前的对话上下文已恢复。' +
-    '请先核对当前的实际状态，再继续把它完成——切勿重复执行任何已经完成的、带副作用的操作' +
-    '（例如部署、提交、推送、发送、创建或删除资源等）。';
+    '[Orbit] The last message you were working on was interrupted because its runner restarted; the ' +
+    'conversation so far has been restored. First check the actual current state, then carry on and finish ' +
+    'it — never repeat any operation with side effects that has already completed ' +
+    '(for example a deploy, commit, push or send, or creating or deleting a resource).';
   const quoted = (original ?? '').trim();
   if (!quoted) return head;
   const preview = quoted.length > MAX_QUOTED ? quoted.slice(0, MAX_QUOTED) + '…' : quoted;
-  return `${head}\n\n被中断的消息：\n${preview}`;
+  return `${head}\n\nThe interrupted message:\n${preview}`;
 }
