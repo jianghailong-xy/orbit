@@ -18,6 +18,7 @@ import {
   FolderOpenOutlined,
   GlobalOutlined,
   LoadingOutlined,
+  MessageFilled,
   MinusCircleOutlined,
   PaperClipOutlined,
   PartitionOutlined,
@@ -37,6 +38,7 @@ import { Fragment, createContext, isValidElement, memo, useContext, useEffect, u
 import type { ComponentProps, ReactNode } from 'react';
 import {
   apiErrorRetryAt,
+  askedQuestions,
   CONTINUE_MESSAGE,
   isApiErrorText,
   isAuthErrorText,
@@ -47,8 +49,15 @@ import {
   parseQuotaResetAt,
   isAsyncAgentLaunchAck,
   progressBadge,
+  QUESTION_RECORD_COPY,
+  questionAnswerLine,
+  questionLead,
+  questionOutcome,
+  questionReplyLine,
   workflowLaunchReceipt,
   workflowTitle,
+  type AskedQuestion,
+  type QuestionOutcome,
   type TaskProgress,
 } from '@orbit/shared';
 import type { LoginEngine } from '@orbit/shared';
@@ -3397,10 +3406,9 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
   // distinct "Shell" card, not Claude's Bash tool — see describeTool's isShell branch.
   const isShell = node.id.startsWith('shell-');
   const exp = useContext(ExportCtx);
-  // A plan or a question to the user is the point of the turn — open it by
-  // default; a result carrying an image (a screenshot the workspace produced for the
-  // user) opens so the picture shows without a click. A static export opens every card
-  // (nothing can be un-folded after the fact).
+  // A plan is the point of the turn — open it by default; a result carrying an image (a
+  // screenshot the workspace produced for the user) opens so the picture shows without a click.
+  // A static export opens every card (nothing can be un-folded after the fact).
   // A created batch joins them: it is a write to state outside this session, the titles it names
   // appear nowhere else in the transcript, and under auto-approval the panel that would have shown
   // them was never on screen. The folded row carries the shape and the count — which is what the
@@ -3412,40 +3420,59 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
   // Keyed on the *preview* result, which is why a clipped image keeps its (dataless) block: this
   // decides whether the card opens, and opening the card is what fetches the picture back. Asking
   // `resultImages` here instead would deadlock the two — the refetch below is gated on being open.
-  const defaultOpen =
+  // A question to the user no longer opens: folded, its card is already the record of what was
+  // asked and how it was answered (see `questionUnread` below for the one time it still does).
+  const usuallyOpen =
     !!exp ||
     node.name === 'ExitPlanMode' ||
-    node.name === 'AskUserQuestion' ||
     isShell ||
     isAutoOpenBatch(node) ||
     hasResultImage(node.result?.content);
   const [manualOpen, setManualOpen] = useState<boolean | null>(null);
-  const open = manualOpen ?? defaultOpen;
+  const isQuestion = node.name === 'AskUserQuestion';
   // Opening a clipped card pulls its untrimmed call/result back (see useFullPayload); until
-  // then — and for the folded majority, forever — the server's preview is what renders.
-  const fullInput = useFullPayload(node.seq, node.truncated, open);
+  // then — and for the folded majority, forever — the server's preview is what renders. A
+  // question's folded card is its record, read off the call and the result, so it reads both
+  // whole while folded: a clipped one would lose the questions' text, or the answers after the cut.
+  const fullInput = useFullPayload(node.seq, node.truncated, isQuestion || (manualOpen ?? usuallyOpen));
   // The session-created card parses its result as JSON even while folded, so a clipped copy would
-  // fail to parse and render nothing — it needs the whole result regardless of the fold.
-  const needsWholeResult = node.name === 'mcp__orbit__session_create';
+  // fail to parse and render nothing — it needs the whole result regardless of the fold. So does a
+  // question's record.
+  const needsWholeResult = node.name === 'mcp__orbit__session_create' || isQuestion;
   const hideResult = resultRepeatsBody(node);
   const fullResult = useFullPayload(
     node.result?.seq ?? 0,
     node.result?.truncated,
-    (open || needsWholeResult) && !!node.result && !hideResult,
+    ((manualOpen ?? usuallyOpen) || needsWholeResult) && !!node.result && !hideResult,
   );
   const input = fullInput?.input ?? node.input;
   const resultContent = fullResult ? fullResult.content : node.result?.content;
-  // The chosen answer for an AskUserQuestion lives only in the result text
-  // ("The user answered: …"); pass it in so the historical card can highlight
-  // the picked option(s).
+  // How a question ended lives only in the result text ("The user answered: …"), so the card reads
+  // it back (`questionOutcome`, the same reader the native client is held to).
   const answer = node.result ? resultText(resultContent) : '';
+  const questions = useMemo(() => (isQuestion ? askedQuestions(input) : []), [isQuestion, input]);
+  const outcome = useMemo(
+    () => (questions.length ? questionOutcome(questions, answer, !!node.result?.isError) : null),
+    [questions, answer, node.result?.isError],
+  );
+  // A result this client cannot read, once it is whole: its own words are then the only answer
+  // there is, so the card opens on them, as it always did.
+  const questionUnread =
+    questions.length > 0 &&
+    !outcome &&
+    !!node.result &&
+    !node.result.isError &&
+    answer !== '' &&
+    (!node.result.truncated || !!fullResult);
+  const defaultOpen = usuallyOpen || questionUnread;
+  const open = manualOpen ?? defaultOpen;
   // `input` keeps its reference across tree rebuilds (the source event object is reused when
   // events are appended, and a refetched payload is held in state), so this holds the computed
   // body/icon — and the <Diff>/<MD>/<KeyVals> elements inside it — stable instead of rebuilding
   // on each append.
   const { label, summary, summaryMono, body, icon, tone, path, meta } = useMemo(
-    () => describeTool(node.name, input, isShell, answer),
-    [node.name, input, isShell, answer],
+    () => describeTool(node.name, input, isShell, outcome),
+    [node.name, input, isShell, outcome],
   );
   const isSubWorkspace = node.name === 'Task' || node.name === 'Agent';
   const isBackgroundTask = isBackgroundTaskCall(node.name);
@@ -3495,6 +3522,9 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
         )}
         {isBackgroundTask ? (
           <TaskBadgeAndStatus node={node} live={live} meta={meta} />
+        ) : outcome?.kind === 'replied' ? (
+          // The engine files "Chat about this" as the call's error; it is the person's reply.
+          <MessageFilled className="chat-tool-status replied" />
         ) : (
           <>
             {meta && <span className="chat-tool-meta">{meta}</span>}
@@ -3502,13 +3532,20 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
           </>
         )}
       </div>
+      {questions.length > 0 && !(hasDetail && open) && (
+        <QuestionFolded
+          questions={questions}
+          outcome={outcome}
+          onOpen={() => setManualOpen((prev) => !(prev ?? defaultOpen))}
+        />
+      )}
       {hasDetail && open && (
         <div className="chat-tool-detail">
           {/* A failed call is opened to find out why, and the input is rarely the answer — a
               heredoc alone clamps to sixteen lines, which is enough to push the reason off the
               bottom of the card. Put the error first when there is one; everywhere else the
               call still reads input-then-output. */}
-          {node.result?.isError && (
+          {node.result?.isError && !outcome && (
             <ToolResult seq={node.seq} content={resultContent} isError compact markdown={isSubWorkspace} />
           )}
           {node.name === 'Workflow' && (
@@ -3537,7 +3574,8 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
           )}
           {/* A sub-agent's totals close its transcript rather than open it. */}
           {isBackgroundTask && node.name !== 'Workflow' && <TaskProgressDetail id={node.id} />}
-          {node.result && !node.result.isError && !hideResult && !launchReceipt && (
+          {/* A question's result, once read, is only the replay above said again. */}
+          {node.result && !node.result.isError && !hideResult && !launchReceipt && !outcome && (
             <ToolResult seq={node.seq} content={resultContent} compact markdown={isSubWorkspace} />
           )}
           {!node.result && isShell && <LiveShellOutput toolUseId={node.id} seq={node.seq} />}
@@ -3785,7 +3823,7 @@ function shellCommandSummary(command: string): string {
 
 // describeTool maps a tool name + input to a folded-row label/summary/icon and an
 // optional expanded body, roughly matching how Claude Code Web renders each tool.
-function describeTool(name: string, input: any, isShell?: boolean, answer?: string): ToolDesc {
+function describeTool(name: string, input: any, isShell?: boolean, outcome?: QuestionOutcome | null): ToolDesc {
   const i = input ?? {};
   // A user-run `!`-shell command (not Claude's Bash tool): show the command inline in the
   // folded row and render as a terminal-flavoured "Shell" card (ToolView auto-opens it).
@@ -3928,16 +3966,16 @@ function describeTool(name: string, input: any, isShell?: boolean, answer?: stri
         ) : undefined,
       };
     case 'AskUserQuestion': {
-      // A multiple-choice prompt to the user — render each question as a card
-      // (header · question · options) instead of dumping the nested questions
-      // array as a raw JSON blob via the default branch.
-      const qs: any[] = Array.isArray(i.questions) ? i.questions : [];
+      // A multiple-choice prompt to the user, drawn with how it ended: open, each question as a
+      // card (header · question · options, the pick ticked) instead of the nested questions array
+      // as a raw JSON blob; folded, ToolView draws the record under the row (`QuestionFolded`).
+      const qs = askedQuestions(i);
       return {
         label: 'Question',
         icon: <QuestionCircleOutlined />,
         tone: 'agent',
-        summary: qs.map((q) => q?.header).filter(Boolean).join('  ·  ') || undefined,
-        body: qs.length ? <Questions questions={qs} answer={answer} /> : undefined,
+        summary: qs.map((q) => q.header).filter(Boolean).join('  ·  ') || undefined,
+        body: qs.length ? <QuestionReplay questions={qs} outcome={outcome ?? null} /> : undefined,
       };
     }
     // Orbit's own two writes, rendered as what they did rather than as the JSON they were sent.
@@ -4241,47 +4279,85 @@ function Todos({ todos }: { todos: any[] }) {
   );
 }
 
-// labelPicked reports whether an option was chosen, given the answer result text
-// (… "Q"="A". — multi-select joins the picks as "a,b,c" inside the one quote
-// pair). The text only ever contains the picked labels, each bounded by a quote
-// or a comma, so a label is picked iff it appears delimited that way. The
-// boundary check keeps a label that's merely a substring of the echoed question
-// (or of a longer sibling label) from matching; a typed-in custom answer is no
-// option's label, so it highlights nothing.
-function labelPicked(answer: string, label: string): boolean {
-  if (!answer || !label) return false;
-  const bound = (c: string | undefined) => c === '"' || c === ',';
-  for (let i = answer.indexOf(label); i >= 0; i = answer.indexOf(label, i + 1)) {
-    if (bound(answer[i - 1]) && bound(answer[i + label.length])) return true;
-  }
-  return false;
+// QuestionFolded is an answered question's folded card, under its row: each question's opening,
+// then how it was answered — the option picked, the words typed, or the reply given in the
+// conversation instead. One question keeps two lines of its opening and several keep one each, so
+// the card stays a record rather than the replay; a click opens the replay, as the row's does.
+function QuestionFolded({
+  questions,
+  outcome,
+  onOpen,
+}: {
+  questions: AskedQuestion[];
+  outcome: QuestionOutcome | null;
+  onOpen: () => void;
+}) {
+  const several = questions.length > 1;
+  return (
+    <div className="chat-q-folded" onClick={onOpen}>
+      {questions.map((q, k) => {
+        const line = outcome?.kind === 'answered' ? questionAnswerLine(q, outcome.answers[k] ?? null) : null;
+        return (
+          <Fragment key={k}>
+            <div className={`chat-q-lead${several ? ' is-one-line' : ''}`}>{questionLead(q.question)}</div>
+            {line && (
+              <div className="chat-q-answer">
+                <CheckCircleFilled />
+                <span className="chat-q-answer-words">{line}</span>
+              </div>
+            )}
+          </Fragment>
+        );
+      })}
+      {outcome?.kind === 'replied' && (
+        <div className="chat-q-answer">
+          <MessageFilled />
+          <span>
+            <span className="chat-q-answer-words">{questionReplyLine(outcome.words)}</span>
+            <span className="chat-q-answer-note">{QUESTION_RECORD_COPY.repliedInChat}</span>
+          </span>
+        </div>
+      )}
+    </div>
+  );
 }
 
-// Questions renders an AskUserQuestion input: each question as a card with its
-// header, prompt text, and the options (label + description); once answered, the
-// option(s) the user picked are highlighted (see labelPicked).
-function Questions({ questions, answer }: { questions: any[]; answer?: string }) {
+// QuestionReplay is the open card: each question as it was asked — header, prompt text, and every
+// option with its description — with the option(s) picked highlighted, then the words typed
+// instead of an option, or the reply given in the conversation instead of any.
+function QuestionReplay({ questions, outcome }: { questions: AskedQuestion[]; outcome: QuestionOutcome | null }) {
   return (
     <div className="chat-questions">
-      {questions.map((q: any, k: number) => (
-        <div className="chat-q" key={k}>
-          {q?.header && <div className="chat-q-header">{q.header}</div>}
-          {q?.question && <div className="chat-q-text">{String(q.question)}</div>}
-          <div className="chat-q-opts">
-            {(q?.options ?? []).map((o: any, j: number) => {
-              const label = o?.label ?? '';
-              const picked = !!answer && labelPicked(answer, label);
-              return (
-                <div className={`chat-q-opt${picked ? ' is-picked' : ''}`} key={j}>
-                  <span className="chat-q-opt-label">{label}</span>
-                  {o?.description && <span className="chat-q-opt-desc">{o.description}</span>}
+      {questions.map((q, k) => {
+        const answer = outcome?.kind === 'answered' ? (outcome.answers[k] ?? null) : null;
+        return (
+          <div className="chat-q" key={k}>
+            {q.header && <div className="chat-q-header">{q.header}</div>}
+            {q.question && <div className="chat-q-text">{q.question}</div>}
+            <div className="chat-q-opts">
+              {q.options.map((o, j) => (
+                <div className={`chat-q-opt${answer?.picked.includes(j) ? ' is-picked' : ''}`} key={j}>
+                  <span className="chat-q-opt-label">{o.label}</span>
+                  {o.description && <span className="chat-q-opt-desc">{o.description}</span>}
                 </div>
-              );
-            })}
+              ))}
+            </div>
+            {answer?.typed && (
+              <div className="chat-q-words">
+                <span className="chat-q-words-label">{QUESTION_RECORD_COPY.yourAnswer}</span>
+                {answer.typed}
+              </div>
+            )}
+            {q.multiSelect && <div className="chat-q-multi">{QUESTION_RECORD_COPY.multipleChoice}</div>}
           </div>
-          {q?.multiSelect && <div className="chat-q-multi">multi-select</div>}
+        );
+      })}
+      {outcome?.kind === 'replied' && (
+        <div className="chat-q-words">
+          <span className="chat-q-words-label">{QUESTION_RECORD_COPY.repliedInChat}</span>
+          {outcome.words}
         </div>
-      ))}
+      )}
     </div>
   );
 }

@@ -9555,6 +9555,10 @@ button.chat-jump-start:hover {
 .chat-tool-status.pending {
   color: var(--dot-idle);
 }
+/* A question answered in the conversation: the engine files the reply as the call's error. */
+.chat-tool-status.replied {
+  color: var(--text-3);
+}
 .chat-tool-task .chat-tool-row {
   background: #faf8ff;
 }
@@ -9706,6 +9710,73 @@ button.chat-jump-start:hover {
 .chat-q-multi {
   margin-top: 6px;
   font-size: 11px;
+  color: var(--text-3);
+}
+/* Historical variant: the person's own words, read-only — typed instead of an option, or the reply
+   given in the conversation instead of any. */
+.chat-q-words {
+  margin-top: 6px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  background: var(--brand-tint);
+  font-size: 12.5px;
+  color: var(--text-1);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.chat-q-words-label {
+  display: block;
+  font-size: 11px;
+  color: var(--text-3);
+  white-space: normal;
+}
+/* An answered question, folded: the record under its row — each question's opening, then how it
+   was answered. One question keeps two lines of its opening, several keep one each. */
+.chat-q-folded {
+  padding: 0 10px 7px;
+  cursor: pointer;
+}
+.chat-q-lead {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-3);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  word-break: break-word;
+}
+.chat-q-lead.is-one-line {
+  -webkit-line-clamp: 1;
+}
+.chat-q-folded > .chat-q-lead:not(:first-child) {
+  margin-top: 6px;
+}
+.chat-q-answer {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 2px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-1);
+}
+.chat-q-answer > .anticon {
+  flex: none;
+  margin-top: 3px;
+  font-size: 12px;
+  color: var(--brand);
+}
+.chat-q-answer-words {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  word-break: break-word;
+}
+.chat-q-answer-note {
+  display: block;
+  font-size: 12px;
   color: var(--text-3);
 }
 /* Interactive variant (in the approval card): options are clickable buttons. */
@@ -10481,12 +10552,17 @@ button.chat-jump-start:hover {
   display: none;
 }
 /* On a wide screen it is a dialog with no title of its own (the card's head asks the question), so
-   no title row: only the close button, over the card. The replaced modal's line height was unitless:
+   no title row: only the close button, above the card. The replaced modal's line height was unitless:
    the card's smaller text keeps its proportional line (the Dialog shell stays at 22px). */
 .start-card-dialog.orbit-overlay {
   line-height: 1.5714285714285714;
 }
+/* The close floats at the dialog's own top-right (12px in, a 32px box), and the dialog's 20px
+   padding left the card's top-right corner under it: an ✕ cutting through the card's border reads as
+   a mistake. The empty title row reserves the rest of the button and the 12px it keeps from the
+   dialog's edges, so the card starts under the close rather than under its corner. */
 .start-card-dialog > .orbit-overlay-header {
+  height: 36px;
   margin-bottom: 0;
 }
 .start-card-dialog .orbit-overlay-title:empty {

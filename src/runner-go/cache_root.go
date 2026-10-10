@@ -20,7 +20,11 @@ import (
 // a runner manages). Go's build cache and npm's cacache are both safe for concurrent writers, so
 // one root for every session of the machine is also what keeps the caches warm.
 //
-// The Codex sandbox policy carries the root as a writable root, so a confined command may write it.
+// The root is also a writable root of each engine's own file sandbox, so a confined command may
+// write it: the Codex sandbox policy carries it (codexRuntimeWorkspaceRoots), and a dsh session's
+// sandbox has it added to the profile it builds by the session overlay's cache-root plugin
+// (dshSandboxCacheRootPlugin) — dsh itself derives its grants from the workspace root and the
+// temp areas alone.
 const (
 	runnerCacheGoBuild = "go-build"
 	runnerCacheGoMod   = "go-mod"
