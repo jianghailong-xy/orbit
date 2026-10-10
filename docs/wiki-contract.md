@@ -1531,7 +1531,7 @@ runner-go 在 `wiki_plan.go`，OrbitKit 在 `Models/WikiPlan.swift`。起草作�
   消息里写总数。什么都不存，起草作业把清单交回模型重做。
 - **拒绝主题时列出本 space 的主题**（2026-10-10）：会话条件里的主题不是本 space 的，报错是 `"<主题>" is not a topic of this space: `
   后面接本 space 的主题简表，写法和起草材料、runner 自己的闸一样（`wikiPlanTopicsBrief`）：`Existing topics (slug «name» · active entries): wiki «Wiki» · 3; …`，
-  按创建先后；space 还没有主题时是「（这个 space 还没有主题：会话条件里不写主题）」。重试的一轮由此知道能写哪些。起因：canary 上维护作业的
+  按创建先后；space 还没有主题时是「(this space has no topics yet: a session condition names no topic)」。重试的一轮由此知道能写哪些。起因：canary 上维护作业的
   plan 修改建议两次因编造的主题没过闸——10-09 的 54755b7b 第 2、3 轮报的是同样两个编造的主题，10-10 的 3b2bd5f2 第 3 轮报的
   `wiki-maintenance` 是一篇文档的 slug——报错只说「不是本 space 的主题」，模型只能接着猜。
 - **报错里的值、枚举值的读法**（`plan.gate.values`）：message 里引用请求给的值，一律写成 JSON 字符串——带双引号，看不见的字符

@@ -227,22 +227,28 @@ func wikiDocsBuildFixtureInputs() wikiDocsBuildFixture {
 		{Kind: "turn", Ref: "turn-lunch", Weight: "decision", OwnerWords: true, Text: docsOffTopic},
 	}}
 	f.Answers.Merge = map[string]string{
-		"s2": "D1 | 采用 | 设计文档讲投递\nC1 | 采用 | 代码\n- [K1] ｜ 合并到 [D1] ｜ 契约与设计说的是一件事\n现状：\n- 先存后投 [D1]\n1. 契约写成至少一次 [K1]\n",
-		"s3": "S1 | 采用 | owner 原话\nS3 | 采用 | 交付评论\nS5 | 合并到 S1 | 同一件事\nS6 | 舍弃 | 与本节无关\nS2 | 采用 | 不该出现\n现状：\n- 全量测试在宿主上跑 [S1]\n",
-		"s4": "D1 | 采用 | 契约文档\nC1 | 舍弃 | 方法太短\nC2 | 合并到 C9 | 目标不在本节\nC3 |   采用\n现状：\n- 调度 [C2]\n",
+		"s2": "D1 | adopt | the design doc covers delivery\nC1 | adopt | the code\n- [K1] ｜ merge into [D1] ｜ the contract and the design say the same thing\n" +
+			"Current state:\n- store first, then deliver [D1]\n1. the contract says at least once [K1]\n",
+		"s3": "S1 | adopt | the owner's words\nS3 | adopt | a delivery comment\nS5 | merge into S1 | the same thing\nS6 | drop | unrelated to this section\n" +
+			"S2 | adopt | should not appear\nCurrent state:\n- the full suite runs on the host [S1]\n",
+		"s4": "D1 | adopt | the contract document\nC1 | Drop | the method is too short\nC2 | merge into C9 | the target is not in this section\nC3 |   adopt\n" +
+			"current state:\n- scheduling [C2]\n",
 		"s5": "",
-		"s6": "D1 | 采用 | 通配符读到的文件\n现状：\n- 来源读成一个空文件 [D1]\n",
+		"s6": "D1 | adopt | the file the wildcard read\nCurrent state:\n- the source reads as an empty file [D1]\n",
 	}
 	f.Answers.Write = map[string][]string{
 		"s2": {docsWriteS2},
 		"s3": {docsWriteS3First, docsWriteS3Second},
-		"s4": {"### 调度接口 Scheduler\n`Scheduler.claim` 领取下一轮[C2]，`dispatchTurn` 只投递一次[C4]【D1, C3】。租约 60 秒[C5]。\n\n**引文：**\n" +
-			"[C2]: 「Claim the next turn for a runner」\n【C4】「hands a claimed turn to its runner exactly once」\n[D1] “The run reads its dossiers”\n- [C5] 『LEASE_SECONDS = 60』\n"},
-		"s5": {"本篇讲设计[D1]。\n\n引文：\n[D1] 「# Design」\n"},
-		"s6": {"带通配符的来源读成一个空文件[D1]。\n\n引文：\n[D1] 「docs/*.md」\n"},
+		"s4": {"### The Scheduler interface\n" +
+			"`Scheduler.claim` claims the next turn[C2], and `dispatchTurn` delivers it only once[C4]【D1, C3】. The lease is 60 seconds[C5].\n\n**Quotes:**\n" +
+			"[C2]: \"Claim the next turn for a runner\"\n【C4】\"hands a claimed turn to its runner exactly once\"\n[D1] “The run reads its dossiers”\n" +
+			"- [C5] 『LEASE_SECONDS = 60』\n"},
+		"s5": {"This document covers the design[D1].\n\nQuotes:\n[D1] \"# Design\"\n"},
+		"s6": {"A source with a wildcard reads as an empty file[D1].\n\nQuotes:\n[D1] \"docs/*.md\"\n"},
 	}
 	f.Answers.Repair = map[string]string{"s2": "[K1] 「\"delivery\": \"at least once, idempotent on the turn id\"」\n", "s3": docsRepairS3}
-	f.Answers.Overview = "### 总览\n一轮先存后投，至少投递一次[F1]。运行约定是全量测试在 runner 宿主上跑[F4]。调度只投递一次[F6][F99]。\n"
+	f.Answers.Overview = "### Overview\n" +
+		"A turn is stored first and delivered after, at least once[F1]. The convention for running is that the full suite runs on the runner host[F4]. Scheduling delivers only once[F6][F99].\n"
 	f.Locate = append(f.Locate,
 		struct {
 			Path   string        `json:"path"`
