@@ -30,6 +30,7 @@ import {
 import { Image } from 'antd';
 import { ReferenceLink, referenceUrlTransform } from '../lib/markdownLinks';
 import { formatThinkingDuration, formatThinkingSize } from '../lib/thinkingDraft';
+import { checkDuration } from '../lib/checkDuration';
 import { quotaWindowKind } from '../lib/quotaWindow';
 import { Fragment, createContext, isValidElement, memo, useContext, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
@@ -507,6 +508,11 @@ type TextNode = {
   // the run (lib/confirmationReviewTurns). Orbit's turns, drawn as their cards.
   reviewRequest?: ConfirmationReviewRequestCard;
   reviewReturn?: ConfirmationReturnCard;
+  // This message opens a turn, so the turn's head row (TurnHead) is drawn under it and over
+  // whatever the turn goes on to write — with the `turn_end` that closed the turn once it has one.
+  // Only a top-level message opens one: a steer joins the turn already running, and a message
+  // inside a sub-workspace is that sub-agent's, which never gets a `turn_end` of its own.
+  turnHead?: { endTs?: string };
 };
 type ResultNode = { kind: 'result'; seq: number; content: any; isError?: boolean; truncated?: boolean };
 type MarkerNode = { kind: 'interrupt'; seq: number };
@@ -973,6 +979,9 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
   // Narration between tool calls is overwritten by whatever follows it, so what is left when the
   // turn ends is the answer the turn ended on.
   let turnReply: string | undefined;
+  // The `turnHead` the turn now open is drawn from — the message that opened it, until its
+  // `turn_end` closes it. What says how long that turn worked once the end arrives.
+  let turnHead: TextNode['turnHead'];
   for (const ev of events) {
     const p = ev.payload ?? {};
     const parent: string | undefined = p.parentToolUseId;
@@ -1062,6 +1071,10 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
             taskStartByParent.set(parentKey(parent), { text, card: taskStart });
           }
           if (ev.turnId) userByTurn.set(ev.turnId, node);
+          if (!parent && !node.steer) {
+            node.turnHead = {};
+            turnHead = node.turnHead;
+          }
           into(parent).push(node);
         }
         break;
@@ -1173,6 +1186,12 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
         // other way.
         const subtype = typeof p.subtype === 'string' ? p.subtype : '';
         const failed = subtype !== '' && !TURN_FINISHED_SUBTYPES.has(subtype) && !turnAccountedFor;
+        // However the turn went, it was working until now: the head row states that span. A
+        // failure is still an end — the answer above the error line took that long to not arrive.
+        if (turnHead) {
+          turnHead.endTs = ev.ts;
+          turnHead = undefined;
+        }
         if (failed) armTaskStartRetry(parent);
         roots.push(
           failed
@@ -1485,12 +1504,18 @@ function NodeList({
     <>
       {items.flatMap((item) => {
         const seqs = item.kind === 'toolGroup' ? item.nodes.map((node) => node.seq) : [item.node.seq];
+        // The row a turn opens with, under its message and over everything the turn writes.
+        const head =
+          item.kind === 'node' && item.node.kind === 'user' && item.node.turnHead ? (
+            <TurnHead key={`head-${item.node.seq}`} startTs={item.node.ts} endTs={item.node.turnHead.endTs} live={live} />
+          ) : null;
         return [
           item.kind === 'toolGroup' ? (
             <ToolGroupView key={item.key} nodes={item.nodes} live={live} />
           ) : (
             <NodeView key={item.node.seq} node={item.node} live={live} />
           ),
+          head,
           ...seqs
             .flatMap((seq) => placed?.get(seq) ?? [])
             .map((insert) => <Fragment key={insert.key}>{insert.element}</Fragment>),
@@ -2531,6 +2556,32 @@ function TurnFoot({ node }: { node: DividerNode }) {
       {ts && <span className="chat-time">{formatClock(new Date(ts))}</span>}
     </div>
   );
+}
+
+/**
+ * The head of a turn, over the turn's own output: how long it worked, or has been working — the row
+ * Codex draws above a turn's answer (owner, 2026-10-10). The span runs from the turn's `user`
+ * message to its `turn_end`, both of them stored, so a turn read back later says exactly what the
+ * turn on screen said; while the turn is still open it counts up once a second. A turn whose start
+ * the loaded window doesn't reach states no duration rather than a wrong one, and a turn that
+ * neither ended nor is still running states nothing at all.
+ */
+function TurnHead({ startTs, endTs, live }: { startTs?: string; endTs?: string; live?: boolean }) {
+  const start = startTs ? Date.parse(startTs) : NaN;
+  const end = endTs ? Date.parse(endTs) : NaN;
+  const ended = Number.isFinite(start) && Number.isFinite(end) && end >= start;
+  const ticking = !ended && !!live && Number.isFinite(start);
+  const [, tick] = useReducer((n: number) => n + 1, 0);
+  useEffect(() => {
+    if (!ticking) return undefined;
+    const timer = setInterval(tick, 1000);
+    return () => clearInterval(timer);
+  }, [ticking]);
+  // A turn is never under a second: "Worked for 0s" reads as a bug, not as a measurement.
+  const span = (ms: number) => checkDuration(Math.max(1000, ms));
+  if (ended) return <div className="chat-turn-head">Worked for {span(end - start)}</div>;
+  if (!live) return null;
+  return <div className="chat-turn-head">{ticking ? `Working for ${span(Date.now() - start)}` : 'Working…'}</div>;
 }
 
 // Relative timestamp under a user bubble ("just now", "5m ago", "3h ago", "2d ago",

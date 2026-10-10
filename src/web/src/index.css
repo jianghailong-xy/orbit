@@ -8460,6 +8460,17 @@ button.chat-jump-start:hover {
 .chat-turn-foot > .chat-copy {
   margin-left: -4px;
 }
+/* A turn's head row (TurnHead): how long the turn worked, over its own output — the line Codex
+   draws above an answer. Inset like .chat-assistant's text so it starts on the reply's edge, and
+   pulled up against the bubble above: it is the answer's first line, not the question's last. */
+.chat-turn-head {
+  margin: -2px 0 4px;
+  padding: 0 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
 .chat-error {
   color: var(--error);
   font-size: 13px;
