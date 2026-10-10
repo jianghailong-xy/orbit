@@ -13,19 +13,19 @@ final class AgentDefaultsTests: XCTestCase {
         ])
         let remembered = ["codex": "gpt-6.1-sol", "claude": "claude-sonnet-5"]
         XCTAssertEqual(AgentDefaults.newSessionModel(
-            for: "codex", accountModels: remembered, fallback: "gpt-5.6-sol",
+            engine: "codex", provider: "codex", accountModels: remembered, fallback: "gpt-5.6-sol",
             catalog: catalog, configured: nil), "gpt-6.1-sol")
         XCTAssertEqual(AgentDefaults.newSessionModel(
-            for: "codex", accountModels: ["claude": "claude-sonnet-5"], fallback: "gpt-5.6-sol",
+            engine: "codex", provider: "codex", accountModels: ["claude": "claude-sonnet-5"], fallback: "gpt-5.6-sol",
             catalog: catalog, configured: nil), "gpt-5.6-sol")
         XCTAssertEqual(AgentDefaults.newSessionModel(
-            for: "codex", accountModels: ["codex": "gpt-retired"], fallback: "gpt-5.6-sol",
+            engine: "codex", provider: "codex", accountModels: ["codex": "gpt-retired"], fallback: "gpt-5.6-sol",
             catalog: catalog, configured: nil), "gpt-5.6-sol")
         XCTAssertEqual(AgentDefaults.newSessionModel(
-            for: "codex", accountModels: remembered, fallback: "gpt-5.6-sol",
+            engine: "codex", provider: "codex", accountModels: remembered, fallback: "gpt-5.6-sol",
             catalog: nil, configured: nil), "gpt-6.1-sol")
         XCTAssertEqual(AgentDefaults.newSessionModel(
-            for: "opencode", accountModels: ["opencode": ""], fallback: "some/model",
+            engine: "opencode", provider: "opencode", accountModels: ["opencode": ""], fallback: "some/model",
             catalog: nil, configured: nil), "")
     }
 
@@ -240,37 +240,37 @@ final class AgentDefaultsTests: XCTestCase {
         XCTAssertTrue(AgentDefaults.supportsAuto("claude-fable-5"))
         XCTAssertTrue(AgentDefaults.supportsAuto("claude-sonnet-5"))
         XCTAssertTrue(AgentDefaults.supportsAuto(
-            "kimi-code/kimi-for-coding", provider: "kimi"))
-        XCTAssertTrue(AgentDefaults.supportsAuto("local-kimi-alias", provider: "kimi"))
+            "kimi-code/kimi-for-coding", engine: "kimi", provider: "kimi"))
+        XCTAssertTrue(AgentDefaults.supportsAuto("local-kimi-alias", engine: "kimi", provider: "kimi"))
         XCTAssertFalse(AgentDefaults.supportsAuto("claude-haiku-4-5"))
         XCTAssertFalse(AgentDefaults.supportsAuto("gpt-5.6-sol"))
         XCTAssertFalse(AgentDefaults.supportsAuto("custom-model"))
         // Only Claude gates Auto per model. Codex has it as `on-request`, so the same model id
         // that is refused on the Claude runtime is accepted on its own.
-        XCTAssertTrue(AgentDefaults.supportsAuto("gpt-5.6-sol", provider: "codex"))
-        XCTAssertTrue(AgentDefaults.supportsAuto("", provider: "opencode"))
+        XCTAssertTrue(AgentDefaults.supportsAuto("gpt-5.6-sol", engine: "codex", provider: "codex"))
+        XCTAssertTrue(AgentDefaults.supportsAuto("", engine: "opencode", provider: "opencode"))
 
         XCTAssertEqual(AgentDefaults.clampPermissionMode(.auto, for: "claude-haiku-4-5"),
                        .default)
         XCTAssertEqual(AgentDefaults.clampPermissionMode(.auto, for: "gpt-5.6-sol"), .default)
         XCTAssertEqual(
-            AgentDefaults.clampPermissionMode(.auto, for: "gpt-5.6-sol", provider: "codex"), .auto)
+            AgentDefaults.clampPermissionMode(.auto, for: "gpt-5.6-sol", engine: "codex", provider: "codex"), .auto)
         XCTAssertEqual(AgentDefaults.clampPermissionMode(.auto, for: "claude-opus-5"), .auto)
         XCTAssertEqual(AgentDefaults.clampPermissionMode(.plan, for: "gpt-5.6-sol"), .plan)
 
-        // A configured provider that borrows the Kimi runtime gets Kimi's runtime-wide Auto,
-        // whatever its model alias is — same as web's supportsAuto parity case.
+        // A key on Kimi Code gets Kimi's engine-wide Auto, whatever its model alias is — same as
+        // web's supportsAuto parity case: the engine decides, not the key.
         let configured = [ConfiguredProvider(
             slug: "local-kimi", label: "Local Kimi", runtime: "kimi")]
         XCTAssertTrue(AgentDefaults.supportsAuto(
-            "any-alias", provider: "local-kimi", configured: configured))
+            "any-alias", engine: "kimi", provider: "local-kimi", configured: configured))
 
         // A configured provider on the Claude runtime owns its model space: the static Claude
         // allow-list can't cover vendor ids (e.g. DeepSeek), so the CLI decides for itself.
         XCTAssertTrue(AgentDefaults.supportsAuto(
             "deepseek-v4-pro", provider: "deepseek", configured: [deepseek]))
         XCTAssertEqual(AgentDefaults.clampPermissionMode(
-            .auto, for: "deepseek-v4-pro", provider: "deepseek", configured: [deepseek]), .auto)
+            .auto, for: "deepseek-v4-pro", engine: "claude", provider: "deepseek", configured: [deepseek]), .auto)
     }
 
     /// Auto follows the CLI installed on the machine that will run the session, exactly as the
@@ -381,41 +381,30 @@ final class AgentDefaultsTests: XCTestCase {
         ],
         defaultModel: "deepseek-v4-pro")
 
-    func testMergedProviderOptions() {
-        XCTAssertEqual(AgentDefaults.providers(configured: [deepseek]).map(\.id),
-                       ["claude", "codex", "kimi", "opencode", "antigravity", "deepseek"])
-        XCTAssertEqual(AgentDefaults.providers(configured: [deepseek]).last?.name, "DeepSeek")
-        // No configured providers → the built-ins only, in their fixed order.
-        XCTAssertEqual(AgentDefaults.providers(configured: nil).map(\.id),
-                       ["claude", "codex", "kimi", "opencode", "antigravity"])
-        XCTAssertEqual(AgentDefaults.providers(configured: []).map(\.id),
-                       ["claude", "codex", "kimi", "opencode", "antigravity"])
-    }
-
     func testModelsForConfiguredProvider() {
-        let models = AgentDefaults.models(for: "deepseek", catalog: nil, configured: [deepseek])
+        let models = AgentDefaults.models(engine: "claude", provider: "deepseek", catalog: nil, configured: [deepseek])
         XCTAssertEqual(models.map(\.id), ["deepseek-v4-pro", "deepseek-v4-lite"])
         XCTAssertEqual(models.map(\.name), ["DeepSeek V4 Pro", "DeepSeek V4 Lite"])
 
         // A built-in slug never resolves to a configured provider — returns empty (no static fallback).
-        XCTAssertEqual(AgentDefaults.models(for: "claude", catalog: nil, configured: [deepseek]).map(\.id), [])
+        XCTAssertEqual(AgentDefaults.models(engine: "claude", provider: "claude", catalog: nil, configured: [deepseek]).map(\.id), [])
         // An unconfigured slug also returns empty (no static fallback).
-        XCTAssertEqual(AgentDefaults.models(for: "gemini", catalog: nil, configured: [deepseek]).map(\.id), [])
+        XCTAssertEqual(AgentDefaults.models(engine: "claude", provider: "gemini", catalog: nil, configured: [deepseek]).map(\.id), [])
         // A configured provider with no usable models also returns empty.
         let empty = ConfiguredProvider(slug: "hollow", label: "Hollow")
-        XCTAssertEqual(AgentDefaults.models(for: "hollow", catalog: nil, configured: [empty]).map(\.id), [])
+        XCTAssertEqual(AgentDefaults.models(engine: "claude", provider: "hollow", catalog: nil, configured: [empty]).map(\.id), [])
     }
 
     func testDefaultModelForConfiguredProvider() {
-        XCTAssertEqual(AgentDefaults.defaultModel(for: "deepseek", catalog: nil, configured: [deepseek]),
+        XCTAssertEqual(AgentDefaults.defaultModel(engine: "claude", provider: "deepseek", catalog: nil, configured: [deepseek]),
                        "deepseek-v4-pro")
         // No declared default → the provider's first model.
         let noDefault = ConfiguredProvider(slug: "deepseek", label: "DeepSeek",
                                            models: deepseek.models, defaultModel: nil)
-        XCTAssertEqual(AgentDefaults.defaultModel(for: "deepseek", catalog: nil, configured: [noDefault]),
+        XCTAssertEqual(AgentDefaults.defaultModel(engine: "claude", provider: "deepseek", catalog: nil, configured: [noDefault]),
                        "deepseek-v4-pro")
         // Not configured at all → identical to the existing catalog overload's fallback.
-        XCTAssertEqual(AgentDefaults.defaultModel(for: "deepseek", catalog: nil, configured: []),
+        XCTAssertEqual(AgentDefaults.defaultModel(engine: "claude", provider: "deepseek", catalog: nil, configured: []),
                        AgentDefaults.defaultModel(for: "deepseek", catalog: nil))
 
         // An empty custom model space inherits only the static default of the runtime it borrows;
@@ -423,9 +412,9 @@ final class AgentDefaultsTests: XCTestCase {
         let codexBacked = ConfiguredProvider(slug: "internal-codex", label: "Internal Codex",
                                              runtime: "codex", models: [], defaultModel: nil)
         XCTAssertEqual(AgentDefaults.defaultModel(
-            for: "internal-codex", catalog: nil, configured: [codexBacked]), "gpt-5.6-sol")
-        XCTAssertEqual(AgentDefaults.effectiveDefaultModel(
-            for: "internal-codex", catalog: nil, configured: [codexBacked],
+            engine: "codex", provider: "internal-codex", catalog: nil, configured: [codexBacked]), "gpt-5.6-sol")
+        XCTAssertEqual(AgentDefaults.defaultModel(
+            engine: "codex", provider: "internal-codex", catalog: nil, configured: [codexBacked],
             runtimeDefaults: ["codex": "runner-codex-default"]), "gpt-5.6-sol")
     }
 
@@ -457,21 +446,21 @@ final class AgentDefaultsTests: XCTestCase {
     func testModelsFromRuntimeProviderFollowsLiveCatalog() {
         // The BYOK Claude provider's picker follows the runner catalog, matching the built-in engine
         // exactly — not the stale preset list it was seeded with.
-        let models = AgentDefaults.models(for: "anthropic", catalog: liveClaudeCatalog,
+        let models = AgentDefaults.models(engine: "claude", provider: "anthropic", catalog: liveClaudeCatalog,
                                           configured: [anthropicKey])
         XCTAssertEqual(models.map(\.id), ["claude-opus-5", "claude-sonnet-5"])
-        XCTAssertEqual(models, AgentDefaults.models(for: "claude", catalog: liveClaudeCatalog,
+        XCTAssertEqual(models, AgentDefaults.models(engine: "claude", provider: "claude", catalog: liveClaudeCatalog,
                                                     configured: [anthropicKey]))
         // Its default follows the catalog's first model too, not the stale preset default.
-        XCTAssertEqual(AgentDefaults.defaultModel(for: "anthropic", catalog: liveClaudeCatalog,
+        XCTAssertEqual(AgentDefaults.defaultModel(engine: "claude", provider: "anthropic", catalog: liveClaudeCatalog,
                                                   configured: [anthropicKey]), "claude-opus-5")
 
         // With no catalog (offline, or the runner's probe hasn't landed) it falls back to the
         // stored preset list and default.
         XCTAssertEqual(
-            AgentDefaults.models(for: "anthropic", catalog: nil, configured: [anthropicKey]).map(\.id),
+            AgentDefaults.models(engine: "claude", provider: "anthropic", catalog: nil, configured: [anthropicKey]).map(\.id),
             ["claude-opus-4-8", "claude-sonnet-5", "claude-haiku-4-5-20251001"])
-        XCTAssertEqual(AgentDefaults.defaultModel(for: "anthropic", catalog: nil,
+        XCTAssertEqual(AgentDefaults.defaultModel(engine: "claude", provider: "anthropic", catalog: nil,
                                                   configured: [anthropicKey]), "claude-opus-4-8")
     }
 
@@ -483,36 +472,36 @@ final class AgentDefaultsTests: XCTestCase {
             slug: "anthropic", label: "Anthropic (Claude)", runtime: "claude",
             models: [ConfiguredProviderModel(value: "claude-opus-5", label: "Claude Opus 5")],
             defaultModel: "claude-opus-5", modelsFromRuntime: true)
-        XCTAssertEqual(AgentDefaults.friendlyName("claude-opus-5", for: "anthropic",
+        XCTAssertEqual(AgentDefaults.friendlyName("claude-opus-5", engine: "claude", provider: "anthropic",
                                                   catalog: liveClaudeCatalog,
                                                   configured: [anthropicOpus5]), "Opus 5")
         // The built-in engine has always read the catalogue; the BYOK row now agrees with it.
-        XCTAssertEqual(AgentDefaults.friendlyName("claude-opus-5", for: "claude",
+        XCTAssertEqual(AgentDefaults.friendlyName("claude-opus-5", engine: "claude", provider: "claude",
                                                   catalog: liveClaudeCatalog,
                                                   configured: [anthropicOpus5]), "Opus 5")
         // No catalogue yet: the row's own list is all there is, so its label stands.
-        XCTAssertEqual(AgentDefaults.friendlyName("claude-opus-5", for: "anthropic", catalog: nil,
+        XCTAssertEqual(AgentDefaults.friendlyName("claude-opus-5", engine: "claude", provider: "anthropic", catalog: nil,
                                                   configured: [anthropicOpus5]), "Claude Opus 5")
         // A third-party vendor is not runtime-led — only its row knows what its endpoint serves.
-        XCTAssertEqual(AgentDefaults.friendlyName("deepseek-v4-pro", for: "deepseek",
+        XCTAssertEqual(AgentDefaults.friendlyName("deepseek-v4-pro", engine: "claude", provider: "deepseek",
                                                   catalog: liveClaudeCatalog,
                                                   configured: [deepseek]), "DeepSeek V4 Pro")
         // A model the list doesn't offer keeps the id-based lookup rather than rendering raw.
-        XCTAssertEqual(AgentDefaults.friendlyName("claude-sonnet-5", for: "deepseek",
+        XCTAssertEqual(AgentDefaults.friendlyName("claude-sonnet-5", engine: "claude", provider: "deepseek",
                                                   catalog: liveClaudeCatalog,
                                                   configured: [deepseek]), "Sonnet 5")
     }
 
     func testModelsFromRuntimeProviderPrefersHeartbeatDefault() {
         // effectiveDefaultModel precedence: heartbeat default → live catalog first → preset default.
-        XCTAssertEqual(AgentDefaults.effectiveDefaultModel(
-            for: "anthropic", catalog: liveClaudeCatalog, configured: [anthropicKey],
+        XCTAssertEqual(AgentDefaults.defaultModel(
+            engine: "claude", provider: "anthropic", catalog: liveClaudeCatalog, configured: [anthropicKey],
             runtimeDefaults: ["claude": "claude-sonnet-5"]), "claude-sonnet-5")
-        XCTAssertEqual(AgentDefaults.effectiveDefaultModel(
-            for: "anthropic", catalog: liveClaudeCatalog, configured: [anthropicKey],
+        XCTAssertEqual(AgentDefaults.defaultModel(
+            engine: "claude", provider: "anthropic", catalog: liveClaudeCatalog, configured: [anthropicKey],
             runtimeDefaults: [:]), "claude-opus-5")
-        XCTAssertEqual(AgentDefaults.effectiveDefaultModel(
-            for: "anthropic", catalog: nil, configured: [anthropicKey],
+        XCTAssertEqual(AgentDefaults.defaultModel(
+            engine: "claude", provider: "anthropic", catalog: nil, configured: [anthropicKey],
             runtimeDefaults: nil), "claude-opus-4-8")
     }
 
@@ -520,10 +509,10 @@ final class AgentDefaultsTests: XCTestCase {
     /// Claude probe says nothing about what DeepSeek serves, so it keeps its own maintained list.
     func testThirdPartyClaudeVendorKeepsOwnListDespiteCatalog() {
         XCTAssertEqual(
-            AgentDefaults.models(for: "deepseek", catalog: liveClaudeCatalog,
+            AgentDefaults.models(engine: "claude", provider: "deepseek", catalog: liveClaudeCatalog,
                                  configured: [deepseek]).map(\.id),
             ["deepseek-v4-pro", "deepseek-v4-lite"])
-        XCTAssertEqual(AgentDefaults.defaultModel(for: "deepseek", catalog: liveClaudeCatalog,
+        XCTAssertEqual(AgentDefaults.defaultModel(engine: "claude", provider: "deepseek", catalog: liveClaudeCatalog,
                                                   configured: [deepseek]), "deepseek-v4-pro")
     }
 
@@ -532,39 +521,39 @@ final class AgentDefaultsTests: XCTestCase {
     func testLivePinDropsAModelTheRuntimeNoLongerOffers() {
         // The reported symptom: a session left on last generation's Opus. The catalog no longer
         // lists it, so the pill must re-resolve rather than show an id nobody can select back.
-        XCTAssertNil(AgentDefaults.livePin("claude-opus-4-8", provider: "claude",
+        XCTAssertNil(AgentDefaults.livePin("claude-opus-4-8", engine: "claude", provider: "claude",
                                            catalog: liveClaudeCatalog, configured: nil,
                                            runtimeDefaults: nil))
-        XCTAssertEqual(AgentDefaults.livePin("claude-opus-5", provider: "claude",
+        XCTAssertEqual(AgentDefaults.livePin("claude-opus-5", engine: "claude", provider: "claude",
                                              catalog: liveClaudeCatalog, configured: nil,
                                              runtimeDefaults: nil), "claude-opus-5")
         // A BYOK vendor on the CLI's own endpoint is judged against the same catalog.
-        XCTAssertNil(AgentDefaults.livePin("claude-opus-4-8", provider: "anthropic",
+        XCTAssertNil(AgentDefaults.livePin("claude-opus-4-8", engine: "claude", provider: "anthropic",
                                            catalog: liveClaudeCatalog, configured: [anthropicKey],
                                            runtimeDefaults: nil))
     }
 
     func testLivePinKeepsEveryPinTheCatalogCannotSpeakFor() {
         // No catalog reported → nothing can be retired.
-        XCTAssertEqual(AgentDefaults.livePin("claude-opus-4-8", provider: "claude", catalog: nil,
+        XCTAssertEqual(AgentDefaults.livePin("claude-opus-4-8", engine: "claude", provider: "claude", catalog: nil,
                                              configured: nil, runtimeDefaults: nil),
                        "claude-opus-4-8")
         // The Runtime's own reported default (an alias, a gateway id) is current by definition.
-        XCTAssertEqual(AgentDefaults.livePin("opus", provider: "claude", catalog: liveClaudeCatalog,
+        XCTAssertEqual(AgentDefaults.livePin("opus", engine: "claude", provider: "claude", catalog: liveClaudeCatalog,
                                              configured: nil, runtimeDefaults: ["claude": "opus"]),
                        "opus")
         // A third-party vendor keeps its own list — the runner's Claude probe says nothing about it.
-        XCTAssertEqual(AgentDefaults.livePin("deepseek-v3", provider: "deepseek",
+        XCTAssertEqual(AgentDefaults.livePin("deepseek-v3", engine: "claude", provider: "deepseek",
                                              catalog: liveClaudeCatalog, configured: [deepseek],
                                              runtimeDefaults: nil), "deepseek-v3")
         // OpenCode owns model selection, and its empty sentinel is a choice.
-        XCTAssertEqual(AgentDefaults.livePin("anthropic/claude-sonnet-4", provider: "opencode",
+        XCTAssertEqual(AgentDefaults.livePin("anthropic/claude-sonnet-4", engine: "opencode", provider: "opencode",
                                              catalog: liveClaudeCatalog, configured: nil,
                                              runtimeDefaults: nil), "anthropic/claude-sonnet-4")
-        XCTAssertEqual(AgentDefaults.livePin("", provider: "opencode", catalog: liveClaudeCatalog,
+        XCTAssertEqual(AgentDefaults.livePin("", engine: "opencode", provider: "opencode", catalog: liveClaudeCatalog,
                                              configured: nil, runtimeDefaults: nil), "")
         // A model-less session stays model-less.
-        XCTAssertNil(AgentDefaults.livePin(nil, provider: "claude", catalog: liveClaudeCatalog,
+        XCTAssertNil(AgentDefaults.livePin(nil, engine: "claude", provider: "claude", catalog: liveClaudeCatalog,
                                            configured: nil, runtimeDefaults: nil))
     }
 
@@ -574,34 +563,34 @@ final class AgentDefaultsTests: XCTestCase {
                                      contextWindow: nil, reasoningLevels: nil,
                                      defaultReasoningLevel: nil, serviceTiers: nil)],
             codex: nil)
-        XCTAssertEqual(AgentDefaults.effectiveDefaultModel(
-            for: "claude", catalog: catalog, configured: nil,
+        XCTAssertEqual(AgentDefaults.defaultModel(
+            engine: "claude", provider: "claude", catalog: catalog, configured: nil,
             runtimeDefaults: ["claude": "claude-sonnet-5"]),
             "claude-sonnet-5")
         // No directly reported default falls through to the Runtime catalog.
-        XCTAssertEqual(AgentDefaults.effectiveDefaultModel(
-            for: "claude", catalog: catalog, configured: nil,
+        XCTAssertEqual(AgentDefaults.defaultModel(
+            engine: "claude", provider: "claude", catalog: catalog, configured: nil,
             runtimeDefaults: [:]),
             "claude-fable-5")
-        XCTAssertEqual(AgentDefaults.effectiveDefaultModel(
-            for: "kimi", catalog: nil, configured: nil,
+        XCTAssertEqual(AgentDefaults.defaultModel(
+            engine: "kimi", provider: "kimi", catalog: nil, configured: nil,
             runtimeDefaults: [:]),
             "kimi-code/kimi-for-coding")
     }
 
     func testEffectiveDefaultModelKeepsConfiguredProviderInItsOwnModelSpace() {
-        XCTAssertEqual(AgentDefaults.effectiveDefaultModel(
-            for: "claude", catalog: nil, configured: nil,
+        XCTAssertEqual(AgentDefaults.defaultModel(
+            engine: "claude", provider: "claude", catalog: nil, configured: nil,
             runtimeDefaults: nil),
             "claude-opus-5")
-        XCTAssertEqual(AgentDefaults.effectiveDefaultModel(
-            for: "deepseek", catalog: nil, configured: [deepseek],
+        XCTAssertEqual(AgentDefaults.defaultModel(
+            engine: "claude", provider: "deepseek", catalog: nil, configured: [deepseek],
             runtimeDefaults: nil),
             "deepseek-v4-pro")
         // A configured provider owns its own default even if the borrowed Claude runtime reports
         // another one.
-        XCTAssertEqual(AgentDefaults.effectiveDefaultModel(
-            for: "deepseek", catalog: nil, configured: [deepseek],
+        XCTAssertEqual(AgentDefaults.defaultModel(
+            engine: "claude", provider: "deepseek", catalog: nil, configured: [deepseek],
             runtimeDefaults: ["claude": "claude-opus-5"]),
             "deepseek-v4-pro")
     }
@@ -615,41 +604,41 @@ final class AgentDefaultsTests: XCTestCase {
 
         // A disabled custom Provider falls back through the Claude Runtime. A stale/forged entry
         // under its old slug is ignored rather than becoming a fourth heartbeat namespace.
-        XCTAssertEqual(AgentDefaults.effectiveDefaultModel(
-            for: "retired-provider", catalog: catalog, configured: [],
+        XCTAssertEqual(AgentDefaults.defaultModel(
+            engine: "claude", provider: "retired-provider", catalog: catalog, configured: [],
             runtimeDefaults: [
                 "retired-provider": "wrong-custom-default",
                 "claude": "runtime-claude-default",
             ]), "runtime-claude-default")
-        XCTAssertEqual(AgentDefaults.effectiveDefaultModel(
-            for: "retired-provider", catalog: catalog, configured: [], runtimeDefaults: [:]),
+        XCTAssertEqual(AgentDefaults.defaultModel(
+            engine: "claude", provider: "retired-provider", catalog: catalog, configured: [], runtimeDefaults: [:]),
             "claude-fable-5")
-        XCTAssertEqual(AgentDefaults.effectiveDefaultModel(
-            for: "retired-provider", catalog: nil, configured: [], runtimeDefaults: [:]),
+        XCTAssertEqual(AgentDefaults.defaultModel(
+            engine: "claude", provider: "retired-provider", catalog: nil, configured: [], runtimeDefaults: [:]),
             "claude-opus-5")
 
         // An enabled configured Provider still owns its declared model space.
-        XCTAssertEqual(AgentDefaults.effectiveDefaultModel(
-            for: "deepseek", catalog: catalog, configured: [deepseek],
+        XCTAssertEqual(AgentDefaults.defaultModel(
+            engine: "claude", provider: "deepseek", catalog: catalog, configured: [deepseek],
             runtimeDefaults: ["claude": "runtime-claude-default"]),
             "deepseek-v4-pro")
     }
 
     func testRefreshedDefaultModelPreservesAnUnavailableSnapshot() {
         XCTAssertEqual(AgentDefaults.refreshedDefaultModel(
-            currentModel: "cached-runtime-default", for: "claude", catalog: nil, configured: nil,
+            currentModel: "cached-runtime-default", engine: "claude", provider: "claude", catalog: nil, configured: nil,
             runtimeDefaults: nil, runnerSnapshotLoaded: false, configuredProvidersLoaded: false),
             "cached-runtime-default")
         XCTAssertEqual(AgentDefaults.refreshedDefaultModel(
-            currentModel: "cached-runtime-default", for: "claude", catalog: nil, configured: nil,
+            currentModel: "cached-runtime-default", engine: "claude", provider: "claude", catalog: nil, configured: nil,
             runtimeDefaults: nil, runnerSnapshotLoaded: true, configuredProvidersLoaded: false),
             "claude-opus-5")
         XCTAssertEqual(AgentDefaults.refreshedDefaultModel(
-            currentModel: "cached-custom-default", for: "deepseek", catalog: nil, configured: nil,
+            currentModel: "cached-custom-default", engine: "claude", provider: "deepseek", catalog: nil, configured: nil,
             runtimeDefaults: [:], runnerSnapshotLoaded: true, configuredProvidersLoaded: false),
             "cached-custom-default")
         XCTAssertEqual(AgentDefaults.refreshedDefaultModel(
-            currentModel: "wrong-claude-seed", for: "deepseek", catalog: nil,
+            currentModel: "wrong-claude-seed", engine: "claude", provider: "deepseek", catalog: nil,
             configured: [deepseek], runtimeDefaults: nil, runnerSnapshotLoaded: false,
             configuredProvidersLoaded: true),
             "deepseek-v4-pro")
@@ -908,9 +897,9 @@ final class AgentDefaultsTests: XCTestCase {
         // Its catalog and Runtime default are keyed on its own name, never Claude's.
         XCTAssertEqual(AgentDefaults.runtime(for: "antigravity"), "antigravity")
         // agy runs Auto as --dangerously-skip-permissions on any model, so it is not a per-model question.
-        XCTAssertTrue(AgentDefaults.supportsAuto("gemini-3.1-pro", provider: "antigravity"))
+        XCTAssertTrue(AgentDefaults.supportsAuto("gemini-3.1-pro", engine: "antigravity", provider: "antigravity"))
         XCTAssertEqual(AgentDefaults.clampPermissionMode(.auto, for: "gemini-3.1-pro",
-                                                         provider: "antigravity"), .auto)
+                                                         engine: "antigravity", provider: "antigravity"), .auto)
         // No fast lane, whatever its catalog row says.
         XCTAssertFalse(AgentDefaults.fastModeAvailable(
             runtime: AgentDefaults.runtime(for: "antigravity"), model: "gemini-3.8-flash",
@@ -931,36 +920,36 @@ final class AgentDefaultsTests: XCTestCase {
         }
         XCTAssertEqual(AgentDefaults.models(for: "antigravity"), AgentDefaults.antigravityModels)
         XCTAssertEqual(AgentDefaults.friendlyName("gemini-3.1-pro", catalog: agyCatalog), "Gemini 3.1 Pro")
-        XCTAssertEqual(AgentDefaults.friendlyName("", for: "antigravity", catalog: nil, configured: nil),
+        XCTAssertEqual(AgentDefaults.friendlyName("", engine: "antigravity", provider: "antigravity", catalog: nil, configured: nil),
                        "Gemini 3.8 Flash")
         // Left on "" after the catalog replaced that row, it still reads as agy's own pick — the id
         // alone would find OpenCode's row first.
-        XCTAssertEqual(AgentDefaults.friendlyName("", for: "antigravity", catalog: agyCatalog,
+        XCTAssertEqual(AgentDefaults.friendlyName("", engine: "antigravity", provider: "antigravity", catalog: agyCatalog,
                                                   configured: nil), "Gemini 3.8 Flash")
-        XCTAssertEqual(AgentDefaults.friendlyName("", for: "opencode", catalog: agyCatalog,
+        XCTAssertEqual(AgentDefaults.friendlyName("", engine: "opencode", provider: "opencode", catalog: agyCatalog,
                                                   configured: nil), "Managed by OpenCode")
     }
 
     func testAntigravityDefaultsLikeTheOtherBuiltInsAndNeverToAClaudeModel() {
-        XCTAssertEqual(AgentDefaults.effectiveDefaultModel(
-            for: "antigravity", catalog: agyCatalog, configured: nil,
+        XCTAssertEqual(AgentDefaults.defaultModel(
+            engine: "antigravity", provider: "antigravity", catalog: agyCatalog, configured: nil,
             runtimeDefaults: ["antigravity": "gemini-3.1-pro"]), "gemini-3.1-pro")
-        XCTAssertEqual(AgentDefaults.effectiveDefaultModel(
-            for: "antigravity", catalog: agyCatalog, configured: nil, runtimeDefaults: [:]),
+        XCTAssertEqual(AgentDefaults.defaultModel(
+            engine: "antigravity", provider: "antigravity", catalog: agyCatalog, configured: nil, runtimeDefaults: [:]),
             "gemini-3.8-flash")
         XCTAssertEqual(AgentDefaults.defaultModel(for: "antigravity", catalog: agyCatalog), "gemini-3.8-flash")
         // No catalog and no reported default: no `--model`, which is what dispatch sends too —
         // whatever the runner reports for Claude.
         XCTAssertEqual(AgentDefaults.defaultModel(for: "antigravity"), "")
-        XCTAssertEqual(AgentDefaults.effectiveDefaultModel(
-            for: "antigravity", catalog: nil, configured: nil, runtimeDefaults: nil), "")
-        XCTAssertEqual(AgentDefaults.effectiveDefaultModel(
-            for: "antigravity", catalog: liveClaudeCatalog, configured: nil,
+        XCTAssertEqual(AgentDefaults.defaultModel(
+            engine: "antigravity", provider: "antigravity", catalog: nil, configured: nil, runtimeDefaults: nil), "")
+        XCTAssertEqual(AgentDefaults.defaultModel(
+            engine: "antigravity", provider: "antigravity", catalog: liveClaudeCatalog, configured: nil,
             runtimeDefaults: ["claude": "claude-sonnet-5"]), "")
-        XCTAssertEqual(AgentDefaults.defaultModel(for: "antigravity", catalog: liveClaudeCatalog,
+        XCTAssertEqual(AgentDefaults.defaultModel(engine: "antigravity", provider: "antigravity", catalog: liveClaudeCatalog,
                                                   configured: nil), "")
         XCTAssertEqual(AgentDefaults.refreshedDefaultModel(
-            currentModel: "claude-opus-5", for: "antigravity", catalog: nil, configured: nil,
+            currentModel: "claude-opus-5", engine: "antigravity", provider: "antigravity", catalog: nil, configured: nil,
             runtimeDefaults: nil, runnerSnapshotLoaded: true, configuredProvidersLoaded: false), "")
     }
 
@@ -969,27 +958,27 @@ final class AgentDefaultsTests: XCTestCase {
         // session runs on the reported default, so the pin drops out and the caller re-resolves.
         // (OpenCode's "", a choice, is kept — see testLivePinKeepsEveryPinTheCatalogCannotSpeakFor.)
         for catalog in [agyCatalog, nil] as [RunnerModelCatalog?] {
-            XCTAssertNil(AgentDefaults.livePin("", provider: "antigravity", catalog: catalog,
+            XCTAssertNil(AgentDefaults.livePin("", engine: "antigravity", provider: "antigravity", catalog: catalog,
                                                configured: nil, runtimeDefaults: nil))
         }
         XCTAssertEqual(AgentDefaults.newSessionModel(
-            for: "antigravity", accountModels: ["antigravity": ""], fallback: "gemini-3.8-flash",
+            engine: "antigravity", provider: "antigravity", accountModels: ["antigravity": ""], fallback: "gemini-3.8-flash",
             catalog: agyCatalog, configured: nil), "gemini-3.8-flash")
         // A pin the runner still lists stays; one it no longer lists falls to the current default.
-        XCTAssertEqual(AgentDefaults.livePin("gemini-3.1-pro", provider: "antigravity",
+        XCTAssertEqual(AgentDefaults.livePin("gemini-3.1-pro", engine: "antigravity", provider: "antigravity",
                                              catalog: agyCatalog, configured: nil,
                                              runtimeDefaults: nil), "gemini-3.1-pro")
-        XCTAssertNil(AgentDefaults.livePin("gemini-2.9-pro", provider: "antigravity",
+        XCTAssertNil(AgentDefaults.livePin("gemini-2.9-pro", engine: "antigravity", provider: "antigravity",
                                            catalog: agyCatalog, configured: nil, runtimeDefaults: nil))
         XCTAssertEqual(AgentDefaults.newSessionModel(
-            for: "antigravity", accountModels: ["antigravity": "gemini-2.9-pro"],
+            engine: "antigravity", provider: "antigravity", accountModels: ["antigravity": "gemini-2.9-pro"],
             fallback: "gemini-3.8-flash", catalog: agyCatalog, configured: nil), "gemini-3.8-flash")
         // Judged against agy's own rows: Claude's catalog says nothing about a Gemini pin, and the
         // id agy itself reports as its default is current by definition.
-        XCTAssertEqual(AgentDefaults.livePin("gemini-3.1-pro", provider: "antigravity",
+        XCTAssertEqual(AgentDefaults.livePin("gemini-3.1-pro", engine: "antigravity", provider: "antigravity",
                                              catalog: liveClaudeCatalog, configured: nil,
                                              runtimeDefaults: nil), "gemini-3.1-pro")
-        XCTAssertEqual(AgentDefaults.livePin("gemini-3.9-pro", provider: "antigravity",
+        XCTAssertEqual(AgentDefaults.livePin("gemini-3.9-pro", engine: "antigravity", provider: "antigravity",
                                              catalog: agyCatalog, configured: nil,
                                              runtimeDefaults: ["antigravity": "gemini-3.9-pro"]),
                        "gemini-3.9-pro")
@@ -1074,20 +1063,20 @@ final class AgentDefaultsTests: XCTestCase {
     func testAGeminiKeyRunsOnTheAntigravityRuntimeItBorrows() {
         XCTAssertEqual(AgentDefaults.runtime(for: "gemini", configured: [geminiKey]), "antigravity")
         // agy's own models, from the runner — not Claude's, which is where the row used to read.
-        XCTAssertEqual(AgentDefaults.models(for: "gemini", catalog: agyCatalog, configured: [geminiKey]).map(\.id),
+        XCTAssertEqual(AgentDefaults.models(engine: "antigravity", provider: "gemini", catalog: agyCatalog, configured: [geminiKey]).map(\.id),
                        ["gemini-3.8-flash", "gemini-3.1-pro"])
-        XCTAssertEqual(AgentDefaults.models(for: "gemini", catalog: liveClaudeCatalog,
+        XCTAssertEqual(AgentDefaults.models(engine: "antigravity", provider: "gemini", catalog: liveClaudeCatalog,
                                             configured: [geminiKey]).map(\.id),
                        ["gemini-3.8-flash", "gemini-3.7-flash"])
-        XCTAssertEqual(AgentDefaults.effectiveDefaultModel(
-            for: "gemini", catalog: agyCatalog, configured: [geminiKey],
+        XCTAssertEqual(AgentDefaults.defaultModel(
+            engine: "antigravity", provider: "gemini", catalog: agyCatalog, configured: [geminiKey],
             runtimeDefaults: ["claude": "claude-opus-5", "antigravity": "gemini-3.1-pro"]), "gemini-3.1-pro")
-        XCTAssertEqual(AgentDefaults.defaultModel(for: "gemini", catalog: agyCatalog, configured: [geminiKey]),
+        XCTAssertEqual(AgentDefaults.defaultModel(engine: "antigravity", provider: "gemini", catalog: agyCatalog, configured: [geminiKey]),
                        "gemini-3.8-flash")
         // A pin from when the row ran on Codex is one agy has never listed.
-        XCTAssertNil(AgentDefaults.livePin("gemini-2.5-pro", provider: "gemini", catalog: agyCatalog,
+        XCTAssertNil(AgentDefaults.livePin("gemini-2.5-pro", engine: "antigravity", provider: "gemini", catalog: agyCatalog,
                                            configured: [geminiKey], runtimeDefaults: nil))
-        XCTAssertEqual(AgentDefaults.livePin("gemini-3.1-pro", provider: "gemini", catalog: agyCatalog,
+        XCTAssertEqual(AgentDefaults.livePin("gemini-3.1-pro", engine: "antigravity", provider: "gemini", catalog: agyCatalog,
                                              configured: [geminiKey], runtimeDefaults: nil), "gemini-3.1-pro")
     }
 
@@ -1109,7 +1098,7 @@ final class AgentDefaultsTests: XCTestCase {
 
     func testDeclaredModelOffersOnlyItsLevelsWithUltraWhereXhighIs() {
         func offered(_ model: String) -> [Effort] {
-            AgentDefaults.efforts(for: "local-vllm", model: model, catalog: nil, configured: [vllm])
+            AgentDefaults.efforts(for: "claude", provider: "local-vllm", model: model, catalog: nil, configured: [vllm])
         }
         XCTAssertEqual(offered("qwen3.8-27b-fp8"), [.default, .low, .medium, .xhigh, .ultra])
         XCTAssertEqual(offered("qwen3.8-9b"), [.default, .low, .medium, .high])
@@ -1117,13 +1106,13 @@ final class AgentDefaultsTests: XCTestCase {
         XCTAssertEqual(offered("qwen3.8-mini"), [.default])
         // No declaration leaves Claude's list, as before — and so does a provider list not yet read.
         XCTAssertEqual(offered("qwen3.8-plain"), AgentDefaults.efforts(for: "claude"))
-        XCTAssertEqual(AgentDefaults.efforts(for: "local-vllm", model: "qwen3.8-27b-fp8", catalog: nil),
+        XCTAssertEqual(AgentDefaults.efforts(for: "claude", provider: "local-vllm", model: "qwen3.8-27b-fp8", catalog: nil),
                        AgentDefaults.efforts(for: "claude"))
     }
 
     func testDeclaredModelNamesTheLevelDispatchRunsAt() {
         func shown(_ effort: Effort, _ model: String) -> Effort {
-            AgentDefaults.normalizedEffort(effort, for: "local-vllm", model: model, catalog: nil,
+            AgentDefaults.normalizedEffort(effort, for: "claude", provider: "local-vllm", model: model, catalog: nil,
                                            configured: [vllm])
         }
         // The session that was painted "Max": it runs at xhigh.
@@ -1141,19 +1130,55 @@ final class AgentDefaultsTests: XCTestCase {
         XCTAssertEqual(shown(.max, "qwen3.8-plain"), .max)
         XCTAssertEqual(
             AgentDefaults.newSessionEffort(accountDefault: "max", legacyWorkspaceDefault: nil,
-                                           for: "local-vllm", model: "qwen3.8-27b-fp8", catalog: nil,
-                                           configured: [vllm]),
+                                           for: "claude", provider: "local-vllm", model: "qwen3.8-27b-fp8",
+                                           catalog: nil, configured: [vllm]),
             .xhigh)
     }
 
     func testDeclarationIsReadOnlyOnTheClaudeRuntime() {
         let codexRow = ConfiguredProvider(slug: "gateway", label: "Gateway", runtime: "codex",
                                           models: vllm.models)
-        XCTAssertEqual(AgentDefaults.efforts(for: "gateway", model: "qwen3.8-27b-fp8", catalog: nil,
+        XCTAssertEqual(AgentDefaults.efforts(for: "codex", provider: "gateway", model: "qwen3.8-27b-fp8", catalog: nil,
                                              configured: [codexRow]),
-                       AgentDefaults.efforts(for: "gateway", model: "qwen3.8-27b-fp8", catalog: nil))
-        XCTAssertEqual(AgentDefaults.normalizedEffort(.max, for: "gateway", model: "qwen3.8-27b-fp8",
+                       AgentDefaults.efforts(for: "codex", provider: "gateway", model: "qwen3.8-27b-fp8", catalog: nil))
+        XCTAssertEqual(AgentDefaults.normalizedEffort(.max, for: "codex", provider: "gateway", model: "qwen3.8-27b-fp8",
                                                       catalog: nil, configured: [codexRow]), .max)
+        // The same Claude-protocol key on OpenCode is OpenCode's to describe (contract §2.3): its
+        // variants, not the declaration Claude Code honours.
+        XCTAssertEqual(AgentDefaults.efforts(for: "opencode", provider: "local-vllm", model: "qwen3.8-27b-fp8",
+                                             catalog: nil, configured: [vllm]),
+                       AgentDefaults.efforts(for: "opencode"))
+        XCTAssertEqual(AgentDefaults.normalizedEffort(.max, for: "opencode", provider: "local-vllm",
+                                                      model: "qwen3.8-27b-fp8", catalog: nil, configured: [vllm]),
+                       .max)
+    }
+
+    /// `runtime(for:)` used to answer "claude" for OpenCode's own slug, so a session placed by its
+    /// provider landed on Claude Code's models, efforts and slash commands (docs/provider-engine-contract.md
+    /// §9.1). It now reads the slug as the compatibility table does: the engine the provider runs on by
+    /// default, and Claude Code only for a provider since removed, as dispatch used to read it.
+    func testRuntimeForOpenCodeIsOpenCodeNeverClaude() {
+        XCTAssertEqual(AgentDefaults.runtime(for: "opencode"), "opencode")
+        XCTAssertEqual(AgentDefaults.runtime(for: "opencode", configured: [deepseek]), "opencode")
+        for engine in ["claude", "codex", "kimi", "antigravity"] {
+            XCTAssertEqual(AgentDefaults.runtime(for: engine), engine)
+        }
+        // A key runs on its protocol's own engine by default, whichever others it runs on too.
+        let served = ConfiguredProvider(slug: "deepseek", label: "DeepSeek", runtime: "claude",
+                                        engines: ["claude", "opencode", "dsh"])
+        XCTAssertEqual(AgentDefaults.runtime(for: "deepseek", configured: [served]), "claude")
+        XCTAssertEqual(AgentDefaults.runtime(for: "deepseek", configured: [deepseek]), "claude")
+        // The legacy built-in `dsh` is DeepSeek Harness; a provider since removed reads as Claude Code.
+        XCTAssertEqual(AgentDefaults.runtime(for: "dsh"), "dsh")
+        XCTAssertEqual(AgentDefaults.runtime(for: "retired-provider", configured: []), "claude")
+        // And everything that reads the engine follows: OpenCode's own models and variants, not Claude's.
+        let catalog = RunnerModelCatalog(claude: [RunnerModelInfo(value: "claude-opus-5", label: "Opus 5")],
+                                         opencode: [RunnerModelInfo(value: "anthropic/claude-sonnet-4",
+                                                                    label: "Claude Sonnet 4")])
+        let engine = AgentDefaults.runtime(for: "opencode")
+        XCTAssertEqual(AgentDefaults.models(engine: engine, provider: "opencode", catalog: catalog, configured: nil)
+                        .map(\.id), ["", "anthropic/claude-sonnet-4"])
+        XCTAssertEqual(AgentDefaults.efforts(for: engine), [.default, .minimal, .low, .medium, .high, .xhigh, .max])
     }
 
     func testProviderNameResolution() {

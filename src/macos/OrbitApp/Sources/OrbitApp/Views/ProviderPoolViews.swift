@@ -1722,18 +1722,37 @@ struct DeepSeekKeyPageView: View {
             } footer: {
                 footer(state)
             }
+            // Every engine this key runs on, a row each, in the server's order (board iOS 2 ①): one key is
+            // no engine's, so the page says where it can be picked rather than what it "runs on".
             Section {
-                LabeledContent(DeepSeekBalance.runsOn, value: DeepSeekBalance.engine(of: key))
-                if let model = key.defaultModel, !model.isEmpty {
+                ForEach(ProviderEngines.of(key), id: \.self) { engine in
+                    Label {
+                        Text(ProviderEngines.cliName(engine))
+                    } icon: {
+                        ProviderMark(provider: engine, size: 26, brandKey: SessionProviderChoices.enginePreset[engine],
+                                     label: ProviderEngines.cliName(engine))
+                    }
+                }
+            } header: {
+                SettingsHeader(DeepSeekBalance.worksWith)
+            } footer: {
+                Text(DeepSeekBalance.worksWithFooter)
+            }
+            // The key itself (board iOS 2 ②): the protocol its endpoint speaks, its default model by name
+            // and its endpoint. Changing or turning it off happens on the web, and stops it on every
+            // engine above (③).
+            Section {
+                LabeledContent(DeepSeekBalance.protocolLabel, value: SessionProviderChoices.runtimeSummary(key.runtime))
+                if let model = DeepSeekBalance.defaultModelName(key) {
                     LabeledContent(DeepSeekBalance.defaultModel, value: model)
                 }
                 if let host = DeepSeekBalance.endpointHost(key) {
                     LabeledContent(DeepSeekBalance.endpoint, value: host)
                 }
             } header: {
-                SettingsHeader(DeepSeekBalance.providerHeader)
+                SettingsHeader(DeepSeekBalance.keyHeader)
             } footer: {
-                Text(ProvidersOverview.editOnWeb)
+                Text(DeepSeekBalance.turnOffNote(key))
             }
         }
         .navigationTitle(key.label)

@@ -168,12 +168,11 @@ public enum RunnerPageFormat {
         return known + reported.filter { !engineOrder.contains($0.engine) }
     }
 
-    /// The CLI's own product name: `Claude Code`, `Codex`, `Kimi Code`, `OpenCode`,
-    /// `Antigravity`.
+    /// The CLI's own product name, as every list of engines says it (shared `ENGINE_CLI_NAMES`, web's
+    /// `ENGINE_CLI_NAME`): `Claude Code`, `Codex`, `Kimi Code`, `OpenCode`, `Antigravity CLI`, `DeepSeek
+    /// Harness` — on a machine's page as in the pickers.
     public static func engineName(_ engine: String) -> String {
-        if let login = LoginEngine(rawValue: engine) { return login.displayName }
-        if engine == "dsh" { return "DeepSeek Harness" }
-        return engine == "opencode" ? "OpenCode" : engine
+        ProviderEngines.cliName(engine)
     }
 
     /// OpenCode's sign-in belongs to whichever provider it runs.

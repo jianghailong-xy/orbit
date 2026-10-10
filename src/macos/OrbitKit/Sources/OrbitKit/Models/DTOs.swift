@@ -92,6 +92,10 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
     /// interactive session. An agent stores no provider of its own: it names a machine and a
     /// directory, while the provider is a per-session binding.
     public let lastProvider: String?
+    /// The engine that session ran on — the CLI, which a provider no longer decides (one DeepSeek key
+    /// runs on Claude Code, OpenCode and DeepSeek Harness alike). Nil from an older server, and where
+    /// nobody can tell; `defaultEngine(configured:)` reads it.
+    public let lastEngine: String?
     /// @deprecated The same derived value under its old name, served for builds that predate
     /// `lastProvider`. Read `defaultProvider` instead of either.
     public let provider: String?
@@ -144,7 +148,7 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
     public let repoCleanup: RunnerRepoCleanup?
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, lastProvider, provider, model, permissionMode, effort, workDir
+        case id, name, lastProvider, lastEngine, provider, model, permissionMode, effort, workDir
         case description, appendSystemPrompt, systemPrompt, allowedTools, disallowedTools
         case maxTurns, maxBudgetUsd, targetRunnerId, targetLabels, runnerId, env, enabled
         case antigravityKeyAvailableByRunner
@@ -158,6 +162,7 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
         id = try c.decode(String.self, forKey: .id)
         name = try c.decode(String.self, forKey: .name)
         lastProvider = try c.decodeIfPresent(String.self, forKey: .lastProvider)
+        lastEngine = try c.decodeIfPresent(String.self, forKey: .lastEngine)
         provider = try c.decodeIfPresent(String.self, forKey: .provider)
         model = try c.decodeIfPresent(String.self, forKey: .model)
         permissionMode = try c.decodeIfPresent(String.self, forKey: .permissionMode)
@@ -206,6 +211,12 @@ extension KeyedDecodingContainer {
 extension Agent {
     /// The provider a new session here starts on, unless the composer picks another.
     public var defaultProvider: String { lastProvider ?? provider ?? "claude" }
+
+    /// The engine a new session here starts on, unless the hero picks another: the one this project
+    /// last ran on, else — from an older server — the one its provider runs on by default.
+    public func defaultEngine(configured: [ConfiguredProvider]?) -> String {
+        ProviderEngines.sessionEngine(lastEngine, provider: defaultProvider, configured: configured)
+    }
 }
 
 public struct Runner: Codable, Equatable, Sendable, Identifiable {
@@ -343,6 +354,13 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     public let projectIntegrationRef: String?
     public let agentId: String?
     public let assignedRunnerId: String?
+    /// The engine the session runs on for good — the CLI on the runner that produced its runtime
+    /// session (`claude`, `codex`, `kimi`, `antigravity`, `opencode` or `dsh`). Nil from an older
+    /// server, and for a session whose engine nobody can tell; read it with
+    /// `ProviderEngines.sessionEngine`, which places such a row by its provider.
+    public let engine: String?
+    /// Where the session's credential comes from: an engine's own sign-in (the engine's name), OpenCode's
+    /// own configuration (`opencode`), an account pool or a key — never which CLI runs it.
     public let provider: String?
     /// On an account pool: the member its last claim dispatched on (nil before the first). Carried
     /// by the detail payload only — the list leaves it out — so read it off `GET /sessions/:id`.
@@ -563,6 +581,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         projectIntegrationRef = try values.decodeIfPresent(String.self, forKey: .projectIntegrationRef)
         agentId = try values.decodeIfPresent(String.self, forKey: .agentId)
         assignedRunnerId = try values.decodeIfPresent(String.self, forKey: .assignedRunnerId)
+        engine = try values.decodeIfPresent(String.self, forKey: .engine)
         provider = try values.decodeIfPresent(String.self, forKey: .provider)
         poolMemberProviderId = try values.decodeIfPresent(String.self, forKey: .poolMemberProviderId)
         poolKeyId = try values.decodeIfPresent(String.self, forKey: .poolKeyId)
@@ -624,7 +643,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
                 completedAt: String? = nil, deletedAt: String? = nil,
                 capabilities: SessionCapabilities? = nil,
                 agentId: String?,
-                assignedRunnerId: String?, provider: String? = nil,
+                assignedRunnerId: String?, engine: String? = nil, provider: String? = nil,
                 pendingApprovals: Int?, waitingKind: SessionWaitingKind? = nil,
                 ownerItems: [SessionOwnerItem]? = nil, taskId: String? = nil,
                 branch: String?,
@@ -667,6 +686,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.capabilities = capabilities
         self.agentId = agentId
         self.assignedRunnerId = assignedRunnerId
+        self.engine = engine
         self.provider = provider
         self.poolMemberProviderId = poolMemberProviderId
         self.poolKeyId = poolKeyId
@@ -1052,9 +1072,12 @@ public struct CreateSessionRequest: Codable, Sendable {
     public let title: String?
     public let agentId: String?
     public let assignedRunnerId: String?
-    /// Provider picked on the new-session screen: a built-in engine slug or one of this account's
-    /// configured providers. Nil omits the field, so the session starts where this project last
-    /// started — the behaviour every client had before the picker existed.
+    /// The engine picked on the new-session screen — the CLI the session runs on for good — sent with
+    /// the credential of it picked there (docs/provider-engine-contract.md §3.2). Nil omits both, so the
+    /// session starts where this project last started.
+    public let engine: String?
+    /// The credential picked on the new-session screen: an engine's own sign-in (the engine's name),
+    /// OpenCode's own configuration, an account pool or a key — one `engine` runs.
     public let provider: String?
     public let model: String?
     public let permissionMode: String?
@@ -1083,7 +1106,7 @@ public struct CreateSessionRequest: Codable, Sendable {
     /// folders, else the server answers 400. Nil omits it: the session is in no folder.
     public let folderId: String?
     public init(prompt: String, title: String? = nil, agentId: String? = nil, assignedRunnerId: String? = nil,
-                provider: String? = nil,
+                engine: String? = nil, provider: String? = nil,
                 model: String? = nil, permissionMode: String? = nil, effort: String? = nil,
                 fastMode: Bool? = nil,
                 shell: Bool? = nil, attachmentIds: [String]? = nil, codexAccount: String? = nil,
@@ -1093,6 +1116,7 @@ public struct CreateSessionRequest: Codable, Sendable {
         self.title = title
         self.agentId = agentId
         self.assignedRunnerId = assignedRunnerId
+        self.engine = engine
         self.provider = provider
         self.model = model
         self.permissionMode = permissionMode

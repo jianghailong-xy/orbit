@@ -159,7 +159,7 @@ final class CodexAccountsTests: XCTestCase {
         XCTAssertEqual(CodexAccounts.label("c0ffee42", accounts: accounts), "Account c0ffee42", "an empty name is none")
         // The picker reads the same rule.
         let engines = [RunnerEngineHealth(engine: "claude", installed: true, auth: "yes", accounts: accounts)]
-        XCTAssertEqual(SessionProviderChoices.choices(configured: [], engines: engines)
+        XCTAssertEqual(SessionProviderChoices.providers(for: "claude", sources: ChoiceSources(configured: [], engines: engines))
                         .first { $0.slug == "claude" }?.accounts?.map(\.label),
                        ["jianghailong.main", "Research", "Account c0ffee42"])
     }
@@ -237,18 +237,20 @@ final class CodexAccountsTests: XCTestCase {
                    "accounts": {"\(pro)": {"provider": "codex", "primary": {"utilization": 0, "windowDurationMins": 10080}}}}}
         """.utf8))
         XCTAssertNotNil(planUsage)
-        let choices = SessionProviderChoices.choices(configured: [], engines: engines, planUsage: planUsage)
-        XCTAssertEqual(choices.first { $0.slug == "codex" }?.accounts, [
+        let sources = ChoiceSources(configured: [], engines: engines, planUsage: planUsage)
+        XCTAssertEqual(SessionProviderChoices.providers(for: "codex", sources: sources).first { $0.slug == "codex" }?.accounts, [
             AccountChoice(id: "default", label: "Default", quota: "5h 100%", nearLimit: true),
             AccountChoice(id: pro, label: "kxugfvukxczwl@mail.com", quota: "Weekly 0%"),
             AccountChoice(id: "c0ffee42", label: "Account c0ffee42", unavailable: "Not signed in"),
         ])
-        XCTAssertNil(choices.first { $0.slug == "claude" }?.accounts)
+        XCTAssertNil(SessionProviderChoices.providers(for: "claude", sources: sources).first { $0.slug == "claude" }?.accounts)
         // One account, or an engine that cannot run, lists none.
         let single = [RunnerEngineHealth(engine: "codex", installed: true, auth: "yes", accounts: [account("default")])]
-        XCTAssertNil(SessionProviderChoices.choices(configured: [], engines: single).first { $0.slug == "codex" }?.accounts)
+        XCTAssertNil(SessionProviderChoices.providers(for: "codex", sources: ChoiceSources(configured: [], engines: single))
+                        .first { $0.slug == "codex" }?.accounts)
         let signedOut = [RunnerEngineHealth(engine: "codex", installed: true, auth: "no", accounts: both)]
-        XCTAssertNil(SessionProviderChoices.choices(configured: [], engines: signedOut).first { $0.slug == "codex" }?.accounts)
+        XCTAssertNil(SessionProviderChoices.providers(for: "codex", sources: ChoiceSources(configured: [], engines: signedOut))
+                        .first { $0.slug == "codex" }?.accounts)
     }
 
     // MARK: Claude accounts, the same way
@@ -298,7 +300,8 @@ final class CodexAccountsTests: XCTestCase {
                     "accounts": {"\(pro)": {"provider": "claude", "fiveHour": {"utilization": 19}, "sevenDay": {"utilization": 28}}}}}
         """.utf8))
         XCTAssertNotNil(planUsage)
-        let choices = SessionProviderChoices.choices(configured: [], engines: engines, planUsage: planUsage)
+        let choices = SessionProviderChoices.providers(
+            for: "claude", sources: ChoiceSources(configured: [], engines: engines, planUsage: planUsage))
         XCTAssertEqual(choices.first { $0.slug == "claude" }?.accounts, [
             AccountChoice(id: "default", label: "Default", quota: "Weekly 100%", nearLimit: true),
             AccountChoice(id: pro, label: "jianghailong.rd", quota: "Weekly 28%"),

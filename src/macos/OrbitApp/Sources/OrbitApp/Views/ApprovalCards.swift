@@ -177,9 +177,9 @@ struct ToolApprovalCard: View {
     @State private var criteriaOpen = false
 
     private var rememberRules: [PermissionRule] {
-        // A runtime that drops remember rules (Harness) gets Allow / Deny only.
-        guard Approvals.rememberOffered(runtime: SessionProviderChoices.executingRuntime(
-            console.provider, configured: console.configuredProviders)) else { return [] }
+        // An engine that drops remember rules (Harness) gets Allow / Deny only — asked of the session's
+        // engine, whichever DeepSeek key it runs on.
+        guard Approvals.rememberOffered(runtime: console.engine) else { return [] }
         return approval.input.map { Approvals.rememberRules(toolName: approval.toolName ?? "", input: $0) } ?? []
     }
     /// A shell line is shown as the command itself — never the model's prose `description`, since
