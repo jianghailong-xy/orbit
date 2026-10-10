@@ -204,8 +204,11 @@ final class ProjectPageCopyParityTests: XCTestCase {
 
     func testIntegrationLineWords() throws {
         let web = try source(Self.integration)
+        // How far ahead of the project's main branch, and when it last synced with it: `{main}` is
+        // that branch by name, main on a project on main.
         for phrase in ["PASSING: { text: '✓ passing'", "FAILING: { text: '✕ failing'", "UNKNOWN: { text: 'not checked'",
-                       "ahead of main", "synced with main", "at last measurement", "Last landing check", "Running jobs"] {
+                       "ahead of {main}", "synced with {main}", "const main = mainBranchName(view.upstreamRef);",
+                       "at last measurement", "Last landing check", "Running jobs"] {
             assertSays(web, phrase, in: Self.integration)
         }
     }

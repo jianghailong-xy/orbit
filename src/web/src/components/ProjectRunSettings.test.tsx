@@ -401,3 +401,137 @@ describe('How it runs — Pause project', () => {
     expect(writes).toEqual([{ method: 'POST', path: `/projects/${PROJECT}/resume`, body: undefined }]);
   });
 });
+
+describe('How it runs — the main branch', () => {
+  const PAYMENTS = {
+    names: ['develop', 'master', 'release/2.4'],
+    workspaceName: 'payments-api',
+    reportedAt: '2026-10-09T03:00:00.000Z',
+  };
+  /** The payments project of the board (⑨⑩): started on master, before anything integrated. */
+  const onMaster = (over: Partial<ProjectIntegrationView> = {}): ProjectIntegrationView => viewOf({
+    upstreamRef: 'master',
+    upstreamChosenAt: '2026-10-07T03:00:00.000Z',
+    lastMainBranch: { branch: 'master', repository: 'acme/payments-api', chosenAt: '2026-10-07T03:00:00.000Z' },
+    repository: 'acme/payments-api',
+    branches: PAYMENTS,
+    locked: false,
+    startedAt: null,
+    ...over,
+  });
+
+  /** A mouse press as a browser delivers it, the mouse being the primary pointer. */
+  async function pointerPress(element: Element | null | undefined, what: string): Promise<void> {
+    expect(element, `${what} is on screen`).toBeTruthy();
+    await act(async () => {
+      const init = { bubbles: true, cancelable: true, button: 0, buttons: 1, detail: 1 };
+      element!.dispatchEvent(new PointerEvent('pointerdown', { ...init, pointerType: 'mouse', isPrimary: true }));
+      element!.dispatchEvent(new MouseEvent('mousedown', init));
+      element!.dispatchEvent(new PointerEvent('pointerup', { ...init, buttons: 0, pointerType: 'mouse', isPrimary: true }));
+      element!.dispatchEvent(new MouseEvent('mouseup', { ...init, buttons: 0 }));
+      element!.dispatchEvent(new MouseEvent('click', { ...init, buttons: 0 }));
+    });
+    for (let n = 0; n < 5; n += 1) await turn();
+  }
+  const field = (node: ParentNode): HTMLInputElement =>
+    settingRow(node, 'Main branch').querySelector<HTMLInputElement>('input[role="combobox"]')!;
+  const shown = (node: ParentNode): string =>
+    settingRow(node, 'Main branch').querySelector('.orbit-combobox-value')?.textContent ?? '';
+  const menu = (): HTMLElement[] => [...document.body.querySelectorAll<HTMLElement>('[role="listbox"] [role="option"]')];
+  async function pick(node: HTMLElement, name: string): Promise<void> {
+    await pointerPress(field(node), 'the Main branch field');
+    await until(() => menu().length > 0, 'the Main branch menu');
+    await pointerPress(menu().find((option) => option.querySelector('.main-branch-option')?.textContent === name), name);
+  }
+
+  it('draws Main branch under Tasks land on, says a save there is the repository’s next default, and names it everywhere', async () => {
+    server.view = onMaster();
+    const node = await mount();
+    expect(labels(node)).toEqual(['Tasks land on', 'Main branch', 'Automatic', 'At most', 'Merge check', 'Escalate after']);
+    expect(shown(node)).toBe('master');
+    expect(field(node).disabled).toBe(false);
+    expect(settingRow(node, 'Main branch').querySelector('.project-integration-setting-hint')?.textContent).toBe(
+      'Tasks start from it, and the project’s work ends up on it. New projects in acme/payments-api start '
+      + 'with your last choice.');
+    expect(settingRow(node, 'Tasks land on').textContent).toContain('Directly into master');
+    expect(settingRow(node, 'Tasks land on').textContent).toContain(
+      'For a single task or an urgent fix. Every merge into master asks you.');
+    expect(settingRow(node, 'Automatic').textContent).toContain(
+      'merges the branch into master once the merge check passes — with a receipt you can revert');
+    expect(settingRow(node, 'Merge check').textContent).toContain(
+      'Runs on the combined tree before anything lands — on the project branch and again before master.');
+    expect(node.textContent).toContain('Stops new tasks, wake-ups and merges into master. Running tasks finish.');
+    expect(node.textContent).not.toMatch(/\bmain\./u);
+  });
+
+  it('tags the owner’s last choice for the repository in the menu', async () => {
+    server.view = onMaster();
+    const node = await mount();
+    await pointerPress(field(node), 'the Main branch field');
+    await until(() => menu().length > 0, 'the Main branch menu');
+    expect(menu().map((option) => option.textContent)).toEqual(['develop', 'masterlast chosen', 'release/2.4']);
+    expect(document.body.querySelector('.main-branch-menu-head')?.textContent).toBe('Branches in payments-api');
+  });
+
+  it('saves a main branch picked here to the integration door, as a full ref', async () => {
+    server.view = onMaster();
+    const node = await mount();
+    expect(button(node, RUN_SAVE).disabled).toBe(true);
+    await pick(node, 'develop');
+    expect(shown(node)).toBe('develop');
+    // The sentences follow the branch being chosen.
+    expect(settingRow(node, 'Automatic').textContent).toContain('merges the branch into develop');
+    await save(node, 1);
+    expect(writes).toEqual([
+      { method: 'PATCH', path: `/projects/${PROJECT}/integration`, body: { upstreamRef: 'refs/heads/develop' } },
+    ]);
+  });
+
+  it('saves the line and the main branch together, and nothing for a main branch picked back to where it was', async () => {
+    server.view = onMaster({ line: null, lineAbsentReason: 'NOT_DECIDED', ref: null, source: null });
+    const node = await mount();
+    await pick(node, 'develop');
+    await pick(node, 'master');
+    expect(button(node, RUN_SAVE).disabled).toBe(true);
+    await press(lineInput(node, 'MAIN'));
+    await pick(node, 'release/2.4');
+    await save(node, 1);
+    expect(writes).toEqual([{
+      method: 'PATCH',
+      path: `/projects/${PROJECT}/integration`,
+      body: { line: 'MAIN', upstreamRef: 'refs/heads/release/2.4' },
+    }]);
+  });
+
+  it('stands an unbound project on the branch binding would give it, and writes it only when changed', async () => {
+    server.view = onMaster({ upstreamRef: null, upstreamChosenAt: null });
+    const node = await mount();
+    expect(shown(node)).toBe('master');
+    await type(settingRow(node, 'Merge check').querySelector<HTMLInputElement>('input')!, 'make test');
+    await save(node, 1);
+    expect(writes).toEqual([
+      { method: 'PATCH', path: `/projects/${PROJECT}/integration`, body: { mergeCheckCommand: 'make test' } },
+    ]);
+  });
+
+  it('is read-only once the project started integrating, with why under it, naming the main branch', async () => {
+    server.view = onMaster({ locked: true, startedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString() });
+    const node = await mount();
+    expect(field(node).disabled).toBe(true);
+    expect(settingRow(node, 'Main branch').querySelector('.project-integration-setting-hint')?.textContent).toBe(
+      'This project started integrating 3d ago, so the line it lands on and its main branch can no longer '
+      + 'change. Merge it into master, or give up the branch, to start another.');
+    // Said once, under the second of the two: the line's own row no longer carries it.
+    expect(settingRow(node, 'Tasks land on').textContent).not.toContain('started integrating');
+    expect(settingRow(node, 'Tasks land on').textContent).toContain('Directly into master');
+    expect(button(node, RUN_SAVE).disabled).toBe(true);
+  });
+
+  it('draws no Main branch for a project with no repository, and keeps why the line is locked under the line', async () => {
+    server.view = viewOf({ repository: null, branches: null });
+    const node = await mount();
+    expect(labels(node)).toEqual(['Tasks land on', 'Automatic', 'At most', 'Merge check', 'Escalate after']);
+    expect(settingRow(node, 'Tasks land on').textContent).toContain(runLineLocked('2h ago'));
+    expect(node.querySelector('.main-branch-select')).toBeNull();
+  });
+});

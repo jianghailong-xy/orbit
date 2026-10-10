@@ -1,0 +1,49 @@
+OrbitKit swift test (swift:6.1 docker, /mnt/data/wmb/ok-run.sh), the same command on two git-archive copies:
+  base     = e611d64a02f7f19fd5d1d1ce4cb6f785337f6193 (origin/project/34cjQN5ynG6eIH5A0neeu, the tip this branch merges into)
+  delivery = fc17fb86bd9779f5bebab28daf607467ddd976fb (this task's delivery commit)
+
+ok-base: Executed 3669 tests, with 5 tests skipped and 0 failures (0 unexpected) in 47.242 (47.242) seconds
+ok-branch: Executed 3669 tests, with 5 tests skipped and 0 failures (0 unexpected) in 35.465 (35.465) seconds
+
+How the delivery keeps them at 0:
+- lib/projectStart.ts keeps every literal declaration the parity tests pin (RUN_LINE_MAIN, RUN_LINE_MAIN_HINT,
+  RUN_AUTOMATIC_HINT_*, RUN_MERGE_CHECK_HINT, RUN_NO_MERGE_CHECK_WARNING, RUN_AUTOMATIC_ON_*/OFF*, START_MERGING_INTO_MAIN,
+  START_EACH_MERGE_INTO_MAIN, RUN_PAUSE_HINT) in main's words, beside the function that names the project's main branch;
+  projectStart.mainBranch.test.ts holds each function, at main, to its constant.
+- runLineLocked keeps its words and its call line in ProjectRunSettings.tsx (a project with no Main branch row);
+  the Main branch row's lock sentence, with "and its main branch", is runMainBranchLocked, which no native code says yet.
+- Source-line pins re-pinned in src/macos/OrbitKit/Tests only (OrbitKit sources and SwiftUI untouched), each still
+  asserting that a project on main reads the same sentence at both ends (this end's sentence with main put back as
+  the web template's ${main}):
+    ProjectRunSettingsCopyParityTests: runLineInSentence's body; the undecided row's runLineInSentence call;
+      {runAutomaticHint(draft.line ?? 'PROJECT_BRANCH', main)} + const main = draft.upstream ?? DEFAULT_MAIN_BRANCH;
+      runPauseHint's body and the pause footnote's two lines
+    StartProjectCardCopyParityTests: runAutomaticHint's body and its two templates (automaticHintMain/ProjectBranch)
+    ProjectPageCopyParityTests: "ahead of {main}", "synced with {main}", const main = mainBranchName(view.upstreamRef);
+
+The three parity suites' cases on the delivery copy:
+Test Case 'ProjectPageCopyParityTests.testAProjectNobodyStartedIsTaggedNotStarted' passed
+Test Case 'ProjectPageCopyParityTests.testCoordinatorWords' passed
+Test Case 'ProjectPageCopyParityTests.testCriteriaWords' passed
+Test Case 'ProjectPageCopyParityTests.testIntegrationLineWords' passed
+Test Case 'ProjectPageCopyParityTests.testOpenItemsAndCoordinatorProgressWords' passed
+Test Case 'ProjectPageCopyParityTests.testTaskBandAndTagWords' passed
+Test Case 'ProjectPageCopyParityTests.testTheClosingRowsInOpenItemsAreTheWebs' passed
+Test Case 'ProjectPageCopyParityTests.testTheHeaderSaysReadyToCloseAndWhoRecordedItDone' passed
+Test Case 'ProjectPageCopyParityTests.testWorkOverviewWords' passed
+Test Case 'ProjectRunSettingsCopyParityTests.testHowItRunsSaysTheWebsWords' passed
+Test Case 'ProjectRunSettingsCopyParityTests.testTheEscalationChoicesAreTheWebsOwn' passed
+Test Case 'ProjectRunSettingsCopyParityTests.testTheLockedLineAndThePauseSayTheWebsSentences' passed
+Test Case 'ProjectRunSettingsCopyParityTests.testTheNotStartedTagAndTheStartRowAreTheWebsWords' passed
+Test Case 'ProjectRunSettingsCopyParityTests.testTheOwnersStartIsSetByTheWebsDefaultRule' passed
+Test Case 'ProjectRunSettingsCopyParityTests.testTheUndecidedLineIsTheWebsSentence' passed
+Test Case 'ProjectRunSettingsCopyParityTests.testTheWebBlockOrdersItsRowsTheWayTheNativeBlockDoes' passed
+Test Case 'StartProjectCardCopyParityTests.testHowItRunsSaysWhatTheWebSays' passed
+Test Case 'StartProjectCardCopyParityTests.testTheCardsFixedWordsMatchTheWeb' passed
+Test Case 'StartProjectCardCopyParityTests.testTheParagraphsAndTheLineUnderStartMatchTheWebWhole' passed
+Test Case 'StartProjectCardCopyParityTests.testThePlansWordsMatchTheWebWhole' passed
+Test Case 'StartProjectCardCopyParityTests.testTheRefusalTheConsoleSaysIsTheWebsSentence' passed
+Test Case 'StartProjectCardCopyParityTests.testTheSecondActionAndTheSessionRowSayTheSharedWords' passed
+Test Case 'StartProjectCardCopyParityTests.testTheSectionHeadsAndTheHeaderLineMatchTheWebWhole' passed
+Test Case 'StartProjectCardCopyParityTests.testTheSettingsLineIsBuiltFromTheWebsWords' passed
+Test Case 'StartProjectCardCopyParityTests.testWhatComesToTheOwnerIsSaidInTheWebsWords' passed
