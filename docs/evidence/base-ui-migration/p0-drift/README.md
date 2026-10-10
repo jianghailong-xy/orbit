@@ -289,6 +289,7 @@ WebKit 桌面的两张截图，以及 WebKit 的 settings-saved，都没有变�
 | 第 8 批，第 6 条第二种情况，引用原判定：P3.2 第 2 版，旧条目移入 `previous` | A16（main `e69765706` 合入的 T7 `3a3c58c1f`，任务详情 Engine 一行）：task-share-dialog（8 个项目），task-action-menu（浅色 4 个项目、深色桌面 2 个项目） | 14 | 不变：第 1 批 A4 的 main 漂移参考（`4088d37e6`） | before `46e28aaa3`（X 的 first-parent 前驱），after `e69765706`（X） | [p0-drift-8](../p0-drift-8/README.md) |
 | 第 8 批，首次登记：P3.2 判定已接受、但低于阈值没有登记的差异上叠加 main 改动 | A16：task-action-menu（深色手机 2 个项目），webkit-dark-phone 的 task-detail、task-action-hover、task-action-focus，breakpoint-599/601-dialog（WebKit 桌面 2 个项目，4 张），P3.2 第 2 版判定 | 9 | 第 1 批 A4 的 main 漂移参考（`4088d37e6`） | before `46e28aaa3`，after `e69765706` | [p0-drift-8](../p0-drift-8/README.md) |
 | 第 8 批，第 6 条第二种情况，引用原判定：WebKit 滚动锁第 1 版，旧条目移入 `previous` | A17（main `d2e295917`，回合头 Worked for 一行）：notification-error（WebKit 4 个项目，叠在第 7 批 A13 那一条上） | 4 | 不变：桌面 2 张为会话组的 main 漂移参考，手机 2 张为 P0.2 原图 | before `c26b69643`（X 的 first-parent 前驱），after `d2e295917`（X） | [p0-drift-8](../p0-drift-8/README.md) |
+| P5.3（[34Za39Ov1yysHZaYL6wgJ](orbit-task:34Za39Ov1yysHZaYL6wgJ)）第 1 版证据，`evidenceDigest` `6f0931cc…01c2`，CONFIRM，文档 [p5.3/README.md](../p5.3/README.md) | session-attachment-staged（明色桌面 2 个、明色手机 2 个项目）；session-attachment-menu（4 个手机项目） | 8 | main 漂移参考，都生成于 `d2e295917`：桌面 2 张为会话列表行组，手机 6 张为会话页组 | before `8f94ddda9`（P5.3 的同提交参照：交付撤回业务切换 `c868a02c2`，P5.3 的本地提交），after `b72da6eda`（P5.3 的交付，经 `a167c2ff0` 落地项目线） | [p5.3-p0-registration](../p5.3-p0-registration/README.md) |
 
 P3.2 另有 11 张截图的变化低于 P0 比较器阈值（深色 task-action-menu 4 张，webkit-dark-phone 的 task-detail、task-action-hover、task-action-focus，WebKit 桌面的 breakpoint-599/601-dialog 4 张）。登记工具不收这类截图，它们仍对照 main 漂移参考并通过，逐张见 p3.2-accepted。
 
@@ -299,6 +300,8 @@ WebKit 滚动锁另有 3 张截图（webkit-light-phone 的 settings-saved、pro
 第 7 批：A14（main `9d3751ec2`，输入框上方的分隔线改为渐隐）对已接受层 4 张 notification-error（WebKit 桌面 2 张、WebKit 手机 2 张）的变化低于 P0 比较器阈值（396–1206 像素，单通道差 ≤20），登记工具不收，它们仍对照 A13 那一条通过；main 漂移层里同一改动随参考图在 `9d3751ec2` 上生成而登记。P4.3b 让 WebKit 桌面的 project-graph-fullscreen 差 9、17 个像素（单通道差 1），同样低于阈值，没有登记，见 p0-drift-7。
 
 第 8 批：上面这 4 张 notification-error 按 A17 重登后，after 原件在含 A14 的 `d2e295917` 上生成，A14 随之进入它们的期望。P4.4（Wiki 新条目对话框换成 Orbit Dialog）让 6 张 wiki-new-entry 的变化低于 P0 比较器阈值（Chromium 手机 2 张：18141、28455 个像素，单通道差 ≤2；WebKit 4 张：8–17 个像素，单通道差 1），像素数与 P4.4 自己的同提交对照（p4.4/compare/p0-compare.json）逐张相同；它是迁移差异，登记工具不收，没有登记在任何一层，仍对照 main 漂移参考通过，见 p0-drift-8。
+
+P5.3：暗色 4 个项目（桌面、手机）的 session-attachment-staged 有同样的输入框轮廓差（单通道差 ≤40），WebKit 桌面的 session-attachment-menu 2 张有 WebKit 行高小数带来的 6、10 个像素（单通道差 1），都低于 P0 比较器阈值，登记工具不收，仍对照 main 漂移参考通过。同提交对照里，其余 244 张截图 before → after 218 张逐字节相同、20 张是 Chromium 噪声、6 张就是上面这些低于阈值的差异，都通过 P0 比较器，逐张见 p5.3-p0-registration。
 
 ## 维护规则
 
