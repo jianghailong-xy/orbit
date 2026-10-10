@@ -1,0 +1,504 @@
+<!doctype html>
+<!-- DESIGN MOCK (2026-10-10). The iOS login page remembers the last account that signed in.
+     Today (OrbitApp Views/LoginView.swift, shared by iOS and macOS; AppModel.login / loginWithGoogle /
+     logout): a successful password sign-in saves its email under UserDefaults `orbit.email` and the page
+     prefills it; a Google sign-in saves only the server (`orbit.instance`); Sign out and a 401 both run
+     logout(), which revokes and deletes the tokens and says nothing on the page it lands on.
+     This board: today, the proposal (an account card in place of the Email field), the details (what is
+     kept, when it is forgotten, security), the open choices (A/B), and what landing it costs.
+     Sample person: "Alex Morgan" / alex@example.com — the repo is public.
+     Geometry: iPhone 393×852 pt, safe area 59 / 34. LoginView's own numbers: logo 76 (40 compact),
+     form 36 below the header (24 compact), fields 12 apart, radius 14, Sign In 50 high, max width 360.
+     Render: node /var/tmp/login-remember-mock/render.mjs board.html <outdir> (playwright-core,
+     Inter + Noto Sans SC); one PNG per section#part-N, one per phone, plus board.png. -->
+<html lang="zh-CN">
+<meta charset="utf-8">
+<title>登录页记住上次的账号 — iPhone 设计图</title>
+<style>
+  :root {
+    --accent: #2E6BFF;          /* AccentColor (0.18, 0.42, 1) */
+    --label: #000; --l2: rgba(60,60,67,.6); --l3: rgba(60,60,67,.3);
+    --fill: rgba(60,60,67,.07); /* Color.secondary.opacity(0.1) */
+    --sep: rgba(60,60,67,.29);
+    --red: #FF3B30;
+    --mk: #E5484D; --mkfill: #F08A24;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 36px; background: #e9e9ee; color: #16161a; width: 1960px;
+         font: 15px/1.6 "Inter", "Noto Sans SC", sans-serif; -webkit-font-smoothing: antialiased; }
+  .part { background: #f7f7f9; border-radius: 26px; padding: 30px 34px 34px; }
+  .part + .part { margin-top: 30px; }
+  h1 { font-size: 27px; line-height: 1.3; margin: 0 0 12px; letter-spacing: -.01em; }
+  h2 { font-size: 21px; margin: 0 0 6px; }
+  h3 { font-size: 17px; margin: 0 0 4px; }
+  .lede { color: #4d4d56; font-size: 15.5px; max-width: 1800px; margin: 0 0 6px; }
+  .lede b, .cap b, .cols b, .steps b, .panel b, td b { color: #16161a; }
+  code { font-family: "DejaVu Sans Mono", monospace; font-size: 12.5px; background: #e4e4ea; border-radius: 4px; padding: 1px 5px; }
+  .tag { display: inline-block; font: 600 12.5px/1 "Inter", "Noto Sans SC", sans-serif; padding: 5px 9px; border-radius: 7px; margin-bottom: 12px; }
+  .tag.now { background: #ffe1dc; color: #b3261e; }
+  .tag.new { background: #dfe8ff; color: #2346c4; }
+  .tag.alt { background: #efe3ff; color: #6a2bb8; }
+  .tag.open { background: #fff0d1; color: #8a5300; }
+  .row { display: flex; gap: 38px; align-items: flex-start; margin-top: 22px; }
+  figure { margin: 0; flex: none; width: 393px; }
+  .cap { margin-top: 16px; font-size: 14px; line-height: 1.68; color: #4d4d56; }
+  .cap > b:first-child { display: block; font-size: 15px; margin-bottom: 4px; }
+  .cap ol { margin: 6px 0 0; padding-left: 0; list-style: none; }
+  .cap li { margin-top: 6px; padding-left: 28px; position: relative; }
+  .cap li .n { position: absolute; left: 0; top: 2px; }
+  .n { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--mkfill);
+       color: #fff; font: 700 12px/1 "Inter", sans-serif; }
+  .n.g { background: #8e8e96; }
+  .panel { background: #fff; border-radius: 24px; padding: 18px 22px 20px; box-shadow: 0 8px 26px rgba(0,0,0,.10);
+           font-size: 14.5px; line-height: 1.75; color: #4d4d56; }
+  .panel ul { margin: 8px 0 0; padding-left: 18px; } .panel li { margin-top: 4px; }
+
+  /* ── the phone, 393 × 852 pt ── */
+  .phone { width: 393px; height: 852px; border-radius: 54px; overflow: hidden; position: relative; background: #fff; color: var(--label);
+           box-shadow: 0 14px 44px rgba(0,0,0,.16); border: 1px solid rgba(0,0,0,.08);
+           font-family: "Inter", "Noto Sans SC", sans-serif; line-height: 1.3; }
+  .island { position: absolute; top: 11px; left: 50%; width: 126px; height: 37px; margin-left: -63px; border-radius: 20px; background: #000; z-index: 8; }
+  .sb { position: absolute; top: 0; left: 0; right: 0; height: 54px; display: flex; justify-content: space-between; align-items: center;
+        padding: 6px 30px 0 46px; z-index: 7; }
+  .sb .time { font-size: 17px; font-weight: 700; }
+  .sb .sys { display: flex; gap: 6px; align-items: center; }
+  .sb .bat { width: 27px; height: 13px; border: 1.5px solid rgba(0,0,0,.4); border-radius: 4px; padding: 1.5px; position: relative; }
+  .sb .bat i { display: block; height: 100%; width: 80%; background: #000; border-radius: 2px; }
+  .home { position: absolute; bottom: 8px; left: 50%; width: 134px; height: 5px; margin-left: -67px; border-radius: 3px; background: #000; z-index: 8; }
+  .wash { position: absolute; inset: 0; background: radial-gradient(circle 520px at 50% 0, rgba(46,107,255,.10), rgba(46,107,255,0)); }
+
+  /* ── LoginView ── */
+  .lg { position: absolute; top: 59px; bottom: 34px; left: 0; right: 0; display: flex; flex-direction: column; justify-content: center; padding: 40px 24px; }
+  .lg.compact { justify-content: flex-start; padding: 16px 24px; }
+  .hd { display: flex; flex-direction: column; align-items: center; }
+  .logo { position: relative; width: 76px; height: 76px; margin-bottom: 20px; }
+  .logo img { position: relative; z-index: 1; display: block; width: 76px; height: 76px; border-radius: 17px; box-shadow: 0 7.6px 25px rgba(46,107,255,.28); }
+  .logo .rings { position: absolute; left: 50%; top: 50%; width: 394px; height: 394px; margin: -197px 0 0 -197px; z-index: 0; }
+  .hd .t { font-size: 34px; font-weight: 700; letter-spacing: -.01em; line-height: 41px; }
+  .hd .s { font-size: 17px; color: var(--l2); margin-top: 6px; line-height: 22px; }
+  .hdc { display: flex; align-items: center; gap: 12px; }
+  .hdc img { width: 40px; height: 40px; border-radius: 9px; box-shadow: 0 4px 13px rgba(46,107,255,.28); }
+  .hdc .t { font-size: 20px; font-weight: 700; line-height: 25px; }
+  .hdc .s { font-size: 13px; color: var(--l2); margin-top: 2px; line-height: 16px; }
+  .form { margin-top: 36px; display: flex; flex-direction: column; gap: 12px; }
+  .compact .form { margin-top: 24px; }
+  .fld { position: relative; padding: 10px 16px; border-radius: 14px; background: var(--fill); border: 1.5px solid transparent; }
+  .fld.focus { background: #fff; border-color: var(--accent); }
+  .fld .fl { font-size: 13px; line-height: 16px; color: var(--l2); }
+  .fld.focus .fl { color: var(--accent); }
+  .fld .fv { font-size: 17px; line-height: 22px; margin-top: 2px; }
+  .fld .fv.ph { color: var(--l3); }
+  .fld .eye { position: absolute; right: 16px; top: 50%; margin-top: -7px; }
+  .caret { display: inline-block; width: 2px; height: 20px; background: var(--accent); vertical-align: -4px; margin-left: 1px; }
+  .btn { margin-top: 8px; height: 50px; border-radius: 25px; background: var(--accent); color: #fff; font-size: 17px; font-weight: 600;
+         display: flex; align-items: center; justify-content: center; }
+  .btn.off { opacity: .38; }
+  .or { display: flex; align-items: center; gap: 12px; padding: 4px 0; font-size: 13px; color: var(--l2); }
+  .or::before, .or::after { content: ""; flex: 1; height: 1px; background: rgba(60,60,67,.16); }
+  .gbtn { height: 50px; border-radius: 25px; background: #fff; border: 1px solid #747775; color: #1F1F1F; font-size: 17px; font-weight: 600;
+          display: flex; align-items: center; justify-content: center; gap: 10px; }
+  .lk { align-self: center; color: var(--accent); font-size: 15px; font-weight: 500; line-height: 20px; margin-top: 10px; padding: 2px 6px; }
+
+  /* the account card: LoginField's shape and fill, holding who instead of a field */
+  .acct { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-radius: 14px; background: var(--fill); }
+  .acct .ai { min-width: 0; flex: 1; }
+  .acct .an { font-size: 17px; font-weight: 600; line-height: 22px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .acct .ae { font-size: 13px; line-height: 18px; color: var(--l2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .acct .as { font-size: 13px; line-height: 18px; color: var(--l2); display: flex; align-items: center; gap: 4px; }
+  .av { flex: none; width: 40px; height: 40px; border-radius: 50%; overflow: hidden; display: grid; place-items: center; }
+  .av.mono { background: var(--accent); color: #fff; font-size: 18px; font-weight: 600; }
+  .av.plus { background: rgba(46,107,255,.12); }
+
+  /* keyboard */
+  .kb { position: absolute; left: 0; right: 0; bottom: 0; height: 336px; background: #D1D3D9; padding: 6px 3px 0; z-index: 5; }
+  .kb .bar { height: 44px; display: flex; align-items: center; justify-content: center; font-size: 15px; color: #333; }
+  .kb .pw { display: flex; align-items: center; gap: 6px; }
+  .kr { display: flex; justify-content: center; gap: 6px; margin-top: 11px; }
+  .kr span { width: 33px; height: 42px; background: #fff; border-radius: 5px; box-shadow: 0 1px 0 rgba(0,0,0,.3); display: flex; align-items: center; justify-content: center; font-size: 22px; }
+  .kr span.w { background: #ABB0BA; font-size: 15px; }
+  .kr span.sp { width: 182px; font-size: 15px; }
+  .kr span.go { width: 88px; background: var(--accent); color: #fff; font-size: 15px; }
+
+  /* long press: the page blurred, the card lifted, its menu under it */
+  .lg.blur { filter: blur(7px); }
+  .dimmer { position: absolute; inset: 0; background: rgba(0,0,0,.10); z-index: 3; }
+  .acct.lifted { position: absolute; z-index: 4; background: #fff; box-shadow: 0 14px 38px rgba(0,0,0,.20); transform: scale(1.03); }
+  .menu { position: absolute; z-index: 4; width: 280px; border-radius: 18px; background: rgba(255,255,255,.97); box-shadow: 0 14px 40px rgba(0,0,0,.20); overflow: hidden; }
+  .menu .mi { height: 50px; display: flex; align-items: center; justify-content: space-between; padding: 0 18px; font-size: 17px; color: var(--red); }
+
+  /* the account list of option B */
+  .alist { border-radius: 14px; background: var(--fill); overflow: hidden; }
+  .alist .acct { border-radius: 0; background: transparent; position: relative; }
+  .alist .acct + .acct::before { content: ""; position: absolute; top: 0; left: 68px; right: 0; height: 1px; transform: scaleY(.5); background: var(--sep); }
+  .alist .chev { flex: none; }
+
+  /* marks: dashed outline + numbered dot, placed after layout */
+  .ol-mk { position: absolute; border: 2px dashed var(--mk); border-radius: 14px; z-index: 9; pointer-events: none; }
+  .dot-mk { position: absolute; width: 22px; height: 22px; border-radius: 50%; background: var(--mkfill); color: #fff; z-index: 10;
+            font: 700 12.5px/22px "Inter", sans-serif; text-align: center; box-shadow: 0 0 0 2px #fff; }
+
+  /* snippets */
+  .snip { width: 393px; background: #fff; border-radius: 24px; padding: 6px 24px 20px; box-shadow: 0 8px 26px rgba(0,0,0,.10); }
+  .snip .sl { font: 600 11.5px/1 "DejaVu Sans Mono", monospace; color: #8a8a93; letter-spacing: .04em; padding: 14px 0 2px; text-transform: uppercase; }
+  .var { margin-top: 14px; }
+  .var .vk { font-size: 13px; line-height: 1.5; color: #4d4d56; margin-bottom: 6px; }
+  .var .vk b { color: #16161a; }
+
+  table.when { border-collapse: collapse; width: 100%; font-size: 14px; line-height: 1.6; color: #4d4d56; }
+  table.when th { text-align: left; font-size: 12.5px; color: #8a8a93; font-weight: 600; padding: 0 10px 8px 0; border-bottom: 1px solid #e0e0e6; }
+  table.when td { padding: 8px 10px 8px 0; border-bottom: 1px solid #ececf0; vertical-align: top; }
+  table.when td:first-child { white-space: nowrap; color: #16161a; }
+  .k { display: inline-block; font-size: 12px; font-weight: 700; border-radius: 6px; padding: 1px 8px; white-space: nowrap; }
+  .k.w { background: #dfe8ff; color: #2346c4; }
+  .k.keep { background: #e3f4e6; color: #1f7a35; }
+  .k.del { background: #ffe1dc; color: #b3261e; }
+  .k.no { background: #ececf0; color: #66666f; }
+
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; margin-top: 18px; font-size: 14.5px; line-height: 1.72; color: #4d4d56; }
+  .cols ul { margin: 6px 0 0; padding-left: 18px; } .cols li { margin-top: 4px; }
+  .pick { border: 2px solid var(--accent); border-radius: 18px; padding: 14px 18px; background: #fff; }
+  .pick.no { border-color: #d9d9e0; }
+  .pick ul { margin: 8px 0 0; padding-left: 18px; font-size: 14.5px; line-height: 1.72; color: #4d4d56; }
+  .pick li { margin-top: 3px; }
+  .steps { margin-top: 16px; font-size: 15px; line-height: 1.72; color: #4d4d56; max-width: 1400px; }
+  .steps ol { margin: 0; padding-left: 0; list-style: none; counter-reset: s; }
+  .steps li { position: relative; padding: 12px 0 12px 44px; border-top: 1px solid #e0e0e6; }
+  .steps li::before { counter-increment: s; content: counter(s); position: absolute; left: 0; top: 13px; width: 28px; height: 28px; border-radius: 8px;
+                      background: #2346c4; color: #fff; font: 700 14px/28px "Inter", sans-serif; text-align: center; }
+  .steps li.opt::before { background: #9a9aa4; }
+  .steps .cost { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 6px; padding: 1px 7px; margin-left: 8px; background: #e7ecff; color: #2346c4; vertical-align: 1px; }
+  .steps li.opt .cost { background: #ececf0; color: #66666f; }
+</style>
+
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#D7E6F8"/><stop offset="1" stop-color="#A9C6EC"/></linearGradient>
+    <clipPath id="disc"><circle cx="20" cy="20" r="20"/></clipPath>
+  </defs>
+</svg>
+
+<!-- ═══════════════ 1 · today ═══════════════ -->
+<section class="part" id="part-1">
+  <h1>iOS 登录页：记住上次登录的账号</h1>
+  <p class="lede">登录页什么时候会出现：主动点了 Sign out，或者登录过期（token 过期、被吊销，App 收到 401 自己退出）。平时 token 在钥匙串里，打开 App 直接进，不经过这页。所以这页上的人<b>几乎都是「回来的人」</b>，可今天它对回来的人和第一次装 App 的人长得差不多。</p>
+  <p class="lede">下面先画今天的两种人：用密码登录的、用 Google 登录的，都是退出后再打开 App 看到的样子。</p>
+  <div class="row">
+    <figure>
+      <span class="tag now">现状 · 用密码登录的人回来</span>
+      <div class="phone" id="p-today-pw"></div>
+      <div class="cap"><ol>
+        <li><span class="n">1</span>只预填了一串邮箱：没有名字、没有头像，Welcome back 不知道在欢迎谁。这串邮箱只有密码登录成功才写，所有服务器共用一份。</li>
+      </ol></div>
+    </figure>
+    <figure>
+      <span class="tag now">现状 · 用 Google 登录的人回来</span>
+      <div class="phone" id="p-today-google"></div>
+      <div class="cap"><ol>
+        <li><span class="n">2</span>一张空表：Google 登录只记了服务器，没记人。要是这台手机以前用密码登过别的账号，这里预填的反而是那个旧邮箱。</li>
+        <li><span class="n">3</span>得自己想起来「我当初点的是 Google」，按钮排在最下面，和第一次装 App 一样。</li>
+      </ol></div>
+    </figure>
+    <figure style="width:900px">
+      <span class="tag open">今天记住了什么（读代码）</span>
+      <div class="panel">
+        <ul>
+          <li><code>orbit.instance</code>（UserDefaults）：上次登录成功的服务器，密码、Google 都写。</li>
+          <li><code>orbit.email</code>（UserDefaults）：上次<b>密码</b>登录成功的邮箱，登录页预填它。Google 登录既不写也不清；所有服务器共用这一个。</li>
+          <li>钥匙串：每个服务器一对 access / refresh token。点 Sign out 先在服务端吊销 refresh token 再删掉；收到 401 走的是同一个 <code>logout()</code>，落回登录页时什么都不说。</li>
+          <li>Android：同样只记密码登录的邮箱，不过按服务器各记一份、加密存；Google 也不记（测试里写明 <i>none was typed</i>）。Web 什么都不记，交给浏览器的密码管理器。</li>
+        </ul>
+        <p style="margin:14px 0 0"><b>结论：</b>用密码的人只被记住了一半（邮箱），用 Google 的人完全没被记住；两种人回来都看不到「这是我的账号」。</p>
+        <p style="margin:10px 0 0"><b>建议的做法：</b>登录成功时记下「这是谁」——名字、邮箱、头像、用哪种方式登录的、在哪个服务器。回到登录页时，Email 框换成这个人的账号卡片，下面只给他上次用的那种登录方式。不记密码、不记 token，退出照旧是真退出。</p>
+      </div>
+    </figure>
+  </div>
+</section>
+
+<!-- ═══════════════ 2 · proposal ═══════════════ -->
+<section class="part" id="part-2">
+  <h2>建议：Email 框换成账号卡片，下面只给上次那种登录方式</h2>
+  <p class="lede">页面结构不变：同一个 logo、同一句 Welcome back、同样的圆角框和按钮。只把 Email 框换成一张同形状的账号卡片，卡片下面只摆这个人上次用的那一种登录方式；另一种方式和换人，都在 Use another account 后面。不另开一页「Continue as …」：退出后 token 已经吊销，点了「继续」还是要输密码或走 Google，多一页就是多一步。</p>
+  <div class="row">
+    <figure>
+      <span class="tag new">① 用密码登录的人回来</span>
+      <div class="phone" id="p-new-pw"></div>
+      <div class="cap"><ol>
+        <li><span class="n">1</span>账号卡片：头像、名字、邮箱，和 Email 框同一个圆角、同一个底色。头像有照片用照片，没有用首字母，和抽屉、Settings 顶上那个一样。卡片本身不是按钮。</li>
+        <li><span class="n">2</span>只剩密码要填，也只给密码这一种：上次用密码登的，就不再摆 or 和 Google 按钮。不自动弹键盘：刚点完 Sign out 的人多半不是要马上登回来。点一下密码框，键盘上照旧有 Passwords（iCloud 钥匙串）。</li>
+        <li><span class="n">3</span>Use another account：换成今天的完整登录页（③），想用 Google 或换个人都从这里走。记住的账号不会因此被删。</li>
+      </ol></div>
+    </figure>
+    <figure>
+      <span class="tag new">② 用 Google 登录的人回来</span>
+      <div class="phone" id="p-new-google"></div>
+      <div class="cap"><ol>
+        <li><span class="n">4</span>上次用 Google 登的，卡片下面就只有 Continue with Google：没有密码框、没有 or。点下去仍会出 Google 的「选择账号」页（服务端特意要求每次手选，见第 3 部分），省掉的是「想起来用的哪种」和找按钮。</li>
+        <li><span class="n">3</span>同 ①。一个 Google 注册的账号可能根本没有密码，所以这里不放密码框；想用密码就点它。</li>
+      </ol></div>
+    </figure>
+    <figure>
+      <span class="tag new">③ 点了 Use another account</span>
+      <div class="phone" id="p-new-other"></div>
+      <div class="cap"><ol>
+        <li><span class="n">5</span>就是今天的登录页，底部多一行 Sign in as Alex Morgan，点了回到卡片。用别的账号登录成功，卡片才换成那个人；没登成什么都不变。</li>
+      </ol></div>
+    </figure>
+    <figure>
+      <span class="tag new">④ 长按卡片</span>
+      <div class="phone" id="p-new-remove" data-lift="1"></div>
+      <div class="cap"><ol>
+        <li><span class="n">6</span>Remove from this device：忘掉这个账号，连头像小图一起删，页面变回空表，也不再有 Sign in as。用得少（换手机、借给别人用），所以放在长按菜单里，不占页面。VoiceOver 里是卡片上的一个操作；Mac 上是右键菜单。</li>
+      </ol></div>
+    </figure>
+  </div>
+</section>
+
+<!-- ═══════════════ 3 · details ═══════════════ -->
+<section class="part" id="part-3">
+  <h2>细节：输入时、卡片的几种样子、什么时候记和忘、安全</h2>
+  <div class="row">
+    <figure>
+      <span class="tag new">⑤ 点进密码框</span>
+      <div class="phone" id="p-typing"></div>
+      <div class="cap"><ol>
+        <li><span class="n">7</span>键盘起来时品牌收成一行（今天就是这样），卡片、密码框、Sign In 都在键盘上面。邮箱不再是输入框，但要求不变：点 Passwords 选 alex@example.com 那一条，密码照样填进来（实现时邮箱仍以用户名的身份交给系统）。</li>
+      </ol></div>
+    </figure>
+    <figure style="width:393px">
+      <span class="tag open">卡片的几种样子</span>
+      <div class="snip" id="variants">
+        <div class="sl">Account card</div>
+      </div>
+    </figure>
+    <figure style="width:930px">
+      <span class="tag open">什么时候记、什么时候忘</span>
+      <div class="panel">
+        <table class="when">
+          <tr><th style="width:230px">时机</th><th style="width:96px">记住的账号</th><th>说明</th></tr>
+          <tr><td>密码登录成功</td><td><span class="k w">写入 / 换人</span></td><td>服务器、邮箱、名字、方式 = 密码；有头像就在本机存一份小图</td></tr>
+          <tr><td>Google 登录成功</td><td><span class="k w">写入 / 换人</span></td><td>同上，方式 = Google（邮箱、名字取自 <code>/users/me</code>）</td></tr>
+          <tr><td>登录着改了名字、换/删了头像</td><td><span class="k w">跟着更新</span></td><td>下次回到登录页看到的是新的</td></tr>
+          <tr><td>登录失败（密码错、服务器不通）</td><td><span class="k no">不动</span></td><td>打错的邮箱、试过的服务器都不记，今天就是这条规则</td></tr>
+          <tr><td>Settings → Sign out</td><td><span class="k keep">保留</span></td><td>照旧当场吊销 refresh token、清钥匙串</td></tr>
+          <tr><td>登录过期、被吊销（401）</td><td><span class="k keep">保留</span></td><td>同一个 <code>logout()</code></td></tr>
+          <tr><td>点 Use another account</td><td><span class="k keep">保留</span></td><td>只是换一张表；底部 Sign in as … 回到卡片</td></tr>
+          <tr><td>长按卡片 → Remove from this device</td><td><span class="k del">删除</span></td><td>连头像小图一起删</td></tr>
+          <tr><td>隐藏的 Server 面板换了服务器</td><td><span class="k keep">保留</span></td><td>卡片只在当前服务器就是记住的那个时出现；换回来，卡片就回来</td></tr>
+          <tr><td>删掉 App</td><td><span class="k del">删除</span></td><td>UserDefaults 和小图都在 App 里，随 App 一起走</td></tr>
+        </table>
+        <h3 style="margin-top:18px">安全</h3>
+        <ul>
+          <li><b>不存密码、不存 token。</b>记的只是登录页要画的东西：名字、邮箱、头像、方式、服务器。密码交给 iCloud 钥匙串，和今天一样。</li>
+          <li><b>退出就是退出。</b>refresh token 照旧当场吊销。不做「退出后点头像一键回来」：那要把能登录的凭据留在本机，等于没退出。</li>
+          <li><b>只在这台设备。</b>一条 UserDefaults 加一张头像小图，在 App 沙盒里，受 iOS 数据保护加密，不跨设备同步。</li>
+          <li><b>Google 那一步不省。</b>服务端发起 Google 登录时特意带 <code>prompt=select_account</code>（防抢注 <code>orbit://</code> 的恶意 App，见 google-sign-in-design §4.4），所以 Google 用户仍要在 Google 页面点一下自己的账号，这次不动它。</li>
+        </ul>
+      </div>
+    </figure>
+  </div>
+</section>
+
+<!-- ═══════════════ 4 · decide ═══════════════ -->
+<section class="part" id="part-4">
+  <h2>待定 · 要你拍板</h2>
+  <div class="row">
+    <figure>
+      <span class="tag alt">1 的方案 B · 最近几个账号的列表</span>
+      <div class="phone" id="p-list"></div>
+      <div class="cap">点一行，进那个账号的密码或 Google（就是第 2 部分 ① ② 那页）；长按一行删掉。比 A 多一步。</div>
+    </figure>
+    <div style="width:640px">
+      <h3 style="margin:2px 0 12px">1. 记一个，还是记最近几个？</h3>
+      <div class="pick">
+        <b style="font-size:16px;color:#2346c4">推荐 A：只记上一个（第 2 部分那样）</b>
+        <ul>
+          <li>你要的就是「上次登录的用户」。一台手机通常就是一个人、一个账号，回来时一张卡片、一个密码框，最少的一步。</li>
+          <li>换账号随时能换：Use another account 登录成功，卡片就换成新的人。</li>
+          <li>以后真要多个，A 的卡片就是 B 列表里的一行，不白做。</li>
+        </ul>
+      </div>
+      <div class="pick no" style="margin-top:14px">
+        <b style="font-size:16px;color:#6a2bb8">B：记最近几个，回来先挑账号（左图）</b>
+        <ul>
+          <li>同一台手机来回切几个账号的人（比如 orbitd.io 一个、公司自建服务器一个，或者管理员的测试账号）不用每次重新输邮箱。</li>
+          <li>代价：每次回来多一页列表；要按服务器区分、存多张头像；列表要有上限（比如 3 个）和删除。</li>
+        </ul>
+      </div>
+    </div>
+    <div style="width:640px">
+      <h3 style="margin:2px 0 12px">2. 用 Google 登录的人，也记吗？</h3>
+      <div class="pick">
+        <b style="font-size:16px;color:#2346c4">推荐 A：记（第 2 部分 ②）</b>
+        <ul>
+          <li>用 Google 的人回来看到自己的卡片，下面只有 Continue with Google，不用记得当初怎么登的。</li>
+          <li>记的是 Orbit 自己 <code>/users/me</code> 返回的名字和邮箱，不是 Google 那边的任何东西；Google 的 token 服务端当场就丢了，这里也碰不到。</li>
+        </ul>
+      </div>
+      <div class="pick no" style="margin-top:14px">
+        <b style="font-size:16px;color:#6a2bb8">B：不记，保持现在的规则</b>
+        <ul>
+          <li>Android 现在明确写了「Google 只记服务器，因为用户没输过邮箱」：预填只放用户自己打过的字。</li>
+          <li>那样 Google 用户回来还是第 1 部分那张空表。卡片是「这是谁」，不是替用户打字，所以建议改掉这条；Android 跟进时（落地第 4 步）一起改。</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ 5 · landing ═══════════════ -->
+<section class="part" id="part-5">
+  <h2>落地（按代价排）</h2>
+  <div class="steps">
+    <ol>
+      <li><b>OrbitKit：记住的账号和它的规则</b><span class="cost">只改客户端 · 不动服务端</span><br>
+        一个 <code>RememberedAccount</code>（服务器、邮箱、名字、方式、头像小图），存取、上面那张「什么时候记、什么时候忘」的规则，以及把老的 <code>orbit.email</code> 迁过来（老用户先只显示邮箱，下次登录后补齐名字和头像）。全在 OrbitKit 里，Linux 上 <code>swift test</code> 能跑。</li>
+      <li><b>登录页和 AppModel</b><span class="cost">只改客户端</span><br>
+        Email 框换卡片；Use another account / Sign in as …；长按 Remove from this device；两种登录成功、改名、换头像时写入。新文案都是英文（Use another account、Sign in as {name}、Remove from this device）。<code>LoginView</code> 是 iOS 和 Mac 共用的一个文件，<b>Mac 会自动一起变</b>；只要 iOS 的话说一声，多包一层平台判断。</li>
+      <li><b>CI 模拟器截图对照</b><span class="cost">CI</span><br>
+        浅色、深色各一套：密码卡片、Google 卡片、空表、长按菜单、键盘弹起，放回这个目录，和这张设计图对照。</li>
+      <li class="opt"><b>可选 · Android 照做</b><span class="cost">Android</span><br>
+        Android 已经按服务器加密记邮箱，加名字、头像、方式和同样的卡片。Web 不做：浏览器自己记账号密码。</li>
+      <li class="opt"><b>可选 · 登录过期时说一句原因</b><span class="cost">只改客户端</span><br>
+        今天 401 和主动退出走同一个 <code>logout()</code>，落到登录页什么都不说。可以在卡片上方加一行 <i>Your session expired. Sign in again to continue.</i> 和这次的卡片无关，可以单独做。</li>
+    </ol>
+    <p style="margin:14px 0 0;font-size:14.5px;color:#4d4d56">建议 1–3 一个任务、一次落地；4、5 你说要再做。</p>
+  </div>
+</section>
+
+<script>
+const ICON = '../../../src/ios/Support/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png';
+const IC = {
+  signal: '<svg width="19" height="12" viewBox="0 0 19 12"><rect x="0" y="8" width="3.2" height="4" rx="1"/><rect x="5.1" y="5.4" width="3.2" height="6.6" rx="1"/><rect x="10.2" y="2.7" width="3.2" height="9.3" rx="1"/><rect x="15.3" y="0" width="3.2" height="12" rx="1"/></svg>',
+  wifi: '<svg width="17" height="12" viewBox="0 0 18 13"><path d="M9 12.5l2.6-3a3.6 3.6 0 0 0-5.2 0zM3.6 6.4l1.6 1.8a5.5 5.5 0 0 1 7.6 0l1.6-1.8a7.9 7.9 0 0 0-10.8 0zM.6 3.1l1.6 1.8a10 10 0 0 1 13.6 0l1.6-1.8A12.4 12.4 0 0 0 .6 3.1z"/></svg>',
+  eye: '<svg width="22" height="14" viewBox="0 0 22 14"><path d="M11 1.5C6.5 1.5 3 4.6 1.6 7c1.4 2.4 4.9 5.5 9.4 5.5s8-3.1 9.4-5.5C19 4.6 15.5 1.5 11 1.5z" fill="none" stroke="rgba(60,60,67,.6)" stroke-width="1.5"/><circle cx="11" cy="7" r="2.8" fill="none" stroke="rgba(60,60,67,.6)" stroke-width="1.5"/></svg>',
+  key: '<svg width="13" height="16" viewBox="0 0 13 16"><circle cx="6.5" cy="4.6" r="3.9" fill="none" stroke="#333" stroke-width="1.6"/><path d="M6.5 8.5V15M6.5 11.4h2.6M6.5 13.6h2" stroke="#333" stroke-width="1.6" stroke-linecap="round"/></svg>',
+  trash: '<svg width="17" height="19" viewBox="0 0 17 19" fill="none" stroke="#FF3B30" stroke-width="1.6" stroke-linecap="round"><path d="M1.5 4h14M6 4V2h5v2M3.2 4l.9 13h8.8l.9-13M7 7.5v6.5M10 7.5v6.5"/></svg>',
+  server: '<svg width="13" height="12" viewBox="0 0 13 12" fill="none" stroke="rgba(60,60,67,.6)" stroke-width="1.3"><rect x="1" y="1" width="11" height="4" rx="1.2"/><rect x="1" y="7" width="11" height="4" rx="1.2"/><circle cx="3.6" cy="3" r=".6" fill="rgba(60,60,67,.6)"/><circle cx="3.6" cy="9" r=".6" fill="rgba(60,60,67,.6)"/></svg>',
+  chev: '<svg width="8" height="13" viewBox="0 0 8 13"><path d="M1.6 1.5 6.4 6.5 1.6 11.5" fill="none" stroke="rgba(60,60,67,.3)" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  plus: '<svg width="16" height="16" viewBox="0 0 16 16"><path d="M8 2v12M2 8h12" stroke="#2E6BFF" stroke-width="2" stroke-linecap="round"/></svg>',
+  rings: '<svg class="rings" viewBox="0 0 394 394"><g fill="none" stroke="#2E6BFF"><circle cx="197" cy="197" r="90" stroke-opacity=".14"/><circle cx="197" cy="197" r="140" stroke-opacity=".09"/><circle cx="197" cy="197" r="196" stroke-opacity=".05"/></g></svg>',
+  // Google's four-colour G, the 48-unit paths of LoginView's GoogleMark.
+  g: '<svg width="18" height="18" viewBox="0 0 48 48">'
+    + '<path fill="#EA4335" d="M24 9.5C27.54 9.5 30.71 10.72 33.21 13.1L40.06 6.25C35.9 2.38 30.47 0 24 0C14.62 0 6.51 5.38 2.56 13.22L10.54 19.41C12.43 13.72 17.74 9.5 24 9.5Z"/>'
+    + '<path fill="#4285F4" d="M46.98 24.55C46.98 22.98 46.83 21.46 46.6 20L24 20L24 29.02L36.94 29.02C36.36 31.98 34.68 34.5 32.16 36.2L39.89 42.2C44.4 38.02 46.98 31.84 46.98 24.55Z"/>'
+    + '<path fill="#FBBC05" d="M10.53 28.59C10.05 27.14 9.77 25.6 9.77 24C9.77 22.4 10.04 20.86 10.53 19.41L2.55 13.22C0.92 16.46 0 20.12 0 24C0 27.88 0.92 31.54 2.56 34.78L10.53 28.59Z"/>'
+    + '<path fill="#34A853" d="M24 48C30.48 48 35.93 45.87 39.89 42.19L32.16 36.19C30.01 37.64 27.24 38.49 24 38.49C17.74 38.49 12.43 34.27 10.53 28.58L2.55 34.77C6.51 42.62 14.62 48 24 48Z"/>'
+    + '</svg>',
+};
+// A stand-in for a profile photo: a person on a sky, cut to the avatar's circle.
+const PHOTO = '<svg width="40" height="40" viewBox="0 0 40 40"><g clip-path="url(#disc)"><rect width="40" height="40" fill="url(#sky)"/>'
+  + '<path d="M5 41C6 31.5 12.5 28 20 28C27.5 28 34 31.5 35 41Z" fill="#2F4858"/><rect x="17.2" y="22" width="5.6" height="7" rx="2" fill="#E9B893"/>'
+  + '<circle cx="20" cy="17" r="7.4" fill="#F2C6A2"/><path d="M12.4 17C12 11 15.6 8.6 20 8.6C24.8 8.6 28.2 11.4 27.6 17C26 13.6 23.4 12.6 20 12.7C16.6 12.8 14 13.9 12.4 17Z" fill="#3B2A22"/></g></svg>';
+
+const ALEX = { name: 'Alex Morgan', email: 'alex@example.com', photo: true };
+const ALEX_G = { name: 'Alex Morgan', email: 'alex@example.com', photo: false };
+
+/* ── LoginView's pieces ── */
+const statusBar = () => `<div class="sb"><span class="time">9:41</span><span class="sys">${IC.signal}${IC.wifi}<span class="bat"><i></i></span></span></div>`;
+const header = () => `<div class="hd"><div class="logo">${IC.rings}<img src="${ICON}"></div><div class="t">Welcome back</div><div class="s">Sign in to continue to Orbit</div></div>`;
+const headerCompact = () => `<div class="hdc"><img src="${ICON}"><div><div class="t">Welcome back</div><div class="s">Sign in to continue to Orbit</div></div></div>`;
+const mk = (n) => (n ? ` data-mk="${n}"` : '');
+const field = (label, value, o = {}) => `<div class="fld${o.focus ? ' focus' : ''}"${mk(o.mk)}><div class="fl">${label}</div>`
+  + `<div class="fv${value ? '' : ' ph'}">${value || o.ph}${o.focus ? '<span class="caret"></span>' : ''}</div>${o.eye ? `<span class="eye">${IC.eye}</span>` : ''}</div>`;
+const email = (value, o = {}) => field('Email', value, { ph: 'you@example.com', ...o });
+const password = (value, o = {}) => field('Password', value, { ph: 'Enter your password', eye: true, ...o });
+const avatar = (a) => a.plus ? `<div class="av plus">${IC.plus}</div>`
+  : a.photo ? `<div class="av">${PHOTO}</div>`
+  : `<div class="av mono">${(a.name || a.email).trim()[0].toUpperCase()}</div>`;
+const card = (a, o = {}) => `<div class="acct"${mk(o.mk)}>${avatar(a)}<div class="ai">`
+  + (a.name ? `<div class="an">${a.name}</div><div class="ae">${a.email}</div>` : `<div class="an" style="font-weight:500">${a.email}</div>`)
+  + (a.server ? `<div class="as">${IC.server}${a.server}</div>` : '')
+  + `</div>${o.chev ? `<span class="chev">${IC.chev}</span>` : ''}</div>`;
+const signIn = (on, o = {}) => `<div class="btn${on ? '' : ' off'}"${mk(o.mk)}>Sign In</div>`;
+const or = () => `<div class="or">or</div>`;
+const google = (o = {}) => `<div class="gbtn"${mk(o.mk)}>${IC.g}<span>Continue with Google</span></div>`;
+const link = (text, o = {}) => `<div class="lk"${mk(o.mk)}>${text}</div>`;
+const keyboard = () => `<div class="kb"><div class="bar"><span class="pw">${IC.key} Passwords</span></div>`
+  + '<div class="kr">' + 'qwertyuiop'.split('').map((c) => `<span>${c}</span>`).join('') + '</div>'
+  + '<div class="kr">' + 'asdfghjkl'.split('').map((c) => `<span>${c}</span>`).join('') + '</div>'
+  + '<div class="kr"><span class="w" style="width:44px">⇧</span>' + 'zxcvbnm'.split('').map((c) => `<span>${c}</span>`).join('') + '<span class="w" style="width:44px">⌫</span></div>'
+  + '<div class="kr"><span class="w" style="width:88px">123</span><span class="sp">space</span><span class="go">go</span></div></div>';
+
+function phone(id, items, o = {}) {
+  const el = document.getElementById(id);
+  el.innerHTML = '<div class="wash"></div><div class="island"></div>' + statusBar()
+    + `<div class="lg${o.compact ? ' compact' : ''}${o.blur ? ' blur' : ''}">${o.compact ? headerCompact() : header()}<div class="form">${items.join('')}</div></div>`
+    + (o.extra || '') + '<div class="home"></div>';
+}
+
+/* ── today ── */
+phone('p-today-pw', [email('alex@example.com', { mk: 1 }), password(''), signIn(false), or(), google()]);
+phone('p-today-google', [email('', { mk: 2 }), password(''), signIn(false), or(), google({ mk: 3 })]);
+
+/* ── proposal ── */
+phone('p-new-pw', [card(ALEX, { mk: 1 }), password('', { mk: 2 }), signIn(false), link('Use another account', { mk: 3 })]);
+phone('p-new-google', [card(ALEX_G), google({ mk: 4 }), link('Use another account', { mk: 3 })]);
+phone('p-new-other', [email(''), password(''), signIn(false), or(), google(), link('Sign in as Alex Morgan', { mk: 5 })]);
+phone('p-new-remove', [card(ALEX), password(''), signIn(false), link('Use another account')], {
+  blur: true,
+  extra: `<div class="dimmer"></div><div class="menu" data-mk="6"><div class="mi"><span>Remove from this device</span>${IC.trash}</div></div>`,
+});
+
+/* ── details ── */
+phone('p-typing', [card(ALEX, { mk: 7 }), password('••••••••••', { focus: true }), signIn(true), link('Use another account')], { compact: true, extra: keyboard() });
+document.getElementById('variants').insertAdjacentHTML('beforeend', [
+  ['<b>a · 有头像照片</b>：Orbit 里传过的头像，登录时在本机存一份小图', card(ALEX)],
+  ['<b>b · 没有照片</b>：名字的首字母，和抽屉、Settings 一样', card(ALEX_G)],
+  ['<b>c · 从老版本升上来</b>：只有 <code>orbit.email</code>，先只显示邮箱；下次登录后补齐', card({ email: 'alex@example.com' })],
+  ['<b>d · 自建服务器</b>：多一行服务器地址；orbitd.io 不写', card({ ...ALEX, server: 'orbit.example.com' })],
+  ['<b>e · 太长</b>：名字、邮箱各一行，末尾省略', card({ name: 'Alexandra Montgomery-Fairweather', email: 'alexandra.montgomery-fairweather@example.com', photo: true })],
+].map(([k, c]) => `<div class="var"><div class="vk">${k}</div>${c}</div>`).join(''));
+
+/* ── option B: the recent accounts ── */
+document.getElementById('p-list').innerHTML = '<div class="wash"></div><div class="island"></div>' + statusBar()
+  + `<div class="lg">${header()}<div class="form"><div class="alist">`
+  + card(ALEX, { chev: true })
+  + card({ name: 'Alex Morgan', email: 'alex@work.example', server: 'orbit.example.com' }, { chev: true })
+  + card({ plus: true, name: 'Use another account', email: '' }).replace('<div class="ae"></div>', '').replace('class="an"', 'class="an" style="color:#2E6BFF;font-weight:500"')
+  + '</div></div></div><div class="home"></div>';
+
+/* ── long press: lift a copy of the card over the blurred page and hang its menu under it ── */
+function lift() {
+  document.querySelectorAll('.phone[data-lift]').forEach((ph) => {
+    if (ph.querySelector('.acct.lifted')) return;
+    const src = ph.querySelector('.lg .acct');
+    const pr = ph.getBoundingClientRect(), r = src.getBoundingClientRect();
+    const copy = src.cloneNode(true);
+    copy.classList.add('lifted');
+    copy.style.cssText = `left:${r.left - pr.left}px;top:${r.top - pr.top}px;width:${r.width}px;height:${r.height}px`;
+    ph.appendChild(copy);
+    const menu = ph.querySelector('.menu');
+    menu.style.left = `${r.left - pr.left}px`;
+    menu.style.top = `${r.bottom - pr.top + 14}px`;
+  });
+}
+
+/* ── marks: a dashed outline around every [data-mk], its number at the top right ── */
+function drawMarks() {
+  lift();
+  document.querySelectorAll('.ol-mk, .dot-mk').forEach((e) => e.remove());
+  document.querySelectorAll('.phone').forEach((ph) => {
+    const pr = ph.getBoundingClientRect();
+    ph.querySelectorAll('[data-mk]').forEach((el) => {
+      const r = el.getBoundingClientRect();
+      const pad = 4;
+      const L = Math.max(4, r.left - pr.left - pad), R = Math.min(389, r.right - pr.left + pad);
+      const T = r.top - pr.top - pad, B = Math.min(846, r.bottom - pr.top + pad);
+      const box = document.createElement('div');
+      box.className = 'ol-mk';
+      box.style.cssText = `left:${L}px;top:${T}px;width:${R - L}px;height:${B - T}px`;
+      ph.appendChild(box);
+      const dot = document.createElement('div');
+      dot.className = 'dot-mk';
+      dot.textContent = el.dataset.mk;
+      dot.style.cssText = `left:${Math.min(R - 16, 393 - 30)}px;top:${T - 13}px`;
+      ph.appendChild(dot);
+    });
+  });
+}
+window.drawMarks = drawMarks;
+document.fonts.ready.then(() => requestAnimationFrame(drawMarks));
+</script>
+</body>
+</html>
