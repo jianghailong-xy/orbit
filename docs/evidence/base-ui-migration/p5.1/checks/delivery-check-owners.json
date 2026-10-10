@@ -1,0 +1,37 @@
+{
+  "baseline": {
+    "commit": "a0e84233f4c532a810ca7bbd17214e34b0793344",
+    "scopeHash": "1ab8a95ff34818dfd20ae6543703ef0dca5763409d91f94f679d1765f8aae798"
+  },
+  "records": [
+    "2026-10-07.json",
+    "2026-10-07b.json",
+    "2026-10-07c.json",
+    "2026-10-07d.json",
+    "2026-10-08.json",
+    "2026-10-08b.json",
+    "2026-10-09.json",
+    "2026-10-09b.json",
+    "2026-10-09c.json"
+  ],
+  "unowned": [
+    {
+      "path": "src/web/src/components/WorkspaceView.recapRow.test.tsx",
+      "reason": "no owner"
+    },
+    {
+      "path": "src/web/src/index.css",
+      "line": 17921,
+      "kind": "ant-class",
+      "text": ".ant-dropdown-menu-item.composer-provider-gone .scope-menu-row {",
+      "reason": "no owner"
+    }
+  ],
+  "pending": [],
+  "owners": {
+    "KEEP": 1,
+    "P5.2": 11,
+    "P5.3": 95,
+    "P6": 42
+  }
+}

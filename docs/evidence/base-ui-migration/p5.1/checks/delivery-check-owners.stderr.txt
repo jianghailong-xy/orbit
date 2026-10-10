@@ -1,0 +1,1 @@
+Ownership gaps: 2 use points have no owner. Migrate them in this batch if in scope, otherwise report them to the coordinator.

@@ -1,0 +1,18 @@
+src/web/src/components/ui/Menu.footer.test.tsx run alone, `npx vitest run <file> --maxWorkers=1`, repeatedly (2026-10-10, host load 8-12).
+
+== before the fix, merge a0e84233f, task worktree (SSD): 8 of 15 passed
+   run 4: opened from the keyboard, starts on the first item as every menu does :: AssertionError: expected '' to be 'main' // Object.is equality
+   run 9: opened from the keyboard, starts on the first item as every menu does :: AssertionError: expected '' to be 'main' // Object.is equality
+   run 10: opened from the keyboard, starts on the first item as every menu does :: AssertionError: expected '' to be 'main' // Object.is equality
+   run 11: opened from the keyboard, starts on the first item as every menu does :: AssertionError: expected '' to be 'main' // Object.is equality
+   run 13: opened from the keyboard, starts on the first item as every menu does :: AssertionError: expected '' to be 'main' // Object.is equality
+   run 14: opened from the keyboard, starts on the first item as every menu does :: AssertionError: expected '' to be 'main' // Object.is equality
+   run 15: opened from the keyboard, starts on the first item as every menu does :: AssertionError: expected '' to be 'main' // Object.is equality
+
+== before the fix, merge a0e84233f, delivery tree on /mnt/data (spinning disk): 13 of 15 passed
+   run 11: opened from the keyboard, starts on the first item as every menu does :: AssertionError: expected '' to be 'main' // Object.is equality
+   run 14: opened from the keyboard, starts on the first item as every menu does :: AssertionError: expected '' to be 'main' // Object.is equality
+
+== before the fix, before the merge (dev reference tree on /mnt/data; components/ui identical): 15 of 15 passed
+
+== after the fix, task worktree (SSD): 30 of 30 passed
