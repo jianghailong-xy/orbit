@@ -28,16 +28,18 @@ text claude writes from Orbit's `updatedInput.answers`. Both are proved against
 | OrbitKit `swift test`, Linux `swift:6.1` (as CI's Swift core) | 3631 tests, 5 skipped (Linux perf, as on main), 0 failures |
 | Web, whole suite (4 shards) | 387 files, 5095 tests, 0 failed |
 | Web `tsc -b` | clean |
-| macOS: OrbitKit `swift test` + OrbitApp `swift build` (macos-15, probe run 38018707522) | success |
-| iOS: XcodeGen + `xcodebuild` for the simulator (probe run 38018707522) | success |
+| macOS: OrbitKit `swift test` + OrbitApp `swift build` (macos-15, probe run 38022756625, at 4237003241) | 3633 tests, 5 skipped, 0 failures; build success |
+| iOS: XcodeGen + `xcodebuild` for the simulator (probe run 38022756625) | success |
+| Probe UI tests, iPhone and Mac, before and after (run 38022756625) | 6/6 on each, both trees |
 
 ## Pictures
 
 - `web/compare-web-q*.png`: the real web `Transcript` before (main 539cca126) and after, as rendered
   and after a click on the row. The harness is `web-harness/`.
-- `ios/` and `mac/`: the real iPhone `CompactShell` and Mac `MainView` against a stub API, before and
-  after, as opened and after a tap on the row. The harness is `probe-harness/`; it runs on GitHub's
-  macos-26.
+- `ios/compare-ios-*.png`: the real iPhone `CompactShell` against a stub API (probe run 38022756625).
+  Columns: before (main 539cca126), after, after a tap on the row, and the lower half of the opened card.
+- `mac/compare-mac-*.png`: the real Mac `MainView`, before, after, and after a click.
+- The harness is `probe-harness/`, run on GitHub's macos-26.
 
 The five conversations are the same on every client:
 1. one question (the 10:14 screenshot's, word for word);
@@ -46,5 +48,14 @@ The five conversations are the same on every client:
 4. a multi-select question;
 5. a reply given with Chat about this.
 
-Round 1 of the iPhone probe (run 38018707522) showed the replay cutting each option's description at two
-lines. d4dc11d89 fixed it, and round 2 shows the fix.
+Two defects were found by the probe and fixed:
+- **Cut-off descriptions (round 1, run 38018707522).** The iPhone replay cut each option's description
+  at two lines with "…". d4dc11d89 lets every text in the replay take its whole height; rounds 2 and 3
+  show it.
+- **Stale row height on the Mac (round 2, run 38020631149).** An opened card kept its folded height
+  while the transcript still fit the window, so the replay was clipped under the next message
+  (`mac/mac-multi-select-row-height.png`, left). 4237003241 makes an opened tool card on the Mac ask
+  the table behind the List to measure its row again; round 3 shows it (right).
+- **Other cards.** Round 3 also clicked a folded Bash card on both trees. It opened correctly on both,
+  but its output made the transcript scroll, so this probe doesn't show whether other cards had the
+  stale height before. The re-measure applies to every tool card either way.
