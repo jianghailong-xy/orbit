@@ -12,7 +12,7 @@ import {
   type WikiReviewMode,
 } from '@orbit/shared';
 import type { PrismaService } from '../prisma/prisma.service';
-import { listWikiAnchorsForJob } from '../wiki/wiki-anchors';
+import { anchorCheckRefs, anchorDiffNames, listWikiAnchorsForJob, type WikiAnchorDiffNames, type WikiAnchorProof } from '../wiki/wiki-anchors';
 import { gatherDocMaterial, storedSessionCondition, type StoredSessionCondition } from '../wiki/wiki-docs-material';
 import { wikiDocsAffected } from '../wiki/wiki-docs-affected';
 import type { WikiDocs } from '../wiki/wiki-docs';
@@ -58,7 +58,7 @@ import {
 } from './wiki-maintain-plan';
 import { cutRunes, parseWikiImportAnswer, WikiImportRepo, wikiImportIsObject } from './wiki-import-extract';
 import { type WikiPlanSnapshotIndex } from './wiki-plan-repo';
-import { type WikiAnchorCheckInput, type WikiRepoFileRead } from '@orbit/shared';
+import { type WikiAnchorCheckInput, type WikiAnchorDueEntry, type WikiRepoFileRead } from '@orbit/shared';
 import {
   readWikiRepoFiles,
   readWikiRepoReadiness,
@@ -172,8 +172,8 @@ export interface WikiMaintainReport {
   };
   /**
    * The anchors step's counts (contract `maintenance.job.server.anchors`): the entries whose checks this run
-   * wrote, and — of them — those left changed or missing; `skipped` the entries every anchor of which was
-   * already checked at the run's commit, which were neither sent nor written.
+   * wrote, and — of them — those left changed or missing; `skipped` the entries every anchor of which still
+   * held at the run's commit (`anchorRules.verify.skip`), which were neither sent nor written.
    */
   anchors?: { entries: number; changed: number; missing: number; skipped: number };
   docs?: WikiMaintainDocsReport;
@@ -918,16 +918,24 @@ class WikiMaintainRun {
    * that no longer matched was refused and failed the run. Every check the report carries also names
    * its anchor (type, path, symbol, sha), and `recordAnchorChecks` writes it only on that anchor.
    *
-   * AN ENTRY ALREADY CHECKED AT THIS COMMIT IS NOT CHECKED AGAIN (2026-10-10, `anchorRules.verify.skip`).
-   * A check's answer depends on the anchor and the commit alone, so an entry every one of whose anchors was
-   * last checked on exactly this snapshot commit — what the list leaves the run (`anchorsDueAt`) — owes
-   * nothing: it is not sent to the runner, not written, and counted in `skipped` alone. A run that replays
-   * after a REPO_OP_WAIT, or one on a space whose main has not moved, re-checks nothing rather than the
-   * whole space's anchors. One anchor last checked elsewhere, or never, re-checks the entry whole, as
-   * always. What the counts mean is the contract's (`maintenance.job.server.anchors`).
+   * AN ENTRY WHOSE CHECKS STILL HOLD IS NOT CHECKED AGAIN (2026-10-10, `anchorRules.verify.skip`). A check's
+   * answer depends on the anchor and what the commit holds of it, so an entry every one of whose anchors was
+   * last checked on exactly this snapshot commit, or found verified on a commit since which nothing its answer
+   * depends on has moved — the path's place in the tree, the symbol's file, the commit's ancestry, read from a
+   * diff to this commit and from the commits the snapshot reaches (`anchorProof`) — owes nothing: what the list
+   * leaves the run (`anchorsDueAt`) is not sent to the runner, not written, and counted in `skipped` alone. A
+   * round on a main that moved by a day re-checks the entries whose files moved, not the whole space's ~7,800.
+   * One anchor that does not hold re-checks the entry whole, as always, and moves its checks onto this commit;
+   * a skipped one keeps its checks where they were. What the counts mean is the contract's
+   * (`maintenance.job.server.anchors`).
+   *
+   * The entries that still owe a check go out together, whichever page they were read on, `listEntriesMax` of
+   * them an operation at most: once most of a page is left alone, its few would otherwise each cost an
+   * operation's wait — ~39 a round for a handful of entries each.
    */
   private async anchors(): Promise<void> {
     const { job } = this.jobContext;
+    const proof = await this.anchorProof();
     let after: string | null = null;
     let entries = 0;
     let changed = 0;
@@ -935,15 +943,16 @@ class WikiMaintainRun {
     let skipped = 0;
     let refused = 0;
     let failed = 0;
+    const pending: WikiAnchorDueEntry[] = [];
     for (;;) {
       const page = await listWikiAnchorsForJob(this.deps.prisma, {
-        ownerId: job.ownerId, spaceId: job.spaceId, after, limit: WIKI_ANCHOR_RULES.listEntriesMax, checkedAt: this.snapshot?.sha ?? '',
+        ownerId: job.ownerId, spaceId: job.spaceId, after, limit: WIKI_ANCHOR_RULES.listEntriesMax, proof,
       });
-      if (page.entries.length === 0) break;
       after = page.next;
       skipped += page.entries.filter((entry) => entry.anchors.length === 0).length;
-      const wanted = page.entries.filter((entry) => entry.anchors.length > 0);
-      if (wanted.length > 0) {
+      pending.push(...page.entries.filter((entry) => entry.anchors.length > 0));
+      while (pending.length >= WIKI_ANCHOR_RULES.listEntriesMax || (after === null && pending.length > 0)) {
+        const wanted = pending.splice(0, WIKI_ANCHOR_RULES.listEntriesMax);
         // One flat list for the operation: the runner echoes each check's place in this list, so
         // `slots` — not the per-entry index the checks are recorded under — is what maps a check home.
         const slots: Array<{ entry: number; anchor: number }> = [];
@@ -1027,7 +1036,38 @@ class WikiMaintainRun {
       throw new WikiJobContentError(`git could not check ${failed} anchor(s), and the server refused ${refused} entr(ies)`);
     }
     this.jobContext.log(`re-checked the anchors of ${entries} entr(ies): ${changed} changed, ${missing} missing; `
-      + `left ${skipped} entr(ies) alone: every anchor of theirs was already checked at this commit`);
+      + `left ${skipped} entr(ies) alone: every anchor of theirs still held at this commit`);
+  }
+
+  /**
+   * What lets the anchors step leave a check standing (`anchorRules.verify.skip`): the snapshot's commit, the commits
+   * it reaches, and the names of one diff to it from each commit the space's anchors were last checked at — the
+   * commits most anchors were checked at first, `anchorDiffsMax` of them at most, each asked once the one before it
+   * has settled. A commit the snapshot does not reach gets none, and neither does one past the cap: their entries are
+   * checked again, which moves their checks onto this commit. A diff the runner could not make vouches for nothing.
+   */
+  private async anchorProof(): Promise<WikiAnchorProof> {
+    const { job } = this.jobContext;
+    const head = this.snapshot?.sha ?? '';
+    const reaches = new Set((this.snapshot?.index.commits ?? []).map((commit) => commit.toLowerCase()));
+    const refs = (await anchorCheckRefs(this.deps.prisma, { ownerId: job.ownerId, spaceId: job.spaceId, sha: head }))
+      .filter((row) => reaches.has(row.ref));
+    const changed = new Map<string, WikiAnchorDiffNames>();
+    for (const { ref } of refs.slice(0, WIKI_MAINTAIN_JOB.anchorDiffsMax)) {
+      const what = `the diff ${ref.slice(0, 12)}..${head.slice(0, 12)}`;
+      const settled = await this.operation('diff', { from: ref, to: head }, what);
+      if (settled.state !== 'succeeded') {
+        this.jobContext.log(`${what} ${settled.state}: the anchors last checked at ${ref.slice(0, 12)} are checked again`);
+        continue;
+      }
+      changed.set(ref, anchorDiffNames(diffAnswerOf(settled).files));
+    }
+    const left = refs.slice(WIKI_MAINTAIN_JOB.anchorDiffsMax);
+    this.jobContext.log(`anchors were last checked at ${refs.length} other commit(s) the snapshot reaches: ${changed.size} diffed`
+      + (left.length > 0
+        ? `, and the ${left.reduce((total, row) => total + row.anchors, 0)} anchor(s) checked at the other ${left.length} are checked again`
+        : ''));
+    return { sha: head, reaches, changed };
   }
 
   // ── The documents ─────────────────────────────────────────────────────────────────────────────
@@ -1417,11 +1457,7 @@ class WikiMaintainRun {
     if (settled.state !== 'succeeded') {
       throw new WikiJobInfraError(`REPO_OP_FAILED: the diff ${from.slice(0, 12)}..${to.slice(0, 12)} ${settled.state}: ${settled.error ?? ''}`);
     }
-    const answer = (settled.result?.diff ?? {}) as { files?: Array<{ status?: string; path?: string; from?: string }>; docs?: string[] };
-    return {
-      files: (answer.files ?? []).map((file) => ({ status: String(file.status ?? ''), path: String(file.path ?? ''), from: file.from ?? null })),
-      docs: answer.docs ?? [],
-    };
+    return diffAnswerOf(settled);
   }
 
   /**
@@ -1573,6 +1609,15 @@ function sectionPaths(section: { sources?: { docs?: Array<{ path: string }> | nu
   for (const source of section.sources?.code ?? []) out.push(wikiDocCleanPath(source.path));
   for (const source of section.sources?.contracts ?? []) out.push(wikiDocCleanPath(source.path));
   return out;
+}
+
+/** A settled `diff` operation's answer: what `git diff --name-status -M` named, and the documents it added or renamed into place. */
+function diffAnswerOf(settled: WikiRepoOpWait): { files: Array<{ status: string; path: string; from: string | null }>; docs: string[] } {
+  const answer = (settled.result?.diff ?? {}) as { files?: Array<{ status?: string; path?: string; from?: string }>; docs?: string[] };
+  return {
+    files: (answer.files ?? []).map((file) => ({ status: String(file.status ?? ''), path: String(file.path ?? ''), from: file.from ?? null })),
+    docs: answer.docs ?? [],
+  };
 }
 
 /** Whether a changed path is one the section names: the file itself, or a file under a directory it names. */
