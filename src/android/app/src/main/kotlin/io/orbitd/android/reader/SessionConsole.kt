@@ -7,6 +7,7 @@ import io.orbitd.android.composer.ComposerModel
 import io.orbitd.android.composer.ProviderChoices
 import io.orbitd.android.composer.ProviderOption
 import io.orbitd.android.core.auth.SessionHandle
+import io.orbitd.android.core.cards.DshRuntime
 import io.orbitd.android.directory.directoryError
 import io.orbitd.android.management.ManagementApi
 import io.orbitd.android.management.RunnerPage
@@ -39,6 +40,9 @@ internal class SessionConsole(val app: OrbitApplication, val handle: SessionHand
     val runnerVersion get() = runner?.string("version") ?: (detail?.get("assignedRunner") as? JsonObject)?.string("version")
     /** The CLI that runs this session is Antigravity: its own provider, or a key that borrows it. */
     val executesAntigravity get() = ProviderChoices.executingRuntime(provider, providers) == "antigravity"
+    /** The CLI that runs this session, as the server says it — or, from one that doesn't, the one its provider borrows. */
+    val engine get() = detail?.let { ProviderChoices.engine(it, providers) }
+    val executesDsh get() = engine == DshRuntime.ENGINE
 
     /** Re-read the runner and the providers: on a card's first appearance, and back from the page that fixes it. */
     fun refresh() { scope.launch { reload() } }
@@ -61,16 +65,18 @@ internal class SessionConsole(val app: OrbitApplication, val handle: SessionHand
     val googleSignIn get() = runner?.let(RunnerPage::antigravityCanSignIn) == true
     val googleSignInHint get() = RunnerPage.antigravityLoginHint(antigravity?.string("googleLogin"))
 
-    fun installAntigravity() {
+    fun installAntigravity() { if (canInstallAntigravity) install("antigravity", "Antigravity CLI") }
+
+    /** The pinned CLI of [engine] onto this session's runner, through its one install relay; the relay's state comes back. */
+    private fun install(engine: String, name: String) {
         val id = runnerId ?: return
-        if (!canInstallAntigravity) return
         installing = true; error = null
         scope.launch {
             try {
-                val state = management.post("runners/$id/install", buildJsonObject { put("engine", "antigravity") }) as? JsonObject
+                val state = management.post("runners/$id/install", buildJsonObject { put("engine", engine) }) as? JsonObject
                 runner = runner?.let { JsonObject(it + ("install" to (state ?: JsonObject(emptyMap())))) }
             } catch (cancel: CancellationException) { throw cancel }
-            catch (e: Exception) { error = "Couldn't install Antigravity CLI — ${directoryError(e)}." }
+            catch (e: Exception) { error = "Couldn't install $name — ${directoryError(e)}." }
             finally { installing = false }
         }
     }
@@ -100,6 +106,28 @@ internal class SessionConsole(val app: OrbitApplication, val handle: SessionHand
 
     /** The failed message again, now that what stopped it is fixed — on the provider picked in the composer, if any (A07-8). */
     fun retry() = composer.retryFailed()
+
+    // MARK: DeepSeek Harness (iOS e789ce3dc)
+
+    /** Harness can go onto this session's runner from here: online, a release that runs it, and no install already under way. */
+    val canInstallDsh get() = runner?.let { runner -> !RunnerPage.isOffline(runner, System.currentTimeMillis()) &&
+        (runner["capabilities"] as? JsonArray)?.any { (it as? JsonPrimitive)?.contentOrNull == DshRuntime.RUNNER_CAPABILITY } == true } == true &&
+        !installing && !installInFlight
+    /** The install relay is carrying Harness's install. */
+    val dshInstallInFlight get() = installInFlight && (runner?.get("install") as? JsonObject)?.string("engine") == DshRuntime.ENGINE
+
+    fun installDsh() { if (canInstallDsh) install(DshRuntime.ENGINE, "DeepSeek Harness") }
+
+    /** Where Update the API key goes, on the web: the session's own key, else a key Harness runs on, else the form that connects one.
+     * These clients don't edit keys themselves. */
+    suspend fun dshKeyUrl(): String {
+        val origin = handle.account.server.trimEnd('/')
+        val mine = runCatching { (management.get("providers/mine") as? JsonArray)?.filterIsInstance<JsonObject>() }.getOrNull().orEmpty()
+        val key = mine.firstOrNull { it.string("slug") == provider } ?: mine.firstOrNull { row ->
+            row.string("runtime") == DshRuntime.ENGINE || (row["engines"] as? JsonArray)?.any { (it as? JsonPrimitive)?.contentOrNull == DshRuntime.ENGINE } == true
+        }
+        return key?.string("id")?.let { "$origin/providers/$it" } ?: "$origin/providers/new/${DshRuntime.PRESET_SLUG}"
+    }
 
     // MARK: auto-retry (iOS `AutoRetryCardView`'s reads and presses on `ConsoleModel`)
 
