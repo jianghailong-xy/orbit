@@ -1023,12 +1023,34 @@ JSON 里是 `anchorRules.verify`；实现在 `src/apiserver/src/wiki/wiki-anchor
   对基线判 verified / changed，runner 的判断不作数；changed / missing 的检查不会移动基线，只有 owner 的 Re-confirm 会。
 - 每个锚点最近一次检查存在 `wiki_entry.anchors[i].check`：`{ state, ref, at }`，找到的 symbol 另有 `regionSha256`（这次找到的）和
   `baselineSha256`（检查采纳的基线）。**修订里存的是写下时的锚点，不带检查**；amend 冲突回答里给的当前锚点也不带。
-- **同一个提交上查过的不再重做**（2026-10-10，`anchorRules.verify.skip`）：运行检查某个提交时，某条目每条 git 锚点的最近一次检查的
-  `ref` 逐字等于这个提交（快照的 sha）就整条跳过——不送 runner、不写回：一条锚点的结论只取决于锚点本身和被检查的提交，再查一遍
-  只会写下同一份结果。有一条锚点的检查不在这个提交上（或还没有检查），整条照旧复核。symbol 例外，它的结论还取决于基线，而基线会被
-  owner 的 Re-confirm 改动：只有那次检查记下了它比对的基线（`baselineSha256`，锚点自己没有 `regionSha256` 时检查才写）且它仍是该锚点
-  现在的基线，才算数；自己带 `regionSha256` 的 symbol 一律重新复核——Re-confirm 留下的形状和普通检查一样，从锚点上看不出是谁动的基线，
-  宁可多查一遍。只有服务端自己的运行跳过：runner 门那份列表照旧每次都把每条锚点交出去。
+- **查过、之后没动过的不再重做**（2026-10-10，`anchorRules.verify.skip`）：运行检查某个提交（快照的 sha）时，某条目每条 git 锚点的
+  最近一次检查都仍然成立，就整条跳过——不送 runner、不写回。一条锚点的结论只取决于锚点本身和被检查的提交里与它有关的那部分，
+  所以下面两种情况再查一遍只会写下同一份结果：
+  - **同一个提交上查过**：最近一次检查的 `ref` 逐字等于这个提交，什么状态都算。symbol 例外，它的结论还取决于基线，而基线会被
+    owner 的 Re-confirm 改动：只有那次检查记下了它比对的基线（`baselineSha256`，锚点自己没有 `regionSha256` 时检查才写）且它仍是该锚点
+    现在的基线，才算数。
+  - **在别的提交上查过、之后没动过**：最近一次检查在另一个 40 位 sha 的提交上、结论是 verified，并且从那个提交到这次快照，结论依赖的
+    东西都没变——
+    - path：runner 只问在不在（`git cat-file -e`）。从 `check.ref` 到快照提交的 diff（`git diff --name-status -M`，`diff` 仓库操作）里，
+      这个路径和它下面的文件只出现 M（只改了内容）时不复核；出现 A、D、T、R 的任一端或 C 的新端就复核。
+    - symbol（只限基线是检查采纳的那种）：区域按内容算，diff 里出现这个文件或它下面的任何文件——M 也算——就复核。
+    - commit：快照自带的可达提交（快照 sha 的 `git rev-list`）里有这个 sha，`git merge-base --is-ancestor` 的回答就是祖先，不复核。
+    路径按 runner 的写法比（去首尾空白、合并重复的 `/`、去掉开头的 `./` 和 `/`、去掉结尾的 `/`）；规整后为空、或含 `.`、`..` 段的，
+    跨提交一律复核。
+  - **diff 怎么发**：只给快照可达、且不是快照本身的那些 `check.ref` 发，每个一次；先发其上 verified 的 path 和 symbol 锚点最多的那几个，
+    最多 `maintenance.job.server.rules.anchorDiffsMax`（4）个，一个结算后再发下一个；runner 没做成的 diff 什么都不证明。上限取 4：一个 diff
+    多一次仓库操作（约 1.6 秒），要省下二十六条以上锚点的检查（每条约 0.06 秒）才划算。按 canary 2026-10-08/10 的 19 轮回放（11,565 条
+    锚点、main 动了 653 个提交），上限 4 每轮约 44 秒，8 约 47 秒，不设上限约 53 秒，全部复核约 763 秒：第四个之后的提交上锚点不多，
+    而且大多下一轮又动了。
+  - **其余照旧整条复核**：没检查过的、`check.ref` 不是 40 位 sha 的、检查所在的提交超出上限或快照不可达的、上次是 missing 或 changed 的
+    （不见的路径或提交可能回来，失效条目要记的 challenge 也该由检查来记），以及自己带 `regionSha256` 的 symbol（提议者给的，或 Re-confirm
+    写进去的——Re-confirm 留下的形状和普通检查一样，从锚点上看不出是谁动的基线，宁可多查一遍）。条目里有一条不成立就整条复核，
+    它的检查落到这次的提交上。
+  - **不写回、不前移 ref**：跳过的条目什么都不写，检查、`anchor_checked_ref`、`anchor_checked_at` 都留在真正做了检查的那一次——不为没发生
+    任何事的条目花一次写入，也不把没做的检查记成做过。ref 的分散有上界：复核的条目都落到当次的提交上，超出上限的 ref 上的条目一律
+    复核，所以一轮下来，跳过的 path 和 symbol 至多停在 4 个旧提交上，另加当次的提交。
+  - 待复核的条目不分页，合进同一个 `anchors` 操作，每个最多 `anchorRules.verify.rules.listEntriesMax` 条。只有服务端自己的运行跳过：runner
+    门那份列表照旧每次都把每条锚点交出去。
 - `anchor_state` 由各锚点的最近检查汇总：有 missing 就是 missing，否则有 changed 就是 changed，否则有未检查的（或根本没有锚点）就是
   unchecked，否则 verified；`anchor_checked_ref` / `anchor_checked_at` 是最近一次检查的 ref 和时间。只由 `applyOp` 写：一次检查，
   以及重新给出锚点的 amend（新锚点是 unchecked，Re-confirm 带着保留的检查除外）。
@@ -2553,15 +2575,19 @@ JSON 里是 `maintenance.job.server` 和 `jobs.kindRuns.maintain`；迁移 `0407
    `rules.adoptOpsMax` 个等待中的 op；没有结论的 op 不上线、留给下一次运行，不算失败。
 8. **锚点**：一页一页取 `listWikiAnchorsForJob`，每页至多 `anchorRules.verify.rules.listEntriesMax` 条（2026-10-10 起服务端用列表上限当批量：
    一次 `anchors` 仓库操作就是一次 runner 心跳的等待加一次 fetch，锚点本身每条只有毫秒级，一页越小越是白等；canary 的
-   7,600–7,700 条从约 88 次操作降到约 22 次）。把这一页的锚点作为一次 `anchors` 仓库操作交给空间所在的 runner，结果按现有写入口
-   `recordAnchorChecks` 写回（锚点状态、挑战 op），一页按 `anchorRules.verify.rules.reportEntriesMax` 分成若干次报告写回，每条锚点的
+   7,600–7,700 条从约 88 次操作降到约 22 次）。待复核的条目不分页攒起来，每满 `listEntriesMax` 条（最后不满的也一样）作为一次
+   `anchors` 仓库操作交给空间所在的 runner，结果按现有写入口
+   `recordAnchorChecks` 写回（锚点状态、挑战 op），一次操作的条目按 `anchorRules.verify.rules.reportEntriesMax` 分成若干次报告写回，每条锚点的
    结果不变。
-   **同一个提交上查过的不再重做**（2026-10-10，`anchorRules.verify.skip`，§17.3）：每条 git 锚点的最近检查都在这次快照的提交上
-   （`ref` 逐字相等）的条目这一轮整条不进操作——不送 runner、不写回；有一条不在（或没查过）就整条照旧。symbol 只在上次检查记下了它
-   比对的基线（`baselineSha256`）且该基线仍是这条锚点现在的基线时才跳过，自己带 `regionSha256` 的一律重新复核。报告里的 `anchors`
+   **查过、之后没动过的不再重做**（2026-10-10，`anchorRules.verify.skip`，§17.3）：取列表之前先按 §17.3 发 diff（最多
+   `maintenance.job.server.rules.anchorDiffsMax` 个，一次一个）；每条 git 锚点都仍然成立的条目这一轮整条不进操作——不送 runner、不写回；
+   有一条不成立就整条照旧。报告里的 `anchors`
    计的是这一轮写下检查的条目：`entries` 是写下的条数，`changed` / `missing` 是其中写完后判成 changed / missing 的条数；跳过的条目
-   不计入这三项，只计 `skipped`（条目数），所以一次重放可以报 `entries` 0、space 的全部条目都在 `skipped` 里。一次 REPO_OP_WAIT 之后的
-   重放、或两轮之间 main 没动时，约 22 次 `anchors` 仓库操作因此减到 0。
+   不计入这三项，只计 `skipped`（条目数，同一提交上查过的和之后没动过的合在一起），所以一次重放可以报 `entries` 0、space 的全部条目都在
+   `skipped` 里，main 动过的一轮在 `entries` 里只计这一轮不得不重查的条目。diff 不计入报告，它们是这次运行 `kind` 为 `diff` 的
+   `wiki_repo_op` 行，正如检查是 `kind` 为 `anchors` 的行。按 canary 的 19 轮回放，一轮从约 763 秒（11,565 条锚点、40 次操作）降到约
+   44 秒（平均重查约 400 个条目、538 条锚点，约 2.7 次 `anchors` 操作加 3.7 次 `diff`）；一次 REPO_OP_WAIT 之后的重放、或两轮之间
+   main 没动时，`anchors` 仓库操作减到 0。
 9. **文档**（追赶期整步跳过）：`wikiDocsAffected` 拿服务端那一半；仓库那一半用 `diff` 仓库操作按节自己的 `repoSha`
    比到 head（消失的路径先撤回，`withdrawPaths`），只重写受影响的节（P7 的 `runWikiDocsBuild`，`only` 传入本次要写的节）。
    **比较要读的文件按提交合并**（2026-10-10）：`diff` 仍是每个 `repoSha` 一次（等于 head 的不发；快照里没有的那个提交，它的节直接算
