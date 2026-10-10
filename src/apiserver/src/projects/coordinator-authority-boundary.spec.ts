@@ -624,17 +624,17 @@ test('the judgment opening states the boundaries, and that nothing judges the cr
 
   // What it must DECLARE to open work, and what bounds how much of it there can be.
   assert.match(opening, /criterionKey/);
-  assert.match(opening, /预算/);
+  assert.match(opening, /budget/);
   // And what it cannot write, said as refusals rather than as etiquette — the reader is about to
   // meet them as HTTP 403s.
-  assert.match(opening, /服务端会照着拒/);
-  assert.match(opening, /验收标准/);
+  assert.match(opening, /the server refuses what crosses them/);
+  assert.match(opening, /acceptance criteria/);
   // The PASS boundary that stood here is gone with the thing that could hold one: migration 0229
   // removed the project acceptance judgment, so the opening says THAT instead of describing a
   // verdict a one-shot session would go looking for a tool to submit.
   assert.equal(opening.includes('PASS'), false);
-  assert.match(opening, /没有任何东西会判定这些标准/);
-  assert.match(opening, /status 你也写不了/);
+  assert.match(opening, /nothing judges these criteria/);
+  assert.match(opening, /cannot write status with project_update either/);
   assert.match(opening, /PROJECT_STATUS_NOT_SESSION_WRITABLE/);
-  assert.match(opening, /不是对“真人在场”的密码学证明/);
+  assert.match(opening, /not a cryptographic proof of human presence/);
 });
