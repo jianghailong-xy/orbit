@@ -7,12 +7,12 @@ import { LandingJobsSheet } from './LandingJobsSheet';
 import { LandingRow, LandingRowButton, landingLine } from './ProjectPanoramaHeader';
 import {
   CANCEL_MERGE,
-  MERGE_TO_MAIN,
   NOT_NOW,
   OPEN_COORDINATOR,
   ProjectPromotion,
   ProjectPromotionReceipt,
   decidePromotion,
+  mergeTo,
   promotionCriteriaLine,
   promotionHeading,
   promotionItem,
@@ -38,6 +38,7 @@ import {
   promotionTimelineTitle,
 } from '../lib/projectMerge';
 import { projectIntegrationQuery, projectOpenItemsQuery, projectPromotionQuery } from '../lib/queries';
+import { mainBranchName } from '../lib/projectStart';
 import { ago } from '../lib/watches';
 
 /** A read the page can draw from: the door answers a candidate or `null`, and anything else is no
@@ -163,7 +164,7 @@ export function ProjectMergeStrip({
           {criteriaLine ? <div className="session-project-merge-criteria">{criteriaLine}</div> : null}
           <div className="session-project-merge-actions">
             <button type="button" className="session-project-merge-primary" disabled={decide.isPending}
-              onClick={() => press('confirm')}>{MERGE_TO_MAIN}</button>
+              onClick={() => press('confirm')}>{mergeTo(mainBranchName(current.upstreamRef))}</button>
             <button type="button" disabled={decide.isPending} onClick={() => press('decline')}>{NOT_NOW}</button>
           </div>
           <div className="session-project-merge-foot">

@@ -19,7 +19,11 @@
  *      was not made while the space was behind, and only for an account the server runs — one per space while queued or
  *      parked;
  *   6. the runner door in both modes: under the default runner a maintenance session reads and writes the articles as it
- *      always has; for a canary account it is refused WIKI_SERVER_EXECUTES on all three routes, and the job is not.
+ *      always has; for a canary account it is refused WIKI_SERVER_EXECUTES on all three routes, and the job is not;
+ *   7. a worker stopped once the job's first topic is written hands the job back, and the next one finishes it: the report
+ *      the replay ends with is the whole job's (contract `jobs.carry`) — the topics the space was seeded with, the topic
+ *      written before the stop as written, every topic once, every call the job made once — exactly what the same job
+ *      reports when nothing stops it.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/wiki-worker/wiki-articles-job.pg.spec.ts
  *
@@ -41,11 +45,12 @@ import { PrismaService } from '../prisma/prisma.service';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
 import type { PushService } from '../push/push.service';
 import type { RealtimeService } from '../realtime/realtime.service';
-import { WikiArticles, wikiArticlesJobPrincipal } from '../wiki/wiki-articles';
+import { sumStats, WikiArticles, wikiArticlesJobPrincipal } from '../wiki/wiki-articles';
 import { enqueueWikiArticlesJob, queueWikiArticlesAfterRun, queueWikiArticlesAfterSessionRun } from '../wiki/wiki-articles-jobs';
 import { WikiRefusalError, WikiService, type WikiPrincipal } from '../wiki/wiki.service';
 import { wikiArticlesJobRunner } from './wiki-articles-job';
 import { WikiJobExecutor } from './wiki-job-executor';
+import { WIKI_JOB_HANDED_BACK } from './wiki-jobs';
 import { WikiModelRequestQueue } from './wiki-model-queue.service';
 import { WikiModelStatusProbe } from './wiki-model-status';
 import { WikiRepoOps } from './wiki-repo-ops';
@@ -723,4 +728,129 @@ test('the runner door: a maintenance session writes as ever under runner, and is
   assert.equal(asJob.spaceId, o.spaceId);
   delete process.env.ORBIT_WIKI_EXECUTOR;
   delete process.env.ORBIT_WIKI_EXECUTOR_CANARY_OWNERS;
+});
+
+// ── 7. a worker stopped mid-job: the report is the whole job's ───────────────────────────────────
+
+/**
+ * What a model writes for this case, the same whoever asks and however often: a group named by what its entries say
+ * rather than by the order the names are asked in (`writer` counts its calls, and a call the stop cut off is asked
+ * again), and an article as `writer` writes one.
+ */
+function stableWriter(): (prompt: string) => string {
+  const article = writer();
+  return (prompt) => {
+    if (prompt.includes('起一个简短的中文小标题')) return `好的，这组的小标题是：\n「${prompt.includes('stub 渲染') ? '组件渲染' : 'lib 请求'}」`;
+    return article(prompt);
+  };
+}
+
+/** Which of the two topics a prompt writes, by the words its entries carry. */
+function topicOfPrompt(prompt: string): string {
+  return prompt.includes('迁移编号') ? 'database' : 'web-client';
+}
+
+interface ArticlesReport {
+  seeded: number;
+  ref: string | null;
+  topics: Array<{ slug: string; entries: number; outcome: string; parts: Array<{ kind: string; kept: boolean; stats: Record<string, number> }> }>;
+  written: number;
+  unchanged: number;
+  failed: number;
+  calls: number;
+  usage: { inputTokens: number; outputTokens: number };
+  stats: Record<string, number>;
+}
+
+/** A report's totals and topics: what two runs of the same job on two spaces of the same shape must agree on. */
+function articlesTotals(report: ArticlesReport): Record<string, unknown> {
+  return {
+    seeded: report.seeded, ref: report.ref, written: report.written, unchanged: report.unchanged, failed: report.failed,
+    calls: report.calls, usage: report.usage, stats: report.stats,
+    topics: report.topics.map((topic) => ({ slug: topic.slug, entries: topic.entries, outcome: topic.outcome, parts: topic.parts.map((part) => part.kind).sort() }))
+      .sort((a, b) => (a.slug < b.slug ? -1 : 1)),
+  };
+}
+
+test('a worker stopped once the first topic is written hands the job back, and the report the replay ends with is the whole job\'s', { skip, timeout: 180_000 }, async () => {
+  const h = await boot();
+  const service = h.prisma as unknown as PrismaService;
+  // Two spaces of the same shape: one job runs straight through, the other is stopped once its first topic is written.
+  const straight = await owner(h);
+  await topics(h, straight);
+  await snapshot(h, straight);
+  const stopped = await owner(h);
+  const made = await topics(h, stopped);
+  await snapshot(h, stopped);
+  await canary(h, straight.id, stopped.id);
+  h.model.hits.length = 0;
+  h.model.status = () => 200;
+  h.model.before = async () => undefined;
+  h.model.answer = stableWriter();
+
+  // What the job reports when nothing stops it.
+  const through = worker(h);
+  await enqueueWikiArticlesJob(service, { ownerId: straight.id, spaceId: straight.spaceId });
+  await until('the job that runs straight through', through, async () => settled(await jobs(h, straight)), 90);
+  const [whole] = await jobs(h, straight);
+  assert.equal(whole.state, 'succeeded', `${whole.state}: ${whole.error}`);
+  await through.executor.onModuleDestroy();
+  await through.queue.onModuleDestroy();
+
+  // The other job: the first topic's calls are answered; the second topic's first call is held while the worker stops.
+  let first: string | null = null;
+  let holding = false;
+  let release: () => void = () => undefined;
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  h.model.before = async (prompt) => {
+    const topic = topicOfPrompt(prompt);
+    first ??= topic;
+    if (topic === first) return;
+    holding = true;
+    await released;
+  };
+  const one = worker(h);
+  await enqueueWikiArticlesJob(service, { ownerId: stopped.id, spaceId: stopped.spaceId });
+  await until('the first topic written and the second one\'s first call in flight', one, async () =>
+    holding && (await h.prisma.wikiTopicSummary.count({ where: { ownerId: stopped.id, part: 0 } })) === 1, 90);
+  // SIGTERM: the job's wait for the held call is cancelled and the job is handed back; the call is let go with it.
+  await one.executor.onModuleDestroy();
+  await one.queue.onModuleDestroy();
+  release();
+  h.model.before = async () => undefined;
+  const [back] = await jobs(h, stopped);
+  assert.deepEqual([back.state, back.attempts, back.error], ['queued', 0, WIKI_JOB_HANDED_BACK], 'the job is handed back, nothing counted');
+
+  // The next worker takes it over: its plan no longer names the topic written before the stop, and it writes the other.
+  const two = worker(h);
+  await until('the replay', two, async () => settled(await jobs(h, stopped)), 90);
+  const [done] = await jobs(h, stopped);
+  assert.equal(done.state, 'succeeded', `${done.state}: ${done.error}`);
+  const report = done.report as unknown as ArticlesReport;
+  // What the same job reports when nothing stops it, to the topic and the call.
+  assert.deepEqual(articlesTotals(report), articlesTotals(whole.report as unknown as ArticlesReport), 'the stopped job reports what the straight one does');
+
+  // The space had no topic: the job gave it the ones every space starts with, in the attempt the stop cut short.
+  assert.equal(report.seeded, await h.prisma.wikiTopic.count({ where: { ownerId: stopped.id } }), 'the topics the job seeded');
+  // Every topic it wrote — the one before the stop too — written, once.
+  assert.deepEqual(report.topics.map((topic) => [topic.slug, topic.outcome]).sort(), [['database', 'written'], ['web-client', 'written']]);
+  assert.deepEqual([report.written, report.unchanged, report.failed], [2, 0, 0]);
+  assert.deepEqual(report.topics.map((topic) => [topic.slug, topic.entries]).sort(), [['database', made.database.length], ['web-client', made.web.length]]);
+  // Each topic's parts as they were written, and the counts of the whole job's parts summed.
+  const stored = await h.prisma.wikiTopicSummary.findMany({ where: { ownerId: stopped.id }, select: { kind: true, stats: true, topic: { select: { slug: true } } } });
+  for (const topic of report.topics) {
+    assert.deepEqual(topic.parts.map((part) => part.kind).sort(), stored.filter((row) => row.topic.slug === topic.slug).map((row) => row.kind).sort(), `${topic.slug}'s parts`);
+  }
+  assert.deepEqual(report.stats, sumStats(stored.map((row) => row.stats as unknown as Parameters<typeof sumStats>[0][number])), 'the parts\' counts, every part once');
+  assert.equal(report.ref, SHA);
+  // Its calls are the job's requests, each once: the call the stop cut off was asked again under its own row.
+  const requests = await h.prisma.wikiModelRequest.findMany({ where: { jobId: done.id }, select: { state: true, inputTokens: true, outputTokens: true } });
+  assert.ok(requests.every((request) => request.state === 'succeeded'), JSON.stringify(requests));
+  assert.equal(report.calls, requests.length, 'every call of the job, the attempt the stop cut short included');
+  assert.deepEqual(report.usage, {
+    inputTokens: requests.reduce((total, request) => total + (request.inputTokens ?? 0), 0),
+    outputTokens: requests.reduce((total, request) => total + (request.outputTokens ?? 0), 0),
+  });
 });

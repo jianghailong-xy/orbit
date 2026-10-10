@@ -26,6 +26,8 @@ import {
   type WikiArticleWriterEntry,
 } from './wiki-articles-writer';
 import { WikiJobContentError, WikiJobInfraError, WikiJobParked, type WikiJobContext, type WikiJobRunner } from './wiki-job-executor';
+import { readWikiJobCarry, wikiJobCarryWriter } from './wiki-jobs';
+import { wikiJobModelCalls } from './wiki-model-queue';
 import { WikiRepoOpRefused, waitForWikiRepoOpAsJob, type WikiRepoOps, type WikiRepoOpWake } from './wiki-repo-ops';
 
 /**
@@ -61,6 +63,14 @@ import { WikiRepoOpRefused, waitForWikiRepoOpAsJob, type WikiRepoOps, type WikiR
  * row, as the command exited non-zero: the next job writes it from the entries as they stand. A failure of the
  * platform (a request past its wait limit, the database, the worker stopping) is not the topic's and ends this
  * attempt as infra, to be replayed.
+ *
+ * THE REPORT IS THE WHOLE JOB'S (contract `jobs.carry`). A replay — after a stop handed the job back, a failure of the
+ * platform, a park — starts from the plan again, and the plan no longer names a topic an earlier attempt wrote: its
+ * articles carry its fingerprint now. So each attempt carries on the job's row what its replay will not do again —
+ * the topics it seeded, each topic it wrote or found written, the ref it wrote them at — as soon as each is done, and
+ * the report folds that in: every topic once, in the plan's order. Its calls and usage are the job's own requests,
+ * each once, whichever attempt made them. A topic left unwritten is not carried: it is still changed, and the replay
+ * takes it up again.
  */
 
 /** What the job needs besides its context: the services it writes through, and the System model's name. */
@@ -119,10 +129,24 @@ export function wikiArticlesJobRunner(deps: WikiArticlesJobDeps): WikiJobRunner 
   return (context) => runWikiArticlesJob(context, deps) as unknown as Promise<Record<string, unknown>>;
 }
 
-/** Write the articles of the space's topics whose entries changed, and say what was done. */
+/**
+ * What an attempt carries to the job's replay (contract `jobs.carry.kinds.articles`): what the replay's plan no longer
+ * names — the topics the attempt seeded, every topic it wrote or found written already, and the ref it wrote them at.
+ */
+interface WikiArticlesCarry {
+  seeded: number;
+  ref: string | null;
+  refWhy: string | null;
+  topics: WikiArticlesTopicRun[];
+}
+
+/** Write the articles of the space's topics whose entries changed, and say what the whole job did. */
 export async function runWikiArticlesJob(context: WikiJobContext, deps: WikiArticlesJobDeps): Promise<WikiArticlesReport> {
   const { job } = context;
   const principal = wikiArticlesJobPrincipal(job.ownerId);
+  const earlier = articlesCarryOf((await readWikiJobCarry(deps.prisma, job.id)).carry);
+  const carry: WikiArticlesCarry = { ...earlier, topics: [...earlier.topics] };
+  const keep = wikiJobCarryWriter(deps.prisma, job, () => ({ ...carry }));
   const report: WikiArticlesReport = {
     kind: 'articles',
     spaceId: job.spaceId,
@@ -142,32 +166,89 @@ export async function runWikiArticlesJob(context: WikiJobContext, deps: WikiArti
   try {
     plan = await deps.articles.plan(principal, job.spaceId);
   } catch (error) {
-    if (error instanceof HttpException) throw new WikiJobContentError(`the plan was refused: ${refusalText(error)}`, { ...report });
+    if (error instanceof HttpException) {
+      const whole = await wholeReport(deps, job.id, earlier, report, [], false);
+      throw new WikiJobContentError(`the plan was refused: ${refusalText(error)}`, whole as unknown as Record<string, unknown>);
+    }
     throw error;
   }
+  const order = plan.topics.map((topic) => topic.slug);
   report.seeded = plan.seeded;
-  if (plan.seeded > 0) context.log(`the space had no topic: it was given the ${plan.seeded} every space starts with`);
+  if (plan.seeded > 0) {
+    context.log(`the space had no topic: it was given the ${plan.seeded} every space starts with`);
+    // The replay's plan finds them there and seeds none: carried before anything can stop this attempt.
+    carry.seeded += plan.seeded;
+    await keep();
+  }
   const targets = plan.topics.filter((topic) => topic.changed).map((topic) => topic.slug);
-  if (targets.length === 0) return report;
+  if (targets.length === 0) return wholeReport(deps, job.id, earlier, report, order, false);
 
   const ref = await articlesRef(context, deps);
   report.ref = ref.sha;
   report.refWhy = ref.why;
   for (const slug of targets) {
-    const topic = await writeTopic(context, deps, principal, slug, ref.sha, report);
+    const topic = await writeTopic(context, deps, principal, slug, ref.sha);
     report.topics.push(topic);
-    if (topic.outcome === 'written') report.written += 1;
-    else if (topic.outcome === 'unchanged') report.unchanged += 1;
-    else report.failed += 1;
-    report.stats = sumStats([report.stats, ...topic.parts.map((part) => part.stats)]);
+    if (topic.outcome === 'failed') continue;
+    // Its articles carry its fingerprint now, so the replay's plan no longer names it: carried as soon as it is done.
+    carry.topics = [...carry.topics.filter((one) => one.slug !== slug), topic];
+    carry.ref = ref.sha;
+    carry.refWhy = ref.why;
+    await keep();
   }
-  if (report.failed > 0) {
+  const whole = await wholeReport(deps, job.id, earlier, report, order, true);
+  if (whole.failed > 0) {
     throw new WikiJobContentError(
-      `${report.failed === 1 ? '1 topic was' : `${report.failed} topics were`} left unwritten: the next run tries again`,
-      report as unknown as Record<string, unknown>,
+      `${whole.failed === 1 ? '1 topic was' : `${whole.failed} topics were`} left unwritten: the next run tries again`,
+      whole as unknown as Record<string, unknown>,
     );
   }
-  return report;
+  return whole;
+}
+
+/** The carry as the job's row holds it: a job nothing was carried for reads as one with nothing in it. */
+function articlesCarryOf(raw: Record<string, unknown> | null): WikiArticlesCarry {
+  const carry = (raw ?? {}) as Partial<WikiArticlesCarry>;
+  return {
+    seeded: typeof carry.seeded === 'number' ? carry.seeded : 0,
+    ref: typeof carry.ref === 'string' ? carry.ref : null,
+    refWhy: typeof carry.refWhy === 'string' ? carry.refWhy : null,
+    topics: Array.isArray(carry.topics) ? carry.topics : [],
+  };
+}
+
+/**
+ * The report the job ends with (contract `jobs.carry`): this attempt's, with what the attempts before it finished that
+ * this one's plan no longer named — the topics they seeded, and the topics they wrote or found written, each once and in
+ * the plan's order (a topic this attempt took up again is this attempt's) — the ref they wrote at when this attempt read
+ * none, and the calls and usage of every request the job made, each once.
+ */
+async function wholeReport(
+  deps: WikiArticlesJobDeps,
+  jobId: string,
+  earlier: WikiArticlesCarry,
+  report: WikiArticlesReport,
+  order: readonly string[],
+  refRead: boolean,
+): Promise<WikiArticlesReport> {
+  const taken = new Set(report.topics.map((topic) => topic.slug));
+  const place = new Map(order.map((slug, i) => [slug, i]));
+  const topics = [...earlier.topics.filter((topic) => !taken.has(topic.slug)), ...report.topics]
+    .sort((a, b) => (place.get(a.slug) ?? -1) - (place.get(b.slug) ?? -1));
+  const spent = await wikiJobModelCalls(deps.prisma, { jobId });
+  return {
+    ...report,
+    seeded: earlier.seeded + report.seeded,
+    ref: refRead ? report.ref : earlier.ref,
+    refWhy: refRead ? report.refWhy : earlier.refWhy,
+    topics,
+    written: topics.filter((topic) => topic.outcome === 'written').length,
+    unchanged: topics.filter((topic) => topic.outcome === 'unchanged').length,
+    failed: topics.filter((topic) => topic.outcome === 'failed').length,
+    calls: spent.calls,
+    usage: { inputTokens: spent.inputTokens, outputTokens: spent.outputTokens },
+    stats: sumStats(topics.flatMap((topic) => topic.parts.map((part) => part.stats))),
+  };
 }
 
 // ── The ref ─────────────────────────────────────────────────────────────────────────────────────
@@ -226,9 +307,6 @@ async function articlesRef(context: WikiJobContext, deps: WikiArticlesJobDeps): 
 
 // ── One topic ───────────────────────────────────────────────────────────────────────────────────
 
-/** What a run's calls cost, summed as they come back. */
-type Tally = Pick<WikiArticlesReport, 'calls' | 'usage'>;
-
 /** Write one topic's articles. A failure that is the topic's comes back as its outcome; the platform's is thrown. */
 async function writeTopic(
   context: WikiJobContext,
@@ -236,7 +314,6 @@ async function writeTopic(
   principal: WikiPrincipal,
   slug: string,
   ref: string | null,
-  tally: Tally,
 ): Promise<WikiArticlesTopicRun> {
   const run: WikiArticlesTopicRun = { slug, entries: 0, outcome: 'failed', parts: [] };
   const fail = (why: string): WikiArticlesTopicRun => {
@@ -256,7 +333,7 @@ async function writeTopic(
   if (input.entries.length === 0) return fail('the topic has no entry to write from');
   let parts: WikiArticlePartInput[];
   try {
-    parts = await compose(context, deps, input, tally);
+    parts = await compose(context, deps, input);
   } catch (error) {
     if (error instanceof WikiJobContentError) return fail(error.message);
     throw error;
@@ -305,7 +382,6 @@ async function compose(
   context: WikiJobContext,
   deps: WikiArticlesJobDeps,
   input: WikiArticleInput,
-  tally: Tally,
 ): Promise<WikiArticlePartInput[]> {
   const entries: WikiArticleWriterEntry[] = input.entries;
   const topicTitle = input.topic.title;
@@ -313,7 +389,7 @@ async function compose(
   // attempts of the job is asked afresh rather than answered with what another set of entries got.
   const at = `${input.topic.slug}@${input.entrySetSha256.slice(0, 12)}`;
   if (entries.length <= WIKI_ARTICLE_RULES.splitAbove) {
-    return [await writePart(context, tally, `${at}/part-0`, 'article', topicTitle, topicTitle, entries, entries.length, '', 0)];
+    return [await writePart(context, `${at}/part-0`, 'article', topicTitle, topicTitle, entries, entries.length, '', 0)];
   }
   const groups = await groupWikiArticleEntries(entries, { sliceMs: deps.groupingSliceMs });
   context.log(`topic ${input.topic.slug}: ${entries.length} entries split into ${groups.length} subtopics by their paths and words`);
@@ -321,16 +397,16 @@ async function compose(
   const names: string[] = [];
   for (const [g, group] of groups.entries()) {
     const members = group.map((i) => entries[i]);
-    names.push(await nameGroup(context, tally, `${at}/name-${g + 1}`, topicTitle, members, names));
+    names.push(await nameGroup(context, `${at}/name-${g + 1}`, topicTitle, members, names));
   }
   const lines = groups.map((group, g) => `- ${names[g]} (${count(group.length, 'entry', 'entries')})`).join('\n');
   const top = groups.flatMap((group) => group.slice(0, 2).map((i) => entries[i])).slice(0, WIKI_ARTICLE_RULES.entriesPerArticle);
   const written = await inParallel(groups.length + 1, WIKI_ARTICLES_JOB.parallel, async (i) => {
     if (i === groups.length) {
-      return writePart(context, tally, `${at}/part-0`, 'overview', topicTitle, topicTitle, top, entries.length, lines, 0);
+      return writePart(context, `${at}/part-0`, 'overview', topicTitle, topicTitle, top, entries.length, lines, 0);
     }
     const members = groups[i].map((j) => entries[j]);
-    const part = await writePart(context, tally, `${at}/part-${i + 1}`, 'subtopic', topicTitle, names[i], members, members.length, '', i + 1);
+    const part = await writePart(context, `${at}/part-${i + 1}`, 'subtopic', topicTitle, names[i], members, members.length, '', i + 1);
     return { ...part, entries: members.map((entry) => entry.id) };
   });
   return [written[groups.length], ...written.slice(0, groups.length)];
@@ -342,7 +418,6 @@ async function compose(
  */
 async function writePart(
   context: WikiJobContext,
-  tally: Tally,
   unit: string,
   kind: WikiArticleKind,
   topicTitle: string,
@@ -355,10 +430,10 @@ async function writePart(
   const fed = pool.slice(0, WIKI_ARTICLE_RULES.entriesPerArticle);
   const notes = fed.map((entry) => entry.id);
   const prompt = wikiArticlePrompt(kind, topicTitle, title, fed, subs);
-  let text = await ask(context, tally, unit, prompt, WIKI_ARTICLES_JOB.articleMaxTokens);
+  let text = await ask(context, unit, prompt, WIKI_ARTICLES_JOB.articleMaxTokens);
   const chars = wikiArticleDraftChars(text, notes);
   if (chars < WIKI_ARTICLE_RULES.minChars && poolSize >= WIKI_ARTICLE_WRITER.retryPoolMin) {
-    const again = await ask(context, tally, `${unit}/again`, prompt + wikiArticleRetrySuffix(chars), WIKI_ARTICLES_JOB.articleMaxTokens);
+    const again = await ask(context, `${unit}/again`, prompt + wikiArticleRetrySuffix(chars), WIKI_ARTICLES_JOB.articleMaxTokens);
     if (wikiArticleDraftChars(again, notes) > chars) text = again;
   }
   return { part, kind, title: wikiArticleTitle(text, title), markdown: text, notes };
@@ -371,7 +446,6 @@ async function writePart(
  */
 async function nameGroup(
   context: WikiJobContext,
-  tally: Tally,
   unit: string,
   topicTitle: string,
   members: readonly WikiArticleWriterEntry[],
@@ -379,19 +453,19 @@ async function nameGroup(
 ): Promise<string> {
   let text = '';
   try {
-    text = await ask(context, tally, unit, wikiArticleNamePrompt(topicTitle, members, taken), WIKI_ARTICLES_JOB.nameMaxTokens);
+    text = await ask(context, unit, wikiArticleNamePrompt(topicTitle, members, taken), WIKI_ARTICLES_JOB.nameMaxTokens);
   } catch (error) {
     if (!(error instanceof WikiJobContentError)) throw error;
   }
   return wikiArticleGroupName(text) || wikiArticleFallbackName(members);
 }
 
-/** One model call through the queue, counted. Its row is the breakpoint; a failure is the context's to classify. */
-async function ask(context: WikiJobContext, tally: Tally, unit: string, prompt: string, maxTokens: number): Promise<string> {
+/**
+ * One model call through the queue. Its row is the breakpoint, and what the report counts (`wikiJobModelCalls`); a
+ * failure is the context's to classify.
+ */
+async function ask(context: WikiJobContext, unit: string, prompt: string, maxTokens: number): Promise<string> {
   const row = await context.ask(WIKI_ARTICLES_JOB.step, unit, { system: WIKI_ARTICLE_SYSTEM_PROMPT, prompt, maxTokens });
-  tally.calls += 1;
-  tally.usage.inputTokens += row.inputTokens ?? 0;
-  tally.usage.outputTokens += row.outputTokens ?? 0;
   return row.answer ?? '';
 }
 

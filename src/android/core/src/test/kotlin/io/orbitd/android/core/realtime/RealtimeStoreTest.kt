@@ -39,6 +39,10 @@ class RealtimeStoreTest {
         var project = false
         /** The server's own null: a 200 with no body, as `promotions/current` answers for a project asking nothing. */
         var emptyPromotion = false
+        /** The project document's `startedAt` as raw JSON — `null` for a project nobody has started — or no document of its own. */
+        var projectStartedAt: String? = null
+        /** How `projects/p1/integration` answers. */
+        var integrationStatus = 200
         var heldDirectory: CompletableDeferred<Unit>? = null
         var heldDetail: CompletableDeferred<Unit>? = null
         fun response(json: String) = ApiResponse(200, json.encodeToByteArray())
@@ -67,6 +71,9 @@ class RealtimeStoreTest {
                     response("""{"id":"${path.last()}","status":"RUNNING"${if (project) ",\"taskId\":\"t1\",\"projectId\":\"p1\"" else ""}}""")
                 }
                 emptyPromotion && path.takeLast(2) == listOf("promotions", "current") -> ApiResponse(200, ByteArray(0))
+                projectStartedAt != null && path == listOf("projects", "p1") -> response("""{"id":"p1","startedAt":$projectStartedAt}""")
+                path == listOf("projects", "p1", "integration") -> if (integrationStatus != 200) ApiResponse(integrationStatus, "{}".encodeToByteArray())
+                    else response("""{"repository":"acme/payments-api","upstreamRef":null,"lastMainBranch":{"branch":"master"}}""")
                 path.last() in setOf("approvals", "turns", "background") ->
                     response(if (pending) """[{"id":"pending-card-marker","status":"PENDING"}]""" else "[]")
                 else -> response(if (pending) """{"pending":[{"id":"standing-card-marker"}]}""" else "null")
@@ -125,6 +132,36 @@ class RealtimeStoreTest {
         assertTrue(store.state.value.session!!.fresh)
         assertEquals(kotlinx.serialization.json.JsonNull, store.state.value.session!!.snapshot!!.standing["promotion"])
         assertTrue(rig.reads.any { it.api.path.joinToString("/") == "projects/p1/promotions/current" })
+    }
+
+    /** The start card's Main branch row is drawn from the project's integration read, which a project nobody has started reads with
+     * its conversation — so the card is never drawn on main and then moved — and a started one does not read at all. */
+    @Test fun anUnstartedProjectsConversationReadsItsIntegration() = runTest {
+        val rig = Rig(this)
+        rig.project = true; rig.pending = false; rig.projectStartedAt = "null"
+        val (_, store) = rig.start()
+        assertTrue(store.state.value.session!!.fresh)
+        val read = store.state.value.session!!.snapshot!!.standing["integration"] as kotlinx.serialization.json.JsonObject
+        assertEquals("acme/payments-api", (read["repository"] as kotlinx.serialization.json.JsonPrimitive).content)
+    }
+
+    @Test fun aStartedProjectsConversationDoesNotReadItsIntegration() = runTest {
+        val rig = Rig(this)
+        rig.project = true; rig.pending = false; rig.projectStartedAt = "\"2026-10-10T00:00:00Z\""
+        val (_, store) = rig.start()
+        assertTrue(store.state.value.session!!.fresh)
+        assertNull(store.state.value.session!!.snapshot!!.standing["integration"])
+        assertFalse(rig.reads.any { it.api.path == listOf("projects", "p1", "integration") })
+    }
+
+    /** A read of it that fails costs the conversation nothing: the snapshot is fresh without it, and the card draws no row. */
+    @Test fun aFailedIntegrationReadLeavesTheConversationFresh() = runTest {
+        val rig = Rig(this)
+        rig.project = true; rig.pending = false; rig.projectStartedAt = "null"; rig.integrationStatus = 503
+        val (_, store) = rig.start()
+        assertTrue(store.state.value.session!!.fresh)
+        assertTrue(rig.reads.any { it.api.path == listOf("projects", "p1", "integration") })
+        assertNull(store.state.value.session!!.snapshot!!.standing["integration"])
     }
 
     @Test fun forbiddenAndMissingSessionWithdrawTranscriptAndCacheUntilAuthorityRecovers() = runTest {

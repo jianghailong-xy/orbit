@@ -96,7 +96,14 @@ final class SessionProjectCopyParityTests: XCTestCase {
         XCTAssertTrue(web.contains("pageNotStarted: (tasks: number) => `Not started · ${tasks} ${tasks === 1 ? 'task' : 'tasks'}`,"))
         XCTAssertEqual(SessionProjectCopy.pageNotStarted(tasks: 1), "Not started · 1 task")
         XCTAssertEqual(SessionProjectCopy.pageNotStarted(tasks: 5), "Not started · 5 tasks")
-        XCTAssertTrue(web.contains("`${settings.line === 'MAIN' ? 'Directly into main' : 'Project branch'} · Automatic ${settings.automatic ? 'on' : 'off'} · ${settings.maxConcurrentTasks} at a time`,"))
+        // Directly into the main branch the start names (`runLineMain`, `Directly into ${main}`): main, on a
+        // project on main.
+        XCTAssertTrue(web.contains("`${settings.line === 'MAIN' ? runLineMain(main) : 'Project branch'} · Automatic ${settings.automatic ? 'on' : 'off'} · ${settings.maxConcurrentTasks} at a time`,"))
+        XCTAssertTrue(web.contains("main: string = mainBranchName(settings.upstreamRef),"))
+        let words = try String(contentsOf: try repoRoot().appendingPathComponent("src/web/src/lib/projectStart.ts"),
+                               encoding: .utf8)
+        XCTAssertTrue(words.contains("return `Directly into ${main}`;"),
+                      "the web no longer says Directly into the project's main branch")
         XCTAssertEqual(SessionProjectCopy.startSuggestion(
             ProjectStartSettings(line: .projectBranch, automatic: true, maxConcurrentTasks: 2)),
             "Project branch · Automatic on · 2 at a time")

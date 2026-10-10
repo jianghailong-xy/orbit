@@ -12,7 +12,10 @@ import { ownerConfirmationQuery } from '../lib/queries';
 import { ENTER_HINT } from './CardHotkey';
 import { DecisionStrip, ownerConfirmationPointer, type PendingDecisionQueue } from './DecisionRail';
 import {
+  IF_CONFIRMED_AUTO_MAIN,
   IF_CONFIRMED_ENDS_SESSION,
+  IF_CONFIRMED_LINE_THEN_OWNER,
+  IF_CONFIRMED_NO_RECORD_ON_MAIN,
   IF_CONFIRMED_NOT_ON_MAIN,
   IF_YOU_CONFIRM,
   OWNER_CONFIRMATION_HEADING,
@@ -442,6 +445,37 @@ describe('If you confirm, in the words both clients say', () => {
     expect(fixture.criteria.length).toBeGreaterThan(8);
     for (const c of fixture.criteria) {
       expect(criteriaItemsLabel(c.acceptanceCriteria), c.case).toBe(c.label);
+    }
+  });
+});
+
+/** The rows that say main, said of the project's main branch the read names (`ifConfirmed.mainBranch`). */
+describe('If you confirm, by the project’s main branch', () => {
+  const unmerged = { name: 'orbit/p1-1c207b', linesAdded: 12, linesRemoved: 1, files: 2, onMain: 'NO' } as const;
+  const unplaced = { ...unmerged, onMain: 'UNKNOWN' } as const;
+  const leads = (ifConfirmed: OwnerConfirmationIfConfirmed) => ifConfirmedRows(ifConfirmed).map((row) => row.lead);
+
+  it('names the branch and the landing rows by the main branch the read names', () => {
+    expect(leads({ branch: unmerged, landing: 'LINE_THEN_OWNER', mainBranch: 'master' })).toEqual([
+      'Not on master yet',
+      'Goes onto the integration line; merging into master asks you again',
+    ]);
+    expect(leads({ branch: unplaced, landing: 'AUTO_MAIN', mainBranch: 'master' })).toEqual([
+      'No record of this branch on master',
+      'Lands on master by itself if the checks pass',
+    ]);
+    const html = card({ view: view({ ifConfirmed: { branch: unmerged, landing: 'LINE_THEN_OWNER', mainBranch: 'master' } }) });
+    expect(html).toContain('Not on master yet · <span class="owner-confirmation-if-added">+12</span>');
+    expect(html).toContain('merging into master asks you again');
+    expect(html).not.toContain(IF_CONFIRMED_NOT_ON_MAIN);
+  });
+
+  it('says them as before for a project on main, with no repository bound, or from an older server', () => {
+    for (const mainBranch of ['main', null, undefined]) {
+      expect(leads({ branch: unmerged, landing: 'LINE_THEN_OWNER', mainBranch }), String(mainBranch))
+        .toEqual([IF_CONFIRMED_NOT_ON_MAIN, IF_CONFIRMED_LINE_THEN_OWNER]);
+      expect(leads({ branch: unplaced, landing: 'AUTO_MAIN', mainBranch }), String(mainBranch))
+        .toEqual([IF_CONFIRMED_NO_RECORD_ON_MAIN, IF_CONFIRMED_AUTO_MAIN]);
     }
   });
 });

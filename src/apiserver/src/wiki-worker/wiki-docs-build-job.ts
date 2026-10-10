@@ -9,7 +9,10 @@ import { wikiPlanProjectIds } from '../wiki/wiki-plan';
 import { finishWikiPlanJob, progressWikiPlanBuildOfJob, type WikiPlanJobEnd } from '../wiki/wiki-plan-job';
 import { WikiRefusalError, type WikiService } from '../wiki/wiki.service';
 import {
+  carryWikiDocsSection,
+  mergeWikiDocsBuild,
   runWikiDocsBuild,
+  wikiDocsBuildCarryOf,
   WikiDocsCallFailed,
   WikiDocsWriteRefused,
   type WikiDocsBuildSummary,
@@ -20,7 +23,8 @@ import {
 import { wikiDocCleanPath, type WikiDocRepo, type WikiDocShown, type WikiDocsPlanDoc } from './wiki-docs-writer';
 import { cutRunes } from './wiki-import-extract';
 import { isWikiJobCancellation, WikiJobContentError, WikiJobInfraError, type WikiJobContext, type WikiJobRunner } from './wiki-job-executor';
-import { writeWikiJobProgress } from './wiki-jobs';
+import { readWikiJobCarry, wikiJobCarryWriter, writeWikiJobProgress } from './wiki-jobs';
+import { wikiJobModelCalls } from './wiki-model-queue';
 import {
   readWikiRepoFiles,
   readWikiRepoReadiness,
@@ -67,6 +71,11 @@ import {
  * ends both failed once every other section has been tried, as the command exited non-zero. A failure of the
  * platform (the space's runner away, a read or a request past its limit, the worker stopping) is not the
  * build's: the job is tried again and the plan job reads as running meanwhile.
+ *
+ * THE REPORT IS THE WHOLE BUILD'S (contract `jobs.carry`), the job's and the plan job's alike. A section an earlier
+ * attempt wrote is unchanged for the replay by its fingerprint; each written section is carried on the job's row as it
+ * is written, and the report counts it written, once. Its calls and usage are the job's own requests, each once, and
+ * its seconds run from the job's first claim.
  */
 
 /** What the job needs besides its context. */
@@ -141,6 +150,11 @@ export async function runWikiDocsBuildJob(context: WikiJobContext, deps: WikiDoc
     stored.set(doc.slug, new Map(doc.sections.map((section) => [section.key, { materialSha256: section.materialSha256, stale: section.stale }])));
   }
   const literals = await ownerEnvLiterals(prisma, job.ownerId);
+  // What the attempts before this one wrote: the replay finds it unchanged, and the report counts it written.
+  const { carry: carried, startedAt } = await readWikiJobCarry(prisma, job.id);
+  const earlier = wikiDocsBuildCarryOf(carried);
+  const carry = wikiDocsBuildCarryOf(carried);
+  const keep = wikiJobCarryWriter(prisma, job, () => ({ docs: carry.docs }));
   const summary = await runWikiDocsBuild({
     repo,
     prepare: (paths) => repo.prepare(paths),
@@ -182,16 +196,26 @@ export async function runWikiDocsBuildJob(context: WikiJobContext, deps: WikiDoc
       await progressWikiPlanBuildOfJob(prisma, planJobId, job.id, at);
       await progress(prisma, context, { step: 'documents', ...at });
     },
+    onSection: async (doc, run, answer) => {
+      if (carryWikiDocsSection(carry, doc.slug, run, answer)) await keep();
+    },
   });
 
-  const build = buildReportOf(summary, deps.model);
-  const report: WikiDocsBuildJobReport = { kind: 'docs_build', planJobId, ...summary, build };
-  if (summary.failed > 0) {
-    const error = `${summary.failed === 1 ? '1 section was' : `${summary.failed} sections were`} left unwritten`;
-    await finishPlanJob(deps, job.id, planJobId, { outcome: 'failed', version: summary.planVersion, errors: [], error, report: build as unknown as Record<string, unknown>, draft: null, attempt: null });
+  const spent = await wikiJobModelCalls(prisma, { jobId: job.id, failed: true });
+  const whole: WikiDocsBuildSummary = {
+    ...mergeWikiDocsBuild(summary, earlier),
+    calls: spent.calls,
+    usage: { inputTokens: spent.inputTokens, outputTokens: spent.outputTokens },
+    seconds: startedAt ? Math.max(0, (Date.now() - startedAt.getTime()) / 1000) : summary.seconds,
+  };
+  const build = buildReportOf(whole, deps.model);
+  const report: WikiDocsBuildJobReport = { kind: 'docs_build', planJobId, ...whole, build };
+  if (whole.failed > 0) {
+    const error = `${whole.failed === 1 ? '1 section was' : `${whole.failed} sections were`} left unwritten`;
+    await finishPlanJob(deps, job.id, planJobId, { outcome: 'failed', version: whole.planVersion, errors: [], error, report: build as unknown as Record<string, unknown>, draft: null, attempt: null });
     throw new WikiJobContentError(error, report as unknown as Record<string, unknown>);
   }
-  await finishPlanJob(deps, job.id, planJobId, { outcome: 'succeeded', version: summary.planVersion, errors: [], error: null, report: build as unknown as Record<string, unknown>, draft: null, attempt: null });
+  await finishPlanJob(deps, job.id, planJobId, { outcome: 'succeeded', version: whole.planVersion, errors: [], error: null, report: build as unknown as Record<string, unknown>, draft: null, attempt: null });
   return report;
 }
 

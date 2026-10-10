@@ -248,6 +248,66 @@ export async function writeWikiJobProgress(
   return updated > 0;
 }
 
+/**
+ * What a job's earlier attempts finished that its replay will not do again (contract `jobs.carry`), and when the job was
+ * first claimed: read by an attempt as it starts. A job its worker's stop handed back, put back for infra, taken over
+ * after its worker died or parked on a repository operation is replayed from its plan, and the plan no longer names what
+ * was finished — a topic written, a section written, an op given its verdict, a page of dossiers behind the cursor. Each
+ * pipeline keeps what it finished as it goes (`wikiJobCarryWriter`) and folds it into the report it ends with, so the
+ * report is the whole job's.
+ *
+ * It is kept in the job's own `report` column, as `{ carry }`, while the job has not ended: no read shows a job's report
+ * before its end (Activity's jobs read reads no report at all, and the import's read only an import job's, which carries
+ * nothing), and the end writes the report over it. Null for a job nothing has been carried for.
+ */
+export async function readWikiJobCarry(
+  prisma: PrismaService,
+  jobId: string,
+): Promise<{ carry: Record<string, unknown> | null; startedAt: Date | null }> {
+  const rows = await prisma.$queryRaw<Array<{ carry: unknown; startedAt: Date | null }>>`
+    SELECT "report"->'carry' AS "carry", "started_at" AS "startedAt" FROM "wiki_job" WHERE "id" = ${jobId}::uuid`;
+  const carry = rows[0]?.carry;
+  return {
+    carry: carry !== null && typeof carry === 'object' && !Array.isArray(carry) ? (carry as Record<string, unknown>) : null,
+    startedAt: rows[0]?.startedAt ?? null,
+  };
+}
+
+/**
+ * Keep what this attempt has finished for a replay to fold in (contract `jobs.carry`): the whole carry, as the running
+ * job's `report` (`{ carry }`), under the claim's generation, so a holder whose lease was taken over writes nothing over
+ * the takeover's, and without any U+0000, as a job's progress and report are (`jobs.serverWrites`). False means a takeover
+ * holds the job.
+ */
+export async function writeWikiJobCarry(
+  prisma: PrismaService,
+  input: { id: string; generation: string; carry: Record<string, unknown> },
+): Promise<boolean> {
+  const updated = await prisma.$executeRaw`
+    UPDATE "wiki_job"
+    SET "report" = jsonb_build_object('carry', ${JSON.stringify(stripNul(input.carry))}::jsonb), "updated_at" = now()
+    WHERE "id" = ${input.id}::uuid AND "state" = 'running' AND "lease_generation" = ${input.generation}::uuid`;
+  return updated > 0;
+}
+
+/**
+ * One attempt's carry, kept: each call writes the carry as it stands when its write runs, one write at a time — of two
+ * sections finished side by side, neither write lands after the other's with less in it. A call resolves once its write
+ * is in, so a pipeline that awaits it before going on has nothing in flight when a stop ends the attempt.
+ */
+export function wikiJobCarryWriter(
+  prisma: PrismaService,
+  job: Pick<ClaimedWikiJob, 'id' | 'leaseGeneration'>,
+  carry: () => Record<string, unknown>,
+): () => Promise<void> {
+  let last: Promise<unknown> = Promise.resolve();
+  return () => {
+    const write = last.then(() => writeWikiJobCarry(prisma, { id: job.id, generation: job.leaseGeneration, carry: carry() }));
+    last = write.catch(() => undefined);
+    return write.then(() => undefined);
+  };
+}
+
 /** What a job that ran to its end reported. */
 export interface WikiJobOutcomeReport {
   report?: Record<string, unknown> | null;
@@ -373,14 +433,14 @@ class RetryLimitWriter {
         const ended = input.from.state === 'running'
           ? await tx.$queryRaw<EndedWikiJob[]>`
               UPDATE "wiki_job"
-                 SET "state" = 'failed', "attempts" = "attempts" + 1, "failure_kind" = 'infra', "error" = ${input.error},
+                 SET "state" = 'failed', "attempts" = "attempts" + 1, "failure_kind" = 'infra', "error" = ${input.error}, "report" = NULL,
                      "lease_owner" = NULL, "lease_generation" = NULL, "lease_deadline_at" = NULL,
                      "ended_at" = ${now}, "updated_at" = now()
                WHERE "id" = ${input.id}::uuid AND "state" = 'running' AND "lease_generation" = ${input.from.generation}::uuid
               RETURNING "id", "kind", "input"`
           : await tx.$queryRaw<EndedWikiJob[]>`
               UPDATE "wiki_job"
-                 SET "state" = 'failed', "failure_kind" = 'infra', "error" = ${input.error}, "ended_at" = ${now}, "updated_at" = now()
+                 SET "state" = 'failed', "failure_kind" = 'infra', "error" = ${input.error}, "report" = NULL, "ended_at" = ${now}, "updated_at" = now()
                WHERE "id" = ${input.id}::uuid AND "state" = 'queued' AND "attempts" >= ${WIKI_JOB.maxAttempts}
               RETURNING "id", "kind", "input"`;
         if (ended.length === 0) return false;

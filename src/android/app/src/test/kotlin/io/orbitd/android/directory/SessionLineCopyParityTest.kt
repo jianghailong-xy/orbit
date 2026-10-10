@@ -80,8 +80,8 @@ class SessionLineCopyParityTest {
         assertDeclares(done, "ProjectDone.swift", "readyToClose", ProjectDone.readyToClose)
         assertDeclares(done, "ProjectDone.swift", "recordAsDoneRow", ProjectDone.recordAsDoneRow)
         val needsYou = swift("NeedsYou.swift")
-        mapOf("promotionApproval" to "PROMOTION_APPROVAL", "coordinatorQuestion" to "COORDINATOR_QUESTION", "escalated" to "ESCALATED",
-            "fusePaused" to "FUSE_PAUSED").forEach { (case, kind) ->
+        // A merge approval names the branch it merges into: MainBranchCopyTest holds its words to the web's WorkspaceView.tsx.
+        mapOf("coordinatorQuestion" to "COORDINATOR_QUESTION", "escalated" to "ESCALATED", "fusePaused" to "FUSE_PAUSED").forEach { (case, kind) ->
             val word = NeedsYouLogic.kindWord(kind) ?: throw AssertionError("Android has no word for $kind")
             assertTrue("NeedsYou.swift no longer says \"$word\" for .$case", needsYou.contains("case .$case: return \"$word\""))
         }

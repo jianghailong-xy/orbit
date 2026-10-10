@@ -459,12 +459,19 @@ export function integrationJobView(row: IntegrationJobRow): IntegrationJobView {
 
 /**
  * The title an exception item about this job carries (§4.2). Built from the job and the task's own
- * title, both of which are immutable by the time an item is opened, so a replay reads the same.
+ * title, both of which are immutable by the time an item is opened, so a replay reads the same — as
+ * is the project's main branch a promotion merges into (`mainBranch`, null with no repository bound:
+ * main), which cannot change once the line has started (L4).
  */
-export function integrationItemTitle(state: string, kind: string, taskTitle: string): string {
+export function integrationItemTitle(
+  state: string,
+  kind: string,
+  taskTitle: string,
+  mainBranch: string | null = null,
+): string {
   // A promotion's failure is not about one task — it is about the branch the owner was going to be
   // asked to merge — so it is named after that rather than after whichever task landed last.
-  const subject = kind === 'LAND_TASK' ? taskTitle : 'merging the project branch into main';
+  const subject = kind === 'LAND_TASK' ? taskTitle : `merging the project branch into ${mainBranch ?? 'main'}`;
   switch (state) {
     case 'CONFLICT': return `Merge conflict: ${subject}`;
     case 'CHECK_FAILED': return `Checks failed on the combined tree: ${subject}`;

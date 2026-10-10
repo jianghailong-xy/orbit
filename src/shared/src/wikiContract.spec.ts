@@ -1860,6 +1860,35 @@ describe('wiki contract', () => {
     expect(jobs.executor.read.rule).toMatch(/Never the list itself/u);
   });
 
+  it('reports the whole job, its hand-backs and replays included: what a replay carries, kind by kind (2026-10-10)', () => {
+    const carry = CONTRACT.jobs.carry;
+    // Where a running attempt keeps what it finished: the job's own report, which no read shows before the end.
+    expect(CONTRACT.jobs.columns).toContain('report');
+    expect(carry.where).toMatch(/^wiki_job\.report, as \{ carry \}, while the job has not ended/u);
+    expect(carry.where).toMatch(/Activity's jobs read reads no report at all \(read\.never\)/u);
+    expect(CONTRACT.jobs.read.never).toMatch(/the job's input and report/u);
+    // Every kind says what its replay is carried, or why nothing needs to be.
+    expect(keysOf(carry.kinds).sort()).toEqual([...WIKI_JOB_KINDS].sort());
+    for (const kind of ['import', 'plan_draft', 'plan_revise', 'smoke']) expect(carry.kinds[kind]).toMatch(/^Nothing/u);
+    for (const kind of ['articles', 'verify', 'docs_build', 'maintain']) expect(carry.kinds[kind]).not.toMatch(/^Nothing/u);
+    // Only finished work is carried, so a job ends and writes as it would have; the report alone changes.
+    expect(carry.rule).toMatch(/only finished work is carried, so a job ends as it would have and writes what it would have/u);
+    expect(carry.write).toMatch(/a compare-and-set on the claim's generation/u);
+    expect(carry.write).toMatch(/The job's end writes the report over it/u);
+    expect(CONTRACT.jobs.progress).toMatch(/until then holds only what its attempts carry to a replay \(carry\)/u);
+    expect(CONTRACT.jobs.lease.handBack).toMatch(/is on its row already \(carry\)/u);
+    // The calls and usage are the job's own requests, each once; a call failed on its wait limit is none.
+    expect(carry.calls).toMatch(/each once \(wikiJobModelCalls\)/u);
+    expect(carry.calls).toMatch(/never one failed on its step's wait limit/u);
+    // The pipelines that say what their report is say it is the whole job's.
+    expect(CONTRACT.articles.serverExecution.ends).toMatch(/Its report is the whole job's \(jobs\.carry\)/u);
+    expect(CONTRACT.docs.build.server.end).toMatch(/are the whole build's \(jobs\.carry\)/u);
+    // A replay on the same commit leaves alone what an earlier attempt of the run checked, and the report counts it the run's.
+    expect(CONTRACT.maintenance.job.server.anchors).toMatch(/An entry an earlier attempt of the run checked, which a replay on the same commit leaves alone, is the run's and counted in them, not in skipped/u);
+    expect(CONTRACT.maintenance.job.server.anchors).toMatch(/so a second run on the commit an earlier run checked reports entries 0/u);
+    expect(carry.articlesAfterRun).toMatch(/of the whole run's report/u);
+  });
+
   it('reads a space\'s server runs and their calls for Activity, their metadata alone (server execution P9)', () => {
     const read = CONTRACT.jobs.read;
     expect(CONTRACT.agentSurface.doors.user.routes).toContain(read.route);

@@ -58,6 +58,12 @@ type whatTheDoorWasTold struct {
 // request is recorded in order, and both bodies are kept for inspection.
 func skipCheckServer(t *testing.T, decision string, taskRead string) (*httptest.Server, *[]string, *whatTheDoorWasTold) {
 	t.Helper()
+	return skipCheckServerReading(t, decision, taskRead, skipProjectRead)
+}
+
+// skipCheckServerReading is skipCheckServer with the project read it answers.
+func skipCheckServerReading(t *testing.T, decision, taskRead, projectRead string) (*httptest.Server, *[]string, *whatTheDoorWasTold) {
+	t.Helper()
 	var hits []string
 	told := &whatTheDoorWasTold{card: map[string]interface{}{}, body: map[string]interface{}{}}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -76,7 +82,7 @@ func skipCheckServer(t *testing.T, decision string, taskRead string) (*httptest.
 		case strings.HasSuffix(r.URL.Path, "/tasks/task-1"):
 			_, _ = w.Write([]byte(taskRead))
 		default:
-			_, _ = w.Write([]byte(skipProjectRead))
+			_, _ = w.Write([]byte(projectRead))
 		}
 	}))
 	t.Cleanup(srv.Close)
@@ -125,6 +131,36 @@ func TestMCPSkipMergeCheckAsksBeforeQueueing(t *testing.T) {
 		!strings.Contains(fmt.Sprintf("%v", input["failure"]), "exited 127") ||
 		!strings.Contains(fmt.Sprintf("%v", input["reason"]), "GNU timeout") {
 		t.Fatalf("card input = %#v", input)
+	}
+}
+
+// The card's note says every merge into the project's main branch is still checked, so the card
+// carries that branch by name from the project read — and null where the project has no repository,
+// which the card says as main.
+func TestMCPSkipMergeCheckCardNamesTheProjectsMainBranch(t *testing.T) {
+	for _, tc := range []struct {
+		name, projectRead string
+		want              interface{}
+	}{
+		{"master", strings.Replace(skipProjectRead, `"upstreamRef": "main"`, `"upstreamRef": "master"`, 1), "master"},
+		{"no repository", strings.Replace(skipProjectRead, `"upstreamRef": "main"`, `"upstreamRef": null`, 1), nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv, _, told := skipCheckServerReading(t, `{"status":"ALLOWED"}`, skipTaskRead, tc.projectRead)
+			mcp := &mcpServer{agentID: "agent-1", sessionID: "sess-1", t: NewTransport(srv.URL, "tok")}
+
+			res := mcp.callTool("integration_skip_merge_check", map[string]interface{}{
+				"projectId": "proj-1", "taskId": "task-1", "reason": "the check cannot run here",
+			})
+
+			if res["isError"] == true {
+				t.Fatalf("skip returned an error: %#v", res["content"])
+			}
+			input, _ := told.card["input"].(map[string]interface{})
+			if got, ok := input["mainBranch"]; !ok || got != tc.want {
+				t.Fatalf("card input mainBranch = %#v (present %v), want %#v", got, ok, tc.want)
+			}
+		})
 	}
 }
 

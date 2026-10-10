@@ -3,11 +3,16 @@ import { test } from 'node:test';
 import { WIKI_DOC_BUILD_RULES, WIKI_DOCS_BUILD_JOB, type WikiDocMaterialRecord } from '@orbit/shared';
 
 import {
+  carryWikiDocsSection,
+  mergeWikiDocsBuild,
   runWikiDocsBuild,
   WikiDocsCallFailed,
   WikiDocsWriteRefused,
+  type WikiDocsBuildCarry,
   type WikiDocsBuildDeps,
   type WikiDocsBuildOptions,
+  type WikiDocsBuildSectionRun,
+  type WikiDocsBuildSummary,
   type WikiDocsStoredSection,
   type WikiDocsWriteAnswer,
   type WikiDocsWriteRequest,
@@ -586,4 +591,52 @@ test('the build reads only the files its sections name, and takes the material c
   await build(h, repo);
   assert.deepEqual([...new Set(repo.prepared)].sort(), ['contracts/session.contract.json', 'docs/design.md', 'src/runloop.go']);
   assert.equal(WIKI_DOC_BUILD_RULES.parallel, 4);
+});
+
+// ── What a replay is told (contract `jobs.carry`) ───────────────────────────────────────────────────
+
+function sectionRun(key: string, outcome: WikiDocsBuildSectionRun['outcome'], materialSha256: string, calls = 0): WikiDocsBuildSectionRun {
+  return {
+    key, title: key, kind: 'flow', outcome, materialSha256, pieces: 1, actions: {}, footnotes: { total: 0, found: 0, noQuote: 0 },
+    calls, usage: { inputTokens: 10 * calls, outputTokens: 2 * calls }, seconds: 1,
+  };
+}
+
+function summaryOf(docs: WikiDocsBuildSummary['docs']): WikiDocsBuildSummary {
+  return {
+    spaceId: 'space', planVersion: 3, repoSha: 'c'.repeat(40), model: 'm', docs, written: 0, unchanged: 0, failed: 0,
+    calls: 0, usage: { inputTokens: 0, outputTokens: 0 }, seconds: 0,
+  };
+}
+
+test('a replay folds in what the attempt before it wrote: written once each, by the fingerprint it was written with (jobs.carry)', () => {
+  // The attempt the stop cut short wrote two sections of the first document and one of the second; it carries those alone.
+  const carry: WikiDocsBuildCarry = { docs: [] };
+  const answer: WikiDocsWriteAnswer = { status: 'complete', sections: [], counts: { sentences: 4 } };
+  assert.equal(carryWikiDocsSection(carry, 'one', sectionRun('a', 'written', 'sha-a', 2), answer), true);
+  assert.equal(carryWikiDocsSection(carry, 'one', sectionRun('b', 'written', 'sha-b', 3), answer), true);
+  assert.equal(carryWikiDocsSection(carry, 'one', sectionRun('c', 'failed', ''), null), false, 'a section left unwritten is not carried');
+  assert.equal(carryWikiDocsSection(carry, 'two', sectionRun('x', 'written', 'sha-x', 1), answer), true);
+  // The replay: `a` unchanged by the fingerprint it was written with, `b` written again from material that moved since,
+  // `c` written now, its write answered `partial`; the second document not taken up at all (a maintenance run's documents
+  // step takes up what is left).
+  const merged = mergeWikiDocsBuild(summaryOf([{
+    slug: 'one', status: 'partial',
+    sections: [sectionRun('a', 'unchanged', 'sha-a'), sectionRun('b', 'written', 'sha-b2', 2), sectionRun('c', 'written', 'sha-c', 2)],
+  }]), carry);
+  assert.deepEqual(
+    merged.docs.map((doc) => [doc.slug, doc.status, doc.sections.map((one) => [one.key, one.outcome, one.materialSha256, one.calls])]),
+    [
+      ['one', 'partial', [['a', 'written', 'sha-a', 2], ['b', 'written', 'sha-b2', 2], ['c', 'written', 'sha-c', 2]]],
+      ['two', 'complete', [['x', 'written', 'sha-x', 1]]],
+    ],
+    'a: the earlier attempt\'s run; b and c: the replay\'s; x: carried as it was; each document its last write\'s answer',
+  );
+  assert.deepEqual([merged.written, merged.unchanged, merged.failed], [4, 0, 0]);
+  // A section unchanged by another fingerprint than the one carried was not this job's to write: it stays unchanged.
+  const other = mergeWikiDocsBuild(summaryOf([{ slug: 'one', sections: [sectionRun('a', 'unchanged', 'sha-older')] }]), { docs: [{ slug: 'one', sections: [sectionRun('a', 'written', 'sha-a', 2)] }] });
+  assert.deepEqual([other.written, other.unchanged], [0, 1]);
+  // A section the replay failed is the replay's, whatever an earlier attempt wrote: the job's end is the replay's.
+  const failed = mergeWikiDocsBuild(summaryOf([{ slug: 'one', sections: [sectionRun('a', 'failed', '')] }]), { docs: [{ slug: 'one', sections: [sectionRun('a', 'written', 'sha-a', 2)] }] });
+  assert.deepEqual([failed.written, failed.failed], [0, 1]);
 });

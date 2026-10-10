@@ -10,6 +10,7 @@ import {
   type ProjectManualReady,
 } from '@orbit/shared';
 import { api } from '../api';
+import { DEFAULT_MAIN_BRANCH, mainBranchName } from '../lib/projectStart';
 import { projectIntegrationQuery, projectReadyToRunQuery } from '../lib/queries';
 import { LandingJobsSheet } from './LandingJobsSheet';
 import { ProjectTaskLink } from './ProjectTaskLink';
@@ -182,10 +183,13 @@ export function reportsIntegrationLanes(buckets: ProjectPanoramaBuckets): boolea
  * `On project branch` is dropped on a `MAIN` line rather than shown as a zero: a project landing
  * straight into main has no branch for work to be stranded on, and a lane saying "0 stranded"
  * answers a question nobody asked.
+ *
+ * `main` is the project's main branch by name, which the lanes about it say.
  */
 export function integrationLanes(
   buckets: ProjectPanoramaBuckets,
   line: 'MAIN' | 'PROJECT_BRANCH' | null,
+  main: string = DEFAULT_MAIN_BRANCH,
 ): ReadonlyArray<{ key: string; label: string; value: number; footnote: string; glyph: BucketGlyph; color: string }> {
   const at = (value: number | undefined) => value ?? 0;
   const lanes = [
@@ -203,13 +207,13 @@ export function integrationLanes(
       glyph: 'hourglass' as BucketGlyph, color: 'var(--text-3)' },
     ...(line === 'MAIN' ? [] : [{
       key: 'onIntegrationLine', label: 'On project branch', value: at(buckets.onIntegrationLine),
-      footnote: 'not on main yet', glyph: 'branch' as BucketGlyph, color: 'var(--success)',
+      footnote: `not on ${main} yet`, glyph: 'branch' as BucketGlyph, color: 'var(--success)',
     }]),
     // The two greens are deliberately different, and the meter is why: these lanes are adjacent
     // segments on one bar, and two touching blocks of the same colour read as a single larger
     // block — which is exactly the reading this split exists to break up. `--success-solid` is the
     // brighter of the pair, so main is the one that stands out.
-    { key: 'onUpstream', label: 'On main', value: at(buckets.onUpstream), footnote: 'landed on main',
+    { key: 'onUpstream', label: `On ${main}`, value: at(buckets.onUpstream), footnote: `landed on ${main}`,
       glyph: 'check' as BucketGlyph, color: 'var(--success-solid)' },
   ];
   const extras = [
@@ -282,6 +286,12 @@ export const JOB_WORDS = {
   LAND_PROMOTION: 'Merge to main',
 };
 
+/** The words above for a project whose main branch is `main` by name: a merge names the branch it
+ *  goes into. */
+export function jobWords(main: string = DEFAULT_MAIN_BRANCH): typeof JOB_WORDS {
+  return { ...JOB_WORDS, LAND_PROMOTION: `Merge to ${main}` };
+}
+
 /**
  * The state word for a job whose runner has stopped reporting.
  *
@@ -304,6 +314,11 @@ export const JOB_PHASES = {
   VERIFY: 'verifying',
   PUSH: 'pushing',
 };
+
+/** The phases above for a project whose main branch is `main` by name: the sync takes that branch in. */
+export function jobPhases(main: string = DEFAULT_MAIN_BRANCH): typeof JOB_PHASES {
+  return { ...JOB_PHASES, MAIN_SYNC: `syncing ${main}` };
+}
 
 export const LANDING_WORDS = {
   TIMED_OUT: 'Timed out',
@@ -392,15 +407,16 @@ export function landingLine(
   const silent = !listed && running
     && (!Number.isFinite(heartbeatAt) || now - heartbeatAt > INTEGRATION_CLAIM_STALE_MS);
   const unavailable = unreadable(now, observation);
+  const main = mainBranchName(view.upstreamRef);
   const named = {
-    word: inFlight.kind ? JOB_WORDS[inFlight.kind] ?? 'Integration' : 'Integration',
+    word: inFlight.kind ? jobWords(main)[inFlight.kind] ?? 'Integration' : 'Integration',
     what: jobs > 1 ? landingJobsCount(jobs, timedOutJobs) : inFlight.taskTitle,
   };
   // What the job waited for a runner before it was claimed — the row's own `inFlight` carries it,
   // and only a CLAIMED job has one to show: a queued job's whole clock already is that wait.
   const waitMs = running ? inFlight.waitMs : null;
   if (!unavailable && lead?.timedOut) return { ...named, ...timedOutLine(lead, now, waitMs) };
-  return { ...named, ...liveLine(inFlight, now, observation, unavailable, silent, waitMs) };
+  return { ...named, ...liveLine(inFlight, now, observation, unavailable, silent, main, waitMs) };
 }
 
 /** Whether this app has lost the server: its last read failed, or is more than 90 s old. */
@@ -411,13 +427,15 @@ function unreadable(now: number, observation: { updatedAt?: number; failed?: boo
 
 /** A running or queued job's half of a line: its state, its clock and how fresh the line is —
  *  frozen at the last word anyone had when `unavailable`, and at the last report when `silent`
- *  (the same freeze, reached from the runner's silence rather than this app's read). */
+ *  (the same freeze, reached from the runner's silence rather than this app's read). `main` is the
+ *  project's main branch by name, which a sync names. */
 function liveLine(
   job: { state: 'RUNNING' | 'QUEUED'; phase?: IntegrationJobPhase | null; startedAt: string; heartbeatAt?: string | null },
   now: number,
   observation: { updatedAt?: number },
   unavailable: boolean,
   silent: boolean,
+  main: string,
   waitMs?: number | null,
 ): Omit<LandingLine, 'word' | 'what'> {
   const running = job.state === 'RUNNING';
@@ -435,7 +453,7 @@ function liveLine(
     timedOut: false,
     state: unavailable ? 'Update unavailable'
       : silent ? LANDING_NO_REPORT
-        : running ? (job.phase ? JOB_PHASES[job.phase] ?? 'running' : 'running') : 'queued',
+        : running ? (job.phase ? jobPhases(main)[job.phase] ?? 'running' : 'running') : 'queued',
     // An instant this clock cannot read is no elapsed time rather than `NaN` on the page: the row
     // stays up and counts from zero, which is the one thing it can still say truthfully.
     clock: landingClock(Number.isFinite(startedAt) ? elapsedAt - startedAt : 0),
@@ -496,16 +514,17 @@ export function landingJobLines(
   observation: { updatedAt?: number; failed?: boolean } = {},
 ): LandingJobLine[] {
   const unavailable = unreadable(now, observation);
+  const main = mainBranchName(view.upstreamRef);
   return (view.inFlightJobs ?? []).map((job) => {
-    const named = { word: JOB_WORDS[job.kind] ?? 'Integration', what: job.taskTitle };
-    const stoppedAt = job.phase ? JOB_PHASES[job.phase] ?? 'running' : 'running';
+    const named = { word: jobWords(main)[job.kind] ?? 'Integration', what: job.taskTitle };
+    const stoppedAt = job.phase ? jobPhases(main)[job.phase] ?? 'running' : 'running';
     const pushed = job.phase === 'PUSH' || job.phase === 'VERIFY';
     return {
       jobId: job.jobId,
       taskId: job.taskId,
       line: !unavailable && job.timedOut
         ? { ...named, ...timedOutLine(job, now) }
-        : { ...named, ...liveLine(job, now, observation, unavailable, false, null) },
+        : { ...named, ...liveLine(job, now, observation, unavailable, false, main, null) },
       detail: job.timedOut
         ? `${job.runnerName ? `Runner ${job.runnerName}` : 'The runner'} took it at ${landingClockTime(job.startedAt)} · stopped at ${stoppedAt} · ${pushed ? LANDING_WORDS.MAY_HAVE_BEEN_PUSHED : LANDING_WORDS.NO_PUSH_RECORDED}`
         : job.retriedBy
@@ -924,6 +943,7 @@ export function ProjectPanoramaHeader({
         panorama={panorama.data}
         projectStatus={projectStatus}
         integrationLine={integrationLine}
+        mainBranch={mainBranchName(integration.data?.upstreamRef)}
         started={started}
         paused={paused}
         projectId={projectId}
@@ -951,6 +971,7 @@ export function ProjectPanoramaCard({
   panorama,
   projectStatus,
   integrationLine,
+  mainBranch = DEFAULT_MAIN_BRANCH,
   banners = true,
   landing = null,
   onOpenLanding,
@@ -962,6 +983,9 @@ export function ProjectPanoramaCard({
   panorama: ProjectPanorama;
   projectStatus?: 'OPEN' | 'DONE' | 'CANCELLED';
   integrationLine?: 'MAIN' | 'PROJECT_BRANCH' | null;
+  /** The project's main branch by name, which the lanes about it say; main where the page holds no
+   *  read that names it. */
+  mainBranch?: string;
   banners?: boolean;
   /** Whether the project has been started; `false` says ready work waits for the start. */
   started?: boolean | null;
@@ -983,7 +1007,7 @@ export function ProjectPanoramaCard({
   const readyFootnote = notStarted ? READY_UNTIL_STARTED : paused ? READY_WHILE_PAUSED
     : manual?.count === loaded.ready ? 'can start manually' : 'can start now';
   const lanes = reportsIntegrationLanes(loaded)
-    ? integrationLanes(loaded, integrationLine ?? null).map((lane) =>
+    ? integrationLanes(loaded, integrationLine ?? null, mainBranch).map((lane) =>
         lane.key === 'ready' ? { ...lane, footnote: readyFootnote } : lane)
     : null;
   const awaitingVerification = loaded.awaitingVerification ?? 0;

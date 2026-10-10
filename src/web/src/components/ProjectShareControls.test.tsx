@@ -242,6 +242,28 @@ describe('the project header’s sharing controls', { timeout: 60_000 }, () => {
   });
 });
 
+describe('Copy as Markdown, by the project’s main branch', () => {
+  const criteriaLines = (markdown: string) => markdown.split('\n').filter((line) => / — (Met|Not met) by its work/u.test(line));
+
+  it('says on main and not on main yet word for word as before for a project on main', () => {
+    const before = [
+      '1. 同一 owner 的多行订阅可以归入一个池。 — Met by its work · on main',
+      '2. 派发时选中窗口占用最低的那一行。 — Met by its work · on the project branch · not on main yet',
+      '3. 客户端能看到每个成员的占用。 — Not met by its work',
+    ];
+    expect(criteriaLines(projectMarkdown(PROJECT_DOC, APP_URL))).toEqual(before);
+    expect(criteriaLines(projectMarkdown({ ...PROJECT_DOC, integration: { upstreamRef: 'main' } }, APP_URL))).toEqual(before);
+  });
+
+  it('names master for a project on master, off the document the page holds', () => {
+    expect(criteriaLines(projectMarkdown({ ...PROJECT_DOC, integration: { upstreamRef: 'master' } }, APP_URL))).toEqual([
+      '1. 同一 owner 的多行订阅可以归入一个池。 — Met by its work · on master',
+      '2. 派发时选中窗口占用最低的那一行。 — Met by its work · on the project branch · not on master yet',
+      '3. 客户端能看到每个成员的占用。 — Not met by its work',
+    ]);
+  });
+});
+
 describe('the Share dialog, on a project', { timeout: 60_000 }, () => {
   it('has Task pages on by default, and Comments & files and Conversations under it, greyed out with it', async () => {
     // A link opened with the defaults (contract §1): Task pages on, the two below it off.

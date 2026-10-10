@@ -45,9 +45,7 @@ class SessionProjectCopyParityTest {
         assertSentence(copy, SessionProjectCopy.pageNotStarted(count), "$count tasks" to "\\(tasks) \\(tasks == 1 ? \"task\" : \"tasks\")")
         assertEquals("Not started · 1 task", SessionProjectCopy.pageNotStarted(1))
         assertSentence(copy, SessionProjectCopy.startAsked("§"), "§" to "\\(ago)")
-        val suggestion = SessionProjectCopy.startSuggestion(buildJsonObject { put("line", "PROJECT_BRANCH"); put("automatic", true); put("maxConcurrentTasks", count) })
-        assertSentence(copy, suggestion, "Project branch" to "\\(settings.line == .main ? \"Directly into main\" : \"Project branch\")",
-            "Automatic on" to "Automatic \\(settings.automatic ? \"on\" : \"off\")", "$count at" to "\\(settings.maxConcurrentTasks) at")
+        // The start suggestion names the main branch the start opens with: MainBranchCopyTest holds it to the web's sessionProjects.ts.
         assertEquals("Directly into main · Automatic off · 2 at a time",
             SessionProjectCopy.startSuggestion(buildJsonObject { put("line", "MAIN"); put("automatic", false); put("maxConcurrentTasks", 2) }))
         assertSentence(copy, SessionProjectCopy.landingSilentWord(count), "$count" to "\\($0)")

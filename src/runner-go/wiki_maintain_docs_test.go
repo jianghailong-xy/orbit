@@ -191,31 +191,32 @@ func (m *docsRunModel) answer(prompt string) (int, string) {
 	defer m.mu.Unlock()
 	m.prompts = append(m.prompts, prompt)
 	title := ""
-	if match := regexp.MustCompile(`「([^」]+)」（`).FindStringSubmatch(prompt); match != nil {
+	if match := regexp.MustCompile(`«([^»]+)» \(`).FindStringSubmatch(prompt); match != nil {
 		title = match[1]
 	}
 	switch {
-	case strings.Contains(prompt, "维护作业的 plan 修改建议"):
+	case strings.Contains(prompt, "the maintenance run's proposed change to the plan"):
 		if len(m.proposals) == 0 {
-			return http.StatusOK, "放入：runner"
+			return http.StatusOK, "Into: runner"
 		}
 		next := m.proposals[0]
 		m.proposals = m.proposals[1:]
 		return http.StatusOK, next
-	case strings.Contains(prompt, "做「归并」"):
+	case strings.Contains(prompt, `the "merge" for the document`):
 		var lines []string
 		for _, id := range regexp.MustCompile(`(?m)^\[([A-Z]\d+)\] `).FindAllStringSubmatch(prompt, -1) {
-			lines = append(lines, id[1]+" | 采用 | 讲的正是本节")
+			lines = append(lines, id[1]+" | adopt | it is what this section is about")
 		}
-		return http.StatusOK, strings.Join(lines, "\n") + "\n现状：\n- 本节的现状要点\n"
-	case strings.Contains(prompt, "# 任务：写文档"):
+		return http.StatusOK, strings.Join(lines, "\n") + "\nCurrent state:\n- this section's point of the current state\n"
+	case strings.Contains(prompt, "# Task: write the document"):
 		switch title {
 		case "投递":
-			return http.StatusOK, "### 投递\n一轮 turn 先落库再投递，至少投递一次，按 turn id 幂等[D1]。\n\n引文：\n[D1] 「至少投递一次，按 turn id 幂等」\n"
+			return http.StatusOK, "### 投递\nA turn is stored before it is delivered, at least once and idempotent on the turn id[D1].\n\n" +
+				"Quotes:\n[D1] \"至少投递一次，按 turn id 幂等\"\n"
 		case "约定":
-			return http.StatusOK, "### 约定\n全量测试在 runner 宿主上跑[S1]。\n\n引文：\n[S1] 「全量测试在 runner 宿主上跑」\n"
+			return http.StatusOK, "### 约定\nThe full suite runs on the runner host[S1].\n\nQuotes:\n[S1] \"全量测试在 runner 宿主上跑\"\n"
 		default:
-			return http.StatusOK, "### " + title + "\n这一节讲的文件已不在 origin/main 上。\n"
+			return http.StatusOK, "### " + title + "\nThe file this section covers is no longer on origin/main.\n"
 		}
 	}
 	return http.StatusOK, "?"
@@ -314,7 +315,7 @@ func TestWikiMaintainWritesOnlyTheSectionsItsEntriesAndOriginMainTouched(t *test
 	// Only the sections' own files were read: the design document's section 1 twice (at both commits),
 	// nothing of README or src.
 	for _, prompt := range model.Prompts() {
-		if strings.Contains(prompt, "「传输」（") && (strings.Contains(prompt, "# 任务：写文档") || strings.Contains(prompt, "做「归并」")) {
+		if strings.Contains(prompt, "«传输» (") && (strings.Contains(prompt, "# Task: write the document") || strings.Contains(prompt, `# Task: the "merge" for the document`)) {
 			t.Errorf("section 1 was taken up though what it cites did not change")
 		}
 	}
@@ -376,11 +377,13 @@ func TestWikiMaintainProposesOneChangeForANewDesignDocumentNoSectionCites(t *tes
 		}
 		return http.StatusOK, `{"id":"proposal-1","status":"pending"}`
 	}
-	good := "放入：runner\n理由：新设计文档 docs/new-design.md 讲 Codex 登录由服务器保管和下发，plan 里没有一节讲它；放进《Runner》新增一节。\n覆盖：K1、K2\n" +
-		"### 1. 账号代管 | concepts | 400\n讲什么：登录由服务器保管，runner 用时下发。\n- 文档：docs/new-design.md § 1. 保管\n"
+	good := "Into: runner\nReason: the new design doc docs/new-design.md covers how the server keeps the Codex login and hands it out, and no section " +
+		"of the plan covers it; a new section of «Runner» takes it.\nUses: K1, K2\n" +
+		"### 1. Login custody | concepts | 400\nCovers: the server keeps the login, and hands it to the runner when the runner needs it.\n" +
+		"- Docs: docs/new-design.md § 1. 保管\n"
 	model := &docsRunModel{proposals: []string{
 		// Round 1: a section heading origin/main does not have — this runner's gate finds it.
-		strings.Replace(good, "§ 1. 保管", "§ 9. 不存在", 1),
+		strings.Replace(good, "§ 1. 保管", "§ 9. Not there", 1),
 		// Round 2: the server's gate finds something; round 3 passes.
 		good,
 		good,
@@ -426,13 +429,13 @@ func TestWikiMaintainProposesOneChangeForANewDesignDocumentNoSectionCites(t *tes
 	}
 	added6 := sections[5].(map[string]interface{})
 	source, _ := json.Marshal(added6["sources"].(map[string]interface{})["docs"])
-	if added6["title"] != "账号代管" || added6["kind"] != "concepts" || string(source) != `[{"path":"docs/new-design.md","section":"1. 保管"}]` {
+	if added6["title"] != "Login custody" || added6["kind"] != "concepts" || string(source) != `[{"path":"docs/new-design.md","section":"1. 保管"}]` {
 		t.Errorf("the new section = %v", added6)
 	}
 	// What the model was told: the knowledge — the design document with its headings, and the entry — and the plan.
 	var asked []string
 	for _, prompt := range model.Prompts() {
-		if strings.Contains(prompt, "维护作业的 plan 修改建议") {
+		if strings.Contains(prompt, "the maintenance run's proposed change to the plan") {
 			asked = append(asked, prompt)
 		}
 	}
@@ -440,8 +443,8 @@ func TestWikiMaintainProposesOneChangeForANewDesignDocumentNoSectionCites(t *tes
 		t.Fatalf("the proposal was asked %d times, want 3 rounds", len(asked))
 	}
 	// One place, one subject: what does not belong with the group waits for the next run.
-	for _, want := range []string{"[K1] 新设计文档 docs/new-design.md「账号代管」", "## 1. 保管", "[K2] 条目（concept）「Codex 登录由服务器保管」", "`runner`《Runner》",
-		"留给下一次维护作业再提", "不要为了一次放完，把不相干的知识凑进同一篇或同一节"} {
+	for _, want := range []string{"[K1] new design doc docs/new-design.md «账号代管»", "## 1. 保管", "[K2] entry (concept) «Codex 登录由服务器保管»", "`runner` «Runner»",
+		"leave it for the next maintenance run to propose", "do not put unrelated knowledge together into one document or one section to place it all at once"} {
 		if !strings.Contains(asked[0], want) {
 			t.Errorf("the proposal prompt does not say %q", want)
 		}
@@ -451,7 +454,7 @@ func TestWikiMaintainProposesOneChangeForANewDesignDocumentNoSectionCites(t *tes
 			t.Errorf("the proposal prompt offers %s, which is no design document", never)
 		}
 	}
-	if !strings.Contains(asked[1], "9. 不存在") || !strings.Contains(asked[1], "上一次的答案有这些问题") {
+	if !strings.Contains(asked[1], "9. Not there") || !strings.Contains(asked[1], "The last answer had these problems") {
 		t.Errorf("round 2 was not told what this runner's gate found")
 	}
 	if !strings.Contains(asked[2], "is at most 2000 characters") {
@@ -510,9 +513,9 @@ func TestWikiMaintainProposalNamesOnlyTheSpacesTopics(t *testing.T) {
 				return http.StatusOK, `{"id":"proposal-1","status":"pending"}`
 			}
 			naming := func(topic string) string {
-				return "放入：runner\n理由：全量测试在 runner 宿主上会抢端口，plan 里没有一节讲这个坑。\n覆盖：K1\n" +
-					"### 1. 宿主上的坑 | pitfalls | 300\n讲什么：全量测试在 runner 宿主上抢端口。\n" +
-					"- 会话：关键词 端口；kind pitfall；主题 " + topic + "；要找：owner 说端口被抢的原话\n"
+				return "Into: runner\nReason: the full suite takes ports on the runner host, and no section of the plan covers this pitfall.\nUses: K1\n" +
+					"### 1. Pitfalls on the host | pitfalls | 300\nCovers: the full suite takes ports on the runner host.\n" +
+					"- Sessions: keywords 端口; kind pitfall; topics " + topic + "; look for: the owner's words saying the ports were taken\n"
 			}
 			// Round 1 names the document's slug, as the canary's did; round 2 the topic only the list names.
 			model := &docsRunModel{proposals: []string{naming("runner"), naming("runner-host")}}
@@ -535,11 +538,11 @@ func TestWikiMaintainProposalNamesOnlyTheSpacesTopics(t *testing.T) {
 			}
 			var asked []string
 			for _, prompt := range model.Prompts() {
-				if strings.Contains(prompt, "维护作业的 plan 修改建议") {
+				if strings.Contains(prompt, "the maintenance run's proposed change to the plan") {
 					asked = append(asked, prompt)
 				}
 			}
-			want := "\n- 第 1 节: \"runner\" is not a topic of this space: 现有主题（slug「名称」·active 条目数）：runner-host「runner 宿主」·2\n"
+			want := "\n- section 1: \"runner\" is not a topic of this space: Existing topics (slug «name» · active entries): runner-host «runner 宿主» · 2\n"
 			if len(asked) != 2 || !strings.Contains(asked[1], want) {
 				t.Errorf("round 2 was not told the space's topics with the one refused: %d rounds asked, want %q in the second", len(asked), want)
 			}
@@ -560,9 +563,9 @@ func TestWikiMaintainProposalReadsAWrappedKindBareAndNamesWhatItRefusesQuoted(t 
 		t.Fatal(err)
 	}
 	items := []wikiProposalItem{{ID: "K1", entry: &wikiUnplacedEntry{ID: "entry-1", Kind: "convention", Title: "收工前 rebase 到 main"}}}
-	answer := parseWikiProposal("放入：storage\n理由：收工的约定没有地方放。\n覆盖：K1\n" +
-		"### 1. 收工约定 | conventions | 300\n讲什么：收工前 rebase 到 main、写明分支和 sha、不自己 merge。\n" +
-		"- 会话：关键词 rebase、merge；kind `decision`/\"convention\"；主题 `storage-topic`；要找：owner 说收工前要 rebase 的原话\n")
+	answer := parseWikiProposal("Into: storage\nReason: the convention for finishing work has no place.\nUses: K1\n" +
+		"### 1. Finishing conventions | conventions | 300\nCovers: before finishing, rebase onto main, name the branch and the sha, and do not merge yourself.\n" +
+		"- Sessions: keywords rebase, merge; kind `decision`/\"convention\"; topics `storage-topic`; look for: the owner's words saying to rebase before finishing\n")
 	request, problems := assembleWikiProposal(plan, answer, items, nil, nil)
 	if len(problems) != 0 {
 		t.Fatalf("a wrapped kind was refused: %v", problems)
@@ -573,13 +576,13 @@ func TestWikiMaintainProposalReadsAWrappedKindBareAndNamesWhatItRefusesQuoted(t 
 		t.Errorf("the proposal carries the session condition %+v, want its kinds and topic bare", sessions)
 	}
 
-	answer = parseWikiProposal("放入：`storage-docs`\n理由：收工的约定没有地方放。\n覆盖：K1、K7\n" +
-		"### 1. 收工约定 | convention | 300\n讲什么：收工前 rebase 到 main。\n- 会话：关键词 rebase\n")
+	answer = parseWikiProposal("Into: `storage-docs`\nReason: the convention for finishing work has no place.\nUses: K1, K7\n" +
+		"### 1. Finishing conventions | convention | 300\nCovers: before finishing, rebase onto main.\n- Sessions: keywords rebase\n")
 	_, problems = assembleWikiProposal(plan, answer, items, nil, nil)
 	for _, want := range []string{
-		`「覆盖」里的 "K7" 不是新知识的编号`,
-		`第 1 节的 type "convention" 不是节的类型`,
-		`「放入」"storage-docs" 不是目录里的一篇`,
+		`"K7" on the Uses line is not the number of an item of new knowledge`,
+		`section 1: the type "convention" is not a section type`,
+		`Into "storage-docs" is not a document of the catalogue`,
 	} {
 		found := false
 		for _, problem := range problems {
