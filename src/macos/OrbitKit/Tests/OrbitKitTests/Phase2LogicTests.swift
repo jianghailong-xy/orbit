@@ -304,7 +304,7 @@ final class Phase2LogicTests: XCTestCase {
         XCTAssertEqual(u.flatSnapshot.bindingRow()?.percent, 92)
         XCTAssertNil(u.snapshot(for: "opencode"))      // never show Claude quota for OpenCode
         XCTAssertNil(u.snapshot(for: "antigravity"))   // …nor for Antigravity, which has no plan usage
-        XCTAssertNil(AgentDefaults.planUsage(for: "antigravity", runner: u, configured: nil))
+        XCTAssertNil(AgentDefaults.planUsage(engine: "antigravity", provider: "antigravity", runner: u, configured: nil))
         XCTAssertNil(PlanUsage(fiveHour: nil, sevenDay: nil, sevenDayOpus: nil,
                                sevenDaySonnet: nil, fetchedAt: nil).flatSnapshot.bindingRow())
 
@@ -385,18 +385,25 @@ final class Phase2LogicTests: XCTestCase {
         let metered = ConfiguredProvider(slug: "deepseek", label: "DeepSeek", runtime: "claude")
         let configured = [byok, metered]
 
-        // Built-in Claude runs on the runner's own login.
-        XCTAssertEqual(AgentDefaults.planUsage(for: "claude", runner: runner,
+        // Claude Code's own sign-in runs on the runner's own login.
+        XCTAssertEqual(AgentDefaults.planUsage(engine: "claude", provider: "claude", runner: runner,
                                                configured: configured)?.bindingRow()?.percent, 100)
         // A configured Anthropic account reports its own subscription.
-        XCTAssertEqual(AgentDefaults.planUsage(for: "anthropic-2", runner: runner,
+        XCTAssertEqual(AgentDefaults.planUsage(engine: "claude", provider: "anthropic-2", runner: runner,
                                                configured: configured)?.bindingRow()?.percent, 9)
-        // A metered key has no window at all — no gauge, rather than the runner's.
-        XCTAssertNil(AgentDefaults.planUsage(for: "deepseek", runner: runner,
-                                             configured: configured))
+        // A metered key has no window at all — no gauge, rather than the runner's — on whichever engine
+        // runs it.
+        for engine in ["claude", "opencode", "dsh"] {
+            XCTAssertNil(AgentDefaults.planUsage(engine: engine, provider: "deepseek", runner: runner,
+                                                 configured: configured))
+        }
         // A slug no longer configured is the same: nothing to report.
-        XCTAssertNil(AgentDefaults.planUsage(for: "removed", runner: runner,
+        XCTAssertNil(AgentDefaults.planUsage(engine: "claude", provider: "removed", runner: runner,
                                              configured: configured))
+        // OpenCode's own configuration and the legacy built-in `dsh` report none either.
+        XCTAssertNil(AgentDefaults.planUsage(engine: "opencode", provider: "opencode", runner: runner,
+                                             configured: configured))
+        XCTAssertNil(AgentDefaults.planUsage(engine: "dsh", provider: "dsh", runner: runner, configured: configured))
     }
 
     func testMakeTurn() {
@@ -461,31 +468,39 @@ final class Phase2LogicTests: XCTestCase {
         XCTAssertTrue(ComposerSlash.matches(items: scoped, token: nil, scope: nil).isEmpty)
     }
 
-    /// Runtime-owned registries are isolated: Codex, OpenCode and Antigravity only keep local Orbit
-    /// commands, Kimi only sees tagged Kimi entries, and Claude/custom providers accept legacy nil +
-    /// Claude tags.
-    func testSlashForProvider() {
+    /// Runtime-owned registries are isolated by the session's engine: Codex, OpenCode, Antigravity and
+    /// DeepSeek Harness only keep local Orbit commands, Kimi only sees tagged Kimi entries, and Claude
+    /// Code accepts legacy nil + Claude tags — whichever key it runs on (web `slashAssetMatchesEngine`).
+    func testSlashForEngine() {
         let items = ComposerHostCommand.slashItems + [
             SlashCommandInfo(name: "commit", type: "command"),
             SlashCommandInfo(name: "loop", type: "skill", builtin: true, provider: "claude"),
             SlashCommandInfo(name: "deploy", type: "command", provider: "kimi"),
         ]
-        XCTAssertEqual(ComposerSlash.forProvider(items: items, provider: "codex").map(\.name),
+        XCTAssertEqual(ComposerSlash.forEngine(items: items, engine: "codex").map(\.name),
                        ["status"])
-        XCTAssertEqual(ComposerSlash.forProvider(items: items, provider: "opencode").map(\.name),
+        XCTAssertEqual(ComposerSlash.forEngine(items: items, engine: "opencode").map(\.name),
                        ["status"])
         // agy is started with --disable-slash-commands: slash text is an ordinary prompt there.
-        XCTAssertEqual(ComposerSlash.forProvider(items: items, provider: "antigravity").map(\.name),
+        XCTAssertEqual(ComposerSlash.forEngine(items: items, engine: "antigravity").map(\.name),
                        ["status"])
-        XCTAssertEqual(ComposerSlash.forProvider(items: items, provider: "claude").map(\.name),
+        XCTAssertEqual(ComposerSlash.forEngine(items: items, engine: "dsh").map(\.name),
+                       ["status"])
+        XCTAssertEqual(ComposerSlash.forEngine(items: items, engine: "claude").map(\.name),
                        ["status", "commit", "loop"])
-        XCTAssertEqual(ComposerSlash.forProvider(items: items, provider: "kimi").map(\.name),
+        XCTAssertEqual(ComposerSlash.forEngine(items: items, engine: "kimi").map(\.name),
                        ["status", "deploy"])
-        XCTAssertEqual(ComposerSlash.forProvider(items: items, provider: "deepseek").map(\.name),
+        // An unset engine is Claude Code's (the default everywhere else in the composer).
+        XCTAssertEqual(ComposerSlash.forEngine(items: items, engine: nil).map(\.name),
                        ["status", "commit", "loop"])
-        // An unset provider is claude's (the default everywhere else in the composer).
-        XCTAssertEqual(ComposerSlash.forProvider(items: items, provider: nil).map(\.name),
-                       ["status", "commit", "loop"])
+        // Asked of the engine, never the key's slug: a DeepSeek key on Claude Code has Claude Code's
+        // commands, and the same key on DeepSeek Harness none of them.
+        let configured = [ConfiguredProvider(slug: "deepseek", label: "DeepSeek", runtime: "claude",
+                                             engines: ["claude", "opencode", "dsh"])]
+        for (engine, names) in [("claude", ["status", "commit", "loop"]), ("dsh", ["status"]), ("opencode", ["status"])] {
+            let shown = ProviderEngines.sessionEngine(engine, provider: "deepseek", configured: configured)
+            XCTAssertEqual(ComposerSlash.forEngine(items: items, engine: shown).map(\.name), names)
+        }
 
         let claudeID = SlashCommandInfo(name: "same", type: "command", provider: "claude").id
         let kimiID = SlashCommandInfo(name: "same", type: "command", provider: "kimi").id
@@ -552,6 +567,13 @@ final class Phase2LogicTests: XCTestCase {
         XCTAssertTrue(inTheLane.contains(ComposerStatusRow(label: "Fast mode", value: "on")))
         XCTAssertFalse(ComposerHostCommand.statusRows(ComposerStatusSnapshot(
             surface: "App", effort: "max")).contains { $0.label == "Fast mode" })
+
+        // The engine and the credential are two rows, the engine first (web `localStatusRows`).
+        let pair = ComposerHostCommand.statusRows(ComposerStatusSnapshot(
+            surface: "App", engine: "DeepSeek Harness", provider: "DeepSeek 2"))
+        XCTAssertEqual(pair.filter { ["Engine", "Provider"].contains($0.label) },
+                       [ComposerStatusRow(label: "Engine", value: "DeepSeek Harness"),
+                        ComposerStatusRow(label: "Provider", value: "DeepSeek 2")])
     }
 
     func testSlashPickAndOpening() {

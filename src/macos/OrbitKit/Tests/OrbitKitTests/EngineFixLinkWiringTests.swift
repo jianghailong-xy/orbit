@@ -73,9 +73,9 @@ final class EngineFixLinkWiringTests: XCTestCase {
     /// machine runs it.
     func testTheRowsNameTheEngineTheyWantFixed() {
         let missing = ["claude", "codex", "kimi", "opencode"].map { RunnerEngineHealth(engine: $0, installed: false) }
-        let choices = SessionProviderChoices.choices(configured: [], engines: missing)
         for engine in ["claude", "codex", "kimi", "opencode"] {
-            let row = choices.first { $0.slug == engine }
+            let row = SessionProviderChoices.providers(for: engine, sources: ChoiceSources(configured: [], engines: missing))
+                .first { $0.slug == engine }
             XCTAssertEqual(row?.unavailable, "Not installed", engine)
             XCTAssertEqual(row?.fixEngine, engine, "\(engine)'s row asks for its own engine to be fixed")
         }
