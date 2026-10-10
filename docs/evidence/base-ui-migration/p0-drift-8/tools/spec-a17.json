@@ -1,0 +1,69 @@
+[
+ {
+  "group": "session page",
+  "change": [
+   "A17"
+  ],
+  "screenshots": [
+   "chromium-dark-desktop/breakpoint-959-session.png",
+   "chromium-dark-desktop/breakpoint-961-session.png",
+   "chromium-dark-desktop/notification-error.png",
+   "chromium-dark-desktop/session-attachment-menu.png",
+   "chromium-dark-desktop/session-attachment-staged.png",
+   "chromium-dark-desktop/session-composer-focus.png",
+   "chromium-dark-desktop/session-idle.png",
+   "chromium-dark-desktop/session-streaming.png",
+   "chromium-dark-phone/notification-error.png",
+   "chromium-dark-phone/session-attachment-menu.png",
+   "chromium-dark-phone/session-attachment-staged.png",
+   "chromium-dark-phone/session-composer-focus.png",
+   "chromium-dark-phone/session-idle.png",
+   "chromium-dark-phone/session-streaming.png",
+   "chromium-light-desktop/breakpoint-959-session.png",
+   "chromium-light-desktop/breakpoint-961-session.png",
+   "chromium-light-desktop/notification-error.png",
+   "chromium-light-desktop/session-attachment-menu.png",
+   "chromium-light-desktop/session-attachment-staged.png",
+   "chromium-light-desktop/session-composer-focus.png",
+   "chromium-light-desktop/session-idle.png",
+   "chromium-light-desktop/session-streaming.png",
+   "chromium-light-phone/notification-error.png",
+   "chromium-light-phone/session-attachment-menu.png",
+   "chromium-light-phone/session-attachment-staged.png",
+   "chromium-light-phone/session-composer-focus.png",
+   "chromium-light-phone/session-idle.png",
+   "chromium-light-phone/session-streaming.png",
+   "webkit-dark-desktop/breakpoint-959-session.png",
+   "webkit-dark-desktop/breakpoint-961-session.png",
+   "webkit-dark-desktop/session-attachment-menu.png",
+   "webkit-dark-desktop/session-attachment-staged.png",
+   "webkit-dark-desktop/session-composer-focus.png",
+   "webkit-dark-desktop/session-idle.png",
+   "webkit-dark-desktop/session-streaming.png",
+   "webkit-dark-phone/session-attachment-menu.png",
+   "webkit-dark-phone/session-attachment-staged.png",
+   "webkit-dark-phone/session-composer-focus.png",
+   "webkit-dark-phone/session-idle.png",
+   "webkit-dark-phone/session-streaming.png",
+   "webkit-light-desktop/breakpoint-959-session.png",
+   "webkit-light-desktop/breakpoint-961-session.png",
+   "webkit-light-desktop/session-attachment-menu.png",
+   "webkit-light-desktop/session-attachment-staged.png",
+   "webkit-light-desktop/session-composer-focus.png",
+   "webkit-light-desktop/session-idle.png",
+   "webkit-light-desktop/session-streaming.png",
+   "webkit-light-phone/session-attachment-menu.png",
+   "webkit-light-phone/session-attachment-staged.png",
+   "webkit-light-phone/session-composer-focus.png",
+   "webkit-light-phone/session-idle.png",
+   "webkit-light-phone/session-streaming.png"
+  ],
+  "mainCommits": [
+   "d2e295917"
+  ],
+  "projectLine": [
+   "d354b64c5"
+  ],
+  "generatedFrom": "full-d2e295917"
+ }
+]
