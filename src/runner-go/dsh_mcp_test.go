@@ -153,6 +153,7 @@ func TestDshToolPolicy(t *testing.T) {
 }
 
 func TestDshAgentOverlay(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
 	exe := testDshExecutable(t)
 	work := t.TempDir()
 	input := DshLaunchInput{OrbitSessionID: "overlay-session", ExecutionDir: work, APIKey: "sk-overlay", BaseURL: "http://127.0.0.1:9", FileMode: "read-only"}

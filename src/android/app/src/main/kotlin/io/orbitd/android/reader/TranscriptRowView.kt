@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import io.orbitd.android.core.realtime.*
+import io.orbitd.android.core.cards.AntigravityRepair
 import io.orbitd.android.core.cards.transcriptCards
 import io.orbitd.android.core.cards.withoutWakeBlocks
 import io.orbitd.android.cards.TranscriptCardView
@@ -86,7 +87,16 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
     val activity = LocalTaskActivity.current
     val progress = if (taskKind != null) activity?.progress(event.toolId()) else null
     val resultText = result?.let { contentText(it.fields["content"]) ?: it.fields.string("result") }
+    // A07-4: an Antigravity failure on a session Antigravity runs is its repair card, in place of the line (iOS d2737d665).
+    val console = LocalSessionConsole.current
+    val repair = if (event.type == "error" || event.type == "assistant") AntigravityRepair.of(shown.body().trim())?.takeIf { console?.executesAntigravity == true } else null
     Column(Modifier.fillMaxWidth().background(bg).padding(10.dp).testTag(row.key), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (repair != null && console != null) { AntigravityRepairCard(repair, console); return@Column }
+        if (event.type == "auto_retry" && console != null) {
+            AutoRetryCard(AutoRetryNotice(shown.body(), shown.fields.string("variant") == "quota", shown.fields["stale"] == JsonPrimitive(true),
+                shown.fields["afterUserMsg"] == JsonPrimitive(true)), console)
+            return@Column
+        }
         if (!detailOnly) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Text(title, Modifier.weight(1f, fill = false), style = MaterialTheme.typography.labelMedium)
             // A workflow's agents done out of all, an agent's tool calls.

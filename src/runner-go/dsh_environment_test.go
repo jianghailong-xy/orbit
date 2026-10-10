@@ -249,6 +249,32 @@ func TestDshConcurrentSessionIsolationAndRestart(t *testing.T) {
 	}
 }
 
+// TestDshSessionCacheEnv: every dsh session launch — the workspace-write one included — points the
+// session's toolchains at the runner-owned shared cache root, so a build in the sandbox has one
+// cache for the whole machine to read and write rather than the read-only ~/.cache its file mode
+// leaves behind, or a directory the agent invents when that fails.
+func TestDshSessionCacheEnv(t *testing.T) {
+	_, workspace := dshEnvironmentFixture(t)
+	cacheRoot := runnerCacheRoot()
+	for _, mode := range []string{"read-only", "workspace-write"} {
+		t.Run(mode, func(t *testing.T) {
+			input := DshLaunchInput{"cache-env-" + mode, workspace, "fake-key", "https://synthetic.example", mode}
+			spec, err := prepareDshAgentConfigAt(input, &DshAgentOverlay{}, testDshExecutable(t), filepath.Join(t.TempDir(), "home"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			for key, sub := range map[string]string{
+				"GOCACHE": runnerCacheGoBuild, "GOMODCACHE": runnerCacheGoMod, "npm_config_cache": runnerCacheNPM,
+			} {
+				want := filepath.Join(cacheRoot, sub)
+				if got := envValue(spec.Env, key); got != want {
+					t.Errorf("%s = %q, want %q", key, got, want)
+				}
+			}
+		})
+	}
+}
+
 func TestDshProfileAndOverlayHashesPreserveRecovery(t *testing.T) {
 	_, workspace := dshEnvironmentFixture(t)
 	input := DshLaunchInput{"hash-session", workspace, "fake-original", "https://synthetic.example", "read-only"}

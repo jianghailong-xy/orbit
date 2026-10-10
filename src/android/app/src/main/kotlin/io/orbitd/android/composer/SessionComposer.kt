@@ -22,7 +22,6 @@ import androidx.compose.ui.composed
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
@@ -53,7 +52,7 @@ import kotlinx.serialization.json.*
 
 @Composable
 fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: String, session: SessionState?, target: DraftTarget? = null, focusRequest: Int = 0,
-    inputFocusChanged: (Boolean) -> Unit = {}, openTask: ((String) -> Unit)? = null) {
+    inputFocusChanged: (Boolean) -> Unit = {}, openTask: ((String) -> Unit)? = null, openRunner: ((runner: String, engine: String) -> Unit)? = null) {
     val model = remember(app, handle, sessionId) { app.composer(handle, sessionId, target) }
     val state by model.state.collectAsState()
     val context = LocalContext.current
@@ -196,7 +195,7 @@ fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: Str
                         DropdownMenuItem(text = { Text("Shell command") }, onClick = { menu = false; if (!draft.text.startsWith("!")) model.edit("!${draft.text}", 1, 1) })
                         if (target == null) DropdownMenuItem(text = { Text("Queued messages (${session?.snapshot?.queuedTurns?.size ?: 0})") }, onClick = { menu = false; queued = true })
                         if (target == null) DropdownMenuItem(text = { Text("Retry last failed message") }, enabled = usable && !state.busy,
-                            onClick = { menu = false; model.control("retry-message", body = JsonObject(emptyMap())) })
+                            onClick = { menu = false; model.retryFailed() })
                         if (detail.text("retryAt") != null) DropdownMenuItem(text = { Text("Cancel automatic retry") }, enabled = usable && !state.busy,
                             onClick = { menu = false; model.control("auto-retry", HttpMethod.DELETE) })
                     }
@@ -237,7 +236,11 @@ fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: Str
             }
         }, confirmButton = { TextButton(onClick = { slashScope = null }) { Text("Close") } })
     }
-    if (models && session?.accessDenied != true) ModelChoices(model, state, effective, usable, smart, detail.text("taskId"), openTask) { models = false }
+    // The menu's title: the engine running this session, and where a pick held for the resume takes the next turn (A07-13).
+    val engineTitle = ProviderChoices.engineTitle((if (target == null) detail else effective).text("provider").orEmpty(),
+        state.catalog?.providers.orEmpty(), next = if (target == null) draft.resumeConfig.text("provider") else null)
+    if (models && session?.accessDenied != true) ModelChoices(model, state, effective, engineTitle, usable, smart, detail.text("taskId"), openTask,
+        openRunner) { models = false }
     if (queued) AlertDialog(onDismissRequest = { queued = false }, title = { Text("Queued messages") }, text = {
         Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
             if (session?.fresh != true) Text("Reconnect to check the queue.")
@@ -318,6 +321,19 @@ internal fun ModelChip(name: String, effort: String, smart: Boolean, enabled: Bo
     }
 }
 
+/** One account in its engine's section of the Provider list (iOS `accountRowLabel`): its name, and under it its own quota — "5h 12%",
+ * what an Antigravity bucket has left, "gemini-5h 4% left" — or what Automatic does, or why it can't take the session. */
+@Composable
+private fun AccountRow(name: String, detail: String?, enabled: Boolean, nearLimit: Boolean = false, spoken: String? = null, press: () -> Unit) {
+    TextButton(enabled = enabled, onClick = press, modifier = if (spoken == null) Modifier else Modifier.semantics { contentDescription = spoken }) {
+        Column(Modifier.fillMaxWidth()) {
+            Text(name)
+            detail?.let { Text(it, style = MaterialTheme.typography.bodySmall,
+                color = if (nearLimit) LocalOrbitColors.current.needsYou else MaterialTheme.colorScheme.onSurfaceVariant) }
+        }
+    }
+}
+
 /** What the chip's menu opens on for a task run on smart selection's pick (iOS 6826eed7e, 7c49be60a): the tier it picked, its first
  * reason, and the note — a sentence an item, as a phone's menu cuts an item at its third line. */
 @Composable
@@ -330,21 +346,25 @@ internal fun SmartRouteNote(route: JsonObject) = Column(Modifier.testTag("compos
 }
 
 @Composable
-private fun ModelChoices(model: ComposerModel, state: ComposerState, detail: JsonObject, usable: Boolean, smart: JsonObject?, taskId: String?,
-    openTask: ((String) -> Unit)?, close: () -> Unit) {
+private fun ModelChoices(model: ComposerModel, state: ComposerState, detail: JsonObject, engineTitle: String, usable: Boolean, smart: JsonObject?,
+    taskId: String?, openTask: ((String) -> Unit)?, openRunner: ((String, String) -> Unit)?, close: () -> Unit) {
     val catalog = state.catalog
     val provider = detail.text("provider") ?: ""
     val chosen = detail.text("model") ?: ""
+    // OpenCode on a configured key is on that key: whose models the menu lists and whose row is ticked (A07-6).
+    val choice = OpenCodeKeys.choice(provider, chosen)
     val enabled = usable && !state.busy && catalog != null && state.draft.pending == null
     fun change(key: String, value: String) { model.config(buildJsonObject { put(key, value) }) }
     AlertDialog(onDismissRequest = close, title = { Text("Model and account") }, text = {
         Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+            // The engine this session runs on (iOS 0557592f8), over everything below that picks for the next turn.
+            Text(engineTitle, Modifier.testTag("composer-engine-title"), fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            HorizontalDivider(Modifier.padding(vertical = 8.dp))
             // A task run on smart selection's pick opens on why it is this model, and on where to fix the model for every run.
             smart?.let { SmartRouteNote(it); HorizontalDivider(Modifier.padding(vertical = 8.dp)) }
             if (state.catalogLoading) CircularProgressIndicator()
             state.catalogError?.let { Text(it); TextButton(onClick = model::loadCatalog) { Text("Retry model catalog") } }
-            Text("Current: $provider · $chosen")
-            val rows = catalog?.models(provider).orEmpty()
+            val rows = catalog?.models(choice).orEmpty()
             rows.forEach { row ->
                 TextButton(enabled = enabled, onClick = {
                     val id = row.text("value") ?: return@TextButton
@@ -371,25 +391,51 @@ private fun ModelChoices(model: ComposerModel, state: ComposerState, detail: Jso
                 Text(if (detail.flag("fastMode") == true) "Speed: Fast" else "Speed: Standard")
             }
             Text("Provider")
-            catalog?.options(provider, model.target != null)?.forEach { option ->
-                TextButton(enabled = enabled && option.unavailable == null, onClick = {
-                    model.config(buildJsonObject {
-                        put("provider", option.id); put("model", option.models.firstOrNull()?.text("value") ?: ""); put("effort", "")
-                    })
-                }) { Text(option.label + (option.unavailable?.let { " · $it" } ?: "")) }
-            }
-            // A draft starts on any of the runner's accounts; a session moves only where the runner carries it across.
-            val accounts = catalog?.takeIf { model.target != null || it.movesAccounts(provider) }?.accountChoices(provider).orEmpty()
-            if (accounts.isNotEmpty()) {
-                Text("Account")
-                TextButton(enabled = enabled, onClick = { model.config(buildJsonObject { put("account", "automatic") }, true) }) { Text("Automatic") }
-                accounts.forEach { account -> TextButton(enabled = enabled && account.unavailable == null, onClick = {
-                    model.config(buildJsonObject { put("account", account.id) }, true)
+            val draft = model.target != null
+            // A draft starts on any engine, in iOS's order; a session moves only between the providers of its own CLI.
+            catalog?.let { val all = it.choices(it.antigravityKeyAvailable(detail)); if (draft) all else it.sameRuntime(choice, all) }?.forEach { option ->
+                val here = option.id == choice
+                fun pick(account: String? = null) {
+                    val next = option.models.firstOrNull()?.text("value") ?: ""
+                    when {
+                        // On the engine it is on, only the account moves.
+                        here && account != null -> model.config(buildJsonObject { put("account", account) }, true)
+                        // Within OpenCode a key is part of the model, so moving between its own config and its keys is a model change.
+                        provider == "opencode" && option.runtime == "opencode" -> model.config(buildJsonObject { put("model", next) })
+                        else -> model.config(buildJsonObject {
+                            put("provider", if (OpenCodeKeys.choiceKey(option.id) != null) "opencode" else option.id); put("model", next); put("effort", "")
+                            account?.let { put("account", it) }
+                        })
+                    }
+                }
+                // An engine whose runner keeps several accounts names a section of them (iOS 9ee358083, `accountsUnderHeader`): on the
+                // engine the draft or session is on, the ones it moves between; under another, the ones a new session there starts on.
+                // A draft starts on any of them; a session moves only where the runner carries it across.
+                val accounts = if (option.unavailable != null && !here) emptyList()
+                    else catalog.takeIf { draft || it.movesAccounts(option.id) }?.accountChoices(option.id).orEmpty()
+                // A row this runner can't run stays listed with why; where an engine page fixes it, the row goes there (iOS d2737d665).
+                // The one the session is on is exempt: it is the list's own caption.
+                val blocked = option.unavailable != null && !here
+                val fix = option.fixEngine?.takeIf { blocked && openRunner != null }
+                val name = listOfNotNull(option.label, option.labelDetail).joinToString(" · ")
+                if (accounts.size < 2) TextButton(enabled = enabled && (!blocked || fix != null), onClick = {
+                    if (fix == null) pick() else catalog.runner.text("id")?.let { runner -> close(); openRunner?.invoke(runner, fix) }
                 }) {
-                    Text(account.label + (account.unavailable?.let { " · $it" } ?: ""))
-                    // Its own quota beside it: "5h 12%", or what an Antigravity bucket has left, "gemini-5h 4% left".
-                    account.quota?.let { Text(" · $it", color = if (account.nearLimit) LocalOrbitColors.current.needsYou else Color.Unspecified) }
-                } }
+                    Text(if (blocked) "${option.label} — ${option.unavailable}" + (if (option.fixEngine != null) ProviderChoices.fixSuffix(option.fixEngine) else "")
+                        else (if (here) "✓ " else "") + name)
+                } else {
+                    Text(name, Modifier.padding(top = 8.dp).testTag("composer-engine-accounts"), style = MaterialTheme.typography.labelLarge)
+                    AccountRow("Automatic", "Switches to soonest reset", enabled,
+                        spoken = "Automatic: starts on the ${option.label} account whose quota resets soonest, and switches when it hits its limit") { pick("automatic") }
+                    accounts.forEach { account ->
+                        // A signed-out account is a request for its sign-in, on the runner's page for the engine.
+                        AccountRow(account.label, account.unavailable?.let { "$it, sign in →" } ?: account.quota, enabled,
+                            nearLimit = account.nearLimit && account.unavailable == null) {
+                            if (account.unavailable == null) pick(account.id)
+                            else catalog.runner.text("id")?.let { runner -> openRunner?.let { close(); it(runner, option.id) } }
+                        }
+                    }
+                }
             }
             // …and ends on the task, pushed over this run, so Back returns to it.
             if (smart != null && taskId != null && openTask != null) {

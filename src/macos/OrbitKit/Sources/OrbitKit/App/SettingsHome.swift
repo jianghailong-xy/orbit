@@ -37,7 +37,7 @@ public enum SettingsHome {
     }
 
     public enum Row: String, CaseIterable, Sendable {
-        case defaultPermission, orchestration, modelRouting, promptSuggestions
+        case defaultPermission, orchestration, modelRouting, promptSuggestions, recaps
         case infrastructure
         case notifications, appearance
         case email, instance, sharedLinks, accessTokens, changePassword, admin
@@ -55,7 +55,7 @@ public enum SettingsHome {
     /// The rows a group shows, in order. Admin is role-gated, like its section everywhere else.
     public static func rows(_ group: Group, isAdmin: Bool) -> [Row] {
         switch group {
-        case .sessions:    return [.defaultPermission, .orchestration, .modelRouting, .promptSuggestions]
+        case .sessions:    return [.defaultPermission, .orchestration, .modelRouting, .promptSuggestions, .recaps]
         case .machines:    return [.infrastructure]
         case .preferences: return [.notifications, .appearance]
         case .account:
@@ -70,6 +70,7 @@ public enum SettingsHome {
         case .orchestration:     return "Session orchestration"
         case .modelRouting:      return SettingsCopy.smartModelSelection
         case .promptSuggestions: return SettingsCopy.suggestedReplies
+        case .recaps:            return SettingsCopy.sessionRecaps
         case .infrastructure:    return AppSection.runners.title
         case .notifications:     return "Notifications"
         case .appearance:        return "Appearance"
@@ -89,6 +90,7 @@ public enum SettingsHome {
         case .orchestration:     return "point.3.connected.trianglepath.dotted"
         case .modelRouting:      return "sparkles"
         case .promptSuggestions: return "text.bubble"
+        case .recaps:            return "text.alignleft"
         case .infrastructure:    return AppSection.runners.systemImage
         case .notifications:     return "bell"
         case .appearance:        return "circle.lefthalf.filled"
@@ -102,9 +104,9 @@ public enum SettingsHome {
     }
 
     /// The page a row opens. Nil for the rows that are answered in place: the two pickers, which
-    /// are menus on the row itself, the orchestration, smart model selection and suggested replies
-    /// switches — each one for the whole account, so the row is the switch — and the two lines that
-    /// only say something.
+    /// are menus on the row itself, the orchestration, smart model selection, suggested replies and
+    /// session recaps switches — each one for the whole account, so the row is the switch — and the
+    /// two lines that only say something.
     public static func page(_ row: Row) -> SettingsPage? {
         switch row {
         case .infrastructure: return .infrastructure
@@ -113,8 +115,8 @@ public enum SettingsHome {
         case .accessTokens:   return .accessTokens
         case .changePassword: return .changePassword
         case .admin:          return .admin
-        case .defaultPermission, .orchestration, .modelRouting, .promptSuggestions, .appearance, .email,
-             .instance:
+        case .defaultPermission, .orchestration, .modelRouting, .promptSuggestions, .recaps, .appearance,
+             .email, .instance:
             return nil
         }
     }
@@ -301,6 +303,13 @@ public enum SettingsCopy {
     /// the row is the switch, with the hint under its name, as smart model selection's is.
     public static let suggestedReplies = "Suggested replies"
     public static let suggestedRepliesHint = "When a Claude turn ends, the empty message box offers what you'd probably type next. Each suggestion is one more request on that session's Claude account."
+
+    // MARK: Session recaps (the web page's Session defaults card)
+
+    /// The account's switch for the server's rolling recap on a session's list row, on unless turned
+    /// off. On iOS the row is the switch, with the hint under its name, as its two neighbours are.
+    public static let sessionRecaps = "Session recaps"
+    public static let sessionRecapsHint = "Session lists show the one-line summary the server writes for each conversation, in place of its raw last reply. Off: the raw last reply."
 
     // MARK: Change password (the web's Profile page)
 

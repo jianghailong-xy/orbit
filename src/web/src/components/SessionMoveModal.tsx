@@ -9,7 +9,7 @@ import {
   RightOutlined,
 } from '@ant-design/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import type { SessionMoveFolder, SessionMoveTarget, SessionMoveTargets } from '@orbit/shared';
+import { ENGINE_CLI_NAMES, isEngine, type SessionMoveFolder, type SessionMoveTarget, type SessionMoveTargets } from '@orbit/shared';
 import {
   createSessionFolder,
   endSession,
@@ -39,7 +39,6 @@ import {
 import { ENGINE_PRESET } from '../lib/sessionProviderChoices';
 import { isSessionTerminal } from '../lib/sessionState';
 import { useToast } from '../lib/toast';
-import { PROVIDER_OPTIONS } from '../lib/workspaceDefaults';
 import { ProviderTile } from './ProviderGallery';
 
 /** The session the dialog moves, as the list or the open conversation has it. */
@@ -50,8 +49,9 @@ export interface MoveDialogSession {
   projectId?: string;
 }
 
-const providerName = (slug: string): string =>
-  PROVIDER_OPTIONS.find((o) => o.value === slug)?.label ?? slug;
+/** What a workspace's next session would start on, as its row names it: an engine's own sign-in by
+ *  the engine's CLI (ENGINE_CLI_NAMES), anything else by the slug the answer carries. */
+const providerName = (slug: string): string => (isEngine(slug) ? ENGINE_CLI_NAMES[slug] : slug);
 
 /** The key the dialog reads its other workspaces under. Under the session's own key, so a
  *  reconnect's refetch of every open session reaches it too. */

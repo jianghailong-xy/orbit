@@ -123,23 +123,26 @@ describe('planUsageRows', () => {
 describe('sessionPlanUsage', () => {
   const runner = { claude: { fiveHour: { utilization: 100 } }, codex: { primary: { utilization: 4 } } };
 
-  it('shows a built-in engine the quota of the login the runner reported', () => {
-    expect(sessionPlanUsage('claude', runner)?.fiveHour?.utilization).toBe(100);
-    expect(sessionPlanUsage('codex', runner)?.primary?.utilization).toBe(4);
+  it('shows an engine’s own sign-in the quota of the login the runner reported', () => {
+    expect(sessionPlanUsage('claude', 'claude', runner)?.fiveHour?.utilization).toBe(100);
+    expect(sessionPlanUsage('codex', 'codex', runner)?.primary?.utilization).toBe(4);
   });
 
-  it('shows a configured provider the quota of its own credential', () => {
+  it('shows a key the quota of its own credential, on whichever engine runs it', () => {
     const configured = [
       { slug: 'anthropic', label: 'Anthropic', runtime: 'claude', models: [], planUsage: { fiveHour: { utilization: 12 } } },
     ];
-    expect(sessionPlanUsage('anthropic', runner, configured)?.fiveHour?.utilization).toBe(12);
+    expect(sessionPlanUsage('claude', 'anthropic', runner, configured)?.fiveHour?.utilization).toBe(12);
   });
 
-  it('never lets a configured provider inherit the runner login it does not bill', () => {
+  it('never lets a key inherit the runner login it does not bill', () => {
     const configured = [{ slug: 'anthropic', label: 'Anthropic', runtime: 'claude', models: [] }];
-    expect(sessionPlanUsage('anthropic', runner, configured)).toBeNull();
+    expect(sessionPlanUsage('claude', 'anthropic', runner, configured)).toBeNull();
     // Unknown slug (a row since deleted) resolves the same way, not to the runner's numbers.
-    expect(sessionPlanUsage('anthropic', runner, [])).toBeNull();
+    expect(sessionPlanUsage('claude', 'anthropic', runner, [])).toBeNull();
+    // A DeepSeek key on DeepSeek Harness or OpenCode is no sign-in either; nor is OpenCode's own config.
+    expect(sessionPlanUsage('dsh', 'deepseek', runner, [])).toBeNull();
+    expect(sessionPlanUsage('opencode', 'opencode', runner)).toBeNull();
   });
 
   it('keeps a row that shadows a built-in slug out of the way of the engine it shadows', () => {
@@ -147,7 +150,7 @@ describe('sessionPlanUsage', () => {
       { slug: 'claude', label: 'Claude', runtime: 'claude', models: [], planUsage: { fiveHour: { utilization: 1 } } },
     ];
     // isBuiltinProvider wins at dispatch, so the runner's login is the credential being spent.
-    expect(sessionPlanUsage('claude', runner, shadow)?.fiveHour?.utilization).toBe(100);
+    expect(sessionPlanUsage('claude', 'claude', runner, shadow)?.fiveHour?.utilization).toBe(100);
   });
 });
 

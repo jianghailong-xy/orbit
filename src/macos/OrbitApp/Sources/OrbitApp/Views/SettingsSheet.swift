@@ -100,6 +100,8 @@ struct SettingsHomeView: View {
     @State private var modelRouting = false
     /// The account's switch for suggested replies. Absent on the server means on.
     @State private var promptSuggestions = true
+    /// The account's switch for session recaps. Absent on the server means on.
+    @State private var recaps = true
     @State private var seeded = false
     /// This device's own answer to "may Orbit alert you" — nil until asked.
     @State private var alertsAllowed: Bool?
@@ -170,6 +172,10 @@ struct SettingsHomeView: View {
         .onChange(of: promptSuggestions) { _, value in
             guard (model.user?.preferences?.suggestedReplies ?? true) != value else { return }
             Task { await model.savePreferences(UpdatePreferencesRequest(promptSuggestions: value)) }
+        }
+        .onChange(of: recaps) { _, value in
+            guard (model.user?.preferences?.showRecaps ?? true) != value else { return }
+            Task { await model.savePreferences(UpdatePreferencesRequest(recaps: value)) }
         }
         .onAppear(perform: seed)
         // Each row's value is its own read, so they are asked for side by side. Infrastructure's is what
@@ -285,6 +291,21 @@ struct SettingsHomeView: View {
                     Image(systemName: SettingsHome.systemImage(row)).foregroundStyle(Color.primary)
                 }
             }
+        case .recaps:
+            // The same shape as its two neighbours: what the list shows, and what turning it off
+            // leaves, under the name.
+            Toggle(isOn: $recaps) {
+                Label {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(SettingsHome.title(row)).foregroundStyle(Color.primary)
+                        Text(SettingsCopy.sessionRecapsHint)
+                            .font(.orbitListSubtitle)
+                            .foregroundStyle(.secondary)
+                    }
+                } icon: {
+                    Image(systemName: SettingsHome.systemImage(row)).foregroundStyle(Color.primary)
+                }
+            }
         case .appearance:
             Picker(selection: $theme) {
                 Text("System").tag("system")
@@ -368,6 +389,7 @@ struct SettingsHomeView: View {
         orchestration = p?.enableOrchestration ?? true
         modelRouting = p?.smartModelSelection ?? false
         promptSuggestions = p?.suggestedReplies ?? true
+        recaps = p?.showRecaps ?? true
     }
 }
 

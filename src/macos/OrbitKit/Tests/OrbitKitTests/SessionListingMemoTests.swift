@@ -144,6 +144,16 @@ final class SessionListingMemoTests: XCTestCase {
                                                       watches: [WatchFixture.watch(id: "W1", observer: "b")]))
         XCTAssertEqual(cache.line(for: b, watching: watch), SessionLine.make(for: b, live: true, watching: watch))
         XCTAssertEqual(cache.made, 4, "b's watch moved")
+
+        // The account's Session recaps switch is part of what a line is made of: flipping it makes
+        // the lines again, or a list left on screen would keep drawing the lines the old answer asked
+        // for (Settings writes a switch mid-list).
+        _ = cache.line(for: a, watching: nil, recaps: false)
+        XCTAssertEqual(cache.made, 5, "the switch moved")
+        _ = cache.line(for: a, watching: nil, recaps: false)
+        _ = cache.line(for: b, watching: watch, recaps: false)
+        cache.endPass()
+        XCTAssertEqual(cache.made, 6, "only the line the switch was not yet told about")
     }
 
     /// A session no pass asked for any more is let go of, and made afresh if it comes back.

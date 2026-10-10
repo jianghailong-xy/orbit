@@ -2,6 +2,7 @@ package io.orbitd.android.composer
 
 import io.orbitd.android.core.realtime.SessionState
 import io.orbitd.android.management.AccountCopy
+import io.orbitd.android.management.CodexLogins
 import io.orbitd.android.management.EngineAccounts
 import io.orbitd.android.management.ProviderPools
 import io.orbitd.android.management.RunnerPage
@@ -43,14 +44,24 @@ data class ComposerState(val draft: ComposerDraft = ComposerDraft(), val loaded:
     val catalogLoading: Boolean = false, val catalogError: String? = null,
     val acknowledgementPending: Boolean = false)
 
+/** One row of the Provider list (OrbitKit `ProviderChoice`): [labelDetail] says which credential it runs on ("Google account",
+ * "env key", "Antigravity CLI"); [fixEngine] is the engine whose page on the runner fixes [unavailable], null when none can. */
 data class ProviderOption(val id: String, val label: String, val runtime: String,
-    val models: List<JsonObject>, val unavailable: String? = null)
+    val models: List<JsonObject>, val unavailable: String? = null, val labelDetail: String? = null, val fixEngine: String? = null)
 
 /** One of the runner's accounts of an engine as a row of the account menu (web AccountChoice): its own quota's tightest
  * window, compactly ("5h 12%", an Antigravity bucket by what is left: "gemini-5h 4% left"), "env key" for an Antigravity
  * Default on the runner's own Gemini key, and why it can't take a session. */
 data class AccountChoice(val id: String, val label: String, val quota: String? = null, val nearLimit: Boolean = false,
     val unavailable: String? = null)
+
+/** The account of a pool a session spends (iOS `PoolAccount`, f929ab1e4, a0a76a760): its name, its own quota, whether it is the
+ * session's own ([current]) or the one the next claim picks, and how many the pool holds. */
+data class PoolAccount(val pool: String, val label: String, val usage: JsonObject?, val current: Boolean, val accounts: Int, val shared: Boolean) {
+    /** ProviderPools.accountHelp: what the account beside the quota says about itself when asked. */
+    val help get() = if (current) "$pool is running this session on $label"
+        else "A session on $pool starts on $label — " + if (shared) "the key it picks for you right now" else "the account whose quota resets soonest"
+}
 
 data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObject>) {
     fun usage(detail: JsonObject): JsonObject? {
@@ -65,12 +76,8 @@ data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObjec
         }
         if (provider !in BUILT_INS) {
             val row = providers.firstOrNull { it.text("slug") == provider } ?: return null
-            if (row["members"] is JsonArray) {
-                val assigned = detail.text("poolMemberProviderId")
-                val member = if (assigned != null) row.objects("members").firstOrNull { ObjectId.same(it.text("id"), assigned) }
-                    else row.objects("members").firstOrNull { it.flag("next") == true }
-                return member?.get("planUsage") as? JsonObject
-            }
+            // A pool's quota is the account the session spends, never the pool's — and none while no account can be named.
+            if (isPool(row)) return poolAccount(detail)?.usage
             return row["planUsage"] as? JsonObject // Never borrow a runner login's quota for BYOK.
         }
         val all = runner["planUsage"] as? JsonObject ?: return null
@@ -84,6 +91,27 @@ data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObjec
         if (account == "automatic") return null // The server has not yet chosen the billed account.
         return if (account == "default") snapshot else (snapshot["accounts"] as? JsonObject)?.get(account) as? JsonObject
     }
+    /** ConsoleModel.poolAccount (ProviderPools.sessionAccount, CodexLoginPool.sessionMember): on a pool of one's own ChatGPT accounts,
+     * the one the session's detail names (`poolCodexLogin`, matched by its masked id) whatever its state; on any pool, the member its
+     * last claim recorded (a shared pool's key, `poolKeyId`); for a draft, or a session no claim has reached yet, the one the next
+     * claim picks. Null once the recorded one has left the pool: nobody is guessed. */
+    fun poolAccount(detail: JsonObject): PoolAccount? {
+        val row = providers.firstOrNull { isPool(it) && it.text("slug") == detail.text("provider") } ?: return null
+        val now = System.currentTimeMillis()
+        val shared = row.flag("sharedPool") == true
+        val pool = if (shared) ProviderPools.shared(row, now) else ProviderPools.own(row, now)
+        val login = (detail["poolCodexLogin"] as? JsonObject)?.text("fingerprint")
+        val recorded = detail.text(if (shared) "poolKeyId" else "poolMemberProviderId")?.takeIf { it.isNotEmpty() }
+        val (member, current) = when {
+            login != null && CodexLogins.isLoginPool(pool) -> (pool.members.firstOrNull { it.login?.text("fingerprint") == login } ?: return null) to true
+            recorded != null -> (pool.members.firstOrNull { ObjectId.same(it.id, recorded) } ?: return null) to true
+            else -> (pool.members.firstOrNull { it.next } ?: return null) to false
+        }
+        val accounts = if (CodexLogins.isLoginPool(pool)) CodexLogins.logins(pool).size else pool.members.size
+        return PoolAccount(pool.label, member.label, member.planUsage, current, accounts, shared)
+    }
+    /** A pool as the catalog marks it, or a row with the members GET /providers/pools answers with. */
+    private fun isPool(row: JsonObject) = row.flag("pool") == true || row["members"] is JsonArray
     fun slashItems(provider: String, agentId: String?): List<JsonObject> =
         (runner.objects("commands") + runner.objects("skills")).filter { item ->
             (item.text("agentId").isNullOrEmpty() || item.text("agentId") == agentId) && when (provider) {
@@ -92,9 +120,13 @@ data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObjec
                 else -> item.text("provider") in listOf(null, "claude")
             }
         }.sortedWith(compareBy({ it.flag("builtin") == true }, { it.text("name")?.lowercase() }))
-    fun runtime(provider: String): String? = if (provider in BUILT_INS) provider
+    fun runtime(provider: String): String? = if (provider in BUILT_INS || OpenCodeKeys.choiceKey(provider) != null) provider.substringBefore('/')
         else providers.firstOrNull { it.text("slug") == provider }?.text("runtime")
     fun models(provider: String): List<JsonObject> {
+        // A key run on OpenCode offers the key's own models, under the OpenCode ids that name the key (OpenCodeKeys).
+        OpenCodeKeys.choiceKey(provider)?.let { key ->
+            return models(key).map { row -> JsonObject(row + ("value" to JsonPrimitive(OpenCodeKeys.model(key, row.text("value").orEmpty())))) }
+        }
         val configured = providers.firstOrNull { it.text("slug") == provider }
         val own = configured?.objects("models").orEmpty()
         val space = runtime(provider) ?: return emptyList()
@@ -115,6 +147,71 @@ data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObjec
             ProviderOption(slug, row?.text("label") ?: slug, space, models(slug), blocker
                 ?: row?.text("unavailable") ?: if (row == null && engine?.text("auth") == "no" && engine.objects("accounts").none { it.text("auth") == "yes" }) "Not signed in" else null)
         }
+    }
+    private fun health(engine: String) = runner.objects("engines").firstOrNull { it.text("engine") == engine }
+    private fun option(slug: String, unavailable: String?, fixEngine: String? = null, labelDetail: String? = null) =
+        ProviderOption(slug, ProviderChoices.providerName(slug, providers), runtime(slug) ?: slug, models(slug), unavailable, labelDetail, fixEngine)
+    /** SessionProviderChoices.antigravityKeyAvailable: the server's answer for the machine this runs on — the workspace's, by runner
+     * (a draft's detail is its workspace) — else the runner's own credential. */
+    fun antigravityKeyAvailable(detail: JsonObject): Boolean {
+        val workspace = detail["workspace"] as? JsonObject ?: detail.takeIf { "antigravityKeyAvailableByRunner" in it }
+            ?: return (runner["antigravity"] as? JsonObject)?.flag("envKeyAvailable") == true
+        val byRunner = workspace["antigravityKeyAvailableByRunner"] as? JsonObject ?: return false
+        return byRunner.entries.any { (id, available) -> ObjectId.same(id, runner.text("id")) && (available as? JsonPrimitive)?.booleanOrNull == true }
+    }
+    /** SessionProviderChoices.choices: the runner's engines in iOS's order — claude, codex, antigravity, kimi — then the account
+     * pools, then the configured keys, then OpenCode once the runner has it and the keys it may spend (A07-6: each key the server
+     * marks `runsOnOpenCode`, listed again under OpenCode as `opencode/<slug>`). A row this runner can't run stays listed with why. */
+    fun choices(keyAvailable: Boolean = false): List<ProviderOption> {
+        // A07-4 (and A13-3's composer part): Antigravity is offered for a Google account or a key the server confirms, named by which
+        // one it runs on — a Google sign-in, unless that has lapsed where a key still runs it.
+        val antigravity = runner["antigravity"] as? JsonObject
+        val google = antigravity?.text("authSource") == "google"
+        val googleAccount = google && !(keyAvailable && antigravity?.flag("envKeyAvailable") == false)
+        val engines = ProviderChoices.engineSlugs.filter { it != "antigravity" || keyAvailable || google }.map { slug ->
+            val blocker = if (slug == "antigravity") ProviderChoices.antigravityBlocker(antigravity, health(slug), login = !keyAvailable || googleAccount)
+                else ProviderChoices.engineBlocker(health(slug))
+            option(slug, blocker, fixEngine = slug.takeIf { blocker != null },
+                labelDetail = if (slug != "antigravity") null else if (googleAccount) "Google account" else "env key")
+        }
+        // A pool, like a configured key, needs the CLI it runs on and nothing signed in; what the server says it lacks follows,
+        // and no runner fixes that.
+        val pools = providers.filter { it.flag("pool") == true }.map { row ->
+            val slug = row.text("slug").orEmpty()
+            val engine = runtime(slug) ?: "claude"
+            val missing = ProviderChoices.byokBlocker(health(engine))
+            option(slug, missing ?: row.text("unavailable"), fixEngine = engine.takeIf { missing != null })
+        }
+        // A configured row shadowing a built-in slug would dispatch the same identity as the engine above. A key is judged through
+        // the CLI it borrows; a Gemini key on Antigravity's own terms, and named for it.
+        val keys = providers.filter { it.flag("pool") != true && it.text("slug") !in ProviderChoices.engineSlugs + "opencode" }.map { row ->
+            val slug = row.text("slug").orEmpty()
+            val engine = ProviderChoices.executingRuntime(slug, providers)
+            val blocker = if (engine == "antigravity") ProviderChoices.antigravityBlocker(antigravity, health(engine)) else ProviderChoices.byokBlocker(health(engine))
+            option(slug, blocker, fixEngine = engine.takeIf { blocker != null }, labelDetail = "Antigravity CLI".takeIf { engine == "antigravity" })
+        }
+        val openCode = if (health("opencode")?.flag("installed") != true) emptyList() else listOf(option("opencode", null)) +
+            providers.filter { it.flag("runsOnOpenCode") == true && it.flag("pool") != true }.map { row ->
+                val choice = OpenCodeKeys.choice(row.text("slug").orEmpty())
+                ProviderOption(choice, row.text("label") ?: choice, "opencode", models(choice), null)
+            }
+        return engines + pools + keys + openCode
+    }
+    /** SessionProviderChoices.sameRuntime: what an existing session may move to — the choices on the CLI it was started on, in
+     * the list's own order. A provider absent from them (removed, or OpenCode before the runner reports it) leads. */
+    fun sameRuntime(current: String, choices: List<ProviderOption> = choices()): List<ProviderOption> {
+        val runtime = ProviderChoices.executingRuntime(current, providers)
+        val same = choices.filter { ProviderChoices.executingRuntime(it.id, providers) == runtime }
+        return if (same.any { it.id == current }) same else listOf(currentOption(current)) + same
+    }
+    /** SessionProviderChoices.current: a provider absent from the list still renders as what it is — an Antigravity one with its
+     * own reason and credential. */
+    private fun currentOption(slug: String): ProviderOption {
+        if (ProviderChoices.executingRuntime(slug, providers) != "antigravity") return option(slug, null)
+        val antigravity = runner["antigravity"] as? JsonObject
+        val blocker = ProviderChoices.antigravityBlocker(antigravity, null, login = slug == "antigravity" && antigravity?.flag("envKeyAvailable") != true)
+        return option(slug, blocker, fixEngine = "antigravity".takeIf { blocker != null }, labelDetail = if (slug != "antigravity") "Antigravity CLI"
+            else if (antigravity?.text("authSource") == "google") "Google account" else "env key")
     }
     fun accounts(provider: String) = if (RunnerPage.keepsAccounts(provider))
         runner.objects("engines").firstOrNull { it.text("engine") == provider }?.objects("accounts").orEmpty() else emptyList()

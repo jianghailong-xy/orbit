@@ -1,17 +1,21 @@
 import { useState } from 'react';
 import { Popover } from 'antd';
 import { Link } from 'react-router-dom';
+import type { AgentProvider } from '@orbit/shared';
 import { encodeId } from '../lib/idCodec';
 import { PROVIDER_GLYPHS } from '../lib/providerGlyphs';
-import type { EngineChoice, ProviderChoice } from '../lib/sessionProviderChoices';
+import { providerNameOn, type EngineChoice } from '../lib/sessionProviderChoices';
 
 /** The brand mark. Same artwork and tile as /providers, sized up: at hero size it carries a soft
- *  shadow in its own brand colour, which a 20px row chip can't. */
-function BrandMark({ choice, size }: { choice: Pick<EngineChoice, 'brand' | 'glyphKey'>; size: number }) {
+ *  shadow in its own brand colour, which a 20px row chip can't. The composer's Provider menu draws
+ *  its keys' and pools' vendor marks with it too. */
+export function BrandMark({ choice, size }: { choice: Pick<EngineChoice, 'brand' | 'glyphKey'>; size: number }) {
   const glyph = choice.glyphKey ? PROVIDER_GLYPHS[choice.glyphKey] : undefined;
   return (
     <span
       className="provider-tile np-mark"
+      // Decorative: the name beside it says the same thing.
+      aria-hidden="true"
       style={{
         width: size,
         height: size,
@@ -45,14 +49,14 @@ function hexAlpha(hex: string, alpha: number): string {
 }
 
 /**
- * The New Session middle area: which engine runs this session.
+ * The New Session middle area: which engine runs this session — fixed for its life once it starts.
  *
  * Collapsed to a single identity by default — the engine is a sticky choice, so showing every
  * option on every new session would charge the full visual cost for the rare switch. The list
  * opens on click, and the pick is remembered on the workspace, so the common path is: read it, ignore
- * it, start typing. Which provider of the engine the session spends — its own sign-in, an account
- * pool, a key that borrows it, and which account — is picked in the composer's Provider menu, as it
- * is on a session that is already running, and only there: the card names the engine alone.
+ * it, start typing. Which credential the engine spends — its own sign-in, an account pool, a key it
+ * runs, and which account — is picked in the composer's Provider menu, as it is on a session that is
+ * already running, and only there: the card names the engine alone.
  */
 export function NewSessionProviderHero({
   current,
@@ -67,8 +71,8 @@ export function NewSessionProviderHero({
   /** The engine the draft runs on, landing on the provider it will spend. */
   current: EngineChoice;
   engines: EngineChoice[];
-  /** An engine was picked: the provider of it to start on (`EngineChoice.provider`). */
-  onPick: (provider: string) => void;
+  /** Another engine was picked, with the provider of it to start on (`EngineChoice.provider`). */
+  onPick: (engine: AgentProvider, provider: string) => void;
   /** The machine these engines live on — the sign-in link has to name it, since Infrastructure
    *  lists every machine and only this one's row is the answer. */
   runnerId: string;
@@ -87,23 +91,23 @@ export function NewSessionProviderHero({
   // Naming the runner and the engine, so Infrastructure can unfold that machine's card and
   // point at the row — where its Install and Sign in buttons are — instead of leaving the user to
   // find it among every runner they own. A problem that is not this machine's (an account pool none
-  // of whose accounts can run) names its own page instead.
-  const fixLink = (choice: Pick<ProviderChoice, 'slug' | 'fixEngine' | 'fixHref'>) =>
+  // of whose accounts can run, a DeepSeek key not connected yet) names its own page instead.
+  const fixLink = (choice: Pick<EngineChoice, 'slug' | 'fixEngine' | 'fixHref'>) =>
     choice.fixHref ?? `/infrastructure?runner=${encodeId(runnerId)}&engine=${choice.fixEngine ?? choice.slug}`;
-  const onRunner = (choice: Pick<ProviderChoice, 'fixHref'>) => (choice.fixHref ? '' : ' on this runner');
-  const modelLabel = currentModelLabel ?? current.provider.modelLabel;
+  const onRunner = (choice: Pick<EngineChoice, 'fixHref'>) => (choice.fixHref ? '' : ' on this runner');
+  const modelLabel = currentModelLabel ?? current.provider?.modelLabel ?? '';
 
-  // An engine none of whose providers this runner can run can't start a session, so the row doesn't
+  // An engine none of whose credentials this runner can run can't start a session, so the row doesn't
   // pick it — it goes where the fix lives instead. The identity greys out (it isn't usable yet) while
   // the reason stays lit as the link it now is, so the row states the problem and offers the fix
   // rather than disappearing and leaving the absence to be explained.
   const row = (engine: EngineChoice) =>
-    engine.unavailable ? (
+    engine.unavailable || !engine.provider ? (
       <Link
         key={engine.slug}
-        to={fixLink(engine.provider)}
+        to={fixLink(engine)}
         className="np-row np-unavailable"
-        title={`${engine.label}: ${engine.unavailable}${onRunner(engine.provider)} — fix it in Infrastructure`}
+        title={`${engine.label}: ${engine.unavailable}${onRunner(engine)} — fix it in Infrastructure`}
         onClick={() => setOpen(false)}
       >
         <BrandMark choice={engine} size={20} />
@@ -117,7 +121,7 @@ export function NewSessionProviderHero({
         className={`np-row${engine.slug === current.slug ? ' on' : ''}`}
         onClick={() => {
           setOpen(false);
-          if (engine.provider.slug !== current.provider.slug) onPick(engine.provider.slug);
+          if (engine.slug !== current.slug && engine.provider) onPick(engine.slug, engine.provider.slug);
         }}
       >
         <BrandMark choice={engine} size={20} />
@@ -154,17 +158,17 @@ export function NewSessionProviderHero({
     </button>
   );
 
-  // The pick is sticky, so the current one can be a provider that machine can no longer run — and a
-  // session started on it fails minutes later, at the runner. Say so here instead.
-  const blocked = current.provider.unavailable ? current.provider : null;
+  // The pick is sticky, so the current one can be a credential that machine can no longer run — and
+  // a session started on it fails minutes later, at the runner. Say so here instead.
+  const blocked = current.provider?.unavailable ? current.provider : null;
   const fixSummary = blocked && (
     <div className="np-summary">
-      <b>{blocked.label}</b>
+      <b>{providerNameOn(current.slug, blocked)}</b>
       <span className="np-dot">·</span>
       {blocked.unavailable}
       {onRunner(blocked)}
       <span className="np-dot">·</span>
-      <Link to={fixLink(blocked)}>Fix it</Link>
+      <Link to={fixLink({ slug: current.slug, fixEngine: blocked.fixEngine, fixHref: blocked.fixHref })}>Fix it</Link>
     </div>
   );
 
@@ -196,7 +200,7 @@ export function NewSessionProviderHero({
       {fixSummary ??
         (projectIntent ? (
           <div className="np-summary">
-            <b>{current.provider.label}</b>
+            <b>{current.provider ? providerNameOn(current.slug, current.provider) : current.label}</b>
             <span className="np-dot">·</span>
             {modelLabel}
             <span className="np-dot">·</span>

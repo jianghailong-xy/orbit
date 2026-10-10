@@ -71,6 +71,24 @@ class ProjectApi(private val auth: AuthSession, private val handle: SessionHandl
      * queued. Answers the integration view read again. */
     suspend fun retryJob(id: String, jobId: String) = send("retry:$jobId", listOf("projects", id, "integration", "jobs", jobId, "retry")) as? JsonObject
     suspend fun start(id: String, body: JsonObject) = send(body.text("criteriaDigest").orEmpty(), listOf("projects", id, "start"), body = body)
+    /** The candidate this project is asking its owner to merge into main, or null while it asks nothing — which the server answers
+     * with no body. Its latest candidate, whatever state it is in. */
+    suspend fun currentPromotion(id: String): JsonObject? {
+        val body = auth.request(handle, ApiRequest(listOf("projects", id, "promotions", "current"))).body
+        return if (body.isEmpty()) null else Wire.decode(body, JsonElement.serializer()) as? JsonObject
+    }
+    /** The merges this project has already made, newest first: the records a merge leaves. */
+    suspend fun mergedPromotions(id: String) = (read(listOf("projects", id, "promotions", "merged")) as? JsonArray).orEmpty().filterIsInstance<JsonObject>()
+    /** M-T4: merge it. The candidate's own source SHA travels with the press, so a card drawn before a newer candidate superseded it
+     * is refused rather than merging whatever is on the branch now. Each door answers the candidate's new state. */
+    suspend fun confirmPromotion(id: String, promotionId: String, sourceSha: String) = send("promotion:confirm:$promotionId",
+        listOf("projects", id, "promotions", promotionId, "confirm"), body = buildJsonObject { put("sourceSha", sourceSha) }) as? JsonObject
+    /** M-T5: not now. The branch stays where it is, and the next landing offers it again. */
+    suspend fun declinePromotion(id: String, promotionId: String) = send("promotion:decline:$promotionId",
+        listOf("projects", id, "promotions", promotionId, "decline")) as? JsonObject
+    /** M-T10: call a confirmed merge back, while its job has not reached the push. */
+    suspend fun cancelPromotion(id: String, promotionId: String) = send("promotion:cancel:$promotionId",
+        listOf("projects", id, "promotions", promotionId, "cancel")) as? JsonObject
     suspend fun delete(id: String) = send("delete", listOf("projects", id), HttpMethod.DELETE)
     suspend fun resumeFuse(id: String, episode: String) = send(episode, listOf("projects", id, "fuse", episode, "resume"))
     suspend fun resolveBlocker(id: String, blocker: String, reason: String) = send(blocker, listOf("projects", id, "blockers", blocker, "resolve"),

@@ -6,6 +6,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -26,11 +27,16 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.*
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.R
+import io.orbitd.android.cards.PromotionReceiptSheet
 import io.orbitd.android.core.auth.AuthState
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.cards.*
@@ -43,8 +49,10 @@ import io.orbitd.android.projects.LandingRow
 import io.orbitd.android.projects.OwnerStartSheet
 import io.orbitd.android.projects.ProjectApi
 import io.orbitd.android.projects.ProjectDoc
+import io.orbitd.android.projects.ProjectDone
 import io.orbitd.android.projects.ProjectPage
 import io.orbitd.android.projects.ProjectPageState
+import io.orbitd.android.projects.ProjectSettledCard
 import io.orbitd.android.projects.RequestedStartSheet
 import io.orbitd.android.projects.StartProjectCopy
 import io.orbitd.android.projects.failureReason
@@ -86,7 +94,12 @@ internal fun SessionProjectRowView(row: SessionProjectRow, onOpen: () -> Unit, o
         supportingContent = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                 ProjectProgressChip(row.taskCounts, row.runningCount, row.status)
-                Text(row.line.text, Modifier.testTag("project-row-line"), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                // The line, with the recap's muted label when it has one (web draws it in the row's quiet tone).
+                Text(row.line.label?.let { label -> buildAnnotatedString {
+                        withStyle(SpanStyle(color = MaterialTheme.colorScheme.onSurfaceVariant)) { append("$label ") }
+                        append(row.line.text)
+                    } } ?: AnnotatedString(row.line.text),
+                    Modifier.testTag("project-row-line"), maxLines = 1, overflow = TextOverflow.Ellipsis,
                     style = MaterialTheme.typography.bodyMedium, color = lineColor(row.line.tone))
             }
         },
@@ -178,16 +191,19 @@ private class ProjectSessionsState(initial: List<DirectorySession>) {
     var integrationReadAt by mutableStateOf<Instant?>(null)
     var integrationReadFailed by mutableStateOf(false)
     var openItems by mutableStateOf<JsonObject?>(null)
+    /** The project document, while the project may be done: what the page's ending is drawn from (`ProjectDone.drawsEnding`). */
+    var done by mutableStateOf<JsonObject?>(null)
 }
 
 private enum class StartSheet { ASKED, OWN }
 
 /**
  * A project's sessions (iOS `SessionProjectPage`, A05-7), pushed over the list it was opened from, or the root of the drawer's project
- * row: its progress — with the start while nobody has started the project, and the landing in flight — then its coordinator, then
- * every other member by recency, Open and Completed together. No search and no Pinned: it lists one project's sessions. A member
- * opens over this page, and the workspace the page was entered from stays the one beneath it. Members, the landing and the start
- * are each read every 4 s; the progress comes from `GET /projects/sidebar`.
+ * row: its progress — with the start while nobody has started the project, and the landing in flight — then the merge into main
+ * (A11-9) while there is one to show, then its coordinator, then every other member by recency, Open and Completed together, with the
+ * merges already made among them at their own instant. No search and no Pinned: it lists one project's sessions. A member opens over
+ * this page, and the workspace the page was entered from stays the one beneath it. Members, the landing, the merge and the start are
+ * each read every 4 s; the progress comes from `GET /projects/sidebar`.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -210,6 +226,11 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
     var action by remember { mutableStateOf<DirectoryDialog?>(null) }
     var startSheet by remember { mutableStateOf<StartSheet?>(null) }
     var showsJobs by remember { mutableStateOf(false) }
+    // The merge into main (iOS `ProjectMergeModel`): this project's candidate and merges, never another project's.
+    val merge = remember(handle, projectId) { ProjectMergeModel(projects, projectId) }
+    // Hosted here rather than by the card or the row, so a poll redrawing either cannot dismiss what the owner is reading.
+    var promotionReview by remember(projectId) { mutableStateOf<String?>(null) }
+    var promotionReceipt by remember(projectId) { mutableStateOf<JsonObject?>(null) }
 
     suspend fun read(view: String): List<DirectorySession> =
         api.read(listOf("sessions"), ListSerializer(DirectorySession.serializer()), listOf("view" to view, "projectId" to projectId))
@@ -255,15 +276,27 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
         val items = try { projects.openItems(projectId) } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { null }
         if (items != null) state.openItems = items
     }
+    /** The ending's read (docs/mocks/project-done-sessions-page, owner decision 2026-10-10), while the page's project may be done:
+     * the sidebar's rows are the Open projects, so a row that is not Open, or none at all, is that state. A project the row says is
+     * Open reads nothing and keeps nothing; a read that fails keeps the last answer, as the landing line's does. */
+    suspend fun loadDone() {
+        val row = currentProject
+        if (row?.text("status") == "OPEN") { state.done = null; return }
+        val doc = try { projects.document(projectId) } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { null }
+        if (doc != null) state.done = doc
+    }
     LaunchedEffect(handle, projectId) {
         launch { loadMembers(); while (true) { delay(4_000); pollMembers() } }
         launch { while (true) { loadIntegration(); delay(4_000) } }
+        launch { while (true) { merge.load(); delay(4_000) } }
         launch { while (true) { loadStart(); delay(4_000) } }
+        launch { while (true) { loadDone(); delay(4_000) } }
         launch { while (true) { delay(1_000); now = Instant.now() } }
     }
     fun refresh() = scope.launch {
         refreshing = true
-        try { coroutineScope { launch { loadMembers() }; launch { loadIntegration() }; launch { loadStart() } } } finally { refreshing = false }
+        try { coroutineScope { launch { loadMembers() }; launch { loadIntegration() }; launch { merge.load(force = true) }; launch { loadStart() }; launch { loadDone() } } }
+        finally { refreshing = false }
     }
     // The project's page, over this one: back returns here.
     fun openProject() = open(OrbitRoute(Destination.PROJECT, projectId))
@@ -287,17 +320,51 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
     PullToRefreshBox(isRefreshing = refreshing, onRefresh = { refresh() }, modifier = Modifier.fillMaxSize().testTag("project-sessions")) {
         LazyColumn(Modifier.fillMaxSize().testTag("project-sessions-list"), contentPadding = PaddingValues(bottom = 24.dp)) {
             item(key = "progress") {
-                ProgressCard(project, members, state, now, openStart = { startSheet = it },
-                    openLanding = { if (state.integration?.let(ProjectPage::inFlightJobs) != null) showsJobs = true else openProject() })
+                // The page's first card: the project's ending once it is done (docs/mocks/project-done-sessions-page, owner decision
+                // 2026-10-10) — the same settled card the conversation draws, where a progress card would say nothing but "Done" —
+                // and the progress card before that, and for a read that carries no projection to tally.
+                val ending = state.done
+                if (ending != null && ProjectDone.drawsEnding(ending)) {
+                    // The page's own card chrome, as the merge card wears it — the ending is the last of its events.
+                    val success = LocalOrbitColors.current.success
+                    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
+                        .background(success.copy(alpha = 0.08f), RoundedCornerShape(14.dp))
+                        .border(1.dp, success.copy(alpha = 0.3f), RoundedCornerShape(14.dp)).padding(12.dp)) {
+                        ProjectSettledCard(ending, "project-sessions-ending")
+                    }
+                } else {
+                    ProgressCard(project, members, state, now, openStart = { startSheet = it },
+                        openLanding = { if (state.integration?.let(ProjectPage::inFlightJobs) != null) showsJobs = true else openProject() })
+                }
+            }
+            // The merge into main, under the progress card: the candidate's card while it asks, merges or is blocked, and the merge
+            // check's live line before that. Absent otherwise — a merge already made is a row on the timeline instead.
+            ProjectMergeCard.shape(merge.current, state.integration)?.let { shape ->
+                item(key = "merge") {
+                    val integration = state.integration
+                    ProjectMergeCardView(merge, shape,
+                        landing = integration?.let { ProjectMergeCard.mergeLandingLine(it, now, state.integrationReadAt, state.integrationReadFailed) },
+                        now = now,
+                        // The merge job's row opens the same jobs the progress card's does — on a server that lists them.
+                        onLanding = if (integration?.let(ProjectPage::inFlightJobs) != null) ({ showsJobs = true }) else null,
+                        onDetails = { promotionReview = it },
+                        onCoordinator = coordinator?.let { c -> { open(OrbitRoute(Destination.SESSION, c.id, route.workspaceId, origin = Origin.LIST)) } })
+                }
             }
             coordinator?.let { c ->
                 item(key = "heading:coordinator") { SectionHeading(SessionProjectCopy.coordinatorSection) }
                 item(key = c.id) { MemberRow(c) }
             }
-            // The members by recency, newest first, in the list's day sections — without Pinned: the page has none.
-            directoryGroups(members.filter { it.projectMembership?.isCoordinator != true }, SessionView.COMPLETED, Grouping.RECENCY).forEach { group ->
-                item(key = "heading:${group.id}") { SectionHeading(group.title) }
-                items(group.sessions, key = { it.id }) { MemberRow(it) }
+            // The members by recency, newest first, in the list's day sections — without Pinned: the page has none — and the merges
+            // into main already made among them, each at its own instant.
+            ProjectTimeline.sections(members.filter { it.projectMembership?.isCoordinator != true }, merge.receipts).forEach { section ->
+                item(key = "heading:${section.id}") { SectionHeading(section.title) }
+                items(section.items, key = { it.key }) { row ->
+                    when (row) {
+                        is ProjectTimelineSection.Item.Session -> MemberRow(row.session)
+                        is ProjectTimelineSection.Item.Merge -> ProjectMergeTimelineRow(row.receipt, now) { promotionReceipt = row.receipt.promotion }
+                    }
+                }
             }
             if (members.isEmpty()) {
                 val reason = state.error
@@ -345,6 +412,8 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
         }
         null -> Unit
     }
+    promotionReview?.let { id -> ProjectMergeReviewSheet(merge, id) { promotionReview = null } }
+    promotionReceipt?.let { PromotionReceiptSheet(it) { promotionReceipt = null } }
     // The jobs the landing row counts, read off the page's own landing read, which its poll keeps current.
     if (showsJobs) LandingJobsSheet(state.integration?.let { ProjectPage.landingJobLines(it, now, state.integrationReadAt, state.integrationReadFailed) }.orEmpty(),
         retry = { jobId ->
@@ -374,14 +443,10 @@ private fun ProgressCard(project: JsonObject?, members: List<DirectorySession>, 
                 Modifier.testTag("project-sessions-progress-line"), style = MaterialTheme.typography.labelMedium, color = muted)
         }
         project?.let { StartProjectCopy.pageRow(it.text("status") ?: "UNKNOWN", ProjectDoc.started(it), state.openItems) }?.let { StartLine(it, openStart) }
-        // A merge job's line belongs to the merge into main, not to tasks landing on the project branch.
-        val integration = state.integration
-        val inFlight = integration?.obj("inFlight")
-        if (integration != null && inFlight != null && inFlight.text("kind") !in setOf("CHECK_PROMOTION", "LAND_PROMOTION")) {
-            ProjectPage.landingLine(integration, now, state.integrationReadAt, state.integrationReadFailed)?.let { line ->
-                HorizontalDivider(Modifier.padding(start = 12.dp))
-                Box(Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) { LandingRow(line, openLanding) }
-            }
+        // A merge job's line belongs to the merge card, not to tasks landing on the project branch.
+        state.integration?.let { ProjectMergeCard.progressLandingLine(it, now, state.integrationReadAt, state.integrationReadFailed) }?.let { line ->
+            HorizontalDivider(Modifier.padding(start = 12.dp))
+            Box(Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) { LandingRow(line, openLanding) }
         }
     }
 }

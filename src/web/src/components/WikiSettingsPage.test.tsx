@@ -93,7 +93,9 @@ async function serve(url: string, init?: RequestInit): Promise<Response> {
   if (url === '/api/providers') {
     return reply(200, [
       { slug: 'local-vllm', label: 'local-vllm', runtime: 'claude', models: [{ value: 'qwen3.8-27b-fp8', label: 'qwen' }], defaultModel: 'qwen3.8-27b-fp8' },
-      { slug: 'deepseek', label: 'DeepSeek', runtime: 'opencode', models: [], defaultModel: null },
+      // Claude Code runs a DeepSeek key as well as DeepSeek Harness does; it runs no Moonshot key.
+      { slug: 'deepseek', label: 'DeepSeek', runtime: 'claude', models: [], defaultModel: null, engines: ['claude', 'opencode', 'dsh'] },
+      { slug: 'moonshot', label: 'Kimi (Moonshot)', runtime: 'kimi', models: [], defaultModel: null, engines: ['kimi', 'opencode'] },
     ]);
   }
   return reply(404, { message: `${url} is not in this fixture` });
@@ -227,6 +229,24 @@ describe('Wiki settings', () => {
     expect(patches).toEqual([
       { maintenance: { enabled: true, workspaceId: WORKSPACE_ID, provider: 'local-vllm', dailyRunLimit: 8, lookbackDays: 14 } },
     ]);
+  });
+
+  it('offers the keys Claude Code runs, by the compatibility table — a DeepSeek key, and no Moonshot key', async () => {
+    await mount(space());
+    await act(async () => button('Set up…', container).click());
+    await settle();
+    const dialog = document.querySelector<HTMLElement>('.ant-modal')!;
+    expect(dialog).toBeTruthy();
+    await act(async () => {
+      document.getElementById('wk-setup-provider')?.closest('.ant-select')?.querySelector('.ant-select-content')
+        ?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    });
+    await settle();
+    const options = [...document.body.querySelectorAll<HTMLElement>('.ant-select-item-option')].map((node) => node.textContent ?? '');
+    expect(options.length).toBe(2);
+    expect(options.some((option) => option.includes('local-vllm'))).toBe(true);
+    expect(options.some((option) => option.includes('deepseek'))).toBe(true);
+    expect(options.some((option) => option.includes('moonshot'))).toBe(false);
   });
 
   it('looks back as far as the owner picks: all of history, from now on, or days they type', async () => {

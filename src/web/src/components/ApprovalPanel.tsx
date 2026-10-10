@@ -7,7 +7,7 @@ import { CardActionButton, CardActions } from './CardAction';
 import { ReviewCard } from './ReviewCard';
 import { useIsMobile } from '../lib/useMediaQuery';
 import { ENTER_HINT, SHORTCUT_HINT, useApproveHotkey, useCardKeyClaim } from './CardHotkey';
-import { buildBatchGraph, describeShape, shouldDraw } from '../lib/batchGraph';
+import { buildBatchGraph, describeShape } from '../lib/batchGraph';
 import { ReferenceLink, referenceUrlTransform } from '../lib/markdownLinks';
 import { markdownToPlainLines } from '../lib/markdownText';
 import {
@@ -860,9 +860,6 @@ function BatchCreateBody({ preview }: { preview: BatchPreview }): JSX.Element {
   // picture shows, and the "+N more" below says what it does not.
   const graph = buildBatchGraph(tasks);
   const shape = describeShape(graph);
-  // Drawn only while it stays legible; past that the sentence carries the shape and the list
-  // carries the names, which is strictly more readable than a picture scaled into illegibility.
-  const hasShape = shouldDraw(graph);
   return (
     <div className="dag-approval">
       <ImpactPills preview={preview} withZeroStarting />
@@ -875,26 +872,28 @@ function BatchCreateBody({ preview }: { preview: BatchPreview }): JSX.Element {
       <p className="dag-approval-caption">
         Tasks{shape ? ` — ${shape}` : ''}
       </p>
-      {hasShape ? (
-        // Drawn only when the batch has edges. A chain of ten and ten unrelated tasks produce the
-        // same list of titles and behave completely differently, and that is exactly what a
-        // picture shows and a list cannot.
-        <BatchGraph tasks={tasks} />
-      ) : (
-        <ul className="dag-approval-ops">
-          {tasks.map((t, i) => (
-            <li key={i} className="dag-op">
-              <span className="dag-op-verb">+</span>
-              <span className="dag-op-text">{t.title}</span>
-              {((t.dependsOnRefs?.length ?? 0) + (t.dependsOnTaskIds?.length ?? 0)) > 0 && (
-                <span className="dag-op-noop">
-                  waits on {(t.dependsOnRefs?.length ?? 0) + (t.dependsOnTaskIds?.length ?? 0)}
-                </span>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
+      {/* The picture — the project page's own canvas, drawn top to bottom on a card — or, when
+          there is no shape to draw or none that fits this width, the titles. A chain of ten and ten
+          unrelated tasks produce the same list and behave completely differently, and that is
+          exactly what a picture shows and a list cannot. */}
+      <BatchGraph
+        tasks={tasks}
+        fallback={
+          <ul className="dag-approval-ops">
+            {tasks.map((t, i) => (
+              <li key={i} className="dag-op">
+                <span className="dag-op-verb">+</span>
+                <span className="dag-op-text">{t.title}</span>
+                {((t.dependsOnRefs?.length ?? 0) + (t.dependsOnTaskIds?.length ?? 0)) > 0 && (
+                  <span className="dag-op-noop">
+                    waits on {(t.dependsOnRefs?.length ?? 0) + (t.dependsOnTaskIds?.length ?? 0)}
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        }
+      />
       {(preview.titlesTruncated ?? 0) > 0 && (
         <p className="dag-approval-foot">+{preview.titlesTruncated} more</p>
       )}

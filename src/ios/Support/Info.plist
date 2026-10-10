@@ -31,8 +31,46 @@
 	</array>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<!-- Self-hosted Orbit is an address the operator types in: a public IP, a LAN address,
+		     or an http:// host. Named hosts over http are covered by the global exception;
+		     iOS 17 applies ATS to IP literals again, so those get their own entries below.
+		     A /0 entry (0.0.0.0/0, ::/0) is treated as a flag rather than an address and matches
+		     nothing, so each family is listed as its two halves — Apple's workaround for
+		     r.114040682, and what docs/evidence/ios-http-ip/README.md measured on a simulator.
+		     NSAllowsLocalNetworking is deliberately absent: its presence would make iOS 10+
+		     ignore NSAllowsArbitraryLoads. -->
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+		<key>NSExceptionDomains</key>
+		<dict>
+			<key>0.0.0.0/1</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+			</dict>
+			<key>128.0.0.0/1</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+			</dict>
+			<key>::/1</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+			</dict>
+			<key>8000::/1</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+			</dict>
+		</dict>
+	</dict>
 	<key>NSCameraUsageDescription</key>
 	<string>Orbit uses the camera to take your profile photo.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>A self-hosted Orbit server can be on your local network, so signing in may connect to it.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Orbit saves images from your conversations to your photo library.</string>
 	<key>ITSAppUsesNonExemptEncryption</key>

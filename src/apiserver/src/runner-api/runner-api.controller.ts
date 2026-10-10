@@ -5157,14 +5157,20 @@ export class RunnerApiController {
           select: { id: true },
         });
         if (queued == null) {
-          const last = await tx.conversationTurn.aggregate({
-            where: { sessionId },
-            _max: { seq: true },
-          });
+          // Raw SQL, never `conversationTurn.aggregate`: Prisma compiles an aggregate to a MAX
+          // over an OFFSET subquery the planner cannot flatten, so it visits every turn the
+          // session has (measured on a 1500-turn session: 1260 heap blocks, 1263 buffers, 1.2 s
+          // cold) where `max("seq")` reads one index tuple of conversation_turn_session_id_seq_key.
+          // This runs inside the transaction that queues the shell turn, so the scan is held under
+          // the session's own lock — cf. QueueService.buildSession, where the same read was moved
+          // for the same reason.
+          const [last] = await tx.$queryRaw<Array<{ seq: number }>>`
+            SELECT max("seq") AS "seq" FROM "conversation_turn" WHERE "session_id" = ${sessionId}::uuid
+          `;
           await tx.conversationTurn.create({
             data: {
               sessionId,
-              seq: (last._max.seq ?? 0) + 1,
+              seq: Number(last?.seq ?? 0) + 1,
               clientTurnId,
               kind: 'shell',
               content: completedTask.acceptanceCommand,

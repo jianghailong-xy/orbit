@@ -25,6 +25,12 @@ val LocalAppearanceChanged = staticCompositionLocalOf<(String) -> Unit> { {} }
  * Settings' switch sets it the moment the server has taken the change. */
 val LocalSmartSelection = compositionLocalOf { false }
 val LocalSmartSelectionChanged = staticCompositionLocalOf<(Boolean) -> Unit> { {} }
+/** The account's Session recaps switch (`preferences.recaps`; on unless the owner turned it off, iOS UserPreferences.showRecaps),
+ * read with the theme from the same `users/me`. While it is off no session list draws the server's rolling recap: a row falls back
+ * to the raw last reply it showed before the recap existed — on this page and on a project's. Settings' switch sets it the moment
+ * the server has taken the change. */
+val LocalSessionRecaps = compositionLocalOf { true }
+val LocalSessionRecapsChanged = staticCompositionLocalOf<(Boolean) -> Unit> { {} }
 
 // androidx.activity's own defaults for the navigation bar's scrim (EdgeToEdge.kt).
 private val LightScrim = Color.argb(0xe6, 0xFF, 0xFF, 0xFF)
@@ -40,8 +46,10 @@ fun AccountAppearance(app: OrbitApplication, content: @Composable () -> Unit) {
     val revision = if (live.first === handle) live.second else 0L
     var theme by remember(handle) { mutableStateOf("system") }
     var smartSelection by remember(handle) { mutableStateOf(false) }
+    var sessionRecaps by remember(handle) { mutableStateOf(true) }
     var appearanceVersion by remember(handle) { mutableLongStateOf(0L) }
     var smartSelectionVersion by remember(handle) { mutableLongStateOf(0L) }
+    var sessionRecapsVersion by remember(handle) { mutableLongStateOf(0L) }
     var resume by remember { mutableIntStateOf(0) }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     DisposableEffect(lifecycle) {
@@ -53,11 +61,13 @@ fun AccountAppearance(app: OrbitApplication, content: @Composable () -> Unit) {
         if (handle != null) {
             val version = appearanceVersion
             val smartVersion = smartSelectionVersion
+            val recapsVersion = sessionRecapsVersion
             try {
                 val user = ManagementApi(app.session, handle).get("users/me") as JsonObject
                 if (version == appearanceVersion) theme = (user["preferences"] as? JsonObject)?.text("theme") ?: "system"
                 // A read that left before the switch was pressed does not take its answer back.
                 if (smartVersion == smartSelectionVersion) smartSelection = smartModelSelection(user["preferences"] as? JsonObject)
+                if (recapsVersion == sessionRecapsVersion) sessionRecaps = sessionRecapsEnabled(user["preferences"] as? JsonObject)
             } catch (cancel: CancellationException) { throw cancel }
             catch (_: Exception) { /* Keep this account's last known preference until the next refresh. */ }
         }
@@ -73,7 +83,8 @@ fun AccountAppearance(app: OrbitApplication, content: @Composable () -> Unit) {
         onDispose { }
     }
     CompositionLocalProvider(LocalAppearanceChanged provides { appearanceVersion++; theme = it }, LocalSmartSelection provides smartSelection,
-        LocalSmartSelectionChanged provides { smartSelectionVersion++; smartSelection = it }) {
+        LocalSmartSelectionChanged provides { smartSelectionVersion++; smartSelection = it },
+        LocalSessionRecaps provides sessionRecaps, LocalSessionRecapsChanged provides { sessionRecapsVersion++; sessionRecaps = it }) {
         OrbitTheme(darkTheme = dark, content = content)
     }
 }
