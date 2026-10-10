@@ -1,0 +1,28 @@
+argv: npm run test:ui-choices -w @orbit/web -- --project chromium-light-desktop --grep 'no-preference Dialog Popover Select exits restore one layer at a time'
+tree: /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/base
+head: 896226a23bc38c8d2dbae1e29769201499de3e04
+load: 13.96 15.53 18.91 11/5488 968633
+started: 2026-10-09T23:49:41Z
+
+
+> @orbit/web@0.1.0 pretest:ui-choices
+> npm run build -w @orbit/shared
+
+
+> @orbit/shared@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @orbit/web@0.1.0 test:ui-choices
+> playwright test --config ui-migration/choices.config.mjs --project chromium-light-desktop --grep no-preference Dialog Popover Select exits restore one layer at a time
+
+P0 expected screenshots: 87 P0.2 originals, 143 main drift references, 22 accepted migration differences.
+
+Running 1 test using 1 worker
+
+  ✓  1 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:51:51 › no-preference Dialog Popover Select exits restore one layer at a time (3.0s)
+
+  1 passed (7.2s)
+exit=0
+load: 16.04 15.94 19.00 11/5492 969326
+ended: 2026-10-09T23:49:49Z

@@ -1,0 +1,24 @@
+argv: --project chromium-dark-desktop --grep its\ versions,\ compare,\ redraft,\ the\ edit\ drawer\ and\ a\ section\ form
+tree: /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del
+head: f4ec61864e53a13aa35cbff25b5ea1ae03c99453
+load: 11.36 15.33 18.98 14/5480 961848
+started: 2026-10-09T23:49:06Z
+
+
+Running 1 test using 1 worker
+
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-rerun-del-chromium-dark-desktop-shots/chromium-dark-desktop/p44-plan.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-rerun-del-chromium-dark-desktop-shots/chromium-dark-desktop/p44-plan-versions.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-rerun-del-chromium-dark-desktop-shots/chromium-dark-desktop/p44-plan-more.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-rerun-del-chromium-dark-desktop-shots/chromium-dark-desktop/p44-plan-compared.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-rerun-del-chromium-dark-desktop-shots/chromium-dark-desktop/p44-plan-redraft.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-rerun-del-chromium-dark-desktop-shots/chromium-dark-desktop/p44-plan-edit.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-rerun-del-chromium-dark-desktop-shots/chromium-dark-desktop/p44-plan-edit-kinds.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-rerun-del-chromium-dark-desktop-shots/chromium-dark-desktop/p44-plan-edit-changed.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-rerun-del-chromium-dark-desktop-shots/chromium-dark-desktop/p44-plan-section.png, writing actual.
+  ✓  1 [chromium-dark-desktop] › ui-migration/p44.browser.mjs:425:3 › P4.4 the plan › its versions, compare, redraft, the edit drawer and a section form (11.9s)
+
+  1 passed (13.6s)
+exit=0
+load: 11.42 15.15 18.86 13/5379 964253
+ended: 2026-10-09T23:49:23Z

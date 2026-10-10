@@ -1,7 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Button, Drawer, Popover, Tooltip } from 'antd';
 import {
   ClockCircleOutlined,
   CodeOutlined,
@@ -18,6 +17,10 @@ import {
 import { WikiEmpty } from './WikiCards';
 import { WIKI_DOC_SECTION_EVENT, WikiContentsButton } from './WikiDirectory';
 import { WikiAnchorMark, WikiKindMark, WikiStatusBadge, WikiTrustBadge } from './WikiMarks';
+import { Button, LinkButton } from './ui/Button';
+import { Drawer } from './ui/Drawer';
+import { Popover } from './ui/Popover';
+import { Tooltip } from './ui/Tooltip';
 import { wikiDocQuery, wikiDocsQuery, wikiEntriesQuery, wikiSpaceQuery } from '../lib/queries';
 import { MOBILE_QUERY, useMediaQuery } from '../lib/useMediaQuery';
 import {
@@ -263,10 +266,10 @@ export function WikiDocPage({
           placement="bottom"
           open={open !== null}
           onClose={() => setOpen(null)}
-          size="auto"
+          height="auto"
           closable={false}
-          rootClassName="wk-fnsheet"
-          styles={{ body: { padding: 0 } }}
+          title={null}
+          className="wk-fnsheet"
         >
           {open && notes.get(open.n) && (
             <WikiDocFootnoteCard note={notes.get(open.n)!} via={via} github={github} spaceSlug={spaceSlug} docSlug={doc.slug} sheet />
@@ -527,7 +530,7 @@ function WikiDocSentence({
     </div>
   ) : null;
   const text = mark ? (
-    <Tooltip title={explained} trigger={phone ? ['click'] : ['hover', 'click']} placement="bottomLeft" color="rgba(0, 0, 0, .85)">
+    <Tooltip content={explained} toggleOnClick side="bottom" align="start" popupClassName="wk-dc-tip-pop">
       <span className={MARK_CLASS[mark]} data-mark={mark} tabIndex={0}>
         {words}
       </span>
@@ -560,15 +563,16 @@ function WikiDocSentence({
               <Popover
                 key={n}
                 open={on}
-                trigger="click"
-                placement="bottomLeft"
-                arrow={{ pointAtCenter: true }}
+                side="bottom"
+                align="start"
+                pointAtCenter
+                title={null}
                 onOpenChange={(visible) => {
                   if (!visible && on) setOpen(null);
                 }}
-                content={<WikiDocFootnoteCard note={footnote} via={via} github={github} spaceSlug={spaceSlug} docSlug={doc.slug} />}
+                trigger={marker}
               >
-                {marker}
+                <WikiDocFootnoteCard note={footnote} via={via} github={github} spaceSlug={spaceSlug} docSlug={doc.slug} />
               </Popover>
             );
           })}
@@ -699,19 +703,15 @@ export function WikiDocFootnoteCard({
           <WikiTrustBadge trust={entry.trust as WikiTrust} />
         </div>
       )}
-      {sheet && open && (
-        <Button
-          type="primary"
-          block
-          size="large"
-          className="wk-fncard-open"
-          href={open.external ? open.href : undefined}
-          target={open.external ? '_blank' : undefined}
-          onClick={open.external ? undefined : () => navigate(open.href)}
-        >
+      {sheet && open && (open.external ? (
+        <LinkButton variant="primary" size="large" className="wk-fncard-open" href={open.href} target="_blank">
+          {open.label}
+        </LinkButton>
+      ) : (
+        <Button variant="primary" size="large" className="wk-fncard-open" onClick={() => navigate(open.href)}>
           {open.label}
         </Button>
-      )}
+      ))}
     </div>
   );
 }

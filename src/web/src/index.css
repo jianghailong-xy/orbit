@@ -9545,6 +9545,10 @@ button.chat-jump-start:hover {
 .chat-tool-status.pending {
   color: var(--dot-idle);
 }
+/* A question answered in the conversation: the engine files the reply as the call's error. */
+.chat-tool-status.replied {
+  color: var(--text-3);
+}
 .chat-tool-task .chat-tool-row {
   background: #faf8ff;
 }
@@ -9696,6 +9700,73 @@ button.chat-jump-start:hover {
 .chat-q-multi {
   margin-top: 6px;
   font-size: 11px;
+  color: var(--text-3);
+}
+/* Historical variant: the person's own words, read-only — typed instead of an option, or the reply
+   given in the conversation instead of any. */
+.chat-q-words {
+  margin-top: 6px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  background: var(--brand-tint);
+  font-size: 12.5px;
+  color: var(--text-1);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.chat-q-words-label {
+  display: block;
+  font-size: 11px;
+  color: var(--text-3);
+  white-space: normal;
+}
+/* An answered question, folded: the record under its row — each question's opening, then how it
+   was answered. One question keeps two lines of its opening, several keep one each. */
+.chat-q-folded {
+  padding: 0 10px 7px;
+  cursor: pointer;
+}
+.chat-q-lead {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-3);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  word-break: break-word;
+}
+.chat-q-lead.is-one-line {
+  -webkit-line-clamp: 1;
+}
+.chat-q-folded > .chat-q-lead:not(:first-child) {
+  margin-top: 6px;
+}
+.chat-q-answer {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 2px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-1);
+}
+.chat-q-answer > .anticon {
+  flex: none;
+  margin-top: 3px;
+  font-size: 12px;
+  color: var(--brand);
+}
+.chat-q-answer-words {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  word-break: break-word;
+}
+.chat-q-answer-note {
+  display: block;
+  font-size: 12px;
   color: var(--text-3);
 }
 /* Interactive variant (in the approval card): options are clickable buttons. */
@@ -20171,6 +20242,16 @@ div.landing-jobs-open {
 .tasks-batch-dialog.orbit-overlay {
   line-height: 1.5714285714285714;
 }
+/* And for the Wiki's and the watch editor's dialogs (P4.4). */
+.wk-new-entry-dialog.orbit-overlay,
+.wk-entry-edit-dialog.orbit-overlay,
+.wk-proposal-dialog.orbit-overlay,
+.wk-pl-redraft-dialog.orbit-overlay,
+.wk-pl-section-dialog.orbit-overlay,
+.wk-setup-dialog.orbit-overlay,
+.watch-editor-dialog.orbit-overlay {
+  line-height: 1.5714285714285714;
+}
 .watch-card {
   overflow: hidden;
   border: 1px solid var(--border);
@@ -20430,6 +20511,10 @@ div.landing-jobs-open {
   border-top: 1px solid var(--border-subtle);
   background: var(--bg-subtle);
 }
+/* The replaced buttons took the card's line height; the shared button sets 22px. */
+.watch-actions .orbit-button {
+  line-height: inherit;
+}
 .watch-spacer {
   flex: 1;
 }
@@ -20472,7 +20557,7 @@ div.landing-jobs-open {
   flex-direction: column;
   gap: 6px;
 }
-.ant-popover .watch-row-list {
+.watch-popover .watch-row-list {
   width: min(460px, 80vw);
 }
 .watch-row {
@@ -21707,7 +21792,8 @@ div.landing-jobs-open {
   font-size: 12px;
   font-weight: 600;
 }
-.watch-editor-options {
+/* The radio group's own display and margin load after this file: these name its class to keep the column. */
+.watch-editor-options.orbit-radio-group {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -21721,7 +21807,7 @@ div.landing-jobs-open {
   color: var(--text-3);
   font-size: 12px;
 }
-.watch-editor-aggregation {
+.watch-editor-aggregation.orbit-radio-group {
   margin-bottom: 8px;
 }
 .watch-editor-fixed {
@@ -21921,9 +22007,9 @@ button.project-open-item-action:disabled {
 /* The action row's third weight (mock 7, 方案 B): the doors that only look and only stop read as text
    links instead of boxes as heavy as the press the card is asking for — no border, no fill,
    underlined, and quiet until they are hovered. Scoped to the action row so these four properties
-   stand against the link chrome antd sets for the presses drawn in this weight, which comes in at
-   the same weight as a bare class of this file's; the row's own box is untouched, because it is the
-   way IN and not a door being demoted. */
+   stand against the link chrome the link button sets for the presses drawn in this weight, which
+   loads after this file and so outranks a bare class of it; the row's own box is untouched, because
+   it is the way IN and not a door being demoted. */
 .project-open-item-actions .project-open-item-quiet {
   height: auto;
   padding: 0 2px;
@@ -22298,9 +22384,12 @@ button.project-open-item-action:disabled {
 /* The space's public link, as the head's buttons are sized (mock share-links 08 ②). */
 .wk-actions > .session-shared-pill { height: 32px; padding: 0 12px; font-size: 13px; }
 /* Activity's button carries the collapsed sidebar's amber badge in its corner, and is pressed on Activity. */
-.wk-activity-btn.ant-btn { position: relative; overflow: visible; }
+.wk-activity-btn.orbit-button { position: relative; overflow: visible; }
+/* The replaced button held the badge as its own child, out of the flow; the shared button wraps its children in a
+   span, which on a phone (no label, only the badge) would still take the icon's gap. */
+.wk-activity-btn.orbit-button > span:not(.orbit-button-icon) { display: contents; }
 .wk-activity-btn .tp-rail-badge { top: -7px; right: -7px; box-shadow: 0 0 0 2px var(--bg-base); }
-.wk-activity-btn.on.ant-btn, .wk-activity-btn.on.ant-btn:hover { border-color: var(--brand-border); background: var(--brand-tint); color: var(--brand); }
+.wk-activity-btn.on.orbit-button, .wk-activity-btn.on.orbit-button:hover { border-color: var(--brand-border); background: var(--brand-tint); color: var(--brand); }
 .wk-search { display: flex; align-items: center; gap: 8px; height: 32px; margin: 16px 0 0; padding: 0 8px 0 11px;
              border: 1px solid var(--border); border-radius: 6px; background: var(--bg-raised); font-size: 14px; color: var(--text-4); }
 .wk-search .ic { color: var(--text-4); font-size: 14px; }
@@ -22629,7 +22718,8 @@ button.project-open-item-action:disabled {
 .wk-settings-card { margin-bottom: 16px; }
 .wk-settings-hint { font-size: 12.5px; font-weight: 400; color: var(--text-3); }
 .wk-settings-lead { margin-bottom: 8px; font-size: 13px; color: var(--text-2); }
-.wk-modes.ant-radio-group { display: flex; flex-direction: column; gap: 4px; width: 100%; }
+/* The replaced group passed its unitless line height down (only its font size is 0); the spot check's title sets none. */
+.wk-modes.orbit-radio-group { display: flex; flex-direction: column; gap: 4px; width: 100%; line-height: 1.5714285714285714; }
 .wk-mode { padding: 9px 12px 10px; border-radius: 8px; }
 .wk-mode.on { background: var(--brand-tint); }
 .wk-mode-t { font-weight: 600; color: var(--text-1); }
@@ -22657,7 +22747,7 @@ button.project-open-item-action:disabled {
 .wk-setup-k { margin: 12px 0 6px; font-size: 13px; font-weight: 500; color: var(--text-1); }
 .wk-setup-d { margin-top: 5px; font-size: 12px; line-height: 1.5; color: var(--text-3); }
 .wk-setup-limit { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-2); }
-.wk-setup-limit .ant-input-number { width: 72px; }
+.wk-setup-limit .orbit-number-input { width: 72px; }
 .wk-setup-days { margin-top: 8px; }
 .wk-setup-refusal { margin: 14px 0 0; }
 /* Maintenance while the server runs the wiki (mock 35 ①②): the longer key, the System model and its state, read-only,
@@ -22679,7 +22769,7 @@ button.project-open-item-action:disabled {
 .wk-privacy .ic { flex: none; margin-top: 3px; color: var(--text-3); }
 @media (max-width: 600px) {
   .wk-maint-off { grid-template-columns: minmax(0, 1fr) auto; }
-  .wk-maint-off > .ant-btn { grid-column: 1 / -1; justify-self: start; }
+  .wk-maint-off > .orbit-button { grid-column: 1 / -1; justify-self: start; }
 }
 
 .wk-markbar { display: flex; gap: 8px; align-items: flex-start; margin: 0 20px 6px; padding: 9px 12px; border-radius: 8px;
@@ -22691,6 +22781,8 @@ button.project-open-item-action:disabled {
 .wk-markbar.tone-amber { background: var(--warning-bg); border-color: var(--warning-border); }
 .wk-markbar.tone-amber > .ic, .wk-markbar.tone-amber b { color: var(--warning); }
 .wk-markbar-line { margin-top: 2px; font-size: 12px; color: var(--text-3); }
+/* An entry's Reject: the arrow at 12px, as the replaced dropdown trigger drew its down arrow. */
+.wk-reject-btn .anticon-down { font-size: 12px; }
 
 .wk-run-meta { margin-top: 6px; font-size: 12.5px; color: var(--text-3); }
 .wk-run-actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 20px 12px; }
@@ -22747,7 +22839,7 @@ button.project-open-item-action:disabled {
    Ported from the mocks' own sheet (`docs/mocks/wiki/wiki-p2.css`) the way the phase-1 block above
    was: the directory is the app sidebar's rows one step smaller, the article's head is the topic
    page's (`.t-title`, `.t-meta`), its entries are the topic page's groups (`.wk-sec`, `.wk-erow`) and a
-   footnote's card is antd's Popover — on a phone the Drawer from the bottom. The Contents drawer is
+   footnote's card is a Popover — on a phone a Drawer from the bottom. The Contents drawer is
    the app drawer's own shape (`.app-nav` below 960px): 320px from the left over a 40% scrim. */
 .wk-layout { display: grid; grid-template-columns: 224px minmax(0, 1fr); gap: 32px; align-items: start; margin-top: 18px; }
 .wk-layout.home { gap: 24px; }
@@ -22835,10 +22927,11 @@ button.project-open-item-action:disabled {
 .wk-fncard.sheet .t { margin-top: 8px; font-size: 16px; }
 .wk-fncard.sheet .d { margin-top: 6px; font-size: 14px; line-height: 1.65; -webkit-line-clamp: 4; }
 .wk-fncard.sheet .f { border-top: 0; padding-top: 0; font-size: 12.5px; }
-.wk-fncard-open { margin-top: 14px; }
-.wk-fnsheet .ant-drawer-content { border-radius: 12px 12px 0 0; }
-.wk-fnsheet .ant-drawer-body::before { content: ""; display: block; width: 36px; height: 4px; border-radius: 2px; background: var(--border);
-                                       margin: 8px auto 4px; }
+.wk-fncard-open { margin-top: 14px; width: 100%; }
+.wk-fnsheet > .orbit-overlay-header { display: none; }
+.wk-fnsheet > .orbit-overlay-body { padding: 0; }
+.wk-fnsheet > .orbit-overlay-body::before { content: ""; display: block; width: 36px; height: 4px; border-radius: 2px; background: var(--border);
+                                            margin: 8px auto 4px; }
 
 .wk-fnlist { margin-top: 30px; }
 .wk-fnlist h3, .wk-art-entries-h { margin: 0 0 8px; font-size: 15px; font-weight: 650; color: var(--text-1); display: flex;
@@ -23091,6 +23184,8 @@ button.project-open-item-action:disabled {
 .wk-pl-ver .ic { font-size: 10px; color: var(--text-3); }
 .wk-pl-ver .tdp-badge, .wk-pl-verrow .tdp-badge { font-size: 11px; line-height: 16px; padding: 0 6px; }
 .wk-pl-verrow { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 8px; align-items: center; min-width: 300px; }
+/* The replaced menu's rows had no minimum height: a version's row of 12.5px text stands 30px tall. */
+.wk-pl-vermenu .orbit-menu-item { min-height: 0; }
 .wk-pl-verrow .v { font: 650 12.5px ui-monospace, SFMono-Regular, Menlo, "DejaVu Sans Mono", monospace; color: var(--text-1); }
 .wk-pl-verrow .d { color: var(--text-2); font-size: 12.5px; }
 .wk-pl-meta { margin-top: 8px; font-size: 13px; color: var(--text-2); display: flex; flex-wrap: wrap; gap: 4px 9px; align-items: center; }
@@ -23098,7 +23193,7 @@ button.project-open-item-action:disabled {
 .wk-pl-meta .errn { color: var(--error); font-weight: 600; }
 .wk-pl-hint { margin-top: 6px; font-size: 12.5px; color: var(--text-3); }
 
-/* the plan check, and the job's card — an antd Alert-coloured card, one row a check */
+/* the plan check, and the job's card — an Alert-coloured card, one row a check */
 .wk-pl-check { margin-top: 16px; border-radius: 10px; border: 1px solid var(--border-subtle); background: var(--bg-raised); overflow: hidden; }
 .wk-pl-check > .h { display: flex; align-items: center; gap: 9px; padding: 11px 14px; border-bottom: 1px solid var(--border-subtle); font-size: 14px; }
 .wk-pl-check > .h .ic { font-size: 16px; flex: none; }
@@ -23260,11 +23355,15 @@ button.project-open-item-action:disabled {
 .wk-pl-src .cond code { margin-right: 4px; }
 
 /* Edit (a document, in a right drawer) and Redraft… (a modal) */
+/* The replaced drawer's title passed a unitless line height to its smaller first line; the shared title sets 24px. */
+.wk-pl-drawer .orbit-overlay-title { line-height: 1.5; }
 .wk-pl-drawer-t .sub { font-size: 12px; font-weight: 500; color: var(--text-3); }
 .wk-pl-form { padding: 0 0 8px; }
 .wk-pl-f { display: block; margin-top: 12px; }
 .wk-pl-f:first-child { margin-top: 0; }
 .wk-pl-f .l { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; font-size: 13px; color: var(--text-1); }
+/* The replaced select kept 6px between its value and its arrow; the section form's is as wide as its value. */
+.wk-pl-section-dialog .wk-pl-f .orbit-select-trigger { gap: 6px; }
 .wk-pl-f .l .dim, .wk-pl-f .dim { color: var(--text-3); font-size: 12px; }
 .wk-pl-f.row2 { display: flex; gap: 16px; align-items: flex-start; }
 .wk-pl-f.row2 .grow { flex: 1; min-width: 0; }
@@ -23332,6 +23431,8 @@ button.project-open-item-action:disabled {
 .wk-s-lab.gone { background: var(--fill-muted); color: var(--text-2); }
 .wk-fn-n.x { color: var(--error); text-decoration: line-through; }
 .wk-fn-n.x.on { background: var(--error-solid); color: #fff; }
+/* The replaced tip had its own colour (`color="rgba(0, 0, 0, .85)"`), in the dark theme as well. */
+.wk-dc-tip-pop.orbit-tooltip { --orbit-tooltip-bg: rgba(0, 0, 0, 0.85); }
 .wk-dc-tip { max-width: 300px; font-size: 12.5px; line-height: 1.55; }
 .wk-dc-tip b { font-weight: 650; }
 
@@ -23450,12 +23551,12 @@ button.project-open-item-action:disabled {
   .wk-pl-titlerow { justify-content: space-between; }
   .wk-pl-titlerow .t-title { font-size: 24px; line-height: 1.35; }
   .wk-pl-acts { margin-top: 12px; }
-  .wk-pl-acts > .ant-btn:not(.ant-btn-icon-only) { flex: 1; height: 40px; }
+  .wk-pl-acts > .orbit-button:not(.orbit-button-icon-only) { flex: 1; height: 40px; }
   .wk-pl-ck { grid-template-columns: 16px minmax(0, 1fr); }
   .wk-pl-ck .r, .wk-pl-errs { grid-column: 2; }
   .wk-pl-err { grid-template-columns: minmax(0, 1fr); gap: 0; }
   .wk-pl-empty { padding: 28px 20px 22px; }
-  .wk-pl-empty .ant-btn { width: 100%; height: 40px; }
+  .wk-pl-empty .orbit-button { width: 100%; height: 40px; }
   .wk-pl-cat-h .q { display: none; }
   .wk-pl-sec.phone .chev { font-size: 11px; color: var(--text-4); }
   .wk-pl-kv { grid-template-columns: minmax(0, 1fr); gap: 2px; margin-top: 12px; }

@@ -1358,6 +1358,15 @@ class WikiMaintainRun {
    * files are read at the same commits and the sections compared in the same order, so `changed` and `gone` are
    * what they were. The diffs stay one a commit — none at the head, none for a commit the snapshot does not
    * reach — and each operation is still asked once the one before it has settled.
+   *
+   * A RENAME IS TAKEN BY ITS OLD PATH, AND A DELETED FILE IS READ AT ITS COMMIT (2026-10-10), as the runner's
+   * comparison takes them (`wikiGitChanges`, and `newWikiDocRepo` at the commit itself): the names are keyed by the
+   * path at the section's commit (`gitChangesOf`), so either end of a rename touches a section that names it and the
+   * old one is withdrawn, `to` where it went; and the commit's files have what the range deleted or renamed away
+   * (`baseTreeOf`), so a cited file that is gone is read there and its going changes the section's material. The
+   * server used to match a rename by its new path and withdraw that, `to` the old one — a section citing only the old
+   * path was not touched, and no sentence citing it was taken back — and read a deleted file at neither commit, so
+   * its going changed nothing.
    */
   private async repoAffected(
     planVersion: Awaited<ReturnType<PlansVersion>>,
@@ -1400,15 +1409,16 @@ class WikiMaintainRun {
       }
       const diff = await this.diffOf(sha, head);
       if (diff.files.length === 0) continue;
+      const changes = gitChangesOf(diff.files);
       const touched: WikiMaintainComparedSection[] = [];
       for (const pending of sections) {
         let touches = false;
-        for (const file of diff.files) {
-          if (!pathNamed(file.path, pending.paths)) continue;
+        for (const [path, change] of changes) {
+          if (!pathNamed(path, pending.paths)) continue;
           touches = true;
-          if ((file.status.startsWith('D') || file.status.startsWith('R')) && !goneSeen.has(file.path)) {
-            goneSeen.add(file.path);
-            gone.push(file.status.startsWith('R') ? { path: file.path, change: 'renamed', to: file.from ?? '' } : { path: file.path, change: 'deleted' });
+          if ((change.status === 'D' || change.status === 'R') && !goneSeen.has(path)) {
+            goneSeen.add(path);
+            gone.push(change.status === 'R' ? { path, change: 'renamed', to: change.to } : { path, change: 'deleted' });
           }
         }
         if (touches) touched.push(pending);
@@ -1436,7 +1446,8 @@ class WikiMaintainRun {
         if (!samePieces(before.pieces, after.pieces)) changed.push({ doc: pending.doc, key: pending.key });
       }
     }
-    gone.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+    // By the paths' bytes, as the runner's `sort.Slice` compares Go strings.
+    gone.sort((a, b) => Buffer.compare(Buffer.from(a.path), Buffer.from(b.path)));
     return { changed, gone };
   }
 
@@ -1619,9 +1630,32 @@ function pathNamed(changed: string, named: readonly string[]): boolean {
 }
 
 /**
+ * A diff's names keyed by the path at the commit it starts from, as the runner's `wikiGitChanges` keys `git diff
+ * --name-status -M`: a rename under its old path (R, `to` its new one) and its new path once more, as added (A); a
+ * copy's new path as added; any other change under its path, by its status's first letter.
+ */
+function gitChangesOf(files: ReadonlyArray<{ status: string; path: string; from: string | null }>): Map<string, { status: string; to: string }> {
+  const changes = new Map<string, { status: string; to: string }>();
+  for (const file of files) {
+    const status = file.status.slice(0, 1);
+    if (status === '' || file.path === '') continue;
+    if (status === 'R' && file.from) {
+      changes.set(file.from, { status: 'R', to: file.path });
+      changes.set(file.path, { status: 'A', to: '' });
+    } else if (status === 'C' && file.from) {
+      changes.set(file.path, { status: 'A', to: '' });
+    } else {
+      changes.set(file.path, { status, to: '' });
+    }
+  }
+  return changes;
+}
+
+/**
  * The base commit's file list, as the diff names it: the head's, less what the range added or renamed into
- * place, plus what it deleted or renamed away. The files whose sizes the head does not carry are marked with
- * one byte, which is what lets a read of them answer at all (their content is still whatever git holds).
+ * place, plus what it deleted or renamed away — the files the runner reads at the commit itself, so a deleted
+ * one is read there too. The files whose sizes the head does not carry are marked with one byte, which is what
+ * lets a read of them answer at all (their content is still whatever git holds).
  */
 function baseTreeOf(
   headFiles: readonly string[],
@@ -1631,7 +1665,7 @@ function baseTreeOf(
   const gone = new Set<string>();
   const back = new Set<string>();
   for (const file of files) {
-    if (file.status.startsWith('D')) gone.add(file.path);
+    if (file.status.startsWith('D')) back.add(file.path);
     else if (file.status.startsWith('R')) {
       gone.add(file.path);
       if (file.from) back.add(file.from);

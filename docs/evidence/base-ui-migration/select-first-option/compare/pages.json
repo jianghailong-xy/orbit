@@ -1,0 +1,514 @@
+{
+ "chromium-light-desktop": {
+  "ref": {
+   "rebind": {
+    "before": "Workspace",
+    "highlighted": [],
+    "afterEnter": "Workspace",
+    "listOpen": true,
+    "rebindEnabled": false
+   },
+   "choose": {
+    "before": "Workspace",
+    "highlighted": [],
+    "afterEnter": "Workspace",
+    "listOpen": true
+   },
+   "expiresUntil": {
+    "before": "Until Oct 5",
+    "highlighted": [],
+    "afterEnter": "Until Oct 5",
+    "listOpen": true
+   },
+   "suggestedNone": {
+    "before": "No suggestion",
+    "highlighted": [],
+    "afterEnter": "No suggestion",
+    "listOpen": true
+   }
+  },
+  "del": {
+   "rebind": {
+    "before": "Workspace",
+    "highlighted": [
+     "Orbit baseline (current)"
+    ],
+    "afterEnter": "Orbit baseline (current)",
+    "listOpen": false,
+    "rebindEnabled": true
+   },
+   "choose": {
+    "before": "Workspace",
+    "highlighted": [
+     "Orbit baseline"
+    ],
+    "afterEnter": "Orbit baseline",
+    "listOpen": false
+   },
+   "expiresUntil": {
+    "before": "Until Oct 5",
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "Never",
+    "listOpen": false
+   },
+   "suggestedNone": {
+    "before": "No suggestion",
+    "highlighted": [
+     "No suggestionKeeps the agent's model, as today"
+    ],
+    "afterEnter": "No suggestion",
+    "listOpen": false
+   }
+  }
+ },
+ "chromium-light-phone": {
+  "ref": {
+   "rebind": {
+    "before": "Workspace",
+    "highlighted": [],
+    "afterEnter": "Workspace",
+    "listOpen": true,
+    "rebindEnabled": false
+   },
+   "choose": {
+    "before": "Workspace",
+    "highlighted": [],
+    "afterEnter": "Workspace",
+    "listOpen": true
+   },
+   "expiresUntil": {
+    "before": "Until Oct 5",
+    "highlighted": [],
+    "afterEnter": "Until Oct 5",
+    "listOpen": true
+   },
+   "suggestedNone": {
+    "before": "No suggestion",
+    "highlighted": [],
+    "afterEnter": "No suggestion",
+    "listOpen": true
+   }
+  },
+  "del": {
+   "rebind": {
+    "before": "Workspace",
+    "highlighted": [
+     "Orbit baseline (current)"
+    ],
+    "afterEnter": "Orbit baseline (current)",
+    "listOpen": false,
+    "rebindEnabled": true
+   },
+   "choose": {
+    "before": "Workspace",
+    "highlighted": [
+     "Orbit baseline"
+    ],
+    "afterEnter": "Orbit baseline",
+    "listOpen": false
+   },
+   "expiresUntil": {
+    "before": "Until Oct 5",
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "Never",
+    "listOpen": false
+   },
+   "suggestedNone": {
+    "before": "No suggestion",
+    "highlighted": [
+     "No suggestionKeeps the agent's model, as today"
+    ],
+    "afterEnter": "No suggestion",
+    "listOpen": false
+   }
+  }
+ },
+ "chromium-dark-desktop": {
+  "ref": {
+   "rebind": {
+    "before": "Workspace",
+    "highlighted": [],
+    "afterEnter": "Workspace",
+    "listOpen": true,
+    "rebindEnabled": false
+   },
+   "choose": {
+    "before": "Workspace",
+    "highlighted": [],
+    "afterEnter": "Workspace",
+    "listOpen": true
+   },
+   "expiresUntil": {
+    "before": "Until Oct 5",
+    "highlighted": [],
+    "afterEnter": "Until Oct 5",
+    "listOpen": true
+   },
+   "suggestedNone": {
+    "before": "No suggestion",
+    "highlighted": [],
+    "afterEnter": "No suggestion",
+    "listOpen": true
+   }
+  },
+  "del": {
+   "rebind": {
+    "before": "Workspace",
+    "highlighted": [
+     "Orbit baseline (current)"
+    ],
+    "afterEnter": "Orbit baseline (current)",
+    "listOpen": false,
+    "rebindEnabled": true
+   },
+   "choose": {
+    "before": "Workspace",
+    "highlighted": [
+     "Orbit baseline"
+    ],
+    "afterEnter": "Orbit baseline",
+    "listOpen": false
+   },
+   "expiresUntil": {
+    "before": "Until Oct 5",
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "Never",
+    "listOpen": false
+   },
+   "suggestedNone": {
+    "before": "No suggestion",
+    "highlighted": [
+     "No suggestionKeeps the agent's model, as today"
+    ],
+    "afterEnter": "No suggestion",
+    "listOpen": false
+   }
+  }
+ },
+ "chromium-dark-phone": {
+  "ref": {
+   "rebind": {
+    "before": "Workspace",
+    "highlighted": [],
+    "afterEnter": "Workspace",
+    "listOpen": true,
+    "rebindEnabled": false
+   },
+   "choose": {
+    "before": "Workspace",
+    "highlighted": [],
+    "afterEnter": "Workspace",
+    "listOpen": true
+   },
+   "expiresUntil": {
+    "before": "Until Oct 5",
+    "highlighted": [],
+    "afterEnter": "Until Oct 5",
+    "listOpen": true
+   },
+   "suggestedNone": {
+    "before": "No suggestion",
+    "highlighted": [],
+    "afterEnter": "No suggestion",
+    "listOpen": true
+   }
+  },
+  "del": {
+   "rebind": {
+    "before": "Workspace",
+    "highlighted": [
+     "Orbit baseline (current)"
+    ],
+    "afterEnter": "Orbit baseline (current)",
+    "listOpen": false,
+    "rebindEnabled": true
+   },
+   "choose": {
+    "before": "Workspace",
+    "highlighted": [
+     "Orbit baseline"
+    ],
+    "afterEnter": "Orbit baseline",
+    "listOpen": false
+   },
+   "expiresUntil": {
+    "before": "Until Oct 5",
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "Never",
+    "listOpen": false
+   },
+   "suggestedNone": {
+    "before": "No suggestion",
+    "highlighted": [
+     "No suggestionKeeps the agent's model, as today"
+    ],
+    "afterEnter": "No suggestion",
+    "listOpen": false
+   }
+  }
+ },
+ "webkit-light-desktop": {
+  "ref": {
+   "rebind": {
+    "before": "Workspace",
+    "highlighted": [],
+    "afterEnter": "Workspace",
+    "listOpen": true,
+    "rebindEnabled": false
+   },
+   "choose": {
+    "before": "Workspace",
+    "highlighted": [],
+    "afterEnter": "Workspace",
+    "listOpen": true
+   },
+   "expiresUntil": {
+    "before": "Until Oct 5",
+    "highlighted": [],
+    "afterEnter": "Until Oct 5",
+    "listOpen": true
+   },
+   "suggestedNone": {
+    "before": "No suggestion",
+    "highlighted": [],
+    "afterEnter": "No suggestion",
+    "listOpen": true
+   }
+  },
+  "del": {
+   "rebind": {
+    "before": "Workspace",
+    "highlighted": [
+     "Orbit baseline (current)"
+    ],
+    "afterEnter": "Orbit baseline (current)",
+    "listOpen": false,
+    "rebindEnabled": true
+   },
+   "choose": {
+    "before": "Workspace",
+    "highlighted": [
+     "Orbit baseline"
+    ],
+    "afterEnter": "Orbit baseline",
+    "listOpen": false
+   },
+   "expiresUntil": {
+    "before": "Until Oct 5",
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "Never",
+    "listOpen": false
+   },
+   "suggestedNone": {
+    "before": "No suggestion",
+    "highlighted": [
+     "No suggestionKeeps the agent's model, as today"
+    ],
+    "afterEnter": "No suggestion",
+    "listOpen": false
+   }
+  }
+ },
+ "webkit-light-phone": {
+  "ref": {
+   "rebind": {
+    "before": "Workspace",
+    "highlighted": [],
+    "afterEnter": "Workspace",
+    "listOpen": true,
+    "rebindEnabled": false
+   },
+   "choose": {
+    "before": "Workspace",
+    "highlighted": [],
+    "afterEnter": "Workspace",
+    "listOpen": true
+   },
+   "expiresUntil": {
+    "before": "Until Oct 5",
+    "highlighted": [],
+    "afterEnter": "Until Oct 5",
+    "listOpen": true
+   },
+   "suggestedNone": {
+    "before": "No suggestion",
+    "highlighted": [],
+    "afterEnter": "No suggestion",
+    "listOpen": true
+   }
+  },
+  "del": {
+   "rebind": {
+    "before": "Workspace",
+    "highlighted": [
+     "Orbit baseline (current)"
+    ],
+    "afterEnter": "Orbit baseline (current)",
+    "listOpen": false,
+    "rebindEnabled": true
+   },
+   "choose": {
+    "before": "Workspace",
+    "highlighted": [
+     "Orbit baseline"
+    ],
+    "afterEnter": "Orbit baseline",
+    "listOpen": false
+   },
+   "expiresUntil": {
+    "before": "Until Oct 5",
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "Never",
+    "listOpen": false
+   },
+   "suggestedNone": {
+    "before": "No suggestion",
+    "highlighted": [
+     "No suggestionKeeps the agent's model, as today"
+    ],
+    "afterEnter": "No suggestion",
+    "listOpen": false
+   }
+  }
+ },
+ "webkit-dark-desktop": {
+  "ref": {
+   "rebind": {
+    "before": "Workspace",
+    "highlighted": [],
+    "afterEnter": "Workspace",
+    "listOpen": true,
+    "rebindEnabled": false
+   },
+   "choose": {
+    "before": "Workspace",
+    "highlighted": [],
+    "afterEnter": "Workspace",
+    "listOpen": true
+   },
+   "expiresUntil": {
+    "before": "Until Oct 5",
+    "highlighted": [],
+    "afterEnter": "Until Oct 5",
+    "listOpen": true
+   },
+   "suggestedNone": {
+    "before": "No suggestion",
+    "highlighted": [],
+    "afterEnter": "No suggestion",
+    "listOpen": true
+   }
+  },
+  "del": {
+   "rebind": {
+    "before": "Workspace",
+    "highlighted": [
+     "Orbit baseline (current)"
+    ],
+    "afterEnter": "Orbit baseline (current)",
+    "listOpen": false,
+    "rebindEnabled": true
+   },
+   "choose": {
+    "before": "Workspace",
+    "highlighted": [
+     "Orbit baseline"
+    ],
+    "afterEnter": "Orbit baseline",
+    "listOpen": false
+   },
+   "expiresUntil": {
+    "before": "Until Oct 5",
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "Never",
+    "listOpen": false
+   },
+   "suggestedNone": {
+    "before": "No suggestion",
+    "highlighted": [
+     "No suggestionKeeps the agent's model, as today"
+    ],
+    "afterEnter": "No suggestion",
+    "listOpen": false
+   }
+  }
+ },
+ "webkit-dark-phone": {
+  "ref": {
+   "rebind": {
+    "before": "Workspace",
+    "highlighted": [],
+    "afterEnter": "Workspace",
+    "listOpen": true,
+    "rebindEnabled": false
+   },
+   "choose": {
+    "before": "Workspace",
+    "highlighted": [],
+    "afterEnter": "Workspace",
+    "listOpen": true
+   },
+   "expiresUntil": {
+    "before": "Until Oct 5",
+    "highlighted": [],
+    "afterEnter": "Until Oct 5",
+    "listOpen": true
+   },
+   "suggestedNone": {
+    "before": "No suggestion",
+    "highlighted": [],
+    "afterEnter": "No suggestion",
+    "listOpen": true
+   }
+  },
+  "del": {
+   "rebind": {
+    "before": "Workspace",
+    "highlighted": [
+     "Orbit baseline (current)"
+    ],
+    "afterEnter": "Orbit baseline (current)",
+    "listOpen": false,
+    "rebindEnabled": true
+   },
+   "choose": {
+    "before": "Workspace",
+    "highlighted": [
+     "Orbit baseline"
+    ],
+    "afterEnter": "Orbit baseline",
+    "listOpen": false
+   },
+   "expiresUntil": {
+    "before": "Until Oct 5",
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "Never",
+    "listOpen": false
+   },
+   "suggestedNone": {
+    "before": "No suggestion",
+    "highlighted": [
+     "No suggestionKeeps the agent's model, as today"
+    ],
+    "afterEnter": "No suggestion",
+    "listOpen": false
+   }
+  }
+ }
+}

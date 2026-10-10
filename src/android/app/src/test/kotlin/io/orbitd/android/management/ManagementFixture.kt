@@ -75,6 +75,8 @@ object ManagementFixture {
     @Volatile var onCode: () -> Unit = {}
     val loginBodies = CopyOnWriteArrayList<JsonObject>()
     val pauseBodies = CopyOnWriteArrayList<String>()
+    /** POST runners/:id/install's bodies, in order; each answers the relay as pending for its engine. */
+    val installBodies = CopyOnWriteArrayList<JsonObject>()
     /** Completing it drops the control stream; a reconnect then never opens. */
     @Volatile var drop = CompletableDeferred<Unit>()
     @Volatile private var opened = 0
@@ -84,7 +86,7 @@ object ManagementFixture {
         viewerRole = "ADMIN"; viewerCreates = true; membersCanAdd = false; membersCanAddAccounts = false; loginState = "ACTIVE"
         secondRunner = false; runnerOrder = listOf(RUNNER, RUNNER_TWO); removedRunners = emptySet(); selfUpdate = null
         runnerEngines = "[]"; runnerExtra = ""; loginRelay = """{"status":null}"""; loginStarted = """{"status":"pending"}"""
-        codeSent = """{"status":"done"}"""; onCode = {}; loginBodies.clear(); pauseBodies.clear()
+        codeSent = """{"status":"done"}"""; onCode = {}; loginBodies.clear(); pauseBodies.clear(); installBodies.clear()
         drop = CompletableDeferred(); opened = 0
         queries.clear(); modelRouting = null; recaps = null; accessTokens = emptyList(); accessTokensFail = false; providerCatalog = "[]"; providersMine = "[]"
         balances.clear(); balanceGates.clear(); task = "{}"
@@ -178,6 +180,7 @@ object ManagementFixture {
             }
             "runners/$RUNNER/login/code" -> { loginBodies += body(); loginRelay = codeSent; onCode(); ok(loginRelay) }
             "runners/$RUNNER/self-update" -> ok("""{"requestedAt":"$now"}""")
+            "runners/$RUNNER/install" -> { installBodies += body(); ok("""{"status":"pending","engine":${body()["engine"]},"mode":"install"}""") }
             "sessions" -> ok(if (api.query.contains("view" to "open")) "[${sessionRow()}]" else "[]")
             "sessions/$SESSION/share" -> when {
                 shareFails -> fail(503, "share read failed")

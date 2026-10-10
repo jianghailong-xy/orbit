@@ -1,0 +1,578 @@
+{
+ "tests": 3,
+ "steps": 18,
+ "semantic": [],
+ "antd": {
+  "ref": {
+   "steps": 18,
+   "rows": [
+    {
+     "test": "chromium-light-phone :: P4.4 Following › its tabs, pause, resume and stop, loading and a failed read",
+     "step": "active",
+     "url": "/following",
+     "antd": [
+      "ant-app",
+      "ant-btn",
+      "ant-btn-color-dangerous",
+      "ant-btn-color-default",
+      "ant-btn-color-primary",
+      "ant-btn-dangerous",
+      "ant-btn-default",
+      "ant-btn-primary",
+      "ant-btn-sm",
+      "ant-btn-variant-outlined",
+      "ant-btn-variant-solid"
+     ]
+    },
+    {
+     "test": "chromium-light-phone :: P4.4 Following › its tabs, pause, resume and stop, loading and a failed read",
+     "step": "stop question",
+     "url": "/following",
+     "antd": [
+      "ant-app",
+      "ant-btn",
+      "ant-btn-color-dangerous",
+      "ant-btn-color-default",
+      "ant-btn-color-primary",
+      "ant-btn-dangerous",
+      "ant-btn-default",
+      "ant-btn-primary",
+      "ant-btn-sm",
+      "ant-btn-variant-outlined",
+      "ant-btn-variant-solid",
+      "ant-popconfirm-buttons",
+      "ant-popconfirm-description",
+      "ant-popconfirm-inner-content",
+      "ant-popconfirm-message",
+      "ant-popconfirm-message-icon",
+      "ant-popconfirm-message-text",
+      "ant-popconfirm-title",
+      "ant-popover-arrow",
+      "ant-popover-container",
+      "ant-popover-content",
+      "ant-popover-open"
+     ]
+    },
+    {
+     "test": "chromium-light-phone :: P4.4 Following › its tabs, pause, resume and stop, loading and a failed read",
+     "step": "paused",
+     "url": "/following",
+     "antd": [
+      "ant-app",
+      "ant-btn",
+      "ant-btn-color-dangerous",
+      "ant-btn-color-default",
+      "ant-btn-color-primary",
+      "ant-btn-dangerous",
+      "ant-btn-default",
+      "ant-btn-primary",
+      "ant-btn-sm",
+      "ant-btn-variant-outlined",
+      "ant-btn-variant-solid"
+     ]
+    },
+    {
+     "test": "chromium-light-phone :: P4.4 Following › its tabs, pause, resume and stop, loading and a failed read",
+     "step": "Needs attention",
+     "url": "/following?tab=attention",
+     "antd": [
+      "ant-app",
+      "ant-btn",
+      "ant-btn-color-dangerous",
+      "ant-btn-color-default",
+      "ant-btn-color-primary",
+      "ant-btn-dangerous",
+      "ant-btn-default",
+      "ant-btn-primary",
+      "ant-btn-sm",
+      "ant-btn-variant-outlined",
+      "ant-btn-variant-solid"
+     ]
+    },
+    {
+     "test": "chromium-light-phone :: P4.4 Following › its tabs, pause, resume and stop, loading and a failed read",
+     "step": "Triggered history",
+     "url": "/following?tab=history",
+     "antd": [
+      "ant-app"
+     ]
+    },
+    {
+     "test": "chromium-light-phone :: P4.4 Following › its tabs, pause, resume and stop, loading and a failed read",
+     "step": "failed read",
+     "url": "/following?tab=history",
+     "antd": [
+      "ant-app",
+      "ant-btn",
+      "ant-btn-color-default",
+      "ant-btn-default",
+      "ant-btn-sm",
+      "ant-btn-variant-outlined"
+     ]
+    },
+    {
+     "test": "chromium-light-phone :: P4.4 Following › its tabs, pause, resume and stop, loading and a failed read",
+     "step": "retried",
+     "url": "/following?tab=history",
+     "antd": [
+      "ant-app"
+     ]
+    },
+    {
+     "test": "chromium-light-phone :: P4.4 a written document › its marks, footnote cards and the phone sheet",
+     "step": "document",
+     "url": "/wiki/orbit/d/session-runtime",
+     "antd": [
+      "ant-app",
+      "ant-btn",
+      "ant-btn-color-default",
+      "ant-btn-default",
+      "ant-btn-icon",
+      "ant-btn-icon-only",
+      "ant-btn-variant-outlined"
+     ]
+    },
+    {
+     "test": "chromium-light-phone :: P4.4 a written document › its marks, footnote cards and the phone sheet",
+     "step": "mark explained",
+     "url": "/wiki/orbit/d/session-runtime",
+     "antd": [
+      "ant-app",
+      "ant-btn",
+      "ant-btn-color-default",
+      "ant-btn-default",
+      "ant-btn-icon",
+      "ant-btn-icon-only",
+      "ant-btn-variant-outlined",
+      "ant-tooltip",
+      "ant-tooltip-arrow",
+      "ant-tooltip-container",
+      "ant-tooltip-css-var",
+      "ant-tooltip-open",
+      "ant-tooltip-placement-bottomLeft"
+     ]
+    },
+    {
+     "test": "chromium-light-phone :: P4.4 a written document › its marks, footnote cards and the phone sheet",
+     "step": "footnote from the mark",
+     "url": "/wiki/orbit/d/session-runtime",
+     "antd": [
+      "ant-app",
+      "ant-btn",
+      "ant-btn-block",
+      "ant-btn-color-default",
+      "ant-btn-color-primary",
+      "ant-btn-default",
+      "ant-btn-icon",
+      "ant-btn-icon-only",
+      "ant-btn-lg",
+      "ant-btn-primary",
+      "ant-btn-variant-outlined",
+      "ant-btn-variant-solid",
+      "ant-drawer",
+      "ant-drawer-body",
+      "ant-drawer-bottom",
+      "ant-drawer-content-wrapper",
+      "ant-drawer-mask",
+      "ant-drawer-open",
+      "ant-drawer-panel-motion-bottom",
+      "ant-drawer-panel-motion-bottom-appear",
+      "ant-drawer-panel-motion-bottom-appear-active",
+      "ant-drawer-section",
+      "ant-tooltip",
+      "ant-tooltip-arrow",
+      "ant-tooltip-container",
+      "ant-tooltip-css-var",
+      "ant-tooltip-open",
+      "ant-tooltip-placement-bottomLeft"
+     ]
+    },
+    {
+     "test": "chromium-light-phone :: P4.4 a written document › its marks, footnote cards and the phone sheet",
+     "step": "footnote 44",
+     "url": "/wiki/orbit/d/session-runtime",
+     "antd": [
+      "ant-app",
+      "ant-btn",
+      "ant-btn-block",
+      "ant-btn-color-default",
+      "ant-btn-color-primary",
+      "ant-btn-default",
+      "ant-btn-icon",
+      "ant-btn-icon-only",
+      "ant-btn-lg",
+      "ant-btn-primary",
+      "ant-btn-variant-outlined",
+      "ant-btn-variant-solid",
+      "ant-drawer",
+      "ant-drawer-body",
+      "ant-drawer-bottom",
+      "ant-drawer-content-wrapper",
+      "ant-drawer-mask",
+      "ant-drawer-open",
+      "ant-drawer-panel-motion-bottom",
+      "ant-drawer-panel-motion-bottom-enter",
+      "ant-drawer-panel-motion-bottom-enter-active",
+      "ant-drawer-section"
+     ]
+    },
+    {
+     "test": "chromium-light-phone :: P4.4 a written document › its marks, footnote cards and the phone sheet",
+     "step": "opened the turn",
+     "url": "/sessions/se4?at=t44",
+     "antd": [
+      "ant-app",
+      "ant-spin",
+      "ant-spin-dot",
+      "ant-spin-dot-holder",
+      "ant-spin-dot-item",
+      "ant-spin-dot-spin",
+      "ant-spin-section",
+      "ant-spin-spinning"
+     ]
+    },
+    {
+     "test": "chromium-light-phone :: P4.4 a written document › its marks, footnote cards and the phone sheet",
+     "step": "footnote 9",
+     "url": "/wiki/orbit/d/session-runtime",
+     "antd": [
+      "ant-app",
+      "ant-btn",
+      "ant-btn-block",
+      "ant-btn-color-default",
+      "ant-btn-color-primary",
+      "ant-btn-default",
+      "ant-btn-icon",
+      "ant-btn-icon-only",
+      "ant-btn-lg",
+      "ant-btn-primary",
+      "ant-btn-variant-outlined",
+      "ant-btn-variant-solid",
+      "ant-drawer",
+      "ant-drawer-body",
+      "ant-drawer-bottom",
+      "ant-drawer-content-wrapper",
+      "ant-drawer-mask",
+      "ant-drawer-open",
+      "ant-drawer-panel-motion-bottom",
+      "ant-drawer-panel-motion-bottom-appear",
+      "ant-drawer-panel-motion-bottom-appear-active",
+      "ant-drawer-section"
+     ]
+    },
+    {
+     "test": "chromium-light-phone :: P4.4 a written document › its marks, footnote cards and the phone sheet",
+     "step": "next marked",
+     "url": "/wiki/orbit/d/session-runtime",
+     "antd": [
+      "ant-app",
+      "ant-btn",
+      "ant-btn-color-default",
+      "ant-btn-default",
+      "ant-btn-icon",
+      "ant-btn-icon-only",
+      "ant-btn-variant-outlined",
+      "ant-drawer",
+      "ant-drawer-bottom"
+     ]
+    },
+    {
+     "test": "chromium-light-phone :: P4.4 public pages › a shared project and a shared wiki",
+     "step": "shared project",
+     "url": "/s/uiMigrationP43aProject20260928",
+     "antd": [
+      "ant-app",
+      "ant-list",
+      "ant-list-container",
+      "ant-list-item",
+      "ant-list-item-meta",
+      "ant-list-item-meta-content",
+      "ant-list-item-meta-title",
+      "ant-list-items",
+      "ant-list-split",
+      "ant-spin",
+      "ant-spin-container",
+      "ant-tag",
+      "ant-tag-blue",
+      "ant-tag-default",
+      "ant-tag-filled",
+      "ant-tag-gold",
+      "ant-tag-green",
+      "ant-tag-processing",
+      "ant-typography"
+     ]
+    },
+    {
+     "test": "chromium-light-phone :: P4.4 public pages › a shared project and a shared wiki",
+     "step": "shared wiki",
+     "url": "/s/uiMigrationP44Wiki20260928",
+     "antd": [
+      "ant-app"
+     ]
+    },
+    {
+     "test": "chromium-light-phone :: P4.4 public pages › a shared project and a shared wiki",
+     "step": "shared footnote",
+     "url": "/s/uiMigrationP44Wiki20260928/d/session-runtime",
+     "antd": [
+      "ant-app",
+      "ant-drawer",
+      "ant-drawer-body",
+      "ant-drawer-bottom",
+      "ant-drawer-content-wrapper",
+      "ant-drawer-mask",
+      "ant-drawer-open",
+      "ant-drawer-panel-motion-bottom",
+      "ant-drawer-panel-motion-bottom-appear",
+      "ant-drawer-panel-motion-bottom-appear-active",
+      "ant-drawer-section"
+     ]
+    },
+    {
+     "test": "chromium-light-phone :: P4.4 public pages › a shared project and a shared wiki",
+     "step": "closed",
+     "url": "/s/uiMigrationP44Wiki20260928/d/session-runtime",
+     "antd": [
+      "ant-app",
+      "ant-drawer",
+      "ant-drawer-bottom"
+     ]
+    }
+   ]
+  },
+  "del": {
+   "steps": 18,
+   "rows": [
+    {
+     "test": "chromium-light-phone :: P4.4 Following › its tabs, pause, resume and stop, loading and a failed read",
+     "step": "active",
+     "url": "/following",
+     "antd": [
+      "ant-app"
+     ]
+    },
+    {
+     "test": "chromium-light-phone :: P4.4 Following › its tabs, pause, resume and stop, loading and a failed read",
+     "step": "stop question",
+     "url": "/following",
+     "antd": [
+      "ant-app"
+     ]
+    },
+    {
+     "test": "chromium-light-phone :: P4.4 Following › its tabs, pause, resume and stop, loading and a failed read",
+     "step": "paused",
+     "url": "/following",
+     "antd": [
+      "ant-app"
+     ]
+    },
+    {
+     "test": "chromium-light-phone :: P4.4 Following › its tabs, pause, resume and stop, loading and a failed read",
+     "step": "Needs attention",
+     "url": "/following?tab=attention",
+     "antd": [
+      "ant-app"
+     ]
+    },
+    {
+     "test": "chromium-light-phone :: P4.4 Following › its tabs, pause, resume and stop, loading and a failed read",
+     "step": "Triggered history",
+     "url": "/following?tab=history",
+     "antd": [
+      "ant-app"
+     ]
+    },
+    {
+     "test": "chromium-light-phone :: P4.4 Following › its tabs, pause, resume and stop, loading and a failed read",
+     "step": "failed read",
+     "url": "/following?tab=history",
+     "antd": [
+      "ant-app"
+     ]
+    },
+    {
+     "test": "chromium-light-phone :: P4.4 Following › its tabs, pause, resume and stop, loading and a failed read",
+     "step": "retried",
+     "url": "/following?tab=history",
+     "antd": [
+      "ant-app"
+     ]
+    },
+    {
+     "test": "chromium-light-phone :: P4.4 a written document › its marks, footnote cards and the phone sheet",
+     "step": "document",
+     "url": "/wiki/orbit/d/session-runtime",
+     "antd": [
+      "ant-app"
+     ]
+    },
+    {
+     "test": "chromium-light-phone :: P4.4 a written document › its marks, footnote cards and the phone sheet",
+     "step": "mark explained",
+     "url": "/wiki/orbit/d/session-runtime",
+     "antd": [
+      "ant-app"
+     ]
+    },
+    {
+     "test": "chromium-light-phone :: P4.4 a written document › its marks, footnote cards and the phone sheet",
+     "step": "footnote from the mark",
+     "url": "/wiki/orbit/d/session-runtime",
+     "antd": [
+      "ant-app"
+     ]
+    },
+    {
+     "test": "chromium-light-phone :: P4.4 a written document › its marks, footnote cards and the phone sheet",
+     "step": "footnote 44",
+     "url": "/wiki/orbit/d/session-runtime",
+     "antd": [
+      "ant-app"
+     ]
+    },
+    {
+     "test": "chromium-light-phone :: P4.4 a written document › its marks, footnote cards and the phone sheet",
+     "step": "opened the turn",
+     "url": "/sessions/se4?at=t44",
+     "antd": [
+      "ant-app",
+      "ant-spin",
+      "ant-spin-dot",
+      "ant-spin-dot-holder",
+      "ant-spin-dot-item",
+      "ant-spin-dot-spin",
+      "ant-spin-section",
+      "ant-spin-spinning"
+     ]
+    },
+    {
+     "test": "chromium-light-phone :: P4.4 a written document › its marks, footnote cards and the phone sheet",
+     "step": "footnote 9",
+     "url": "/wiki/orbit/d/session-runtime",
+     "antd": [
+      "ant-app"
+     ]
+    },
+    {
+     "test": "chromium-light-phone :: P4.4 a written document › its marks, footnote cards and the phone sheet",
+     "step": "next marked",
+     "url": "/wiki/orbit/d/session-runtime",
+     "antd": [
+      "ant-app"
+     ]
+    },
+    {
+     "test": "chromium-light-phone :: P4.4 public pages › a shared project and a shared wiki",
+     "step": "shared project",
+     "url": "/s/uiMigrationP43aProject20260928",
+     "antd": [
+      "ant-app"
+     ]
+    },
+    {
+     "test": "chromium-light-phone :: P4.4 public pages › a shared project and a shared wiki",
+     "step": "shared wiki",
+     "url": "/s/uiMigrationP44Wiki20260928",
+     "antd": [
+      "ant-app"
+     ]
+    },
+    {
+     "test": "chromium-light-phone :: P4.4 public pages › a shared project and a shared wiki",
+     "step": "shared footnote",
+     "url": "/s/uiMigrationP44Wiki20260928/d/session-runtime",
+     "antd": [
+      "ant-app"
+     ]
+    },
+    {
+     "test": "chromium-light-phone :: P4.4 public pages › a shared project and a shared wiki",
+     "step": "closed",
+     "url": "/s/uiMigrationP44Wiki20260928/d/session-runtime",
+     "antd": [
+      "ant-app"
+     ]
+    }
+   ]
+  }
+ },
+ "presentation": {
+  "focus": 5,
+  "dialogs": 1
+ },
+ "examples": {
+  "focus": [
+   {
+    "test": "chromium-light-phone :: P4.4 Following › its tabs, pause, resume and stop, loading and a failed read",
+    "step": "stop question",
+    "ref": {
+     "role": "button",
+     "name": "Stop"
+    },
+    "del": {
+     "role": "dialog",
+     "name": "Stop this watch?"
+    }
+   },
+   {
+    "test": "chromium-light-phone :: P4.4 a written document › its marks, footnote cards and the phone sheet",
+    "step": "footnote from the mark",
+    "ref": {
+     "role": "div",
+     "name": "[10]Code✗ no quote givenThe sentence cites this code without quoting it, so it c"
+    },
+    "del": {
+     "role": "dialog",
+     "name": "[10]Code✗ no quote givenThe sentence cites this code without quoting it, so it c"
+    }
+   },
+   {
+    "test": "chromium-light-phone :: P4.4 a written document › its marks, footnote cards and the phone sheet",
+    "step": "footnote 44",
+    "ref": {
+     "role": "div",
+     "name": "[44]Session· User messagequote verified ✓“runner — drain 就会把作业杀掉，唤醒不一定送到，你这次就是这么"
+    },
+    "del": {
+     "role": "dialog",
+     "name": "[44]Session· User messagequote verified ✓“runner — drain 就会把作业杀掉，唤醒不一定送到，你这次就是这么"
+    }
+   },
+   {
+    "test": "chromium-light-phone :: P4.4 a written document › its marks, footnote cards and the phone sheet",
+    "step": "footnote 9",
+    "ref": {
+     "role": "div",
+     "name": "[9]Codequote verified ✓330 /** Park until a turn is enqueued for this run, or th"
+    },
+    "del": {
+     "role": "dialog",
+     "name": "[9]Codequote verified ✓330 /** Park until a turn is enqueued for this run, or th"
+    }
+   },
+   {
+    "test": "chromium-light-phone :: P4.4 public pages › a shared project and a shared wiki",
+    "step": "shared footnote",
+    "ref": {
+     "role": "div",
+     "name": "[1]Codequote verified ✓10function claim() {11 claimTurn(next);12}src/runner/loop"
+    },
+    "del": {
+     "role": "dialog",
+     "name": "[1]Codequote verified ✓10function claim() {11 claimTurn(next);12}src/runner/loop"
+    }
+   }
+  ],
+  "dialogs": [
+   {
+    "test": "chromium-light-phone :: P4.4 Following › its tabs, pause, resume and stop, loading and a failed read",
+    "step": "stop question",
+    "ref": [],
+    "del": [
+     "Stop this watch?You won't be notified when the condition holds.Keep watchingStop watching"
+    ]
+   }
+  ]
+ }
+}
