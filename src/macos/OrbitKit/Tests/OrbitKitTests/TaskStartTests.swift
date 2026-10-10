@@ -31,7 +31,8 @@ final class TaskStartTests: XCTestCase {
         String(decoding: try! JSONEncoder().encode(text), as: UTF8.self)
     }
 
-    /// The brief as the agent reads it (tasks.service.ts `buildTaskExecutionPrompt`), abridged.
+    /// The brief as the agent read it (tasks.service.ts `buildTaskExecutionPrompt`), abridged — in the
+    /// Chinese it was written in until 2026-10, which every older transcript holds.
     static let brief = """
         请开始执行任务「runner + web：配额按账户归属」。
 
@@ -40,6 +41,17 @@ final class TaskStartTests: XCTestCase {
 
         请按以下步骤进行：
         1. 先用 task_get 查看该任务的完整信息与历史评论。
+        """
+
+    /// The same brief in the English it is written in now (task-execution-prompt.ts), abridged.
+    static let englishBrief = """
+        Start the task “runner + web：配额按账户归属”.
+
+        Task description:
+        让每个账户的 plan usage 只进它自己那一行。
+
+        Follow these steps:
+        1. First use task_get to read the task in full with its comment history.
         """
 
     /// The same card as the web suite's `CARD`, field for field.
@@ -129,6 +141,26 @@ final class TaskStartTests: XCTestCase {
                                        taskStart: b.taskStart)
         XCTAssertEqual(summary.label, "↑ Task started")
         XCTAssertEqual(summary.text, "runner + web：配额按账户归属")
+    }
+
+    /// The card is the payload's, never read out of the brief, so the brief's language changes nothing:
+    /// an English brief is the same card as a Chinese one, and without a card the bubble it always was.
+    func testAnEnglishBriefIsReadExactlyAsTheChineseOneIs() throws {
+        var carded = TranscriptReducer()
+        carded.apply(try started(card, text: Self.englishBrief))
+        let withCard = try bubble(carded)
+        XCTAssertEqual(withCard.taskStart, try XCTUnwrap(TaskStart.parse(try started(card).payload)))
+        XCTAssertEqual(withCard.text, Self.englishBrief, "the brief the agent read is folded, not dropped")
+        XCTAssertEqual(StickySummary.of(text: withCard.text, note: withCard.note, itemCard: withCard.itemCard,
+                                        taskStart: withCard.taskStart).label, "↑ Task started")
+
+        var bare = TranscriptReducer()
+        bare.apply(try started(nil, text: Self.englishBrief))
+        let without = try bubble(bare)
+        XCTAssertNil(without.taskStart)
+        XCTAssertEqual(without.text, Self.englishBrief)
+        XCTAssertEqual(StickySummary.of(text: without.text, note: without.note, itemCard: without.itemCard,
+                                        taskStart: without.taskStart).label, StickySummary.yourQuestion)
     }
 
     /// A cached transcript written before the card existed rehydrates with the bubble it had, and one
