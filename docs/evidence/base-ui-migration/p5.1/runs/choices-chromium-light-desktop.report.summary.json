@@ -1,0 +1,4486 @@
+{
+ "config": {
+  "argv": [
+   "/usr/local/bin/node",
+   "/mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/del/node_modules/.bin/playwright",
+   "test",
+   "--config",
+   "ui-migration/choices.config.mjs",
+   "--project",
+   "chromium-light-desktop"
+  ],
+  "configFile": "/mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/del/src/web/ui-migration/choices.config.mjs",
+  "rootDir": "/mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/del/src/web/ui-migration",
+  "failOnFlakyTests": false,
+  "forbidOnly": false,
+  "fullyParallel": false,
+  "globalSetup": "/mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/del/src/web/ui-migration/environment.mjs",
+  "globalTeardown": null,
+  "globalTimeout": 0,
+  "grep": {},
+  "grepInvert": null,
+  "maxFailures": 0,
+  "metadata": {
+   "actualWorkers": 1
+  },
+  "preserveOutput": "always",
+  "projects": [
+   {
+    "outputDir": "/mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/del/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-desktop",
+    "name": "chromium-light-desktop",
+    "testDir": "/mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/del/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-phone",
+    "name": "chromium-light-phone",
+    "testDir": "/mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/del/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-desktop",
+    "name": "chromium-dark-desktop",
+    "testDir": "/mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/del/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-phone",
+    "name": "chromium-dark-phone",
+    "testDir": "/mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/del/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-desktop",
+    "name": "webkit-light-desktop",
+    "testDir": "/mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/del/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-phone",
+    "name": "webkit-light-phone",
+    "testDir": "/mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/del/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-desktop",
+    "name": "webkit-dark-desktop",
+    "testDir": "/mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/del/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-phone",
+    "name": "webkit-dark-phone",
+    "testDir": "/mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   }
+  ],
+  "quiet": false,
+  "reporter": [
+   [
+    "list",
+    null
+   ],
+   [
+    "json",
+    {
+     "outputFile": "/mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/del/src/web/.choices-results/report.json"
+    }
+   ]
+  ],
+  "reportSlowTests": {
+   "max": 5,
+   "threshold": 300000
+  },
+  "shard": null,
+  "tags": [],
+  "updateSnapshots": "none",
+  "updateSourceMethod": "patch",
+  "version": "1.63.0",
+  "workers": 1,
+  "webServer": {
+   "command": "npm run dev -- --host 127.0.0.1 --port 4177 --strictPort",
+   "cwd": "/mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/del/src/web/",
+   "url": "http://127.0.0.1:4177",
+   "reuseExistingServer": false,
+   "timeout": 30000
+  }
+ },
+ "suites": [
+  {
+   "title": "choices-first-frame.browser.mjs",
+   "file": "choices-first-frame.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "menu is drawn where it settles from its first frame, at the replaced popup's place",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 15059,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:08:36.372Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "first-frames",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "0109f8812f52f1c26549-34852067ceed9e412e30",
+     "file": "choices-first-frame.browser.mjs",
+     "line": 177,
+     "column": 3
+    },
+    {
+     "title": "menu keeps its place through the normal entrance motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3639,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:08:51.488Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion-frames",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "0109f8812f52f1c26549-da2f2ee50437876df0ae",
+     "file": "choices-first-frame.browser.mjs",
+     "line": 210,
+     "column": 3
+    },
+    {
+     "title": "submenu is drawn where it settles from its first frame, at the replaced popup's place",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 16117,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:08:55.133Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "first-frames",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "0109f8812f52f1c26549-7e4378795c312ad3f252",
+     "file": "choices-first-frame.browser.mjs",
+     "line": 177,
+     "column": 3
+    },
+    {
+     "title": "submenu keeps its place through the normal entrance motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3714,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:09:11.257Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion-frames",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "0109f8812f52f1c26549-04c43497b2d11ac6b78d",
+     "file": "choices-first-frame.browser.mjs",
+     "line": 210,
+     "column": 3
+    },
+    {
+     "title": "select is drawn where it settles from its first frame, at the replaced popup's place",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 10860,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:09:14.975Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "first-frames",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "0109f8812f52f1c26549-53f5965f906651bbcc2d",
+     "file": "choices-first-frame.browser.mjs",
+     "line": 177,
+     "column": 3
+    },
+    {
+     "title": "select keeps its place through the normal entrance motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2123,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:09:25.840Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion-frames",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "0109f8812f52f1c26549-0ee96873ac7f446f19d6",
+     "file": "choices-first-frame.browser.mjs",
+     "line": 210,
+     "column": 3
+    },
+    {
+     "title": "combobox is drawn where it settles from its first frame, at the replaced popup's place",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 10888,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:09:27.967Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "first-frames",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "0109f8812f52f1c26549-7d99fd2bdd6906bdb43e",
+     "file": "choices-first-frame.browser.mjs",
+     "line": 177,
+     "column": 3
+    },
+    {
+     "title": "combobox keeps its place through the normal entrance motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2033,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:09:38.859Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion-frames",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "0109f8812f52f1c26549-22f7750e45abef438d7c",
+     "file": "choices-first-frame.browser.mjs",
+     "line": 210,
+     "column": 3
+    },
+    {
+     "title": "multiselect is drawn where it settles from its first frame, at the replaced popup's place",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 11138,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:09:40.896Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "first-frames",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "0109f8812f52f1c26549-a29095a872623e5a3832",
+     "file": "choices-first-frame.browser.mjs",
+     "line": 177,
+     "column": 3
+    },
+    {
+     "title": "multiselect keeps its place through the normal entrance motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2016,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:09:52.038Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion-frames",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "0109f8812f52f1c26549-fdc4665a2deba292ec97",
+     "file": "choices-first-frame.browser.mjs",
+     "line": 210,
+     "column": 3
+    },
+    {
+     "title": "popover is drawn where it settles from its first frame, at the replaced popup's place",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 10659,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:09:54.060Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "first-frames",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "0109f8812f52f1c26549-33ca111ed56767cc8012",
+     "file": "choices-first-frame.browser.mjs",
+     "line": 177,
+     "column": 3
+    },
+    {
+     "title": "popover keeps its place through the normal entrance motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2014,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:10:04.723Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion-frames",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "0109f8812f52f1c26549-a4151712c678f30ecf45",
+     "file": "choices-first-frame.browser.mjs",
+     "line": 210,
+     "column": 3
+    },
+    {
+     "title": "tooltip is drawn where it settles from its first frame, at the replaced popup's place",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 11773,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:10:06.742Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "first-frames",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "0109f8812f52f1c26549-be5621005f6a97a4f94a",
+     "file": "choices-first-frame.browser.mjs",
+     "line": 177,
+     "column": 3
+    },
+    {
+     "title": "tooltip keeps its place through the normal entrance motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2382,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:10:18.520Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion-frames",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "0109f8812f52f1c26549-d29adcf4f57712dc7db8",
+     "file": "choices-first-frame.browser.mjs",
+     "line": 210,
+     "column": 3
+    },
+    {
+     "title": "popconfirm is drawn where it settles from its first frame, at the replaced popup's place",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 10798,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:10:20.906Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "first-frames",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "0109f8812f52f1c26549-dea132fc2c5f7b5e5d94",
+     "file": "choices-first-frame.browser.mjs",
+     "line": 177,
+     "column": 3
+    },
+    {
+     "title": "popconfirm keeps its place through the normal entrance motion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2749,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:10:31.710Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion-frames",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "0109f8812f52f1c26549-8628af67a17b5ee7a0e2",
+     "file": "choices-first-frame.browser.mjs",
+     "line": 210,
+     "column": 3
+    }
+   ]
+  },
+  {
+   "title": "choices-first-option.browser.mjs",
+   "file": "choices-first-option.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "opened by pointer with no value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2319,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:11:16.640Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-42b611239fff7b9f52aa",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by ArrowDown with no value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2009,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:11:19.028Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-fe8b78cc2c26167c013b",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by Enter with no value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2125,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:11:21.042Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-eab05f7c5a0d02f8d9a2",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by Space with no value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2057,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:11:23.172Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-07a92f6d03aeecf86b0c",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by pointer with a value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2147,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:11:25.236Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-4df8168802b543f54a6c",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by ArrowDown with a value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1943,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:11:27.391Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-a34ba8765c49d92629d4",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by Enter with a value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2038,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:11:29.339Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-f00f396a7317e57d3db4",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by Space with a value, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2272,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:11:31.381Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-a73ca6cf3b349eaf69e2",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by pointer with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2388,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:11:33.661Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-fbf117a3b659ec633b9f",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by ArrowDown with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2341,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:11:36.054Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-4e4e89dfae9e07b90988",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by Enter with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2371,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:11:38.400Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-e9978d5d567f3f0e307f",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    },
+    {
+     "title": "opened by Space with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2328,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:11:40.775Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "first-option",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "736ca6154650dec96323-acb5c1d444a23b599e7a",
+     "file": "choices-first-option.browser.mjs",
+     "line": 38,
+     "column": 59
+    }
+   ]
+  },
+  {
+   "title": "choices-lifecycle.browser.mjs",
+   "file": "choices-lifecycle.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "no-preference Dialog Popover Select exits restore one layer at a time",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2895,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:11:43.155Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "nested-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "scroll-unlock",
+           "contentType": "application/json"
+          },
+          {
+           "name": "page-scroll",
+           "contentType": "application/json"
+          },
+          {
+           "name": "nested-lifecycle",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "fc9bd5f4bdcc690b6239-6dec7576b95c36bcfa3a",
+     "file": "choices-lifecycle.browser.mjs",
+     "line": 51,
+     "column": 51
+    },
+    {
+     "title": "reduce Dialog Popover Select exits restore one layer at a time",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1579,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:11:46.056Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "nested-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "scroll-unlock",
+           "contentType": "application/json"
+          },
+          {
+           "name": "page-scroll",
+           "contentType": "application/json"
+          },
+          {
+           "name": "nested-lifecycle",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "fc9bd5f4bdcc690b6239-1fed099b1aac59706b98",
+     "file": "choices-lifecycle.browser.mjs",
+     "line": 51,
+     "column": 51
+    },
+    {
+     "title": "reduced motion attachment has no transition and dismisses cleanly",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 802,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:11:47.639Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "reduced-motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "fc9bd5f4bdcc690b6239-726d46b47edc6864213b",
+     "file": "choices-lifecycle.browser.mjs",
+     "line": 115,
+     "column": 90
+    },
+    {
+     "title": "reduced motion expiry has no transition and dismisses cleanly",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 848,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:11:48.447Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "reduced-motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "fc9bd5f4bdcc690b6239-66927ff83486dc251d2c",
+     "file": "choices-lifecycle.browser.mjs",
+     "line": 115,
+     "column": 90
+    },
+    {
+     "title": "reduced motion search has no transition and dismisses cleanly",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1024,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:11:49.299Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "reduced-motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "fc9bd5f4bdcc690b6239-8338bf39d6af0db04dbb",
+     "file": "choices-lifecycle.browser.mjs",
+     "line": 115,
+     "column": 90
+    },
+    {
+     "title": "reduced motion multiple has no transition and dismisses cleanly",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 999,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:11:50.329Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "reduced-motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "fc9bd5f4bdcc690b6239-fee202624343df50666b",
+     "file": "choices-lifecycle.browser.mjs",
+     "line": 115,
+     "column": 90
+    },
+    {
+     "title": "reduced motion popover has no transition and dismisses cleanly",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 956,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:11:51.332Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "reduced-motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "fc9bd5f4bdcc690b6239-d3f9ef566ec7429fa3c3",
+     "file": "choices-lifecycle.browser.mjs",
+     "line": 115,
+     "column": 90
+    },
+    {
+     "title": "reduced motion tooltip has no transition and dismisses cleanly",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 956,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:11:52.293Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "reduced-motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "fc9bd5f4bdcc690b6239-4574f2779a8da28a53ab",
+     "file": "choices-lifecycle.browser.mjs",
+     "line": 115,
+     "column": 90
+    },
+    {
+     "title": "normal attachment can reopen during exit without stale unmount",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1726,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:11:53.254Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "reopen",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "fc9bd5f4bdcc690b6239-adb5ab89c73175f654d7",
+     "file": "choices-lifecycle.browser.mjs",
+     "line": 132,
+     "column": 67
+    },
+    {
+     "title": "normal expiry can reopen during exit without stale unmount",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1789,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:11:54.985Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "reopen",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "fc9bd5f4bdcc690b6239-9cc7e9d7c599ded2f0ff",
+     "file": "choices-lifecycle.browser.mjs",
+     "line": 132,
+     "column": 67
+    },
+    {
+     "title": "normal search can reopen during exit without stale unmount",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1704,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:11:56.780Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "reopen",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "fc9bd5f4bdcc690b6239-e7bb99853578b3f1967f",
+     "file": "choices-lifecycle.browser.mjs",
+     "line": 132,
+     "column": 67
+    },
+    {
+     "title": "normal popover can reopen during exit without stale unmount",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1654,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:11:58.488Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "reopen",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "fc9bd5f4bdcc690b6239-d2d3374f1400a5225218",
+     "file": "choices-lifecycle.browser.mjs",
+     "line": 132,
+     "column": 67
+    }
+   ]
+  },
+  {
+   "title": "choices-motion.browser.mjs",
+   "file": "choices-motion.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "normal bottom entrance and exit motion matches attachment",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2764,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:12:00.194Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-4157fbfa45f8019ebd1e",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal top entrance and exit motion matches attachment",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2793,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:12:02.963Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-354352890c6216f4b7b8",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal flipped entrance and exit motion matches attachment",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2779,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:12:05.760Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-2870065aeb10ca599116",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal bottom entrance and exit motion matches expiry",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2618,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:12:08.544Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-4347ad39b4c2b08c290e",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal top entrance and exit motion matches expiry",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2752,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:12:11.166Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-8dbd19063a75748baa6f",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal flipped entrance and exit motion matches expiry",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2784,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:12:13.923Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-0d0aa1f44cd267cf7a0d",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal bottom entrance and exit motion matches search",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2588,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:12:16.711Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-390da89f6468a0fa70e1",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal top entrance and exit motion matches search",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2752,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:12:19.303Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-b77ed532ca9f04b52a75",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal flipped entrance and exit motion matches search",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3023,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:12:22.059Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-db268d1fce91c4cd1929",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal bottom entrance and exit motion matches multiple",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3089,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:12:25.092Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-8eb20c1d8e1121067146",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal top entrance and exit motion matches multiple",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2663,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:12:28.187Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-4bdbc71da03827dd01fd",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal flipped entrance and exit motion matches multiple",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2764,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:12:30.855Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-6e498671b351f0feb45a",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal bottom entrance and exit motion matches popover",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2642,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:12:33.623Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-3fe7024b27919f0b56af",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal top entrance and exit motion matches popover",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2726,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:12:36.271Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-aa79e71e2f78a10145ba",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal flipped entrance and exit motion matches popover",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2725,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:12:39.004Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-e8f72f22132c684acfbf",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal bottom entrance and exit motion matches tooltip",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2774,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:12:41.734Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-enter-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-exit-midpoint",
+           "contentType": "image/png"
+          },
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-7ac6b39685dbc06f5e19",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal top entrance and exit motion matches tooltip",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2779,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:12:44.512Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-d5d30341b6a3fea6745f",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "normal flipped entrance and exit motion matches tooltip",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2628,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:12:47.295Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-9099ddbd187750b2ca14",
+     "file": "choices-motion.browser.mjs",
+     "line": 104,
+     "column": 3
+    },
+    {
+     "title": "popover center zoom origin matches",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2691,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:12:49.928Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-a6a9eb0709a14e3bd565",
+     "file": "choices-motion.browser.mjs",
+     "line": 141,
+     "column": 83
+    },
+    {
+     "title": "popover end zoom origin matches",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2816,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:12:52.624Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-f3ae4d3e7ab94d9125c8",
+     "file": "choices-motion.browser.mjs",
+     "line": 141,
+     "column": 83
+    },
+    {
+     "title": "tooltip center zoom origin matches",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2740,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:12:55.444Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-971412ade05626351d55",
+     "file": "choices-motion.browser.mjs",
+     "line": 141,
+     "column": 83
+    },
+    {
+     "title": "tooltip end zoom origin matches",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2646,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:12:58.188Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-b875021e7548653849d7",
+     "file": "choices-motion.browser.mjs",
+     "line": 141,
+     "column": 83
+    },
+    {
+     "title": "submenu left edge zoom matches and stays in view",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3633,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:13:00.839Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-424f3b6d1b3ff404436d",
+     "file": "choices-motion.browser.mjs",
+     "line": 160,
+     "column": 41
+    },
+    {
+     "title": "submenu right edge zoom matches and stays in view",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3840,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:13:04.476Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "motion",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "74bee9524c7c0ec45eac-4fb8aac6dfc8b60aeaf0",
+     "file": "choices-motion.browser.mjs",
+     "line": 160,
+     "column": 41
+    }
+   ]
+  },
+  {
+   "title": "choices-open-value.browser.mjs",
+   "file": "choices-open-value.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "expiry dims the current value while open and restores it on Escape",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2836,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:13:08.361Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-expiry-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "open-value",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "eeddbfef8f2db5cd42c9-a0cffd93333a46ab6fd4",
+     "file": "choices-open-value.browser.mjs",
+     "line": 31,
+     "column": 53
+    },
+    {
+     "title": "account dims the current value while open and restores it on Escape",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2698,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:13:11.201Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-account-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-account-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "open-value",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "eeddbfef8f2db5cd42c9-574c9785ee3995397957",
+     "file": "choices-open-value.browser.mjs",
+     "line": 31,
+     "column": 53
+    },
+    {
+     "title": "search dims the current value while open and restores it on Escape",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2798,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:13:13.903Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-search-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-open-value",
+           "contentType": "image/png"
+          },
+          {
+           "name": "open-value",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "eeddbfef8f2db5cd42c9-62d578103cff27b500a1",
+     "file": "choices-open-value.browser.mjs",
+     "line": 31,
+     "column": 53
+    }
+   ]
+  },
+  {
+   "title": "choices-submenu-geometry.browser.mjs",
+   "file": "choices-submenu-geometry.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "submenu at the left of the page settles where the replaced submenu does",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 11131,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:10:34.533Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "submenu-geometry",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "868cb2351927fbf39c3e-ad397ca9a234754660b6",
+     "file": "choices-submenu-geometry.browser.mjs",
+     "line": 84,
+     "column": 29
+    },
+    {
+     "title": "submenu at the middle of the page settles where the replaced submenu does",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 9482,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:10:45.668Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "submenu-geometry",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "868cb2351927fbf39c3e-8ee728f5b76c85c6a202",
+     "file": "choices-submenu-geometry.browser.mjs",
+     "line": 84,
+     "column": 29
+    },
+    {
+     "title": "submenu at the right edge settles where the replaced submenu does",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 9342,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:10:55.154Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "submenu-geometry",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "868cb2351927fbf39c3e-1cec9482724f7ebfd0a6",
+     "file": "choices-submenu-geometry.browser.mjs",
+     "line": 84,
+     "column": 29
+    },
+    {
+     "title": "submenu at the right edge of a dialog settles where the replaced submenu does",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 11696,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:11:04.500Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "submenu-geometry",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "868cb2351927fbf39c3e-48b45e6127c2c8f8d38b",
+     "file": "choices-submenu-geometry.browser.mjs",
+     "line": 84,
+     "column": 29
+    }
+   ]
+  },
+  {
+   "title": "choices.browser.mjs",
+   "file": "choices.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "attachment matches the current surface, density and option states",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3759,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:13:16.739Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-attachment-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-attachment-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "menu-glyphs",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-abb5ac390dbd95d33ee8",
+     "file": "choices.browser.mjs",
+     "line": 83,
+     "column": 3
+    },
+    {
+     "title": "access matches the current surface, density and option states",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3597,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:13:20.503Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-access-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-access-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          },
+          {
+           "name": "menu-glyphs",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-f16ad644183c46357dda",
+     "file": "choices.browser.mjs",
+     "line": 83,
+     "column": 3
+    },
+    {
+     "title": "expiry matches the current surface, density and option states",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3724,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:13:24.104Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-expiry-closed",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-expiry-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-closed",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-c17f532220ed72002f0b",
+     "file": "choices.browser.mjs",
+     "line": 83,
+     "column": 3
+    },
+    {
+     "title": "account matches the current surface, density and option states",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 5265,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:13:27.833Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-account-closed",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-account-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-account-closed",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-account-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-2f7d6b87ff5359d73785",
+     "file": "choices.browser.mjs",
+     "line": 83,
+     "column": 3
+    },
+    {
+     "title": "search matches the current surface, density and option states",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 5273,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:13:33.109Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-search-closed",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-search-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-closed",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-1422f13feed85edc2b03",
+     "file": "choices.browser.mjs",
+     "line": 83,
+     "column": 3
+    },
+    {
+     "title": "popover matches the current surface, density and option states",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4189,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:13:38.387Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-popover-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-popover-context",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-popover-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-popover-context",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-7b7720459d2908099177",
+     "file": "choices.browser.mjs",
+     "line": 83,
+     "column": 3
+    },
+    {
+     "title": "tooltip matches the current surface, density and option states",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4307,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:13:42.585Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-tooltip-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-tooltip-context",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-tooltip-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-tooltip-context",
+           "contentType": "image/png"
+          },
+          {
+           "name": "appearance",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-1d130ed67a9f45b589cf",
+     "file": "choices.browser.mjs",
+     "line": 83,
+     "column": 3
+    },
+    {
+     "title": "empty, disabled, hover and focus choice surfaces match the existing states",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 16963,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:13:46.898Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-expiry-disabled",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-disabled",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-expiry-empty",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-empty",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-expiry-focus",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-expiry-focus",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-search-disabled",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-disabled",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-search-empty",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-empty",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-search-focus",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-search-focus",
+           "contentType": "image/png"
+          },
+          {
+           "name": "choice-states",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-140e3f8ac8f6859e8d0a",
+     "file": "choices.browser.mjs",
+     "line": 158,
+     "column": 1
+    },
+    {
+     "title": "menu arrows, disabled items, submenu, checkbox and focus return work",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1548,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:14:03.867Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "keyboard-menu",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-8e2f55bf54c1212e60dc",
+     "file": "choices.browser.mjs",
+     "line": 198,
+     "column": 1
+    },
+    {
+     "title": "touch or pointer menus dismiss outside, fit viewport and open a dialog with stable return focus",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1891,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:14:05.420Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "pointer-menu",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-83c9f9a2356c26265872",
+     "file": "choices.browser.mjs",
+     "line": 231,
+     "column": 1
+    },
+    {
+     "title": "select supports arrows, Enter, clear, empty, disabled and empty-string account values",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1544,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:14:07.316Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "select",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-2fead9e29b857515e968",
+     "file": "choices.browser.mjs",
+     "line": 263,
+     "column": 1
+    },
+    {
+     "title": "search preserves selection, filters groups, handles no results, composition and explicit clear",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1758,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:14:08.865Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "search",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-117f9e8ab79d9adab205",
+     "file": "choices.browser.mjs",
+     "line": 292,
+     "column": 1
+    },
+    {
+     "title": "remote search accepts server labels and resets an action picker without local filtering",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1175,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:14:10.628Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "remote-search",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-2220ce601d8c1a288e9e",
+     "file": "choices.browser.mjs",
+     "line": 323,
+     "column": 1
+    },
+    {
+     "title": "Dialog owns choices, top-layer Escape, Tab and theme",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2167,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:14:11.807Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "choices-in-dialog",
+           "contentType": "image/png"
+          },
+          {
+           "name": "nested-choices",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-f0d358ab21ff27bbcdd6",
+     "file": "choices.browser.mjs",
+     "line": 343,
+     "column": 37
+    },
+    {
+     "title": "legacy Modal owns choices, top-layer Escape, Tab and theme",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2323,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:14:13.980Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "choices-in-dialog",
+           "contentType": "image/png"
+          },
+          {
+           "name": "nested-choices",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-e07bf532eee64f3b7468",
+     "file": "choices.browser.mjs",
+     "line": 343,
+     "column": 37
+    },
+    {
+     "title": "legacy host final Tab matches the AntD-only baseline, including its browser-focus boundary",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3809,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:14:16.308Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "legacy-tab-baseline",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-39a0ee14dbb445914f97",
+     "file": "choices.browser.mjs",
+     "line": 381,
+     "column": 1
+    },
+    {
+     "title": "popover owns a select and restores focus one layer at a time; tooltip responds to focus and hover",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1785,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:14:20.122Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "popover-tooltip",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-e0d879a71800ac7059b5",
+     "file": "choices.browser.mjs",
+     "line": 400,
+     "column": 1
+    },
+    {
+     "title": "open choices follow the live system theme without losing selection",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1273,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:14:21.912Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "live-theme",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-cb256c1a9b5e03e3b3b8",
+     "file": "choices.browser.mjs",
+     "line": 435,
+     "column": 1
+    },
+    {
+     "title": "Dialog keeps composition, outside dismissal, submenu Escape and keyboard clear within its owner",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1663,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:14:23.190Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "dialog-boundaries",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-bab0e06945aca3f1bdb0",
+     "file": "choices.browser.mjs",
+     "line": 453,
+     "column": 1
+    },
+    {
+     "title": "multiple chip appearance matches current labels and email fields",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 5121,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:14:24.857Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-multiple-default",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-multiple-options",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-multiple-default",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-multiple-options",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-multiple-disabled",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-multiple-disabled",
+           "contentType": "image/png"
+          },
+          {
+           "name": "multi-appearance",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-0f4921667d1a3c3a877f",
+     "file": "choices.browser.mjs",
+     "line": 486,
+     "column": 42
+    },
+    {
+     "title": "tags chip appearance matches current labels and email fields",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4530,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:14:29.982Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "antd-tags-default",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-tags-default",
+           "contentType": "image/png"
+          },
+          {
+           "name": "antd-tags-disabled",
+           "contentType": "image/png"
+          },
+          {
+           "name": "orbit-tags-disabled",
+           "contentType": "image/png"
+          },
+          {
+           "name": "multi-appearance",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-20c780f0743abfd730dc",
+     "file": "choices.browser.mjs",
+     "line": 486,
+     "column": 42
+    },
+    {
+     "title": "multiple labels search, toggle, collapse, remove and clear without losing the remaining values",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1524,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:14:34.517Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "multiple-labels",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-0adcc2f226e96fb21aa2",
+     "file": "choices.browser.mjs",
+     "line": 515,
+     "column": 1
+    },
+    {
+     "title": "email tags support controlled typing, separators, composition, Enter, blur and deletion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1375,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:14:36.046Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "email-tags",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-5766b49cd1ee78e4371a",
+     "file": "choices.browser.mjs",
+     "line": 552,
+     "column": 1
+    },
+    {
+     "title": "multiple choices in Dialog keep their owner and menus do not activate a clickable row",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1600,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:14:37.425Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "multi-dialog-and-row",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-0d6b9296de38275bb55b",
+     "file": "choices.browser.mjs",
+     "line": 592,
+     "column": 1
+    },
+    {
+     "title": "search option touch selects once and preserves input focus",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1150,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:14:39.029Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "search-touch",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-4de8ff8a9788b5835138",
+     "file": "choices.browser.mjs",
+     "line": 631,
+     "column": 1
+    },
+    {
+     "title": "disabled-button and long tooltips remain accessible; a plan-usage-sized popover fits the screen",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1457,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T06:14:40.185Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "long-tooltip",
+           "contentType": "image/png"
+          },
+          {
+           "name": "plan-usage-sized-popover",
+           "contentType": "image/png"
+          },
+          {
+           "name": "tooltip-and-popover-edges",
+           "contentType": "application/json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-815a2e301b2d91231870",
+     "file": "choices.browser.mjs",
+     "line": 642,
+     "column": 1
+    }
+   ]
+  }
+ ],
+ "errors": [],
+ "stats": {
+  "startTime": "2026-10-10T06:08:31.906Z",
+  "duration": 370053.88999999996,
+  "expected": 97,
+  "skipped": 0,
+  "unexpected": 0,
+  "flaky": 0
+ }
+}

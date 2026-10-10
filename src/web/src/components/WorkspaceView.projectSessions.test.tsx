@@ -2,7 +2,6 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { App as AntApp } from 'antd';
 import { MemoryRouter, Route, Routes, useLocation, useNavigate, type NavigateFunction } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Runner } from './TasksSidePanel';
@@ -205,11 +204,9 @@ async function mount(ready: () => void = () => expect(projectRows()).toHaveLengt
     nextRoot.render(
       <QueryClientProvider client={nextClient}>
         <MemoryRouter initialEntries={[path]}>
-          <AntApp>
-            {withControlPlane ? <ControlPlaneProvider>{view}</ControlPlaneProvider> : view}
-            <SessionSearch />
-            <LocationProbe />
-          </AntApp>
+          {withControlPlane ? <ControlPlaneProvider>{view}</ControlPlaneProvider> : view}
+          <SessionSearch />
+          <LocationProbe />
         </MemoryRouter>
       </QueryClientProvider>,
     );
@@ -222,11 +219,20 @@ async function click(element: Element | null | undefined, what: string): Promise
   await act(async () => element!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
   await settle();
 }
+/** Whether a menu or item is on an open menu: a closing or closed menu takes no pointer (the session list's
+ *  dropdowns stay in the page as they leave) or is gone. */
+const onOpenMenu = (el: Element): boolean => {
+  for (let node: HTMLElement | null = el as HTMLElement; node; node = node.parentElement) {
+    if (node.hidden || node.style.display === 'none' || node.style.pointerEvents === 'none') return false;
+  }
+  return true;
+};
+/** The open menus' plain items, top to bottom (a row that opens a submenu is not one). Submenus use their own
+ *  portal, outside their parent menu's element. */
+const menuItems = (): HTMLElement[] =>
+  [...document.querySelectorAll<HTMLElement>('[role="menu"] [role="menuitem"]:not([aria-haspopup])')].filter(onOpenMenu);
 const menuItem = (label: string): HTMLElement | undefined =>
-  // Submenus use their own portal, outside the dropdown's root element.
-  [...document.querySelectorAll<HTMLElement>('.ant-dropdown:not(.ant-dropdown-hidden) .ant-dropdown-menu-item')].find(
-    (el) => el.closest<HTMLElement>('.ant-dropdown')?.style.pointerEvents !== 'none' && el.textContent?.trim().startsWith(label),
-  );
+  menuItems().find((el) => el.textContent?.trim().startsWith(label));
 async function chooseView(label: string): Promise<void> {
   await click(mounted().querySelector('.session-scope-menu'), 'the view menu');
   await until(() => expect(menuItem(label)).toBeTruthy());
@@ -436,7 +442,7 @@ describe('project entry navigation and actions', { timeout: 60_000 }, () => {
     projects = [project({ coordinatorActivity: null })];
     await mount();
     await hoverProjectMenu();
-    expect(menuItem('Open Session')?.classList.contains('ant-dropdown-menu-item-disabled')).toBe(true);
+    expect(menuItem('Open Session')?.getAttribute('aria-disabled')).toBe('true');
     await click(menuItem('Open Session'), 'the disabled Open Session');
     expect(location).toBe(`/sessions/${LOOSE.id}`);
     await click(projectRow(), 'the project entry without a coordinator');
@@ -466,11 +472,12 @@ describe('project entry navigation and actions', { timeout: 60_000 }, () => {
       await act(async () => projectRow().dispatchEvent(new MouseEvent('contextmenu', { bubbles: true })));
       await until(() => expect(menuItem('Sessions')).toBeTruthy());
     }
-    const labels = [...document.querySelectorAll('.ant-dropdown:not(.ant-dropdown-hidden) .ant-dropdown-menu-item')].map((item) => item.textContent?.trim());
+    const labels = menuItems().map((item) => item.textContent?.trim());
     expect(labels).toEqual(['Open Session', 'Sessions', 'Open Project', 'Pin', 'Move…']);
-    const items = document.querySelector('.ant-dropdown:not(.ant-dropdown-hidden) .ant-dropdown-menu')?.children;
-    expect(items?.[3].classList.contains('ant-dropdown-menu-item-divider')).toBe(true);
-    expect(document.querySelectorAll('.ant-dropdown:not(.ant-dropdown-hidden) .ant-dropdown-menu-item-divider')).toHaveLength(1);
+    const menus = [...document.querySelectorAll('[role="menu"]')].filter(onOpenMenu);
+    expect(menus).toHaveLength(1);
+    expect(menus[0].children[3]?.getAttribute('role')).toBe('separator');
+    expect(menus[0].querySelectorAll('[role="separator"]')).toHaveLength(1);
     const entryText = projectRow().textContent ?? '';
     for (const forbidden of ['Complete', 'Share', 'Delete', 'Confirm done', 'Chat about this', 'Approve', 'Reject', 'Start project']) {
       expect(labels).not.toContain(forbidden);
@@ -499,7 +506,7 @@ describe('project entry navigation and actions', { timeout: 60_000 }, () => {
     rows = [LOOSE, { ...COORDINATOR, pinnedAt: '2026-10-01T09:00:00Z' }, TASK];
     await mount();
     await hoverProjectMenu();
-    expect([...document.querySelectorAll('.ant-dropdown:not(.ant-dropdown-hidden) .ant-dropdown-menu-item')].map((item) => item.textContent?.trim())).toEqual(['Open Session', 'Sessions', 'Open Project', 'Unpin', 'Move…']);
+    expect(menuItems().map((item) => item.textContent?.trim())).toEqual(['Open Session', 'Sessions', 'Open Project', 'Unpin', 'Move…']);
     await click(menuItem('Unpin'), 'Unpin');
     await until(() => expect(apiModule.unpinSession).toHaveBeenCalledWith(COORDINATOR.id));
   });

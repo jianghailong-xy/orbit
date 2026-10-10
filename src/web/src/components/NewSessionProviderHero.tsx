@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import { Popover } from 'antd';
 import { Link } from 'react-router-dom';
 import type { AgentProvider } from '@orbit/shared';
 import { encodeId } from '../lib/idCodec';
 import { PROVIDER_GLYPHS } from '../lib/providerGlyphs';
 import { providerNameOn, type EngineChoice } from '../lib/sessionProviderChoices';
+import { Popover } from './ui/Popover';
 
 /** The brand mark. Same artwork and tile as /providers, sized up: at hero size it carries a soft
  *  shadow in its own brand colour, which a 20px row chip can't. The composer's Provider menu draws
@@ -186,15 +186,15 @@ export function NewSessionProviderHero({
         card
       ) : (
         <Popover
-          content={list}
-          trigger="click"
-          placement="bottom"
+          title={null}
+          trigger={card}
+          side="bottom"
           open={open}
           onOpenChange={setOpen}
           arrow={false}
-          overlayClassName="np-pop"
+          popupClassName="np-pop"
         >
-          {card}
+          {list}
         </Popover>
       )}
       {fixSummary ??

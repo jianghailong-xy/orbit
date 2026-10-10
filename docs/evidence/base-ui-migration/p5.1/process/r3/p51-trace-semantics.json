@@ -1,0 +1,273 @@
+{
+ "tests": 60,
+ "steps": 496,
+ "semantic": [
+  {
+   "test": "chromium-dark-desktop :: P5.1 the worktree bar › merge targets, the branch search and the failure and divergence tips",
+   "step": "nothing matches",
+   "delta": {
+    "menus": [
+     [],
+     [
+      []
+     ]
+    ]
+   }
+  },
+  {
+   "test": "chromium-dark-phone :: P5.1 the worktree bar › merge targets, the branch search and the failure and divergence tips",
+   "step": "nothing matches",
+   "delta": {
+    "menus": [
+     [],
+     [
+      []
+     ]
+    ]
+   }
+  },
+  {
+   "test": "chromium-light-desktop :: P5.1 the worktree bar › merge targets, the branch search and the failure and divergence tips",
+   "step": "nothing matches",
+   "delta": {
+    "menus": [
+     [],
+     [
+      []
+     ]
+    ]
+   }
+  },
+  {
+   "test": "chromium-light-phone :: P5.1 the worktree bar › merge targets, the branch search and the failure and divergence tips",
+   "step": "nothing matches",
+   "delta": {
+    "menus": [
+     [],
+     [
+      []
+     ]
+    ]
+   }
+  },
+  {
+   "test": "webkit-dark-desktop :: P5.1 the worktree bar › merge targets, the branch search and the failure and divergence tips",
+   "step": "nothing matches",
+   "delta": {
+    "menus": [
+     [],
+     [
+      []
+     ]
+    ]
+   }
+  },
+  {
+   "test": "webkit-dark-phone :: P5.1 the worktree bar › merge targets, the branch search and the failure and divergence tips",
+   "step": "nothing matches",
+   "delta": {
+    "menus": [
+     [],
+     [
+      []
+     ]
+    ]
+   }
+  },
+  {
+   "test": "webkit-light-desktop :: P5.1 the worktree bar › merge targets, the branch search and the failure and divergence tips",
+   "step": "nothing matches",
+   "delta": {
+    "menus": [
+     [],
+     [
+      []
+     ]
+    ]
+   }
+  },
+  {
+   "test": "webkit-light-phone :: P5.1 the worktree bar › merge targets, the branch search and the failure and divergence tips",
+   "step": "nothing matches",
+   "delta": {
+    "menus": [
+     [],
+     [
+      []
+     ]
+    ]
+   }
+  }
+ ],
+ "presentation": {
+  "focus": 148,
+  "dialogs": 92
+ },
+ "antd": {
+  "ref": {
+   "steps": 496,
+   "classes": [
+    "ant-app",
+    "ant-avatar",
+    "ant-avatar-circle",
+    "ant-avatar-css-var",
+    "ant-avatar-icon",
+    "ant-avatar-image",
+    "ant-btn",
+    "ant-btn-block",
+    "ant-btn-circle",
+    "ant-btn-color-default",
+    "ant-btn-color-primary",
+    "ant-btn-default",
+    "ant-btn-icon",
+    "ant-btn-icon-only",
+    "ant-btn-primary",
+    "ant-btn-sm",
+    "ant-btn-text",
+    "ant-btn-variant-outlined",
+    "ant-btn-variant-solid",
+    "ant-btn-variant-text",
+    "ant-drawer",
+    "ant-drawer-body",
+    "ant-drawer-bottom",
+    "ant-drawer-close",
+    "ant-drawer-content-wrapper",
+    "ant-drawer-extra",
+    "ant-drawer-header",
+    "ant-drawer-header-title",
+    "ant-drawer-mask",
+    "ant-drawer-open",
+    "ant-drawer-panel-motion-bottom",
+    "ant-drawer-panel-motion-bottom-appear",
+    "ant-drawer-panel-motion-bottom-appear-active",
+    "ant-drawer-right",
+    "ant-drawer-section",
+    "ant-drawer-title",
+    "ant-dropdown",
+    "ant-dropdown-css-var",
+    "ant-dropdown-menu",
+    "ant-dropdown-menu-css-var",
+    "ant-dropdown-menu-item",
+    "ant-dropdown-menu-item-danger",
+    "ant-dropdown-menu-item-divider",
+    "ant-dropdown-menu-item-icon",
+    "ant-dropdown-menu-item-only-child",
+    "ant-dropdown-menu-light",
+    "ant-dropdown-menu-root",
+    "ant-dropdown-menu-sub",
+    "ant-dropdown-menu-submenu",
+    "ant-dropdown-menu-submenu-active",
+    "ant-dropdown-menu-submenu-arrow",
+    "ant-dropdown-menu-submenu-arrow-icon",
+    "ant-dropdown-menu-submenu-expand-icon",
+    "ant-dropdown-menu-submenu-open",
+    "ant-dropdown-menu-submenu-placement-rightTop",
+    "ant-dropdown-menu-submenu-popup",
+    "ant-dropdown-menu-submenu-title",
+    "ant-dropdown-menu-submenu-vertical",
+    "ant-dropdown-menu-title-content",
+    "ant-dropdown-menu-vertical",
+    "ant-dropdown-open",
+    "ant-dropdown-placement-topLeft",
+    "ant-dropdown-placement-topRight",
+    "ant-dropdown-trigger",
+    "ant-input",
+    "ant-input-affix-wrapper",
+    "ant-input-affix-wrapper-focused",
+    "ant-input-affix-wrapper-sm",
+    "ant-input-borderless",
+    "ant-input-clear-icon",
+    "ant-input-css-var",
+    "ant-input-outlined",
+    "ant-input-sm",
+    "ant-input-suffix",
+    "ant-modal",
+    "ant-modal-body",
+    "ant-modal-close",
+    "ant-modal-close-icon",
+    "ant-modal-close-x",
+    "ant-modal-confirm",
+    "ant-modal-confirm-body",
+    "ant-modal-confirm-body-has-title",
+    "ant-modal-confirm-body-wrapper",
+    "ant-modal-confirm-btns",
+    "ant-modal-confirm-confirm",
+    "ant-modal-confirm-content",
+    "ant-modal-confirm-paragraph",
+    "ant-modal-confirm-title",
+    "ant-modal-container",
+    "ant-modal-footer",
+    "ant-modal-header",
+    "ant-modal-mask",
+    "ant-modal-title",
+    "ant-modal-wrap",
+    "ant-popover",
+    "ant-popover-arrow",
+    "ant-popover-container",
+    "ant-popover-content",
+    "ant-popover-css-var",
+    "ant-popover-open",
+    "ant-popover-placement-bottom",
+    "ant-popover-placement-topRight",
+    "ant-popover-title",
+    "ant-segmented",
+    "ant-segmented-group",
+    "ant-segmented-item",
+    "ant-segmented-item-label",
+    "ant-segmented-item-selected",
+    "ant-segmented-item-selected-text",
+    "ant-segmented-sm",
+    "ant-select",
+    "ant-select-borderless",
+    "ant-select-content",
+    "ant-select-content-has-value",
+    "ant-select-css-var",
+    "ant-select-input",
+    "ant-select-single",
+    "ant-select-sm",
+    "ant-spin",
+    "ant-spin-dot",
+    "ant-spin-dot-holder",
+    "ant-spin-dot-item",
+    "ant-spin-dot-spin",
+    "ant-spin-section",
+    "ant-spin-sm",
+    "ant-spin-spinning",
+    "ant-tooltip",
+    "ant-tooltip-arrow",
+    "ant-tooltip-container",
+    "ant-tooltip-css-var",
+    "ant-tooltip-open",
+    "ant-tooltip-placement-top"
+   ]
+  },
+  "del": {
+   "steps": 496,
+   "classes": [
+    "ant-app",
+    "ant-btn",
+    "ant-btn-circle",
+    "ant-btn-color-default",
+    "ant-btn-color-primary",
+    "ant-btn-icon",
+    "ant-btn-icon-only",
+    "ant-btn-primary",
+    "ant-btn-text",
+    "ant-btn-variant-solid",
+    "ant-btn-variant-text",
+    "ant-dropdown-trigger",
+    "ant-input",
+    "ant-input-borderless",
+    "ant-input-css-var",
+    "ant-select",
+    "ant-select-borderless",
+    "ant-select-content",
+    "ant-select-content-has-value",
+    "ant-select-css-var",
+    "ant-select-input",
+    "ant-select-single",
+    "ant-select-sm"
+   ]
+  }
+ }
+}

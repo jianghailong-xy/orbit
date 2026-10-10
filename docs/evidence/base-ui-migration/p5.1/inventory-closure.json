@@ -1,0 +1,579 @@
+{
+ "records": [
+  "2026-10-07.json",
+  "2026-10-07b.json",
+  "2026-10-07c.json",
+  "2026-10-07d.json",
+  "2026-10-08.json",
+  "2026-10-08b.json",
+  "2026-10-09.json",
+  "2026-10-09b.json",
+  "2026-10-09c.json",
+  "2026-10-10.json",
+  "2026-10-10b.json"
+ ],
+ "before": {
+  "baseline": {
+   "commit": "7c6810a7806096f37e601ec46eba281c1ddb0de5",
+   "scopeHash": "c56bfb233f7b2f6bd6c23284cc475cfa60e785f22131c94a90b3b40e50711e9b"
+  },
+  "owners": {
+   "KEEP": 1,
+   "P5.1": 28,
+   "P5.3": 97,
+   "P6": 42
+  },
+  "unowned": [],
+  "pending": [],
+  "p51": [
+   {
+    "path": "src/web/src/components/CodexResetCredit.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/NewSessionProviderHero.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/PlanUsageIndicator.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/PlanUsageIndicator.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/SessionMoveModal.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/SessionOutputs.commitFailure.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/SessionOutputs.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/SessionSearch.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/SessionSearch.wiki.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/TasksSidePanel.admin.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/TasksSidePanel.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/WorkspaceView.projectSessions.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/WorkspaceView.sessionProjects.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 1087,
+    "kind": "ant-class",
+    "text": ".ant-dropdown-menu.tp-account-menu {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 1091,
+    "kind": "ant-class",
+    "text": ".tp-account-menu .ant-dropdown-menu-item,"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 1092,
+    "kind": "ant-class",
+    "text": ".tp-account-menu .ant-dropdown-menu-submenu-title {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 1097,
+    "kind": "ant-class",
+    "text": ".tp-account-menu .ant-dropdown-menu-title-content {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 1101,
+    "kind": "ant-class",
+    "text": ".tp-account-menu .ant-dropdown-menu-item.tp-account-profile {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 1142,
+    "kind": "ant-class",
+    "text": ".tp-account-menu .ant-dropdown-menu-item-danger,"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 1143,
+    "kind": "ant-class",
+    "text": ".tp-account-menu .ant-dropdown-menu-item-danger .ant-dropdown-menu-item-icon {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 3887,
+    "kind": "ant-class",
+    "text": ".wt-diff-drawer .ant-drawer-body {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 4101,
+    "kind": "antd-reference",
+    "text": "itself carries the elevated surface (antd theme tokens, set inline), so the antd menu inside it is"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 4110,
+    "kind": "ant-class",
+    "text": ".wt-merge-menu-list.ant-dropdown-menu {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 14434,
+    "kind": "antd-reference",
+    "text": "/* Maximize / Restore toggle in the drawer header (sits in AntD's `extra` slot, left of ✕). */"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 17599,
+    "kind": "antd-reference",
+    "text": "chrome: no antd title bar, no footer buttons, body padding stripped. The three"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 17602,
+    "kind": "ant-class",
+    "text": ".ssearch-modal .ant-modal-container {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 17645,
+    "kind": "antd-reference",
+    "text": "Brand tint rather than --bg-hover: in dark the modal surface IS --bg-hover (AntD's"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 17867,
+    "kind": "ant-class",
+    "text": ".np-pop .ant-popover-container {"
+   }
+  ]
+ },
+ "after": {
+  "baseline": {
+   "commit": "1886feef3e8c6d288fd54977fc8870b3bce6cec1",
+   "scopeHash": "207adee641ac6b35cdd3e7c29019290ac801f5c611bfee7a4d595fc7b0388168"
+  },
+  "owners": {
+   "KEEP": 1,
+   "P5.3": 97,
+   "P6": 42
+  },
+  "unowned": [],
+  "pending": [],
+  "p51": []
+ },
+ "counts": {
+  "scannedFiles": [
+   786,
+   786
+  ],
+  "productionFiles": [
+   388,
+   388
+  ],
+  "testFiles": [
+   396,
+   396
+  ],
+  "antdProductionFiles": [
+   18,
+   11
+  ],
+  "antdTestFiles": [
+   46,
+   42
+  ],
+  "antSelectorTestFiles": [
+   13,
+   9
+  ],
+  "antClassTestFiles": [
+   13,
+   9
+  ],
+  "iconProductionFiles": [
+   114,
+   114
+  ],
+  "iconTestFiles": [
+   0,
+   0
+  ],
+  "relevantSourceFiles": [
+   218,
+   212
+  ],
+  "retirementBlockingFiles": [
+   92,
+   79
+  ]
+ },
+ "hitLines": {
+  "ant-class": [
+   138,
+   106
+  ],
+  "ant-design-support": [
+   19,
+   19
+  ],
+  "ant-selector": [
+   133,
+   103
+  ],
+  "antd-reference": [
+   171,
+   146
+  ],
+  "icon-class": [
+   86,
+   86
+  ],
+  "icon-reference": [
+   125,
+   125
+  ],
+  "imperative-confirm": [
+   10,
+   9
+  ],
+  "imperative-feedback": [
+   220,
+   220
+  ],
+  "internal-ref": [
+   4,
+   4
+  ],
+  "provider": [
+   58,
+   53
+  ],
+  "rc-support": [
+   241,
+   240
+  ],
+  "ref-focus": [
+   29,
+   24
+  ],
+  "theme": [
+   2,
+   1
+  ],
+  "use-app": [
+   4,
+   3
+  ],
+  "use-token": [
+   1,
+   0
+  ]
+ },
+ "files": {
+  "src/web/src/components/CodexResetCredit.tsx": {
+   "before": {
+    "antdImports": [
+     "Button",
+     "Modal"
+    ],
+    "hitKinds": {
+     "antd-reference": 2,
+     "icon-reference": 1,
+     "ref-focus": 2
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1
+    }
+   }
+  },
+  "src/web/src/components/NewSessionProviderHero.tsx": {
+   "before": {
+    "antdImports": [
+     "Popover"
+    ],
+    "hitKinds": {
+     "antd-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/PlanUsageIndicator.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App",
+     "ConfigProvider"
+    ],
+    "hitKinds": {
+     "ant-class": 1,
+     "ant-selector": 1,
+     "antd-reference": 2,
+     "provider": 2,
+     "rc-support": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/PlanUsageIndicator.tsx": {
+   "before": {
+    "antdImports": [
+     "Popover"
+    ],
+    "hitKinds": {
+     "antd-reference": 2,
+     "ref-focus": 3
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "ref-focus": 1
+    }
+   }
+  },
+  "src/web/src/components/SessionMoveModal.tsx": {
+   "before": {
+    "antdImports": [
+     "App",
+     "Modal",
+     "Spin"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "icon-reference": 1,
+     "imperative-confirm": 1,
+     "imperative-feedback": 4,
+     "use-app": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1,
+     "imperative-feedback": 4
+    }
+   }
+  },
+  "src/web/src/components/SessionOutputs.commitFailure.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/SessionOutputs.tsx": {
+   "before": {
+    "antdImports": [
+     "Drawer",
+     "Dropdown",
+     "Input",
+     "MenuProps",
+     "Segmented",
+     "Tooltip",
+     "theme"
+    ],
+    "hitKinds": {
+     "antd-reference": 4,
+     "icon-reference": 1,
+     "imperative-feedback": 1,
+     "theme": 1,
+     "use-token": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1,
+     "imperative-feedback": 1
+    }
+   }
+  },
+  "src/web/src/components/SessionSearch.tsx": {
+   "before": {
+    "antdImports": [
+     "Modal",
+     "Spin"
+    ],
+    "hitKinds": {
+     "ant-class": 1,
+     "ant-selector": 1,
+     "antd-reference": 4,
+     "icon-reference": 1,
+     "ref-focus": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1
+    }
+   }
+  },
+  "src/web/src/components/SessionSearch.wiki.test.tsx": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "antd-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/TasksSidePanel.admin.test.tsx": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 4,
+     "ant-selector": 4
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/TasksSidePanel.tsx": {
+   "before": {
+    "antdImports": [
+     "Avatar",
+     "Dropdown",
+     "Tooltip"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "icon-reference": 1,
+     "imperative-feedback": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1,
+     "imperative-feedback": 1
+    }
+   }
+  },
+  "src/web/src/components/WorkspaceView.projectSessions.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "ant-class": 8,
+     "ant-selector": 6,
+     "antd-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/WorkspaceView.sessionFolders.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "ant-class": 11,
+     "ant-selector": 11,
+     "antd-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "ant-class": 7,
+     "ant-selector": 7,
+     "antd-reference": 1,
+     "provider": 1
+    }
+   }
+  },
+  "src/web/src/components/WorkspaceView.sessionProjects.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "ant-class": 3,
+     "ant-selector": 3,
+     "antd-reference": 1,
+     "icon-class": 2,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-class": 2
+    }
+   }
+  },
+  "src/web/src/index.css": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 56,
+     "ant-selector": 56,
+     "antd-reference": 23,
+     "icon-class": 30
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 45,
+     "ant-selector": 45,
+     "antd-reference": 19,
+     "icon-class": 30
+    }
+   }
+  }
+ }
+}

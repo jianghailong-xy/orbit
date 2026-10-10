@@ -1,0 +1,16 @@
+Reference Plan usage popover, WebKit light desktop, 16 repeats (repeats 8 and 14 stopped earlier: the session page was not drawn in time).
+Times in ms from the logger start (just before the Dismiss press): the pointer entering the popover, the Escape, the popover entering again.
+repeat  0: entered    -  Escape  152  gap pointer already inside reopened    -  drawn 2 s later False
+repeat  1: entered   53  Escape  232  gap 179 ms                 reopened    -  drawn 2 s later False
+repeat  2: entered    -  Escape  213  gap pointer already inside reopened    -  drawn 2 s later False
+repeat  3: entered    -  Escape  192  gap pointer already inside reopened    -  drawn 2 s later False
+repeat  4: entered   40  Escape  186  gap 146 ms                 reopened    -  drawn 2 s later False
+repeat  5: entered   35  Escape  148  gap 113 ms                 reopened    -  drawn 2 s later False
+repeat  6: entered    -  Escape  170  gap pointer already inside reopened    -  drawn 2 s later False
+repeat  7: entered    -  Escape  146  gap pointer already inside reopened    -  drawn 2 s later False
+repeat  9: entered   95  Escape  166  gap 71 ms                  reopened  203  drawn 2 s later False
+repeat 10: entered    -  Escape  178  gap pointer already inside reopened    -  drawn 2 s later False
+repeat 11: entered   52  Escape  175  gap 123 ms                 reopened    -  drawn 2 s later False
+repeat 12: entered   50  Escape  148  gap 98 ms                  reopened  157  drawn 2 s later True
+repeat 13: entered   53  Escape  178  gap 125 ms                 reopened    -  drawn 2 s later False
+repeat 15: entered   70  Escape  169  gap 99 ms                  reopened  179  drawn 2 s later False
