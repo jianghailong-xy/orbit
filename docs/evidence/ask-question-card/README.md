@@ -48,7 +48,7 @@ The five conversations are the same on every client:
 4. a multi-select question;
 5. a reply given with Chat about this.
 
-Two defects were found by the probe and fixed:
+What the probe found:
 - **Cut-off descriptions (round 1, run 38018707522).** The iPhone replay cut each option's description
   at two lines with "…". d4dc11d89 lets every text in the replay take its whole height; rounds 2 and 3
   show it.
