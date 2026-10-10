@@ -190,10 +190,12 @@ private fun ProjectDoneReceipt(doc: JsonObject, record: JsonObject?, enabled: Bo
     }
 }
 
-/** A project Orbit recorded done itself: the old question's terminal state, "This project is done · recorded by Orbit", and how its
- * criteria ended — the only part of "Why is this project not done?" a conversation still draws. */
+/** A project that is done: the old question's terminal state, "This project is done · recorded by Orbit" (or "recorded by you"),
+ * and how its criteria ended — the only part of "Why is this project not done?" a conversation still draws, and the card a project's
+ * sessions page draws where its progress card was while it is done (docs/mocks/project-done-sessions-page, owner decision 2026-10-10).
+ * The chrome belongs to the caller: the conversation wraps it in its Surface, the page in the list's own. */
 @Composable
-private fun ProjectSettledCard(doc: JsonObject, tag: String) {
+internal fun ProjectSettledCard(doc: JsonObject, tag: String) {
     Column(Modifier.fillMaxWidth().testTag("$tag-settled"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         DoneSettledHead(ProjectDone.settledBadge(doc.text("doneBy"))) {}
         Text(ProjectDone.whyNotDoneTally(doc), Modifier.testTag("$tag-settled-tally"), style = MaterialTheme.typography.labelMedium,

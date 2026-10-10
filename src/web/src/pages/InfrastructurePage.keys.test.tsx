@@ -37,6 +37,7 @@ const key = (n: number, label: string, over: Partial<ProviderRow> = {}): Provide
   enabled: true,
   hasApiKey: true,
   poolRefusal: null,
+  lastUsedAt: null,
   ...over,
 });
 const deepseek = (n: number, label: string, over: Partial<ProviderRow> = {}) =>
@@ -48,7 +49,9 @@ const deepseek = (n: number, label: string, over: Partial<ProviderRow> = {}) =>
   });
 // The boards' account: two DeepSeek keys (one made from the retired Harness preset before the split,
 // which is a DeepSeek key like the other), Gemini, Kimi and GLM keys, and a Claude subscription token.
-const DEEPSEEK = deepseek(1, 'DeepSeek');
+/** A session ran on the first DeepSeek key three days ago; nothing has spent the others. */
+const THREE_DAYS_AGO = new Date(Date.now() - 3 * 86_400_000).toISOString();
+const DEEPSEEK = deepseek(1, 'DeepSeek', { lastUsedAt: THREE_DAYS_AGO });
 const DEEPSEEK_2 = deepseek(2, 'DeepSeek 2', {
   runtime: 'dsh',
   engines: ['dsh', 'claude', 'opencode'] as ProviderRow['engines'],
@@ -221,6 +224,35 @@ describe('API keys after the provider/engine split', () => {
     // Nothing on a key says it runs on one engine, or which machines run Harness.
     expect(text(document.body.querySelector('.provider-keys'))).not.toMatch(/Runs on|Ready on|Not ready/);
     expect(document.body.querySelector('[data-testid="dsh-runner-status"]')).toBeNull();
+  });
+
+  it('says when each key last ran a session, and Never used for one nothing has spent', async () => {
+    await mount();
+    expect([...document.body.querySelectorAll('.provider-keys thead th')].map((th) => text(th))).toEqual([
+      'Key',
+      'Models',
+      'Endpoint',
+      'Enabled',
+      'Last used',
+      '',
+    ]);
+    // The last cell before the row's Edit/Delete.
+    const lastUsedCell = (label: string) => {
+      const tds = [...keyRow(label).querySelectorAll('td')];
+      return tds[tds.length - 2];
+    };
+    const used = lastUsedCell('DeepSeek');
+    expect(text(used)).toBe('3d ago');
+    // What the relative time stands for is the cell's tooltip.
+    expect(used.querySelector('span')?.getAttribute('title')).toBe(
+      new Date(THREE_DAYS_AGO).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }),
+    );
+    // A key nobody has spent says so, in the muted state, rather than showing a time.
+    expect(text(lastUsedCell('Claude Max'))).toBe('Never used');
+    expect(lastUsedCell('Claude Max').querySelector('.prov-never')).not.toBeNull();
+    expect(lastUsedCell('Claude Max').querySelector('span[title]')).toBeNull();
+    // A vendor's head spans every column, the new one included.
+    expect(keyRow('DeepSeek').closest('tbody')!.querySelector('tr.prov-group td')!.getAttribute('colspan')).toBe('6');
   });
 
   it('offers a card per vendor, by the vendor’s name, and none for DeepSeek Harness', async () => {

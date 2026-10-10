@@ -31,6 +31,14 @@ internal object ProjectShell {
     @Volatile var startRequest = false
     /** The status the project-scoped session reads answer with, instead of their rows (Quiet's failure case). */
     @Volatile var quietStatus = 200
+    // A05-7's ending (docs/mocks/project-done-sessions-page): Launch recorded done. Its sidebar row goes — the rows are the Open
+    // projects — its members' membership says DONE, and its document carries the projection the card is drawn from.
+    /** Whether Launch has been recorded done. */
+    @Volatile var done = false
+    /** Who recorded it: "DERIVED" for Orbit itself, "OWNER" for the owner's own press. */
+    @Volatile var doneBy = "DERIVED"
+    /** Whether the DONE document carries the projection's counts; false is a server before the owner's done door, which draws none. */
+    @Volatile var doneCounts = true
 
     // A11-9: Launch's merge into main. Off by default, which answers as the server does for a project asking nothing.
     /** The candidate `promotions/current` answers, or null for none (an empty body). */
@@ -52,6 +60,7 @@ internal object ProjectShell {
 
     fun reset() {
         calls.clear(); started = true; startRequest = false; quietStatus = 200
+        done = false; doneBy = "DERIVED"; doneCounts = true
         promotion = null; merged = "[]"; mergeCheck = false; holder = null; criteria = null; pressStatus = 200; mergeWaiting = false; bodies.clear()
     }
 
@@ -60,7 +69,8 @@ internal object ProjectShell {
         {"id":"$ALPHA","name":"Alpha","runnerId":"r1","enabled":true,"position":0,"createdAt":"2026-10-01T01:00:00.000Z"},
         {"id":"$BETA","name":"Beta","runnerId":"r1","enabled":true,"position":1,"createdAt":"2026-10-01T02:00:00.000Z"}]"""
 
-    private fun member(role: String) = """"projectMembership":{"projectId":"$LAUNCH","projectTitle":"Launch","projectStatus":"OPEN","role":"$role"}"""
+    private fun member(role: String) =
+        """"projectMembership":{"projectId":"$LAUNCH","projectTitle":"Launch","projectStatus":"${if (done) "DONE" else "OPEN"}","role":"$role"}"""
     private fun row(id: String, title: String, workspace: String, run: String, extra: String, lifecycle: String = "OPEN", lastTurnAt: String = ago(5),
         approvals: Int = 0) =
         """{"id":"$id","title":"$title","status":"$run","runState":"$run","lifecycleState":"$lifecycle","agent":{"id":"$workspace","name":"${if (workspace == ALPHA) "Alpha" else "Beta"}"},
@@ -77,9 +87,9 @@ internal object ProjectShell {
     }
     private fun list(vararg sessions: String) = sessions.joinToString(",", "[", "]") { session(it) }
 
-    private fun sidebar() = """[{"id":"$LAUNCH","title":"Launch","status":"OPEN","createdAt":"2026-10-01T00:00:00Z","buckets":{"running":2},
+    private fun sidebar() = """[${if (done) "" else """{"id":"$LAUNCH","title":"Launch","status":"OPEN","createdAt":"2026-10-01T00:00:00Z","buckets":{"running":2},
         "taskCounts":{"done":3,"failed":1,"total":8},"attention":{},"integration":{"line":"PROJECT_BRANCH","ref":"project/launch","activeJobCount":1},
-        "startedAt":${if (started) "\"2026-10-02T00:00:00Z\"" else "null"}},
+        "startedAt":${if (started) "\"2026-10-02T00:00:00Z\"" else "null"}},"""}
         {"id":"$QUIET","title":"Quiet","status":"OPEN","createdAt":"2026-10-01T00:00:00Z","buckets":{},"attention":{},"startedAt":"2026-10-02T00:00:00Z"}]"""
     private val integration get() = """{"line":"PROJECT_BRANCH","ref":"project/launch","integratingCount":1,"queuedCount":0,
         "inFlight":${if (mergeCheck) """{"kind":"CHECK_PROMOTION","state":"RUNNING","phase":"CHECK","startedAt":"${ago(7)}","heartbeatAt":"${ago(0)}"}"""
@@ -87,8 +97,14 @@ internal object ProjectShell {
     private val openItems get() = if (!startRequest) """{"needsYou":[],"withCoordinator":[${holder.orEmpty()}]}""" else """{"needsYou":[],"withCoordinator":[],
         "startRequest":{"itemId":"start-1","waitingSince":"${ago(130)}","startRequest":{"criteriaDigest":"digest-1","why":"Everything is filed.",
         "settings":{"line":"PROJECT_BRANCH","automatic":true,"maxConcurrentTasks":3,"mergeCheckCommand":null,"projectBranchName":"project/launch"}}}}"""
-    private val project get() = """{"id":"$LAUNCH","title":"Launch","status":"OPEN","goal":"Ship it.","createdAt":"2026-10-01T00:00:00Z","_count":{"tasks":8}${
-        criteria?.let { ""","acceptanceCriteriaItems":$it""" }.orEmpty()}}"""
+    /** The projection a current server carries for a done project: six criteria, five on main and one with no code to land — or,
+     * with `doneCounts` off, an older server's, which has the criteria but no counts behind them. */
+    private val projection get() = """{${if (doneCounts) """"counts":{"criteria":6,"met":6,"landed":6,"onMain":5,"byReason":{"IN_FLIGHT":0,
+        "ON_PROJECT_BRANCH":0,"NOTHING_TO_LAND":0,"NO_RECEIPT":0,"CODELESS":1}},""" else ""}"status":"DONE","done":true,"withheld":[],
+        "confirmation":"CONFIRMED","criteria":[${(1..5).joinToString(",") { """{"definitionId":"c$it","satisfied":true,"landing":"LANDED","landingReason":null}""" }},
+        {"definitionId":"c6","satisfied":true,"landing":"LANDED","landingReason":"CODELESS"}]}"""
+    private val project get() = """{"id":"$LAUNCH","title":"Launch","status":"${if (done) "DONE" else "OPEN"}","goal":"Ship it.","createdAt":"2026-10-01T00:00:00Z","_count":{"tasks":8}${
+        if (done) ""","doneBy":"$doneBy","derivedDone":$projection""" else ""}${criteria?.let { ""","acceptanceCriteriaItems":$it""" }.orEmpty()}}"""
 
     /** A press on Launch's candidate: the door's answer is the candidate in its next state, or the server's refusal. */
     private fun press(door: String): ApiResponse {

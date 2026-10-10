@@ -4,7 +4,8 @@ export interface ComposerSlashItem {
   name: string;
   description?: string | null;
   type?: ComposerSlashItemType;
-  /** Runtime that owns this item. Absent runner assets are legacy Claude entries. */
+  /** The engine that owns this item, as the runner reports it. Absent runner assets are legacy
+   *  Claude entries. */
   provider?: string | null;
   workspaceId?: string | null;
   /** Registered by the runtime itself (built-in skill, plugin skill, namespaced
@@ -21,6 +22,9 @@ export interface LocalStatusSnapshot {
   sessionTitle?: string | null;
   sessionStatus?: string | null;
   workspaceName?: string | null;
+  /** The CLI the session runs on, by its name. */
+  engine?: string | null;
+  /** The credential it spends — a key on any of the engines that run it, an engine's own sign-in. */
   provider?: string | null;
   model?: string | null;
   permissionMode?: string | null;
@@ -71,22 +75,21 @@ export function isLocalSlashCommand(name: string): boolean {
 /** Codex, OpenCode, Antigravity and DeepSeek Harness take slash-prefixed text as an ordinary
  *  runtime prompt and have no runner slash registry (agy is started with `--disable-slash-commands`,
  *  since its own command handler ends a stream-json session); Kimi exposes commands and skills
- *  through ACP. */
-export function supportsRunnerSlashAssets(provider?: string | null): boolean {
-  return provider !== 'codex' && provider !== 'opencode' && provider !== 'antigravity' && provider !== 'dsh';
+ *  through ACP. Asked of the session's engine, never of its provider: a key on Codex's protocol runs
+ *  on Codex, and a DeepSeek key on Claude Code has Claude Code's commands. */
+export function supportsRunnerSlashAssets(engine?: string | null): boolean {
+  return engine !== 'codex' && engine !== 'opencode' && engine !== 'antigravity' && engine !== 'dsh';
 }
 
-/** Match one runner-owned slash asset to the active runtime. Untagged assets come
- *  from older runners and therefore belong to Claude (and Claude-compatible custom providers). */
-export function slashAssetMatchesProvider(
-  assetProvider: string | null | undefined,
-  activeProvider: string | null | undefined,
+/** Match one runner-owned slash asset to the session's engine. Untagged assets come from older
+ *  runners and therefore belong to Claude Code. */
+export function slashAssetMatchesEngine(
+  assetEngine: string | null | undefined,
+  engine: string | null | undefined,
 ): boolean {
-  if (activeProvider === 'codex' || activeProvider === 'opencode' || activeProvider === 'antigravity' || activeProvider === 'dsh') {
-    return false;
-  }
-  if (activeProvider === 'kimi') return assetProvider === 'kimi';
-  return !assetProvider || assetProvider === 'claude';
+  if (!supportsRunnerSlashAssets(engine)) return false;
+  if (engine === 'kimi') return assetEngine === 'kimi';
+  return !assetEngine || assetEngine === 'claude';
 }
 
 export function slashMatches(
@@ -144,6 +147,7 @@ export function localStatusRows(s: LocalStatusSnapshot): LocalStatusRow[] {
       : 'New session draft',
   });
   if (s.workspaceName) rows.push({ label: 'Workspace', value: s.workspaceName });
+  if (s.engine) rows.push({ label: 'Engine', value: s.engine });
   if (s.provider) rows.push({ label: 'Provider', value: s.provider });
   if (s.model) rows.push({ label: 'Model', value: s.model });
   if (s.permissionMode) rows.push({ label: 'Permission', value: s.permissionMode });

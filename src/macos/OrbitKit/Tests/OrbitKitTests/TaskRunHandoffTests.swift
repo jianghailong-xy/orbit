@@ -237,10 +237,10 @@ final class TaskRunHandoffTests: XCTestCase {
     func testTheComposerSaysWhenAProviderPickTakesHold() {
         XCTAssertEqual(
             TaskRunHandoff.providerSwitchNote(from: "claude", to: "deepseek", liveRun: true),
-            "The turn in flight finishes on claude. Your next one runs on deepseek.")
+            "The turn in flight finishes on claude. Your next one uses deepseek.")
         XCTAssertEqual(
             TaskRunHandoff.providerSwitchNote(from: "claude", to: "deepseek", liveRun: false),
-            "Your next message runs on deepseek.")
+            "Your next message uses deepseek.")
 
         // Nothing to say: picking what is already running is not a switch, and an end that does not
         // know what it is on cannot describe the change.

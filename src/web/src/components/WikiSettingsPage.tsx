@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ExclamationCircleOutlined, RightOutlined } from '@ant-design/icons';
 import {
+  AgentProvider,
   WIKI_DEFAULT_MAINTENANCE_SETTINGS,
   WIKI_MAINTENANCE_DAILY_RUN_LIMIT,
   WIKI_MAINTENANCE_LOOKBACK_DAYS,
@@ -79,7 +80,7 @@ import { NumberInput } from './ui/NumberInput';
 import { Radio, RadioGroup } from './ui/Radio';
 import { Select } from './ui/Select';
 import { Switch } from './ui/Switch';
-import type { ConfiguredProvider } from '../lib/workspaceDefaults';
+import { providerEngines, type ConfiguredProvider } from '../lib/workspaceDefaults';
 
 /**
  * Wiki settings (criterion 8, mocks 19–20): which review mode the space runs in, whether Automatic
@@ -288,10 +289,12 @@ function MaintenanceOn({
  * Set up maintenance: the workspace it runs in, the provider it is pinned to, how many runs a day it
  * may start and how far back it starts reading — then Turn on (or Save, for one already on).
  *
- * THE PROVIDERS ARE THE ONES THE SERVER TAKES: configured providers on the Claude Code runtime, since
- * a maintenance run starts a clean Claude Code (contract `space.settings.maintenance.provider`). The
- * one the space already names stays in the list even when this account has not configured it yet —
- * the server takes a name it does not know, and refuses the run that finds it still missing.
+ * THE PROVIDERS ARE THE ONES THE SERVER TAKES: the keys Claude Code runs, by the compatibility table
+ * (each key's `engines`, docs/provider-engine-contract.md §3.5), since a maintenance run starts a clean
+ * Claude Code (contract `space.settings.maintenance.provider`) — a DeepSeek key included, which Claude
+ * Code runs as well as DeepSeek Harness does. The one the space already names stays in the list even
+ * when this account has not configured it yet — the server takes a name it does not know, and refuses
+ * the run that finds it still missing.
  *
  * WHILE THE SERVER RUNS THE WIKI there is no provider to pin (mock 35 ②): the System model is shown,
  * read-only, nothing writes `provider` — whatever the space names stays as it was, for a return to runner
@@ -327,7 +330,9 @@ function MaintenanceSetUp({
   const chosen = workspaceId ?? rows.find((row) => row.name === spaceSlug)?.id ?? null;
 
   const providerOptions = useMemo(() => {
-    const claude = ((providers.data ?? []) as ConfiguredProvider[]).filter((row) => row.runtime === 'claude');
+    const claude = ((providers.data ?? []) as ConfiguredProvider[]).filter((row) =>
+      providerEngines(row.slug, [row]).includes(AgentProvider.CLAUDE),
+    );
     const options = claude.map((row) => ({
       value: row.slug,
       label: wikiProviderLabel(row.slug, row.defaultModel ?? row.models[0]?.value ?? null),

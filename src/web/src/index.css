@@ -2597,6 +2597,17 @@ button.toast--pill:focus-visible {
   margin-top: 6px;
   line-height: 1.5;
 }
+/* Each engine by its CLI's name over its own mark; the agent's own says so beside it (board 7). */
+.rd-engine-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.rd-engine-own {
+  font-size: 11.5px;
+  font-weight: 400;
+  color: var(--text-3);
+}
 /* Advanced disclosure — folded by default, but it has to admit when it hides something. */
 .rd-adv-toggle {
   display: flex;
@@ -3294,6 +3305,10 @@ html[data-theme='dark'] .session-tag-chip {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* What became of a session's key, where the Provider row says its value: Key deleted, Turned off. */
+.scope-menu-value.is-warning {
+  color: var(--warning);
 }
 /* Swatch + name for a tag in the filter submenu. */
 .scope-tag-label {
@@ -8445,6 +8460,17 @@ button.chat-jump-start:hover {
 .chat-turn-foot > .chat-copy {
   margin-left: -4px;
 }
+/* A turn's head row (TurnHead): how long the turn worked, over its own output — the line Codex
+   draws above an answer. Inset like .chat-assistant's text so it starts on the reply's edge, and
+   pulled up against the bubble above: it is the answer's first line, not the question's last. */
+.chat-turn-head {
+  margin: -2px 0 4px;
+  padding: 0 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
 .chat-error {
   color: var(--error);
   font-size: 13px;
@@ -10445,12 +10471,17 @@ button.chat-jump-start:hover {
   display: none;
 }
 /* On a wide screen it is a dialog with no title of its own (the card's head asks the question), so
-   no title row: only the close button, over the card. The replaced modal's line height was unitless:
+   no title row: only the close button, above the card. The replaced modal's line height was unitless:
    the card's smaller text keeps its proportional line (the Dialog shell stays at 22px). */
 .start-card-dialog.orbit-overlay {
   line-height: 1.5714285714285714;
 }
+/* The close floats at the dialog's own top-right (12px in, a 32px box), and the dialog's 20px
+   padding left the card's top-right corner under it: an ✕ cutting through the card's border reads as
+   a mistake. The empty title row reserves the rest of the button and the 12px it keeps from the
+   dialog's edges, so the card starts under the close rather than under its corner. */
 .start-card-dialog > .orbit-overlay-header {
+  height: 36px;
   margin-bottom: 0;
 }
 .start-card-dialog .orbit-overlay-title:empty {
@@ -11451,30 +11482,16 @@ button.chat-jump-start:hover {
   color: var(--warning-fg, #ad6800);
   font-weight: 600;
 }
-/* The batch's shape. Nodes read as the same objects the counts above describe, and edges are the
-   quietest thing on the card — the structure should be legible from the arrangement, not from the
-   lines being loud. */
+/* The batch's shape, which is the project page's own canvas (`BatchPlanGraph`): it brings its own
+   card, edge and tone styles, so all this adds is where it sits on the card. */
 .batch-graph {
   margin: 2px 0 8px;
 }
-.batch-graph-edge {
-  fill: none;
-  stroke: color-mix(in srgb, var(--text-3) 55%, transparent);
-  stroke-width: 1.2;
-}
-.batch-graph-node rect {
-  fill: color-mix(in srgb, var(--brand) 12%, var(--bg-raised));
-  stroke: color-mix(in srgb, var(--brand) 34%, transparent);
-  stroke-width: 1;
-}
-.batch-graph-node text {
-  fill: var(--text-1);
-  font-size: 11px;
-}
-/* Waiting on something that is not drawn: dashed, so it never reads as a task ready to start. */
-.batch-graph-node.is-outside rect {
-  stroke-dasharray: 3 2;
-  fill: var(--bg-raised);
+/* What the picture cannot draw: the prerequisites that are tasks nobody put on this canvas. */
+.batch-graph-foot {
+  margin: 6px 0 0;
+  color: var(--text-3);
+  font-size: 11.5px;
 }
 
 .dag-approval-caption {
@@ -12551,6 +12568,21 @@ button.chat-jump-start:hover {
 }
 .tdp-assignee-select .orbit-combobox-placeholder,
 .tdp-assignee-select.orbit-select[data-empty] .orbit-choice-value {
+  color: var(--text-3);
+}
+/* An Engine or Provider pin: its mark, its name, and — on "Assignee's" and "Engine default" — what
+   that stands for, on the right (board 6). */
+.tdp-pin-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  width: 100%;
+}
+.tdp-pin-detail {
+  margin-left: auto;
+  padding-left: 12px;
+  font-size: 12px;
   color: var(--text-3);
 }
 /* The Suggested tier (model routing §9): its picker with the coordinator's reason under it, and in
@@ -15291,6 +15323,10 @@ button.chat-jump-start:hover {
   color: var(--text-3);
   overflow-wrap: anywhere;
 }
+/* A key nobody has run on, in the Last used column: a state, not a time, so it sits back. */
+.prov-never {
+  color: var(--text-3);
+}
 /* A row's Edit and Delete side by side, and the provider form's own buttons. */
 .prov-actions {
   display: inline-flex;
@@ -17750,8 +17786,10 @@ button.chat-jump-start:hover {
 .np-pop .ant-popover-container {
   padding: 6px;
 }
+/* Wide enough for the longest engine name (Antigravity CLI, DeepSeek Harness) beside the model it
+   would run (board 4 ①). */
 .np-list {
-  width: 244px;
+  width: 312px;
 }
 .np-row {
   display: flex;
@@ -17786,6 +17824,28 @@ button.chat-jump-start:hover {
    than three elements: dim it as unavailable, but leave it pickable — choosing it opens the sign-in it
    names, so greying it out would take away the only thing it is there to offer. */
 .ant-dropdown-menu-item.composer-provider-fix .scope-menu-row {
+  color: var(--text-3);
+}
+/* A session's own key that is gone — turned off, or deleted — dimmed under its own heading, with
+   what became of it on the right in the warning colour (board 5 ④). */
+.ant-dropdown-menu-item.composer-provider-gone .scope-menu-row {
+  color: var(--text-3);
+}
+/* A credential in the Provider submenu: a key's or a pool's vendor mark before its name, since one
+   group holds several vendors' keys (board 4 ④). */
+.composer-provider-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+/* The one sentence under OpenCode's keys, for the key it cannot run (board 4 ⑤). */
+.composer-provider-foot {
+  display: block;
+  max-width: 280px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  white-space: normal;
   color: var(--text-3);
 }
 /* A Codex account under Codex in that submenu: indented under its engine, its own quota on the right

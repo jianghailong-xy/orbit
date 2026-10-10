@@ -398,6 +398,19 @@ public enum ProjectPage {
         }
     }
 
+    // MARK: - The ending, where the progress card was
+
+    /// Whether a project page draws the project's ending where its progress card was: a read that
+    /// says DONE and carries the unified projection's counts to tally. The same card, and the same
+    /// rule, the coordinator conversation's settled branch keeps — and the browser's sessions page
+    /// keeps off its own document read (docs/mocks/project-done-sessions-page, owner decision
+    /// 2026-10-10). A read without the counts (an older server, whose projection draws none of these
+    /// cards) keeps the progress card, which in that state says its status and nothing else.
+    public static func drawsEnding(_ subject: ProjectDoneSubject?) -> Bool {
+        guard let subject, subject.status == "DONE" else { return false }
+        return subject.counts != nil
+    }
+
     // MARK: - Acceptance criteria
 
     public enum CriterionMark: Sendable {
