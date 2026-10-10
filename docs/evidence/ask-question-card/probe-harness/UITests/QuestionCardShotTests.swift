@@ -17,7 +17,7 @@ final class QuestionCardShotTests: ProbeCase {
     private func photograph(_ session: String, _ name: String) {
         let app = launch(session: session, until: label, name)
         settle(1.5)
-        let row = text(app, label)
+        let row = cardRow(app)
         // As it opens: where the conversation puts the card, its tail in view.
         shot("\(name)-a-as-opened")
         tree(app, "\(name)-as-opened")
@@ -38,9 +38,38 @@ final class QuestionCardShotTests: ProbeCase {
             shot("\(name)-c-tapped")
             tree(app, "\(name)-tapped")
             note("\(name) tapped, row: \(describe(row))")
+            // The rest of the replay: its last options, and the words typed or replied, if any.
+            scrollTranscript(app, by: -320)
+            shot("\(name)-d-tapped-lower")
         } else {
             note("\(name): the row is not hittable: \(describe(row))")
         }
         app.terminate()
+    }
+
+    /// The card's row, found by its "Question" text: a label on iOS, a static text's value on macOS
+    /// (the first round's Mac pass looked for a label and found none).
+    private func cardRow(_ app: XCUIApplication) -> XCUIElement {
+        #if os(iOS)
+        return text(app, label)
+        #else
+        return app.staticTexts.matching(NSPredicate(format: "value BEGINSWITH %@", label)).firstMatch
+        #endif
+    }
+
+    /// Move the transcript by `points` (negative: toward its end) with no momentum, from a point clear of
+    /// its rows' controls: the left margin on iOS, the console column on the Mac.
+    private func scrollTranscript(_ app: XCUIApplication, by points: CGFloat) {
+        let window = app.windows.firstMatch
+        #if os(iOS)
+        let start = window.coordinate(withNormalizedOffset: CGVector(dx: 0.04, dy: 0.62))
+        start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 0, dy: points)),
+                    withVelocity: .slow, thenHoldForDuration: 0.6)
+        #else
+        let pane = window.coordinate(withNormalizedOffset: CGVector(dx: 0.82, dy: 0.5))
+        pane.hover()
+        pane.scroll(byDeltaX: 0, deltaY: points)
+        #endif
+        settle(1.5)
     }
 }
