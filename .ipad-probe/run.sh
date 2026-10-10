@@ -41,9 +41,12 @@ xcrun simctl bootstatus "$IPAD_UDID" -b >/dev/null 2>&1 || true
 xcrun simctl status_bar "$IPAD_UDID" override --time "9:41" --batteryState charged --batteryLevel 100 2>/dev/null || true
 
 STATUS=0
+# PROBE_ONLY names one test class (or class/method) to run instead of all of them.
+ONLY=()
+[ -n "${PROBE_ONLY:-}" ] && ONLY=("-only-testing:IpadProbeUITests/$PROBE_ONLY")
 SHOTS_DIR="$OUT" TEST_RUNNER_SHOTS_DIR="$OUT" xcodebuild test -project IpadProbe.xcodeproj -scheme IpadProbe \
   -destination "id=$IPAD_UDID" -derivedDataPath .dd -resultBundlePath results/ipad.xcresult \
-  CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- > build-ipad.log 2>&1 || STATUS=1
+  ${ONLY[@]+"${ONLY[@]}"} CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- > build-ipad.log 2>&1 || STATUS=1
 grep -E "Test Case|Executed|error:|\*\* TEST|\*\* BUILD" build-ipad.log | tail -80 || true
 cp build-ipad.log "$OUT/xcodebuild-ipad.log"
 # A test process that could not write the pictures still keeps them as attachments.

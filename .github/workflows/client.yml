@@ -29,6 +29,8 @@ jobs:
       - name: Build, swipe and capture
         id: capture
         continue-on-error: true
+        env:
+          PROBE_ONLY: RowEdgeTests
         run: |
           bash .ipad-probe/run.sh 2>&1 | tee run-output.log
           exit "${PIPESTATUS[0]}"
