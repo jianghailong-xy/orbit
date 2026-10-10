@@ -2,7 +2,6 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { App as AntApp } from 'antd';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Runner } from './TasksSidePanel';
@@ -305,9 +304,7 @@ async function mountWorkspace(): Promise<void> {
     nextRoot.render(
       <QueryClientProvider client={nextClient}>
         <MemoryRouter initialEntries={[`/sessions/${SESSION_PUBLIC}`]}>
-          <AntApp>
-            <WorkspaceView runner={RUNNER} />
-          </AntApp>
+          <WorkspaceView runner={RUNNER} />
           <ToastViewport />
         </MemoryRouter>
       </QueryClientProvider>,
@@ -341,7 +338,7 @@ async function commitAndAwaitOutcome(outcome: {
   });
 }
 
-// A real WorkspaceView/AntD mount is seconds, not milliseconds, and these cases cover the mount plus
+// A real WorkspaceView mount is seconds, not milliseconds, and these cases cover the mount plus
 // the commit round-trip — a slow render against the suite's budget, not a sleep.
 describe('a finished commit reports the runner line', () => {
   it('shows the runner message under "Changes committed"', async () => {

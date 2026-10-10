@@ -530,8 +530,8 @@ suite('an acceptance turn without a comparable shell result emits a needs-human 
   );
   const comments = await db.taskComment.findMany({ where: { taskId: f.taskId } });
   assert.equal(comments.length, 1);
-  assert.match(comments[0].body, /需要人工介入：EXECUTABLE 验收未能判定/);
-  assert.match(comments[0].body, /命令：true[\s\S]*期望退出码：0/);
+  assert.match(comments[0].body, /Needs a person: EXECUTABLE acceptance could not be decided/);
+  assert.match(comments[0].body, /Command: true[\s\S]*Expected exit code: 0/);
   assert.match(comments[0].body, /runner did not return shellExitCode\/shellOutput/);
   assert.match(comments[0].body, new RegExp(EXECUTABLE_ACCEPTANCE_UNAVAILABLE_SIGNAL_CODE));
 

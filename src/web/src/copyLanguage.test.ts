@@ -54,19 +54,7 @@ const ALLOWED: Record<string, [count: number, why: string]> = {
   'src/apiserver/src/tasks/task-criterion-shape-advice.ts': [10, OWNER_WORDS],
   'src/web/src/lib/wikiArticles.ts': [1, 'sorts Chinese titles by their pinyin initials'],
 
-  // Session titles, system comments on the task timeline, and the task-list notes.
-  'src/apiserver/src/tasks/tasks.service.ts': [41, TO_ENGLISH],
-  'src/apiserver/src/task-lists/task-lists.service.ts': [13, TO_ENGLISH],
-  'src/apiserver/src/task-lists/list-events.service.ts': [11, TO_ENGLISH],
-  'src/apiserver/src/tasks/reclaim-stalled-task.ts': [20, TO_ENGLISH],
-  'src/apiserver/src/tasks/task-dispatch-refusal.ts': [13, TO_ENGLISH],
-  'src/apiserver/src/projects/attempt-ended-unsettled.producer.ts': [13, TO_ENGLISH],
-  'src/apiserver/src/runner-api/integration-job-relay.ts': [23, TO_ENGLISH],
-  'src/apiserver/src/tasks/owner-confirmation-review-turn.ts': [3, TO_ENGLISH],
-  'src/apiserver/src/tasks/moved-task-evidence.ts': [54, TO_ENGLISH],
-
   // The coordinator's judgment turn.
-  'src/apiserver/src/projects/coordinator-judgment-opening.ts': [312, TO_ENGLISH],
 
   // The task brief and the notes delivered into sessions.
   'src/apiserver/src/tasks/task-execution-prompt.ts': [35, TO_ENGLISH],

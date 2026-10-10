@@ -134,10 +134,10 @@ test('the foreman brief names the stall and stays a one-shot', async () => {
   await f.sweep();
 
   const description: string = f.created[0].description;
-  assert.match(description, /停滞约 30 分钟/);
+  assert.match(description, /stalled for about 30 min/);
   // The instruction that keeps this episodic. A coordinator that decided to sit and poll would
   // be the resident supervisor this design exists to avoid, and it would hold a slot doing it.
-  assert.match(description, /一次性的协调任务，不要保持长时间运行或轮询/);
+  assert.match(description, /one-off coordinating task: do not keep running or polling/);
 });
 
 test('the foreman does not auto-run — the stall dispatched it, not a prerequisite', async () => {
@@ -194,7 +194,7 @@ test('the note that stall leaves on the list names the foreman by its public id'
   assert.ok(detail.includes(TASK_PUBLIC_IDS[0]), detail);
   assert.equal(detail.includes(TASK_IDS[0]), false, 'the raw uuid reached the stored event');
   // The rest of the note is unchanged — the encoding is the id's alone.
-  assert.match(detail, /停滞约 30 分钟，已自动派出协调任务 .+ 去诊断/);
+  assert.match(detail, /Stalled for about 30 min; coordinating task .+ was dispatched automatically to diagnose it/);
 });
 
 test('the ids the dispatch itself uses stay uuids', async () => {

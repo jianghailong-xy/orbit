@@ -479,8 +479,8 @@ test('an Automatic project hands a path warning to its coordinator as a delivery
         }
         // Revision 13 (§4.6): a review the coordinator took up is not handed to the owner on a clock.
         assert.ok(!text.includes('exceptionEscalationSeconds'), 'the review still threatens the escalation clock');
-        assert.ok(!text.includes('合并到 main'), 'the review was sent as an order to merge');
-        assert.ok(!text.includes('需要账号所有者裁决'), 'the review was worded as the owner’s decision');
+        assert.ok(!text.includes('merge into main'), 'the review was sent as an order to merge');
+        assert.ok(!text.includes('needs the account owner’s ruling'), 'the review was worded as the owner’s decision');
         assert.equal(await stack.db.projectOpenItemDelivery.count({
           where: { itemId: item!.id, sessionId: f.coordinatorSessionId, purpose: 'ITEM' },
         }), 1, 'the hand-over was not recorded against the item');
@@ -600,7 +600,7 @@ test('an argued exemption and a moved standard are the owner’s blockers even i
       for (const turn of turns) {
         assert.ok(!turn.clientTurnId?.startsWith(OPEN_ITEM_TURN_PREFIX),
           'the coordinator was handed an exception item about the ruler');
-        assert.ok(turn.content.includes('需要账号所有者裁决'),
+        assert.ok(turn.content.includes('needs the account owner’s ruling'),
           'the coordinator was told about the ruler as something other than the owner’s decision');
       }
     } finally {

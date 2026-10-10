@@ -522,10 +522,10 @@ test('(a) a decidable revision is handed to the target coordinator to decide, an
       const content = message!.content ?? '';
       assert.ok(content.includes(w.title), 'the task is not named by its title');
       assert.ok(content.includes(uuidToBase62(w.task)), 'the task is not named by its id');
-      assert.ok(content.includes(`从项目 ${uuidToBase62(w.projectA)} 移进了这个项目`),
+      assert.ok(content.includes(`moved from project ${uuidToBase62(w.projectA)} into this project`),
         'the message does not say the task moved in from A');
-      assert.ok(content.includes('evidenceRevision 传 "1"'));
-      assert.ok(content.includes(`「${OWN}」`), 'the criterion the evidence quotes is not in it');
+      assert.ok(content.includes('evidenceRevision: "1"'));
+      assert.ok(content.includes(`“${OWN}”`), 'the criterion the evidence quotes is not in it');
       assert.ok(content.includes('task_evidence_decide'));
       // A keeps what it was told before the move, and is told nothing more; the run is told nothing,
       // and nothing was opened to judge it: it went to the conversation B already has.
@@ -600,9 +600,9 @@ test('(b) a revision quoting the criterion the move took back is decided by nobo
       assert.ok(runSays.includes(w.title));
       assert.ok(runSays.includes(uuidToBase62(w.projectB)), 'the run is not told where the task went');
       assert.ok(runSays.includes(`key ${criterionKeyOf(w.criterionA)}`), 'the withdrawn quote is not named');
-      assert.ok(runSays.includes('移动时已经收回'), 'the run is not told the criterion was taken back');
-      assert.ok(runSays.includes(`key：${criterionKeyOf(w.criterionB)}`), 'the criterion to quote is not named');
-      assert.ok(runSays.includes(`「${WANTS_B}」`), 'the criterion to quote is not given word for word');
+      assert.ok(runSays.includes('was taken back by the move'), 'the run is not told the criterion was taken back');
+      assert.ok(runSays.includes(`key: ${criterionKeyOf(w.criterionB)}`), 'the criterion to quote is not named');
+      assert.ok(runSays.includes(`“${WANTS_B}”`), 'the criterion to quote is not given word for word');
       assert.ok(runSays.includes('task_evidence_submit'));
 
       // B's coordinator: one message, not a decision request, saying the task arrived owing a new one.
@@ -612,10 +612,10 @@ test('(b) a revision quoting the criterion the move took back is decided by nobo
       assert.equal(toB!.sendIntent, 'NEXT_TURN');
       const coordinatorSays = toB!.content ?? '';
       assert.ok(coordinatorSays.includes(w.title));
-      assert.ok(coordinatorSays.includes('要重交'));
+      assert.ok(coordinatorSays.includes('to be submitted again'));
       assert.ok(coordinatorSays.includes(`key ${criterionKeyOf(w.criterionB)}`));
       assert.ok(coordinatorSays.includes(uuidToBase62(w.run)), 'it is not told the run was told');
-      assert.ok(!coordinatorSays.includes('evidenceRevision 传'), 'it was asked to decide a revision nobody can');
+      assert.ok(!coordinatorSays.includes('evidenceRevision:'), 'it was asked to decide a revision nobody can');
 
       // Nobody is asked to decide it, and the door would refuse whoever tried: the standard moved.
       assert.deepEqual(await ownerAsked(stack, w, w.coordB, later()), []);
@@ -667,9 +667,9 @@ test('(c) with no target criterion the standard is the task own criteria, and a 
       const says = toB!.content ?? '';
       // The standard is the task's own criteria, quoted under the task's own id.
       assert.ok(says.includes(`key ${uuidToBase62(w.task)}`), 'the key to quote is not the task\'s own id');
-      assert.ok(says.includes(`「${OWN}」`), 'the task\'s own criteria are not given word for word');
+      assert.ok(says.includes(`“${OWN}”`), 'the task\'s own criteria are not given word for word');
       // And nobody will file it unless the coordinator acts.
-      assert.ok(says.includes('没有运行中的会话'));
+      assert.ok(says.includes('has no running session'));
       assert.ok(says.includes('task_start'));
     } finally {
       await stack.db.$disconnect();
