@@ -1,11 +1,13 @@
 import { useQuery } from '@tanstack/react-query';
-import { Button, Result, Spin } from 'antd';
 import { useRef } from 'react';
 import { useMatch, useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { routeId } from '../lib/idCodec';
 import { useManagedRunner } from '../lib/managedRunner';
 import { sessionQuery } from '../lib/queries';
+import { Button } from './ui/Button';
+import { Result } from './ui/Result';
+import { Spinner } from './ui/Spinner';
 import { WorkspaceView } from './WorkspaceView';
 
 // The workspace console, mounted as the layout route shared by /workspaces/:id(/new) and
@@ -72,14 +74,14 @@ export function WorkspaceConsole() {
             title="Session not found"
             subTitle="This session doesn't exist or has been deleted."
             extra={
-              <Button type="primary" onClick={() => navigate('/')}>
+              <Button variant="primary" onClick={() => navigate('/')}>
                 Go home
               </Button>
             }
           />
         ) : (
           <div style={{ padding: 48, textAlign: 'center' }}>
-            <Spin />
+            <Spinner />
           </div>
         )}
       </div>
