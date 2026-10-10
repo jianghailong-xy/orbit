@@ -118,25 +118,18 @@ final class LoginShotTests: ProbeCase {
 
     /// ⑤ The keyboard up: the brand folds into one row; the card, the password and Sign In stay above it.
     /// iOS keeps a password field's keyboard and dots out of the test's own screenshots, so the
-    /// simulator takes this one; a second picture shows the password in the clear, whose keyboard
-    /// any screenshot keeps.
+    /// simulator takes this one.
     func test5KeyboardUp() {
         for dark in [false, true] {
             let s = dark ? "dark" : "light"
             let app = launch(alex, dark: dark, until: "Alex Morgan", "keyboard-\(s)")
             let field = app.secureTextFields.firstMatch
             field.tap()
-            if !app.keyboards.firstMatch.waitForExistence(timeout: 8) { note("keyboard-\(s): no software keyboard") }
+            if !app.keyboards.firstMatch.waitForExistence(timeout: 8) { XCTFail("keyboard-\(s): no software keyboard") }
             field.typeText("correcthors")
             settle(1.5)
             hostShot("5-keyboard-up-\(s)")
             note("keyboard-\(s): card \(describe(card(app))) keyboard \(describe(app.keyboards.firstMatch))")
-            press(app, "Show password", "keyboard-\(s)")
-            let shown = reachableTextField(app)
-            shown.tap()
-            settle(1.5)
-            shot("5b-keyboard-up-password-shown-\(s)")
-            note("keyboard-\(s): shown field \(describe(shown)) keyboard \(describe(app.keyboards.firstMatch))")
             app.terminate()
         }
     }
@@ -272,9 +265,15 @@ final class LoginShotTests: ProbeCase {
         settle(1)
         shot("8b-mac-google-card-light")
         card(app).rightClick()
-        if appears(app, "Remove from this device", timeout: 8) {
+        // A Mac menu item carries its words as its title, not its label.
+        let remove = app.menuItems.matching(NSPredicate(format: "title == %@", "Remove from this device")).firstMatch
+        if remove.waitForExistence(timeout: 8) {
             settle(1)
             shot("8c-mac-right-click-light", screen: true)
+            remove.click()
+            settle(1.5)
+            shot("8d-mac-removed-light")
+            if card(app).exists { XCTFail("mac: Remove from this device left the card") }
         } else {
             XCTFail("mac: no Remove from this device on a right click")
             tree(app, "mac-right-click")
