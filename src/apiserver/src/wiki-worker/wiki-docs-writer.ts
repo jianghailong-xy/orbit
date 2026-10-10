@@ -24,8 +24,8 @@ import { collapseWhitespace, cutRunes, goTrimSpace } from './wiki-import-extract
 // ── The contract's numbers and words ────────────────────────────────────────────────────────────
 
 /** The whole system prompt each call carries (`wikiDocsBuildSystemPrompt`): the rest is in the prompt. */
-export const WIKI_DOCS_BUILD_SYSTEM_PROMPT = '你是 Orbit 的技术文档作者。你只根据给你的材料写，不编造事实、名字、数字和路径。'
-  + '用中文写，代码名、路径、命令保留原文。只输出要求的内容。';
+export const WIKI_DOCS_BUILD_SYSTEM_PROMPT = "You are Orbit's technical writer. You write only from the materials you are given, and invent no "
+  + 'fact, name, number or path. Write in English; keep code names, paths and commands as they are. Output only what is asked for.';
 
 /** What of the repository one piece carries (wiki_docs_build.go's sample sizes). */
 export const WIKI_DOC_PIECE_RULES = {
@@ -46,12 +46,12 @@ export const WIKI_DOC_PIECE_RULES = {
 const MECHANISM_KINDS = new Set(['concepts', 'flow', 'interface', 'data', 'ops']);
 
 const KIND_WORDS: Record<string, string> = {
-  overview: '概述', concepts: '概念', flow: '流程', interface: '接口', data: '数据与配置', ops: '运维',
-  pitfalls: '已知的坑', decisions: '决策与理由', conventions: '约定', other: '其他',
+  overview: 'overview', concepts: 'concepts', flow: 'flow', interface: 'interface', data: 'data and configuration', ops: 'operations',
+  pitfalls: 'known pitfalls', decisions: 'decisions and reasons', conventions: 'conventions', other: 'other',
 };
 
 const WEIGHT_WORDS: Record<string, string> = {
-  decision: '决定', merge: '合并记录', output: '命令输出', error: '报错', other: '其他',
+  decision: 'decision', merge: 'merge record', output: 'command output', error: 'error', other: 'other',
 };
 
 /** `docs.dispositionActions`, in the order a section's line names them. */
@@ -212,14 +212,14 @@ export function wikiDocFilter(pieces: WikiDocPiece[]): void {
   for (const piece of pieces) {
     if (piece.kind === 'turn' && TEMPLATE_TURN.test(piece.text) && piece.text.includes('Orbit has not recorded it done')) {
       piece.action = 'filtered';
-      piece.reason = '平台自动生成的复查模板消息（项目结算卡片发出），不是 owner 原话';
+      piece.reason = "a review template message the platform generated (a project's settlement card sends it), not the owner's words";
       continue;
     }
     const key = createHash('sha256').update(goTrimSpace(piece.text), 'utf8').digest('hex');
     const first = seen.get(key);
     if (first !== undefined) {
       piece.action = 'filtered';
-      piece.reason = `与 ${first} 的原文相同，只留一条`;
+      piece.reason = `the same original as ${first}: kept once`;
       continue;
     }
     seen.set(key, piece.id);
@@ -242,7 +242,7 @@ export function wikiDocSelect(kind: string, pieces: WikiDocPiece[]): void {
     const size = runeCount(piece.text) + WIKI_DOC_BUILD_RULES.materialHeaderChars;
     if (kept > 0 && total + size > WIKI_DOC_BUILD_RULES.materialMaxChars) {
       piece.action = 'over_cap';
-      piece.reason = `本节材料已满（上限 ${WIKI_DOC_BUILD_RULES.materialMaxChars} 字符），没有交给模型`;
+      piece.reason = `the section's material is full (at most ${WIKI_DOC_BUILD_RULES.materialMaxChars} characters): not handed to the model`;
       continue;
     }
     piece.handed = true;
@@ -788,105 +788,105 @@ function kindWord(kind: string): string {
 
 // The four prompts, word for word as wiki_docs_build.go writes them (its fmt.Sprintf templates).
 
-const WIKI_DOC_MERGE_TEMPLATE = `# 任务：为文档《%s》的第 %d 节做「归并」：把下面的材料合成这一节要写的「现状」
+const WIKI_DOC_MERGE_TEMPLATE = `# Task: the "merge" for the document «%s», section %d: combine the materials below into the "current state" this section is to write
 
-## 这一节
-第 %d 节「%s」（%s，约 %d 字）：%s
+## This section
+Section %d «%s» (%s, about %d characters): %s
 
-## 材料（D=设计文档章节，C=代码，K=契约，都取自 origin/main；S=会话等一手记录的原文，已脱敏）
+## Materials (D = a design document's section, C = code, K = a contract, all from origin/main; S = the original words of a session or another first-hand record, redacted)
 %s
 
-## 归并规则（owner 已定）
-1. 同一件事有多条材料时合成一条现状；新决定覆盖旧的。
-2. 证据分量：决定（owner 原话与拍板、判据修订）> 合并记录（合并回执、交付评论）> 命令与测试输出 > 报错原文；同一分量取时间最新的一条。S 材料的标题写了它的证据分量和日期。
-3. 不能当证据：agent 的猜测（「可能」「我怀疑」「估计」）、后来被推翻的说法、与本节无关的材料。
-4. 讲机制的节以设计文档和代码为准；会话材料只用来说明「为什么」「坑」「决策」。代码与文档说法不一致时，以 origin/main 上的代码为准，并把不一致写进现状。
-5. 被推翻的旧说法不进现状；如果它能解释当初为什么这么设计，可以写成「曾经……后来改为……」，并注明新旧两条材料。
+## Merge rules (set by the owner)
+1. When several materials are about the same thing, combine them into one current state; a newer decision overrides an older one.
+2. Weight of evidence: decision (the owner's own words and rulings, criterion revisions) > merge record (merge receipts, delivery comments) > command and test output > error text; within one weight, take the newest. An S material's header gives its weight and its date.
+3. Not evidence: an agent's guesses ("probably", "I suspect", "my guess is"), statements later overturned, material unrelated to this section.
+4. A section on a mechanism goes by the design documents and the code; session material only explains "why", "pitfalls" and "decisions". Where the code and a document disagree, the code on origin/main wins, and the disagreement goes into the current state.
+5. A statement that was overturned stays out of the current state; if it explains why the design was once made that way, it may be written as "it used to be …, and was changed to …", naming both the old and the new material.
 
-## 输出格式
-先逐条写处置，每条材料一行，一条不漏：
-<编号> | 采用 | <一句理由>
-<编号> | 合并到 <编号> | <一句理由>
-<编号> | 舍弃 | <一句理由>
-然后写：
-现状：
-- <一条要点，一句话> [<编号>][<编号>]
-（3–8 条要点，每条标出依据的材料编号）
+## Output format
+First write what becomes of each material, one line a material, leaving none out:
+<id> | adopt | <one sentence of reason>
+<id> | merge into <id> | <one sentence of reason>
+<id> | drop | <one sentence of reason>
+Then write:
+Current state:
+- <one point, in one sentence> [<id>][<id>]
+(3–8 points, each marked with the ids of the materials it rests on)
 `;
 
-const WIKI_DOC_WRITE_TEMPLATE = `# 任务：写文档《%s》的第 %d 节
+const WIKI_DOC_WRITE_TEMPLATE = `# Task: write the document «%s», section %d
 
-## 这篇文档
-- 读者带着的问题：%s
-- 写给谁：%s
-- 全篇大纲：
+## This document
+- The question the reader comes with: %s
+- Written for: %s
+- The whole document's outline:
 %s
 
-## 本节
-「%s」（%s，约 %d 字）：%s
+## This section
+«%s» (%s, about %d characters): %s
 
-## 归并后的现状（上一步的结果）
+## The current state after the merge (the result of the step before)
 %s
 
-## 可用材料（只可引用这些，编号不变）
+## The materials you may use (cite only these, by the ids they have)
 %s
 
-## 写法
-- 写成连贯的技术文档段落：先讲是什么，再讲怎么运转、为什么。不要逐条罗列材料，不要写「材料显示」「根据会话记录」这类话。
-- 每个陈述事实的句子，各自在句末标出依据的材料编号，如 [D1] 或 [C2][S3]。「决策与理由」「已知的坑」「约定」这类段落也要逐句标注，不能只在段末标一次。
-- 讲机制（概念、流程、接口、数据、运维）只依据 D/C/K 材料；S 材料只用来讲为什么、已知的坑、决策。
-- 契约和设计文档里的缩写与编号（例如 SR50、PAC §12、G0–G6 这类）第一次出现时，先用半句话说明它指什么，再用；说明不了就不用缩写，直接说它指的那件事。
-- 过渡句、概括句可以不标编号，但不能带出材料里没有的新事实（新的名字、数字、路径、结论）。
-- 不写材料里没有的事实。材料之间有冲突时写现状，必要时用一句话交代变化。
-- 代码名、路径、命令用反引号，照原文写。长度约 %d 字。
+## How to write
+- Write coherent paragraphs of technical documentation: first what it is, then how it works and why. Do not list the materials one by one, and do not write phrases such as "the materials show" or "according to the session records".
+- Every sentence that states a fact ends with the ids of the materials it rests on, such as [D1] or [C2][S3]. Paragraphs of decisions and reasons, known pitfalls, conventions and the like are marked sentence by sentence too, never only once at the end of the paragraph.
+- A mechanism (concepts, flow, interface, data, operations) rests only on D/C/K materials; S materials only tell why, the known pitfalls and the decisions.
+- An abbreviation or a number from a contract or a design document (such as SR50, PAC §12 or G0–G6) is explained in half a sentence where it first appears, before it is used; if you cannot explain it, do not use the abbreviation, and say directly the thing it stands for.
+- Transition and summary sentences may go without ids, but must not bring in a new fact the materials do not have (a new name, number, path or conclusion).
+- Write no fact the materials do not have. Where materials conflict, write the current state, with a sentence on the change where one is needed.
+- Code names, paths and commands go in backticks, written as in the original. About %d characters long.
 
-## 引文
-正文之后另起一行写「引文：」，为正文里用到的每个编号各写一行逐字引文：从该材料原文里原样抄出支撑你那句话的一小段（10–80 字，一字不改，不翻译，不把两处拼在一起，不加省略号）。正文里出现的每一个编号都必须有一行引文。
-[D1] 「……」
-[S3] 「……」
+## Quotes
+After the body, on a line of its own, write "Quotes:", then a line of verbatim quote for each id the body uses: a short passage copied exactly from that material's original that supports your sentence (10–80 characters, not a character changed, not translated, not two places joined together, no ellipsis). Every id that appears in the body must have a line of quote.
+[D1] "……"
+[S3] "……"
 
-## 输出格式
-只输出下面这些，不要前言：
+## Output format
+Output only what follows, with no preamble:
 ### %s
-<正文>
+<body>
 
-引文：
-[编号] 「逐字引文」
+Quotes:
+[id] "verbatim quote"
 `;
 
-const WIKI_DOC_OVERVIEW_TEMPLATE = `# 任务：写文档《%s》的第 %d 节「%s」（概述，约 %d 字）
+const WIKI_DOC_OVERVIEW_TEMPLATE = `# Task: write the document «%s», section %d «%s» (the overview, about %d characters)
 
-## 这篇文档
-- 读者带着的问题：%s
-- 写给谁：%s
-- 这一节要概括：%s
+## This document
+- The question the reader comes with: %s
+- Written for: %s
+- What this section sums up: %s
 
-## 下文各节已经写好（正文里的 [F编号] 是它们的脚注）
+## The sections below, already written (the [F<n>] in their text are their footnotes)
 %s
 
-## 这些脚注的逐字引文
+## Those footnotes' verbatim quotes
 %s
 
-## 写法
-- 用一两段话告诉读者：这篇讲的东西是什么、怎么运转、读完能知道什么；点出最重要的几件事。
-- 只概括下文已经写了的内容，不引入新事实。每个陈述事实的句子在句末沿用下文该事实所用的 [F编号]，只用上面列出的编号。
-- 不写「本文将介绍」这类空话。
+## How to write
+- In a paragraph or two, tell the reader what this document is about, how it works and what they will know once they have read it; point out the few most important things.
+- Sum up only what the sections below already say, and bring in no new fact. Every sentence that states a fact ends with the [F<n>] the section below uses for that fact, using only the ids listed above.
+- Write no empty phrases such as "this document will introduce".
 
-## 输出格式
-只输出下面这些，不要前言：
+## Output format
+Output only what follows, with no preamble:
 ### %s
-<正文>
+<body>
 `;
 
-const WIKI_DOC_QUOTE_REPAIR_TEMPLATE = `# 任务：给下面几个脚注补逐字引文
+const WIKI_DOC_QUOTE_REPAIR_TEMPLATE = `# Task: give the footnotes below their verbatim quotes
 
-你刚写的一节里，这些编号的引文缺了，或者在材料原文里找不到。请为每个编号从它的材料原文里原样抄出一段支撑那些句子的文字（10–80 字，一字不改，不翻译，不把两处拼在一起，不加省略号）。
+In the section you just wrote, the quotes for these ids were missing, or could not be found in their materials' originals. For each id, copy exactly from its material's original a passage that supports those sentences (10–80 characters, not a character changed, not translated, not two places joined together, no ellipsis).
 
 %s
 
-## 输出格式
-每个编号一行，只输出这些：
-[编号] 「逐字引文」
+## Output format
+One line an id, and only these:
+[id] "verbatim quote"
 `;
 
 
@@ -897,11 +897,11 @@ const WIKI_DOC_QUOTE_REPAIR_TEMPLATE = `# 任务：给下面几个脚注补逐�
 export function wikiDocHeader(piece: WikiDocPiece): string {
   switch (piece.kind) {
     case 'design_doc':
-      return `[${piece.id}] 设计文档 ${piece.path} § ${piece.section}（L${piece.lines.start}–L${piece.lines.end}，origin/main）`;
+      return `[${piece.id}] design doc ${piece.path} § ${piece.section} (L${piece.lines.start}–L${piece.lines.end}, origin/main)`;
     case 'code':
-      return `[${piece.id}] 代码 ${piece.path}${piece.symbol !== '' ? ` · ${piece.symbol}` : ''}（L${piece.lines.start}–L${piece.lines.end}，origin/main）`;
+      return `[${piece.id}] code ${piece.path}${piece.symbol !== '' ? ` · ${piece.symbol}` : ''} (L${piece.lines.start}–L${piece.lines.end}, origin/main)`;
     case 'contract':
-      return `[${piece.id}] 契约 ${piece.path}（L${piece.lines.start}–L${piece.lines.end}，origin/main）`;
+      return `[${piece.id}] contract ${piece.path} (L${piece.lines.start}–L${piece.lines.end}, origin/main)`;
     default:
       break;
   }
@@ -909,6 +909,7 @@ export function wikiDocHeader(piece: WikiDocPiece): string {
   const who = wikiDocWho(piece);
   let when = '';
   let where = '';
+  let project = '';
   let via = '';
   if (record) {
     // Go slices the first ten bytes; a timestamp is ASCII.
@@ -919,11 +920,11 @@ export function wikiDocHeader(piece: WikiDocPiece): string {
         break;
       }
     }
-    if (record.via) via = `，经条目《${record.via.title}》`;
-    if (record.projectTitle !== null && record.projectTitle !== undefined && record.projectTitle !== '') where += `（项目「${cutRunes(record.projectTitle, 40)}」）`;
+    if (record.via) via = `, via entry «${record.via.title}»`;
+    if (record.projectTitle !== null && record.projectTitle !== undefined && record.projectTitle !== '') project = ` (project «${cutRunes(record.projectTitle, 40)}»)`;
   }
-  const weight = record && WEIGHT_WORDS[record.weight] !== undefined ? ` · 证据分量：${WEIGHT_WORDS[record.weight]}` : '';
-  return `[${piece.id}] 记录原文 · ${who} · ${when} · 「${where}」${via}${weight}`;
+  const weight = record && WEIGHT_WORDS[record.weight] !== undefined ? ` · weight: ${WEIGHT_WORDS[record.weight]}` : '';
+  return `[${piece.id}] record · ${who} · ${when} · «${where}»${project}${via}${weight}`;
 }
 
 /** Who a record's words are (`wikiDocWho`). */
@@ -932,36 +933,36 @@ export function wikiDocWho(piece: WikiDocPiece): string {
   const label = record?.label ?? '';
   switch (piece.kind) {
     case 'turn':
-      return record?.ownerWords ? 'owner 原话' : '会话消息';
+      return record?.ownerWords ? "the owner's words" : 'session message';
     case 'event':
       switch (label) {
         case 'assistant':
-          return 'agent 回复';
+          return 'agent reply';
         case 'thinking':
-          return 'agent 思考';
+          return 'agent thinking';
         case 'tool_use':
-          return 'agent 工具调用';
+          return 'agent tool call';
         case 'tool_result':
-          return record?.weight === 'error' ? '工具结果（报错）' : '工具结果';
+          return record?.weight === 'error' ? 'tool result (error)' : 'tool result';
         case 'error':
-          return '报错';
+          return 'error';
         default:
-          return `会话事件 ${label}`;
+          return `session event ${label}`;
       }
     case 'tool_call':
-      return record?.weight === 'error' ? '命令输出（报错）' : '命令输出';
+      return record?.weight === 'error' ? 'command output (error)' : 'command output';
     case 'task_comment':
-      return record?.ownerWords ? 'owner 评论' : 'agent 交付评论';
+      return record?.ownerWords ? 'owner comment' : 'agent delivery comment';
     case 'approval':
-      return 'owner 的回答';
+      return "the owner's answer";
     case 'owner_decision':
-      return 'owner 的决定';
+      return "the owner's decision";
     case 'merge_receipt':
-      return '合并回执';
+      return 'merge receipt';
     case 'note':
-      return '导入的笔记';
+      return 'imported note';
     case 'task':
-      return '任务描述';
+      return 'task description';
     default:
       return piece.kind;
   }
@@ -974,12 +975,12 @@ function block(piece: WikiDocPiece): string {
 
 function outline(doc: WikiDocsPlanDoc, current: number): string {
   return doc.sections
-    .map((section, i) => `  ${i + 1}. ${section.title}（${kindWord(section.kind)}）—— ${section.covers}${i === current ? '　← 本节' : ''}`)
+    .map((section, i) => `  ${i + 1}. ${section.title} (${kindWord(section.kind)}) — ${section.covers}${i === current ? '  ← this section' : ''}`)
     .join('\n');
 }
 
 function audience(doc: WikiDocsPlanDoc): string {
-  return (doc.audience ?? []).join('；');
+  return (doc.audience ?? []).join('; ');
 }
 
 /** Ask the model to merge the pieces it is handed into the section's current state, and to say what became of each. */
@@ -995,10 +996,10 @@ export function wikiDocMergePrompt(doc: WikiDocsPlanDoc, index: number, handed: 
 /** Ask the model to write the section from the pieces it kept, with a verbatim quote for every footnote it marks. */
 export function wikiDocWritePrompt(doc: WikiDocsPlanDoc, index: number, state: readonly string[], used: readonly WikiDocPiece[]): string {
   const section = doc.sections[index];
-  const stateText = state.length > 0 ? `- ${state.join('\n- ')}` : '（无）';
+  const stateText = state.length > 0 ? `- ${state.join('\n- ')}` : '(none)';
   const materials = used.length > 0
     ? used.map((piece) => block(piece)).join('\n\n')
-    : '（归并后没有可用材料。只写一两句本篇的边界说明，不陈述新事实。）';
+    : "(No material is left after the merge. Write only a sentence or two on this document's boundaries, and state no new fact.)";
   return goSprintf(
     WIKI_DOC_WRITE_TEMPLATE,
     doc.title, index + 1, doc.question, audience(doc), outline(doc, index), section.title, kindWord(section.kind),
@@ -1015,7 +1016,7 @@ export interface WikiDocOverviewNote {
 /** Ask for the overview from the other sections as they are written. */
 export function wikiDocOverviewPrompt(doc: WikiDocsPlanDoc, index: number, sections: readonly string[], notes: readonly WikiDocOverviewNote[]): string {
   const section = doc.sections[index];
-  const quotes = notes.map((note) => `[${note.id}] ${note.footnote.quote !== null ? `「${note.footnote.quote}」` : '（无引文）'}`);
+  const quotes = notes.map((note) => `[${note.id}] ${note.footnote.quote !== null ? `"${note.footnote.quote}"` : '(no quote)'}`);
   return goSprintf(
     WIKI_DOC_OVERVIEW_TEMPLATE,
     doc.title, index + 1, section.title, section.length, doc.question, audience(doc), section.covers,
@@ -1029,27 +1030,28 @@ export function wikiDocQuoteRepairPrompt(draft: WikiDocDraft, ids: readonly stri
   const parts = ids.map((id) => {
     const piece = byId.get(id);
     const sentences = wikiDocSentencesCiting(draft.body, id);
-    return `## [${id}] 标在这些句子上：\n${sentences.join('\n')}\n材料原文：\n${piece?.text ?? ''}`;
+    return `## [${id}] marks these sentences:\n${sentences.join('\n')}\nThe material's original:\n${piece?.text ?? ''}`;
   });
   return goSprintf(WIKI_DOC_QUOTE_REPAIR_TEMPLATE, parts.join('\n\n'));
 }
 
 /** What a draft whose paragraphs marked only their last sentence is told when it is asked again. */
 export function wikiDocEndOnlyNote(lonely: readonly string[]): string {
-  return '\n\n## 上一稿的问题\n上一稿有段落只在段末标了一次编号，前面陈述事实的句子没有标：\n'
-    + `- ${lonely.join('\n- ')}\n这次每个陈述事实的句子都要在句末标出它自己依据的编号。\n`;
+  return '\n\n## What was wrong with the last draft\nSome paragraphs of the last draft marked their ids only once, at the end, and the '
+    + `sentences before that state facts carry none:\n- ${lonely.join('\n- ')}\nThis time, every sentence that states a fact ends with the ids `
+    + 'it rests on itself.\n';
 }
 
 // ── Reading what the model wrote ────────────────────────────────────────────────────────────────
 
 const DISPOSITION_LINE = new RegExp(
-  `^${S}*[-*]?${S}*\\[?([A-Z]\\d{1,4})\\]?${S}*[|｜]${S}*(采用|舍弃|合并到${S}*\\[?([A-Z]\\d{1,4})\\]?)${S}*(?:[|｜]${S}*([^\\n]*))?$`,
+  `^${S}*[-*]?${S}*\\[?([A-Z]\\d{1,4})\\]?${S}*[|｜]${S}*([Aa]dopt|[Dd]rop|[Mm]erge${S}+into${S}*\\[?([A-Z]\\d{1,4})\\]?)${S}*(?:[|｜]${S}*([^\\n]*))?$`,
   'u',
 );
-const STATE_LINE = new RegExp(`^${S}*现状${S}*[:：]`, 'u');
+const STATE_LINE = new RegExp(`^${S}*[Cc]urrent${S}+state${S}*[:：]`, 'u');
 const BULLET = new RegExp(`^${S}*([-*•]|\\d+[.、])${S}*`, 'u');
 const QUOTE_LINE = new RegExp(`^${S}*[-*]?${S}*[\\[【]([A-Z]\\d{1,4})[\\]】]${S}*[:：]?${S}*[「“"『]([^\\n]*)[」”"』]${S}*$`, 'u');
-const QUOTES_START = new RegExp(`^${S}*\\**引文\\**${S}*[:：]${S}*$`, 'mu');
+const QUOTES_START = new RegExp(`^${S}*\\**[Qq]uotes\\**${S}*[:：]${S}*$`, 'mu');
 /**
  * A material marker: D, C, K and S name a section's pieces, F an overview's footnotes. Anything else in brackets is
  * the text's own ([P0], [x]) and is left as it is.
@@ -1085,23 +1087,24 @@ export function wikiDocApplyMerge(text: string, pieces: WikiDocPiece[]): string[
     if (!piece || said.has(m[1])) continue;
     said.add(m[1]);
     let reason = goTrimSpace(m[4] ?? '');
-    if (m[2] === '采用') {
+    const action = m[2].toLowerCase();
+    if (action === 'adopt') {
       piece.action = 'adopt';
-    } else if (m[2] === '舍弃') {
+    } else if (action === 'drop') {
       piece.action = 'drop';
     } else if (byId.has(m[3]) && m[3] !== piece.id) {
       piece.action = 'merge';
       piece.into = m[3];
     } else {
       piece.action = 'adopt';
-      reason = goTrimSpace(`（合并目标 ${m[3]} 不是本节交给模型的材料，按采用）${reason}`);
+      reason = goTrimSpace(`(the merge target ${m[3]} is no material handed to the model for this section: read as adopt) ${reason}`);
     }
-    piece.reason = reason === '' ? '归并没有写理由' : reason;
+    piece.reason = reason === '' ? 'the merge gave no reason' : reason;
   }
   for (const piece of byId.values()) {
     if (piece.action === '') {
       piece.action = 'adopt';
-      piece.reason = '归并没有写这条的处置，按采用交给写作';
+      piece.reason = 'the merge said nothing of this material: adopted and handed to the writing';
     }
   }
   return state;
@@ -1352,10 +1355,8 @@ export function wikiDocEndOnlyParagraphs(body: string): string[] {
   return out;
 }
 
-const FACT_TOKEN = new RegExp(
-  `\`[^\`]+\`|\\b[A-Za-z_][A-Za-z0-9_./-]*[A-Za-z0-9_]\\b|\\d{2,}|\\d+(?:\\.\\d+)?${S}*(?:秒|分钟|小时|天|个|条|次|%|ms|s|MB|KB)`,
-  'gu',
-);
+/** The units read Chinese as well as English: a sentence of a document written in Chinese still counts its facts. */
+const FACT_TOKEN = /`[^`]+`|\b[A-Za-z_][A-Za-z0-9_./-]*[A-Za-z0-9_]\b|\d{2,}|\d+(?:\.\d+)?[\t\n\f\r ]*(?:秒|分钟|小时|天|个|条|次|%|ms|s|MB|KB)/gu;
 const STOP_WORDS = new Set(['the', 'and', 'for', 'with', 'not', 'are', 'can', 'its', 'but', 'via']);
 
 /** A sentence's fact tokens (contract `docs.factTokens`), markers aside — Go's list, repeats and all. */
@@ -1383,7 +1384,7 @@ export function wikiDocDispositions(pieces: readonly WikiDocPiece[]): Array<{ ma
       ref: cutRunes(wikiDocDispositionRef(piece), 1000),
       action: piece.action,
       into: piece.action === 'merge' ? piece.into : null,
-      reason: reason === '' ? '（没有理由）' : reason,
+      reason: reason === '' ? '(no reason)' : reason,
     });
   }
   return out;
@@ -1477,7 +1478,7 @@ export function wikiDocOverviewMaterial(
       text = goTrimSpace(b);
     }
     if (goTrimSpace(text) === '') return;
-    sections.push(`【第 ${i + 1} 节 ${section.title}】\n${text}`);
+    sections.push(`[Section ${i + 1}: ${section.title}]\n${text}`);
   });
   return { sections, notes };
 }

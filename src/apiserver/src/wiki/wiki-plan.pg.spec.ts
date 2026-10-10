@@ -696,7 +696,7 @@ test('a topic the space does not have is refused with the space\'s topics listed
   );
   const counted = await entry(h, s.owner.id, s.spaceId);
   await h.sql.query(`UPDATE "wiki_entry" SET "topics" = '{wiki}' WHERE "id" = $1`, [counted]);
-  const listed = '现有主题（slug「名称」·active 条目数）：wiki「wiki」·1；sessions「sessions」·0';
+  const listed = 'Existing topics (slug «name» · active entries): wiki «wiki» · 1; sessions «sessions» · 0';
 
   // A draft: a document's slug as a topic is refused with the list; the space's own topic beside it passes.
   const named = planOf(20);
