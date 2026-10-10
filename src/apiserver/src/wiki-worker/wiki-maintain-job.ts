@@ -1032,14 +1032,21 @@ class WikiMaintainRun {
 
   // ── Verification and anchors ──────────────────────────────────────────────────────────────────
 
-  /** Verify the run's own ops in an automatic space, then adopt what ended sessions left waiting. */
+  /**
+   * Verify the run's own ops in an automatic space, then adopt what ended sessions left waiting. The run's own are its
+   * job's (`maintenance.job.server.verify`), whichever attempt recorded them: a replay after a stop in this step records
+   * none itself — its dossiers are behind the cursor — and the ops the stop left waiting are nobody else's to verify.
+   */
   private async verify(): Promise<void> {
     if (this.context.reviewMode !== 'automatic') return;
-    if (this.report.ops.recorded > 0) await this.verifyOwn();
+    await this.verifyOwn();
     await this.adopt();
   }
 
-  /** Verify the ops this run proposed, in two passes at most; what still has no verdict fails nothing. */
+  /**
+   * Verify the run's own ops still waiting for their verdict, in two passes at most — the second under each op's
+   * retry unit (`verifyWikiOps`); what still has no verdict fails nothing.
+   */
   private async verifyOwn(): Promise<void> {
     const result = { verified: 0, failed: 0, waitingForNextRun: 0 };
     this.report.verification = result;
