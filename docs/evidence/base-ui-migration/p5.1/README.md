@@ -2,11 +2,12 @@
 
 服务于 [P5.1 迁移会话导航、搜索、输出与选择控件](orbit-task:34Za39L1H6V82d2sobzPY)，项目验收条目 key `4Un2KxG0vLBv3dXWCfnqwK`：**P5：会话工作区完成迁移，输入、附件、富内容、消息操作及滚动导航行为无迁移回归。** 本任务承担其子范围：会话导航、搜索、输出和相关选择操作保持原语义；明暗/响应式、焦点与返回路径符合基线，本任务范围内 AntD 耦合已清除。
 
-**结论**：P5.1 的 7 个生产文件不再导入 antd，6 个测试不再导入 antd、按 `.ant-*` 类名定位或在注释里提它，index.css 本批的 15 处改写到 Orbit 类名上；在交付上 `--check-owners`，P5.1 从 28 个使用点降到 0，剩下的只有协调者判归 P5.3 的两个已知未归属点。分支已合入当前 main（`23bdaa967`，含项目 tip `951882866`）。同提交对照（参照 = 交付只撤回业务切换）在八个环境里，正式轮 r2（合并之后）：
+**结论**：P5.1 的 7 个生产文件不再导入 antd，6 个测试不再导入 antd、按 `.ant-*` 类名定位或在注释里提它，index.css 本批的 15 处改写到 Orbit 类名上；在交付上 `--check-owners`，P5.1 从 28 个使用点降到 0，并以 0 退出（协调者判归 P5.3 的两个点已随 P5.2 的记录归属）。分支已合入当前 main（`a51372d3b`，含项目 tip `cf1fa543c`）。同提交对照（参照 = 交付只撤回业务切换）在八个环境里，正式轮 r2（合入 `23bdaa967` 之后）：
 
 - P5.1 用例交付 60 通过；参照有一例在 WebKit 暗色手机上超时，两棵树补跑都通过。trace 的语义字段（地址、主题、侧栏亮着的行、请求与请求体、菜单项、提示、浮层文字、通知、alert）496 步里只有一类差异，已交代：空的合并目标菜单仍是菜单。合并之前的 r1 另有一次参照树的浮层在 Esc 后被延迟的悬停打开又拉开（插桩复现，交付 16 次都没有）。
 - 288 张截图中 109 张超出抗锯齿级，全部归类：浮层在触发器上方的纵向取整、边缘栅格化、P4.2 已接受的 Tooltip 贴边边距、一处对话框阴影。
 - P0 页面矩阵（每个页面都带侧栏）在逐像素阈值下与参照一致，逐字节只有 1 张有 3 个像素的边缘差异；标准 P0 的失败与起点逐条相同，是起点已有的漂移；overlays、controls、八个环境的 choices 组件矩阵全部通过；合并检查唯一的失败是本批一个测试的时序，已在 `b51a143e3` 修正并连跑验证。
+- 第四次同步（`a51372d3b`）之后在 `1886feef3` 上复核（r3）：P5.1 用例两棵树各 60 通过，截图与 trace 的结果与 r2 相同（超出的 107 张全部归类，106 张与 r2 逐张相同；语义差异只有空菜单一类）；P0 矩阵与参照一致；标准 P0 在交付与起点上都全部通过（P0 漂移第 8 批登记了之前的 28 个失败）；合并检查 5151 个测试全过，含修正后的 Menu footer 用例。
 - 对照中找到的 6 处差异已在交付里修正（见[对照找到并修正的差异](#对照找到并修正的差异)）；公共组件新增五项，默认值不变。
 - 焦点与返回路径按 P2–P4 已接受的约定（焦点进出弹层的位置）；合并目标菜单的键盘可达性好于被替换的控件。
 
@@ -32,6 +33,7 @@
 | 10-10 01:45 前后（开发对照中途） | origin/main `ab47a1c11`（34 个新提交，主要是 provider/engine 项目的 T7：会话、任务与工作区先选引擎再选 provider） | 项目 tip 不在 main 里，按规则在 tip 上合入 main，再把本批提交接在合并之后（见[提交](#提交)）。文字冲突只有 `WikiSettingsPage.tsx`（tip 是 P4.4 迁移后的 Orbit 版，main T7 改了维护 provider 列表）：解法 = tip 的文件加 main 的 3 处改动，git rerere 重放的解法与逐行核对一致。语义冲突 1 处：T7 新增的单测「offers the keys Claude Code runs, by the compatibility table …」按 AntD 类名找对话框与选项，Orbit 页面不画这些类名，合入后必然失败（合并树上复现过）；报告协调者后（请求 `34dEqXW9ewr6tEUPubUe6`，选项 0「按建议办」）改为按角色定位、断言不变，内容取协调者晋升同步 `2fcd654d8` 的同一文件（与 P5.2 的 `378b7033e` 逐字节相同）。合并后 `--check-owners` 的未归属点是协调者转告过的两个（`WorkspaceView.recapRow.test.tsx`，以及 main T7 在 index.css 新加的 `.ant-dropdown-menu-item.composer-provider-gone` 一行，归 P5.3，由 P5.2 写记录 2026-10-10b），本批不动、不写记录；P5.1 与 P4.4 都是 0 个使用点。`NewSessionProviderHero.tsx` 在本批提交接到合并之后时有一处导入行的文字冲突（main 改了 `sessionProviderChoices` 的导入，本批把 antd Popover 换成 Orbit Popover），合成两边。 |
 | 10-10 03:10 前后（正式轮之前） | origin/main `57324e33a`（`ab47a1c11` 之后 12 个提交，另有合并提交；src/web 里只有 index.css 一处：开工卡片对话框的关闭键 `b4a5183e3`，P4.3b 的范围） | 按同样的解法重做同步合并：`git merge-tree` 在 `67af3f29c` 上合入 main 的新提交（无冲突），得到的树以项目 tip `d580e572d` 与 `57324e33a` 为父提交写成 `dea24d897`，取代 `67af3f29c`；本批三个提交接在它之后，逐文件 patch-id 与之前相同（29 个文件），内容没有变化。合并后 `--check-owners` 仍只报那两个已知未归属点，P5.1 为 0 个使用点（见[迁移清单](#迁移清单)）。正式轮在这之后跑。 |
 | 10-10 05:05 前后（正式轮 r1 之后、交证据之前） | origin/main `23bdaa967`：main 合入了项目线（`bcf00ab95`），项目 tip `951882866`（P2 的 Select 打开即高亮第一项与对话框 Close 的悬停底色、任务列表工具栏，以及项目线自己的同步带进来的 main 问答卡片）已在 main 里 | tip 在 main 里，同步就是合入 origin/main：在本批三个提交之后 `git merge --no-ff origin/main`，得到 `a0e84233f`（父提交 `eb9438625` 与 `23bdaa967`），分支同时带着当前 main 与当前项目 tip。冲突 1 处：`src/web/ui-migration/playwright.config.mjs` 的 P0 矩阵 `testIgnore`，两边各加了一类用例（本批 `p51*`，main `tasks-toolbar*`），两项都留；index.css 与 components/ui/README.md 自动合并（不同位置）。`git show --remerge-diff a0e84233f` 只有这一处解法。合并带进本树的 web/shared 变化与本批不相交：Dialog 的 Close 只在悬停时换底色，用例不悬停它；Select 打开即高亮第一项，本批不用 Select；Transcript 的问答卡片属 P5.2 的文件。合并后 `--check-owners` 不变（两个已知未归属点，CSS 那一行移到 17921 行；P5.1 为 0）。正式轮在合并上重跑为 r2，作为本批的记录；r1 的步骤日志留在 [process/r1/](process/r1/)。 |
+| 10-10 07:05 前后（证据提交 `856e7bcd5` 之后、交证据之前） | origin/main `a51372d3b`：main 又合入了项目线，项目 tip `cf1fa543c`（P0 漂移登记第 8 批；P5.2 的交付：Image、ImagePreview 两个公共组件与改用它们的 Transcript）已在 main 里 | 在证据提交之后再 `git merge --no-ff origin/main`，得到 `1886feef3`（父提交 `856e7bcd5` 与 `a51372d3b`）。冲突还是 P0 矩阵的 `testIgnore`（本批 `p51*`，main `p52*`），全部保留；index.css 与 components/ui/README.md 自动合并。合并带进来的 web/shared 变化不改动本批用到或修改的公共组件（只新增 Image 与 ImagePreview），Transcript 属 P5.2。合并后 `--check-owners` 以 0 退出：P5.2 的两份记录（2026-10-10、2026-10-10b）随它的交付进来，那两个点归 P5.3，未归属为 0。在合并上复核为 r3（P5.1 两棵树、P0 矩阵、标准 P0 ×2、合并检查；组件矩阵沿用 r2，见[对照结果](#对照结果)）。 |
 
 ## 提交
 
@@ -45,10 +47,12 @@
 | `eb9438625` | **test：同提交对照用例。** `p51.browser.mjs`（7 个用例 × 8 个环境）、`p51-fixtures.mjs`、`p51.config.mjs`；P0 矩阵忽略 `p51*.browser.mjs`。 |
 | `a0e84233f` | **merge：合入 origin/main `23bdaa967`（已含项目 tip `951882866`）。** 见[跟上 origin/main](#跟上-originmain)：P0 矩阵 `testIgnore` 的冲突两项都留。 |
 | `b51a143e3` | **test：Menu footer 的用例等第一项取得焦点。** r2 合并检查里 `Menu.footer.test.tsx` 一例因时序失败，见[对照结果](#对照结果)的合并检查一条；只改这一个测试文件。 |
-| 本目录所在的提交 | **docs：本目录。** 证据、对照脚本与运行记录（报告去掉附件正文）。 |
+| `856e7bcd5` | **docs：本目录。** 证据、对照脚本与运行记录（报告去掉附件正文）。 |
+| `1886feef3` | **merge：合入 origin/main `a51372d3b`（已含项目 tip `cf1fa543c`）。** P0 矩阵 `testIgnore` 的冲突全部保留。 |
+| 本目录更新所在的提交 | **docs：本目录的更新。** 第四次同步与 r3 的复核，r3 的记录在 [process/r3/](process/r3/)。 |
 
 - 撤回 `62a0820f9` 就恢复本批的 AntD 界面，同提交参照树正是这样得到的：正式轮 r2 的参照树 `72fc42d85` = 交付 `a0e84233f` 撤回 `62a0820f9`，与交付只差业务切换的 15 个文件（r1 的参照树 `ca9b895b0` 同理，它的 `src/web/src` 与 `64e45915e` 逐字节相同）。
-- 落地：分支里有合并提交，并同时带着当前 main 与当前项目 tip（`23bdaa967` 含 `951882866`），落地按 MERGE 方式整体接上。
+- 落地：分支里有合并提交，并同时带着当前 main 与当前项目 tip（`a51372d3b` 含 `cf1fa543c`），落地按 MERGE 方式整体接上。
 
 ## 公共组件
 
@@ -135,7 +139,8 @@
 - **标准 P0**：交付与起点（`23bdaa967`，不含本批）各 28 失败、73 通过、11 跳过，失败清单逐条相同，也与 r1 的相同（会话、设置、任务三个页面的 8 个环境，加桌面 4 个环境的断点用例）；失败用例的实际截图 26 张逐字节相同，2 张（任务详情，Chromium 明亮与暗色桌面）各差 5 个与 3 个像素、每像素 1 级（[checks/p0-standard-failures.txt](checks/p0-standard-failures.txt)，两个环境的期望/实际/差异图在 [shots/p0-standard/](shots/p0-standard/)）。这是起点已有的漂移，本批没有带来新的失败，也不登记它。
 - **合并检查**：r2 在交付上 `npm run build -w @orbit/web && npm run test -w @orbit/web` 393 个文件里 1 个失败，是本批的 `Menu.footer.test.tsx`（主机负载 36）：Base UI 在菜单打开后的下一帧才把焦点移到第一项，晚于 footer 输入框的 `autoFocus`，用例只等固定的 4 个时钟就把焦点放进输入框，负载高时迟到的聚焦把打的字交给了菜单项。单独连跑：修正前合并后在任务工作树 15 次失败 7 次（键盘打开那一例的“第一项有焦点”同样在抢），合并前 15 次全过（被测组件合并前后相同）；`b51a143e3` 让依赖这次聚焦的四个用例先等到菜单项取得焦点（至多 2 秒），之后连跑 30 次全过，拿掉 footer 的按键保护时打字用例照样失败（[checks/menu-footer-loops.txt](checks/menu-footer-loops.txt)、[checks/footer-red-after-fix.txt](checks/footer-red-after-fix.txt)）。其余 5131 个测试通过。r1 在 `eb9438625` 上 391 个文件、5107 个测试全部通过。`b51a143e3` 只改这一个测试文件，r2 的浏览器各步不受影响。
 - **组件矩阵**（交付）：overlays 184 通过、controls 32 通过、choices 八个环境各 97 通过（比 r1 多的是 main 带来的 Close 悬停与 Select 第一项用例；r1 为 176、32、85）。
-- **最终提交上的复跑**：交证据前，在最终提交（交付、`b51a143e3` 加本目录）上再跑合并检查、apiserver 的 `npm test` 与 OrbitKit 的 Swift 全量测试（[scripts/final-checks.sh](scripts/final-checks.sh)），这三次运行在证据提交里引用。
+- **第四次同步之后的复核 r3**（[process/r3/](process/r3/)；交付 `1886feef3`，参照 `7c6810a78`，起点 `a51372d3b`；`MATRICES=0 scripts/formal.sh r3`）：P5.1 用例两棵树各 60 通过、4 跳过，没有要补跑的。288 张截图中 75 张相同、106 张抗锯齿级、107 张超出，全部归类（纵向取整 48、边缘栅格化 34、Tooltip 贴边边距 24、对话框阴影 1，未归类 0）；与 r2（含补跑的一对）比，106 张同一批、超过 2 级的像素数逐张相同，其余的差别是 ⌘K 方向键图标边缘（4–6 个像素）在一轮超过 2 级、在另一轮不超过（r2 另有 3 张，r3 另有 1 张）。trace 60 个用例、496 步，语义差异只有 8 个环境“无匹配”一步的空菜单；焦点 148 处、对话框文字 92 处，与 r2 相同。AntD 普查同 r2。P0 矩阵：参照、逐像素比较与交付各 101 通过、11 跳过；逐字节 252 张中 242 张相同、8 张抗锯齿级、2 张超出，都是边缘栅格化且不在侧栏上（手机暗色项目页空搜索结果的筛选条圆角 3+1 个像素、手机明亮任务详情顶栏图标 1 个像素）。标准 P0：交付与起点都是 101 通过、11 跳过、0 失败——P0 漂移登记第 8 批随这次同步进来，之前的 28 个失败已登记。合并检查：395 个文件、5151 个测试全部通过（含 `b51a143e3` 修正后的 `Menu.footer.test.tsx`）。组件矩阵没有重跑：这次合并没有改动既有的公共组件（只新增 Image 与 ImagePreview），沿用 r2 的 overlays、controls、choices。
+- **最终提交上的复跑**：交证据前，在最终提交（`1886feef3` 加本目录的更新）上再跑合并检查、apiserver 的 `npm test` 与 OrbitKit 的 Swift 全量测试（[scripts/final-checks.sh](scripts/final-checks.sh)），这三次运行在证据提交里引用。
 
 ## 对照找到并修正的差异
 
@@ -179,7 +184,7 @@
 
 协调者（会话 34b245G3NiwgVVUj2JFJw）的转告与判定，都已照做：
 
-1. **2026-10-10 两条清单转告**：main `2255a5313`（0418，会话列表第二行读服务端 recap）带进来的 `WorkspaceView.recapRow.test.tsx`（只为包裹 WorkspaceView 导入 antd `App`），以及 main T7（`3a3c58c1f`，经 `ab47a1c11` 进 main）在 index.css 新加的 `.ant-dropdown-menu-item.composer-provider-gone .scope-menu-row {`（composer 的 Provider 菜单），都已判定归 P5.3、由 P5.2 写记录 2026-10-10 与 2026-10-10b。本批不写记录、不动它们，`--check-owners` 里按已知未归属点列出（见[迁移清单](#迁移清单)）。
+1. **2026-10-10 两条清单转告**：main `2255a5313`（0418，会话列表第二行读服务端 recap）带进来的 `WorkspaceView.recapRow.test.tsx`（只为包裹 WorkspaceView 导入 antd `App`），以及 main T7（`3a3c58c1f`，经 `ab47a1c11` 进 main）在 index.css 新加的 `.ant-dropdown-menu-item.composer-provider-gone .scope-menu-row {`（composer 的 Provider 菜单），都已判定归 P5.3、由 P5.2 写记录 2026-10-10 与 2026-10-10b。本批不写记录、不动它们；在那两份记录进 main 之前，`--check-owners` 里按已知未归属点列出，第四次同步带进记录之后归 P5.3、未归属为 0（见[迁移清单](#迁移清单)）。
 2. **main T7 的 WikiSettingsPage 单测**（请求 `34dEqXW9ewr6tEUPubUe6`，选项 0「按建议办：P5.1 在同步合并里改」）：作为这次合入 main 的语义冲突解法放进同步合并（第一次是 `67af3f29c`，正式轮之前按同一解法重做为 `dea24d897`），内容取协调者晋升同步 `2fcd654d8` 的同一文件（与 P5.2 的 `378b7033e` 逐字节相同；`c26b69643..ab47a1c11` 之间 main 没有再改这两个文件），只改定位、断言不变；它不是未归属点，不写清单记录。改完后 P4.4 回到 0 个使用点。
 
 ## 迁移清单
@@ -188,17 +193,16 @@
 
 | | 提交 | P5.1 的使用点 | 未归属 | 待定 | 其余归属 |
 | --- | --- | --- | --- | --- | --- |
-| 参照（本批撤回） | `72fc42d85` | 28 | 2 | 0 | KEEP 1、P5.2 11、P5.3 95、P6 42 |
-| 交付 | `a0e84233f` | **0** | 2 | 0 | KEEP 1、P5.2 11、P5.3 95、P6 42 |
+| 参照（本批撤回） | `7c6810a78` | 28 | 0 | 0 | KEEP 1、P5.3 97、P6 42 |
+| 交付 | `1886feef3` | **0** | 0 | 0 | KEEP 1、P5.3 97、P6 42 |
 
-（合入 main `23bdaa967` 之前，r1 的参照 `ca9b895b0` 与交付 `eb9438625` 也是这组数字。）
-
-- 交付上 `--check-owners` 以 1 退出，只因为那两个未归属点（[checks/delivery-check-owners.json](checks/delivery-check-owners.json)）：`WorkspaceView.recapRow.test.tsx` 与 index.css 的 `.ant-dropdown-menu-item.composer-provider-gone .scope-menu-row {`（合并后在 17921 行）。协调者已判定都归 P5.3、由 P5.2 写记录 2026-10-10 与 2026-10-10b（见[协调者的判定与转告](#协调者的判定与转告)），本树里还没有这两份记录，本批不动它们、不另写记录。
+- 这是第四次同步之后的审计（[checks/](checks/)）：交付上 `--check-owners` 以 0 退出。此前一直列出的两个未归属点（`WorkspaceView.recapRow.test.tsx` 与 index.css 的 `.ant-dropdown-menu-item.composer-provider-gone .scope-menu-row {`）已由随 P5.2 交付进来的记录 2026-10-10、2026-10-10b 归到 P5.3（P5.3 由 95 变为 97）；P5.2 自己的 11 个点也随它的交付清掉了。
+- 之前各次：r2（合并 `23bdaa967` 之后）参照 `72fc42d85` 28 个点、交付 `a0e84233f` 0 个，未归属 2（就是那两个点，`--check-owners` 以 1 退出）；r1 的 `ca9b895b0`/`eb9438625` 同样。
 - 本批没有新的使用点要登记，不写清单记录。其余归属的数字在参照与交付之间不变：本批只移走自己的 28 个点。
 
 ## 查漏：登录后外壳还连着的 AntD
 
-[p4.4/route-closure.mjs](../p4.4/route-closure.mjs) 在交付上重跑（[route-closure.json](route-closure.json)）：登录后各页共用的外壳（`AppShell`：侧栏与会话搜索）的静态导入闭包里，还导入 antd 的模块只剩 `WorkspaceView`（P5.3）与 `Transcript`（P5.2），都是经 `SessionSearch` 导入 `WorkspaceView` 的 `StatusIcon`/`statusLabel` 连上的；P5.1 的 7 个模块都不再导入 antd。P4.4 记录的“外壳到达 `TasksSidePanel`、`SessionSearch`（P5.1）及 `SessionMoveModal`、`SessionOutputs`、`NewSessionProviderHero`、`PlanUsageIndicator`、`CodexResetCredit`（P5.1）”这几条链已断开。
+[p4.4/route-closure.mjs](../p4.4/route-closure.mjs) 在交付 `1886feef3` 上重跑（[route-closure.json](route-closure.json)）：登录后各页共用的外壳（`AppShell`：侧栏与会话搜索）的静态导入闭包里，还导入 antd 的模块只剩 `WorkspaceView`（P5.3），是经 `SessionSearch` 导入 `WorkspaceView` 的 `StatusIcon`/`statusLabel` 连上的；Wiki 各路由也只经它连上。P5.1 的 7 个模块都不再导入 antd；第四次同步带进 P5.2 的交付之后，`Transcript` 也不再导入 antd（合入之前，r2 的交付上外壳还经 `WorkspaceView` 连到 `Transcript`，P5.2）。P4.4 记录的“外壳到达 `TasksSidePanel`、`SessionSearch`（P5.1）及 `SessionMoveModal`、`SessionOutputs`、`NewSessionProviderHero`、`PlanUsageIndicator`、`CodexResetCredit`（P5.1）”这几条链已断开。
 
 ## 复现
 
@@ -211,7 +215,8 @@ scripts/p51-rerun.sh r2     # 正式轮里失败的 P5.1 用例，在同一环�
 scripts/analyze.sh r2       # 截图、计算样式、trace 与其语义字段、AntD 普查；补跑的一对同样比较
 python3 scripts/classify.py /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/compare-r2
 scripts/audit.sh            # audit-antd（交付与参照）、--check-owners、迁移清单闭合、外壳路由闭合
-scripts/collect.sh r2 r1    # 把本文引用的产物复制到本目录（r1 的步骤日志进 process/r1/）
+MATRICES=0 scripts/formal.sh r3   # 第四次同步之后的复核（make-trees.sh 1886feef3… 62a0820f9… a51372d3b… 之后）
+scripts/collect.sh r2 r1 r3 # 把本文引用的产物复制到本目录（r1、r3 进 process/）
 scripts/final-checks.sh <最终提交> final   # 合并检查、apiserver npm test、OrbitKit swift test
 ```
 

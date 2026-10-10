@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "baseline": {
-    "commit": "72fc42d85175a97095e3cc88347cbd009719e2ce",
-    "scopeHash": "01c80e31624c74c91b201ac787231f951ad2cc6b21e1bc8de40693ecba612b4a"
+    "commit": "7c6810a7806096f37e601ec46eba281c1ddb0de5",
+    "scopeHash": "c56bfb233f7b2f6bd6c23284cc475cfa60e785f22131c94a90b3b40e50711e9b"
   },
   "scope": [
     "src/web/src/**",
@@ -18,34 +18,34 @@
     "--check-retired rejects antd references, ant-* class tokens, known internal-ref patterns and the v5 React 19 patch even in comments/tests. Icons, anticon and support packages alone do not block; review support-package reachability separately."
   ],
   "counts": {
-    "scannedFiles": 779,
-    "productionFiles": 383,
-    "testFiles": 394,
-    "antdProductionFiles": 19,
-    "antdTestFiles": 50,
+    "scannedFiles": 786,
+    "productionFiles": 388,
+    "testFiles": 396,
+    "antdProductionFiles": 18,
+    "antdTestFiles": 46,
     "antSelectorTestFiles": 13,
     "antClassTestFiles": 13,
-    "iconProductionFiles": 113,
+    "iconProductionFiles": 114,
     "iconTestFiles": 0,
-    "relevantSourceFiles": 220,
+    "relevantSourceFiles": 218,
     "hitLines": {
-      "ant-class": 142,
+      "ant-class": 138,
       "ant-design-support": 19,
-      "ant-selector": 137,
-      "antd-reference": 181,
+      "ant-selector": 133,
+      "antd-reference": 171,
       "icon-class": 86,
-      "icon-reference": 124,
+      "icon-reference": 125,
       "imperative-confirm": 10,
       "imperative-feedback": 220,
       "internal-ref": 4,
-      "provider": 63,
-      "rc-support": 238,
-      "ref-focus": 28,
+      "provider": 58,
+      "rc-support": 241,
+      "ref-focus": 29,
       "theme": 2,
       "use-app": 4,
       "use-token": 1
     },
-    "retirementBlockingFiles": 97
+    "retirementBlockingFiles": 92
   },
   "dependencies": {
     "declared": [
@@ -2648,34 +2648,9 @@
     {
       "path": "src/web/src/components/BackgroundWakeSteer.test.tsx",
       "category": "test",
-      "sha256": "db9f3b427e1fc324e7174a2fe0b07210b5073d8575a431546fb67f9f1dd963b3",
-      "imports": [
-        {
-          "kind": "import",
-          "module": "antd",
-          "family": "antd",
-          "line": 5,
-          "bindings": [
-            {
-              "imported": "App",
-              "local": "AntApp",
-              "typeOnly": false
-            }
-          ]
-        }
-      ],
-      "hits": [
-        {
-          "kind": "antd-reference",
-          "line": 5,
-          "text": "import { App as AntApp } from 'antd';"
-        },
-        {
-          "kind": "provider",
-          "line": 223,
-          "text": "<AntApp>"
-        }
-      ]
+      "sha256": "632aed8de151b46a6142fbba889e05d9c0bbf6518e405ab9c8b65a831011cf5a",
+      "imports": [],
+      "hits": []
     },
     {
       "path": "src/web/src/components/BatchGraph.tsx",
@@ -4445,44 +4420,9 @@
     {
       "path": "src/web/src/components/QueuedUserTurn.test.tsx",
       "category": "test",
-      "sha256": "62380945874f30b46687ef52321d4fad6a7aa6eb5acead5dca4fd1578feb3ee7",
-      "imports": [
-        {
-          "kind": "import",
-          "module": "antd",
-          "family": "antd",
-          "line": 5,
-          "bindings": [
-            {
-              "imported": "App",
-              "local": "AntApp",
-              "typeOnly": false
-            }
-          ]
-        }
-      ],
-      "hits": [
-        {
-          "kind": "antd-reference",
-          "line": 5,
-          "text": "import { App as AntApp } from 'antd';"
-        },
-        {
-          "kind": "antd-reference",
-          "line": 313,
-          "text": "/** Something drawn the way the console draws it: under a router, a query client and AntD's App. */"
-        },
-        {
-          "kind": "provider",
-          "line": 323,
-          "text": "<AntApp>{node}</AntApp>"
-        },
-        {
-          "kind": "provider",
-          "line": 691,
-          "text": "<AntApp>"
-        }
-      ]
+      "sha256": "a1c8fb35eb041c96e16ded20ca8b0868fafddb1c54a9efc0485f5e4af5e4ebeb",
+      "imports": [],
+      "hits": []
     },
     {
       "path": "src/web/src/components/ReferencedTaskNote.tsx",
@@ -6611,34 +6551,9 @@
     {
       "path": "src/web/src/components/Transcript.backgroundWake.test.tsx",
       "category": "test",
-      "sha256": "f4e95318b6324780c338fe49cafca46b34734af1db97b6d7f63650cef3a8fb34",
-      "imports": [
-        {
-          "kind": "import",
-          "module": "antd",
-          "family": "antd",
-          "line": 6,
-          "bindings": [
-            {
-              "imported": "App",
-              "local": "AntApp",
-              "typeOnly": false
-            }
-          ]
-        }
-      ],
-      "hits": [
-        {
-          "kind": "antd-reference",
-          "line": 6,
-          "text": "import { App as AntApp } from 'antd';"
-        },
-        {
-          "kind": "provider",
-          "line": 515,
-          "text": "<AntApp>"
-        }
-      ]
+      "sha256": "d4bb921dc89bd244e248147a91e343d61593d084ab11b9642a188fb4bf2bb245",
+      "imports": [],
+      "hits": []
     },
     {
       "path": "src/web/src/components/Transcript.controlPlaneNote.test.tsx",
@@ -6651,6 +6566,13 @@
       "path": "src/web/src/components/Transcript.dsh.test.tsx",
       "category": "test",
       "sha256": "c5c70b465bf57b32852df456933461fc6848f09a404980285c7cf6f4390bf171",
+      "imports": [],
+      "hits": []
+    },
+    {
+      "path": "src/web/src/components/Transcript.imagePreview.test.tsx",
+      "category": "test",
+      "sha256": "5e406ae9e2dd3dd4a695d047efe17a14030b57a285d33158fcf90166aa92da50",
       "imports": [],
       "hits": []
     },
@@ -6685,34 +6607,9 @@
     {
       "path": "src/web/src/components/Transcript.settledReply.test.tsx",
       "category": "test",
-      "sha256": "a03bdd71051591350012bc7c6bc8a7028b745829c4cf854f08582f97d32c0845",
-      "imports": [
-        {
-          "kind": "import",
-          "module": "antd",
-          "family": "antd",
-          "line": 5,
-          "bindings": [
-            {
-              "imported": "App",
-              "local": "AntApp",
-              "typeOnly": false
-            }
-          ]
-        }
-      ],
-      "hits": [
-        {
-          "kind": "antd-reference",
-          "line": 5,
-          "text": "import { App as AntApp } from 'antd';"
-        },
-        {
-          "kind": "provider",
-          "line": 232,
-          "text": "<AntApp>"
-        }
-      ]
+      "sha256": "32bbaf95c5bf142424f50acf0fe13ce25c32d21dbf42f5b922bae0e9fb18051d",
+      "imports": [],
+      "hits": []
     },
     {
       "path": "src/web/src/components/Transcript.streamingOrder.test.tsx",
@@ -6738,7 +6635,7 @@
     {
       "path": "src/web/src/components/Transcript.tsx",
       "category": "production",
-      "sha256": "803618c3aa0dfb3f72513529a76eb3a9f9ee181749780fa5d866615f00e24112",
+      "sha256": "f6ff5cdc363dac64266a13e8a541a3f1e9fe5c81b8b709f7141dae3eb779e78a",
       "imports": [
         {
           "kind": "import",
@@ -6887,19 +6784,6 @@
               "typeOnly": false
             }
           ]
-        },
-        {
-          "kind": "import",
-          "module": "antd",
-          "family": "antd",
-          "line": 31,
-          "bindings": [
-            {
-              "imported": "Image",
-              "local": "Image",
-              "typeOnly": false
-            }
-          ]
         }
       ],
       "hits": [
@@ -6907,26 +6791,6 @@
           "kind": "icon-reference",
           "line": 30,
           "text": "} from '@ant-design/icons';"
-        },
-        {
-          "kind": "antd-reference",
-          "line": 31,
-          "text": "import { Image } from 'antd';"
-        },
-        {
-          "kind": "antd-reference",
-          "line": 2788,
-          "text": "// A user-sent image: click to open AntD's full-screen preview (zoom/rotate, ESC to close)."
-        },
-        {
-          "kind": "antd-reference",
-          "line": 2809,
-          "text": "// Static export: AntD's Image lightbox is JS-driven and inert in a saved file — render a"
-        },
-        {
-          "kind": "antd-reference",
-          "line": 2818,
-          "text": "// Standalone (the composer's unsent previews): AntD's own single-image lightbox."
         }
       ]
     },
@@ -11574,6 +11438,106 @@
       ]
     },
     {
+      "path": "src/web/src/components/ui/Image.css",
+      "category": "production",
+      "sha256": "8a962dd6f84f73b65c6333d5a3144c99bd22f88a8d1ef4d3ef6a95a3af43782b",
+      "imports": [],
+      "hits": []
+    },
+    {
+      "path": "src/web/src/components/ui/Image.tsx",
+      "category": "production",
+      "sha256": "5aff1c52314bad3cd71de6ea04f43afdb47201748dbfa32d6c2f9b41afedc085",
+      "imports": [],
+      "hits": []
+    },
+    {
+      "path": "src/web/src/components/ui/ImagePreview.css",
+      "category": "production",
+      "sha256": "9937169e934954a925a600de5f72a95c32ebb411b7bda1f30f0e4c7a0cec2830",
+      "imports": [],
+      "hits": []
+    },
+    {
+      "path": "src/web/src/components/ui/ImagePreview.test.tsx",
+      "category": "test",
+      "sha256": "8e91ec7cfcfdbc4e4e1a75741a1059830699f2f91cf4d0a94ea283b28967d6ab",
+      "imports": [],
+      "hits": []
+    },
+    {
+      "path": "src/web/src/components/ui/ImagePreview.tsx",
+      "category": "production",
+      "sha256": "0c863d66eb72ee1cee2ad75f52742d1633d74a9b8897c5edd6179be2e8fff5c2",
+      "imports": [
+        {
+          "kind": "import",
+          "module": "@ant-design/icons",
+          "family": "icons",
+          "line": 3,
+          "bindings": [
+            {
+              "imported": "CloseOutlined",
+              "local": "CloseOutlined",
+              "typeOnly": false
+            },
+            {
+              "imported": "LeftOutlined",
+              "local": "LeftOutlined",
+              "typeOnly": false
+            },
+            {
+              "imported": "RightOutlined",
+              "local": "RightOutlined",
+              "typeOnly": false
+            },
+            {
+              "imported": "RotateLeftOutlined",
+              "local": "RotateLeftOutlined",
+              "typeOnly": false
+            },
+            {
+              "imported": "RotateRightOutlined",
+              "local": "RotateRightOutlined",
+              "typeOnly": false
+            },
+            {
+              "imported": "SwapOutlined",
+              "local": "SwapOutlined",
+              "typeOnly": false
+            },
+            {
+              "imported": "ZoomInOutlined",
+              "local": "ZoomInOutlined",
+              "typeOnly": false
+            },
+            {
+              "imported": "ZoomOutOutlined",
+              "local": "ZoomOutOutlined",
+              "typeOnly": false
+            }
+          ]
+        }
+      ],
+      "hits": [
+        {
+          "kind": "icon-reference",
+          "line": 12,
+          "text": "} from '@ant-design/icons';"
+        },
+        {
+          "kind": "rc-support",
+          "line": 37,
+          "text": "// The replaced preview's own arithmetic (rc-image, MIT, see ./rc-image.LICENSE), so a button, the wheel, a double"
+        },
+        {
+          "kind": "ref-focus",
+          "line": 329,
+          "text": "closeButton.current?.focus({ preventScroll: true });"
+        }
+      ]
+    },
+    {
       "path": "src/web/src/components/ui/Input.tsx",
       "category": "production",
       "sha256": "8b0822e5f78036924063b28a9bf4ce4bcb7bdbac7201cf3321ee36f5d0329cec",
@@ -11610,7 +11574,7 @@
     {
       "path": "src/web/src/components/ui/Menu.footer.test.tsx",
       "category": "test",
-      "sha256": "808ba01807fb8977f42724420b393e6a1b96177b65d2b76addc769b895f235b7",
+      "sha256": "1b5d2d93bc3fec02cea99554c5e5c1eae429ac60b3c4eb1d532795cdaa30433d",
       "imports": [],
       "hits": []
     },
@@ -11864,7 +11828,7 @@
     {
       "path": "src/web/src/components/ui/README.md",
       "category": "production",
-      "sha256": "92e039b7909f5d0ffe7545989d038d82ee4b6809149daff5dfa9fe9250f8d750",
+      "sha256": "9a8f8a7e9dd4408b511cff354ad0be605a5e961aafedfeba39b14e8298003eb7",
       "imports": [],
       "hits": [
         {
@@ -11976,6 +11940,16 @@
           "kind": "antd-reference",
           "line": 180,
           "text": "`ui-migration/composer.html` 用真实 CSS、ComposerMirror 和输入框辅助函数复现 WorkspaceView 会话输入与 TaskDetailPanel 评论框，同一脚本分别驱动旧 AntD 字段和 Orbit Textarea。`npm run test:ui-composer -w @orbit/web` 比较几何、计算样式、截图像素、镜像字形对齐、附件对齐、手动高度、断点、过渡，以及中文组合输入、Enter/Shift+Enter、⌘/Ctrl+Enter、候选菜单、粘贴、长度上限和历史回溯。Chromium 用 DevTools 真实组合输入；WebKit 无输入法自动化，以 insertText 加组合事件/keyCode 229 重放，不代表真机输入法或软键盘。详见 [P3.1 证据](../../../../../docs/evidence/base-ui-migration/p3.1/README.md)。"
+        },
+        {
+          "kind": "antd-reference",
+          "line": 184,
+          "text": "`ImagePreview`（`ImagePreview.tsx` + `.css`）和 `Image`（`Image.tsx` + `.css`）替代 AntD `Image.PreviewGroup` 与 `Image`。"
+        },
+        {
+          "kind": "rc-support",
+          "line": 188,
+          "text": "- 缩放（按钮、滚轮、双击）、拖动、双指缩放与拖动、松开后的回弹，都沿用被替换预览的算法（rc-image，MIT，见 `rc-image.LICENSE`）：每次缩放 1.5 倍，范围 1–50 倍。翻页时新图以原尺寸立即出现。"
         }
       ]
     },
@@ -13027,6 +13001,19 @@
       "hits": []
     },
     {
+      "path": "src/web/src/components/ui/rc-image.LICENSE",
+      "category": "production",
+      "sha256": "7b763305366912a8caac689f03c071cfef7af43cbfc4f01a789315067187f467",
+      "imports": [],
+      "hits": [
+        {
+          "kind": "rc-support",
+          "line": 2,
+          "text": "@rc-component/image 1.10.0 (hooks/useImageTransform, hooks/useMouseEvent,"
+        }
+      ]
+    },
+    {
       "path": "src/web/src/components/ui/useFormFields.ts",
       "category": "production",
       "sha256": "128d1331065be497d89945938e1f28ecb494eafb24eccaf0b4f4097ccdbcc607",
@@ -13056,7 +13043,7 @@
     {
       "path": "src/web/src/index.css",
       "category": "production",
-      "sha256": "32581ef974d45a6f50c4dc31dc82069543aa0cafed4fcc3b7210630af93bd5fd",
+      "sha256": "686eb2552983072d85f5e1f191fdf1dbe1d12c3d1abf1deebadc6bc3a6eb2adc",
       "imports": [],
       "hits": [
         {
@@ -13645,293 +13632,243 @@
           "text": ".composer-attach .ant-image-cover {"
         },
         {
-          "kind": "antd-reference",
-          "line": 7467,
-          "text": "/* AntD wraps each <Image> in a .ant-image; round it so the hover mask is clipped to the"
-        },
-        {
-          "kind": "ant-selector",
-          "line": 7467,
-          "text": "/* AntD wraps each <Image> in a .ant-image; round it so the hover mask is clipped to the"
-        },
-        {
-          "kind": "ant-class",
-          "line": 7467,
-          "text": "/* AntD wraps each <Image> in a .ant-image; round it so the hover mask is clipped to the"
-        },
-        {
-          "kind": "ant-selector",
-          "line": 7469,
-          "text": ".chat-images .ant-image {"
-        },
-        {
-          "kind": "ant-class",
-          "line": 7469,
-          "text": ".chat-images .ant-image {"
-        },
-        {
-          "kind": "antd-reference",
-          "line": 7482,
-          "text": "AntD .ant-image thumbnail (rounded, zoom cursor) and paints the mask as a hover overlay. */"
-        },
-        {
-          "kind": "ant-selector",
-          "line": 7482,
-          "text": "AntD .ant-image thumbnail (rounded, zoom cursor) and paints the mask as a hover overlay. */"
-        },
-        {
-          "kind": "ant-class",
-          "line": 7482,
-          "text": "AntD .ant-image thumbnail (rounded, zoom cursor) and paints the mask as a hover overlay. */"
-        },
-        {
-          "kind": "ant-selector",
-          "line": 7529,
-          "text": ".md .ant-image {"
-        },
-        {
-          "kind": "ant-class",
-          "line": 7529,
-          "text": ".md .ant-image {"
-        },
-        {
           "kind": "icon-class",
-          "line": 7649,
+          "line": 7659,
           "text": ".chat-injected-action .anticon {"
         },
         {
           "kind": "icon-class",
-          "line": 9754,
+          "line": 9764,
           "text": ".chat-q-answer > .anticon {"
         },
         {
           "kind": "icon-class",
-          "line": 10036,
+          "line": 10046,
           "text": ".evidence-queued-pause .anticon {"
         },
         {
           "kind": "icon-class",
-          "line": 10149,
+          "line": 10159,
           "text": ".owner-confirmation-fold .anticon {"
         },
         {
           "kind": "icon-class",
-          "line": 10289,
+          "line": 10299,
           "text": ".owner-confirmation-review-status .anticon {"
         },
         {
           "kind": "icon-class",
-          "line": 10375,
+          "line": 10385,
           "text": ".owner-confirmation-review-old .anticon,"
         },
         {
           "kind": "icon-class",
-          "line": 10376,
+          "line": 10386,
           "text": ".owner-confirmation-review-evidence .anticon {"
         },
         {
           "kind": "icon-class",
-          "line": 12215,
+          "line": 12225,
           "text": ".answered-question-footer-line > .anticon-check-circle {"
         },
         {
           "kind": "icon-class",
-          "line": 12218,
+          "line": 12228,
           "text": ".answered-question-footer-line > .anticon-rollback {"
         },
         {
           "kind": "icon-class",
-          "line": 12466,
+          "line": 12476,
           "text": ".tdp-judgment.is-judged .anticon {"
         },
         {
           "kind": "antd-reference",
-          "line": 12720,
+          "line": 12730,
           "text": "/* The Reopen question replaced an AntD Modal, whose line height is unitless: text of another size"
         },
         {
           "kind": "ant-selector",
-          "line": 14228,
+          "line": 14238,
           "text": ".ant-input,"
         },
         {
           "kind": "ant-class",
-          "line": 14228,
+          "line": 14238,
           "text": ".ant-input,"
         },
         {
           "kind": "ant-selector",
-          "line": 14229,
+          "line": 14239,
           "text": ".ant-input-affix-wrapper input,"
         },
         {
           "kind": "ant-class",
-          "line": 14229,
+          "line": 14239,
           "text": ".ant-input-affix-wrapper input,"
         },
         {
           "kind": "ant-selector",
-          "line": 14230,
+          "line": 14240,
           "text": "textarea.ant-input,"
         },
         {
           "kind": "ant-class",
-          "line": 14230,
+          "line": 14240,
           "text": "textarea.ant-input,"
         },
         {
           "kind": "antd-reference",
-          "line": 14235,
+          "line": 14245,
           "text": "/* AntD Select focuses this hidden search input on tap — a <16px font here is what"
         },
         {
           "kind": "antd-reference",
-          "line": 14237,
+          "line": 14247,
           "text": "AntD sizes it from the Select's own font token through a rule that outranks a plain"
         },
         {
           "kind": "ant-selector",
-          "line": 14240,
+          "line": 14250,
           "text": ".ant-select-input {"
         },
         {
           "kind": "ant-class",
-          "line": 14240,
+          "line": 14250,
           "text": ".ant-select-input {"
         },
         {
           "kind": "antd-reference",
-          "line": 14424,
+          "line": 14434,
           "text": "/* Maximize / Restore toggle in the drawer header (sits in AntD's `extra` slot, left of ✕). */"
         },
         {
           "kind": "antd-reference",
-          "line": 14898,
+          "line": 14908,
           "text": "/* Unitless line height, as the AntD Modal this dialog replaced: smaller text inside keeps its own"
         },
         {
           "kind": "icon-class",
-          "line": 15787,
+          "line": 15797,
           "text": ".re-runner-status .re-summary .anticon {"
         },
         {
           "kind": "icon-class",
-          "line": 16120,
+          "line": 16130,
           "text": ".re-action .anticon {"
         },
         {
           "kind": "icon-class",
-          "line": 16150,
+          "line": 16160,
           "text": ".re-action.re-more .anticon {"
         },
         {
           "kind": "icon-class",
-          "line": 16911,
+          "line": 16921,
           "text": ".pool-runs-for .anticon {"
         },
         {
           "kind": "icon-class",
-          "line": 16975,
+          "line": 16985,
           "text": ".who-foot .anticon {"
         },
         {
           "kind": "icon-class",
-          "line": 16996,
+          "line": 17006,
           "text": ".who-warn > .anticon {"
         },
         {
           "kind": "icon-class",
-          "line": 17109,
+          "line": 17119,
           "text": ".pa-risk .anticon {"
         },
         {
           "kind": "icon-class",
-          "line": 17129,
+          "line": 17139,
           "text": ".pa-done .anticon {"
         },
         {
           "kind": "icon-class",
-          "line": 17134,
+          "line": 17144,
           "text": ".pa-dup .anticon {"
         },
         {
           "kind": "antd-reference",
-          "line": 17589,
+          "line": 17599,
           "text": "chrome: no antd title bar, no footer buttons, body padding stripped. The three"
         },
         {
           "kind": "ant-selector",
-          "line": 17592,
+          "line": 17602,
           "text": ".ssearch-modal .ant-modal-container {"
         },
         {
           "kind": "ant-class",
-          "line": 17592,
+          "line": 17602,
           "text": ".ssearch-modal .ant-modal-container {"
         },
         {
           "kind": "antd-reference",
-          "line": 17635,
+          "line": 17645,
           "text": "Brand tint rather than --bg-hover: in dark the modal surface IS --bg-hover (AntD's"
         },
         {
           "kind": "ant-selector",
-          "line": 17857,
+          "line": 17867,
           "text": ".np-pop .ant-popover-container {"
         },
         {
           "kind": "ant-class",
-          "line": 17857,
+          "line": 17867,
           "text": ".np-pop .ant-popover-container {"
         },
         {
           "kind": "ant-selector",
-          "line": 17897,
+          "line": 17907,
           "text": ".ant-dropdown-menu-item.composer-provider-fix .scope-menu-row {"
         },
         {
           "kind": "ant-class",
-          "line": 17897,
+          "line": 17907,
           "text": ".ant-dropdown-menu-item.composer-provider-fix .scope-menu-row {"
         },
         {
           "kind": "ant-selector",
-          "line": 17902,
+          "line": 17912,
           "text": ".ant-dropdown-menu-item.composer-provider-gone .scope-menu-row {"
         },
         {
           "kind": "ant-class",
-          "line": 17902,
+          "line": 17912,
           "text": ".ant-dropdown-menu-item.composer-provider-gone .scope-menu-row {"
         },
         {
           "kind": "ant-selector",
-          "line": 17925,
+          "line": 17935,
           "text": ".ant-dropdown-menu-item.composer-account-row .scope-menu-row {"
         },
         {
           "kind": "ant-class",
-          "line": 17925,
+          "line": 17935,
           "text": ".ant-dropdown-menu-item.composer-account-row .scope-menu-row {"
         },
         {
           "kind": "icon-class",
-          "line": 18831,
+          "line": 18841,
           "text": ".project-coordinator-split > .project-coordinator-caret .anticon-down {"
         },
         {
           "kind": "icon-class",
-          "line": 20956,
+          "line": 20966,
           "text": ".bgwake-output[open] .bgwake-output-action .anticon {"
         },
         {
           "kind": "icon-class",
-          "line": 22785,
+          "line": 22795,
           "text": ".wk-reject-btn .anticon-down { font-size: 12px; }"
         },
         {
           "kind": "icon-class",
-          "line": 23482,
+          "line": 23492,
           "text": ".wk-fn2-row .kd .anticon { font-size: 11px; }"
         }
       ]

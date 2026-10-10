@@ -49,6 +49,9 @@ mkdir -p $R/p0-standard-out && cp -a $DEL/src/web/.ui-migration-results/. $R/p0-
 step p0-standard-base $BASE npx playwright test --config ui-migration/playwright.config.mjs
 mkdir -p $R/p0-standard-base-out && cp -a $BASE/src/web/.ui-migration-results/. $R/p0-standard-base-out/
 step merge $DEL bash -c 'cd ../.. && npm run build -w @orbit/web && npm run test -w @orbit/web'
+# MATRICES=0: leave out the component matrices (overlays, controls, choices), for a re-check after a sync with main that
+# changes none of the shared components they cover.
+if [ "${MATRICES:-1}" = 0 ]; then echo "== done (matrices left out) $(date -u +%T)"; exit 0; fi
 step overlays $DEL bash -c 'cd ../.. && npm run test:ui-overlays -w @orbit/web'
 cp -a $DEL/src/web/.overlays-results/report.json $R/overlays-report.json 2>/dev/null
 step controls $DEL bash -c 'cd ../.. && npm run test:ui-controls -w @orbit/web'

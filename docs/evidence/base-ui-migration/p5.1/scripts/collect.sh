@@ -16,6 +16,7 @@
 set -eu
 RUN=${1:?run name}
 PRE=${2:-}   # optional: an earlier formal round kept in process/PRE (its step logs and the small comparison files)
+POST=${3:-}  # optional: a re-check after a later sync with main, kept in process/POST the same way, with its reports' summaries
 T=/mnt/data/tmp/34Za39L1H6V82d2sobzPY
 V=$T/v1
 E=/root/.orbit/worktrees/9f22d16e-3f30-5541-a5ef-91972ffc7911/docs/evidence/base-ui-migration/p5.1
@@ -163,6 +164,25 @@ if [ -n "$PRE" ]; then
      "$V/compare-$PRE/p0-summary.json" "$P/"
   python3 -I -c "import json,sys; d=json.load(open(sys.argv[1])); json.dump({k: d[k] for k in ('tests', 'steps', 'semantic', 'presentation')}, open(sys.argv[2], 'w'), indent=1, ensure_ascii=False)" \
     "$V/compare-$PRE/p51-trace-semantics.json" "$P/p51-trace-semantics.semantic.json"
+fi
+
+# A re-check after a later sync with main (formal.sh with MATRICES=0): its step logs, the reports' summaries, the P5.1
+# classes and clusters, the P0 summary and the semantic part of its trace comparison, any rerun pair.
+if [ -n "$POST" ]; then
+  P=$E/process/$POST
+  CP=$V/compare-$POST
+  mkdir -p "$P"
+  for f in "$V/$POST"/*.txt; do log "$f" "$P/$(basename "$f")"; done
+  for n in p51-ref p51-del p0-ref p0-strict p0-del p0-standard p0-standard-base; do
+    [ -f "$V/$POST/$n-out/report.json" ] && $SUMMARY "$V/$POST/$n-out/report.json" "$P/$n.report.summary.json" > /dev/null
+  done
+  for d in "$V/$POST"/p51-rerun-*-out; do [ -d "$d" ] || continue; n=$(basename "$d" -out); $SUMMARY "$d/report.json" "$P/$n.report.summary.json" > /dev/null; done
+  python3 -I "$T/scripts/classify.py" "$CP" > "$CP/p51-classes.txt"
+  cp "$CP/p51-classes.txt" "$CP/p51-beyond-classes.json" "$CP/p51-beyond-clusters.txt" "$CP/p0-summary.json" "$CP/p0-beyond-clusters.txt" "$P/"
+  for f in "$CP"/p51-rerun-*-summary.json "$CP"/p51-rerun-*-beyond-clusters.txt "$CP"/p51-rerun-*-trace-semantics.json; do [ -f "$f" ] && cp "$f" "$P/"; done
+  python3 -I -c "import json,sys; d=json.load(open(sys.argv[1])); out={k: d[k] for k in ('tests', 'steps', 'semantic', 'presentation')}; out['antd']={side: {k: v for k, v in x.items() if k != 'rows'} for side, x in d['antd'].items()}; json.dump(out, open(sys.argv[2], 'w'), indent=1, ensure_ascii=False)" \
+    "$CP/p51-trace-semantics.json" "$P/p51-trace-semantics.json"
+  python3 -I "$B/p5.1/scripts/failures.py" "$V/$POST/p0-standard-base-out/report.json" "$V/$POST/p0-standard-out/report.json" > "$P/p0-standard-failures.txt" 2>&1 || true
 fi
 
 # Scripts as run that live only on /mnt/data (the rest were run from scripts/ itself).

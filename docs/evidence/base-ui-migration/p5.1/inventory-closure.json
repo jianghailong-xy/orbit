@@ -8,33 +8,22 @@
   "2026-10-08b.json",
   "2026-10-09.json",
   "2026-10-09b.json",
-  "2026-10-09c.json"
+  "2026-10-09c.json",
+  "2026-10-10.json",
+  "2026-10-10b.json"
  ],
  "before": {
   "baseline": {
-   "commit": "72fc42d85175a97095e3cc88347cbd009719e2ce",
-   "scopeHash": "01c80e31624c74c91b201ac787231f951ad2cc6b21e1bc8de40693ecba612b4a"
+   "commit": "7c6810a7806096f37e601ec46eba281c1ddb0de5",
+   "scopeHash": "c56bfb233f7b2f6bd6c23284cc475cfa60e785f22131c94a90b3b40e50711e9b"
   },
   "owners": {
    "KEEP": 1,
    "P5.1": 28,
-   "P5.2": 11,
-   "P5.3": 95,
+   "P5.3": 97,
    "P6": 42
   },
-  "unowned": [
-   {
-    "path": "src/web/src/components/WorkspaceView.recapRow.test.tsx",
-    "reason": "no owner"
-   },
-   {
-    "path": "src/web/src/index.css",
-    "line": 17902,
-    "kind": "ant-class",
-    "text": ".ant-dropdown-menu-item.composer-provider-gone .scope-menu-row {",
-    "reason": "no owner"
-   }
-  ],
+  "unowned": [],
   "pending": [],
   "p51": [
    {
@@ -151,31 +140,31 @@
    },
    {
     "path": "src/web/src/index.css",
-    "line": 14424,
+    "line": 14434,
     "kind": "antd-reference",
     "text": "/* Maximize / Restore toggle in the drawer header (sits in AntD's `extra` slot, left of ✕). */"
    },
    {
     "path": "src/web/src/index.css",
-    "line": 17589,
+    "line": 17599,
     "kind": "antd-reference",
     "text": "chrome: no antd title bar, no footer buttons, body padding stripped. The three"
    },
    {
     "path": "src/web/src/index.css",
-    "line": 17592,
+    "line": 17602,
     "kind": "ant-class",
     "text": ".ssearch-modal .ant-modal-container {"
    },
    {
     "path": "src/web/src/index.css",
-    "line": 17635,
+    "line": 17645,
     "kind": "antd-reference",
     "text": "Brand tint rather than --bg-hover: in dark the modal surface IS --bg-hover (AntD's"
    },
    {
     "path": "src/web/src/index.css",
-    "line": 17857,
+    "line": 17867,
     "kind": "ant-class",
     "text": ".np-pop .ant-popover-container {"
    }
@@ -183,51 +172,38 @@
  },
  "after": {
   "baseline": {
-   "commit": "a0e84233f4c532a810ca7bbd17214e34b0793344",
-   "scopeHash": "1ab8a95ff34818dfd20ae6543703ef0dca5763409d91f94f679d1765f8aae798"
+   "commit": "1886feef3e8c6d288fd54977fc8870b3bce6cec1",
+   "scopeHash": "207adee641ac6b35cdd3e7c29019290ac801f5c611bfee7a4d595fc7b0388168"
   },
   "owners": {
    "KEEP": 1,
-   "P5.2": 11,
-   "P5.3": 95,
+   "P5.3": 97,
    "P6": 42
   },
-  "unowned": [
-   {
-    "path": "src/web/src/components/WorkspaceView.recapRow.test.tsx",
-    "reason": "no owner"
-   },
-   {
-    "path": "src/web/src/index.css",
-    "line": 17921,
-    "kind": "ant-class",
-    "text": ".ant-dropdown-menu-item.composer-provider-gone .scope-menu-row {",
-    "reason": "no owner"
-   }
-  ],
+  "unowned": [],
   "pending": [],
   "p51": []
  },
  "counts": {
   "scannedFiles": [
-   779,
-   779
+   786,
+   786
   ],
   "productionFiles": [
-   383,
-   383
+   388,
+   388
   ],
   "testFiles": [
-   394,
-   394
+   396,
+   396
   ],
   "antdProductionFiles": [
-   19,
-   12
+   18,
+   11
   ],
   "antdTestFiles": [
-   50,
-   46
+   46,
+   42
   ],
   "antSelectorTestFiles": [
    13,
@@ -238,46 +214,46 @@
    9
   ],
   "iconProductionFiles": [
-   113,
-   113
+   114,
+   114
   ],
   "iconTestFiles": [
    0,
    0
   ],
   "relevantSourceFiles": [
-   220,
-   214
+   218,
+   212
   ],
   "retirementBlockingFiles": [
-   97,
-   84
+   92,
+   79
   ]
  },
  "hitLines": {
   "ant-class": [
-   142,
-   110
+   138,
+   106
   ],
   "ant-design-support": [
    19,
    19
   ],
   "ant-selector": [
-   137,
-   107
+   133,
+   103
   ],
   "antd-reference": [
-   181,
-   156
+   171,
+   146
   ],
   "icon-class": [
    86,
    86
   ],
   "icon-reference": [
-   124,
-   124
+   125,
+   125
   ],
   "imperative-confirm": [
    10,
@@ -292,16 +268,16 @@
    4
   ],
   "provider": [
-   63,
-   58
+   58,
+   53
   ],
   "rc-support": [
-   238,
-   237
+   241,
+   240
   ],
   "ref-focus": [
-   28,
-   23
+   29,
+   24
   ],
   "theme": [
    2,
@@ -583,18 +559,18 @@
    "before": {
     "antdImports": [],
     "hitKinds": {
-     "ant-class": 60,
-     "ant-selector": 60,
-     "antd-reference": 25,
+     "ant-class": 56,
+     "ant-selector": 56,
+     "antd-reference": 23,
      "icon-class": 30
     }
    },
    "after": {
     "antdImports": [],
     "hitKinds": {
-     "ant-class": 49,
-     "ant-selector": 49,
-     "antd-reference": 21,
+     "ant-class": 45,
+     "ant-selector": 45,
+     "antd-reference": 19,
      "icon-class": 30
     }
    }

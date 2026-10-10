@@ -1,7 +1,7 @@
 {
  "audit": {
-  "commit": "a0e84233f4c532a810ca7bbd17214e34b0793344",
-  "scopeHash": "1ab8a95ff34818dfd20ae6543703ef0dca5763409d91f94f679d1765f8aae798"
+  "commit": "1886feef3e8c6d288fd54977fc8870b3bce6cec1",
+  "scopeHash": "207adee641ac6b35cdd3e7c29019290ac801f5c611bfee7a4d595fc7b0388168"
  },
  "records": [
   "2026-10-07.json",
@@ -12,83 +12,34 @@
   "2026-10-08b.json",
   "2026-10-09.json",
   "2026-10-09b.json",
-  "2026-10-09c.json"
+  "2026-10-09c.json",
+  "2026-10-10.json",
+  "2026-10-10b.json"
  ],
  "routes": [
   {
    "route": "/s/:token (task, project, wiki or session link)",
    "entry": "pages/SharedLinkPage.tsx",
-   "modules": 195,
-   "antd": [
-    {
-     "module": "src/web/src/components/Transcript.tsx",
-     "antd": [
-      "Image"
-     ],
-     "owner": "P5.2",
-     "chain": [
-      "src/web/src/pages/SharedLinkPage.tsx",
-      "src/web/src/pages/SharedSessionPage.tsx {{ SharedLoading, sharedRootQuery, SharedSessionPage, SharedUnavailable }}",
-      "src/web/src/components/Transcript.tsx {{ ArtifactResolverContext, AttachmentResolverContext, EventFullCtx, PublicLinkResolverCtx, type PublicLinkResolver, Transcript, }}"
-     ]
-    }
-   ]
+   "modules": 197,
+   "antd": []
   },
   {
    "route": "/s/:token/t/:taskId",
    "entry": "pages/SharedLinkPage.tsx",
-   "modules": 195,
-   "antd": [
-    {
-     "module": "src/web/src/components/Transcript.tsx",
-     "antd": [
-      "Image"
-     ],
-     "owner": "P5.2",
-     "chain": [
-      "src/web/src/pages/SharedLinkPage.tsx",
-      "src/web/src/pages/SharedSessionPage.tsx {{ SharedLoading, sharedRootQuery, SharedSessionPage, SharedUnavailable }}",
-      "src/web/src/components/Transcript.tsx {{ ArtifactResolverContext, AttachmentResolverContext, EventFullCtx, PublicLinkResolverCtx, type PublicLinkResolver, Transcript, }}"
-     ]
-    }
-   ]
+   "modules": 197,
+   "antd": []
   },
   {
    "route": "/s/:token/d/:slug",
    "entry": "pages/SharedWikiPage.tsx",
-   "modules": 118,
-   "antd": [
-    {
-     "module": "src/web/src/components/Transcript.tsx",
-     "antd": [
-      "Image"
-     ],
-     "owner": "P5.2",
-     "chain": [
-      "src/web/src/pages/SharedWikiPage.tsx",
-      "src/web/src/pages/SharedSessionPage.tsx {{ SharedLoading, SharedUnavailable }}",
-      "src/web/src/components/Transcript.tsx {{ ArtifactResolverContext, AttachmentResolverContext, EventFullCtx, PublicLinkResolverCtx, type PublicLinkResolver, Transcript, }}"
-     ]
-    }
-   ]
+   "modules": 120,
+   "antd": []
   },
   {
    "route": "/s/:token/c/:sessionId (a shared conversation)",
    "entry": "pages/SharedSessionPage.tsx",
-   "modules": 107,
-   "antd": [
-    {
-     "module": "src/web/src/components/Transcript.tsx",
-     "antd": [
-      "Image"
-     ],
-     "owner": "P5.2",
-     "chain": [
-      "src/web/src/pages/SharedSessionPage.tsx",
-      "src/web/src/components/Transcript.tsx {{ ArtifactResolverContext, AttachmentResolverContext, EventFullCtx, PublicLinkResolverCtx, type PublicLinkResolver, Transcript, }}"
-     ]
-    }
-   ]
+   "modules": 109,
+   "antd": []
   },
   {
    "route": "/login",
@@ -117,7 +68,7 @@
   {
    "route": "(the signed-in shell: sidebar and session search)",
    "entry": "components/AppShell.tsx",
-   "modules": 228,
+   "modules": 230,
    "antd": [
     {
      "module": "src/web/src/components/WorkspaceView.tsx",
@@ -139,19 +90,6 @@
       "src/web/src/components/SessionSearch.tsx {{ SessionSearch }}",
       "src/web/src/components/WorkspaceView.tsx {{ StatusIcon, statusLabel }}"
      ]
-    },
-    {
-     "module": "src/web/src/components/Transcript.tsx",
-     "antd": [
-      "Image"
-     ],
-     "owner": "P5.2",
-     "chain": [
-      "src/web/src/components/AppShell.tsx",
-      "src/web/src/components/SessionSearch.tsx {{ SessionSearch }}",
-      "src/web/src/components/WorkspaceView.tsx {{ StatusIcon, statusLabel }}",
-      "src/web/src/components/Transcript.tsx {{ DshRepairCard }}"
-     ]
     }
    ]
   },
@@ -164,22 +102,8 @@
   {
    "route": "/tasks, /tasks/:id, /lists/:key",
    "entry": "pages/TaskRoute.tsx",
-   "modules": 154,
-   "antd": [
-    {
-     "module": "src/web/src/components/Transcript.tsx",
-     "antd": [
-      "Image"
-     ],
-     "owner": "P5.2",
-     "chain": [
-      "src/web/src/pages/TaskRoute.tsx",
-      "src/web/src/pages/TaskListView.tsx {{ TaskListView }}",
-      "src/web/src/components/TaskDetailPanel.tsx {{ TaskDetailPanel }}",
-      "src/web/src/components/Transcript.tsx {{ MD }}"
-     ]
-    }
-   ]
+   "modules": 156,
+   "antd": []
   },
   {
    "route": "/settings/profile",
@@ -244,27 +168,13 @@
   {
    "route": "/projects, /projects/:id, /projects/:id/tasks/:taskId",
    "entry": "pages/ProjectsPage.tsx",
-   "modules": 176,
-   "antd": [
-    {
-     "module": "src/web/src/components/Transcript.tsx",
-     "antd": [
-      "Image"
-     ],
-     "owner": "P5.2",
-     "chain": [
-      "src/web/src/pages/ProjectsPage.tsx",
-      "src/web/src/components/ProjectTaskPanel.tsx {import()}",
-      "src/web/src/components/TaskDetailPanel.tsx {{ TaskDetailPanel }}",
-      "src/web/src/components/Transcript.tsx {{ MD }}"
-     ]
-    }
-   ]
+   "modules": 178,
+   "antd": []
   },
   {
    "route": "/wiki and its routes",
    "entry": "pages/WikiPage.tsx",
-   "modules": 258,
+   "modules": 260,
    "antd": [
     {
      "module": "src/web/src/components/WorkspaceView.tsx",
@@ -284,18 +194,6 @@
      "chain": [
       "src/web/src/pages/WikiPage.tsx",
       "src/web/src/components/WorkspaceView.tsx {{ statusLabel }}"
-     ]
-    },
-    {
-     "module": "src/web/src/components/Transcript.tsx",
-     "antd": [
-      "Image"
-     ],
-     "owner": "P5.2",
-     "chain": [
-      "src/web/src/pages/WikiPage.tsx",
-      "src/web/src/components/OrbitLinkCard.tsx {{ OrbitLinkCardsProvider }}",
-      "src/web/src/components/Transcript.tsx {{ relTime }}"
      ]
     }
    ]
