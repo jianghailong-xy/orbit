@@ -18,6 +18,8 @@ interface MenuAction {
   checked?: boolean;
   onCheckedChange?: (checked: boolean) => void;
   children?: MenuItem[];
+  /** A class on the item itself, for a row the page styles apart (the account menu's profile row). */
+  className?: string;
   type?: 'item';
 }
 export type MenuItem = MenuAction | { type: 'separator'; key: string }
@@ -33,6 +35,10 @@ export interface MenuProps extends FloatingProps {
    *  page steps through its rows with them); Enter, Space and a click still open it, and the open menu keeps its
    *  arrows. */
   openOnArrowKeys?: boolean;
+  /** Content under the items and outside their arrow-key and typeahead navigation: the merge-target menu's branch
+   *  search. The items scroll above it; keys pressed in it stay its own, except Escape and Tab, which close the menu
+   *  as they do from an item. */
+  footer?: ReactNode;
 }
 
 /**
@@ -56,13 +62,15 @@ function handOver(event: ReactKeyboardEvent<HTMLElement> & { preventBaseUIHandle
     shiftKey: event.shiftKey, ctrlKey: event.ctrlKey, altKey: event.altKey, metaKey: event.metaKey }));
 }
 
+const itemClass = (item: MenuAction) => `orbit-menu-item${item.className ? ` ${item.className}` : ''}`;
+
 function Submenu({ item, contents, container, zIndex }: { item: MenuAction; contents: ReactNode; container: () => HTMLElement | undefined; zIndex: number }) {
   const layer = useFloating({});
   const anchor = useRef<HTMLDivElement>(null);
   const popup = useRef<HTMLDivElement>(null);
   const { positioner, ...placement } = useSubmenuPlacement(anchor);
   return <BaseMenu.SubmenuRoot open={layer.open} onOpenChange={layer.setOpen}>
-    <BaseMenu.SubmenuTrigger ref={anchor} className="orbit-menu-item" label={item.textValue} onKeyDown={(event) => {
+    <BaseMenu.SubmenuTrigger ref={anchor} className={itemClass(item)} label={item.textValue} onKeyDown={(event) => {
       // Opened from the keyboard, the submenu highlights its first item before focus moves into it; until then
       // the parent menu would take these keys, an arrow, Home or End moving to another of its items for the next
       // Enter to run. Opened by hover, nothing in it is highlighted and the keys stay the parent's.
@@ -92,12 +100,12 @@ function Items({ items, container, zIndex }: { items: MenuItem[]; container: () 
       {item.icon != null && <span className="orbit-menu-icon" aria-hidden>{item.icon}</span>}
       <span className="orbit-menu-label">{item.label}</span>
     </>;
-    const common = { className: 'orbit-menu-item', disabled: item.disabled, label: item.textValue,
+    const common = { className: itemClass(item), disabled: item.disabled, label: item.textValue,
       'data-danger': item.danger || undefined, 'data-selected': item.selected || undefined };
     // Disabled actions remain readable but are outside arrow-key navigation,
     // matching the existing workspace menus. They register no selectable item.
     if (item.disabled) return <div key={item.key} role={item.checked === undefined ? 'menuitem' : 'menuitemcheckbox'}
-      aria-disabled="true" aria-checked={item.checked} className="orbit-menu-item" data-disabled>{contents}</div>;
+      aria-disabled="true" aria-checked={item.checked} className={itemClass(item)} data-disabled>{contents}</div>;
     if (item.children) return <Submenu key={item.key} item={item} contents={contents} container={container} zIndex={zIndex} />;
     if (item.checked !== undefined) return <BaseMenu.CheckboxItem key={item.key} {...common}
       checked={item.checked} onCheckedChange={item.onCheckedChange} onClick={item.onSelect} closeOnClick={item.closeOnSelect ?? false}>
@@ -107,7 +115,7 @@ function Items({ items, container, zIndex }: { items: MenuItem[]; container: () 
   });
 }
 
-export function Menu({ trigger, items, disabled, variant = 'default', openOnArrowKeys = true, side = 'bottom', align = 'start',
+export function Menu({ trigger, items, disabled, variant = 'default', openOnArrowKeys = true, footer, side = 'bottom', align = 'start',
   popupClassName, popupStyle, returnFocus, ...state }: MenuProps) {
   const layer = useFloating(state);
   const anchor = useRef<HTMLButtonElement>(null);
@@ -136,9 +144,16 @@ export function Menu({ trigger, items, disabled, variant = 'default', openOnArro
     }} />
     <BaseMenu.Portal container={layer.container()}>
       <BaseMenu.Positioner ref={positioner} side={side} align={align} {...placement} positionMethod={layer.positionMethod} className="orbit-floating-positioner" style={{ zIndex: layer.zIndex }}>
-        <BaseMenu.Popup ref={popup} finalFocus={returnFocus} className={`orbit-menu${popupClassName ? ` ${popupClassName}` : ''}`} data-variant={variant} onClick={(event) => event.stopPropagation()}
+        <BaseMenu.Popup ref={popup} finalFocus={returnFocus} className={`orbit-menu${footer != null ? ' orbit-menu-footed' : ''}${popupClassName ? ` ${popupClassName}` : ''}`} data-variant={variant} onClick={(event) => event.stopPropagation()}
           style={{ '--orbit-menu-anchor-width': anchorWidth === undefined ? undefined : `${anchorWidth}px`, ...popupStyle } as CSSProperties}>
-          <Items items={items} container={layer.container} zIndex={layer.zIndex} />
+          {footer == null ? <Items items={items} container={layer.container} zIndex={layer.zIndex} /> : <>
+            {items.length > 0 && <div className="orbit-menu-list"><Items items={items} container={layer.container} zIndex={layer.zIndex} /></div>}
+            {/* Typed into (a search field), not walked: Base UI's typeahead and arrow keys on the menu would take
+                its letters and arrows. Escape and Tab go on to close the menu. */}
+            <div className="orbit-menu-footer" onKeyDown={(event) => {
+              if (event.key !== 'Escape' && event.key !== 'Tab') event.stopPropagation();
+            }}>{footer}</div>
+          </>}
         </BaseMenu.Popup>
       </BaseMenu.Positioner>
     </BaseMenu.Portal>

@@ -15,6 +15,10 @@
    only to the room on its right, its labels wrapping (see useSubmenuPlacement). */
 .orbit-menu[data-nested] { min-width: 0; max-width: var(--orbit-submenu-room, none); }
 .orbit-menu[data-nested] .orbit-menu-item { white-space: normal; }
+/* With a footer (the merge-target menu's search) the items scroll in their own box and the footer stays under them. */
+.orbit-menu.orbit-menu-footed { display: flex; flex-direction: column; padding: 0; overflow: hidden; }
+.orbit-menu-list { min-height: 0; overflow-y: auto; padding: 4px; }
+.orbit-menu-footer { flex: none; }
 .orbit-menu-item {
   display: flex; align-items: center; gap: 8px; padding: 5px 12px; min-height: 32px;
   border-radius: 4px; cursor: pointer; outline: none; white-space: nowrap;
