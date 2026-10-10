@@ -1,0 +1,127 @@
+argv: bash -c cd ../.. && npm run test:ui-choices -w @orbit/web -- --project webkit-light-desktop
+tree: /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/del
+head: a0e84233f4c532a810ca7bbd17214e34b0793344
+uncommitted:
+load: 14.09 14.38 15.86 11/3035 1863449
+mem: 7274M available
+disk: / 14707M available, TMPDIR /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/tmp
+started: 2026-10-10T06:33:51Z
+
+
+> @orbit/web@0.1.0 pretest:ui-choices
+> npm run build -w @orbit/shared
+
+
+> @orbit/shared@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @orbit/web@0.1.0 test:ui-choices
+> playwright test --config ui-migration/choices.config.mjs --project webkit-light-desktop
+
+P0 expected screenshots: 44 P0.2 originals, 183 main drift references, 25 accepted migration differences.
+
+Running 97 tests using 1 worker
+
+  ✓   1 [webkit-light-desktop] › ui-migration/choices-first-frame.browser.mjs:177:3 › menu is drawn where it settles from its first frame, at the replaced popup's place (17.8s)
+  ✓   2 [webkit-light-desktop] › ui-migration/choices-first-frame.browser.mjs:210:3 › menu keeps its place through the normal entrance motion (4.2s)
+  ✓   3 [webkit-light-desktop] › ui-migration/choices-first-frame.browser.mjs:177:3 › submenu is drawn where it settles from its first frame, at the replaced popup's place (16.8s)
+  ✓   4 [webkit-light-desktop] › ui-migration/choices-first-frame.browser.mjs:210:3 › submenu keeps its place through the normal entrance motion (3.8s)
+  ✓   5 [webkit-light-desktop] › ui-migration/choices-first-frame.browser.mjs:177:3 › select is drawn where it settles from its first frame, at the replaced popup's place (12.1s)
+  ✓   6 [webkit-light-desktop] › ui-migration/choices-first-frame.browser.mjs:210:3 › select keeps its place through the normal entrance motion (2.3s)
+  ✓   7 [webkit-light-desktop] › ui-migration/choices-first-frame.browser.mjs:177:3 › combobox is drawn where it settles from its first frame, at the replaced popup's place (12.7s)
+  ✓   8 [webkit-light-desktop] › ui-migration/choices-first-frame.browser.mjs:210:3 › combobox keeps its place through the normal entrance motion (2.4s)
+  ✓   9 [webkit-light-desktop] › ui-migration/choices-first-frame.browser.mjs:177:3 › multiselect is drawn where it settles from its first frame, at the replaced popup's place (12.6s)
+  ✓  10 [webkit-light-desktop] › ui-migration/choices-first-frame.browser.mjs:210:3 › multiselect keeps its place through the normal entrance motion (2.5s)
+  ✓  11 [webkit-light-desktop] › ui-migration/choices-first-frame.browser.mjs:177:3 › popover is drawn where it settles from its first frame, at the replaced popup's place (11.9s)
+  ✓  12 [webkit-light-desktop] › ui-migration/choices-first-frame.browser.mjs:210:3 › popover keeps its place through the normal entrance motion (2.6s)
+  ✓  13 [webkit-light-desktop] › ui-migration/choices-first-frame.browser.mjs:177:3 › tooltip is drawn where it settles from its first frame, at the replaced popup's place (13.5s)
+  ✓  14 [webkit-light-desktop] › ui-migration/choices-first-frame.browser.mjs:210:3 › tooltip keeps its place through the normal entrance motion (2.7s)
+  ✓  15 [webkit-light-desktop] › ui-migration/choices-first-frame.browser.mjs:177:3 › popconfirm is drawn where it settles from its first frame, at the replaced popup's place (12.1s)
+  ✓  16 [webkit-light-desktop] › ui-migration/choices-first-frame.browser.mjs:210:3 › popconfirm keeps its place through the normal entrance motion (2.3s)
+  ✓  17 [webkit-light-desktop] › ui-migration/choices-submenu-geometry.browser.mjs:84:29 › submenu at the left of the page settles where the replaced submenu does (9.4s)
+  ✓  18 [webkit-light-desktop] › ui-migration/choices-submenu-geometry.browser.mjs:84:29 › submenu at the middle of the page settles where the replaced submenu does (9.3s)
+  ✓  19 [webkit-light-desktop] › ui-migration/choices-submenu-geometry.browser.mjs:84:29 › submenu at the right edge settles where the replaced submenu does (9.2s)
+  ✓  20 [webkit-light-desktop] › ui-migration/choices-submenu-geometry.browser.mjs:84:29 › submenu at the right edge of a dialog settles where the replaced submenu does (11.5s)
+  ✓  21 [webkit-light-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by pointer with no value, the list is on the option the old select was on and Enter picks it (1.9s)
+  ✓  22 [webkit-light-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by ArrowDown with no value, the list is on the option the old select was on and Enter picks it (1.8s)
+  ✓  23 [webkit-light-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by Enter with no value, the list is on the option the old select was on and Enter picks it (1.8s)
+  ✓  24 [webkit-light-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by Space with no value, the list is on the option the old select was on and Enter picks it (1.7s)
+  ✓  25 [webkit-light-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by pointer with a value, the list is on the option the old select was on and Enter picks it (1.8s)
+  ✓  26 [webkit-light-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by ArrowDown with a value, the list is on the option the old select was on and Enter picks it (1.7s)
+  ✓  27 [webkit-light-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by Enter with a value, the list is on the option the old select was on and Enter picks it (1.7s)
+  ✓  28 [webkit-light-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by Space with a value, the list is on the option the old select was on and Enter picks it (1.7s)
+  ✓  29 [webkit-light-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by pointer with no value and the first option disabled, the list is on the option the old select was on and Enter picks it (1.8s)
+  ✓  30 [webkit-light-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by ArrowDown with no value and the first option disabled, the list is on the option the old select was on and Enter picks it (1.7s)
+  ✓  31 [webkit-light-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by Enter with no value and the first option disabled, the list is on the option the old select was on and Enter picks it (1.8s)
+  ✓  32 [webkit-light-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by Space with no value and the first option disabled, the list is on the option the old select was on and Enter picks it (1.8s)
+  ✓  33 [webkit-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:51:51 › no-preference Dialog Popover Select exits restore one layer at a time (2.9s)
+  ✓  34 [webkit-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:51:51 › reduce Dialog Popover Select exits restore one layer at a time (1.5s)
+  ✓  35 [webkit-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:115:90 › reduced motion attachment has no transition and dismisses cleanly (761ms)
+  ✓  36 [webkit-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:115:90 › reduced motion expiry has no transition and dismisses cleanly (738ms)
+  ✓  37 [webkit-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:115:90 › reduced motion search has no transition and dismisses cleanly (785ms)
+  ✓  38 [webkit-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:115:90 › reduced motion multiple has no transition and dismisses cleanly (750ms)
+  ✓  39 [webkit-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:115:90 › reduced motion popover has no transition and dismisses cleanly (785ms)
+  ✓  40 [webkit-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:115:90 › reduced motion tooltip has no transition and dismisses cleanly (739ms)
+  ✓  41 [webkit-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:132:67 › normal attachment can reopen during exit without stale unmount (1.5s)
+  ✓  42 [webkit-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:132:67 › normal expiry can reopen during exit without stale unmount (1.5s)
+  ✓  43 [webkit-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:132:67 › normal search can reopen during exit without stale unmount (1.5s)
+  ✓  44 [webkit-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:132:67 › normal popover can reopen during exit without stale unmount (1.5s)
+  ✓  45 [webkit-light-desktop] › ui-migration/choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches attachment (1.8s)
+  ✓  46 [webkit-light-desktop] › ui-migration/choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches attachment (2.1s)
+  ✓  47 [webkit-light-desktop] › ui-migration/choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches attachment (2.1s)
+  ✓  48 [webkit-light-desktop] › ui-migration/choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches expiry (1.7s)
+  ✓  49 [webkit-light-desktop] › ui-migration/choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches expiry (2.1s)
+  ✓  50 [webkit-light-desktop] › ui-migration/choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches expiry (2.1s)
+  ✓  51 [webkit-light-desktop] › ui-migration/choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches search (1.7s)
+  ✓  52 [webkit-light-desktop] › ui-migration/choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches search (2.1s)
+  ✓  53 [webkit-light-desktop] › ui-migration/choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches search (2.1s)
+  ✓  54 [webkit-light-desktop] › ui-migration/choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches multiple (1.7s)
+  ✓  55 [webkit-light-desktop] › ui-migration/choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches multiple (2.7s)
+  ✓  56 [webkit-light-desktop] › ui-migration/choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches multiple (2.2s)
+  ✓  57 [webkit-light-desktop] › ui-migration/choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches popover (1.7s)
+  ✓  58 [webkit-light-desktop] › ui-migration/choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches popover (2.1s)
+  ✓  59 [webkit-light-desktop] › ui-migration/choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches popover (2.1s)
+  ✓  60 [webkit-light-desktop] › ui-migration/choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches tooltip (2.1s)
+  ✓  61 [webkit-light-desktop] › ui-migration/choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches tooltip (2.1s)
+  ✓  62 [webkit-light-desktop] › ui-migration/choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches tooltip (2.1s)
+  ✓  63 [webkit-light-desktop] › ui-migration/choices-motion.browser.mjs:141:83 › popover center zoom origin matches (2.1s)
+  ✓  64 [webkit-light-desktop] › ui-migration/choices-motion.browser.mjs:141:83 › popover end zoom origin matches (2.1s)
+  ✓  65 [webkit-light-desktop] › ui-migration/choices-motion.browser.mjs:141:83 › tooltip center zoom origin matches (2.1s)
+  ✓  66 [webkit-light-desktop] › ui-migration/choices-motion.browser.mjs:141:83 › tooltip end zoom origin matches (2.1s)
+  ✓  67 [webkit-light-desktop] › ui-migration/choices-motion.browser.mjs:160:41 › submenu left edge zoom matches and stays in view (2.9s)
+  ✓  68 [webkit-light-desktop] › ui-migration/choices-motion.browser.mjs:160:41 › submenu right edge zoom matches and stays in view (2.9s)
+  ✓  69 [webkit-light-desktop] › ui-migration/choices-open-value.browser.mjs:31:53 › expiry dims the current value while open and restores it on Escape (2.1s)
+  ✓  70 [webkit-light-desktop] › ui-migration/choices-open-value.browser.mjs:31:53 › account dims the current value while open and restores it on Escape (2.1s)
+  ✓  71 [webkit-light-desktop] › ui-migration/choices-open-value.browser.mjs:31:53 › search dims the current value while open and restores it on Escape (2.1s)
+  ✓  72 [webkit-light-desktop] › ui-migration/choices.browser.mjs:83:3 › attachment matches the current surface, density and option states (2.3s)
+  ✓  73 [webkit-light-desktop] › ui-migration/choices.browser.mjs:83:3 › access matches the current surface, density and option states (2.3s)
+  ✓  74 [webkit-light-desktop] › ui-migration/choices.browser.mjs:83:3 › expiry matches the current surface, density and option states (2.6s)
+  ✓  75 [webkit-light-desktop] › ui-migration/choices.browser.mjs:83:3 › account matches the current surface, density and option states (2.5s)
+  ✓  76 [webkit-light-desktop] › ui-migration/choices.browser.mjs:83:3 › search matches the current surface, density and option states (2.8s)
+  ✓  77 [webkit-light-desktop] › ui-migration/choices.browser.mjs:83:3 › popover matches the current surface, density and option states (2.2s)
+  ✓  78 [webkit-light-desktop] › ui-migration/choices.browser.mjs:83:3 › tooltip matches the current surface, density and option states (2.2s)
+  ✓  79 [webkit-light-desktop] › ui-migration/choices.browser.mjs:158:1 › empty, disabled, hover and focus choice surfaces match the existing states (10.8s)
+  ✓  80 [webkit-light-desktop] › ui-migration/choices.browser.mjs:198:1 › menu arrows, disabled items, submenu, checkbox and focus return work (1.1s)
+  ✓  81 [webkit-light-desktop] › ui-migration/choices.browser.mjs:231:1 › touch or pointer menus dismiss outside, fit viewport and open a dialog with stable return focus (1.5s)
+  ✓  82 [webkit-light-desktop] › ui-migration/choices.browser.mjs:263:1 › select supports arrows, Enter, clear, empty, disabled and empty-string account values (1.1s)
+  ✓  83 [webkit-light-desktop] › ui-migration/choices.browser.mjs:292:1 › search preserves selection, filters groups, handles no results, composition and explicit clear (1.4s)
+  ✓  84 [webkit-light-desktop] › ui-migration/choices.browser.mjs:323:1 › remote search accepts server labels and resets an action picker without local filtering (771ms)
+  ✓  85 [webkit-light-desktop] › ui-migration/choices.browser.mjs:343:37 › Dialog owns choices, top-layer Escape, Tab and theme (1.8s)
+  ✓  86 [webkit-light-desktop] › ui-migration/choices.browser.mjs:343:37 › legacy Modal owns choices, top-layer Escape, Tab and theme (2.2s)
+  ✓  87 [webkit-light-desktop] › ui-migration/choices.browser.mjs:381:1 › legacy host final Tab matches the AntD-only baseline, including its browser-focus boundary (2.6s)
+  ✓  88 [webkit-light-desktop] › ui-migration/choices.browser.mjs:400:1 › popover owns a select and restores focus one layer at a time; tooltip responds to focus and hover (1.5s)
+  ✓  89 [webkit-light-desktop] › ui-migration/choices.browser.mjs:435:1 › open choices follow the live system theme without losing selection (959ms)
+  ✓  90 [webkit-light-desktop] › ui-migration/choices.browser.mjs:453:1 › Dialog keeps composition, outside dismissal, submenu Escape and keyboard clear within its owner (1.4s)
+  ✓  91 [webkit-light-desktop] › ui-migration/choices.browser.mjs:486:42 › multiple chip appearance matches current labels and email fields (3.7s)
+  ✓  92 [webkit-light-desktop] › ui-migration/choices.browser.mjs:486:42 › tags chip appearance matches current labels and email fields (2.7s)
+  ✓  93 [webkit-light-desktop] › ui-migration/choices.browser.mjs:515:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values (1.2s)
+  ✓  94 [webkit-light-desktop] › ui-migration/choices.browser.mjs:552:1 › email tags support controlled typing, separators, composition, Enter, blur and deletion (1.0s)
+  ✓  95 [webkit-light-desktop] › ui-migration/choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row (1.2s)
+  ✓  96 [webkit-light-desktop] › ui-migration/choices.browser.mjs:631:1 › search option touch selects once and preserves input focus (853ms)
+  ✓  97 [webkit-light-desktop] › ui-migration/choices.browser.mjs:642:1 › disabled-button and long tooltips remain accessible; a plan-usage-sized popover fits the screen (1.3s)
+
+  97 passed (5.4m)
+exit=0
+load: 12.71 12.88 14.71 10/2920 1926588
+ended: 2026-10-10T06:39:19Z

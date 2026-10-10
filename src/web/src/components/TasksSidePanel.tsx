@@ -32,7 +32,6 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useMutation, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
-import { Avatar, Dropdown, Tooltip } from 'antd';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useLocation, useMatch, useNavigate, useSearchParams } from 'react-router-dom';
 import type {
@@ -70,6 +69,9 @@ import {
 import { wikiShown, wikiWaitingOnYou } from '../lib/wiki';
 import { wikiWaiting, writeWikiFromWorkspace } from '../lib/wikiSpace';
 import { SidebarNavIcon } from './SidebarNavIcon';
+import { Avatar } from './ui/Avatar';
+import { Menu } from './ui/Menu';
+import { Tooltip } from './ui/Tooltip';
 
 const IS_MAC_PLATFORM =
   typeof navigator !== 'undefined' &&
@@ -919,117 +921,114 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
       </div>
 
       <div className="tp-user">
-        <Dropdown
-          trigger={['click']}
-          placement="topLeft"
+        <Menu
+          side="top"
+          align="start"
           open={accountMenuOpen}
           onOpenChange={setAccountMenuOpen}
-          menu={{
-            className: 'tp-account-menu',
-            items: [
-              {
-                key: 'profile',
-                className: 'tp-account-profile',
-                label: (
-                  <span className="tp-account-profile-content">
-                    <Avatar
-                      size={36}
-                      src={avatar.data}
-                      icon={<UserOutlined />}
-                      style={{ background: 'var(--brand)', flex: 'none' }}
-                    />
-                    <span className="tp-account-identity">
-                      <span className="tp-account-name">
-                        {me.data?.name || me.data?.email || 'Profile'}
-                      </span>
-                      <span className="tp-account-detail">
-                        {me.data?.name && me.data.name !== me.data.email ? me.data.email : 'View profile'}
-                      </span>
+          popupClassName="tp-account-menu"
+          items={[
+            {
+              key: 'profile',
+              className: 'tp-account-profile',
+              label: (
+                <span className="tp-account-profile-content">
+                  <Avatar
+                    size={36}
+                    src={avatar.data}
+                    icon={<UserOutlined />}
+                    style={{ background: 'var(--brand)', flex: 'none' }}
+                  />
+                  <span className="tp-account-identity">
+                    <span className="tp-account-name">
+                      {me.data?.name || me.data?.email || 'Profile'}
+                    </span>
+                    <span className="tp-account-detail">
+                      {me.data?.name && me.data.name !== me.data.email ? me.data.email : 'View profile'}
                     </span>
                   </span>
-                ),
-                onClick: () => navigate('/settings/profile'),
-              },
-              { type: 'divider' },
-              {
-                key: 'appearance',
-                icon: <BgColorsOutlined />,
-                label: (
-                  <span className="tp-account-appearance-label">
-                    <span>Appearance</span>
-                    <span className="tp-account-current-theme">
-                      {mode === 'system' ? 'System' : mode === 'light' ? 'Light' : 'Dark'}
-                    </span>
+                </span>
+              ),
+              onSelect: () => navigate('/settings/profile'),
+            },
+            { type: 'separator', key: 'identity' },
+            {
+              key: 'appearance',
+              icon: <BgColorsOutlined />,
+              label: (
+                <span className="tp-account-appearance-label">
+                  <span>Appearance</span>
+                  <span className="tp-account-current-theme">
+                    {mode === 'system' ? 'System' : mode === 'light' ? 'Light' : 'Dark'}
                   </span>
-                ),
-                children: (
-                  [
-                    { key: 'system', label: 'System' },
-                    { key: 'light', label: 'Light' },
-                    { key: 'dark', label: 'Dark' },
-                  ] as { key: ThemeMode; label: string }[]
-                ).map((it) => ({
-                  key: `theme-${it.key}`,
-                  label: it.label,
-                  icon:
-                    mode === it.key ? (
-                      <CheckOutlined />
-                    ) : (
-                      <span style={{ display: 'inline-block', width: 14 }} />
-                    ),
-                  onClick: () => {
-                    if (mode !== it.key) setMode(it.key);
+                </span>
+              ),
+              children: (
+                [
+                  { key: 'system', label: 'System' },
+                  { key: 'light', label: 'Light' },
+                  { key: 'dark', label: 'Dark' },
+                ] as { key: ThemeMode; label: string }[]
+              ).map((it) => ({
+                key: `theme-${it.key}`,
+                label: it.label,
+                icon:
+                  mode === it.key ? (
+                    <CheckOutlined />
+                  ) : (
+                    <span style={{ display: 'inline-block', width: 14 }} />
+                  ),
+                onSelect: () => {
+                  if (mode !== it.key) setMode(it.key);
+                },
+              })),
+            },
+            {
+              key: 'settings',
+              icon: <SettingOutlined />,
+              label: 'Settings',
+              onSelect: () => navigate('/settings'),
+            },
+            // User management, for admins only. It opens a settings page as the row above does, so
+            // it sits in that row's group. The menu opens from the collapsed rail's avatar too, so
+            // Admin stays reachable with the panel collapsed.
+            ...(me.data?.role === 'ADMIN'
+              ? [
+                  {
+                    key: 'admin',
+                    icon: <TeamOutlined />,
+                    label: 'Admin',
+                    onSelect: () => navigate('/admin'),
                   },
-                })),
-              },
-              {
-                key: 'settings',
-                icon: <SettingOutlined />,
-                label: 'Settings',
-                onClick: () => navigate('/settings'),
-              },
-              // User management, for admins only. It opens a settings page as the row above does, so
-              // it sits in that row's group. The menu opens from the collapsed rail's avatar too, so
-              // Admin stays reachable with the panel collapsed.
-              ...(me.data?.role === 'ADMIN'
-                ? [
-                    {
-                      key: 'admin',
-                      icon: <TeamOutlined />,
-                      label: 'Admin',
-                      onClick: () => navigate('/admin'),
-                    },
-                  ]
-                : []),
-              { type: 'divider' },
-              {
-                key: 'logout',
-                icon: <LogoutOutlined />,
-                label: 'Log out',
-                danger: true,
-                onClick: logout,
-              },
-            ],
-          }}
-        >
-          <button
-            type="button"
-            className={`tp-user-trigger ${accountMenuOpen ? 'open' : ''}`}
-            aria-label={`Account menu, ${me.data?.name || me.data?.email || 'Profile'}`}
-            aria-haspopup="menu"
-            aria-expanded={accountMenuOpen}
-          >
-            <Avatar
-              size={32}
-              src={avatar.data}
-              icon={<UserOutlined />}
-              style={{ background: 'var(--brand)', flex: 'none' }}
-            />
-            {me.data && (
-              <span className="tp-user-name">{me.data.name || me.data.email}</span>
-            )}
-          </button>
-        </Dropdown>
+                ]
+              : []),
+            { type: 'separator', key: 'session' },
+            {
+              key: 'logout',
+              icon: <LogoutOutlined />,
+              label: 'Log out',
+              danger: true,
+              onSelect: () => void logout(),
+            },
+          ]}
+          trigger={
+            <button
+              type="button"
+              className={`tp-user-trigger ${accountMenuOpen ? 'open' : ''}`}
+              aria-label={`Account menu, ${me.data?.name || me.data?.email || 'Profile'}`}
+            >
+              <Avatar
+                size={32}
+                src={avatar.data}
+                icon={<UserOutlined />}
+                style={{ background: 'var(--brand)', flex: 'none' }}
+              />
+              {me.data && (
+                <span className="tp-user-name">{me.data.name || me.data.email}</span>
+              )}
+            </button>
+          }
+        />
       </div>
 
       <div
@@ -1121,7 +1120,7 @@ export function WorkspaceStateMark({
     if (badge) return badge;
     const title = runnerLabel ? `${runnerLabel} is offline` : 'Runner offline';
     return (
-      <Tooltip title={title}>
+      <Tooltip content={title}>
         <DisconnectOutlined
           className="tp-rail-offline"
           aria-label={title}
@@ -1133,7 +1132,7 @@ export function WorkspaceStateMark({
   if (running) {
     return (
       <>
-        <Tooltip title="Running">
+        <Tooltip content="Running">
           <LoadingOutlined
             className="tp-rail-running"
             spin
@@ -1152,7 +1151,7 @@ export function WorkspaceStateMark({
     const title = `${jobs} background ${jobs === 1 ? 'job' : 'jobs'} running`;
     return (
       <>
-        <Tooltip title={title}>
+        <Tooltip content={title}>
           <CodeOutlined
             // In the collapsed rail this mark sits at the avatar's corner like the spinner it
             // replaces, and the desktop rule below turns it into a quiet dot there.
@@ -1246,7 +1245,7 @@ export function WorkspaceRow({
       >
         <FolderOutlined aria-hidden="true" />
         {offline && (
-          <Tooltip title={offlineTitle}>
+          <Tooltip content={offlineTitle}>
             <DisconnectOutlined
               className="tp-workspace-icon-offline"
               aria-hidden="true"

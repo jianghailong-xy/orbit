@@ -77,10 +77,11 @@ async function openAccountMenu(): Promise<void> {
 const topEntries = () =>
   [...container!.querySelectorAll('.tp-section .tp-item .tp-label')].map((label) => label.textContent);
 
-/** The account menu's plain rows, top to bottom, by label (Appearance is a submenu, not one). */
+/** The account menu's plain rows, top to bottom, by label (the profile row aside; Appearance opens a submenu, so
+ *  it is not one). */
 const menuRows = () =>
-  [...document.querySelectorAll('.tp-account-menu .ant-dropdown-menu-item:not(.tp-account-profile)')].map(
-    (row) => row.querySelector('.ant-dropdown-menu-title-content')?.textContent,
+  [...document.querySelectorAll('[role="menu"].tp-account-menu [role="menuitem"]:not(.tp-account-profile):not([aria-haspopup])')].map(
+    (row) => row.textContent,
   );
 
 beforeEach(() => {
@@ -126,8 +127,8 @@ describe('Admin, for an admin', () => {
     await visit('/projects');
     await openAccountMenu();
 
-    const admin = [...document.querySelectorAll<HTMLElement>('.tp-account-menu .ant-dropdown-menu-item')].find(
-      (row) => row.querySelector('.ant-dropdown-menu-title-content')?.textContent === 'Admin',
+    const admin = [...document.querySelectorAll<HTMLElement>('[role="menu"].tp-account-menu [role="menuitem"]')].find(
+      (row) => row.textContent === 'Admin',
     )!;
     await act(async () => admin.click());
     await settle();

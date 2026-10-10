@@ -545,16 +545,20 @@ describe('Move', { timeout: 60_000 }, () => {
     );
     await click(option('Bugs'), 'the Bugs folder');
 
-    await until(() => expect(document.querySelector('.ant-modal-confirm')).not.toBeNull());
-    const confirm = document.querySelector<HTMLElement>('.ant-modal-confirm')!;
-    expect(confirm.querySelector('.ant-modal-confirm-title')?.textContent).toBe('Move to wikova-develop?');
+    // The question stacks on the Move dialog: an alert dialog, named by its title.
+    const question = () =>
+      [...document.querySelectorAll<HTMLElement>('[role="alertdialog"]')].find(
+        (el) => document.getElementById(el.getAttribute('aria-labelledby') ?? '')?.textContent === 'Move to wikova-develop?',
+      );
+    await until(() => expect(question()).toBeTruthy());
+    const confirm = question()!;
     expect([...confirm.querySelectorAll('.move-confirm-body p')].map((p) => p.textContent)).toEqual([
       'The conversation moves with it. Your next message continues it in wikova-develop.',
       '3 changed files aren’t merged into main yet. They stay on branch orbit/review-import-3fa21c in orbit.',
       'The session ends first.',
     ]);
-    const ok = confirm.querySelector<HTMLElement>('.ant-modal-confirm-btns .ant-btn-primary')!;
-    expect(ok.textContent).toBe('End and Move');
+    const ok = [...confirm.querySelectorAll<HTMLElement>('button')].find((button) => button.textContent === 'End and Move')!;
+    expect(ok.classList.contains('orbit-button-primary')).toBe(true);
     await click(ok, 'End and Move');
 
     await until(() => expect(apiModule.moveSession).toHaveBeenCalled());

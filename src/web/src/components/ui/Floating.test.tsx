@@ -25,12 +25,12 @@ afterEach(async () => {
   roots = [];
 });
 
-async function offsetsFor(rect: { left: number; width: number }, pointAt?: 'start' | 'end'): Promise<Offsets> {
+async function offsetsFor(rect: { left: number; width: number }, pointAt?: 'start' | 'end', padding = 8): Promise<Offsets> {
   let offsets: Offsets | undefined;
   const box = { left: rect.left, right: rect.left + rect.width, width: rect.width, top: 400, bottom: 413, height: 13 };
   function Probe() {
     const anchor = useRef({ getBoundingClientRect: () => box } as unknown as Element);
-    offsets = useWholePixelOffsets(anchor, 12, 8, pointAt);
+    offsets = useWholePixelOffsets(anchor, 12, padding, pointAt);
     return null;
   }
   const root = createRoot(document.createElement('div'));
@@ -68,5 +68,23 @@ describe('useWholePixelOffsets pointAt', () => {
   it('without it, the start edge stays on the anchor’s', async () => {
     const marker = { left: 759.67, width: 14.24 };
     expect(leftEdge(await offsetsFor(marker), marker, 'start', 404)).toBe(759);
+  });
+});
+
+describe('useWholePixelOffsets padding', () => {
+  // A 320px popover end-aligned to a 40px pill mid-row on a phone (a 390px layout viewport), as the Plan usage
+  // popover is: it would start 165px off the left edge. It slides back in to keep its padding from the edge, flush
+  // when the padding is 0, as the replaced popover's `align.overflow.shiftX` slid it.
+  beforeEach(() => {
+    Object.defineProperty(document.documentElement, 'clientWidth', { configurable: true, value: 390 });
+  });
+  const pill = { left: 115, width: 40 };
+
+  it('keeps 8px from the edge by default', async () => {
+    expect(leftEdge(await offsetsFor(pill), pill, 'end', 320)).toBe(8);
+  });
+
+  it('slides flush to the edge with padding 0', async () => {
+    expect(leftEdge(await offsetsFor(pill, undefined, 0), pill, 'end', 320)).toBe(0);
   });
 });

@@ -1,0 +1,329 @@
+{
+ "config": {
+  "argv": [
+   "/usr/local/bin/node",
+   "/mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/ref/node_modules/.bin/playwright",
+   "test",
+   "--config",
+   "ui-migration/p51.config.mjs",
+   "--project",
+   "webkit-dark-phone",
+   "--grep",
+   "the\\ popover\\ by\\ hover\\ and\\ by\\ press,\\ the\\ reset\\ credit\\ and\\ its\\ confirmation",
+   "--update-snapshots=all"
+  ],
+  "configFile": "/mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/ref/src/web/ui-migration/p51.config.mjs",
+  "rootDir": "/mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/ref/src/web/ui-migration",
+  "failOnFlakyTests": false,
+  "forbidOnly": false,
+  "fullyParallel": false,
+  "globalSetup": "/mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/ref/src/web/ui-migration/environment.mjs",
+  "globalTeardown": null,
+  "globalTimeout": 0,
+  "grep": {},
+  "grepInvert": null,
+  "maxFailures": 0,
+  "metadata": {
+   "actualWorkers": 1
+  },
+  "preserveOutput": "always",
+  "projects": [
+   {
+    "outputDir": "/mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-rerun-ref-webkit-dark-phone-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-desktop",
+    "name": "chromium-light-desktop",
+    "testDir": "/mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/ref/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "p51*.browser.mjs"
+    ],
+    "timeout": 240000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-rerun-ref-webkit-dark-phone-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-phone",
+    "name": "chromium-light-phone",
+    "testDir": "/mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/ref/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "p51*.browser.mjs"
+    ],
+    "timeout": 240000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-rerun-ref-webkit-dark-phone-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-desktop",
+    "name": "chromium-dark-desktop",
+    "testDir": "/mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/ref/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "p51*.browser.mjs"
+    ],
+    "timeout": 240000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-rerun-ref-webkit-dark-phone-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-phone",
+    "name": "chromium-dark-phone",
+    "testDir": "/mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/ref/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "p51*.browser.mjs"
+    ],
+    "timeout": 240000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-rerun-ref-webkit-dark-phone-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-desktop",
+    "name": "webkit-light-desktop",
+    "testDir": "/mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/ref/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "p51*.browser.mjs"
+    ],
+    "timeout": 240000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-rerun-ref-webkit-dark-phone-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-phone",
+    "name": "webkit-light-phone",
+    "testDir": "/mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/ref/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "p51*.browser.mjs"
+    ],
+    "timeout": 240000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-rerun-ref-webkit-dark-phone-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-desktop",
+    "name": "webkit-dark-desktop",
+    "testDir": "/mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/ref/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "p51*.browser.mjs"
+    ],
+    "timeout": 240000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-rerun-ref-webkit-dark-phone-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-phone",
+    "name": "webkit-dark-phone",
+    "testDir": "/mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/ref/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "p51*.browser.mjs"
+    ],
+    "timeout": 240000
+   }
+  ],
+  "quiet": false,
+  "reporter": [
+   [
+    "list",
+    null
+   ],
+   [
+    "json",
+    {
+     "outputFile": "/mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-rerun-ref-webkit-dark-phone-out/report.json"
+    }
+   ]
+  ],
+  "reportSlowTests": {
+   "max": 5,
+   "threshold": 300000
+  },
+  "shard": null,
+  "tags": [],
+  "updateSnapshots": "all",
+  "updateSourceMethod": "patch",
+  "version": "1.63.0",
+  "workers": 1,
+  "webServer": {
+   "command": "npm run preview -- --host 127.0.0.1 --port 4173 --strictPort",
+   "cwd": "/mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/ref/src/web/",
+   "url": "http://127.0.0.1:4173",
+   "reuseExistingServer": false,
+   "timeout": 30000
+  }
+ },
+ "suites": [
+  {
+   "title": "p51.browser.mjs",
+   "file": "p51.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [],
+   "suites": [
+    {
+     "title": "P5.1 Plan usage",
+     "file": "p51.browser.mjs",
+     "line": 559,
+     "column": 6,
+     "specs": [
+      {
+       "title": "the popover by hover and by press, the reset credit and its confirmation",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 240000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "webkit-dark-phone",
+         "projectName": "webkit-dark-phone",
+         "results": [
+          {
+           "workerIndex": 0,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 21436,
+           "errors": [],
+           "stdout": [
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-rerun-ref-webkit-dark-phone-shots/webkit-dark-phone/p51-usage.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-rerun-ref-webkit-dark-phone-shots/webkit-dark-phone/p51-reset-confirm.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-rerun-ref-webkit-dark-phone-shots/webkit-dark-phone/p51-reset-unanswered.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-rerun-ref-webkit-dark-phone-shots/webkit-dark-phone/p51-reset-started.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-rerun-ref-webkit-dark-phone-shots/webkit-dark-phone/p51-reset-done.png, writing actual.\n"
+            }
+           ],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-10T07:04:54.207Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "p51-usage-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-rerun-ref-webkit-dark-phone-shots/webkit-dark-phone/p51-usage.png"
+            },
+            {
+             "name": "p51-usage-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-rerun-ref-webkit-dark-phone-out/p51.browser.mjs-P5-1-Plan--e5381-credit-and-its-confirmation-webkit-dark-phone/p51-usage-actual.png"
+            },
+            {
+             "name": "p51-reset-confirm-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-rerun-ref-webkit-dark-phone-shots/webkit-dark-phone/p51-reset-confirm.png"
+            },
+            {
+             "name": "p51-reset-confirm-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-rerun-ref-webkit-dark-phone-out/p51.browser.mjs-P5-1-Plan--e5381-credit-and-its-confirmation-webkit-dark-phone/p51-reset-confirm-actual.png"
+            },
+            {
+             "name": "p51-reset-unanswered-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-rerun-ref-webkit-dark-phone-shots/webkit-dark-phone/p51-reset-unanswered.png"
+            },
+            {
+             "name": "p51-reset-unanswered-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-rerun-ref-webkit-dark-phone-out/p51.browser.mjs-P5-1-Plan--e5381-credit-and-its-confirmation-webkit-dark-phone/p51-reset-unanswered-actual.png"
+            },
+            {
+             "name": "p51-reset-started-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-rerun-ref-webkit-dark-phone-shots/webkit-dark-phone/p51-reset-started.png"
+            },
+            {
+             "name": "p51-reset-started-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-rerun-ref-webkit-dark-phone-out/p51.browser.mjs-P5-1-Plan--e5381-credit-and-its-confirmation-webkit-dark-phone/p51-reset-started-actual.png"
+            },
+            {
+             "name": "p51-reset-done-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-rerun-ref-webkit-dark-phone-shots/webkit-dark-phone/p51-reset-done.png"
+            },
+            {
+             "name": "p51-reset-done-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-rerun-ref-webkit-dark-phone-out/p51.browser.mjs-P5-1-Plan--e5381-credit-and-its-confirmation-webkit-dark-phone/p51-reset-done-actual.png"
+            },
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p51-rerun-ref-webkit-dark-phone-out/p51.browser.mjs-P5-1-Plan--e5381-credit-and-its-confirmation-webkit-dark-phone/attachments/computed-styles-and-timings-859a89bc5ed09a5bbd84f581901542e55507fd10.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "11c152524de25f809644-2942cfc165aa2c929e25",
+       "file": "p51.browser.mjs",
+       "line": 560,
+       "column": 3
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "errors": [],
+ "stats": {
+  "startTime": "2026-10-10T07:04:52.438Z",
+  "duration": 23486.706,
+  "expected": 1,
+  "skipped": 0,
+  "unexpected": 0,
+  "flaky": 0
+ }
+}
