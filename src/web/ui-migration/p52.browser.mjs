@@ -501,7 +501,8 @@ test.describe('P5.2 the transcript’s pictures', () => {
     await expect(page.getByText('Looking at the screenshot and the one it took: both match.', { exact: true })).toBeVisible();
     await decoded(page);
     trace.push(await observe(page, fixtures, 'settled'));
-    trace.push({ step: 'rows in order', rows: await page.locator(`${CONVERSATION} [data-seq]`).evaluateAll((rows) => rows.map((el) => `${el.getAttribute('data-seq')} ${el.className.split(' ')[0]}`)) });
+    // Every row of the conversation, top to bottom: its seq and its first class.
+    trace.push({ step: 'rows in order', rows: await page.locator('.workspace-scroll-wrap > .workspace-sessions [data-seq]').evaluateAll((rows) => rows.map((el) => `${el.getAttribute('data-seq')} ${el.className.split(' ')[0]}`)) });
 
     // The newest picture is the last page of the viewer.
     await press(row(page, 14).locator('button.chat-image-btn'), testInfo);
