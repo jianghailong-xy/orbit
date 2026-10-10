@@ -43,6 +43,14 @@
  *      unchecked, one that names its own baseline (a Re-confirm's shape, which no rule can prove holds), one whose
  *      check adopted its region;
  *  15. a symbol whose baseline the owner's Re-confirm moved is re-checked, though its check stands on this commit.
+ *  16. the documents step's comparison by commit (2026-10-10, P10's rounds f098cd24 and 54755b7b: ~107 single-file
+ *      reads a round, one at a time): eleven written sections on three commits whose files the diffs name, around
+ *      them a commit the snapshot does not reach, an empty diff, the head and a section with no file, a file deleted
+ *      and one renamed — the same sections are written again and the same paths withdrawn as the reads section by
+ *      section gave, one `diff` a commit, and the files are read with one `read` a commit and one at the head
+ *      instead of one a section at each end, each operation asked once the one before it has settled;
+ *  17. a commit whose files are more than `RepoOps.operationBytes` is read in the fewest operations that limit
+ *      allows, at the commit and at the head alike.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/wiki-worker/wiki-maintain-job.pg.spec.ts
  *
@@ -73,14 +81,14 @@ import { WikiDocs } from '../wiki/wiki-docs';
 import { WikiHealth } from '../wiki/wiki-health';
 import { WikiPlans } from '../wiki/wiki-plan';
 import { WikiRefusalError, WikiService, type WikiPrincipal } from '../wiki/wiki.service';
-import { WikiRepoOps } from './wiki-repo-ops';
-import { WIKI_ANCHOR_RULES, WIKI_JOB, WIKI_LIMITS, WIKI_REPO_OP_CAPABILITY, WIKI_REPO_OPS } from '@orbit/shared';
+import { WikiRepoOps, type WikiRepoOpWake } from './wiki-repo-ops';
+import { WIKI_ANCHOR_RULES, WIKI_JOB, WIKI_LIMITS, WIKI_REPO_OP_CAPABILITY, WIKI_REPO_OP_READ_CAPABILITY, WIKI_REPO_OPS } from '@orbit/shared';
 import { WikiJobExecutor, WIKI_JOB_RUNNERS, type WikiJobRunner } from './wiki-job-executor';
 import { claimWikiJobs, reclaimExpiredWikiJobs, WIKI_JOB_HANDED_BACK } from './wiki-jobs';
 import { WikiModelRequestQueue } from './wiki-model-queue.service';
 import { WikiModelStatusProbe } from './wiki-model-status';
 import { readWikiSystemModel, type WikiSystemModelConfig } from './wiki-system-model';
-import { wikiMaintainJobRunner, type WikiMaintainJobDeps } from './wiki-maintain-job';
+import { wikiMaintainJobPrincipal, wikiMaintainJobRunner, type WikiMaintainJobDeps } from './wiki-maintain-job';
 import { wikiStoredText } from './wiki-stored-text';
 
 const URL_ = process.env.COORDINATOR_PG_URL;
@@ -257,13 +265,22 @@ interface Fixture {
  */
 async function fixture(
   h: Harness,
-  over: { catchUp?: string | null; expect?: boolean; activeEntries?: number; snapshot?: { files: Record<string, string>; commits: string[] } } = {},
+  over: {
+    catchUp?: string | null;
+    expect?: boolean;
+    activeEntries?: number;
+    /** The machine reads whole files (`wiki-repo-op-read/v1`), as production's runners do since 0.1.225. */
+    wholeFile?: boolean;
+    /** The files the snapshot adds, the commits it reaches, and sizes its index gives where they are not the text's. */
+    snapshot?: { files: Record<string, string>; commits: string[]; sizes?: Record<string, number> };
+  } = {},
 ): Promise<Fixture> {
   const runnerId = randomUUID();
   await h.prisma.runner.create({
     data: {
       id: runnerId, name: `maintain-${runnerId.slice(0, 8)}`, ownerId: h.ownerId, tokenHash: `hash-${runnerId}`,
-      capabilities: [WIKI_REPO_OP_CAPABILITY], capabilitiesReportedAt: new Date(), lastHeartbeatAt: new Date(),
+      capabilities: over.wholeFile === true ? [WIKI_REPO_OP_CAPABILITY, WIKI_REPO_OP_READ_CAPABILITY] : [WIKI_REPO_OP_CAPABILITY],
+      capabilitiesReportedAt: new Date(), lastHeartbeatAt: new Date(),
     },
   });
   const workspaceId = randomUUID();
@@ -293,7 +310,10 @@ async function fixture(
   const extra = Object.entries(over.snapshot?.files ?? {});
   const index = JSON.stringify({
     sha: REPO.sha, date: '2026-09-20',
-    files: [...REPO.paths.map((path) => ({ path, size: 100 })), ...extra.map(([path, text]) => ({ path, size: Buffer.byteLength(text, 'utf8') }))],
+    files: [
+      ...REPO.paths.map((path) => ({ path, size: 100 })),
+      ...extra.map(([path, text]) => ({ path, size: over.snapshot?.sizes?.[path] ?? Buffer.byteLength(text, 'utf8') })),
+    ],
     docs: [
       { path: 'docs/README.md', title: 'App', headings: [{ level: 1, text: 'App' }] },
       ...extra.filter(([path]) => path.endsWith('.md')).map(([path, text]) => indexedDoc(path, text)),
@@ -384,8 +404,20 @@ afterEach(async () => {
 const HARNESS_LEASE_MS = WIKI_JOB.leaseSeconds * 1000;
 const HARNESS_RENEW_MS = WIKI_JOB.renewSeconds * 1000;
 
+/**
+ * What the runner this spec plays announces as it settles an operation, as the `wiki_repo_op` channel's NOTIFY does:
+ * a worker made with `wake` hears it, and its wait for an operation ends at once instead of at the next 2-second poll.
+ */
+const settledListeners = new Set<(opId: string) => void>();
+const REPO_WAKE: WikiRepoOpWake = {
+  onChange(listener) {
+    settledListeners.add(listener);
+    return () => settledListeners.delete(listener);
+  },
+};
+
 /** The worker under test, its kind map the one the worker module builds — with this spec's services. */
-function worker(h: Harness, over: { repoWaitMs?: number } = {}): { queue: WikiModelRequestQueue; executor: WikiJobExecutor } {
+function worker(h: Harness, over: { repoWaitMs?: number; wake?: boolean } = {}): { queue: WikiModelRequestQueue; executor: WikiJobExecutor } {
   const options = { leaseMs: HARNESS_LEASE_MS, renewMs: HARNESS_RENEW_MS, partialMs: 40, pollMs: 30 };
   const config_ = config(h);
   const queue = new WikiModelRequestQueue(
@@ -402,6 +434,7 @@ function worker(h: Harness, over: { repoWaitMs?: number } = {}): { queue: WikiMo
     model: MODEL,
     modelBaseUrl: h.model.base,
     repoWaitMs: over.repoWaitMs ?? 5_000,
+    ...(over.wake === true ? { repoWake: REPO_WAKE } : {}),
   };
   const runners: Record<string, WikiJobRunner> = { ...WIKI_JOB_RUNNERS, maintain: wikiMaintainJobRunner(deps) };
   const executor = new WikiJobExecutor(h.prisma as unknown as PrismaService, queue, options, runners);
@@ -437,6 +470,13 @@ interface RunnerPlay {
   files?: Record<string, string>;
   /** What a diff between two commits names. */
   diff?: { files: Array<{ status: string; path: string }>; docs: string[] };
+  /**
+   * The files at each commit, by commit: a read is answered at the commit it names — a file the commit has with its
+   * text, any other as missing — and every item is cached at that commit, as the result route settles a read.
+   */
+  filesAt?: Record<string, Record<string, string>>;
+  /** What the diff from each commit names, by its `from`: a rename names where it came from and where it went. */
+  diffs?: Record<string, { files: Array<{ status: string; path: string; from?: string }>; docs: string[] }>;
 }
 
 /**
@@ -456,12 +496,22 @@ async function runRepoOps(h: Harness, over: RunnerPlay = {}): Promise<number> {
     }
     const input = row.input ?? {};
     const head = over.snapshotSha ?? REPO.sha;
+    const from = String(input.from ?? '');
     const result = row.kind === 'snapshot'
       ? { sha: head }
       : row.kind === 'read'
-        ? { read: { sha: REPO.sha, items: await readItems(h, row.space_id, input, over.files ?? {}), chars: 12 } }
+        ? {
+            read: over.filesAt
+              ? { sha: String(input.sha ?? ''), items: await readItemsAt(h, row.space_id, input, over.filesAt), chars: 12 }
+              : { sha: REPO.sha, items: await readItems(h, row.space_id, input, over.files ?? {}), chars: 12 },
+          }
         : row.kind === 'diff'
-          ? { diff: { from: String(input.from ?? ''), to: String(input.to ?? ''), files: over.diff?.files ?? [], docs: over.diff?.docs ?? [] } }
+          ? {
+              diff: {
+                from, to: String(input.to ?? ''),
+                ...(over.diffs ? (over.diffs[from] ?? { files: [], docs: [] }) : { files: over.diff?.files ?? [], docs: over.diff?.docs ?? [] }),
+              },
+            }
           : {
               anchors: {
                 sha: head,
@@ -476,8 +526,36 @@ async function runRepoOps(h: Harness, over: RunnerPlay = {}): Promise<number> {
               },
             };
     await h.sql.query(`UPDATE "wiki_repo_op" SET "state"='succeeded', "result"=$2::jsonb, "ended_at"=now() WHERE "id"=$1`, [row.id, JSON.stringify(result)]);
+    for (const listener of [...settledListeners]) listener(row.id);
   }
   return rows.length;
+}
+
+/** A read's items at the commit it names (`RunnerPlay.filesAt`), each cached there as the result route caches it. */
+async function readItemsAt(
+  h: Harness,
+  spaceId: string,
+  input: Record<string, unknown>,
+  filesAt: Record<string, Record<string, string>>,
+): Promise<Array<Record<string, unknown>>> {
+  const sha = String(input.sha ?? '');
+  const items: Array<Record<string, unknown>> = [];
+  for (const item of (Array.isArray(input.items) ? input.items : []) as Array<{ path?: unknown }>) {
+    const path = String(item.path ?? '');
+    const text = filesAt[sha]?.[path];
+    const stored = wikiStoredText(text ?? '');
+    const held = {
+      state: text === undefined ? 'missing' : 'found', content: stored.content, contentEncoding: stored.encoding,
+      sizeBytes: BigInt(Buffer.byteLength(text ?? '', 'utf8')),
+    };
+    await h.prisma.wikiRepoFile.upsert({
+      where: { spaceId_sha_path: { spaceId, sha, path } },
+      create: { ownerId: h.ownerId, spaceId, sha, path, ...held },
+      update: held,
+    });
+    items.push(text === undefined ? { path, found: false, chars: 0 } : { path, found: true, text, chars: [...text].length });
+  }
+  return items;
 }
 
 /** A read's items: a file the case gives is answered with its text, and cached as the result route caches a read; any other with a stub. */
@@ -826,6 +904,397 @@ test('the documents step reads the confirmed plan through its read, and a sectio
     `SELECT f."kind", f."quote" FROM "wiki_doc_footnote" f JOIN "wiki_doc_sentence" t ON t."id" = f."sentence_id"
        JOIN "wiki_doc_section" x ON x."id" = t."section_id" JOIN "wiki_doc" d ON d."id" = x."doc_id" WHERE d."space_id" = $1`, [fx.spaceId]);
   assert.ok(footnotes.rows.some((note) => note.kind === 'turn' && (note.quote ?? '').includes('fixture')), JSON.stringify(footnotes.rows));
+});
+
+// ── The documents step's comparison, read by commit (2026-10-10) ──────────────────────────────
+
+/** A commit of the spec's own, named for what it stands for. */
+function commitNamed(name: string): string {
+  return createHash('sha1').update(`the commit the documents spec calls ${name}`).digest('hex');
+}
+
+const C1 = commitNamed('c1');
+const C2 = commitNamed('c2');
+const C3 = commitNamed('c3');
+/** A commit the snapshot does not reach: its sections are taken as changed, with no diff and no read. */
+const FAR = commitNamed('far');
+/** A commit origin/main changed nothing since: its diff is empty. */
+const STILL = commitNamed('still');
+const BIG = commitNamed('big');
+const COMMIT_NAMES = new Map([[C1, 'c1'], [C2, 'c2'], [C3, 'c3'], [FAR, 'far'], [STILL, 'still'], [BIG, 'big'], [REPO.sha, 'head']]);
+
+function commitName(sha: string): string {
+  return COMMIT_NAMES.get(sha) ?? sha;
+}
+
+/** One section's design document: `Part`, which its section takes, and the rest, which it does not. */
+function partDoc(key: string, part: 'written' | 'moved', rest: 'written' | 'moved'): string {
+  return `# ${key}\n\n## Part\n\n`
+    + (part === 'written' ? `The part of ${key} as it was written at its commit.` : `The part of ${key} as origin/main has it now.`)
+    + '\n\n## Rest\n\n'
+    + (rest === 'written' ? `The rest of ${key} before origin/main moved.` : `The rest of ${key} after origin/main moved.`)
+    + '\n';
+}
+
+/** A plan section of a comparison case: the commit it was written at, and the files its sources name. */
+interface ComparedSection {
+  key: string;
+  sha: string;
+  docs?: string[];
+  code?: string[];
+  /** A file its written sentence cites in a footnote: a withdrawal of that path takes the sentence back. */
+  cites?: string;
+}
+
+/** A comparison case: the plan, origin/main and the commits behind it, and what each diff names. */
+interface ComparisonCase {
+  docs: Array<{ slug: string; sections: ComparedSection[] }>;
+  /** The files at origin/main: the snapshot's. */
+  head: Record<string, string>;
+  /** Sizes the snapshot's index gives, where they are not the text's. */
+  sizes?: Record<string, number>;
+  /** The files at each commit a section was written at, as a read there answers. */
+  at: Record<string, Record<string, string>>;
+  /** The commits the snapshot reaches. */
+  commits: string[];
+  diffs: NonNullable<RunnerPlay['diffs']>;
+}
+
+/** What a comparison case's run left: the documents' report, the withdrawal it asked for, what it wrote again, and its operations. */
+interface ComparisonSeen {
+  outcome: string | null;
+  docs: Record<string, unknown>;
+  withdrawals: unknown[];
+  rewritten: string[];
+  ops: Array<{ kind: string; sha: string; from: string; to: string; paths: string[]; createdAt: Date; endedAt: Date | null }>;
+}
+
+/**
+ * Run a comparison case through a whole maintenance run: the plan confirmed, every section written at its commit
+ * through the documents' own writer, no dossiers, and the runner answering at each commit what the case holds there.
+ */
+async function runComparison(h: Harness, which: ComparisonCase): Promise<ComparisonSeen> {
+  await clearWork(h);
+  const fx = await fixture(h, { wholeFile: true, snapshot: { files: which.head, commits: which.commits, sizes: which.sizes } });
+  h.maintenance.dossierPage = (async () => ({ ...(pageOf(fx) as Record<string, unknown>), facts: 0, dossiers: [] })) as unknown as WikiMaintenance['dossierPage'];
+  await h.prisma.wikiPlan.create({
+    data: {
+      spaceId: fx.spaceId, ownerId: h.ownerId, version: 1, status: 'confirmed', origin: 'owner', authorUserId: h.ownerId,
+      confirmedByUserId: h.ownerId, confirmedAt: new Date(), docsMin: 1, docsMax: 10, gate: {},
+      categories: [{ key: 'dev', title: 'Development', question: 'How it works', forAgents: true }],
+      docs: {
+        create: which.docs.map((doc, position) => ({
+          position, category: 'dev', slug: doc.slug, title: doc.slug, question: `${doc.slug} 怎么工作？`,
+          audience: ['新加入的开发者'], scopeIn: [doc.slug], lengthMin: 400, lengthMax: 4000,
+          sections: {
+            create: doc.sections.map((section, at) => ({
+              position: at, key: section.key, title: section.key, kind: 'flow', covers: `${section.key} 讲什么。`, length: 400,
+              sources: {
+                docs: (section.docs ?? []).map((path) => ({ path, section: 'Part' })),
+                code: (section.code ?? []).map((path) => ({ path, symbols: [] })),
+                contracts: [],
+                sessions: null,
+              },
+            })),
+          },
+        })),
+      },
+    },
+  });
+  // Every section written at its own commit, through the writer a run writes with: one write a commit a document.
+  const principal = wikiMaintainJobPrincipal(h.ownerId, fx.jobId);
+  const writtenAt = new Map<string, string>();
+  for (const doc of which.docs) {
+    for (const sha of new Set(doc.sections.map((section) => section.sha))) {
+      const sections = doc.sections.filter((section) => section.sha === sha);
+      for (const section of sections) writtenAt.set(`${doc.slug}#${section.key}`, sha);
+      await h.docs.write(principal, fx.spaceId, doc.slug, {
+        planVersion: 1,
+        repoSha: sha,
+        model: MODEL,
+        sections: sections.map((section) => ({
+          key: section.key,
+          materialSha256: '0'.repeat(64),
+          markdown: section.cites ? `${section.key} 写在它的提交上，引用了一个文件[1]。` : `${section.key} 写在它的提交上。`,
+          footnotes: section.cites
+            ? [{ kind: 'design_doc', path: section.cites, sha, lines: { start: 3, end: 5 }, section: 'Part', quote: 'The part', verified: true }]
+            : [],
+        })),
+      });
+    }
+  }
+  // The paths the run withdraws, as it asks the documents' writer to.
+  const withdrawals: unknown[] = [];
+  const withdrawPaths = h.docs.withdrawPaths;
+  h.docs.withdrawPaths = (async (who, spaceId, body) => {
+    withdrawals.push(body);
+    return withdrawPaths.call(h.docs, who, spaceId, body);
+  }) as WikiDocs['withdrawPaths'];
+  h.model.answer = (hit) => writerAnswer(hit.prompt);
+  try {
+    await pass(h, worker(h, { wake: true }), async () => ['succeeded', 'failed'].includes((await jobOf(h, fx.jobId)).state), {
+      filesAt: { ...which.at, [REPO.sha]: which.head },
+      diffs: which.diffs,
+    }, 2_000);
+  } finally {
+    h.docs.withdrawPaths = withdrawPaths;
+  }
+  const run = await runRow(h, fx.runId);
+  const sections = await h.sql.query<{ slug: string; key: string; repo_sha: string }>(
+    `SELECT d."slug", x."key", x."repo_sha" FROM "wiki_doc_section" x JOIN "wiki_doc" d ON d."id" = x."doc_id" WHERE d."space_id" = $1`,
+    [fx.spaceId],
+  );
+  const ops = await h.sql.query<{ kind: string; input: Record<string, unknown>; created_at: Date; ended_at: Date | null }>(
+    `SELECT "kind", "input", "created_at", "ended_at" FROM "wiki_repo_op" WHERE "job_id" = $1 ORDER BY "created_at", "id"`,
+    [fx.jobId],
+  );
+  return {
+    outcome: run.outcome,
+    docs: (run.report as { docs?: Record<string, unknown> } | null)?.docs ?? {},
+    withdrawals,
+    // Written again: a section the run moved to the head, which it was not written at before.
+    rewritten: sections.rows
+      .filter((row) => row.repo_sha === REPO.sha && writtenAt.get(`${row.slug}#${row.key}`) !== REPO.sha)
+      .map((row) => `${row.slug}#${row.key}`)
+      .sort(),
+    ops: ops.rows.map((op) => ({
+      kind: op.kind,
+      sha: String(op.input.sha ?? ''),
+      from: String(op.input.from ?? ''),
+      to: String(op.input.to ?? ''),
+      paths: (Array.isArray(op.input.items) ? (op.input.items as Array<{ path?: unknown }>) : []).map((item) => String(item.path ?? '')),
+      createdAt: op.created_at,
+      endedAt: op.ended_at,
+    })),
+  };
+}
+
+/** Each commit's reads, by its name: the files each operation asked for, in order. */
+function readsByCommit(seen: ComparisonSeen): Record<string, string[][]> {
+  const out: Record<string, string[][]> = {};
+  for (const op of seen.ops) {
+    if (op.kind !== 'read') continue;
+    (out[commitName(op.sha)] ??= []).push([...op.paths].sort());
+  }
+  return out;
+}
+
+/** Every operation of the run asked only once the one before it had settled: none of them ran beside another. */
+function assertOneAtATime(seen: ComparisonSeen): void {
+  seen.ops.forEach((op, i) => {
+    if (i === 0) return;
+    const before = seen.ops[i - 1]!;
+    assert.ok(
+      before.endedAt !== null && op.createdAt.getTime() >= before.endedAt.getTime(),
+      `operation ${i} (${op.kind}) was asked at ${op.createdAt.toISOString()}, before operation ${i - 1} (${before.kind}) settled at ${before.endedAt?.toISOString() ?? 'never'}`,
+    );
+  });
+}
+
+/**
+ * The documents step's comparison as P10's rounds shape it, made small. Eleven written sections on three commits
+ * have a file their commit's diff names: s1, s3, s4, s5, s9 and s11 with their part moved, so they are written
+ * again, and the rest moved outside it. s12 has no file the diff names. Around them: u1 and u2 on a commit the
+ * snapshot does not reach (taken as changed, with no diff and no read), e1 on a commit whose diff is empty, h1 at
+ * the head and n1 citing no file. origin/main deleted docs/c1/gone.md, which s4 cites and a sentence of s2 cites
+ * in a footnote, and renamed src/c2/old.go to src/c2/new.go under src/c2/, which s8 cites.
+ */
+const COMPARISON: ComparisonCase = {
+  docs: [
+    {
+      slug: 'alpha',
+      sections: [
+        { key: 's1', sha: C1, docs: ['docs/c1/s1.md'] },
+        { key: 's5', sha: C2, docs: ['docs/c2/s5.md'] },
+        { key: 's9', sha: C3, docs: ['docs/c3/s9.md'] },
+        { key: 'u1', sha: FAR, docs: ['docs/c1/s1.md'] },
+        { key: 'e1', sha: STILL, docs: ['docs/still/e1.md'] },
+      ],
+    },
+    {
+      slug: 'beta',
+      sections: [
+        { key: 's2', sha: C1, docs: ['docs/c1/s2.md'], cites: 'docs/c1/gone.md' },
+        { key: 's6', sha: C2, docs: ['docs/c2/s6.md'] },
+        { key: 's10', sha: C3, docs: ['docs/c3/s10.md'] },
+        { key: 'h1', sha: REPO.sha, docs: ['docs/head/h1.md'] },
+        { key: 'n1', sha: C1 },
+      ],
+    },
+    {
+      slug: 'gamma',
+      sections: [
+        { key: 's3', sha: C1, docs: ['docs/c1/s3.md'] },
+        { key: 's4', sha: C1, docs: ['docs/c1/s4.md', 'docs/c1/gone.md'] },
+        { key: 's7', sha: C2, docs: ['docs/c2/s7.md'] },
+        { key: 's8', sha: C2, docs: ['docs/c2/s8.md'], code: ['src/c2/'] },
+        { key: 's11', sha: C3, docs: ['docs/c3/s11.md'] },
+        { key: 's12', sha: C3, docs: ['docs/c3/s12.md'] },
+        { key: 'u2', sha: FAR, docs: ['docs/c3/s9.md'] },
+      ],
+    },
+  ],
+  head: {
+    'docs/c1/s1.md': partDoc('s1', 'moved', 'written'),
+    'docs/c1/s2.md': partDoc('s2', 'written', 'moved'),
+    'docs/c1/s3.md': partDoc('s3', 'moved', 'written'),
+    'docs/c1/s4.md': partDoc('s4', 'moved', 'written'),
+    'docs/c2/s5.md': partDoc('s5', 'moved', 'written'),
+    'docs/c2/s6.md': partDoc('s6', 'written', 'moved'),
+    'docs/c2/s7.md': partDoc('s7', 'written', 'moved'),
+    'docs/c2/s8.md': partDoc('s8', 'written', 'moved'),
+    'docs/c3/s9.md': partDoc('s9', 'moved', 'written'),
+    'docs/c3/s10.md': partDoc('s10', 'written', 'moved'),
+    'docs/c3/s11.md': partDoc('s11', 'moved', 'written'),
+    'docs/c3/s12.md': partDoc('s12', 'written', 'written'),
+    'docs/still/e1.md': partDoc('e1', 'written', 'written'),
+    'docs/head/h1.md': partDoc('h1', 'written', 'written'),
+    'src/c2/new.go': 'package c2\n',
+    'src/unrelated.go': 'package unrelated\n',
+  },
+  at: {
+    [C1]: {
+      'docs/c1/s1.md': partDoc('s1', 'written', 'written'),
+      'docs/c1/s2.md': partDoc('s2', 'written', 'written'),
+      'docs/c1/s3.md': partDoc('s3', 'written', 'written'),
+      'docs/c1/s4.md': partDoc('s4', 'written', 'written'),
+      'docs/c1/gone.md': partDoc('gone', 'written', 'written'),
+    },
+    [C2]: {
+      'docs/c2/s5.md': partDoc('s5', 'written', 'written'),
+      'docs/c2/s6.md': partDoc('s6', 'written', 'written'),
+      'docs/c2/s7.md': partDoc('s7', 'written', 'written'),
+      'docs/c2/s8.md': partDoc('s8', 'written', 'written'),
+      'src/c2/old.go': 'package c2\n',
+    },
+    [C3]: {
+      'docs/c3/s9.md': partDoc('s9', 'written', 'written'),
+      'docs/c3/s10.md': partDoc('s10', 'written', 'written'),
+      'docs/c3/s11.md': partDoc('s11', 'written', 'written'),
+      'docs/c3/s12.md': partDoc('s12', 'written', 'written'),
+    },
+  },
+  commits: [C1, C2, C3, STILL, REPO.sha],
+  diffs: {
+    [C1]: {
+      files: [
+        { status: 'M', path: 'docs/c1/s1.md' },
+        { status: 'M', path: 'docs/c1/s2.md' },
+        { status: 'M', path: 'docs/c1/s3.md' },
+        { status: 'M', path: 'docs/c1/s4.md' },
+        { status: 'D', path: 'docs/c1/gone.md' },
+        { status: 'M', path: 'src/unrelated.go' },
+      ],
+      docs: [],
+    },
+    [C2]: {
+      files: [
+        { status: 'M', path: 'docs/c2/s5.md' },
+        { status: 'M', path: 'docs/c2/s6.md' },
+        { status: 'M', path: 'docs/c2/s7.md' },
+        { status: 'M', path: 'docs/c2/s8.md' },
+        // The runner's diff operation names a rename's old path `from` and its new one `path`.
+        { status: 'R100', from: 'src/c2/old.go', path: 'src/c2/new.go' },
+      ],
+      docs: [],
+    },
+    [C3]: {
+      files: [
+        { status: 'M', path: 'docs/c3/s9.md' },
+        { status: 'M', path: 'docs/c3/s10.md' },
+        { status: 'M', path: 'docs/c3/s11.md' },
+      ],
+      docs: [],
+    },
+    [STILL]: { files: [], docs: [] },
+  },
+};
+
+/** The comparison case's one run, which the two cases below read: what it wrote, and how it read. */
+let comparisonSeen: Promise<ComparisonSeen> | undefined;
+
+test('the documents step writes again the same sections and withdraws the same paths when it reads by commit, one diff a commit', { skip }, async (t) => {
+  const h = await boot();
+  comparisonSeen ??= runComparison(h, COMPARISON);
+  const seen = await comparisonSeen;
+  t.diagnostic(`written again: ${seen.rewritten.join(', ')}`);
+  t.diagnostic(`withdrawn: ${JSON.stringify(seen.withdrawals)}`);
+  t.diagnostic(`docs report: ${JSON.stringify({ affected: seen.docs.affected, withdrawn: seen.docs.withdrawn, sections: seen.docs.sections, error: seen.docs.error ?? null })}`);
+  assert.equal(seen.outcome, 'succeeded');
+  assert.equal(seen.docs.error, undefined, `the documents step: ${String(seen.docs.error)}`);
+  // The sections whose part moved, and the two on a commit the snapshot does not reach, are changed by the
+  // repository; s2 is stale once the sentence citing the deleted file is withdrawn. Nothing else is written again.
+  assert.deepEqual(
+    seen.rewritten,
+    ['alpha#s1', 'alpha#s5', 'alpha#s9', 'alpha#u1', 'beta#s2', 'gamma#s11', 'gamma#s3', 'gamma#s4', 'gamma#u2'],
+  );
+  assert.deepEqual(seen.docs.affected, { byEntries: 0, byRepo: 8, stale: 1, unwritten: 0, total: 9 });
+  assert.deepEqual(seen.docs.sections, { written: 9, unchanged: 0, failed: 0 });
+  assert.deepEqual(seen.docs.withdrawn, { paths: 2, sentences: 1 });
+  assert.deepEqual(seen.withdrawals, [{
+    repoSha: REPO.sha,
+    paths: [
+      { path: 'docs/c1/gone.md', change: 'deleted' },
+      // A rename as the server's comparison has always read it: the diff's `path` — where the file went — as the path
+      // gone. Pinned as it stands: reading by commit does not move it.
+      { path: 'src/c2/new.go', change: 'renamed', to: 'src/c2/old.go' },
+    ],
+  }]);
+  // One diff a commit the snapshot reaches, in the order of their shas; none at the head and none for the commit the
+  // snapshot does not reach.
+  assert.deepEqual(
+    seen.ops.filter((op) => op.kind === 'diff').map((op) => `${commitName(op.from)}..${commitName(op.to)}`),
+    [C1, C2, C3, STILL].sort().map((sha) => `${commitName(sha)}..head`),
+  );
+});
+
+test('the documents step reads the files it compares with one read a commit and one at the head, not one a section at each end', { skip }, async (t) => {
+  const h = await boot();
+  comparisonSeen ??= runComparison(h, COMPARISON);
+  const seen = await comparisonSeen;
+  const reads = readsByCommit(seen);
+  t.diagnostic(`read operations: ${seen.ops.filter((op) => op.kind === 'read').length} — `
+    + Object.entries(reads).map(([commit, packs]) => `${commit} ${packs.length} (${packs.map((pack) => pack.length).join('+')} files)`).join(', '));
+  t.diagnostic(`every operation, in order: ${seen.ops.map((op) => (op.kind === 'diff' ? `diff ${commitName(op.from)}` : op.kind === 'read' ? `read ${commitName(op.sha)}×${op.paths.length}` : op.kind)).join(', ')}`);
+  // Eleven sections on three commits: each commit's files in one read there, every file at the head in one read
+  // there. s12's file is not in its commit's diff, and the deleted file and the directory have nothing to read.
+  assert.deepEqual(reads, {
+    c1: [['docs/c1/s1.md', 'docs/c1/s2.md', 'docs/c1/s3.md', 'docs/c1/s4.md']],
+    c2: [['docs/c2/s5.md', 'docs/c2/s6.md', 'docs/c2/s7.md', 'docs/c2/s8.md']],
+    c3: [['docs/c3/s10.md', 'docs/c3/s11.md', 'docs/c3/s9.md']],
+    head: [[
+      'docs/c1/s1.md', 'docs/c1/s2.md', 'docs/c1/s3.md', 'docs/c1/s4.md',
+      'docs/c2/s5.md', 'docs/c2/s6.md', 'docs/c2/s7.md', 'docs/c2/s8.md',
+      'docs/c3/s10.md', 'docs/c3/s11.md', 'docs/c3/s9.md',
+    ]],
+  });
+  assertOneAtATime(seen);
+});
+
+test('a commit whose files pass operationBytes is read in the fewest operations the limit allows, at the commit and at the head', { skip }, async (t) => {
+  const h = await boot();
+  const keys = ['p1', 'p2', 'p3', 'p4', 'p5'];
+  // Two of these fit in one operation and three do not; the snapshot's sizes are what a read is packed by.
+  const size = Math.floor((WIKI_REPO_OPS.operationBytes * 3) / 8);
+  assert.ok(size <= WIKI_REPO_OPS.wholeFileBytes && 2 * size <= WIKI_REPO_OPS.operationBytes && 3 * size > WIKI_REPO_OPS.operationBytes);
+  const path = (key: string): string => `docs/big/${key}.md`;
+  const seen = await runComparison(h, {
+    docs: [{ slug: 'delta', sections: keys.map((key) => ({ key, sha: BIG, docs: [path(key)] })) }],
+    head: Object.fromEntries(keys.map((key) => [path(key), partDoc(key, 'written', 'moved')])),
+    sizes: Object.fromEntries(keys.map((key) => [path(key), size])),
+    at: { [BIG]: Object.fromEntries(keys.map((key) => [path(key), partDoc(key, 'written', 'written')])) },
+    commits: [BIG, REPO.sha],
+    diffs: { [BIG]: { files: keys.map((key) => ({ status: 'M', path: path(key) })), docs: [] } },
+  });
+  const reads = readsByCommit(seen);
+  t.diagnostic(`read operations: ${Object.entries(reads).map(([commit, packs]) => `${commit} ${packs.length} (${packs.map((pack) => pack.length).join('+')} files)`).join(', ')}`);
+  assert.equal(seen.outcome, 'succeeded');
+  assert.deepEqual(seen.docs.affected, { byEntries: 0, byRepo: 0, stale: 0, unwritten: 0, total: 0 }, 'only the rest of each file moved');
+  assert.deepEqual(reads, {
+    big: [[path('p1'), path('p2')], [path('p3'), path('p4')], [path('p5')]],
+    head: [[path('p1'), path('p2')], [path('p3'), path('p4')], [path('p5')]],
+  });
+  assertOneAtATime(seen);
 });
 
 // ── The plan proposal (2026-10-09, run 28ea4f5c) ──────────────────────────────────────────────

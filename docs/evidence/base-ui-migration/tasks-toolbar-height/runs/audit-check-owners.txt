@@ -1,0 +1,48 @@
+argv: bash -c cd ../.. && node src/web/scripts/audit-antd.mjs --check-owners
+tree: fix
+head: 423aa3fdb4da9eb51aee4fa198488ac77a4c76fe
+uncommitted:
+load: 23.70 31.13 35.84 13/4019 2643412
+memory: 2700 MB available
+disk: / 15452M available, TMPDIR /mnt/data/tmp/34coPBqt8gi229cVNds0E/tmp
+started: 2026-10-10T02:17:43Z
+
+{
+  "baseline": {
+    "commit": "423aa3fdb4da9eb51aee4fa198488ac77a4c76fe",
+    "scopeHash": "1a3be246af8f614a35f3e343290b4442a50e8ff6d5acefadad42a4d9a1a65367"
+  },
+  "records": [
+    "2026-10-07.json",
+    "2026-10-07b.json",
+    "2026-10-07c.json",
+    "2026-10-07d.json",
+    "2026-10-08.json",
+    "2026-10-08b.json",
+    "2026-10-09.json",
+    "2026-10-09b.json"
+  ],
+  "unowned": [
+    {
+      "path": "src/web/src/App.managedRunner.test.tsx",
+      "reason": "no owner"
+    },
+    {
+      "path": "src/web/src/components/WorkspaceView.managedRunner.test.tsx",
+      "reason": "no owner"
+    }
+  ],
+  "pending": [],
+  "owners": {
+    "KEEP": 1,
+    "P4.4": 55,
+    "P5.1": 28,
+    "P5.2": 11,
+    "P5.3": 94,
+    "P6": 42
+  }
+}
+Ownership gaps: 2 use points have no owner. Migrate them in this batch if in scope, otherwise report them to the coordinator.
+exit=1
+load: 23.16 30.89 35.74 10/4019 2644289
+ended: 2026-10-10T02:17:46Z
