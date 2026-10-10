@@ -1,0 +1,26 @@
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<link rel="stylesheet" href="kit.css">
+<script src="kit.js"></script>
+<body>
+<h1>② 结束卡上的两处变量：谁记的 · 判据落成什么样</h1>
+<p class="lede" style="max-width:1330px">卡片只用现成读里的两个字（<code>doneBy</code>、<code>derivedDone</code>），位置都按方案 A。判据一行按落地原因报数（on main / nothing to land / merged outside Orbit / not met），和协调会话里那张一字不差——所以这一页上不会出现第三种说法。</p>
+<div class="row" id="figs"></div>
+<script>
+document.getElementById('figs').innerHTML = [
+  fig('after', 'recorded by Orbit', pageA({
+    by: 'recorded by Orbit', tally: '6 criteria · 4 on main · 1 nothing to land · 1 merged outside Orbit' }),
+    `<b>平台记的，判据各有各的去处</b><ol>
+<li>哪些判据在 main 上、哪些是没代码可落、哪些是在 Orbit 外面合掉的，一行报全。</li>
+<li>徽标是平台：这枚 DONE 是推导出来的，不是你按的。</li></ol>`),
+  fig('after', 'recorded by you', pageA({ by: 'recorded by you', tally: '6 criteria · 5 on main · 1 not met' }),
+    `<b>你按的，有一条判据没达成</b><ol>
+<li>徽标换 <b>recorded by you</b>，时间线 / 颜色都不变。</li>
+<li>“1 not met” 就是记的时候你接受的那条（回执和明细都在项目页，卡片只报数）。</li></ol>`),
+  fig('after', '全部落在 main 上', pageA({ by: 'recorded by Orbit', tally: '6 criteria · 6 on main' }),
+    `<b>没有尾巴的一种</b><ol>
+<li>每条判据都在 main 上时，tally 只有两段，不硬凑。</li>
+<li>三种写法都来自 <code>ProjectDone.whyNotDoneTally</code>（Web / iOS / Android 同一套），这一页不做第二个版本。</li></ol>`),
+].join('');
+</script>
+</body>
+</html>
