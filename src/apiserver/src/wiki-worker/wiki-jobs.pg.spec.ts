@@ -916,7 +916,8 @@ test('an articles job yields one round, every attempt of it, and the round after
   await h.sql.query(`UPDATE "wiki_job" SET "next_attempt_at" = now() + interval '10 seconds' WHERE "id" = $1 AND "state" = 'queued'`, [round]);
   // While it backs off, the articles job still waits for it: the space runs nothing rather than let the articles in.
   await take();
-  await h.sql.query(`UPDATE "wiki_job" SET "next_attempt_at" = now() WHERE "id" = $1 AND "state" = 'queued'`, [round]);
+  // A second in the past: the column keeps milliseconds, rounded, so now() itself can land after the next claim's now().
+  await h.sql.query(`UPDATE "wiki_job" SET "next_attempt_at" = now() - interval '1 second' WHERE "id" = $1 AND "state" = 'queued'`, [round]);
   // Its retry is still that round, and this time it ends.
   await succeeded(h, await take());
   // The round after it is made: the articles job has yielded its one round and goes first, the new round waits for the
