@@ -76,18 +76,23 @@ test('taken out by rule: a turn that is the settlement card\'s template, whoever
   ];
   wikiDocFilter(filtered);
   assert.equal(actions(filtered), 'S1=filtered S2= S3= S4= S5=filtered');
-  assert.match(filtered[4].reason, /与 S4 的原文相同/u);
+  assert.match(filtered[4].reason, /the same original as S4/u);
 });
 
 // ── The merge, read strictly (TestWikiArticleBuildSendsWhatBecameOfEveryPieceWithItsSection) ─────
 
 test('a merge into a piece that is not the section\'s is an adoption, and a piece the merge said nothing of is adopted — each saying so', () => {
   const pieces = [piece({ id: 'S1', handed: true }), piece({ id: 'S2', handed: true }), piece({ id: 'S3', handed: true }), piece({ id: 'S4' })];
-  const state = wikiDocApplyMerge('S1 | 采用 | 原话\nS2 | 合并到 S9 | 同一件事\n[S4] | 舍弃 | 没交给它\n现状：\n- 第一条 [S1]\n- 第二条\n', pieces);
+  const state = wikiDocApplyMerge("S1 | adopt | the owner's words\nS2 | merge into S9 | the same thing\n[S4] | drop | not handed to it\nCurrent state:\n- the first point [S1]\n- the second\n", pieces);
   assert.deepEqual(pieces.map((p) => p.action), ['adopt', 'adopt', 'adopt', '']);
   assert.match(pieces[1].reason, /S9/u);
-  assert.match(pieces[2].reason, /按采用/u);
-  assert.deepEqual(state, ['第一条 [S1]', '第二条']);
+  assert.match(pieces[2].reason, /read as adopt|adopted/u);
+  assert.equal(pieces[2].reason, 'the merge said nothing of this material: adopted and handed to the writing');
+  assert.deepEqual(state, ['the first point [S1]', 'the second']);
+  // The words read in any case at their start, as a model capitalizes a line.
+  const capital = [piece({ id: 'S1', handed: true }), piece({ id: 'S2', handed: true })];
+  assert.deepEqual(wikiDocApplyMerge('S1 | Drop | off the topic\nS2 | Merge into S1 | the same\ncurrent state:\n- one\n', capital), ['one']);
+  assert.deepEqual(capital.map((p) => [p.action, p.into]), [['drop', ''], ['merge', 'S1']]);
 });
 
 // ── A quote in a file (TestWikiArticleBuildChecksRepositoryQuotesInTheFileAtTheCommit) ───────────
@@ -210,6 +215,8 @@ test('in a file a read cut short only the heading named is looked for, and what 
 });
 
 test('a read cut short keeps the file\'s whole lines before the cut, and an empty file is not a missing one', () => {
+  assert.deepEqual(wikiDocsShownOf(file('docs/big.md', 'cut', 'line 1\nline 2\nhalf a li\n… (rest omitted)\n', 90_000), 90_000), { text: 'line 1\nline 2\n', cut: true });
+  // The marker an older runner ends its cut read with, which the read cache may still hold.
   assert.deepEqual(wikiDocsShownOf(file('docs/big.md', 'cut', 'line 1\nline 2\nhalf a li\n…（后略）\n', 90_000), 90_000), { text: 'line 1\nline 2\n', cut: true });
   assert.deepEqual(wikiDocsShownOf(file('docs/a.md', 'found', 'whole\n', 6), 6), { text: 'whole\n', cut: false });
   assert.deepEqual(wikiDocsShownOf(file('docs/empty.md', 'missing', '', 0), 0), { text: '', cut: false });

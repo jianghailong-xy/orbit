@@ -21,19 +21,29 @@ export const WIKI_PLAN_CLUSTER_SLICE_MS = 20;
 
 /** The owner's projects, oldest first: when, how it stands, how much work it holds. */
 export function wikiPlanProjectsText(m: WikiPlanMaterials): string {
-  let b = `# 项目标题清单（${m.asOf}；owner 的全部项目，按创建时间）\n\n| 创建 | 状态 | 任务数 | 会话数 | 标题 |\n|---|---|---|---|---|\n`;
+  let b = `# Project titles (${m.asOf}; all of the owner's projects, by when they were created)\n\n| Created | Status | Tasks | Sessions | Title |\n|---|---|---|---|---|\n`;
   for (const p of m.projects) {
     const created = p.createdAt.length >= 10 ? p.createdAt.slice(0, 10) : p.createdAt;
     const title = p.title.replaceAll('|', '/').replaceAll('\n', ' ');
     b += `| ${created} | ${p.status} | ${p.tasks} | ${p.sessions} | ${cutRunes(title, 110)} |\n`;
   }
-  return `${b}\n共 ${m.projects.length} 个项目。任务数特别大的是批量数据项目，不是产品功能。\n`;
+  return `${b}\n${count(m.projects.length, 'project', 'projects')} in all. Projects with a very large number of tasks are bulk data `
+    + 'projects, not product features.\n';
 }
 
-const SESSION_PREFIXES: ReadonlyArray<{ prefix: string; kind: string }> = [
-  { prefix: '执行任务：', kind: '任务执行会话' },
-  { prefix: '判断：', kind: '判断会话' },
-  { prefix: '[VERIFY]', kind: '验证会话' },
+/** `1 session`, `3 sessions`: the runner's `wikiCount`. */
+function count(n: number, one: string, many: string): string {
+  return n === 1 ? `1 ${one}` : `${n} ${many}`;
+}
+
+/**
+ * The title prefixes a session's kind is read from: `Task: ` and `Judgment: ` as Orbit names those sessions, and
+ * the `执行任务：` and `判断：` older sessions were named with.
+ */
+const SESSION_PREFIXES: ReadonlyArray<{ prefix: RegExp; kind: string }> = [
+  { prefix: /^(?:Task:|执行任务：)/u, kind: 'task run session' },
+  { prefix: /^(?:Judgment:|判断：)/u, kind: 'judgment session' },
+  { prefix: /^\[VERIFY\]/u, kind: 'verification session' },
 ];
 
 /**
@@ -42,9 +52,9 @@ const SESSION_PREFIXES: ReadonlyArray<{ prefix: string; kind: string }> = [
  */
 export async function wikiPlanSessionsText(m: WikiPlanMaterials, sliceMs = WIKI_PLAN_CLUSTER_SLICE_MS): Promise<string> {
   const items = m.sessions.items;
-  let b = `# 近 ${m.sessions.days} 天的会话（${m.asOf}；本 space 的 workspace）\n\n共 ${m.sessions.total} 个会话`;
-  if (items.length < m.sessions.total) b += `，下面读的是最新的 ${items.length} 个`;
-  b += '。\n\n';
+  let b = `# Sessions of the last ${m.sessions.days} days (${m.asOf}; this space's workspace)\n\n${count(m.sessions.total, 'session', 'sessions')} in all`;
+  if (items.length < m.sessions.total) b += `; what follows reads the newest ${items.length}`;
+  b += '.\n\n';
   const byMonth = new Map<string, number>();
   const byKind = new Map<string, number>();
   const byEngine = new Map<string, number>();
@@ -56,51 +66,54 @@ export async function wikiPlanSessionsText(m: WikiPlanMaterials, sliceMs = WIKI_
   for (const item of items) {
     bump(byMonth, item.month);
     let title = goTrimSpace(item.title);
-    let kind = '自由会话';
+    let kind = 'free session';
     for (const p of SESSION_PREFIXES) {
-      if (title.startsWith(p.prefix)) {
+      const prefix = p.prefix.exec(title);
+      if (prefix) {
         kind = p.kind;
-        title = goTrimSpace(title.slice(p.prefix.length));
+        title = goTrimSpace(title.slice(prefix[0].length));
         break;
       }
     }
-    if (item.task && kind === '自由会话') kind = '任务执行会话';
+    if (item.task && kind === 'free session') kind = 'task run session';
     bump(byKind, kind);
     if (item.provider !== null && item.provider !== undefined) bump(byEngine, item.provider);
     if (item.project !== null && item.project !== undefined && item.project !== '') bump(byProject, item.project);
     titles.push(title);
   }
-  b += `按月：${wikiPlanCounts(byMonth, false, 0)}\n\n按类型：${wikiPlanCounts(byKind, true, 0)}\n\n按引擎：${wikiPlanCounts(byEngine, true, 8)}\n\n`;
+  b += `By month: ${wikiPlanCounts(byMonth, false, 0)}\n\nBy kind: ${wikiPlanCounts(byKind, true, 0)}\n\nBy engine: ${wikiPlanCounts(byEngine, true, 8)}\n\n`;
   if (byProject.size > 0) {
-    b += '## 会话最多的项目（前 30）\n\n';
+    b += '## The projects with the most sessions (top 30)\n\n';
     for (const kv of wikiPlanTop(byProject, 30)) b += `- ${kv.n} · ${cutRunes(kv.key, 100)}\n`;
     b += '\n';
   }
   const { groups, unclustered } = await wikiPlanCluster(titles, 36, sliceMs);
   if (groups.length > 0) {
-    b += `## 标题聚类（TF-IDF + 球面 k-means，k=${groups.length}；去掉「执行任务：」「判断：」前缀；每组：会话数、高频词、示例标题）\n\n`;
+    b += `## Title clusters (TF-IDF + spherical k-means, k=${groups.length}; the "Task:" and "Judgment:" prefixes taken off; each group: `
+      + 'its sessions, frequent terms and example titles)\n\n';
     for (const [i, g] of groups.entries()) {
-      b += `### 组 ${i + 1}（${g.size} 个，不同标题 ${g.distinct} 个）高频词：${g.terms.join(' / ')}\n`;
+      b += `### Group ${i + 1} (${count(g.size, 'session', 'sessions')}, ${count(g.distinct, 'distinct title', 'distinct titles')}) `
+        + `frequent terms: ${g.terms.join(' / ')}\n`;
       for (const title of g.examples) b += `- ${cutRunes(title, 90)}\n`;
       b += '\n';
     }
-    if (unclustered > 0) b += `（${unclustered} 个标题太短或全是常见词，未参与聚类。）\n`;
+    if (unclustered > 0) b += `(Not clustered: ${count(unclustered, 'title', 'titles')} too short or made only of common words.)\n`;
   }
   return b;
 }
 
 /** How the space's entries and topics are spread: kind by status, and each topic with its category, path prefixes, active entries and its newest ones. */
 export function wikiPlanSpaceText(m: WikiPlanMaterials): string {
-  let b = `# space「${m.title}」现状（${m.asOf}）\n\n条目是原子事实，kind 取 ${WIKI_KINDS.join(' / ')}。\n\n## 条目 kind × 状态\n\n`;
-  if (m.entries.length === 0) b += '（还没有条目）\n';
+  let b = `# The space «${m.title}» as it stands (${m.asOf})\n\nAn entry is an atomic fact; its kind is one of ${WIKI_KINDS.join(' / ')}.\n\n## Entries by kind × status\n\n`;
+  if (m.entries.length === 0) b += '(no entries yet)\n';
   for (const e of m.entries) b += `- ${e.kind} / ${e.status}: ${e.count}\n`;
-  b += '\n## 现有主题（slug「名称」分类 · active 条目数；路径前缀；最近的几条条目）\n\n';
-  if (m.topics.length === 0) b += '（还没有主题）\n';
+  b += '\n## Existing topics (slug «name» category · active entries; path prefixes; the newest few entries)\n\n';
+  if (m.topics.length === 0) b += '(no topics yet)\n';
   for (const t of m.topics) {
     const category = t.category !== null && t.category !== undefined && t.category !== '' ? t.category : '-';
-    b += `### ${t.slug}「${t.title}」 分类 ${category} · active ${t.active} 条\n`;
-    if (t.pathPrefixes.length > 0) b += `路径前缀：${t.pathPrefixes.join(' ')}\n`;
-    for (const e of t.recent) b += `- ${e.kind}：${cutRunes(e.title, 70)}\n`;
+    b += `### ${t.slug} «${t.title}» category ${category} · ${t.active} active\n`;
+    if (t.pathPrefixes.length > 0) b += `Path prefixes: ${t.pathPrefixes.join(' ')}\n`;
+    for (const e of t.recent) b += `- ${e.kind}: ${cutRunes(e.title, 70)}\n`;
     b += '\n';
   }
   return b;
@@ -108,8 +121,8 @@ export function wikiPlanSpaceText(m: WikiPlanMaterials): string {
 
 /** The topics on one line: what a section's session condition may name. */
 export function wikiPlanTopicsBrief(m: { topics: readonly WikiPlanTopic[] }): string {
-  if (m.topics.length === 0) return '（这个 space 还没有主题：会话条件里不写主题）';
-  return `现有主题（slug「名称」·active 条目数）：${m.topics.map((t) => `${t.slug}「${t.title}」·${t.active}`).join('；')}`;
+  if (m.topics.length === 0) return '(this space has no topics yet: a session condition names no topic)';
+  return `Existing topics (slug «name» · active entries): ${m.topics.map((t) => `${t.slug} «${t.title}» · ${t.active}`).join('; ')}`;
 }
 
 /** The named topics with their newest entries: the materials of one document. */
@@ -118,8 +131,8 @@ export function wikiPlanTopicBlocks(m: WikiPlanMaterials, slugs: readonly string
   const want = new Set(slugs.map((slug) => goTrim(goTrimSpace(slug), '`')));
   for (const t of m.topics) {
     if (!want.has(t.slug)) continue;
-    b += `### ${t.slug}「${t.title}」\n`;
-    for (const e of t.recent) b += `- ${e.kind}：${cutRunes(e.title, 90)}\n`;
+    b += `### ${t.slug} «${t.title}»\n`;
+    for (const e of t.recent) b += `- ${e.kind}: ${cutRunes(e.title, 90)}\n`;
   }
   return b;
 }
@@ -137,11 +150,11 @@ export function wikiPlanTop(counts: ReadonlyMap<string, number>, max: number): W
 }
 
 export function wikiPlanCounts(counts: ReadonlyMap<string, number>, byCount: boolean, max: number): string {
-  if (counts.size === 0) return '（无）';
+  if (counts.size === 0) return '(none)';
   const list = byCount
     ? wikiPlanTop(counts, max)
     : [...counts.entries()].map(([key, n]) => ({ key, n })).sort((a, b) => goCompare(a.key, b.key));
-  return list.map((kv) => `${kv.key} ${kv.n}`).join('，');
+  return list.map((kv) => `${kv.key} ${kv.n}`).join(', ');
 }
 
 // ── Clustering the titles ───────────────────────────────────────────────────────────────────────────
