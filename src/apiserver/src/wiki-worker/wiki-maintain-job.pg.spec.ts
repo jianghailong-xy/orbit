@@ -1546,6 +1546,76 @@ test('a proposal naming a new design document\'s sections as its prompt lists th
   ], 'the two new sections cite the document\'s sections as the model named them');
 });
 
+test('a proposal naming a document\'s slug as its topic is refused by the run\'s own check with the space\'s topics listed, and the next round names one of them', { skip }, async () => {
+  // Canary, 2026-10-10 (3b2bd5f2): the run's check let «wiki-maintenance», a document's slug, through as a section's
+  // topic, and the gate refused it in the last round with no topic to name instead; on 10-09 (54755b7b) two rounds
+  // running named the same made-up topics. The model here names a topic only from a list it was given, as a retry can.
+  const h = await boot();
+  await clearWork(h);
+  const DOC = 'docs/wiki-comment-to-session-design.md';
+  const text = PROPOSAL_FIXTURE.files[DOC];
+  const base = createHash('sha1').update('the commit the plan was checked at').digest('hex');
+  const fx = await fixture(h, { snapshot: { files: { [DOC]: text }, commits: [base, REPO.sha] } });
+  h.maintenance.dossierPage = (async () => ({ ...(pageOf(fx) as Record<string, unknown>), facts: 0, dossiers: [] })) as unknown as WikiMaintenance['dossierPage'];
+  await h.prisma.wikiTopic.createMany({
+    data: [
+      { ownerId: h.ownerId, spaceId: fx.spaceId, slug: 'wiki', title: 'Wiki', createdAt: new Date('2026-09-01T00:00:00Z') },
+      { ownerId: h.ownerId, spaceId: fx.spaceId, slug: 'sessions', title: '会话', createdAt: new Date('2026-09-02T00:00:00Z') },
+    ],
+  });
+  const empty = { docs: [], code: [], contracts: [], sessions: null };
+  await h.prisma.wikiPlan.create({
+    data: {
+      spaceId: fx.spaceId, ownerId: h.ownerId, version: 1, status: 'confirmed', origin: 'owner', authorUserId: h.ownerId,
+      confirmedByUserId: h.ownerId, confirmedAt: new Date(), docsMin: 1, docsMax: 10, gate: {},
+      repoSha: base, repoCheck: { sha: base, checked: 0, missing: [] },
+      categories: [{ key: 'dev', title: 'Development', question: 'How it works', forAgents: true }],
+      docs: {
+        create: [{
+          position: 0, category: 'dev', slug: 'wiki-pipeline', title: 'Wiki 流水线', question: 'wiki 怎么维护？',
+          audience: ['新加入的开发者'], scopeIn: ['维护'], lengthMin: 400, lengthMax: 4000,
+          sections: { create: [{ position: 0, key: 'overview', title: '总览', kind: 'overview', covers: '这篇讲 wiki 怎么维护。', length: 300, sources: empty }] },
+        }],
+      },
+    },
+  });
+  const answerNaming = (topic: string): string => '放入：wiki-pipeline\n理由：评论发起改动时踩过的坑，plan 里没有一节讲。\n覆盖：K1\n'
+    + '### 1. 评论发起改动的坑 | pitfalls | 300\n讲什么：评论发起改动时踩过的坑。\n'
+    + `- 会话：关键词 评论、改动；kind pitfall；主题 ${topic}；要找：owner 说评论发起改动出过什么错的原话\n`;
+  const prompts: string[] = [];
+  h.model.answer = (hit) => {
+    if (!hit.prompt.includes('# 任务：维护作业的 plan 修改建议')) return writerAnswer(hit.prompt);
+    prompts.push(hit.prompt);
+    const listed = /现有主题（slug「名称」·active 条目数）：([a-z0-9-]+)「/u.exec(hit.prompt);
+    return answerNaming(listed?.[1] ?? 'wiki-pipeline');
+  };
+  const which = worker(h);
+  await pass(h, which, async () => ['succeeded', 'failed'].includes((await jobOf(h, fx.jobId)).state), {
+    files: { [DOC]: text },
+    diff: { files: [{ status: 'A', path: DOC }], docs: [DOC] },
+  });
+
+  const run = await runRow(h, fx.runId);
+  assert.equal(run.outcome, 'succeeded', run.error ?? '');
+  const docs = (run.report as { docs: { proposal: Record<string, unknown> | null } }).docs;
+  assert.deepEqual(
+    { outcome: docs.proposal?.outcome, rounds: docs.proposal?.rounds, error: docs.proposal?.error ?? null },
+    { outcome: 'proposed', rounds: 2, error: null },
+    'the second round names a topic of the space, and the proposal is stored',
+  );
+  assert.equal(prompts.length, 2);
+  // Round 1 was refused here, before the gate saw it: by its section, with the space's topics as the gate lists them.
+  assert.ok(
+    prompts[1].includes('\n- 第 1 节: "wiki-pipeline" is not a topic of this space: 现有主题（slug「名称」·active 条目数）：wiki「Wiki」·0；sessions「会话」·0\n'),
+    `round 2 was told: ${prompts[1].slice(prompts[1].indexOf('## 上一次的答案有这些问题'))}`,
+  );
+  assert.ok(!prompts[1].includes('change.doc.'), 'the gate refused nothing: the run\'s own check found it first');
+  const stored = await h.prisma.wikiPlanProposal.findMany({ where: { ownerId: h.ownerId, spaceId: fx.spaceId } });
+  assert.equal(stored.length, 1);
+  const sections = (stored[0].change as { doc: { sections: Array<{ sources: { sessions: { topics: string[] } | null } }> } }).doc.sections;
+  assert.deepEqual(sections[sections.length - 1].sources.sessions?.topics, ['wiki']);
+});
+
 // ── The anchors of a page: every entry keeps its own checks ─────────────────────────────────────
 
 /**

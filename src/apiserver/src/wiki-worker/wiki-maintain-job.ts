@@ -8,6 +8,7 @@ import {
   WIKI_REVIEW_RULES,
   wikiMaintenanceRunSessions,
   type WikiDossier,
+  type WikiPlanTopic,
   type WikiRepoOpKind,
   type WikiReviewMode,
 } from '@orbit/shared';
@@ -1192,7 +1193,7 @@ class WikiMaintainRun {
     const designs = await this.newDesignDocs(affected.plan.repoSha ?? '', head, cited);
     report.unplaced = { designDocs: designs.length, entries: affected.unplaced.length + affected.unplacedMore };
     if (designs.length > 0 || affected.unplaced.length > 0) {
-      report.proposal = await this.proposePlanChange(designs, affected.unplaced, head);
+      report.proposal = await this.proposePlanChange(designs, affected.unplaced, head, affected.topics);
     }
     if (writeError) throw writeError;
   }
@@ -1503,7 +1504,12 @@ class WikiMaintainRun {
   }
 
   /** The run's one plan proposal: the model says where the knowledge belongs, the run checks it, the gate decides. */
-  private async proposePlanChange(designs: readonly WikiNewDesignDoc[], entries: readonly WikiUnplacedEntry[], head: string): Promise<NonNullable<WikiMaintainDocsReport['proposal']>> {
+  private async proposePlanChange(
+    designs: readonly WikiNewDesignDoc[],
+    entries: readonly WikiUnplacedEntry[],
+    head: string,
+    topics: readonly WikiPlanTopic[],
+  ): Promise<NonNullable<WikiMaintainDocsReport['proposal']>> {
     const out: NonNullable<WikiMaintainDocsReport['proposal']> = { outcome: 'failed' };
     if (this.plan === null) {
       out.error = 'no confirmed plan';
@@ -1542,7 +1548,7 @@ class WikiMaintainRun {
         out.error = cutRunes((error as Error).message, 400);
         return out;
       }
-      const { request, problems: check } = assembleWikiMaintainProposal(this.plan, answer, items, repo);
+      const { request, problems: check } = assembleWikiMaintainProposal(this.plan, answer, items, repo, topics);
       if (check.length > 0) {
         problems = check;
         this.jobContext.log(`  proposal round ${round}: ${check.length} problem(s) found here: ${cutRunes(check.join('; '), 300)}`);

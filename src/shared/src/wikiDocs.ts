@@ -5,7 +5,7 @@
 // the contract JSON.
 
 import type { WikiAnchorState, WikiEntryKind, WikiEntryStatus, WikiTrust } from './wiki';
-import type { WikiPlanSectionKind, WikiPlanSessionCondition } from './wikiPlan';
+import type { WikiPlanSectionKind, WikiPlanSessionCondition, WikiPlanTopic } from './wikiPlan';
 
 /** `needs_review`: more than `rules.needsReviewAbove` of its sentences are unsourced or unverified. */
 export const WIKI_DOC_STATUSES = ['ok', 'needs_review'] as const;
@@ -577,6 +577,12 @@ export interface WikiDocsAffected {
   unplacedMore: number;
   /** What the space's proposals, whatever became of them, already name: its entries, commits and design documents. */
   proposed: { entryIds: string[]; commits: string[]; paths: string[] };
+  /**
+   * The space's topics, oldest first: the ones the plan's gate takes in a session condition (contract
+   * `plan.gate.references`). A run checks its proposal's new sections against them before the gate does, and a
+   * topic that is none of them is handed back to the model with these listed.
+   */
+  topics: WikiPlanTopic[];
 }
 
 /**

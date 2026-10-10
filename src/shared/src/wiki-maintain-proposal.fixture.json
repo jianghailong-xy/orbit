@@ -1,5 +1,5 @@
 {
-  "why": "One input, one deterministic answer on both paths: what the runner's check of a maintenance run's plan proposal (src/runner-go/wiki_maintain_docs.go: parseWikiProposal, assembleWikiProposal, wikiProposalSection) makes of each answer on a checkout of these files at one commit — the problems it hands back to the model, and the session conditions of the sections it would send — and the server's port (src/apiserver/src/wiki-worker/wiki-maintain-plan.ts) must make the same of it: word for word, save the three problems the server words in English (AGENTS.md section 5) — a section with no sources, a line that is no line of a section, a part that is no part of a session condition — which it must raise for the same section and the same line. The first case is production's (2026-10-09, run 28ea4f5c): docs/wiki-comment-to-session-design.md as origin/main held it at fadc587b0, its sections named as the proposal prompt lists them.",
+  "why": "One input, one deterministic answer on both paths: what the runner's check of a maintenance run's plan proposal (src/runner-go/wiki_maintain_docs.go: parseWikiProposal, assembleWikiProposal, wikiProposalSection) makes of each answer on a checkout of these files at one commit — the problems it hands back to the model, and the session conditions of the sections it would send — and the server's port (src/apiserver/src/wiki-worker/wiki-maintain-plan.ts) must make the same of it: word for word, save the three problems the server words in English (AGENTS.md section 5) — a section with no sources, a line that is no line of a section, a part that is no part of a session condition — which it must raise for the same section and the same line. A section's topics are held to the space's, as GET …/maintenance/docs hands them to the run (topics): one that is none of them is a problem that lists them, as the server's gate lists them. The first case is production's (2026-10-09, run 28ea4f5c): docs/wiki-comment-to-session-design.md as origin/main held it at fadc587b0, its sections named as the proposal prompt lists them.",
   "write": "ORBIT_WIKI_MAINTAIN_PROPOSAL_FIXTURE=write go test -run TestWikiMaintainProposalFixtureIsTheServersToo .",
   "files": {
     "contracts/app.contract.json": "{\n  \"version\": 1\n}\n",
@@ -136,6 +136,18 @@
         "anchorPaths": [],
         "changedAt": "2026-10-09T00:00:00Z"
       }
+    }
+  ],
+  "topics": [
+    {
+      "slug": "storage-topic",
+      "title": "存储",
+      "active": 3
+    },
+    {
+      "slug": "ops-topic",
+      "title": "运维",
+      "active": 0
     }
   ],
   "cases": [
@@ -294,6 +306,26 @@
       ],
       "sessions": [
         null
+      ]
+    },
+    {
+      "name": "a topic that is a document's slug, and one the space does not have, are refused with the space's topics listed; the space's own passes (canary 3b2bd5f2, 2026-10-10: «wiki-maintenance», a document's slug, refused only at the gate in the run's last round)",
+      "answer": "放入：wiki-pipeline\n理由：维护作业踩过的坑没有地方放。\n覆盖：K2\n### 1. 维护的坑 | pitfalls | 300\n讲什么：维护作业里踩过的坑。\n- 会话：关键词 rebase；kind pitfall；主题 wiki-pipeline、storage-topic、evidence-wait-queue；要找：owner 说维护作业出过什么错的原话\n",
+      "problems": [
+        "第 1 节: \"wiki-pipeline\" is not a topic of this space: 现有主题（slug「名称」·active 条目数）：storage-topic「存储」·3；ops-topic「运维」·0",
+        "第 1 节: \"evidence-wait-queue\" is not a topic of this space: 现有主题（slug「名称」·active 条目数）：storage-topic「存储」·3；ops-topic「运维」·0"
+      ],
+      "sessions": [
+        {
+          "entryKinds": [
+            "pitfall"
+          ],
+          "topics": [
+            "wiki-pipeline",
+            "storage-topic",
+            "evidence-wait-queue"
+          ]
+        }
       ]
     }
   ]

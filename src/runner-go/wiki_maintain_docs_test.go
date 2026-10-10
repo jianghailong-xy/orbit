@@ -460,6 +460,93 @@ func TestWikiMaintainProposesOneChangeForANewDesignDocumentNoSectionCites(t *tes
 	_ = head
 }
 
+// Canary, 2026-10-10 (3b2bd5f2): the run's check let «wiki-maintenance», a document's slug, through as a section's
+// topic, and the server's gate refused it in the run's last round with no topic to name instead. The run holds a
+// proposal's topics to the space's, as GET …/maintenance/docs hands them over, and lists them with one it refuses, so
+// the next round can name one; a server that predates them leaves the topics to its gate.
+func TestWikiMaintainProposalNamesOnlyTheSpacesTopics(t *testing.T) {
+	for _, c := range []struct {
+		name   string
+		topics []interface{} // the affected read's topics; nil: a server that predates them
+		rounds int
+		sent   [][]string // each proposal's new section's topics, as the server got them
+	}{
+		{"the space's topics", []interface{}{map[string]interface{}{"slug": "runner-host", "title": "runner 宿主", "active": 2}}, 2, [][]string{{"runner-host"}}},
+		{"a server that predates them", nil, 1, [][]string{{"runner"}}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			f := docsRepo(t)
+			written := f.first
+			door := newFakeMaintainDoor(t)
+			door.context = maintainContext(f.maintainFixture, "tiered", 0, "tok-expect")
+			door.propose = pendingForVerification
+			affected := docsAffectedAnswer(written, map[string]interface{}{"id": "e-9", "kind": "pitfall", "title": "runner 宿主上的测试会抢端口",
+				"summary": "全量测试在 runner 宿主上跑时会抢端口。", "topics": []string{}, "anchorPaths": []string{}, "changedAt": "2026-09-30T01:00:00.000Z"})
+			door.docs = func() (int, string) {
+				status, body := affected()
+				if c.topics == nil {
+					return status, body
+				}
+				var answer map[string]interface{}
+				if err := json.Unmarshal([]byte(body), &answer); err != nil {
+					t.Fatal(err)
+				}
+				answer["topics"] = c.topics
+				raw, _ := json.Marshal(answer)
+				return status, string(raw)
+			}
+			door.plan = docsPlanFor()
+			door.docsState = docsWrittenAt(written, "s1", "s2", "s3", "s4", "s5")
+			door.material = map[string]string{"runner#s5": docsMaterialS5}
+			var sent [][]string
+			door.proposals = func(body map[string]interface{}) (int, string) {
+				sections := body["change"].(map[string]interface{})["doc"].(map[string]interface{})["sections"].([]interface{})
+				sessions := sections[len(sections)-1].(map[string]interface{})["sources"].(map[string]interface{})["sessions"].(map[string]interface{})
+				var topics []string
+				for _, topic := range sessions["topics"].([]interface{}) {
+					topics = append(topics, topic.(string))
+				}
+				sent = append(sent, topics)
+				return http.StatusOK, `{"id":"proposal-1","status":"pending"}`
+			}
+			naming := func(topic string) string {
+				return "放入：runner\n理由：全量测试在 runner 宿主上会抢端口，plan 里没有一节讲这个坑。\n覆盖：K1\n" +
+					"### 1. 宿主上的坑 | pitfalls | 300\n讲什么：全量测试在 runner 宿主上抢端口。\n" +
+					"- 会话：关键词 端口；kind pitfall；主题 " + topic + "；要找：owner 说端口被抢的原话\n"
+			}
+			// Round 1 names the document's slug, as the canary's did; round 2 the topic only the list names.
+			model := &docsRunModel{proposals: []string{naming("runner"), naming("runner-host")}}
+			vllm := newFakeVLLM(t, model.answer)
+			fakeVerifyClaude(t)
+			wikiMaintainSession(t, door.URL, vllm)
+
+			summary, err := runMaintainCLI(t)
+			if err != nil || summary.Outcome != "succeeded" {
+				t.Fatalf("orbit wiki maintain: %v\n%+v", err, summary)
+			}
+			if p := summary.Report.Docs.Proposal; p == nil || p.Outcome != "proposed" || p.Rounds != c.rounds {
+				t.Fatalf("proposal = %+v, want it proposed on round %d", p, c.rounds)
+			}
+			if !reflect.DeepEqual(sent, c.sent) {
+				t.Errorf("the server was sent proposals naming %q, want %q", sent, c.sent)
+			}
+			if c.topics == nil {
+				return
+			}
+			var asked []string
+			for _, prompt := range model.Prompts() {
+				if strings.Contains(prompt, "维护作业的 plan 修改建议") {
+					asked = append(asked, prompt)
+				}
+			}
+			want := "\n- 第 1 节: \"runner\" is not a topic of this space: 现有主题（slug「名称」·active 条目数）：runner-host「runner 宿主」·2\n"
+			if len(asked) != 2 || !strings.Contains(asked[1], want) {
+				t.Errorf("round 2 was not told the space's topics with the one refused: %d rounds asked, want %q in the second", len(asked), want)
+			}
+		})
+	}
+}
+
 // ── No confirmed plan, no document ──────────────────────────────────────────────────────────────
 
 // 10-01 10:40Z: a proposal's session condition named its kind `decision`, in backticks, and the server's gate
@@ -476,7 +563,7 @@ func TestWikiMaintainProposalReadsAWrappedKindBareAndNamesWhatItRefusesQuoted(t 
 	answer := parseWikiProposal("放入：storage\n理由：收工的约定没有地方放。\n覆盖：K1\n" +
 		"### 1. 收工约定 | conventions | 300\n讲什么：收工前 rebase 到 main、写明分支和 sha、不自己 merge。\n" +
 		"- 会话：关键词 rebase、merge；kind `decision`/\"convention\"；主题 `storage-topic`；要找：owner 说收工前要 rebase 的原话\n")
-	request, problems := assembleWikiProposal(plan, answer, items, nil)
+	request, problems := assembleWikiProposal(plan, answer, items, nil, nil)
 	if len(problems) != 0 {
 		t.Fatalf("a wrapped kind was refused: %v", problems)
 	}
@@ -488,7 +575,7 @@ func TestWikiMaintainProposalReadsAWrappedKindBareAndNamesWhatItRefusesQuoted(t 
 
 	answer = parseWikiProposal("放入：`storage-docs`\n理由：收工的约定没有地方放。\n覆盖：K1、K7\n" +
 		"### 1. 收工约定 | convention | 300\n讲什么：收工前 rebase 到 main。\n- 会话：关键词 rebase\n")
-	_, problems = assembleWikiProposal(plan, answer, items, nil)
+	_, problems = assembleWikiProposal(plan, answer, items, nil, nil)
 	for _, want := range []string{
 		`「覆盖」里的 "K7" 不是新知识的编号`,
 		`第 1 节的 type "convention" 不是节的类型`,

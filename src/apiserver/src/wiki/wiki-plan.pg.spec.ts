@@ -677,6 +677,57 @@ test('the gate reads a closed-set value as what its wrapping holds, and names wh
   assert.ok(messageAt(wrong, 'change.doc.sections[3].sources.sessions.entryKinds[0]').startsWith('"dicision" is no kind of entry: one of'));
 });
 
+test('a topic the space does not have is refused with the space\'s topics listed, as the drafting job\'s materials list them', { skip }, async () => {
+  // Canary, 2026-10-10 (3b2bd5f2): a maintenance run's proposal named «wiki-maintenance», a document's slug, as a
+  // section's topic; its last round was refused with «"wiki-maintenance" is not a topic of this space» and no topic
+  // to name instead, and on 10-09 (54755b7b) two rounds running named the same made-up ones (contract
+  // `plan.gate.references`).
+  const h = await boot();
+  const s = await scene(h);
+  type Docs = Array<{ sections: Array<Record<string, unknown> & { sources: { sessions: Record<string, unknown> } }> } & Record<string, unknown>>;
+  const errorsAt = (answer: Answer, path: string): string[] =>
+    (answer.body.errors as Array<{ path: string; message: string }>).filter((error) => error.path === path).map((error) => error.message);
+  // The scene's two topics a day apart, so the list's order (oldest first) does not hang on a millisecond; and one
+  // active entry in «wiki», so the list counts it.
+  await h.sql.query(
+    `UPDATE "wiki_topic" SET "created_at" = CASE "slug" WHEN 'wiki' THEN '2026-09-01T00:00:00Z'::timestamptz ELSE '2026-09-02T00:00:00Z'::timestamptz END
+      WHERE "space_id" = $1`,
+    [s.spaceId],
+  );
+  const counted = await entry(h, s.owner.id, s.spaceId);
+  await h.sql.query(`UPDATE "wiki_entry" SET "topics" = '{wiki}' WHERE "id" = $1`, [counted]);
+  const listed = '现有主题（slug「名称」·active 条目数）：wiki「wiki」·1；sessions「sessions」·0';
+
+  // A draft: a document's slug as a topic is refused with the list; the space's own topic beside it passes.
+  const named = planOf(20);
+  (named.docs as Docs)[6].sections[2].sources.sessions.topics = ['doc-3', 'wiki'];
+  const refused = await draft(h, s, null, named);
+  expectGate(refused, 'references', 'plan.docs[6].sections[2].sources.sessions.topics[0]', 'a document\'s slug named as a topic');
+  assert.deepEqual(errorsAt(refused, 'plan.docs[6].sections[2].sources.sessions.topics[0]'), [`"doc-3" is not a topic of this space: ${listed}`]);
+  assert.deepEqual(errorsAt(refused, 'plan.docs[6].sections[2].sources.sessions.topics[1]'), [], 'the space\'s own topic is no error');
+
+  // A proposal, as the canary's run sent it: refused at change.doc with the list, and taken once it names the space's topic.
+  expectStatus(await draft(h, s, null, planOf(20)), 200, 'the first draft');
+  expectStatus(await confirm(h, s, 1), 200, 'the owner confirms it');
+  const knowledge = await entry(h, s.owner.id, s.spaceId);
+  const proposalOf = (topics: string[]): Record<string, unknown> => {
+    const doc = docOf(5, 20);
+    (doc.sections as unknown[]).push({
+      title: 'Maintenance pitfalls', kind: 'pitfalls', covers: 'What went wrong in the wiki\'s maintenance runs.', length: 300,
+      sources: { sessions: { keywords: ['maintenance'], entryKinds: ['pitfall'], topics, evidence: 'the owner saying what went wrong' } },
+    });
+    return { reason: 'Pitfalls the plan has no section for.', change: { doc }, facts: [{ kind: 'entry', id: knowledge }] };
+  };
+  const path = `/runner/wiki/spaces/${s.spaceId}/plan/proposals`;
+  const wrong = await call(h, s.maintainer, 'POST', path, proposalOf(['doc-5', 'evidence-wait-queue']));
+  expectGate(wrong, 'references', 'change.doc.sections[3].sources.sessions.topics[0]', 'a document\'s slug named as a proposal\'s topic');
+  assert.deepEqual(errorsAt(wrong, 'change.doc.sections[3].sources.sessions.topics[0]'), [`"doc-5" is not a topic of this space: ${listed}`]);
+  assert.deepEqual(errorsAt(wrong, 'change.doc.sections[3].sources.sessions.topics[1]'), [`"evidence-wait-queue" is not a topic of this space: ${listed}`]);
+  const taken = await call(h, s.maintainer, 'POST', path, proposalOf(['wiki']));
+  expectStatus(taken, 200, 'the same proposal naming the space\'s topic');
+  assert.deepEqual(taken.body.change.doc.sections[3].sources.sessions.topics, ['wiki']);
+});
+
 test('a protected document stays as it was: a draft that changes it, drops it or protects another is refused', { skip }, async () => {
   const h = await boot();
   const s = await scene(h);

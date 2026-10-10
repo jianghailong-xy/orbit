@@ -1349,7 +1349,9 @@ owner 09-29：agent 往 `docs/` 里写的设计文档，wiki 要主动跟上。
   plan 核对引用那次提交（`plan.repoSha`）以来在 `docs/` 下新增或改名进来的 Markdown 设计文档（不含 `docs/mocks`、`docs/evidence`），且没被
   任何一节、任何一条修改建议引用。每次运行至多产出**一条** plan 修改建议：本地模型拿到 plan 的目录、这些新知识（设计文档附标题、章节与开头，
   至多 `rules.proposalItemsMax` = 12 条，设计文档在前），挑出讲同一件事的一组（不相干的不凑在一起，也不建「杂项」篇），用 plan 的行格式回答放进哪一篇（给它加节）或新增哪一篇；runner 先在 origin/main 上
-  核对它引用的文件、章节、符号、契约，再交服务端的检查闸（`POST …/plan/proposals`）；哪道闸查出问题就带着逐条问题让模型重写，最多
+  核对它引用的文件、章节、符号、契约，并拿 GET 答的 `topics`（本 space 的主题，检查闸认的就是这些）核对新节会话条件里的主题——不在其中的
+  和检查闸一样报，附上主题简表（21.3）；服务端还没有 `topics` 时这一项只由检查闸查——再交服务端的检查闸（`POST …/plan/proposals`）；
+  哪道闸查出问题就带着逐条问题让模型重写，最多
   `rules.proposalRoundsMax` = 3 轮。事实是它放进去的条目（`entry`）和加入设计文档的提交（`commit`，完整 sha）。owner 确认之前 plan 不变；
   没放进这条建议的新知识留给下一次运行。修改建议没过闸不让运行失败，报告里写明原因。
 - **报告**：`docs { planVersion, skipped?, repoSha, affected { byEntries, byRepo, stale, unwritten, total }, withdrawn { paths, sentences },
@@ -1525,6 +1527,11 @@ runner-go 在 `wiki_plan.go`，OrbitKit 在 `Models/WikiPlan.swift`。起草作�
   （草稿是 `plan.docs[3].sections[2].sources.sessions.projects[0]`，编辑是 `doc.…` / `section.…`，建议是 `change.doc.…`）；编辑和建议
   会让整个 plan 变成什么样，关于那份结果的错误按结果 plan 的位置写（`plan.docs[20].protected`）。最多列 `rules.errorsMax`（200）条，
   消息里写总数。什么都不存，起草作业把清单交回模型重做。
+- **拒绝主题时列出本 space 的主题**（2026-10-10）：会话条件里的主题不是本 space 的，报错是 `"<主题>" is not a topic of this space: `
+  后面接本 space 的主题简表，写法和起草材料、runner 自己的闸一样（`wikiPlanTopicsBrief`）：`现有主题（slug「名称」·active 条目数）：wiki「Wiki」·3；…`，
+  按创建先后；space 还没有主题时是「（这个 space 还没有主题：会话条件里不写主题）」。重试的一轮由此知道能写哪些。起因：canary 上维护作业的
+  plan 修改建议两次因编造的主题没过闸——10-09 的 54755b7b 第 2、3 轮报的是同样两个编造的主题，10-10 的 3b2bd5f2 第 3 轮报的
+  `wiki-maintenance` 是一篇文档的 slug——报错只说「不是本 space 的主题」，模型只能接着猜。
 - **报错里的值、枚举值的读法**（`plan.gate.values`）：message 里引用请求给的值，一律写成 JSON 字符串——带双引号，看不见的字符
   （控制字符、格式字符、行与段分隔符、U+0020 以外的空白）写成 `\uXXXX`——让反引号、不可见字符、首尾空白都看得见。起因：10-01 的维护
   运行里，plan 修改建议三轮都没过闸，报错是 ``…entryKinds[0]: `decision` is no kind of entry: one of principle, convention, decision, …``：
@@ -1928,7 +1935,7 @@ orbit wiki docs build --space <id> [--doc <slug>] [--section <key>] [--repo <pat
 ### 22.12 维护作业要重写哪些节，和引用的文件没了（判据 3 第 3 版）
 
 - **`GET /api/runner/wiki/spaces/:id/maintenance/docs`**（`docs.reads.affected`，维护会话）：`{ spaceId, plan, build, sections, unplaced,
-  unplacedMore, proposed }`（`WikiDocsAffected`）。
+  unplacedMore, proposed, topics }`（`WikiDocsAffected`）。
   - `plan`：已确认的版本、确认时间、plan 最近一次核对仓库引用的提交（`repoSha`：确认版本的，没有就沿 `baseVersion` 往前找最近一个有的）、
     这个 space 第一版 plan 的起草时间（`draftedAt`）；没有已确认的 plan 就是 null，其余全空——维护作业就不写文档。
   - `build`：space 没结束的生成作业（`{ jobId, state, version }`），没有就是 null。
@@ -1938,6 +1945,8 @@ orbit wiki docs build --space <id> [--doc <slug>] [--section <key>] [--repo <pat
   - `unplaced`：自第一版 plan 起草以来被应用过 op、active 且锚点健在、符合不了已确认 plan 任何一节、也没被任何修改建议（无论结果）点名的条目，
     新的在前，至多 `docs.affected.rules.unplacedMax` = 50 条；`unplacedMore` 是其余的数。
   - `proposed`：space 所有修改建议已经点名的条目、提交，以及它们的改动里引用的设计文档路径——维护作业不再提。
+  - `topics`（2026-10-10）：本 space 的主题 `[{ slug, title, active }]`，按创建先后，`active` 是提到它的 active 条目数——检查闸收会话条件里的
+    主题就只收这些（21.3）。维护作业提修改建议前拿它核对新节的主题，不在其中的连同这份简表交回模型；没有已确认的 plan 时也照样给。
 - **`POST /api/runner/wiki/spaces/:id/maintenance/docs/withdrawals`**（`docs.withdrawalPaths`，维护会话）：`{ repoSha, paths: [{ path, change:
   deleted | renamed, to? }] }`，`repoSha` 是这些路径已不在的 origin/main 提交（40 位），至多 `withdrawPathsMax` = 500 条；形状不对
   `WIKI_DOC_INVALID`，逐条列出。回答 `{ spaceId, withdrawn, sections: [{ doc, key }] }`：这次撤下的句子数（已撤的不再算）和它们所在的节。
@@ -2608,7 +2617,10 @@ JSON 里是 `maintenance.job.server` 和 `jobs.kindRuns.maintain`；迁移 `0407
    原文（`read`，有缓存先用缓存），docs 章节、代码符号、契约用文档构建同一套读法（`wikiDocRepo` 的 `docSection` / `codePieces` /
    `contract`）判：章节按规整后的标题、编号、包含关系找，代码块里的标题不算，`##` 写不写都一样；文件没有和章节没有分开报。不查快照
    索引里的标题和符号——2026-10-09 canary 的运行 28ea4f5c 就是这样，把提示词原样列出的「## 4. wiki 怎么跟上」三轮都判成没有。
-   两条路对同一个回答的结论由 `src/shared/src/wiki-maintain-proposal.fixture.json` 对齐（服务端有三条报错用英文写，结论一样）。
+   新节会话条件里的主题按 `wikiDocsAffected` 给的 `topics` 核对（2026-10-10）：检查闸认的就是这些，不在其中的当轮就报，附上和检查闸一样的
+   主题简表（21.3）。以前运行自己的检查不查主题，10-10 canary 的 3b2bd5f2 把文档 slug `wiki-maintenance` 当主题写进去，第 3 轮（最后一轮）被闸拒，没有机会再改。
+   两条路对同一个回答的结论由 `src/shared/src/wiki-maintain-proposal.fixture.json` 对齐（主题按夹具的 `topics` 查；服务端有三条报错用英文写，
+   结论一样）。
    再用 P6 的门（`proposeServer`）检查，最多三轮把两道检查报的错回给模型。
 10. **结束**：写报告与 token 合计，`finishWikiMaintenanceJob` 推进游标、写运行行、按 owner 2026-10-08 的决定调用
     `queueWikiArticlesAfterRun`——只有成功、记下了 op、且不在追赶期才排文章作业（§24）。
