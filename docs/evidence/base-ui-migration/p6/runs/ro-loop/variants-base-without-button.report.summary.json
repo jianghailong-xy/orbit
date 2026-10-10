@@ -1,0 +1,943 @@
+{
+ "config": {
+  "argv": [
+   "/usr/local/bin/node",
+   "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/node_modules/.bin/playwright",
+   "test",
+   "--config",
+   "ui-migration/choices.config.mjs",
+   "--project",
+   "webkit-light-phone",
+   "--project",
+   "webkit-dark-phone",
+   "-g",
+   "multiple labels search, toggle, collapse, remove and clear",
+   "--repeat-each",
+   "5"
+  ],
+  "configFile": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/ui-migration/choices.config.mjs",
+  "rootDir": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/ui-migration",
+  "failOnFlakyTests": false,
+  "forbidOnly": false,
+  "fullyParallel": false,
+  "globalSetup": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/ui-migration/environment.mjs",
+  "globalTeardown": null,
+  "globalTimeout": 0,
+  "grep": {},
+  "grepInvert": null,
+  "maxFailures": 0,
+  "metadata": {
+   "actualWorkers": 1
+  },
+  "preserveOutput": "always",
+  "projects": [
+   {
+    "outputDir": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-desktop",
+    "name": "chromium-light-desktop",
+    "testDir": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-phone",
+    "name": "chromium-light-phone",
+    "testDir": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-desktop",
+    "name": "chromium-dark-desktop",
+    "testDir": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-phone",
+    "name": "chromium-dark-phone",
+    "testDir": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-desktop",
+    "name": "webkit-light-desktop",
+    "testDir": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/.choices-results",
+    "repeatEach": 5,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-phone",
+    "name": "webkit-light-phone",
+    "testDir": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/.choices-results",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-desktop",
+    "name": "webkit-dark-desktop",
+    "testDir": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/.choices-results",
+    "repeatEach": 5,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-phone",
+    "name": "webkit-dark-phone",
+    "testDir": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "choices*.browser.mjs"
+    ],
+    "timeout": 90000
+   }
+  ],
+  "quiet": false,
+  "reporter": [
+   [
+    "list",
+    null
+   ],
+   [
+    "json",
+    {
+     "outputFile": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/.choices-results/report.json"
+    }
+   ]
+  ],
+  "reportSlowTests": {
+   "max": 5,
+   "threshold": 300000
+  },
+  "shard": null,
+  "tags": [],
+  "updateSnapshots": "none",
+  "updateSourceMethod": "patch",
+  "version": "1.63.0",
+  "workers": 1,
+  "webServer": {
+   "command": "npm run dev -- --host 127.0.0.1 --port 4177 --strictPort",
+   "cwd": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/",
+   "url": "http://127.0.0.1:4177",
+   "reuseExistingServer": false,
+   "timeout": 30000
+  }
+ },
+ "suites": [
+  {
+   "title": "choices.browser.mjs",
+   "file": "choices.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "multiple labels search, toggle, collapse, remove and clear without losing the remaining values",
+     "ok": false,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "failed",
+         "duration": 1148,
+         "error": {
+          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 1\u001b[39m\n\u001b[31m+ Received  + 3\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   \"ResizeObserver loop completed with undelivered notifications.\",\u001b[39m\n\u001b[31m+ ]\u001b[39m",
+          "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 1\u001b[39m\n\u001b[31m+ Received  + 3\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   \"ResizeObserver loop completed with undelivered notifications.\",\u001b[39m\n\u001b[31m+ ]\u001b[39m\n    at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/ui-migration/choices.browser.mjs:12:63",
+          "location": {
+           "file": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/ui-migration/choices.browser.mjs",
+           "column": 63,
+           "line": 12
+          },
+          "snippet": "  10 |   await page.evaluate(() => document.fonts.ready);\n  11 | });\n> 12 | test.afterEach(async ({ page }) => { expect(errors.get(page)).toEqual([]); });\n     |                                                               ^\n  13 | const attach = (info, name, value) => info.attach(name, { body: JSON.stringify(value, null, 2), contentType: 'application/json' });\n  14 | const shot = (info, name, locator) => locator.screenshot({ animations: 'disabled' }).then((body) => info.attach(name, { body, contentType: 'image/png' }));\n  15 | async function settle(locator) {"
+         },
+         "errors": [
+          {
+           "location": {
+            "file": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/ui-migration/choices.browser.mjs",
+            "column": 63,
+            "line": 12
+           },
+           "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 1\u001b[39m\n\u001b[31m+ Received  + 3\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   \"ResizeObserver loop completed with undelivered notifications.\",\u001b[39m\n\u001b[31m+ ]\u001b[39m\n\n  10 |   await page.evaluate(() => document.fonts.ready);\n  11 | });\n> 12 | test.afterEach(async ({ page }) => { expect(errors.get(page)).toEqual([]); });\n     |                                                               ^\n  13 | const attach = (info, name, value) => info.attach(name, { body: JSON.stringify(value, null, 2), contentType: 'application/json' });\n  14 | const shot = (info, name, locator) => locator.screenshot({ animations: 'disabled' }).then((body) => info.attach(name, { body, contentType: 'image/png' }));\n  15 | async function settle(locator) {\n    at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/ui-migration/choices.browser.mjs:12:63"
+          }
+         ],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T18:02:54.919Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "multiple-labels",
+           "contentType": "application/json"
+          },
+          {
+           "name": "error-context",
+           "contentType": "text/markdown",
+           "path": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/.choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-light-phone/error-context.md"
+          },
+          {
+           "name": "trace",
+           "contentType": "application/zip",
+           "path": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/.choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-light-phone/trace.zip"
+          }
+         ],
+         "errorLocation": {
+          "file": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/ui-migration/choices.browser.mjs",
+          "column": 63,
+          "line": 12
+         }
+        }
+       ],
+       "status": "unexpected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-8360a0b0740205f1758e",
+     "file": "choices.browser.mjs",
+     "line": 474,
+     "column": 1
+    },
+    {
+     "title": "multiple labels search, toggle, collapse, remove and clear without losing the remaining values",
+     "ok": false,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "failed",
+         "duration": 1163,
+         "error": {
+          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 1\u001b[39m\n\u001b[31m+ Received  + 3\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   \"ResizeObserver loop completed with undelivered notifications.\",\u001b[39m\n\u001b[31m+ ]\u001b[39m",
+          "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 1\u001b[39m\n\u001b[31m+ Received  + 3\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   \"ResizeObserver loop completed with undelivered notifications.\",\u001b[39m\n\u001b[31m+ ]\u001b[39m\n    at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/ui-migration/choices.browser.mjs:12:63",
+          "location": {
+           "file": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/ui-migration/choices.browser.mjs",
+           "column": 63,
+           "line": 12
+          },
+          "snippet": "  10 |   await page.evaluate(() => document.fonts.ready);\n  11 | });\n> 12 | test.afterEach(async ({ page }) => { expect(errors.get(page)).toEqual([]); });\n     |                                                               ^\n  13 | const attach = (info, name, value) => info.attach(name, { body: JSON.stringify(value, null, 2), contentType: 'application/json' });\n  14 | const shot = (info, name, locator) => locator.screenshot({ animations: 'disabled' }).then((body) => info.attach(name, { body, contentType: 'image/png' }));\n  15 | async function settle(locator) {"
+         },
+         "errors": [
+          {
+           "location": {
+            "file": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/ui-migration/choices.browser.mjs",
+            "column": 63,
+            "line": 12
+           },
+           "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 1\u001b[39m\n\u001b[31m+ Received  + 3\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   \"ResizeObserver loop completed with undelivered notifications.\",\u001b[39m\n\u001b[31m+ ]\u001b[39m\n\n  10 |   await page.evaluate(() => document.fonts.ready);\n  11 | });\n> 12 | test.afterEach(async ({ page }) => { expect(errors.get(page)).toEqual([]); });\n     |                                                               ^\n  13 | const attach = (info, name, value) => info.attach(name, { body: JSON.stringify(value, null, 2), contentType: 'application/json' });\n  14 | const shot = (info, name, locator) => locator.screenshot({ animations: 'disabled' }).then((body) => info.attach(name, { body, contentType: 'image/png' }));\n  15 | async function settle(locator) {\n    at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/ui-migration/choices.browser.mjs:12:63"
+          }
+         ],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T18:02:56.387Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "multiple-labels",
+           "contentType": "application/json"
+          },
+          {
+           "name": "error-context",
+           "contentType": "text/markdown",
+           "path": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/.choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-light-phone-repeat1/error-context.md"
+          },
+          {
+           "name": "trace",
+           "contentType": "application/zip",
+           "path": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/.choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-light-phone-repeat1/trace.zip"
+          }
+         ],
+         "errorLocation": {
+          "file": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/ui-migration/choices.browser.mjs",
+          "column": 63,
+          "line": 12
+         }
+        }
+       ],
+       "status": "unexpected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-75abc2923590e664002b",
+     "file": "choices.browser.mjs",
+     "line": 474,
+     "column": 1
+    },
+    {
+     "title": "multiple labels search, toggle, collapse, remove and clear without losing the remaining values",
+     "ok": false,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "failed",
+         "duration": 1224,
+         "error": {
+          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 1\u001b[39m\n\u001b[31m+ Received  + 3\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   \"ResizeObserver loop completed with undelivered notifications.\",\u001b[39m\n\u001b[31m+ ]\u001b[39m",
+          "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 1\u001b[39m\n\u001b[31m+ Received  + 3\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   \"ResizeObserver loop completed with undelivered notifications.\",\u001b[39m\n\u001b[31m+ ]\u001b[39m\n    at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/ui-migration/choices.browser.mjs:12:63",
+          "location": {
+           "file": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/ui-migration/choices.browser.mjs",
+           "column": 63,
+           "line": 12
+          },
+          "snippet": "  10 |   await page.evaluate(() => document.fonts.ready);\n  11 | });\n> 12 | test.afterEach(async ({ page }) => { expect(errors.get(page)).toEqual([]); });\n     |                                                               ^\n  13 | const attach = (info, name, value) => info.attach(name, { body: JSON.stringify(value, null, 2), contentType: 'application/json' });\n  14 | const shot = (info, name, locator) => locator.screenshot({ animations: 'disabled' }).then((body) => info.attach(name, { body, contentType: 'image/png' }));\n  15 | async function settle(locator) {"
+         },
+         "errors": [
+          {
+           "location": {
+            "file": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/ui-migration/choices.browser.mjs",
+            "column": 63,
+            "line": 12
+           },
+           "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 1\u001b[39m\n\u001b[31m+ Received  + 3\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   \"ResizeObserver loop completed with undelivered notifications.\",\u001b[39m\n\u001b[31m+ ]\u001b[39m\n\n  10 |   await page.evaluate(() => document.fonts.ready);\n  11 | });\n> 12 | test.afterEach(async ({ page }) => { expect(errors.get(page)).toEqual([]); });\n     |                                                               ^\n  13 | const attach = (info, name, value) => info.attach(name, { body: JSON.stringify(value, null, 2), contentType: 'application/json' });\n  14 | const shot = (info, name, locator) => locator.screenshot({ animations: 'disabled' }).then((body) => info.attach(name, { body, contentType: 'image/png' }));\n  15 | async function settle(locator) {\n    at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/ui-migration/choices.browser.mjs:12:63"
+          }
+         ],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T18:02:57.869Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "multiple-labels",
+           "contentType": "application/json"
+          },
+          {
+           "name": "error-context",
+           "contentType": "text/markdown",
+           "path": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/.choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-light-phone-repeat2/error-context.md"
+          },
+          {
+           "name": "trace",
+           "contentType": "application/zip",
+           "path": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/.choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-light-phone-repeat2/trace.zip"
+          }
+         ],
+         "errorLocation": {
+          "file": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/ui-migration/choices.browser.mjs",
+          "column": 63,
+          "line": 12
+         }
+        }
+       ],
+       "status": "unexpected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-3139c07facc707728768",
+     "file": "choices.browser.mjs",
+     "line": 474,
+     "column": 1
+    },
+    {
+     "title": "multiple labels search, toggle, collapse, remove and clear without losing the remaining values",
+     "ok": false,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "failed",
+         "duration": 1164,
+         "error": {
+          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 1\u001b[39m\n\u001b[31m+ Received  + 3\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   \"ResizeObserver loop completed with undelivered notifications.\",\u001b[39m\n\u001b[31m+ ]\u001b[39m",
+          "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 1\u001b[39m\n\u001b[31m+ Received  + 3\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   \"ResizeObserver loop completed with undelivered notifications.\",\u001b[39m\n\u001b[31m+ ]\u001b[39m\n    at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/ui-migration/choices.browser.mjs:12:63",
+          "location": {
+           "file": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/ui-migration/choices.browser.mjs",
+           "column": 63,
+           "line": 12
+          },
+          "snippet": "  10 |   await page.evaluate(() => document.fonts.ready);\n  11 | });\n> 12 | test.afterEach(async ({ page }) => { expect(errors.get(page)).toEqual([]); });\n     |                                                               ^\n  13 | const attach = (info, name, value) => info.attach(name, { body: JSON.stringify(value, null, 2), contentType: 'application/json' });\n  14 | const shot = (info, name, locator) => locator.screenshot({ animations: 'disabled' }).then((body) => info.attach(name, { body, contentType: 'image/png' }));\n  15 | async function settle(locator) {"
+         },
+         "errors": [
+          {
+           "location": {
+            "file": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/ui-migration/choices.browser.mjs",
+            "column": 63,
+            "line": 12
+           },
+           "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 1\u001b[39m\n\u001b[31m+ Received  + 3\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   \"ResizeObserver loop completed with undelivered notifications.\",\u001b[39m\n\u001b[31m+ ]\u001b[39m\n\n  10 |   await page.evaluate(() => document.fonts.ready);\n  11 | });\n> 12 | test.afterEach(async ({ page }) => { expect(errors.get(page)).toEqual([]); });\n     |                                                               ^\n  13 | const attach = (info, name, value) => info.attach(name, { body: JSON.stringify(value, null, 2), contentType: 'application/json' });\n  14 | const shot = (info, name, locator) => locator.screenshot({ animations: 'disabled' }).then((body) => info.attach(name, { body, contentType: 'image/png' }));\n  15 | async function settle(locator) {\n    at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/ui-migration/choices.browser.mjs:12:63"
+          }
+         ],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T18:02:59.420Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "multiple-labels",
+           "contentType": "application/json"
+          },
+          {
+           "name": "error-context",
+           "contentType": "text/markdown",
+           "path": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/.choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-light-phone-repeat3/error-context.md"
+          },
+          {
+           "name": "trace",
+           "contentType": "application/zip",
+           "path": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/.choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-light-phone-repeat3/trace.zip"
+          }
+         ],
+         "errorLocation": {
+          "file": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/ui-migration/choices.browser.mjs",
+          "column": 63,
+          "line": 12
+         }
+        }
+       ],
+       "status": "unexpected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-bffeb6bc03f7fdd33da6",
+     "file": "choices.browser.mjs",
+     "line": 474,
+     "column": 1
+    },
+    {
+     "title": "multiple labels search, toggle, collapse, remove and clear without losing the remaining values",
+     "ok": false,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "failed",
+         "duration": 1210,
+         "error": {
+          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 1\u001b[39m\n\u001b[31m+ Received  + 3\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   \"ResizeObserver loop completed with undelivered notifications.\",\u001b[39m\n\u001b[31m+ ]\u001b[39m",
+          "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 1\u001b[39m\n\u001b[31m+ Received  + 3\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   \"ResizeObserver loop completed with undelivered notifications.\",\u001b[39m\n\u001b[31m+ ]\u001b[39m\n    at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/ui-migration/choices.browser.mjs:12:63",
+          "location": {
+           "file": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/ui-migration/choices.browser.mjs",
+           "column": 63,
+           "line": 12
+          },
+          "snippet": "  10 |   await page.evaluate(() => document.fonts.ready);\n  11 | });\n> 12 | test.afterEach(async ({ page }) => { expect(errors.get(page)).toEqual([]); });\n     |                                                               ^\n  13 | const attach = (info, name, value) => info.attach(name, { body: JSON.stringify(value, null, 2), contentType: 'application/json' });\n  14 | const shot = (info, name, locator) => locator.screenshot({ animations: 'disabled' }).then((body) => info.attach(name, { body, contentType: 'image/png' }));\n  15 | async function settle(locator) {"
+         },
+         "errors": [
+          {
+           "location": {
+            "file": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/ui-migration/choices.browser.mjs",
+            "column": 63,
+            "line": 12
+           },
+           "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 1\u001b[39m\n\u001b[31m+ Received  + 3\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   \"ResizeObserver loop completed with undelivered notifications.\",\u001b[39m\n\u001b[31m+ ]\u001b[39m\n\n  10 |   await page.evaluate(() => document.fonts.ready);\n  11 | });\n> 12 | test.afterEach(async ({ page }) => { expect(errors.get(page)).toEqual([]); });\n     |                                                               ^\n  13 | const attach = (info, name, value) => info.attach(name, { body: JSON.stringify(value, null, 2), contentType: 'application/json' });\n  14 | const shot = (info, name, locator) => locator.screenshot({ animations: 'disabled' }).then((body) => info.attach(name, { body, contentType: 'image/png' }));\n  15 | async function settle(locator) {\n    at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/ui-migration/choices.browser.mjs:12:63"
+          }
+         ],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T18:03:00.962Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "multiple-labels",
+           "contentType": "application/json"
+          },
+          {
+           "name": "error-context",
+           "contentType": "text/markdown",
+           "path": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/.choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-light-phone-repeat4/error-context.md"
+          },
+          {
+           "name": "trace",
+           "contentType": "application/zip",
+           "path": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/.choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-light-phone-repeat4/trace.zip"
+          }
+         ],
+         "errorLocation": {
+          "file": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/ui-migration/choices.browser.mjs",
+          "column": 63,
+          "line": 12
+         }
+        }
+       ],
+       "status": "unexpected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-c4d6a720af134d628b4c",
+     "file": "choices.browser.mjs",
+     "line": 474,
+     "column": 1
+    },
+    {
+     "title": "multiple labels search, toggle, collapse, remove and clear without losing the remaining values",
+     "ok": false,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "failed",
+         "duration": 1221,
+         "error": {
+          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 1\u001b[39m\n\u001b[31m+ Received  + 3\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   \"ResizeObserver loop completed with undelivered notifications.\",\u001b[39m\n\u001b[31m+ ]\u001b[39m",
+          "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 1\u001b[39m\n\u001b[31m+ Received  + 3\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   \"ResizeObserver loop completed with undelivered notifications.\",\u001b[39m\n\u001b[31m+ ]\u001b[39m\n    at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/ui-migration/choices.browser.mjs:12:63",
+          "location": {
+           "file": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/ui-migration/choices.browser.mjs",
+           "column": 63,
+           "line": 12
+          },
+          "snippet": "  10 |   await page.evaluate(() => document.fonts.ready);\n  11 | });\n> 12 | test.afterEach(async ({ page }) => { expect(errors.get(page)).toEqual([]); });\n     |                                                               ^\n  13 | const attach = (info, name, value) => info.attach(name, { body: JSON.stringify(value, null, 2), contentType: 'application/json' });\n  14 | const shot = (info, name, locator) => locator.screenshot({ animations: 'disabled' }).then((body) => info.attach(name, { body, contentType: 'image/png' }));\n  15 | async function settle(locator) {"
+         },
+         "errors": [
+          {
+           "location": {
+            "file": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/ui-migration/choices.browser.mjs",
+            "column": 63,
+            "line": 12
+           },
+           "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 1\u001b[39m\n\u001b[31m+ Received  + 3\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   \"ResizeObserver loop completed with undelivered notifications.\",\u001b[39m\n\u001b[31m+ ]\u001b[39m\n\n  10 |   await page.evaluate(() => document.fonts.ready);\n  11 | });\n> 12 | test.afterEach(async ({ page }) => { expect(errors.get(page)).toEqual([]); });\n     |                                                               ^\n  13 | const attach = (info, name, value) => info.attach(name, { body: JSON.stringify(value, null, 2), contentType: 'application/json' });\n  14 | const shot = (info, name, locator) => locator.screenshot({ animations: 'disabled' }).then((body) => info.attach(name, { body, contentType: 'image/png' }));\n  15 | async function settle(locator) {\n    at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/ui-migration/choices.browser.mjs:12:63"
+          }
+         ],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T18:03:02.508Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "multiple-labels",
+           "contentType": "application/json"
+          },
+          {
+           "name": "error-context",
+           "contentType": "text/markdown",
+           "path": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/.choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-dark-phone/error-context.md"
+          },
+          {
+           "name": "trace",
+           "contentType": "application/zip",
+           "path": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/.choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-dark-phone/trace.zip"
+          }
+         ],
+         "errorLocation": {
+          "file": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/ui-migration/choices.browser.mjs",
+          "column": 63,
+          "line": 12
+         }
+        }
+       ],
+       "status": "unexpected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-85813765a23a61ef5d8d",
+     "file": "choices.browser.mjs",
+     "line": 474,
+     "column": 1
+    },
+    {
+     "title": "multiple labels search, toggle, collapse, remove and clear without losing the remaining values",
+     "ok": false,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "failed",
+         "duration": 1190,
+         "error": {
+          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 1\u001b[39m\n\u001b[31m+ Received  + 3\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   \"ResizeObserver loop completed with undelivered notifications.\",\u001b[39m\n\u001b[31m+ ]\u001b[39m",
+          "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 1\u001b[39m\n\u001b[31m+ Received  + 3\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   \"ResizeObserver loop completed with undelivered notifications.\",\u001b[39m\n\u001b[31m+ ]\u001b[39m\n    at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/ui-migration/choices.browser.mjs:12:63",
+          "location": {
+           "file": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/ui-migration/choices.browser.mjs",
+           "column": 63,
+           "line": 12
+          },
+          "snippet": "  10 |   await page.evaluate(() => document.fonts.ready);\n  11 | });\n> 12 | test.afterEach(async ({ page }) => { expect(errors.get(page)).toEqual([]); });\n     |                                                               ^\n  13 | const attach = (info, name, value) => info.attach(name, { body: JSON.stringify(value, null, 2), contentType: 'application/json' });\n  14 | const shot = (info, name, locator) => locator.screenshot({ animations: 'disabled' }).then((body) => info.attach(name, { body, contentType: 'image/png' }));\n  15 | async function settle(locator) {"
+         },
+         "errors": [
+          {
+           "location": {
+            "file": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/ui-migration/choices.browser.mjs",
+            "column": 63,
+            "line": 12
+           },
+           "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 1\u001b[39m\n\u001b[31m+ Received  + 3\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   \"ResizeObserver loop completed with undelivered notifications.\",\u001b[39m\n\u001b[31m+ ]\u001b[39m\n\n  10 |   await page.evaluate(() => document.fonts.ready);\n  11 | });\n> 12 | test.afterEach(async ({ page }) => { expect(errors.get(page)).toEqual([]); });\n     |                                                               ^\n  13 | const attach = (info, name, value) => info.attach(name, { body: JSON.stringify(value, null, 2), contentType: 'application/json' });\n  14 | const shot = (info, name, locator) => locator.screenshot({ animations: 'disabled' }).then((body) => info.attach(name, { body, contentType: 'image/png' }));\n  15 | async function settle(locator) {\n    at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/ui-migration/choices.browser.mjs:12:63"
+          }
+         ],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T18:03:04.064Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "multiple-labels",
+           "contentType": "application/json"
+          },
+          {
+           "name": "error-context",
+           "contentType": "text/markdown",
+           "path": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/.choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-dark-phone-repeat1/error-context.md"
+          },
+          {
+           "name": "trace",
+           "contentType": "application/zip",
+           "path": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/.choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-dark-phone-repeat1/trace.zip"
+          }
+         ],
+         "errorLocation": {
+          "file": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/ui-migration/choices.browser.mjs",
+          "column": 63,
+          "line": 12
+         }
+        }
+       ],
+       "status": "unexpected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-82128261decd5d3532fa",
+     "file": "choices.browser.mjs",
+     "line": 474,
+     "column": 1
+    },
+    {
+     "title": "multiple labels search, toggle, collapse, remove and clear without losing the remaining values",
+     "ok": false,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "failed",
+         "duration": 1195,
+         "error": {
+          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 1\u001b[39m\n\u001b[31m+ Received  + 3\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   \"ResizeObserver loop completed with undelivered notifications.\",\u001b[39m\n\u001b[31m+ ]\u001b[39m",
+          "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 1\u001b[39m\n\u001b[31m+ Received  + 3\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   \"ResizeObserver loop completed with undelivered notifications.\",\u001b[39m\n\u001b[31m+ ]\u001b[39m\n    at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/ui-migration/choices.browser.mjs:12:63",
+          "location": {
+           "file": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/ui-migration/choices.browser.mjs",
+           "column": 63,
+           "line": 12
+          },
+          "snippet": "  10 |   await page.evaluate(() => document.fonts.ready);\n  11 | });\n> 12 | test.afterEach(async ({ page }) => { expect(errors.get(page)).toEqual([]); });\n     |                                                               ^\n  13 | const attach = (info, name, value) => info.attach(name, { body: JSON.stringify(value, null, 2), contentType: 'application/json' });\n  14 | const shot = (info, name, locator) => locator.screenshot({ animations: 'disabled' }).then((body) => info.attach(name, { body, contentType: 'image/png' }));\n  15 | async function settle(locator) {"
+         },
+         "errors": [
+          {
+           "location": {
+            "file": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/ui-migration/choices.browser.mjs",
+            "column": 63,
+            "line": 12
+           },
+           "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 1\u001b[39m\n\u001b[31m+ Received  + 3\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   \"ResizeObserver loop completed with undelivered notifications.\",\u001b[39m\n\u001b[31m+ ]\u001b[39m\n\n  10 |   await page.evaluate(() => document.fonts.ready);\n  11 | });\n> 12 | test.afterEach(async ({ page }) => { expect(errors.get(page)).toEqual([]); });\n     |                                                               ^\n  13 | const attach = (info, name, value) => info.attach(name, { body: JSON.stringify(value, null, 2), contentType: 'application/json' });\n  14 | const shot = (info, name, locator) => locator.screenshot({ animations: 'disabled' }).then((body) => info.attach(name, { body, contentType: 'image/png' }));\n  15 | async function settle(locator) {\n    at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/ui-migration/choices.browser.mjs:12:63"
+          }
+         ],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T18:03:05.589Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "multiple-labels",
+           "contentType": "application/json"
+          },
+          {
+           "name": "error-context",
+           "contentType": "text/markdown",
+           "path": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/.choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-dark-phone-repeat2/error-context.md"
+          },
+          {
+           "name": "trace",
+           "contentType": "application/zip",
+           "path": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/.choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-dark-phone-repeat2/trace.zip"
+          }
+         ],
+         "errorLocation": {
+          "file": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/ui-migration/choices.browser.mjs",
+          "column": 63,
+          "line": 12
+         }
+        }
+       ],
+       "status": "unexpected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-588ce6415cdc006ca170",
+     "file": "choices.browser.mjs",
+     "line": 474,
+     "column": 1
+    },
+    {
+     "title": "multiple labels search, toggle, collapse, remove and clear without losing the remaining values",
+     "ok": false,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 8,
+         "parallelIndex": 0,
+         "status": "failed",
+         "duration": 1230,
+         "error": {
+          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 1\u001b[39m\n\u001b[31m+ Received  + 3\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   \"ResizeObserver loop completed with undelivered notifications.\",\u001b[39m\n\u001b[31m+ ]\u001b[39m",
+          "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 1\u001b[39m\n\u001b[31m+ Received  + 3\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   \"ResizeObserver loop completed with undelivered notifications.\",\u001b[39m\n\u001b[31m+ ]\u001b[39m\n    at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/ui-migration/choices.browser.mjs:12:63",
+          "location": {
+           "file": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/ui-migration/choices.browser.mjs",
+           "column": 63,
+           "line": 12
+          },
+          "snippet": "  10 |   await page.evaluate(() => document.fonts.ready);\n  11 | });\n> 12 | test.afterEach(async ({ page }) => { expect(errors.get(page)).toEqual([]); });\n     |                                                               ^\n  13 | const attach = (info, name, value) => info.attach(name, { body: JSON.stringify(value, null, 2), contentType: 'application/json' });\n  14 | const shot = (info, name, locator) => locator.screenshot({ animations: 'disabled' }).then((body) => info.attach(name, { body, contentType: 'image/png' }));\n  15 | async function settle(locator) {"
+         },
+         "errors": [
+          {
+           "location": {
+            "file": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/ui-migration/choices.browser.mjs",
+            "column": 63,
+            "line": 12
+           },
+           "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 1\u001b[39m\n\u001b[31m+ Received  + 3\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   \"ResizeObserver loop completed with undelivered notifications.\",\u001b[39m\n\u001b[31m+ ]\u001b[39m\n\n  10 |   await page.evaluate(() => document.fonts.ready);\n  11 | });\n> 12 | test.afterEach(async ({ page }) => { expect(errors.get(page)).toEqual([]); });\n     |                                                               ^\n  13 | const attach = (info, name, value) => info.attach(name, { body: JSON.stringify(value, null, 2), contentType: 'application/json' });\n  14 | const shot = (info, name, locator) => locator.screenshot({ animations: 'disabled' }).then((body) => info.attach(name, { body, contentType: 'image/png' }));\n  15 | async function settle(locator) {\n    at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/ui-migration/choices.browser.mjs:12:63"
+          }
+         ],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T18:03:07.158Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "multiple-labels",
+           "contentType": "application/json"
+          },
+          {
+           "name": "error-context",
+           "contentType": "text/markdown",
+           "path": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/.choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-dark-phone-repeat3/error-context.md"
+          },
+          {
+           "name": "trace",
+           "contentType": "application/zip",
+           "path": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/.choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-dark-phone-repeat3/trace.zip"
+          }
+         ],
+         "errorLocation": {
+          "file": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/ui-migration/choices.browser.mjs",
+          "column": 63,
+          "line": 12
+         }
+        }
+       ],
+       "status": "unexpected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-5d1ea26c7152b1972f80",
+     "file": "choices.browser.mjs",
+     "line": 474,
+     "column": 1
+    },
+    {
+     "title": "multiple labels search, toggle, collapse, remove and clear without losing the remaining values",
+     "ok": false,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 9,
+         "parallelIndex": 0,
+         "status": "failed",
+         "duration": 1265,
+         "error": {
+          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 1\u001b[39m\n\u001b[31m+ Received  + 3\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   \"ResizeObserver loop completed with undelivered notifications.\",\u001b[39m\n\u001b[31m+ ]\u001b[39m",
+          "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 1\u001b[39m\n\u001b[31m+ Received  + 3\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   \"ResizeObserver loop completed with undelivered notifications.\",\u001b[39m\n\u001b[31m+ ]\u001b[39m\n    at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/ui-migration/choices.browser.mjs:12:63",
+          "location": {
+           "file": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/ui-migration/choices.browser.mjs",
+           "column": 63,
+           "line": 12
+          },
+          "snippet": "  10 |   await page.evaluate(() => document.fonts.ready);\n  11 | });\n> 12 | test.afterEach(async ({ page }) => { expect(errors.get(page)).toEqual([]); });\n     |                                                               ^\n  13 | const attach = (info, name, value) => info.attach(name, { body: JSON.stringify(value, null, 2), contentType: 'application/json' });\n  14 | const shot = (info, name, locator) => locator.screenshot({ animations: 'disabled' }).then((body) => info.attach(name, { body, contentType: 'image/png' }));\n  15 | async function settle(locator) {"
+         },
+         "errors": [
+          {
+           "location": {
+            "file": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/ui-migration/choices.browser.mjs",
+            "column": 63,
+            "line": 12
+           },
+           "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  - 1\u001b[39m\n\u001b[31m+ Received  + 3\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   \"ResizeObserver loop completed with undelivered notifications.\",\u001b[39m\n\u001b[31m+ ]\u001b[39m\n\n  10 |   await page.evaluate(() => document.fonts.ready);\n  11 | });\n> 12 | test.afterEach(async ({ page }) => { expect(errors.get(page)).toEqual([]); });\n     |                                                               ^\n  13 | const attach = (info, name, value) => info.attach(name, { body: JSON.stringify(value, null, 2), contentType: 'application/json' });\n  14 | const shot = (info, name, locator) => locator.screenshot({ animations: 'disabled' }).then((body) => info.attach(name, { body, contentType: 'image/png' }));\n  15 | async function settle(locator) {\n    at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/ui-migration/choices.browser.mjs:12:63"
+          }
+         ],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T18:03:08.731Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "multiple-labels",
+           "contentType": "application/json"
+          },
+          {
+           "name": "error-context",
+           "contentType": "text/markdown",
+           "path": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/.choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-dark-phone-repeat4/error-context.md"
+          },
+          {
+           "name": "trace",
+           "contentType": "application/zip",
+           "path": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/.choices-results/choices.browser.mjs-multip-b015e-losing-the-remaining-values-webkit-dark-phone-repeat4/trace.zip"
+          }
+         ],
+         "errorLocation": {
+          "file": "/mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/exp-base/src/web/ui-migration/choices.browser.mjs",
+          "column": 63,
+          "line": 12
+         }
+        }
+       ],
+       "status": "unexpected"
+      }
+     ],
+     "id": "3a792d852a32503923ba-d2fd4b6a201e02532483",
+     "file": "choices.browser.mjs",
+     "line": 474,
+     "column": 1
+    }
+   ]
+  }
+ ],
+ "errors": [],
+ "stats": {
+  "startTime": "2026-10-10T18:02:53.635Z",
+  "duration": 16547.39,
+  "expected": 0,
+  "skipped": 0,
+  "unexpected": 10,
+  "flaky": 0
+ }
+}

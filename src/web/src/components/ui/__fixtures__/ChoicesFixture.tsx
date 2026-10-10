@@ -1,14 +1,12 @@
 import { useRef, useState, type ReactNode } from 'react';
-import { App as AntApp, Button as AntButton, ConfigProvider, Drawer as AntDrawer, Dropdown, Modal, Popconfirm as AntPopconfirm, Popover as AntPopover, Select as AntSelect, Tooltip as AntTooltip } from 'antd';
 import { CodeOutlined, GlobalOutlined, LockOutlined, PaperClipOutlined, PictureOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider, useThemeMode } from '../../../lib/theme';
-import { darkTheme, lightTheme } from '../../../theme';
+import { AppRoot } from '../AppRoot';
 import { Button } from '../Button';
 import { Input } from '../Input';
 import { Dialog } from '../Dialog';
 import { Drawer } from '../Drawer';
-import { OverlayScope } from '../Overlay';
 import { Menu, type MenuItem } from '../Menu';
 import { Popconfirm } from '../Popconfirm';
 import { Popover } from '../Popover';
@@ -36,14 +34,10 @@ const attachmentItems: MenuItem[] = [
 
 function Samples() {
   const params = new URLSearchParams(location.search);
-  const legacy = params.get('system') === 'antd';
   const kind = params.get('sample') ?? 'attachment';
   const state = params.get('state') ?? 'default';
   const side = params.get('side') === 'top' ? 'top' : 'bottom';
   const align = params.get('align') === 'end' ? 'end' : params.get('align') === 'center' ? 'center' : 'start';
-  const placement = side === 'top' ? 'topLeft' : 'bottomLeft';
-  const calloutPlacement = side === 'top' ? align === 'center' ? 'top' : align === 'end' ? 'topRight' : 'topLeft'
-    : align === 'center' ? 'bottom' : align === 'end' ? 'bottomRight' : 'bottomLeft';
   const anchor = params.get('anchor');
   // A select sample's starting value (value=none: none, as the replaced dialogs started on undefined), shown in
   // an output; options=first-disabled disables its first option.
@@ -62,58 +56,40 @@ function Samples() {
   // The submenus' second label: short, as long as an account name, or wider than a phone leaves beside its item.
   const claude = params.get('labels') === 'long' ? 'Claude Opus 5.5 with extended thinking (work)'
     : params.get('labels') === 'medium' ? 'Claude · work account' : 'Claude';
-  const submenuItems = [{ key: 'provider', label: 'Provider', popupClassName: 'sample-submenu', children: [{ key: 'codex', label: 'Codex' }, { key: 'claude', label: claude }] }];
+  const submenuItems = [{ key: 'provider', label: 'Provider', children: [{ key: 'codex', label: 'Codex' }, { key: 'claude', label: claude }] }];
   const items = kind === 'access' ? accessItems : kind === 'submenu' ? submenuItems : attachmentItems;
   const menuClass = kind === 'access' ? 'fixture-access-menu share-access-menu' : kind === 'attachment' ? 'composer-attach-menu' : '';
   const trigger = <Button disabled={disabled}>{kind === 'access' ? 'Access' : 'Add attachment'}</Button>;
-  return <SampleOwner legacy={legacy}><section className="choices-sample" aria-label="Appearance sample" style={anchor ? { position: 'fixed', padding: 0,
+  return <SampleOwner><section className="choices-sample" aria-label="Appearance sample" style={anchor ? { position: 'fixed', padding: 0,
     top: anchor !== 'bottom' ? 12 : undefined, bottom: anchor === 'bottom' ? 12 : undefined,
     left: anchor === 'right' ? undefined : anchor === 'center' ? '45%' : 24, right: anchor === 'right' ? 12 : undefined } : undefined}>
-    <div tabIndex={-1} data-testid="neutral">{['attachment', 'access', 'submenu'].includes(kind) ? legacy
-      ? <Dropdown open={open} onOpenChange={setOpen} placement={calloutPlacement} trigger={['click']} disabled={disabled} menu={{ className: `sample-surface ${menuClass}`, selectedKeys: kind === 'access' ? ['private'] : [], items: kind === 'submenu' ? submenuItems : (items as MenuItem[]).map((entry) => entry.type === 'separator' ? { key: entry.key, type: 'divider' } : entry.type === 'group' ? null : { key: entry.key, label: entry.label, icon: entry.icon, disabled: entry.disabled }) }}>{trigger}</Dropdown>
-      : <Menu open={open} onOpenChange={setOpen} side={side} align={align} trigger={trigger} disabled={disabled} items={items} variant={kind === 'attachment' ? 'attachment' : 'default'} popupClassName={`sample-surface ${menuClass}`} />
-      // A workspace menu's shape: items around a submenu, one dangerous; same items and trigger for both systems.
-      : kind === 'session' ? <>{legacy
-        ? <Dropdown trigger={['click']} menu={{ onClick: ({ key }) => setPicked(key), items: [{ key: 'default', label: 'Default model' },
-          { key: 'provider', label: 'Provider', children: [{ key: 'codex', label: 'Codex' }, { key: 'claude', label: claude }] },
-          { key: 'separator', type: 'divider' }, { key: 'group', label: 'Group by tag' }, { key: 'delete', label: 'Delete', danger: true }] }}>
-          <Button>Session actions</Button></Dropdown>
-        : <Menu trigger={<Button>Session actions</Button>} items={[{ key: 'default', label: 'Default model', onSelect: () => setPicked('default') },
+    <div tabIndex={-1} data-testid="neutral">{['attachment', 'access', 'submenu'].includes(kind)
+      ? <Menu open={open} onOpenChange={setOpen} side={side} align={align} trigger={trigger} disabled={disabled} items={items} variant={kind === 'attachment' ? 'attachment' : 'default'} popupClassName={`sample-surface ${menuClass}`} />
+      // A workspace menu's shape: items around a submenu, one dangerous.
+      : kind === 'session' ? <>
+        <Menu trigger={<Button>Session actions</Button>} items={[{ key: 'default', label: 'Default model', onSelect: () => setPicked('default') },
           { key: 'provider', label: 'Provider', children: [{ key: 'codex', label: 'Codex', onSelect: () => setPicked('codex') }, { key: 'claude', label: claude, onSelect: () => setPicked('claude') }] },
           { key: 'separator', type: 'separator' }, { key: 'group', label: 'Group by tag', onSelect: () => setPicked('group') },
-          { key: 'delete', label: 'Delete', danger: true, onSelect: () => setPicked('delete') }]} />}
+          { key: 'delete', label: 'Delete', danger: true, onSelect: () => setPicked('delete') }]} />
         <output aria-label="Picked">{picked}</output></>
-      // The task panel's delete question, on the same trigger for both systems.
-      : kind === 'popconfirm' ? <>{legacy
-        ? <AntPopconfirm title="Delete this task?" description="A run still in flight is stopped. This action cannot be undone." okText="Delete" cancelText="Cancel"
-          okButtonProps={{ danger: true }} classNames={{ container: 'sample-surface' }} onConfirm={() => setAnswer('confirmed')} onCancel={() => setAnswer('cancelled')}><Button>Delete task</Button></AntPopconfirm>
-        : <Popconfirm trigger={<Button>Delete task</Button>} title="Delete this task?" description="A run still in flight is stopped. This action cannot be undone."
-          confirmText="Delete" cancelText="Cancel" danger popupClassName="sample-surface" onConfirm={() => setAnswer('confirmed')} onCancel={() => setAnswer('cancelled')} />}
+      // The task panel's delete question.
+      : kind === 'popconfirm' ? <>
+        <Popconfirm trigger={<Button>Delete task</Button>} title="Delete this task?" description="A run still in flight is stopped. This action cannot be undone."
+          confirmText="Delete" cancelText="Cancel" danger popupClassName="sample-surface" onConfirm={() => setAnswer('confirmed')} onCancel={() => setAnswer('cancelled')} />
         <output aria-label="Answer">{answer}</output></>
-      : kind === 'popover' ? legacy
-        ? <AntPopover title="Context" content={<div>12,800 of 128,000 tokens</div>} trigger="click" placement={calloutPlacement} classNames={{ root: 'sample-floating-root', arrow: 'sample-arrow', container: 'sample-surface', title: 'sample-title' }}><Button>Context</Button></AntPopover>
-        : <Popover trigger={<Button>Context</Button>} title="Context" side={side} align={align} popupClassName="sample-surface"><div>12,800 of 128,000 tokens</div></Popover>
-      : kind === 'tooltip' ? legacy
-        ? <AntTooltip title="Usage from this account" placement={calloutPlacement} classNames={{ root: 'sample-floating-root', arrow: 'sample-arrow', container: 'sample-surface' }}><Button>Usage</Button></AntTooltip>
-        : <Tooltip content="Usage from this account" side={side} align={align} popupClassName="sample-surface"><Button>Usage</Button></Tooltip>
-      : ['multiple', 'tags'].includes(kind) ? legacy
-        ? <AntSelect aria-label="Sample choice" className="sample-choice" classNames={{ item: 'sample-chip', popup: { root: 'sample-surface' } }}
-          placement={placement} mode={kind === 'tags' ? 'tags' : 'multiple'} size={kind === 'multiple' ? 'small' : 'middle'} value={many} onChange={setMany}
-          options={kind === 'tags' ? [] : labels} maxTagCount={kind === 'multiple' ? 2 : undefined} disabled={disabled} allowClear showSearch optionFilterProp="label" virtual={false}
-          open={kind === 'tags' ? false : undefined} tokenSeparators={[',', ' ']} />
-        : <MultiSelect aria-label="Sample choice" className="sample-choice" popupClassName="sample-surface"
+      : kind === 'popover'
+        ? <Popover trigger={<Button>Context</Button>} title="Context" side={side} align={align} popupClassName="sample-surface"><div>12,800 of 128,000 tokens</div></Popover>
+      : kind === 'tooltip'
+        ? <Tooltip content="Usage from this account" side={side} align={align} popupClassName="sample-surface"><Button>Usage</Button></Tooltip>
+      : ['multiple', 'tags'].includes(kind)
+        ? <MultiSelect aria-label="Sample choice" className="sample-choice" popupClassName="sample-surface"
           side={side} mode={kind === 'tags' ? 'tags' : 'multiple'} size={kind === 'multiple' ? 'small' : 'middle'} value={many} onValueChange={setMany}
           options={kind === 'tags' ? [] : labels} maxTagCount={kind === 'multiple' ? 2 : undefined} disabled={disabled} clearable
           open={kind === 'tags' ? false : undefined} tokenSeparators={[',', ' ']} />
-      : legacy
-        ? <AntSelect placement={placement} aria-label="Sample choice" value={value ?? undefined} onChange={setValue} size={kind === 'expiry' ? 'small' : 'middle'}
-          className="sample-choice" disabled={disabled} allowClear={kind === 'search'} showSearch={kind === 'search'} optionFilterProp="label" virtual={false}
-          classNames={{ popup: { root: 'sample-surface' } }} options={choiceOptions}
-          optionRender={kind === 'account' ? (option) => accountDetail(option.data) : undefined} />
-        : kind === 'search'
-          ? <Combobox side={side} aria-label="Sample choice" options={state === 'empty' ? [] : expiry} value={value} onValueChange={setValue} className="sample-choice" popupClassName="sample-surface" clearable disabled={disabled} />
-          : <Select side={side} aria-label="Sample choice" options={choiceOptions} value={value} onValueChange={setValue}
-            size={kind === 'expiry' ? 'small' : 'middle'} className="sample-choice" popupClassName="sample-surface" disabled={disabled} renderOption={kind === 'account' ? accountDetail : undefined} />}
+      : kind === 'search'
+        ? <Combobox side={side} aria-label="Sample choice" options={state === 'empty' ? [] : expiry} value={value} onValueChange={setValue} className="sample-choice" popupClassName="sample-surface" clearable disabled={disabled} />
+        : <Select side={side} aria-label="Sample choice" options={choiceOptions} value={value} onValueChange={setValue}
+          size={kind === 'expiry' ? 'small' : 'middle'} className="sample-choice" popupClassName="sample-surface" disabled={disabled} renderOption={kind === 'account' ? accountDetail : undefined} />}
     </div>
     {start !== null && <output aria-label="Sample value">{value ?? 'null'}</output>}
   </section></SampleOwner>;
@@ -121,23 +97,18 @@ function Samples() {
 
 /**
  * Where a sample is mounted, for the first-frame checks: on the page (default), or in an open dialog
- * or drawer (owner=dialog/drawer: Orbit's for Orbit samples, the replaced one for legacy samples, at
- * the same place). scroll puts a screen of content before and after the sample, in a scrolling box
- * on the page or in the owner, and pagescroll in the page itself; transform moves the owner (a box
- * around the sample on the page).
+ * or drawer (owner=dialog/drawer). scroll puts a screen of content before and after the sample, in a
+ * scrolling box on the page or in the owner, and pagescroll in the page itself; transform moves the
+ * owner (a box around the sample on the page).
  */
-function SampleOwner({ legacy, children }: { legacy: boolean; children: ReactNode }) {
+function SampleOwner({ children }: { children: ReactNode }) {
   const params = new URLSearchParams(location.search);
   const owner = params.get('owner');
   const moved = params.has('transform') ? { transform: 'translate(16px, 8px)' } : undefined;
   const content = params.has('scroll') || params.has('pagescroll')
     ? <><div className="fixture-scroll-spacer" />{children}<div className="fixture-scroll-spacer" /></> : children;
-  if (owner === 'dialog') return legacy
-    ? <Modal open title="Sample owner" footer={null} closable={false} keyboard={false} maskClosable={false} style={moved}>{content}</Modal>
-    : <Dialog open onClose={() => {}} title="Sample owner" closable={false} closeOnEscape={false} closeOnOutsideClick={false} style={moved}>{content}</Dialog>;
-  if (owner === 'drawer') return legacy
-    ? <AntDrawer open title="Sample owner" closable={false} keyboard={false} maskClosable={false} style={moved}>{content}</AntDrawer>
-    : <Drawer open onClose={() => {}} title="Sample owner" closable={false} closeOnEscape={false} closeOnOutsideClick={false} style={moved}>{content}</Drawer>;
+  if (owner === 'dialog') return <Dialog open onClose={() => {}} title="Sample owner" closable={false} closeOnEscape={false} closeOnOutsideClick={false} style={moved}>{content}</Dialog>;
+  if (owner === 'drawer') return <Drawer open onClose={() => {}} title="Sample owner" closable={false} closeOnEscape={false} closeOnOutsideClick={false} style={moved}>{content}</Drawer>;
   if (params.has('scroll')) return <div className="fixture-scroll-owner">{content}</div>;
   return moved ? <div style={moved}>{content}</div> : content;
 }
@@ -242,25 +213,19 @@ function MultiCases() {
 function Content() {
   const { resolved, setMode } = useThemeMode();
   const [dialog, setDialog] = useState(false);
-  const [legacy, setLegacy] = useState(false);
-  return <ConfigProvider theme={resolved === 'dark' ? darkTheme : lightTheme}><AntApp>
+  // The app's root (AppRoot, as main.tsx draws it).
+  return <AppRoot>
     <main className="choices-fixture">
       <output data-testid="theme">{resolved}</output>
       <Button onClick={() => setMode(resolved === 'dark' ? 'light' : 'dark')}>Switch theme</Button>
       {new URLSearchParams(location.search).has('sample') ? <Samples /> : <>
         <Button onClick={() => setDialog(true)}>Open Dialog</Button>
-        <Button onClick={() => setLegacy(true)}>Open legacy Modal</Button>
         <section aria-label="Standalone choices"><ChoiceFields /><RemoteChoice /></section>
         <MultiCases />
         <Dialog open={dialog} onClose={() => setDialog(false)} title="Share workspace"><ChoiceFields /></Dialog>
-        <Modal open={legacy} onCancel={() => setLegacy(false)} title="Legacy share" footer={null} destroyOnHidden rootClassName="legacy-choices-owner">
-        {new URLSearchParams(location.search).has('legacyBaseline')
-          ? <><AntSelect aria-label="Legacy expiry" options={expiry} defaultValue="never" /><AntButton>After choices</AntButton></>
-          : <OverlayScope><ChoiceFields /></OverlayScope>}
-        </Modal>
       </>}
     </main>
-  </AntApp></ConfigProvider>;
+  </AppRoot>;
 }
 
 const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });

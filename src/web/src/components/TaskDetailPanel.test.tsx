@@ -684,7 +684,7 @@ describe('runNowHint — what the header button says on hover', () => {
   });
 
   it('says nothing at all on an unscheduled task that can just run', () => {
-    // '' is no tooltip — antd renders nothing for an empty title, which is right when there is
+    // '' is no tooltip — an empty title draws nothing, which is right when there is
     // neither an obstacle nor anything to lose.
     for (const none of [undefined, null, '']) {
       expect(runNowHint({ ...runnable, scheduledLocal: none })).toBe('');

@@ -1,7 +1,7 @@
 /* ============================================================================
    Design tokens — every colour in this file resolves through one of these
    semantic vars. Light is the default :root; [data-theme="dark"] re-points the
-   same names. AntD components are themed separately in theme.ts (darkAlgorithm).
+   same names.
    ========================================================================== */
 :root {
   color-scheme: light;
@@ -12738,7 +12738,7 @@ button.chat-jump-start:hover {
   line-height: 1.45;
   color: var(--text-2);
 }
-/* The Reopen question replaced an AntD Modal, whose line height is unitless: text of another size
+/* The Reopen question replaced a modal whose line height is unitless: text of another size
    inside keeps its own proportional line. The shared Dialog shell stays at 22px. */
 .tdp-reopen-dialog.orbit-overlay {
   line-height: 1.5714285714285714;
@@ -14245,21 +14245,11 @@ button.chat-jump-start:hover {
   /* iOS Safari force-zooms the whole page when a focused input has font-size < 16px
      (and never zooms back out). Lift every focusable input to 16px on mobile so the
      keyboard opens without the jarring zoom; desktop keeps the compact 13–14px sizes.
-     Not touching the viewport meta — pinch-to-zoom stays enabled for accessibility. */
-  .ant-input,
-  .ant-input-affix-wrapper input,
-  textarea.ant-input,
+     Not touching the viewport meta — pinch-to-zoom stays enabled for accessibility. The
+     Orbit fields lift themselves (components/ui/TextControls.css, Select.css). */
   .skills-search,
   .share-dialog-url-input {
     font-size: 16px;
-  }
-  /* AntD Select focuses this hidden search input on tap — a <16px font here is what
-     still zooms the page when the composer's Mode / Model / Effort dropdowns open.
-     AntD sizes it from the Select's own font token through a rule that outranks a plain
-     selector, so !important is required to actually lift it. The input is invisible on a
-     non-search Select, so this only affects the zoom trigger, not layout. */
-  .ant-select-input {
-    font-size: 16px !important;
   }
 }
 
@@ -14916,7 +14906,7 @@ button.chat-jump-start:hover {
 /* ── Share dialog (ShareModal) ─────────────────────────────────────────────────
    docs/mocks/share-links/03-share-dialog: Access, the link, Includes with counts, the Live line,
    Expires, and a foot with the views and the two buttons. */
-/* Unitless line height, as the AntD Modal this dialog replaced: smaller text inside keeps its own
+/* Unitless line height, as the modal this dialog replaced: smaller text inside keeps its own
    proportional line. The shared Dialog shell stays at 22px. */
 .share-dialog.orbit-overlay {
   line-height: 1.5714285714285714;

@@ -104,7 +104,7 @@ function finished(
   };
 }
 
-/** Six criteria, every one of them Not met yet — the antd migration the owner reported on
+/** Six criteria, every one of them Not met yet — the component migration the owner reported on
  *  2026-10-06, which the conversation carried the card under. */
 function antdMigration(over: Partial<Doc> = {}): Doc {
   return finished({ tasksByStatus: { DONE: 2, OPEN: 5 }, ...over }, [
@@ -275,7 +275,7 @@ describe('the coordinator conversation', () => {
       expect(server.document.tasksByStatus).toEqual({ DONE: 4 });
     });
 
-    it('draws nothing for a project whose criteria are not met yet — the antd migration', async () => {
+    it('draws nothing for a project whose criteria are not met yet — the component migration', async () => {
       server.document = antdMigration();
       await mount();
       nothingDrawn();

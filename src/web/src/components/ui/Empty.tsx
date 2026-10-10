@@ -8,8 +8,8 @@ export interface EmptyProps extends ComponentPropsWithoutRef<'div'> {
 }
 
 /** The replaced empty state's two illustrations, Ant Design's MIT-licensed Empty and Empty/simple
- *  (attribution and license: ./antd-empty.LICENSE), with their colours read from the theme. Each
- *  carries its "No data" title, as the replaced one did. */
+ *  (attribution and license: the Ant Design license file in this directory), with their colours read
+ *  from the theme. Each carries its "No data" title, as the replaced one did. */
 function DefaultImage() {
   return <svg width="184" height="152" viewBox="0 0 184 152" xmlns="http://www.w3.org/2000/svg">
     <title>No data</title>
