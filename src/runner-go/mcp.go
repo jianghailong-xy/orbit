@@ -3537,6 +3537,18 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"description": "With PROJECT_BRANCH only: the branch as a full ref (refs/heads/…). " +
 						"Leave it out for refs/heads/project/<project id>.",
 				},
+				"upstreamRef": map[string]interface{}{
+					"type": "string",
+					"description": "The project's main branch, as a full ref (refs/heads/…): the branch its " +
+						"tasks start from and its finished work is finally merged into, with either line. " +
+						"Leave it out when project_get's integration.lastMainBranch has a value: the account " +
+						"owner has already chosen one for this repository. When it is null, run `git " +
+						"symbolic-ref --short refs/remotes/origin/HEAD` in your checkout and send the name it " +
+						"prints after origin/ as refs/heads/<name> (origin/master becomes refs/heads/master); if " +
+						"that fails, leave it out. It is only a suggestion: the owner's card puts their own " +
+						"last choice for this repository ahead of it, and nothing is written until they press " +
+						"Start.",
+				},
 				"automatic": map[string]interface{}{
 					"type": "boolean",
 					"description": "Whether you run the project for the owner: you decide when each task is " +

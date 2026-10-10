@@ -39,7 +39,20 @@ export interface ProjectIntegrationSettings<Instant = string> {
   lineAbsentReason: 'NOT_DECIDED' | null;
   /** The integration line's branch, spelled as a merge receipt spells it (no `refs/heads/`). */
   ref: string | null;
+  /** The project's main branch, short (no `refs/heads/`); null while it has no binding. */
   upstreamRef: string | null;
+  /**
+   * When the account owner chose this project's main branch (§1.2 L6) — null while it is still
+   * the default, or the choice a new binding carried over from this account's last one for the
+   * same repository, and for a project with no binding. Absent on servers that predate it.
+   */
+  upstreamChosenAt?: Instant | null;
+  /**
+   * The main branch this account chose last for this project's repository (§1.2 L6), which is what
+   * a new binding of that repository starts from — null when it has never chosen one there, or the
+   * project has no repository. Absent on servers that predate it.
+   */
+  lastMainBranch?: ProjectLastMainBranch<Instant> | null;
   source: IntegrationRefSource | null;
   /** Integration started, so the line can no longer change (§1.2 L4). */
   locked: boolean;
@@ -51,6 +64,27 @@ export interface ProjectIntegrationSettings<Instant = string> {
   escalationSeconds: number;
 }
 
+/** An account's last choice of main branch for one repository (§1.2 L6). */
+export interface ProjectLastMainBranch<Instant = string> {
+  /** The branch, short (no `refs/heads/`). */
+  branch: string;
+  /** The repository, short: the last two segments of its canonical URL, as `repository` gives it. */
+  repository: string;
+  chosenAt: Instant;
+}
+
+/**
+ * The branches a project's main branch can be chosen from (§1.6): the local branches the runner
+ * last reported for a session of the project's coordination workspace (`session.merge_targets`),
+ * without Orbit's own `orbit/*` session branches.
+ */
+export interface ProjectBranchCandidates<Instant = string> {
+  names: string[];
+  /** The coordination workspace they were reported for. */
+  workspaceName: string;
+  reportedAt: Instant;
+}
+
 /**
  * The settings plus what the integration queue has done with them (§1.6): the five facts the
  * project page's line row is drawn from.
@@ -60,6 +94,16 @@ export interface ProjectIntegrationSettings<Instant = string> {
  * that synced at the epoch.
  */
 export interface ProjectIntegrationView<Instant = string> extends ProjectIntegrationSettings<Instant> {
+  /**
+   * The project's repository, short — the last two segments of its canonical URL, as
+   * `acme/payments-api`: its binding's, or before it has one, its coordination workspace's. Null
+   * when neither names one, and then the project has no main branch to choose. Absent on servers
+   * that predate it.
+   */
+  repository?: string | null;
+  /** What its main branch can be chosen from; null when nothing has been reported. Absent on
+   *  servers that predate it. */
+  branches?: ProjectBranchCandidates<Instant> | null;
   /** Distance measured by the last successful `LAND_TASK` that reported it; a historical snapshot. */
   commitsAheadOfUpstream: number | null;
   commitsAheadOfUpstreamAbsentReason: 'NO_LANDING_YET' | null;
