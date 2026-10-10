@@ -1,0 +1,21 @@
+# P5.2's use points at the start: audit-antd.mjs --json on the project tip d580e572d (scopeHash below), owners by --check-owners rules
+{'commit': 'd580e572d11b8535ae6ab12186a92c2a840ab1d3', 'scopeHash': '6880da833868b65eb0358b4e2ee0870b5ac74ffe9649f069e5c280b4fe2175e9'}
+
+## files (path, points)
+src/web/src/components/BackgroundWakeSteer.test.tsx  x1
+src/web/src/components/QueuedUserTurn.test.tsx  x1
+src/web/src/components/Transcript.backgroundWake.test.tsx  x1
+src/web/src/components/Transcript.settledReply.test.tsx  x1
+src/web/src/components/Transcript.tsx  x1
+
+## index.css (owner, line, kind, text)
+P5.2	7452	antd-reference	/* AntD wraps each <Image> in a .ant-image; round it so the hover mask is clipped to the
+P5.2	7452	ant-class	/* AntD wraps each <Image> in a .ant-image; round it so the hover mask is clipped to the
+P5.2	7454	ant-class	.chat-images .ant-image {
+P5.2	7467	antd-reference	AntD .ant-image thumbnail (rounded, zoom cursor) and paints the mask as a hover overlay. */
+P5.2	7467	ant-class	AntD .ant-image thumbnail (rounded, zoom cursor) and paints the mask as a hover overlay. */
+P5.2	7514	ant-class	.md .ant-image {
+
+## the same on the delivery's audit (p5.2/checks/record-10b-audit.json, 378b7033e; src/web unchanged since but for the spec)
+
+(none)

@@ -88,6 +88,31 @@ final class QuestionCardWiringTests: XCTestCase {
         XCTAssertTrue(cards.contains("guard expanded || needsWholeResult || readsWholeQuestion, card.resultTruncated, !resultResolved,"))
     }
 
+    /// Every text in the replay takes its whole height. Without it the transcript's List cell measured
+    /// the baseline-aligned option rows short and cut each description at two lines, ellipsis and all
+    /// (the iPhone probe's pictures, run 38018707522).
+    func testReplayTextsTakeTheirWholeHeight() throws {
+        let views = try source(Self.views)
+        let replay = code(String(views[try XCTUnwrap(views.range(of: "struct QuestionReplayView: View {")).lowerBound...]))
+        let whole = replay.components(separatedBy: ".fixedSize(horizontal: false, vertical: true)").count - 1
+        XCTAssertEqual(whole, 4, "the question, an option's label and its description, and the words box")
+    }
+
+    /// On the Mac an opened card tells the table behind the List its row height changed. Left to itself
+    /// the List kept an opened card at its folded height while the transcript still fit, the replay
+    /// clipped under the next row (the probe's Mac pass, run 38020631149).
+    func testAnOpenedCardIsMeasuredAgainOnTheMac() throws {
+        let cards = try source(Self.cards)
+        let folded = code(try slice(cards, from: "private var defaultBody: some View {",
+                                    to: "RowHeightNudge(open: isOpen)"))
+        XCTAssertTrue(folded.hasSuffix(".animation(nil, value: isOpen) #if os(macOS) .background { RowHeightNudge(open: isOpen)"),
+                      "the card's own body asks for the re-measure, on macOS only")
+        let nudge = code(try slice(cards, from: "private struct RowHeightNudge: NSViewRepresentable {",
+                                   to: "private static func table(holding view: NSView)"))
+        XCTAssertTrue(nudge.contains("guard context.coordinator.open != open else { return }"))
+        XCTAssertTrue(nudge.contains("table.noteHeightOfRows(withIndexesChanged: IndexSet(integer: row))"))
+    }
+
     /// The words are OrbitKit's, which the shared fixture holds to the browser's.
     func testWordsComeFromQuestionRecords() throws {
         let views = code(try source(Self.views))
