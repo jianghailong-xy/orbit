@@ -355,10 +355,10 @@ test('delivery keeps the project-page coordinator boundaries without repeating i
     assert.equal(delivered.slice(delivered.indexOf('\n\n')), opening.slice(opening.indexOf('\n\n')));
     assert.match(delivered, new RegExp(uuidToBase62(PROJECT.id)));
     assert.doesNotMatch(delivered, new RegExp(PROJECT.title));
-    assert.match(delivered, /不是用来替它干活/);
-    assert.match(delivered, /先读再说/);
-    assert.match(delivered, /账号所有者通道记录/);
-    assert.match(delivered, /直接指挥 runner，都不在你手上/);
+    assert.match(delivered, /not for doing their work yourself/);
+    assert.match(delivered, /Read first/);
+    assert.match(delivered, /recorded through the account owner’s channel/);
+    assert.match(delivered, /directing a runner directly are not in your hands/);
   }
 });
 
@@ -426,5 +426,5 @@ test('a re-delivered promoted turn keeps the coordinator role around its continu
   assert.match(content, /^\[Orbit\]/);
   assert.match(content, /<\/orbit_project_coordinator_context>$/);
   assert.match(content, /interrupted because its runner restarted/);
-  assert.match(content, /不是用来替它干活/);
+  assert.match(content, /not for doing their work yourself/);
 });
