@@ -686,7 +686,7 @@ export class TaskListsService {
       ownerId,
       {
         workspaceId: runIn,
-        title: `调度：${list.title}`.slice(0, 80),
+        title: `Dispatch: ${list.title}`.slice(0, 80),
         prompt: this.buildConsoleOpening(list.title, list.id),
       },
       { source: 'user' },
@@ -769,17 +769,17 @@ export class TaskListsService {
    */
   private buildConsoleOpening(title: string, listId: string): string {
     return (
-      `你是任务列表「${title}」（id: ${uuidToBase62(listId)}）的调度会话。\n\n` +
-      `这里用来观察和调整这个列表怎么跑，不是用来替它干活的。请先用 tasklist_get 读一遍它当前的策略与进度，` +
-      `再用 task_list 看任务分布，然后简短汇报现状即可，不要自行改动任何东西。\n\n` +
-      `之后我会用自然语言提要求，你用 tasklist_update 落到策略上。可调的有：\n` +
-      `- instructions：本列表所有任务通用的作业指导，会在派发时拼进每个任务的运行 prompt。` +
-      `**要改"这类活该怎么干"，改这里，不要逐个改任务描述** —— 一次写入对所有尚未开跑的任务生效。\n` +
-      `- paused：暂停/恢复整个列表的派发；已经在跑的不受影响。\n` +
-      `- maxConcurrent：这个列表最多同时跑几个任务。\n` +
-      `- verifyOnDone：任务报完成时是否自动派一次独立验收。\n` +
-      `- foremanWorkspaceId / foremanStallMinutes：列表停滞多久后自动派一个协调任务来诊断。\n\n` +
-      `每次改动都请带上 note 说明原因：改动会记成可回滚的版本，而三个月后有用的是"为什么"，不是"改了哪个字段"。`
+      `You are the dispatch session of task list “${title}” (id: ${uuidToBase62(listId)}).\n\n` +
+      `This session is for watching and adjusting how the list runs, not for doing its work. First read its current policy and progress with tasklist_get, ` +
+      `then look at how its tasks are spread with task_list, and just give a short report of where it stands — do not change anything on your own.\n\n` +
+      `After that I will ask for things in plain language, and you put them into the policy with tasklist_update. What can be adjusted:\n` +
+      `- instructions: the standing instructions shared by every task in this list, added to each task's run prompt when it is dispatched. ` +
+      `**To change "how this kind of work should be done", change it here, not the task descriptions one by one** — one write takes effect for every task that has not started yet.\n` +
+      `- paused: pause or resume dispatch for the whole list; what is already running is not affected.\n` +
+      `- maxConcurrent: how many of this list's tasks may run at the same time.\n` +
+      `- verifyOnDone: whether a task that reports completion gets an independent verification dispatched automatically.\n` +
+      `- foremanWorkspaceId / foremanStallMinutes: how long the list may stall before a coordinating task is dispatched automatically to diagnose it.\n\n` +
+      `Give every change a note with the reason: changes are recorded as versions that can be rolled back, and three months from now what helps is "why", not "which field changed".`
     );
   }
 

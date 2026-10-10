@@ -95,8 +95,8 @@ export async function postRunFailureComment(
       authorType: task.assigneeId ? CreatorType.AGENT : task.creatorType,
       authorId: task.assigneeId ?? task.creatorId,
       body:
-        `**执行失败（系统自动记录）**\n\n本任务的一次执行会话因运行错误中止，未完成。\n\n` +
-        `失败原因：\n${reason}\n\n可重新运行本任务重试。`,
+        `**Run failed (recorded by Orbit)**\n\nA run session of this task stopped on a run error and did not finish.\n\n` +
+        `Reason:\n${reason}\n\nRun this task again to retry.`,
     },
   });
 }
@@ -139,15 +139,15 @@ export async function postWorkNotOnBranchComment(
       authorId: task.assigneeId ?? task.creatorId,
       body:
         `<!-- orbit:${WORK_NOT_ON_BRANCH_SIGNAL_CODE} -->\n` +
-        `**成果没有落到分支上（系统自动记录）**\n\n` +
-        `本任务的执行会话已结束，但 runner 的收尾提交失败了：改动仍以未提交文件的形式留在该会话的 worktree 里，` +
-        `分支${branch ? ` \`${branch}\`` : ''}上没有它们。\n\n` +
-        `注意判据不受影响：EXECUTABLE 验收命令跑的是工作树，成果就在那里，所以它照样能通过——` +
-        `「判据通过」和「成果已提交」从来不是同一件事。\n\n` +
-        `失败原因：\n${reason}\n\n` +
-        `回收办法：在 Orbit 里打开这条任务的会话，用状态栏的 Commit 把 worktree 里的改动提交到它自己的分支，` +
-        `然后照常合并。不需要重新运行本任务。\n\n` +
-        `信号来源：${WORK_NOT_ON_BRANCH_SIGNAL_CODE}`,
+        `**Work did not reach the branch (recorded by Orbit)**\n\n` +
+        `This task's run session has ended, but the runner's final commit failed: the changes are still uncommitted files in that session's worktree, ` +
+        `and ${branch ? `branch \`${branch}\`` : 'the branch'} does not have them.\n\n` +
+        `Note that the criterion is not affected: the EXECUTABLE acceptance command runs against the working tree, where the work is, so it passes all the same — ` +
+        `"the criterion passed" and "the work is committed" were never the same thing.\n\n` +
+        `Reason:\n${reason}\n\n` +
+        `To recover it: open this task's session in Orbit and use Commit in the status bar to commit the worktree's changes to its own branch, ` +
+        `then merge as usual. There is no need to run this task again.\n\n` +
+        `Signal source: ${WORK_NOT_ON_BRANCH_SIGNAL_CODE}`,
     },
   });
 }
@@ -181,13 +181,13 @@ export async function postExecutableAcceptanceUnavailableComment(
       authorId: task.assigneeId ?? task.creatorId,
       body:
         `<!-- orbit:${EXECUTABLE_ACCEPTANCE_UNAVAILABLE_SIGNAL_CODE} -->\n` +
-        `**需要人工介入：EXECUTABLE 验收未能判定（系统自动记录）**\n\n` +
-        `任务声明的验收命令没有返回可与期望值比较的原始结果；系统没有猜测任务状态。\n\n` +
-        `命令：${command}\n\n` +
-        `期望退出码：${expectedExitCode}\n\n` +
-        `无法判定原因：\n${reason}\n\n` +
-        `请修复执行环境或声明后重新运行任务；若工作不再可继续，请由执行会话明确报告 FAILED。\n\n` +
-        `信号来源：${EXECUTABLE_ACCEPTANCE_UNAVAILABLE_SIGNAL_CODE}`,
+        `**Needs a person: EXECUTABLE acceptance could not be decided (recorded by Orbit)**\n\n` +
+        `The acceptance command the task declares did not return a raw result that can be compared with the expected one; Orbit did not guess the task's status.\n\n` +
+        `Command: ${command}\n\n` +
+        `Expected exit code: ${expectedExitCode}\n\n` +
+        `Why it could not be decided:\n${reason}\n\n` +
+        `Fix the run environment or the declaration, then run the task again; if the work cannot go on, the run session should report FAILED explicitly.\n\n` +
+        `Signal source: ${EXECUTABLE_ACCEPTANCE_UNAVAILABLE_SIGNAL_CODE}`,
     },
   });
 }
