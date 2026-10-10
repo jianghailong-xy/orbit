@@ -1,0 +1,969 @@
+argv: env P32_BASE_CONFIG=choices.config.mjs P32_PORT=4512 P32_OUTPUT=/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-first-option-ref-out npx playwright test --config ui-migration/port.config.mjs ui-migration/choices-first-option.browser.mjs
+tree: /mnt/data/tmp/34coPBk43ULRuisicUTAy/ref HEAD f492dbb30fa24718061f69ca93ef1df5a05f4fa0
+uncommitted: 
+start: 2026-10-09T20:43:43Z load: 50.64 57.25 58.36
+mem: 3614M available, swap 2778M free
+disk: / 3533M available
+cgroup: 0::/system.slice/run-p2977809-i57469495.scope
+P0 expected screenshots: 44 P0.2 originals, 183 main drift references, 25 accepted migration differences.
+
+Running 96 tests using 1 worker
+
+  ✘   1 [chromium-light-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by pointer with no value, the list is on the option the old select was on and Enter picks it (14.1s)
+  ✓   2 [chromium-light-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by ArrowDown with no value, the list is on the option the old select was on and Enter picks it (2.9s)
+  ✓   3 [chromium-light-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by Enter with no value, the list is on the option the old select was on and Enter picks it (3.6s)
+  ✓   4 [chromium-light-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by Space with no value, the list is on the option the old select was on and Enter picks it (3.7s)
+  ✓   5 [chromium-light-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by pointer with a value, the list is on the option the old select was on and Enter picks it (6.3s)
+  ✓   6 [chromium-light-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by ArrowDown with a value, the list is on the option the old select was on and Enter picks it (3.2s)
+  ✓   7 [chromium-light-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by Enter with a value, the list is on the option the old select was on and Enter picks it (4.0s)
+  ✓   8 [chromium-light-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by Space with a value, the list is on the option the old select was on and Enter picks it (3.4s)
+  ✘   9 [chromium-light-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by pointer with no value and the first option disabled, the list is on the option the old select was on and Enter picks it (13.8s)
+  ✓  10 [chromium-light-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by ArrowDown with no value and the first option disabled, the list is on the option the old select was on and Enter picks it (3.4s)
+  ✓  11 [chromium-light-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by Enter with no value and the first option disabled, the list is on the option the old select was on and Enter picks it (3.0s)
+  ✓  12 [chromium-light-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by Space with no value and the first option disabled, the list is on the option the old select was on and Enter picks it (3.1s)
+  ✘  13 [chromium-light-phone] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by pointer with no value, the list is on the option the old select was on and Enter picks it (19.4s)
+  ✓  14 [chromium-light-phone] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by ArrowDown with no value, the list is on the option the old select was on and Enter picks it (3.9s)
+  ✓  15 [chromium-light-phone] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by Enter with no value, the list is on the option the old select was on and Enter picks it (4.3s)
+  ✓  16 [chromium-light-phone] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by Space with no value, the list is on the option the old select was on and Enter picks it (3.9s)
+  ✓  17 [chromium-light-phone] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by pointer with a value, the list is on the option the old select was on and Enter picks it (5.9s)
+  ✓  18 [chromium-light-phone] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by ArrowDown with a value, the list is on the option the old select was on and Enter picks it (3.9s)
+  ✓  19 [chromium-light-phone] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by Enter with a value, the list is on the option the old select was on and Enter picks it (3.0s)
+  ✓  20 [chromium-light-phone] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by Space with a value, the list is on the option the old select was on and Enter picks it (3.3s)
+  ✘  21 [chromium-light-phone] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by pointer with no value and the first option disabled, the list is on the option the old select was on and Enter picks it (13.3s)
+  ✓  22 [chromium-light-phone] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by ArrowDown with no value and the first option disabled, the list is on the option the old select was on and Enter picks it (4.4s)
+  ✓  23 [chromium-light-phone] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by Enter with no value and the first option disabled, the list is on the option the old select was on and Enter picks it (3.4s)
+  ✓  24 [chromium-light-phone] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by Space with no value and the first option disabled, the list is on the option the old select was on and Enter picks it (10.2s)
+  ✘  25 [chromium-dark-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by pointer with no value, the list is on the option the old select was on and Enter picks it (34.0s)
+  ✓  26 [chromium-dark-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by ArrowDown with no value, the list is on the option the old select was on and Enter picks it (6.6s)
+  ✓  27 [chromium-dark-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by Enter with no value, the list is on the option the old select was on and Enter picks it (3.2s)
+  ✓  28 [chromium-dark-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by Space with no value, the list is on the option the old select was on and Enter picks it (2.9s)
+  ✓  29 [chromium-dark-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by pointer with a value, the list is on the option the old select was on and Enter picks it (3.4s)
+  ✓  30 [chromium-dark-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by ArrowDown with a value, the list is on the option the old select was on and Enter picks it (3.2s)
+  ✓  31 [chromium-dark-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by Enter with a value, the list is on the option the old select was on and Enter picks it (3.3s)
+  ✓  32 [chromium-dark-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by Space with a value, the list is on the option the old select was on and Enter picks it (3.3s)
+  ✘  33 [chromium-dark-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by pointer with no value and the first option disabled, the list is on the option the old select was on and Enter picks it (16.3s)
+  ✓  34 [chromium-dark-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by ArrowDown with no value and the first option disabled, the list is on the option the old select was on and Enter picks it (2.7s)
+  ✓  35 [chromium-dark-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by Enter with no value and the first option disabled, the list is on the option the old select was on and Enter picks it (3.1s)
+  ✓  36 [chromium-dark-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by Space with no value and the first option disabled, the list is on the option the old select was on and Enter picks it (2.7s)
+  ✘  37 [chromium-dark-phone] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by pointer with no value, the list is on the option the old select was on and Enter picks it (13.5s)
+  ✓  38 [chromium-dark-phone] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by ArrowDown with no value, the list is on the option the old select was on and Enter picks it (3.2s)
+  ✓  39 [chromium-dark-phone] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by Enter with no value, the list is on the option the old select was on and Enter picks it (2.7s)
+  ✓  40 [chromium-dark-phone] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by Space with no value, the list is on the option the old select was on and Enter picks it (2.5s)
+  ✓  41 [chromium-dark-phone] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by pointer with a value, the list is on the option the old select was on and Enter picks it (3.2s)
+  ✓  42 [chromium-dark-phone] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by ArrowDown with a value, the list is on the option the old select was on and Enter picks it (3.0s)
+  ✓  43 [chromium-dark-phone] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by Enter with a value, the list is on the option the old select was on and Enter picks it (2.9s)
+  ✓  44 [chromium-dark-phone] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by Space with a value, the list is on the option the old select was on and Enter picks it (3.0s)
+  ✘  45 [chromium-dark-phone] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by pointer with no value and the first option disabled, the list is on the option the old select was on and Enter picks it (12.7s)
+  ✓  46 [chromium-dark-phone] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by ArrowDown with no value and the first option disabled, the list is on the option the old select was on and Enter picks it (3.0s)
+  ✓  47 [chromium-dark-phone] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by Enter with no value and the first option disabled, the list is on the option the old select was on and Enter picks it (2.7s)
+  ✓  48 [chromium-dark-phone] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by Space with no value and the first option disabled, the list is on the option the old select was on and Enter picks it (2.8s)
+  ✘  49 [webkit-light-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by pointer with no value, the list is on the option the old select was on and Enter picks it (12.7s)
+  ✓  50 [webkit-light-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by ArrowDown with no value, the list is on the option the old select was on and Enter picks it (2.4s)
+  ✓  51 [webkit-light-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by Enter with no value, the list is on the option the old select was on and Enter picks it (2.2s)
+  ✓  52 [webkit-light-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by Space with no value, the list is on the option the old select was on and Enter picks it (1.9s)
+  ✓  53 [webkit-light-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by pointer with a value, the list is on the option the old select was on and Enter picks it (2.3s)
+  ✓  54 [webkit-light-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by ArrowDown with a value, the list is on the option the old select was on and Enter picks it (2.0s)
+  ✓  55 [webkit-light-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by Enter with a value, the list is on the option the old select was on and Enter picks it (2.1s)
+  ✓  56 [webkit-light-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by Space with a value, the list is on the option the old select was on and Enter picks it (2.3s)
+  ✘  57 [webkit-light-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by pointer with no value and the first option disabled, the list is on the option the old select was on and Enter picks it (12.2s)
+  ✓  58 [webkit-light-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by ArrowDown with no value and the first option disabled, the list is on the option the old select was on and Enter picks it (2.8s)
+  ✓  59 [webkit-light-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by Enter with no value and the first option disabled, the list is on the option the old select was on and Enter picks it (2.8s)
+  ✓  60 [webkit-light-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by Space with no value and the first option disabled, the list is on the option the old select was on and Enter picks it (3.6s)
+  ✘  61 [webkit-light-phone] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by pointer with no value, the list is on the option the old select was on and Enter picks it (18.1s)
+  ✓  62 [webkit-light-phone] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by ArrowDown with no value, the list is on the option the old select was on and Enter picks it (15.2s)
+  ✓  63 [webkit-light-phone] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by Enter with no value, the list is on the option the old select was on and Enter picks it (2.5s)
+  ✓  64 [webkit-light-phone] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by Space with no value, the list is on the option the old select was on and Enter picks it (2.5s)
+  ✓  65 [webkit-light-phone] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by pointer with a value, the list is on the option the old select was on and Enter picks it (2.8s)
+  ✓  66 [webkit-light-phone] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by ArrowDown with a value, the list is on the option the old select was on and Enter picks it (2.4s)
+  ✓  67 [webkit-light-phone] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by Enter with a value, the list is on the option the old select was on and Enter picks it (2.7s)
+  ✓  68 [webkit-light-phone] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by Space with a value, the list is on the option the old select was on and Enter picks it (2.8s)
+  ✘  69 [webkit-light-phone] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by pointer with no value and the first option disabled, the list is on the option the old select was on and Enter picks it (12.5s)
+  ✓  70 [webkit-light-phone] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by ArrowDown with no value and the first option disabled, the list is on the option the old select was on and Enter picks it (3.3s)
+  ✓  71 [webkit-light-phone] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by Enter with no value and the first option disabled, the list is on the option the old select was on and Enter picks it (2.9s)
+  ✓  72 [webkit-light-phone] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by Space with no value and the first option disabled, the list is on the option the old select was on and Enter picks it (3.6s)
+  ✘  73 [webkit-dark-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by pointer with no value, the list is on the option the old select was on and Enter picks it (12.8s)
+  ✓  74 [webkit-dark-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by ArrowDown with no value, the list is on the option the old select was on and Enter picks it (3.3s)
+  ✓  75 [webkit-dark-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by Enter with no value, the list is on the option the old select was on and Enter picks it (3.4s)
+  ✓  76 [webkit-dark-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by Space with no value, the list is on the option the old select was on and Enter picks it (2.7s)
+  ✓  77 [webkit-dark-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by pointer with a value, the list is on the option the old select was on and Enter picks it (2.8s)
+  ✓  78 [webkit-dark-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by ArrowDown with a value, the list is on the option the old select was on and Enter picks it (2.9s)
+  ✓  79 [webkit-dark-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by Enter with a value, the list is on the option the old select was on and Enter picks it (3.1s)
+  ✓  80 [webkit-dark-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by Space with a value, the list is on the option the old select was on and Enter picks it (2.2s)
+  ✘  81 [webkit-dark-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by pointer with no value and the first option disabled, the list is on the option the old select was on and Enter picks it (12.1s)
+  ✓  82 [webkit-dark-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by ArrowDown with no value and the first option disabled, the list is on the option the old select was on and Enter picks it (3.2s)
+  ✓  83 [webkit-dark-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by Enter with no value and the first option disabled, the list is on the option the old select was on and Enter picks it (4.1s)
+  ✓  84 [webkit-dark-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by Space with no value and the first option disabled, the list is on the option the old select was on and Enter picks it (3.7s)
+  ✘  85 [webkit-dark-phone] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by pointer with no value, the list is on the option the old select was on and Enter picks it (13.5s)
+  ✓  86 [webkit-dark-phone] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by ArrowDown with no value, the list is on the option the old select was on and Enter picks it (5.5s)
+  ✓  87 [webkit-dark-phone] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by Enter with no value, the list is on the option the old select was on and Enter picks it (3.7s)
+  ✓  88 [webkit-dark-phone] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by Space with no value, the list is on the option the old select was on and Enter picks it (2.4s)
+  ✓  89 [webkit-dark-phone] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by pointer with a value, the list is on the option the old select was on and Enter picks it (4.7s)
+  ✓  90 [webkit-dark-phone] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by ArrowDown with a value, the list is on the option the old select was on and Enter picks it (2.6s)
+  ✓  91 [webkit-dark-phone] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by Enter with a value, the list is on the option the old select was on and Enter picks it (3.0s)
+  ✓  92 [webkit-dark-phone] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by Space with a value, the list is on the option the old select was on and Enter picks it (4.0s)
+  ✘  93 [webkit-dark-phone] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by pointer with no value and the first option disabled, the list is on the option the old select was on and Enter picks it (13.3s)
+  ✓  94 [webkit-dark-phone] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by ArrowDown with no value and the first option disabled, the list is on the option the old select was on and Enter picks it (4.2s)
+  ✓  95 [webkit-dark-phone] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by Enter with no value and the first option disabled, the list is on the option the old select was on and Enter picks it (3.0s)
+  ✓  96 [webkit-dark-phone] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by Space with no value and the first option disabled, the list is on the option the old select was on and Enter picks it (3.2s)
+
+
+  1) [chromium-light-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by pointer with no value, the list is on the option the old select was on and Enter picks it 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 8
+    + Received  + 6
+
+    @@ -1,16 +1,14 @@
+      Object {
+    -   "afterEnter": "never",
+    -   "expanded": "false",
+    -   "focused": true,
+    -   "highlighted": Array [
+    -     "Never",
+    -   ],
+    +   "afterEnter": "null",
+    +   "expanded": "true",
+    +   "focused": false,
+    +   "highlighted": Array [],
+        "open": Array [
+          Object {
+    -       "background": "rgba(0, 0, 0, 0.04)",
+    -       "highlighted": true,
+    +       "background": "rgba(0, 0, 0, 0)",
+    +       "highlighted": false,
+            "label": "Never",
+          },
+          Object {
+            "background": "rgba(0, 0, 0, 0)",
+            "highlighted": false,
+
+      69 |   expect(results.antd.highlighted).toEqual([sample.opensOn]);
+      70 |   expect(results.antd).toMatchObject({ afterEnter: sample.picks, expanded: 'false', focused: true });
+    > 71 |   expect(results.orbit).toEqual(results.antd);
+         |                         ^
+      72 |   expect(errors).toEqual([]);
+      73 | });
+      74 |
+        at /mnt/data/tmp/34coPBk43ULRuisicUTAy/ref/src/web/ui-migration/choices-first-option.browser.mjs:71:25
+
+    Error Context: ../../../runs/f-first-option-ref-out/choices-first-option.brows-b20e7-t-was-on-and-Enter-picks-it-chromium-light-desktop/error-context.md
+
+    attachment #5: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs/f-first-option-ref-out/choices-first-option.brows-b20e7-t-was-on-and-Enter-picks-it-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs/f-first-option-ref-out/choices-first-option.brows-b20e7-t-was-on-and-Enter-picks-it-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [chromium-light-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by pointer with no value and the first option disabled, the list is on the option the old select was on and Enter picks it 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 8
+    + Received  + 6
+
+    @@ -1,21 +1,19 @@
+      Object {
+    -   "afterEnter": "7",
+    -   "expanded": "false",
+    -   "focused": true,
+    -   "highlighted": Array [
+    -     "7 days",
+    -   ],
+    +   "afterEnter": "null",
+    +   "expanded": "true",
+    +   "focused": false,
+    +   "highlighted": Array [],
+        "open": Array [
+          Object {
+            "background": "rgba(0, 0, 0, 0)",
+            "highlighted": false,
+            "label": "Never",
+          },
+          Object {
+    -       "background": "rgba(0, 0, 0, 0.04)",
+    -       "highlighted": true,
+    +       "background": "rgba(0, 0, 0, 0)",
+    +       "highlighted": false,
+            "label": "7 days",
+          },
+          Object {
+            "background": "rgba(0, 0, 0, 0)",
+            "highlighted": false,
+
+      69 |   expect(results.antd.highlighted).toEqual([sample.opensOn]);
+      70 |   expect(results.antd).toMatchObject({ afterEnter: sample.picks, expanded: 'false', focused: true });
+    > 71 |   expect(results.orbit).toEqual(results.antd);
+         |                         ^
+      72 |   expect(errors).toEqual([]);
+      73 | });
+      74 |
+        at /mnt/data/tmp/34coPBk43ULRuisicUTAy/ref/src/web/ui-migration/choices-first-option.browser.mjs:71:25
+
+    Error Context: ../../../runs/f-first-option-ref-out/choices-first-option.brows-73368-t-was-on-and-Enter-picks-it-chromium-light-desktop/error-context.md
+
+    attachment #5: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs/f-first-option-ref-out/choices-first-option.brows-73368-t-was-on-and-Enter-picks-it-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs/f-first-option-ref-out/choices-first-option.brows-73368-t-was-on-and-Enter-picks-it-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3) [chromium-light-phone] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by pointer with no value, the list is on the option the old select was on and Enter picks it 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 8
+    + Received  + 6
+
+    @@ -1,16 +1,14 @@
+      Object {
+    -   "afterEnter": "never",
+    -   "expanded": "false",
+    -   "focused": true,
+    -   "highlighted": Array [
+    -     "Never",
+    -   ],
+    +   "afterEnter": "null",
+    +   "expanded": "true",
+    +   "focused": false,
+    +   "highlighted": Array [],
+        "open": Array [
+          Object {
+    -       "background": "rgba(0, 0, 0, 0.04)",
+    -       "highlighted": true,
+    +       "background": "rgba(0, 0, 0, 0)",
+    +       "highlighted": false,
+            "label": "Never",
+          },
+          Object {
+            "background": "rgba(0, 0, 0, 0)",
+            "highlighted": false,
+
+      69 |   expect(results.antd.highlighted).toEqual([sample.opensOn]);
+      70 |   expect(results.antd).toMatchObject({ afterEnter: sample.picks, expanded: 'false', focused: true });
+    > 71 |   expect(results.orbit).toEqual(results.antd);
+         |                         ^
+      72 |   expect(errors).toEqual([]);
+      73 | });
+      74 |
+        at /mnt/data/tmp/34coPBk43ULRuisicUTAy/ref/src/web/ui-migration/choices-first-option.browser.mjs:71:25
+
+    Error Context: ../../../runs/f-first-option-ref-out/choices-first-option.brows-b20e7-t-was-on-and-Enter-picks-it-chromium-light-phone/error-context.md
+
+    attachment #5: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs/f-first-option-ref-out/choices-first-option.brows-b20e7-t-was-on-and-Enter-picks-it-chromium-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs/f-first-option-ref-out/choices-first-option.brows-b20e7-t-was-on-and-Enter-picks-it-chromium-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  4) [chromium-light-phone] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by pointer with no value and the first option disabled, the list is on the option the old select was on and Enter picks it 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 8
+    + Received  + 6
+
+    @@ -1,21 +1,19 @@
+      Object {
+    -   "afterEnter": "7",
+    -   "expanded": "false",
+    -   "focused": true,
+    -   "highlighted": Array [
+    -     "7 days",
+    -   ],
+    +   "afterEnter": "null",
+    +   "expanded": "true",
+    +   "focused": false,
+    +   "highlighted": Array [],
+        "open": Array [
+          Object {
+            "background": "rgba(0, 0, 0, 0)",
+            "highlighted": false,
+            "label": "Never",
+          },
+          Object {
+    -       "background": "rgba(0, 0, 0, 0.04)",
+    -       "highlighted": true,
+    +       "background": "rgba(0, 0, 0, 0)",
+    +       "highlighted": false,
+            "label": "7 days",
+          },
+          Object {
+            "background": "rgba(0, 0, 0, 0)",
+            "highlighted": false,
+
+      69 |   expect(results.antd.highlighted).toEqual([sample.opensOn]);
+      70 |   expect(results.antd).toMatchObject({ afterEnter: sample.picks, expanded: 'false', focused: true });
+    > 71 |   expect(results.orbit).toEqual(results.antd);
+         |                         ^
+      72 |   expect(errors).toEqual([]);
+      73 | });
+      74 |
+        at /mnt/data/tmp/34coPBk43ULRuisicUTAy/ref/src/web/ui-migration/choices-first-option.browser.mjs:71:25
+
+    Error Context: ../../../runs/f-first-option-ref-out/choices-first-option.brows-73368-t-was-on-and-Enter-picks-it-chromium-light-phone/error-context.md
+
+    attachment #5: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs/f-first-option-ref-out/choices-first-option.brows-73368-t-was-on-and-Enter-picks-it-chromium-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs/f-first-option-ref-out/choices-first-option.brows-73368-t-was-on-and-Enter-picks-it-chromium-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  5) [chromium-dark-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by pointer with no value, the list is on the option the old select was on and Enter picks it 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 8
+    + Received  + 6
+
+    @@ -1,16 +1,14 @@
+      Object {
+    -   "afterEnter": "never",
+    -   "expanded": "false",
+    -   "focused": true,
+    -   "highlighted": Array [
+    -     "Never",
+    -   ],
+    +   "afterEnter": "null",
+    +   "expanded": "true",
+    +   "focused": false,
+    +   "highlighted": Array [],
+        "open": Array [
+          Object {
+    -       "background": "rgba(255, 255, 255, 0.08)",
+    -       "highlighted": true,
+    +       "background": "rgba(0, 0, 0, 0)",
+    +       "highlighted": false,
+            "label": "Never",
+          },
+          Object {
+            "background": "rgba(0, 0, 0, 0)",
+            "highlighted": false,
+
+      69 |   expect(results.antd.highlighted).toEqual([sample.opensOn]);
+      70 |   expect(results.antd).toMatchObject({ afterEnter: sample.picks, expanded: 'false', focused: true });
+    > 71 |   expect(results.orbit).toEqual(results.antd);
+         |                         ^
+      72 |   expect(errors).toEqual([]);
+      73 | });
+      74 |
+        at /mnt/data/tmp/34coPBk43ULRuisicUTAy/ref/src/web/ui-migration/choices-first-option.browser.mjs:71:25
+
+    Error Context: ../../../runs/f-first-option-ref-out/choices-first-option.brows-b20e7-t-was-on-and-Enter-picks-it-chromium-dark-desktop/error-context.md
+
+    attachment #5: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs/f-first-option-ref-out/choices-first-option.brows-b20e7-t-was-on-and-Enter-picks-it-chromium-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs/f-first-option-ref-out/choices-first-option.brows-b20e7-t-was-on-and-Enter-picks-it-chromium-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  6) [chromium-dark-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by pointer with no value and the first option disabled, the list is on the option the old select was on and Enter picks it 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 8
+    + Received  + 6
+
+    @@ -1,21 +1,19 @@
+      Object {
+    -   "afterEnter": "7",
+    -   "expanded": "false",
+    -   "focused": true,
+    -   "highlighted": Array [
+    -     "7 days",
+    -   ],
+    +   "afterEnter": "null",
+    +   "expanded": "true",
+    +   "focused": false,
+    +   "highlighted": Array [],
+        "open": Array [
+          Object {
+            "background": "rgba(0, 0, 0, 0)",
+            "highlighted": false,
+            "label": "Never",
+          },
+          Object {
+    -       "background": "rgba(255, 255, 255, 0.08)",
+    -       "highlighted": true,
+    +       "background": "rgba(0, 0, 0, 0)",
+    +       "highlighted": false,
+            "label": "7 days",
+          },
+          Object {
+            "background": "rgba(0, 0, 0, 0)",
+            "highlighted": false,
+
+      69 |   expect(results.antd.highlighted).toEqual([sample.opensOn]);
+      70 |   expect(results.antd).toMatchObject({ afterEnter: sample.picks, expanded: 'false', focused: true });
+    > 71 |   expect(results.orbit).toEqual(results.antd);
+         |                         ^
+      72 |   expect(errors).toEqual([]);
+      73 | });
+      74 |
+        at /mnt/data/tmp/34coPBk43ULRuisicUTAy/ref/src/web/ui-migration/choices-first-option.browser.mjs:71:25
+
+    Error Context: ../../../runs/f-first-option-ref-out/choices-first-option.brows-73368-t-was-on-and-Enter-picks-it-chromium-dark-desktop/error-context.md
+
+    attachment #5: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs/f-first-option-ref-out/choices-first-option.brows-73368-t-was-on-and-Enter-picks-it-chromium-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs/f-first-option-ref-out/choices-first-option.brows-73368-t-was-on-and-Enter-picks-it-chromium-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  7) [chromium-dark-phone] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by pointer with no value, the list is on the option the old select was on and Enter picks it 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 8
+    + Received  + 6
+
+    @@ -1,16 +1,14 @@
+      Object {
+    -   "afterEnter": "never",
+    -   "expanded": "false",
+    -   "focused": true,
+    -   "highlighted": Array [
+    -     "Never",
+    -   ],
+    +   "afterEnter": "null",
+    +   "expanded": "true",
+    +   "focused": false,
+    +   "highlighted": Array [],
+        "open": Array [
+          Object {
+    -       "background": "rgba(255, 255, 255, 0.08)",
+    -       "highlighted": true,
+    +       "background": "rgba(0, 0, 0, 0)",
+    +       "highlighted": false,
+            "label": "Never",
+          },
+          Object {
+            "background": "rgba(0, 0, 0, 0)",
+            "highlighted": false,
+
+      69 |   expect(results.antd.highlighted).toEqual([sample.opensOn]);
+      70 |   expect(results.antd).toMatchObject({ afterEnter: sample.picks, expanded: 'false', focused: true });
+    > 71 |   expect(results.orbit).toEqual(results.antd);
+         |                         ^
+      72 |   expect(errors).toEqual([]);
+      73 | });
+      74 |
+        at /mnt/data/tmp/34coPBk43ULRuisicUTAy/ref/src/web/ui-migration/choices-first-option.browser.mjs:71:25
+
+    Error Context: ../../../runs/f-first-option-ref-out/choices-first-option.brows-b20e7-t-was-on-and-Enter-picks-it-chromium-dark-phone/error-context.md
+
+    attachment #5: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs/f-first-option-ref-out/choices-first-option.brows-b20e7-t-was-on-and-Enter-picks-it-chromium-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs/f-first-option-ref-out/choices-first-option.brows-b20e7-t-was-on-and-Enter-picks-it-chromium-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  8) [chromium-dark-phone] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by pointer with no value and the first option disabled, the list is on the option the old select was on and Enter picks it 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 8
+    + Received  + 6
+
+    @@ -1,21 +1,19 @@
+      Object {
+    -   "afterEnter": "7",
+    -   "expanded": "false",
+    -   "focused": true,
+    -   "highlighted": Array [
+    -     "7 days",
+    -   ],
+    +   "afterEnter": "null",
+    +   "expanded": "true",
+    +   "focused": false,
+    +   "highlighted": Array [],
+        "open": Array [
+          Object {
+            "background": "rgba(0, 0, 0, 0)",
+            "highlighted": false,
+            "label": "Never",
+          },
+          Object {
+    -       "background": "rgba(255, 255, 255, 0.08)",
+    -       "highlighted": true,
+    +       "background": "rgba(0, 0, 0, 0)",
+    +       "highlighted": false,
+            "label": "7 days",
+          },
+          Object {
+            "background": "rgba(0, 0, 0, 0)",
+            "highlighted": false,
+
+      69 |   expect(results.antd.highlighted).toEqual([sample.opensOn]);
+      70 |   expect(results.antd).toMatchObject({ afterEnter: sample.picks, expanded: 'false', focused: true });
+    > 71 |   expect(results.orbit).toEqual(results.antd);
+         |                         ^
+      72 |   expect(errors).toEqual([]);
+      73 | });
+      74 |
+        at /mnt/data/tmp/34coPBk43ULRuisicUTAy/ref/src/web/ui-migration/choices-first-option.browser.mjs:71:25
+
+    Error Context: ../../../runs/f-first-option-ref-out/choices-first-option.brows-73368-t-was-on-and-Enter-picks-it-chromium-dark-phone/error-context.md
+
+    attachment #5: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs/f-first-option-ref-out/choices-first-option.brows-73368-t-was-on-and-Enter-picks-it-chromium-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs/f-first-option-ref-out/choices-first-option.brows-73368-t-was-on-and-Enter-picks-it-chromium-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  9) [webkit-light-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by pointer with no value, the list is on the option the old select was on and Enter picks it 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 8
+    + Received  + 6
+
+    @@ -1,16 +1,14 @@
+      Object {
+    -   "afterEnter": "never",
+    -   "expanded": "false",
+    -   "focused": true,
+    -   "highlighted": Array [
+    -     "Never",
+    -   ],
+    +   "afterEnter": "null",
+    +   "expanded": "true",
+    +   "focused": false,
+    +   "highlighted": Array [],
+        "open": Array [
+          Object {
+    -       "background": "rgba(0, 0, 0, 0.04)",
+    -       "highlighted": true,
+    +       "background": "rgba(0, 0, 0, 0)",
+    +       "highlighted": false,
+            "label": "Never",
+          },
+          Object {
+            "background": "rgba(0, 0, 0, 0)",
+            "highlighted": false,
+
+      69 |   expect(results.antd.highlighted).toEqual([sample.opensOn]);
+      70 |   expect(results.antd).toMatchObject({ afterEnter: sample.picks, expanded: 'false', focused: true });
+    > 71 |   expect(results.orbit).toEqual(results.antd);
+         |                         ^
+      72 |   expect(errors).toEqual([]);
+      73 | });
+      74 |
+        at /mnt/data/tmp/34coPBk43ULRuisicUTAy/ref/src/web/ui-migration/choices-first-option.browser.mjs:71:25
+
+    Error Context: ../../../runs/f-first-option-ref-out/choices-first-option.brows-b20e7-t-was-on-and-Enter-picks-it-webkit-light-desktop/error-context.md
+
+    attachment #5: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs/f-first-option-ref-out/choices-first-option.brows-b20e7-t-was-on-and-Enter-picks-it-webkit-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs/f-first-option-ref-out/choices-first-option.brows-b20e7-t-was-on-and-Enter-picks-it-webkit-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  10) [webkit-light-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by pointer with no value and the first option disabled, the list is on the option the old select was on and Enter picks it 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 8
+    + Received  + 6
+
+    @@ -1,21 +1,19 @@
+      Object {
+    -   "afterEnter": "7",
+    -   "expanded": "false",
+    -   "focused": true,
+    -   "highlighted": Array [
+    -     "7 days",
+    -   ],
+    +   "afterEnter": "null",
+    +   "expanded": "true",
+    +   "focused": false,
+    +   "highlighted": Array [],
+        "open": Array [
+          Object {
+            "background": "rgba(0, 0, 0, 0)",
+            "highlighted": false,
+            "label": "Never",
+          },
+          Object {
+    -       "background": "rgba(0, 0, 0, 0.04)",
+    -       "highlighted": true,
+    +       "background": "rgba(0, 0, 0, 0)",
+    +       "highlighted": false,
+            "label": "7 days",
+          },
+          Object {
+            "background": "rgba(0, 0, 0, 0)",
+            "highlighted": false,
+
+      69 |   expect(results.antd.highlighted).toEqual([sample.opensOn]);
+      70 |   expect(results.antd).toMatchObject({ afterEnter: sample.picks, expanded: 'false', focused: true });
+    > 71 |   expect(results.orbit).toEqual(results.antd);
+         |                         ^
+      72 |   expect(errors).toEqual([]);
+      73 | });
+      74 |
+        at /mnt/data/tmp/34coPBk43ULRuisicUTAy/ref/src/web/ui-migration/choices-first-option.browser.mjs:71:25
+
+    Error Context: ../../../runs/f-first-option-ref-out/choices-first-option.brows-73368-t-was-on-and-Enter-picks-it-webkit-light-desktop/error-context.md
+
+    attachment #5: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs/f-first-option-ref-out/choices-first-option.brows-73368-t-was-on-and-Enter-picks-it-webkit-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs/f-first-option-ref-out/choices-first-option.brows-73368-t-was-on-and-Enter-picks-it-webkit-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  11) [webkit-light-phone] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by pointer with no value, the list is on the option the old select was on and Enter picks it 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 8
+    + Received  + 6
+
+    @@ -1,16 +1,14 @@
+      Object {
+    -   "afterEnter": "never",
+    -   "expanded": "false",
+    -   "focused": true,
+    -   "highlighted": Array [
+    -     "Never",
+    -   ],
+    +   "afterEnter": "null",
+    +   "expanded": "true",
+    +   "focused": false,
+    +   "highlighted": Array [],
+        "open": Array [
+          Object {
+    -       "background": "rgba(0, 0, 0, 0.04)",
+    -       "highlighted": true,
+    +       "background": "rgba(0, 0, 0, 0)",
+    +       "highlighted": false,
+            "label": "Never",
+          },
+          Object {
+            "background": "rgba(0, 0, 0, 0)",
+            "highlighted": false,
+
+      69 |   expect(results.antd.highlighted).toEqual([sample.opensOn]);
+      70 |   expect(results.antd).toMatchObject({ afterEnter: sample.picks, expanded: 'false', focused: true });
+    > 71 |   expect(results.orbit).toEqual(results.antd);
+         |                         ^
+      72 |   expect(errors).toEqual([]);
+      73 | });
+      74 |
+        at /mnt/data/tmp/34coPBk43ULRuisicUTAy/ref/src/web/ui-migration/choices-first-option.browser.mjs:71:25
+
+    Error Context: ../../../runs/f-first-option-ref-out/choices-first-option.brows-b20e7-t-was-on-and-Enter-picks-it-webkit-light-phone/error-context.md
+
+    attachment #5: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs/f-first-option-ref-out/choices-first-option.brows-b20e7-t-was-on-and-Enter-picks-it-webkit-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs/f-first-option-ref-out/choices-first-option.brows-b20e7-t-was-on-and-Enter-picks-it-webkit-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  12) [webkit-light-phone] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by pointer with no value and the first option disabled, the list is on the option the old select was on and Enter picks it 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 8
+    + Received  + 6
+
+    @@ -1,21 +1,19 @@
+      Object {
+    -   "afterEnter": "7",
+    -   "expanded": "false",
+    -   "focused": true,
+    -   "highlighted": Array [
+    -     "7 days",
+    -   ],
+    +   "afterEnter": "null",
+    +   "expanded": "true",
+    +   "focused": false,
+    +   "highlighted": Array [],
+        "open": Array [
+          Object {
+            "background": "rgba(0, 0, 0, 0)",
+            "highlighted": false,
+            "label": "Never",
+          },
+          Object {
+    -       "background": "rgba(0, 0, 0, 0.04)",
+    -       "highlighted": true,
+    +       "background": "rgba(0, 0, 0, 0)",
+    +       "highlighted": false,
+            "label": "7 days",
+          },
+          Object {
+            "background": "rgba(0, 0, 0, 0)",
+            "highlighted": false,
+
+      69 |   expect(results.antd.highlighted).toEqual([sample.opensOn]);
+      70 |   expect(results.antd).toMatchObject({ afterEnter: sample.picks, expanded: 'false', focused: true });
+    > 71 |   expect(results.orbit).toEqual(results.antd);
+         |                         ^
+      72 |   expect(errors).toEqual([]);
+      73 | });
+      74 |
+        at /mnt/data/tmp/34coPBk43ULRuisicUTAy/ref/src/web/ui-migration/choices-first-option.browser.mjs:71:25
+
+    Error Context: ../../../runs/f-first-option-ref-out/choices-first-option.brows-73368-t-was-on-and-Enter-picks-it-webkit-light-phone/error-context.md
+
+    attachment #5: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs/f-first-option-ref-out/choices-first-option.brows-73368-t-was-on-and-Enter-picks-it-webkit-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs/f-first-option-ref-out/choices-first-option.brows-73368-t-was-on-and-Enter-picks-it-webkit-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  13) [webkit-dark-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by pointer with no value, the list is on the option the old select was on and Enter picks it 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 8
+    + Received  + 6
+
+    @@ -1,16 +1,14 @@
+      Object {
+    -   "afterEnter": "never",
+    -   "expanded": "false",
+    -   "focused": true,
+    -   "highlighted": Array [
+    -     "Never",
+    -   ],
+    +   "afterEnter": "null",
+    +   "expanded": "true",
+    +   "focused": false,
+    +   "highlighted": Array [],
+        "open": Array [
+          Object {
+    -       "background": "rgba(255, 255, 255, 0.08)",
+    -       "highlighted": true,
+    +       "background": "rgba(0, 0, 0, 0)",
+    +       "highlighted": false,
+            "label": "Never",
+          },
+          Object {
+            "background": "rgba(0, 0, 0, 0)",
+            "highlighted": false,
+
+      69 |   expect(results.antd.highlighted).toEqual([sample.opensOn]);
+      70 |   expect(results.antd).toMatchObject({ afterEnter: sample.picks, expanded: 'false', focused: true });
+    > 71 |   expect(results.orbit).toEqual(results.antd);
+         |                         ^
+      72 |   expect(errors).toEqual([]);
+      73 | });
+      74 |
+        at /mnt/data/tmp/34coPBk43ULRuisicUTAy/ref/src/web/ui-migration/choices-first-option.browser.mjs:71:25
+
+    Error Context: ../../../runs/f-first-option-ref-out/choices-first-option.brows-b20e7-t-was-on-and-Enter-picks-it-webkit-dark-desktop/error-context.md
+
+    attachment #5: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs/f-first-option-ref-out/choices-first-option.brows-b20e7-t-was-on-and-Enter-picks-it-webkit-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs/f-first-option-ref-out/choices-first-option.brows-b20e7-t-was-on-and-Enter-picks-it-webkit-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  14) [webkit-dark-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by pointer with no value and the first option disabled, the list is on the option the old select was on and Enter picks it 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 8
+    + Received  + 6
+
+    @@ -1,21 +1,19 @@
+      Object {
+    -   "afterEnter": "7",
+    -   "expanded": "false",
+    -   "focused": true,
+    -   "highlighted": Array [
+    -     "7 days",
+    -   ],
+    +   "afterEnter": "null",
+    +   "expanded": "true",
+    +   "focused": false,
+    +   "highlighted": Array [],
+        "open": Array [
+          Object {
+            "background": "rgba(0, 0, 0, 0)",
+            "highlighted": false,
+            "label": "Never",
+          },
+          Object {
+    -       "background": "rgba(255, 255, 255, 0.08)",
+    -       "highlighted": true,
+    +       "background": "rgba(0, 0, 0, 0)",
+    +       "highlighted": false,
+            "label": "7 days",
+          },
+          Object {
+            "background": "rgba(0, 0, 0, 0)",
+            "highlighted": false,
+
+      69 |   expect(results.antd.highlighted).toEqual([sample.opensOn]);
+      70 |   expect(results.antd).toMatchObject({ afterEnter: sample.picks, expanded: 'false', focused: true });
+    > 71 |   expect(results.orbit).toEqual(results.antd);
+         |                         ^
+      72 |   expect(errors).toEqual([]);
+      73 | });
+      74 |
+        at /mnt/data/tmp/34coPBk43ULRuisicUTAy/ref/src/web/ui-migration/choices-first-option.browser.mjs:71:25
+
+    Error Context: ../../../runs/f-first-option-ref-out/choices-first-option.brows-73368-t-was-on-and-Enter-picks-it-webkit-dark-desktop/error-context.md
+
+    attachment #5: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs/f-first-option-ref-out/choices-first-option.brows-73368-t-was-on-and-Enter-picks-it-webkit-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs/f-first-option-ref-out/choices-first-option.brows-73368-t-was-on-and-Enter-picks-it-webkit-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  15) [webkit-dark-phone] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by pointer with no value, the list is on the option the old select was on and Enter picks it 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 8
+    + Received  + 6
+
+    @@ -1,16 +1,14 @@
+      Object {
+    -   "afterEnter": "never",
+    -   "expanded": "false",
+    -   "focused": true,
+    -   "highlighted": Array [
+    -     "Never",
+    -   ],
+    +   "afterEnter": "null",
+    +   "expanded": "true",
+    +   "focused": false,
+    +   "highlighted": Array [],
+        "open": Array [
+          Object {
+    -       "background": "rgba(255, 255, 255, 0.08)",
+    -       "highlighted": true,
+    +       "background": "rgba(0, 0, 0, 0)",
+    +       "highlighted": false,
+            "label": "Never",
+          },
+          Object {
+            "background": "rgba(0, 0, 0, 0)",
+            "highlighted": false,
+
+      69 |   expect(results.antd.highlighted).toEqual([sample.opensOn]);
+      70 |   expect(results.antd).toMatchObject({ afterEnter: sample.picks, expanded: 'false', focused: true });
+    > 71 |   expect(results.orbit).toEqual(results.antd);
+         |                         ^
+      72 |   expect(errors).toEqual([]);
+      73 | });
+      74 |
+        at /mnt/data/tmp/34coPBk43ULRuisicUTAy/ref/src/web/ui-migration/choices-first-option.browser.mjs:71:25
+
+    Error Context: ../../../runs/f-first-option-ref-out/choices-first-option.brows-b20e7-t-was-on-and-Enter-picks-it-webkit-dark-phone/error-context.md
+
+    attachment #5: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs/f-first-option-ref-out/choices-first-option.brows-b20e7-t-was-on-and-Enter-picks-it-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs/f-first-option-ref-out/choices-first-option.brows-b20e7-t-was-on-and-Enter-picks-it-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  16) [webkit-dark-phone] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by pointer with no value and the first option disabled, the list is on the option the old select was on and Enter picks it 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 8
+    + Received  + 6
+
+    @@ -1,21 +1,19 @@
+      Object {
+    -   "afterEnter": "7",
+    -   "expanded": "false",
+    -   "focused": true,
+    -   "highlighted": Array [
+    -     "7 days",
+    -   ],
+    +   "afterEnter": "null",
+    +   "expanded": "true",
+    +   "focused": false,
+    +   "highlighted": Array [],
+        "open": Array [
+          Object {
+            "background": "rgba(0, 0, 0, 0)",
+            "highlighted": false,
+            "label": "Never",
+          },
+          Object {
+    -       "background": "rgba(255, 255, 255, 0.08)",
+    -       "highlighted": true,
+    +       "background": "rgba(0, 0, 0, 0)",
+    +       "highlighted": false,
+            "label": "7 days",
+          },
+          Object {
+            "background": "rgba(0, 0, 0, 0)",
+            "highlighted": false,
+
+      69 |   expect(results.antd.highlighted).toEqual([sample.opensOn]);
+      70 |   expect(results.antd).toMatchObject({ afterEnter: sample.picks, expanded: 'false', focused: true });
+    > 71 |   expect(results.orbit).toEqual(results.antd);
+         |                         ^
+      72 |   expect(errors).toEqual([]);
+      73 | });
+      74 |
+        at /mnt/data/tmp/34coPBk43ULRuisicUTAy/ref/src/web/ui-migration/choices-first-option.browser.mjs:71:25
+
+    Error Context: ../../../runs/f-first-option-ref-out/choices-first-option.brows-73368-t-was-on-and-Enter-picks-it-webkit-dark-phone/error-context.md
+
+    attachment #5: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs/f-first-option-ref-out/choices-first-option.brows-73368-t-was-on-and-Enter-picks-it-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs/f-first-option-ref-out/choices-first-option.brows-73368-t-was-on-and-Enter-picks-it-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  16 failed
+    [chromium-light-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by pointer with no value, the list is on the option the old select was on and Enter picks it 
+    [chromium-light-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by pointer with no value and the first option disabled, the list is on the option the old select was on and Enter picks it 
+    [chromium-light-phone] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by pointer with no value, the list is on the option the old select was on and Enter picks it 
+    [chromium-light-phone] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by pointer with no value and the first option disabled, the list is on the option the old select was on and Enter picks it 
+    [chromium-dark-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by pointer with no value, the list is on the option the old select was on and Enter picks it 
+    [chromium-dark-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by pointer with no value and the first option disabled, the list is on the option the old select was on and Enter picks it 
+    [chromium-dark-phone] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by pointer with no value, the list is on the option the old select was on and Enter picks it 
+    [chromium-dark-phone] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by pointer with no value and the first option disabled, the list is on the option the old select was on and Enter picks it 
+    [webkit-light-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by pointer with no value, the list is on the option the old select was on and Enter picks it 
+    [webkit-light-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by pointer with no value and the first option disabled, the list is on the option the old select was on and Enter picks it 
+    [webkit-light-phone] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by pointer with no value, the list is on the option the old select was on and Enter picks it 
+    [webkit-light-phone] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by pointer with no value and the first option disabled, the list is on the option the old select was on and Enter picks it 
+    [webkit-dark-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by pointer with no value, the list is on the option the old select was on and Enter picks it 
+    [webkit-dark-desktop] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by pointer with no value and the first option disabled, the list is on the option the old select was on and Enter picks it 
+    [webkit-dark-phone] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by pointer with no value, the list is on the option the old select was on and Enter picks it 
+    [webkit-dark-phone] › ui-migration/choices-first-option.browser.mjs:38:59 › opened by pointer with no value and the first option disabled, the list is on the option the old select was on and Enter picks it 
+  80 passed (9.4m)
+end: 2026-10-09T20:53:18Z load: 45.30 47.36 53.08
+exit=1
