@@ -66,7 +66,8 @@ class AntigravityAccountsTest {
             assertFalse(RunnerPage.antigravityCanSignIn(runner))
             assertEquals("Update this runner to sign in with Google.", RunnerPage.signInHint(runner, "antigravity"))
         }
-        assertEquals("Antigravity", RunnerPage.engineName("antigravity"))
+        // Every engine by its CLI's name (ENGINE_CLI_NAMES; the owner's call on the provider/engine boards, 2026-10-09).
+        assertEquals("Antigravity CLI", RunnerPage.engineName("antigravity"))
     }
 
     @Test fun aMacOSRunnerWithAnEnvironmentKeyKeepsTheKeyAndTheUnsupportedHint() {

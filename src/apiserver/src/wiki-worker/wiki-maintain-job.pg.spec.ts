@@ -38,19 +38,37 @@
  *  12. a second run on the commit an earlier run checked (2026-10-10, `anchorRules.verify.skip`): the same space
  *      run again on the same snapshot sends the runner no anchor at all, writes nothing, and reports the entries
  *      it left alone under `skipped` — the replay after a REPO_OP_WAIT, which used to re-check all ~7,700 anchors;
- *  13. a snapshot that moved re-checks every entry, and its checks carry the commit that just moved;
+ *  13. a snapshot that moved, and does not reach the commit the checks were made on, re-checks every entry, and its
+ *      checks carry the commit that just moved;
  *  14. a mixed page: only the entries that still owe a check at this commit go out — one checked here, one
  *      unchecked, one that names its own baseline (a Re-confirm's shape, which no rule can prove holds), one whose
  *      check adopted its region;
- *  15. a symbol whose baseline the owner's Re-confirm moved is re-checked, though its check stands on this commit.
+ *  15. a symbol whose baseline the owner's Re-confirm moved is re-checked, though its check stands on this commit;
+ *  15a. a check nothing has moved since owes nothing either (2026-10-10, `anchorRules.verify.skip`, P10's rounds re-checked
+ *      all ~11,600 anchors once main moved, every one of them unchanged): a path checked on an earlier commit the
+ *      snapshot reaches is checked again when the diff since names it, or a file under it, as anything but a
+ *      modification — an A, a D, a T, either side of an R, a C's new side — and left alone, unwritten, when it only
+ *      modifies it; a path found missing is checked again; a symbol on any change to its file, and always when it
+ *      names its own baseline or was re-confirmed; a commit found verified is left alone while the snapshot reaches it,
+ *      and one found missing or no longer reached is checked again; the diffs go to the `anchorDiffsMax` commits most
+ *      anchors were checked at, one at a time, and what is checked at any other is checked again; the entries that
+ *      still owe a check go out together whichever page they were read on; and a diff the runner could not make
+ *      vouches for nothing.
  *  16. the documents step's comparison by commit (2026-10-10, P10's rounds f098cd24 and 54755b7b: ~107 single-file
  *      reads a round, one at a time): eleven written sections on three commits whose files the diffs name, around
  *      them a commit the snapshot does not reach, an empty diff, the head and a section with no file, a file deleted
  *      and one renamed — the same sections are written again and the same paths withdrawn as the reads section by
- *      section gave, one `diff` a commit, and the files are read with one `read` a commit and one at the head
- *      instead of one a section at each end, each operation asked once the one before it has settled;
+ *      section gave (the rename by its old path since 18), one `diff` a commit, and the files are read with one
+ *      `read` a commit and one at the head instead of one a section at each end, each operation asked once the one
+ *      before it has settled;
  *  17. a commit whose files are more than `RepoOps.operationBytes` is read in the fewest operations that limit
- *      allows, at the commit and at the head alike.
+ *      allows, at the commit and at the head alike;
+ *  18. a rename and a deletion as the runner's comparison takes them (2026-10-10, `wikiGitChanges`), on the repository
+ *      of wiki_maintain_docs_test.go's TestWikiMaintainWritesOnlyTheSectionsItsEntriesAndOriginMainTouched: a section
+ *      citing only a renamed file's old path, and one citing only a deleted file, are the repository's — each file read
+ *      at the section's commit, where it still is — and the rename is withdrawn by its old path, `to` where it went;
+ *  19. a rename that changed the file as well, and a deleted file no sentence cites: the sections citing either end of
+ *      the rename and the one citing the deleted file are written again, and the old path is withdrawn, the new not.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/wiki-worker/wiki-maintain-job.pg.spec.ts
  *
@@ -82,7 +100,7 @@ import { WikiHealth } from '../wiki/wiki-health';
 import { WikiPlans } from '../wiki/wiki-plan';
 import { WikiRefusalError, WikiService, type WikiPrincipal } from '../wiki/wiki.service';
 import { WikiRepoOps, type WikiRepoOpWake } from './wiki-repo-ops';
-import { WIKI_ANCHOR_RULES, WIKI_JOB, WIKI_LIMITS, WIKI_REPO_OP_CAPABILITY, WIKI_REPO_OP_READ_CAPABILITY, WIKI_REPO_OPS } from '@orbit/shared';
+import { WIKI_ANCHOR_RULES, WIKI_JOB, WIKI_LIMITS, WIKI_MAINTAIN_JOB, WIKI_REPO_OP_CAPABILITY, WIKI_REPO_OP_READ_CAPABILITY, WIKI_REPO_OPS } from '@orbit/shared';
 import { WikiJobExecutor, WIKI_JOB_RUNNERS, type WikiJobRunner } from './wiki-job-executor';
 import { claimWikiJobs, reclaimExpiredWikiJobs, WIKI_JOB_HANDED_BACK } from './wiki-jobs';
 import { WikiModelRequestQueue } from './wiki-model-queue.service';
@@ -477,6 +495,8 @@ interface RunnerPlay {
   filesAt?: Record<string, Record<string, string>>;
   /** What the diff from each commit names, by its `from`: a rename names where it came from and where it went. */
   diffs?: Record<string, { files: Array<{ status: string; path: string; from?: string }>; docs: string[] }>;
+  /** Every diff fails, as on a checkout git cannot diff in. */
+  failDiffs?: boolean;
 }
 
 /**
@@ -492,6 +512,11 @@ async function runRepoOps(h: Harness, over: RunnerPlay = {}): Promise<number> {
     if (over.holdReads === true && row.kind === 'read') continue;
     if (over.failSnapshot === true && row.kind === 'snapshot') {
       await h.sql.query(`UPDATE "wiki_repo_op" SET "state"='failed', "error"='the machine went away', "ended_at"=now() WHERE "id"=$1`, [row.id]);
+      continue;
+    }
+    if (over.failDiffs === true && row.kind === 'diff') {
+      await h.sql.query(`UPDATE "wiki_repo_op" SET "state"='failed', "error"='git diff failed', "ended_at"=now() WHERE "id"=$1`, [row.id]);
+      for (const listener of [...settledListeners]) listener(row.id);
       continue;
     }
     const input = row.input ?? {};
@@ -921,7 +946,13 @@ const FAR = commitNamed('far');
 /** A commit origin/main changed nothing since: its diff is empty. */
 const STILL = commitNamed('still');
 const BIG = commitNamed('big');
-const COMMIT_NAMES = new Map([[C1, 'c1'], [C2, 'c2'], [C3, 'c3'], [FAR, 'far'], [STILL, 'still'], [BIG, 'big'], [REPO.sha, 'head']]);
+/** The commit wiki_maintain_docs_test.go's documents were written at (`f.first`). */
+const FIRST = commitNamed('first');
+/** A commit origin/main has since renamed a file at, changing it too, and deleted another. */
+const RENAMED = commitNamed('renamed');
+const COMMIT_NAMES = new Map([
+  [C1, 'c1'], [C2, 'c2'], [C3, 'c3'], [FAR, 'far'], [STILL, 'still'], [BIG, 'big'], [FIRST, 'first'], [RENAMED, 'renamed'], [REPO.sha, 'head'],
+]);
 
 function commitName(sha: string): string {
   return COMMIT_NAMES.get(sha) ?? sha;
@@ -941,6 +972,8 @@ interface ComparedSection {
   key: string;
   sha: string;
   docs?: string[];
+  /** The section of its design documents it takes: `Part` unless named; null for the whole document. */
+  heading?: string | null;
   code?: string[];
   /** A file its written sentence cites in a footnote: a withdrawal of that path takes the sentence back. */
   cites?: string;
@@ -990,7 +1023,7 @@ async function runComparison(h: Harness, which: ComparisonCase): Promise<Compari
             create: doc.sections.map((section, at) => ({
               position: at, key: section.key, title: section.key, kind: 'flow', covers: `${section.key} 讲什么。`, length: 400,
               sources: {
-                docs: (section.docs ?? []).map((path) => ({ path, section: 'Part' })),
+                docs: (section.docs ?? []).map((path) => ({ path, section: section.heading === undefined ? 'Part' : section.heading })),
                 code: (section.code ?? []).map((path) => ({ path, symbols: [] })),
                 contracts: [],
                 sessions: null,
@@ -1235,9 +1268,9 @@ test('the documents step writes again the same sections and withdraws the same p
     repoSha: REPO.sha,
     paths: [
       { path: 'docs/c1/gone.md', change: 'deleted' },
-      // A rename as the server's comparison has always read it: the diff's `path` — where the file went — as the path
-      // gone. Pinned as it stands: reading by commit does not move it.
-      { path: 'src/c2/new.go', change: 'renamed', to: 'src/c2/old.go' },
+      // A rename by its old path, where the file went as `to` — the runner's `wikiGitChanges` (2026-10-10). Until then the
+      // server withdrew the diff's `path`, where the file went, `to` where it came from.
+      { path: 'src/c2/old.go', change: 'renamed', to: 'src/c2/new.go' },
     ],
   }]);
   // One diff a commit the snapshot reaches, in the order of their shas; none at the head and none for the commit the
@@ -1257,9 +1290,10 @@ test('the documents step reads the files it compares with one read a commit and 
     + Object.entries(reads).map(([commit, packs]) => `${commit} ${packs.length} (${packs.map((pack) => pack.length).join('+')} files)`).join(', '));
   t.diagnostic(`every operation, in order: ${seen.ops.map((op) => (op.kind === 'diff' ? `diff ${commitName(op.from)}` : op.kind === 'read' ? `read ${commitName(op.sha)}×${op.paths.length}` : op.kind)).join(', ')}`);
   // Eleven sections on three commits: each commit's files in one read there, every file at the head in one read
-  // there. s12's file is not in its commit's diff, and the deleted file and the directory have nothing to read.
+  // there. s12's file is not in its commit's diff, and the directory has nothing to read. The deleted file is read at
+  // c1, where it still is, as the runner reads it there; the head does not have it.
   assert.deepEqual(reads, {
-    c1: [['docs/c1/s1.md', 'docs/c1/s2.md', 'docs/c1/s3.md', 'docs/c1/s4.md']],
+    c1: [['docs/c1/gone.md', 'docs/c1/s1.md', 'docs/c1/s2.md', 'docs/c1/s3.md', 'docs/c1/s4.md']],
     c2: [['docs/c2/s5.md', 'docs/c2/s6.md', 'docs/c2/s7.md', 'docs/c2/s8.md']],
     c3: [['docs/c3/s10.md', 'docs/c3/s11.md', 'docs/c3/s9.md']],
     head: [[
@@ -1293,6 +1327,143 @@ test('a commit whose files pass operationBytes is read in the fewest operations 
   assert.deepEqual(reads, {
     big: [[path('p1'), path('p2')], [path('p3'), path('p4')], [path('p5')]],
     head: [[path('p1'), path('p2')], [path('p3'), path('p4')], [path('p5')]],
+  });
+  assertOneAtATime(seen);
+});
+
+// ── A rename and a deletion, as the runner's comparison takes them (2026-10-10) ───────────────
+
+/** What a comparison case's run left, as its diagnostics say it: what it wrote again, withdrew and read. */
+function diagnoseComparison(t: { diagnostic: (message: string) => void }, seen: ComparisonSeen): void {
+  t.diagnostic(`written again: ${seen.rewritten.join(', ')}`);
+  t.diagnostic(`withdrawn: ${JSON.stringify(seen.withdrawals)}`);
+  t.diagnostic(`docs report: ${JSON.stringify({ affected: seen.docs.affected, withdrawn: seen.docs.withdrawn, sections: seen.docs.sections, error: seen.docs.error ?? null })}`);
+  t.diagnostic(`reads: ${JSON.stringify(readsByCommit(seen))}`);
+}
+
+const RUNNER_DESIGN_BEFORE = '# Runner 设计\n\n## 1. 传输\n\nrunner 通过出站 HTTP 轮询服务器，不需要入站端口。\n\n## 2. 投递\n\n一轮 turn 先落库再投递，至少投递一次。\n';
+const RUNNER_DESIGN_AFTER = '# Runner 设计\n\n## 1. 传输\n\nrunner 通过出站 HTTP 轮询服务器，不需要入站端口。\n\n## 2. 投递\n\n一轮 turn 先落库再投递，至少投递一次，按 turn id 幂等。\n';
+const RUNNER_DISPATCH = '# 派发\n\n## 概要\n\n讲派发怎么把会话交给 runner。\n';
+
+/**
+ * The repository's half of wiki_maintain_docs_test.go's TestWikiMaintainWritesOnlyTheSectionsItsEntriesAndOriginMainTouched,
+ * its files and sections as they are there: the documents were written at the first commit, and origin/main has since
+ * changed the design document's section 2 (section 1 is as it was), deleted docs/old.md and renamed docs/moved.md to
+ * docs/dispatch.md, unchanged — the names its diff gives, in git's order. s3 cites only the deleted file and s4 only the
+ * renamed one's old path, each with a sentence that cites it in a footnote. The Go test's s5 is its entries' to write,
+ * not the repository's, and has no place here.
+ */
+test('a section citing only a renamed file\'s old path, and one citing a deleted file, are the repository\'s, and the rename is withdrawn by its old path, as the runner has them', { skip }, async (t) => {
+  const h = await boot();
+  const seen = await runComparison(h, {
+    docs: [{
+      slug: 'runner',
+      sections: [
+        { key: 's1', sha: FIRST, docs: ['docs/design.md'], heading: '1. 传输' },
+        { key: 's2', sha: FIRST, docs: ['docs/design.md'], heading: '2. 投递' },
+        { key: 's3', sha: FIRST, docs: ['docs/old.md'], heading: null, cites: 'docs/old.md' },
+        { key: 's4', sha: FIRST, docs: ['docs/moved.md'], heading: null, cites: 'docs/moved.md' },
+      ],
+    }],
+    head: { 'docs/design.md': RUNNER_DESIGN_AFTER, 'docs/dispatch.md': RUNNER_DISPATCH },
+    at: {
+      [FIRST]: {
+        'docs/design.md': RUNNER_DESIGN_BEFORE,
+        'docs/old.md': '# 旧设计\n\n## 概要\n\n这份文档讲旧的领取方式。\n',
+        'docs/moved.md': RUNNER_DISPATCH,
+      },
+    },
+    commits: [FIRST, REPO.sha],
+    diffs: {
+      [FIRST]: {
+        files: [
+          { status: 'M', path: 'docs/design.md' },
+          { status: 'R100', from: 'docs/moved.md', path: 'docs/dispatch.md' },
+          { status: 'D', path: 'docs/old.md' },
+        ],
+        docs: ['docs/dispatch.md'],
+      },
+    },
+  });
+  diagnoseComparison(t, seen);
+  assert.equal(seen.outcome, 'succeeded');
+  assert.equal(seen.docs.error, undefined, `the documents step: ${String(seen.docs.error)}`);
+  // The Go test's: s2, s3 and s4 by the repository (it writes s5 too, by its entries) — not s1, whose section did not
+  // change. s3 and s4 are the repository's, not stale: their file was at their commit and is not at the head.
+  assert.deepEqual(seen.rewritten, ['runner#s2', 'runner#s3', 'runner#s4']);
+  assert.deepEqual(seen.docs.affected, { byEntries: 0, byRepo: 3, stale: 0, unwritten: 0, total: 3 });
+  // Withdrawn once, at the head, deleted and renamed as git says: the Go test's
+  // [{"change":"renamed","path":"docs/moved.md","to":"docs/dispatch.md"},{"change":"deleted","path":"docs/old.md"}].
+  assert.deepEqual(seen.withdrawals, [{
+    repoSha: REPO.sha,
+    paths: [
+      { path: 'docs/moved.md', change: 'renamed', to: 'docs/dispatch.md' },
+      { path: 'docs/old.md', change: 'deleted' },
+    ],
+  }]);
+  assert.deepEqual(seen.docs.withdrawn, { paths: 2, sentences: 2 });
+  // The deleted file and the renamed one's old path are read at the first commit, where they still are, in its one
+  // read; the head has neither, and its one read is the design document.
+  assert.deepEqual(readsByCommit(seen), {
+    first: [['docs/design.md', 'docs/moved.md', 'docs/old.md']],
+    head: [['docs/design.md']],
+  });
+  assertOneAtATime(seen);
+});
+
+test('a rename that changed the file as well, and a deleted file no sentence cites: either end\'s section and the deleted file\'s are the repository\'s, and only the old path is withdrawn', { skip }, async (t) => {
+  const h = await boot();
+  const seen = await runComparison(h, {
+    docs: [{
+      slug: 'epsilon',
+      sections: [
+        { key: 'm1', sha: RENAMED, code: ['src/m/old.go'] },
+        { key: 'm2', sha: RENAMED, code: ['src/m/new.go'] },
+        { key: 'd1', sha: RENAMED, docs: ['docs/d/gone.md'] },
+      ],
+    }],
+    head: {
+      'src/m/new.go': 'package m\n\n// Serve answers the port the runner polls, and its health check.\nfunc Serve() {}\n\n'
+        + '// Port is the port Serve answers.\nfunc Port() int { return 9000 }\n\n// Close stops answering.\nfunc Close() {}\n',
+    },
+    at: {
+      [RENAMED]: {
+        'src/m/old.go': 'package m\n\n// Serve answers the port the runner polls.\nfunc Serve() {}\n\n'
+          + '// Port is the port Serve answers.\nfunc Port() int { return 9000 }\n\n// Close stops answering.\nfunc Close() {}\n',
+        'docs/d/gone.md': partDoc('d1', 'written', 'written'),
+      },
+    },
+    commits: [RENAMED, REPO.sha],
+    diffs: {
+      [RENAMED]: {
+        files: [
+          { status: 'D', path: 'docs/d/gone.md' },
+          // Changed as it moved: git still pairs the two ends, 67% alike (`git diff --name-status -M` on these two texts).
+          { status: 'R067', from: 'src/m/old.go', path: 'src/m/new.go' },
+        ],
+        docs: [],
+      },
+    },
+  });
+  diagnoseComparison(t, seen);
+  assert.equal(seen.outcome, 'succeeded');
+  assert.equal(seen.docs.error, undefined, `the documents step: ${String(seen.docs.error)}`);
+  // m1's file was at its commit, under its old path, and is not at the head under it; m2's was not at its commit and is
+  // at the head; d1's was at its commit and is gone. No sentence cites any of them, so none is stale.
+  assert.deepEqual(seen.rewritten, ['epsilon#d1', 'epsilon#m1', 'epsilon#m2']);
+  assert.deepEqual(seen.docs.affected, { byEntries: 0, byRepo: 3, stale: 0, unwritten: 0, total: 3 });
+  assert.deepEqual(seen.withdrawals, [{
+    repoSha: REPO.sha,
+    paths: [
+      { path: 'docs/d/gone.md', change: 'deleted' },
+      { path: 'src/m/old.go', change: 'renamed', to: 'src/m/new.go' },
+    ],
+  }]);
+  assert.deepEqual(seen.docs.withdrawn, { paths: 2, sentences: 0 });
+  // At the commit, the deleted file and the old path, as they were there; at the head, the new path.
+  assert.deepEqual(readsByCommit(seen), {
+    renamed: [['docs/d/gone.md', 'src/m/old.go']],
+    head: [['src/m/new.go']],
   });
   assertOneAtATime(seen);
 });
@@ -1373,6 +1544,76 @@ test('a proposal naming a new design document\'s sections as its prompt lists th
     [{ path: DOC, section: '## 4. wiki 怎么跟上' }],
     [{ path: DOC, section: '## 12. 现在的缺口一起补（owner 10-09）' }],
   ], 'the two new sections cite the document\'s sections as the model named them');
+});
+
+test('a proposal naming a document\'s slug as its topic is refused by the run\'s own check with the space\'s topics listed, and the next round names one of them', { skip }, async () => {
+  // Canary, 2026-10-10 (3b2bd5f2): the run's check let «wiki-maintenance», a document's slug, through as a section's
+  // topic, and the gate refused it in the last round with no topic to name instead; on 10-09 (54755b7b) two rounds
+  // running named the same made-up topics. The model here names a topic only from a list it was given, as a retry can.
+  const h = await boot();
+  await clearWork(h);
+  const DOC = 'docs/wiki-comment-to-session-design.md';
+  const text = PROPOSAL_FIXTURE.files[DOC];
+  const base = createHash('sha1').update('the commit the plan was checked at').digest('hex');
+  const fx = await fixture(h, { snapshot: { files: { [DOC]: text }, commits: [base, REPO.sha] } });
+  h.maintenance.dossierPage = (async () => ({ ...(pageOf(fx) as Record<string, unknown>), facts: 0, dossiers: [] })) as unknown as WikiMaintenance['dossierPage'];
+  await h.prisma.wikiTopic.createMany({
+    data: [
+      { ownerId: h.ownerId, spaceId: fx.spaceId, slug: 'wiki', title: 'Wiki', createdAt: new Date('2026-09-01T00:00:00Z') },
+      { ownerId: h.ownerId, spaceId: fx.spaceId, slug: 'sessions', title: '会话', createdAt: new Date('2026-09-02T00:00:00Z') },
+    ],
+  });
+  const empty = { docs: [], code: [], contracts: [], sessions: null };
+  await h.prisma.wikiPlan.create({
+    data: {
+      spaceId: fx.spaceId, ownerId: h.ownerId, version: 1, status: 'confirmed', origin: 'owner', authorUserId: h.ownerId,
+      confirmedByUserId: h.ownerId, confirmedAt: new Date(), docsMin: 1, docsMax: 10, gate: {},
+      repoSha: base, repoCheck: { sha: base, checked: 0, missing: [] },
+      categories: [{ key: 'dev', title: 'Development', question: 'How it works', forAgents: true }],
+      docs: {
+        create: [{
+          position: 0, category: 'dev', slug: 'wiki-pipeline', title: 'Wiki 流水线', question: 'wiki 怎么维护？',
+          audience: ['新加入的开发者'], scopeIn: ['维护'], lengthMin: 400, lengthMax: 4000,
+          sections: { create: [{ position: 0, key: 'overview', title: '总览', kind: 'overview', covers: '这篇讲 wiki 怎么维护。', length: 300, sources: empty }] },
+        }],
+      },
+    },
+  });
+  const answerNaming = (topic: string): string => '放入：wiki-pipeline\n理由：评论发起改动时踩过的坑，plan 里没有一节讲。\n覆盖：K1\n'
+    + '### 1. 评论发起改动的坑 | pitfalls | 300\n讲什么：评论发起改动时踩过的坑。\n'
+    + `- 会话：关键词 评论、改动；kind pitfall；主题 ${topic}；要找：owner 说评论发起改动出过什么错的原话\n`;
+  const prompts: string[] = [];
+  h.model.answer = (hit) => {
+    if (!hit.prompt.includes('# 任务：维护作业的 plan 修改建议')) return writerAnswer(hit.prompt);
+    prompts.push(hit.prompt);
+    const listed = /现有主题（slug「名称」·active 条目数）：([a-z0-9-]+)「/u.exec(hit.prompt);
+    return answerNaming(listed?.[1] ?? 'wiki-pipeline');
+  };
+  const which = worker(h);
+  await pass(h, which, async () => ['succeeded', 'failed'].includes((await jobOf(h, fx.jobId)).state), {
+    files: { [DOC]: text },
+    diff: { files: [{ status: 'A', path: DOC }], docs: [DOC] },
+  });
+
+  const run = await runRow(h, fx.runId);
+  assert.equal(run.outcome, 'succeeded', run.error ?? '');
+  const docs = (run.report as { docs: { proposal: Record<string, unknown> | null } }).docs;
+  assert.deepEqual(
+    { outcome: docs.proposal?.outcome, rounds: docs.proposal?.rounds, error: docs.proposal?.error ?? null },
+    { outcome: 'proposed', rounds: 2, error: null },
+    'the second round names a topic of the space, and the proposal is stored',
+  );
+  assert.equal(prompts.length, 2);
+  // Round 1 was refused here, before the gate saw it: by its section, with the space's topics as the gate lists them.
+  assert.ok(
+    prompts[1].includes('\n- 第 1 节: "wiki-pipeline" is not a topic of this space: 现有主题（slug「名称」·active 条目数）：wiki「Wiki」·0；sessions「会话」·0\n'),
+    `round 2 was told: ${prompts[1].slice(prompts[1].indexOf('## 上一次的答案有这些问题'))}`,
+  );
+  assert.ok(!prompts[1].includes('change.doc.'), 'the gate refused nothing: the run\'s own check found it first');
+  const stored = await h.prisma.wikiPlanProposal.findMany({ where: { ownerId: h.ownerId, spaceId: fx.spaceId } });
+  assert.equal(stored.length, 1);
+  const sections = (stored[0].change as { doc: { sections: Array<{ sources: { sessions: { topics: string[] } | null } }> } }).doc.sections;
+  assert.deepEqual(sections[sections.length - 1].sources.sessions?.topics, ['wiki']);
 });
 
 // ── The anchors of a page: every entry keeps its own checks ─────────────────────────────────────
@@ -1680,7 +1921,7 @@ test('a second run on the commit an earlier run checked re-checks nothing: no an
     'entries counts what the run wrote; what it left alone is skipped and nothing else');
 });
 
-test('a snapshot that moved re-checks every entry, and the checks carry the commit they were made on', { skip }, async () => {
+test('a snapshot that moved, and does not reach the commit the checks were made on, re-checks every entry, and the checks carry the commit they were made on', { skip }, async () => {
   const h = await boot();
   await clearWork(h);
   const fx = await fixture(h);
@@ -1702,7 +1943,7 @@ test('a snapshot that moved re-checks every entry, and the checks carry the comm
   const job = await jobOf(h, again.jobId);
   assert.equal(job.state, 'succeeded', job.error ?? '');
   assert.deepEqual((await repoOpsOf(h, again.jobId)).map((op) => op.kind), ['snapshot', 'anchors'],
-    'a check made on another commit is not this commit\'s answer: the whole page goes out again');
+    'a check made on a commit the snapshot does not reach has no diff to vouch for it: the whole page goes out again');
   assert.equal(await anchorsSent(h, again.jobId), 4, 'every anchor of it');
   assert.deepEqual(await anchorsReport(h, again.runId), { entries: 3, changed: 0, missing: 0, skipped: 0 }, 'nothing was already checked at the moved commit');
   const after = await Promise.all(once.map((id) => entryAnchors(h, id)));
@@ -1789,6 +2030,303 @@ test('a baseline the owner\'s Re-confirm moved is re-checked, though its check s
   assert.equal(anchors[0]!.check?.state, 'verified');
   assert.equal(anchors[0]!.check?.ref, REPO.sha);
   assert.notEqual(anchors[0]!.check?.at, '2026-10-01T00:00:00.000Z', 'the check is this run\'s, not the one the re-confirm kept');
+});
+
+// ── A check nothing has moved since owes nothing either (2026-10-10, `anchorRules.verify.skip`) ──────────────────
+
+/**
+ * The commit the cases below last checked their entries at: one the snapshot (REPO.sha) reaches — each case's
+ * fixture lists it among the snapshot's commits — so the run can ask the runner for a diff from it.
+ */
+const CHECKED = createHash('sha1').update('the commit the entries were last checked at').digest('hex');
+const CHECKED_AT = '2026-10-09T00:00:00.000Z';
+
+/** A last check as an earlier run left it, on CHECKED unless `ref` says otherwise. */
+function checkedOn(state: 'verified' | 'missing' | 'changed', extra: Record<string, unknown> = {}, ref: string = CHECKED): Record<string, unknown> {
+  return { state, ref, at: CHECKED_AT, ...extra };
+}
+
+/** Entries with the anchors given, under ids of one case's own (`prefix`, numbered from 1): the list orders by id, so do these. */
+async function anchoredEntries(h: Harness, spaceId: string, prefix: string, anchors: Array<Array<Record<string, unknown>>>): Promise<string[]> {
+  const ids = anchors.map((_, i) => `${prefix}-0000-4000-8000-${String(i + 1).padStart(12, '0')}`);
+  await h.prisma.wikiEntry.createMany({
+    data: anchors.map((list, i) => ({
+      id: ids[i]!, ownerId: h.ownerId, spaceId, kind: 'concept', title: `anchored ${prefix} ${i}`, summary: 'a live entry',
+      status: 'active', trust: 'auto', currentRevision: 1, fields: { definition: 'x', boundaries: 'y' }, topics: [],
+      anchors: list as unknown as Prisma.InputJsonValue,
+    })),
+  });
+  return ids;
+}
+
+/** What the run's `anchors` operations handed the runner, anchor by anchor and in order: its type and what it names. */
+async function anchorsAsked(h: Harness, jobId: string): Promise<string[]> {
+  const rows = await h.sql.query<{ input: { anchors?: Array<Record<string, unknown>> } }>(
+    `SELECT "input" FROM "wiki_repo_op" WHERE "job_id" = $1 AND "kind" = 'anchors' ORDER BY "created_at", "id"`, [jobId],
+  );
+  return rows.rows.flatMap((row) => (row.input.anchors ?? []).map((anchor) =>
+    `${String(anchor.type)} ${String(anchor.path ?? anchor.sha ?? '')}${anchor.symbol === undefined ? '' : `#${String(anchor.symbol)}`}`));
+}
+
+/** The diffs the run asked for, in order: from which commit to which, and when each was asked and settled. */
+async function diffsAsked(h: Harness, jobId: string): Promise<Array<{ from: string; to: string; createdAt: string; endedAt: string }>> {
+  return h.sql.query<{ from: string; to: string; createdAt: string; endedAt: string }>(
+    `SELECT "input"->>'from' AS "from", "input"->>'to' AS "to", "created_at" AS "createdAt", "ended_at" AS "endedAt"
+       FROM "wiki_repo_op" WHERE "job_id" = $1 AND "kind" = 'diff' ORDER BY "created_at", "id"`, [jobId],
+  ).then((result) => result.rows);
+}
+
+/** The runner at REPO.sha: a path is there unless `gone` names it, a commit an ancestor when `reached` holds it, and a symbol's region hashes from its name. */
+function runnerAt(gone: readonly string[], reached: readonly string[] = []): (anchor: Record<string, unknown>) => Record<string, unknown> {
+  return (anchor) => {
+    if (anchor.type === 'path') return { ...anchor, state: gone.includes(String(anchor.path)) ? 'missing' : 'verified' };
+    if (anchor.type === 'commit') return { ...anchor, state: reached.includes(String(anchor.sha)) ? 'verified' : 'missing' };
+    return { ...anchor, state: 'verified', regionSha256: ANCHOR_REPO.regionOf(String(anchor.symbol ?? '')) };
+  };
+}
+
+/** No dossiers: the run proposes nothing, and the anchors step is what these cases are about. */
+function noDossiers(h: Harness, fx: Fixture): void {
+  h.maintenance.dossierPage = (async () => ({ ...(pageOf(fx) as Record<string, unknown>), facts: 0, dossiers: [] })) as unknown as WikiMaintenance['dossierPage'];
+}
+
+test('a path checked since is checked again when the diff moves it — an A, a D, a T, either side of an R, a C\'s new side — and not when it only modifies it', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const fx = await fixture(h, { snapshot: { files: {}, commits: [CHECKED] } });
+  noDossiers(h, fx);
+  // One path an entry, found there on CHECKED but the one found missing there; what the diff since does to each:
+  const paths: Array<[string, boolean]> = [
+    ['src/kept.go', false], //            nothing (a sibling's A, src/kept.go.orig, names another file)
+    ['src/edited.go', false], //          M: it is still there
+    ['src/added.go', true], //            A
+    ['src/deleted.go', true], //          D
+    ['src/moved-away.go', true], //       R, its old side
+    ['src/moved-here.go', true], //       R, its new side
+    ['src/copied-here.go', true], //      C, its new side
+    ['src/copied-from.go', false], //     C, its old side: a copy leaves its source where it was
+    ['src/retyped', true], //             T
+    ['src/tree-edited', false], //        a directory, a file under which is M
+    ['src/tree-grown', true], //          a directory, a file under which is A
+    ['src/tree-shrunk', true], //         a directory, a file under which is D
+    ['src/tree', false], //               a directory that is a prefix of the ones above but holds nothing they name
+    ['./src//deleted-too.go/', true], //  D of src/deleted-too.go: the path as the runner spells it
+    ['src/back.go', true], //             found missing on CHECKED, A since: it came back
+  ];
+  const ids = await anchoredEntries(h, fx.spaceId, 'beef0001', paths.map(([path]) => [
+    { type: 'path', path, check: checkedOn(path === 'src/back.go' ? 'missing' : 'verified') },
+  ]));
+  const diff = [
+    { status: 'A', path: 'src/kept.go.orig' },
+    { status: 'M', path: 'src/edited.go' },
+    { status: 'A', path: 'src/added.go' },
+    { status: 'D', path: 'src/deleted.go' },
+    { status: 'R100', path: 'lib/moved-away.go', from: 'src/moved-away.go' },
+    { status: 'R087', path: 'src/moved-here.go', from: 'lib/moved-here.go' },
+    { status: 'C075', path: 'src/copied-here.go', from: 'src/copied-from.go' },
+    { status: 'T', path: 'src/retyped' },
+    { status: 'M', path: 'src/tree-edited/a.go' },
+    { status: 'A', path: 'src/tree-grown/new.go' },
+    { status: 'D', path: 'src/tree-shrunk/old.go' },
+    { status: 'D', path: 'src/deleted-too.go' },
+    { status: 'A', path: 'src/back.go' },
+  ];
+  const before = await Promise.all(ids.map((id) => entryAnchors(h, id)));
+
+  const which = worker(h, { wake: true });
+  await pass(h, which, async () => (await jobOf(h, fx.jobId)).state === 'succeeded', {
+    checkAnchor: runnerAt(['src/deleted.go', 'src/moved-away.go', './src//deleted-too.go/']),
+    diffs: { [CHECKED]: { files: diff, docs: [] } },
+  });
+
+  const job = await jobOf(h, fx.jobId);
+  assert.equal(job.state, 'succeeded', job.error ?? '');
+  assert.deepEqual((await repoOpsOf(h, fx.jobId)).map((op) => op.kind), ['snapshot', 'diff', 'anchors'], 'one diff, then one operation for what it did not vouch for');
+  assert.deepEqual((await diffsAsked(h, fx.jobId)).map((op) => [op.from, op.to]), [[CHECKED, REPO.sha]], 'from the commit the checks were made on to the snapshot\'s');
+  const due = paths.filter(([, again]) => again).map(([path]) => `path ${path}`);
+  assert.deepEqual(await anchorsAsked(h, fx.jobId), due, 'exactly the paths the diff may have moved go out');
+  const after = await Promise.all(ids.map((id) => entryAnchors(h, id)));
+  for (const [i, [path, again]] of paths.entries()) {
+    const check = (after[i] as Array<{ check?: { ref?: string } }>)[0]!.check;
+    if (again) assert.equal(check?.ref, REPO.sha, `${path} is checked at the snapshot's commit`);
+    else assert.deepEqual(after[i], before[i], `${path}: nothing of it is written`);
+  }
+  const back = await h.prisma.wikiEntry.findFirstOrThrow({ where: { id: ids[14]! } });
+  assert.equal(back.anchorState, 'verified', 'the path that came back reads verified again');
+  assert.deepEqual(await anchorsReport(h, fx.runId), { entries: due.length, changed: 0, missing: 3, skipped: paths.length - due.length },
+    'what was checked is counted as written, the rest as skipped');
+});
+
+test('a symbol checked since is checked again on any change to its file, a modification too; one that names its own baseline, or was re-confirmed, always', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const fx = await fixture(h, { snapshot: { files: {}, commits: [CHECKED] } });
+  noDossiers(h, fx);
+  const region = (symbol: string): string => ANCHOR_REPO.regionOf(symbol);
+  // The re-confirm of a symbol found changed on CHECKED: it names the region that check found as its own baseline.
+  const reconfirmed = rebaselinedAnchors([{
+    type: 'symbol', path: 'src/app.go', symbol: 'again', regionSha256: 'c'.repeat(64),
+    check: { state: 'changed', ref: CHECKED, at: CHECKED_AT, regionSha256: region('again') },
+  }]).anchors;
+  const ids = await anchoredEntries(h, fx.spaceId, 'beef0002', [
+    // 0: its check adopted its region, and nothing in the diff is its file: left alone.
+    [{ type: 'symbol', path: 'src/app.go', symbol: 'main', check: checkedOn('verified', { regionSha256: region('main'), baselineSha256: region('main') }) }],
+    // 1: adopted, and its file is modified: its region may have moved.
+    [{ type: 'symbol', path: 'src/server.go', symbol: 'serve', check: checkedOn('verified', { regionSha256: region('serve'), baselineSha256: region('serve') }) }],
+    // 2: adopted, in a directory a file under which is modified.
+    [{ type: 'symbol', path: 'src/tree', symbol: 'walk', check: checkedOn('verified', { regionSha256: region('walk'), baselineSha256: region('walk') }) }],
+    // 3: it names its own baseline, a proposer's, and its file did not change: no rule proves it.
+    [{ type: 'symbol', path: 'src/app.go', symbol: 'own', regionSha256: region('own'), check: checkedOn('verified', { regionSha256: region('own') }) }],
+    // 4: re-confirmed, and its file did not change.
+    reconfirmed as unknown as Array<Record<string, unknown>>,
+    // 5: a path whose file is modified: a modification does not move a path.
+    [{ type: 'path', path: 'src/server.go', check: checkedOn('verified') }],
+  ]);
+  const before = await Promise.all(ids.map((id) => entryAnchors(h, id)));
+
+  const which = worker(h, { wake: true });
+  await pass(h, which, async () => (await jobOf(h, fx.jobId)).state === 'succeeded', {
+    checkAnchor: runnerAt([]),
+    diffs: { [CHECKED]: { files: [{ status: 'M', path: 'src/server.go' }, { status: 'M', path: 'src/tree/leaf.go' }], docs: [] } },
+  });
+
+  const job = await jobOf(h, fx.jobId);
+  assert.equal(job.state, 'succeeded', job.error ?? '');
+  assert.deepEqual(await anchorsAsked(h, fx.jobId),
+    ['symbol src/server.go#serve', 'symbol src/tree#walk', 'symbol src/app.go#own', 'symbol src/app.go#again'],
+    'the modified file\'s symbol, the one under the modified directory, and the two baselines no check can vouch for');
+  const after = await Promise.all(ids.map((id) => entryAnchors(h, id)));
+  assert.deepEqual(after[0], before[0], 'the symbol whose file did not change is not written');
+  assert.deepEqual(after[5], before[5], 'nor is the path whose file was only modified');
+  for (const i of [1, 2, 3, 4]) {
+    assert.equal((after[i] as Array<{ check?: { ref?: string; state?: string } }>)[0]!.check?.ref, REPO.sha, `symbol ${i} is checked at the snapshot's commit`);
+  }
+  assert.deepEqual(await anchorsReport(h, fx.runId), { entries: 4, changed: 0, missing: 0, skipped: 2 });
+});
+
+test('a commit found verified is left alone while the snapshot reaches it; one found missing, or one the snapshot no longer reaches, is checked again', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const sha = (what: string): string => createHash('sha1').update(what).digest('hex');
+  const reached = sha('a commit main has had all along');
+  const merged = sha('a commit main has merged since it was found missing');
+  const absent = sha('a commit main never had');
+  const dropped = sha('a commit a rewrite of main dropped');
+  const fx = await fixture(h, { snapshot: { files: {}, commits: [CHECKED, reached, merged] } });
+  noDossiers(h, fx);
+  const ids = await anchoredEntries(h, fx.spaceId, 'beef0003', [
+    [{ type: 'commit', sha: reached, check: checkedOn('verified') }], //  0: left alone
+    [{ type: 'commit', sha: merged, check: checkedOn('missing') }], //    1: checked again, and found now
+    [{ type: 'commit', sha: absent, check: checkedOn('missing') }], //    2: checked again, still missing
+    [{ type: 'commit', sha: dropped, check: checkedOn('verified') }], //  3: checked again: the snapshot no longer reaches it
+    // 4: every anchor holds — a path nothing moved and a commit reached: left alone.
+    [{ type: 'path', path: 'src/kept.go', check: checkedOn('verified') }, { type: 'commit', sha: reached, check: checkedOn('verified') }],
+    // 5: one anchor that does not hold re-checks the entry whole, its reached commit too.
+    [{ type: 'commit', sha: reached, check: checkedOn('verified') }, { type: 'path', path: 'src/deleted.go', check: checkedOn('verified') }],
+  ]);
+  const before = await Promise.all(ids.map((id) => entryAnchors(h, id)));
+
+  const which = worker(h, { wake: true });
+  await pass(h, which, async () => (await jobOf(h, fx.jobId)).state === 'succeeded', {
+    checkAnchor: runnerAt(['src/deleted.go'], [reached, merged]),
+    diffs: { [CHECKED]: { files: [{ status: 'D', path: 'src/deleted.go' }], docs: [] } },
+  });
+
+  const job = await jobOf(h, fx.jobId);
+  assert.equal(job.state, 'succeeded', job.error ?? '');
+  assert.deepEqual(await anchorsAsked(h, fx.jobId), [`commit ${merged}`, `commit ${absent}`, `commit ${dropped}`, `commit ${reached}`, 'path src/deleted.go']);
+  const after = await Promise.all(ids.map((id) => entryAnchors(h, id)));
+  assert.deepEqual(after[0], before[0], 'the reached commit is not written');
+  assert.deepEqual(after[4], before[4], 'nor the entry whose every anchor holds');
+  const states = await Promise.all(ids.map((id) => h.prisma.wikiEntry.findFirstOrThrow({ where: { id }, select: { anchorState: true } })));
+  assert.deepEqual(states.map((row) => row.anchorState), ['unchecked', 'verified', 'missing', 'missing', 'unchecked', 'missing'],
+    'the merged commit reads verified now, the absent one and the dropped one missing, and the entry whose path went with it missing');
+  assert.deepEqual(await anchorsReport(h, fx.runId), { entries: 4, changed: 0, missing: 3, skipped: 2 });
+});
+
+test('the diffs go to the commits most anchors were checked at, anchorDiffsMax of them, one at a time; the entries checked at any other are checked again', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const cap = WIKI_MAINTAIN_JOB.anchorDiffsMax;
+  // cap + 2 commits the snapshot reaches, the first with the most entries checked at it and the last with one, and
+  // a commit it does not reach with more entries than any: none of their files moved.
+  const refs = Array.from({ length: cap + 2 }, (_, i) => createHash('sha1').update(`a commit the space's checks were made on, ${i}`).digest('hex'));
+  const far = createHash('sha1').update('a commit the snapshot does not reach').digest('hex');
+  const fx = await fixture(h, { snapshot: { files: {}, commits: [...refs].reverse() } });
+  noDossiers(h, fx);
+  const groups = [...refs.map((ref, i) => ({ ref, count: cap + 2 - i })), { ref: far, count: cap + 3 }];
+  const anchors = groups.flatMap((group, g) => Array.from({ length: group.count }, (_, n) => [
+    { type: 'path', path: `src/group-${g}/file-${n}.go`, check: checkedOn('verified', {}, group.ref) },
+  ]));
+  await anchoredEntries(h, fx.spaceId, 'beef0004', anchors);
+
+  const which = worker(h, { wake: true });
+  await pass(h, which, async () => (await jobOf(h, fx.jobId)).state === 'succeeded', { checkAnchor: runnerAt([]) });
+
+  const job = await jobOf(h, fx.jobId);
+  assert.equal(job.state, 'succeeded', job.error ?? '');
+  const diffs = await diffsAsked(h, fx.jobId);
+  assert.deepEqual(diffs.map((op) => op.from), refs.slice(0, cap), `the ${cap} commits most anchors were checked at, the most first`);
+  for (const [i, op] of diffs.entries()) {
+    assert.equal(op.to, REPO.sha);
+    if (i > 0) assert.ok(Date.parse(op.createdAt) >= Date.parse(diffs[i - 1]!.endedAt), 'no diff is asked while another is in flight');
+  }
+  const again = groups.flatMap((group, g) => (g < cap ? [] : Array.from({ length: group.count }, (_, n) => `path src/group-${g}/file-${n}.go`)));
+  assert.deepEqual(await anchorsAsked(h, fx.jobId), again, 'what the cap left without a diff, and what the snapshot does not reach, is checked again');
+  const left = groups.slice(0, cap).reduce((total, group) => total + group.count, 0);
+  assert.deepEqual(await anchorsReport(h, fx.runId), { entries: again.length, changed: 0, missing: 0, skipped: left });
+});
+
+test('the entries that still owe a check go out together whichever page they were read on: 450 entries, 12 of them due, are one operation', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const fx = await fixture(h, { snapshot: { files: {}, commits: [CHECKED] } });
+  noDossiers(h, fx);
+  const count = 450;
+  const pathOf = (i: number): string => `src/e-${String(i).padStart(3, '0')}.go`;
+  // Due: every 50th entry from the 7th, whose file the diff deletes; one never checked; one whose check names no commit;
+  // one found missing on CHECKED, which is checked again though nothing moved it. Left alone: the rest, checked on
+  // CHECKED and not moved since, and one checked on this very commit.
+  const deleted = new Set(Array.from({ length: count }, (_, i) => i).filter((i) => i % 50 === 7));
+  const due = new Set([...deleted, 100, 200, 300]);
+  await anchoredEntries(h, fx.spaceId, 'beef0005', Array.from({ length: count }, (_, i) => [{
+    type: 'path',
+    path: pathOf(i),
+    ...(i === 100 ? {} : { check: i === 200 ? checkedOn('verified', {}, 'main') : i === 300 ? checkedOn('missing') : i === 400 ? checkedOn('verified', {}, REPO.sha) : checkedOn('verified') }),
+  }]));
+
+  const which = worker(h, { wake: true });
+  await pass(h, which, async () => (await jobOf(h, fx.jobId)).state === 'succeeded', {
+    checkAnchor: runnerAt([...deleted].map(pathOf)),
+    diffs: { [CHECKED]: { files: [...deleted].map((i) => ({ status: 'D', path: pathOf(i) })), docs: [] } },
+  });
+
+  const job = await jobOf(h, fx.jobId);
+  assert.equal(job.state, 'succeeded', job.error ?? '');
+  const ops = await anchorsOps(h);
+  assert.deepEqual(ops.map((op) => op.anchors), [due.size], 'the due entries of three pages are one operation');
+  assert.deepEqual(await anchorsAsked(h, fx.jobId), [...due].sort((a, b) => a - b).map((i) => `path ${pathOf(i)}`), 'in the list\'s order');
+  assert.deepEqual(await anchorsReport(h, fx.runId), { entries: due.size, changed: 0, missing: deleted.size, skipped: count - due.size });
+});
+
+test('a diff the runner could not make vouches for nothing: the entries checked at its commit are checked again, and the run goes on', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const fx = await fixture(h, { snapshot: { files: {}, commits: [CHECKED] } });
+  noDossiers(h, fx);
+  await anchoredEntries(h, fx.spaceId, 'beef0006', [
+    [{ type: 'path', path: 'src/kept.go', check: checkedOn('verified') }],
+    [{ type: 'path', path: 'src/also-kept.go', check: checkedOn('verified') }],
+  ]);
+
+  const which = worker(h, { wake: true });
+  await pass(h, which, async () => (await jobOf(h, fx.jobId)).state === 'succeeded', { checkAnchor: runnerAt([]), failDiffs: true });
+
+  const job = await jobOf(h, fx.jobId);
+  assert.equal(job.state, 'succeeded', job.error ?? '');
+  assert.deepEqual((await repoOpsOf(h, fx.jobId)).map((op) => op.kind), ['snapshot', 'diff', 'anchors']);
+  assert.deepEqual(await anchorsAsked(h, fx.jobId), ['path src/kept.go', 'path src/also-kept.go']);
+  assert.deepEqual(await anchorsReport(h, fx.runId), { entries: 2, changed: 0, missing: 0, skipped: 0 });
 });
 
 test('anchor verdicts that name anchors no entry asked for fail the run: nothing is laid on a guess', { skip }, async () => {

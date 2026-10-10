@@ -85,6 +85,9 @@ type wikiMaintenanceDocsRead struct {
 		Commits  []string `json:"commits"`
 		Paths    []string `json:"paths"`
 	} `json:"proposed"`
+	// Topics are the space's, the ones the plan's gate takes in a session condition: nil from a server that predates
+	// them, whose gate is then the only check of a proposal's topics.
+	Topics []wikiPlanTopic `json:"topics"`
 }
 
 // wikiUnplacedEntry is an entry that fits no section of the confirmed plan.
@@ -360,7 +363,7 @@ func (r *wikiMaintainRun) writeDocs(report *wikiMaintainDocsReport) error {
 	designs := r.newDesignDocs(base, head, cited)
 	report.Unplaced.DesignDocs, report.Unplaced.Entries = len(designs), len(affected.Unplaced)+affected.UnplacedMore
 	if len(designs) > 0 || len(affected.Unplaced) > 0 {
-		report.Proposal = r.proposePlanChange(*full.Confirmed, designs, affected.Unplaced, head)
+		report.Proposal = r.proposePlanChange(*full.Confirmed, designs, affected.Unplaced, head, affected.Topics)
 	}
 	return writeErr
 }
@@ -695,8 +698,9 @@ type wikiProposalAnswer struct {
 }
 
 // proposePlanChange makes the run's one proposal: the model says where the knowledge belongs, the run
-// checks it on origin/main and the server's gate checks the rest, three rounds at most.
-func (r *wikiMaintainRun) proposePlanChange(plan wikiPlanVersionRead, designs []wikiNewDesignDoc, entries []wikiUnplacedEntry, head string) *wikiMaintainProposalReport {
+// checks it on origin/main and against the space's topics, and the server's gate checks the rest, three
+// rounds at most.
+func (r *wikiMaintainRun) proposePlanChange(plan wikiPlanVersionRead, designs []wikiNewDesignDoc, entries []wikiUnplacedEntry, head string, topics []wikiPlanTopic) *wikiMaintainProposalReport {
 	var items []wikiProposalItem
 	for i := range designs {
 		if len(items) == wikiMaintainProposalItemsMax {
@@ -732,7 +736,7 @@ func (r *wikiMaintainRun) proposePlanChange(plan wikiPlanVersionRead, designs []
 			return out
 		}
 		answer := parseWikiProposal(text)
-		request, check := assembleWikiProposal(plan, answer, items, repo)
+		request, check := assembleWikiProposal(plan, answer, items, repo, topics)
 		if len(check) > 0 {
 			problems = check
 			r.say("  proposal round %d: %s found here: %s", round, wikiCount(len(check), "problem", "problems"), cutRunes(strings.Join(check, "; "), 300))
@@ -902,8 +906,9 @@ func parseWikiProposal(text string) wikiProposalAnswer {
 // assembleWikiProposal turns the answer into the proposal the server gates: the document as it should read
 // — the plan's own, with the new sections after its last, or a new one — and the facts it came from. What
 // is wrong with it that this runner can see — a missing line, a kind the plan does not have, a file,
-// document section, symbol or contract origin/main does not have — comes back as problems, for the model.
-func assembleWikiProposal(plan wikiPlanVersionRead, answer wikiProposalAnswer, items []wikiProposalItem, repo *wikiDocRepo) (wikiPlanProposalRequest, []string) {
+// document section, symbol or contract origin/main does not have, a topic the space does not have (topics,
+// the space's: nil leaves them to the server's gate) — comes back as problems, for the model.
+func assembleWikiProposal(plan wikiPlanVersionRead, answer wikiProposalAnswer, items []wikiProposalItem, repo *wikiDocRepo, topics []wikiPlanTopic) (wikiPlanProposalRequest, []string) {
 	var problems []string
 	var request wikiPlanProposalRequest
 	if strings.TrimSpace(answer.Reason) == "" {
@@ -940,7 +945,7 @@ func assembleWikiProposal(plan wikiPlanVersionRead, answer wikiProposalAnswer, i
 	}
 	var sections []wikiPlanSection
 	for i, draft := range answer.Sections {
-		section, check := wikiProposalSection(fmt.Sprintf("第 %d 节", i+1), draft, repo)
+		section, check := wikiProposalSection(fmt.Sprintf("第 %d 节", i+1), draft, repo, topics)
 		problems = append(problems, check...)
 		sections = append(sections, section)
 	}
@@ -1001,8 +1006,8 @@ func assembleWikiProposal(plan wikiPlanVersionRead, answer wikiProposalAnswer, i
 }
 
 // wikiProposalSection is one new section as the model wrote it, checked against origin/main: its kind, its
-// length, and every file, document section, symbol and contract it names.
-func wikiProposalSection(at string, draft wikiPlanSectionDraft, repo *wikiDocRepo) (wikiPlanSection, []string) {
+// length, and every file, document section, symbol and contract it names; and its topics among the space's.
+func wikiProposalSection(at string, draft wikiPlanSectionDraft, repo *wikiDocRepo, topics []wikiPlanTopic) (wikiPlanSection, []string) {
 	var problems []string
 	section := wikiPlanSection{Title: draft.Title, Kind: wikiUnwrap(draft.Kind), Covers: draft.Covers}
 	if !contains(wikiPlanSectionKinds, section.Kind) {
@@ -1058,6 +1063,20 @@ func wikiProposalSection(at string, draft wikiPlanSectionDraft, repo *wikiDocRep
 		}
 		for _, part := range c.Stray {
 			problems = append(problems, fmt.Sprintf("%s的会话条件里 %s 不是其中一项：只有项目、时间、关键词、锚点、kind、主题和要找", at, wikiQuote(cutRunes(part, 60))))
+		}
+		// The server's gate takes a topic only from the space's (plan.gate.references), and lists them with one it
+		// refuses: so is it here, and listed the same, so the round that refuses it can fix it. A document's slug
+		// passed here until 2026-10-10 and was refused at the gate in the run's last round (canary 3b2bd5f2).
+		if topics != nil {
+			known := map[string]bool{}
+			for _, t := range topics {
+				known[t.Slug] = true
+			}
+			for _, topic := range sessions.Topics {
+				if !known[topic] {
+					problems = append(problems, fmt.Sprintf("%s: %s is not a topic of this space: %s", at, wikiQuote(topic), wikiPlanTopicsBrief(topics)))
+				}
+			}
 		}
 		section.Sources.Sessions = sessions
 	}

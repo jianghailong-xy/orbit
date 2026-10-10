@@ -634,6 +634,16 @@ export interface WikiPlanJobCheck {
 }
 
 /**
+ * A topic of the space as a session condition may name it (contract `plan.gate.references`): its slug, its
+ * display name, and how many of the space's active entries name it.
+ */
+export interface WikiPlanTopic {
+  slug: string;
+  title: string;
+  active: number;
+}
+
+/**
  * `GET /api/runner/wiki/spaces/:id/plan/materials` (contract `plan.jobs.materials`): what the drafting
  * job reads of Orbit besides the repository — the owner's projects, the space's sessions of the last
  * `materialsSessionDays` days, and how the space's entries and topics are spread. Titles are redacted

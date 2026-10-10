@@ -1,0 +1,5 @@
+root free before overlay: 10249M
+root free after overlay: 9330M
+MemAvailable at start: 4522M
+root free after merge check: 4686M
+root free after removing the overlay: 5556M

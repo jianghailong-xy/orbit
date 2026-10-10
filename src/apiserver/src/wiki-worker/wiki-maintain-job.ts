@@ -8,11 +8,12 @@ import {
   WIKI_REVIEW_RULES,
   wikiMaintenanceRunSessions,
   type WikiDossier,
+  type WikiPlanTopic,
   type WikiRepoOpKind,
   type WikiReviewMode,
 } from '@orbit/shared';
 import type { PrismaService } from '../prisma/prisma.service';
-import { listWikiAnchorsForJob } from '../wiki/wiki-anchors';
+import { anchorCheckRefs, anchorDiffNames, listWikiAnchorsForJob, type WikiAnchorDiffNames, type WikiAnchorProof } from '../wiki/wiki-anchors';
 import { gatherDocMaterial, storedSessionCondition, type StoredSessionCondition } from '../wiki/wiki-docs-material';
 import { wikiDocsAffected } from '../wiki/wiki-docs-affected';
 import type { WikiDocs } from '../wiki/wiki-docs';
@@ -58,7 +59,7 @@ import {
 } from './wiki-maintain-plan';
 import { cutRunes, parseWikiImportAnswer, WikiImportRepo, wikiImportIsObject } from './wiki-import-extract';
 import { type WikiPlanSnapshotIndex } from './wiki-plan-repo';
-import { type WikiAnchorCheckInput, type WikiRepoFileRead } from '@orbit/shared';
+import { type WikiAnchorCheckInput, type WikiAnchorDueEntry, type WikiRepoFileRead } from '@orbit/shared';
 import {
   readWikiRepoFiles,
   readWikiRepoReadiness,
@@ -172,8 +173,8 @@ export interface WikiMaintainReport {
   };
   /**
    * The anchors step's counts (contract `maintenance.job.server.anchors`): the entries whose checks this run
-   * wrote, and — of them — those left changed or missing; `skipped` the entries every anchor of which was
-   * already checked at the run's commit, which were neither sent nor written.
+   * wrote, and — of them — those left changed or missing; `skipped` the entries every anchor of which still
+   * held at the run's commit (`anchorRules.verify.skip`), which were neither sent nor written.
    */
   anchors?: { entries: number; changed: number; missing: number; skipped: number };
   docs?: WikiMaintainDocsReport;
@@ -918,16 +919,24 @@ class WikiMaintainRun {
    * that no longer matched was refused and failed the run. Every check the report carries also names
    * its anchor (type, path, symbol, sha), and `recordAnchorChecks` writes it only on that anchor.
    *
-   * AN ENTRY ALREADY CHECKED AT THIS COMMIT IS NOT CHECKED AGAIN (2026-10-10, `anchorRules.verify.skip`).
-   * A check's answer depends on the anchor and the commit alone, so an entry every one of whose anchors was
-   * last checked on exactly this snapshot commit — what the list leaves the run (`anchorsDueAt`) — owes
-   * nothing: it is not sent to the runner, not written, and counted in `skipped` alone. A run that replays
-   * after a REPO_OP_WAIT, or one on a space whose main has not moved, re-checks nothing rather than the
-   * whole space's anchors. One anchor last checked elsewhere, or never, re-checks the entry whole, as
-   * always. What the counts mean is the contract's (`maintenance.job.server.anchors`).
+   * AN ENTRY WHOSE CHECKS STILL HOLD IS NOT CHECKED AGAIN (2026-10-10, `anchorRules.verify.skip`). A check's
+   * answer depends on the anchor and what the commit holds of it, so an entry every one of whose anchors was
+   * last checked on exactly this snapshot commit, or found verified on a commit since which nothing its answer
+   * depends on has moved — the path's place in the tree, the symbol's file, the commit's ancestry, read from a
+   * diff to this commit and from the commits the snapshot reaches (`anchorProof`) — owes nothing: what the list
+   * leaves the run (`anchorsDueAt`) is not sent to the runner, not written, and counted in `skipped` alone. A
+   * round on a main that moved by a day re-checks the entries whose files moved, not the whole space's ~7,800.
+   * One anchor that does not hold re-checks the entry whole, as always, and moves its checks onto this commit;
+   * a skipped one keeps its checks where they were. What the counts mean is the contract's
+   * (`maintenance.job.server.anchors`).
+   *
+   * The entries that still owe a check go out together, whichever page they were read on, `listEntriesMax` of
+   * them an operation at most: once most of a page is left alone, its few would otherwise each cost an
+   * operation's wait — ~39 a round for a handful of entries each.
    */
   private async anchors(): Promise<void> {
     const { job } = this.jobContext;
+    const proof = await this.anchorProof();
     let after: string | null = null;
     let entries = 0;
     let changed = 0;
@@ -935,15 +944,16 @@ class WikiMaintainRun {
     let skipped = 0;
     let refused = 0;
     let failed = 0;
+    const pending: WikiAnchorDueEntry[] = [];
     for (;;) {
       const page = await listWikiAnchorsForJob(this.deps.prisma, {
-        ownerId: job.ownerId, spaceId: job.spaceId, after, limit: WIKI_ANCHOR_RULES.listEntriesMax, checkedAt: this.snapshot?.sha ?? '',
+        ownerId: job.ownerId, spaceId: job.spaceId, after, limit: WIKI_ANCHOR_RULES.listEntriesMax, proof,
       });
-      if (page.entries.length === 0) break;
       after = page.next;
       skipped += page.entries.filter((entry) => entry.anchors.length === 0).length;
-      const wanted = page.entries.filter((entry) => entry.anchors.length > 0);
-      if (wanted.length > 0) {
+      pending.push(...page.entries.filter((entry) => entry.anchors.length > 0));
+      while (pending.length >= WIKI_ANCHOR_RULES.listEntriesMax || (after === null && pending.length > 0)) {
+        const wanted = pending.splice(0, WIKI_ANCHOR_RULES.listEntriesMax);
         // One flat list for the operation: the runner echoes each check's place in this list, so
         // `slots` — not the per-entry index the checks are recorded under — is what maps a check home.
         const slots: Array<{ entry: number; anchor: number }> = [];
@@ -1027,7 +1037,38 @@ class WikiMaintainRun {
       throw new WikiJobContentError(`git could not check ${failed} anchor(s), and the server refused ${refused} entr(ies)`);
     }
     this.jobContext.log(`re-checked the anchors of ${entries} entr(ies): ${changed} changed, ${missing} missing; `
-      + `left ${skipped} entr(ies) alone: every anchor of theirs was already checked at this commit`);
+      + `left ${skipped} entr(ies) alone: every anchor of theirs still held at this commit`);
+  }
+
+  /**
+   * What lets the anchors step leave a check standing (`anchorRules.verify.skip`): the snapshot's commit, the commits
+   * it reaches, and the names of one diff to it from each commit the space's anchors were last checked at — the
+   * commits most anchors were checked at first, `anchorDiffsMax` of them at most, each asked once the one before it
+   * has settled. A commit the snapshot does not reach gets none, and neither does one past the cap: their entries are
+   * checked again, which moves their checks onto this commit. A diff the runner could not make vouches for nothing.
+   */
+  private async anchorProof(): Promise<WikiAnchorProof> {
+    const { job } = this.jobContext;
+    const head = this.snapshot?.sha ?? '';
+    const reaches = new Set((this.snapshot?.index.commits ?? []).map((commit) => commit.toLowerCase()));
+    const refs = (await anchorCheckRefs(this.deps.prisma, { ownerId: job.ownerId, spaceId: job.spaceId, sha: head }))
+      .filter((row) => reaches.has(row.ref));
+    const changed = new Map<string, WikiAnchorDiffNames>();
+    for (const { ref } of refs.slice(0, WIKI_MAINTAIN_JOB.anchorDiffsMax)) {
+      const what = `the diff ${ref.slice(0, 12)}..${head.slice(0, 12)}`;
+      const settled = await this.operation('diff', { from: ref, to: head }, what);
+      if (settled.state !== 'succeeded') {
+        this.jobContext.log(`${what} ${settled.state}: the anchors last checked at ${ref.slice(0, 12)} are checked again`);
+        continue;
+      }
+      changed.set(ref, anchorDiffNames(diffAnswerOf(settled).files));
+    }
+    const left = refs.slice(WIKI_MAINTAIN_JOB.anchorDiffsMax);
+    this.jobContext.log(`anchors were last checked at ${refs.length} other commit(s) the snapshot reaches: ${changed.size} diffed`
+      + (left.length > 0
+        ? `, and the ${left.reduce((total, row) => total + row.anchors, 0)} anchor(s) checked at the other ${left.length} are checked again`
+        : ''));
+    return { sha: head, reaches, changed };
   }
 
   // ── The documents ─────────────────────────────────────────────────────────────────────────────
@@ -1152,7 +1193,7 @@ class WikiMaintainRun {
     const designs = await this.newDesignDocs(affected.plan.repoSha ?? '', head, cited);
     report.unplaced = { designDocs: designs.length, entries: affected.unplaced.length + affected.unplacedMore };
     if (designs.length > 0 || affected.unplaced.length > 0) {
-      report.proposal = await this.proposePlanChange(designs, affected.unplaced, head);
+      report.proposal = await this.proposePlanChange(designs, affected.unplaced, head, affected.topics);
     }
     if (writeError) throw writeError;
   }
@@ -1318,6 +1359,15 @@ class WikiMaintainRun {
    * files are read at the same commits and the sections compared in the same order, so `changed` and `gone` are
    * what they were. The diffs stay one a commit — none at the head, none for a commit the snapshot does not
    * reach — and each operation is still asked once the one before it has settled.
+   *
+   * A RENAME IS TAKEN BY ITS OLD PATH, AND A DELETED FILE IS READ AT ITS COMMIT (2026-10-10), as the runner's
+   * comparison takes them (`wikiGitChanges`, and `newWikiDocRepo` at the commit itself): the names are keyed by the
+   * path at the section's commit (`gitChangesOf`), so either end of a rename touches a section that names it and the
+   * old one is withdrawn, `to` where it went; and the commit's files have what the range deleted or renamed away
+   * (`baseTreeOf`), so a cited file that is gone is read there and its going changes the section's material. The
+   * server used to match a rename by its new path and withdraw that, `to` the old one — a section citing only the old
+   * path was not touched, and no sentence citing it was taken back — and read a deleted file at neither commit, so
+   * its going changed nothing.
    */
   private async repoAffected(
     planVersion: Awaited<ReturnType<PlansVersion>>,
@@ -1360,15 +1410,16 @@ class WikiMaintainRun {
       }
       const diff = await this.diffOf(sha, head);
       if (diff.files.length === 0) continue;
+      const changes = gitChangesOf(diff.files);
       const touched: WikiMaintainComparedSection[] = [];
       for (const pending of sections) {
         let touches = false;
-        for (const file of diff.files) {
-          if (!pathNamed(file.path, pending.paths)) continue;
+        for (const [path, change] of changes) {
+          if (!pathNamed(path, pending.paths)) continue;
           touches = true;
-          if ((file.status.startsWith('D') || file.status.startsWith('R')) && !goneSeen.has(file.path)) {
-            goneSeen.add(file.path);
-            gone.push(file.status.startsWith('R') ? { path: file.path, change: 'renamed', to: file.from ?? '' } : { path: file.path, change: 'deleted' });
+          if ((change.status === 'D' || change.status === 'R') && !goneSeen.has(path)) {
+            goneSeen.add(path);
+            gone.push(change.status === 'R' ? { path, change: 'renamed', to: change.to } : { path, change: 'deleted' });
           }
         }
         if (touches) touched.push(pending);
@@ -1396,7 +1447,8 @@ class WikiMaintainRun {
         if (!samePieces(before.pieces, after.pieces)) changed.push({ doc: pending.doc, key: pending.key });
       }
     }
-    gone.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+    // By the paths' bytes, as the runner's `sort.Slice` compares Go strings.
+    gone.sort((a, b) => Buffer.compare(Buffer.from(a.path), Buffer.from(b.path)));
     return { changed, gone };
   }
 
@@ -1406,11 +1458,7 @@ class WikiMaintainRun {
     if (settled.state !== 'succeeded') {
       throw new WikiJobInfraError(`REPO_OP_FAILED: the diff ${from.slice(0, 12)}..${to.slice(0, 12)} ${settled.state}: ${settled.error ?? ''}`);
     }
-    const answer = (settled.result?.diff ?? {}) as { files?: Array<{ status?: string; path?: string; from?: string }>; docs?: string[] };
-    return {
-      files: (answer.files ?? []).map((file) => ({ status: String(file.status ?? ''), path: String(file.path ?? ''), from: file.from ?? null })),
-      docs: answer.docs ?? [],
-    };
+    return diffAnswerOf(settled);
   }
 
   /**
@@ -1456,7 +1504,12 @@ class WikiMaintainRun {
   }
 
   /** The run's one plan proposal: the model says where the knowledge belongs, the run checks it, the gate decides. */
-  private async proposePlanChange(designs: readonly WikiNewDesignDoc[], entries: readonly WikiUnplacedEntry[], head: string): Promise<NonNullable<WikiMaintainDocsReport['proposal']>> {
+  private async proposePlanChange(
+    designs: readonly WikiNewDesignDoc[],
+    entries: readonly WikiUnplacedEntry[],
+    head: string,
+    topics: readonly WikiPlanTopic[],
+  ): Promise<NonNullable<WikiMaintainDocsReport['proposal']>> {
     const out: NonNullable<WikiMaintainDocsReport['proposal']> = { outcome: 'failed' };
     if (this.plan === null) {
       out.error = 'no confirmed plan';
@@ -1495,7 +1548,7 @@ class WikiMaintainRun {
         out.error = cutRunes((error as Error).message, 400);
         return out;
       }
-      const { request, problems: check } = assembleWikiMaintainProposal(this.plan, answer, items, repo);
+      const { request, problems: check } = assembleWikiMaintainProposal(this.plan, answer, items, repo, topics);
       if (check.length > 0) {
         problems = check;
         this.jobContext.log(`  proposal round ${round}: ${check.length} problem(s) found here: ${cutRunes(check.join('; '), 300)}`);
@@ -1564,6 +1617,15 @@ function sectionPaths(section: { sources?: { docs?: Array<{ path: string }> | nu
   return out;
 }
 
+/** A settled `diff` operation's answer: what `git diff --name-status -M` named, and the documents it added or renamed into place. */
+function diffAnswerOf(settled: WikiRepoOpWait): { files: Array<{ status: string; path: string; from: string | null }>; docs: string[] } {
+  const answer = (settled.result?.diff ?? {}) as { files?: Array<{ status?: string; path?: string; from?: string }>; docs?: string[] };
+  return {
+    files: (answer.files ?? []).map((file) => ({ status: String(file.status ?? ''), path: String(file.path ?? ''), from: file.from ?? null })),
+    docs: answer.docs ?? [],
+  };
+}
+
 /** Whether a changed path is one the section names: the file itself, or a file under a directory it names. */
 function pathNamed(changed: string, named: readonly string[]): boolean {
   for (const path of named) {
@@ -1574,9 +1636,32 @@ function pathNamed(changed: string, named: readonly string[]): boolean {
 }
 
 /**
+ * A diff's names keyed by the path at the commit it starts from, as the runner's `wikiGitChanges` keys `git diff
+ * --name-status -M`: a rename under its old path (R, `to` its new one) and its new path once more, as added (A); a
+ * copy's new path as added; any other change under its path, by its status's first letter.
+ */
+function gitChangesOf(files: ReadonlyArray<{ status: string; path: string; from: string | null }>): Map<string, { status: string; to: string }> {
+  const changes = new Map<string, { status: string; to: string }>();
+  for (const file of files) {
+    const status = file.status.slice(0, 1);
+    if (status === '' || file.path === '') continue;
+    if (status === 'R' && file.from) {
+      changes.set(file.from, { status: 'R', to: file.path });
+      changes.set(file.path, { status: 'A', to: '' });
+    } else if (status === 'C' && file.from) {
+      changes.set(file.path, { status: 'A', to: '' });
+    } else {
+      changes.set(file.path, { status, to: '' });
+    }
+  }
+  return changes;
+}
+
+/**
  * The base commit's file list, as the diff names it: the head's, less what the range added or renamed into
- * place, plus what it deleted or renamed away. The files whose sizes the head does not carry are marked with
- * one byte, which is what lets a read of them answer at all (their content is still whatever git holds).
+ * place, plus what it deleted or renamed away — the files the runner reads at the commit itself, so a deleted
+ * one is read there too. The files whose sizes the head does not carry are marked with one byte, which is what
+ * lets a read of them answer at all (their content is still whatever git holds).
  */
 function baseTreeOf(
   headFiles: readonly string[],
@@ -1586,7 +1671,7 @@ function baseTreeOf(
   const gone = new Set<string>();
   const back = new Set<string>();
   for (const file of files) {
-    if (file.status.startsWith('D')) gone.add(file.path);
+    if (file.status.startsWith('D')) back.add(file.path);
     else if (file.status.startsWith('R')) {
       gone.add(file.path);
       if (file.from) back.add(file.from);

@@ -33,7 +33,12 @@ import io.orbitd.android.core.cards.*
 import io.orbitd.android.core.net.ApiError
 import io.orbitd.android.core.net.ApiRequest
 import io.orbitd.android.directory.orderedWorkspaceRows
+import io.orbitd.android.composer.ComposerCatalog
+import io.orbitd.android.composer.CredentialKind
+import io.orbitd.android.composer.EngineCopy
+import io.orbitd.android.composer.ProviderEngines
 import io.orbitd.android.management.LocalSmartSelection
+import io.orbitd.android.management.RunnerPage
 import io.orbitd.android.navigation.*
 import io.orbitd.android.projects.TaskDependencyGraphView
 import io.orbitd.android.taskprojects.*
@@ -124,7 +129,11 @@ internal fun TaskDetail(app: OrbitApplication, handle: SessionHandle, id: String
                 val share = async { runCatching { api.share(id) }.getOrNull() }
                 val runnerId = workspaces.firstOrNull { ObjectId.same(it.text("id"), task.obj("assignee")?.text("id")) }?.text("runnerId")
                 val runner = async { runnerId?.let { runCatching { api.read(listOf("runners", it)) as? JsonObject }.getOrNull() } }
-                val providers = async { runCatching { (api.read(listOf("providers")) as? JsonArray).orEmpty().filterIsInstance<JsonObject>() }.getOrNull() }
+                // The keys with the engines each runs on, and the account pools read as providers: what a pin can name.
+                fun rows(vararg path: String) = async { runCatching { (api.read(path.toList()) as? JsonArray).orEmpty().filterIsInstance<JsonObject>() }.getOrNull() }
+                val providers = rows("providers")
+                val pools = rows("providers", "pools")
+                val sharedPools = rows("providers", "shared-pools")
                 data.owner = owner.await()
                 attribution.await().onSuccess { data.attribution = it; data.attributionFailed = false }.onFailure { if (data.attribution == null) data.attributionFailed = true }
                 graph.await()?.let { data.graph = it }
@@ -132,7 +141,10 @@ internal fun TaskDetail(app: OrbitApplication, handle: SessionHandle, id: String
                 lists.await()?.let { data.lists = it }
                 share.await()?.let { data.share = it }
                 runner.await()?.let { data.runner = it }
-                providers.await()?.let { data.providers = it }
+                providers.await()?.let { keys ->
+                    data.providers = (keys + pools.await().orEmpty().map { ProviderEngines.poolRow(it, ProviderEngines.CLAUDE) } +
+                        sharedPools.await().orEmpty().map { ProviderEngines.poolRow(it, ProviderEngines.CODEX) }).distinctBy { it.text("slug") }
+                }
             }
         } catch (cancel: CancellationException) { throw cancel }
         catch (failure: Exception) {
@@ -180,6 +192,9 @@ internal fun TaskDetail(app: OrbitApplication, handle: SessionHandle, id: String
     fun revisionOf(task: JsonObject) = "${task.text("id")}:${task.text("updatedAt")}"
     fun patch(fields: JsonObject, saved: String? = null, fromSheet: String? = null, done: () -> Unit = {}) { val task = data.task ?: return
         mutate(fromSheet, done) { api.update(id, fields, revisionOf(task) + ":" + fields); saved?.let { data.notice = it } } }
+    /** The engine and credential this task's runs use (board 6), as TaskApi.pin writes them. */
+    fun pin(change: TaskPin) { val task = data.task ?: return
+        mutate { api.pin(id, change, revisionOf(task) + ":" + change.request()) } }
     fun closeSheet() { sheet = null; data.sheetError = null }
 
     val task = data.task
@@ -277,7 +292,7 @@ internal fun TaskDetail(app: OrbitApplication, handle: SessionHandle, id: String
                     OutlinedButton(onClick = { verifier.text("id")?.let { open(OrbitRoute(Destination.TASK, it)) } }) { Text(TaskJudgmentCopy.verifierCardEntry) }
                 }
             }
-            item(key = "details") { DetailsSection(task, data, workspaces, assigneeWorkspace, enabled, open, edit = { sheet = it }) { fields -> patch(fields) } }
+            item(key = "details") { DetailsSection(task, data, workspaces, assigneeWorkspace, enabled, open, edit = { sheet = it }, pin = { pin(it) }) { fields -> patch(fields) } }
             item(key = "dependencies") {
                 TaskSectionHeader(TaskDetailCopy.dependenciesHeading)
                 Column(Modifier.testTag("task-dependencies-section"), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -494,7 +509,7 @@ private fun ActionRow(row: TaskActionRow, canStart: Boolean, enabled: Boolean, t
 
 @Composable
 private fun DetailsSection(task: JsonObject, data: TaskDetailData, workspaces: List<JsonObject>, assignee: JsonObject?, enabled: Boolean,
-    open: (OrbitRoute) -> Unit, edit: (String) -> Unit, patch: (JsonObject) -> Unit) {
+    open: (OrbitRoute) -> Unit, edit: (String) -> Unit, pin: (TaskPin) -> Unit, patch: (JsonObject) -> Unit) {
     TaskSectionHeader(TaskDetailCopy.detailsHeading)
     Column(Modifier.testTag("task-details"), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         val currentAssignee = task.obj("assignee")
@@ -508,17 +523,54 @@ private fun DetailsSection(task: JsonObject, data: TaskDetailData, workspaces: L
         val picks = TaskDetailLogic.modelHintPicks(task.objects("modelHintOptions"))
         if (smartSelection) PickerRow(TaskDetailCopy.suggestedLabel, picks.firstOrNull { it.value == task.text("modelHint") }?.label ?: task.text("modelHint") ?: TaskDetailCopy.noSuggestion,
             enabled, picks.map { it.value to it.label }, details = picks.associate { it.value to it.detail }, tag = "task-suggested") { patch(TaskDetailLogic.modelHintRequest(it)) }
-        val catalog = data.runner?.let { io.orbitd.android.composer.ComposerCatalog(it, data.providers) }
-        val inherited = assignee?.text("provider") ?: assignee?.text("lastProvider")
-        val providerOptions = catalog?.options(task.text("provider") ?: inherited ?: "claude", newSession = true).orEmpty()
-        PickerRow(TaskDetailCopy.providerLabel, task.text("provider")?.let { p -> providerOptions.firstOrNull { it.id == p }?.label ?: p } ?: inherited?.let { "Assignee's ($it)" } ?: "Assignee's",
-            enabled, listOf<Pair<String?, String>>(null to (inherited?.let { "Assignee's ($it)" } ?: "Assignee's")) + providerOptions.map { it.id to it.label } +
-                listOfNotNull(task.text("provider")?.takeIf { p -> providerOptions.none { it.id == p } }?.let { it to it }), tag = "task-provider") {
-            // A model id means something only inside one provider: changing the provider clears it.
-            patch(buildJsonObject { put("provider", it?.let(::JsonPrimitive) ?: JsonNull); put("model", JsonNull) })
+        // The run pins (board 6): first the engine — unpinned it follows what the assignee's project last ran — then a credential
+        // that engine runs, then a model of the pair (docs/provider-engine-contract.md §1.2).
+        val catalog = data.runner?.let { ComposerCatalog(it, data.providers) }
+        val assigneeProvider = assignee?.text("lastProvider") ?: assignee?.text("provider") ?: ProviderEngines.CLAUDE
+        val assigneeEngine = ProviderEngines.sessionEngine(assignee?.text("lastEngine"), assigneeProvider, data.providers)
+        val pinnedProvider = task.text("provider")
+        val pinnedEngine = task.text("engine")?.takeIf(ProviderEngines::isEngine)
+        // A credential pinned alone, by an older client, runs on its default engine.
+        val runEngine = pinnedEngine ?: pinnedProvider?.let { ProviderEngines.defaultEngineOf(it, data.providers) } ?: assigneeEngine
+        PickerRow(EngineCopy.ENGINE, if (pinnedEngine == null && pinnedProvider == null) "${EngineCopy.ASSIGNEES} · ${ProviderEngines.cliName(assigneeEngine)}"
+            else ProviderEngines.cliName(runEngine), enabled,
+            listOf<Pair<String?, String>>(null to EngineCopy.ASSIGNEES) + ProviderEngines.ALL_ENGINES.map { it to ProviderEngines.cliName(it) },
+            details = mapOf(null to ProviderEngines.cliName(assigneeEngine)), tag = "task-engine") { engine ->
+            TaskPins.engine(engine, pinnedEngine, pinnedProvider, ProviderEngines.providerEngines(pinnedProvider, data.providers))?.let(pin)
         }
-        val effective = task.text("provider") ?: inherited ?: "claude"
-        val models = catalog?.models(effective).orEmpty()
+        // Past the engine's default credential — its own sign-in on the runner, OpenCode's own configuration, DeepSeek Harness's first
+        // DeepSeek key, which "Engine default" stands for — the account pools and the keys the engine runs. A pinned credential it no
+        // longer lists stays on top, so the row still says what is pinned.
+        val credentials = catalog?.credentials(runEngine).orEmpty().filter { it.kind == CredentialKind.POOL || it.kind == CredentialKind.KEY }
+        val firstDeepSeekKey = catalog?.credentials(ProviderEngines.DSH)?.firstOrNull { it.kind == CredentialKind.KEY }
+        val runnerName = data.runner?.let(RunnerPage::displayName)
+        val engineDefault = when (runEngine) {
+            ProviderEngines.DSH -> firstDeepSeekKey?.label ?: EngineCopy.FIRST_DEEPSEEK_KEY
+            ProviderEngines.OPENCODE -> EngineCopy.OPENCODE_OWN
+            else -> runnerName?.let(EngineCopy::signInOn) ?: EngineCopy.RUNNER_SIGN_IN
+        }
+        fun pinLabel(slug: String) = credentials.firstOrNull { it.id == slug }?.label ?: when {
+            slug in ProviderEngines.LOGIN_ENGINES -> (runnerName?.let(EngineCopy::signInOn) ?: EngineCopy.RUNNER_SIGN_IN).replaceFirstChar { it.uppercase() }
+            slug == ProviderEngines.OPENCODE -> EngineCopy.OPENCODE_OWN
+            else -> data.providers.firstOrNull { it.text("slug") == slug }?.text("label") ?: slug
+        }
+        val offList = pinnedProvider?.takeIf { slug -> credentials.none { it.id == slug } }
+        val pools = credentials.filter { it.kind == CredentialKind.POOL }
+        val keys = credentials.filter { it.kind == CredentialKind.KEY }
+        PickerRow(TaskDetailCopy.providerLabel, pinnedProvider?.let(::pinLabel) ?: "${EngineCopy.ENGINE_DEFAULT} · $engineDefault", enabled,
+            listOf<Pair<String?, String>>(null to EngineCopy.ENGINE_DEFAULT) + listOfNotNull(offList?.let { it to pinLabel(it) }) +
+                (pools + keys).map { it.id to it.label },
+            details = mapOf<String?, String>(null to when (runEngine) {
+                ProviderEngines.DSH -> EngineCopy.FIRST_DEEPSEEK_KEY; ProviderEngines.OPENCODE -> EngineCopy.OWN_SIGN_IN; else -> EngineCopy.RUNNER_SIGN_IN
+            }) + credentials.mapNotNull { option -> option.unavailable?.let { option.id to it } },
+            headers = listOfNotNull(pools.firstOrNull()?.let { it.id to EngineCopy.ACCOUNT_POOLS },
+                keys.firstOrNull()?.let { it.id to if (runEngine == ProviderEngines.DSH) EngineCopy.YOUR_DEEPSEEK_KEYS else EngineCopy.YOUR_KEYS }).toMap(),
+            tag = "task-provider") { slug -> TaskPins.provider(slug, pinnedProvider, runEngine)?.let(pin) }
+        // The credential whose model space the Model row lists: the task's own pin, the engine's default credential under an engine
+        // pinned alone, else the assignee's.
+        val runProvider = pinnedProvider ?: pinnedEngine?.let { engine -> if (engine == ProviderEngines.DSH) firstDeepSeekKey?.id ?: engine else engine }
+            ?: assigneeProvider
+        val models = catalog?.models(runEngine, runProvider).orEmpty()
         val unpinned = if (smartSelection && assignee?.flag("modelRouting") == true) TaskDetailCopy.smartSelectionPlaceholder else "Provider default"
         PickerRow(TaskDetailCopy.modelLabel, task.text("model")?.let { m -> models.firstOrNull { it.text("value") == m }?.text("label") ?: m } ?: unpinned, enabled,
             listOf<Pair<String?, String>>(null to unpinned) + models.map { it.text("value") to (it.text("label") ?: it.text("value").orEmpty()) } +
@@ -542,12 +594,16 @@ private fun DetailsSection(task: JsonObject, data: TaskDetailData, workspaces: L
 /** A form row: the label, the value in grey with its chooser mark, and a menu of choices. */
 @Composable
 private fun PickerRow(label: String, value: String, enabled: Boolean, options: List<Pair<String?, String>>, details: Map<String?, String> = emptyMap(),
-    tag: String, choose: (String?) -> Unit) {
+    headers: Map<String?, String> = emptyMap(), tag: String, choose: (String?) -> Unit) {
     var open by remember { mutableStateOf(false) }
     Box {
         DetailRow(label, value, "⇕", enabled, tag) { open = true }
         DropdownMenu(open, { open = false }) {
-            options.distinctBy { it.first }.forEach { (option, title) -> DropdownMenuItem(text = { Column {
+            options.distinctBy { it.first }.forEach { (option, title) ->
+                // A group's name over its first row (board 6 ②: Account pools, Your keys), never a choice itself.
+                headers[option]?.let { Text(it, Modifier.padding(horizontal = 12.dp, vertical = 6.dp), style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                DropdownMenuItem(text = { Column {
                 Text(title); details[option]?.takeIf { it.isNotEmpty() }?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
             } }, onClick = { open = false; choose(option) }) }
         }

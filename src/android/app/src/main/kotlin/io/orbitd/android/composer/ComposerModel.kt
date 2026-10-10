@@ -66,8 +66,8 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
     fun clearError() { mutable.update { it.copy(error = null) } }
     /** Why the box won't do what was asked of it, said as an error: there until dismissed. */
     fun refuse(message: String) { mutable.update { it.copy(error = message) } }
-    /** Whether [effective] — a session's detail, or a draft's workspace, under the picks held for it — runs on DeepSeek Harness: the
-     * server's `engine`, else the CLI its provider borrows, which only the account's keys can say. */
+    /** Whether [effective] — a session's detail, or a draft's workspace, under the picks held for it — runs on DeepSeek Harness: its
+     * engine ([ProviderChoices.engine]), which for a key or a pool on a server that records none only the account's keys can say. */
     private suspend fun executesDsh(effective: JsonObject): Boolean {
         val keys = if (!ProviderChoices.engineFromKeys(effective)) emptyList()
             else runCatching { api.read(listOf("providers")).jsonArray.filterIsInstance<JsonObject>() }.getOrDefault(emptyList())
@@ -252,12 +252,10 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
         pending.attachments.forEach { auth.writeData(handle, DataKind.DRAFT, "$key:attachment:${it.id}", ByteArray(0)) }
         refresh()
     }
-    /** What a Retry re-sends with (RetryIdentityDto, iOS 163e67872): the provider picked here for the next turn, and its account —
-     * so the re-send runs there, as a send would. Nothing picked, the body is empty and the re-send goes where the session is. */
-    fun retryIdentity(): JsonObject = buildJsonObject {
-        val config = state.value.draft.resumeConfig
-        config.text("provider")?.let { provider -> put("provider", provider); config.text("account")?.let { put("account", it) } }
-    }
+    /** What a Retry re-sends with (RetryIdentityDto, iOS 163e67872): the provider picked here for the next turn, with its engine and
+     * its account — so the re-send runs there, as a send would. Nothing picked, the body is empty and the re-send goes where the
+     * session is. */
+    fun retryIdentity(): JsonObject = retryIdentityOf(state.value.draft.resumeConfig)
     /** The failed message again, through the retry door: the server re-sends it under a key of its own, so a second press is the
      * turn already queued. */
     fun retryFailed() = control("retry-message", body = retryIdentity())
@@ -282,12 +280,21 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
             finally { mutable.update { it.copy(catalogLoading = false) } }
         }
     }
-    fun config(values: JsonObject, accountOnly: Boolean = false) {
+    /** A provider is never written without its engine (docs/provider-engine-contract.md §3.5, §6.1): the session's own, which a
+     * switch never changes, or — for a draft — the engine the provider was picked under, else the provider's default. */
+    private fun withEngine(values: JsonObject, detail: JsonObject): JsonObject {
+        val provider = values.text("provider") ?: return values
+        if (values["engine"] != null) return values
+        val engine = (if (target == null) detail.text("engine") else null) ?: state.value.catalog?.providerEngines(provider)?.firstOrNull() ?: return values
+        return JsonObject(values + ("engine" to JsonPrimitive(engine)))
+    }
+    fun config(requested: JsonObject, accountOnly: Boolean = false) {
         if (state.value.busy || state.value.waiting || state.value.draft.pending != null || state.value.draft.createdSessionId != null) return
         mutable.update { it.copy(busy = true, error = null) }
         launch {
             try {
                 val detail = api.detail()
+                val values = withEngine(requested, detail)
                 if (target != null || terminal(detail) && !accountOnly) {
                     mutable.update {
                         val config = it.draft.resumeConfig

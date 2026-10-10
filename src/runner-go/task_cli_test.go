@@ -142,6 +142,7 @@ func TestCapabilitiesJSONUsesMCPDescriptorsAndExposesOnlyPhase1(t *testing.T) {
 
 // The reported actor must track the write path exactly, in both directions.
 func TestCLICapabilityActorMatchesTheWritePath(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
 	t.Setenv("ORBIT_SESSION_ID", "session-1")
 	t.Setenv("ORBIT_AGENT_ID", "agent-1")
 	if got := cliCapabilityActor(); got != "agent" {
@@ -447,6 +448,7 @@ func TestTaskCLIUpdateReplacesOrClearsDependencies(t *testing.T) {
 }
 
 func TestTaskCLIUpdateDependencyFlagsAreExplicitAndExclusive(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
 	for _, tc := range []struct {
 		args []string
 		want string
@@ -463,6 +465,7 @@ func TestTaskCLIUpdateDependencyFlagsAreExplicitAndExclusive(t *testing.T) {
 }
 
 func TestTaskCLIUpdateCapabilityAdvertisesDependencyReplacement(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
 	doc := buildCLICapabilities(orbitCLIExecutable())
 	for _, capability := range doc.Capabilities {
 		if capability.ID != "task_update" {
@@ -544,6 +547,7 @@ func TestTaskCLIUsesCurrentTaskFallback(t *testing.T) {
 }
 
 func TestTaskCLIRejectsArbitraryDescriptionAndBodyFiles(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
 	for _, args := range [][]string{
 		{"create", "--title", "x", "--description-file", "/etc/passwd"},
 		{"comment", "task-1", "--body-file", "/etc/passwd"},
@@ -638,6 +642,7 @@ func TestTaskCLIListSendsFiltersToServer(t *testing.T) {
 }
 
 func TestTaskCLIListRejectsLimitOverCap(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
 	var out bytes.Buffer
 	err := cmdTaskCLI([]string{"list", "--limit", strconv.Itoa(maxTaskListLimit + 1)}, strings.NewReader(""), &out)
 	if err == nil || !strings.Contains(err.Error(), "--limit must be between") {
@@ -690,6 +695,7 @@ func TestTaskListCLIDelete(t *testing.T) {
 }
 
 func TestTaskCLIRejectsUnknownFlags(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
 	var out bytes.Buffer
 	err := cmdTaskCLI([]string{"list", "--not-a-real-flag"}, strings.NewReader(""), &out)
 	if err == nil || !strings.Contains(err.Error(), "flag provided but not defined") {
@@ -698,6 +704,7 @@ func TestTaskCLIRejectsUnknownFlags(t *testing.T) {
 }
 
 func TestTaskCLIRejectsPathLikeTaskIDs(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
 	for _, id := range []string{"../sessions", `..\\sessions`, "..%2Fsessions", "a/b", ".", ".."} {
 		var out bytes.Buffer
 		err := cmdTaskCLI([]string{"get", id, "--json"}, strings.NewReader(""), &out)
@@ -962,6 +969,7 @@ func TestTaskCLIVerifiesTaskIDTravelsVerbatimAndClears(t *testing.T) {
 // A flag that is set to nothing is a typo or an unset shell variable, and detaching has its own
 // spelling — the same rule --parent-task-id and --clear-parent already carry.
 func TestTaskCLIVerifiesFlagsAreExplicitAndExclusive(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
 	for _, tc := range []struct {
 		args []string
 		want string

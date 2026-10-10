@@ -170,6 +170,7 @@ func TestTaskEvidenceCLIAndMCPUseTheSameWireStructure(t *testing.T) {
 }
 
 func TestTaskEvidenceSubmitRequiresStructuredEvidenceAndSourceSession(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
 	t.Setenv("ORBIT_TASK_ID", "task-1")
 	t.Setenv("ORBIT_SESSION_ID", "")
 	var out bytes.Buffer
@@ -248,6 +249,7 @@ func TestTaskEvidenceDecideCLIAndMCPUseTheSameWireStructure(t *testing.T) {
 
 // The three refusals a decider can be given before anything leaves the machine.
 func TestTaskEvidenceDecideRefusesLocallyWithoutDecisionRevisionOrSession(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
 	t.Setenv("ORBIT_TASK_ID", "task-1")
 	t.Setenv("ORBIT_SESSION_ID", "session-2")
 	var out bytes.Buffer

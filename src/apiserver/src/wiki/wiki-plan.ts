@@ -45,6 +45,7 @@ import {
   type WikiPlanSectionKind,
   type WikiPlanState,
   type WikiPlanStatus,
+  type WikiPlanTopic,
   type WikiPlanVersion,
   type WikiPlanVersionSummary,
 } from '@orbit/shared';
@@ -52,6 +53,7 @@ import { redactSecrets } from '../common/secret-redaction';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
+import { wikiPlanTopicsBrief } from '../wiki-worker/wiki-plan-materials';
 import { currentWikiExecutorSwitch, wikiExecutorServes } from './wiki-executor-switch';
 import { isWikiMaintenanceSession } from './wiki-maintenance-settings';
 import {
@@ -901,6 +903,29 @@ export async function requireConfirmedPlan(
   return { id: confirmed.id, version: confirmed.version, confirmedAt: confirmed.confirmedAt };
 }
 
+/**
+ * The space's topics, oldest first, each with its active entries (contract `plan.gate.references`): what the gate
+ * takes a session condition's topic from, and lists back with one that is none of them, written as the drafting
+ * job's materials list them (`wikiPlanTopicsBrief`). A maintenance run reads the same (`docs.reads.affected`), and
+ * checks its proposal against it before the gate does.
+ */
+export async function wikiPlanTopics(
+  db: Pick<Prisma.TransactionClient, 'wikiTopic' | '$queryRaw'>,
+  ownerId: string,
+  spaceId: string,
+): Promise<WikiPlanTopic[]> {
+  const [topics, active] = await Promise.all([
+    db.wikiTopic.findMany({ where: { ownerId, spaceId }, orderBy: [{ createdAt: 'asc' }, { slug: 'asc' }], select: { slug: true, title: true } }),
+    db.$queryRaw<Array<{ slug: string; n: number }>>`
+      SELECT tp AS "slug", count(*)::int AS "n"
+        FROM "wiki_entry" e, unnest(e."topics") tp
+       WHERE e."owner_id" = ${ownerId}::uuid AND e."space_id" = ${spaceId}::uuid AND e."status" = 'active'
+       GROUP BY 1`,
+  ]);
+  const counts = new Map(active.map((row) => [row.slug, row.n]));
+  return topics.map((topic) => ({ slug: topic.slug, title: topic.title, active: counts.get(topic.slug) ?? 0 }));
+}
+
 // ── The service ─────────────────────────────────────────────────────────────────────────────────
 
 /** A version about to be written: everything but the number, which is taken under the lock. */
@@ -1249,8 +1274,13 @@ export class WikiPlans {
         ? []
         : (await this.prisma.wikiTopic.findMany({ where: { ownerId, spaceId, slug: { in: slugs } }, select: { slug: true } })).map((t) => t.slug),
     );
-    for (const named of walk.topics) {
-      if (!topics.has(named.value)) walk.fail('references', named.path, `${quoted(named.value)} is not a topic of this space`);
+    const unknown = walk.topics.filter((named) => !topics.has(named.value));
+    if (unknown.length > 0) {
+      // The space's topics go with each one refused, so the next round has them to name: told only that a topic was
+      // none (canary 54755b7b, 10-09; 3b2bd5f2, 10-10, a document's slug), a maintenance run's proposal failed its
+      // last rounds on topics it had made up.
+      const brief = wikiPlanTopicsBrief({ topics: await wikiPlanTopics(this.prisma, ownerId, spaceId) });
+      for (const named of unknown) walk.fail('references', named.path, `${quoted(named.value)} is not a topic of this space: ${brief}`);
     }
     for (const doc of plan.docs) {
       for (const section of doc.sections) {

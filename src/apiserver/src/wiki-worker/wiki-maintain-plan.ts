@@ -2,6 +2,7 @@ import {
   WIKI_MAINTAIN_JOB,
   WIKI_PLAN_SECTION_KINDS,
   WIKI_SLUG_PATTERN,
+  type WikiPlanTopic,
   type WikiPlanVersion,
 } from '@orbit/shared';
 import { PAST_THE_READ, wikiDocCleanPath, wikiDocCodePieces, wikiDocContract, wikiDocDocSection, type WikiDocRepo } from './wiki-docs-writer';
@@ -20,6 +21,7 @@ import {
   type WikiPlanSectionDraft,
 } from './wiki-plan-format';
 import { wikiQuote, wikiUnwrap } from './wiki-plan-gate';
+import { wikiPlanTopicsBrief } from './wiki-plan-materials';
 
 /**
  * The one change to the plan a maintenance run may propose (contracts/wiki.contract.json `plan.proposals`,
@@ -288,13 +290,15 @@ function goTrimLeft(value: string, cutset: string): string {
  * Turn the answer into the proposal the server gates: the document as it should read — the plan's own, with
  * the new sections after its last, or a new one — and the facts it came from. What is wrong with it that this
  * side can see — a missing line, a kind the plan does not have, a file, document section, symbol or contract
- * origin/main does not have — comes back as problems, for the model.
+ * origin/main does not have, a topic the space does not have (`topics`, the space's: docs.reads.affected) —
+ * comes back as problems, for the model.
  */
 export function assembleWikiMaintainProposal(
   plan: WikiMaintainPlanRead,
   answer: WikiMaintainProposalAnswer,
   items: readonly WikiMaintainProposalItem[],
   repo: WikiDocRepo,
+  topics: readonly WikiPlanTopic[],
 ): { request: WikiMaintainProposalRequest; problems: string[] } {
   const problems: string[] = [];
   if (goTrimSpace(answer.reason) === '') problems.push('「理由」一行缺了：写明新知识是什么、为什么放在这里');
@@ -317,7 +321,7 @@ export function assembleWikiMaintainProposal(
   if (answer.sections.length === 0) problems.push('没有要新增的节：至少写一节「### 1. <节标题> | <type> | <中文字数>」');
   const sections: WikiPlanSection[] = [];
   answer.sections.forEach((draft, i) => {
-    const made = wikiMaintainProposalSection(`第 ${i + 1} 节`, draft, repo);
+    const made = wikiMaintainProposalSection(`第 ${i + 1} 节`, draft, repo, topics);
     problems.push(...made.problems);
     sections.push(made.section);
   });
@@ -375,12 +379,13 @@ export function assembleWikiMaintainProposal(
 /**
  * One new section as the model wrote it, checked on origin/main as the runner checks it (`wikiProposalSection`): its
  * kind, its length, every file, document section, symbol and contract it names — read in the files at the commit —
- * its session condition, and its lines.
+ * its session condition, its topics among the space's, and its lines.
  */
 export function wikiMaintainProposalSection(
   at: string,
   draft: WikiPlanSectionDraft,
   read: WikiDocRepo,
+  topics: readonly WikiPlanTopic[],
 ): { section: WikiPlanSection; problems: string[] } {
   const repo = gitShows(read);
   const problems: string[] = [];
@@ -431,6 +436,13 @@ export function wikiMaintainProposalSection(
     for (const part of c.stray ?? []) {
       problems.push(`${at}: ${wikiQuote(cutRunes(part, 60))} is not a part of a session condition: it has projects, dates, keywords, `
         + 'anchors, kinds, topics and what to look for — drop it');
+    }
+    // The server's gate takes a topic only from the space's (plan.gate.references), and lists them with one it refuses:
+    // so is it here, and listed the same, so the round that refuses it can fix it. A document's slug passed here until
+    // 2026-10-10 and was refused at the gate in the run's last round (canary 3b2bd5f2, «wiki-maintenance»).
+    const known = new Set(topics.map((topic) => topic.slug));
+    for (const topic of section.sources.sessions.topics) {
+      if (!known.has(topic)) problems.push(`${at}: ${wikiQuote(topic)} is not a topic of this space: ${wikiPlanTopicsBrief({ topics })}`);
     }
   }
   const { docs, code, contracts, sessions } = section.sources;

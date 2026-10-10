@@ -32,8 +32,8 @@ import java.net.URL
 /**
  * A07c on A11's isolated Orbit stack (its apiserver, PostgreSQL and Go runner with the stand-in engine), seeded by
  * scripts/a11-stack/a07c-stack.mjs, which also speaks for the runner "a07c-engines" through the real runner API. Signed in through
- * the product's screen, the app reads what the real server says and presses what it offers: the Provider list over that runner's
- * engines, accounts and lapsed Antigravity sign-in, with a key OpenCode runs (A07-3/4/6/10/13); the auto-retry card over a weekly
+ * the product's screen, the app reads what the real server says and presses what it offers: the Engine list over that runner's
+ * engines and lapsed Antigravity sign-in, and each engine's Provider list, its accounts and a key OpenCode runs (A07-3/4/6/10/13); the auto-retry card over a weekly
  * limit the server armed itself, its switch and its Retry (baseline); a FAILED turn re-sent on the provider picked after it (A07-8);
  * a pool session naming the key it runs on (A07-7); a Codex reset credit spent through the server's relay until none is left
  * (baseline, A07-9); a Markdown and a text file opened in the app (A07-1). Every press is read back from the stack's API with the
@@ -159,15 +159,17 @@ class ComposerStackDeviceTest {
         finally { File(output, "$name-readback.txt").writeText(reads.joinToString("\n")); runBlocking { app.session.logout() } }
     }
 
-    /** A07-3, A07-10, A07-4, A07-6, A07-13 over what the server says of a07c-engines: its engines in iOS's order, each engine's
-     * accounts under it with Automatic first, Antigravity's lapsed Google sign-in as the reason on its row — which opens that
-     * runner's Antigravity page — and the configured key again under OpenCode. */
+    /** A07-3, A07-10, A07-4, A07-6, A07-13 on the provider/engine split, over what the server says of a07c-engines: a new session's
+     * Engine list names its engines in the boards' order, Antigravity CLI with its lapsed Google sign-in as the reason — which opens
+     * that runner's Antigravity page; under each engine the model menu lists only its credentials: its accounts with Automatic first,
+     * and the configured key under Claude Code and again under OpenCode. */
     @Test fun s1_aNewSessionListsTheRunnersEnginesTheirAccountsAndTheKeys() = journey("a07c-stack-menu") {
         val runner = seeded("enginesRunner").field("id")!!
         keep("a07c-stack-runner", awaitServer("/runners", "a07c-engines online with its engines") { all ->
             all.jsonArray.any { it.jsonObject.field("id") == runner && it.jsonObject["online"] == JsonPrimitive(true) &&
                 (it.jsonObject["antigravity"] as? JsonObject)?.field("authSource") == "google" }
         })
+        keep("a07c-stack-providers", api("/providers"))
         signIn()
         val workspace = seeded("enginesWorkspace").field("id")!!
         compose.waitUntil(30_000) { has(hasTestTag("workspace:$workspace")) }
@@ -176,28 +178,65 @@ class ComposerStackDeviceTest {
         compose.waitUntil(30_000) { compose.onAllNodes(hasText("New session") and hasClickAction() and isEnabled()).fetchSemanticsNodes().any { it.boundsInRoot.left >= 0f } }
         val buttons = compose.onAllNodes(hasText("New session") and hasClickAction() and isEnabled())
         buttons[buttons.fetchSemanticsNodes().indexOfFirst { it.boundsInRoot.left >= 0f }].performClick()
-        openModelMenu()
-        compose.waitUntil(30_000) { has(hasText("Antigravity — Not signed in →") and hasAnyAncestor(isDialog())) }
-        val all = dialogTexts()
-        File(output, "a07c-stack-menu.txt").writeText(all.joinToString("\n"))
+        fun engineList(): List<String> {
+            compose.waitUntil(30_000) { has(hasTestTag("new-session-engine") and isEnabled()) }
+            compose.onNodeWithTag("new-session-engine").performClick()
+            compose.waitUntil(30_000) { has(hasTestTag("engine:claude")) }
+            return dialogTexts()
+        }
+        fun pickEngine(engine: String, name: String) {
+            engineList(); compose.onNodeWithTag("engine:$engine").performScrollTo().performClick()
+            compose.waitUntil(30_000) { has(hasText("$name ⌄")) }
+        }
+        /** The model menu's Provider section, below its heading and the current credential beside it. */
+        fun providerRows(): List<String> {
+            openModelMenu()
+            compose.waitUntil(30_000) { has(hasText("Provider") and hasAnyAncestor(isDialog())) && has(hasText("Signed in on", substring = true) or hasText("On ", substring = true)) }
+            val all = dialogTexts()
+            return all.drop(all.indexOf("Provider") + 2)
+        }
+        val engines = engineList()
+        File(output, "a07c-stack-engines.txt").writeText(engines.joinToString("\n"))
+        fun at(row: String) = engines.indexOfFirst { it == row || it.startsWith("$row | ") }.also { assertTrue("engine $row in $engines", it >= 0) }
+        val order = listOf("Claude Code", "Codex", "Kimi Code", "Antigravity CLI", "OpenCode").map(::at)
+        assertEquals("A07-3: the engines in the boards' order", order.sorted(), order)
+        assertTrue("A07-4: Antigravity CLI says why it can't run, and where that is fixed",
+            engines.any { it.startsWith("Antigravity CLI | ") && it.contains("Not signed in →") })
+        capture("a07c-stack-engine-list")
+        // A new session starts on the engine its workspace last ran (the seed's Codex session's): Claude Code is picked here.
+        compose.onNodeWithTag("engine:claude").performScrollTo().performClick()
+        compose.waitUntil(30_000) { has(hasText("Claude Code ⌄")) }
+
+        val claude = providerRows()
+        File(output, "a07c-stack-menu.txt").writeText(claude.joinToString("\n"))
         reads += "A07-13: the menu is titled ${compose.onNodeWithTag("composer-engine-title").fetchSemanticsNode().config.getOrNull(SemanticsProperties.Text)}"
-        // The Provider section: below its heading, under the menu's own title (the draft's engine, A07-13).
-        val rows = all.drop(all.indexOf("Provider") + 1).map { it.removePrefix("✓ ") }
-        fun at(row: String) = rows.indexOfFirst { it == row || it.startsWith("$row | ") }.also { assertTrue("row $row in $rows", it >= 0) }
-        val engines = listOf("Claude", "Codex", "Antigravity — Not signed in →", "Kimi").map(::at)
-        assertEquals("A07-3: the engines in iOS's order", engines.sorted(), engines)
-        assertTrue("A07-10: Claude's accounts under it, Automatic first", at("Claude") < at("Automatic") && at("Automatic") < at("Work") && at("Work") < at("Codex"))
-        assertTrue("A07-10: Codex's accounts under it", at("Codex") < rows.indexOfLast { it.startsWith("Automatic") } && at("Codex") < at("Team"))
-        assertEquals("A07-10: Automatic for each engine whose accounts the runner moves between", 2, rows.count { it.startsWith("Automatic") })
-        assertTrue("A07-6: the key, then again under OpenCode", at("DeepSeek") < at("OpenCode") && rows.lastIndexOf("DeepSeek") > at("OpenCode"))
-        // Scrolled down to Kimi: the engines and their accounts above it fill the dialog.
-        compose.onAllNodes(hasText("Kimi") and hasAnyAncestor(isDialog())).onFirst().performScrollTo()
+        compose.onNodeWithTag("composer-engine-title").assertTextEquals("Claude Code")
+        fun rowAt(rows: List<String>, row: String) = rows.indexOfFirst { it.removePrefix("✓ ") == row || it.removePrefix("✓ ").startsWith("$row | ") }
+            .also { assertTrue("row $row in $rows", it >= 0) }
+        assertTrue("A07-10: Claude Code's accounts, Automatic first", rowAt(claude, "Automatic") < rowAt(claude, "Default") && rowAt(claude, "Default") < rowAt(claude, "Work"))
+        assertTrue("A07-6: the key under API keys", rowAt(claude, "API keys") < rowAt(claude, "DeepSeek"))
+        assertTrue("only Claude Code's: no other engine's account", claude.none { it.startsWith("Team") })
+        compose.onNodeWithContentDescription("Automatic: starts on the Claude Code account whose quota resets soonest, and switches when it hits its limit").assertExists()
         capture("a07c-stack-provider-list")
-        compose.onAllNodes(hasText("OpenCode") and hasAnyAncestor(isDialog())).onFirst().performScrollTo()
+        appClick("Close")
+
+        pickEngine("codex", "Codex")
+        val codex = providerRows()
+        assertTrue("A07-10: Codex's accounts, Automatic first", rowAt(codex, "Automatic") < rowAt(codex, "Default") && rowAt(codex, "Default") < rowAt(codex, "Team"))
+        assertTrue(codex.none { it.startsWith("Work") || it.startsWith("DeepSeek") })
+        capture("a07c-stack-codex-accounts")
+        appClick("Close")
+
+        pickEngine("opencode", "OpenCode")
+        val openCode = providerRows()
+        assertTrue("A07-6: the key again under OpenCode, after its own sign-in", rowAt(openCode, "OpenCode's own sign-in") < rowAt(openCode, "DeepSeek"))
         capture("a07c-stack-opencode-keys")
-        // A07-4: the row names why, and opens the page that fixes it.
-        appClick("Antigravity — Not signed in →")
-        compose.waitUntil(30_000) { !has(isDialog()) && has(hasText("Antigravity")) }
+        appClick("Close")
+
+        // A07-4: the engine's row names why, and opens the page that fixes it.
+        engineList()
+        compose.onNodeWithTag("engine:antigravity").performScrollTo().performClick()
+        compose.waitUntil(30_000) { !has(isDialog()) && has(hasText("Antigravity CLI")) }
         capture("a07c-stack-antigravity-page")
     }
 

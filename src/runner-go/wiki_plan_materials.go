@@ -181,11 +181,28 @@ func (m *wikiPlanMaterialsRead) spaceText() string {
 
 // topicsBrief is the topics on one line: what a section's session condition may name.
 func (m *wikiPlanMaterialsRead) topicsBrief() string {
-	if len(m.Topics) == 0 {
+	topics := make([]wikiPlanTopic, 0, len(m.Topics))
+	for _, t := range m.Topics {
+		topics = append(topics, wikiPlanTopic{Slug: t.Slug, Title: t.Title, Active: t.Active})
+	}
+	return wikiPlanTopicsBrief(topics)
+}
+
+// wikiPlanTopic is a topic of the space as a session condition may name it (contract `plan.gate.references`):
+// its slug, its display name, and how many of the space's active entries name it.
+type wikiPlanTopic struct {
+	Slug   string `json:"slug"`
+	Title  string `json:"title"`
+	Active int    `json:"active"`
+}
+
+// wikiPlanTopicsBrief is topics on one line, as the drafting job's materials and the plan's gate list them.
+func wikiPlanTopicsBrief(topics []wikiPlanTopic) string {
+	if len(topics) == 0 {
 		return "（这个 space 还没有主题：会话条件里不写主题）"
 	}
-	parts := make([]string, 0, len(m.Topics))
-	for _, t := range m.Topics {
+	parts := make([]string, 0, len(topics))
+	for _, t := range topics {
 		parts = append(parts, fmt.Sprintf("%s「%s」·%d", t.Slug, t.Title, t.Active))
 	}
 	return "现有主题（slug「名称」·active 条目数）：" + strings.Join(parts, "；")

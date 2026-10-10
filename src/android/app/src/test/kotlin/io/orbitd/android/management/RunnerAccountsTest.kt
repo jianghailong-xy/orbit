@@ -95,6 +95,6 @@ class RunnerAccountsTest {
         assertEquals("Sessions can’t use this account until you sign in again.", RunnerPage.signedOutNote(lines[1], false, "claude"))
         assertNull(RunnerPage.signedOutNote(lines[2], false, "claude"))
         assertEquals("Sessions on this runner can’t use Claude Code until you sign in again.", RunnerPage.signedOutNote(lines[1], true, "claude"))
-        assertEquals("Sessions on this runner can’t use Antigravity until you sign in again.", RunnerPage.signedOutNote(lines[1], true, "antigravity"))
+        assertEquals("Sessions on this runner can’t use Antigravity CLI until you sign in again.", RunnerPage.signedOutNote(lines[1], true, "antigravity"))
     }
 }

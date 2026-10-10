@@ -1,0 +1,13 @@
+# npm run build -w @orbit/web && npm run test -w @orbit/web on the task worktree (NVMe) at 211949ed8, after round f7.
+# Build output and the Vitest summary; the full log stays at /mnt/data/tmp/34Za39Mm04q5p66pqUTtj/v1/merge-check-f7.log until judged.
+
+> @orbit/web@0.1.0 build
+> tsc -b && vite build
+vite v8.3.1 building client environment for production...
+✓ 4583 modules transformed.
+✓ built in 1.08s
+> @orbit/web@0.1.0 test
+> vitest run --maxWorkers=2
+ Test Files  392 passed (392)
+      Tests  5136 passed (5136)
+   Duration  344.83s (tests 45%, import 37%, environment 16%, transform 3%)

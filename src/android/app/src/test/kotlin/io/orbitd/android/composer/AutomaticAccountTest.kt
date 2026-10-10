@@ -5,9 +5,10 @@ import kotlinx.serialization.json.*
 import org.junit.Assert.*
 import org.junit.Test
 
-/** A07-10 (iOS 9ee358083): each engine's accounts are a section of the Provider list, Automatic first with what it does —
- * "Switches to soonest reset", said aloud as "Automatic: starts on the <engine> account whose quota resets soonest, and switches
- * when it hits its limit" — then every account with its own quota. */
+/** A07-10 (iOS 9ee358083) on the provider/engine split: the engine's own sign-in in the Provider list is its accounts, Automatic
+ * first with what it does — "Switches to soonest reset", said aloud as "Automatic: starts on the <engine> account whose quota resets
+ * soonest, and switches when it hits its limit" — then every account with its own quota, the one the draft or session is on ticked.
+ * Only the picked engine's accounts are there: another engine's are under that engine, picked first in the Engine list. */
 class AutomaticAccountTest : ComposerShellTest() {
     private fun twoAccountRunner(capabilities: String = "") {
         ComposerShell.runner = ComposerShell.obj("""{"id":"${ComposerShell.RUNNER}","name":"Fixture runner","online":true,"status":"ONLINE",
@@ -20,25 +21,35 @@ class AutomaticAccountTest : ComposerShellTest() {
             "modelCatalog":{"claude":[{"value":"claude-opus-5-5","label":"Opus 5.5"}],"codex":[{"value":"gpt-6","label":"GPT-6"}]}}""")
     }
 
-    private fun providerRows() = section("Provider", until = setOf("Close")).filterNot { "Antigravity" in it }
+    /** The Provider list's rows after its heading's current credential. */
+    private fun providerRows() = section("Provider", until = setOf("Close")).drop(1)
 
-    @Test fun aNewSessionListsEachEnginesAccountsUnderItAutomaticFirst() {
+    @Test fun aNewSessionListsItsEnginesAccountsAutomaticFirst() {
         twoAccountRunner()
         signIn(); openDraft(); openModelMenu()
-        assertEquals(listOf("Claude", "Automatic\nSwitches to soonest reset", "Default", "Work",
-            "Codex", "Automatic\nSwitches to soonest reset", "Default\n5h 23%", "Second account\n5h 95%",
-            "Expired account\nNot signed in, sign in →", "Kimi"), providerRows())
+        assertEquals("Claude Code's: nothing named, the draft starts on Default", listOf("Signed in on Fixture runner",
+            "Automatic\nSwitches to soonest reset", "✓ Default", "Work"), providerRows())
+        compose.onNodeWithContentDescription("Automatic: starts on the Claude Code account whose quota resets soonest, and switches when it hits its limit")
+            .assertExists()
+        compose.onNode(hasText("Close") and hasAnyAncestor(isDialog())).performClick()
+        // Codex's accounts are Codex's: the engine first, then the account.
+        compose.onNodeWithTag("new-session-engine").performClick()
+        await { has(hasTestTag("engine:codex") and hasClickAction()) }
+        compose.onNodeWithTag("engine:codex").performClick()
+        await { has(hasText("Codex ⌄")) }
+        openModelMenu()
+        assertEquals(listOf("Signed in on Fixture runner", "Automatic\nSwitches to soonest reset", "✓ Default\n5h 23%", "Second account\n5h 95%",
+            "Expired account\nNot signed in, sign in →"), providerRows())
         compose.onNodeWithContentDescription("Automatic: starts on the Codex account whose quota resets soonest, and switches when it hits its limit")
             .assertExists()
-        compose.onNodeWithContentDescription("Automatic: starts on the Claude account whose quota resets soonest, and switches when it hits its limit")
-            .assertExists()
-        // An account under another engine starts the new session there, on that account.
-        compose.onNode(hasText("Second account") and hasClickAction() and hasAnyAncestor(isDialog())).performScrollTo().performClick()
+        compose.onNode(hasText("Second account", substring = true) and hasClickAction() and hasAnyAncestor(isDialog())).performScrollTo().performClick()
+        await { providerRows().any { it.startsWith("✓ Second account") } }
         compose.onNode(hasText("Close") and hasAnyAncestor(isDialog())).performClick()
         compose.onNodeWithTag("composer-input").performTextInput("Start on the second account")
         compose.onNodeWithTag("composer-send").performClick()
         await { ComposerShell.body("POST sessions") != null }
         val created = ComposerShell.body("POST sessions")!!
+        assertEquals("codex", created["engine"]?.jsonPrimitive?.content)
         assertEquals("codex", created["provider"]?.jsonPrimitive?.content)
         assertEquals("1a2b3c4d", created["codexAccount"]?.jsonPrimitive?.content)
     }
@@ -47,7 +58,7 @@ class AutomaticAccountTest : ComposerShellTest() {
         twoAccountRunner(capabilities = "\"codex-account-move/v1\"")
         ComposerShell.session = mapOf("provider" to JsonPrimitive("codex"), "model" to JsonPrimitive("gpt-6"))
         signIn(); openSession(); openModelMenu()
-        assertEquals(listOf("Codex", "Automatic\nSwitches to soonest reset", "Default\n5h 23%", "Second account\n5h 95%",
+        assertEquals(listOf("Signed in on Fixture runner", "Automatic\nSwitches to soonest reset", "✓ Default\n5h 23%", "Second account\n5h 95%",
             "Expired account\nNot signed in, sign in →"), providerRows())
         compose.onNode(hasText("Automatic") and hasClickAction() and hasAnyAncestor(isDialog())).performScrollTo().performClick()
         await { ComposerShell.body("PATCH sessions/${ComposerShell.SESSION}/account") != null }
@@ -58,7 +69,7 @@ class AutomaticAccountTest : ComposerShellTest() {
         twoAccountRunner()
         ComposerShell.session = mapOf("provider" to JsonPrimitive("codex"), "model" to JsonPrimitive("gpt-6"))
         signIn(); openSession(); openModelMenu()
-        assertEquals(listOf("✓ Codex"), providerRows())
+        assertEquals(listOf("Signed in on Fixture runner", "✓ Default"), providerRows())
         assertFalse(shows("Switches to soonest reset"))
     }
 }
