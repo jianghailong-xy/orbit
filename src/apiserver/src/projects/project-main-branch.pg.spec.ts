@@ -34,6 +34,10 @@
  * agent — and the CLI — reaches the server through `RunnerProjectsController`. The first integration
  * is the transaction that queues it (`enqueueForDoneTask`). Every write is read back with SQL.
  *
+ * The new field is read through `WithUpstream` rather than off the shared types, so this file
+ * compiles on the tree before the change too, and each case there fails on the assertion that names
+ * what is missing instead of the whole build failing on a type.
+ *
  * Not destructive: every case owns freshly generated ids.
  */
 import assert from 'node:assert/strict';
@@ -116,6 +120,10 @@ interface Binding {
 }
 
 interface Answer { status: number; body: string; json: Record<string, unknown> }
+
+/** A main branch, on settings of any of the start's shapes. */
+type WithUpstream = { upstreamRef?: string };
+const upstreamOf = (settings: unknown) => (settings as WithUpstream).upstreamRef;
 
 test('a project’s main branch is chosen by its owner, remembered per account and repository, and '
   + 'offered back', { skip, concurrency: 1, timeout: 300_000 }, async (t) => {
@@ -302,7 +310,11 @@ test('a project’s main branch is chosen by its owner, remembered per account a
   }
 
   /** The start as a browser presses it. */
-  async function press(f: Fixture, body: Omit<StartProjectRequestBody, 'criteriaDigest'>, sessionHeader?: string) {
+  async function press(
+    f: Fixture,
+    body: Omit<StartProjectRequestBody, 'criteriaDigest'> & WithUpstream,
+    sessionHeader?: string,
+  ) {
     return call(f.ownerId, 'POST', `/projects/${f.publicId}/start`,
       { criteriaDigest: await seal(f), ...body }, sessionHeader);
   }
@@ -752,7 +764,7 @@ test('a project’s main branch is chosen by its owner, remembered per account a
       });
       return f;
     };
-    const suggestion: ProjectStartRequestBody = {
+    const suggestion: ProjectStartRequestBody & WithUpstream = {
       line: 'MAIN',
       upstreamRef: 'refs/heads/master',
       automatic: true,
@@ -768,13 +780,13 @@ test('a project’s main branch is chosen by its owner, remembered per account a
 
     const f = await planned('asked', REPO_URL);
     const filed = await runnerDoor.requestStart(runner, f.sessionId, f.projectId, suggestion as never);
-    assert.equal(filed.settings.upstreamRef, 'refs/heads/master');
+    assert.equal(upstreamOf(filed.settings), 'refs/heads/master');
     const { rows: [stored] } = await sql.query<{ payload: ProjectStartRequest }>(
       `SELECT "payload" FROM "project_open_item"
         WHERE "project_id" = $1::uuid AND "kind" = 'START_REQUEST' AND "state" = 'OPEN'`,
       [f.projectId],
     );
-    assert.equal(stored.payload.settings.upstreamRef, 'refs/heads/master', 'the request keeps it as suggested');
+    assert.equal(upstreamOf(stored.payload.settings), 'refs/heads/master', 'the request keeps it as suggested');
     const view = await openItems.list(f.ownerId, f.projectId);
     assert.equal(view.startRequest?.detailLine,
       'Directly into master · Automatic on · 2 tasks at a time · merge check set');
@@ -790,7 +802,7 @@ test('a project’s main branch is chosen by its owner, remembered per account a
       mergeCheckCommand: 'npm test',
       requestId: filed.itemId,
     });
-    assert.equal(answered.settings.upstreamRef, 'refs/heads/main');
+    assert.equal(upstreamOf(answered.settings), 'refs/heads/main');
     assert.deepEqual(answered.differsFromRequest, ['line', 'automatic']);
     assert.equal((await bindingOf(f))?.upstream_ref_chosen_at, null);
 
@@ -805,7 +817,7 @@ test('a project’s main branch is chosen by its owner, remembered per account a
       maxConcurrentTasks: 2,
       mergeCheckCommand: 'npm test',
       requestId: again.itemId,
-    });
+    } as StartProjectRequestBody);
     assert.deepEqual(agreed.differsFromRequest, []);
     assert.equal((await bindingOf(taken))?.upstream_ref, 'refs/heads/master');
     assert.ok((await bindingOf(taken))?.upstream_ref_chosen_at instanceof Date);
@@ -825,7 +837,7 @@ test('a project’s main branch is chosen by its owner, remembered per account a
     const plain = await runnerDoor.requestStart(runner, nowhere.sessionId, nowhere.projectId, {
       ...withoutUpstream, mergeCheckCommand: null,
     } as never);
-    assert.equal(plain.settings.upstreamRef, undefined);
+    assert.equal(upstreamOf(plain.settings), undefined);
     assert.equal((await openItems.list(nowhere.ownerId, nowhere.projectId)).startRequest?.detailLine,
       'Directly into main · Automatic on · 2 tasks at a time · no merge check',
       'a request that suggests no main branch reads as it always has');
