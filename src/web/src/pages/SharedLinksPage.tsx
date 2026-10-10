@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CopyOutlined, WarningOutlined } from '@ant-design/icons';
-import { Button, Popconfirm, Spin } from 'antd';
 import { useSearchParams } from 'react-router-dom';
 import { putShareLink, turnOffShareLinks, type ShareLink, type ShareLinkState } from '../api';
 import { canShareKind, ShareModal } from '../components/ShareModal';
 import { taskStatusLabel } from '../components/TaskStatusPill';
+import { Button } from '../components/ui/Button';
+import { Popconfirm } from '../components/ui/Popconfirm';
+import { Spinner } from '../components/ui/Spinner';
 import { copyText } from '../lib/clipboard';
 import { shareLinksQuery } from '../lib/queries';
 import { includeChips, publicLinkUrl, shortDate, staleSessionLinks } from '../lib/shareLinks';
@@ -158,21 +160,22 @@ export function SharedLinksPage() {
           <Popconfirm
             title={stale.length === 1 ? TURN_OFF_TITLE : `Turn off these ${stale.length} links?`}
             description={stale.length === 1 ? TURN_OFF_DETAIL : 'Anyone who has them loses access right away.'}
-            okText="Turn off"
-            okButtonProps={{ danger: true }}
+            confirmText="Turn off"
+            danger
             cancelText="Cancel"
             onConfirm={() => turnOff.mutate(stale.map((link) => link.id))}
-          >
-            <Button size="small" loading={turnOff.isPending}>
-              {stale.length === 1 ? 'Turn off this link' : `Turn off these ${stale.length}`}
-            </Button>
-          </Popconfirm>
+            trigger={
+              <Button size="small" loading={turnOff.isPending}>
+                {stale.length === 1 ? 'Turn off this link' : `Turn off these ${stale.length}`}
+              </Button>
+            }
+          />
         </div>
       )}
       <div role="tabpanel" className="following-panel">
         {linksQ.isPending ? (
           <div className="following-empty">
-            <Spin />
+            <Spinner aria-busy="true" />
           </div>
         ) : linksQ.isError ? (
           <div className="following-empty">
@@ -246,15 +249,16 @@ export function SharedLinksPage() {
                     <Popconfirm
                       title={TURN_OFF_TITLE}
                       description={TURN_OFF_DETAIL}
-                      okText="Turn off"
-                      okButtonProps={{ danger: true }}
+                      confirmText="Turn off"
+                      danger
                       cancelText="Cancel"
                       onConfirm={() => turnOff.mutate([link.id])}
-                    >
-                      <Button size="small" type="text" danger>
-                        Turn off
-                      </Button>
-                    </Popconfirm>
+                      trigger={
+                        <Button size="small" variant="text" danger>
+                          Turn off
+                        </Button>
+                      }
+                    />
                   )}
                   {link.state === 'ENDED' && link.stateReason === 'EXPIRED' && !openRoots.has(link.root.id) && (
                     <Button size="small" loading={shareAgain.isPending} onClick={() => shareAgain.mutate(link)}>

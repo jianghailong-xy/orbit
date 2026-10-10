@@ -1,0 +1,2509 @@
+{
+ "config": {
+  "argv": [
+   "/usr/local/bin/node",
+   "/mnt/data/tmp/34coPBqt8gi229cVNds0E/fix/node_modules/.bin/playwright",
+   "test",
+   "--config",
+   "ui-migration/tasks-toolbar.config.mjs"
+  ],
+  "configFile": "/mnt/data/tmp/34coPBqt8gi229cVNds0E/fix/src/web/ui-migration/tasks-toolbar.config.mjs",
+  "rootDir": "/mnt/data/tmp/34coPBqt8gi229cVNds0E/fix/src/web/ui-migration",
+  "failOnFlakyTests": false,
+  "forbidOnly": false,
+  "fullyParallel": false,
+  "globalSetup": "/mnt/data/tmp/34coPBqt8gi229cVNds0E/fix/src/web/ui-migration/environment.mjs",
+  "globalTeardown": null,
+  "globalTimeout": 0,
+  "grep": {},
+  "grepInvert": null,
+  "maxFailures": 0,
+  "metadata": {
+   "actualWorkers": 1
+  },
+  "preserveOutput": "always",
+  "projects": [
+   {
+    "outputDir": "/mnt/data/tmp/34coPBqt8gi229cVNds0E/runs3/resident-fix-r1-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-desktop",
+    "name": "chromium-light-desktop",
+    "testDir": "/mnt/data/tmp/34coPBqt8gi229cVNds0E/fix/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "tasks-toolbar.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34coPBqt8gi229cVNds0E/runs3/resident-fix-r1-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-desktop",
+    "name": "chromium-dark-desktop",
+    "testDir": "/mnt/data/tmp/34coPBqt8gi229cVNds0E/fix/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "tasks-toolbar.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34coPBqt8gi229cVNds0E/runs3/resident-fix-r1-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-desktop",
+    "name": "webkit-light-desktop",
+    "testDir": "/mnt/data/tmp/34coPBqt8gi229cVNds0E/fix/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "tasks-toolbar.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34coPBqt8gi229cVNds0E/runs3/resident-fix-r1-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-desktop",
+    "name": "webkit-dark-desktop",
+    "testDir": "/mnt/data/tmp/34coPBqt8gi229cVNds0E/fix/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "tasks-toolbar.browser.mjs"
+    ],
+    "timeout": 90000
+   }
+  ],
+  "quiet": false,
+  "reporter": [
+   [
+    "list",
+    null
+   ],
+   [
+    "json",
+    {
+     "outputFile": "/mnt/data/tmp/34coPBqt8gi229cVNds0E/runs3/resident-fix-r1-out/report.json"
+    }
+   ]
+  ],
+  "reportSlowTests": {
+   "max": 5,
+   "threshold": 300000
+  },
+  "shard": null,
+  "tags": [],
+  "updateSnapshots": "none",
+  "updateSourceMethod": "patch",
+  "version": "1.63.0",
+  "workers": 1,
+  "webServer": {
+   "command": "npm run preview -- --host 127.0.0.1 --port 4173 --strictPort",
+   "cwd": "/mnt/data/tmp/34coPBqt8gi229cVNds0E/fix/src/web/",
+   "url": "http://127.0.0.1:4173",
+   "reuseExistingServer": false,
+   "timeout": 30000
+  }
+ },
+ "suites": [
+  {
+   "title": "tasks-toolbar.browser.mjs",
+   "file": "tasks-toolbar.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "a task open, Space checks it (run 1)",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2060,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T03:43:00.427Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "geometry: Space with a task open",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34coPBqt8gi229cVNds0E/runs3/resident-fix-r1-out/tasks-toolbar.browser.mjs-a-task-open-Space-checks-it-run-1--chromium-light-desktop/attachments/computed-styles-and-timings-a0a10b3df88ca01e01c533fed43aa0c90a5ec0fa.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "dbfe25a13a7147205ec9-c4e5d1ae5f0cc0792ad2",
+     "file": "tasks-toolbar.browser.mjs",
+     "line": 54,
+     "column": 3
+    },
+    {
+     "title": "a task open, a row checked, then the task closed (run 1)",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1765,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T03:43:02.609Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "geometry: a row checked with a task open",
+           "contentType": "application/json"
+          },
+          {
+           "name": "geometry: the task closed",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34coPBqt8gi229cVNds0E/runs3/resident-fix-r1-out/tasks-toolbar.browser.mjs--a99c1-then-the-task-closed-run-1--chromium-light-desktop/attachments/computed-styles-and-timings-85ad0a7b158918f71121a9e1058c77e312b53e8b.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "dbfe25a13a7147205ec9-56575c714ebb370c3ed4",
+     "file": "tasks-toolbar.browser.mjs",
+     "line": 65,
+     "column": 3
+    },
+    {
+     "title": "a row checked, then a task opened, the window widened and narrowed (run 1)",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2560,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T03:43:04.381Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "geometry: a row checked, no task open",
+           "contentType": "application/json"
+          },
+          {
+           "name": "geometry: a task opened",
+           "contentType": "application/json"
+          },
+          {
+           "name": "geometry: the window widened to 1920px",
+           "contentType": "application/json"
+          },
+          {
+           "name": "geometry: the window back at 1280px",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34coPBqt8gi229cVNds0E/runs3/resident-fix-r1-out/tasks-toolbar.browser.mjs--fbca4-widened-and-narrowed-run-1--chromium-light-desktop/attachments/computed-styles-and-timings-8948da2172d2cf6b2db9a2e3d169d665a43e2c0b.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "dbfe25a13a7147205ec9-e8ee0c2a66be6394d38f",
+     "file": "tasks-toolbar.browser.mjs",
+     "line": 77,
+     "column": 3
+    },
+    {
+     "title": "a task open, Space checks it (run 2)",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1597,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T03:43:06.949Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "geometry: Space with a task open",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34coPBqt8gi229cVNds0E/runs3/resident-fix-r1-out/tasks-toolbar.browser.mjs-a-task-open-Space-checks-it-run-2--chromium-light-desktop/attachments/computed-styles-and-timings-37c719c68788be5d26cd5952bf62604fc7cbd562.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "dbfe25a13a7147205ec9-028b3054ddd77014c6b0",
+     "file": "tasks-toolbar.browser.mjs",
+     "line": 54,
+     "column": 3
+    },
+    {
+     "title": "a task open, a row checked, then the task closed (run 2)",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2650,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T03:43:08.560Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "geometry: a row checked with a task open",
+           "contentType": "application/json"
+          },
+          {
+           "name": "geometry: the task closed",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34coPBqt8gi229cVNds0E/runs3/resident-fix-r1-out/tasks-toolbar.browser.mjs--6617b-then-the-task-closed-run-2--chromium-light-desktop/attachments/computed-styles-and-timings-ef4ca1ccb9d6deb849a527bd554a97c80c71f802.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "dbfe25a13a7147205ec9-f5d4fa2fa4700112cf85",
+     "file": "tasks-toolbar.browser.mjs",
+     "line": 65,
+     "column": 3
+    },
+    {
+     "title": "a row checked, then a task opened, the window widened and narrowed (run 2)",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2330,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T03:43:11.217Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "geometry: a row checked, no task open",
+           "contentType": "application/json"
+          },
+          {
+           "name": "geometry: a task opened",
+           "contentType": "application/json"
+          },
+          {
+           "name": "geometry: the window widened to 1920px",
+           "contentType": "application/json"
+          },
+          {
+           "name": "geometry: the window back at 1280px",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34coPBqt8gi229cVNds0E/runs3/resident-fix-r1-out/tasks-toolbar.browser.mjs--ef073-widened-and-narrowed-run-2--chromium-light-desktop/attachments/computed-styles-and-timings-d1f46b0ea0e98821f415dee2a6a2edb1d0fbaf1d.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "dbfe25a13a7147205ec9-83908156051c831ec428",
+     "file": "tasks-toolbar.browser.mjs",
+     "line": 77,
+     "column": 3
+    },
+    {
+     "title": "a task open, Space checks it (run 3)",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1482,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T03:43:13.554Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "geometry: Space with a task open",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34coPBqt8gi229cVNds0E/runs3/resident-fix-r1-out/tasks-toolbar.browser.mjs-a-task-open-Space-checks-it-run-3--chromium-light-desktop/attachments/computed-styles-and-timings-6c70bfffbd4511e07a142dcd581ae23245866fa3.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "dbfe25a13a7147205ec9-789f81a6c143fa30b928",
+     "file": "tasks-toolbar.browser.mjs",
+     "line": 54,
+     "column": 3
+    },
+    {
+     "title": "a task open, a row checked, then the task closed (run 3)",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1785,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T03:43:15.052Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "geometry: a row checked with a task open",
+           "contentType": "application/json"
+          },
+          {
+           "name": "geometry: the task closed",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34coPBqt8gi229cVNds0E/runs3/resident-fix-r1-out/tasks-toolbar.browser.mjs--c4a7f-then-the-task-closed-run-3--chromium-light-desktop/attachments/computed-styles-and-timings-f84230c9a974dc507596b2aef7fad9f2bed54f0e.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "dbfe25a13a7147205ec9-26ffc4492bf53b244c9c",
+     "file": "tasks-toolbar.browser.mjs",
+     "line": 65,
+     "column": 3
+    },
+    {
+     "title": "a row checked, then a task opened, the window widened and narrowed (run 3)",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2015,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T03:43:16.848Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "geometry: a row checked, no task open",
+           "contentType": "application/json"
+          },
+          {
+           "name": "geometry: a task opened",
+           "contentType": "application/json"
+          },
+          {
+           "name": "geometry: the window widened to 1920px",
+           "contentType": "application/json"
+          },
+          {
+           "name": "geometry: the window back at 1280px",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34coPBqt8gi229cVNds0E/runs3/resident-fix-r1-out/tasks-toolbar.browser.mjs--5459a-widened-and-narrowed-run-3--chromium-light-desktop/attachments/computed-styles-and-timings-8189cdd4ef85eda91abf96c8eb36964a7edac202.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "dbfe25a13a7147205ec9-3f02256a5e7dea0a2481",
+     "file": "tasks-toolbar.browser.mjs",
+     "line": 77,
+     "column": 3
+    },
+    {
+     "title": "a task open, Space checks it (run 4)",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1585,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T03:43:18.872Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "geometry: Space with a task open",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34coPBqt8gi229cVNds0E/runs3/resident-fix-r1-out/tasks-toolbar.browser.mjs-a-task-open-Space-checks-it-run-4--chromium-light-desktop/attachments/computed-styles-and-timings-fb654dafbecbdabefe4aecf1f70b96cdb8d8b5ce.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "dbfe25a13a7147205ec9-d4c645c79109a1a2400f",
+     "file": "tasks-toolbar.browser.mjs",
+     "line": 54,
+     "column": 3
+    },
+    {
+     "title": "a task open, a row checked, then the task closed (run 4)",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1379,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T03:43:20.466Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "geometry: a row checked with a task open",
+           "contentType": "application/json"
+          },
+          {
+           "name": "geometry: the task closed",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34coPBqt8gi229cVNds0E/runs3/resident-fix-r1-out/tasks-toolbar.browser.mjs--c9bc9-then-the-task-closed-run-4--chromium-light-desktop/attachments/computed-styles-and-timings-7835ba03eafcb706dbbf0eec4b5d43b02bf87281.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "dbfe25a13a7147205ec9-ec6e6c60a1f113f7e57d",
+     "file": "tasks-toolbar.browser.mjs",
+     "line": 65,
+     "column": 3
+    },
+    {
+     "title": "a row checked, then a task opened, the window widened and narrowed (run 4)",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1307,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T03:43:21.850Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "geometry: a row checked, no task open",
+           "contentType": "application/json"
+          },
+          {
+           "name": "geometry: a task opened",
+           "contentType": "application/json"
+          },
+          {
+           "name": "geometry: the window widened to 1920px",
+           "contentType": "application/json"
+          },
+          {
+           "name": "geometry: the window back at 1280px",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34coPBqt8gi229cVNds0E/runs3/resident-fix-r1-out/tasks-toolbar.browser.mjs--a53c9-widened-and-narrowed-run-4--chromium-light-desktop/attachments/computed-styles-and-timings-d0b2a70b025a2686a8b2e6524bfa3604d5dfb5bf.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "dbfe25a13a7147205ec9-75a9c529c756ebca9ffb",
+     "file": "tasks-toolbar.browser.mjs",
+     "line": 77,
+     "column": 3
+    },
+    {
+     "title": "a task open, Space checks it (run 1)",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 953,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T03:43:26.050Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "geometry: Space with a task open",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34coPBqt8gi229cVNds0E/runs3/resident-fix-r1-out/tasks-toolbar.browser.mjs-a-task-open-Space-checks-it-run-1--chromium-dark-desktop/attachments/computed-styles-and-timings-8fbec0a7b40bc0db1518fc9c6444a0967fe297d5.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "dbfe25a13a7147205ec9-6d6783de749949935f63",
+     "file": "tasks-toolbar.browser.mjs",
+     "line": 54,
+     "column": 3
+    },
+    {
+     "title": "a task open, a row checked, then the task closed (run 1)",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1095,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T03:43:27.073Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "geometry: a row checked with a task open",
+           "contentType": "application/json"
+          },
+          {
+           "name": "geometry: the task closed",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34coPBqt8gi229cVNds0E/runs3/resident-fix-r1-out/tasks-toolbar.browser.mjs--a99c1-then-the-task-closed-run-1--chromium-dark-desktop/attachments/computed-styles-and-timings-ed02e52259b2e5574cf97ab0aecf643fe2939a58.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "dbfe25a13a7147205ec9-e28dc7a51323795d89a4",
+     "file": "tasks-toolbar.browser.mjs",
+     "line": 65,
+     "column": 3
+    },
+    {
+     "title": "a row checked, then a task opened, the window widened and narrowed (run 1)",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 926,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T03:43:28.174Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "geometry: a row checked, no task open",
+           "contentType": "application/json"
+          },
+          {
+           "name": "geometry: a task opened",
+           "contentType": "application/json"
+          },
+          {
+           "name": "geometry: the window widened to 1920px",
+           "contentType": "application/json"
+          },
+          {
+           "name": "geometry: the window back at 1280px",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34coPBqt8gi229cVNds0E/runs3/resident-fix-r1-out/tasks-toolbar.browser.mjs--fbca4-widened-and-narrowed-run-1--chromium-dark-desktop/attachments/computed-styles-and-timings-d988644f890acba5b686e91385506037f7e90857.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "dbfe25a13a7147205ec9-ae0256783cf95eb10e98",
+     "file": "tasks-toolbar.browser.mjs",
+     "line": 77,
+     "column": 3
+    },
+    {
+     "title": "a task open, Space checks it (run 2)",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 888,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T03:43:29.106Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "geometry: Space with a task open",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34coPBqt8gi229cVNds0E/runs3/resident-fix-r1-out/tasks-toolbar.browser.mjs-a-task-open-Space-checks-it-run-2--chromium-dark-desktop/attachments/computed-styles-and-timings-5c4965c0d9badc420d465e989447419ad73e56c9.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "dbfe25a13a7147205ec9-8718d3853ebb2e3caa01",
+     "file": "tasks-toolbar.browser.mjs",
+     "line": 54,
+     "column": 3
+    },
+    {
+     "title": "a task open, a row checked, then the task closed (run 2)",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 855,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T03:43:30.002Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "geometry: a row checked with a task open",
+           "contentType": "application/json"
+          },
+          {
+           "name": "geometry: the task closed",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34coPBqt8gi229cVNds0E/runs3/resident-fix-r1-out/tasks-toolbar.browser.mjs--6617b-then-the-task-closed-run-2--chromium-dark-desktop/attachments/computed-styles-and-timings-64d302a7c91aee44356e40ab1f4d2182df81fb16.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "dbfe25a13a7147205ec9-6c95094fe940f0ee875f",
+     "file": "tasks-toolbar.browser.mjs",
+     "line": 65,
+     "column": 3
+    },
+    {
+     "title": "a row checked, then a task opened, the window widened and narrowed (run 2)",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 891,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T03:43:30.862Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "geometry: a row checked, no task open",
+           "contentType": "application/json"
+          },
+          {
+           "name": "geometry: a task opened",
+           "contentType": "application/json"
+          },
+          {
+           "name": "geometry: the window widened to 1920px",
+           "contentType": "application/json"
+          },
+          {
+           "name": "geometry: the window back at 1280px",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34coPBqt8gi229cVNds0E/runs3/resident-fix-r1-out/tasks-toolbar.browser.mjs--ef073-widened-and-narrowed-run-2--chromium-dark-desktop/attachments/computed-styles-and-timings-ac961847a7e0f9a58548d5d0d8d398ccdc5f4ee0.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "dbfe25a13a7147205ec9-4b16d320c901ef5342f5",
+     "file": "tasks-toolbar.browser.mjs",
+     "line": 77,
+     "column": 3
+    },
+    {
+     "title": "a task open, Space checks it (run 3)",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 671,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T03:43:31.758Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "geometry: Space with a task open",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34coPBqt8gi229cVNds0E/runs3/resident-fix-r1-out/tasks-toolbar.browser.mjs-a-task-open-Space-checks-it-run-3--chromium-dark-desktop/attachments/computed-styles-and-timings-63decdc439ddee09d8b999a52e9bbb193a6d748e.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "dbfe25a13a7147205ec9-80422f0fcba9eb9e4735",
+     "file": "tasks-toolbar.browser.mjs",
+     "line": 54,
+     "column": 3
+    },
+    {
+     "title": "a task open, a row checked, then the task closed (run 3)",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 954,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T03:43:32.433Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "geometry: a row checked with a task open",
+           "contentType": "application/json"
+          },
+          {
+           "name": "geometry: the task closed",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34coPBqt8gi229cVNds0E/runs3/resident-fix-r1-out/tasks-toolbar.browser.mjs--c4a7f-then-the-task-closed-run-3--chromium-dark-desktop/attachments/computed-styles-and-timings-b15550c3d3306e145f644c6bd3aacf46ca919ecc.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "dbfe25a13a7147205ec9-cec5f8715dc2e001ca5e",
+     "file": "tasks-toolbar.browser.mjs",
+     "line": 65,
+     "column": 3
+    },
+    {
+     "title": "a row checked, then a task opened, the window widened and narrowed (run 3)",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1083,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T03:43:33.391Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "geometry: a row checked, no task open",
+           "contentType": "application/json"
+          },
+          {
+           "name": "geometry: a task opened",
+           "contentType": "application/json"
+          },
+          {
+           "name": "geometry: the window widened to 1920px",
+           "contentType": "application/json"
+          },
+          {
+           "name": "geometry: the window back at 1280px",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34coPBqt8gi229cVNds0E/runs3/resident-fix-r1-out/tasks-toolbar.browser.mjs--5459a-widened-and-narrowed-run-3--chromium-dark-desktop/attachments/computed-styles-and-timings-cc1b31aa1396a2d16356ace94c390696fb986c6a.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "dbfe25a13a7147205ec9-26ffe225947923260e87",
+     "file": "tasks-toolbar.browser.mjs",
+     "line": 77,
+     "column": 3
+    },
+    {
+     "title": "a task open, Space checks it (run 4)",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 984,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T03:43:34.479Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "geometry: Space with a task open",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34coPBqt8gi229cVNds0E/runs3/resident-fix-r1-out/tasks-toolbar.browser.mjs-a-task-open-Space-checks-it-run-4--chromium-dark-desktop/attachments/computed-styles-and-timings-69f25d6c512ccb2b75166ec725f1f72c101eb521.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "dbfe25a13a7147205ec9-9e532a90bb7586cdfe1a",
+     "file": "tasks-toolbar.browser.mjs",
+     "line": 54,
+     "column": 3
+    },
+    {
+     "title": "a task open, a row checked, then the task closed (run 4)",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1341,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T03:43:35.468Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "geometry: a row checked with a task open",
+           "contentType": "application/json"
+          },
+          {
+           "name": "geometry: the task closed",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34coPBqt8gi229cVNds0E/runs3/resident-fix-r1-out/tasks-toolbar.browser.mjs--c9bc9-then-the-task-closed-run-4--chromium-dark-desktop/attachments/computed-styles-and-timings-cd0fa1af4e374e7e0050da8f043c8258e63fe82e.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "dbfe25a13a7147205ec9-442d74eccd57facd09f0",
+     "file": "tasks-toolbar.browser.mjs",
+     "line": 65,
+     "column": 3
+    },
+    {
+     "title": "a row checked, then a task opened, the window widened and narrowed (run 4)",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1535,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T03:43:36.815Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "geometry: a row checked, no task open",
+           "contentType": "application/json"
+          },
+          {
+           "name": "geometry: a task opened",
+           "contentType": "application/json"
+          },
+          {
+           "name": "geometry: the window widened to 1920px",
+           "contentType": "application/json"
+          },
+          {
+           "name": "geometry: the window back at 1280px",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34coPBqt8gi229cVNds0E/runs3/resident-fix-r1-out/tasks-toolbar.browser.mjs--a53c9-widened-and-narrowed-run-4--chromium-dark-desktop/attachments/computed-styles-and-timings-24f3c1ee86f963ec17e7fa7b9eaf62f9f17a48ef.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "dbfe25a13a7147205ec9-2157407e30663da86f2d",
+     "file": "tasks-toolbar.browser.mjs",
+     "line": 77,
+     "column": 3
+    },
+    {
+     "title": "a task open, Space checks it (run 1)",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1769,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T03:43:41.721Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "geometry: Space with a task open",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34coPBqt8gi229cVNds0E/runs3/resident-fix-r1-out/tasks-toolbar.browser.mjs-a-task-open-Space-checks-it-run-1--webkit-light-desktop/attachments/computed-styles-and-timings-84872822fe44e085ea8a4aacb28a6ee6edd03bf7.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "dbfe25a13a7147205ec9-c316e6cf832671bd07fa",
+     "file": "tasks-toolbar.browser.mjs",
+     "line": 54,
+     "column": 3
+    },
+    {
+     "title": "a task open, a row checked, then the task closed (run 1)",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2216,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T03:43:43.613Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "geometry: a row checked with a task open",
+           "contentType": "application/json"
+          },
+          {
+           "name": "geometry: the task closed",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34coPBqt8gi229cVNds0E/runs3/resident-fix-r1-out/tasks-toolbar.browser.mjs--a99c1-then-the-task-closed-run-1--webkit-light-desktop/attachments/computed-styles-and-timings-cfd081fd33f0aae69be34a420d09b0ee1e3a0544.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "dbfe25a13a7147205ec9-5125dcafc02e676bedac",
+     "file": "tasks-toolbar.browser.mjs",
+     "line": 65,
+     "column": 3
+    },
+    {
+     "title": "a row checked, then a task opened, the window widened and narrowed (run 1)",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2851,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T03:43:45.839Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "geometry: a row checked, no task open",
+           "contentType": "application/json"
+          },
+          {
+           "name": "geometry: a task opened",
+           "contentType": "application/json"
+          },
+          {
+           "name": "geometry: the window widened to 1920px",
+           "contentType": "application/json"
+          },
+          {
+           "name": "geometry: the window back at 1280px",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34coPBqt8gi229cVNds0E/runs3/resident-fix-r1-out/tasks-toolbar.browser.mjs--fbca4-widened-and-narrowed-run-1--webkit-light-desktop/attachments/computed-styles-and-timings-cd9e39758e674c061eb9d0d385308c143d7f271a.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "dbfe25a13a7147205ec9-3ffb6ae430f7ecd423c5",
+     "file": "tasks-toolbar.browser.mjs",
+     "line": 77,
+     "column": 3
+    },
+    {
+     "title": "a task open, Space checks it (run 2)",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1922,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T03:43:48.696Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "geometry: Space with a task open",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34coPBqt8gi229cVNds0E/runs3/resident-fix-r1-out/tasks-toolbar.browser.mjs-a-task-open-Space-checks-it-run-2--webkit-light-desktop/attachments/computed-styles-and-timings-b1109eab52add593bbe2cd59f8311f99e160ae9e.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "dbfe25a13a7147205ec9-4b7735a5e6b066d95cf9",
+     "file": "tasks-toolbar.browser.mjs",
+     "line": 54,
+     "column": 3
+    },
+    {
+     "title": "a task open, a row checked, then the task closed (run 2)",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2040,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T03:43:50.627Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "geometry: a row checked with a task open",
+           "contentType": "application/json"
+          },
+          {
+           "name": "geometry: the task closed",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34coPBqt8gi229cVNds0E/runs3/resident-fix-r1-out/tasks-toolbar.browser.mjs--6617b-then-the-task-closed-run-2--webkit-light-desktop/attachments/computed-styles-and-timings-6abb123c12f6ec3fb8345dbc3ccdb05bc282c8a1.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "dbfe25a13a7147205ec9-21bbb6dfd5567a768258",
+     "file": "tasks-toolbar.browser.mjs",
+     "line": 65,
+     "column": 3
+    },
+    {
+     "title": "a row checked, then a task opened, the window widened and narrowed (run 2)",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2210,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T03:43:52.673Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "geometry: a row checked, no task open",
+           "contentType": "application/json"
+          },
+          {
+           "name": "geometry: a task opened",
+           "contentType": "application/json"
+          },
+          {
+           "name": "geometry: the window widened to 1920px",
+           "contentType": "application/json"
+          },
+          {
+           "name": "geometry: the window back at 1280px",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34coPBqt8gi229cVNds0E/runs3/resident-fix-r1-out/tasks-toolbar.browser.mjs--ef073-widened-and-narrowed-run-2--webkit-light-desktop/attachments/computed-styles-and-timings-09e44f32c429d671d351ff557505a75ab9dc0ecb.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "dbfe25a13a7147205ec9-c7564e26cc4c77d8a1f2",
+     "file": "tasks-toolbar.browser.mjs",
+     "line": 77,
+     "column": 3
+    },
+    {
+     "title": "a task open, Space checks it (run 3)",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1444,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T03:43:54.893Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "geometry: Space with a task open",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34coPBqt8gi229cVNds0E/runs3/resident-fix-r1-out/tasks-toolbar.browser.mjs-a-task-open-Space-checks-it-run-3--webkit-light-desktop/attachments/computed-styles-and-timings-b2143552e28b68aa350ba1c0d34f9ce671dba38c.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "dbfe25a13a7147205ec9-0ae2286b5e9bab876203",
+     "file": "tasks-toolbar.browser.mjs",
+     "line": 54,
+     "column": 3
+    },
+    {
+     "title": "a task open, a row checked, then the task closed (run 3)",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1706,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T03:43:56.343Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "geometry: a row checked with a task open",
+           "contentType": "application/json"
+          },
+          {
+           "name": "geometry: the task closed",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34coPBqt8gi229cVNds0E/runs3/resident-fix-r1-out/tasks-toolbar.browser.mjs--c4a7f-then-the-task-closed-run-3--webkit-light-desktop/attachments/computed-styles-and-timings-5d92006491f64a702c40c1c96fbd1a8a92d4abc1.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "dbfe25a13a7147205ec9-0cb74b929ec6170d5eaa",
+     "file": "tasks-toolbar.browser.mjs",
+     "line": 65,
+     "column": 3
+    },
+    {
+     "title": "a row checked, then a task opened, the window widened and narrowed (run 3)",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1980,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T03:43:58.054Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "geometry: a row checked, no task open",
+           "contentType": "application/json"
+          },
+          {
+           "name": "geometry: a task opened",
+           "contentType": "application/json"
+          },
+          {
+           "name": "geometry: the window widened to 1920px",
+           "contentType": "application/json"
+          },
+          {
+           "name": "geometry: the window back at 1280px",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34coPBqt8gi229cVNds0E/runs3/resident-fix-r1-out/tasks-toolbar.browser.mjs--5459a-widened-and-narrowed-run-3--webkit-light-desktop/attachments/computed-styles-and-timings-8507ddd96c3db6a061f1e75214e90a17889e8ab9.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "dbfe25a13a7147205ec9-0c637d49d7f2c9b2fba5",
+     "file": "tasks-toolbar.browser.mjs",
+     "line": 77,
+     "column": 3
+    },
+    {
+     "title": "a task open, Space checks it (run 4)",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1500,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T03:44:00.039Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "geometry: Space with a task open",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34coPBqt8gi229cVNds0E/runs3/resident-fix-r1-out/tasks-toolbar.browser.mjs-a-task-open-Space-checks-it-run-4--webkit-light-desktop/attachments/computed-styles-and-timings-b3137005e1878c6a46481a1443e064bb029daf5d.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "dbfe25a13a7147205ec9-608c8affc54bf054d490",
+     "file": "tasks-toolbar.browser.mjs",
+     "line": 54,
+     "column": 3
+    },
+    {
+     "title": "a task open, a row checked, then the task closed (run 4)",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1797,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T03:44:01.545Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "geometry: a row checked with a task open",
+           "contentType": "application/json"
+          },
+          {
+           "name": "geometry: the task closed",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34coPBqt8gi229cVNds0E/runs3/resident-fix-r1-out/tasks-toolbar.browser.mjs--c9bc9-then-the-task-closed-run-4--webkit-light-desktop/attachments/computed-styles-and-timings-548c5fc51357c189756d3fd68d85865053997593.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "dbfe25a13a7147205ec9-af77af78cee0db56b16a",
+     "file": "tasks-toolbar.browser.mjs",
+     "line": 65,
+     "column": 3
+    },
+    {
+     "title": "a row checked, then a task opened, the window widened and narrowed (run 4)",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2375,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T03:44:03.348Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "geometry: a row checked, no task open",
+           "contentType": "application/json"
+          },
+          {
+           "name": "geometry: a task opened",
+           "contentType": "application/json"
+          },
+          {
+           "name": "geometry: the window widened to 1920px",
+           "contentType": "application/json"
+          },
+          {
+           "name": "geometry: the window back at 1280px",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34coPBqt8gi229cVNds0E/runs3/resident-fix-r1-out/tasks-toolbar.browser.mjs--a53c9-widened-and-narrowed-run-4--webkit-light-desktop/attachments/computed-styles-and-timings-f752732e134edbe79a55ecdb0149d62984251b09.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "dbfe25a13a7147205ec9-bb2cea62b6712a0cc44a",
+     "file": "tasks-toolbar.browser.mjs",
+     "line": 77,
+     "column": 3
+    },
+    {
+     "title": "a task open, Space checks it (run 1)",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1751,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T03:44:07.622Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "geometry: Space with a task open",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34coPBqt8gi229cVNds0E/runs3/resident-fix-r1-out/tasks-toolbar.browser.mjs-a-task-open-Space-checks-it-run-1--webkit-dark-desktop/attachments/computed-styles-and-timings-55361214e8eb2c02c778c5922a311c1caef388e2.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "dbfe25a13a7147205ec9-9aeaf5074faaaa5a666f",
+     "file": "tasks-toolbar.browser.mjs",
+     "line": 54,
+     "column": 3
+    },
+    {
+     "title": "a task open, a row checked, then the task closed (run 1)",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2012,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T03:44:09.461Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "geometry: a row checked with a task open",
+           "contentType": "application/json"
+          },
+          {
+           "name": "geometry: the task closed",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34coPBqt8gi229cVNds0E/runs3/resident-fix-r1-out/tasks-toolbar.browser.mjs--a99c1-then-the-task-closed-run-1--webkit-dark-desktop/attachments/computed-styles-and-timings-f01586806c357e92ccdb18c9183b6d4306f2fca2.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "dbfe25a13a7147205ec9-5bb063e70b196e457831",
+     "file": "tasks-toolbar.browser.mjs",
+     "line": 65,
+     "column": 3
+    },
+    {
+     "title": "a row checked, then a task opened, the window widened and narrowed (run 1)",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1840,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T03:44:11.480Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "geometry: a row checked, no task open",
+           "contentType": "application/json"
+          },
+          {
+           "name": "geometry: a task opened",
+           "contentType": "application/json"
+          },
+          {
+           "name": "geometry: the window widened to 1920px",
+           "contentType": "application/json"
+          },
+          {
+           "name": "geometry: the window back at 1280px",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34coPBqt8gi229cVNds0E/runs3/resident-fix-r1-out/tasks-toolbar.browser.mjs--fbca4-widened-and-narrowed-run-1--webkit-dark-desktop/attachments/computed-styles-and-timings-a26404a8f57414a3d08c6aa99a025672d90b5131.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "dbfe25a13a7147205ec9-57a8f877267517655c6a",
+     "file": "tasks-toolbar.browser.mjs",
+     "line": 77,
+     "column": 3
+    },
+    {
+     "title": "a task open, Space checks it (run 2)",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1665,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T03:44:13.325Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "geometry: Space with a task open",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34coPBqt8gi229cVNds0E/runs3/resident-fix-r1-out/tasks-toolbar.browser.mjs-a-task-open-Space-checks-it-run-2--webkit-dark-desktop/attachments/computed-styles-and-timings-21d052fac7fff176613ffb0d3e8def3f1556aeab.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "dbfe25a13a7147205ec9-ee19ee40ae421c6b77ed",
+     "file": "tasks-toolbar.browser.mjs",
+     "line": 54,
+     "column": 3
+    },
+    {
+     "title": "a task open, a row checked, then the task closed (run 2)",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1587,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T03:44:14.995Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "geometry: a row checked with a task open",
+           "contentType": "application/json"
+          },
+          {
+           "name": "geometry: the task closed",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34coPBqt8gi229cVNds0E/runs3/resident-fix-r1-out/tasks-toolbar.browser.mjs--6617b-then-the-task-closed-run-2--webkit-dark-desktop/attachments/computed-styles-and-timings-fb8679dd76108ff384a87f8cfadb5a9693aced9c.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "dbfe25a13a7147205ec9-72a5b5bc390b4bae9b04",
+     "file": "tasks-toolbar.browser.mjs",
+     "line": 65,
+     "column": 3
+    },
+    {
+     "title": "a row checked, then a task opened, the window widened and narrowed (run 2)",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1888,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T03:44:16.587Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "geometry: a row checked, no task open",
+           "contentType": "application/json"
+          },
+          {
+           "name": "geometry: a task opened",
+           "contentType": "application/json"
+          },
+          {
+           "name": "geometry: the window widened to 1920px",
+           "contentType": "application/json"
+          },
+          {
+           "name": "geometry: the window back at 1280px",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34coPBqt8gi229cVNds0E/runs3/resident-fix-r1-out/tasks-toolbar.browser.mjs--ef073-widened-and-narrowed-run-2--webkit-dark-desktop/attachments/computed-styles-and-timings-53fd0da0c56183e36335e3d4e082d9c31f786e62.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "dbfe25a13a7147205ec9-b18a68d8421bdfa12a65",
+     "file": "tasks-toolbar.browser.mjs",
+     "line": 77,
+     "column": 3
+    },
+    {
+     "title": "a task open, Space checks it (run 3)",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1851,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T03:44:18.481Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "geometry: Space with a task open",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34coPBqt8gi229cVNds0E/runs3/resident-fix-r1-out/tasks-toolbar.browser.mjs-a-task-open-Space-checks-it-run-3--webkit-dark-desktop/attachments/computed-styles-and-timings-b44fdb47f5a2f553bf3308db3dedfef87d6591d0.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "dbfe25a13a7147205ec9-b415613c5453b5727a2e",
+     "file": "tasks-toolbar.browser.mjs",
+     "line": 54,
+     "column": 3
+    },
+    {
+     "title": "a task open, a row checked, then the task closed (run 3)",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1659,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T03:44:20.339Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "geometry: a row checked with a task open",
+           "contentType": "application/json"
+          },
+          {
+           "name": "geometry: the task closed",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34coPBqt8gi229cVNds0E/runs3/resident-fix-r1-out/tasks-toolbar.browser.mjs--c4a7f-then-the-task-closed-run-3--webkit-dark-desktop/attachments/computed-styles-and-timings-b9db280258224917c18346bc60dfdb5a7b7000fa.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "dbfe25a13a7147205ec9-9e0adfcd9da46be91f81",
+     "file": "tasks-toolbar.browser.mjs",
+     "line": 65,
+     "column": 3
+    },
+    {
+     "title": "a row checked, then a task opened, the window widened and narrowed (run 3)",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2000,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T03:44:22.003Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "geometry: a row checked, no task open",
+           "contentType": "application/json"
+          },
+          {
+           "name": "geometry: a task opened",
+           "contentType": "application/json"
+          },
+          {
+           "name": "geometry: the window widened to 1920px",
+           "contentType": "application/json"
+          },
+          {
+           "name": "geometry: the window back at 1280px",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34coPBqt8gi229cVNds0E/runs3/resident-fix-r1-out/tasks-toolbar.browser.mjs--5459a-widened-and-narrowed-run-3--webkit-dark-desktop/attachments/computed-styles-and-timings-2c948c066e0a55fd6770e510e9b396f657ed5724.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "dbfe25a13a7147205ec9-0cff0056fb85912a05d7",
+     "file": "tasks-toolbar.browser.mjs",
+     "line": 77,
+     "column": 3
+    },
+    {
+     "title": "a task open, Space checks it (run 4)",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1424,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T03:44:24.010Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "geometry: Space with a task open",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34coPBqt8gi229cVNds0E/runs3/resident-fix-r1-out/tasks-toolbar.browser.mjs-a-task-open-Space-checks-it-run-4--webkit-dark-desktop/attachments/computed-styles-and-timings-cb38b805ac0582f3f0466000aa6627b0069db902.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "dbfe25a13a7147205ec9-af859258d7810f8a1d24",
+     "file": "tasks-toolbar.browser.mjs",
+     "line": 54,
+     "column": 3
+    },
+    {
+     "title": "a task open, a row checked, then the task closed (run 4)",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1557,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T03:44:25.445Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "geometry: a row checked with a task open",
+           "contentType": "application/json"
+          },
+          {
+           "name": "geometry: the task closed",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34coPBqt8gi229cVNds0E/runs3/resident-fix-r1-out/tasks-toolbar.browser.mjs--c9bc9-then-the-task-closed-run-4--webkit-dark-desktop/attachments/computed-styles-and-timings-596c506e0e30bb6102a64012045357538da3f2ba.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "dbfe25a13a7147205ec9-34d98473e9a80602af1d",
+     "file": "tasks-toolbar.browser.mjs",
+     "line": 65,
+     "column": 3
+    },
+    {
+     "title": "a row checked, then a task opened, the window widened and narrowed (run 4)",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 1521,
+         "errors": [],
+         "stdout": [],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T03:44:27.006Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "geometry: a row checked, no task open",
+           "contentType": "application/json"
+          },
+          {
+           "name": "geometry: a task opened",
+           "contentType": "application/json"
+          },
+          {
+           "name": "geometry: the window widened to 1920px",
+           "contentType": "application/json"
+          },
+          {
+           "name": "geometry: the window back at 1280px",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34coPBqt8gi229cVNds0E/runs3/resident-fix-r1-out/tasks-toolbar.browser.mjs--a53c9-widened-and-narrowed-run-4--webkit-dark-desktop/attachments/computed-styles-and-timings-798a88f970653af3951d547221532f43faa58572.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "dbfe25a13a7147205ec9-263316d54cd43086aac4",
+     "file": "tasks-toolbar.browser.mjs",
+     "line": 77,
+     "column": 3
+    }
+   ]
+  }
+ ],
+ "errors": [],
+ "stats": {
+  "startTime": "2026-10-10T03:42:48.640Z",
+  "duration": 100026.56,
+  "expected": 48,
+  "skipped": 0,
+  "unexpected": 0,
+  "flaky": 0
+ }
+}

@@ -32,6 +32,8 @@ object ManagementFixture {
     val queries = CopyOnWriteArrayList<String>()
     /** The account's switch for smart model selection as users/me's preferences carry it; null leaves it out, as before it was written. */
     @Volatile var modelRouting: Boolean? = null
+    /** The account's Session recaps switch as users/me's preferences carry it; null leaves it out, as before it was written. */
+    @Volatile var recaps: Boolean? = null
     /** GET access-tokens' tokens, newest first; DELETE access-tokens/:id revokes one (REVOKED, by its USER). */
     @Volatile var accessTokens: List<JsonObject> = emptyList()
     @Volatile var accessTokensFail = false
@@ -84,7 +86,7 @@ object ManagementFixture {
         runnerEngines = "[]"; runnerExtra = ""; loginRelay = """{"status":null}"""; loginStarted = """{"status":"pending"}"""
         codeSent = """{"status":"done"}"""; onCode = {}; loginBodies.clear(); pauseBodies.clear()
         drop = CompletableDeferred(); opened = 0
-        queries.clear(); modelRouting = null; accessTokens = emptyList(); accessTokensFail = false; providerCatalog = "[]"; providersMine = "[]"
+        queries.clear(); modelRouting = null; recaps = null; accessTokens = emptyList(); accessTokensFail = false; providerCatalog = "[]"; providersMine = "[]"
         balances.clear(); balanceGates.clear(); task = "{}"
     }
 
@@ -110,7 +112,7 @@ object ManagementFixture {
 
     private val now get() = Instant.now()
     private fun user() = """{"id":"$ME","email":"a13@example.test","name":"Fixture","role":"MEMBER","avatarUpdatedAt":null,
-        "preferences":{"theme":"$theme","defaultPermissionMode":"auto","enableOrchestration":true${modelRouting?.let { ",\"modelRouting\":$it" }.orEmpty()}}}"""
+        "preferences":{"theme":"$theme","defaultPermissionMode":"auto","enableOrchestration":true${modelRouting?.let { ",\"modelRouting\":$it" }.orEmpty()}${recaps?.let { ",\"recaps\":$it" }.orEmpty()}}}"""
     private fun workspace() = """{"id":"$WORKSPACE","name":"$workspaceName","runnerId":"$RUNNER","enabled":true,"workDir":"/srv/alpha",
         "lastProvider":"claude","effort":"","modelRouting":false,"env":{},"position":0,"createdAt":"2026-09-01T00:00:00Z"}"""
     private fun runners() = runnerOrder.filter { (it == RUNNER || secondRunner) && it !in removedRunners }.joinToString(",", "[", "]") { if (it == RUNNER) runner() else runnerTwo() }
@@ -148,6 +150,7 @@ object ManagementFixture {
             "users/me/preferences" -> {
                 body()["theme"]?.let { theme = it.jsonPrimitive.content }
                 body()["modelRouting"]?.let { modelRouting = it.jsonPrimitive.boolean }
+                body()["recaps"]?.let { recaps = it.jsonPrimitive.boolean }
                 ok(user())
             }
             "access-tokens" -> if (accessTokensFail) fail(503, "token list failed") else ok("""{"tokens":${JsonArray(accessTokens)}}""")

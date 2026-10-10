@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -237,6 +238,10 @@ func TestDshPermissionBridge(t *testing.T) {
 // TestDshAutoRoutineEscalation: which escalations Auto may allow without a person. The commands are
 // shaped like the ones dsh task sessions escalated in an isolated worktree (2026-10-07/08).
 func TestDshAutoRoutineEscalation(t *testing.T) {
+	// A runner home outside every temp area, so a path beside the cache root is judged as the
+	// runner's own state and not as /tmp (the check is pure string work; nothing is created).
+	t.Setenv("ORBIT_HOME", "/orbit-runner-home")
+	cacheRoot := runnerCacheRoot()
 	escalation := func(command, workdir string) dshPermissionAsk {
 		input := map[string]interface{}{"command": command, "description": "probe", "sandbox_permissions": "danger-full-access", "justification": "probe"}
 		if workdir != "" {
@@ -254,6 +259,8 @@ func TestDshAutoRoutineEscalation(t *testing.T) {
 		{name: "merge with workdir", command: "git merge origin/main --no-edit 2>&1 | tail -30; echo \"EXIT=${PIPESTATUS[0]}\"", workdir: "/w", want: true},
 		{name: "amend", command: "git add -A && git commit -q --amend --no-edit && git status --short | head -3", want: true},
 		{name: "build cache", command: "cd src/runner-go && go test -count=1 ./...", want: true},
+		{name: "the shared cache root", command: "GOCACHE=" + cacheRoot + "/go-build go test ./...", want: true},
+		{name: "runner state outside the shared cache root", command: "cp out " + filepath.Dir(cacheRoot) + "/config.json", want: false},
 		{name: "message file in tmp", command: "git commit -F /tmp/msg.txt > /dev/null", want: true},
 		{name: "index file named by PWD", command: "GIT_INDEX_FILE=$PWD/.probe-index git read-tree HEAD", want: true},
 		{name: "prose in a quoted message", command: "git add a.ts && git commit -q -m \"docs: the Gmail / Google Workspace limit, see ~/notes and ../x\n\nSpotted in \\\"5.2\\\".\" && git status --short", want: true},
@@ -295,6 +302,19 @@ func TestDshAutoRoutineEscalation(t *testing.T) {
 	}
 	if dshAutoRoutineEscalation(escalation("git commit -am x", ""), "") {
 		t.Fatal("without a workspace nothing is routine")
+	}
+}
+
+// TestDshWritableRoots: a workspace-write session's writable set is its workspace, the platform
+// temp areas dsh's own sandbox profile grants, and the runner-owned shared cache root its Go and
+// npm caches live in — the same root Codex's sandbox policy grants.
+func TestDshWritableRoots(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("ORBIT_HOME", home)
+	roots := dshWritableRoots("/work")
+	want := []string{"/work", "/tmp", os.TempDir(), filepath.Join(home, "caches")}
+	if !reflect.DeepEqual(roots, want) {
+		t.Fatalf("dshWritableRoots() = %#v, want %#v", roots, want)
 	}
 }
 

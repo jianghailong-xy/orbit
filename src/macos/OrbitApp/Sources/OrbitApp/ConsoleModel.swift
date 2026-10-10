@@ -945,6 +945,17 @@ final class ConsoleModel {
     private static let tailPage = 200
     /// Page size for scroll-up history fetches (web parity — `OLDER_PAGE`). See `loadOlder()`.
     private static let olderPage = 200
+    /// How many `olderPage`-sized pages a reconnect will spend closing its gap over REST before it
+    /// re-seeds from the tail instead (5 × 200). Deliberately the server's own budget: it answers a
+    /// gap wider than `SSE_GAP_CAP` (1000) with `resync` rather than replaying it, so a client that
+    /// paged past 1000 and kept going would be spending transfers on events the server would have
+    /// already told it to drop. See `catchUpToTail`.
+    private static let catchUpPages = 5
+    /// Per-request timeout for the small page reads that gate a first paint or a reconnect's
+    /// catch-up (see `APIClient.makeRequest`). 20s is several times a healthy gzipped page on a
+    /// slow link; a read still idle at that point is a dead socket, and its retry — on a fresh
+    /// connection — lands sooner than the 60s default it would otherwise wait out.
+    private static let pageTimeout: TimeInterval = 20
     /// Ceiling on the transcript items kept in memory, and the hysteresis above it before a trim
     /// fires. See `TranscriptReducer.trimOlder` for what a trim moves; this is only the number.
     ///
@@ -1227,6 +1238,13 @@ final class ConsoleModel {
 
         reconnectPolicy = ReconnectPolicy()
         var isReconnect = false          // the first connect is seeded by `approvalsSeed` above
+        // Whether the window may sit far behind the session and should close that gap before its
+        // first stream connect: a snapshot restored from disk can be hours old, while a window this
+        // run has just seeded from is current by construction.
+        var catchUpPending = !coldOpen
+        // Whether the attempt before this one ended in a drop, so the window may have fallen behind
+        // while it was down. `.resync` leaves this false on purpose: it just re-seeded.
+        var catchUpAfterFailure = false
         while !Task.isCancelled {
             // A window opened at a record stays off the stream until it is back at the tail
             // (`newerCursor`): what the stream carries belongs past the gap, not at this window's end.
@@ -1262,6 +1280,15 @@ final class ConsoleModel {
                 Task { [weak self] in await self?.refreshRunner() }
             }
             isReconnect = true
+            // Close a large gap over compressed REST pages BEFORE the stream opens — see
+            // `catchUpToTail` for why a big gap must not ride the SSE replay. Runs on the first
+            // connect of a restored window and after any failed attempt; the healthy reconnects
+            // (`ended`, a kick, a just-re-seeded `resync`) have nothing to close.
+            if catchUpPending || catchUpAfterFailure {
+                await catchUpToTail()
+            }
+            catchUpPending = false
+            catchUpAfterFailure = false
             let outcome = await withTaskGroup(of: StreamOutcome.self) { group in
                 // The live read, on the main actor (folds into the shared reducer). Ends on a clean
                 // close, throws on a drop, or is cancelled by the kick watcher / view teardown.
@@ -1327,6 +1354,7 @@ final class ConsoleModel {
             // reconnect cursor-less — and a cursor-less replay is server-capped, so the fallback
             // is still a bounded catch-up rather than the full history.
             if outcome == .resync { await reseedFromTailPage() }
+            catchUpAfterFailure = (outcome == .failed)   // the next iteration may need to close a gap
             switch reconnectPolicy.next(after: outcome) {
             case .stop:
                 return
@@ -1345,16 +1373,67 @@ final class ConsoleModel {
     /// the loop the instant a page seeds (applyTailPage advances maxSeq); if all attempts fail the
     /// server still caps a cursor-less replay (SSE_REPLAY_CAP), so it degrades gracefully rather
     /// than dumping the full history.
+    ///
+    /// The short per-request timeout is what makes that retry rule worth anything on a dead socket:
+    /// this page gates the first paint, and waiting out the 60s default on a connection that is
+    /// gone serves nobody — the next attempt opens a fresh one (see `pageTimeout`).
     private func seedTailPage() async {
         for attempt in 0..<3 where reducer.state.maxSeq == 0 {
             if Task.isCancelled { return }
-            if let page = try? await api.eventPage(sessionID: sessionID, tail: Self.tailPage) {
+            if let page = try? await api.eventPage(sessionID: sessionID, tail: Self.tailPage,
+                                                   timeout: Self.pageTimeout) {
                 reducer.applyTailPage(page)   // also records the scroll-up window cursor (hasMoreOlder)
                 publishStateNow()
             } else if attempt < 2 {
                 try? await Task.sleep(nanoseconds: UInt64(300 * (attempt + 1)) * 1_000_000)
             }
         }
+    }
+
+    /// Close a large gap between the loaded window and the session's newest event BEFORE the live
+    /// stream connects, over gzipped REST pages rather than the SSE replay the stream would do.
+    ///
+    /// The gateway compresses `application/json` but deliberately NOT `text/event-stream`
+    /// (gateway/nginx.conf: compression buffers a stream), so a cursor'd replay is the one bulk
+    /// transfer in the console's open path that crosses the network uncompressed — and it is
+    /// all-or-nothing: a drop mid-replay leaves `maxSeq` where it was, so the next attempt asks for
+    /// the same cursor and pays for the whole gap again. That is the shape a Beijing → Cloudflare
+    /// link produced on 2026-10-10: `sinceSeq` stuck while ~700KB was re-pulled every few seconds.
+    /// A page is ~4× smaller on the wire (web's own measurement: 190KB raw → 45KB gzipped) and is
+    /// acknowledged by landing, so however the connection dies, at most the page in flight is lost.
+    ///
+    /// The budget mirrors the server's own policy: it answers a gap wider than `SSE_GAP_CAP` (1000)
+    /// with `resync` rather than replaying it (`catchUpPages` × `olderPage` = the same 1000), so
+    /// past that budget the window is re-seeded from a tail page instead. The reader is at the tail
+    /// either way, and the middle of a gap nobody saw carries nothing the tail page doesn't.
+    ///
+    /// A failed page is not retried here: the stream attempt right after this IS the retry, with
+    /// everything that landed already folded in (that is the whole point — the next attempt resumes
+    /// from the advanced `maxSeq` instead of the gap's start). Nothing to close leaves this a no-op.
+    private func catchUpToTail() async {
+        guard !sessionID.isEmpty, reducer.state.maxSeq > 0 else { return }
+        var cursor = reducer.state.maxSeq
+        for _ in 0..<Self.catchUpPages {
+            // Cheap pre-check: a window opened at a record must not fold anything until its gap
+            // closes (see below for why).
+            if Task.isCancelled || detached { return }
+            guard let page = try? await api.eventPageAfter(sessionID: sessionID, after: cursor,
+                                                           limit: Self.olderPage,
+                                                           timeout: Self.pageTimeout) else { return }
+            // Re-checked AFTER the await, on the main actor, so it is exhaustive: the window became
+            // a record window while this page was in flight (a link was opened on this console —
+            // `openRecord`), and folding a page past its gap would leave a hole in the middle of
+            // the transcript. The stream task bails for the same reason; this is the coarser of the
+            // two, and the check-then-fold below cannot interleave with anything.
+            if Task.isCancelled || detached { return }
+            reducer.appendNewer(page)   // folds exactly as the live stream would (it is `after=` data)
+            publishStateNow()
+            guard let next = page.after else { return }   // this page reached the newest event
+            cursor = next
+        }
+        // Still short of the tail after the whole budget: re-seed, as the server's `resync` would
+        // have. The window is replaced wholesale, so the dropped middle leaves no hole.
+        await reseedFromTailPage()
     }
 
     /// Act on the server's `resync`: drop the loaded window and rebuild it from a tail page.
@@ -1585,8 +1664,12 @@ final class ConsoleModel {
     private func followPendingRecord() async -> Bool {
         guard let record = pendingRecord, !sessionID.isEmpty else { return false }
         pendingRecord = nil
+        // Like the tail seed, this page gates the first paint (a link opens ON it), so it fails
+        // fast rather than waiting out a dead socket — `showTransientStatus` names the record as
+        // not found and the stream's capped replay paints the tail behind it.
         guard let page = try? await api.eventPageAround(sessionID: sessionID, record: record,
-                                                        limit: Self.tailPage),
+                                                        limit: Self.tailPage,
+                                                        timeout: Self.pageTimeout),
               let anchor = page.anchor else {
             showTransientStatus(SessionRecordLink.Copy.notFound)
             return false

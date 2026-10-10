@@ -104,6 +104,23 @@ const project = (extra: Record<string, unknown> = {}) => ({
   coordinatorActivity: { working: false, lastTurnAt: COORDINATOR.lastTurnAt },
   ...extra,
 });
+/** The unified projection a current server carries on the project document: every listed criterion
+ *  met its work, each with the landing reason given (`null` is "on main"), and the counts that
+ *  partition them. The default is the tally the owner read back — six criteria, five on main, one
+ *  with no code to land. */
+const derivedDone = (landingReasons: (string | null)[] = [null, null, null, null, null, 'CODELESS']) => {
+  const criteria = landingReasons.map((landingReason, index) => ({
+    definitionId: `c${index + 1}`, satisfied: true, landing: 'LANDED' as const, landingReason,
+  }));
+  const byReason = { IN_FLIGHT: 0, ON_PROJECT_BRANCH: 0, NOTHING_TO_LAND: 0, NO_RECEIPT: 0, CODELESS: 0 };
+  for (const reason of landingReasons) if (reason) byReason[reason as keyof typeof byReason] += 1;
+  const total = landingReasons.length;
+  return {
+    status: 'DONE' as const, done: true, withheld: [], confirmation: 'CONFIRMED' as const,
+    counts: { criteria: total, met: total, landed: total, onMain: total - landingReasons.filter(Boolean).length, byReason },
+    criteria,
+  };
+};
 
 class FakeEventSource {
   static streams: FakeEventSource[] = [];
@@ -546,11 +563,79 @@ describe('project sessions page', { timeout: 60_000 }, () => {
     expect(page()?.querySelector('.session-project-page-header')?.textContent).toContain('Project · 2 sessions');
     expect(page()?.querySelector('.session-project-page-progress')?.textContent).toContain('4/5 done · 0 running');
     expect(page()?.querySelector('.session-project-progress-bar .done')?.getAttribute('style')).toContain('80%');
+    // No projection to tally (`derivedDone`): the progress card stays where a current server's read
+    // would have drawn the project's ending.
+    expect(page()?.querySelector('.project-why-not-done')).toBeNull();
     expect(projectDetailsCalls).toEqual([`/projects/${PROJECT_ID}`]);
     expect(listCalls.some((path) => {
       const params = new URLSearchParams(path.split('?')[1]);
       return !params.has('workspaceId') && !params.has('projectId') && !params.has('limit');
     })).toBe(false);
+  });
+
+  it('draws the project’s ending where the progress card was, once the read carries the projection', async () => {
+    projects = [];
+    projectDetails = {
+      id: PROJECT_ID, title: 'Delivered Alpha', status: 'DONE', doneBy: 'DERIVED',
+      tasksByStatus: { DONE: 4, FAILED: 1, CANCELLED: 2 }, derivedDone: derivedDone(),
+    };
+    rows = [LOOSE, ...[COORDINATOR, TASK].map((session) => ({
+      ...session, lifecycleState: 'COMPLETED', status: 'SUCCEEDED', runState: 'SUCCEEDED',
+      projectMembership: { ...session.projectMembership!, projectStatus: 'DONE' },
+    }))];
+    await mount(() => expect(titles()).toEqual([LOOSE.title]));
+    await chooseView('Completed');
+    await until(() => expect(projectRows()).toHaveLength(1));
+    await openSessions();
+    await until(() => expect(page()?.querySelector('.session-project-page-header')?.textContent).toContain('Delivered Alpha'));
+    const ending = page()?.querySelector('.project-why-not-done.is-settled');
+    expect(ending?.querySelector('.project-settlement-heading')?.textContent).toBe('This project is done');
+    expect(ending?.querySelector('.criteria-provenance')?.textContent).toBe('recorded by Orbit');
+    expect(ending?.querySelector('.project-done-tally')?.textContent).toBe('6 criteria · 5 on main · 1 no code to land');
+    // The card it stands in for — one that would say nothing but "4/5 done · 0 running" — is gone.
+    expect(page()?.querySelector('.session-project-page-card')).toBeNull();
+  });
+
+  it('keeps the progress card when the projection carries no unified counts', async () => {
+    projects = [];
+    projectDetails = {
+      id: PROJECT_ID, title: 'Delivered Alpha', status: 'DONE', doneBy: 'DERIVED',
+      tasksByStatus: { DONE: 4, FAILED: 1, CANCELLED: 2 },
+      // An older server's projection: the criteria with no counts behind them draws none of these
+      // cards (the conversation's own rule).
+      derivedDone: { criteria: derivedDone().criteria },
+    };
+    rows = [LOOSE, ...[COORDINATOR, TASK].map((session) => ({
+      ...session, lifecycleState: 'COMPLETED', status: 'SUCCEEDED', runState: 'SUCCEEDED',
+      projectMembership: { ...session.projectMembership!, projectStatus: 'DONE' },
+    }))];
+    await mount(() => expect(titles()).toEqual([LOOSE.title]));
+    await chooseView('Completed');
+    await until(() => expect(projectRows()).toHaveLength(1));
+    await openSessions();
+    await until(() => expect(page()?.querySelector('.session-project-page-header')?.textContent).toContain('Delivered Alpha'));
+    expect(page()?.querySelector('.session-project-page-progress')?.textContent).toContain('4/5 done · 0 running');
+    expect(page()?.querySelector('.project-why-not-done')).toBeNull();
+  });
+
+  it('spells the badge of the ending the way the recorder wrote it', async () => {
+    projects = [];
+    projectDetails = {
+      id: PROJECT_ID, title: 'Delivered Alpha', status: 'DONE', doneBy: 'OWNER',
+      tasksByStatus: { DONE: 5 }, derivedDone: derivedDone([null, 'CODELESS']),
+    };
+    rows = [LOOSE, ...[COORDINATOR, TASK].map((session) => ({
+      ...session, lifecycleState: 'COMPLETED', status: 'SUCCEEDED', runState: 'SUCCEEDED',
+      projectMembership: { ...session.projectMembership!, projectStatus: 'DONE' },
+    }))];
+    await mount(() => expect(titles()).toEqual([LOOSE.title]));
+    await chooseView('Completed');
+    await until(() => expect(projectRows()).toHaveLength(1));
+    await openSessions();
+    await until(() => expect(page()?.querySelector('.project-why-not-done.is-settled')).not.toBeNull());
+    const ending = page()!.querySelector('.project-why-not-done.is-settled')!;
+    expect(ending.querySelector('.criteria-provenance')?.textContent).toBe('recorded by you');
+    expect(ending.querySelector('.project-done-tally')?.textContent).toBe('2 criteria · 1 on main · 1 no code to land');
   });
 
   it('lists Open and Completed members across workspaces, excludes Trash and counts running members', async () => {

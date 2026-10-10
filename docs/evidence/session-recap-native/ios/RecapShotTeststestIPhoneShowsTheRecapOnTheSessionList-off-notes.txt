@@ -1,0 +1,6 @@
+ios: Recap on the session list row is up; the fallback its line falls back to follows
+ios: S1 falls back to its raw reply shown
+ios: S4 falls back to its raw reply shown
+ios: no Recap ·  label anywhere confirmed
+ios: S2 still shows its raw reply shown
+ios: S3 still shows Running Bash… shown

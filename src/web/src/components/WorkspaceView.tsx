@@ -379,8 +379,8 @@ import {
   type SettlementQuestion,
   type StartPageRow,
 } from '../lib/projectStart';
-import { PROJECT_DONE_COPY } from '../lib/projectDone';
-import { SessionProjectSettlementCard } from './ProjectSettlementCard';
+import { PROJECT_DONE_COPY, type ProjectDoneDocument } from '../lib/projectDone';
+import { ProjectWhyNotDoneCard, SessionProjectSettlementCard } from './ProjectSettlementCard';
 import {
   OWNER_SEND_BACK_LABEL,
   OWNER_SENDING_BACK_PREFIX,
@@ -1109,7 +1109,10 @@ const waitingLabel = (s: any): string => {
 
 // `watching` is this session as an observer — what its row says about the live watches that will
 // resume it (lib/watches `watchingSessions`) — and absent wherever a caller holds no watches.
-export const sessionLine = (s: any, live: boolean, watching?: SessionWatching | null): SessionLine => {
+// `recaps` is the account's Session recaps switch (Settings): on unless turned off, and off means
+// the row falls through to the raw reply exactly as it did before the recap existed. It only ever
+// gates that one line — every live line above it is untouched.
+export const sessionLine = (s: any, live: boolean, watching?: SessionWatching | null, recaps = true): SessionLine => {
   // `sessionReadingState`, not the run's own status: a refused SOURCE is over (SR34) and its row
   // wears what a dead run wears, rather than the Starting line the wait would otherwise draw.
   const state = sessionReadingState(s);
@@ -1166,8 +1169,9 @@ export const sessionLine = (s: any, live: boolean, watching?: SessionWatching | 
   if (s.lastUserText) return sentLine(s.lastUserText);
   // The rolling recap (0418) takes the place of the reply preview it used to show: the sentence
   // the server wrote about the session, not the raw last reply flattened down to one line. Only
-  // here — below every live line above — so a working session still says what it is doing.
-  if (typeof s.recapText === 'string' && s.recapText.trim())
+  // here — below every live line above — so a working session still says what it is doing. Off
+  // with the account's Session recaps switch, the row falls through to the reply preview below.
+  if (recaps && typeof s.recapText === 'string' && s.recapText.trim())
     return { label: recapLabel(s.recapAt), text: s.recapText.trim(), tone: 'preview' };
   if (s.lastAssistantText) return { text: plainPreview(s.lastAssistantText), tone: 'preview' };
   // Nothing to preview at all (a run that died before even its user turn was recorded, or an older
@@ -1964,6 +1968,9 @@ export function WorkspaceView({
   // Workspace — the permission Mode a new session starts in). Cached/deduped with the nav footer.
   const me = useQuery(meQuery());
   const accountDefaultPermissionMode = me.data?.preferences?.defaultPermissionMode;
+  // The account's Session recaps switch (Settings): on unless turned off, so a list row prefers the
+  // server's recap until somebody opts out. Every row builder below reads it through `sessionLine`.
+  const recapsEnabled = me.data?.preferences?.recaps !== false;
   // Configured providers (custom slugs borrowing a built-in runtime) merged into the composer's
   // model list + context-window sizing when the open session/workspace uses one. Cached/deduped
   // app-wide by React Query; empty until it loads (then the model pill's options fill in).
@@ -3131,6 +3138,8 @@ export function WorkspaceView({
   const pageProject = projectsQ.data?.find((p) => p.id === openProjectId);
   const pageProjectDetailsQ = useQuery({
     ...projectDetailsQuery(openProjectId ?? ''),
+    // It is also what a DONE project's ending card is drawn from (`pageSettledDoc`): the Open-only
+    // sidebar carries no row for it, so this page reads its own document either way.
     enabled: !!openProjectId && projectsQ.isSuccess && !pageProject,
     refetchInterval: PROJECT_SESSION_REFRESH_MS,
   });
@@ -3143,6 +3152,16 @@ export function WorkspaceView({
   const pageProjectTitle = pageProject?.title ?? pageProjectDetailsQ.data?.title ?? projectMembers[0]?.projectMembership?.projectTitle ?? pageMenuCoordinator?.projectMembership?.projectTitle ?? 'Project';
   const pageRunningCount = projectMembers.filter((s) => statusGlyphMotion(s) === 'spinner').length;
   const pageStatus = pageProject?.status ?? pageProjectDetailsQ.data?.status ?? projectMembers[0]?.projectMembership?.projectStatus;
+  // The project's ending where the page's progress card was (owner, 2026-10-10): a DONE project's
+  // first card is its record — "This project is done · recorded by Orbit · 6 criteria · 5 on main
+  // · 1 no code to land" — and never a progress card with nothing in it but the word Done. The
+  // same card, off the same read, as the conversation's settled branch; a read that carries no
+  // projection, or one without the unified counts (an older server), keeps the progress card.
+  const pageDetails = pageProjectDetailsQ.data as unknown as ProjectDoneDocument | undefined;
+  const pageSettledDoc = pageDetails && pageStatus === 'DONE' && pageDetails.derivedDone != null
+      && 'counts' in pageDetails.derivedDone
+    ? pageDetails
+    : null;
   const pageSessionsError = (projectSessionsQ.error ?? completedProjectSessionsQ.error) as Error | null;
   // A project nobody has started (docs/mocks/project-start-sessions-page): its progress line says so,
   // and the start's row sits under it — by the project page's own rule (`startPageRow`), read off the
@@ -3193,10 +3212,10 @@ export function WorkspaceView({
       needsYou: sessionNeedsYou,
       motion: (s) => statusGlyphMotion(s, sessionWatching(watchingBySession, s.id)?.word),
       line: (s) => sessionLine(selectedSession?.id === s.id ? selectedSession : s,
-        effectiveView !== 'trash', sessionWatching(watchingBySession, s.id)),
+        effectiveView !== 'trash', sessionWatching(watchingBySession, s.id), recapsEnabled),
     }),
     [openFolder, visibleSessions, workspaceFolders, projectsQ.data, projectData.coordinators, projectData.contentSessions,
-      effectiveView, listByTag, runner.online, watchingBySession, selectedSession],
+      effectiveView, listByTag, runner.online, watchingBySession, selectedSession, recapsEnabled],
   );
   const listedSessions = useMemo(
     () => openProjectId ? projectMembers : folderListing.entries.flatMap((entry) => entry.kind === 'project'
@@ -9370,10 +9389,15 @@ export function WorkspaceView({
           ref={listRef}
           onScroll={onSessionListScroll}
         >
-          {/* The project's progress card and its merge into main lead the list and scroll with it, as
+          {/* The project's first card and its merge into main lead the list and scroll with it, as
               on iOS (docs/mocks/project-sessions-page-web); the coordinator's conversation keeps
-              a line about the merge. */}
-          {openProjectId && (
+              a line about the merge. A DONE project's first card is its ending, in the progress
+              card's place (docs/mocks/project-done-sessions-page) — the progress card itself would
+              say nothing but the word Done. */}
+          {openProjectId && pageSettledDoc && (
+            <ProjectWhyNotDoneCard project={pageSettledDoc} />
+          )}
+          {openProjectId && !pageSettledDoc && (
             <div className="session-project-page-card">
               <div className="session-project-page-progress">
                 {pageTaskCounts ? (
@@ -9540,7 +9564,7 @@ export function WorkspaceView({
                 // merged row for both status surfaces so the banner and its list warning point at
                 // the same canonical obligation during that refresh gap.
                 const watching = sessionWatching(watchingBySession, s.id);
-                const line = sessionLine(actionSession, openable, watching);
+                const line = sessionLine(actionSession, openable, watching, recapsEnabled);
                 const drag = swipeDrag?.id === s.id ? swipeDrag : null;
                 const swipeTx = drag
                   ? drag.dx

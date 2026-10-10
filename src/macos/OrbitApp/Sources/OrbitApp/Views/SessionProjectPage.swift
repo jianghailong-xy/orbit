@@ -275,6 +275,12 @@ struct SessionProjectPage: View {
             return false
         }.count
     }
+    /// The project as the page's ending is drawn from, while it is done — never what the model still
+    /// holds for another address, like the members above. Nil until the read answers, and on a
+    /// project that is not done.
+    private var doneSubject: ProjectDoneSubject? {
+        app.projectSessionsAddress == address ? app.projectSessionsDone : nil
+    }
     private var project: ProjectSummary? {
         app.projects?.sidebarProjects.first { $0.id == address.projectID } ?? app.projects?.project(address.projectID)
     }
@@ -313,7 +319,7 @@ struct SessionProjectPage: View {
 
     var body: some View {
         List(selection: selection) {
-            progressCard
+            firstCard
                 .listRowSeparator(.hidden)
             mergeCard
                 .listRowSeparator(.hidden)
@@ -342,6 +348,7 @@ struct SessionProjectPage: View {
                 group.addTask { @MainActor in await app.loadProjectIntegration(address) }
                 group.addTask { @MainActor in await app.loadProjectMerge(address, force: true) }
                 group.addTask { @MainActor in await app.loadProjectStart(address) }
+                group.addTask { @MainActor in await app.loadProjectDone(address) }
             }
         }
         .overlay {
@@ -420,9 +427,10 @@ struct SessionProjectPage: View {
                     app.openFromConversation(.task(taskID), overConsole: rowNavigation == .push)
                 })
         }
-        // Side by side, each on its own 4-second poll: the landing line, the merge card and the start
-        // row never wait behind the member lists, the slowest reads the page makes, and a poll of the
-        // members asks for neither list again unless something moved (`pollProjectSessions`).
+        // Side by side, each on its own 4-second poll: the landing line, the merge card, the start
+        // row and the ending never wait behind the member lists, the slowest reads the page makes,
+        // and a poll of the members asks for neither list again unless something moved
+        // (`pollProjectSessions`).
         .task(id: address) {
             await withTaskGroup(of: Void.self) { group in
                 group.addTask { @MainActor in
@@ -440,7 +448,11 @@ struct SessionProjectPage: View {
                 group.addTask { @MainActor in
                     await app.projects?.load()
                     await app.loadProjectStart(address)
-                    await Self.poll { await app.loadProjectStart(address) }
+                    await app.loadProjectDone(address)
+                    await Self.poll {
+                        await app.loadProjectStart(address)
+                        await app.loadProjectDone(address)
+                    }
                 }
             }
         }
@@ -470,6 +482,19 @@ struct SessionProjectPage: View {
         .frame(maxWidth: 240)
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isHeader)
+    }
+
+    /// The page's first card: the project's ending once it is done — the settled card the
+    /// conversation draws, "This project is done · recorded by Orbit · 6 criteria · 5 on main · 1 no
+    /// code to land", where a progress card would say nothing but the word Done
+    /// (docs/mocks/project-done-sessions-page, owner decision 2026-10-10) — and the progress card
+    /// before that, and for a read that carries no projection to tally.
+    @ViewBuilder private var firstCard: some View {
+        if let subject = doneSubject, ProjectPage.drawsEnding(subject) {
+            ProjectNotDoneCard(subject: subject, withCoordinator: 0, askedAt: nil)
+        } else {
+            progressCard
+        }
     }
 
     private var progressCard: some View {

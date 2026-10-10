@@ -1,0 +1,1728 @@
+{
+ "screenshots": {
+  "chromium-dark-desktop/p44-plan-compared.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 7,
+     "x": [
+      1216,
+      1218
+     ],
+     "y": [
+      203,
+      206
+     ]
+    },
+    {
+     "maxChannelDiff": 2,
+     "pixels": 6,
+     "x": [
+      1245,
+      1247
+     ],
+     "y": [
+      203,
+      206
+     ]
+    },
+    {
+     "maxChannelDiff": 2,
+     "pixels": 6,
+     "x": [
+      1216,
+      1217
+     ],
+     "y": [
+      227,
+      230
+     ]
+    },
+    {
+     "maxChannelDiff": 2,
+     "pixels": 5,
+     "x": [
+      1246,
+      1247
+     ],
+     "y": [
+      227,
+      230
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 2,
+   "pixels": 24,
+   "pixelsAtMost2": 24,
+   "sha256Del": "ec013e744c79a51b3f2b84ac33e9b386d640e0a5505f6dc2c02b14bf92b1f4b1",
+   "sha256Ref": "2fe872dad1a4a47e0795d5dec5ddac3ee64092493aed2480e48f9ff60f92e43a"
+  },
+  "chromium-dark-desktop/p44-plan-edit-changed.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 6,
+     "x": [
+      1087,
+      1090
+     ],
+     "y": [
+      860,
+      862
+     ]
+    },
+    {
+     "maxChannelDiff": 2,
+     "pixels": 10,
+     "x": [
+      1154,
+      1159
+     ],
+     "y": [
+      860,
+      864
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 7,
+     "x": [
+      1156,
+      1159
+     ],
+     "y": [
+      887,
+      891
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 3,
+     "x": [
+      1087,
+      1088
+     ],
+     "y": [
+      889,
+      891
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 2,
+   "pixels": 26,
+   "pixelsAtMost2": 26,
+   "sha256Del": "5ed51597965ddb37bbd70ca374a05099b5798788400c9547db436897d8f7c08a",
+   "sha256Ref": "7705c55db77d727752eadfa06b31da226b86fb59c442d1b8cc79fe30366c5acd"
+  },
+  "chromium-dark-desktop/p44-plan-edit-kinds.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 5,
+     "x": [
+      744,
+      745
+     ],
+     "y": [
+      209,
+      212
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 7,
+     "x": [
+      744,
+      746
+     ],
+     "y": [
+      249,
+      252
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 5,
+     "x": [
+      744,
+      745
+     ],
+     "y": [
+      273,
+      276
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 7,
+     "x": [
+      744,
+      746
+     ],
+     "y": [
+      313,
+      316
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 5,
+     "x": [
+      744,
+      745
+     ],
+     "y": [
+      359,
+      362
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 3,
+     "x": [
+      859,
+      860
+     ],
+     "y": [
+      398,
+      399
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 7,
+     "x": [
+      744,
+      746
+     ],
+     "y": [
+      399,
+      402
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 11,
+     "x": [
+      744,
+      749
+     ],
+     "y": [
+      423,
+      428
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 5,
+     "x": [
+      828,
+      830
+     ],
+     "y": [
+      427,
+      428
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 5,
+     "x": [
+      861,
+      863
+     ],
+     "y": [
+      427,
+      428
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 5,
+     "x": [
+      942,
+      944
+     ],
+     "y": [
+      427,
+      428
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 79,
+     "x": [
+      1101,
+      1148
+     ],
+     "y": [
+      475,
+      484
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 1,
+     "x": [
+      1136,
+      1136
+     ],
+     "y": [
+      477,
+      477
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 23,
+     "x": [
+      1143,
+      1158
+     ],
+     "y": [
+      477,
+      484
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 1,
+     "x": [
+      1159,
+      1159
+     ],
+     "y": [
+      477,
+      477
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 2,
+     "x": [
+      1094,
+      1094
+     ],
+     "y": [
+      497,
+      499
+     ]
+    },
+    {
+     "maxChannelDiff": 63,
+     "pixels": 1628,
+     "x": [
+      1205,
+      1216
+     ],
+     "y": [
+      497,
+      702
+     ]
+    },
+    {
+     "maxChannelDiff": 60,
+     "pixels": 3,
+     "x": [
+      1206,
+      1208
+     ],
+     "y": [
+      499,
+      499
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 2,
+     "x": [
+      744,
+      744
+     ],
+     "y": [
+      507,
+      508
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 3,
+     "x": [
+      1254,
+      1255
+     ],
+     "y": [
+      507,
+      509
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 6,
+     "x": [
+      1093,
+      1099
+     ],
+     "y": [
+      753,
+      758
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 8,
+     "x": [
+      1210,
+      1216
+     ],
+     "y": [
+      753,
+      758
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 6,
+     "x": [
+      1087,
+      1090
+     ],
+     "y": [
+      860,
+      862
+     ]
+    },
+    {
+     "maxChannelDiff": 2,
+     "pixels": 10,
+     "x": [
+      1154,
+      1159
+     ],
+     "y": [
+      860,
+      864
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 7,
+     "x": [
+      1156,
+      1159
+     ],
+     "y": [
+      887,
+      891
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 3,
+     "x": [
+      1087,
+      1088
+     ],
+     "y": [
+      889,
+      891
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 63,
+   "pixels": 1847,
+   "pixelsAtMost2": 219,
+   "sha256Del": "4916ce690f234a5b61b4664f4deda17f23c6e084d9a27163669001cc9a492e08",
+   "sha256Ref": "5c6e914d051e14c50b691dba6b75d94b9cce01b76385d2991406906517bcd35a"
+  },
+  "chromium-dark-desktop/p44-plan-edit.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 4,
+     "x": [
+      1093,
+      1094
+     ],
+     "y": [
+      512,
+      514
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 5,
+     "x": [
+      1215,
+      1216
+     ],
+     "y": [
+      512,
+      514
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 9,
+     "x": [
+      1093,
+      1096
+     ],
+     "y": [
+      531,
+      534
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 9,
+     "x": [
+      1213,
+      1216
+     ],
+     "y": [
+      531,
+      534
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 6,
+     "x": [
+      1087,
+      1090
+     ],
+     "y": [
+      860,
+      862
+     ]
+    },
+    {
+     "maxChannelDiff": 2,
+     "pixels": 10,
+     "x": [
+      1154,
+      1159
+     ],
+     "y": [
+      860,
+      864
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 7,
+     "x": [
+      1156,
+      1159
+     ],
+     "y": [
+      887,
+      891
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 3,
+     "x": [
+      1087,
+      1088
+     ],
+     "y": [
+      889,
+      891
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 2,
+   "pixels": 53,
+   "pixelsAtMost2": 53,
+   "sha256Del": "64be0c54ea7579452f549dfbc67b4ecc8d4d647270c8bf479977d8812dd24280",
+   "sha256Ref": "0f4f2c0e73e7760a09c6ab8e3156cd879c6f60f74957f3623ef7a01d0199dd79"
+  },
+  "chromium-dark-desktop/p44-plan-more.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 2,
+     "x": [
+      1111,
+      1112
+     ],
+     "y": [
+      239,
+      241
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 3,
+     "x": [
+      1245,
+      1247
+     ],
+     "y": [
+      239,
+      241
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 3,
+     "x": [
+      1111,
+      1113
+     ],
+     "y": [
+      272,
+      274
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 3,
+     "x": [
+      1245,
+      1247
+     ],
+     "y": [
+      272,
+      274
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 11,
+   "pixelsAtMost2": 11,
+   "sha256Del": "1c1c3717bc5f098a004e3170696676965438415bb82e89072cb1fb8b8281cf6f",
+   "sha256Ref": "b4d36cc5d7eb37fde07f2232556395cb59adf67f679ae4f4ecca98cf427b6897"
+  },
+  "chromium-dark-desktop/p44-plan-redraft.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 2,
+     "pixels": 13,
+     "x": [
+      714,
+      719
+     ],
+     "y": [
+      344,
+      349
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 5,
+     "x": [
+      784,
+      787
+     ],
+     "y": [
+      344,
+      345
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 6,
+     "x": [
+      714,
+      715
+     ],
+     "y": [
+      370,
+      373
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 2,
+   "pixels": 24,
+   "pixelsAtMost2": 24,
+   "sha256Del": "827c51612eba9f953fbe92f1969939fdcdb417383aa7ad101ccf44e68d5f5c6c",
+   "sha256Ref": "acb1d76caefd7e00d2d7bc05e9a9f9e7d93abc2efff9789bf76cf88feadc6d49"
+  },
+  "chromium-dark-desktop/p44-plan-section.png": {
+   "equal": true,
+   "sha256": "ef04d05a5ff1a57bd750ed401c0c8cb3df51543bf5bb6ffc2a2b0da4a1fb248d"
+  },
+  "chromium-dark-desktop/p44-plan-versions.png": {
+   "clusters": [
+    {
+     "maxChannelDiff": 1,
+     "pixels": 2,
+     "x": [
+      638,
+      639
+     ],
+     "y": [
+      239,
+      241
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 3,
+     "x": [
+      977,
+      979
+     ],
+     "y": [
+      239,
+      241
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 3,
+     "x": [
+      638,
+      640
+     ],
+     "y": [
+      299,
+      301
+     ]
+    },
+    {
+     "maxChannelDiff": 1,
+     "pixels": 3,
+     "x": [
+      977,
+      979
+     ],
+     "y": [
+      299,
+      301
+     ]
+    }
+   ],
+   "equal": false,
+   "maxChannelDiff": 1,
+   "pixels": 11,
+   "pixelsAtMost2": 11,
+   "sha256Del": "60b46c78e3aeb9b74ace69ef68e5b293c939aa6ec7a5d680b78caa334ad84bb8",
+   "sha256Ref": "641d977063500a7c094809acf0a0e6c29e7799f43da91ffbe947dda90a2f0b55"
+  },
+  "chromium-dark-desktop/p44-plan.png": {
+   "equal": true,
+   "sha256": "413afe3ebc590d4f5e42a3e08768a7cfd0325f22afc10b5c1ae980e2f74bad1a"
+  }
+ },
+ "styles": {
+  "chromium-dark-desktop/p44-plan": {},
+  "chromium-dark-desktop/p44-plan-compared": {},
+  "chromium-dark-desktop/p44-plan-edit": {
+   "drawer": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(52, 52, 55)"
+    ]
+   }
+  },
+  "chromium-dark-desktop/p44-plan-edit-changed": {
+   "drawer": {
+    "background": [
+     "rgba(0, 0, 0, 0)",
+     "rgb(52, 52, 55)"
+    ]
+   }
+  },
+  "chromium-dark-desktop/p44-plan-edit-kinds": {},
+  "chromium-dark-desktop/p44-plan-more": {},
+  "chromium-dark-desktop/p44-plan-redraft": {},
+  "chromium-dark-desktop/p44-plan-section": {},
+  "chromium-dark-desktop/p44-plan-versions": {}
+ },
+ "tests": {
+  "chromium-dark-desktop :: P4.4 the plan \u203a its versions, compare, redraft, the edit drawer and a section form": {
+   "del": "passed",
+   "ref": "passed"
+  }
+ },
+ "traces": {
+  "chromium-dark-desktop :: P4.4 the plan \u203a its versions, compare, redraft, the edit drawer and a section form": {
+   "differences": [
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "plan",
+      "url": "/wiki/orbit/plan"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-default",
+       "ant-btn-icon",
+       "ant-btn-icon-only",
+       "ant-btn-primary",
+       "ant-btn-variant-outlined",
+       "ant-btn-variant-solid",
+       "ant-dropdown-trigger"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "plan",
+      "url": "/wiki/orbit/plan"
+     },
+     "step": "plan"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "v2Draft",
+       "role": "menu"
+      },
+      "menus": [
+       [
+        {
+         "disabled": false,
+         "text": "v2Redraft \u00b7 Sep 28, 12:43 \u00b7 waiting for youDraft"
+        },
+        {
+         "disabled": false,
+         "text": "v1Sep 28, 09:12 \u00b7 confirmed by youConfirmed"
+        }
+       ]
+      ],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "versions",
+      "url": "/wiki/orbit/plan"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-default",
+       "ant-btn-icon",
+       "ant-btn-icon-only",
+       "ant-btn-primary",
+       "ant-btn-variant-outlined",
+       "ant-btn-variant-solid",
+       "ant-dropdown",
+       "ant-dropdown-css-var",
+       "ant-dropdown-menu",
+       "ant-dropdown-menu-css-var",
+       "ant-dropdown-menu-item",
+       "ant-dropdown-menu-item-only-child",
+       "ant-dropdown-menu-item-selected",
+       "ant-dropdown-menu-light",
+       "ant-dropdown-menu-root",
+       "ant-dropdown-menu-title-content",
+       "ant-dropdown-menu-vertical",
+       "ant-dropdown-open",
+       "ant-dropdown-placement-bottomLeft",
+       "ant-dropdown-trigger"
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "v2Draft",
+       "role": "button"
+      },
+      "menus": [
+       [
+        {
+         "disabled": false,
+         "text": "v2Redraft \u00b7 Sep 28, 12:43 \u00b7 waiting for youDraft"
+        },
+        {
+         "disabled": false,
+         "text": "v1Sep 28, 09:12 \u00b7 confirmed by youConfirmed"
+        }
+       ]
+      ],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "versions",
+      "url": "/wiki/orbit/plan"
+     },
+     "step": "versions"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "Compare with v1",
+       "role": "menu"
+      },
+      "menus": [
+       [
+        {
+         "disabled": false,
+         "text": "Compare with v1"
+        }
+       ]
+      ],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "more",
+      "url": "/wiki/orbit/plan"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-default",
+       "ant-btn-icon",
+       "ant-btn-icon-only",
+       "ant-btn-primary",
+       "ant-btn-variant-outlined",
+       "ant-btn-variant-solid",
+       "ant-dropdown",
+       "ant-dropdown-css-var",
+       "ant-dropdown-menu",
+       "ant-dropdown-menu-css-var",
+       "ant-dropdown-menu-item",
+       "ant-dropdown-menu-item-only-child",
+       "ant-dropdown-menu-light",
+       "ant-dropdown-menu-root",
+       "ant-dropdown-menu-title-content",
+       "ant-dropdown-menu-vertical",
+       "ant-dropdown-open",
+       "ant-dropdown-placement-bottomRight",
+       "ant-dropdown-trigger"
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "More",
+       "role": "button"
+      },
+      "menus": [
+       [
+        {
+         "disabled": false,
+         "text": "Compare with v1"
+        }
+       ]
+      ],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "more",
+      "url": "/wiki/orbit/plan"
+     },
+     "step": "more"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "More",
+       "role": "button"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "compared",
+      "url": "/wiki/orbit/plan"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-default",
+       "ant-btn-icon",
+       "ant-btn-icon-only",
+       "ant-btn-primary",
+       "ant-btn-variant-outlined",
+       "ant-btn-variant-solid",
+       "ant-dropdown-trigger"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "compared",
+      "url": "/wiki/orbit/plan"
+     },
+     "step": "compared"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [
+       "Redraft the planWiki maintenance drafts it again from draft v2, with what you write here. A draft that doesn\u2019t pass the "
+      ],
+      "focus": {
+       "name": "What should change: what to merge, split, move or leave out",
+       "role": "textarea"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "redraft",
+      "url": "/wiki/orbit/plan"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-default",
+       "ant-btn-icon",
+       "ant-btn-icon-only",
+       "ant-btn-primary",
+       "ant-btn-variant-outlined",
+       "ant-btn-variant-solid",
+       "ant-dropdown-trigger",
+       "ant-input",
+       "ant-input-css-var",
+       "ant-input-outlined",
+       "ant-modal",
+       "ant-modal-body",
+       "ant-modal-close",
+       "ant-modal-close-icon",
+       "ant-modal-close-x",
+       "ant-modal-container",
+       "ant-modal-footer",
+       "ant-modal-header",
+       "ant-modal-mask",
+       "ant-modal-title",
+       "ant-modal-wrap"
+      ],
+      "dialogs": [
+       "Redraft the planWiki maintenance drafts it again from draft v2, with what you write here. A draft that doesn\u2019t pass the "
+      ],
+      "focus": {
+       "name": "What should change: what to merge, split, move or leave out",
+       "role": "textarea"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "redraft",
+      "url": "/wiki/orbit/plan"
+     },
+     "step": "redraft"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "Redraft\u2026",
+       "role": "button"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [
+       {
+        "body": {
+         "instructions": "Split the runtime document in two."
+        },
+        "method": "POST",
+        "path": "/api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/plan/redraft"
+       }
+      ],
+      "step": "redraft asked",
+      "url": "/wiki/orbit/plan"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-default",
+       "ant-btn-icon",
+       "ant-btn-icon-only",
+       "ant-btn-primary",
+       "ant-btn-variant-outlined",
+       "ant-btn-variant-solid",
+       "ant-dropdown-trigger"
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "Redraft\u2026",
+       "role": "button"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [
+       {
+        "body": {
+         "instructions": "Split the runtime document in two."
+        },
+        "method": "POST",
+        "path": "/api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/plan/redraft"
+       }
+      ],
+      "step": "redraft asked",
+      "url": "/wiki/orbit/plan"
+     },
+     "step": "redraft asked"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [
+       "Plan v2 \u00b7 Draft \u00b7 \u4ea7\u54c1\u6982\u89c8Edit 1.1 \u4ea7\u54c1\u5b9a\u4f4d\u4e0e\u4f7f\u7528\u573a\u666fTitleQuestion\u6211\u662f\u65b0\u8bfb\u8005\uff0cOrbit \u89e3\u51b3\u4ec0\u4e48\u95ee\u9898\u3001\u548c\u76f4\u63a5\u5f00\u4e00\u4e2a CLI \u6709\u4ec0\u4e48\u4e0d\u540cWritten for One per line\u7b2c\u4e00\u6b21\u6253\u5f00 Or"
+      ],
+      "focus": {
+       "name": "Plan v2 \u00b7 Draft \u00b7 \u4ea7\u54c1\u6982\u89c8Edit 1.1 \u4ea7\u54c1\u5b9a\u4f4d\u4e0e\u4f7f\u7528\u573a\u666f",
+       "role": "dialog"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "edit drawer",
+      "url": "/wiki/orbit/plan"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-default",
+       "ant-btn-icon",
+       "ant-btn-icon-only",
+       "ant-btn-primary",
+       "ant-btn-sm",
+       "ant-btn-variant-outlined",
+       "ant-btn-variant-solid",
+       "ant-drawer",
+       "ant-drawer-body",
+       "ant-drawer-close",
+       "ant-drawer-content-wrapper",
+       "ant-drawer-footer",
+       "ant-drawer-header",
+       "ant-drawer-header-title",
+       "ant-drawer-mask",
+       "ant-drawer-open",
+       "ant-drawer-right",
+       "ant-drawer-section",
+       "ant-drawer-title",
+       "ant-dropdown-trigger",
+       "ant-input",
+       "ant-input-css-var",
+       "ant-input-number",
+       "ant-input-number-action",
+       "ant-input-number-action-down",
+       "ant-input-number-action-up",
+       "ant-input-number-css-var",
+       "ant-input-number-input",
+       "ant-input-number-mode-input",
+       "ant-input-number-outlined",
+       "ant-input-outlined",
+       "ant-select",
+       "ant-select-content",
+       "ant-select-content-has-value",
+       "ant-select-css-var",
+       "ant-select-input"
+      ],
+      "dialogs": [
+       "Plan v2 \u00b7 Draft \u00b7 \u4ea7\u54c1\u6982\u89c8Edit 1.1 \u4ea7\u54c1\u5b9a\u4f4d\u4e0e\u4f7f\u7528\u573a\u666fTitleQuestion\u6211\u662f\u65b0\u8bfb\u8005\uff0cOrbit \u89e3\u51b3\u4ec0\u4e48\u95ee\u9898\u3001\u548c\u76f4\u63a5\u5f00\u4e00\u4e2a CLI \u6709\u4ec0\u4e48\u4e0d\u540cWritten for One per line\u7b2c\u4e00\u6b21\u6253\u5f00 Or"
+      ],
+      "focus": {
+       "name": "Plan v2 \u00b7 Draft \u00b7 \u4ea7\u54c1\u6982\u89c8Edit 1.1 \u4ea7\u54c1\u5b9a\u4f4d\u4e0e\u4f7f\u7528\u573a\u666fTitleQuestion\u6211\u662f\u65b0\u8bfb\u8005\uff0cOrbit \u89e3\u51b3\u4ec0\u4e48\u95ee\u9898\u3001\u548c\u76f4\u63a5\u5f00\u4e00\u4e2a C",
+       "role": "div"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "edit drawer",
+      "url": "/wiki/orbit/plan"
+     },
+     "step": "edit drawer"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [
+       "Plan v2 \u00b7 Draft \u00b7 \u4ea7\u54c1\u6982\u89c8Edit 1.1 \u4ea7\u54c1\u5b9a\u4f4d\u4e0e\u4f7f\u7528\u573a\u666fTitleQuestion\u6211\u662f\u65b0\u8bfb\u8005\uff0cOrbit \u89e3\u51b3\u4ec0\u4e48\u95ee\u9898\u3001\u548c\u76f4\u63a5\u5f00\u4e00\u4e2a CLI \u6709\u4ec0\u4e48\u4e0d\u540cWritten for One per line\u7b2c\u4e00\u6b21\u6253\u5f00 Or"
+      ],
+      "focus": {
+       "name": "Overview",
+       "role": "option"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [
+       "",
+       ""
+      ],
+      "options": [
+       "Overview",
+       "Concepts",
+       "Flow",
+       "Interface",
+       "Data & config",
+       "Operations",
+       "Pitfalls",
+       "Decisions",
+       "Conventions",
+       "Other"
+      ],
+      "requests": [],
+      "step": "section kinds",
+      "url": "/wiki/orbit/plan"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-default",
+       "ant-btn-icon",
+       "ant-btn-icon-only",
+       "ant-btn-primary",
+       "ant-btn-sm",
+       "ant-btn-variant-outlined",
+       "ant-btn-variant-solid",
+       "ant-drawer",
+       "ant-drawer-body",
+       "ant-drawer-close",
+       "ant-drawer-content-wrapper",
+       "ant-drawer-footer",
+       "ant-drawer-header",
+       "ant-drawer-header-title",
+       "ant-drawer-mask",
+       "ant-drawer-open",
+       "ant-drawer-right",
+       "ant-drawer-section",
+       "ant-drawer-title",
+       "ant-dropdown-trigger",
+       "ant-input",
+       "ant-input-css-var",
+       "ant-input-number",
+       "ant-input-number-action",
+       "ant-input-number-action-down",
+       "ant-input-number-action-up",
+       "ant-input-number-css-var",
+       "ant-input-number-input",
+       "ant-input-number-mode-input",
+       "ant-input-number-outlined",
+       "ant-input-outlined",
+       "ant-select",
+       "ant-select-content",
+       "ant-select-content-has-value",
+       "ant-select-css-var",
+       "ant-select-dropdown"
+      ],
+      "dialogs": [
+       "Plan v2 \u00b7 Draft \u00b7 \u4ea7\u54c1\u6982\u89c8Edit 1.1 \u4ea7\u54c1\u5b9a\u4f4d\u4e0e\u4f7f\u7528\u573a\u666fTitleQuestion\u6211\u662f\u65b0\u8bfb\u8005\uff0cOrbit \u89e3\u51b3\u4ec0\u4e48\u95ee\u9898\u3001\u548c\u76f4\u63a5\u5f00\u4e00\u4e2a CLI \u6709\u4ec0\u4e48\u4e0d\u540cWritten for One per line\u7b2c\u4e00\u6b21\u6253\u5f00 Or"
+      ],
+      "focus": {
+       "name": "Kind",
+       "role": "combobox"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [
+       ""
+      ],
+      "options": [
+       "Overview",
+       "Concepts",
+       "Flow",
+       "Interface",
+       "Data & config",
+       "Operations",
+       "Pitfalls",
+       "Decisions",
+       "Conventions",
+       "Other"
+      ],
+      "requests": [],
+      "step": "section kinds",
+      "url": "/wiki/orbit/plan"
+     },
+     "step": "section kinds"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [
+       "Plan v2 \u00b7 Draft \u00b7 \u4ea7\u54c1\u6982\u89c8Edit 1.1 \u4ea7\u54c1\u5b9a\u4f4d\u4e0e\u4f7f\u7528\u573a\u666fTitleQuestion\u6211\u662f\u65b0\u8bfb\u8005\uff0cOrbit \u89e3\u51b3\u4ec0\u4e48\u95ee\u9898\u3001\u548c\u76f4\u63a5\u5f00\u4e00\u4e2a CLI \u6709\u4ec0\u4e48\u4e0d\u540cWritten for One per line\u7b2c\u4e00\u6b21\u6253\u5f00 Or"
+      ],
+      "focus": {
+       "name": "Kind",
+       "role": "combobox"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [
+       "",
+       ""
+      ],
+      "requests": [],
+      "step": "edited",
+      "url": "/wiki/orbit/plan"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-default",
+       "ant-btn-icon",
+       "ant-btn-icon-only",
+       "ant-btn-primary",
+       "ant-btn-sm",
+       "ant-btn-variant-outlined",
+       "ant-btn-variant-solid",
+       "ant-drawer",
+       "ant-drawer-body",
+       "ant-drawer-close",
+       "ant-drawer-content-wrapper",
+       "ant-drawer-footer",
+       "ant-drawer-header",
+       "ant-drawer-header-title",
+       "ant-drawer-mask",
+       "ant-drawer-open",
+       "ant-drawer-right",
+       "ant-drawer-section",
+       "ant-drawer-title",
+       "ant-dropdown-trigger",
+       "ant-input",
+       "ant-input-css-var",
+       "ant-input-number",
+       "ant-input-number-action",
+       "ant-input-number-action-down",
+       "ant-input-number-action-up",
+       "ant-input-number-css-var",
+       "ant-input-number-input",
+       "ant-input-number-mode-input",
+       "ant-input-number-outlined",
+       "ant-input-outlined",
+       "ant-select",
+       "ant-select-content",
+       "ant-select-content-has-value",
+       "ant-select-css-var",
+       "ant-select-focused"
+      ],
+      "dialogs": [
+       "Plan v2 \u00b7 Draft \u00b7 \u4ea7\u54c1\u6982\u89c8Edit 1.1 \u4ea7\u54c1\u5b9a\u4f4d\u4e0e\u4f7f\u7528\u573a\u666fTitleQuestion\u6211\u662f\u65b0\u8bfb\u8005\uff0cOrbit \u89e3\u51b3\u4ec0\u4e48\u95ee\u9898\u3001\u548c\u76f4\u63a5\u5f00\u4e00\u4e2a CLI \u6709\u4ec0\u4e48\u4e0d\u540cWritten for One per line\u7b2c\u4e00\u6b21\u6253\u5f00 Or"
+      ],
+      "focus": {
+       "name": "Kind",
+       "role": "combobox"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [
+       ""
+      ],
+      "requests": [],
+      "step": "edited",
+      "url": "/wiki/orbit/plan"
+     },
+     "step": "edited"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [
+       {
+        "body": {
+         "baseVersion": 2,
+         "doc": {
+          "audience": [
+           "\u7b2c\u4e00\u6b21\u6253\u5f00 Orbit \u7684\u4eba"
+          ],
+          "category": "overview",
+          "length": {
+           "max": 2000,
+           "min": 900
+          },
+          "protected": true,
+          "question": "\u6211\u662f\u65b0\u8bfb\u8005\uff0cOrbit \u89e3\u51b3\u4ec0\u4e48\u95ee\u9898\u3001\u548c\u76f4\u63a5\u5f00\u4e00\u4e2a CLI \u6709\u4ec0\u4e48\u4e0d\u540c",
+          "scopeIn": [
+           "Orbit \u89e3\u51b3\u7684\u95ee\u9898",
+           "\u548c CLI \u7684\u5dee\u522b"
+          ],
+          "scopeOut": [],
+          "sections": [
+           {
+            "covers": "\u4e00\u6bb5\u8bdd\u8bf4\u6e05 Orbit",
+            "key": "s1",
+            "kind": "concepts",
+            "length": 300,
+            "sources": {
+             "code": [],
+             "contracts": [],
+             "docs": [],
+             "sessions": null
+            },
+            "title": "\u603b\u89c8"
+           },
+           {
+            "covers": "\u54ea\u4e9b\u573a\u666f\u7528 Orbit",
+            "key": "s2",
+            "kind": "concepts",
+            "length": 600,
+            "sources": {
+             "code": [],
+             "contracts": [],
+             "docs": [
+              {
+               "path": "docs/architecture.md",
+               "section": "1. Why"
+              }
+             ],
+             "sessions": null
+            },
+            "title": "\u9002\u7528\u573a\u666f"
+           }
+          ],
+          "slug": "product",
+          "title": "\u4ea7\u54c1\u5b9a\u4f4d\u4e0e\u4f7f\u7528\u573a\u666f"
+         },
+         "docSlug": "product"
+        },
+        "method": "POST",
+        "path": "/api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/plan/edits"
+       }
+      ],
+      "step": "saved",
+      "url": "/wiki/orbit/plan?v=3"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-default",
+       "ant-btn-icon",
+       "ant-btn-primary",
+       "ant-btn-variant-outlined",
+       "ant-btn-variant-solid"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [
+       {
+        "body": {
+         "baseVersion": 2,
+         "doc": {
+          "audience": [
+           "\u7b2c\u4e00\u6b21\u6253\u5f00 Orbit \u7684\u4eba"
+          ],
+          "category": "overview",
+          "length": {
+           "max": 2000,
+           "min": 900
+          },
+          "protected": true,
+          "question": "\u6211\u662f\u65b0\u8bfb\u8005\uff0cOrbit \u89e3\u51b3\u4ec0\u4e48\u95ee\u9898\u3001\u548c\u76f4\u63a5\u5f00\u4e00\u4e2a CLI \u6709\u4ec0\u4e48\u4e0d\u540c",
+          "scopeIn": [
+           "Orbit \u89e3\u51b3\u7684\u95ee\u9898",
+           "\u548c CLI \u7684\u5dee\u522b"
+          ],
+          "scopeOut": [],
+          "sections": [
+           {
+            "covers": "\u4e00\u6bb5\u8bdd\u8bf4\u6e05 Orbit",
+            "key": "s1",
+            "kind": "concepts",
+            "length": 300,
+            "sources": {
+             "code": [],
+             "contracts": [],
+             "docs": [],
+             "sessions": null
+            },
+            "title": "\u603b\u89c8"
+           },
+           {
+            "covers": "\u54ea\u4e9b\u573a\u666f\u7528 Orbit",
+            "key": "s2",
+            "kind": "concepts",
+            "length": 600,
+            "sources": {
+             "code": [],
+             "contracts": [],
+             "docs": [
+              {
+               "path": "docs/architecture.md",
+               "section": "1. Why"
+              }
+             ],
+             "sessions": null
+            },
+            "title": "\u9002\u7528\u573a\u666f"
+           }
+          ],
+          "slug": "product",
+          "title": "\u4ea7\u54c1\u5b9a\u4f4d\u4e0e\u4f7f\u7528\u573a\u666f"
+         },
+         "docSlug": "product"
+        },
+        "method": "POST",
+        "path": "/api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/plan/edits"
+       }
+      ],
+      "step": "saved",
+      "url": "/wiki/orbit/plan?v=3"
+     },
+     "step": "saved"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [
+       "Edit \u00a71TitleKindOverviewCovers\u4e00\u6bb5\u8bdd\u8bf4\u6e05 OrbitLengthSaving makes draft v3; it goes through the plan check again.CancelSave dr"
+      ],
+      "focus": {
+       "name": "Edit \u00a71",
+       "role": "dialog"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "section form",
+      "url": "/wiki/orbit/plan/d/product/1?v=2"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-default",
+       "ant-btn-icon",
+       "ant-btn-icon-only",
+       "ant-btn-primary",
+       "ant-btn-variant-outlined",
+       "ant-btn-variant-solid",
+       "ant-input",
+       "ant-input-css-var",
+       "ant-input-number",
+       "ant-input-number-action",
+       "ant-input-number-action-down",
+       "ant-input-number-action-up",
+       "ant-input-number-css-var",
+       "ant-input-number-input",
+       "ant-input-number-mode-input",
+       "ant-input-number-outlined",
+       "ant-input-outlined",
+       "ant-modal",
+       "ant-modal-body",
+       "ant-modal-close",
+       "ant-modal-close-icon",
+       "ant-modal-close-x",
+       "ant-modal-container",
+       "ant-modal-footer",
+       "ant-modal-header",
+       "ant-modal-mask",
+       "ant-modal-title",
+       "ant-modal-wrap",
+       "ant-select",
+       "ant-select-content",
+       "ant-select-content-has-value",
+       "ant-select-css-var",
+       "ant-select-input",
+       "ant-select-outlined",
+       "ant-select-show-arrow",
+       "ant-select-single"
+      ],
+      "dialogs": [
+       "Edit \u00a71TitleKindOverviewCovers\u4e00\u6bb5\u8bdd\u8bf4\u6e05 OrbitLengthSaving makes draft v3; it goes through the plan check again.CancelSave dr"
+      ],
+      "focus": {
+       "name": "Close",
+       "role": "button"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [],
+      "step": "section form",
+      "url": "/wiki/orbit/plan/d/product/1?v=2"
+     },
+     "step": "section form"
+    },
+    {
+     "del": {
+      "alerts": [],
+      "antd": [
+       "ant-app"
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "Edit",
+       "role": "button"
+      },
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [
+       {
+        "body": {
+         "baseVersion": 2,
+         "docSlug": "product",
+         "section": {
+          "covers": "\u4e00\u6bb5\u8bdd\u8bf4\u6e05 Orbit",
+          "key": "s1",
+          "kind": "overview",
+          "length": 300,
+          "sources": {
+           "code": [],
+           "contracts": [],
+           "docs": [],
+           "sessions": null
+          },
+          "title": "Overview"
+         },
+         "sectionKey": "s1"
+        },
+        "method": "POST",
+        "path": "/api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/plan/edits"
+       }
+      ],
+      "step": "section saved",
+      "url": "/wiki/orbit/plan/d/product/1?v=2"
+     },
+     "ref": {
+      "alerts": [],
+      "antd": [
+       "ant-app",
+       "ant-btn",
+       "ant-btn-color-default",
+       "ant-btn-color-primary",
+       "ant-btn-default",
+       "ant-btn-icon",
+       "ant-btn-icon-only",
+       "ant-btn-primary",
+       "ant-btn-variant-outlined",
+       "ant-btn-variant-solid"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "menus": [],
+      "notifications": "",
+      "on": [],
+      "requests": [
+       {
+        "body": {
+         "baseVersion": 2,
+         "docSlug": "product",
+         "section": {
+          "covers": "\u4e00\u6bb5\u8bdd\u8bf4\u6e05 Orbit",
+          "key": "s1",
+          "kind": "overview",
+          "length": 300,
+          "sources": {
+           "code": [],
+           "contracts": [],
+           "docs": [],
+           "sessions": null
+          },
+          "title": "Overview"
+         },
+         "sectionKey": "s1"
+        },
+        "method": "POST",
+        "path": "/api/wiki/spaces/2zwQZ2hd93IvLb59t6pDl/plan/edits"
+       }
+      ],
+      "step": "section saved",
+      "url": "/wiki/orbit/plan/d/product/1?v=2"
+     },
+     "step": "section saved"
+    }
+   ],
+   "equal": false
+  }
+ }
+}

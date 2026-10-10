@@ -11,18 +11,22 @@ export interface PopoverProps extends FloatingProps {
   openOnHover?: boolean;
   disabled?: boolean;
   initialFocus?: RefObject<HTMLElement | null>;
+  /** As the replaced popover's `arrow.pointAtCenter`: above or below its trigger and aligned to one edge, the
+   *  popover moves so its arrow points at the trigger's centre, and flips at the viewport's edge without sliding. */
+  pointAtCenter?: boolean;
 }
 
-export function Popover({ trigger, title, children, openOnHover = false, disabled, initialFocus,
+export function Popover({ trigger, title, children, openOnHover = false, disabled, initialFocus, pointAtCenter = false,
   side = 'top', align = 'center', popupClassName, popupStyle, returnFocus, ...state }: PopoverProps) {
   const layer = useFloating(state);
   const popup = useRef<HTMLDivElement>(null);
   const anchor = useRef<HTMLButtonElement>(null);
-  const { positionerRef, ...offsets } = useWholePixelOffsets(anchor, 12, 8);
+  const pointAt = pointAtCenter && align !== 'center' ? align : undefined;
+  const { positionerRef, ...offsets } = useWholePixelOffsets(anchor, 12, 8, pointAt);
   return <BasePopover.Root open={layer.open} onOpenChange={layer.setOpen} modal={false}>
     <BasePopover.Trigger ref={anchor} render={trigger} disabled={disabled} openOnHover={openOnHover} delay={100} closeDelay={100} />
     <BasePopover.Portal container={layer.container()}>
-      <BasePopover.Positioner ref={positionerRef} side={side} align={align} {...offsets} collisionPadding={8} positionMethod={layer.positionMethod} className="orbit-floating-positioner" style={{ zIndex: layer.zIndex }}>
+      <BasePopover.Positioner ref={positionerRef} side={side} align={align} {...offsets} collisionPadding={pointAt ? 0 : 8} positionMethod={layer.positionMethod} className="orbit-floating-positioner" style={{ zIndex: layer.zIndex }}>
         <BasePopover.Popup ref={popup} initialFocus={initialFocus ?? popup} finalFocus={returnFocus}
           className={`orbit-popover${popupClassName ? ` ${popupClassName}` : ''}`} style={popupStyle}>
           <BasePopover.Arrow className="orbit-floating-arrow" style={calloutArrowStyle} />

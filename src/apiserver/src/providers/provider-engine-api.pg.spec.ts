@@ -5,7 +5,9 @@
  * session create, resume and config, task create, update and batch pin, run receipts. A key runs on
  * every engine its protocol reaches, a DeepSeek key on DeepSeek Harness too; the built-in `dsh` is
  * DeepSeek Harness on the owner's first DeepSeek key; a retired provider name resolves to the key it
- * was folded into; a key in use keeps the protocol its engines need; the sweep holds a run on a
+ * was folded into; a key in use keeps the protocol its engines need; /providers/mine says when each
+ * key last ran a session (a pool's member while the session is still on the pool, and the retired
+ * OpenCode encoding among the ways a session names a key); the sweep holds a run on a
  * runner's sign-in by that sign-in's quota, and never a run on a key. Named in
  * scripts/test-provider-engine-api.mjs; a missing server is a failure, not a skip.
  */
@@ -610,6 +612,55 @@ test('T3 provider-engine API on PostgreSQL', { timeout: 600_000 }, async (t) => 
     const shared = await connect(null, 'deepseek');
     const listed = await providers.listPublic(admin) as unknown as Array<{ slug: string; engines: string[] }>;
     assert.deepEqual(listed.find((r) => r.slug === shared.slug)?.engines, [AgentProvider.CLAUDE, AgentProvider.OPENCODE, AgentProvider.DSH]);
+  });
+
+  await t.test('T3 /providers/mine says when each key last ran a session: a turn on the key, a pool’s chosen member, and nothing for a key nobody spent', async () => {
+    const owner = await account('last-used');
+    const at = await machine(owner);
+    const ds = await connect(owner, 'deepseek');
+    const glm = await connect(owner, 'glm');
+    const sub = await connect(owner, 'anthropic', { apiKey: SUBSCRIPTION_TOKEN });
+    // A session RAN on the DeepSeek key three days ago — the key's last use is its last turn.
+    const ran = await create(at, { provider: ds.slug, model: 'deepseek-v4-flash' });
+    const threeDaysAgo = new Date(Date.now() - 3 * 86_400_000);
+    await db.session.update({ where: { id: ran.id }, data: { lastTurnAt: threeDaysAgo, status: RunStatus.AWAITING_INPUT } });
+    // Opened on the GLM key and never took a turn: not a use — newer than the encoded session's turn,
+    // so an implementation that counted creation would read it instead.
+    const idle = await create(at, { provider: glm.slug, model: 'glm-5.2' });
+    await db.session.update({ where: { id: idle.id }, data: { status: RunStatus.AWAITING_INPUT } });
+    // A key only ever opened on: nothing has spent it.
+    const unspent = await connect(owner, 'openai');
+    const opened = await create(at, { provider: unspent.slug, model: 'gpt-5.1' });
+    await db.session.update({ where: { id: opened.id }, data: { status: RunStatus.AWAITING_INPUT } });
+    // A session an older client opened in OpenCode's old encoding still names the GLM key in its model.
+    const encoded = await db.session.create({ data: {
+      title: 'old encoding', prompt: '', ownerId: owner, creatorId: owner, workspaceId: at.workspaceId,
+      assignedRunnerId: at.id, provider: AgentProvider.OPENCODE, providerBuiltin: true,
+      model: `orbit-${glm.slug}/glm-5.2`, status: RunStatus.AWAITING_INPUT,
+    } });
+    const yesterday = new Date(Date.now() - 86_400_000);
+    await db.session.update({ where: { id: encoded.id }, data: { lastTurnAt: yesterday } });
+    // An account pool of the subscription key: the claim spends the member, and a turn on the pooled
+    // session is the member's use.
+    const pool = await providers.createPool(owner, { label: `last-used ${randomUUID().slice(0, 6)}`, providerIds: [sub.id] }) as { id: string; slug: string };
+    const pooled = await create(at, { provider: pool.slug });
+    await claimed(at, pooled.id);
+    const recently = new Date(Date.now() - 60_000);
+    await db.session.update({ where: { id: pooled.id }, data: { lastTurnAt: recently } });
+
+    const lastUsed = async (id: string) => {
+      const mine = await providers.listMine(owner) as unknown as Array<{ id: string; lastUsedAt: Date | null }>;
+      return mine.find((row) => row.id === id)!.lastUsedAt;
+    };
+    assert.equal((await lastUsed(ds.id))?.getTime(), threeDaysAgo.getTime(), 'the key a session ran on, by its last turn');
+    assert.equal((await lastUsed(glm.id))?.getTime(), yesterday.getTime(), 'the retired encoding still names the key it spends');
+    assert.equal((await lastUsed(sub.id))?.getTime(), recently.getTime(), 'a pool claim counts on the member it chose');
+    assert.equal(await lastUsed(unspent.id), null, 'a key only ever opened on has never been used');
+
+    // Switched off the pool onto the runner's own sign-in: the member the session left is no longer
+    // credited — the stale recorded member is why the pool rule checks the session is still on a pool.
+    await sessions.updateConfig(owner, pooled.id, { provider: AgentProvider.CLAUDE } as never);
+    assert.equal(await lastUsed(sub.id), null, 'a session switched off the pool stops crediting its member');
   });
 
   await t.test('T3 the sweep runs a task on its own key while the runner reports its engine sign-in spent, and holds one on that sign-in', async () => {

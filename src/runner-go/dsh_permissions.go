@@ -361,11 +361,27 @@ var (
 	dshGitMessage = regexp.MustCompile(`\bgit\b[^;|&\n]*?\s(?:commit|merge|tag)\b[^;|&\n]*?\s(?:-m|--message)(?:=|\s+)('[^']*'|"(?:[^"\\$` + "`" + `]|\\.)*")`)
 )
 
+// dshWritableRoots is what a workspace-write dsh session may write: its workspace, the platform
+// temp areas the engine's own sandbox grants (@deepseek-ai/dsh-sandbox's writableRoots — the
+// workspace root, /tmp and os.tmpdir()), and the runner-owned shared toolchain cache
+// (runnerCacheRoot) every session's Go and npm caches live in.
+//
+// The root is the same one Codex's sandbox policy grants (codexRuntimeWorkspaceRoots), and a
+// session's own sandbox grants it too: dsh builds its grants from the workspace root and the temp
+// areas alone, so the session overlay adds the root to that profile itself
+// (dshSandboxCacheRootPlugin). Listing it here is what judges an escalation in Auto — a command
+// writing a cache the runner owns stays routine rather than filing a card, which is how a session
+// whose dsh process still runs under the grants of an older launch reaches its cache (the owner's
+// sign-off on that boundary).
+func dshWritableRoots(workspace string) []string {
+	return []string{workspace, "/tmp", os.TempDir(), runnerCacheRoot()}
+}
+
 // dshCommandStaysInWorkspace reads every word of a command line that could name a path — commit
 // messages excepted, here-documents fed to a non-interpreter and quoted -m text, as both are data
-// — and requires each to be in the workspace or a temporary directory. It is not a shell parser:
-// a word it cannot place (a HOME path, an unknown variable, a .. that leaves) fails the command,
-// so a misreading can only ever lead to a card.
+// — and requires each to be in dshWritableRoots. It is not a shell parser: a word it cannot place
+// (a HOME path, an unknown variable, a .. that leaves) fails the command, so a misreading can only
+// ever lead to a card.
 func dshCommandStaysInWorkspace(command, cwd, workspace string) bool {
 	text, ok := dshWithoutHeredocBodies(command)
 	if !ok {
@@ -378,7 +394,7 @@ func dshCommandStaysInWorkspace(command, cwd, workspace string) bool {
 		return false
 	}
 	text = strings.NewReplacer("${PWD}", cwd, "$PWD", cwd).Replace(text)
-	roots := []string{workspace, "/tmp", os.TempDir()}
+	roots := dshWritableRoots(workspace)
 	for _, word := range strings.FieldsFunc(text, func(r rune) bool { return strings.ContainsRune(" \t\r\n;|&<>()'\"`=", r) }) {
 		switch {
 		case strings.Contains(word, "://"):

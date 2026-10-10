@@ -5,7 +5,6 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
-import { App as AntApp } from 'antd';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WikiDocsDirectory, WikiPlanJob, WikiPlanProposal, WikiPlanState, WikiPlanVersion } from '@orbit/shared';
 import { WikiPage } from '../pages/WikiPage';
@@ -229,20 +228,18 @@ async function open(path: string): Promise<void> {
     root.render(
       <QueryClientProvider client={client}>
         <MemoryRouter initialEntries={[path]}>
-          <AntApp>
-            <Routes>
-              <Route path="/wiki/:space" element={<WikiPage route="home" />} />
-              <Route path="/wiki/:space/activity" element={<WikiPage route="activity" />} />
-              <Route path="/wiki/:space/plan" element={<WikiPage route="plan" />} />
-              <Route path="/wiki/:space/plan/d/:doc" element={<WikiPage route="planDoc" />} />
-              <Route path="/wiki/:space/plan/d/:doc/:section" element={<WikiPage route="planSection" />} />
-              <Route path="/wiki/:space/settings" element={<span>settings</span>} />
-              <Route path="/wiki/review" element={<span>review</span>} />
-              <Route path="/runners" element={<span>runners</span>} />
-              <Route path="/sessions/:id" element={<span>session</span>} />
-            </Routes>
-            <Where />
-          </AntApp>
+          <Routes>
+            <Route path="/wiki/:space" element={<WikiPage route="home" />} />
+            <Route path="/wiki/:space/activity" element={<WikiPage route="activity" />} />
+            <Route path="/wiki/:space/plan" element={<WikiPage route="plan" />} />
+            <Route path="/wiki/:space/plan/d/:doc" element={<WikiPage route="planDoc" />} />
+            <Route path="/wiki/:space/plan/d/:doc/:section" element={<WikiPage route="planSection" />} />
+            <Route path="/wiki/:space/settings" element={<span>settings</span>} />
+            <Route path="/wiki/review" element={<span>review</span>} />
+            <Route path="/runners" element={<span>runners</span>} />
+            <Route path="/sessions/:id" element={<span>session</span>} />
+          </Routes>
+          <Where />
           <ToastViewport />
         </MemoryRouter>
       </QueryClientProvider>,
