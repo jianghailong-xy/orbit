@@ -1,0 +1,4 @@
+POST /api/projects/34MainBranchProject001/start {"criteriaDigest":"seal-34MainBranchProject001","line":"PROJECT_BRANCH","projectBranchName":"refs/heads/project/34MainBranchProject001","upstreamRef":"refs/heads/release/3.0","automatic":true,"maxConcurrentTasks":2,"mergeCheckCommand":"make test","requestId":"item-1"}
+POST /api/projects/34MainBranchProject002/start {"criteriaDigest":"seal-34MainBranchProject002","line":"PROJECT_BRANCH","upstreamRef":"refs/heads/master","automatic":true,"maxConcurrentTasks":2,"mergeCheckCommand":null,"requestId":null}
+POST /api/projects/34MainBranchProject003/start {"criteriaDigest":"seal-34MainBranchProject003","line":"PROJECT_BRANCH","automatic":true,"maxConcurrentTasks":2,"mergeCheckCommand":null,"requestId":null}
+PATCH /api/projects/34MainBranchProject004/integration {"upstreamRef":"refs/heads/develop"}

@@ -101,11 +101,15 @@ const CHECK_NAMES: Record<string, string> = {
   MERGE_CHECK: 'the merge check',
 };
 
-const RUNNING_ELSEWHERE: Record<string, string> = {
-  LAND_TASK: 'another landing',
-  CHECK_PROMOTION: 'a check of the merge into main',
-  LAND_PROMOTION: 'the merge into main',
-};
+/** The job running on the branch first, by its kind. A merge into main is into the project's main
+ *  branch by name, which is main with no repository bound. */
+function runningElsewhere(main: string): Record<string, string> {
+  return {
+    LAND_TASK: 'another landing',
+    CHECK_PROMOTION: `a check of the merge into ${main}`,
+    LAND_PROMOTION: `the merge into ${main}`,
+  };
+}
 
 /** The sentence a page prints for a reason, built from the facts the row read. */
 function reasonSummary(code: LandTaskBlockingReasonCode, row: TaskIntegrationRow): string {
@@ -122,7 +126,7 @@ function reasonSummary(code: LandTaskBlockingReasonCode, row: TaskIntegrationRow
     case 'WAITING_SERIAL_SLOT': {
       const what = row.blockingTaskTitle
         ? `the landing of “${row.blockingTaskTitle}”`
-        : RUNNING_ELSEWHERE[row.blockingJobKind ?? ''] ?? 'another integration job';
+        : runningElsewhere(row.mainBranch ?? 'main')[row.blockingJobKind ?? ''] ?? 'another integration job';
       return `Waiting to land: ${what} is running on this branch first`;
     }
     case 'WAITING_RUNNER':

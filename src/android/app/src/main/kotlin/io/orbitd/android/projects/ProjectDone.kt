@@ -53,6 +53,11 @@ object ProjectDone {
     const val recordAsDoneRow = "Record as done…"
     const val noRequestMeta = "record as done anyway"
     const val landedOnMain = "landed on main"
+    /** [onMain] and [landedOnMain], said of the project's main branch (web's `whyNotDoneOn`, `landedOn`). */
+    fun on(main: String) = "on $main"
+    fun landedOn(main: String) = "landed on $main"
+    /** The branch the cards name where work landed: the project document's `integration.upstreamRef`, main when it says none. */
+    fun mainBranch(doc: JsonObject) = RunSettings.mainBranchName(doc.obj("integration")?.text("upstreamRef"))
     /** The cards' provenance badge. */
     const val provenanceBadge = "FROM ORBIT"
     const val noGaps = "Orbit has no gaps to report."
@@ -85,28 +90,29 @@ object ProjectDone {
     /** CODELESS says the same thing to a reader as a zero-commit task: there is nothing to land. */
     private fun nothingToLandCount(counts: JsonObject) = counts.obj("byReason").let { (it?.number("NOTHING_TO_LAND") ?: 0) + (it?.number("CODELESS") ?: 0) }
     /** `projectDoneCardTally`: the request card's three counts — its head already says how many criteria there are. */
-    fun cardTally(counts: JsonObject?) = counts?.let { "${it.n("met")} met · ${it.n("onMain")} $landedOnMain · ${nothingToLandCount(it)} $nothingToLand" }.orEmpty()
+    fun cardTally(counts: JsonObject?, main: String = RunSettings.defaultMainBranch) =
+        counts?.let { "${it.n("met")} met · ${it.n("onMain")} ${landedOn(main)} · ${nothingToLandCount(it)} $nothingToLand" }.orEmpty()
     /** `projectDoneReceiptTally`: how many were met, then the same three, then what was accepted. */
-    fun receiptTally(counts: JsonObject?, acceptedGaps: Int) = if (counts == null) "$acceptedGaps $gapsAccepted"
-        else "${counts.n("criteria")} criteria met · ${counts.n("onMain")} $landedOnMain · ${nothingToLandCount(counts)} $nothingToLand · $acceptedGaps $gapsAccepted"
+    fun receiptTally(counts: JsonObject?, acceptedGaps: Int, main: String = RunSettings.defaultMainBranch) = if (counts == null) "$acceptedGaps $gapsAccepted"
+        else "${counts.n("criteria")} criteria met · ${counts.n("onMain")} ${landedOn(main)} · ${nothingToLandCount(counts)} $nothingToLand · $acceptedGaps $gapsAccepted"
     /** `projectWhyNotDoneTally`: the criteria, then where each one stands, in parts that add up to them — a met criterion where its
      * work is, an unmet one as not met and never by its landing lane: "8 criteria · 2 on main · 6 not met". */
     fun whyNotDoneTally(doc: JsonObject): String {
         val criteria = doc.obj("derivedDone")?.objects("criteria") ?: return ""
         val met = criteria.filter { it.flag("satisfied") }
-        val parts = listOf("${criteria.size} criteria", "${met.count { it.text("landingReason") == null }} $onMain") +
+        val parts = listOf("${criteria.size} criteria", "${met.count { it.text("landingReason") == null }} ${on(mainBranch(doc))}") +
             reasonParts { reason -> met.count { it.text("landingReason") == reason } }
         return (parts + listOfNotNull((criteria.size - met.size).takeIf { it > 0 }?.let { "$it $notMet" })).joinToString(" · ")
     }
 
-    /** `landingReasonLabel`: one criterion's reason, as a row says it. Null is on main. */
-    fun landingReasonLabel(reason: String?) = when (reason) {
+    /** `landingReasonLabel`: one criterion's reason, as a row says it. Null is on the project's main branch, [main]. */
+    fun landingReasonLabel(reason: String?, main: String = RunSettings.defaultMainBranch) = when (reason) {
         "IN_FLIGHT" -> "In flight"
         "ON_PROJECT_BRANCH" -> onProjectBranch
         "NO_RECEIPT" -> mergedOutsideOrbit
         "NOTHING_TO_LAND" -> nothingToLand
         "CODELESS" -> "No code to land"
-        else -> "Landed on main"
+        else -> "Landed on $main"
     }
 
     /** One criterion of the projection beside the words the document states it in. */
@@ -118,17 +124,18 @@ object ProjectDone {
     }
     /** The criterion a gap or an answer names — by its id or by its key. */
     fun criterion(doc: JsonObject, key: String) = doc.objects("acceptanceCriteriaItems").firstOrNull { it.text("id") == key || it.text("key") == key }
-    fun criterionState(c: Criterion) = "${if (c.satisfied) "met" else "not met"} · ${landingReasonLabel(c.landingReason)}"
+    fun criterionState(c: Criterion, main: String = RunSettings.defaultMainBranch) = "${if (c.satisfied) "met" else "not met"} · ${landingReasonLabel(c.landingReason, main)}"
 
     /** `syntheticGaps`: the gaps a card nobody asked for carries — every criterion not met, or not on main for a reason that is a gap
      * (nothing to land and no code to land are outcomes, not gaps). */
     fun syntheticGaps(doc: JsonObject): List<JsonObject> = criteria(doc).filter { c ->
         (c.landingReason != null && c.landingReason != "NOTHING_TO_LAND" && c.landingReason != "CODELESS") || !c.satisfied
     }.map { c ->
+        val main = mainBranch(doc)
         buildJsonObject {
             put("criterionKey", c.key)
             put("title", c.text)
-            put("whyNotProven", if (c.satisfied) "Orbit cannot prove this criterion is on main: ${landingReasonLabel(c.landingReason)}."
+            put("whyNotProven", if (c.satisfied) "Orbit cannot prove this criterion is on $main: ${landingReasonLabel(c.landingReason, main)}."
                 else "Orbit cannot prove this criterion is met by its work yet.")
         }
     }
@@ -222,7 +229,7 @@ object ProjectDone {
         if (!ownerRecorded(doc, record)) return "$thisProjectIsDone · $recordedByOrbit"
         return receipt + (dateTime(doneAt(doc, record), zone)?.let { " · $it" } ?: "")
     }
-    fun receiptTally(doc: JsonObject, record: JsonObject?) = receiptTally(counts(doc), accepted(doc, record).size)
+    fun receiptTally(doc: JsonObject, record: JsonObject?) = receiptTally(counts(doc), accepted(doc, record).size, mainBranch(doc))
 
     /** `doneProvenance`: who recorded it. */
     fun provenance(doneBy: String?, acceptedGaps: Int) = if (doneBy == "OWNER") "$recordedByYou · $acceptedGaps $gapsAccepted" else recordedByOrbit

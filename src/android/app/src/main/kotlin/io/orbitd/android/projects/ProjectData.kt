@@ -106,6 +106,35 @@ class ProjectApi(private val auth: AuthSession, private val handle: SessionHandl
     suspend fun replaceCoordinator(id: String, revision: String) = send(revision, listOf("projects", id, "coordinator", "replace")) as? JsonObject
 }
 
+/** What `GET /projects/:id/integration` says about the project's main branch (`ProjectIntegrationView`, contract L6): the
+ * repository, the branches it can be chosen from, this account's last choice for that repository, and when this project's own
+ * was chosen. A server that predates them sends none of the four, and that reads as none. */
+object ProjectMainBranch {
+    /** The branches the runner last reported for the coordination workspace's checkout, without Orbit's own session branches — the
+     * Merge menu's list. */
+    data class Branches(val names: List<String>, val workspaceName: String, val reportedAt: String?)
+    /** This account's last choice of main branch for the repository, both short. */
+    data class LastChoice(val branch: String, val repository: String, val chosenAt: String?)
+
+    /** The repository, short ("acme/payments-api"); null for a project with none, which has no main branch to choose. */
+    fun repository(view: JsonObject?): String? = view?.text("repository")?.takeIf { it.isNotEmpty() }
+    fun branches(view: JsonObject?): Branches? {
+        val read = view?.obj("branches") ?: return null
+        return Branches(read.strings("names"), read.text("workspaceName") ?: return null, read.text("reportedAt"))
+    }
+    fun lastChoice(view: JsonObject?): LastChoice? {
+        val read = view?.obj("lastMainBranch") ?: return null
+        val branch = read.text("branch")?.takeIf { it.isNotEmpty() } ?: return null
+        return LastChoice(branch, read.text("repository").orEmpty(), read.text("chosenAt"))
+    }
+    /** When the owner chose this project's own main branch; null while it is still the default or one carried over. */
+    fun chosenAt(view: JsonObject?): String? = view?.text("upstreamChosenAt")
+    /** The main branch the project stands on, by name — before it is bound to its repository, the one binding gives it: the owner's
+     * last choice there, else main — and null for a project with no repository (web's `storedUpstream`). */
+    fun stored(view: JsonObject?): String? =
+        if (repository(view) == null) null else RunSettings.mainBranchName(view?.text("upstreamRef") ?: lastChoice(view)?.branch)
+}
+
 /** `APIClient.failureReason`: the server's own sentence when it wrote one (`ComposerLogic.serverMessage`). */
 fun failureReason(error: Throwable): String = when (error) {
     is ApiError -> when {

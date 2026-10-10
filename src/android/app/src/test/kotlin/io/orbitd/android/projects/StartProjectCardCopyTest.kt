@@ -130,25 +130,28 @@ class StartProjectCardCopyTest {
         assertEquals("task at a time", RunSettings.tasksAtATime(1))
     }
 
-    /** The request's row on the project page and the undecided line, held to ProjectRunSettings.swift part by part. */
+    /** The request's row on the project page and the undecided line, held to ProjectRunSettings.swift part by part. Where the line
+     * goes directly into the project's main branch, the words name that branch: MainBranchCopyTest holds that half to the web, and
+     * the pins here stop at the call, which takes the branch on every client. */
     @Test fun theStartsRowAndTheUndecidedLineAreTheSwiftsWords() {
         val suggestion = Json.parseToJsonElement("""{"line":"PROJECT_BRANCH","automatic":true,"maxConcurrentTasks":$count}""").jsonObject
         assertEquals("The coordinator asked · a project branch · Automatic on · at most $n at a time", StartProjectCopy.requestSummary(suggestion))
         assertEquals("The coordinator asked · directly into main · Automatic off · at most 1 at a time",
             StartProjectCopy.requestSummary(Json.parseToJsonElement("""{"line":"MAIN","automatic":false,"maxConcurrentTasks":1}""").jsonObject))
-        listOf("rowAsked,", "RunSettings.lineInSentence(settings.line),", "\"\\(RunSettings.automatic) \\(settings.automatic ? \"on\" : \"off\")\",",
+        listOf("rowAsked,", "RunSettings.lineInSentence(settings.line", "\"\\(RunSettings.automatic) \\(settings.automatic ? \"on\" : \"off\")\",",
             "\"at most \\(settings.maxConcurrentTasks) at a time\",", "].joined(separator: \" · \")",
-            "line == .main ? \"directly into main\" : \"a project branch\"").forEach { assertTrue("ProjectRunSettings.swift no longer says $it", page.contains(it)) }
+        ).forEach { assertTrue("ProjectRunSettings.swift no longer says $it", page.contains(it)) }
         assertEquals("Tasks land on: decided when you start", RunSettings.undecidedLine(null))
         assertEquals("Tasks land on: decided when you start — the coordinator suggests a project branch", RunSettings.undecidedLine("PROJECT_BRANCH"))
         assertTrue(page.contains("\"\\(tasksLandOn): \\(lineDecidedAtStart)\""))
-        assertTrue(page.contains("\"\\(decided) — \\(lineSuggested) \\(lineInSentence(suggested))\""))
+        assertTrue(page.contains("\"\\(decided) — \\(lineSuggested) \\(lineInSentence(suggested"))
     }
 
-    /** The owner's own Start… is set by the default rule and is a card nobody asked for (`OwnerStartProjectSheet`). */
+    /** The owner's own Start… is set by the default rule and is a card nobody asked for (`OwnerStartProjectSheet`). The main branch
+     * the rule also carries is MainBranchCopyTest's, held to the web. */
     @Test fun theOwnersStartIsSetByTheDefaultRule() {
         listOf("let line = decided ?? (graph.map(planHasDependencies) == true ? .projectBranch : .main)", "automatic: true,",
-            "maxConcurrentTasks: maxConcurrentTasks ?? 1,", "mergeCheckCommand: view?.mergeCheckCommand)",
+            "maxConcurrentTasks: maxConcurrentTasks ?? 1,", "mergeCheckCommand: view?.mergeCheckCommand",
             "ProjectStartRequest(settings: settings, why: \"\", criteriaDigest: criteriaDigest)").forEach {
             assertTrue("ProjectRunSettings.swift no longer says $it", page.contains(it))
         }

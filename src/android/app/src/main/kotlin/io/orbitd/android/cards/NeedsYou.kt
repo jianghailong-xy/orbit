@@ -5,11 +5,13 @@ import io.orbitd.android.core.realtime.SessionSnapshot
 import io.orbitd.android.navigation.ObjectId
 import io.orbitd.android.projects.ProjectDoc
 import io.orbitd.android.projects.ProjectDone
+import io.orbitd.android.projects.RunSettings
 import kotlinx.serialization.json.JsonObject
 import java.time.Instant
 
 /** One of the four owner items a session row carries (OrbitKit `SessionOwnerItem`, §7.6 V13). */
-data class OwnerItem(val itemId: String, val kind: String, val title: String, val since: String)
+/** `mainBranch` is the project's main branch, short — what a merge approval merges into — null with no repository bound. */
+data class OwnerItem(val itemId: String, val kind: String, val title: String, val since: String, val mainBranch: String? = null)
 
 /** What the cross-session bar says, and where its press goes (OrbitKit `NeedsYouBanner`): the session that has
  * waited longest, or — when one of the four owner items is waiting — the card that item is. */
@@ -95,7 +97,7 @@ object NeedsYouLogic {
 
     fun ownerItems(items: List<JsonObject>): List<OwnerItem> = items.mapNotNull { item ->
         OwnerItem(item.text("itemId") ?: return@mapNotNull null, item.text("kind") ?: "UNKNOWN",
-            item.text("title").orEmpty(), item.text("since").orEmpty())
+            item.text("title").orEmpty(), item.text("since").orEmpty(), item.text("mainBranch"))
     }
 
     /** The cross-session bar for a screen showing [focused], or null when nothing elsewhere is waiting. An owner item wins
@@ -110,9 +112,10 @@ object NeedsYouLogic {
         return NeedsYouBanner(elsewhere.size, target, text(elsewhere.size, target))
     }
 
-    /** The words the bar and a session row share for one of the four; null for a kind this build does not know. */
-    fun kindWord(kind: String): String? = when (kind) {
-        "PROMOTION_APPROVAL" -> "Approve merge to main"
+    /** The words the bar and a session row share for one of the four; null for a kind this build does not know. A merge approval
+     * names the branch it merges into, [main]. */
+    fun kindWord(kind: String, main: String = RunSettings.defaultMainBranch): String? = when (kind) {
+        "PROMOTION_APPROVAL" -> "Approve merge to $main"
         "COORDINATOR_QUESTION" -> "Question from coordinator"
         "ESCALATED" -> "Escalated to you"
         "FUSE_PAUSED" -> "Paused"
@@ -121,14 +124,17 @@ object NeedsYouLogic {
 
     /** The word of the item that has waited longest, for a row the server says waits on one of the four (OrbitKit
      * `oldestItemWord`); null when none is a kind this build knows. An unparseable instant sorts last, as for the bar. */
-    fun oldestItemWord(items: List<OwnerItem>): String? = items.mapNotNull { item -> kindWord(item.kind)?.let { it to (parse(item.since) ?: Instant.MAX) } }
+    fun oldestItemWord(items: List<OwnerItem>): String? = items.mapNotNull { item -> word(item)?.let { it to (parse(item.since) ?: Instant.MAX) } }
         .fold(null as Pair<String, Instant>?) { oldest, next -> if (oldest == null || next.second < oldest.second) next else oldest }?.first
 
     /** "Approve merge to main · Integration line": which of the four, and which project. */
     fun ownerItemText(item: OwnerItem, project: String?): String {
-        val what = kindWord(item.kind) ?: "Needs you"
+        val what = word(item) ?: "Needs you"
         return if (project.isNullOrEmpty()) what else "$what · $project"
     }
+
+    /** An item's word, its merge named by the main branch the item carries. */
+    private fun word(item: OwnerItem) = kindWord(item.kind, RunSettings.mainBranchName(item.mainBranch))
 
     /** The card an owner item is drawn as in its coordinator conversation (`CardFocus` addresses). */
     fun cardKey(item: OwnerItem): String = if (item.kind == "PROMOTION_APPROVAL") "promotion:" else "item:${item.itemId}"

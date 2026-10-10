@@ -848,7 +848,7 @@ export async function configureProjectIntegration(
       code: 'INTEGRATION_LINE_LOCKED',
       message: `this project started integrating into ${branchName(row.integrationRef)} at `
         + `${row.integrationStartedAt.toISOString()}, so its integration line can no longer change. `
-        + 'To change it, merge the project branch into main or abandon it first.',
+        + `To change it, merge the project branch into ${branchName(row.upstreamRef)} or abandon it first.`,
     });
   }
 

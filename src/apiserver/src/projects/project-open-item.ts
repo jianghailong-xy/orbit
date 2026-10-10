@@ -15,7 +15,7 @@ import {
   uuidToBase62,
 } from '@orbit/shared';
 
-import { taskLanding, readLandingBranches } from './project-criterion-landing';
+import { landingBranchesFor, mainBranchOf, taskLanding } from './project-criterion-landing';
 import { LIVE_PROMOTION_STATES } from './project-promotion';
 import {
   doorsForOpenItem,
@@ -251,6 +251,9 @@ export interface OpenItemDecisionRow {
   handover_note?: string | null;
   source_job?: string | null;
   failure_class?: string | null;
+  /** The project's main branch by name (`mainBranchOf`), which the next step says a merge reaches;
+   *  null or absent with no repository bound, and the sentence then says main. */
+  mainBranch?: string | null;
 }
 
 function doorInputForRow(row: OpenItemDecisionRow): OpenItemDoorInput {
@@ -380,13 +383,15 @@ export function openItemRequiredAction(row: OpenItemDecisionRow): string {
   const sourceJob = sourceJobForOpenItem(input);
   const failureClass = failureClassForOpenItem(input);
   const actor = ownerOrCoordinator(row);
+  const main = row.mainBranch ?? 'main';
 
   // This is the copy approved in the project effect and is intentionally byte-for-byte stable:
-  // the three clients render this field, they do not translate it.
+  // the three clients render this field, they do not translate it. Its main is the project's main
+  // branch by name, so a project on main reads every sentence as it always did.
   if (row.assignee === 'OWNER' && row.kind === 'INTEGRATION_CHECK_FAILED'
       && (sourceJob === 'CHECK_PROMOTION' || sourceJob === 'LAND_PROMOTION')
       && failureClass !== 'CONFLICT') {
-    return 'Nothing on the project branch reaches main until this check passes — re-run it or ask the coordinator to fix it.';
+    return `Nothing on the project branch reaches ${main} until this check passes — re-run it or ask the coordinator to fix it.`;
   }
 
   if (row.kind === 'COORDINATOR_QUESTION') {
@@ -398,7 +403,7 @@ export function openItemRequiredAction(row: OpenItemDecisionRow): string {
   if (row.kind === 'START_REQUEST') return 'The project is ready to start — approve or decline the start request.';
   if (row.kind === 'DONE_REQUEST') return 'The project may be finished — review the work and record it done or send it back.';
   if (row.kind === 'PROMOTION_APPROVAL') {
-    return `${actor} must decide whether this promotion reaches main — review it, then approve, decline, or cancel it.`;
+    return `${actor} must decide whether this promotion reaches ${main} — review it, then approve, decline, or cancel it.`;
   }
   if (row.kind === 'TASK_FAILED') {
     return `${actor} must get this task past its failure — retry it, file a repair task, or close it.`;
@@ -411,12 +416,12 @@ export function openItemRequiredAction(row: OpenItemDecisionRow): string {
   }
   if (sourceJob === 'CHECK_PROMOTION' || sourceJob === 'LAND_PROMOTION') {
     if (failureClass === 'CONFLICT') {
-      return 'The project branch cannot reach main until this promotion conflict is repaired — create a sync task or ask the coordinator to fix it.';
+      return `The project branch cannot reach ${main} until this promotion conflict is repaired — create a sync task or ask the coordinator to fix it.`;
     }
     if (failureClass === 'CHECK_TIMED_OUT') {
-      return 'The project branch cannot reach main until this check finishes — re-run it with a reason or ask the coordinator to fix it.';
+      return `The project branch cannot reach ${main} until this check finishes — re-run it with a reason or ask the coordinator to fix it.`;
     }
-    return 'The project branch cannot reach main until this integration is repaired — re-run it or ask the coordinator to fix it.';
+    return `The project branch cannot reach ${main} until this integration is repaired — re-run it or ask the coordinator to fix it.`;
   }
   if (failureClass === 'CONFLICT') {
     return 'This task cannot reach the project branch until its merge conflict is repaired — fix the task branch or ask the coordinator to do it.';
@@ -2082,7 +2087,13 @@ export async function readOpenItemDeliveryCard(
         },
       })
     : null;
-  const branches = await readLandingBranches(prisma, item.projectId);
+  // The binding, read once: the branches the landing is judged against, and the main branch the next
+  // step names (main with no repository bound).
+  const codebase = await prisma.projectCodebase.findFirst({
+    where: { projectId: item.projectId, slot: 'primary' },
+    select: { upstreamRef: true, integrationRef: true },
+  });
+  const branches = landingBranchesFor(codebase);
   const receipts = task?.mergeReceipts ?? [];
   return {
     itemId: item.id,
@@ -2136,6 +2147,7 @@ export async function readOpenItemDeliveryCard(
       payload: item.payload,
       state: item.state,
       handoverNote: item.handoverNote,
+      mainBranch: mainBranchOf(codebase),
     }),
     primaryAction: primaryAction({
       kind: item.kind,
