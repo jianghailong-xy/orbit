@@ -1,0 +1,42 @@
+# The WebKit race of a field opened from a menu (Rename…, New Folder…), before and after the fix (README, 开发中对照找到并修正的差异 10).
+# Before: development runs of the delivery with the next-task timer (dev-run.sh del <environment>, the whole P5.3 file, once per environment):
+## del-webkit-light-desktop
+  ✘  6 [webkit-light-desktop] › ui-migration/p53.browser.mjs:643:3 › P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete (22.0s)
+    Error: expect(locator).toBeFocused() failed
+    Locator: locator('.workspace-name-input')
+  1 failed
+  6 passed (1.6m)
+## del-webkit-dark-phone
+  ✘  5 [webkit-dark-phone] › ui-migration/p53.browser.mjs:477:3 › P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder (19.0s)
+    Error: expect(locator).toBeFocused() failed
+    Locator: locator('.session-folder-row.editing input')
+  1 failed
+  6 passed (1.2m)
+
+# After: the delivery with the focus-return wait, the list and header cases 3 times in each WebKit environment:
+# webkit-repeat.sh del <out> 3 "session list|conversation header" webkit-light-desktop webkit-dark-desktop webkit-light-phone webkit-dark-phone
+  ✓   1 [webkit-light-desktop] › ui-migration/p53.browser.mjs:494:3 › P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder (16.1s)
+  ✓   2 [webkit-light-desktop] › ui-migration/p53.browser.mjs:660:3 › P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete (9.4s)
+  ✓   3 [webkit-light-desktop] › ui-migration/p53.browser.mjs:494:3 › P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder (16.1s)
+  ✓   4 [webkit-light-desktop] › ui-migration/p53.browser.mjs:660:3 › P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete (9.4s)
+  ✓   5 [webkit-light-desktop] › ui-migration/p53.browser.mjs:494:3 › P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder (16.1s)
+  ✓   6 [webkit-light-desktop] › ui-migration/p53.browser.mjs:660:3 › P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete (9.2s)
+  ✓   7 [webkit-light-phone] › ui-migration/p53.browser.mjs:494:3 › P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder (5.9s)
+  ✓   8 [webkit-light-phone] › ui-migration/p53.browser.mjs:660:3 › P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete (6.5s)
+  ✓   9 [webkit-light-phone] › ui-migration/p53.browser.mjs:494:3 › P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder (6.0s)
+  ✓  10 [webkit-light-phone] › ui-migration/p53.browser.mjs:660:3 › P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete (6.5s)
+  ✓  11 [webkit-light-phone] › ui-migration/p53.browser.mjs:494:3 › P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder (6.0s)
+  ✓  12 [webkit-light-phone] › ui-migration/p53.browser.mjs:660:3 › P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete (6.6s)
+  ✓  13 [webkit-dark-desktop] › ui-migration/p53.browser.mjs:494:3 › P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder (16.2s)
+  ✓  14 [webkit-dark-desktop] › ui-migration/p53.browser.mjs:660:3 › P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete (9.3s)
+  ✓  15 [webkit-dark-desktop] › ui-migration/p53.browser.mjs:494:3 › P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder (16.0s)
+  ✓  16 [webkit-dark-desktop] › ui-migration/p53.browser.mjs:660:3 › P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete (9.3s)
+  ✓  17 [webkit-dark-desktop] › ui-migration/p53.browser.mjs:494:3 › P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder (16.4s)
+  ✓  18 [webkit-dark-desktop] › ui-migration/p53.browser.mjs:660:3 › P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete (9.4s)
+  ✓  19 [webkit-dark-phone] › ui-migration/p53.browser.mjs:494:3 › P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder (6.0s)
+  ✓  20 [webkit-dark-phone] › ui-migration/p53.browser.mjs:660:3 › P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete (6.6s)
+  ✓  21 [webkit-dark-phone] › ui-migration/p53.browser.mjs:494:3 › P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder (5.8s)
+  ✓  22 [webkit-dark-phone] › ui-migration/p53.browser.mjs:660:3 › P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete (6.4s)
+  ✓  23 [webkit-dark-phone] › ui-migration/p53.browser.mjs:494:3 › P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder (5.8s)
+  ✓  24 [webkit-dark-phone] › ui-migration/p53.browser.mjs:660:3 › P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete (6.1s)
+  24 passed (3.9m)
