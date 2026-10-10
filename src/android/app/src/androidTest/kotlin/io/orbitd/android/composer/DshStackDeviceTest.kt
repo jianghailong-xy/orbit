@@ -101,6 +101,19 @@ class DshStackDeviceTest {
             } catch (error: AssertionError) { if (attempt == 3) throw error; compose.waitForIdle() }
         }
     }
+    /** The transcript is a lazy list pinned to its latest row: a row in it is scrolled to, as a reader would, so its head shows. */
+    private fun reveal(matcher: SemanticsMatcher) {
+        compose.waitUntil(30_000) { has(matcher) }
+        try { compose.onNodeWithTag("transcript-list").performScrollToNode(matcher) }
+        catch (_: AssertionError) { compose.onAllNodes(matcher).onFirst().performScrollTo() }
+        compose.waitForIdle()
+    }
+    /** Brought into view on its page's own scroll. */
+    private fun scrollTo(matcher: SemanticsMatcher) {
+        compose.waitUntil(30_000) { has(matcher) }
+        try { compose.onAllNodes(matcher).onFirst().performScrollTo() } catch (_: AssertionError) { }
+        compose.waitForIdle()
+    }
     /** A screenshot the system withholds under load (UiAutomation returns null) is asked for again. */
     private fun capture(name: String) {
         compose.waitForIdle(); SystemClock.sleep(700)
@@ -155,7 +168,11 @@ class DshStackDeviceTest {
         signIn(); openSession("approval")
         compose.waitUntil(60_000) { has(hasText("Allow") and hasClickAction()) && has(hasText("Deny") and hasClickAction()) }
         assertFalse("no Allow & remember on Harness", has(hasText("Allow & remember", substring = true)))
+        // The card's head — the tool and its command — then its doors: the transcript's viewport holds one at a time here.
+        reveal(hasText("Decisions and requests"))
         capture("a07d-stack-approval-card")
+        scrollTo(hasText("Deny") and hasClickAction())
+        capture("a07d-stack-approval-doors")
         appClick("Allow")
         val decided = awaitServer("/sessions/$id/approvals", "allowed") { all -> all.jsonArray.any { it.jsonObject.field("status") == "ALLOWED" } }
         keep("a07d-stack-approval-decided", decided)
@@ -175,7 +192,10 @@ class DshStackDeviceTest {
         awaitText("Update the API key")
         awaitText("Retry — re-send my last message")
         assertFalse("the card stands in for the runner's line", has(hasText("Authentication Fails", substring = true)))
+        reveal(hasText("DeepSeek rejected this API key"))
         capture("a07d-stack-repair-card")
+        scrollTo(hasText("Retry — re-send my last message") and hasClickAction())
+        capture("a07d-stack-repair-buttons")
         appClick("Retry — re-send my last message")
         keep("a07d-stack-rejected-retried", awaitServer("/sessions/$id", "the message went again") { d ->
             d.jsonObject.field("status") in setOf("PENDING", "RUNNING") })
@@ -214,6 +234,7 @@ class DshStackDeviceTest {
         appClick("Settings"); awaitText("Default permission")
         appClick("Runners"); awaitText(name)
         appClick(name); awaitText("DeepSeek Harness")
+        scrollTo(hasText("DeepSeek Harness") and hasClickAction())
         capture("a07d-stack-runner-page")
         appClick("DeepSeek Harness")
         awaitText("This runner has a DeepSeek Harness version Orbit does not support. Reinstall it from Infrastructure.")

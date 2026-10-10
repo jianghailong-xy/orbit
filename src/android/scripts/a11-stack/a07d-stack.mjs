@@ -116,7 +116,9 @@ if (mode === 'seed') {
   await call('POST', `/runner/sessions/${rejected.runnerId}/events`, token, { leaseOwner, events: [
     { seq: 1, type: 'user', ts: iso(), turnId: rejected.turnId, payload: { text: rejected.prompt } },
     { seq: 2, type: 'error', ts: iso(), turnId: rejected.turnId, payload: { message: REJECTED } }] });
-  await call('POST', `/runner/sessions/${rejected.runnerId}/turn-complete`, token, { turnId: rejected.turnId, leaseOwner, status: 'FAILED', error: REJECTED });
+  // The ACP session the runner opened is the session's context, as the runner reports it: what a resume (a Retry) needs.
+  await call('POST', `/runner/sessions/${rejected.runnerId}/turn-complete`, token, { turnId: rejected.turnId, leaseOwner, status: 'FAILED',
+    error: REJECTED, runtimeSessionId: `a07d-acp-${randomUUID()}` });
 
   seed.a07d = {
     runner: { id: runnerId('a07d-dsh'), name: 'a07d-dsh' },
