@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
@@ -12,12 +13,14 @@ import {
 } from '@orbit/shared';
 
 import type { PrismaService } from '../prisma/prisma.service';
+import { renderRawQuery } from '../test-support/prisma-transaction-double';
 import type { WikiArticles } from '../wiki/wiki-articles';
 import { WikiRefusalError, type WikiPrincipal } from '../wiki/wiki.service';
 import { runWikiArticlesJob, type WikiArticlesJobDeps, type WikiArticlesReport } from './wiki-articles-job';
 import type { WikiArticleWriterEntry } from './wiki-articles-writer';
 import { WikiJobContentError, WikiJobInfraError, type WikiJobContext } from './wiki-job-executor';
 import type { WikiModelRequestCall, WikiModelRequestRead } from './wiki-model-queue';
+import { WikiModelWaitCancelled } from './wiki-model-queue.service';
 import { WikiRepoOpRefused, type WikiRepoOps } from './wiki-repo-ops';
 
 /**
@@ -33,7 +36,9 @@ import { WikiRepoOpRefused, type WikiRepoOps } from './wiki-repo-ops';
  *   - a write refused WIKI_ARTICLE_STALE, or a call that ended in a way that is the work's, leaves that topic
  *     unwritten — the job tries the others and then fails as content, its report on the row;
  *   - a failure that is the platform's ends the attempt with nothing written;
- *   - the ref is the space's snapshot's, and with none to be had the articles are written without one.
+ *   - the ref is the space's snapshot's, and with none to be had the articles are written without one;
+ *   - a replay folds in what the attempt before it finished (contract `jobs.carry`): the topic written before a stop
+ *     is in its report, written, once, and every call of both attempts is counted once.
  *
  * The end-to-end run — the executor, the queue, a fake System model, the real write path and a canary account —
  * is `wiki-articles-job.pg.spec.ts`.
@@ -76,16 +81,25 @@ function row(answer: string): WikiModelRequestRead {
   };
 }
 
-function context(answer: (prompt: string, unit: string) => string | Error): { ctx: WikiJobContext; asked: Asked[] } {
+/**
+ * The job's rows as the report reads and writes them, by job: the units of the calls that answered — one request row a
+ * unit, which a replay meets again — and the job's carry (contract `jobs.carry`).
+ */
+const answered = new Map<string, Set<string>>();
+const carried = new Map<string, unknown>();
+
+/** A job's context: its row (a fresh job unless `jobId` names one already run) and the queue, as `answer` answers. */
+function context(answer: (prompt: string, unit: string) => string | Error, jobId: string = randomUUID()): { ctx: WikiJobContext; asked: Asked[] } {
   const asked: Asked[] = [];
   const ctx: WikiJobContext = {
-    job: { id: 'job-1', ownerId: 'owner-1', spaceId: 'space-1', kind: 'articles', input: {}, priority: 0, attempts: 0, leaseGeneration: 'gen-1' },
+    job: { id: jobId, ownerId: 'owner-1', spaceId: 'space-1', kind: 'articles', input: {}, priority: 0, attempts: 0, leaseGeneration: 'gen-1' },
     signal: new AbortController().signal,
     log: () => undefined,
     ask: async (step, unit, call) => {
       asked.push({ step, unit, call });
       const said = answer(call.prompt, unit);
       if (said instanceof Error) throw said;
+      answered.set(jobId, (answered.get(jobId) ?? new Set()).add(`${step}/${unit}`));
       return row(said);
     },
   };
@@ -150,6 +164,21 @@ function deps(articles: WikiArticles, snapshot: { sha: string } | null = { sha: 
     prisma: {
       wikiRepoSnapshot: { findFirst: async () => snapshot },
       wikiRepoOp: { findFirst: async () => null },
+      // The job's own row and requests, as the carry's read and write and the report's count of the calls ask them.
+      $queryRaw: async (...args: unknown[]) => {
+        const { text, values } = renderRawQuery(args);
+        if (text.includes('"wiki_model_request"')) {
+          const calls = answered.get(String(values[2]))?.size ?? 0;
+          return [{ calls, inputTokens: 100 * calls, outputTokens: 40 * calls }];
+        }
+        const jobId = String(values[0]);
+        return carried.has(jobId) ? [{ carry: carried.get(jobId), startedAt: null }] : [];
+      },
+      $executeRaw: async (...args: unknown[]) => {
+        const { values } = renderRawQuery(args);
+        carried.set(String(values[1]), JSON.parse(String(values[0])));
+        return 1;
+      },
     } as unknown as PrismaService,
     articles,
     repoOps: {} as WikiRepoOps,
@@ -320,4 +349,25 @@ test('with no snapshot to name, the articles are written without a ref, and the 
   assert.equal(second.ref, null);
   assert.match(second.refWhy ?? '', /ended failed: the checkout is not the space's repository/u);
   assert.ok(again.writes.has('database'));
+});
+
+test('a replay folds in what the attempt before it finished: the topic written before a stop is written, once, and every call is counted once', async () => {
+  const [first, second] = FIXTURE.topics.map((topic) => topic.slug);
+  // The first attempt writes the first topic; the worker stops while the second one's first call waits.
+  const before = door();
+  const stopped = context((prompt, unit) => (unit.startsWith(`${second}@`) ? new WikiModelWaitCancelled() : fixtureModel()(prompt)));
+  await assert.rejects(runWikiArticlesJob(stopped.ctx, deps(before.articles)), WikiModelWaitCancelled);
+  assert.deepEqual([...before.writes.keys()], [first], 'the first topic was written before the stop');
+  // The replay: its plan no longer names the first topic, and it writes the second.
+  const after = door({ unchanged: [first] });
+  const replay = context(fixtureModel(), stopped.ctx.job.id);
+  const report = await runWikiArticlesJob(replay.ctx, deps(after.articles));
+  assert.deepEqual([...after.writes.keys()], [second], 'the replay wrote the second topic alone');
+  assert.deepEqual(report.topics.map((topic) => [topic.slug, topic.outcome]), [[first, 'written'], [second, 'written']], 'both, once, in the plan\'s order');
+  assert.deepEqual([report.written, report.unchanged, report.failed], [2, 0, 0]);
+  assert.equal(report.topics[0].parts.length, before.writes.get(first)!.articles.length, 'the first topic\'s parts, as its attempt wrote them');
+  // Every call of both attempts once: the second topic's calls that answered before the stop are met again, not counted twice.
+  const units = new Set([...stopped.asked, ...replay.asked].filter((one) => !one.unit.startsWith(`${second}@`) || replay.asked.includes(one)).map((one) => one.unit));
+  assert.equal(report.calls, units.size);
+  assert.deepEqual(report.usage, { inputTokens: 100 * units.size, outputTokens: 40 * units.size });
 });

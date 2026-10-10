@@ -56,6 +56,11 @@ import {
  * else — the queue's wait limit, the worker stopping, the database — stops the run: the sections in flight finish,
  * nothing new is started, and the error is the caller's, so the job is tried again and the sections already
  * written are left as they are by their fingerprints.
+ *
+ * WHAT A REPLAY IS TOLD (contract `jobs.carry`). A section an earlier attempt wrote is unchanged for the replay, by its
+ * fingerprint — or not taken up at all, when the caller takes up only what its facts touched. So the caller hears of
+ * each section as it is finished (`onSection`), carries the ones written on its job's row (`carryWikiDocsSection`), and
+ * folds them into the summary its replay ends with (`mergeWikiDocsBuild`).
  */
 
 /** A call whose own failure the section answers for (the model request ended failed): the section fails, the run goes on. */
@@ -134,6 +139,8 @@ export interface WikiDocsBuildOptions {
   only?: Map<string, Set<string>>;
   /** Hears of each document as it is taken up — done of total, and the document — and of the end (doc null). */
   onDoc?(done: number, total: number, doc: WikiDocsPlanDoc | null): Promise<void>;
+  /** Hears of each section as it is finished, written or not, with its write's answer; awaited before the run goes on. */
+  onSection?(doc: WikiDocsPlanDoc, run: WikiDocsBuildSectionRun, answer: WikiDocsWriteAnswer | null): Promise<void>;
 }
 
 /** One section the run took up (`wikiDocsBuildSectionRun`). */
@@ -179,7 +186,7 @@ export interface WikiDocsBuildSummary {
 /** Write the documents of the confirmed plan — or the one `doc` names, or one section of it — and say what was done. */
 export async function runWikiDocsBuild(deps: WikiDocsBuildDeps, options: WikiDocsBuildOptions): Promise<WikiDocsBuildSummary> {
   const started = Date.now();
-  const run = new DocsBuildRun(deps, options.planVersion);
+  const run = new DocsBuildRun(deps, options.planVersion, options.onSection);
   const summary: WikiDocsBuildSummary = {
     spaceId: options.spaceId, planVersion: options.planVersion, repoSha: deps.repo.sha, model: deps.model, docs: [],
     written: 0, unchanged: 0, failed: 0, calls: 0, usage: { inputTokens: 0, outputTokens: 0 }, seconds: 0,
@@ -215,7 +222,11 @@ class DocsBuildRun {
   /** The writes of the run go one at a time: each classifies its whole document again. */
   private writing: Promise<unknown> = Promise.resolve();
 
-  constructor(private readonly deps: WikiDocsBuildDeps, private readonly planVersion: number) {}
+  constructor(
+    private readonly deps: WikiDocsBuildDeps,
+    private readonly planVersion: number,
+    private readonly onSection?: WikiDocsBuildOptions['onSection'],
+  ) {}
 
   /** One call: counted against the section and the run. */
   private async ask(section: WikiDocsBuildSectionRun, step: string, label: string, prompt: string): Promise<string> {
@@ -256,6 +267,7 @@ class DocsBuildRun {
         result.status = done.answer.status;
         result.counts = done.answer.counts;
       }
+      await this.onSection?.(doc, done.run, done.answer);
     });
     for (const i of overviews) {
       if (this.deps.signal?.aborted) throw new Error('the build was stopped: the worker is shutting down');
@@ -265,6 +277,7 @@ class DocsBuildRun {
         result.status = done.answer.status;
         result.counts = done.answer.counts;
       }
+      await this.onSection?.(doc, done.run, done.answer);
     }
     for (const run of runs) if (run) result.sections.push(run);
     return result;
@@ -488,6 +501,67 @@ class DocsBuildRun {
       + `with ${footnotes.length === 1 ? '1 footnote' : `${footnotes.length} footnotes`}.`);
     return { run, answer };
   }
+}
+
+// ── What a replay is told ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * What a build carries to its job's replay (contract `jobs.carry.kinds.docs_build`, and the documents step's of
+ * `maintain`): each section it wrote, as its run says, and each document's last write's answer.
+ */
+export interface WikiDocsBuildCarry {
+  docs: Array<{ slug: string; status?: string; counts?: WikiDocsWriteAnswer['counts']; sections: WikiDocsBuildSectionRun[] }>;
+}
+
+/** A carry as a job's row holds it: nothing carried reads as nothing written. */
+export function wikiDocsBuildCarryOf(raw: unknown): WikiDocsBuildCarry {
+  const docs = raw !== null && typeof raw === 'object' ? (raw as { docs?: unknown }).docs : undefined;
+  return { docs: Array.isArray(docs) ? (docs as WikiDocsBuildCarry['docs']).map((doc) => ({ ...doc, sections: [...doc.sections] })) : [] };
+}
+
+/** Carry a section a build just finished, when it was written: its run, and its document's write's answer. */
+export function carryWikiDocsSection(carry: WikiDocsBuildCarry, slug: string, run: WikiDocsBuildSectionRun, answer: WikiDocsWriteAnswer | null): boolean {
+  if (run.outcome !== 'written') return false;
+  let doc = carry.docs.find((one) => one.slug === slug);
+  if (!doc) {
+    doc = { slug, sections: [] };
+    carry.docs.push(doc);
+  }
+  doc.sections = [...doc.sections.filter((one) => one.key !== run.key), run];
+  if (answer) {
+    doc.status = answer.status;
+    doc.counts = answer.counts;
+  }
+  return true;
+}
+
+/**
+ * A build's summary with what the attempts before it wrote folded in (contract `jobs.carry`): a section this attempt
+ * found unchanged by the fingerprint an earlier attempt wrote it with, or did not take up at all, is that attempt's
+ * written run; any other section this attempt took up is this attempt's. A document keeps the last write's answer.
+ * Every section once, counted again; what the calls and usage were is the caller's to read from its job's requests.
+ */
+export function mergeWikiDocsBuild(summary: WikiDocsBuildSummary, carry: WikiDocsBuildCarry): WikiDocsBuildSummary {
+  const docs = summary.docs.map((doc) => ({ ...doc, sections: [...doc.sections] }));
+  for (const earlier of carry.docs) {
+    let doc = docs.find((one) => one.slug === earlier.slug);
+    if (!doc) {
+      doc = { slug: earlier.slug, sections: [] };
+      docs.push(doc);
+    }
+    for (const run of earlier.sections) {
+      const at = doc.sections.findIndex((one) => one.key === run.key);
+      if (at < 0) doc.sections.push(run);
+      else if (doc.sections[at].outcome === 'unchanged' && doc.sections[at].materialSha256 === run.materialSha256) doc.sections[at] = run;
+    }
+    if (doc.status === undefined && earlier.status !== undefined) {
+      doc.status = earlier.status;
+      doc.counts = earlier.counts;
+    }
+  }
+  const count = (outcome: WikiDocsBuildSectionRun['outcome']): number =>
+    docs.reduce((total, doc) => total + doc.sections.filter((section) => section.outcome === outcome).length, 0);
+  return { ...summary, docs, written: count('written'), unchanged: count('unchanged'), failed: count('failed') };
 }
 
 /** An overview's footnotes as its run counts them: a repository one is found unless its check said it was not. */

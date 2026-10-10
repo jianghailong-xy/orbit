@@ -125,7 +125,7 @@ class UnservedJobSettler {
       async (tx) => {
         const cancelled = await tx.$executeRaw`
           UPDATE "wiki_job"
-             SET "state" = 'cancelled', "ended_at" = ${now}, "error" = ${reason}, "waiting_for" = NULL,
+             SET "state" = 'cancelled', "ended_at" = ${now}, "error" = ${reason}, "waiting_for" = NULL, "report" = NULL,
                  "lease_owner" = NULL, "lease_generation" = NULL, "lease_deadline_at" = NULL, "updated_at" = now()
            WHERE "id" = ${job.id}::uuid AND "state" IN ('queued', 'running', 'waiting')`;
         if (cancelled === 0) return false;

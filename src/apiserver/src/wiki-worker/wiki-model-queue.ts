@@ -424,6 +424,29 @@ export async function wikiModelRequestAttempt(
   return newest.state === 'failed' && wikiModelRequestFailedOnWaitLimit(newest.error) ? newest.attempt + 1 : newest.attempt;
 }
 
+/**
+ * What a job's model calls came to over every attempt of it (contract `jobs.carry`): its own requests, each counted once
+ * — a replay meets the rows its earlier attempts made and makes no new ones for them, so a call it reuses is not
+ * counted again, and one an attempt made that its replay never asked again is still counted — with the tokens they
+ * reported. A call is a request that answered; with `failed`, also one that ended in a failure of its own (a refusal,
+ * its budget), but never one failed on its step's wait limit: that was the platform's, and the replay asks it again
+ * under the next attempt. `steps` narrows it to those of the job's steps.
+ */
+export async function wikiJobModelCalls(
+  prisma: PrismaService,
+  input: { jobId: string; failed?: boolean; steps?: readonly string[] },
+): Promise<{ calls: number; inputTokens: number; outputTokens: number }> {
+  const steps = input.steps ? [...input.steps] : null;
+  const [row] = await prisma.$queryRaw<Array<{ calls: number; inputTokens: number; outputTokens: number }>>`
+    SELECT (count(*) FILTER (WHERE "state" = 'succeeded'
+              OR (${input.failed === true} AND "state" = 'failed' AND NOT starts_with(COALESCE("error", ''), ${WIKI_MODEL_WAIT_LIMIT_ERROR}))))::int AS "calls",
+           COALESCE(sum("input_tokens"), 0)::int AS "inputTokens",
+           COALESCE(sum("output_tokens"), 0)::int AS "outputTokens"
+      FROM "wiki_model_request"
+     WHERE "job_id" = ${input.jobId}::uuid AND (${steps}::text[] IS NULL OR "step" = ANY(${steps}::text[]))`;
+  return { calls: row?.calls ?? 0, inputTokens: row?.inputTokens ?? 0, outputTokens: row?.outputTokens ?? 0 };
+}
+
 /** Enqueue one call (`job_id`, `step`, `unit`, `attempt` is its identity). A row already there is that row. */
 export async function enqueueWikiModelRequest(
   prisma: PrismaService,
