@@ -197,6 +197,19 @@ func wikiDocsBuildFixtureInputs() wikiDocsBuildFixture {
 					"contracts": []interface{}{},
 					"sessions":  nil,
 				}},
+			// Sources whose paths hold a wildcard and are no file of the commit: git takes `<sha>:<path>` for a
+			// pathspec, and `git show` exits 0 printing nothing — an empty file. Escaped, a wildcard is no pattern.
+			map[string]interface{}{"key": "s6", "title": "通配符来源", "kind": "flow", "covers": "来源路径带通配符时读到什么。", "length": 300,
+				"sources": map[string]interface{}{
+					"docs": []interface{}{map[string]interface{}{"path": "docs/*.md", "section": nil}},
+					"code": []interface{}{
+						map[string]interface{}{"path": "src/*.go", "symbols": []string{}},
+						map[string]interface{}{"path": "src/sched?ler.ts", "symbols": []string{"Scheduler.claim"}},
+						map[string]interface{}{"path": "src/\\*.go", "symbols": []string{}},
+					},
+					"contracts": []interface{}{map[string]interface{}{"path": "contracts/[s]ession.contract.json"}},
+					"sessions":  nil,
+				}},
 		},
 	}
 	f.Doc, _ = json.Marshal(doc)
@@ -218,6 +231,7 @@ func wikiDocsBuildFixtureInputs() wikiDocsBuildFixture {
 		"s3": "S1 | 采用 | owner 原话\nS3 | 采用 | 交付评论\nS5 | 合并到 S1 | 同一件事\nS6 | 舍弃 | 与本节无关\nS2 | 采用 | 不该出现\n现状：\n- 全量测试在宿主上跑 [S1]\n",
 		"s4": "D1 | 采用 | 契约文档\nC1 | 舍弃 | 方法太短\nC2 | 合并到 C9 | 目标不在本节\nC3 |   采用\n现状：\n- 调度 [C2]\n",
 		"s5": "",
+		"s6": "D1 | 采用 | 通配符读到的文件\n现状：\n- 来源读成一个空文件 [D1]\n",
 	}
 	f.Answers.Write = map[string][]string{
 		"s2": {docsWriteS2},
@@ -225,6 +239,7 @@ func wikiDocsBuildFixtureInputs() wikiDocsBuildFixture {
 		"s4": {"### 调度接口 Scheduler\n`Scheduler.claim` 领取下一轮[C2]，`dispatchTurn` 只投递一次[C4]【D1, C3】。租约 60 秒[C5]。\n\n**引文：**\n" +
 			"[C2]: 「Claim the next turn for a runner」\n【C4】「hands a claimed turn to its runner exactly once」\n[D1] “The run reads its dossiers”\n- [C5] 『LEASE_SECONDS = 60』\n"},
 		"s5": {"本篇讲设计[D1]。\n\n引文：\n[D1] 「# Design」\n"},
+		"s6": {"带通配符的来源读成一个空文件[D1]。\n\n引文：\n[D1] 「docs/*.md」\n"},
 	}
 	f.Answers.Repair = map[string]string{"s2": "[K1] 「\"delivery\": \"at least once, idempotent on the turn id\"」\n", "s3": docsRepairS3}
 	f.Answers.Overview = "### 总览\n一轮先存后投，至少投递一次[F1]。运行约定是全量测试在 runner 宿主上跑[F4]。调度只投递一次[F6][F99]。\n"
