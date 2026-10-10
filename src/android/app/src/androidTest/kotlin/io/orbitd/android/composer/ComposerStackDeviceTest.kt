@@ -203,7 +203,9 @@ class ComposerStackDeviceTest {
         assertTrue("A07-4: Antigravity CLI says why it can't run, and where that is fixed",
             engines.any { it.startsWith("Antigravity CLI | ") && it.contains("Not signed in →") })
         capture("a07c-stack-engine-list")
-        appClick("Done")
+        // A new session starts on the engine its workspace last ran (the seed's Codex session's): Claude Code is picked here.
+        compose.onNodeWithTag("engine:claude").performScrollTo().performClick()
+        compose.waitUntil(30_000) { has(hasText("Claude Code ⌄")) }
 
         val claude = providerRows()
         File(output, "a07c-stack-menu.txt").writeText(claude.joinToString("\n"))
