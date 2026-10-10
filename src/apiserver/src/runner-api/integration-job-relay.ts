@@ -45,6 +45,8 @@ import {
   supersedeHandledItems,
 } from '../projects/project-open-item';
 import { sessionReportedWork } from '../projects/landing-source-branch';
+import { mainBranchOf } from '../projects/project-criterion-landing';
+import { readProjectCodebase } from '../projects/project-integration-line';
 import {
   LIVE_PROMOTION_STATES,
   PromotionState,
@@ -967,6 +969,10 @@ export async function applyIntegrationJobResult(
         select: { state: true },
       }))?.state as PromotionState);
     if (itemKind && !candidateMovedOn) {
+      // A promotion's item is named after the merge it is about: into the project's main branch.
+      const mainBranch = job.kind === 'LAND_TASK'
+        ? null
+        : mainBranchOf(await readProjectCodebase(tx, job.projectId));
       const opened = await recordIntegrationFailure(tx, {
         projectId: job.projectId,
         ownerId: job.ownerId,
@@ -975,7 +981,7 @@ export async function applyIntegrationJobResult(
         sessionId: job.sessionId,
         promotionId: job.promotionId,
         state: state as 'CONFLICT' | 'CHECK_FAILED' | 'ERROR',
-        title: integrationItemTitle(state, job.kind, job.task?.title ?? 'a task'),
+        title: integrationItemTitle(state, job.kind, job.task?.title ?? 'a task', mainBranch),
         dedupeKey: integrationDedupeKey(state, job.id),
         // §4.7 H4: when this job is a rerun whose item the clock handed to the owner while it ran, the
         // failure it opens stays theirs — the coordinator's rerun does not carry the decision back.
