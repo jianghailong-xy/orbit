@@ -1,6 +1,6 @@
 import { SettingOutlined } from '@ant-design/icons';
-import { Button } from 'antd';
 import { useNavigate } from 'react-router-dom';
+import { Button } from './ui/Button';
 import { PHONE_QUERY, useMediaQuery } from '../lib/useMediaQuery';
 import { WIKI_SETTINGS, wikiSettingsPath } from '../lib/wikiReviewMode';
 

@@ -103,17 +103,36 @@ async function click(element: Element | null | undefined, what: string): Promise
   await settle();
 }
 
+const dialog = () => document.body.querySelector<HTMLElement>('[role="dialog"]');
+/** The dialog's title, by the name it is given. */
+const dialogTitle = () => document.getElementById(dialog()?.getAttribute('aria-labelledby') ?? '')?.textContent;
+
 const button = (text: string) =>
-  [...document.body.querySelectorAll<HTMLButtonElement>('.ant-modal button')].find(
+  [...(dialog()?.querySelectorAll<HTMLButtonElement>('button') ?? [])].find(
     (b) => b.textContent?.trim() === text,
   );
 
 /** Press the radio whose label starts with this text. */
 async function choose(label: string): Promise<void> {
-  const wrapper = [...document.body.querySelectorAll('.ant-modal label')].find((l) =>
+  const wrapper = [...(dialog()?.querySelectorAll('label') ?? [])].find((l) =>
     (l.textContent ?? '').startsWith(label),
   );
-  await click(wrapper?.querySelector('input'), `the "${label}" choice`);
+  await click(wrapper?.querySelector('[role="radio"]'), `the "${label}" choice`);
+}
+
+/** A mouse press as a browser delivers it — pointer and mouse down and up, then the click — which a
+ *  list option needs before it takes a click as a choice rather than a keyboard activation. */
+async function press(element: Element | null | undefined, what: string): Promise<void> {
+  expect(element, `${what} is on screen`).toBeTruthy();
+  await act(async () => {
+    const init = { bubbles: true, cancelable: true, button: 0, buttons: 1, detail: 1 };
+    element!.dispatchEvent(new PointerEvent('pointerdown', { ...init, pointerType: 'mouse' }));
+    element!.dispatchEvent(new MouseEvent('mousedown', init));
+    element!.dispatchEvent(new PointerEvent('pointerup', { ...init, buttons: 0, pointerType: 'mouse' }));
+    element!.dispatchEvent(new MouseEvent('mouseup', { ...init, buttons: 0 }));
+    element!.dispatchEvent(new MouseEvent('click', { ...init, buttons: 0 }));
+  });
+  await settle();
 }
 
 beforeEach(() => {
@@ -160,8 +179,8 @@ describe('following a target', () => {
     serve({ 'POST /watches': () => watch() });
     await open({ kind: 'create', targets: [{ kind: 'TASK', id: 'T1' }] });
 
-    expect(document.body.querySelector('.ant-modal-title')?.textContent).toBe('Follow task');
-    expect(document.body.querySelector('.ant-modal')?.textContent).toContain('Web Watch cards');
+    expect(dialogTitle()).toBe('Follow task');
+    expect(dialog()?.textContent).toContain('Web Watch cards');
     await click(button('Follow'), 'Follow');
 
     expect(writes).toEqual([
@@ -224,7 +243,7 @@ describe('following a target', () => {
     await open({ kind: 'create', targets: [{ kind: 'TASK', id: 'T1' }] });
     await click(button('Follow'), 'Follow');
 
-    expect(document.body.querySelector('.ant-modal [role="alert"]')?.textContent).toBe(
+    expect(dialog()?.querySelector('[role="alert"]')?.textContent).toBe(
       'This account cannot read one of the targets.',
     );
     expect(onClose).not.toHaveBeenCalled();
@@ -247,15 +266,10 @@ describe('following a target', () => {
     await choose('Resume a session');
     expect(button('Follow')?.disabled, 'nothing to resume yet').toBe(true);
 
-    await act(async () => {
-      document.body
-        .querySelector('.ant-modal .ant-select-content')
-        ?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
-    });
-    await settle();
-    const offered = [...document.body.querySelectorAll('.ant-select-item-option')].map((o) => o.textContent);
+    await press(dialog()?.querySelector('[role="combobox"]'), 'the session picker');
+    const offered = [...document.body.querySelectorAll('[role="listbox"] [role="option"]')].map((o) => o.textContent);
     expect(offered).toEqual(['Coordinator · orbit']);
-    await click(document.body.querySelector('.ant-select-item-option'), 'the coordinator option');
+    await press(document.body.querySelector('[role="listbox"] [role="option"]'), 'the coordinator option');
     await click(button('Follow'), 'Follow');
 
     expect(writes).toHaveLength(1);
@@ -273,7 +287,7 @@ describe('editing a watch', () => {
     serve({ 'PATCH /watches/W1': (init) => ({ ...watch(), ...(init?.body as object) }) });
     await open({ kind: 'edit', watch: watch() });
 
-    expect(document.body.querySelector('.ant-modal-title')?.textContent).toBe('Edit watch');
+    expect(dialogTitle()).toBe('Edit watch');
     expect(button('Save')?.disabled, 'nothing changed yet').toBe(true);
     await choose('Fails');
     await click(button('Save'), 'Save');
@@ -293,7 +307,7 @@ describe('editing a watch', () => {
   it('moves the deadline alone, counted from now', async () => {
     serve({ 'PATCH /watches/W1': () => watch() });
     await open({ kind: 'edit', watch: watch() });
-    expect(document.body.querySelector('.ant-modal')?.textContent).toContain('Keep (in 21h)');
+    expect(dialog()?.textContent).toContain('Keep (in 21h)');
     await choose('1 hour');
     await click(button('Save'), 'Save');
 
@@ -320,7 +334,7 @@ describe('editing a watch', () => {
     });
     const fixed = document.body.querySelector('.watch-editor-fixed')?.textContent ?? '';
     expect(fixed).toContain('When the task is done, and the session asks for an approval');
-    expect(document.body.querySelectorAll('.watch-editor-options input')).toHaveLength(0);
+    expect(document.body.querySelectorAll('.watch-editor-options [role="radio"]')).toHaveLength(0);
 
     await choose('3 days');
     await click(button('Save'), 'Save');

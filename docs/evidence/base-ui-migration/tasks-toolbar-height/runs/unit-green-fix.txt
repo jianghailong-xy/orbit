@@ -1,0 +1,19 @@
+argv: delivery 423aa3fdb4da9eb51aee4fa198488ac77a4c76fe: npx vitest run src/pages/TaskListView.toolbarHeight.test.tsx
+load: 35.87 30.15 34.05 19/3711 2705433
+memory: 2897 MB available
+started: 2026-10-10T02:21:58Z
+
+
+ RUN  v5.0.2 /mnt/data/tmp/34coPBqt8gi229cVNds0E/fix/src/web
+
+ ✓ src/pages/TaskListView.toolbarHeight.test.tsx (2 tests) 495ms
+   ✓ the tasks toolbar under the bulk bar (2)
+     ✓ takes the bar’s height whenever a commit can turn its scrollbar on or off, and gives it up with the selection 437ms
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  10:22:13
+   Duration  214.03s (import 74%, environment 15%, transform 10%)
+
+exit=0
+ended: 2026-10-10T02:25:47Z
