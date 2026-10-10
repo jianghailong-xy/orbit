@@ -1,0 +1,76 @@
+== apiserver unit (cd src/apiserver && rm -rf build && npm test)
+base      head=a0891c46a1fb27ee3d36b2d71c3101ee9dbf4192 tests=5157 pass=5157 fail=0 exit=0
+delivery  head=552009d1c95a00ca404069ef4c525d79be078415 tests=5158 pass=5158 fail=0 exit=0
+
+== pg specs (scripts/run-pg-spec.sh), base vs delivery, spec by spec
+pg-base: head=a0891c46a1fb27ee3d36b2d71c3101ee9dbf4192 PostgreSQL 16.15 on 127.0.0.1:33925, system_identifier=7695066879291555881
+pg-delivery: head=552009d1c95a00ca404069ef4c525d79be078415 PostgreSQL 16.15 on 127.0.0.1:33926, system_identifier=7695068838776320041
+pg-base-new-spec: head=a0891c46a1fb27ee3d36b2d71c3101ee9dbf4192 PostgreSQL 16.15 on 127.0.0.1:33927, system_identifier=7695069886966394921
+  abandoned-approvals.pg.spec.ts                       base 16/16 pass, 0 fail, 0 skip delivery 16/16 pass, 0 fail, 0 skip
+  approvals-still-being-asked.pg.spec.ts               base 4/4 pass, 0 fail, 0 skip   delivery 4/4 pass, 0 fail, 0 skip
+  automatic-coordinator-routing.pg.spec.ts             base 22/22 pass, 0 fail, 0 skip delivery 22/22 pass, 0 fail, 0 skip
+  automatic-evidence-to-coordinator.pg.spec.ts         base 14/14 pass, 0 fail, 0 skip delivery 14/14 pass, 0 fail, 0 skip
+  background-job-activity-freshness.pg.spec.ts         base 5/5 pass, 0 fail, 0 skip   delivery 5/5 pass, 0 fail, 0 skip
+  coordinator-fuse-recovery.pg.spec.ts                 base 5/5 pass, 0 fail, 0 skip   delivery 5/5 pass, 0 fail, 0 skip
+  criteria-pending-decisions.pg.spec.ts                base 11/11 pass, 0 fail, 0 skip delivery 11/11 pass, 0 fail, 0 skip
+  evidence-review-outside-projects.pg.spec.ts          base 12/12 pass, 0 fail, 0 skip delivery 12/12 pass, 0 fail, 0 skip
+  evidence-waits-for-coordinator.pg.spec.ts            base 11/12 pass, 1 fail, 0 skip delivery 11/12 pass, 1 fail, 0 skip   <--
+  exception-escalation.pg.spec.ts                      base 9/9 pass, 0 fail, 0 skip   delivery 9/9 pass, 0 fail, 0 skip
+  failure-continuation-removal.pg.spec.ts              base 6/6 pass, 0 fail, 0 skip   delivery 6/6 pass, 0 fail, 0 skip
+  link-previews.pg.spec.ts                             base 12/12 pass, 0 fail, 0 skip delivery 12/12 pass, 0 fail, 0 skip
+  needs-you-owner-decision.pg.spec.ts                  base 22/22 pass, 0 fail, 0 skip delivery 22/22 pass, 0 fail, 0 skip
+  open-item-chat.pg.spec.ts                            base 5/5 pass, 0 fail, 0 skip   delivery 5/5 pass, 0 fail, 0 skip
+  open-item-coordinator-handling.pg.spec.ts            base 15/15 pass, 0 fail, 0 skip delivery 15/15 pass, 0 fail, 0 skip
+  open-item-fix-link.pg.spec.ts                        base 4/4 pass, 0 fail, 0 skip   delivery 4/4 pass, 0 fail, 0 skip
+  open-item-hand-over.pg.spec.ts                       base 3/3 pass, 0 fail, 0 skip   delivery 3/3 pass, 0 fail, 0 skip
+  open-item-owed.pg.spec.ts                            base 5/5 pass, 0 fail, 0 skip   delivery 5/5 pass, 0 fail, 0 skip
+  open-list-version-delivery.pg.spec.ts                base 3/4 pass, 1 fail, 0 skip   delivery not run   <--
+  open-list-version.pg.spec.ts                         base 4/4 pass, 0 fail, 0 skip   delivery 4/4 pass, 0 fail, 0 skip
+  owner-confirmation-if-confirmed.pg.spec.ts           base 5/5 pass, 0 fail, 0 skip   delivery 5/5 pass, 0 fail, 0 skip
+  owner-confirmation-review.pg.spec.ts                 base 16/16 pass, 0 fail, 0 skip delivery 16/16 pass, 0 fail, 0 skip
+  owner-item-badge.pg.spec.ts                          base 1/1 pass, 0 fail, 0 skip   delivery 1/1 pass, 0 fail, 0 skip
+  pool-security-boundary.pg.spec.ts                    base 16/16 pass, 0 fail, 0 skip delivery 16/16 pass, 0 fail, 0 skip
+  project-done-not-yet.pg.spec.ts                      base 8/8 pass, 0 fail, 0 skip   delivery 8/8 pass, 0 fail, 0 skip
+  project-done-request.pg.spec.ts                      base 17/17 pass, 0 fail, 0 skip delivery 17/17 pass, 0 fail, 0 skip
+  project-exception-todos.pg.spec.ts                   base 42/42 pass, 0 fail, 0 skip delivery 42/42 pass, 0 fail, 0 skip
+  project-integration-inflight.pg.spec.ts              base 15/15 pass, 0 fail, 0 skip delivery 15/15 pass, 0 fail, 0 skip
+  project-list-rollup.pg.spec.ts                       base 27/27 pass, 0 fail, 0 skip delivery 27/27 pass, 0 fail, 0 skip
+  project-looks-finished.pg.spec.ts                    base 12/12 pass, 0 fail, 0 skip delivery 12/12 pass, 0 fail, 0 skip
+  project-main-branch-reads.pg.spec.ts                 base 0/6 pass, 6 fail, 0 skip   delivery 6/6 pass, 0 fail, 0 skip   <--
+  project-main-branch.pg.spec.ts                       base 9/9 pass, 0 fail, 0 skip   delivery 9/9 pass, 0 fail, 0 skip
+  project-start-request.pg.spec.ts                     base 14/14 pass, 0 fail, 0 skip delivery 14/14 pass, 0 fail, 0 skip
+  project-task-integration.pg.spec.ts                  base 3/3 pass, 0 fail, 0 skip   delivery 3/3 pass, 0 fail, 0 skip
+  project-work-overview-readiness.pg.spec.ts           base 17/17 pass, 0 fail, 0 skip delivery 17/17 pass, 0 fail, 0 skip
+  provider-engine-followups.pg.spec.ts                 base 4/4 pass, 0 fail, 0 skip   delivery 4/4 pass, 0 fail, 0 skip
+  public-project.pg.spec.ts                            base 7/7 pass, 0 fail, 0 skip   delivery 7/7 pass, 0 fail, 0 skip
+  reopen-landing-handling.pg.spec.ts                   base 4/4 pass, 0 fail, 0 skip   delivery 4/4 pass, 0 fail, 0 skip
+  runner-task-progress.pg.spec.ts                      base 5/5 pass, 0 fail, 0 skip   delivery 5/5 pass, 0 fail, 0 skip
+  task-auto-run-retry-after-run-ended.pg.spec.ts       base 5/5 pass, 0 fail, 0 skip   delivery 5/5 pass, 0 fail, 0 skip
+  task-auto-run-terminal-session-replay.pg.spec.ts     base 2/2 pass, 0 fail, 0 skip   delivery 2/2 pass, 0 fail, 0 skip
+  task-comment-run.pg.spec.ts                          base 1/1 pass, 0 fail, 0 skip   delivery 1/1 pass, 0 fail, 0 skip
+  task-dispatch-refusal-visible.pg.spec.ts             base 10/10 pass, 0 fail, 0 skip delivery 10/10 pass, 0 fail, 0 skip
+  task-model-routing-account-switch.pg.spec.ts         base 6/6 pass, 0 fail, 0 skip   delivery 6/6 pass, 0 fail, 0 skip
+  task-model-routing-apply.pg.spec.ts                  base 8/8 pass, 0 fail, 0 skip   delivery 8/8 pass, 0 fail, 0 skip
+  task-model-routing-cross-provider.pg.spec.ts         base 7/7 pass, 0 fail, 0 skip   delivery 7/7 pass, 0 fail, 0 skip
+  task-model-routing-escalation.pg.spec.ts             base 7/7 pass, 0 fail, 0 skip   delivery 7/7 pass, 0 fail, 0 skip
+  task-model-routing-shadow.pg.spec.ts                 base 7/7 pass, 0 fail, 0 skip   delivery 7/7 pass, 0 fail, 0 skip
+  task-outside-projects.pg.spec.ts                     base 1/1 pass, 0 fail, 0 skip   delivery 1/1 pass, 0 fail, 0 skip
+  task-owner-confirmation.pg.spec.ts                   base 14/14 pass, 0 fail, 0 skip delivery 14/14 pass, 0 fail, 0 skip
+  task-source-refusal-visible.pg.spec.ts               base 5/5 pass, 0 fail, 0 skip   delivery 5/5 pass, 0 fail, 0 skip
+  task-status-derived-end-to-end.pg.spec.ts            base 1/1 pass, 0 fail, 0 skip   delivery 1/1 pass, 0 fail, 0 skip
+  task-supersession.pg.spec.ts                         base 13/13 pass, 0 fail, 0 skip delivery 13/13 pass, 0 fail, 0 skip
+  tenant-isolation-runner.pg.spec.ts                   base 717/717 pass, 0 fail, 0 skip delivery 717/717 pass, 0 fail, 0 skip
+  tenant-isolation.pg.spec.ts                          base 811/811 pass, 0 fail, 0 skip delivery 811/811 pass, 0 fail, 0 skip
+specs with a red: base 3, delivery 1
+base tree, the delivery's copy of project-main-branch-reads.pg.spec.ts: 0/6 pass, 6 fail, 0 skip
+
+== src/web vitest (npx vitest run --maxWorkers=2, 4 shards a tree)
+base      head=a0891c46a1fb27ee3d36b2d71c3101ee9dbf4192 files 402, tests 5237, passed 5237, failed 0, skipped 0; failing files: none
+delivery  head=552009d1c95a00ca404069ef4c525d79be078415 files 402, tests 5247, passed 5247, failed 0, skipped 0; failing files: none
+
+== OrbitKit swift test (swift:6.1, ok-run.sh)
+base      commit=a0891c46a1fb27ee3d36b2d71c3101ee9dbf4192 tests=3671 skipped=5 failures=0
+delivery  commit=552009d1c95a00ca404069ef4c525d79be078415 tests=3671 skipped=5 failures=0
+
+== runner-go (go vet ./... && go test -count=1 ./... -skip the merge check's two)
+delivery head=552009d1c95a00ca404069ef4c525d79be078415 ok  	orbit	273.316s go-delivery exit=0; '--- FAIL:' lines: 0
