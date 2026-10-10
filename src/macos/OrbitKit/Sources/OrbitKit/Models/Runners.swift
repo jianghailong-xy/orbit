@@ -951,8 +951,8 @@ public extension PlanUsage {
             // Kimi must be explicit: its session must never inherit a legacy flat Claude quota.
             return flat.provider == "kimi" ? flat : nil
         }
-        // Only the built-in Claude engine spends the runner's Claude login. A configured provider
-        // slug bills its own credential and is answered by `AgentDefaults.planUsage(for:...)`;
+        // Only Claude Code's own sign-in spends the runner's Claude login. A key bills its own
+        // credential on whichever engine runs it and is answered by `AgentDefaults.planUsage(engine:...)`;
         // falling through to here would show it the runner's subscription numbers instead.
         guard provider == "claude" else { return nil }
         if let claude { return claude }

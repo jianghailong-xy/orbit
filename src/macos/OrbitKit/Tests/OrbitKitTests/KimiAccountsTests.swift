@@ -409,18 +409,18 @@ final class KimiAccountsTests: XCTestCase {
     /// (02-ios ⑮: Default Weekly 34%, Work 5h 91%); a signed-out one asks for its sign-in.
     func testThePickerListsKimiAccountsByTheirTightestWindow() throws {
         let machine = try hpc()
-        XCTAssertEqual(SessionProviderChoices.choices(configured: [], engines: machine.engines, planUsage: machine.planUsage)
+        XCTAssertEqual(SessionProviderChoices.providers(for: "kimi", sources: ChoiceSources(configured: [], engines: machine.engines, planUsage: machine.planUsage))
                         .first { $0.slug == "kimi" }?.accounts, [
             AccountChoice(id: "default", label: "Default", quota: "Weekly 34%"),
             AccountChoice(id: work, label: "Work", quota: "5h 91%", nearLimit: true),
         ])
         let workOut = try hpc([both[0], (work, "Work", "no", "mainland-cn")])
-        XCTAssertEqual(SessionProviderChoices.choices(configured: [], engines: workOut.engines, planUsage: workOut.planUsage)
+        XCTAssertEqual(SessionProviderChoices.providers(for: "kimi", sources: ChoiceSources(configured: [], engines: workOut.engines, planUsage: workOut.planUsage))
                         .first { $0.slug == "kimi" }?.accounts?.last,
                        AccountChoice(id: work, label: "Work", unavailable: "Not signed in"))
         // One account, or a runner too old to list them, lists none.
         let one = try runner([kimi([both[0]])], planUsage: ["kimi": kimiUsage(defaultUsage)])
-        XCTAssertNil(SessionProviderChoices.choices(configured: [], engines: one.engines, planUsage: one.planUsage)
+        XCTAssertNil(SessionProviderChoices.providers(for: "kimi", sources: ChoiceSources(configured: [], engines: one.engines, planUsage: one.planUsage))
                         .first { $0.slug == "kimi" }?.accounts)
         // A month near its end is what the row says.
         let monthly = PlanUsageSnapshot(provider: "kimi", fiveHour: PlanUsageWindow(utilization: 3),
