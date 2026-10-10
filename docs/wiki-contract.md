@@ -2295,7 +2295,8 @@ op 在等），于是旧版 `orbit wiki verify` 读到空列表就正常退出�
   duplicate 把出处追到它指向的那条——与 runner 路径同一条写入路径、同一份留痕。
 - space 不再是 Automatic 就地停下（`stopped` 写明），剩下的继续等。单条 op 的调用以"这不是平台的错"的方式结束（队列的 content 类）
   算这个 op 的失败，不算整次的失败；平台的错照 §24.4 回队列重试。
-- P8 的维护运行调用同一个函数的另外两个参数：维护的第二遍（带着 `refused` 的 retry 后缀再问一次）和收养（`adopt`，最多 50 条）。
+- P8 的维护运行调用同一个函数的另外两个参数：维护的第二遍（带着 `refused` 的 retry 后缀再问一次，`unit = <op id>#retry`，§27.3）
+  和收养（`adopt`，最多 50 条）。
 
 **会话这一侧**
 
@@ -2403,16 +2404,18 @@ op 在等），于是旧版 `orbit wiki verify` 读到空列表就正常退出�
   之前的尝试发出、重放没有再问的请求也算。`articles` 算答过的请求；`docs_build` 和 `maintain` 还算以调用自己的原因失败的（被拒、超出
   预算），不算等待超限失败的（那是平台的，重放换下一个 attempt 再问）。`maintain` 的 `tokens` 是运行的每一次模型调用、每次一回，文档步
   的 `docs.tokens` 是其中文档各步和 plan 提议的。在此之前，文档步的调用在运行的 tokens 里算了两遍，核实的第二遍也按 `looked` 计了次
-  （那一遍的请求和第一遍同一个单元，队列以「already exists with a different call」拒绝，并没有问模型）。
+  （那一遍的请求和第一遍同一个单元，队列以「already exists with a different call」拒绝，并没有问模型）。第二遍改用自己的单元
+  （`<opId>#retry`，§27.3）以后，它的请求和别的调用一样计数。
 - **未变、失败照旧**：没做完的数（失败的主题和节、没给出结论的 op、等下一次运行的）是最后一次尝试的；带过来的只有做完的部分，所以作业
   的成败不变，写出的内容也不变。
 - **seconds**：`docs_build` 的 seconds 从作业第一次被领取算到结束，`maintain` 的从运行第一次开始算起，和 plan 作业一样；`maintain`
   文档步的 `docs.seconds` 是各次尝试在文档步花的时间之和。
 - **维护运行欠的文章**：`finishWikiMaintenanceJob` 按运行的报告判断这次运行是否记下过 op（`articles.regeneration`），读的是整个运行的
   报告：op 在交还前记下、重放什么都没记的运行，结束时照样排文章作业，和没被打断的运行一样。
-- **pg spec**：`wiki-articles-job`、`wiki-verify-job`、`wiki-docs-build-job` 各一个，`wiki-maintain-job` 三个（停在文档步、停在运行自己的
-  两个结论之间、停在两次锚点操作之间）：在中途让 worker 停机交还，下一个 worker 接回跑完，报告和同样形状的空间上一口气跑完的作业一致
-  （停在两个结论之间的那个只比流水线：重放不再核实运行自己剩下的 op）。
+- **pg spec**：`wiki-articles-job`、`wiki-verify-job`、`wiki-docs-build-job` 各一个，`wiki-maintain-job` 四个（停在文档步、停在运行自己的
+  两个结论之间、停在一个 op 的调用上而它的近邻随后被这次运行的结论上线、停在两次锚点操作之间）：在中途让 worker 停机交还，下一个
+  worker 接回跑完，报告和同样形状的空间上一口气跑完的作业一致：运行自己的每个结论只算一次，停机时还在等的 op 由重放核实（§27.3）；
+  问题在交还期间变了的那个 op 多一次调用，报告照实计入。
 
 ## 25. 模型请求队列 `wiki_model_request`（服务端执行 P1b）
 
@@ -2668,7 +2671,16 @@ JSON 里是 `maintenance.job.server` 和 `jobs.kindRuns.maintain`；迁移 `0407
 6. **推进游标**：op 记下后立刻 `advanceRecorded`（判据 3 第 4 版）：成功推进不再动它，之后任何一步失败仍以 failed 结束，
    游标留在原处。
 7. **核实**：用 P3 的 `verifyWikiOps`，自己的 op 核两遍（第二次带上被拒原因），再收养最多
-   `rules.adoptOpsMax` 个等待中的 op；没有结论的 op 不上线、留给下一次运行，不算失败。
+   `rules.adoptOpsMax` 个等待中的 op；没有结论的 op 不上线，不算失败。
+   **运行自己的 op 以作业为准**（2026-10-10，`maintenance.job.server.verify`）：Automatic 空间里每次尝试都核实本作业的 changeset
+   （`job_id`）里仍在 `verifying` 的 op，不管是哪次尝试记下的，不再只看本次尝试记下了几个。worker 在核实步停机交还后，重放从推进过的
+   游标读，一个 op 都不记，而收养只收已结束会话的 op：以前停机时还在等的 op 没人核实，一直停在 `verifying`。交还前记下的结论随
+   `carry` 带过来（§24.10），这些 op 也不在列表里了，报告每个结论只算一次。
+   **第二遍用自己的单元**：第二遍把要再问的 op 放在 `<opId>#retry` 下问，和抽取的重问（`<sessionId>#retry`）一样。队列在 op 的 id 下
+   存着第一遍的请求，同一单元换了调用就拒绝（§25.1）：以前第二遍每个 op 都以「already exists with a different call」被拒，一次也没
+   问到模型。提示词和 runner 的第二遍逐字相同：列表此刻读出的这个 op 的提示词，第一遍的回答不是结论时再加 `wikiVerifyRetrySuffix`。
+   交还期间问题变了的 op（它列出的近邻在这期间上线了），重放时在第一个单元下碰到停机前那个问题的请求，队列不把它交给别的问题，
+   由第二遍在重问单元下再问。两遍之后仍没有结论的 op 继续等着、不算失败；收养不收已结束作业的 op，之后的运行也不会再核实它。
 8. **锚点**：一页一页取 `listWikiAnchorsForJob`，每页至多 `anchorRules.verify.rules.listEntriesMax` 条（2026-10-10 起服务端用列表上限当批量：
    一次 `anchors` 仓库操作就是一次 runner 心跳的等待加一次 fetch，锚点本身每条只有毫秒级，一页越小越是白等；canary 的
    7,600–7,700 条从约 88 次操作降到约 22 次）。待复核的条目不分页攒起来，每满 `listEntriesMax` 条（最后不满的也一样）作为一次
