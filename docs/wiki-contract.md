@@ -2563,7 +2563,12 @@ JSON 里是 `maintenance.job.server` 和 `jobs.kindRuns.maintain`；迁移 `0407
    不计入这三项，只计 `skipped`（条目数），所以一次重放可以报 `entries` 0、space 的全部条目都在 `skipped` 里。一次 REPO_OP_WAIT 之后的
    重放、或两轮之间 main 没动时，约 22 次 `anchors` 仓库操作因此减到 0。
 9. **文档**（追赶期整步跳过）：`wikiDocsAffected` 拿服务端那一半；仓库那一半用 `diff` 仓库操作按节自己的 `repoSha`
-   比到 head（消失的路径先撤回，`withdrawPaths`），只重写受影响的节（P7 的 `runWikiDocsBuild`，`only` 传入本次要写的节）；
+   比到 head（消失的路径先撤回，`withdrawPaths`），只重写受影响的节（P7 的 `runWikiDocsBuild`，`only` 传入本次要写的节）。
+   **比较要读的文件按提交合并**（2026-10-10）：`diff` 仍是每个 `repoSha` 一次（等于 head 的不发；快照里没有的那个提交，它的节直接算
+   受影响，不发 diff 也不读），全部发完才读文件：每个提交上被改到的节要读的路径先收齐，在那个提交上用一次 `read` 读完，head 上的
+   也合成一次；缓存里有的照旧直接用，超过 `repoOps.read.operationBytes` 才按上限切成几次，仓库操作仍然一次一个。以前每个被改到的
+   节在两个提交上各发一次 `read`，P10 的两轮（f098cd24、54755b7b）各有 106–108 次单文件读取、约 430 秒；读到的内容、判出受影响的节
+   和撤回的路径都和以前一样。
    新增的设计文档（`--diff-filter=AR -- docs/`，去掉 `docs/mocks/` 与 `docs/evidence/`、已被引用或已被建议的）算出标题、
    章节与开头；最后提一次 plan 修改建议：先过运行自己的检查，和 runner 一样在原文里查——它引用的文件、契约按快照那个提交读出
    原文（`read`，有缓存先用缓存），docs 章节、代码符号、契约用文档构建同一套读法（`wikiDocRepo` 的 `docSection` / `codePieces` /
