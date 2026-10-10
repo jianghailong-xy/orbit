@@ -1,0 +1,258 @@
+{
+ "menu": [
+  {
+   "screenshot": "chromium-dark-phone/session-attachment-menu.png",
+   "expectedIs": "accepted",
+   "expectedSha256": "0921253df97e6c6e3275afa6b3029689c661b710d2fd7d4e867fe346de133696",
+   "actualSha256": "179b1ff183d57b3c6cdedd3c76ed9e5acf506f459fa69130b482af8dd8a1cf18",
+   "differentPixels": 721,
+   "maxChannelDelta": 87,
+   "allDifferencesBox": {
+    "x0": 38,
+    "y0": 564,
+    "x1": 57,
+    "y1": 756
+   },
+   "beyond2Box": {
+    "x0": 38,
+    "y0": 564,
+    "x1": 57,
+    "y1": 756
+   },
+   "pixelsBeyond2": 712
+  },
+  {
+   "screenshot": "chromium-light-phone/session-attachment-menu.png",
+   "expectedIs": "accepted",
+   "expectedSha256": "5cfed3f46f4944b259724be51a14341dafc24f14c020a22aa4d906b79f157e4f",
+   "actualSha256": "ee42c762c6e5d4f0c1a76ca94eee3f99a2f40b2399295175d7bca104acb662b3",
+   "differentPixels": 721,
+   "maxChannelDelta": 117,
+   "allDifferencesBox": {
+    "x0": 38,
+    "y0": 564,
+    "x1": 57,
+    "y1": 756
+   },
+   "beyond2Box": {
+    "x0": 38,
+    "y0": 564,
+    "x1": 57,
+    "y1": 756
+   },
+   "pixelsBeyond2": 716
+  },
+  {
+   "screenshot": "webkit-dark-phone/session-attachment-menu.png",
+   "expectedIs": "accepted",
+   "expectedSha256": "db9c6e93c467b0d2ac0b73e2a83c753e4ed1ee26c0a73c25b4db4a851e6aa3dc",
+   "actualSha256": "a4e04276c5e3f9d364106faaae404b2ef344795e05f13d3f98c49434b5169135",
+   "differentPixels": 720,
+   "maxChannelDelta": 87,
+   "allDifferencesBox": {
+    "x0": 38,
+    "y0": 564,
+    "x1": 57,
+    "y1": 756
+   },
+   "beyond2Box": {
+    "x0": 38,
+    "y0": 564,
+    "x1": 57,
+    "y1": 756
+   },
+   "pixelsBeyond2": 711
+  },
+  {
+   "screenshot": "webkit-light-phone/session-attachment-menu.png",
+   "expectedIs": "accepted",
+   "expectedSha256": "9022ef0fb13c7f1b1f05bddead0ad3120b388e9e0b3a92bf443e415123e84bb4",
+   "actualSha256": "70be22394625d3c16516698619735ab99de93630874e65f5cdc2fd105dbe3d17",
+   "differentPixels": 720,
+   "maxChannelDelta": 117,
+   "allDifferencesBox": {
+    "x0": 38,
+    "y0": 564,
+    "x1": 57,
+    "y1": 756
+   },
+   "beyond2Box": {
+    "x0": 38,
+    "y0": 564,
+    "x1": 57,
+    "y1": 756
+   },
+   "pixelsBeyond2": 715
+  }
+ ],
+ "chip": [
+  {
+   "screenshot": "chromium-dark-desktop/session-attachment-staged.png",
+   "expectedIs": "p0-drift",
+   "expectedSha256": "5795729f13a838f2f219e0a4030040f8439b12094c14d07ebbe341a7987be625",
+   "actualSha256": "95838bdef61bf8eb1fa58c793a67eca2401d510e6fa9c256d819bcd186c752fa",
+   "differentPixels": 16803,
+   "maxChannelDelta": 183,
+   "allDifferencesBox": {
+    "x0": 597,
+    "y0": 724,
+    "x1": 1279,
+    "y1": 899
+   },
+   "beyond2Box": {
+    "x0": 621,
+    "y0": 736,
+    "x1": 1259,
+    "y1": 883
+   },
+   "pixelsBeyond2": 2159
+  },
+  {
+   "screenshot": "chromium-dark-phone/session-attachment-staged.png",
+   "expectedIs": "p0-drift",
+   "expectedSha256": "c2d6b2c2eb406ec1420090dd9267d3b31e15c9599dacb12fe4c95899973a685e",
+   "actualSha256": "5b4b469b27f342c8f0951081a578473c3646f350a31ad4527107dc487d706306",
+   "differentPixels": 10317,
+   "maxChannelDelta": 183,
+   "allDifferencesBox": {
+    "x0": 0,
+    "y0": 668,
+    "x1": 389,
+    "y1": 843
+   },
+   "beyond2Box": {
+    "x0": 14,
+    "y0": 680,
+    "x1": 375,
+    "y1": 827
+   },
+   "pixelsBeyond2": 1605
+  },
+  {
+   "screenshot": "chromium-light-desktop/session-attachment-staged.png",
+   "expectedIs": "accepted",
+   "expectedSha256": "ca80aa6a26c62b1842e656cb5f16638ad38442a31fbd0d2ea97ff46eb083572a",
+   "actualSha256": "1396529bc8ec41728979c1514505ebd0a90ccb62cbf96c3a5d6a9a7481c56315",
+   "differentPixels": 546,
+   "maxChannelDelta": 211,
+   "allDifferencesBox": {
+    "x0": 673,
+    "y0": 758,
+    "x1": 761,
+    "y1": 766
+   },
+   "beyond2Box": {
+    "x0": 673,
+    "y0": 758,
+    "x1": 761,
+    "y1": 766
+   },
+   "pixelsBeyond2": 540
+  },
+  {
+   "screenshot": "chromium-light-phone/session-attachment-staged.png",
+   "expectedIs": "accepted",
+   "expectedSha256": "e6e76e867ee14922cac01678322a9de978626b411bf682f1d4c068201fc60501",
+   "actualSha256": "fe8d243fb5894dba2783a493689b33ac3450a8cd6d558a1cf4b569f5489dcf9b",
+   "differentPixels": 547,
+   "maxChannelDelta": 211,
+   "allDifferencesBox": {
+    "x0": 39,
+    "y0": 700,
+    "x1": 154,
+    "y1": 710
+   },
+   "beyond2Box": {
+    "x0": 66,
+    "y0": 702,
+    "x1": 154,
+    "y1": 710
+   },
+   "pixelsBeyond2": 540
+  },
+  {
+   "screenshot": "webkit-dark-desktop/session-attachment-staged.png",
+   "expectedIs": "p0-drift",
+   "expectedSha256": "617546025dde5cf76d0372d9fe5d3ca9753dbb9953ff2c0cf6c7336daba74358",
+   "actualSha256": "19af61ab423aa46c57c7437c4dc1d63c628ffb6b57c44709734354fa86e029e1",
+   "differentPixels": 12019,
+   "maxChannelDelta": 182,
+   "allDifferencesBox": {
+    "x0": 610,
+    "y0": 733,
+    "x1": 1270,
+    "y1": 899
+   },
+   "beyond2Box": {
+    "x0": 621,
+    "y0": 736,
+    "x1": 1259,
+    "y1": 883
+   },
+   "pixelsBeyond2": 2227
+  },
+  {
+   "screenshot": "webkit-dark-phone/session-attachment-staged.png",
+   "expectedIs": "p0-drift",
+   "expectedSha256": "a005f85dd2f9dc36569fe5870041fc7802823aea98b7738859c66536af2edbf7",
+   "actualSha256": "0e58448ffa2ea9d5d74a02f810cf4f232c91a690fe9f46a8fe321f1e4aca1d26",
+   "differentPixels": 8418,
+   "maxChannelDelta": 182,
+   "allDifferencesBox": {
+    "x0": 3,
+    "y0": 677,
+    "x1": 386,
+    "y1": 843
+   },
+   "beyond2Box": {
+    "x0": 14,
+    "y0": 680,
+    "x1": 375,
+    "y1": 827
+   },
+   "pixelsBeyond2": 1673
+  },
+  {
+   "screenshot": "webkit-light-desktop/session-attachment-staged.png",
+   "expectedIs": "accepted",
+   "expectedSha256": "7643c68292e5435ac3b46072d64d7c1afa2114dbe0752b58b783abec3ef0937a",
+   "actualSha256": "cb00147f96afff6a3ed7866c4c86768bb3432156d96930eac35a1629e795446b",
+   "differentPixels": 567,
+   "maxChannelDelta": 210,
+   "allDifferencesBox": {
+    "x0": 673,
+    "y0": 759,
+    "x1": 761,
+    "y1": 767
+   },
+   "beyond2Box": {
+    "x0": 673,
+    "y0": 759,
+    "x1": 761,
+    "y1": 767
+   },
+   "pixelsBeyond2": 553
+  },
+  {
+   "screenshot": "webkit-light-phone/session-attachment-staged.png",
+   "expectedIs": "accepted",
+   "expectedSha256": "7eb1c38126583619f533f0e67d05db3b7d4eddeeb3320fc4da4a7940d2156296",
+   "actualSha256": "47d374976e91030a67b7da5f22ab7f0f4a6c486fe57f81c9be258e81f78e48af",
+   "differentPixels": 567,
+   "maxChannelDelta": 210,
+   "allDifferencesBox": {
+    "x0": 66,
+    "y0": 703,
+    "x1": 154,
+    "y1": 711
+   },
+   "beyond2Box": {
+    "x0": 66,
+    "y0": 703,
+    "x1": 154,
+    "y1": 711
+   },
+   "pixelsBeyond2": 553
+  }
+ ]
+}
