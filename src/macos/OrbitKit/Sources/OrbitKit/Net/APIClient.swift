@@ -249,35 +249,41 @@ public final class APIClient: @unchecked Sendable {
     /// A page of a session's persisted events for tail-first loading (web parity): `tail=N` returns
     /// the newest N (initial paint — open a long session at the latest message instead of replaying
     /// its whole history over SSE), `before=<seq>&limit=N` the N events just older than a seq
-    /// (scroll-up). Events come back chronological (seq ascending).
+    /// (scroll-up). Events come back chronological (seq ascending). `timeout` is the narrow
+    /// exception to the session default — see `makeRequest`.
     public func eventPage(sessionID: String, tail: Int? = nil,
-                          before: Int? = nil, limit: Int? = nil) async throws -> EventPage {
+                          before: Int? = nil, limit: Int? = nil,
+                          timeout: TimeInterval? = nil) async throws -> EventPage {
         var q: [URLQueryItem] = []
         if let tail { q.append(URLQueryItem(name: "tail", value: String(tail))) }
         if let before { q.append(URLQueryItem(name: "before", value: String(before))) }
         if let limit { q.append(URLQueryItem(name: "limit", value: String(limit))) }
         q.append(URLQueryItem(name: "maxPayload", value: String(APIClient.maxEventPayload)))
-        return try await get("sessions/\(sessionID)/events/page", query: q)
+        return try await get("sessions/\(sessionID)/events/page", query: q, timeout: timeout)
     }
 
     /// The page of a session's history around one record — a turn, an event or a tool call, by its
     /// id in either spelling — for a link that opens the session at that record (`SessionRecordLink`).
     /// The page names the `anchor` the record resolved to and carries a cursor each way. A record that
     /// is not this session's is a 404. Web parity: `getSessionEventPageAround`.
-    public func eventPageAround(sessionID: String, record: String, limit: Int? = nil) async throws -> EventPage {
+    public func eventPageAround(sessionID: String, record: String, limit: Int? = nil,
+                                timeout: TimeInterval? = nil) async throws -> EventPage {
         var q = [URLQueryItem(name: "around", value: record)]
         if let limit { q.append(URLQueryItem(name: "limit", value: String(limit))) }
         q.append(URLQueryItem(name: "maxPayload", value: String(APIClient.maxEventPayload)))
-        return try await get("sessions/\(sessionID)/events/page", query: q)
+        return try await get("sessions/\(sessionID)/events/page", query: q, timeout: timeout)
     }
 
     /// The page just newer than a seq (`after=<seq>&limit=N`): how a window opened at a record pages
-    /// back down to the latest message, the mirror of `before=`. Web parity: `getSessionEventPageAfter`.
-    public func eventPageAfter(sessionID: String, after: Int, limit: Int? = nil) async throws -> EventPage {
+    /// back down to the latest message, the mirror of `before=` — and, in the console's reconnect
+    /// catch-up, how a gap is closed over compressed REST pages instead of the SSE replay. Web
+    /// parity: `getSessionEventPageAfter`.
+    public func eventPageAfter(sessionID: String, after: Int, limit: Int? = nil,
+                               timeout: TimeInterval? = nil) async throws -> EventPage {
         var q = [URLQueryItem(name: "after", value: String(after))]
         if let limit { q.append(URLQueryItem(name: "limit", value: String(limit))) }
         q.append(URLQueryItem(name: "maxPayload", value: String(APIClient.maxEventPayload)))
-        return try await get("sessions/\(sessionID)/events/page", query: q)
+        return try await get("sessions/\(sessionID)/events/page", query: q, timeout: timeout)
     }
 
     /// One event's untrimmed payload (GET /sessions/:id/events/:seq/full) — fetched when the user
@@ -1696,8 +1702,10 @@ public final class APIClient: @unchecked Sendable {
     private struct Empty: Codable {}
     private struct RunnerReleaseManifest: Decodable { let version: String? }
 
-    private func get<T: Decodable>(_ path: String, query: [URLQueryItem] = []) async throws -> T {
-        let data = try await send(makeRequest(path, method: "GET", query: query, body: Optional<Empty>.none))
+    private func get<T: Decodable>(_ path: String, query: [URLQueryItem] = [],
+                                   timeout: TimeInterval? = nil) async throws -> T {
+        let data = try await send(makeRequest(path, method: "GET", query: query,
+                                              body: Optional<Empty>.none, timeout: timeout))
         return try decoder.decode(T.self, from: data)
     }
 
@@ -1748,12 +1756,18 @@ public final class APIClient: @unchecked Sendable {
         return try decoder.decode(T.self, from: data)
     }
 
+    /// `timeout` overrides the session's default request timeout (60s) for this request alone.
+    /// A caller passes one only for a read whose failure has a fast answer: the transcript pages
+    /// that gate a first paint or a reconnect's catch-up retry on a fresh connection 300ms later,
+    /// so waiting out a dead socket's full default buys nothing (the seed loop's own retry rule).
     private func makeRequest<B: Encodable>(_ path: String, method: String,
-                                           query: [URLQueryItem] = [], body: B?) throws -> URLRequest {
+                                           query: [URLQueryItem] = [], body: B?,
+                                           timeout: TimeInterval? = nil) throws -> URLRequest {
         var comps = URLComponents(url: baseURL.appendingPathComponent("api/\(path)"), resolvingAgainstBaseURL: false)!
         if !query.isEmpty { comps.queryItems = query }
         var req = URLRequest(url: comps.url!)
         req.httpMethod = method
+        if let timeout { req.timeoutInterval = timeout }
         req.setValue(Self.clientHeader, forHTTPHeaderField: "X-Orbit-Client")
         if let token { req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
         if let body {
