@@ -1,0 +1,8 @@
+key-light: Settings row 9 label="Infrastructure, 1 needs you" value="" frame=(16.0, 831.6666666666666, 370.0, 52.0) hittable=true
+key-rows-light: in view after 11 drag(s) at (16.0, 795.3333333333335, 370.0, 61.66666666666663)
+key-light: row 9 label="DeepSeek, DeepSeek V4 Pro, Claude Code · OpenCode · DeepSeek Harness, ¥110.00" value="" frame=(16.0, 225.33333333333326, 370.0, 108.33333333333331) hittable=true
+key-footer-light: in view after 2 drag(s) at (16.0, 778.3333333333334, 370.0, 61.66666666666663)
+key-dark: Settings row 9 label="Infrastructure, 1 needs you" value="" frame=(16.0, 831.6666666666666, 370.0, 52.0) hittable=true
+key-rows-dark: in view after 11 drag(s) at (16.0, 795.3333333333335, 370.0, 61.66666666666663)
+key-dark: row 9 label="DeepSeek, DeepSeek V4 Pro, Claude Code · OpenCode · DeepSeek Harness, ¥110.00" value="" frame=(16.0, 225.33333333333326, 370.0, 108.33333333333331) hittable=true
+key-footer-dark: in view after 2 drag(s) at (16.0, 778.3333333333334, 370.0, 61.66666666666663)

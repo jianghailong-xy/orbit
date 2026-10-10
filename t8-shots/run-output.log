@@ -1,0 +1,90 @@
+==> stub ready after 2s
+==> iPhone 22452A91-4697-4369-8812-53ADB77EB73B
+Test Case '-[T8ProbeUITests.T8ShotTests test1InfrastructurePage]' started.
+Test Case '-[T8ProbeUITests.T8ShotTests test1InfrastructurePage]' passed (292.632 seconds).
+Test Case '-[T8ProbeUITests.T8ShotTests test2DeepSeekKeyPage]' started.
+Test Case '-[T8ProbeUITests.T8ShotTests test2DeepSeekKeyPage]' passed (199.746 seconds).
+Test Case '-[T8ProbeUITests.T8ShotTests test3EngineSheet]' started.
+Test Case '-[T8ProbeUITests.T8ShotTests test3EngineSheet]' passed (126.822 seconds).
+Test Case '-[T8ProbeUITests.T8ShotTests test4ProviderMenus]' started.
+Test Case '-[T8ProbeUITests.T8ShotTests test4ProviderMenus]' passed (268.126 seconds).
+Test Case '-[T8ProbeUITests.T8ShotTests test5SessionProviderMenus]' started.
+Test Case '-[T8ProbeUITests.T8ShotTests test5SessionProviderMenus]' passed (104.331 seconds).
+	 Executed 5 tests, with 0 failures (0 unexpected) in 991.657 (991.668) seconds
+	 Executed 5 tests, with 0 failures (0 unexpected) in 991.657 (991.669) seconds
+	 Executed 5 tests, with 0 failures (0 unexpected) in 991.657 (991.671) seconds
+** TEST SUCCEEDED **
+.t8-probe/run.sh: line 54:  4825 Terminated: 15          python3 -u stub.py 8765 "$OUT/ios/requests.log" > "$OUT/ios/stub.out" 2>&1
+total 24032
+drwxr-xr-x  72 runner  staff    2304 Oct 10 04:21 .
+drwxr-xr-x   3 runner  staff      96 Oct 10 03:52 ..
+drwxr-xr-x  40 runner  staff    1280 Oct 10 04:21 attachments
+-rw-r--r--   1 runner  staff  357439 Oct 10 04:07 ios1-a-infrastructure-top-dark.png
+-rw-r--r--   1 runner  staff  365145 Oct 10 04:05 ios1-a-infrastructure-top-light.png
+-rw-r--r--   1 runner  staff  464469 Oct 10 04:07 ios1-b-infrastructure-overview-dark.png
+-rw-r--r--   1 runner  staff  507281 Oct 10 04:05 ios1-b-infrastructure-overview-light.png
+-rw-r--r--   1 runner  staff  330742 Oct 10 04:08 ios1-c-infrastructure-machines-dark.png
+-rw-r--r--   1 runner  staff  370293 Oct 10 04:05 ios1-c-infrastructure-machines-light.png
+-rw-r--r--   1 runner  staff  386576 Oct 10 04:08 ios1-d-infrastructure-keys-dark.png
+-rw-r--r--   1 runner  staff  415115 Oct 10 04:05 ios1-d-infrastructure-keys-light.png
+-rw-r--r--   1 runner  staff  346346 Oct 10 04:09 ios1-e-machine-hpc-engines-dark.png
+-rw-r--r--   1 runner  staff  385835 Oct 10 04:06 ios1-e-machine-hpc-engines-light.png
+-rw-r--r--   1 runner  staff  159566 Oct 10 04:09 ios1-f-deepseek-harness-engine-page-dark.png
+-rw-r--r--   1 runner  staff  171636 Oct 10 04:06 ios1-f-deepseek-harness-engine-page-light.png
+-rw-r--r--   1 runner  staff  246619 Oct 10 04:12 ios2-a-deepseek-key-top-dark.png
+-rw-r--r--   1 runner  staff  256008 Oct 10 04:10 ios2-a-deepseek-key-top-light.png
+-rw-r--r--   1 runner  staff  331644 Oct 10 04:12 ios2-b-deepseek-key-works-with-dark.png
+-rw-r--r--   1 runner  staff  361256 Oct 10 04:11 ios2-b-deepseek-key-works-with-light.png
+-rw-r--r--   1 runner  staff  380521 Oct 10 04:14 ios4-a-engine-sheet-dark.png
+-rw-r--r--   1 runner  staff  471673 Oct 10 04:13 ios4-a-engine-sheet-light.png
+-rw-r--r--   1 runner  staff  237661 Oct 10 04:14 ios4-a2-engine-sheet-large-dark.png
+-rw-r--r--   1 runner  staff  241489 Oct 10 04:13 ios4-a2-engine-sheet-large-light.png
+-rw-r--r--   1 runner  staff  365600 Oct 10 04:14 ios4-b-engine-sheet-no-deepseek-key-dark.png
+-rw-r--r--   1 runner  staff  459686 Oct 10 04:13 ios4-b-engine-sheet-no-deepseek-key-light.png
+-rw-r--r--   1 runner  staff  321974 Oct 10 04:18 ios4-c-provider-deepseek-harness-dark.png
+-rw-r--r--   1 runner  staff  409296 Oct 10 04:16 ios4-c-provider-deepseek-harness-light.png
+-rw-r--r--   1 runner  staff  292593 Oct 10 04:17 ios4-d-provider-claude-code-dark.png
+-rw-r--r--   1 runner  staff  309452 Oct 10 04:15 ios4-d-provider-claude-code-light.png
+-rw-r--r--   1 runner  staff  314464 Oct 10 04:19 ios4-e-provider-opencode-dark.png
+-rw-r--r--   1 runner  staff  316194 Oct 10 04:16 ios4-e-provider-opencode-light.png
+-rw-r--r--   1 runner  staff  242607 Oct 10 04:20 ios5-a-session-provider-deepseek-harness-dark.png
+-rw-r--r--   1 runner  staff  290536 Oct 10 04:19 ios5-a-session-provider-deepseek-harness-light.png
+-rw-r--r--   1 runner  staff  247783 Oct 10 04:20 ios5-b-session-key-deleted-dark.png
+-rw-r--r--   1 runner  staff  302732 Oct 10 04:20 ios5-b-session-key-deleted-light.png
+-rw-r--r--   1 runner  staff   13453 Oct 10 04:21 not-served.txt
+-rw-r--r--   1 runner  staff   61473 Oct 10 04:20 requests.log
+-rw-r--r--   1 runner  staff      49 Oct 10 03:52 stub.out
+-rw-r--r--@  1 runner  staff    1849 Oct 10 04:09 T8ShotTeststest1InfrastructurePage-notes.txt
+-rw-r--r--@  1 runner  staff    1019 Oct 10 04:12 T8ShotTeststest2DeepSeekKeyPage-notes.txt
+-rw-r--r--@  1 runner  staff    1387 Oct 10 04:14 T8ShotTeststest3EngineSheet-notes.txt
+-rw-r--r--@  1 runner  staff    5034 Oct 10 04:19 T8ShotTeststest4ProviderMenus-notes.txt
+-rw-r--r--@  1 runner  staff    1281 Oct 10 04:20 T8ShotTeststest5SessionProviderMenus-notes.txt
+-rw-r--r--@  1 runner  staff   17278 Oct 10 04:09 tree-dsh-engine-dark.txt
+-rw-r--r--@  1 runner  staff   17278 Oct 10 04:06 tree-dsh-engine-light.txt
+-rw-r--r--@  1 runner  staff   17104 Oct 10 04:20 tree-gone-menu-dark.txt
+-rw-r--r--@  1 runner  staff   17104 Oct 10 04:20 tree-gone-menu-light.txt
+-rw-r--r--@  1 runner  staff   25918 Oct 10 04:08 tree-infra-keys-dark.txt
+-rw-r--r--@  1 runner  staff   25918 Oct 10 04:05 tree-infra-keys-light.txt
+-rw-r--r--@  1 runner  staff   24148 Oct 10 04:07 tree-infra-overview-dark.txt
+-rw-r--r--@  1 runner  staff   24148 Oct 10 04:05 tree-infra-overview-light.txt
+-rw-r--r--@  1 runner  staff   21969 Oct 10 04:07 tree-infra-top-dark.txt
+-rw-r--r--@  1 runner  staff   21969 Oct 10 04:05 tree-infra-top-light.txt
+-rw-r--r--@  1 runner  staff   27174 Oct 10 04:12 tree-key-rest-dark.txt
+-rw-r--r--@  1 runner  staff   27174 Oct 10 04:11 tree-key-rest-light.txt
+-rw-r--r--@  1 runner  staff   24525 Oct 10 04:12 tree-key-top-dark.txt
+-rw-r--r--@  1 runner  staff   24525 Oct 10 04:10 tree-key-top-light.txt
+-rw-r--r--@  1 runner  staff   26605 Oct 10 04:09 tree-machine-dark.txt
+-rw-r--r--@  1 runner  staff   26605 Oct 10 04:06 tree-machine-light.txt
+-rw-r--r--@  1 runner  staff   14567 Oct 10 04:17 tree-menu-claude-dark.txt
+-rw-r--r--@  1 runner  staff   14567 Oct 10 04:15 tree-menu-claude-light.txt
+-rw-r--r--@  1 runner  staff   12901 Oct 10 04:18 tree-menu-dsh-dark.txt
+-rw-r--r--@  1 runner  staff   12901 Oct 10 04:16 tree-menu-dsh-light.txt
+-rw-r--r--@  1 runner  staff   14145 Oct 10 04:19 tree-menu-opencode-dark.txt
+-rw-r--r--@  1 runner  staff   14145 Oct 10 04:16 tree-menu-opencode-light.txt
+-rw-r--r--@  1 runner  staff   16599 Oct 10 04:20 tree-session-menu-dark.txt
+-rw-r--r--@  1 runner  staff   16599 Oct 10 04:19 tree-session-menu-light.txt
+-rw-r--r--@  1 runner  staff   20486 Oct 10 04:14 tree-sheet-dark.txt
+-rw-r--r--@  1 runner  staff   20486 Oct 10 04:13 tree-sheet-light.txt
+-rw-r--r--@  1 runner  staff   20680 Oct 10 04:14 tree-sheet-nokey-dark.txt
+-rw-r--r--@  1 runner  staff   20680 Oct 10 04:13 tree-sheet-nokey-light.txt
+-rw-r--r--   1 runner  staff  829217 Oct 10 04:21 xcodebuild-ios.log

@@ -1,0 +1,16 @@
+infra-light: Settings row 9 label="Infrastructure, 1 needs you" value="" frame=(16.0, 831.6666666666666, 370.0, 52.0) hittable=true
+overview-light: in view after 2 drag(s) at (16.0, 773.3333333333334, 370.0, 45.66666666666663)
+machines-light: in view after 5 drag(s) at (189.33333333333337, 179.0, 180.66666666666663, 15.666666666666657)
+keys-light: in view after 4 drag(s) at (16.0, 795.3333333333335, 370.0, 61.66666666666663)
+hpc-row-light: in view after 4 drag(s) at (16.0, 192.33333333333337, 370.0, 74.33333333333331)
+machine-light: hpc row 9 label="hpc, 3 / 16 running · 3 of 4 signed in" value="" frame=(16.0, 192.33333333333337, 370.0, 74.33333333333331) hittable=true
+machine-dsh-row-light: in view after 3 drag(s) at (16.0, 609.0, 370.0, 74.33333333333337)
+engine-light: DeepSeek Harness row 9 label="DeepSeek Harness, 0.2.0-rc.2 · Uses API keys" value="" frame=(16.0, 609.0, 370.0, 74.33333333333337) hittable=true
+infra-dark: Settings row 9 label="Infrastructure, 1 needs you" value="" frame=(16.0, 831.6666666666666, 370.0, 52.0) hittable=true
+overview-dark: in view after 2 drag(s) at (16.0, 773.3333333333334, 370.0, 45.66666666666663)
+machines-dark: in view after 5 drag(s) at (189.33333333333337, 179.0, 180.66666666666663, 15.666666666666657)
+keys-dark: in view after 4 drag(s) at (16.0, 795.3333333333335, 370.0, 61.66666666666663)
+hpc-row-dark: in view after 4 drag(s) at (16.0, 188.33333333333337, 370.0, 74.33333333333331)
+machine-dark: hpc row 9 label="hpc, 3 / 16 running · 3 of 4 signed in" value="" frame=(16.0, 188.33333333333337, 370.0, 74.33333333333331) hittable=true
+machine-dsh-row-dark: in view after 3 drag(s) at (16.0, 609.0, 370.0, 74.33333333333337)
+engine-dark: DeepSeek Harness row 9 label="DeepSeek Harness, 0.2.0-rc.2 · Uses API keys" value="" frame=(16.0, 609.0, 370.0, 74.33333333333337) hittable=true

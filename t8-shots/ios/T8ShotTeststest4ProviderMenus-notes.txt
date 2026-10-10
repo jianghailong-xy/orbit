@@ -1,0 +1,40 @@
+menu-claude-pick-light: chip 9 label="Model Opus 5.5, effort Default" value="" frame=(167.33333333333331, 797.0, 118.66666666666669, 18.0) hittable=true
+menu-claude-pick-light: Provider row 9 label="Provider, Automatic" value="" frame=(36.0, 481.0, 250.0, 60.0) hittable=true
+menu-claude-pick-light: submenu open after 1 press(es)
+menu-claude-pick-light: Default row 9 label="Default" value="" frame=(36.0, 473.3333333333333, 250.0, 60.00000000000006) hittable=true
+menu-claude-light: chip 9 label="Model Opus 5.5, effort Default" value="" frame=(167.33333333333331, 797.0, 118.66666666666669, 18.0) hittable=true
+menu-claude-light: Provider row 9 label="Provider, Default" value="" frame=(36.0, 481.0, 250.0, 60.0) hittable=true
+menu-claude-light: submenu open after 1 press(es)
+menu-claude-light: 9 label="Z.​AI (GLM)" value="" frame=(36.0, 818.0, 250.0, 42.0) hittable=false
+menu-claude-light: 9 label="Claude Max" value="" frame=(36.0, 860.0, 250.0, 42.0) hittable=false
+menu-dsh-pick-light: hero 9 label="Engine: Claude Code. Switch" value="" frame=(104.66666666666667, 412.6666666666667, 192.66666666666663, 33.66666666666663) hittable=true
+menu-dsh-pick-light: DeepSeek Harness row 9 label="DeepSeek Harness, DeepSeek V4 Pro" value="" frame=(23.36318407960199, 794.3051409618573, 355.27363184079604, 55.69154228855723) hittable=true
+menu-dsh-light: chip 9 label="Model DeepSeek V4 Pro, effort Default" value="" frame=(135.33333333333331, 797.0, 178.66666666666669, 18.0) hittable=true
+menu-dsh-light: Provider row 9 label="Provider, DeepSeek" value="" frame=(64.0, 541.0, 250.0, 60.0) hittable=false
+menu-dsh-light: submenu open after 1 press(es)
+menu-opencode-pick-light: hero 9 label="Engine: Claude Code. Switch" value="" frame=(104.66666666666667, 412.6666666666667, 192.66666666666663, 33.66666666666663) hittable=true
+menu-opencode-pick-light: OpenCode row 9 label="O, OpenCode, Managed by OpenCode" value="" frame=(23.36318407960199, 738.6135986733001, 355.27363184079604, 55.69154228855723) hittable=true
+menu-opencode-light: chip 9 label="Model Managed by OpenCode, effort Default" value="" frame=(121.33333333333333, 797.0, 216.66666666666669, 18.0) hittable=true
+menu-opencode-light: Provider row 9 label="Provider, Own sign-in" value="" frame=(88.0, 583.0, 250.0, 60.0) hittable=true
+menu-opencode-light: submenu open after 1 press(es)
+menu-opencode-light: 9 label="Claude Max isn’t here: a subscription token runs on Claude Code only." value="" frame=(88.0, 753.6666666666666, 250.0, 82.0) hittable=true
+menu-claude-pick-dark: chip 9 label="Model Opus 5.5, effort Default" value="" frame=(167.33333333333331, 797.0, 118.66666666666669, 18.0) hittable=true
+menu-claude-pick-dark: Provider row 9 label="Provider, Automatic" value="" frame=(36.0, 481.0, 250.0, 60.0) hittable=true
+menu-claude-pick-dark: submenu open after 1 press(es)
+menu-claude-pick-dark: Default row 9 label="Default" value="" frame=(36.0, 473.3333333333333, 250.0, 60.00000000000006) hittable=true
+menu-claude-dark: chip 9 label="Model Opus 5.5, effort Default" value="" frame=(167.33333333333331, 797.0, 118.66666666666669, 18.0) hittable=true
+menu-claude-dark: Provider row 9 label="Provider, Default" value="" frame=(36.0, 481.0, 250.0, 60.0) hittable=true
+menu-claude-dark: submenu open after 1 press(es)
+menu-claude-dark: 9 label="Z.​AI (GLM)" value="" frame=(36.0, 818.0, 250.0, 42.0) hittable=false
+menu-claude-dark: 9 label="Claude Max" value="" frame=(36.0, 860.0, 250.0, 42.0) hittable=false
+menu-dsh-pick-dark: hero 9 label="Engine: Claude Code. Switch" value="" frame=(104.66666666666667, 412.6666666666667, 192.66666666666663, 33.66666666666663) hittable=true
+menu-dsh-pick-dark: DeepSeek Harness row 9 label="DeepSeek Harness, DeepSeek V4 Pro" value="" frame=(23.36318407960199, 794.3051409618573, 355.27363184079604, 55.69154228855723) hittable=true
+menu-dsh-dark: chip 9 label="Model DeepSeek V4 Pro, effort Default" value="" frame=(135.33333333333331, 797.0, 178.66666666666669, 18.0) hittable=true
+menu-dsh-dark: Provider row 9 label="Provider, DeepSeek" value="" frame=(64.0, 541.0, 250.0, 60.0) hittable=true
+menu-dsh-dark: submenu open after 1 press(es)
+menu-opencode-pick-dark: hero 9 label="Engine: Claude Code. Switch" value="" frame=(104.66666666666667, 412.6666666666667, 192.66666666666663, 33.66666666666663) hittable=true
+menu-opencode-pick-dark: OpenCode row 9 label="O, OpenCode, Managed by OpenCode" value="" frame=(23.36318407960199, 738.6135986733001, 355.27363184079604, 55.69154228855723) hittable=true
+menu-opencode-dark: chip 9 label="Model Managed by OpenCode, effort Default" value="" frame=(121.33333333333333, 797.0, 216.66666666666669, 18.0) hittable=true
+menu-opencode-dark: Provider row 9 label="Provider, Own sign-in" value="" frame=(88.0, 583.0, 250.0, 60.0) hittable=true
+menu-opencode-dark: submenu open after 1 press(es)
+menu-opencode-dark: 9 label="Claude Max isn’t here: a subscription token runs on Claude Code only." value="" frame=(88.0, 753.6666666666666, 250.0, 82.0) hittable=true

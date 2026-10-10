@@ -1,0 +1,8 @@
+sheet-pick-light: hero 9 label="Engine: Claude Code. Switch" value="" frame=(104.66666666666667, 412.6666666666667, 192.66666666666663, 33.66666666666663) hittable=true
+sheet-pick-light: DeepSeek Harness row 9 label="DeepSeek Harness, DeepSeek V4 Pro" value="" frame=(23.36318407960199, 794.3051409618573, 355.27363184079604, 55.69154228855723) hittable=true
+sheet-light: hero 9 label="Engine: DeepSeek Harness. Switch" value="" frame=(64.33333333333333, 412.6666666666667, 273.3333333333333, 33.66666666666663) hittable=true
+sheet-nokey-light: hero 9 label="Engine: Claude Code. Switch" value="" frame=(104.66666666666667, 412.6666666666667, 192.66666666666663, 33.66666666666663) hittable=true
+sheet-pick-dark: hero 9 label="Engine: Claude Code. Switch" value="" frame=(104.66666666666667, 412.6666666666667, 192.66666666666663, 33.66666666666663) hittable=true
+sheet-pick-dark: DeepSeek Harness row 9 label="DeepSeek Harness, DeepSeek V4 Pro" value="" frame=(23.36318407960199, 794.3051409618573, 355.27363184079604, 55.69154228855723) hittable=true
+sheet-dark: hero 9 label="Engine: DeepSeek Harness. Switch" value="" frame=(64.33333333333333, 412.6666666666667, 273.3333333333333, 33.66666666666663) hittable=true
+sheet-nokey-dark: hero 9 label="Engine: Claude Code. Switch" value="" frame=(104.66666666666667, 412.6666666666667, 192.66666666666663, 33.66666666666663) hittable=true

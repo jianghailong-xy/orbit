@@ -1,0 +1,300 @@
+    t =   250.64s Find the "Model Managed by OpenCode, effort Default" Button
+    t =   250.72s Waiting 20.0s for "Model Managed by OpenCode, effort Default" Button to exist
+    t =   251.73s     Checking `Expect predicate `existsNoRetry == 1` for object "Model Managed by OpenCode, effort Default" Button`
+    t =   251.73s         Checking existence of `"Model Managed by OpenCode, effort Default" Button`
+    t =   252.34s Tap "Model Managed by OpenCode, effort Default" Button
+    t =   252.34s     Wait for io.orbitd.t8probe to idle
+    t =   252.35s     Find the "Model Managed by OpenCode, effort Default" Button
+    t =   252.48s     Check for interrupting elements affecting "Model Managed by OpenCode, effort Default" Button
+    t =   252.57s     Synthesize event
+    t =   253.08s     Wait for io.orbitd.t8probe to idle
+    t =   253.31s Waiting 8.0s for Button (First Match) to exist
+    t =   254.38s     Checking `Expect predicate `existsNoRetry == 1` for object Button (First Match)`
+    t =   254.38s         Checking existence of `Button (First Match)`
+    t =   256.37s Checking existence of `Any (First Match)`
+    t =   256.71s Checking existence of `Button (First Match)`
+    t =   257.13s Find the Button (First Match)
+    t =   257.33s Find the "Provider, Own sign-in" Button
+    t =   257.47s Find the "Provider, Own sign-in" Button
+    t =   257.61s Find the "Provider, Own sign-in" Button
+    t =   257.73s Find the "Provider, Own sign-in" Button
+    t =   257.89s Tap "Provider, Own sign-in" Button
+    t =   257.89s     Wait for io.orbitd.t8probe to idle
+    t =   257.89s     Find the "Provider, Own sign-in" Button
+    t =   258.03s     Check for interrupting elements affecting "Provider, Own sign-in" Button
+    t =   258.12s     Synthesize event
+    t =   258.42s     Wait for io.orbitd.t8probe to idle
+    t =   259.62s Waiting 4.0s for Any (First Match) to exist
+    t =   260.68s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   260.69s         Checking existence of `Any (First Match)`
+    t =   262.50s Checking existence of `Any (First Match)`
+    t =   262.66s Checking existence of `Any (First Match)`
+    t =   262.83s Checking existence of `Any (First Match)`
+    t =   262.96s Checking existence of `Any (First Match)`
+    t =   263.13s Checking existence of `Any (First Match)`
+    t =   263.31s Checking existence of `Any (First Match)`
+    t =   263.50s Checking existence of `Any (First Match)`
+    t =   263.61s Checking existence of `Any (First Match)`
+    t =   263.79s Checking existence of `Any (First Match)`
+    t =   263.93s Checking existence of `Any (First Match)`
+    t =   264.08s Find the Any (First Match)
+    t =   264.26s Find the "Claude Max isn’t here: a subscription token runs on Claude Code only." Button
+    t =   264.40s Find the "Claude Max isn’t here: a subscription token runs on Claude Code only." Button
+    t =   264.74s Find the "Claude Max isn’t here: a subscription token runs on Claude Code only." Button
+    t =   265.28s Find the "Claude Max isn’t here: a subscription token runs on Claude Code only." Button
+    t =   265.75s Added attachment named 'ios4-e-provider-opencode-dark'
+    t =   265.75s Requesting snapshot of accessibility hierarchy for app with pid 60595
+    t =   266.30s Requesting snapshot of accessibility hierarchy for app with pid 60595
+    t =   266.43s Terminate io.orbitd.t8probe:60595
+    t =   267.50s Tear Down
+Test Case '-[T8ProbeUITests.T8ShotTests test4ProviderMenus]' passed (268.126 seconds).
+Test Case '-[T8ProbeUITests.T8ShotTests test5SessionProviderMenus]' started.
+    t =     0.00s Start Test at 2026-10-10 04:19:08.317
+    t =     0.11s Set Up
+    t =     0.19s Open io.orbitd.t8probe
+    t =     0.19s     Launch io.orbitd.t8probe
+2026-10-10 04:19:08.878 xcodebuild[7340:26965] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-10 04:19:08.878 xcodebuild[7340:26965] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     2.10s         Setting up automation session
+    t =     4.36s         Wait for io.orbitd.t8probe to idle
+    t =     6.51s Checking existence of `Any (First Match)`
+    t =     7.98s Checking existence of `Any (First Match)`
+    t =    11.46s Checking existence of `Any (First Match)`
+    t =    12.02s Get all elements bound by index for: Elements matching predicate 'label BEGINSWITH "Model "'
+    t =    12.20s Checking existence of `Button (Element at index 0)`
+    t =    12.31s Find the Button (Element at index 0)
+    t =    12.48s Checking existence of `"Model DeepSeek V4 Pro, effort Default" Button`
+    t =    12.61s Find the "Model DeepSeek V4 Pro, effort Default" Button
+    t =    12.75s Find the "Model DeepSeek V4 Pro, effort Default" Button
+    t =    13.00s Find the "Model DeepSeek V4 Pro, effort Default" Button
+    t =    13.17s Find the "Model DeepSeek V4 Pro, effort Default" Button
+    t =    13.62s Find the "Model DeepSeek V4 Pro, effort Default" Button
+    t =    13.87s Waiting 20.0s for "Model DeepSeek V4 Pro, effort Default" Button to exist
+    t =    14.90s     Checking `Expect predicate `existsNoRetry == 1` for object "Model DeepSeek V4 Pro, effort Default" Button`
+    t =    14.90s         Checking existence of `"Model DeepSeek V4 Pro, effort Default" Button`
+    t =    14.98s Tap "Model DeepSeek V4 Pro, effort Default" Button
+    t =    14.98s     Wait for io.orbitd.t8probe to idle
+    t =    14.98s     Find the "Model DeepSeek V4 Pro, effort Default" Button
+    t =    15.08s     Check for interrupting elements affecting "Model DeepSeek V4 Pro, effort Default" Button
+    t =    15.18s     Synthesize event
+    t =    15.48s     Wait for io.orbitd.t8probe to idle
+    t =    16.93s Waiting 8.0s for Button (First Match) to exist
+    t =    17.97s     Checking `Expect predicate `existsNoRetry == 1` for object Button (First Match)`
+    t =    17.97s         Checking existence of `Button (First Match)`
+    t =    19.37s Checking existence of `Any (First Match)`
+    t =    19.48s Checking existence of `Button (First Match)`
+    t =    19.60s Find the Button (First Match)
+    t =    19.70s Find the "Provider, DeepSeek" Button
+    t =    19.81s Find the "Provider, DeepSeek" Button
+    t =    19.91s Find the "Provider, DeepSeek" Button
+    t =    20.06s Find the "Provider, DeepSeek" Button
+    t =    20.21s Tap "Provider, DeepSeek" Button
+    t =    20.21s     Wait for io.orbitd.t8probe to idle
+    t =    20.22s     Find the "Provider, DeepSeek" Button
+    t =    20.32s     Check for interrupting elements affecting "Provider, DeepSeek" Button
+    t =    20.41s     Synthesize event
+    t =    20.71s     Wait for io.orbitd.t8probe to idle
+    t =    22.41s Waiting 4.0s for Any (First Match) to exist
+    t =    23.46s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    23.46s         Checking existence of `Any (First Match)`
+    t =    25.12s Checking existence of `Any (First Match)`
+    t =    25.25s Checking existence of `Any (First Match)`
+    t =    25.38s Checking existence of `Any (First Match)`
+    t =    25.51s Checking existence of `Any (First Match)`
+    t =    25.86s Checking existence of `Any (First Match)`
+    t =    26.49s Checking existence of `Any (First Match)`
+    t =    27.28s Added attachment named 'ios5-a-session-provider-deepseek-harness-light'
+    t =    27.28s Requesting snapshot of accessibility hierarchy for app with pid 62104
+    t =    27.72s Requesting snapshot of accessibility hierarchy for app with pid 62104
+    t =    27.85s Terminate io.orbitd.t8probe:62104
+    t =    28.87s Open io.orbitd.t8probe
+    t =    28.87s     Launch io.orbitd.t8probe
+2026-10-10 04:19:37.193 xcodebuild[7340:26965] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-10 04:19:37.193 xcodebuild[7340:26965] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =    30.31s         Setting up automation session
+    t =    31.55s         Wait for io.orbitd.t8probe to idle
+    t =    33.51s Checking existence of `Any (First Match)`
+    t =    35.00s Checking existence of `Any (First Match)`
+    t =    36.38s Checking existence of `Any (First Match)`
+    t =    39.99s Checking existence of `Any (First Match)`
+    t =    40.39s Get all elements bound by index for: Elements matching predicate 'label BEGINSWITH "Model "'
+    t =    40.56s Checking existence of `Button (Element at index 0)`
+    t =    40.68s Find the Button (Element at index 0)
+    t =    40.79s Checking existence of `"Model DeepSeek V4 Pro, effort Default" Button`
+    t =    40.86s Find the "Model DeepSeek V4 Pro, effort Default" Button
+    t =    40.95s Find the "Model DeepSeek V4 Pro, effort Default" Button
+    t =    41.04s Find the "Model DeepSeek V4 Pro, effort Default" Button
+    t =    41.13s Find the "Model DeepSeek V4 Pro, effort Default" Button
+    t =    41.21s Find the "Model DeepSeek V4 Pro, effort Default" Button
+    t =    41.31s Waiting 20.0s for "Model DeepSeek V4 Pro, effort Default" Button to exist
+    t =    42.32s     Checking `Expect predicate `existsNoRetry == 1` for object "Model DeepSeek V4 Pro, effort Default" Button`
+    t =    42.32s         Checking existence of `"Model DeepSeek V4 Pro, effort Default" Button`
+    t =    42.41s Tap "Model DeepSeek V4 Pro, effort Default" Button
+    t =    42.41s     Wait for io.orbitd.t8probe to idle
+    t =    42.41s     Find the "Model DeepSeek V4 Pro, effort Default" Button
+    t =    42.50s     Check for interrupting elements affecting "Model DeepSeek V4 Pro, effort Default" Button
+    t =    42.58s     Synthesize event
+    t =    42.89s     Wait for io.orbitd.t8probe to idle
+    t =    43.25s Waiting 8.0s for Button (First Match) to exist
+    t =    44.27s     Checking `Expect predicate `existsNoRetry == 1` for object Button (First Match)`
+    t =    44.27s         Checking existence of `Button (First Match)`
+    t =    45.77s Checking existence of `Any (First Match)`
+    t =    45.89s Checking existence of `Button (First Match)`
+    t =    46.01s Find the Button (First Match)
+    t =    46.14s Find the "Provider, Key deleted" Button
+    t =    46.26s Find the "Provider, Key deleted" Button
+    t =    46.38s Find the "Provider, Key deleted" Button
+    t =    46.51s Find the "Provider, Key deleted" Button
+    t =    46.62s Tap "Provider, Key deleted" Button
+    t =    46.62s     Wait for io.orbitd.t8probe to idle
+    t =    46.63s     Find the "Provider, Key deleted" Button
+    t =    46.72s     Check for interrupting elements affecting "Provider, Key deleted" Button
+    t =    46.82s     Synthesize event
+    t =    47.23s     Wait for io.orbitd.t8probe to idle
+    t =    48.31s Waiting 4.0s for Any (First Match) to exist
+    t =    49.33s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    49.33s         Checking existence of `Any (First Match)`
+    t =    51.61s Checking existence of `Any (First Match)`
+    t =    51.85s Checking existence of `Any (First Match)`
+    t =    52.01s Checking existence of `Any (First Match)`
+    t =    52.22s Checking existence of `Any (First Match)`
+    t =    52.37s Checking existence of `Any (First Match)`
+    t =    52.49s Checking existence of `Any (First Match)`
+    t =    52.66s Checking existence of `Any (First Match)`
+    t =    53.01s Checking existence of `Any (First Match)`
+    t =    53.28s Checking existence of `Any (First Match)`
+    t =    53.82s Added attachment named 'ios5-b-session-key-deleted-light'
+    t =    53.82s Requesting snapshot of accessibility hierarchy for app with pid 62886
+    t =    54.38s Requesting snapshot of accessibility hierarchy for app with pid 62886
+    t =    54.63s Terminate io.orbitd.t8probe:62886
+    t =    55.68s Open io.orbitd.t8probe
+    t =    55.68s     Launch io.orbitd.t8probe
+2026-10-10 04:20:04.000 xcodebuild[7340:26965] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-10 04:20:04.000 xcodebuild[7340:26965] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =    57.26s         Setting up automation session
+    t =    58.68s         Wait for io.orbitd.t8probe to idle
+    t =    61.00s Checking existence of `Any (First Match)`
+    t =    64.68s Checking existence of `Any (First Match)`
+    t =    64.90s Get all elements bound by index for: Elements matching predicate 'label BEGINSWITH "Model "'
+    t =    65.19s Checking existence of `Button (Element at index 0)`
+    t =    65.27s Find the Button (Element at index 0)
+    t =    65.40s Checking existence of `"Model DeepSeek V4 Pro, effort Default" Button`
+    t =    65.50s Find the "Model DeepSeek V4 Pro, effort Default" Button
+    t =    65.59s Find the "Model DeepSeek V4 Pro, effort Default" Button
+    t =    65.67s Find the "Model DeepSeek V4 Pro, effort Default" Button
+    t =    65.75s Find the "Model DeepSeek V4 Pro, effort Default" Button
+    t =    65.83s Find the "Model DeepSeek V4 Pro, effort Default" Button
+    t =    65.92s Waiting 20.0s for "Model DeepSeek V4 Pro, effort Default" Button to exist
+    t =    66.96s     Checking `Expect predicate `existsNoRetry == 1` for object "Model DeepSeek V4 Pro, effort Default" Button`
+    t =    66.97s         Checking existence of `"Model DeepSeek V4 Pro, effort Default" Button`
+    t =    67.06s Tap "Model DeepSeek V4 Pro, effort Default" Button
+    t =    67.06s     Wait for io.orbitd.t8probe to idle
+    t =    67.06s     Find the "Model DeepSeek V4 Pro, effort Default" Button
+    t =    67.13s     Check for interrupting elements affecting "Model DeepSeek V4 Pro, effort Default" Button
+    t =    67.24s     Synthesize event
+    t =    67.55s     Wait for io.orbitd.t8probe to idle
+    t =    68.19s Waiting 8.0s for Button (First Match) to exist
+    t =    69.24s     Checking `Expect predicate `existsNoRetry == 1` for object Button (First Match)`
+    t =    69.24s         Checking existence of `Button (First Match)`
+    t =    70.39s Checking existence of `Any (First Match)`
+    t =    70.48s Checking existence of `Button (First Match)`
+    t =    70.57s Find the Button (First Match)
+    t =    70.67s Find the "Provider, DeepSeek" Button
+    t =    70.77s Find the "Provider, DeepSeek" Button
+    t =    70.87s Find the "Provider, DeepSeek" Button
+    t =    70.97s Find the "Provider, DeepSeek" Button
+    t =    71.09s Tap "Provider, DeepSeek" Button
+    t =    71.09s     Wait for io.orbitd.t8probe to idle
+    t =    71.09s     Find the "Provider, DeepSeek" Button
+    t =    71.21s     Check for interrupting elements affecting "Provider, DeepSeek" Button
+    t =    71.29s     Synthesize event
+    t =    71.60s     Wait for io.orbitd.t8probe to idle
+    t =    73.06s Waiting 4.0s for Any (First Match) to exist
+    t =    74.10s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    74.10s         Checking existence of `Any (First Match)`
+    t =    75.71s Checking existence of `Any (First Match)`
+    t =    75.80s Checking existence of `Any (First Match)`
+    t =    75.95s Checking existence of `Any (First Match)`
+    t =    76.15s Checking existence of `Any (First Match)`
+    t =    76.57s Checking existence of `Any (First Match)`
+    t =    77.52s Checking existence of `Any (First Match)`
+    t =    78.09s Added attachment named 'ios5-a-session-provider-deepseek-harness-dark'
+    t =    78.10s Requesting snapshot of accessibility hierarchy for app with pid 64374
+    t =    78.86s Requesting snapshot of accessibility hierarchy for app with pid 64374
+    t =    79.00s Terminate io.orbitd.t8probe:64374
+    t =    80.05s Open io.orbitd.t8probe
+    t =    80.05s     Launch io.orbitd.t8probe
+2026-10-10 04:20:28.374 xcodebuild[7340:26965] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-10 04:20:28.374 xcodebuild[7340:26965] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =    81.10s         Setting up automation session
+    t =    83.07s         Wait for io.orbitd.t8probe to idle
+    t =    85.74s Checking existence of `Any (First Match)`
+    t =    89.08s Checking existence of `Any (First Match)`
+    t =    89.37s Get all elements bound by index for: Elements matching predicate 'label BEGINSWITH "Model "'
+    t =    89.52s Checking existence of `Button (Element at index 0)`
+    t =    89.59s Find the Button (Element at index 0)
+    t =    89.70s Checking existence of `"Model DeepSeek V4 Pro, effort Default" Button`
+    t =    89.78s Find the "Model DeepSeek V4 Pro, effort Default" Button
+    t =    89.93s Find the "Model DeepSeek V4 Pro, effort Default" Button
+    t =    90.03s Find the "Model DeepSeek V4 Pro, effort Default" Button
+    t =    90.12s Find the "Model DeepSeek V4 Pro, effort Default" Button
+    t =    90.20s Find the "Model DeepSeek V4 Pro, effort Default" Button
+    t =    90.30s Waiting 20.0s for "Model DeepSeek V4 Pro, effort Default" Button to exist
+    t =    91.37s     Checking `Expect predicate `existsNoRetry == 1` for object "Model DeepSeek V4 Pro, effort Default" Button`
+    t =    91.37s         Checking existence of `"Model DeepSeek V4 Pro, effort Default" Button`
+    t =    91.44s Tap "Model DeepSeek V4 Pro, effort Default" Button
+    t =    91.44s     Wait for io.orbitd.t8probe to idle
+    t =    91.44s     Find the "Model DeepSeek V4 Pro, effort Default" Button
+    t =    91.55s     Check for interrupting elements affecting "Model DeepSeek V4 Pro, effort Default" Button
+    t =    91.63s     Synthesize event
+    t =    91.94s     Wait for io.orbitd.t8probe to idle
+    t =    92.30s Waiting 8.0s for Button (First Match) to exist
+    t =    93.32s     Checking `Expect predicate `existsNoRetry == 1` for object Button (First Match)`
+    t =    93.32s         Checking existence of `Button (First Match)`
+    t =    95.07s Checking existence of `Any (First Match)`
+    t =    95.28s Checking existence of `Button (First Match)`
+    t =    95.67s Find the Button (First Match)
+    t =    95.86s Find the "Provider, Key deleted" Button
+    t =    96.03s Find the "Provider, Key deleted" Button
+    t =    96.19s Find the "Provider, Key deleted" Button
+    t =    96.34s Find the "Provider, Key deleted" Button
+    t =    96.54s Tap "Provider, Key deleted" Button
+    t =    96.54s     Wait for io.orbitd.t8probe to idle
+    t =    96.55s     Find the "Provider, Key deleted" Button
+    t =    96.70s     Check for interrupting elements affecting "Provider, Key deleted" Button
+    t =    96.80s     Synthesize event
+    t =    97.10s     Wait for io.orbitd.t8probe to idle
+    t =    98.26s Waiting 4.0s for Any (First Match) to exist
+    t =    99.28s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    99.28s         Checking existence of `Any (First Match)`
+    t =   100.92s Checking existence of `Any (First Match)`
+    t =   101.05s Checking existence of `Any (First Match)`
+    t =   101.13s Checking existence of `Any (First Match)`
+    t =   101.21s Checking existence of `Any (First Match)`
+    t =   101.31s Checking existence of `Any (First Match)`
+    t =   101.40s Checking existence of `Any (First Match)`
+    t =   101.48s Checking existence of `Any (First Match)`
+    t =   101.68s Checking existence of `Any (First Match)`
+    t =   101.91s Checking existence of `Any (First Match)`
+    t =   102.35s Added attachment named 'ios5-b-session-key-deleted-dark'
+    t =   102.35s Requesting snapshot of accessibility hierarchy for app with pid 65264
+    t =   102.78s Requesting snapshot of accessibility hierarchy for app with pid 65264
+    t =   102.92s Terminate io.orbitd.t8probe:65264
+    t =   104.02s Tear Down
+Test Case '-[T8ProbeUITests.T8ShotTests test5SessionProviderMenus]' passed (104.331 seconds).
+Test Suite 'T8ShotTests' passed at 2026-10-10 04:20:52.647.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 991.657 (991.668) seconds
+Test Suite 'T8ProbeUITests.xctest' passed at 2026-10-10 04:20:52.648.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 991.657 (991.669) seconds
+Test Suite 'Selected tests' passed at 2026-10-10 04:20:52.649.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 991.657 (991.671) seconds
+2026-10-10 04:21:32.951 xcodebuild[7340:26965] [MT] IDETestOperationsObserverDebug: 1069.282 elapsed -- Testing started completed.
+2026-10-10 04:21:32.952 xcodebuild[7340:26965] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-10 04:21:32.952 xcodebuild[7340:26965] [MT] IDETestOperationsObserverDebug: 1069.282 sec, +1069.282 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/runner/work/orbit/orbit/.t8-probe/results/ios.xcresult
+
+** TEST SUCCEEDED **
+
+Testing started

@@ -1,0 +1,175 @@
+Attributes: Application, 0x11aabd400, pid: 60595, label: 'T8Probe'
+Element subtree:
+ →Application, 0x11aabd400, pid: 60595, label: 'T8Probe'
+    Window (Main), 0x11aabd540, {{0.0, 0.0}, {402.0, 874.0}}
+      Other, 0x11aabf840, {{0.0, 0.0}, {402.0, 874.0}}
+      Other, 0x11aabdb80, {{0.0, 0.0}, {402.0, 874.0}}
+        Other, 0x11aabf700, {{0.0, 0.0}, {402.0, 874.0}}
+          Other, 0x11aabea80, {{0.0, 0.0}, {402.0, 874.0}}
+            Other, 0x11aabcdc0, {{0.0, 0.0}, {402.0, 874.0}}
+              Other, 0x11aabd180, {{0.0, 62.0}, {402.0, 778.0}}
+              StaticText, 0x11aabcc80, {{22.0, 84.8}, {52.3, 26.3}}, label: 'Orbit'
+              Button, 0x11aabd2c0, {{251.7, 76.0}, {44.0, 44.0}}, identifier: 'magnifyingglass', label: 'Search sessions'
+              CollectionView, 0x11aabe6c0, {{0.0, 128.0}, {305.7, 746.0}}
+                Other, 0x11aabe800, {{0.0, -1364.0}, {305.7, 3206.0}}
+                Cell, 0x11aabe580, {{0.0, 128.0}, {305.3, 44.3}}
+                  Other, 0x11aabfac0, {{0.0, 128.0}, {305.3, 44.3}}
+                    Other, 0x11aabf0c0, {{0.0, 128.0}, {305.3, 44.3}}
+                      Other, 0x11aabf200, {{0.0, 128.0}, {305.3, 44.3}}
+                  Other, 0x11aabf340, {{0.0, 128.0}, {305.3, 44.3}}
+                    Other, 0x11aabf480, {{0.0, 128.0}, {305.3, 44.3}}
+                      Other, 0x11aabe940, {{0.0, 128.0}, {305.3, 44.3}}
+                        Button, 0x11aabf5c0, {{0.0, 128.0}, {305.3, 44.3}}, label: 'Projects'
+                          Image, 0x11aabd680, {{26.3, 142.7}, {15.3, 15.3}}, identifier: 'square.grid.2x2', label: 'Grid View'
+                          StaticText, 0x11aabd7c0, {{58.0, 140.0}, {62.3, 20.3}}, label: 'Projects'
+                Cell, 0x11aabd900, {{0.0, 172.3}, {305.3, 44.3}}
+                  Other, 0x11aabcf00, {{0.0, 172.3}, {305.3, 44.3}}
+                    Other, 0x11aabfc00, {{0.0, 172.3}, {305.3, 44.3}}
+                      Other, 0x11aabe440, {{0.0, 172.3}, {305.3, 44.3}}
+                  Other, 0x11aabee40, {{0.0, 172.3}, {305.3, 44.3}}
+                    Other, 0x11aabebc0, {{0.0, 172.3}, {305.3, 44.3}}
+                      Other, 0x11aabed00, {{0.0, 172.3}, {305.3, 44.3}}
+                        Button, 0x11aabfd40, {{0.0, 172.3}, {305.3, 44.3}}, label: 'Tasks'
+                          Image, 0x11aabfe80, {{24.7, 186.0}, {18.7, 17.0}}, identifier: 'checklist', label: 'checklist'
+                          StaticText, 0x11aabda40, {{58.0, 184.3}, {43.0, 20.3}}, label: 'Tasks'
+                Cell, 0x11aabef80, {{0.0, 216.7}, {305.3, 44.3}}
+                  Other, 0x11aabd040, {{0.0, 216.7}, {305.3, 44.3}}
+                    Other, 0x11aabf980, {{0.0, 216.7}, {305.3, 44.3}}
+                      Other, 0x11aabdcc0, {{0.0, 216.7}, {305.3, 44.3}}
+                  Other, 0x11aabde00, {{0.0, 216.7}, {305.3, 44.3}}
+                    Other, 0x11aabdf40, {{0.0, 216.7}, {305.3, 44.3}}
+                      Other, 0x11aabe080, {{0.0, 216.7}, {305.3, 44.3}}
+                        Button, 0x11aabe1c0, {{0.0, 216.7}, {305.3, 44.3}}, label: 'Wiki'
+                          Image, 0x11aabe300, {{27.0, 230.0}, {14.0, 18.0}}, identifier: 'book.closed', label: 'book.closed'
+                          StaticText, 0x11aac4000, {{58.0, 228.7}, {32.7, 20.3}}, label: 'Wiki'
+                Cell, 0x11aac4140, {{0.0, 261.0}, {305.3, 44.7}}
+                  Other, 0x11aac4280, {{0.0, 261.0}, {305.3, 44.7}}
+                    Other, 0x11aac43c0, {{0.0, 261.0}, {305.3, 44.7}}
+                      Other, 0x11aac4500, {{0.0, 261.0}, {305.3, 44.7}}
+                  Other, 0x11aac4640, {{0.0, 261.0}, {305.3, 44.7}}
+                    Other, 0x11aac4780, {{0.0, 261.0}, {305.3, 44.7}}
+                      Other, 0x11aac48c0, {{0.0, 261.0}, {305.3, 44.7}}
+                        StaticText, 0x11aac4a00, {{0.0, 261.0}, {305.3, 44.7}}, label: 'Workspaces'
+                Cell, 0x11aac4b40, {{0.0, 305.7}, {305.3, 44.3}}
+                  Other, 0x11aac4c80, {{0.0, 305.7}, {305.3, 44.3}}
+                    Other, 0x11aac4dc0, {{0.0, 305.7}, {305.3, 44.3}}
+                      Other, 0x11aac4f00, {{0.0, 305.7}, {305.3, 44.3}}
+                  Other, 0x11aac5040, {{0.0, 305.7}, {305.3, 44.3}}
+                    Other, 0x11aac5180, {{0.0, 305.7}, {305.3, 44.3}}
+                      Other, 0x11aac52c0, {{0.0, 305.7}, {305.3, 44.3}}
+                        Button, 0x11aac5400, {{0.0, 305.7}, {305.3, 44.3}}, label: 'orbit,  · hpc'
+                          Other, 0x11aac5540, {{24.7, 320.3}, {19.0, 15.3}}, label: 'Runner offline'
+                            Image, 0x11aac5680, {{24.7, 320.3}, {19.0, 15.3}}, identifier: 'folder', label: 'Move'
+                          StaticText, 0x11aac57c0, {{58.0, 317.7}, {35.3, 20.3}}, label: 'orbit'
+                          StaticText, 0x11aac5900, {{93.3, 317.7}, {42.0, 20.3}}, label: ' · hpc'
+                Other, 0x11aac5a40, {{272.3, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                  Other, 0x11aac5b80, {{299.3, 561.0}, {3.0, 310.0}}
+                Other, 0x11aac5cc0, {{272.3, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                  Other, 0x11aac5e00, {{299.3, 561.0}, {3.0, 310.0}}
+              Button, 0x11aac5f40, {{10.0, 788.7}, {165.0, 43.0}}, label: 'New session'
+                Image, 0x11aac6080, {{31.0, 801.0}, {18.3, 18.3}}, identifier: 'square.and.pencil', label: 'Compose'
+                StaticText, 0x11aac61c0, {{57.0, 799.8}, {100.0, 20.3}}, label: 'New session'
+              Button, 0x11aac6300, {{251.7, 788.0}, {44.0, 44.0}}, identifier: 'gearshape', label: 'Settings'
+              Other, 0x11aac6440, {{0.0, 0.0}, {402.0, 874.0}}
+                NavigationBar, 0x11aac6580, {{0.0, 62.0}, {402.0, 54.0}}, identifier: 'orbit'
+                  Button, 0x11aac66c0, {{16.0, 62.0}, {44.0, 44.0}}, identifier: 'BackButton', label: 'Back'
+                  StaticText, 0x11aac6800, {{182.0, 73.7}, {37.7, 20.7}}, label: 'orbit'
+                    Other, 0x11aac6940, {{182.0, 73.7}, {37.7, 20.7}}
+                      StaticText, 0x11aac6a80, {{182.0, 74.0}, {37.7, 20.3}}, label: 'Workspace: orbit'
+                Other, 0x11aac6bc0, {{0.0, 0.0}, {402.0, 874.0}}
+                  Other, 0x11aac6d00, {{0.0, 0.0}, {402.0, 874.0}}
+                    Other, 0x11aac6e40, {{0.0, 0.0}, {402.0, 874.0}}
+                      Other, 0x11aac6f80, {{0.0, 0.0}, {402.0, 874.0}}
+                        StaticText, 0x11aac70c0, {{192.5, 348.3}, {17.0, 32.7}}, label: 'O'
+                        Button, 0x11aac7200, {{118.7, 412.7}, {165.0, 33.7}}, label: 'Engine: OpenCode. Switch'
+                          StaticText, 0x11aac7340, {{118.5, 412.7}, {140.7, 33.7}}, label: 'OpenCode'
+                          Image, 0x11aac7480, {{268.3, 425.7}, {13.3, 8.0}}, identifier: 'chevron.down', label: 'Go Down'
+                        StaticText, 0x11aac75c0, {{105.2, 464.3}, {191.7, 19.3}}, label: 'Send a task to get started.'
+                        StaticText, 0x11aac7700, {{129.7, 488.7}, {142.7, 15.7}}, label: 'Managed by OpenCode'
+                        TextView, 0x11aac7840, {{32.0, 754.0}, {338.0, 22.0}}
+                          StaticText, 0x11aac7980, {{32.0, 754.0}, {338.0, 20.3}}, label: 'Message…'
+                          Other, 0x11aac7ac0, {{32.0, 754.0}, {0.0, 0.0}}, identifier: '_UITextSelectionRangeAdjustmentContainerView'
+                            Other, 0x11aac7c00, {{32.0, 754.0}, {0.0, 0.0}}, identifier: 'com.apple.text.grabber.leading'
+                              Other, 0x11aac7d40, {{24.8, 740.5}, {16.5, 16.5}}
+                              Other, 0x11aac7e80, {{32.0, 754.0}, {2.0, 0.0}}
+                            Other, 0x11aad0000, {{32.0, 754.0}, {0.0, 0.0}}, identifier: 'com.apple.text.grabber.leading'
+                              Other, 0x11aad0140, {{24.8, 740.5}, {16.5, 16.5}}
+                              Other, 0x11aad0280, {{32.0, 754.0}, {2.0, 0.0}}
+                          Other, 0x11aad03c0, {{337.0, 754.0}, {30.0, 22.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                            Other, 0x11aad0500, {{364.0, 737.0}, {3.0, 36.0}}
+                          Other, 0x11aad0640, {{32.0, 762.0}, {338.0, 11.0}}, label: 'Horizontal scroll bar, 1 page', value: 0%
+                            Other, 0x11aad0780, {{35.0, 770.0}, {332.0, 3.0}}
+                        Button, 0x11aad08c0, {{24.0, 790.0}, {32.0, 32.0}}, label: 'Add'
+                          Button, 0x11aad0a00, {{24.0, 790.0}, {32.0, 32.0}}
+                            Image, 0x11aad0b40, {{24.0, 790.0}, {32.0, 32.0}}, identifier: 'plus', label: 'Add'
+                        Button, 0x11aad0c80, {{64.0, 797.0}, {33.0, 18.0}}, label: 'Auto'
+                          Button, 0x11aad0dc0, {{64.0, 797.0}, {33.0, 18.0}}
+                            StaticText, 0x11aad0f00, {{64.0, 797.0}, {33.0, 18.0}}, label: 'Auto'
+                        Button, 0x11aad1040, {{121.3, 797.0}, {216.7, 18.0}}, label: 'Model Managed by OpenCode, effort Default'
+                          Button, 0x11aad1180, {{121.3, 797.0}, {216.7, 18.0}}
+                            StaticText, 0x11aad12c0, {{121.3, 797.0}, {162.3, 18.0}}, label: 'Managed by OpenCode'
+                            StaticText, 0x11aad1400, {{288.7, 797.0}, {49.3, 18.0}}, label: 'Default'
+                        Button, 0x11aad1540, {{346.0, 790.0}, {32.0, 32.0}}, identifier: 'arrow.up.circle.fill', label: 'Arrow Up Circle', Disabled
+                Other, 0x11aad1680, {{0.0, 0.0}, {402.0, 874.0}}
+                  Other, 0x11aad17c0, {{0.0, 0.0}, {402.0, 874.0}}
+      Other, 0x11aad1900, {{0.0, 0.0}, {402.0, 874.0}}
+        Other, 0x11aad1a40, {{0.0, 0.0}, {402.0, 874.0}}
+          Other, 0x11aad1b80, {{88.0, 295.0}, {250.0, 520.0}}
+            Other, 0x11aad1cc0, {{88.0, 295.0}, {250.0, 508.0}}
+              Other, 0x11aad1e00, {{88.0, 295.0}, {250.0, 508.0}}
+                Other, 0x11aad1f40, {{88.0, 295.0}, {250.0, 508.0}}
+                CollectionView, 0x11aad2080, {{88.0, 295.0}, {250.0, 874.0}}
+                  Other, 0x11aad21c0, {{88.0, 295.0}, {250.0, 80.0}}
+                    Other, 0x11aad2300, {{88.0, 295.0}, {250.0, 80.0}}
+                    Button, 0x11aad2440, {{88.0, 305.0}, {250.0, 60.0}}, label: 'Provider, Own sign-in'
+                      Image, 0x11aad2580, {{300.7, 330.3}, {12.7, 9.3}}, identifier: 'chevron.forward', label: 'Forward'
+                    Other, 0x11aad26c0, {{112.0, 375.0}, {202.0, 1.0}}
+                      Other, 0x11aad2800, {{112.0, 375.0}, {202.0, 1.0}}
+                  Other, 0x11aad2940, {{88.0, 375.0}, {250.0, 40.3}}
+                    Other, 0x11aad2a80, {{88.0, 375.0}, {250.0, 40.3}}
+                    StaticText, 0x11aad2bc0, {{116.0, 387.0}, {182.0, 15.7}}, label: 'On hpc'
+                  Cell, 0x11aad2d00, {{88.0, 413.3}, {250.0, 60.0}}
+                    Button, 0x11aad2e40, {{88.0, 413.3}, {250.0, 60.0}}, label: 'OpenCode's own sign-in'
+                  Other, 0x11aad2f80, {{88.0, 484.3}, {250.0, 40.3}}
+                    Other, 0x11aad30c0, {{88.0, 484.3}, {250.0, 40.3}}
+                    StaticText, 0x11aad3200, {{116.0, 496.3}, {182.0, 15.7}}, label: 'API keys'
+                  Other, 0x11aad3340, {{112.0, 483.3}, {202.0, 1.0}}
+                  Cell, 0x11aad3480, {{88.0, 522.7}, {250.0, 42.0}}
+                    Button, 0x11aad35c0, {{88.0, 522.7}, {250.0, 42.0}}, label: 'DeepSeek'
+                  Cell, 0x11aad3700, {{88.0, 564.7}, {250.0, 42.0}}
+                    Button, 0x11aad3840, {{88.0, 564.7}, {250.0, 42.0}}, label: 'DeepSeek 2'
+                  Cell, 0x11aad3980, {{88.0, 606.7}, {250.0, 42.0}}
+                    Button, 0x11aad3ac0, {{88.0, 606.7}, {250.0, 42.0}}, label: 'Gemini'
+                  Cell, 0x11aad3c00, {{88.0, 648.7}, {250.0, 42.0}}
+                    Button, 0x11aad3d40, {{88.0, 648.7}, {250.0, 42.0}}, label: 'Kimi (Moonshot)'
+                  Cell, 0x11aad3e80, {{88.0, 690.7}, {250.0, 42.0}}
+                    Button, 0x11aad8000, {{88.0, 690.7}, {250.0, 42.0}}, label: 'Z.​AI (GLM)'
+                  Other, 0x11aad8140, {{112.0, 742.7}, {202.0, 1.0}}
+                  Cell, 0x11aad8280, {{88.0, 753.7}, {250.0, 82.0}}
+                    Button, 0x11aad83c0, {{88.0, 753.7}, {250.0, 82.0}}, label: 'Claude Max isn’t here: a subscription token runs on Claude Code only.', Disabled
+                  Other, 0x11aad8500, {{305.0, 325.0}, {30.0, 448.0}}, label: 'Vertical scroll bar, 2 pages', value: 0%
+                    Other, 0x11aad8640, {{332.0, 328.0}, {3.0, 421.3}}
+                  Other, 0x11aad8780, {{88.0, 740.0}, {250.0, 30.0}}, label: 'Horizontal scroll bar, 1 page', value: 0%
+                    Other, 0x11aad88c0, {{91.0, 767.0}, {241.0, 3.0}}
+                  Other, 0x11aad8a00, {{305.0, 325.0}, {30.0, 448.0}}, label: 'Vertical scroll bar, 2 pages', value: 0%
+                    Other, 0x11aad8b40, {{332.0, 328.0}, {3.0, 421.3}}
+                  Other, 0x11aad8c80, {{88.0, 740.0}, {250.0, 30.0}}, label: 'Horizontal scroll bar, 1 page', value: 0%
+                    Other, 0x11aad8dc0, {{91.0, 767.0}, {241.0, 3.0}}
+              Other, 0x11aad8f00, {{88.0, 295.0}, {250.0, 508.0}}
+                Other, 0x11aad9040, {{88.0, 295.0}, {250.0, 508.0}}
+                  Other, 0x11aad9180, {{88.0, 295.0}, {250.0, 508.0}}
+                    Other, 0x11aad92c0, {{88.0, 295.0}, {250.0, 508.0}}
+                      Other, 0x11aad9400, {{88.0, 295.0}, {250.0, 508.0}}
+                        Other, 0x11aad9540, {{88.0, 295.0}, {250.0, 44.0}}
+                    Other, 0x11aad9680, {{88.0, 295.0}, {250.0, 508.0}}
+                      Other, 0x11aad97c0, {{88.0, 295.0}, {250.0, 44.0}}
+    Window, 0x11aad9900, {{0.0, 0.0}, {402.0, 874.0}}
+      Other, 0x11aad9a40, {{0.0, 0.0}, {402.0, 874.0}}
+        Other, 0x11aad9b80, {{0.0, 0.0}, {402.0, 874.0}}
+Path to element:
+ →Application, 0x11aabd400, pid: 60595, label: 'T8Probe'
+Query chain:
+ →Find: Target Application 'io.orbitd.t8probe'
+  Output: {
+    Application, 0x11aad9cc0, pid: 60595, label: 'T8Probe'
+  }

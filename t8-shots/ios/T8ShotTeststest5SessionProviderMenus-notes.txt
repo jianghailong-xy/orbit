@@ -1,0 +1,12 @@
+session-menu-light: chip 9 label="Model DeepSeek V4 Pro, effort Default" value="" frame=(150.33333333333331, 797.0, 163.66666666666669, 18.0) hittable=true
+session-menu-light: Provider row 9 label="Provider, DeepSeek" value="" frame=(64.0, 541.0, 250.0, 60.0) hittable=true
+session-menu-light: submenu open after 1 press(es)
+gone-menu-light: chip 9 label="Model DeepSeek V4 Pro, effort Default" value="" frame=(150.33333333333331, 797.0, 163.66666666666669, 18.0) hittable=true
+gone-menu-light: Provider row 9 label="Provider, Key deleted" value="" frame=(64.0, 541.0, 250.0, 60.0) hittable=true
+gone-menu-light: submenu open after 1 press(es)
+session-menu-dark: chip 9 label="Model DeepSeek V4 Pro, effort Default" value="" frame=(150.33333333333331, 797.0, 163.66666666666669, 18.0) hittable=true
+session-menu-dark: Provider row 9 label="Provider, DeepSeek" value="" frame=(64.0, 541.0, 250.0, 60.0) hittable=true
+session-menu-dark: submenu open after 1 press(es)
+gone-menu-dark: chip 9 label="Model DeepSeek V4 Pro, effort Default" value="" frame=(150.33333333333331, 797.0, 163.66666666666669, 18.0) hittable=true
+gone-menu-dark: Provider row 9 label="Provider, Key deleted" value="" frame=(64.0, 541.0, 250.0, 60.0) hittable=true
+gone-menu-dark: submenu open after 1 press(es)

@@ -1,0 +1,14 @@
+Test Case '-[T8ProbeUITests.T8ShotTests test1InfrastructurePage]' started.
+Test Case '-[T8ProbeUITests.T8ShotTests test1InfrastructurePage]' passed (292.632 seconds).
+Test Case '-[T8ProbeUITests.T8ShotTests test2DeepSeekKeyPage]' started.
+Test Case '-[T8ProbeUITests.T8ShotTests test2DeepSeekKeyPage]' passed (199.746 seconds).
+Test Case '-[T8ProbeUITests.T8ShotTests test3EngineSheet]' started.
+Test Case '-[T8ProbeUITests.T8ShotTests test3EngineSheet]' passed (126.822 seconds).
+Test Case '-[T8ProbeUITests.T8ShotTests test4ProviderMenus]' started.
+Test Case '-[T8ProbeUITests.T8ShotTests test4ProviderMenus]' passed (268.126 seconds).
+Test Case '-[T8ProbeUITests.T8ShotTests test5SessionProviderMenus]' started.
+Test Case '-[T8ProbeUITests.T8ShotTests test5SessionProviderMenus]' passed (104.331 seconds).
+	 Executed 5 tests, with 0 failures (0 unexpected) in 991.657 (991.668) seconds
+	 Executed 5 tests, with 0 failures (0 unexpected) in 991.657 (991.669) seconds
+	 Executed 5 tests, with 0 failures (0 unexpected) in 991.657 (991.671) seconds
+** TEST SUCCEEDED **
