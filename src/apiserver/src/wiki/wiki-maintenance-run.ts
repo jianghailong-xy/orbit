@@ -110,6 +110,16 @@ import { currentWikiRollout, wikiOnFor } from './wiki-rollout';
  * the space has caught up. Read off the facts and the runs' own ends when a hint arrives — still no clock — and
  * paused once the space's last three runs all failed, until a run succeeds: a pause gives the day its limit
  * back, and a run's end makes nothing.
+ *
+ * A SERVER RUN THAT QUEUED THE ARTICLES ASKS FOR THE NEXT ONE AS IT ENDS (the owner's decision of 2026-10-10:
+ * maintenance first, an articles job yields one round at most; contract `maintenance.job.server.trigger`). The facts
+ * that arrived while a run was under way were answered `unfinished`, and the next fact after its end is what asks them
+ * again — 15 to 100 s later on the canary, while the articles job its end had queued was claimed within 2 s and ran an
+ * hour and a half ahead of the round. So the end of a server run that queued its space's articles job asks the space
+ * once more, at once, with every read above as a fact would ask it: its own job, still running as it ends, is set
+ * aside, and no fact is required of the ask. A space still due has its next round made then, right behind the
+ * articles job and before the run lets the space go, and the claim takes the round first (wiki-worker/wiki-jobs.ts,
+ * THE ORDER); a space no longer due makes nothing, and the articles job runs at the next pass.
  */
 
 // ── The trigger ─────────────────────────────────────────────────────────────────────────────────
@@ -118,6 +128,11 @@ import { currentWikiRollout, wikiOnFor } from './wiki-rollout';
 export interface WikiMaintenanceHint {
   sessionIds: string[];
   taskIds: string[];
+  /**
+   * The server run's `maintain` job whose end asks, after it queued the space's articles job (finishWikiMaintenanceJob):
+   * no fact is required, and the job itself, still running, does not hold the space.
+   */
+  runEnd?: string;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -236,7 +251,7 @@ export async function considerWikiMaintenance(
   // block the runner path's task — on 2026-10-08 one cancelled-never rollback left a space with no
   // maintenance at all, on either path.
   if (listId && (await unfinishedTask(prisma, ownerId, listId))) return no('unfinished');
-  if (onServer && (await unfinishedMaintainJob(prisma, ownerId, spaceId))) return no('unfinished');
+  if (onServer && (await unfinishedMaintainJob(prisma, ownerId, spaceId, hint.runEnd))) return no('unfinished');
   // And a plan job that waits for the list goes before the next run.
   if (await hasQueuedWikiPlanJob(prisma, ownerId, spaceId)) return no('plan_job_queued');
 
@@ -246,12 +261,13 @@ export async function considerWikiMaintenance(
     ? { at: cursor.positionAt, kind: cursor.positionKind as FactPosition['kind'], ref: cursor.positionRef }
     : null;
 
-  // A new fact: the hint names a fact of this space that is still after the cursor.
+  // A new fact: the hint names a fact of this space that is still after the cursor — or the end of a server run that
+  // queued the space's articles job asks (`runEnd`), with the facts that found that run unfinished still after it.
   const sessionIds = hint.sessionIds.filter((id) => UUID.test(id));
   const taskIds = hint.taskIds.filter((id) => UUID.test(id));
-  if (sessionIds.length === 0 && taskIds.length === 0) return no('no_new_fact');
+  if (!hint.runEnd && sessionIds.length === 0 && taskIds.length === 0) return no('no_new_fact');
   if (scope.workspaceIds.length === 0 && scope.projectIds.length === 0) return no('no_new_fact');
-  const named = await prisma.$queryRaw<Array<{ one: number }>>`
+  const named = hint.runEnd ? [] : await prisma.$queryRaw<Array<{ one: number }>>`
     SELECT 1 AS "one" FROM (${factsSql(scope, watermark)}) f
      WHERE ${afterSql(watermark)}
        AND (f."sessionId" = ANY(${sessionIds}::text[])
@@ -259,8 +275,8 @@ export async function considerWikiMaintenance(
      LIMIT 1`;
   // A hint that names no fact may name the end of the space's latest run, which is a fact of its own while the
   // space catches up (contract `maintenance.job.catchUp.trigger`) — and only then, as the catch-up read below says.
-  const runEnded = named.length === 0 && (await namesLatestRunEnd(prisma, ownerId, spaceId, sessionIds, taskIds));
-  if (named.length === 0 && !runEnded) return no('no_new_fact');
+  const runEnded = !hint.runEnd && named.length === 0 && (await namesLatestRunEnd(prisma, ownerId, spaceId, sessionIds, taskIds));
+  if (!hint.runEnd && named.length === 0 && !runEnded) return no('no_new_fact');
 
   const backlog = await countBacklog(prisma, scope, watermark);
   const catchUp = await wikiMaintenanceCatchUpOf(prisma, ownerId, spaceId, backlog.oldestPendingAt, now);
@@ -310,7 +326,7 @@ export async function considerWikiMaintenance(
   };
 
   if (onServer) {
-    const made = await new MaintenanceJobWriter(prisma).makeJob({ ownerId, spaceId, cursorId: cursor.id, now, run });
+    const made = await new MaintenanceJobWriter(prisma).makeJob({ ownerId, spaceId, cursorId: cursor.id, now, run, endingJobId: hint.runEnd });
     if ('why' in made) return no(made.why);
     return {
       made: true,
@@ -509,6 +525,8 @@ class MaintenanceJobWriter {
       catchUp: WikiMaintenanceCatchUp | null;
       localEndpoint: boolean;
     };
+    /** The server run whose end asks (`WikiMaintenanceHint.runEnd`): still running, and set aside as it ends. */
+    endingJobId?: string;
   }): Promise<{ jobId: string; runId: string } | { why: 'off' | 'unfinished' | 'plan_job_queued' | 'daily_limit_reached' }> {
     const { ownerId, spaceId, now } = input;
     const counted = !(input.run.catchUp === 'active' && input.run.localEndpoint);
@@ -518,7 +536,7 @@ class MaintenanceJobWriter {
         const [space] = await tx.$queryRaw<Array<{ id: string }>>`
           SELECT "id" FROM "wiki_space" WHERE "id" = ${spaceId}::uuid AND "owner_id" = ${ownerId}::uuid FOR NO KEY UPDATE`;
         if (!space) return { why: 'off' } as const;
-        if (await unfinishedMaintainJob(tx, ownerId, spaceId)) return { why: 'unfinished' } as const;
+        if (await unfinishedMaintainJob(tx, ownerId, spaceId, input.endingJobId)) return { why: 'unfinished' } as const;
         if (await hasQueuedWikiPlanJob(tx, ownerId, spaceId)) return { why: 'plan_job_queued' } as const;
         if (counted && (await wikiMaintenanceRunsToday(tx, ownerId, spaceId, now)).remaining <= 0) return { why: 'daily_limit_reached' } as const;
         // Both ids are the application's: the row must name its maker from the moment it exists (the
@@ -597,9 +615,14 @@ async function unfinishedMaintainJob(
   db: Pick<Prisma.TransactionClient, 'wikiJob'>,
   ownerId: string,
   spaceId: string,
+  // The run whose own end asks: still running while it ends, and no longer the space's unfinished run.
+  ending?: string,
 ): Promise<boolean> {
   return (await db.wikiJob.findFirst({
-    where: { ownerId, spaceId, kind: WIKI_MAINTAIN_JOB.kind, state: { in: ['queued', 'running', 'waiting'] } },
+    where: {
+      ownerId, spaceId, kind: WIKI_MAINTAIN_JOB.kind, state: { in: ['queued', 'running', 'waiting'] },
+      ...(ending ? { id: { not: ending } } : {}),
+    },
     select: { id: true },
   })) !== null;
 }
@@ -1168,13 +1191,16 @@ export async function finishWikiMaintenanceJob(
       report,
       opsRefused: refused,
     }, now);
-    await queueWikiArticlesAfterRun(prisma, {
+    const articles = await queueWikiArticlesAfterRun(prisma, {
       ownerId,
       spaceId,
       outcome,
       catchUp: run?.catchUp ?? null,
       recordedOps: typeof recordedOps === 'number' && recordedOps > 0,
     });
+    // The articles job goes behind the space's next round (the owner's decision of 2026-10-10): the end asks for the
+    // round now rather than leave it to the owner's next event (WikiMaintenanceHint.runEnd).
+    if (articles) await askForNextWikiMaintenanceRound(prisma, ownerId, spaceId, jobId, now);
     return answer;
   } catch (error) {
     const said = (error as { response?: { message?: unknown } }).response?.message;
@@ -1186,6 +1212,30 @@ export async function finishWikiMaintenanceJob(
       opsRefused: refused,
     }, now);
     throw error;
+  }
+}
+
+const runEndLog = new Logger('WikiMaintenanceTrigger');
+
+/**
+ * The space's next round, asked for by the end of a server run that queued the space's articles job (the owner's decision
+ * of 2026-10-10, contract `maintenance.job.server.trigger`): every read of the trigger, as a fact asks it, with the run's
+ * own job — still running as it ends — set aside and no fact required. A space still due has its round made now, behind
+ * the articles job and before this run lets the space go; one that is not makes nothing. Never throws, and never the
+ * run's failure: what it could not ask it logs, and the round is then the owner's next event's to make, as before.
+ */
+async function askForNextWikiMaintenanceRound(
+  prisma: PrismaService,
+  ownerId: string,
+  spaceId: string,
+  jobId: string,
+  now: Date,
+): Promise<void> {
+  try {
+    const outcome = await considerWikiMaintenance(prisma, ownerId, spaceId, { sessionIds: [], taskIds: [], runEnd: jobId }, now);
+    if (outcome.made) runEndLog.log(`space ${spaceId}: the end of job ${jobId} made the next maintenance job ${outcome.jobId} (${outcome.due})`);
+  } catch (error) {
+    runEndLog.warn(`space ${spaceId}: the end of job ${jobId} could not ask for the next round: ${(error as Error)?.message ?? String(error)}`);
   }
 }
 

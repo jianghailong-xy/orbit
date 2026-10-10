@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import {
+  WIKI_JOB_KINDS,
   WIKI_JOBS_READ,
   type WikiJobCallCounts,
   type WikiJobCallView,
@@ -14,6 +15,7 @@ import {
   type WikiSystemModelErrorKind,
 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { wikiJobQueueSql } from '../wiki-worker/wiki-jobs';
 
 /**
  * A space's server runs, as Activity's Runs card and a run's page read them (contract `jobs.read`, design §2.2 and
@@ -28,7 +30,10 @@ import { PrismaService } from '../prisma/prisma.service';
  *
  * The positions are the queues' own orders, across every space and account of the deployment, as the claims take
  * them: a job's `priority DESC, created_at, id` (`jobs.lease.claim`), a call's `priority DESC, enqueued_at, id`
- * (`modelQueue.concurrency.claim`). Only a count of what is ahead leaves here — never whose it is.
+ * (`modelQueue.concurrency.claim`). A space's jobs hold the places that order gives them, and its own order says which
+ * of them takes which: an articles job that waits for its space's round of maintenance takes the place after the
+ * round's, and the round takes its (wiki-worker/wiki-jobs.ts, THE ORDER). Only a count of what is ahead leaves here —
+ * never whose it is.
  *
  * The owner's alone: another account's space is the plain 404. A read — nothing here writes.
  */
@@ -41,17 +46,33 @@ export class WikiJobReads {
     if (!space) throw new NotFoundException('no such wiki space');
 
     const jobs = await this.prisma.$queryRaw<JobRow[]>`
+      WITH "queue" AS (${wikiJobQueueSql({ kinds: WIKI_JOB_KINDS, owners: [ownerId], dueOnly: false, spaceId })}),
+      -- The space's queued jobs, the n-th of a priority in the space's own order in the n-th of the places first come
+      -- gives that priority's jobs.
+      "places" AS (
+        SELECT t."id", s."created_at" AS "placeAt", s."id" AS "placeId"
+        FROM (SELECT q."id", q."priority",
+                     row_number() OVER (PARTITION BY q."priority" ORDER BY q."waits", q."created_at", q."id") AS "n"
+                FROM "queue" q) t
+        JOIN (SELECT q."id", q."priority", q."created_at",
+                     row_number() OVER (PARTITION BY q."priority" ORDER BY q."created_at", q."id") AS "n"
+                FROM "queue" q) s
+          ON s."priority" = t."priority" AND s."n" = t."n"
+      )
       SELECT j."id", j."kind", j."state", j."waiting_for" AS "waitingFor", j."priority", j."attempts",
              j."created_at" AS "createdAt", j."updated_at" AS "updatedAt", j."started_at" AS "startedAt",
              j."ended_at" AS "endedAt", j."next_attempt_at" AS "nextAttemptAt", j."failure_kind" AS "failureKind",
              j."error", j."progress",
+             -- Counted against the job's place: every space's jobs hold the places their own rows would, whichever
+             -- takes which, so the queued rows before a place are the jobs the claim takes before the one holding it.
              CASE WHEN j."state" = 'queued' THEN (
                SELECT count(*)::int FROM "wiki_job" q
                WHERE q."state" = 'queued'
                  AND (q."priority" > j."priority"
-                   OR (q."priority" = j."priority" AND (q."created_at", q."id") < (j."created_at", j."id")))
+                   OR (q."priority" = j."priority" AND (q."created_at", q."id") < (p."placeAt", p."placeId")))
              ) END AS "ahead"
       FROM "wiki_job" j
+      LEFT JOIN "places" p ON p."id" = j."id"
       WHERE j."owner_id" = ${ownerId}::uuid AND j."space_id" = ${spaceId}::uuid
       ORDER BY j."created_at" DESC, j."id" DESC
       LIMIT ${WIKI_JOBS_READ.jobs}`;

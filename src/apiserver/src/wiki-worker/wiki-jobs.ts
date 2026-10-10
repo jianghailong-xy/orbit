@@ -1,5 +1,5 @@
 import { Logger } from '@nestjs/common';
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { WIKI_JOB, type WikiJobFailureKind } from '@orbit/shared';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import type { PrismaService } from '../prisma/prisma.service';
@@ -16,6 +16,20 @@ import { cutRunes } from './wiki-import-extract';
  * once) and only kinds this build runs. Every write that settles the job afterwards is a compare-and-set on
  * that generation, so a worker whose lease ran out and was taken over settles nothing: the takeover's
  * generation is not its own.
+ *
+ * THE ORDER
+ * A space runs its jobs in its own order: the highest priority first, then the longest-waiting — with one exception,
+ * the owner's decision of 2026-10-10 (maintenance first, an articles job yields one round at most). An `articles` job
+ * that has never been claimed waits for its space's round: the first `maintain` job made after it, until that round
+ * has ended, every attempt and backoff of it included. On the canary each round's end queued an articles job that ran
+ * for an hour and a half, and the next round, queued moments later, waited behind it (61e91611, an hour and 47
+ * minutes). It yields that one round alone: a maintain job made after the round finds it ahead in first-come order,
+ * so it is never starved. A job claimed before — handed back, put back for infra, parked on a repository operation —
+ * has had its turn and yields to nothing, and nothing running is touched. Priorities are not changed for this: a
+ * job's calls carry its priority into the deployment's model queue, where a lower one would rank the articles behind
+ * every other space's calls, and `wiki_job_counts_chk` holds every priority at 0 or above.
+ * Across spaces nothing moves. A space keeps the place in the deployment's line its first job by priority and first
+ * come gives it, whichever of its jobs takes that place (`wikiJobQueueSql`; the jobs read's `ahead` counts by it).
  *
  * THE LEASE
  * A running row holds lease_owner, lease_generation and lease_deadline_at together (`wiki_job_lease_chk`
@@ -64,16 +78,73 @@ export interface ClaimWikiJobsInput {
 }
 
 /**
- * Claim up to `limit` due queued jobs, the owner's first and then the longest-waiting, each under a new
- * lease generation. A space whose job is already running is skipped; a job another claim is holding is
- * passed over rather than waited for. Two claims of one space's last two jobs can read "no running job"
- * at the same time — that is what the partial unique index refuses, and the loser is answered with an
- * empty claim rather than an error: its pass has simply taken nothing.
+ * The queued jobs of the accounts `owners` names (null is every account) and of the kinds `kinds` names, each with
+ * whether it waits for its space's round (THE ORDER above): `dueOnly` keeps the ones a claim could take now — due,
+ * under the retry limit — and `spaceId` keeps one space's. It is what the claim picks each space's job from, and
+ * what the jobs read (wiki/wiki-job-reads.ts) reads a space's places by, so that Activity's `ahead` and the claim
+ * cannot disagree about which job goes first.
+ */
+export function wikiJobQueueSql(input: {
+  kinds: readonly string[];
+  owners: readonly string[] | null;
+  dueOnly: boolean;
+  spaceId?: string;
+}): Prisma.Sql {
+  const kinds = input.kinds as string[];
+  const owners = input.owners as string[] | null;
+  return Prisma.sql`
+    SELECT q."id", q."space_id", q."priority", q."created_at",
+           -- An articles job never claimed waits while its round has not ended: the first maintain job of its space
+           -- made after it, of a kind this build runs and no lower a priority, short of the retry limit.
+           (q."kind" = 'articles' AND q."started_at" IS NULL AND EXISTS (
+              SELECT 1 FROM "wiki_job" m
+              WHERE m."space_id" = q."space_id" AND m."kind" = 'maintain'
+                AND (m."created_at", m."id") > (q."created_at", q."id")
+                AND NOT EXISTS (
+                  SELECT 1 FROM "wiki_job" e
+                  WHERE e."space_id" = q."space_id" AND e."kind" = 'maintain'
+                    AND (e."created_at", e."id") > (q."created_at", q."id")
+                    AND (e."created_at", e."id") < (m."created_at", m."id")
+                )
+                AND m."state" IN ('queued', 'running', 'waiting')
+                AND m."attempts" < ${WIKI_JOB.maxAttempts}
+                AND m."kind" = ANY(${kinds}::text[])
+                AND m."priority" >= q."priority"
+           )) AS "waits"
+    FROM "wiki_job" q
+    WHERE q."state" = 'queued'
+      ${input.dueOnly
+        // A job at the retry limit is never run again: the pass ends it (endWikiJobsPastRetryLimit).
+        ? Prisma.sql`AND (q."next_attempt_at" IS NULL OR q."next_attempt_at" <= now()) AND q."attempts" < ${WIKI_JOB.maxAttempts}`
+        : Prisma.empty}
+      AND q."kind" = ANY(${kinds}::text[])
+      AND (${owners}::uuid[] IS NULL OR q."owner_id" = ANY(${owners}::uuid[]))
+      ${input.spaceId ? Prisma.sql`AND q."space_id" = ${input.spaceId}::uuid` : Prisma.empty}`;
+}
+
+/**
+ * Claim up to `limit` due queued jobs, each under a new lease generation: each free space's next job in its own order
+ * (THE ORDER above), the spaces taken by their places in the line — the owner's first and then the longest-waiting. A
+ * space whose job is already running is skipped; a job another claim is holding is passed over rather than waited for.
+ * Two claims of one space's last two jobs can read "no running job" at the same time — that is what the partial unique
+ * index refuses, and the loser is answered with an empty claim rather than an error: its pass has simply taken nothing.
  */
 export async function claimWikiJobs(prisma: PrismaService, input: ClaimWikiJobsInput): Promise<ClaimedWikiJob[]> {
   const lease = input.leaseMs ?? WIKI_JOB.leaseSeconds * 1000;
   try {
     return await prisma.$queryRaw<ClaimedWikiJob[]>`
+      WITH "queue" AS (${wikiJobQueueSql({ kinds: input.kinds, owners: input.owners, dueOnly: true })}),
+      "line" AS (
+        SELECT q."id", q."waits",
+               -- The job's turn in its space: priority, then first come, a job that waits for its round after the rest.
+               row_number() OVER (PARTITION BY q."space_id" ORDER BY q."waits", q."priority" DESC, q."created_at", q."id") AS "turn",
+               -- The space's place in the line: its first job by priority and first come, whichever of its jobs takes it.
+               first_value(q."priority") OVER "head" AS "placePriority",
+               first_value(q."created_at") OVER "head" AS "placeAt",
+               first_value(q."id") OVER "head" AS "placeId"
+        FROM "queue" q
+        WINDOW "head" AS (PARTITION BY q."space_id" ORDER BY q."priority" DESC, q."created_at", q."id")
+      )
       UPDATE "wiki_job" AS j
       SET "state" = 'running',
           "lease_owner" = ${input.workerId}::uuid,
@@ -83,32 +154,23 @@ export async function claimWikiJobs(prisma: PrismaService, input: ClaimWikiJobsI
           "updated_at" = now()
       FROM (
         SELECT c."id" FROM "wiki_job" c
-        WHERE c."state" = 'queued'
+        JOIN "line" l ON l."id" = c."id"
+        -- The space's next job, and only it: two schedulers therefore pick the same row and one of them skips it,
+        -- rather than each taking a different job of one space and meeting the partial unique index. A space whose
+        -- next job waits for its round takes nothing until the round is due.
+        WHERE l."turn" = 1 AND NOT l."waits"
+          -- Read again on the row the lock takes: a job another claim took meanwhile is no longer due.
+          AND c."state" = 'queued'
           AND (c."next_attempt_at" IS NULL OR c."next_attempt_at" <= now())
-          -- A job at the retry limit is never run again: the pass ends it (endWikiJobsPastRetryLimit).
           AND c."attempts" < ${WIKI_JOB.maxAttempts}
-          AND c."kind" = ANY(${input.kinds as string[]}::text[])
-          AND (${input.owners as string[] | null}::uuid[] IS NULL OR c."owner_id" = ANY(${input.owners as string[] | null}::uuid[]))
           -- No running job of this space: the space is free.
           AND NOT EXISTS (
             SELECT 1 FROM "wiki_job" r
             WHERE r."space_id" = c."space_id" AND r."state" = 'running' AND r."lease_deadline_at" > now()
           )
-          -- And this job is the space's best candidate: nothing queued before it would run instead. Two
-          -- schedulers therefore pick the same row and one of them skips it, rather than each taking a
-          -- different job of one space and meeting the partial unique index.
-          AND NOT EXISTS (
-            SELECT 1 FROM "wiki_job" e
-            WHERE e."space_id" = c."space_id" AND e."state" = 'queued'
-              AND e."kind" = ANY(${input.kinds as string[]}::text[])
-              AND (e."next_attempt_at" IS NULL OR e."next_attempt_at" <= now())
-              AND e."attempts" < ${WIKI_JOB.maxAttempts}
-              AND (e."priority" > c."priority"
-                OR (e."priority" = c."priority" AND (e."created_at", e."id") < (c."created_at", c."id")))
-          )
-        ORDER BY c."priority" DESC, c."created_at" ASC, c."id" ASC
+        ORDER BY l."placePriority" DESC, l."placeAt" ASC, l."placeId" ASC
         LIMIT ${input.limit}
-        FOR UPDATE SKIP LOCKED
+        FOR UPDATE OF c SKIP LOCKED
       ) AS due
       WHERE j."id" = due."id"
       RETURNING j."id", j."owner_id" AS "ownerId", j."space_id" AS "spaceId", j."kind", j."input",
