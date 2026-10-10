@@ -228,8 +228,10 @@ func prepareDshAgentConfigAt(input DshLaunchInput, agent *DshAgentOverlay, execu
 	env := dshBaseEnv()
 	// The session's Go and npm caches: the runner-owned root every engine's sessions share, rather
 	// than the $HOME/.cache the workspace-write sandbox leaves read-only, or a directory the agent
-	// invents when its build fails there (cache_root.go). A catalogue probe is no session and runs
-	// no toolchain, so it is handed none of this; it is exactly the launch without an agent overlay.
+	// invents when its build fails there (cache_root.go). The agent overlay's cache-root plugin
+	// grants that same root to the session's own sandbox, so a confined command writes it without
+	// a denial. A catalogue probe is no session and runs no toolchain, so it is handed neither;
+	// it is exactly the launch without an agent overlay.
 	if agent != nil {
 		env = append(env, runnerCacheEnv()...)
 	}
@@ -311,6 +313,49 @@ export function apply(ctx, config) {
 }
 `
 
+// dshSandboxCacheRootPlugin adds the runner-owned shared toolchain cache root (cache_root.go) to
+// the writable roots of the session's own file sandbox. A session's commands run under
+// workspace-write, where everything outside its workspace and the platform temp areas is
+// read-only: dsh 0.2.0-rc.2 builds its bwrap mounts, Landlock grants and Seatbelt profile from
+// the workspace root and the temp areas alone, with no configuration for another root. So the
+// first confined `go build` — GOCACHE, GOMODCACHE and npm's cache all point at the shared root
+// (runnerCacheEnv) — is denied there and reaches the cache only through an escalation, which runs
+// the whole command outside the sandbox.
+//
+// This plugin wraps the sandbox seam itself (ctx.sandbox.confine) and adds the root to the
+// profile the selected platform runner already built, just before the command: a `--bind` mount
+// beside bwrap's workspace bind, a `--rw` grant beside the Landlock launcher's. Read-only mode is
+// left exactly as it was, and a profile this does not recognize is left as it was too — the
+// command then meets the same denial, and the same escalation, it met before: never a wider
+// sandbox, and never a command that fails differently.
+const dshSandboxCacheRootPlugin = `// Orbit: the runner's shared toolchain cache is a writable root of the session's own sandbox.
+export const name = 'orbit-sandbox-cache-root';
+export const inject = ['sandbox'];
+export function apply(ctx, config) {
+  const root = config.root;
+  const sandbox = ctx.sandbox;
+  if (typeof root !== 'string' || root === '' || typeof sandbox?.confine !== 'function') return;
+  const confine = sandbox.confine.bind(sandbox);
+  let told = false;
+  sandbox.confine = async (argv, policy, signal) => {
+    const wrapped = await confine(argv, policy, signal);
+    if (policy?.mode !== 'workspace-write' || !Array.isArray(wrapped?.argv)) return wrapped;
+    const separator = wrapped.argv.indexOf('--');
+    if (separator < 1) return wrapped;
+    const head = wrapped.argv.slice(0, separator);
+    const extra = head.includes('--ro-bind') ? ['--bind', root, root] : head.includes('--rw') ? ['--rw', root] : undefined;
+    if (extra === undefined) {
+      if (!told) {
+        told = true;
+        console.warn('orbit-sandbox-cache-root: unrecognized sandbox profile; ' + root + ' stays read-only inside it');
+      }
+      return wrapped;
+    }
+    return { ...wrapped, argv: [...head, ...extra, ...wrapped.argv.slice(separator)] };
+  };
+}
+`
+
 // Tools whose work runs in a child agent. A child's escalation never reaches ACP and its tool
 // calls are not projected (P4 evidence), so Orbit could neither ask about nor show them.
 var dshDisabledAgentTools = []string{"tool-subagent", "tool-subagent-fork", "tool-subagent-control",
@@ -318,7 +363,7 @@ var dshDisabledAgentTools = []string{"tool-subagent", "tool-subagent-fork", "too
 
 // dshAgentOverlayPatch writes Orbit's plugins with their versioned manifests (dsh refuses a named
 // package without a version) under directories named for their code hash, and returns the patch:
-// the tool gate in every session, the prompt section when there is one.
+// the tool gate and the shared cache root in every session, the prompt section when there is one.
 func dshAgentOverlayPatch(home string, agent DshAgentOverlay) ([]byte, error) {
 	rows := []interface{}{}
 	for _, id := range dshDisabledAgentTools {
@@ -347,6 +392,12 @@ func dshAgentOverlayPatch(home string, agent DshAgentOverlay) ([]byte, error) {
 	}
 	if err := insert("orbit-tool-gate", "tool-gate", dshToolGatePlugin, map[string]interface{}{"rules": dshToolGateRules,
 		"heredoc": dshHeredoc.String(), "interpreter": dshHeredocInterpreter.String(), "message": dshGitMessage.String()}); err != nil {
+		return nil, err
+	}
+	// The same root runnerCacheEnv points the session's toolchains at, so the confined command and
+	// the runner name one directory.
+	if err := insert("orbit-sandbox-cache-root", "sandbox-cache-root", dshSandboxCacheRootPlugin,
+		map[string]interface{}{"root": runnerCacheRoot()}); err != nil {
 		return nil, err
 	}
 	if strings.TrimSpace(agent.AppendSystemPrompt) != "" {

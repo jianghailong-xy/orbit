@@ -366,13 +366,13 @@ var (
 // workspace root, /tmp and os.tmpdir()), and the runner-owned shared toolchain cache
 // (runnerCacheRoot) every session's Go and npm caches live in.
 //
-// The root is the same one Codex's sandbox policy grants (codexRuntimeWorkspaceRoots). dsh's
-// sandbox profile cannot be told about it — dsh 0.2.0-rc.2 builds bwrap/Landlock/Seatbelt grants
-// from the workspace root and the temp areas alone, with no configuration for another root — so a
-// confined command that needs the cache root is denied there and reaches it the way any other
-// out-of-sandbox write does: through an escalation, run without the sandbox once Orbit allows it.
-// Listing it here is what keeps that escalation routine in Auto instead of a card, for a session
-// writing a cache the runner owns (the owner's sign-off on that boundary).
+// The root is the same one Codex's sandbox policy grants (codexRuntimeWorkspaceRoots), and a
+// session's own sandbox grants it too: dsh builds its grants from the workspace root and the temp
+// areas alone, so the session overlay adds the root to that profile itself
+// (dshSandboxCacheRootPlugin). Listing it here is what judges an escalation in Auto — a command
+// writing a cache the runner owns stays routine rather than filing a card, which is how a session
+// whose dsh process still runs under the grants of an older launch reaches its cache (the owner's
+// sign-off on that boundary).
 func dshWritableRoots(workspace string) []string {
 	return []string{workspace, "/tmp", os.TempDir(), runnerCacheRoot()}
 }

@@ -217,6 +217,13 @@ func TestDshAgentOverlay(t *testing.T) {
 		config["heredoc"] != dshHeredoc.String() || config["interpreter"] != dshHeredocInterpreter.String() || config["message"] != dshGitMessage.String() {
 		t.Fatalf("tool gate config = %+v", config)
 	}
+	// The shared cache root rides every session too, named by the same path the launch
+	// environment hands the session's toolchains (runnerCacheEnv).
+	roots := inserts["orbit-sandbox-cache-root"]
+	pluginSource(roots, dshSandboxCacheRootPlugin)
+	if mapValue(roots["config"])["root"] != runnerCacheRoot() {
+		t.Fatalf("cache root row = %+v", roots)
+	}
 	bare, err := prepareDshAgentConfigAt(input, &DshAgentOverlay{}, exe, filepath.Join(t.TempDir(), "bare"))
 	if err != nil || len(bare.Args) != 6 {
 		t.Fatalf("a session without an appended prompt still carries the gate: %+v, %v", bare.Args, err)
@@ -460,6 +467,14 @@ type dshRealHarness struct {
 	prepares    int
 }
 
+// dshRealHarnessParentDir, when a scenario sets it before newDshRealHarness, roots the scenario's
+// whole tree — workspace, DSH_HOME and ORBIT_HOME — outside the platform temp areas. The
+// workspace-write sandbox grants the temp areas themselves (dsh's writableRoots), so a scenario
+// about a path the sandbox has to reach or deny on its own cannot live under them: the runner
+// home in TestDshRealAutoCacheRoot stands in the runner user's home, where a production
+// ORBIT_HOME stands.
+var dshRealHarnessParentDir string
+
 // newDshRealHarness prepares a session through the production preparer and agent overlay. With
 // real=false nothing may launch; the binary path then only satisfies the preparer.
 func newDshRealHarness(t *testing.T, mode string, real bool) *dshRealHarness {
@@ -475,6 +490,14 @@ func newDshRealHarness(t *testing.T, mode string, real bool) *dshRealHarness {
 		t.Setenv(key, "")
 	}
 	dir := t.TempDir()
+	if dshRealHarnessParentDir != "" {
+		var err error
+		dir, err = os.MkdirTemp(dshRealHarnessParentDir, ".orbit-dsh-p4-")
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	}
 	orbitHome := filepath.Join(dir, "orbit-home")
 	h := &dshRealHarness{t: t, job: dshTestJob(mode), work: filepath.Join(dir, "work"), home: filepath.Join(dir, "dsh-home"),
 		events: &dshProcessEvents{}, completions: make(chan TurnCompleteRequest, 8), done: make(chan struct{})}
