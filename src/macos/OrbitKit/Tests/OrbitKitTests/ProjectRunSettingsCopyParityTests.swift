@@ -87,7 +87,8 @@ final class ProjectRunSettingsCopyParityTests: XCTestCase {
         XCTAssertEqual(StartProject.requestSummary(ProjectStartSettings(line: .main, automatic: false,
                                                                         maxConcurrentTasks: 1)),
                        "The coordinator asked · directly into main · Automatic off · at most 1 at a time")
-        for part in ["START_ROW_ASKED,", "runLineInSentence(settings.line),",
+        for part in ["START_ROW_ASKED,", "runLineInSentence(settings.line, main),",
+                     "main: string = mainBranchName(settings.upstreamRef),",
                      "`${RUN_AUTOMATIC} ${settings.automatic ? 'on' : 'off'}`,",
                      "`at most ${settings.maxConcurrentTasks} at a time`,", "].join(' · ');"] {
             assertSays(web, part, in: Self.words)
@@ -99,7 +100,9 @@ final class ProjectRunSettingsCopyParityTests: XCTestCase {
         // Where the page draws them: the request's row under the card's own question, and the owner's
         // own Start… beside the words that say nobody asked.
         let items = try flat(Self.openItems)
-        assertSays(items, "const line = settings ? startRequestSummary(settings) : row.detailLine;", in: Self.openItems)
+        // …directly into the main branch the start card opens with, off the integration read the page holds.
+        assertSays(items, "const line = settings ? startRequestSummary(settings, startMainBranch(settings.upstreamRef, standing)) : row.detailLine;",
+                   in: Self.openItems)
         assertSays(items, "{START_PROJECT_TITLE}", in: Self.openItems)
         assertSays(items, "{ACTION_LABEL.REVIEW}", in: Self.openItems)
         assertSays(items, "{START_ROW_OWN}", in: Self.openItems)

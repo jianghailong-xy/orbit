@@ -20,11 +20,16 @@ import {
   ProjectPromotion,
   ProjectPromotionCard,
   ProjectPromotionReceipt,
+  MERGED_HEADING,
   UNDER_AUTOMATIC,
+  mergeTo,
+  mergedAutomaticallyHeading,
+  mergedHeading,
   promotionItem,
   resolvingPress,
   type PromotionProjectView,
 } from './ProjectPromotionCard';
+import { ProjectMergeStrip } from './ProjectMergeStrip';
 import { SHORTCUT_HINT } from './CardHotkey';
 import { CHAT_ABOUT_THIS } from '../lib/coordinatorChat';
 import { CriteriaDecisionCard, type PendingCriteriaDecisionRow } from './CriteriaDecisionCard';
@@ -1036,6 +1041,66 @@ describe('the presses', () => {
       'the card',
     );
     expect(host.textContent).toContain('project/bg-jobs');
+  });
+});
+
+/**
+ * The branch a candidate merges into is the project's main branch (`promotion.upstreamRef`), and the
+ * card names it the one way the project page does: the press, both receipts' headings and every row.
+ */
+describe('the merge, by the project’s main branch', () => {
+  const merged = (upstreamRef: string, automatic: boolean) => promotion({
+    upstreamRef,
+    state: 'MERGED',
+    merged: {
+      sha: '324cf003a7b8c9d0e1f2a3b4c5d6e7f809a1b2c3',
+      byUserId: automatic ? null : '2p7QMFOwEGtL5oaTxZHihm',
+      at: at(2 * MINUTE),
+      automatic,
+      revert: 'git revert -m 1 324cf003a7b8c9d0e1f2a3b4c5d6e7f809a1b2c3',
+    },
+  });
+  const pressLabels = (html: string) => [...new DOMParser().parseFromString(html, 'text/html')
+    .querySelectorAll('button')].map((button) => button.textContent);
+  function strip(view: ProjectPromotionView): string {
+    const qc = client();
+    qc.setQueryData(['project', PROJECT_ID, 'promotion'], view);
+    return renderToStaticMarkup(
+      <MemoryRouter>
+        <QueryClientProvider client={qc}>
+          <ProjectMergeStrip projectId={PROJECT_ID} onOpenCoordinator={null} />
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+  }
+
+  it('says Merge to main and Merged into main word for word as before for a project on main', () => {
+    expect([mergeTo(), mergeTo('main')]).toEqual(['Merge to main', MERGE_TO_MAIN]);
+    expect([mergedHeading(), mergedHeading('main')]).toEqual(['✓ Merged into main', MERGED_HEADING]);
+    expect([mergedAutomaticallyHeading(), mergedAutomaticallyHeading('main')])
+      .toEqual(['✓ Merged into main automatically', MERGED_AUTOMATICALLY_HEADING]);
+    expect(pressLabels(card(promotion()))[0]).toBe('Merge to main');
+    expect(pressLabels(strip(promotion()))).toContain('Merge to main');
+    expect(card(merged('main', false))).toContain('✓ Merged into main</span>');
+    expect(card(merged('main', true))).toContain('✓ Merged into main automatically</span>');
+  });
+
+  it('names master on the press, both receipts and the rows, for a project on master', () => {
+    const asking = card(promotion({ upstreamRef: 'refs/heads/master' }));
+    expect(pressLabels(asking)[0]).toBe('Merge to master');
+    expect(asking).toContain('Merge project/bg-jobs into master?');
+    expect(asking).toContain('7 commits ahead of master');
+    expect(asking).not.toContain('Merge to main');
+    expect(pressLabels(strip(promotion({ upstreamRef: 'master' })))).toContain('Merge to master');
+    const pressed = card(merged('master', false), { project: project({ acceptanceCriteriaItems: [
+      { ordinal: 3, satisfied: true, landing: 'LANDED' },
+    ] }) });
+    expect(pressed).toContain('✓ Merged into master</span>');
+    expect(pressed).toContain('Now on master');
+    expect(pressed).toContain('criterion 3 show “on master”');
+    expect(card(merged('master', true))).toContain('✓ Merged into master automatically</span>');
+    expect(markup(<ProjectPromotionReceipt promotion={merged('master', true)} now={NOW} />))
+      .toContain('✓ Merged into master automatically');
   });
 });
 

@@ -9,6 +9,7 @@ import type {
   OpenItemFacts,
   OpenItemHandling,
   OpenItemKind,
+  ProjectIntegrationView,
   ProjectOpenItemRow,
   ProjectOpenItemsView,
 } from '@orbit/shared';
@@ -26,11 +27,14 @@ import {
 } from '../lib/coordinatorChat';
 import { decisionReceiptAnchor, type ReceiptPlacement } from '../lib/decisionReceipt';
 import { encodeId } from '../lib/idCodec';
-import { projectOpenItemsQuery } from '../lib/queries';
+import { projectIntegrationQuery, projectOpenItemsQuery } from '../lib/queries';
 import {
+  DEFAULT_MAIN_BRANCH,
   START_PROJECT_TITLE,
   START_ROW_NOT_ASKED,
   START_ROW_OWN,
+  mainBranchName,
+  startMainBranch,
   startPageRow,
   startRequestSummary,
 } from '../lib/projectStart';
@@ -902,11 +906,14 @@ export function OpenItemCard({
   row,
   now,
   onChat,
+  main = DEFAULT_MAIN_BRANCH,
 }: {
   projectId: string;
   row: ProjectOpenItemRow;
   now: number;
   onChat?: (subject: CoordinatorChatSubject) => void;
+  /** The project's main branch by name, which a rerun of a merge check names. */
+  main?: string;
 }): JSX.Element {
   return (
     <ItemCard
@@ -915,6 +922,7 @@ export function OpenItemCard({
       tone="coordinator"
       now={now}
       onChat={onChat}
+      main={main}
     >
       <CardActions projectId={projectId} row={row} />
     </ItemCard>
@@ -1077,32 +1085,34 @@ function ItemFactRows({ row }: { row: ProjectOpenItemRow }): JSX.Element | null 
   );
 }
 
-/** What the coordinator's rerun is, in the card's words: a task's landing, or a candidate's check. */
+/** What the coordinator's rerun is, in the card's words: a task's landing, or a candidate's check —
+ *  of the merge into `main`, the project's main branch by name. */
 function rerunOf(
   row: Pick<ProjectOpenItemRow, 'promotionId'>,
-  jobKind?: OpenItemHandling['jobKind'],
+  jobKind: OpenItemHandling['jobKind'] | undefined,
+  main: string,
 ): string {
   const check = jobKind ? jobKind === 'CHECK_PROMOTION' : row.promotionId != null;
-  return check ? 'the re-check of the merge into main' : 'the rerun of the landing';
+  return check ? `the re-check of the merge into ${main}` : 'the rerun of the landing';
 }
 
 /** §4.7 H1, in one line: which rerun, which generation, where it is, and since when it was asked. */
-function handlingLine(row: ProjectOpenItemRow, handling: OpenItemHandling, now: number): string {
+function handlingLine(row: ProjectOpenItemRow, handling: OpenItemHandling, now: number, main: string): string {
   const where = handling.state === 'RUNNING' ? 'is running' : 'is queued';
-  return `${rerunOf(row, handling.jobKind)} — generation ${handling.generation} ${where} · asked `
+  return `${rerunOf(row, handling.jobKind, main)} — generation ${handling.generation} ${where} · asked `
     + `${ago(handling.startedAt, now)}`;
 }
 
 /** §4.7 H2/H3, in one line: how the coordinator's handling of an item ended. */
-function outcomeLine(row: ProjectOpenItemRow): string | null {
+function outcomeLine(row: ProjectOpenItemRow, main: string): string | null {
   const outcome = row.outcome;
   if (!outcome) return null;
   if (outcome.resolution === 'RETRIED') {
-    return `${rerunOf(row)} failed again — a new item took its place`;
+    return `${rerunOf(row, undefined, main)} failed again — a new item took its place`;
   }
   if (outcome.jobId == null) return 'closed by the coordinator, with its reason';
   return row.promotionId != null
-    ? 'the re-check of the merge into main passed'
+    ? `the re-check of the merge into ${main} passed`
     : 'the rerun of the landing landed';
 }
 
@@ -1114,18 +1124,20 @@ function outcomeLine(row: ProjectOpenItemRow): string | null {
 function ItemHandlingRows({
   row,
   now,
+  main,
 }: {
   row: ProjectOpenItemRow;
   now: number;
+  main: string;
 }): JSX.Element | null {
   const handling = row.handling ?? null;
   const outcome = row.outcome ?? null;
   if (!handling && !outcome) return null;
-  const said = outcome ? outcomeLine(row) : null;
+  const said = outcome ? outcomeLine(row, main) : null;
   const reason = outcome ? outcome.note : handling?.reason ?? null;
   return (
     <div className="project-open-item-facts project-open-item-handling">
-      {handling ? <FactRow label={HANDLING_TAG}>{handlingLine(row, handling, now)}</FactRow> : null}
+      {handling ? <FactRow label={HANDLING_TAG}>{handlingLine(row, handling, now, main)}</FactRow> : null}
       {outcome && said ? (
         <FactRow label={outcome.resolution === 'RETRIED' ? SUPERSEDED_TAG : HANDLED_TAG}>
           {said}
@@ -1207,9 +1219,10 @@ function handledByOwner(row: ProjectOpenItemRow): boolean {
 
 /**
  * Where an item's handling stands (§4.7), as the line a chat about it carries: whose move it is,
- * since when, and what is in flight. The stage is the server's (`ProjectOpenItemRow.chat`).
+ * since when, and what is in flight. The stage is the server's (`ProjectOpenItemRow.chat`). `main` is
+ * the project's main branch by name, which a rerun of a merge check names.
  */
-export function itemStandingLine(row: ProjectOpenItemRow, now: number): string {
+export function itemStandingLine(row: ProjectOpenItemRow, now: number, main: string = DEFAULT_MAIN_BRANCH): string {
   if (row.kind === 'FUSE_PAUSED') {
     return 'the coordinator stopped itself, and only the owner can lift it';
   }
@@ -1217,7 +1230,7 @@ export function itemStandingLine(row: ProjectOpenItemRow, now: number): string {
   switch (itemChat(row).stage) {
     case 'HANDLING': {
       const rerun = handling
-        ? `being handled — ${handlingLine(row, handling, now)}`
+        ? `being handled — ${handlingLine(row, handling, now, main)}`
         : 'being handled by the coordinator';
       // The clock can hand an item to the owner while its rerun still runs (§4.7 H4): both are true,
       // and whose move it is next is the second half.
@@ -1234,7 +1247,7 @@ export function itemStandingLine(row: ProjectOpenItemRow, now: number): string {
       const owner = handledByOwner(row);
       // The card's `outcomeLine` names the coordinator for a close with no job; the owner's own
       // "Mark as handled" is one too, and the chat says whose it was.
-      const how = owner && row.outcome?.jobId == null ? 'closed by hand, with its reason' : outcomeLine(row);
+      const how = owner && row.outcome?.jobId == null ? 'closed by hand, with its reason' : outcomeLine(row, main);
       return `handled by ${owner ? 'the owner' : 'the coordinator'} ${ago(row.outcome?.resolvedAt, now)}`
         + `${how ? ` — ${how}` : ''}`;
     }
@@ -1369,15 +1382,18 @@ export function EscalatedItemCard({
   row,
   now,
   onChat,
+  main = DEFAULT_MAIN_BRANCH,
 }: {
   projectId: string;
   row: ProjectOpenItemRow;
   now: number;
   onChat?: (subject: CoordinatorChatSubject) => void;
+  /** The project's main branch by name, which a rerun of a merge check names. */
+  main?: string;
 }): JSX.Element {
   const heading = escalationHeading(row, now) ?? itemHeading(row);
   return (
-    <ItemCard row={row} heading={heading} tone="owner" now={now} onChat={onChat}>
+    <ItemCard row={row} heading={heading} tone="owner" now={now} onChat={onChat} main={main}>
       <CardActions projectId={projectId} row={row} />
     </ItemCard>
   );
@@ -1394,13 +1410,16 @@ export function SettledItemCard({
   row,
   now,
   onChat,
+  main = DEFAULT_MAIN_BRANCH,
 }: {
   row: ProjectOpenItemRow;
   now: number;
   onChat?: (subject: CoordinatorChatSubject) => void;
+  /** The project's main branch by name, which a rerun of a merge check names. */
+  main?: string;
 }): JSX.Element {
   return (
-    <ItemCard row={row} heading={itemHeading(row)} tone="settled" now={now} onChat={onChat} />
+    <ItemCard row={row} heading={itemHeading(row)} tone="settled" now={now} onChat={onChat} main={main} />
   );
 }
 
@@ -1464,6 +1483,7 @@ function ItemCard({
   now,
   id,
   onChat,
+  main = DEFAULT_MAIN_BRANCH,
   children,
 }: {
   row: ProjectOpenItemRow;
@@ -1476,6 +1496,8 @@ function ItemCard({
   id?: string;
   /** The host's composer, when the card is drawn in the conversation a chat about it goes to. */
   onChat?: (subject: CoordinatorChatSubject) => void;
+  /** The project's main branch by name, which a rerun of a merge check names. */
+  main?: string;
   children?: ReactNode;
 }): JSX.Element {
   const tag = handlingTag(row);
@@ -1501,7 +1523,7 @@ function ItemCard({
       </div>
       <div className="approval-body is-plan project-open-item-body">
         <ItemFactRows row={row} />
-        <ItemHandlingRows row={row} now={now} />
+        <ItemHandlingRows row={row} now={now} main={main} />
         <div className="project-open-item-actions">{children}</div>
         <ItemChatRow row={row} onChat={onChat} />
       </div>
@@ -1520,6 +1542,7 @@ export function ItemAsCard({
   row,
   now,
   onChat,
+  main = DEFAULT_MAIN_BRANCH,
 }: {
   projectId: string;
   row: ProjectOpenItemRow;
@@ -1527,21 +1550,24 @@ export function ItemAsCard({
   /** "Chat about this" into the host's own composer — given by the coordinator conversation, which
    *  is where the chat is held (`ItemChatRow`). */
   onChat?: (subject: CoordinatorChatSubject) => void;
+  /** The project's main branch by name, which a rerun of a merge check names: the host's to give,
+   *  off a read it holds. */
+  main?: string;
 }): JSX.Element | null {
   if (row.kind === 'FUSE_PAUSED') {
     return <FusePauseCard projectId={projectId} row={row} now={now} onChat={onChat} />;
   }
   // Ended by the coordinator's handling (§4.7 H5): the card stays where it was, saying how it ended.
-  if (row.outcome) return <SettledItemCard row={row} now={now} onChat={onChat} />;
+  if (row.outcome) return <SettledItemCard row={row} now={now} onChat={onChat} main={main} />;
   // A question has its own card, mounted beside this one by both hosts — drawing it again here
   // would be two cards answering one question, and only one of them could win. A merge approval is
   // the same: `ProjectPromotionCard` draws it from the candidate itself, which is where what would
   // land and what the checks came to actually live.
   if (hasCardOfItsOwn(row)) return null;
   return escalationHeading(row, now) != null ? (
-    <EscalatedItemCard projectId={projectId} row={row} now={now} onChat={onChat} />
+    <EscalatedItemCard projectId={projectId} row={row} now={now} onChat={onChat} main={main} />
   ) : (
-    <OpenItemCard projectId={projectId} row={row} now={now} onChat={onChat} />
+    <OpenItemCard projectId={projectId} row={row} now={now} onChat={onChat} main={main} />
   );
 }
 
@@ -1615,7 +1641,7 @@ function ordered(items: ProjectOpenItemsView | undefined): ProjectOpenItemRow[] 
   return [...paused, ...rest];
 }
 
-function OpenItemRowView({ row, now }: { row: ProjectOpenItemRow; now: number }): JSX.Element {
+function OpenItemRowView({ row, now, main }: { row: ProjectOpenItemRow; now: number; main: string }): JSX.Element {
   const actions = drawableActions(row);
   return (
     <li className={`project-open-item-row is-${row.assignee === 'OWNER' ? 'owner' : 'coordinator'}`}>
@@ -1634,7 +1660,7 @@ function OpenItemRowView({ row, now }: { row: ProjectOpenItemRow; now: number })
         {row.handling ? (
           <div className="project-open-item-line is-handling" title={row.handling.reason}>
             <span className="project-open-item-state is-handling">{HANDLING_TAG}</span>
-            {` ${handlingLine(row, row.handling, now)}`}
+            {` ${handlingLine(row, row.handling, now, main)}`}
           </div>
         ) : null}
       </div>
@@ -1666,14 +1692,17 @@ function StartRequestRowView({
   now,
   onReview,
   reviewing,
+  standing,
 }: {
   row: ProjectOpenItemRow;
   now: number;
   onReview?: () => void;
   reviewing?: boolean;
+  /** The project's integration read, for the main branch the start card opens with. */
+  standing: ProjectIntegrationView | null;
 }): JSX.Element {
   const settings = row.startRequest?.settings ?? null;
-  const line = settings ? startRequestSummary(settings) : row.detailLine;
+  const line = settings ? startRequestSummary(settings, startMainBranch(settings.upstreamRef, standing)) : row.detailLine;
   return (
     <li className="project-open-item-row is-owner" data-kind="START_REQUEST">
       <span className="project-open-item-dot" aria-hidden="true" />
@@ -1840,6 +1869,11 @@ export function ProjectOpenItems({
     enabled: Boolean(projectId),
     refetchInterval: 20_000,
   });
+  // The integration read the page's integration row holds (one query key): the project's main
+  // branch, which a rerun of a merge check names, and the one the start card opens with.
+  const integration = useQuery({ ...projectIntegrationQuery(projectId ?? ''), enabled: Boolean(projectId) });
+  const standing = integration.data ?? null;
+  const main = mainBranchName(standing?.upstreamRef);
   // The pause is drawn as a card above the groups and counted in neither: it is not something
   // waiting on a person the way the rows are, it is the reason some of them are waiting.
   const paused = (items.data?.needsYou ?? []).filter((row) => row.kind === 'FUSE_PAUSED');
@@ -1884,6 +1918,7 @@ export function ProjectOpenItems({
                   now={now}
                   onReview={onReviewStart}
                   reviewing={reviewingStart}
+                  standing={standing}
                 />
               ) : row === doneRequest ? (
                 <DoneRequestRowView
@@ -1894,7 +1929,7 @@ export function ProjectOpenItems({
                   reviewing={reviewingDone}
                 />
               ) : (
-                <OpenItemRowView key={row.itemId} row={row} now={now} />
+                <OpenItemRowView key={row.itemId} row={row} now={now} main={main} />
               ),
             )}
           </ul>
@@ -1905,7 +1940,7 @@ export function ProjectOpenItems({
           <div className="project-open-items-group">{WITH_COORDINATOR_GROUP}</div>
           <ul className="project-open-items-list">
             {withCoordinator.map((row) => (
-              <OpenItemRowView key={row.itemId} row={row} now={now} />
+              <OpenItemRowView key={row.itemId} row={row} now={now} main={main} />
             ))}
           </ul>
         </>

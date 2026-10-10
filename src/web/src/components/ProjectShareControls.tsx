@@ -4,6 +4,7 @@ import { useRef, useState } from 'react';
 import { getShareLink } from '../api';
 import { copyText } from '../lib/clipboard';
 import { encodeId } from '../lib/idCodec';
+import { mainBranchName } from '../lib/projectStart';
 import { useToast } from '../lib/toast';
 import { type ProjectPanoramaBuckets, projectPanoramaQuery } from './ProjectPanoramaHeader';
 import { ShareModal, shareLinkQueryKey } from './ShareModal';
@@ -22,6 +23,8 @@ export interface ProjectMarkdownSource {
   goal?: string | null;
   _count: { tasks: number };
   acceptanceCriteriaItems?: { ordinal: number; text: string; satisfied?: boolean; landing?: string }[];
+  /** The project's main branch, which "on main" names. */
+  integration?: { upstreamRef?: string | null } | null;
 }
 
 /** A task as the Markdown lists it: the project page's own task rows. */
@@ -43,6 +46,13 @@ const LANDING_WORDS: Record<string, string> = {
   ON_INTEGRATION_LINE: 'on the project branch · not on main yet',
   UNKNOWN: 'no merge receipt either way',
 };
+
+/** The same, said of the project's main branch by name — `LANDING_WORDS`, for a project on main. */
+function landingWords(landing: string, main: string): string {
+  if (landing === 'LANDED') return `on ${main}`;
+  if (landing === 'ON_INTEGRATION_LINE') return `on the project branch · not on ${main} yet`;
+  return LANDING_WORDS[landing] ?? landing;
+}
 
 /** How many of each lane the progress line names, in the Work overview's order and words. */
 const PROGRESS_LANES: { key: keyof ProjectPanoramaBuckets; word: string }[] = [
@@ -83,6 +93,7 @@ export function projectMarkdown(
   out.push('', '## Goal', '', goal || 'No goal set');
 
   const criteria = project.acceptanceCriteriaItems ?? [];
+  const main = mainBranchName(project.integration?.upstreamRef);
   out.push('', '## Acceptance criteria', '');
   if (criteria.length === 0) out.push('No criteria are stated for this project.');
   for (const criterion of criteria) {
@@ -90,7 +101,7 @@ export function projectMarkdown(
       criterion.satisfied === undefined
         ? ''
         : criterion.satisfied
-          ? ` — Met by its work${criterion.landing ? ` · ${LANDING_WORDS[criterion.landing] ?? criterion.landing}` : ''}`
+          ? ` — Met by its work${criterion.landing ? ` · ${landingWords(criterion.landing, main)}` : ''}`
           : ' — Not met by its work';
     out.push(`${criterion.ordinal}. ${criterion.text.trim()}${answer}`);
   }

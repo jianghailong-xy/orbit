@@ -186,7 +186,7 @@ export function ProjectIntegrationLine({
               <Link className="project-land-task-title" to={projectTaskPath(projectId, task.taskId)}>
                 {task.taskTitle}
               </Link>
-              <LandTaskStatus integration={task.integration} />
+              <LandTaskStatus integration={task.integration} main={main} />
             </div>
           ))}
         </div>
