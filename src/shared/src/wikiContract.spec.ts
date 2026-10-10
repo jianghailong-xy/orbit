@@ -1811,6 +1811,11 @@ describe('wiki contract', () => {
     expect(server.trigger).toMatch(/A run's end asks too \(the owner's decision of 2026-10-10/u);
     expect(server.identity).toMatch(/wiki_changeset\.job_id/u);
     expect(server.door).toMatch(/WIKI_SERVER_EXECUTES/u);
+    // The run's own ops are its job's, whichever attempt recorded them, and the second pass asks under units of its own
+    // (2026-10-10): a replay verifies what a stop left waiting, and the retry suffix reaches the model.
+    expect(server.verify).toMatch(/^The run's own ops are its job's \(identity\), whichever attempt recorded them/u);
+    expect(server.verify).toMatch(/under a unit of its own, <opId>#retry, as the extraction's retry is asked under <sessionId>#retry/u);
+    expect(server.verify).toMatch(/Its prompt is the runner's second pass's, byte for byte/u);
     expect(server.skip).toMatch(/catch-up active or paused/u);
     expect(server.failureKinds).toMatch(/nothing is counted/u);
   });
@@ -1880,6 +1885,7 @@ describe('wiki contract', () => {
     // The calls and usage are the job's own requests, each once; a call failed on its wait limit is none.
     expect(carry.calls).toMatch(/each once \(wikiJobModelCalls\)/u);
     expect(carry.calls).toMatch(/never one failed on its step's wait limit/u);
+    expect(carry.calls).toMatch(/Since it asks under units of its own \(maintenance\.job\.server\.verify\), its requests are calls like any other/u);
     // The pipelines that say what their report is say it is the whole job's.
     expect(CONTRACT.articles.serverExecution.ends).toMatch(/Its report is the whole job's \(jobs\.carry\)/u);
     expect(CONTRACT.docs.build.server.end).toMatch(/are the whole build's \(jobs\.carry\)/u);
