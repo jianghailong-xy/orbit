@@ -1,0 +1,49 @@
+$ node docs/evidence/base-ui-migration/inventory-delta/verify-record.mjs docs/evidence/base-ui-migration/p5.2/checks/record-10b-audit.json 2026-10-10b.json
+Record 2026-10-10b.json verified: 0 file entries and 1 index.css entries match the audit; read after 10 earlier record(s), 1 points need its new/changed entries and 0 change owner without its reassignments; it leaves 0 points pending (0 questions); with all 11 records: 0 unowned, 0 pending; P0.1 baseline clean.
+exit=0
+
+$ node docs/evidence/base-ui-migration/inventory-delta/verify-record.mjs docs/evidence/base-ui-migration/p5.2/checks/record-10-audit.json 2026-10-10.json
+Record 2026-10-10.json verified: 1 file entries and 0 index.css entries match the audit; read after 9 earlier record(s), 1 points need its new/changed entries and 0 change owner without its reassignments; it leaves 0 points pending (0 questions); with all 11 records: 0 unowned, 0 pending; P0.1 baseline clean.
+exit=0
+
+$ node docs/evidence/base-ui-migration/inventory-delta/verify-record.mjs docs/evidence/base-ui-migration/p4.4/checks/record-09c-audit.json 2026-10-09c.json
+Record 2026-10-09c.json verified: 1 file entries and 0 index.css entries match the audit; read after 8 earlier record(s), 1 points need its new/changed entries and 0 change owner without its reassignments; it leaves 0 points pending (0 questions); with all 11 records: 0 unowned, 0 pending; P0.1 baseline clean.
+exit=0
+
+$ python3 -I build-record-10.py ../p5.2/checks/record-10-audit.json | cmp - 2026-10-10.json
+byte-identical
+exit=0
+
+$ python3 -I build-record-10b.py ../p5.2/checks/record-10b-audit.json | cmp - 2026-10-10b.json
+byte-identical
+exit=0
+
+$ node src/web/scripts/audit-antd.mjs --check-owners
+{
+  "baseline": {
+    "commit": "378b7033eb8f470b0c74089bce748cb158b5aacf",
+    "scopeHash": "b444bed5ef1beb033fed68e0f4d58e32cb305ccaef29fd36602fa922d72de5d0"
+  },
+  "records": [
+    "2026-10-07.json",
+    "2026-10-07b.json",
+    "2026-10-07c.json",
+    "2026-10-07d.json",
+    "2026-10-08.json",
+    "2026-10-08b.json",
+    "2026-10-09.json",
+    "2026-10-09b.json",
+    "2026-10-09c.json",
+    "2026-10-10.json",
+    "2026-10-10b.json"
+  ],
+  "unowned": [],
+  "pending": [],
+  "owners": {
+    "KEEP": 1,
+    "P5.1": 28,
+    "P5.3": 97,
+    "P6": 42
+  }
+}
+exit=0
