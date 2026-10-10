@@ -6,6 +6,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -48,8 +49,10 @@ import io.orbitd.android.projects.LandingRow
 import io.orbitd.android.projects.OwnerStartSheet
 import io.orbitd.android.projects.ProjectApi
 import io.orbitd.android.projects.ProjectDoc
+import io.orbitd.android.projects.ProjectDone
 import io.orbitd.android.projects.ProjectPage
 import io.orbitd.android.projects.ProjectPageState
+import io.orbitd.android.projects.ProjectSettledCard
 import io.orbitd.android.projects.RequestedStartSheet
 import io.orbitd.android.projects.StartProjectCopy
 import io.orbitd.android.projects.failureReason
@@ -188,6 +191,8 @@ private class ProjectSessionsState(initial: List<DirectorySession>) {
     var integrationReadAt by mutableStateOf<Instant?>(null)
     var integrationReadFailed by mutableStateOf(false)
     var openItems by mutableStateOf<JsonObject?>(null)
+    /** The project document, while the project may be done: what the page's ending is drawn from (`ProjectDone.drawsEnding`). */
+    var done by mutableStateOf<JsonObject?>(null)
 }
 
 private enum class StartSheet { ASKED, OWN }
@@ -271,16 +276,26 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
         val items = try { projects.openItems(projectId) } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { null }
         if (items != null) state.openItems = items
     }
+    /** The ending's read (docs/mocks/project-done-sessions-page, owner decision 2026-10-10), while the page's project may be done:
+     * the sidebar's rows are the Open projects, so a row that is not Open, or none at all, is that state. A project the row says is
+     * Open reads nothing and keeps nothing; a read that fails keeps the last answer, as the landing line's does. */
+    suspend fun loadDone() {
+        val row = currentProject
+        if (row?.text("status") == "OPEN") { state.done = null; return }
+        val doc = try { projects.document(projectId) } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { null }
+        if (doc != null) state.done = doc
+    }
     LaunchedEffect(handle, projectId) {
         launch { loadMembers(); while (true) { delay(4_000); pollMembers() } }
         launch { while (true) { loadIntegration(); delay(4_000) } }
         launch { while (true) { merge.load(); delay(4_000) } }
         launch { while (true) { loadStart(); delay(4_000) } }
+        launch { while (true) { loadDone(); delay(4_000) } }
         launch { while (true) { delay(1_000); now = Instant.now() } }
     }
     fun refresh() = scope.launch {
         refreshing = true
-        try { coroutineScope { launch { loadMembers() }; launch { loadIntegration() }; launch { merge.load(force = true) }; launch { loadStart() } } }
+        try { coroutineScope { launch { loadMembers() }; launch { loadIntegration() }; launch { merge.load(force = true) }; launch { loadStart() }; launch { loadDone() } } }
         finally { refreshing = false }
     }
     // The project's page, over this one: back returns here.
@@ -305,8 +320,22 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
     PullToRefreshBox(isRefreshing = refreshing, onRefresh = { refresh() }, modifier = Modifier.fillMaxSize().testTag("project-sessions")) {
         LazyColumn(Modifier.fillMaxSize().testTag("project-sessions-list"), contentPadding = PaddingValues(bottom = 24.dp)) {
             item(key = "progress") {
-                ProgressCard(project, members, state, now, openStart = { startSheet = it },
-                    openLanding = { if (state.integration?.let(ProjectPage::inFlightJobs) != null) showsJobs = true else openProject() })
+                // The page's first card: the project's ending once it is done (docs/mocks/project-done-sessions-page, owner decision
+                // 2026-10-10) — the same settled card the conversation draws, where a progress card would say nothing but "Done" —
+                // and the progress card before that, and for a read that carries no projection to tally.
+                val ending = state.done
+                if (ending != null && ProjectDone.drawsEnding(ending)) {
+                    // The page's own card chrome, as the merge card wears it — the ending is the last of its events.
+                    val success = LocalOrbitColors.current.success
+                    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
+                        .background(success.copy(alpha = 0.08f), RoundedCornerShape(14.dp))
+                        .border(1.dp, success.copy(alpha = 0.3f), RoundedCornerShape(14.dp)).padding(12.dp)) {
+                        ProjectSettledCard(ending, "project-sessions-ending")
+                    }
+                } else {
+                    ProgressCard(project, members, state, now, openStart = { startSheet = it },
+                        openLanding = { if (state.integration?.let(ProjectPage::inFlightJobs) != null) showsJobs = true else openProject() })
+                }
             }
             // The merge into main, under the progress card: the candidate's card while it asks, merges or is blocked, and the merge
             // check's live line before that. Absent otherwise — a merge already made is a row on the timeline instead.

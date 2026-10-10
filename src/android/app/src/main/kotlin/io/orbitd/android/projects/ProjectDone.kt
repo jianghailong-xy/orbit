@@ -66,6 +66,12 @@ object ProjectDone {
     /** The projection's counts; a server without the owner's done door sends none (web's `hasDoneGate`), and no card is drawn then. */
     fun counts(doc: JsonObject): JsonObject? = doc.obj("derivedDone")?.obj("counts")
     fun hasDoneDoor(doc: JsonObject) = counts(doc) != null
+
+    /** Whether a project's sessions page draws its ending where the progress card was (docs/mocks/project-done-sessions-page, owner
+     * decision 2026-10-10): DONE, with the projection's counts to tally. The same card, and the same rule, the conversation's settled
+     * branch keeps — and a read without the counts (a server before the owner's done door) keeps the progress card, which in that
+     * state says its status and nothing else. */
+    fun drawsEnding(doc: JsonObject?) = doc != null && ProjectDoc.status(doc) == "DONE" && counts(doc) != null
     fun showAll(count: Int) = "$showAll $count"
 
     // The counts, in words.

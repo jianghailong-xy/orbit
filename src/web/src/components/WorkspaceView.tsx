@@ -379,8 +379,8 @@ import {
   type SettlementQuestion,
   type StartPageRow,
 } from '../lib/projectStart';
-import { PROJECT_DONE_COPY } from '../lib/projectDone';
-import { SessionProjectSettlementCard } from './ProjectSettlementCard';
+import { PROJECT_DONE_COPY, type ProjectDoneDocument } from '../lib/projectDone';
+import { ProjectWhyNotDoneCard, SessionProjectSettlementCard } from './ProjectSettlementCard';
 import {
   OWNER_SEND_BACK_LABEL,
   OWNER_SENDING_BACK_PREFIX,
@@ -3138,6 +3138,8 @@ export function WorkspaceView({
   const pageProject = projectsQ.data?.find((p) => p.id === openProjectId);
   const pageProjectDetailsQ = useQuery({
     ...projectDetailsQuery(openProjectId ?? ''),
+    // It is also what a DONE project's ending card is drawn from (`pageSettledDoc`): the Open-only
+    // sidebar carries no row for it, so this page reads its own document either way.
     enabled: !!openProjectId && projectsQ.isSuccess && !pageProject,
     refetchInterval: PROJECT_SESSION_REFRESH_MS,
   });
@@ -3150,6 +3152,16 @@ export function WorkspaceView({
   const pageProjectTitle = pageProject?.title ?? pageProjectDetailsQ.data?.title ?? projectMembers[0]?.projectMembership?.projectTitle ?? pageMenuCoordinator?.projectMembership?.projectTitle ?? 'Project';
   const pageRunningCount = projectMembers.filter((s) => statusGlyphMotion(s) === 'spinner').length;
   const pageStatus = pageProject?.status ?? pageProjectDetailsQ.data?.status ?? projectMembers[0]?.projectMembership?.projectStatus;
+  // The project's ending where the page's progress card was (owner, 2026-10-10): a DONE project's
+  // first card is its record — "This project is done · recorded by Orbit · 6 criteria · 5 on main
+  // · 1 no code to land" — and never a progress card with nothing in it but the word Done. The
+  // same card, off the same read, as the conversation's settled branch; a read that carries no
+  // projection, or one without the unified counts (an older server), keeps the progress card.
+  const pageDetails = pageProjectDetailsQ.data as unknown as ProjectDoneDocument | undefined;
+  const pageSettledDoc = pageDetails && pageStatus === 'DONE' && pageDetails.derivedDone != null
+      && 'counts' in pageDetails.derivedDone
+    ? pageDetails
+    : null;
   const pageSessionsError = (projectSessionsQ.error ?? completedProjectSessionsQ.error) as Error | null;
   // A project nobody has started (docs/mocks/project-start-sessions-page): its progress line says so,
   // and the start's row sits under it — by the project page's own rule (`startPageRow`), read off the
@@ -9377,10 +9389,15 @@ export function WorkspaceView({
           ref={listRef}
           onScroll={onSessionListScroll}
         >
-          {/* The project's progress card and its merge into main lead the list and scroll with it, as
+          {/* The project's first card and its merge into main lead the list and scroll with it, as
               on iOS (docs/mocks/project-sessions-page-web); the coordinator's conversation keeps
-              a line about the merge. */}
-          {openProjectId && (
+              a line about the merge. A DONE project's first card is its ending, in the progress
+              card's place (docs/mocks/project-done-sessions-page) — the progress card itself would
+              say nothing but the word Done. */}
+          {openProjectId && pageSettledDoc && (
+            <ProjectWhyNotDoneCard project={pageSettledDoc} />
+          )}
+          {openProjectId && !pageSettledDoc && (
             <div className="session-project-page-card">
               <div className="session-project-page-progress">
                 {pageTaskCounts ? (

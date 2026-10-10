@@ -1,0 +1,35 @@
+-- Two per-session reads filter `run_event` by `type` and need nothing else from the row:
+--
+--   * a shared session's counts — a link's page groups the session's events by type and counts them
+--     (`ShareLinksService.sessionCounts`, GET /share/s/:token), on every view of the link;
+--   * the transcript's receipts — `SessionsService.listQueuedTurns` asks a session for its `user`
+--     events of the announced turns and its failed `user_delivery` events, on every load of the
+--     turn queue (and the queue is drawn on every transcript open).
+--
+-- Nothing indexed `type`, so the count had to visit every event the session has: measured on a
+-- 5125-event session (production DDL, PostgreSQL 16.15, one row per heap page), the statement was a
+-- Bitmap Heap Scan reading all 5125 heap blocks — 5172 buffers — to count 4,100 rows. With this
+-- index the same statement is an Index Only Scan over those 4,100 entries: 24 buffers, and
+-- `Heap Fetches: 0` once the pages are all-visible, which is autovacuum's steady state for a
+-- transcript that is not the newest one.
+--
+-- The receipts read is answered as a BitmapOr instead of a scan of the session: `run_event_turn_id_idx`
+-- serves the announced turns and this index serves the delivery branch. It still fetches the rows it
+-- has to inspect — `turn_id` and the delivery marker are not in this index — but only the session's
+-- own `user` and `user_delivery` events: 528 buffers, where the session scan cost 5172.
+--
+-- PARTIAL over the four types these reads ask for. Every other type — `system` (init, resumed and
+-- the ingest's bookkeeping), the streaming deltas, `status`, `tool_result` — is left out of the
+-- index entirely.
+--
+-- WHAT IT COSTS: one index entry per INSERT and nothing else. `run_event` is append-only — no row is
+-- updated and none is deleted (6,857 dead tuples in ~5.7M rows on 2026-10-09) — so there is no HOT
+-- update to lose and no vacuum work to add; the insert path already maintains four indexes.
+--
+-- Deliberately not CONCURRENTLY, as with 0283, 0305, 0353, 0361 and 0417: Prisma runs the migration
+-- in a transaction. The build is one pass over the table; a deployment with a much larger
+-- `run_event` may pre-create the identical index CONCURRENTLY, after which IF NOT EXISTS makes this
+-- a no-op.
+CREATE INDEX IF NOT EXISTS "run_event_session_type_idx"
+  ON "run_event" ("session_id", "type")
+  WHERE "type" IN ('user', 'assistant', 'tool_use', 'user_delivery');

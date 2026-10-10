@@ -1452,11 +1452,15 @@ export async function queuePromotionJob(
     retry?: LandingRetryRequest;
   },
 ): Promise<string> {
-  const previous = await tx.projectIntegrationJob.aggregate({
-    where: { promotionId: input.promotion.id, kind: input.kind },
-    _max: { generation: true },
-  });
-  const generation = (previous._max.generation ?? 0) + 1;
+  // Raw SQL, never `projectIntegrationJob.aggregate`: Prisma compiles an aggregate to a MAX over an
+  // OFFSET subquery the planner cannot flatten, and nothing indexed `promotion_id` before 0421, so
+  // the shape read every row of the table (measured on 300,020 jobs: a parallel sequential scan,
+  // 4,919 buffers) where this is one index probe on the candidate's own rows.
+  const [previous] = await tx.$queryRaw<Array<{ generation: number | null }>>`
+    SELECT max("generation") AS "generation" FROM "project_integration_job"
+     WHERE "promotion_id" = ${input.promotion.id}::uuid AND "kind" = ${input.kind}
+  `;
+  const generation = Number(previous?.generation ?? 0) + 1;
   const jobId = randomUUID();
   const [created] = await tx.projectIntegrationJob.createManyAndReturn({
     data: [{

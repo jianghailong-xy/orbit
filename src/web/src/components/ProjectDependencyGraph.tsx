@@ -1007,8 +1007,9 @@ function ProjectFlow(props: {
 }
 
 /**
- * `data` draws a graph already in hand — a public project page's, which its link carries — instead
- * of reading the project's own; nothing is fetched then.
+ * `data` draws a graph already in hand — a public project page's, which its link carries, or a
+ * proposed batch's, which no project has yet — instead of reading a project's own; nothing is
+ * fetched then, and `projectId` is not needed.
  *
  * The start card draws the same graph two more ways (docs/mocks/start-card-web-width, board 02):
  * `embedded`, its picture of a plan that fits — top to bottom (`direction`), fitted, deaf to the
@@ -1023,7 +1024,8 @@ export function ProjectDependencyGraph({
   fullScreenOnly = false,
   onClose,
 }: {
-  projectId: string;
+  /** Where its marks' tasks open. With `data` and no project, every mark is words, not a link. */
+  projectId?: string;
   data?: ProjectDependencyGraphResponse;
   /** Which way dependencies advance; by default down a phone and across anything wider. */
   direction?: 'LR' | 'TB';
@@ -1054,7 +1056,11 @@ export function ProjectDependencyGraph({
     setFullScreen(false);
     onClose?.();
   }, [onClose, pathname]);
-  const query = useQuery({ ...projectDependencyGraphQuery(projectId), enabled: !data });
+  // A graph handed in is drawn; a canvas that names no project has nothing it could fetch.
+  const query = useQuery({
+    ...projectDependencyGraphQuery(projectId ?? ''),
+    enabled: !data && Boolean(projectId),
+  });
   const graph = data
     ? { data, isLoading: false, isError: false as const, error: null, refetch: query.refetch }
     : query;
@@ -1154,7 +1160,7 @@ export function ProjectDependencyGraph({
   }
 
   return (
-    <GraphProjectCtx.Provider value={projectId}>
+    <GraphProjectCtx.Provider value={projectId ?? null}>
       {fullScreenOnly ? null : (
         <div
           ref={stripRef}
@@ -1215,7 +1221,11 @@ export function ProjectDependencyGraph({
         <Alert
           style={{ marginTop: 8 }}
           type="warning"
-          title={`This project is larger than one graph request reads (${graph.data.limits.maxTasks.toLocaleString()} tasks).`}
+          title={
+            graph.data.limits
+              ? `This project is larger than one graph request reads (${graph.data.limits.maxTasks.toLocaleString()} tasks).`
+              : 'This project is larger than one graph request reads.'
+          }
           description="The task list below has all of them, in dependency order."
         />
       ) : null}

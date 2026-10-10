@@ -29,11 +29,18 @@ func codexAutoApprovalContextFor(execDir, upDir string, readOnlyRoots ...string)
 
 func codexRuntimeWorkspaceRoots(permissionMode string, job *ClaimedSession, execDir, upDir string) []string {
 	roots := []string{execDir, upDir}
-	if permissionMode == "auto" && job != nil && job.WT != nil && job.WT.RepoDir != "" {
-		// A linked worktree stores its index and worktree metadata in the shared repository's
-		// .git directory. Grant that metadata directory alone so local git commands do not
-		// become boundary crossings; the repository's source files remain outside.
-		roots = append(roots, filepath.Join(job.WT.RepoDir, ".git"))
+	if permissionMode == "auto" {
+		if job != nil && job.WT != nil && job.WT.RepoDir != "" {
+			// A linked worktree stores its index and worktree metadata in the shared repository's
+			// .git directory. Grant that metadata directory alone so local git commands do not
+			// become boundary crossings; the repository's source files remain outside.
+			roots = append(roots, filepath.Join(job.WT.RepoDir, ".git"))
+		}
+		// The session's Go and npm caches live in the runner-owned shared cache root, and the
+		// sandbox makes everything else under ORBIT_HOME read-only. Without this grant a
+		// sandboxed `go build` fails on GOCACHE with "read-only file system" and the agent
+		// invents a cache directory of its own (cache_root.go).
+		roots = append(roots, runnerCacheRoot())
 	}
 	return roots
 }

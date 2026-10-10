@@ -8460,6 +8460,17 @@ button.chat-jump-start:hover {
 .chat-turn-foot > .chat-copy {
   margin-left: -4px;
 }
+/* A turn's head row (TurnHead): how long the turn worked, over its own output — the line Codex
+   draws above an answer. Inset like .chat-assistant's text so it starts on the reply's edge, and
+   pulled up against the bubble above: it is the answer's first line, not the question's last. */
+.chat-turn-head {
+  margin: -2px 0 4px;
+  padding: 0 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
 .chat-error {
   color: var(--error);
   font-size: 13px;
@@ -9534,6 +9545,10 @@ button.chat-jump-start:hover {
 .chat-tool-status.pending {
   color: var(--dot-idle);
 }
+/* A question answered in the conversation: the engine files the reply as the call's error. */
+.chat-tool-status.replied {
+  color: var(--text-3);
+}
 .chat-tool-task .chat-tool-row {
   background: #faf8ff;
 }
@@ -9685,6 +9700,73 @@ button.chat-jump-start:hover {
 .chat-q-multi {
   margin-top: 6px;
   font-size: 11px;
+  color: var(--text-3);
+}
+/* Historical variant: the person's own words, read-only — typed instead of an option, or the reply
+   given in the conversation instead of any. */
+.chat-q-words {
+  margin-top: 6px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  background: var(--brand-tint);
+  font-size: 12.5px;
+  color: var(--text-1);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.chat-q-words-label {
+  display: block;
+  font-size: 11px;
+  color: var(--text-3);
+  white-space: normal;
+}
+/* An answered question, folded: the record under its row — each question's opening, then how it
+   was answered. One question keeps two lines of its opening, several keep one each. */
+.chat-q-folded {
+  padding: 0 10px 7px;
+  cursor: pointer;
+}
+.chat-q-lead {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-3);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  word-break: break-word;
+}
+.chat-q-lead.is-one-line {
+  -webkit-line-clamp: 1;
+}
+.chat-q-folded > .chat-q-lead:not(:first-child) {
+  margin-top: 6px;
+}
+.chat-q-answer {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 2px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-1);
+}
+.chat-q-answer > .anticon {
+  flex: none;
+  margin-top: 3px;
+  font-size: 12px;
+  color: var(--brand);
+}
+.chat-q-answer-words {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  word-break: break-word;
+}
+.chat-q-answer-note {
+  display: block;
+  font-size: 12px;
   color: var(--text-3);
 }
 /* Interactive variant (in the approval card): options are clickable buttons. */
@@ -10460,12 +10542,17 @@ button.chat-jump-start:hover {
   display: none;
 }
 /* On a wide screen it is a dialog with no title of its own (the card's head asks the question), so
-   no title row: only the close button, over the card. The replaced modal's line height was unitless:
+   no title row: only the close button, above the card. The replaced modal's line height was unitless:
    the card's smaller text keeps its proportional line (the Dialog shell stays at 22px). */
 .start-card-dialog.orbit-overlay {
   line-height: 1.5714285714285714;
 }
+/* The close floats at the dialog's own top-right (12px in, a 32px box), and the dialog's 20px
+   padding left the card's top-right corner under it: an ✕ cutting through the card's border reads as
+   a mistake. The empty title row reserves the rest of the button and the 12px it keeps from the
+   dialog's edges, so the card starts under the close rather than under its corner. */
 .start-card-dialog > .orbit-overlay-header {
+  height: 36px;
   margin-bottom: 0;
 }
 .start-card-dialog .orbit-overlay-title:empty {
@@ -11466,30 +11553,16 @@ button.chat-jump-start:hover {
   color: var(--warning-fg, #ad6800);
   font-weight: 600;
 }
-/* The batch's shape. Nodes read as the same objects the counts above describe, and edges are the
-   quietest thing on the card — the structure should be legible from the arrangement, not from the
-   lines being loud. */
+/* The batch's shape, which is the project page's own canvas (`BatchPlanGraph`): it brings its own
+   card, edge and tone styles, so all this adds is where it sits on the card. */
 .batch-graph {
   margin: 2px 0 8px;
 }
-.batch-graph-edge {
-  fill: none;
-  stroke: color-mix(in srgb, var(--text-3) 55%, transparent);
-  stroke-width: 1.2;
-}
-.batch-graph-node rect {
-  fill: color-mix(in srgb, var(--brand) 12%, var(--bg-raised));
-  stroke: color-mix(in srgb, var(--brand) 34%, transparent);
-  stroke-width: 1;
-}
-.batch-graph-node text {
-  fill: var(--text-1);
-  font-size: 11px;
-}
-/* Waiting on something that is not drawn: dashed, so it never reads as a task ready to start. */
-.batch-graph-node.is-outside rect {
-  stroke-dasharray: 3 2;
-  fill: var(--bg-raised);
+/* What the picture cannot draw: the prerequisites that are tasks nobody put on this canvas. */
+.batch-graph-foot {
+  margin: 6px 0 0;
+  color: var(--text-3);
+  font-size: 11.5px;
 }
 
 .dag-approval-caption {
@@ -15320,6 +15393,10 @@ button.chat-jump-start:hover {
   font-size: 12px;
   color: var(--text-3);
   overflow-wrap: anywhere;
+}
+/* A key nobody has run on, in the Last used column: a state, not a time, so it sits back. */
+.prov-never {
+  color: var(--text-3);
 }
 /* A row's Edit and Delete side by side, and the provider form's own buttons. */
 .prov-actions {

@@ -401,8 +401,8 @@ public struct ToolPayloadResolutionKey: Equatable, Sendable {
     public let inputSeq: Int?
     public let resultSeq: Int?
 
-    public init(card: ToolCard, expanded: Bool, needsWholeResult: Bool = false) {
-        inputSeq = expanded && card.inputTruncated ? card.inputSeq : nil
+    public init(card: ToolCard, expanded: Bool, needsWholeInput: Bool = false, needsWholeResult: Bool = false) {
+        inputSeq = (expanded || needsWholeInput) && card.inputTruncated ? card.inputSeq : nil
         resultSeq = (expanded || needsWholeResult) && card.resultTruncated ? card.resultSeq : nil
     }
 }
