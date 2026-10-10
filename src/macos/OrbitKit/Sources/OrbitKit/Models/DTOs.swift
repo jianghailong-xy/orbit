@@ -758,14 +758,30 @@ public struct SessionOwnerItem: Codable, Equatable, Sendable, Identifiable {
     public let title: String
     /// Since when it has been waiting on the owner (ISO-8601). The bar shows the oldest.
     public let since: String
+    /// The item's project's main branch by name, which a merge approval asks to merge into. Nil
+    /// with no repository bound and from an older server, and then it is main.
+    public let mainBranch: String?
 
     public var id: String { itemId }
 
-    public init(itemId: String, kind: OwnerItemKind, title: String, since: String) {
+    public init(itemId: String, kind: OwnerItemKind, title: String, since: String,
+                mainBranch: String? = nil) {
         self.itemId = itemId
         self.kind = kind
         self.title = title
         self.since = since
+        self.mainBranch = mainBranch
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        itemId = try c.decode(String.self, forKey: .itemId)
+        kind = try c.decode(OwnerItemKind.self, forKey: .kind)
+        title = try c.decode(String.self, forKey: .title)
+        since = try c.decode(String.self, forKey: .since)
+        // A branch this build cannot read is an older server's absence: the item, and the row it
+        // arrived on, still stand.
+        mainBranch = try? c.decodeIfPresent(String.self, forKey: .mainBranch)
     }
 }
 

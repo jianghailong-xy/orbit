@@ -166,6 +166,26 @@ final class ShareMarkdownTests: XCTestCase {
         ].joined(separator: "\n"))
     }
 
+    /// Where met work landed names the project's main branch, which the document carries
+    /// (`integration.upstreamRef`). Web: `ProjectShareControls.test.tsx` › "Copy as Markdown, by the
+    /// project's main branch".
+    func testAProjectSaysWhereItsWorkLandedByItsMainBranch() {
+        let document = ProjectDocument(
+            id: "p", title: "Payments", status: .open, taskCount: 3,
+            acceptanceCriteriaItems: [
+                ProjectCriterion(id: "c1", ordinal: 1, text: "It ships.", satisfied: true, landing: "LANDED"),
+                ProjectCriterion(id: "c2", ordinal: 2, text: "It is fast.", satisfied: true,
+                                 landing: "ON_INTEGRATION_LINE"),
+                ProjectCriterion(id: "c3", ordinal: 3, text: "It is tested.", satisfied: true, landing: "UNKNOWN"),
+            ],
+            integration: ProjectIntegrationSettings(line: .projectBranch, ref: "project/p", upstreamRef: "master"))
+        let markdown = ShareMarkdown.project(document, link: "L")
+        XCTAssertTrue(markdown.contains("1. It ships. — Met by its work · on master\n"), markdown)
+        XCTAssertTrue(markdown.contains("2. It is fast. — Met by its work · on the project branch · not on master yet\n"),
+                      markdown)
+        XCTAssertTrue(markdown.contains("3. It is tested. — Met by its work · no merge receipt either way\n"), markdown)
+    }
+
     func testAProjectWithNothingReadYetSaysOnlyWhatItHas() {
         let bare = ProjectDocument(id: "p", title: "P", status: .done, taskCount: 1)
         XCTAssertEqual(ShareMarkdown.project(bare, link: "L"), [

@@ -78,7 +78,7 @@ struct ProjectDoneCard: View {
 
     private var question: some View {
         ApprovalReviewLayout(title: ProjectDone.heading, symbol: "checkmark.circle", tone: .blue,
-                             summary: "\(subject.title) · \(ProjectDone.cardTally(counts))",
+                             summary: "\(subject.title) · \(ProjectDone.cardTally(counts, main: subject.main))",
                              badge: doneQuestionBadge) {
             content
         } actions: {
@@ -149,7 +149,7 @@ struct ProjectDoneCard: View {
         DoneSectionHead(title: ProjectDone.doneWhenHead(count),
                         aside: count > 0 ? (criteriaOpen ? ProjectDone.showLess : ProjectDone.showAll(count)) : nil,
                         onAside: { criteriaOpen.toggle() })
-        Text(ProjectDone.cardTally(counts))
+        Text(ProjectDone.cardTally(counts, main: subject.main))
             .font(.orbitLabel).foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
         if criteriaOpen {
@@ -162,7 +162,7 @@ struct ProjectDoneCard: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(item?.text ?? criterion.definitionId).font(.orbitSubtext)
                                 .fixedSize(horizontal: false, vertical: true)
-                            Text(ProjectDone.criterionState(criterion))
+                            Text(ProjectDone.criterionState(criterion, main: subject.main))
                                 .font(.orbitLabel).foregroundStyle(.secondary)
                         }
                         Spacer(minLength: 0)
@@ -387,7 +387,7 @@ struct ProjectNotDoneCard: View {
     }
 
     private var tally: some View {
-        Text(ProjectDone.whyNotDoneTally(subject.derivedDone))
+        Text(ProjectDone.whyNotDoneTally(subject.derivedDone, main: subject.main))
             .font(.orbitLabel).foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -417,9 +417,9 @@ struct ProjectNotDoneCard: View {
                             Text(item?.text ?? criterion.definitionId)
                                 .font(.orbitSubtext.weight(.semibold))
                                 .fixedSize(horizontal: false, vertical: true)
-                            Text(ProjectDone.rowState(criterion))
+                            Text(ProjectDone.rowState(criterion, main: subject.main))
                                 .font(.orbitLabel).foregroundStyle(.secondary)
-                            Text(ProjectDone.rowDetail(criterion, waitingOnWork: waiting))
+                            Text(ProjectDone.rowDetail(criterion, waitingOnWork: waiting, main: subject.main))
                                 .font(.orbitLabel).foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
                         }

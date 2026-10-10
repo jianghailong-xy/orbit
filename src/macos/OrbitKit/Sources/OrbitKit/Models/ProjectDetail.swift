@@ -178,7 +178,7 @@ public struct ProjectDocument: Codable, Equatable, Sendable, Identifiable {
                                                             text: $0.text)
                            },
                            derivedDone: derivedDone, doneBy: doneBy, doneAt: doneAt,
-                           acceptedGaps: acceptedGaps)
+                           acceptedGaps: acceptedGaps, upstreamRef: integration?.upstreamRef)
     }
 
     /// Whether the project has been started, read off `startedAt` and off nothing else — not off

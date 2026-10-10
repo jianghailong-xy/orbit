@@ -548,7 +548,10 @@ struct SessionProjectPage: View {
                             }
                         }
                         if let settings = item.startRequest?.settings {
-                            Text(SessionProjectCopy.startSuggestion(settings))
+                            // Directly into the main branch the start card opens with, off the
+                            // integration read the landing line under it holds.
+                            Text(SessionProjectCopy.startSuggestion(settings, main: StartProject.mainBranch(
+                                suggested: settings.upstreamRef, standing: app.projectSessionsIntegration)))
                                 .font(.orbitMeta).foregroundStyle(.secondary)
                                 .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                                 .padding(.leading, 15)
@@ -823,7 +826,8 @@ private struct ProjectMergeCardView: View {
         }
         HStack(spacing: 8) {
             Button { act { await merge.confirmMergeToMain(view) } } label: {
-                Text(PromotionCards.mergeToMain).frame(maxWidth: .infinity)
+                Text(PromotionCards.mergeTo(RunSettings.mainBranchName(view.upstreamRef)))
+                    .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
             .disabled(acting || !PromotionCards.confirmable(view))

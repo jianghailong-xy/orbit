@@ -359,10 +359,13 @@ public struct ProjectDoneSubject: Equatable, Sendable {
     public let doneBy: ProjectDoneBy?
     public let doneAt: String?
     public let acceptedGaps: [AcceptedGap]
+    /// The project's main branch, as the document's integration settings carry it — what the cards'
+    /// "on main" names. Nil for a project with none, and for a read that did not say.
+    public let upstreamRef: String?
 
     public init(title: String, status: String?, criteria: [Criterion] = [],
                 derivedDone: ProjectDerivedDone? = nil, doneBy: ProjectDoneBy? = nil,
-                doneAt: String? = nil, acceptedGaps: [AcceptedGap] = []) {
+                doneAt: String? = nil, acceptedGaps: [AcceptedGap] = [], upstreamRef: String? = nil) {
         self.title = title
         self.status = status
         self.criteria = criteria
@@ -370,11 +373,16 @@ public struct ProjectDoneSubject: Equatable, Sendable {
         self.doneBy = doneBy
         self.doneAt = doneAt
         self.acceptedGaps = acceptedGaps
+        self.upstreamRef = upstreamRef
     }
 
     /// The counts, which is what a current server's read carries and an older one's does not: no
     /// card is drawn from a projection without them.
     public var counts: ProjectDoneCounts? { derivedDone?.counts }
+
+    /// The main branch by name, which every sentence of these cards about where work landed says:
+    /// main where the document names none.
+    public var main: String { RunSettings.mainBranchName(upstreamRef) }
 
     /// The criterion a gap or an answer names — by its id or by its key, which the browser's
     /// `criterionForGap` reads the same.
@@ -449,6 +457,10 @@ public enum ProjectDone {
     public static let needsYourCall = "Needs your call"
     /// `WHY_NOT_DONE_ON_MAIN`.
     public static let onMain = "on main"
+    /// `whyNotDoneOn` — the same, said of the project's main branch by name (`ProjectDoneSubject.main`).
+    public static func on(_ main: String) -> String {
+        "on \(main)"
+    }
     /// `WHY_NOT_DONE_REVIEW`.
     public static let reviewDoneRequest = "Review “Is this project done?”"
     /// `WHY_NOT_DONE_COORDINATOR_IS_ON_IT`.
@@ -468,6 +480,15 @@ public enum ProjectDone {
     public static let needsCallDetail =
         "Orbit saw no merge for it. The coordinator checked main has it and asked you to record the "
         + "project done."
+    /// `whyNotDoneWaitingDetail` and `whyNotDoneNeedsCallDetail` — the two above, said of the
+    /// project's main branch by name.
+    public static func waitingDetail(_ main: String) -> String {
+        "Goes to \(main) after the merge check — the coordinator is handling it."
+    }
+    public static func needsCallDetail(_ main: String) -> String {
+        "Orbit saw no merge for it. The coordinator checked \(main) has it and asked you to record the "
+            + "project done."
+    }
     /// `WHY_NOT_DONE_NOT_MET_YET` — an unmet criterion's state: its work has not happened, so its
     /// landing lane (no receipt, no code) says nothing yet.
     public static let notMetYet = "Not met yet"
@@ -502,6 +523,10 @@ public enum ProjectDone {
     public static let noRequestMeta = "record as done anyway"
     /// `PROJECT_DONE_COPY.landedOnMain`.
     public static let landedOnMain = "landed on main"
+    /// `landedOn` — the same, said of the project's main branch by name.
+    public static func landedOn(_ main: String) -> String {
+        "landed on \(main)"
+    }
     /// The card's provenance badge (`FROM ORBIT`).
     public static let provenance = "FROM ORBIT"
     /// What the gaps section says when Orbit has none.
@@ -549,26 +574,30 @@ public enum ProjectDone {
         counts.count(.nothingToLand) + counts.count(.codeless)
     }
 
-    /// `projectDoneTally`: "2 criteria · 2 met · 1 landed on main · 1 nothing to land".
-    public static func tally(_ counts: ProjectDoneCounts?) -> String {
+    /// `projectDoneTally`: "2 criteria · 2 met · 1 landed on main · 1 nothing to land". The tallies
+    /// say where work landed on `main`, the project's main branch by name.
+    public static func tally(_ counts: ProjectDoneCounts?,
+                             main: String = RunSettings.defaultMainBranch) -> String {
         guard let counts else { return "" }
         return (["\(counts.criteria) criteria", "\(counts.met) met",
-                 "\(counts.onMain) \(landedOnMain)"] + reasonParts(counts))
+                 "\(counts.onMain) \(landedOn(main))"] + reasonParts(counts))
             .joined(separator: " · ")
     }
 
     /// `projectDoneCardTally` — the request card's three counts; its head already says how many
     /// criteria there are.
-    public static func cardTally(_ counts: ProjectDoneCounts?) -> String {
+    public static func cardTally(_ counts: ProjectDoneCounts?,
+                                 main: String = RunSettings.defaultMainBranch) -> String {
         guard let counts else { return "" }
-        return ["\(counts.met) met", "\(counts.onMain) \(landedOnMain)",
+        return ["\(counts.met) met", "\(counts.onMain) \(landedOn(main))",
                 "\(nothingToLandCount(counts)) \(nothingToLand)"].joined(separator: " · ")
     }
 
     /// `projectDoneReceiptTally` — the receipt's: how many were met, then the same three.
-    public static func receiptTally(_ counts: ProjectDoneCounts?, acceptedGaps: Int) -> String {
+    public static func receiptTally(_ counts: ProjectDoneCounts?, acceptedGaps: Int,
+                                    main: String = RunSettings.defaultMainBranch) -> String {
         guard let counts else { return "\(acceptedGaps) \(gapsAccepted)" }
-        return ["\(counts.criteria) criteria met", "\(counts.onMain) \(landedOnMain)",
+        return ["\(counts.criteria) criteria met", "\(counts.onMain) \(landedOn(main))",
                 "\(nothingToLandCount(counts)) \(nothingToLand)", "\(acceptedGaps) \(gapsAccepted)"]
             .joined(separator: " · ")
     }
@@ -577,26 +606,29 @@ public enum ProjectDone {
     /// them: a met criterion where its work is (the shorter "on main", or its reason), an unmet one
     /// as not met and never by its landing lane. Read off the criteria's own answers, never tasks:
     /// "8 criteria · 2 on main · 6 not met".
-    public static func whyNotDoneTally(_ derivedDone: ProjectDerivedDone?) -> String {
+    public static func whyNotDoneTally(_ derivedDone: ProjectDerivedDone?,
+                                       main: String = RunSettings.defaultMainBranch) -> String {
         guard let derivedDone else { return "" }
         let met = derivedDone.criteria.filter(\.satisfied)
         let notMetCount = derivedDone.criteria.count - met.count
         var parts = ["\(derivedDone.criteria.count) criteria",
-                     "\(met.filter { $0.landingReason == nil }.count) \(onMain)"]
+                     "\(met.filter { $0.landingReason == nil }.count) \(on(main))"]
         parts += reasonParts { reason in met.filter { $0.landingReason == reason }.count }
         if notMetCount > 0 { parts.append("\(notMetCount) \(notMet)") }
         return parts.joined(separator: " · ")
     }
 
-    /// `landingReasonLabel` — one criterion's reason, as a row says it. Nil is on main.
-    public static func landingReasonLabel(_ reason: CriterionLandingReason?) -> String {
+    /// `landingReasonLabel` — one criterion's reason, as a row says it. Nil is on `main`, the
+    /// project's main branch by name.
+    public static func landingReasonLabel(_ reason: CriterionLandingReason?,
+                                          main: String = RunSettings.defaultMainBranch) -> String {
         switch reason {
         case .inFlight?:        return "In flight"
         case .onProjectBranch?: return onProjectBranch
         case .noReceipt?:       return mergedOutsideOrbit
         case .nothingToLand?:   return nothingToLand
         case .codeless?:        return "No code to land"
-        default:                return "Landed on main"
+        default:                return "Landed on \(main)"
         }
     }
 
@@ -675,9 +707,11 @@ public enum ProjectDone {
         return recordAsDone
     }
 
-    /// One criterion's line in Done when's list: "met · Landed on main".
-    public static func criterionState(_ criterion: ProjectDoneCriterion) -> String {
-        "\(criterion.satisfied ? "met" : "not met") · \(landingReasonLabel(criterion.landingReason))"
+    /// One criterion's line in Done when's list: "met · Landed on main" — on `main`, the project's
+    /// main branch by name.
+    public static func criterionState(_ criterion: ProjectDoneCriterion,
+                                      main: String = RunSettings.defaultMainBranch) -> String {
+        "\(criterion.satisfied ? "met" : "not met") · \(landingReasonLabel(criterion.landingReason, main: main))"
     }
 
     /// What the coordinator checked for a gap, and where the evidence is: "main contains the release
@@ -690,9 +724,10 @@ public enum ProjectDone {
 
     /// The gaps a card nobody asked for carries (`syntheticDoneGaps`): every criterion that is not
     /// met, or not on main for a reason that is a gap — nothing to land and no code to land are
-    /// outcomes, not gaps to paper over.
+    /// outcomes, not gaps to paper over. Main is the subject's main branch, by name.
     public static func syntheticGaps(_ subject: ProjectDoneSubject) -> [AcceptedGap] {
-        (subject.derivedDone?.criteria ?? [])
+        let main = subject.main
+        return (subject.derivedDone?.criteria ?? [])
             .filter { criterion in
                 let reason = criterion.landingReason
                 let gap = reason != nil && reason != .nothingToLand && reason != .codeless
@@ -700,12 +735,12 @@ public enum ProjectDone {
             }
             .map { criterion in
                 let item = subject.criteria.first { $0.id == criterion.definitionId }
-                let reason = landingReasonLabel(criterion.landingReason)
+                let reason = landingReasonLabel(criterion.landingReason, main: main)
                 return AcceptedGap(
                     criterionKey: item?.key ?? item?.id ?? criterion.definitionId,
                     title: item?.text ?? criterion.definitionId,
                     whyNotProven: criterion.satisfied
-                        ? "Orbit cannot prove this criterion is on main: \(reason)."
+                        ? "Orbit cannot prove this criterion is on \(main): \(reason)."
                         : "Orbit cannot prove this criterion is met by its work yet.")
             }
     }
@@ -793,7 +828,7 @@ public enum ProjectDone {
 
     /// The receipt's tally.
     public static func receiptTally(_ subject: ProjectDoneSubject, record: ProjectDoneRecord?) -> String {
-        receiptTally(subject.counts, acceptedGaps: accepted(subject, record: record).count)
+        receiptTally(subject.counts, acceptedGaps: accepted(subject, record: record).count, main: subject.main)
     }
 
     // MARK: the press
@@ -967,14 +1002,17 @@ public enum ProjectDone {
     /// One Why-not-done row's state: the landing reason of a met criterion, and "Not met yet" for
     /// one whose work has not met it — not its landing lane, which for unfinished work describes
     /// nothing that happened (no receipt, no code to land).
-    public static func rowState(_ criterion: ProjectDoneCriterion) -> String {
-        criterion.satisfied ? landingReasonLabel(criterion.landingReason) : notMetYet
+    public static func rowState(_ criterion: ProjectDoneCriterion,
+                                main: String = RunSettings.defaultMainBranch) -> String {
+        criterion.satisfied ? landingReasonLabel(criterion.landingReason, main: main) : notMetYet
     }
 
-    /// …and its detail, by the group it is in.
-    public static func rowDetail(_ criterion: ProjectDoneCriterion, waitingOnWork: Bool) -> String {
+    /// …and its detail, by the group it is in — where its work goes, or what the coordinator checked,
+    /// of `main`, the project's main branch by name.
+    public static func rowDetail(_ criterion: ProjectDoneCriterion, waitingOnWork: Bool,
+                                 main: String = RunSettings.defaultMainBranch) -> String {
         guard criterion.satisfied else { return notMetDetail }
-        return waitingOnWork ? waitingDetail : needsCallDetail
+        return waitingOnWork ? waitingDetail(main) : needsCallDetail(main)
     }
 
     /// The settled card's badge: who recorded it.

@@ -293,19 +293,24 @@ public struct OwnerConfirmationIfConfirmed: Codable, Equatable, Sendable {
     public let branch: OwnerConfirmationBranch?
     public let landing: OwnerConfirmationLanding?
     public let endsSession: OwnerConfirmationEndsSession?
+    /// The project's main branch by name, which the branch and landing rows say "main" of. Nil when
+    /// the task is in no project, its project has no repository bound, or the server predates it —
+    /// and the rows then say main.
+    public let mainBranch: String?
 
     public init(startsTasks: [OwnerConfirmationStartsTask]? = nil, startsAfterLanding: Bool? = nil,
                 branch: OwnerConfirmationBranch? = nil, landing: OwnerConfirmationLanding? = nil,
-                endsSession: OwnerConfirmationEndsSession? = nil) {
+                endsSession: OwnerConfirmationEndsSession? = nil, mainBranch: String? = nil) {
         self.startsTasks = startsTasks
         self.startsAfterLanding = startsAfterLanding
         self.branch = branch
         self.landing = landing
         self.endsSession = endsSession
+        self.mainBranch = mainBranch
     }
 
     private enum CodingKeys: String, CodingKey {
-        case startsTasks, startsAfterLanding, branch, landing, endsSession
+        case startsTasks, startsAfterLanding, branch, landing, endsSession, mainBranch
     }
 
     public init(from decoder: Decoder) throws {
@@ -317,6 +322,7 @@ public struct OwnerConfirmationIfConfirmed: Codable, Equatable, Sendable {
         landing = try? box?.decodeIfPresent(OwnerConfirmationLanding.self, forKey: .landing)
         endsSession = try? box?.decodeIfPresent(OwnerConfirmationEndsSession.self,
                                                 forKey: .endsSession)
+        mainBranch = try? box?.decodeIfPresent(String.self, forKey: .mainBranch)
     }
 }
 
@@ -626,6 +632,20 @@ public enum OwnerConfirmations {
         "Goes onto the integration line; merging into main asks you again"
     public static let autoMain = "Lands on main by itself if the checks pass"
     public static let endsSession = "Ends this session"
+    /// The four above that name main, said of the project's main branch (`ifConfirmed.mainBranch`):
+    /// for a project on main, each says its constant's words.
+    public static func notOn(_ main: String) -> String {
+        "Not on \(main) yet"
+    }
+    public static func noRecordOn(_ main: String) -> String {
+        "No record of this branch on \(main)"
+    }
+    public static func lineThenOwner(_ main: String) -> String {
+        "Goes onto the integration line; merging into \(main) asks you again"
+    }
+    public static func autoMain(_ main: String) -> String {
+        "Lands on \(main) by itself if the checks pass"
+    }
 
     /// What the card's mark says about itself, now that an agent's words can stand on it twice — the
     /// report and the review — each in a box naming who wrote it (contract §10 G3;
@@ -964,7 +984,8 @@ public enum OwnerConfirmations {
 
     /// The block's rows, in its order (`ifConfirmedRows`): the tasks it starts (one row per tier,
     /// their titles under it), the branch while it is not known to be on main, how the work lands,
-    /// and the run it ends. An item the read left out draws no row; no rows, no block.
+    /// and the run it ends. An item the read left out draws no row; no rows, no block. Main is the
+    /// project's main branch by name, which the read carries (`mainBranch`).
     ///
     /// The branch row says confirming does not merge it only where the landing is read and is not
     /// Automatic's — there the DONE does lead to main, as the landing row says.
@@ -982,20 +1003,21 @@ public enum OwnerConfirmations {
                 detail: tier.map(\.title).joined(separator: " · ")))
         }
         let landing = ifConfirmed.landing
+        let main = RunSettings.mainBranchName(ifConfirmed.mainBranch)
         if let branch = ifConfirmed.branch, branch.onMain != .yes {
             let unmerged = branch.onMain == .no
             let staysOff = landing == .landsNothing || landing == .lineThenOwner
             rows.append(IfConfirmedRow(
                 kind: .branch,
-                lead: unmerged ? notOnMain : noRecordOnMain,
+                lead: unmerged ? notOn(main) : noRecordOn(main),
                 added: unmerged && branch.linesAdded > 0
                     ? "+\(OrbitLinkCopy.number(branch.linesAdded))" : nil,
                 detail: staysOff ? "\(branch.name) — \(doesNotMerge)" : branch.name))
         }
         if landing == .lineThenOwner {
-            rows.append(IfConfirmedRow(kind: .landing, lead: lineThenOwner))
+            rows.append(IfConfirmedRow(kind: .landing, lead: lineThenOwner(main)))
         } else if landing == .autoMain {
-            rows.append(IfConfirmedRow(kind: .landing, lead: autoMain))
+            rows.append(IfConfirmedRow(kind: .landing, lead: autoMain(main)))
         }
         if let ends = ifConfirmed.endsSession {
             let jobs = ends.runningBgJobs

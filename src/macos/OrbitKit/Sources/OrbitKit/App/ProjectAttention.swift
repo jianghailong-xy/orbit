@@ -470,10 +470,12 @@ public enum ProjectAttention {
         }
     }
 
-    /// What the row says the owner must do, by the item's kind.
-    public static func ownerItemSays(_ item: ProjectListOwnerItem) -> String? {
+    /// What the row says the owner must do, by the item's kind — a merge approval naming the
+    /// project's main branch, `main`, which the row carries (`ProjectSummary.mainBranch`).
+    public static func ownerItemSays(_ item: ProjectListOwnerItem,
+                                     main: String = RunSettings.defaultMainBranch) -> String? {
         switch item.kind {
-        case .promotionApproval: return "Needs you · Approve merge to main"
+        case .promotionApproval: return "Needs you · Approve merge to \(main)"
         case .coordinatorQuestion:
             return "Needs you · \(item.count) question\(item.count == 1 ? "" : "s") from coordinator"
         case .escalated: return "Needs you · \(item.count) escalated to you"
@@ -513,7 +515,9 @@ public enum ProjectAttention {
                 text: joined([readyToCloseSays, elapsedLabel(doneRequest(project)?.waitingSince, now: now)]))
 
         case .approveMergeToMain, .coordinatorQuestion, .escalatedToYou, .fusePaused:
-            guard let item = leadOwnerItem(project), let says = ownerItemSays(item) else { return nil }
+            guard let item = leadOwnerItem(project),
+                  let says = ownerItemSays(item, main: RunSettings.mainBranchName(project.mainBranch))
+            else { return nil }
             return ProjectAttentionChip(
                 tone: .warning,
                 text: joined([says, elapsedLabel(item.oldestWaitingSince, now: now)]))

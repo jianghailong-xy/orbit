@@ -490,6 +490,69 @@ final class OwnerItemCardsTests: XCTestCase {
         XCTAssertEqual(PromotionCards.revertLine(merged), "git revert -m 1 324cf0031a")
     }
 
+    /// A project whose main branch is master: every sentence the card says about the branch it merges
+    /// INTO names master — the candidate's own `upstreamRef`, named the one way the project page names
+    /// it — while the branch it merges from is still the candidate's source.
+    func testTheMergeNamesTheProjectsMainBranch() {
+        func onMaster(_ state: PromotionState, conflicts: [String] = [], blockedReason: String? = nil,
+                      merged: ProjectPromotionView.Merged? = nil,
+                      execution: ProjectPromotionView.Execution? = nil) -> ProjectPromotionView {
+            ProjectPromotionView(promotionId: "pr-1", state: state, sourceRef: "refs/heads/project/bg-jobs",
+                                 sourceSha: "58f3a4711d0c", upstreamRef: "refs/heads/master", commitsAhead: 7,
+                                 taskIds: ["t1", "t2"], conflicts: conflicts, blockedReason: blockedReason,
+                                 merged: merged, execution: execution)
+        }
+        let ready = onMaster(.ready)
+        XCTAssertEqual(PromotionCards.title(ready), "Merge project/bg-jobs into master?")
+        XCTAssertEqual(PromotionCards.previewTitle(ready), "Merge to master")
+        XCTAssertEqual(PromotionCards.pageTitle(ready), "Merge into master?")
+        XCTAssertEqual(PromotionCards.eventLine(ready).text, "Merge into master is waiting for you")
+        XCTAssertEqual(PromotionCards.branchLine(ready), "project/bg-jobs · 7 commits ahead of master")
+        XCTAssertEqual(PromotionCards.upstreamLine(onMaster(.ready, conflicts: ["a.go"])), "1 file conflict with master")
+        XCTAssertEqual(PromotionCards.mergeTo(RunSettings.mainBranchName(ready.upstreamRef)), "Merge to master")
+        let queued = onMaster(.confirmed, execution: .init(state: "QUEUED", startedAt: "2026-09-13T12:00:00Z"))
+        XCTAssertEqual(PromotionCards.title(queued), "Merge queued: project/bg-jobs into master")
+        XCTAssertEqual(PromotionCards.mergingStatusLine(queued), "confirmed — queued to merge into master")
+        XCTAssertEqual(PromotionCards.blockedLine(onMaster(.blocked, blockedReason: "ALREADY_LANDED")),
+                       "nothing to merge — project/bg-jobs is already on master")
+        XCTAssertEqual(PromotionCards.blockedLine(onMaster(.blocked, conflicts: ["a.go"])),
+                       "1 file conflict with master: a.go")
+        let merged = onMaster(.merged, merged: .init(sha: "324cf0031a", at: "2026-09-13T12:00:00Z"))
+        XCTAssertEqual(PromotionCards.title(merged), "✓ Merged into master")
+        XCTAssertEqual(PromotionCards.receiptLine(merged), "✓ Merged into master · 324cf00 · 2 tasks")
+        XCTAssertEqual(PromotionCards.timelineTitle(merged), "Merged into master")
+        XCTAssertEqual(PromotionCards.nowOnLabel(merged), "Now on master")
+        let automatic = onMaster(.merged, merged: .init(sha: "324cf0031a", at: "2026-09-13T12:00:00Z",
+                                                        automatic: true))
+        XCTAssertEqual(PromotionCards.title(automatic), "✓ Merged into master automatically")
+        // Who is in front of a blocked merge: a landing that is syncing the branch it merges into.
+        let syncing = ProjectLandTask(taskId: "t9", taskTitle: "C5", landTask: LandTaskIntegrationView(
+            jobId: "j9", state: "RUNNING", phase: "MAIN_SYNC", targetRef: "refs/heads/master"))
+        XCTAssertEqual(PromotionCards.blockedByLine(onMaster(.blocked, conflicts: ["a.go"]), landings: [syncing]),
+                       "“C5” is landing on the project line · syncing master")
+        // On main, and for a candidate that names no branch at all, it is main as it always was.
+        XCTAssertEqual(PromotionCards.nowOnLabel(candidate(.merged)), "Now on main")
+        let unnamed = ProjectPromotionView(promotionId: "pr-1", state: .ready, sourceRef: "refs/heads/project/bg-jobs",
+                                           sourceSha: "58f3a47", upstreamRef: "")
+        XCTAssertEqual(PromotionCards.pageTitle(unnamed), "Merge into main?")
+    }
+
+    /// The bar's and the row's word for a merge approval names the branch the item's own project
+    /// merges into (`SessionOwnerItem.mainBranch`); the other three kinds name no branch.
+    func testTheMergeApprovalsWordNamesTheProjectsMainBranch() {
+        XCTAssertEqual(NeedsYouLogic.kindWord(.promotionApproval, main: "master"), "Approve merge to master")
+        for kind in [OwnerItemKind.coordinatorQuestion, .escalated, .fusePaused] {
+            XCTAssertEqual(NeedsYouLogic.kindWord(kind, main: "master"), NeedsYouLogic.kindWord(kind))
+        }
+        let onMaster = SessionOwnerItem(itemId: "i1", kind: .promotionApproval, title: "Merge 3 tasks",
+                                        since: "2026-09-13T10:00:00Z", mainBranch: "master")
+        XCTAssertEqual(NeedsYouLogic.oldestItemWord([onMaster]), "Approve merge to master")
+        XCTAssertEqual(NeedsYouLogic.ownerItemText(onMaster, project: "Payments"), "Approve merge to master · Payments")
+        let unnamed = SessionOwnerItem(itemId: "i1", kind: .promotionApproval, title: "Merge 3 tasks",
+                                       since: "2026-09-13T10:00:00Z")
+        XCTAssertEqual(NeedsYouLogic.oldestItemWord([unnamed]), "Approve merge to main")
+    }
+
     /// The two cards have their own transcript rows, addressed the way the bar above the transcript
     /// and the push that opens it point at them.
     func testEachCardHasItsOwnRowID() {

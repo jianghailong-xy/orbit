@@ -272,6 +272,19 @@ final class ProjectsWiringTests: XCTestCase {
                        "readiness alone cannot diagnose a runner problem")
     }
 
+    /// The lanes and the criteria name the project's main branch: the Work overview off the
+    /// integration read the page holds (as the browser's header hands its card `mainBranch`), the
+    /// criteria off the project document (as `ProjectAcceptanceCard` reads `integration.upstreamRef`).
+    func testTheOverviewAndTheCriteriaNameTheProjectsMainBranch() throws {
+        let view = code(try appSource("Views/ProjectsView.swift"))
+        let overview = try slice(view, from: "private func overviewSection(", to: "private func overviewCell(")
+        XCTAssertTrue(overview.contains("main: RunSettings.mainBranchName(store.integration?.upstreamRef))"))
+        let criteria = try slice(view, from: "private func criteriaSection(", to: "private func criterionRow(")
+        XCTAssertTrue(criteria.contains("main: RunSettings.mainBranchName(document.integration?.upstreamRef))"))
+        let row = try slice(view, from: "private func criterionRow(", to: "\n    }\n")
+        XCTAssertTrue(row.contains("ProjectPage.criterionWork(criterion, integrationRef: ref, main: main)"))
+    }
+
     /// A project nobody has started (mock board3 ②) says so in its header, and its Open items lead
     /// with the start: the coordinator's request — whose Review lands on the card in the coordinator
     /// conversation, by Answer's own door and origin, rather than a second copy drawn here — or,

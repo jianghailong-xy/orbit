@@ -4387,7 +4387,7 @@ struct PromotionReviewSheet: View {
             PromotionTasksRow(label: "Tasks", summary: PromotionCards.tasksLine(view),
                               titles: view.tasks.map(\.title))
             CardRow(label: "Checks", value: PromotionCards.checksLine(view))
-            CardRow(label: PromotionCards.shortRef(view.upstreamRef),
+            CardRow(label: RunSettings.mainBranchName(view.upstreamRef),
                     value: PromotionCards.upstreamLine(view))
             if let met = source.criteriaMet,
                let line = PromotionCards.criteriaLine(met: met.met, of: met.total) {
@@ -4419,7 +4419,8 @@ struct PromotionReviewSheet: View {
     private func merged(_ view: ProjectPromotionView) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             CardRow(label: "Commit", value: PromotionCards.mergedLine(view))
-            PromotionTasksRow(label: "Now on main", summary: PromotionCards.nowOnMainLine(view),
+            PromotionTasksRow(label: PromotionCards.nowOnLabel(view),
+                              summary: PromotionCards.nowOnMainLine(view),
                               titles: view.tasks.map(\.title))
             if let undo = PromotionCards.revertLine(view) {
                 CardRow(label: "Undo", value: undo)
@@ -4449,7 +4450,8 @@ struct PromotionReviewSheet: View {
         case .askingYou:
             ApprovalActions {
                 Button { act { await source.confirmMergeToMain(view) } } label: {
-                    Text(PromotionCards.mergeToMain).approvalActionLabel()
+                    Text(PromotionCards.mergeTo(RunSettings.mainBranchName(view.upstreamRef)))
+                        .approvalActionLabel()
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(acting || !PromotionCards.confirmable(view))
@@ -4561,7 +4563,8 @@ struct PromotionReceiptSheet: View {
                         .font(.orbitLabel).foregroundStyle(.secondary)
                     VStack(alignment: .leading, spacing: 6) {
                         CardRow(label: "Commit", value: PromotionCards.mergedLine(promotion))
-                        PromotionTasksRow(label: "Now on main", summary: PromotionCards.nowOnMainLine(promotion),
+                        PromotionTasksRow(label: PromotionCards.nowOnLabel(promotion),
+                                          summary: PromotionCards.nowOnMainLine(promotion),
                                           titles: promotion.tasks.map(\.title))
                         CardRow(label: "Checks", value: PromotionCards.checksLine(promotion))
                         CardRow(label: "Landed", value: PromotionCards.landsLine(promotion))

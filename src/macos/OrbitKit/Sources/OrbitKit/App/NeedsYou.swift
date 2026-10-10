@@ -222,7 +222,7 @@ public enum NeedsYouLogic {
     /// that has to answer "is this mine to go and do now" at a glance. A conversation that names no
     /// project says only the first half rather than trailing an empty separator.
     static func ownerItemText(_ item: SessionOwnerItem, project: String?) -> String {
-        let what = kindWord(item.kind) ?? "Needs you"
+        let what = kindWord(item.kind, main: RunSettings.mainBranchName(item.mainBranch)) ?? "Needs you"
         guard let project, !project.isEmpty else { return what }
         return "\(what) · \(project)"
     }
@@ -234,10 +234,12 @@ public enum NeedsYouLogic {
     /// Separate from `ownerItemText` because a session ROW says this half alone: a row has one line
     /// and the project it is about is the conversation the row already names. Both readers take the
     /// words from here, so the row above a bar can never spell one of the four differently from the
-    /// bar itself.
-    public static func kindWord(_ kind: OwnerItemKind) -> String? {
+    /// bar itself. A merge approval names the branch it merges into: `main`, the item's project's
+    /// main branch by name (`SessionOwnerItem.mainBranch`).
+    public static func kindWord(_ kind: OwnerItemKind,
+                                main: String = RunSettings.defaultMainBranch) -> String? {
         switch kind {
-        case .promotionApproval: return "Approve merge to main"
+        case .promotionApproval: return "Approve merge to \(main)"
         case .coordinatorQuestion: return "Question from coordinator"
         case .escalated: return "Escalated to you"
         case .fusePaused: return "Paused"
@@ -252,7 +254,8 @@ public enum NeedsYouLogic {
         guard let items else { return nil }
         var oldest: (word: String, at: Date)?
         for item in items {
-            guard let word = kindWord(item.kind) else { continue }
+            let main = RunSettings.mainBranchName(item.mainBranch)
+            guard let word = kindWord(item.kind, main: main) else { continue }
             // An unparseable instant sorts last rather than first, exactly as it does for the
             // banner: it must not beat an item whose wait is known.
             let at = RelativeTime.parse(item.since) ?? Date.distantFuture

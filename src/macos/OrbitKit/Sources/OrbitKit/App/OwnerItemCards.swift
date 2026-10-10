@@ -310,6 +310,11 @@ public enum PromotionStage: Equatable, Sendable {
 
 public enum PromotionCards {
     public static let mergeToMain = "Merge to main"
+    /// The same press, said of the branch the candidate merges into: the project's main branch, by
+    /// name — web's `mergeTo`.
+    public static func mergeTo(_ main: String) -> String {
+        "Merge to \(main)"
+    }
     public static let notNow = "Not now"
     public static let merging = "Merging…"
     public static let cancel = "Cancel"
@@ -321,6 +326,13 @@ public enum PromotionCards {
     /// the only place the owner learns the Automatic setting merged it (§3.3 M-T11), so it says so
     /// first.
     public static let mergedAutomaticallyHeading = "✓ Merged into main automatically"
+    /// The two headings above, said of the branch the candidate merged into.
+    public static func mergedHeading(_ main: String) -> String {
+        "✓ Merged into \(main)"
+    }
+    public static func mergedAutomaticallyHeading(_ main: String) -> String {
+        "✓ Merged into \(main) automatically"
+    }
     /// Who merged it, where a pressed merge says "by you" — web's `UNDER_AUTOMATIC`.
     public static let underAutomatic = "under your Automatic setting"
     /// What a card whose candidate the read no longer publishes says about itself: a newer
@@ -366,14 +378,15 @@ public enum PromotionCards {
     /// The card's heading, per state.
     public static func title(_ view: ProjectPromotionView) -> String {
         let branch = shortRef(view.sourceRef)
-        let into = shortRef(view.upstreamRef)
+        let into = RunSettings.mainBranchName(view.upstreamRef)
         switch stage(view) {
         case .merging:
             if view.execution?.state == "QUEUED" { return "Merge queued: \(branch) into \(into)" }
             if view.execution?.state != "RUNNING" { return "Merge confirmed: \(branch) into \(into)" }
             if view.execution?.phase == "CHECK" { return "Re-checking \(branch) before merging into \(into)…" }
             return "Merging \(branch) into \(into)…"
-        case .merged: return view.merged?.automatic == true ? mergedAutomaticallyHeading : mergedHeading
+        case .merged:
+            return view.merged?.automatic == true ? mergedAutomaticallyHeading(into) : mergedHeading(into)
         case .blocked: return "\(branch) can’t merge into \(into) yet"
         default: return "Merge \(branch) into \(into)?"
         }
@@ -381,7 +394,7 @@ public enum PromotionCards {
 
     /// The transcript preview keeps the branch on its own line, outside the heading.
     public static func previewTitle(_ view: ProjectPromotionView) -> String {
-        let into = shortRef(view.upstreamRef)
+        let into = RunSettings.mainBranchName(view.upstreamRef)
         switch stage(view) {
         case .askingYou: return "Merge to \(into)"
         case .merging: return "\(mergingActionLabel(view)) · \(into)"
@@ -409,7 +422,8 @@ public enum PromotionCards {
     public static func branchLine(_ view: ProjectPromotionView) -> String {
         let branch = shortRef(view.sourceRef)
         guard let ahead = view.commitsAhead else { return branch }
-        return "\(branch) · \(ahead) commit\(ahead == 1 ? "" : "s") ahead of \(shortRef(view.upstreamRef))"
+        let into = RunSettings.mainBranchName(view.upstreamRef)
+        return "\(branch) · \(ahead) commit\(ahead == 1 ? "" : "s") ahead of \(into)"
     }
 
     /// `4 landed on the branch` — how much this merge would carry.
@@ -436,7 +450,8 @@ public enum PromotionCards {
     public static func upstreamLine(_ view: ProjectPromotionView) -> String {
         guard view.conflicts.isEmpty else {
             let n = view.conflicts.count
-            return "\(n) file\(n == 1 ? "" : "s") conflict with \(shortRef(view.upstreamRef))"
+            let into = RunSettings.mainBranchName(view.upstreamRef)
+            return "\(n) file\(n == 1 ? "" : "s") conflict with \(into)"
         }
         return "no conflicts"
     }
@@ -459,7 +474,7 @@ public enum PromotionCards {
     /// B's status row: the upstream moved after the check, so the combined tree is being checked
     /// again — and nobody has to press anything for that.
     public static func mergingStatusLine(_ view: ProjectPromotionView) -> String {
-        let into = shortRef(view.upstreamRef)
+        let into = RunSettings.mainBranchName(view.upstreamRef)
         if view.execution?.state == "QUEUED" { return "confirmed — queued to merge into \(into)" }
         guard view.execution?.state == "RUNNING" else { return "confirmed — waiting for merge execution" }
         switch view.execution?.phase {
@@ -524,9 +539,8 @@ public enum PromotionCards {
             return shortRef(job.targetRef) == shortRef(view.sourceRef)
                 || shortRef(job.targetRef) == shortRef(view.upstreamRef)
         }), let job = holding.landTask else { return nil }
-        let state = job.state == "RUNNING"
-            ? (job.phase.flatMap { ProjectPage.integrationPhaseWords[$0] } ?? "running")
-            : "queued"
+        let phases = ProjectPage.integrationPhaseWords(RunSettings.mainBranchName(view.upstreamRef))
+        let state = job.state == "RUNNING" ? (job.phase.flatMap { phases[$0] } ?? "running") : "queued"
         let parts = ["“\(holding.taskTitle)” is landing on the project line", state,
                      job.blockingReason?.summary].compactMap { $0 }
         return parts.joined(separator: " · ")
@@ -540,15 +554,16 @@ public enum PromotionCards {
     /// recorded before the reason was is read off the arrays as it always was. Web's
     /// `promotionBlockedLine`.
     public static func blockedLine(_ view: ProjectPromotionView) -> String {
+        let into = RunSettings.mainBranchName(view.upstreamRef)
         if view.blockedReason == "ALREADY_LANDED" {
-            return "nothing to merge — \(shortRef(view.sourceRef)) is already on \(shortRef(view.upstreamRef))"
+            return "nothing to merge — \(shortRef(view.sourceRef)) is already on \(into)"
         }
         if view.blockedReason == "ERROR" { return "the merge stopped on an error — no check failed" }
         guard !view.conflicts.isEmpty else { return "the checks on the combined tree did not pass" }
         let n = view.conflicts.count
         let files = view.conflicts.prefix(3).joined(separator: ", ")
         let more = n > 3 ? " and \(n - 3) more" : ""
-        return "\(n) file\(n == 1 ? "" : "s") conflict with \(shortRef(view.upstreamRef)): \(files)\(more)"
+        return "\(n) file\(n == 1 ? "" : "s") conflict with \(into): \(files)\(more)"
     }
 
     /// D's press, which reads rather than acts: who has the branch, and for how long. It moved onto
@@ -686,7 +701,7 @@ public enum PromotionCards {
     /// the page is the project's own, so the heading says only what is being asked of main. Web's
     /// `promotionPageTitle`.
     public static func pageTitle(_ view: ProjectPromotionView) -> String {
-        let into = shortRef(view.upstreamRef)
+        let into = RunSettings.mainBranchName(view.upstreamRef)
         switch stage(view) {
         case .askingYou: return "Merge into \(into)?"
         case .merging:
@@ -741,7 +756,8 @@ public enum PromotionCards {
     public static func eventLine(_ view: ProjectPromotionView?) -> (text: String, tone: EventTone) {
         guard let view, let stage = stage(view) else { return (supersededTitle, .quiet) }
         switch stage {
-        case .askingYou: return ("Merge into \(shortRef(view.upstreamRef)) is waiting for you", .needsYou)
+        case .askingYou:
+            return ("Merge into \(RunSettings.mainBranchName(view.upstreamRef)) is waiting for you", .needsYou)
         case .merging: return (pageTitle(view), .working)
         case .blocked: return ("\(pageTitle(view)) · \(blockedReason(view))", .blocked)
         case .merged: return (receiptLine(view), .quiet)
@@ -763,7 +779,7 @@ public enum PromotionCards {
     /// ` · automatically` when nobody pressed Merge — the receipt is still the only place that says
     /// so (§3.3 M-T11).
     public static func receiptLine(_ view: ProjectPromotionView) -> String {
-        var parts = ["✓ Merged into \(shortRef(view.upstreamRef))"]
+        var parts = ["✓ Merged into \(RunSettings.mainBranchName(view.upstreamRef))"]
         if let sha = view.merged?.sha { parts.append(String(sha.prefix(7))) }
         parts.append(taskCount(view))
         if view.merged?.automatic == true { parts.append("automatically") }
@@ -772,7 +788,7 @@ public enum PromotionCards {
 
     /// The timeline row's heading on the sessions page. The check mark is the row's icon there.
     public static func timelineTitle(_ view: ProjectPromotionView) -> String {
-        "Merged into \(shortRef(view.upstreamRef))"
+        "Merged into \(RunSettings.mainBranchName(view.upstreamRef))"
     }
 
     /// The timeline row's second line: `8d5a868 · 2 tasks · by you`, or `· automatically`.
@@ -786,6 +802,12 @@ public enum PromotionCards {
     /// would this carry"; read on a receipt it said nothing about what is now on main.
     public static func nowOnMainLine(_ view: ProjectPromotionView) -> String {
         taskCount(view)
+    }
+
+    /// That row's label: the branch the candidate merged into, by name — `Now on main` for a
+    /// project on main.
+    public static func nowOnLabel(_ view: ProjectPromotionView) -> String {
+        "Now on \(RunSettings.mainBranchName(view.upstreamRef))"
     }
 
     /// `5 commits · 10 files` — the receipt's size row, nil when the read gave neither.

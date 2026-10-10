@@ -563,6 +563,30 @@ final class SessionProjectPageWiringTests: XCTestCase {
                       "the review's press says nobody's name either")
     }
 
+    /// The merge's press and its receipt say the branch the candidate merges into — its own
+    /// `upstreamRef`, by name — on this page's card, in the review and on the receipt, rather than a
+    /// fixed "main" (web's `mergeTo(mainBranchName(promotion.upstreamRef))`, `Now on …`).
+    func testTheMergeSaysTheBranchItMergesInto() throws {
+        let page = code(try appSource("Views/SessionProjectPage.swift"))
+        let asking = try slice(page, from: "@ViewBuilder private func asking(_ view: ProjectPromotionView) -> some View {",
+                               to: "\n    }\n")
+        XCTAssertTrue(asking.contains("Text(PromotionCards.mergeTo(RunSettings.mainBranchName(view.upstreamRef)))"))
+
+        let cards = code(try appSource("Views/ApprovalCards.swift"))
+        let review = try slice(cards, from: "struct PromotionReviewSheet: View {", to: "\n}\n")
+        for part in ["Text(PromotionCards.mergeTo(RunSettings.mainBranchName(view.upstreamRef)))",
+                     "CardRow(label: RunSettings.mainBranchName(view.upstreamRef),",
+                     "PromotionTasksRow(label: PromotionCards.nowOnLabel(view),"] {
+            XCTAssertTrue(review.contains(part), "the review keeps `\(part)`")
+        }
+        let receipt = try slice(cards, from: "struct PromotionReceiptSheet: View {", to: "\n}\n")
+        XCTAssertTrue(receipt.contains("PromotionTasksRow(label: PromotionCards.nowOnLabel(promotion),"))
+        for said in [page, review, receipt] {
+            XCTAssertFalse(said.contains("\"Now on main\""), "the receipt names the branch it merged into")
+            XCTAssertFalse(said.contains("Text(PromotionCards.mergeToMain)"), "the press names the branch it merges into")
+        }
+    }
+
     /// A read that failed with no rows in hand says why in one sentence, with Retry, and stays up
     /// through the page's 4-second polls rather than blinking out while each one is in flight.
     func testAFailedReadStaysUpWithItsReasonAndRetry() throws {
@@ -684,7 +708,11 @@ final class SessionProjectPageWiringTests: XCTestCase {
                             to: "private func openStart(")
         let asked = try slice(row, from: "case .asked(let item):", to: "case .own:")
         for part in ["Circle().fill(Color.orange)", "Text(StartProject.readyToStart)",
-                     "SessionProjectCopy.startAsked(ago)", "SessionProjectCopy.startSuggestion(settings)",
+                     "SessionProjectCopy.startAsked(ago)",
+                     // Directly into the main branch the start card opens with, off the integration read
+                     // the landing line under it holds — web's `startMainBranch(settings.upstreamRef, standing)`.
+                     "SessionProjectCopy.startSuggestion(settings, main: StartProject.mainBranch(",
+                     "suggested: settings.upstreamRef, standing: app.projectSessionsIntegration)",
                      "SessionProjectCopy.startReview", ".buttonStyle(.borderedProminent)", "openStart(.asked)"] {
             XCTAssertTrue(asked.contains(part), "the coordinator's request keeps `\(part)`")
         }

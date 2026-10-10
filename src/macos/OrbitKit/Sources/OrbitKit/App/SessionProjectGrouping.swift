@@ -152,7 +152,8 @@ public enum SessionProjectGrouping {
                 }
                 return a.id.localizedCompare(b.id) == .orderedAscending
             }
-            let landing = SessionProjectCopy.landingLine(summary?.integration, now: now)
+            let landing = SessionProjectCopy.landingLine(summary?.integration, now: now,
+                                                         main: RunSettings.mainBranchName(summary?.mainBranch))
             let selectedLine: SessionLine
             let target: SessionProjectRow.Target
             if let coordinator, let coordinatorLine, coordinatorLine.tone == .approval {

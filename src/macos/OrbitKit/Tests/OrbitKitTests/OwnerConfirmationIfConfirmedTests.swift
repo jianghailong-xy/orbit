@@ -97,6 +97,40 @@ final class OwnerConfirmationIfConfirmedTests: XCTestCase {
             endsSession: OwnerConfirmationEndsSession(sessionId: "s1", runningBgJobs: 2)))
     }
 
+    /// The branch and landing rows say main of the project's main branch, which the card's own read
+    /// carries (`ifConfirmed.mainBranch`): master by name — and main, word for word as the fixture's
+    /// rows, where the read names none.
+    func testTheRowsNameTheProjectsMainBranch() throws {
+        func rows(onMain: OwnerConfirmationOnMain, landing: OwnerConfirmationLanding,
+                  mainBranch: String?) -> [String] {
+            OwnerConfirmations.ifConfirmedRows(OwnerConfirmationIfConfirmed(
+                branch: OwnerConfirmationBranch(name: "orbit/x", linesAdded: 3, linesRemoved: 1, files: 1,
+                                                onMain: onMain),
+                landing: landing, mainBranch: mainBranch)).map(\.lead)
+        }
+        XCTAssertEqual(rows(onMain: .no, landing: .lineThenOwner, mainBranch: "master"),
+                       ["Not on master yet", "Goes onto the integration line; merging into master asks you again"])
+        XCTAssertEqual(rows(onMain: .unknown, landing: .autoMain, mainBranch: "master"),
+                       ["No record of this branch on master", "Lands on master by itself if the checks pass"])
+        for unnamed in [nil, ""] as [String?] {
+            XCTAssertEqual(rows(onMain: .no, landing: .lineThenOwner, mainBranch: unnamed),
+                           [OwnerConfirmations.notOnMain, OwnerConfirmations.lineThenOwner])
+            XCTAssertEqual(rows(onMain: .unknown, landing: .autoMain, mainBranch: unnamed),
+                           [OwnerConfirmations.noRecordOnMain, OwnerConfirmations.autoMain])
+        }
+
+        let read = try decodeView(view(ifConfirmed: """
+            {"branch":{"name":"orbit/x","linesAdded":3,"linesRemoved":1,"files":1,"onMain":"NO"},
+             "landing":"AUTO_MAIN","mainBranch":"master"}
+            """))
+        XCTAssertEqual(read.ifConfirmed?.mainBranch, "master")
+        XCTAssertEqual(OwnerConfirmations.ifConfirmedRows(read.ifConfirmed).first?.lead, "Not on master yet")
+        // A branch this build cannot read costs that item alone, as every other item does.
+        let garbled = try decodeView(view(ifConfirmed: #"{"landing":"AUTO_MAIN","mainBranch":7}"#))
+        XCTAssertNil(garbled.ifConfirmed?.mainBranch)
+        XCTAssertEqual(garbled.ifConfirmed?.landing, .autoMain)
+    }
+
     func testAnOlderServerOrNothingWaitingIsNoBlock() throws {
         XCTAssertNil(try decodeView(view(ifConfirmed: nil)).ifConfirmed)
         XCTAssertNil(try decodeView(view(ifConfirmed: "null")).ifConfirmed)

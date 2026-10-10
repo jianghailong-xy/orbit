@@ -1014,10 +1014,13 @@ struct ProjectDetailView: View {
                 store.readyQueueUnread ? nil : store.readyQueue, status: document.status,
                 started: document.started, paused: document.pausedAt != nil) : nil
             // Ready work on a project nobody has started is waiting for the start, and says so.
+            // The lanes about the project's main branch name it, off the integration read the page
+            // holds; main until it answers.
             let cells = ProjectPage.overviewCells(buckets, taskCount: panorama.shape.taskCount,
                                                   line: document.integration?.line, started: document.started,
                                                   paused: document.pausedAt != nil,
-                                                  manualReadyCount: manual?.count ?? 0)
+                                                  manualReadyCount: manual?.count ?? 0,
+                                                  main: RunSettings.mainBranchName(store.integration?.upstreamRef))
             Section {
                 landingRow(store)
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12, alignment: .topLeading),
@@ -1772,7 +1775,8 @@ struct ProjectDetailView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 ForEach(shown) { criterion in
-                    criterionRow(criterion, ref: document.integration?.ref)
+                    criterionRow(criterion, ref: document.integration?.ref,
+                                 main: RunSettings.mainBranchName(document.integration?.upstreamRef))
                 }
                 if let disclosure = ProjectPage.criteriaDisclosure(total: criteria.count, limit: criteriaLimit,
                                                                    expanded: criteriaExpanded, compact: compact) {
@@ -1801,12 +1805,13 @@ struct ProjectDetailView: View {
         }
     }
 
-    private func criterionRow(_ criterion: ProjectCriterion, ref: String?) -> some View {
+    /// `main` is the project's main branch by name, which where met work landed says.
+    private func criterionRow(_ criterion: ProjectCriterion, ref: String?, main: String) -> some View {
         HStack(alignment: .top, spacing: 10) {
             ordinalMark(criterion)
             VStack(alignment: .leading, spacing: 4) {
                 Text(criterion.text).font(.orbitSubtext).fixedSize(horizontal: false, vertical: true)
-                if let work = ProjectPage.criterionWork(criterion, integrationRef: ref) {
+                if let work = ProjectPage.criterionWork(criterion, integrationRef: ref, main: main) {
                     (Text(work.state).fontWeight(.semibold)
                         .foregroundColor(criterion.satisfied == true ? .green : .primary)
                      + Text(work.landing.map { " · \($0)" } ?? "")

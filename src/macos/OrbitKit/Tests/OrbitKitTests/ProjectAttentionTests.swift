@@ -32,7 +32,8 @@ final class ProjectAttentionTests: XCTestCase {
                          done: Int = 0, cancelled: Int = 0,
                          lastActivityAt: String?? = nil,
                          attention: ProjectListAttention? = nil,
-                         integration: ProjectListIntegration? = nil) -> ProjectSummary {
+                         integration: ProjectListIntegration? = nil,
+                         mainBranch: String? = nil) -> ProjectSummary {
         nextID += 1
         let bucketed = running + ready + blocked + done + cancelled
         let activity: String?
@@ -51,7 +52,8 @@ final class ProjectAttentionTests: XCTestCase {
                                     failed: nil, cancelled: cancelled),
             lastActivityAt: activity,
             attention: attention,
-            integration: integration)
+            integration: integration,
+            mainBranch: mainBranch)
     }
 
     private func ownerItem(_ kind: OwnerItemKind, _ count: Int, waited: TimeInterval) -> ProjectListOwnerItem {
@@ -412,6 +414,30 @@ final class ProjectAttentionTests: XCTestCase {
             ProjectListOwnerItem(kind: .promotionApproval, count: 1, oldestWaitingSince: at(-Self.hour)),
         ]))
         XCTAssertEqual(chip(row)?.text, "Needs you · Approve merge to main")
+    }
+
+    /// The merge an approval asks for is into the project's main branch, which the row carries
+    /// (`GET /projects`' `mainBranch`): master by name, and main for a row that names none.
+    func testAMergeApprovalNamesTheProjectsMainBranch() throws {
+        let approval = ProjectListAttention(ownerItems: [ownerItem(.promotionApproval, 1, waited: 2 * Self.hour)])
+        let onMaster = project(running: 1, attention: approval, mainBranch: "master")
+        XCTAssertEqual(chip(onMaster)?.text, "Needs you · Approve merge to master · 2h")
+        XCTAssertEqual(chip(project(running: 1, attention: approval))?.text, "Needs you · Approve merge to main · 2h")
+        // The other three kinds name no branch, whatever the row's is.
+        let question = ProjectListAttention(ownerItems: [ownerItem(.coordinatorQuestion, 1, waited: Self.hour)])
+        XCTAssertEqual(chip(project(running: 1, attention: question, mainBranch: "master"))?.text,
+                       "Needs you · 1 question from coordinator · 1h")
+
+        // The row reads it, and keeps it through the app's own cache of the list.
+        let json = #"{"id":"p1","title":"Payments","status":"OPEN","mainBranch":"master"}"#
+        let row = try JSONDecoder().decode(ProjectSummary.self, from: Data(json.utf8))
+        XCTAssertEqual(row.mainBranch, "master")
+        XCTAssertEqual(try JSONDecoder().decode(ProjectSummary.self, from: JSONEncoder().encode(row)).mainBranch, "master")
+        let older = try JSONDecoder().decode(ProjectSummary.self, from: Data(#"{"id":"p1","title":"Payments"}"#.utf8))
+        XCTAssertNil(older.mainBranch)
+        let garbled = try JSONDecoder().decode(ProjectSummary.self,
+                                               from: Data(#"{"id":"p1","title":"Payments","mainBranch":{}}"#.utf8))
+        XCTAssertNil(garbled.mainBranch, "a branch this build cannot read costs the branch, never the row")
     }
 
     func testCoordinatorExceptionIsBrandAndKeepsTheLaneItsActivityEarned() {
