@@ -424,6 +424,8 @@ test('T3 providers: /providers, /providers/mine and /runner/providers carry the 
     user: { findUnique: async () => ({ role: 'USER' }) },
     modelProvider: { findMany: async () => rows },
     providerPool: { findMany: async () => [{ slug: 'team-codex', label: 'Team', shared: true, engine: 'codex' }] },
+    // listMine's last-used read (provider-last-used.ts): nobody has run on these keys.
+    session: { groupBy: async () => [] },
   };
   const service = new ProvidersService(prisma as never, {} as never, { snapshot: () => null } as never);
   const listed = await service.listPublic(OWNER);

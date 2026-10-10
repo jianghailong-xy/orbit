@@ -15318,6 +15318,10 @@ button.chat-jump-start:hover {
   color: var(--text-3);
   overflow-wrap: anywhere;
 }
+/* A key nobody has run on, in the Last used column: a state, not a time, so it sits back. */
+.prov-never {
+  color: var(--text-3);
+}
 /* A row's Edit and Delete side by side, and the provider form's own buttons. */
 .prov-actions {
   display: inline-flex;
