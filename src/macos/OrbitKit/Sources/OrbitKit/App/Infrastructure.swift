@@ -152,13 +152,24 @@ public enum Infrastructure {
     /// One engine and what can pay for it now (web's `EngineOverview` card), for every engine a session can
     /// run on — OpenCode and DeepSeek Harness among them.
     public struct EngineCard: Equatable, Sendable, Identifiable {
+        /// A key that runs on the engine, and the model a session on it starts on there.
+        public struct Key: Equatable, Sendable {
+            public let label: String
+            public let model: String?
+
+            public init(label: String, model: String?) {
+                self.label = label
+                self.model = model
+            }
+        }
+
         /// "claude", "codex", "kimi", "antigravity", "opencode" or "dsh".
         public let engine: String
         /// Each machine online signed in to it — "Mac Studio ×2" for two of its accounts; for OpenCode,
         /// each one its own sign-in is set up on. None for DeepSeek Harness, which signs in nowhere.
         public let machines: [String]
         /// API key: the enabled keys that run on it, with the model a session there starts on.
-        public let keys: [Engine.Key]
+        public let keys: [Key]
         /// Pool: its pools that can start a session.
         public let pools: [String]
 
@@ -189,42 +200,11 @@ public enum Infrastructure {
                 return count > 1 ? "\(name) ×\(count)" : name
             }
             let engineKeys = keys.filter { $0.enabled != false && ProviderEngines.of($0).contains(engine) }
-                .map { Engine.Key(label: $0.label, model: engine == "dsh" ? harness : defaultModel($0)) }
+                .map { EngineCard.Key(label: $0.label, model: engine == "dsh" ? harness : defaultModel($0)) }
             let enginePools = pools.filter {
                 $0.unavailable == nil && (ProviderPools.runsCodex($0) ? "codex" : "claude") == engine
             }
             return EngineCard(engine: engine, machines: machines, keys: engineKeys, pools: enginePools.map(\.label))
-        }
-    }
-
-    /// One of the four engines a machine signs in, and what can pay for it now: its `EngineCard`, as the
-    /// app's overview draws it until it lists all six.
-    public struct Engine: Equatable, Sendable, Identifiable {
-        /// A key that runs on the engine, and the model a session on it starts on.
-        public struct Key: Equatable, Sendable {
-            public let label: String
-            public let model: String?
-        }
-
-        public let engine: LoginEngine
-        /// Subscription: each machine online signed in to it — "Mac Studio ×2" for two of its accounts.
-        public let machines: [String]
-        /// API key: the enabled keys that run on it.
-        public let keys: [Key]
-        /// Pool: its pools that can start a session.
-        public let pools: [String]
-
-        /// Ready with any source at all; Not set up without.
-        public var ready: Bool { !machines.isEmpty || !keys.isEmpty || !pools.isEmpty }
-        public var id: String { engine.rawValue }
-    }
-
-    /// The cards of the four engines a machine signs in (`engineCards`).
-    public static func engines(runners: [Runner], keys: [ConfiguredProvider], pools: [ProviderPool]) -> [Engine] {
-        engineCards(runners: runners, keys: keys, pools: pools).compactMap { card in
-            LoginEngine(rawValue: card.engine).map {
-                Engine(engine: $0, machines: card.machines, keys: card.keys, pools: card.pools)
-            }
         }
     }
 

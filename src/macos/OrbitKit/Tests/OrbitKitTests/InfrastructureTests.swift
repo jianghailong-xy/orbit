@@ -162,10 +162,10 @@ final class InfrastructureTests: XCTestCase {
     /// An engine to a card, each Ready with what can pay for it now — online machines by how many of their
     /// accounts, keys beside their models, pools — and Antigravity, with none, Not set up.
     func testEachEngineIsReadyWithWhatCanPayForItNow() throws {
-        let engines = Infrastructure.engines(runners: try fleet(), keys: [anthropic, anthropicWork, deepseek],
-                                             pools: [claudePool()])
-        XCTAssertEqual(engines.map(\.engine), [.claude, .codex, .kimi, .antigravity])
-        XCTAssertEqual(engines.map(\.ready), [true, true, true, false])
+        let engines = Infrastructure.engineCards(runners: try fleet(), keys: [anthropic, anthropicWork, deepseek],
+                                                 pools: [claudePool()])
+        XCTAssertEqual(engines.map(\.engine), ["claude", "codex", "kimi", "antigravity", "opencode", "dsh"])
+        XCTAssertEqual(engines.map(\.ready), [true, true, true, false, true, true])
         XCTAssertEqual(engines[0].machines, ["Mac Studio ×2", "HPC"])
         XCTAssertEqual(engines[0].keys, [.init(label: "Anthropic (Claude)", model: "Claude Opus 5"),
                                          .init(label: "Anthropic · Work", model: "Claude Sonnet 5"),
@@ -175,18 +175,18 @@ final class InfrastructureTests: XCTestCase {
         XCTAssertEqual(engines[1].machines, ["HPC ×2"])
         XCTAssertEqual(engines[1].keys, [])
         XCTAssertEqual(engines[2].machines, ["HPC"])
-        XCTAssertEqual(engines[3], Infrastructure.Engine(engine: .antigravity, machines: [], keys: [], pools: []))
+        XCTAssertEqual(engines[3], Infrastructure.EngineCard(engine: "antigravity", machines: [], keys: [], pools: []))
     }
 
     /// Every engine a session can run on is a card, by its CLI's name in the pickers' order — the same keys
     /// again under each engine they run on: OpenCode runs every one of them, DeepSeek Harness the DeepSeek
-    /// key. The app's four cards are the four a machine signs in.
+    /// key. The app draws all six (board iOS 1 ①).
     func testEveryEngineIsACardWithEveryKeyThatRunsOnIt() throws {
         let cards = Infrastructure.engineCards(runners: try fleet(), keys: [anthropic, anthropicWork, deepseek],
                                                pools: [claudePool()])
         XCTAssertEqual(cards.map(\.name), ["Claude Code", "Codex", "Kimi Code", "Antigravity CLI", "OpenCode", "DeepSeek Harness"])
         XCTAssertEqual(cards.map(\.ready), [true, true, true, false, true, true])
-        let three: [Infrastructure.Engine.Key] = [.init(label: "Anthropic (Claude)", model: "Claude Opus 5"),
+        let three: [Infrastructure.EngineCard.Key] = [.init(label: "Anthropic (Claude)", model: "Claude Opus 5"),
                                                   .init(label: "Anthropic · Work", model: "Claude Sonnet 5"),
                                                   .init(label: "DeepSeek", model: "DeepSeek V4 Pro")]
         XCTAssertEqual(cards[0].keys, three)
@@ -194,9 +194,6 @@ final class InfrastructureTests: XCTestCase {
         // Harness lists its models on each machine, and none here has reported them: the key, and no model.
         XCTAssertEqual(cards[5], Infrastructure.EngineCard(engine: "dsh", machines: [],
                                                            keys: [.init(label: "DeepSeek", model: nil)], pools: []))
-        let four = Infrastructure.engines(runners: try fleet(), keys: [anthropic, anthropicWork, deepseek], pools: [claudePool()])
-        XCTAssertEqual(four.map(\.engine.rawValue), cards.prefix(4).map(\.engine))
-        XCTAssertEqual(four.map(\.keys), cards.prefix(4).map(\.keys))
     }
 
     /// A key is listed under every engine it runs on, beside the model it starts on there; one switched off
@@ -258,8 +255,8 @@ final class InfrastructureTests: XCTestCase {
     func testWhatCannotBeUsedNowIsNotSetUp() throws {
         let offline = try runner(#"{"id":"t","name":"ThinkPad","online":false,"engines":[{"engine":"codex","installed":true,"auth":"yes"}]}"#)
         let codex = ProviderPool(id: "c", slug: "my-codex", label: "My Codex", unavailable: "Not signed in", engine: "codex")
-        let engines = Infrastructure.engines(runners: [offline], keys: [openAIOff], pools: [codex])
-        XCTAssertEqual(engines[1], Infrastructure.Engine(engine: .codex, machines: [], keys: [], pools: []))
+        let engines = Infrastructure.engineCards(runners: [offline], keys: [openAIOff], pools: [codex])
+        XCTAssertEqual(engines[1], Infrastructure.EngineCard(engine: "codex", machines: [], keys: [], pools: []))
         XCTAssertNil(Infrastructure.installTarget([offline]))
         XCTAssertEqual(Infrastructure.installTarget(try fleet())?.id, "mac", "the first machine online")
     }
@@ -267,7 +264,7 @@ final class InfrastructureTests: XCTestCase {
     /// A pool is its engine's: a shared or ChatGPT pool Codex's, any other Claude Code's.
     func testAPoolIsItsEnginesSource() {
         let shared = ProviderPool(id: "s", slug: "team", label: "Team keys", engine: "codex")
-        let engines = Infrastructure.engines(runners: [], keys: [], pools: [claudePool(), shared])
+        let engines = Infrastructure.engineCards(runners: [], keys: [], pools: [claudePool(), shared])
         XCTAssertEqual(engines[0].pools, ["Claude keys"])
         XCTAssertEqual(engines[1].pools, ["Team keys"])
     }
@@ -280,7 +277,7 @@ final class InfrastructureTests: XCTestCase {
          "antigravity":{"supported":true,"installed":true,"envKeyAvailable":true,"googleLogin":"available"},
          "engines":[{"engine":"antigravity","installed":true,"auth":"yes","accounts":[{"id":"default","auth":"no"}]}]}
         """#)
-        let engines = Infrastructure.engines(runners: [box], keys: [], pools: [])
+        let engines = Infrastructure.engineCards(runners: [box], keys: [], pools: [])
         XCTAssertEqual(engines[3].machines, ["Box"])
         XCTAssertEqual(Infrastructure.signedOutEngines(box), [])
     }
