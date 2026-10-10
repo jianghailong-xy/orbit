@@ -27,7 +27,7 @@ import { useFeedbackPortal } from './ui/feedbackPortal';
  * that hugs its words; a toast with an Undo to decide on or a diagnostic to read is a card; a failure
  * is a tinted card with the server's words in a block you can select, and it stays until its × —
  * nothing posted after it can push it away. Wide screens stack them in the top-right corner, where
- * both of AntD's surfaces used to hang as two separate stacks; a phone centres one column under the
+ * the replaced message and notification surfaces used to hang as two separate stacks; a phone centres one column under the
  * top bar and folds an open failure into a pill after six seconds, so it stops covering the page.
  *
  * Mounted once inside the router (main.tsx): clicking a toast that names a session opens it.

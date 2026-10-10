@@ -75,7 +75,7 @@ export function Select<Value extends string = string>({ options, value, onValueC
       }} className="orbit-select-trigger" aria-busy={loading || undefined} onKeyDown={(event) => {
         // Base UI moves focus into an opened list on the next animation frame. Until then the trigger
         // would restart the highlight (arrows) or close the list unselected (Enter), so hand these keys
-        // to the element focus is moving to; they then act as in the list, as with AntD. Tab and Shift+Tab
+        // to the element focus is moving to; they then act as in the list, as with the replaced select. Tab and Shift+Tab
         // would leave from the trigger rather than the list: Tab moves focus first and lets the browser
         // tab on from there, Shift+Tab is handed over like the others.
         const list = popup.current;
