@@ -2,7 +2,6 @@
 import { act, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { App as AntApp } from 'antd';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
@@ -310,7 +309,7 @@ const CASES: Case[] = [
 const mounted: { root: Root; el: HTMLDivElement }[] = [];
 let client: QueryClient;
 
-/** Something drawn the way the console draws it: under a router, a query client and AntD's App. */
+/** Something drawn the way the console draws it: under a router and a query client. */
 async function draw(node: ReactNode): Promise<HTMLDivElement> {
   const el = document.createElement('div');
   document.body.appendChild(el);
@@ -320,7 +319,7 @@ async function draw(node: ReactNode): Promise<HTMLDivElement> {
     root.render(
       <QueryClientProvider client={client}>
         <MemoryRouter>
-          <AntApp>{node}</AntApp>
+          {node}
         </MemoryRouter>
       </QueryClientProvider>,
     );
@@ -688,9 +687,7 @@ describe('the console’s queued tail', { timeout: 60_000 }, () => {
       root.render(
         <QueryClientProvider client={client}>
           <MemoryRouter initialEntries={[`/sessions/${SESSION_PUBLIC}`]}>
-            <AntApp>
-              <WorkspaceView runner={RUNNER} />
-            </AntApp>
+            <WorkspaceView runner={RUNNER} />
           </MemoryRouter>
         </QueryClientProvider>,
       );

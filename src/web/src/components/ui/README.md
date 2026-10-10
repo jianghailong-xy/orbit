@@ -179,6 +179,28 @@ field.current?.setSelectionRange(position, position);
 
 `ui-migration/composer.html` 用真实 CSS、ComposerMirror 和输入框辅助函数复现 WorkspaceView 会话输入与 TaskDetailPanel 评论框，同一脚本分别驱动旧 AntD 字段和 Orbit Textarea。`npm run test:ui-composer -w @orbit/web` 比较几何、计算样式、截图像素、镜像字形对齐、附件对齐、手动高度、断点、过渡，以及中文组合输入、Enter/Shift+Enter、⌘/Ctrl+Enter、候选菜单、粘贴、长度上限和历史回溯。Chromium 用 DevTools 真实组合输入；WebKit 无输入法自动化，以 insertText 加组合事件/keyCode 229 重放，不代表真机输入法或软键盘。详见 [P3.1 证据](../../../../../docs/evidence/base-ui-migration/p3.1/README.md)。
 
+## 图片与预览（P5.2）
+
+`ImagePreview`（`ImagePreview.tsx` + `.css`）和 `Image`（`Image.tsx` + `.css`）替代 AntD `Image.PreviewGroup` 与 `Image`。
+
+- `ImagePreview`：受控的全屏看图层。props 有 `open`、`onClose`（关闭键、Esc、按遮罩时调用；按图片本身不关闭）、`items`（`{ src, alt }`）、`current` 与 `onCurrentChange`。`group` 表示一组可翻页的图片：图片下方显示“n / 总数”；多于一张时两侧有上一张/下一张按钮，并响应 ←/→，到两端即停。`origin` 是打开时放大的起点（视口坐标，即按下的缩略图中心）。
+- 外观同被替换预览：45% 黑遮罩，图片最大为窗口宽度和 70% 高度。右上角的关闭键和两侧的切换键都是 42px 圆键，距边 12px，10% 黑底，悬停时 20%。距底部 32px 处，是 65% 白的位置文字，下面是一排 42px 按钮组成的胶囊：上下翻转、左右翻转、左转、右转、缩小、放大。
+- 缩放（按钮、滚轮、双击）、拖动、双指缩放与拖动、松开后的回弹，都沿用被替换预览的算法（rc-image，MIT，见 `rc-image.LICENSE`）：每次缩放 1.5 倍，范围 1–50 倍。翻页时新图以原尺寸立即出现。
+- 基于 Base UI Dialog，模态焦点、Esc、文档滚动锁与弹层层级沿用本目录约定：顶层 z-index 为 1080（被替换预览的 1000+80），在 Orbit 弹层内按层递增。打开时焦点在关闭键（同被替换预览），关闭后回到打开前的位置。打开期间登记为通知的挂载层。
+- 可访问名称：按钮依次为 Close、Previous image、Next image、Flip vertically、Flip horizontally、Rotate left、Rotate right、Zoom out、Zoom in（被替换预览用的是图标名与 `flipY` 这类内部名）。对话框以当前图片的 alt 命名，没有 alt 时为 Image preview。
+- 减少动态效果时，打开/关闭的渐显与放大、缩放旋转的过渡和按钮的过渡都不播放。
+- `Image`：按下即单独打开预览的一张图片。props 有 `src`、`alt`、`className`（加在 `<img>` 上，尺寸由调用方的类决定）和 `cover`（悬停或键盘聚焦时叠在图上的内容，30% 黑底白字）。外层 `.orbit-image` 是行内块，`role=button`，可 Tab 聚焦，以 alt 命名，Enter/Space 打开。内层 `<img>` 带 `.orbit-image-img`，默认宽度 100%、高度自动，同被替换组件；规则 `.orbit-image .orbit-image-img` 的权重高于调用方的单个类。业务样式通过 `.orbit-image`、`.orbit-image-cover` 调整外层，如 `.md .orbit-image`、`.chat-images .orbit-image`、`.composer-attach .orbit-image`。
+- 授权图片的获取和对象 URL 的生命周期仍归业务侧（Transcript 的 `ResolvedAttachmentImage`、`LocalArtifactImage`）：拿到对象 URL 后再交给这两个组件。预览本身不持有、也不撤销对象 URL。
+
+```tsx
+// 一组：调用方冻结点击那一刻的列表，并持有当前序号（Transcript 的 ImagePreviewProvider）。
+<ImagePreview group open={open} items={items} current={current} onCurrentChange={setCurrent} onClose={() => setOpen(false)} />
+// 单张：会话输入框里的附件缩略图（P5.3 切换 WorkspaceView 时用法相同）。
+<Image className="composer-attach-thumb" src={objectUrl} alt="" cover={<EyeOutlined className="composer-attach-eye" />} />
+```
+
+真实页面的对照见 [P5.2 证据](../../../../../docs/evidence/base-ui-migration/p5.2/README.md)。
+
 ## 验证入口
 
 从仓库根执行：
