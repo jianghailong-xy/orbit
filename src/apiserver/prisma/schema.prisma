@@ -2803,6 +2803,10 @@ model ProjectCodebase {
 
   /// Where this line comes FROM: the default baseline ref for an ordinary project code task.
   upstreamRef String @map("upstream_ref")
+  /// When the account owner chose `upstreamRef` (0422): every owner write that names one records
+  /// it. Null while the project stands on the default, or on the choice a new binding carried over
+  /// from the owner's last one for the same repository (`project-integration-line.ts#bind`).
+  upstreamRefChosenAt DateTime? @map("upstream_ref_chosen_at") @db.Timestamptz(3)
   /// Where it goes TO: the default merge target for a finished project task. Written equal to
   /// `upstreamRef` unless somebody says otherwise, and never rewritten by a merge (SR44) — a
   /// one-off "merge this elsewhere" writes `session.mergeTarget` and nothing here.
@@ -2860,6 +2864,9 @@ model ProjectCodebase {
   /// schema cannot spell.
   @@index([projectId], map: "project_codebase_project_idx")
   @@index([authorityRunnerId], map: "project_codebase_authority_runner_idx")
+  /// The owner's last choice of main branch for a repository: what a new binding starts from (L6).
+  /// PARTIAL in the migration (`WHERE upstream_ref_chosen_at IS NOT NULL`), like the runner one.
+  @@index([ownerId, canonicalRepoUrl, upstreamRefChosenAt(sort: Desc)], map: "project_codebase_upstream_choice_idx")
   @@map("project_codebase")
 }
 

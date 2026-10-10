@@ -2,8 +2,10 @@ import { BadRequestException, ConflictException } from '@nestjs/common';
 import { Prisma, TaskStatus } from '@prisma/client';
 import {
   uuidToBase62,
+  type ProjectBranchCandidates,
   type ProjectIntegrationSettings as SharedProjectIntegrationSettings,
   type ProjectIntegrationView as SharedProjectIntegrationView,
+  type ProjectLastMainBranch,
   type ProjectListIntegration,
   type ProjectIntegrationJob,
   type IntegrationJobKind,
@@ -54,9 +56,10 @@ export type IntegrationLine = 'MAIN' | 'PROJECT_BRANCH';
 export type IntegrationRefSource = 'EXPLICIT' | 'DEFAULT_RULE';
 
 /**
- * A project's upstream until its owner says otherwise. Never probed: the API server has no
- * repository to ask, and falling back to `master` would be a convention of one repository in a
- * product that is about all of them (L6).
+ * A project's upstream when its owner has never said otherwise for its repository. Never probed:
+ * the API server has no repository to ask, and falling back to `master` would be a convention of one
+ * repository in a product that is about all of them (L6). What the owner HAS said is remembered
+ * instead: a new binding starts from their last choice for the same repository (`bind`).
  */
 export const DEFAULT_UPSTREAM_REF = 'refs/heads/main';
 
@@ -102,10 +105,20 @@ export function canonicalRepoUrl(raw: string): string | null {
   return url === '' ? null : url;
 }
 
+/**
+ * A repository as a person names it: the last two segments of its canonical URL, so
+ * `ssh://github.com/acme/payments-api` is `acme/payments-api`. For showing only — identity is the
+ * canonical URL.
+ */
+export function repositoryShortName(canonical: string): string {
+  return canonical.split('/').filter((segment) => segment !== '').slice(-2).join('/');
+}
+
 /** The columns of a binding this module reads and serves. */
 const LINE_COLUMNS = {
   id: true,
   upstreamRef: true,
+  upstreamRefChosenAt: true,
   integrationRef: true,
   integrationRefSource: true,
   integrationStartedAt: true,
@@ -241,6 +254,7 @@ export function projectIntegrationView(
     lineAbsentReason: line ? null : 'NOT_DECIDED',
     ref: row && line ? branchName(row.integrationRef) : null,
     upstreamRef: row ? branchName(row.upstreamRef) : null,
+    upstreamChosenAt: row?.upstreamRefChosenAt ?? null,
     source: row && line ? (row.integrationRefSource as IntegrationRefSource) : null,
     locked: !!row?.integrationStartedAt,
     startedAt: row?.integrationStartedAt ?? null,
@@ -252,7 +266,9 @@ export function projectIntegrationView(
 }
 
 /**
- * The settings, plus what the integration queue has done with them (§1.6).
+ * The settings, plus what the integration queue has done with them (§1.6), and what the project's
+ * main branch can be chosen from: its repository, the branches its coordination workspace reported,
+ * and this account's last choice for that repository (L6).
  *
  * The queue facts are read on top of the binding the caller already read, which is why this is its
  * own endpoint rather than four more fields on the project document: `project-get-query-count`
@@ -262,12 +278,17 @@ export function projectIntegrationView(
  * zero commits ahead, and a project that has never absorbed main is not one that synced at the
  * epoch — printed as numbers, both would read as "nothing has happened here", which is the one
  * thing the row must not say about work that has.
+ *
+ * The caller has established that the project is the reader's: the reads added for the main branch
+ * take the project's owner from its own row.
  */
 export async function readProjectIntegrationView(
   prisma: Pick<PrismaService, '$queryRaw'>,
   projectId: string,
   settings: ProjectIntegrationSettingsView,
 ): Promise<ProjectIntegrationView> {
+  const memory = await readMainBranchMemory(prisma, projectId);
+  const branches = await readBranchCandidates(prisma, projectId);
   // The last finished attempt's checks may have failed on a tree that never landed. Keep its
   // verdict separate from the last successful landing's measured distance from upstream.
   const [newest] = await prisma.$queryRaw<Array<{
@@ -306,6 +327,9 @@ export async function readProjectIntegrationView(
   const lead = jobs[0];
   return {
     ...settings,
+    lastMainBranch: lastMainBranchView(memory),
+    repository: memory.repository ? repositoryShortName(memory.repository) : null,
+    branches,
     commitsAheadOfUpstream: ahead,
     commitsAheadOfUpstreamAbsentReason: ahead === null ? 'NO_LANDING_YET' : null,
     lastUpstreamSyncAt: synced?.at ?? null,
@@ -327,6 +351,125 @@ export async function readProjectIntegrationView(
       : null,
     inFlightJobs: jobs,
   };
+}
+
+/** A project's repository and this account's last choice of main branch for it (L6). */
+export interface MainBranchMemory {
+  /** Canonical: the binding's, or before there is one, the coordination workspace's. */
+  repository: string | null;
+  /** The newest choice of the owner's for that repository, as `rememberedUpstreamRef` reads it. */
+  last: { upstreamRef: string; chosenAt: Date } | null;
+}
+
+/**
+ * A project's repository and the owner's last choice of main branch for it, in one statement keyed
+ * by the project alone — so the project document can spend exactly one on it, issued beside its
+ * other reads (`project-get-query-count.pg.spec.ts`).
+ *
+ * A bound project's repository is its binding's, and the choice is read for that URL the way
+ * `rememberedUpstreamRef` reads it: the newest row of the same owner and repository that has one.
+ * An unbound project's repository is its coordination workspace's remote, which is canonical only
+ * once `canonicalRepoUrl` has read it — so for that project the statement answers the owner's
+ * newest choice for EACH repository they ever chose for, a row apiece, and the one for this
+ * repository is picked here. That is bounded by the owner's repositories, never by their projects
+ * or their work, and nothing is read when there is no repository to read for.
+ */
+export async function readMainBranchMemory(
+  prisma: Pick<PrismaService, '$queryRaw'>,
+  projectId: string,
+): Promise<MainBranchMemory> {
+  const rows = await prisma.$queryRaw<Array<{
+    boundRepository: string | null;
+    workspaceRepoUrl: string | null;
+    chosenRepository: string | null;
+    upstreamRef: string | null;
+    chosenAt: Date | null;
+  }>>(Prisma.sql`
+    SELECT cb."canonical_repo_url" AS "boundRepository", w."repo_url" AS "workspaceRepoUrl",
+           chosen."canonical_repo_url" AS "chosenRepository", chosen."upstream_ref" AS "upstreamRef",
+           chosen."upstream_ref_chosen_at" AS "chosenAt"
+      FROM "project" p
+      LEFT JOIN "project_codebase" cb ON cb."project_id" = p."id" AND cb."slot" = 'primary'
+      LEFT JOIN "workspace" w ON w."id" = p."coordinator_workspace_id"
+      LEFT JOIN LATERAL (
+        SELECT DISTINCT ON (c."canonical_repo_url")
+               c."canonical_repo_url", c."upstream_ref", c."upstream_ref_chosen_at"
+          FROM "project_codebase" c
+         WHERE c."owner_id" = p."owner_id"
+           AND c."upstream_ref_chosen_at" IS NOT NULL
+           AND (CASE WHEN cb."canonical_repo_url" IS NOT NULL
+                     THEN c."canonical_repo_url" = cb."canonical_repo_url"
+                     ELSE NULLIF(btrim(w."repo_url"), '') IS NOT NULL END)
+         ORDER BY c."canonical_repo_url", c."upstream_ref_chosen_at" DESC, c."id" DESC
+      ) chosen ON true
+     WHERE p."id" = ${projectId}::uuid`);
+  const [first] = rows;
+  const repository = first?.boundRepository
+    ?? (first?.workspaceRepoUrl ? canonicalRepoUrl(first.workspaceRepoUrl) : null);
+  const last = repository ? rows.find((row) => row.chosenRepository === repository) : undefined;
+  return {
+    repository,
+    last: last?.upstreamRef && last.chosenAt
+      ? { upstreamRef: last.upstreamRef, chosenAt: last.chosenAt }
+      : null,
+  };
+}
+
+/** `lastMainBranch` as every reader is served it: both names short, as a person reads them. */
+export function lastMainBranchView(memory: MainBranchMemory): ProjectLastMainBranch<Date> | null {
+  return memory.repository && memory.last
+    ? {
+      branch: branchName(memory.last.upstreamRef),
+      repository: repositoryShortName(memory.repository),
+      chosenAt: memory.last.chosenAt,
+    }
+    : null;
+}
+
+/** Orbit's own session branches, which are never anybody's main branch. */
+const ORBIT_SESSION_BRANCHES = 'orbit/';
+
+/**
+ * The branches a project's main branch can be chosen from: the local branches the runner reported
+ * for the newest session of the project's coordination workspace that reported any
+ * (`session.merge_targets` — refreshed on every heartbeat while a session runs and once more when
+ * it ends), without Orbit's `orbit/*` session branches. `reportedAt` is when that session's row was
+ * last written, which is no earlier than the report.
+ *
+ * Newest by creation rather than by last report, so the read walks the workspace's
+ * `(workspace_id, created_at DESC)` index and stops at the first session with a report: the row
+ * that reads this polls, and a coordination workspace can hold thousands of sessions, all of them
+ * reporting the same repository. Null when no session there has reported a branch, or the project
+ * has no coordination workspace.
+ */
+export async function readBranchCandidates(
+  prisma: Pick<PrismaService, '$queryRaw'>,
+  projectId: string,
+): Promise<ProjectBranchCandidates<Date> | null> {
+  const [reported] = await prisma.$queryRaw<Array<{
+    names: string[];
+    workspaceName: string;
+    reportedAt: Date;
+  }>>(Prisma.sql`
+    SELECT s."merge_targets" AS "names", w."name" AS "workspaceName", s."updated_at" AS "reportedAt"
+      FROM "project" p
+      JOIN "workspace" w ON w."id" = p."coordinator_workspace_id"
+      JOIN LATERAL (
+        SELECT s."merge_targets", s."updated_at"
+          FROM "session" s
+         WHERE s."workspace_id" = w."id"
+           AND s."owner_id" = p."owner_id"
+           AND s."deleted_at" IS NULL
+           AND cardinality(s."merge_targets") > 0
+         ORDER BY s."created_at" DESC, s."id" DESC
+         LIMIT 1
+      ) s ON true
+     WHERE p."id" = ${projectId}::uuid`);
+  if (!reported) return null;
+  const names = reported.names.filter((name) => !name.startsWith(ORBIT_SESSION_BRANCHES));
+  return names.length === 0
+    ? null
+    : { names, workspaceName: reported.workspaceName, reportedAt: reported.reportedAt };
 }
 
 /**
@@ -484,7 +627,9 @@ async function lockCodebase(
   projectId: string,
 ): Promise<ProjectCodebaseLine | null> {
   const [row] = await tx.$queryRaw<ProjectCodebaseLine[]>(Prisma.sql`
-    SELECT "id", "upstream_ref" AS "upstreamRef", "integration_ref" AS "integrationRef",
+    SELECT "id", "upstream_ref" AS "upstreamRef",
+           "upstream_ref_chosen_at" AS "upstreamRefChosenAt",
+           "integration_ref" AS "integrationRef",
            "integration_ref_source" AS "integrationRefSource",
            "integration_started_at" AS "integrationStartedAt",
            "merge_check_command" AS "mergeCheckCommand",
@@ -496,20 +641,46 @@ async function lockCodebase(
 }
 
 /**
+ * The main branch this owner chose last for a repository (L6): the newest of their bindings of it
+ * that records a choice, `id` breaking a tie inside one millisecond — one range of
+ * `project_codebase_upstream_choice_idx`. Null when they never chose one there.
+ */
+export async function rememberedUpstreamRef(
+  db: Pick<Prisma.TransactionClient, 'projectCodebase'>,
+  ownerId: string,
+  canonicalRepoUrl: string,
+): Promise<string | null> {
+  const last = await db.projectCodebase.findFirst({
+    where: { ownerId, canonicalRepoUrl, upstreamRefChosenAt: { not: null } },
+    orderBy: [{ upstreamRefChosenAt: 'desc' }, { id: 'desc' }],
+    select: { upstreamRef: true },
+  });
+  return last?.upstreamRef ?? null;
+}
+
+/**
  * Bind a project to its repository, standing on the upstream until a line is decided. A concurrent
  * binder may have won: the insert then does nothing, and the caller locks the row that one left.
+ *
+ * The upstream is the one the owner chose last for the same repository, and `refs/heads/main` only
+ * when they never chose one there (L6) — the start door, a first `PATCH …/integration` and the
+ * first integration of a project nobody started all bind through here. The binding does not
+ * record a choice of its own: it carries one, and `upstream_ref_chosen_at` stays null until the
+ * owner names this project's upstream.
  */
 async function bind(
   tx: Prisma.TransactionClient,
   binding: { ownerId: string; projectId: string; canonicalRepoUrl: string },
 ): Promise<ProjectCodebaseLine> {
+  const upstreamRef = await rememberedUpstreamRef(tx, binding.ownerId, binding.canonicalRepoUrl)
+    ?? DEFAULT_UPSTREAM_REF;
   await tx.projectCodebase.createMany({
     data: [{
       ownerId: binding.ownerId,
       projectId: binding.projectId,
       canonicalRepoUrl: binding.canonicalRepoUrl,
-      upstreamRef: DEFAULT_UPSTREAM_REF,
-      integrationRef: DEFAULT_UPSTREAM_REF,
+      upstreamRef,
+      integrationRef: upstreamRef,
       refAuthority: 'REMOTE',
       remoteName: 'origin',
     }],
@@ -559,7 +730,14 @@ export async function projectRepository(
  *
  * A participant: the caller owns the transaction, has already established that the project is the
  * owner's, and — when it also holds the project row — took it first (rank 40 before this 55).
- * With no binding yet, the repository is the one the project's coordination workspace names.
+ * With no binding yet, the repository is the one the project's coordination workspace names, and
+ * the binding starts from the owner's last choice of upstream for it (`bind`).
+ *
+ * Every door the owner names an upstream through ends here — `PATCH /projects/:id/integration`,
+ * `integration` on a project create or update (the CLI's `--upstream-ref` among them) and the start
+ * door through `startProjectLine` — so this is where the choice is recorded: a request that names
+ * `upstreamRef` writes `upstream_ref_chosen_at` with it, which is what the next binding of the same
+ * repository starts from (L6).
  */
 export async function configureProjectIntegration(
   tx: Prisma.TransactionClient,
@@ -635,6 +813,8 @@ export async function configureProjectIntegration(
     where: { id: row.id },
     data: {
       upstreamRef,
+      // The owner named it, so it is their choice, even where it is the upstream already there.
+      ...(settings.upstreamRef !== undefined ? { upstreamRefChosenAt: new Date() } : {}),
       integrationRef,
       ...(chosen ? { integrationRefSource: 'EXPLICIT' } : {}),
       ...(settings.mergeCheckCommand !== undefined
@@ -703,6 +883,12 @@ export interface StartLineSettings {
   line: IntegrationLine;
   /** A full `refs/heads/…` ref, only with `PROJECT_BRANCH`. */
   projectBranchName?: string;
+  /**
+   * The main branch, a full `refs/heads/…` ref. Asked for, it is the owner's choice and recorded
+   * as one; left out, the project keeps the upstream it stands on. In the answer, the upstream the
+   * project stands on once the start is done — absent only for a project with no binding.
+   */
+  upstreamRef?: string;
   mergeCheckCommand: string | null;
 }
 
@@ -739,16 +925,19 @@ export async function defaultStartLine(
  * transaction and holds the project row. Three ways it goes:
  *
  *   * THE LINE HAS STARTED. It is locked (L4), so the start leaves it where it is and writes only the
- *     merge check, and says so — `locked`, with the line the project is actually on.
+ *     merge check, and says so — `locked`, with the line the project is actually on. A main branch
+ *     the start asked for is not written either, and not recorded as a choice.
  *   * THERE IS NO REPOSITORY. A project with no binding whose coordination workspace names no remote
  *     has nothing a line or a check could be recorded on, and nothing ever lands on a branch of it.
  *     A start that asks for `MAIN` and no check asks nothing of it and writes nothing; one asking for
- *     a project branch or a merge check is refused, 409 `INTEGRATION_REPOSITORY_UNKNOWN`, because
- *     writing the rest of the start without them would drop what the owner chose.
- *   * OTHERWISE the line is written `EXPLICIT` — binding the project first when it has no binding —
- *     together with the merge check.
+ *     a project branch, a main branch or a merge check is refused, 409
+ *     `INTEGRATION_REPOSITORY_UNKNOWN`, because writing the rest of the start without them would
+ *     drop what the owner chose.
+ *   * OTHERWISE the line is written `EXPLICIT` — binding the project first when it has no binding,
+ *     on the owner's last main branch for the repository — together with the merge check, and the
+ *     main branch when the start names one, which records it as the owner's choice (L6).
  *
- * Answers with the line and check as they stand once it is done.
+ * Answers with the line, the main branch and the check as they stand once it is done.
  */
 export async function startProjectLine(
   tx: Prisma.TransactionClient,
@@ -759,11 +948,13 @@ export async function startProjectLine(
   const row = await lockCodebase(tx, projectId);
   const locked = !!row?.integrationStartedAt;
   if (!row && !(await coordinationRepository(tx, ownerId, projectId))) {
-    if (settings.line === 'PROJECT_BRANCH' || mergeCheckCommand !== null) {
+    if (settings.line === 'PROJECT_BRANCH' || mergeCheckCommand !== null
+      || settings.upstreamRef !== undefined) {
       throw repositoryUnknown('this project has no repository to integrate into, so it can have '
-        + 'neither a project branch nor a merge check: its coordination workspace has no recorded '
-        + 'remote. Wait for the runner to detect origin, or set Repository URL in the workspace '
-        + 'settings. A project without a repository can start on main with no merge check.');
+        + 'no project branch, main branch or merge check: its coordination workspace has no '
+        + 'recorded remote. Wait for the runner to detect origin, or set Repository URL in the '
+        + 'workspace settings. A project without a repository can start on main with no merge '
+        + 'check.');
     }
     return { line: 'MAIN', mergeCheckCommand: null, locked: false };
   }
@@ -777,12 +968,17 @@ export async function startProjectLine(
         ...(settings.line === 'PROJECT_BRANCH' && settings.projectBranchName !== undefined
           ? { projectBranchName: settings.projectBranchName }
           : {}),
+        ...(settings.upstreamRef !== undefined ? { upstreamRef: settings.upstreamRef } : {}),
         mergeCheckCommand,
       },
   });
   const written = (await readProjectCodebase(tx, projectId))!;
   const line = decidedLine(written)!;
-  const stands = { mergeCheckCommand: written.mergeCheckCommand, locked };
+  const stands = {
+    upstreamRef: written.upstreamRef,
+    mergeCheckCommand: written.mergeCheckCommand,
+    locked,
+  };
   return line === 'PROJECT_BRANCH'
     ? { line, projectBranchName: written.integrationRef, ...stands }
     : { line, ...stands };

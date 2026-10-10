@@ -159,7 +159,9 @@ import {
 import {
   configureProjectIntegration,
   type IntegrationSettings,
+  lastMainBranchView,
   projectIntegrationView,
+  readMainBranchMemory,
   readProjectIntegrationView,
   type ProjectIntegrationView,
   readProjectCodebase,
@@ -2617,6 +2619,7 @@ export class ProjectsService {
       independence,
       blockers,
       standardSetConfirmation,
+      mainBranchMemory,
     ] = await Promise.all([
       // One lookup by primary key, not a tally of this project's tasks.
       //
@@ -2671,6 +2674,10 @@ export class ProjectsService {
       // that none of the lanes beside it reads. Served on this document so a client renders WHY
       // the column says what it says instead of re-deriving the rule for itself.
       readStandardSetConfirmationState(this.prisma, project.acceptanceCriterionDefinitions, id),
+      // And the main branch this account chose last for the project's repository (contract L6),
+      // one statement keyed by the project: what a coordinator reads before it asks to start, to
+      // know whether it has to suggest one.
+      readMainBranchMemory(this.prisma, id),
     ]);
     const landingAnswers = criterionLandingWithReasons(
       landingFacts,
@@ -2720,7 +2727,10 @@ export class ProjectsService {
         ...criterionIndependenceAnswer(independent.get(item.id)),
       })),
       blockers,
-      integration: projectIntegrationView(codebase, project.exceptionEscalationSeconds),
+      integration: {
+        ...projectIntegrationView(codebase, project.exceptionEscalationSeconds),
+        lastMainBranch: lastMainBranchView(mainBranchMemory),
+      },
       // The projection itself, whole: `withheld` is every clause that does not hold — ALL of them,
       // not the first — and `criteria` carries each one's three lane answers. One fold
       // (`derivedDoneFromLanes`) is shared with the write at the bottom of this file, so what a

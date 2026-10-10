@@ -509,6 +509,13 @@ export class StartProjectDto implements StartProjectRequestBody {
     message: 'CODEBASE_AUTHORITY_INVALID: projectBranchName must be a full branch ref such as refs/heads/project/next',
   })
   projectBranchName?: string;
+  /** The project's main branch as a full ref, recorded as the owner's choice (L6). Left out, the
+   *  project keeps the one it stands on: for a new binding, the owner's last for its repository. */
+  @IsOptional()
+  @Matches(BRANCH_REF, {
+    message: 'CODEBASE_AUTHORITY_INVALID: upstreamRef must be a full branch ref such as refs/heads/main',
+  })
+  upstreamRef?: string;
   /** Automatic: whether the coordinator runs the project for the owner. */
   @IsBoolean() automatic!: boolean;
   @IsInt() @Min(1) @Max(MAX_PROJECT_CONCURRENT_TASKS) maxConcurrentTasks!: number;
@@ -531,6 +538,13 @@ export class RequestProjectStartDto implements ProjectStartRequestBody {
     message: 'CODEBASE_AUTHORITY_INVALID: projectBranchName must be a full branch ref such as refs/heads/project/next',
   })
   projectBranchName?: string;
+  /** The main branch the coordinator suggests, as a full ref — read from the repository when this
+   *  account has no last choice for it (`integration.lastMainBranch`). Left out suggests none. */
+  @IsOptional()
+  @Matches(BRANCH_REF, {
+    message: 'CODEBASE_AUTHORITY_INVALID: upstreamRef must be a full branch ref such as refs/heads/main',
+  })
+  upstreamRef?: string;
   /** Left out is on: the owner's card opens with Automatic on whatever is suggested. */
   @IsOptional() @IsBoolean() automatic?: boolean;
   @IsInt() @Min(1) @Max(MAX_PROJECT_CONCURRENT_TASKS) maxConcurrentTasks!: number;
