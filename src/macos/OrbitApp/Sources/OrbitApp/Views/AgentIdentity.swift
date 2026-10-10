@@ -150,6 +150,9 @@ struct EngineSwitchSheet: View {
                                 .lineLimit(1)
                         }
                     }
+                    // The engine's name is the row: "DeepSeek Harness" keeps its width, and the model
+                    // beside it gives way first (board iOS 4 ①).
+                    .layoutPriority(1)
                 }
                 .opacity(greyed ? 0.5 : 1)
                 Spacer(minLength: 8)
@@ -161,6 +164,7 @@ struct EngineSwitchSheet: View {
                     .foregroundStyle(engine.unavailable == nil || greyed ? AnyShapeStyle(.secondary)
                                                                          : AnyShapeStyle(Color.accentColor))
                     .lineLimit(1)
+                    .minimumScaleFactor(0.85)
                 if engine.slug == current.slug {
                     Image(systemName: "checkmark")
                         .font(.body.weight(.semibold)).foregroundStyle(Color.accentColor)

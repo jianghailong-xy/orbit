@@ -416,32 +416,33 @@ struct InfrastructureKeysSection: View {
 
     /// A key's name over its model and the engines it runs on, and at its end Disabled — or, for a
     /// DeepSeek key that is on, its account's balance once one is read, in the tone of what it comes to.
+    /// The value keeps the row's end (board iOS 1 ③): the engines line wraps beside it rather than
+    /// pushing it under the row, as a `LabeledContent` does once its label runs wide.
     private func row(_ key: ConfiguredProvider, balance: ProviderBalanceReading?) -> some View {
-        LabeledContent {
+        HStack(spacing: 12) {
+            ProviderMark(provider: key.slug, size: 26, brandKey: key.presetSlug, label: key.label)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(Infrastructure.keyLabel(key.label, presetSlug: key.presetSlug))
+                    .lineLimit(1)
+                if let model = Infrastructure.defaultModel(key) {
+                    Text(model)
+                        .font(.orbitListSubtitle)
+                        .foregroundStyle(.secondary)
+                }
+                // "Claude Code · OpenCode · DeepSeek Harness" — or a Claude subscription token's
+                // "Claude Code · subscription token" (`ProvidersOverview.keyLine`).
+                Text(ProvidersOverview.keyLine(key))
+                    .font(.orbitListSubtitle)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
             if key.enabled == false {
                 Text(Infrastructure.disabled)
+                    .foregroundStyle(.secondary)
             } else if let balance, let value = DeepSeekBalance.rowValue(DeepSeekBalance.state(balance)) {
                 Text(value.label)
                     .foregroundStyle(PoolTone.color(value.tone))
                     .monospacedDigit()
-            }
-        } label: {
-            HStack(spacing: 12) {
-                ProviderMark(provider: key.slug, size: 26, brandKey: key.presetSlug, label: key.label)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(Infrastructure.keyLabel(key.label, presetSlug: key.presetSlug))
-                        .lineLimit(1)
-                    if let model = Infrastructure.defaultModel(key) {
-                        Text(model)
-                            .font(.orbitListSubtitle)
-                            .foregroundStyle(.secondary)
-                    }
-                    // "Claude Code · OpenCode · DeepSeek Harness" — or a Claude subscription token's
-                    // "Claude Code · subscription token" (`ProvidersOverview.keyLine`).
-                    Text(ProvidersOverview.keyLine(key))
-                        .font(.orbitListSubtitle)
-                        .foregroundStyle(.secondary)
-                }
             }
         }
     }
