@@ -56,11 +56,6 @@ const ALLOWED: Record<string, [count: number, why: string]> = {
 
   // The coordinator's judgment turn.
 
-  // The coordinator's opening, open items and wake dispositions.
-  'src/apiserver/src/projects/coordinator-opening.ts': [68, TO_ENGLISH],
-  'src/apiserver/src/projects/project-open-item.ts': [231, TO_ENGLISH],
-  'src/apiserver/src/projects/wake-disposition.service.ts': [8, TO_ENGLISH],
-
   // The task brief and the notes delivered into sessions.
 
   // The wiki: its topics, the prompts that write it and the prose it writes, on the server and the runner.

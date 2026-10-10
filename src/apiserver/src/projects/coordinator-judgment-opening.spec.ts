@@ -83,11 +83,11 @@ test('the opening names the tools that are in reach, and the ones that are not',
 test('the opening does not instruct, and does not repeat the two sentences that are false here', () => {
   const opening = buildJudgmentOpening(ENDED, '协调重做');
 
-  assert.doesNotMatch(opening, /没有任何自动的环会替你决定什么时候动/);
-  assert.doesNotMatch(opening, /推进靠的是跟人对话/);
-  // No imperative about the work itself. "先读再说" is the conversational opening's, and "you should"
+  assert.doesNotMatch(opening, /No automatic loop decides for you when to act/);
+  assert.doesNotMatch(opening, /Progress comes from talking with people/);
+  // No imperative about the work itself. "Read first" is the conversational opening's, and "you should"
   // is the shape any later edit would most likely reach for.
-  assert.doesNotMatch(opening, /先读再说/);
+  assert.doesNotMatch(opening, /Read first/);
   assert.doesNotMatch(opening, /you should|you need to|please first|next, you/i);
 });
 
@@ -397,9 +397,9 @@ test('a judgment session is filed under a different title from the conversation'
  */
 test('the conversation a person opens still opens the way 60dece5e restored it', () => {
   const conversational = buildCoordinatorOpening('协调重做', PROJECT, false);
-  assert.match(conversational, /没有任何自动的环会替你决定什么时候动/);
-  assert.match(conversational, /推进靠的是跟人对话/);
-  assert.match(conversational, /先读再说/);
+  assert.match(conversational, /No automatic loop decides for you when to act/);
+  assert.match(conversational, /Progress comes from talking with people/);
+  assert.match(conversational, /Read first/);
   assert.doesNotMatch(conversational, /What happened: /);
 });
 
