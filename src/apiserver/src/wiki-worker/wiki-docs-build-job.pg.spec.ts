@@ -100,25 +100,25 @@ interface FakeModel {
  * one; the overview citing the first footnote it was given.
  */
 function writerAnswer(prompt: string): string {
-  if (prompt.includes('做「归并」')) {
+  if (prompt.includes('the "merge"')) {
     const ids = [...prompt.matchAll(/^\[([A-Z]\d+)\] /gmu)].map(([, id]) => id);
-    return `${ids.map((id) => `${id} | 采用 | 讲的正是本节`).join('\n')}\n现状：\n- 本节要点 [${ids[0] ?? 'D1'}]\n`;
+    return `${ids.map((id) => `${id} | adopt | it is just what this section covers`).join('\n')}\nCurrent state:\n- the point of this section [${ids[0] ?? 'D1'}]\n`;
   }
-  if (prompt.includes('（概述，')) return '### 总览\n这篇讲一个会话怎么运转[F1]。\n';
-  if (prompt.includes('补逐字引文')) return '';
-  if (!prompt.includes('# 任务：写文档')) return '?';
-  const materials = prompt.split('## 可用材料（只可引用这些，编号不变）\n')[1]?.split('\n\n## 写法')[0] ?? '';
+  if (prompt.includes('(the overview, about')) return '### Overview\nThis document covers how a session runs[F1].\n';
+  if (prompt.includes('give the footnotes below their verbatim quotes')) return '';
+  if (!prompt.includes('# Task: write the document')) return '?';
+  const materials = prompt.split('## The materials you may use (cite only these, by the ids they have)\n')[1]?.split('\n\n## How to write')[0] ?? '';
   const sentences: string[] = [];
   const quotes: string[] = [];
   for (const block of materials.split(/\n(?=\[[A-Z]\d+\] )/u)) {
     const id = /^\[([A-Z]\d+)\] /u.exec(block)?.[1];
     if (!id) continue;
     const line = block.split('\n').slice(1).map((one) => one.trim()).find((one) => one.length >= 10 && !one.startsWith('```'));
-    sentences.push(`本节依据 ${id} 写成一句话[${id}]。`);
-    if (line) quotes.push(`[${id}] 「${Array.from(line).slice(0, 60).join('')}」`);
+    sentences.push(`This section rests on ${id} in one sentence[${id}]. `);
+    if (line) quotes.push(`[${id}] "${Array.from(line).slice(0, 60).join('')}"`);
   }
-  if (sentences.length === 0) return '### 边界\n本篇只讲会话怎么运转。\n';
-  return `### 本节\n${sentences.join('')}\n\n引文：\n${quotes.join('\n')}\n`;
+  if (sentences.length === 0) return '### Boundaries\nThis document covers only how a session runs.\n';
+  return `### This section\n${sentences.join('').trim()}\n\nQuotes:\n${quotes.join('\n')}\n`;
 }
 
 async function fakeModel(): Promise<FakeModel> {
@@ -708,7 +708,7 @@ test('canary: the confirmation makes a docs_build job and no task; the worker bu
     'the overview written again from one call; the sections whose material did not change left as they are');
   assert.deepEqual([(again.report as Record<string, unknown>).written, (again.report as Record<string, unknown>).unchanged], [1, 2]);
   assert.equal(h.model.hits.length - firstHits, 1, 'one call in all: the overview\'s');
-  assert.ok(h.model.hits.slice(firstHits).every((hit) => hit.prompt.includes('（概述，')));
+  assert.ok(h.model.hits.slice(firstHits).every((hit) => hit.prompt.includes('(the overview, about')));
   const [, secondRow] = await builds(h, s.spaceId);
   assert.deepEqual([secondRow.state, secondRow.outcome, secondRow.version, (secondRow.report as { sections: unknown }).sections],
     ['ended', 'succeeded', v2, { written: 1, unchanged: 2, failed: 0 }]);
@@ -1005,7 +1005,7 @@ test('a section whose code has a raw NUL in it builds: the model is shown the co
   // A writer that quotes the code with words it does not have: the footnote's excerpt is then the piece's own head —
   // the code, NUL and all — which is what a model that paraphrases leaves a footnote with, and the write must store.
   const asWritten = h.model.answer;
-  h.model.answer = (prompt) => asWritten(prompt).replace(/^\[C1\] 「.*」$/mu, '[C1] 「a line the code does not have」');
+  h.model.answer = (prompt) => asWritten(prompt).replace(/^\[C1\] ".*"$/mu, '[C1] "a line the code does not have"');
   h.model.hits.length = 0;
   try {
     const ended = await buildEnd(h, worker(h), row.job_id!);
@@ -1064,9 +1064,9 @@ test('a NUL in the model\'s answer, raw or as \\u0000: the build succeeds, the a
   h.model.answer = (prompt) => {
     const text = asWritten(prompt);
     // Which section a write prompt is for is its header's number: the outline below it names every section.
-    const section = /^# 任务：写文档《[^》]*》的第 (\d+) 节/mu.exec(prompt)?.[1];
-    if (section === '2') return text.replace(/写成一句话/gu, `写成一句${NUL}话`).replace(/「/gu, `「${NUL}`);
-    if (section === '3') return text.replace(/写成一句话/gu, '写成一句\\u0000话');
+    const section = /^# Task: write the document «[^»]*», section (\d+)/mu.exec(prompt)?.[1];
+    if (section === '2') return text.replace(/in one sentence/gu, `in one sen${NUL}tence`).replace(/\] "/gu, `] "${NUL}`);
+    if (section === '3') return text.replace(/in one sentence/gu, 'in one sen\\u0000tence');
     return text;
   };
   try {
@@ -1080,8 +1080,8 @@ test('a NUL in the model\'s answer, raw or as \\u0000: the build succeeds, the a
       [row.job_id]);
     const kept = writes.map((one) => (one.answer_encoding === 'base64' ? Buffer.from(one.answer, 'base64').toString('utf8') : one.answer));
     assert.ok(writes.some((one) => one.answer_encoding === 'base64'), 'the answer with a raw NUL is kept as its bytes');
-    assert.ok(kept.some((text) => text.includes(`写成一句${NUL}话`)), 'and read back with its NUL');
-    assert.ok(kept.some((text) => text.includes('写成一句\\u0000话')), 'the escaped one is kept as the six characters it is');
+    assert.ok(kept.some((text) => text.includes(`in one sen${NUL}tence`)), 'and read back with its NUL');
+    assert.ok(kept.some((text) => text.includes('in one sen\\u0000tence')), 'the escaped one is kept as the six characters it is');
 
     // What was written has no NUL: the raw one left out, the escaped one the text the model wrote.
     const { rows: sentences } = await h.sql.query<{ text: string }>(
@@ -1090,8 +1090,8 @@ test('a NUL in the model\'s answer, raw or as \\u0000: the build succeeds, the a
     assert.ok(sentences.length > 0);
     assert.ok(sentences.every((one) => !one.text.includes(NUL)), JSON.stringify(sentences));
     // The flow section is the one citing the code (C1): its sentence, the NUL the model put in it left out.
-    assert.ok(sentences.some((one) => one.text.includes('依据 C1 写成一句话')), 'the flow section\'s sentence, its NUL left out');
-    assert.ok(sentences.some((one) => one.text.includes('写成一句\\u0000话')), 'the conventions section\'s sentence, as the model wrote it');
+    assert.ok(sentences.some((one) => one.text.includes('on C1 in one sentence')), 'the flow section\'s sentence, its NUL left out');
+    assert.ok(sentences.some((one) => one.text.includes('in one sen\\u0000tence')), 'the conventions section\'s sentence, as the model wrote it');
     const { rows: notes } = await h.sql.query<{ quote: string | null }>(
       `SELECT f."quote" FROM "wiki_doc_footnote" f JOIN "wiki_doc_sentence" t ON t."id" = f."sentence_id"
          JOIN "wiki_doc_section" x ON x."id" = t."section_id" JOIN "wiki_doc" d ON d."id" = x."doc_id" WHERE d."space_id" = $1`, [s.spaceId]);

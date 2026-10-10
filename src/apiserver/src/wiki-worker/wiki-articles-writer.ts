@@ -151,13 +151,13 @@ export function wikiArticlePrompt(
     return `Write the overview of the wiki topic "${topicTitle}". The topic is split into these sub-articles:
 ${subs}
 
-Using ONLY the numbered entries below (the most important ones of each sub-article), write in Chinese:
+Using ONLY the numbered entries below (the most important ones of each sub-article), write in English:
 - first line: "# " + the topic title
 - two or three short paragraphs that tell a reader what this topic covers and point out its most important rules and traps.
 Rules:
 - EVERY sentence must end with one or more footnote markers such as [2] or [2][5], the numbers of the entries it is based on. A sentence without a marker will be deleted.
 - State only what the entries say; do not invent facts, versions, dates, numbers or paths.
-- LENGTH: 450-750 Chinese characters in total, 6-9 sentences. Anything past ${WIKI_ARTICLE_RULES.maxChars} characters is cut off.
+- LENGTH: 450-750 characters in total, 6-9 sentences. Anything past ${WIKI_ARTICLE_RULES.maxChars} characters is cut off.
 Output only the Markdown.
 
 ENTRIES:
@@ -166,16 +166,16 @@ ${entries}`;
   const scope = kind === 'subtopic' ? ` (a part of the topic "${topicTitle}")` : '';
   return `Write a wiki article titled "${title}"${scope}, using ONLY the numbered knowledge entries below.
 
-Format (Markdown, in Chinese; keep code identifiers, paths and commands verbatim in backticks):
+Format (Markdown, in English; keep code identifiers, paths and commands verbatim in backticks):
 - first line: "# " + a concise article title
 - a lead paragraph of 2-3 sentences: what this area is about and its most important rules and traps
-- then 2-4 sections "## heading" of 2-3 sentences each that group the knowledge (for example 约定 / 决策 / 常见的坑 / 做法 / 概念 — choose what fits)
+- then 2-4 sections "## heading" of 2-3 sentences each that group the knowledge (for example Conventions / Decisions / Common pitfalls / Practices / Concepts — choose what fits)
 Rules:
 - EVERY sentence must end with one or more footnote markers such as [3] or [3][7], the numbers of the entries it is based on. A sentence without a marker will be deleted.
 - State only what the entries say; do not invent facts, versions, dates, numbers or paths. If entries disagree, say so and cite both.
 - Prefer the most important and most corroborated entries (more sources = more corroborated); you need not cite every entry.
-- Mark a trap that an entry says is fixed as 已修.
-- LENGTH: 450-800 Chinese characters in total, 8-11 sentences, one point per sentence. Anything past ${WIKI_ARTICLE_RULES.maxChars} characters is cut off.
+- Mark a trap that an entry says is fixed as (fixed).
+- LENGTH: 450-800 characters in total, 8-11 sentences, one point per sentence. Anything past ${WIKI_ARTICLE_RULES.maxChars} characters is cut off.
 Output only the Markdown article.
 
 ENTRIES:
@@ -193,12 +193,13 @@ export function wikiArticleRetrySuffix(chars: number): string {
  */
 export function wikiArticleNamePrompt(topicTitle: string, members: readonly WikiArticleWriterEntry[], taken: readonly string[]): string {
   const titles = members.slice(0, 14).map((entry) => `- ${cutCodePoints(entry.title, 60)}`);
-  let prompt = `下面是 wiki 里「${topicTitle}」主题下归在同一组的条目标题：\n${titles.join('\n')}\n\n`
-    + '给这组起一个简短的中文小标题（不超过 14 个字，可保留代码名），概括它们共同讲的事。';
+  let prompt = `Below are the titles of the entries filed in one group under the wiki topic "${topicTitle}":\n${titles.join('\n')}\n\n`
+    + 'Give this group a short English subheading (at most 14 characters; code names may stay) that sums up what they have in common.';
   if (taken.length > 0) {
-    prompt += `\n同一主题的其他组已经叫：${taken.join('、')}。起一个和它们都不同的名字，说出这组独有的内容，不要只换个说法。`;
+    prompt += `\nThe topic's other groups are already called: ${taken.join(', ')}. Give this one a name different from all of them that says what `
+      + 'only this group covers, not just another way of saying one of theirs.';
   }
-  return `${prompt}只输出这个小标题。`;
+  return `${prompt} Output only the subheading.`;
 }
 
 // ── Reading what comes back ─────────────────────────────────────────────────────────────────────
@@ -267,7 +268,7 @@ export function wikiArticleFallbackName(members: readonly Pick<WikiArticleWriter
   }
   if (best !== '') return cutCodePoints(best, WIKI_ARTICLE_WRITER.nameMaxChars);
   if (members.length > 0) return cutCodePoints(members[0].title, 14);
-  return '其他';
+  return 'Other';
 }
 
 // ── Grouping: a big topic's subtopics, by code ──────────────────────────────────────────────────

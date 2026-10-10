@@ -332,8 +332,11 @@ function refusalText(spaceId: string, error: WikiRefusalError): string {
 
 // ── The repository, through the space's runner ─────────────────────────────────────────────────
 
-/** What a `read` cut short ends with: `wikiRepoOpAfterwardsMarker` in src/runner-go/wiki_repo_ops.go. */
-const READ_CUT_MARKER = '\n…（后略）\n';
+/**
+ * What a `read` cut short ends with: `wikiRepoOpAfterwardsMarker` in src/runner-go/wiki_repo_ops.go, `\n… (rest omitted)\n` —
+ * or the `\n…（后略）\n` an older runner ends it with, as the read cache may still hold it.
+ */
+const READ_CUT_MARKER = /\n…(?: \(rest omitted\)|（后略）)\n$/u;
 
 /**
  * The checkout at the snapshot's commit, as the writer reads it (`WikiDocRepo`): which files there are and how big
@@ -500,7 +503,7 @@ export function wikiDocsShownOf(file: WikiRepoFileRead, size: number): WikiDocSh
   if (file.state === 'too_large') return null;
   let text = file.text;
   if (file.state !== 'cut') return { text, cut: false };
-  if (text.endsWith(READ_CUT_MARKER)) text = text.slice(0, -READ_CUT_MARKER.length);
+  text = text.replace(READ_CUT_MARKER, '');
   return { text: text.slice(0, text.lastIndexOf('\n') + 1), cut: true };
 }
 

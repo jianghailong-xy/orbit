@@ -128,21 +128,24 @@ const HEAD = 'a'.repeat(40);
 // of its lines) and the contract, with one quote from elsewhere in the design document and one made up; s3 cites
 // the owner's words and the delivery comment — first with a paragraph that marks only its last sentence and with
 // no quote for the comment, then marked sentence by sentence.
-const WRITE_S2 = '### turn 怎么投递\n'
-  + '一轮 turn 先落库再投递，至少投递一次[D1]。runner 通过出站轮询领取工作，不开入站端口[C1]。'
-  + '契约把投递写成至少一次、按 turn id 幂等[K1]。序号在重生后保持单调[D1][S9]，优先级仍是 [P0]。\n\n'
-  + '引文：\n'
-  + '[D1] 「A turn is stored before it is delivered」\n'
-  + '[D1] 「Seq stays monotonic across respawn」\n'
-  + '[C1] 「keeps the heartbeat going. It never opens an inbound port.」\n'
-  + '[K1] 「The contract says delivery is exactly once」\n';
-const WRITE_S3_FIRST = '### 约定\n'
-  + '运行约定有两条。全量测试必须在 `runner 宿主` 上跑，不能在引擎 Bash 里跑。整包跑完要看 0 FAIL[S1][S3]。\n\n'
-  + '引文：\n[S1] 「全量测试在 runner 宿主上跑」\n';
-const WRITE_S3_SECOND = '### 约定\n'
-  + '全量测试必须在 `runner 宿主` 上跑，不能在引擎 Bash 里跑[S1]。整包跑完要看 0 FAIL[S3]。\n\n'
-  + '引文：\n[S1] 「全量测试在 runner 宿主上跑」\n';
-const REPAIR_S3 = '[S3] 「在 runner 宿主上跑完整包」\n';
+const WRITE_S2 = '### How a turn is delivered\n'
+  + 'A turn is stored before it is delivered, and delivered at least once[D1]. The runner takes its work by polling outbound, and opens no '
+  + 'inbound port[C1]. The contract writes delivery as at least once, idempotent on the turn id[K1]. The sequence stays monotonic across a '
+  + 'respawn[D1][S9], and the priority is still [P0].\n\n'
+  + 'Quotes:\n'
+  + '[D1] "A turn is stored before it is delivered"\n'
+  + '[D1] "Seq stays monotonic across respawn"\n'
+  + '[C1] "keeps the heartbeat going. It never opens an inbound port."\n'
+  + '[K1] "The contract says delivery is exactly once"\n';
+// The owner's words and the delivery comment are Chinese, and quoted as they are: a quote is never translated.
+const WRITE_S3_FIRST = '### Conventions\n'
+  + "There are two conventions for running. The full suite must run on the `runner host`, never in the engine's Bash. After the whole "
+  + 'package has run, look for 0 FAIL[S1][S3].\n\n'
+  + 'Quotes:\n[S1] "全量测试在 runner 宿主上跑"\n';
+const WRITE_S3_SECOND = '### Conventions\n'
+  + "The full suite must run on the `runner host`, never in the engine's Bash[S1]. After the whole package has run, look for 0 FAIL[S3].\n\n"
+  + 'Quotes:\n[S1] "全量测试在 runner 宿主上跑"\n';
+const REPAIR_S3 = '[S3] "在 runner 宿主上跑完整包"\n';
 
 /** The id the prompt gave the piece whose text begins with `text` (`docsIDOf`). */
 function idOf(prompt: string, text: string): string {
@@ -162,23 +165,26 @@ class ScriptedModel {
   failing: 'content' | 'platform' | null = null;
 
   answer(prompt: string): string {
-    const title = /「([^」]+)」（/u.exec(prompt)?.[1] ?? '';
-    if (prompt.includes('做「归并」')) {
+    const title = /## This section\n«([^»]+)» \(/u.exec(prompt)?.[1] ?? '';
+    if (prompt.includes('the "merge"')) {
       const lines = [...prompt.matchAll(/^\[([A-Z]\d+)\] /gmu)].map(([, id]) => {
-        if (id === idOf(prompt, OFF_TOPIC)) return `${id} | 舍弃 | 与本节无关`;
-        if (id === idOf(prompt, OUTPUT)) return `${id} | 合并到 ${idOf(prompt, OWNER_WORDS)} | 说的是同一件事，owner 原话分量更重`;
-        return `${id} | 采用 | 讲的正是本节`;
+        if (id === idOf(prompt, OFF_TOPIC)) return `${id} | drop | unrelated to this section`;
+        if (id === idOf(prompt, OUTPUT)) return `${id} | merge into ${idOf(prompt, OWNER_WORDS)} | it says the same thing, and the owner's words weigh more`;
+        return `${id} | adopt | it is just what this section covers`;
       });
-      return `${lines.join('\n')}\n现状：\n- 本节的现状要点 [S1]\n`;
+      return `${lines.join('\n')}\nCurrent state:\n- the point this section makes [S1]\n`;
     }
-    if (prompt.includes('补逐字引文')) {
-      return [...prompt.matchAll(/^## \[([A-Z]\d+)\] 标在/gmu)].map(([, id]) => this.repair[id] ?? '').join('');
+    if (prompt.includes('give the footnotes below their verbatim quotes')) {
+      return [...prompt.matchAll(/^## \[([A-Z]\d+)\] marks/gmu)].map(([, id]) => this.repair[id] ?? '').join('');
     }
-    if (prompt.includes('（概述，')) return '### 总览\n一轮先存后投，至少投递一次[F1]。运行约定是全量测试在 runner 宿主上跑[F4]。\n';
-    if (prompt.includes('# 任务：写文档')) {
+    if (prompt.includes('(the overview, about')) {
+      return '### Overview\nA turn is stored first and delivered after, at least once[F1]. The convention for running is that the full suite runs on '
+        + 'the runner host[F4].\n';
+    }
+    if (prompt.includes('# Task: write the document')) {
       const answers = this.write[title] ?? [];
       if (answers.length === 0) return '';
-      return prompt.includes('上一稿的问题') && answers.length > 1 ? answers[1] : answers[0];
+      return prompt.includes('What was wrong with the last draft') && answers.length > 1 ? answers[1] : answers[0];
     }
     return '?';
   }
@@ -318,9 +324,9 @@ test('the template messages and a repeated text never reach the model, and say s
   }
   const ledger = new Map(h.server.written('s3').dispositions.map((disposition) => [disposition.ref, disposition]));
   assert.equal(ledger.get('turn-template')?.action, 'filtered');
-  assert.match(ledger.get('turn-template')?.reason ?? '', /复查模板/u);
+  assert.match(ledger.get('turn-template')?.reason ?? '', /review template message/u);
   assert.equal(ledger.get('comment-2')?.action, 'filtered');
-  assert.match(ledger.get('comment-2')?.reason ?? '', /原文相同/u);
+  assert.match(ledger.get('comment-2')?.reason ?? '', /the same original as/u);
 });
 
 // ── What became of each piece ───────────────────────────────────────────────────────────────────
@@ -362,7 +368,9 @@ test('every footnote gets its verbatim quote; one missing is asked for once more
   const s2 = h.server.written('s2');
   // The body: markers numbered by first appearance, no material id and no quote block left, a marker naming no
   // piece of the section (S9) dropped, and brackets that are the text's own ([P0]) left alone.
-  assert.equal(s2.markdown, '一轮 turn 先落库再投递，至少投递一次[1]。runner 通过出站轮询领取工作，不开入站端口[2]。契约把投递写成至少一次、按 turn id 幂等[3]。序号在重生后保持单调[1]，优先级仍是 [P0]。');
+  assert.equal(s2.markdown, 'A turn is stored before it is delivered, and delivered at least once[1]. The runner takes its work by polling outbound, and opens '
+    + 'no inbound port[2]. The contract writes delivery as at least once, idempotent on the turn id[3]. The sequence stays monotonic across a respawn[1], '
+    + 'and the priority is still [P0].');
   assert.equal(s2.footnotes.length, 3);
   for (const footnote of s2.footnotes) {
     assert.ok(footnote.quote !== null && footnote.sha === HEAD && footnote.lines && typeof footnote.verified === 'boolean' && footnote.excerpt && footnote.ref === undefined,
@@ -376,17 +384,17 @@ test('every footnote gets its verbatim quote; one missing is asked for once more
   // s3: a record's footnote carries its id, the range the server handed out and the entry it came through; the
   // quote the model left out was asked for once more, and the paragraph marked only at its end was written again.
   const s3 = h.server.written('s3');
-  assert.equal(s3.markdown, '全量测试必须在 `runner 宿主` 上跑，不能在引擎 Bash 里跑[1]。整包跑完要看 0 FAIL[2]。');
+  assert.equal(s3.markdown, "The full suite must run on the `runner host`, never in the engine's Bash[1]. After the whole package has run, look for 0 FAIL[2].");
   assert.equal(s3.footnotes.length, 2);
   const [owner, comment] = s3.footnotes;
   assert.deepEqual([owner.kind, owner.ref, (owner.chars as { end: number }).end, owner.quote, owner.sha, owner.verified],
     ['turn', 'turn-owner', Array.from(OWNER_WORDS).length, '全量测试在 runner 宿主上跑', undefined, undefined]);
   assert.deepEqual([comment.kind, comment.ref, comment.quote], ['task_comment', 'comment-1', '在 runner 宿主上跑完整包']);
   // s2 and s3 are written side by side, so the repair asked about s3 is found by what it asks about.
-  const repair = h.model.prompts.find((prompt) => prompt.includes('补逐字引文') && prompt.includes('## [S3] 标在')) ?? '';
-  assert.ok(repair.includes('[S3]') && repair.includes(DELIVERY) && !repair.includes('[S1] 标在'), `the quote was asked for as ${repair}`);
-  const again = h.model.prompts.find((prompt) => prompt.includes('上一稿的问题')) ?? '';
-  assert.ok(again.includes('运行约定有两条'), 'the paragraph marked only at its end was asked about');
+  const repair = h.model.prompts.find((prompt) => prompt.includes('give the footnotes below their verbatim quotes') && prompt.includes('## [S3] marks')) ?? '';
+  assert.ok(repair.includes('[S3]') && repair.includes(DELIVERY) && !repair.includes('[S1] marks'), `the quote was asked for as ${repair}`);
+  const again = h.model.prompts.find((prompt) => prompt.includes('What was wrong with the last draft')) ?? '';
+  assert.ok(again.includes('There are two conventions for running'), 'the paragraph marked only at its end was asked about');
   // Every footnote of every section has its quote.
   for (const { request } of h.server.writes) {
     for (const section of request.sections) {
@@ -394,8 +402,9 @@ test('every footnote gets its verbatim quote; one missing is asked for once more
     }
   }
   // The write prompt asks for the quotes, sentence by sentence, and for an abbreviation explained first.
-  for (const prompt of h.model.prompts.filter((p) => p.includes('# 任务：写文档') && !p.includes('（概述，'))) {
-    for (const rule of ['每一个编号都必须有一行引文', '不能只在段末标一次', 'SR50', '先用半句话说明它指什么']) assert.ok(prompt.includes(rule), `the write prompt does not say ${rule}`);
+  for (const prompt of h.model.prompts.filter((p) => p.includes('# Task: write the document') && !p.includes('(the overview, about'))) {
+    for (const rule of ['Every id that appears in the body must have a line of quote', 'never only once at the end of the paragraph', 'SR50',
+      'is explained in half a sentence where it first appears']) assert.ok(prompt.includes(rule), `the write prompt does not say ${rule}`);
   }
 });
 
@@ -428,12 +437,12 @@ test('a section whose material did not change is left as it is; the overview is 
   const first = new Map(['s1', 's2', 's3'].map((key) => [key, h.server.written(key)]));
   // The overview was written from the sections as written: their text with their footnotes as [F<n>], and its own
   // footnotes are theirs — the same originals and the same quotes.
-  const overviewPrompt = h.model.prompts.find((prompt) => prompt.includes('（概述，')) ?? '';
-  for (const want of ['【第 2 节 turn 怎么投递】', '至少投递一次[F1]', '【第 3 节 约定】', '[F1] 「A turn is stored before it is delivered」']) {
+  const overviewPrompt = h.model.prompts.find((prompt) => prompt.includes('(the overview, about')) ?? '';
+  for (const want of ['[Section 2: turn 怎么投递]', 'at least once[F1]', '[Section 3: 约定]', '[F1] "A turn is stored before it is delivered"']) {
     assert.ok(overviewPrompt.includes(want), `the overview prompt does not carry ${want}`);
   }
   const s1 = first.get('s1')!;
-  assert.equal(s1.markdown, '一轮先存后投，至少投递一次[1]。运行约定是全量测试在 runner 宿主上跑[2]。');
+  assert.equal(s1.markdown, 'A turn is stored first and delivered after, at least once[1]. The convention for running is that the full suite runs on the runner host[2].');
   assert.equal(s1.footnotes.length, 2);
   assert.deepEqual([s1.footnotes[0].path, s1.footnotes[0].quote, s1.footnotes[0].verified], ['docs/design.md', first.get('s2')!.footnotes[0].quote, true]);
   assert.deepEqual([s1.footnotes[1].ref, s1.footnotes[1].quote], ['turn-owner', first.get('s3')!.footnotes[0].quote]);
@@ -529,13 +538,13 @@ test('a section the plan gives no material is written from one call, its footnot
   const h = harness();
   const docs = plan();
   docs[0].sections.push({ key: 's4', title: '边界', kind: 'conventions', covers: '本篇不讲什么。', length: 200, sources: { ...empty } });
-  h.model.write['边界'] = ['### 边界\n本篇只讲会话怎么运转，任务怎么派发另有专篇。\n'];
+  h.model.write['边界'] = ['### Boundaries\nThis document covers only how a session runs; how tasks are dispatched has a document of its own.\n'];
   const summary = await build(h, new MemoryRepo(HEAD, files()), { docs, doc: 'session-runtime', section: 's4' });
   assert.deepEqual([summary.written, summary.calls], [1, 1], 'written from one call, with no merge');
   assert.equal(h.model.prompts.length, 1);
-  assert.ok(h.model.prompts[0].includes('归并后没有可用材料') && !h.model.prompts[0].includes('做「归并」'));
+  assert.ok(h.model.prompts[0].includes('No material is left after the merge') && !h.model.prompts[0].includes('the "merge"'));
   const s4 = h.server.written('s4');
-  assert.deepEqual([s4.footnotes, s4.dispositions, s4.markdown], [[], [], '本篇只讲会话怎么运转，任务怎么派发另有专篇。']);
+  assert.deepEqual([s4.footnotes, s4.dispositions, s4.markdown], [[], [], 'This document covers only how a session runs; how tasks are dispatched has a document of its own.']);
 });
 
 test('sections that name one file all wait for its read: a plan of v27\'s shape is built through the space\'s runner (2026-10-09)', async () => {

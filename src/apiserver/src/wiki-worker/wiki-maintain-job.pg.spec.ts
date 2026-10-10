@@ -837,25 +837,25 @@ test('a server run reads, checks, proposes, advances, verifies and re-checks the
  * overview citing the first footnote it was given.
  */
 function writerAnswer(prompt: string): string {
-  if (prompt.includes('做「归并」')) {
+  if (prompt.includes('the "merge"')) {
     const ids = [...prompt.matchAll(/^\[([A-Z]\d+)\] /gmu)].map(([, id]) => id);
-    return `${ids.map((id) => `${id} | 采用 | 讲的正是本节`).join('\n')}\n现状：\n- 本节要点 [${ids[0] ?? 'S1'}]\n`;
+    return `${ids.map((id) => `${id} | adopt | it is just what this section covers`).join('\n')}\nCurrent state:\n- the point of this section [${ids[0] ?? 'S1'}]\n`;
   }
-  if (prompt.includes('（概述，')) return '### 总览\n这篇讲 fixture 的端口怎么取[F1]。\n';
-  if (prompt.includes('补逐字引文')) return '';
-  if (!prompt.includes('# 任务：写文档')) return '?';
-  const materials = prompt.split('## 可用材料（只可引用这些，编号不变）\n')[1]?.split('\n\n## 写法')[0] ?? '';
+  if (prompt.includes('(the overview, about')) return '### Overview\nThis document covers where a fixture takes its port from[F1].\n';
+  if (prompt.includes('give the footnotes below their verbatim quotes')) return '';
+  if (!prompt.includes('# Task: write the document')) return '?';
+  const materials = prompt.split('## The materials you may use (cite only these, by the ids they have)\n')[1]?.split('\n\n## How to write')[0] ?? '';
   const sentences: string[] = [];
   const quotes: string[] = [];
   for (const block of materials.split(/\n(?=\[[A-Z]\d+\] )/u)) {
     const id = /^\[([A-Z]\d+)\] /u.exec(block)?.[1];
     if (!id) continue;
     const line = block.split('\n').slice(1).map((one) => one.trim()).find((one) => one.length >= 10 && !one.startsWith('```'));
-    sentences.push(`本节依据 ${id} 写成一句话[${id}]。`);
-    if (line) quotes.push(`[${id}] 「${Array.from(line).slice(0, 60).join('')}」`);
+    sentences.push(`This section rests on ${id} in one sentence[${id}]. `);
+    if (line) quotes.push(`[${id}] "${Array.from(line).slice(0, 60).join('')}"`);
   }
-  if (sentences.length === 0) return '### 约定\n本节只讲端口怎么取。\n';
-  return `### 本节\n${sentences.join('')}\n\n引文：\n${quotes.join('\n')}\n`;
+  if (sentences.length === 0) return '### Conventions\nThis section covers only where the port comes from.\n';
+  return `### This section\n${sentences.join('').trim()}\n\nQuotes:\n${quotes.join('\n')}\n`;
 }
 
 test('the documents step reads the confirmed plan through its read, and a section whose projects are { id, title } gets its material', { skip }, async () => {
@@ -1515,7 +1515,7 @@ test('a proposal naming a new design document\'s sections as its prompt lists th
   });
   const prompts: string[] = [];
   h.model.answer = (hit) => {
-    if (!hit.prompt.includes('# 任务：维护作业的 plan 修改建议')) return writerAnswer(hit.prompt);
+    if (!hit.prompt.includes("# Task: the maintenance run's proposed change to the plan")) return writerAnswer(hit.prompt);
     prompts.push(hit.prompt);
     return production.answer;
   };
@@ -1530,7 +1530,7 @@ test('a proposal naming a new design document\'s sections as its prompt lists th
   const docs = (run.report as { docs: { unplaced: unknown; proposal: Record<string, unknown> | null } }).docs;
   assert.deepEqual(docs.unplaced, { designDocs: 1, entries: 0 }, 'the document is new on origin/main, and no section cites it');
   // The model was shown the document's sections with their `##`, and named two of them that way.
-  assert.match(prompts[0] ?? '', /章节：[^\n]*## 4\. wiki 怎么跟上；[^\n]*## 12\. 现在的缺口一起补（owner 10-09）；/u);
+  assert.match(prompts[0] ?? '', /Sections: [^\n]*## 4\. wiki 怎么跟上; [^\n]*## 12\. 现在的缺口一起补（owner 10-09）; /u);
   assert.deepEqual(
     { outcome: docs.proposal?.outcome, rounds: docs.proposal?.rounds, error: docs.proposal?.error ?? null },
     { outcome: 'proposed', rounds: 1, error: null },
@@ -1579,14 +1579,14 @@ test('a proposal naming a document\'s slug as its topic is refused by the run\'s
       },
     },
   });
-  const answerNaming = (topic: string): string => '放入：wiki-pipeline\n理由：评论发起改动时踩过的坑，plan 里没有一节讲。\n覆盖：K1\n'
-    + '### 1. 评论发起改动的坑 | pitfalls | 300\n讲什么：评论发起改动时踩过的坑。\n'
-    + `- 会话：关键词 评论、改动；kind pitfall；主题 ${topic}；要找：owner 说评论发起改动出过什么错的原话\n`;
+  const answerNaming = (topic: string): string => 'Into: wiki-pipeline\nReason: the pitfalls hit when a comment starts a change have no section in the plan.\nUses: K1\n'
+    + '### 1. Pitfalls of a change a comment starts | pitfalls | 300\nCovers: the pitfalls hit when a comment starts a change.\n'
+    + `- Sessions: keywords comment, change; kind pitfall; topics ${topic}; look for: the owner's words saying what went wrong when a comment started a change\n`;
   const prompts: string[] = [];
   h.model.answer = (hit) => {
-    if (!hit.prompt.includes('# 任务：维护作业的 plan 修改建议')) return writerAnswer(hit.prompt);
+    if (!hit.prompt.includes("# Task: the maintenance run's proposed change to the plan")) return writerAnswer(hit.prompt);
     prompts.push(hit.prompt);
-    const listed = /现有主题（slug「名称」·active 条目数）：([a-z0-9-]+)「/u.exec(hit.prompt);
+    const listed = /Existing topics \(slug «name» · active entries\): ([a-z0-9-]+) «/u.exec(hit.prompt);
     return answerNaming(listed?.[1] ?? 'wiki-pipeline');
   };
   const which = worker(h);
@@ -1606,8 +1606,8 @@ test('a proposal naming a document\'s slug as its topic is refused by the run\'s
   assert.equal(prompts.length, 2);
   // Round 1 was refused here, before the gate saw it: by its section, with the space's topics as the gate lists them.
   assert.ok(
-    prompts[1].includes('\n- 第 1 节: "wiki-pipeline" is not a topic of this space: 现有主题（slug「名称」·active 条目数）：wiki「Wiki」·0；sessions「会话」·0\n'),
-    `round 2 was told: ${prompts[1].slice(prompts[1].indexOf('## 上一次的答案有这些问题'))}`,
+    prompts[1].includes('\n- section 1: "wiki-pipeline" is not a topic of this space: Existing topics (slug «name» · active entries): wiki «Wiki» · 0; sessions «会话» · 0\n'),
+    `round 2 was told: ${prompts[1].slice(prompts[1].indexOf('## The last answer had these problems'))}`,
   );
   assert.ok(!prompts[1].includes('change.doc.'), 'the gate refused nothing: the run\'s own check found it first');
   const stored = await h.prisma.wikiPlanProposal.findMany({ where: { ownerId: h.ownerId, spaceId: fx.spaceId } });

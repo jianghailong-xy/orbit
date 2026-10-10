@@ -1595,8 +1595,9 @@ type PlansVersion = WikiPlans['version'];
 // ── Helpers ─────────────────────────────────────────────────────────────────────────────────────
 
 /** The plan job's own system prompt, for the one plan change a maintenance run may propose (contract `plan.jobs`). */
-const PLAN_SYSTEM_PROMPT = '你是这个仓库的文档主编。你根据材料规划产品与技术文档。只使用材料里出现的文件路径、'
-  + '章节标题、符号、项目名，不编造。用中文写，代码名、路径、命令保留原文。只输出要求的内容。';
+const PLAN_SYSTEM_PROMPT = "You are the chief editor of this repository's documentation. You plan its product and technical documents from "
+  + 'the materials. Use only the file paths, section headings, symbols and project names that appear in the materials, and invent '
+  + 'none. Write in English; keep code names, paths and commands as they are. Output only what is asked for.';
 
 /** Take the quotes off an add's sources, and the places they were quoted from. */
 function stripQuotes(body: Record<string, unknown>): void {

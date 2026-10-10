@@ -139,13 +139,13 @@ async function fakeModel(): Promise<FakeModel> {
 function writer(names: string[] = []): (prompt: string) => string {
   let named = 0;
   return (prompt) => {
-    if (prompt.includes('起一个简短的中文小标题')) return `好的，这组的小标题是：\n「${names[named++] ?? `第 ${named} 组`}」`;
-    const title = /titled "([^"]+)"/u.exec(prompt)?.[1] ?? /topic "([^"]+)"/u.exec(prompt)?.[1] ?? '文章';
+    if (prompt.includes('Give this group a short English subheading')) return `OK, the subheading for this group is:\n"${names[named++] ?? `Group ${named}`}"`;
+    const title = /titled "([^"]+)"/u.exec(prompt)?.[1] ?? /topic "([^"]+)"/u.exec(prompt)?.[1] ?? 'Article';
     const lines = [`# ${title}`, ''];
     for (let i = 0; i < 12; i += 1) {
-      lines.push(`第 ${i + 1} 句写清楚这一组条目说的一条规则，以及它背后的原因和常见的坑[${(i % 2) + 1}]。`);
+      lines.push(`Sentence ${i + 1} states a rule these entries give, the reason behind it and the pitfall it avoids[${(i % 2) + 1}].`);
     }
-    lines.push('这一句越界引用了一条不存在的条目[99]。', '这一句没有脚注，会被删掉。');
+    lines.push('This sentence cites an entry that does not exist[99].', 'This sentence has no footnote, and is deleted.');
     return lines.join('\n');
   };
 }
@@ -397,7 +397,7 @@ test('canary: the server writes the changed topics\' articles, and the footnote 
   h.model.hits.length = 0;
   h.model.status = () => 200;
   h.model.before = async () => undefined;
-  h.model.answer = writer(['组件渲染', 'lib 请求']);
+  h.model.answer = writer(['Component rendering', 'lib requests']);
   const w = worker(h);
   assert.equal(await enqueueWikiArticlesJob(h.prisma as unknown as PrismaService, { ownerId: o.id, spaceId: o.spaceId }), true);
   await until('the articles job', w, async () => settled(await jobs(h, o)), 90);
@@ -433,7 +433,7 @@ test('canary: the server writes the changed topics\' articles, and the footnote 
   assert.deepEqual(requests.filter((request) => request.unit.includes('/name-')).length, 2, 'the two groups were named');
   for (const hit of h.model.hits) {
     assert.match(hit.system, /encyclopedia-style wiki articles/u);
-    assert.equal(hit.maxTokens, hit.prompt.includes('起一个简短的中文小标题') ? WIKI_ARTICLES_JOB.nameMaxTokens : WIKI_ARTICLES_JOB.articleMaxTokens);
+    assert.equal(hit.maxTokens, hit.prompt.includes('Give this group a short English subheading') ? WIKI_ARTICLES_JOB.nameMaxTokens : WIKI_ARTICLES_JOB.articleMaxTokens);
   }
 
   // Nothing changed since: the next job asks nothing and writes nothing.
