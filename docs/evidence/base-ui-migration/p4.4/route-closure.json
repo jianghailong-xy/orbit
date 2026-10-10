@@ -1,0 +1,498 @@
+{
+ "audit": {
+  "commit": "f4ec61864e53a13aa35cbff25b5ea1ae03c99453",
+  "scopeHash": "33cf994720f55abeeaccd795ab6497dd92603232aaaf52c1b0c989924dc7b2c7"
+ },
+ "records": [
+  "2026-10-07.json",
+  "2026-10-07b.json",
+  "2026-10-07c.json",
+  "2026-10-07d.json",
+  "2026-10-08.json",
+  "2026-10-08b.json",
+  "2026-10-09.json",
+  "2026-10-09b.json",
+  "2026-10-09c.json"
+ ],
+ "routes": [
+  {
+   "route": "/s/:token (task, project, wiki or session link)",
+   "entry": "pages/SharedLinkPage.tsx",
+   "modules": 187,
+   "antd": [
+    {
+     "module": "src/web/src/components/Transcript.tsx",
+     "antd": [
+      "Image"
+     ],
+     "owner": "P5.2",
+     "chain": [
+      "src/web/src/pages/SharedLinkPage.tsx",
+      "src/web/src/pages/SharedSessionPage.tsx {{ SharedLoading, sharedRootQuery, SharedSessionPage, SharedUnavailable }}",
+      "src/web/src/components/Transcript.tsx {{ ArtifactResolverContext, AttachmentResolverContext, EventFullCtx, PublicLinkResolverCtx, type PublicLinkResolver, Transcript, }}"
+     ]
+    }
+   ]
+  },
+  {
+   "route": "/s/:token/t/:taskId",
+   "entry": "pages/SharedLinkPage.tsx",
+   "modules": 187,
+   "antd": [
+    {
+     "module": "src/web/src/components/Transcript.tsx",
+     "antd": [
+      "Image"
+     ],
+     "owner": "P5.2",
+     "chain": [
+      "src/web/src/pages/SharedLinkPage.tsx",
+      "src/web/src/pages/SharedSessionPage.tsx {{ SharedLoading, sharedRootQuery, SharedSessionPage, SharedUnavailable }}",
+      "src/web/src/components/Transcript.tsx {{ ArtifactResolverContext, AttachmentResolverContext, EventFullCtx, PublicLinkResolverCtx, type PublicLinkResolver, Transcript, }}"
+     ]
+    }
+   ]
+  },
+  {
+   "route": "/s/:token/d/:slug",
+   "entry": "pages/SharedWikiPage.tsx",
+   "modules": 115,
+   "antd": [
+    {
+     "module": "src/web/src/components/Transcript.tsx",
+     "antd": [
+      "Image"
+     ],
+     "owner": "P5.2",
+     "chain": [
+      "src/web/src/pages/SharedWikiPage.tsx",
+      "src/web/src/pages/SharedSessionPage.tsx {{ SharedLoading, SharedUnavailable }}",
+      "src/web/src/components/Transcript.tsx {{ ArtifactResolverContext, AttachmentResolverContext, EventFullCtx, PublicLinkResolverCtx, type PublicLinkResolver, Transcript, }}"
+     ]
+    }
+   ]
+  },
+  {
+   "route": "/s/:token/c/:sessionId (a shared conversation)",
+   "entry": "pages/SharedSessionPage.tsx",
+   "modules": 104,
+   "antd": [
+    {
+     "module": "src/web/src/components/Transcript.tsx",
+     "antd": [
+      "Image"
+     ],
+     "owner": "P5.2",
+     "chain": [
+      "src/web/src/pages/SharedSessionPage.tsx",
+      "src/web/src/components/Transcript.tsx {{ ArtifactResolverContext, AttachmentResolverContext, EventFullCtx, PublicLinkResolverCtx, type PublicLinkResolver, Transcript, }}"
+     ]
+    }
+   ]
+  },
+  {
+   "route": "/login",
+   "entry": "pages/LoginPage.tsx",
+   "modules": 7,
+   "antd": []
+  },
+  {
+   "route": "/setup",
+   "entry": "pages/SetupPage.tsx",
+   "modules": 21,
+   "antd": []
+  },
+  {
+   "route": "/enroll",
+   "entry": "pages/EnrollPage.tsx",
+   "modules": 16,
+   "antd": []
+  },
+  {
+   "route": "/cli-login",
+   "entry": "pages/CliLoginPage.tsx",
+   "modules": 17,
+   "antd": []
+  },
+  {
+   "route": "(the signed-in shell: sidebar and session search)",
+   "entry": "components/AppShell.tsx",
+   "modules": 225,
+   "antd": [
+    {
+     "module": "src/web/src/components/TasksSidePanel.tsx",
+     "antd": [
+      "Avatar",
+      "Dropdown",
+      "Tooltip"
+     ],
+     "owner": "P5.1",
+     "chain": [
+      "src/web/src/components/AppShell.tsx",
+      "src/web/src/components/TasksSidePanel.tsx {{ TasksSidePanel }}"
+     ]
+    },
+    {
+     "module": "src/web/src/components/SessionSearch.tsx",
+     "antd": [
+      "Modal",
+      "Spin"
+     ],
+     "owner": "P5.1",
+     "chain": [
+      "src/web/src/components/AppShell.tsx",
+      "src/web/src/components/SessionSearch.tsx {{ SessionSearch }}"
+     ]
+    },
+    {
+     "module": "src/web/src/components/WorkspaceView.tsx",
+     "antd": [
+      "App",
+      "Button",
+      "Dropdown",
+      "Image",
+      "Input",
+      "MenuProps",
+      "Popover",
+      "Select",
+      "Spin",
+      "Tooltip"
+     ],
+     "owner": "P5.3",
+     "chain": [
+      "src/web/src/components/AppShell.tsx",
+      "src/web/src/components/SessionSearch.tsx {{ SessionSearch }}",
+      "src/web/src/components/WorkspaceView.tsx {{ StatusIcon, statusLabel }}"
+     ]
+    },
+    {
+     "module": "src/web/src/components/SessionMoveModal.tsx",
+     "antd": [
+      "App",
+      "Modal",
+      "Spin"
+     ],
+     "owner": "P5.1",
+     "chain": [
+      "src/web/src/components/AppShell.tsx",
+      "src/web/src/components/SessionSearch.tsx {{ SessionSearch }}",
+      "src/web/src/components/WorkspaceView.tsx {{ StatusIcon, statusLabel }}",
+      "src/web/src/components/SessionMoveModal.tsx {{ SessionMoveModal, type MoveDialogSession }}"
+     ]
+    },
+    {
+     "module": "src/web/src/components/SessionOutputs.tsx",
+     "antd": [
+      "Drawer",
+      "Dropdown",
+      "Input",
+      "MenuProps",
+      "Segmented",
+      "Tooltip",
+      "theme"
+     ],
+     "owner": "P5.1",
+     "chain": [
+      "src/web/src/components/AppShell.tsx",
+      "src/web/src/components/SessionSearch.tsx {{ SessionSearch }}",
+      "src/web/src/components/WorkspaceView.tsx {{ StatusIcon, statusLabel }}",
+      "src/web/src/components/SessionOutputs.tsx {{ SessionOutputs }}"
+     ]
+    },
+    {
+     "module": "src/web/src/components/NewSessionProviderHero.tsx",
+     "antd": [
+      "Popover"
+     ],
+     "owner": "P5.1",
+     "chain": [
+      "src/web/src/components/AppShell.tsx",
+      "src/web/src/components/SessionSearch.tsx {{ SessionSearch }}",
+      "src/web/src/components/WorkspaceView.tsx {{ StatusIcon, statusLabel }}",
+      "src/web/src/components/NewSessionProviderHero.tsx {{ NewSessionProviderHero }}"
+     ]
+    },
+    {
+     "module": "src/web/src/components/Transcript.tsx",
+     "antd": [
+      "Image"
+     ],
+     "owner": "P5.2",
+     "chain": [
+      "src/web/src/components/AppShell.tsx",
+      "src/web/src/components/SessionSearch.tsx {{ SessionSearch }}",
+      "src/web/src/components/WorkspaceView.tsx {{ StatusIcon, statusLabel }}",
+      "src/web/src/components/Transcript.tsx {{ DshRepairCard }}"
+     ]
+    },
+    {
+     "module": "src/web/src/components/PlanUsageIndicator.tsx",
+     "antd": [
+      "Popover"
+     ],
+     "owner": "P5.1",
+     "chain": [
+      "src/web/src/components/AppShell.tsx",
+      "src/web/src/components/SessionSearch.tsx {{ SessionSearch }}",
+      "src/web/src/components/WorkspaceView.tsx {{ StatusIcon, statusLabel }}",
+      "src/web/src/components/PlanUsageIndicator.tsx {{ PlanUsageIndicator }}"
+     ]
+    },
+    {
+     "module": "src/web/src/components/CodexResetCredit.tsx",
+     "antd": [
+      "Button",
+      "Modal"
+     ],
+     "owner": "P5.1",
+     "chain": [
+      "src/web/src/components/AppShell.tsx",
+      "src/web/src/components/SessionSearch.tsx {{ SessionSearch }}",
+      "src/web/src/components/WorkspaceView.tsx {{ StatusIcon, statusLabel }}",
+      "src/web/src/components/PlanUsageIndicator.tsx {{ PlanUsageIndicator }}",
+      "src/web/src/components/CodexResetCredit.tsx {{ CodexResetConfirm, CodexResetCreditCard, useCodexResetCredit, type CodexResetContext, }}"
+     ]
+    }
+   ]
+  },
+  {
+   "route": "/ (the default landing)",
+   "entry": "App.tsx#DefaultLanding",
+   "modules": 12,
+   "antd": []
+  },
+  {
+   "route": "/tasks, /tasks/:id, /lists/:key",
+   "entry": "pages/TaskRoute.tsx",
+   "modules": 146,
+   "antd": [
+    {
+     "module": "src/web/src/components/Transcript.tsx",
+     "antd": [
+      "Image"
+     ],
+     "owner": "P5.2",
+     "chain": [
+      "src/web/src/pages/TaskRoute.tsx",
+      "src/web/src/pages/TaskListView.tsx {{ TaskListView }}",
+      "src/web/src/components/TaskDetailPanel.tsx {{ TaskDetailPanel }}",
+      "src/web/src/components/Transcript.tsx {{ MD }}"
+     ]
+    }
+   ]
+  },
+  {
+   "route": "/settings/profile",
+   "entry": "pages/ProfilePage.tsx",
+   "modules": 29,
+   "antd": []
+  },
+  {
+   "route": "/settings",
+   "entry": "pages/SettingsPage.tsx",
+   "modules": 25,
+   "antd": []
+  },
+  {
+   "route": "/settings/shared-links",
+   "entry": "pages/SharedLinksPage.tsx",
+   "modules": 29,
+   "antd": []
+  },
+  {
+   "route": "/settings/access-tokens",
+   "entry": "pages/AccessTokensPage.tsx",
+   "modules": 35,
+   "antd": []
+  },
+  {
+   "route": "/admin",
+   "entry": "pages/AdminUsersPage.tsx",
+   "modules": 31,
+   "antd": []
+  },
+  {
+   "route": "/admin/sign-in",
+   "entry": "pages/AdminSignInPage.tsx",
+   "modules": 18,
+   "antd": []
+  },
+  {
+   "route": "/infrastructure",
+   "entry": "pages/InfrastructurePage.tsx",
+   "modules": 69,
+   "antd": []
+  },
+  {
+   "route": "/providers/new, /providers/new/:slug, /providers/:id",
+   "entry": "pages/ProviderConnectPage.tsx",
+   "modules": 38,
+   "antd": []
+  },
+  {
+   "route": "/providers/pools/:id",
+   "entry": "pages/ProviderPoolPage.tsx",
+   "modules": 56,
+   "antd": []
+  },
+  {
+   "route": "/following",
+   "entry": "pages/FollowingPage.tsx",
+   "modules": 23,
+   "antd": []
+  },
+  {
+   "route": "/projects, /projects/:id, /projects/:id/tasks/:taskId",
+   "entry": "pages/ProjectsPage.tsx",
+   "modules": 168,
+   "antd": [
+    {
+     "module": "src/web/src/components/Transcript.tsx",
+     "antd": [
+      "Image"
+     ],
+     "owner": "P5.2",
+     "chain": [
+      "src/web/src/pages/ProjectsPage.tsx",
+      "src/web/src/components/ProjectTaskPanel.tsx {import()}",
+      "src/web/src/components/TaskDetailPanel.tsx {{ TaskDetailPanel }}",
+      "src/web/src/components/Transcript.tsx {{ MD }}"
+     ]
+    }
+   ]
+  },
+  {
+   "route": "/wiki and its routes",
+   "entry": "pages/WikiPage.tsx",
+   "modules": 255,
+   "antd": [
+    {
+     "module": "src/web/src/components/WorkspaceView.tsx",
+     "antd": [
+      "App",
+      "Button",
+      "Dropdown",
+      "Image",
+      "Input",
+      "MenuProps",
+      "Popover",
+      "Select",
+      "Spin",
+      "Tooltip"
+     ],
+     "owner": "P5.3",
+     "chain": [
+      "src/web/src/pages/WikiPage.tsx",
+      "src/web/src/components/WorkspaceView.tsx {{ statusLabel }}"
+     ]
+    },
+    {
+     "module": "src/web/src/components/SessionSearch.tsx",
+     "antd": [
+      "Modal",
+      "Spin"
+     ],
+     "owner": "P5.1",
+     "chain": [
+      "src/web/src/pages/WikiPage.tsx",
+      "src/web/src/components/SessionSearch.tsx {{ openSessionSearch }}"
+     ]
+    },
+    {
+     "module": "src/web/src/components/Transcript.tsx",
+     "antd": [
+      "Image"
+     ],
+     "owner": "P5.2",
+     "chain": [
+      "src/web/src/pages/WikiPage.tsx",
+      "src/web/src/components/OrbitLinkCard.tsx {{ OrbitLinkCardsProvider }}",
+      "src/web/src/components/Transcript.tsx {{ relTime }}"
+     ]
+    },
+    {
+     "module": "src/web/src/components/SessionMoveModal.tsx",
+     "antd": [
+      "App",
+      "Modal",
+      "Spin"
+     ],
+     "owner": "P5.1",
+     "chain": [
+      "src/web/src/pages/WikiPage.tsx",
+      "src/web/src/components/WorkspaceView.tsx {{ statusLabel }}",
+      "src/web/src/components/SessionMoveModal.tsx {{ SessionMoveModal, type MoveDialogSession }}"
+     ]
+    },
+    {
+     "module": "src/web/src/components/SessionOutputs.tsx",
+     "antd": [
+      "Drawer",
+      "Dropdown",
+      "Input",
+      "MenuProps",
+      "Segmented",
+      "Tooltip",
+      "theme"
+     ],
+     "owner": "P5.1",
+     "chain": [
+      "src/web/src/pages/WikiPage.tsx",
+      "src/web/src/components/WorkspaceView.tsx {{ statusLabel }}",
+      "src/web/src/components/SessionOutputs.tsx {{ SessionOutputs }}"
+     ]
+    },
+    {
+     "module": "src/web/src/components/NewSessionProviderHero.tsx",
+     "antd": [
+      "Popover"
+     ],
+     "owner": "P5.1",
+     "chain": [
+      "src/web/src/pages/WikiPage.tsx",
+      "src/web/src/components/WorkspaceView.tsx {{ statusLabel }}",
+      "src/web/src/components/NewSessionProviderHero.tsx {{ NewSessionProviderHero }}"
+     ]
+    },
+    {
+     "module": "src/web/src/components/PlanUsageIndicator.tsx",
+     "antd": [
+      "Popover"
+     ],
+     "owner": "P5.1",
+     "chain": [
+      "src/web/src/pages/WikiPage.tsx",
+      "src/web/src/components/WorkspaceView.tsx {{ statusLabel }}",
+      "src/web/src/components/PlanUsageIndicator.tsx {{ PlanUsageIndicator }}"
+     ]
+    },
+    {
+     "module": "src/web/src/components/CodexResetCredit.tsx",
+     "antd": [
+      "Button",
+      "Modal"
+     ],
+     "owner": "P5.1",
+     "chain": [
+      "src/web/src/pages/WikiPage.tsx",
+      "src/web/src/components/WorkspaceView.tsx {{ statusLabel }}",
+      "src/web/src/components/PlanUsageIndicator.tsx {{ PlanUsageIndicator }}",
+      "src/web/src/components/CodexResetCredit.tsx {{ CodexResetConfirm, CodexResetCreditCard, useCodexResetCredit, type CodexResetContext, }}"
+     ]
+    }
+   ]
+  },
+  {
+   "route": "/runners/register",
+   "entry": "components/RunnerRegisterGuide.tsx",
+   "modules": 7,
+   "antd": []
+  },
+  {
+   "route": "/runners/:id",
+   "entry": "pages/RunnerDetailPage.tsx",
+   "modules": 59,
+   "antd": []
+  }
+ ]
+}

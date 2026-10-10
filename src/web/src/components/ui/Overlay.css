@@ -26,6 +26,8 @@
   color: var(--text-3); background: transparent; font-size: 16px; line-height: 1; cursor: pointer;
 }
 .orbit-overlay-close:hover:not(:disabled) { color: var(--text-1); background: var(--orbit-control-hover-bg); }
+/* The replaced dialog's Close took a stronger hover than the controls' shared one; pressed, it still takes the rule below. */
+:where(.orbit-dialog > .orbit-overlay-header) > .orbit-overlay-close:hover:not(:disabled) { background: var(--orbit-dialog-close-hover-bg); }
 .orbit-overlay-close:active:not(:disabled) { background: var(--orbit-control-active-bg); }
 .orbit-overlay-close:focus-visible { outline: var(--orbit-focus-width) solid var(--orbit-focus-color); outline-offset: var(--orbit-focus-offset); }
 .orbit-overlay-close:disabled { cursor: default; }

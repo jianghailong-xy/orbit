@@ -3,7 +3,6 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
-import { App as AntApp } from 'antd';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WikiChangeset, WikiChangesetOp } from '@orbit/shared';
 import { WikiReviewPage } from './WikiReviewPage';
@@ -137,9 +136,7 @@ async function mount(): Promise<HTMLElement> {
     root.render(
       <QueryClientProvider client={client}>
         <MemoryRouter>
-          <AntApp>
-            <WikiReviewPage spaceSlug={null} />
-          </AntApp>
+          <WikiReviewPage spaceSlug={null} />
         </MemoryRouter>
       </QueryClientProvider>,
     );
@@ -184,7 +181,7 @@ describe('a challenge card', () => {
     const card = await mount();
     await act(async () => button('Amend', card).click());
     await settle();
-    const dialog = document.querySelector<HTMLElement>('.ant-modal')!;
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
     expect(dialog.textContent).toContain('Your version replaces the entry, and its anchors are checked again.');
     const summary = dialog.querySelector<HTMLTextAreaElement>('textarea')!;
     const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!;

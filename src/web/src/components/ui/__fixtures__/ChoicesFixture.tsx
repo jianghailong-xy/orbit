@@ -19,6 +19,7 @@ import { MultiSelect } from '../MultiSelect';
 import './ChoicesFixture.css';
 
 const expiry = [{ value: 'never', label: 'Never' }, { value: '7', label: '7 days' }, { value: '30', label: '30 days', disabled: true }];
+const expiryFirstDisabled = expiry.map((option, index) => index === 0 ? { ...option, disabled: true } : option);
 const workspaces: SelectOptions = [{ label: 'Local', options: [{ value: 'orbit', label: 'Orbit workspace' }, { value: 'docs', label: '文档 Docs' }, { value: 'off', label: 'Offline workspace', disabled: true }] },
   { label: 'Remote', options: [{ value: 'runner', label: 'Runner workspace' }] }];
 const accounts = [{ value: '', label: 'Automatic' }, { value: 'default', label: 'Default' }, { value: 'work', label: 'Work account', disabled: true }];
@@ -44,7 +45,11 @@ function Samples() {
   const calloutPlacement = side === 'top' ? align === 'center' ? 'top' : align === 'end' ? 'topRight' : 'topLeft'
     : align === 'center' ? 'bottom' : align === 'end' ? 'bottomRight' : 'bottomLeft';
   const anchor = params.get('anchor');
-  const [value, setValue] = useState<string | null>(kind === 'account' ? '' : 'never');
+  // A select sample's starting value (value=none: none, as the replaced dialogs started on undefined), shown in
+  // an output; options=first-disabled disables its first option.
+  const start = params.get('value');
+  const [value, setValue] = useState<string | null>(start === 'none' ? null : start ?? (kind === 'account' ? '' : 'never'));
+  const choiceOptions = state === 'empty' ? [] : kind === 'account' ? accounts : params.get('options') === 'first-disabled' ? expiryFirstDisabled : expiry;
   const [open, setOpen] = useState(false);
   const [many, setMany] = useState(kind === 'tags' ? ['a@b.test', 'c@d.test'] : ['bug', 'docs', 'ops']);
   const [answer, setAnswer] = useState('none');
@@ -101,15 +106,16 @@ function Samples() {
           options={kind === 'tags' ? [] : labels} maxTagCount={kind === 'multiple' ? 2 : undefined} disabled={disabled} clearable
           open={kind === 'tags' ? false : undefined} tokenSeparators={[',', ' ']} />
       : legacy
-        ? <AntSelect placement={placement} aria-label="Sample choice" value={value} onChange={setValue} size={kind === 'expiry' ? 'small' : 'middle'}
+        ? <AntSelect placement={placement} aria-label="Sample choice" value={value ?? undefined} onChange={setValue} size={kind === 'expiry' ? 'small' : 'middle'}
           className="sample-choice" disabled={disabled} allowClear={kind === 'search'} showSearch={kind === 'search'} optionFilterProp="label" virtual={false}
-          classNames={{ popup: { root: 'sample-surface' } }} options={state === 'empty' ? [] : kind === 'account' ? accounts : expiry}
+          classNames={{ popup: { root: 'sample-surface' } }} options={choiceOptions}
           optionRender={kind === 'account' ? (option) => accountDetail(option.data) : undefined} />
         : kind === 'search'
           ? <Combobox side={side} aria-label="Sample choice" options={state === 'empty' ? [] : expiry} value={value} onValueChange={setValue} className="sample-choice" popupClassName="sample-surface" clearable disabled={disabled} />
-          : <Select side={side} aria-label="Sample choice" options={state === 'empty' ? [] : kind === 'account' ? accounts : expiry} value={value} onValueChange={setValue}
+          : <Select side={side} aria-label="Sample choice" options={choiceOptions} value={value} onValueChange={setValue}
             size={kind === 'expiry' ? 'small' : 'middle'} className="sample-choice" popupClassName="sample-surface" disabled={disabled} renderOption={kind === 'account' ? accountDetail : undefined} />}
     </div>
+    {start !== null && <output aria-label="Sample value">{value ?? 'null'}</output>}
   </section></SampleOwner>;
 }
 

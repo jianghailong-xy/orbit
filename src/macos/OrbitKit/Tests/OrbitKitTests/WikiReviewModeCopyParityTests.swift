@@ -611,7 +611,7 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
                          "{wikiLookbackLabel(maintenance.lookbackDays)}", "{server && <WikiPrivacyNote />}",
                          "{WIKI_MAINTENANCE_EDIT}", "{WIKI_TURN_OFF}"],
                     "the web's maintenance rows")
-        let form = try slice(page, from: "function MaintenanceSetUp(", to: "</Modal>")
+        let form = try slice(page, from: "function MaintenanceSetUp(", to: "</Dialog>")
         assertOrder(form, ["{server ? WIKI_MAINTENANCE_NOTE_SERVER : WIKI_MAINTENANCE_NOTE}", "{server ? WIKI_REPO_FROM : WIKI_WORKSPACE}",
                            "{server ? WIKI_REPO_FROM_NOTE : WIKI_WORKSPACE_NOTE}", "{WIKI_MODEL}", "<WikiModelLine model={server} />",
                            "{WIKI_MODEL_NOTE}", "{WIKI_PROVIDER}",
@@ -619,7 +619,7 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
                            "{WIKI_LOOKBACK}", "WIKI_LOOKBACK_CHOICES.map(", "{lookback === 'days' && (",
                            "<span>{WIKI_LOOKBACK_UNIT}</span>", "{WIKI_LOOKBACK_NOTE}", "{server && <WikiPrivacyNote />}"],
                     "the web's Set up form")
-        assertSays(form, "okText={maintenance.enabled ? WIKI_SAVE : WIKI_TURN_ON}", in: Self.settingsPage)
+        assertSays(form, "{maintenance.enabled ? WIKI_SAVE : WIKI_TURN_ON}", in: Self.settingsPage)
         assertSays(form, "lookbackDays: wikiLookbackDays(lookback, days)", in: Self.settingsPage)
         // Under the server nothing writes the provider: what the space names stays, for a return to runner.
         assertSays(form, "...(server ? {} : { provider }),", in: Self.settingsPage)
@@ -678,7 +678,7 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
     /// then the bar — before Details, at both ends.
     func testTheEntrysAnswersAndBarAreInTheSameOrder() throws {
         let drawer = try web(Self.drawer)
-        assertOrder(drawer, ["<WikiEntryAnswers entry={data} />", "<>{WIKI_ACTION_EDIT}</>", "<WikiMarkBar entry={data} />",
+        assertOrder(drawer, ["<WikiEntryAnswers entry={data} />", "wikiEntryAnswerable(data) ? null : WIKI_ACTION_EDIT}", "<WikiMarkBar entry={data} />",
                              "<Section title={WIKI_SECTION_DETAILS}>"], "the drawer's head, bar and first section")
         assertSays(drawer, "{WIKI_NOT_SENT_UNREVIEWED}", in: Self.drawer)
         let marks = try web(Self.marks)
@@ -690,7 +690,7 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
         assertOrder(marks, ["<b>{banner.lead}</b> · {banner.text}", "{line && <div className=\"wk-markbar-line\">{line}</div>}"],
                     "the bar's two lines")
         let run = try web(Self.runPage)
-        assertOrder(run, ["...WIKI_REJECT_MENU.map(({ reason, label }) => ({ key: reason, label }))", "{WIKI_REJECT_ON_RECORD}"],
+        assertOrder(run, ["...WIKI_REJECT_MENU.map(({ reason, label }) => ({ key: reason, label, onSelect: () => onReject(reason) }))", "{WIKI_REJECT_ON_RECORD}"],
                     "the reasons, then where they go")
 
         let view = try native("Views/WikiView.swift")
@@ -719,9 +719,9 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
                              "{wikiRunWhen(changeset.createdAt)}", "{WIKI_REVERT_RUN}", "{WIKI_OPEN_SESSION}",
                              "wikiRunCounts(summary).map(", "title={WIKI_RUN_ADDED}", "title={WIKI_RUN_AMENDED}",
                              "title={WIKI_RUN_REINFORCED}"], "the web's run drawer")
-        let confirm = try slice(run, from: "export function useRevertRun(", to: "onOk:")
+        let confirm = try slice(run, from: "export function useRevertRun(", to: "onConfirm:")
         assertOrder(confirm, ["title: WIKI_REVERT_TITLE", "{wikiRevertBody(summary)}", "{WIKI_REVERT_KEEPS}",
-                              "okText: WIKI_REVERT_RUN_CONFIRM", "okButtonProps: { danger: true }", "cancelText: WIKI_CANCEL"],
+                              "confirmText: WIKI_REVERT_RUN_CONFIRM", "danger: true,", "cancelText: WIKI_CANCEL"],
                     "the web's Revert confirm")
         let row = try slice(run, from: "export function WikiRunTimelineRow(", to: "export function WikiRejectButton(")
         assertOrder(row, ["{WIKI_ORIGIN_WORDS[origin] ?? origin}", "{wikiAppliedChanges(summary?.applied ?? changes)}",

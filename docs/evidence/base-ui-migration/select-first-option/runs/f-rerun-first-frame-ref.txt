@@ -1,0 +1,17 @@
+argv: env P32_BASE_CONFIG=choices.config.mjs P32_PORT=4512 P32_OUTPUT=/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-rerun-first-frame-ref-out npx playwright test --config ui-migration/port.config.mjs ui-migration/choices-first-frame.browser.mjs --project chromium-dark-phone --grep menu is drawn where it settles
+tree: /mnt/data/tmp/34coPBk43ULRuisicUTAy/ref HEAD f492dbb30fa24718061f69ca93ef1df5a05f4fa0
+uncommitted: 
+start: 2026-10-10T01:29:35Z load: 18.58 26.10 34.13
+mem: 4798M available, swap 24715M free
+disk: / 22999M available
+cgroup: 0::/system.slice/run-p2152645-i60835542.scope
+P0 expected screenshots: 44 P0.2 originals, 183 main drift references, 25 accepted migration differences.
+
+Running 2 tests using 1 worker
+
+  ✓  1 [chromium-dark-phone] › ui-migration/choices-first-frame.browser.mjs:177:3 › menu is drawn where it settles from its first frame, at the replaced popup's place (17.8s)
+  ✓  2 [chromium-dark-phone] › ui-migration/choices-first-frame.browser.mjs:177:3 › submenu is drawn where it settles from its first frame, at the replaced popup's place (18.5s)
+
+  2 passed (1.0m)
+end: 2026-10-10T01:30:45Z load: 21.49 25.34 33.28
+exit=0

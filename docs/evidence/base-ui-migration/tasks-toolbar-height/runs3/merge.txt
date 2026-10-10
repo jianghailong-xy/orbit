@@ -1,0 +1,436 @@
+bg_run job bgj_8a5ff6ab8f3e in the session worktree /root/.orbit/worktrees/cc35355c-dd74-5ffe-b8f0-f16dd56d0d48 (SSD), started 2026-10-10T03:03:36Z, exit code 0
+command: git rev-parse HEAD && git status --short && systemd-run --scope --quiet -p MemoryMax=6G sh -c 'echo 500 > /proc/self/oom_score_adj && exec "$@"' sh bash -c 'npm run build -w @orbit/web && npm run test -w @orbit/web'
+Condensed copy (Orbit keeps the whole output on the job): the build in full, then each test file's result line and the totals.
+
+1243db2bba248ed8c597e5c16a5ae1048b80d62e
+?? docs/evidence/base-ui-migration/tasks-toolbar-height/
+
+> @orbit/web@0.1.0 build
+> tsc -b && vite build
+
+vite v8.3.1 building client environment for production...
+transforming...
+✓ 4577 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                                     5.90 kB │ gzip:   2.54 kB
+dist/assets/TaskDependencyGraph-DLioOiRN.css       15.41 kB │ gzip:   2.56 kB
+dist/assets/app-BFyjDuqo.css                      489.70 kB │ gzip:  81.12 kB
+dist/assets/rolldown-runtime-hePW80VL.js            0.71 kB │ gzip:   0.42 kB
+dist/assets/StartPlanGraph-B-oVtzzr.js              0.91 kB │ gzip:   0.53 kB
+dist/assets/ProjectTaskPanel-DMnzJ_P-.js            1.00 kB │ gzip:   0.60 kB
+dist/assets/ProjectDependencyGraph-BfoLMqGl.js     14.75 kB │ gzip:   5.50 kB
+dist/assets/projectDependencyGraph-6Q-AsDLv.js    159.83 kB │ gzip:  53.68 kB
+dist/assets/Floating-CG9GxJCz.js                  182.44 kB │ gzip:  62.45 kB
+dist/assets/TaskDependencyGraph-B36XXJHv.js       188.58 kB │ gzip:  60.86 kB
+dist/assets/sessionExport-BCqCoOhL.js             889.92 kB │ gzip: 213.65 kB
+dist/assets/Transcript-CUT3CvCE.js              1,016.30 kB │ gzip: 322.58 kB
+dist/assets/index-Cf-1hBi4.js                   1,980.47 kB │ gzip: 596.05 kB
+
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 1.04s
+
+> @orbit/web@0.1.0 test
+> vitest run --maxWorkers=2
+
+ ✓ src/components/WorkspaceView.modelControl.test.tsx (11 tests) 11294ms
+ ✓ src/components/WorkspaceView.taskRunHandoff.test.tsx (6 tests) 13658ms
+ ✓ src/pages/InfrastructurePage.codexLogin.test.tsx (19 tests) 13272ms
+ ✓ src/components/WorkspaceView.codexAccount.test.tsx (22 tests) 43875ms
+ ✓ src/components/ApprovalPanel.stale.test.tsx (5 tests) 9149ms
+ ✓ src/components/WorkspaceView.projectSessions.test.tsx (51 tests) 12578ms
+ ✓ src/lib/useControlPlane.watches.test.tsx (6 tests) 6051ms
+ ✓ src/components/WorkspaceView.sessionProjects.test.tsx (19 tests) 7355ms
+ ✓ src/components/WorkspaceView.sessionFolders.test.tsx (11 tests) 2848ms
+ ✓ src/components/BackgroundWakeSteer.test.tsx (5 tests) 4434ms
+ ✓ src/components/Transcript.backgroundWake.test.tsx (14 tests) 4491ms
+ ✓ src/firstPageStylesheet.test.ts (1 test) 1996ms
+ ✓ src/components/WorkspaceView.retryAttachments.test.tsx (7 tests) 3385ms
+ ✓ src/components/WorkspaceView.sessionMenu.test.tsx (21 tests) 4299ms
+ ✓ src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx (19 tests) 3001ms
+ ✓ src/components/WorkspaceView.coordinatorChat.test.tsx (21 tests) 3269ms
+ ✓ src/components/WorkspaceView.promptSuggestion.test.tsx (9 tests) 1568ms
+ ✓ src/components/WorkspaceView.sessionDeepLink.test.tsx (5 tests) 1916ms
+ ✓ src/components/WikiArticlePage.test.tsx (11 tests) 646ms
+ ✓ src/components/SessionSearch.wiki.test.tsx (6 tests) 1609ms
+ ✓ src/lib/useControlPlane.pendingDecisions.test.tsx (3 tests) 2030ms
+ ✓ src/components/WorkspaceView.shareEntry.test.tsx (9 tests) 1592ms
+ ✓ src/App.managedRunner.test.tsx (32 tests) 1664ms
+ ✓ src/components/WikiPlanPage.test.tsx (16 tests) 923ms
+ ✓ src/components/PlanUsageIndicator.test.tsx (33 tests) 1881ms
+ ✓ src/components/ui/keyboardWindow.test.tsx (58 tests) 1219ms
+ ✓ src/components/WorkspaceView.promotionPlacement.test.tsx (13 tests) 1948ms
+ ✓ src/components/WorkspaceView.sessionMessageQueue.test.tsx (5 tests) 1417ms
+ ✓ src/components/WorkspaceView.settlementPointer.test.tsx (9 tests) 1854ms
+ ✓ src/components/WorkspaceView.evidenceHandoff.test.tsx (8 tests) 1373ms
+ ✓ src/lib/useControlPlane.wiki.test.tsx (3 tests) 1533ms
+ ✓ src/components/WorkspaceView.commitResultMessage.test.tsx (9 tests) 1258ms
+ ✓ src/components/TaskDetailPanel.modelRouting.test.tsx (16 tests) 1270ms
+ ✓ src/pages/InfrastructurePage.pools.test.tsx (18 tests) 1084ms
+ ✓ src/components/WorkspaceView.queuedTurnWake.test.tsx (5 tests) 1759ms
+ ✓ src/components/RunnerEngines.renameAccount.test.tsx (13 tests) 1532ms
+ ✓ src/components/WorkspaceView.scrollToBottom.test.tsx (4 tests) 1460ms
+ ✓ src/components/WorkspaceView.managedRunner.test.tsx (9 tests) 1210ms
+ ✓ src/components/TasksSidePanel.destinations.test.tsx (21 tests) 816ms
+ ✓ src/components/WikiSettingsPage.test.tsx (11 tests) 946ms
+ ✓ src/components/WorkspaceView.pinnedFold.test.tsx (3 tests) 732ms
+ ✓ src/components/WikiEntryMarks.test.tsx (9 tests) 803ms
+ ✓ src/components/WorkspaceView.modelRouting.test.tsx (7 tests) 1222ms
+ ✓ src/components/ShareModal.test.tsx (10 tests) 1213ms
+ ✓ src/components/WorkspaceView.loginPool.test.tsx (2 tests) 559ms
+ ✓ src/pages/InfrastructurePage.sharedPools.test.tsx (15 tests) 1362ms
+ ✓ src/components/WorkspaceView.taskStartWaiting.test.tsx (5 tests) 1246ms
+ ✓ src/pages/SharedSessionPage.test.tsx (18 tests) 1315ms
+ ✓ src/components/WorkspaceView.criteriaDecisionCard.test.tsx (4 tests) 1318ms
+ ✓ src/lib/useControlPlane.folders.test.tsx (2 tests) 1023ms
+ ✓ src/pages/AccessTokensPage.test.tsx (6 tests) 1056ms
+ ✓ src/components/ui/Select.test.tsx (26 tests) 769ms
+ ✓ src/pages/InfrastructurePage.test.tsx (6 tests) 944ms
+ ✓ src/components/WikiReviewPage.decided.test.tsx (10 tests) 674ms
+ ✓ src/components/WorkspaceView.retrySessionMessage.test.tsx (8 tests) 1005ms
+ ✓ src/pages/ProjectsPageToolbar.test.tsx (18 tests) 1019ms
+ ✓ src/components/WikiDocPage.test.tsx (11 tests) 678ms
+ ✓ src/pages/InfrastructurePage.overview.test.tsx (13 tests) 863ms
+ ✓ src/components/ApprovalPanel.test.tsx (41 tests) 901ms
+ ✓ src/components/WorkspaceView.neverStarted.test.tsx (9 tests) 655ms
+ ✓ src/components/WorkspaceView.watchingRow.test.tsx (1 test) 326ms
+ ✓ src/pages/SharedProjectPage.test.tsx (11 tests) 560ms
+ ✓ src/pages/InfrastructurePage.machines.test.tsx (14 tests) 975ms
+ ✓ src/components/WorkspaceView.poolAccount.test.tsx (6 tests) 716ms
+ ✓ src/components/WorkspaceView.sessionSwipe.test.tsx (3 tests) 677ms
+ ✓ src/pages/RunnerDetailPage.codexAccount.test.tsx (6 tests) 740ms
+ ✓ src/components/WikiReviewPage.edit.test.tsx (6 tests) 584ms
+ ✓ src/components/WikiHomeContent.test.tsx (10 tests) 407ms
+ ✓ src/components/WorkspaceView.stickyWake.test.tsx (4 tests) 765ms
+ ✓ src/pages/RunnerDetailPage.layout.test.tsx (13 tests) 990ms
+ ✓ src/pages/SharedLinksPage.test.tsx (11 tests) 464ms
+ ✓ src/pages/ProviderPoolPage.whoCanUseIt.test.tsx (9 tests) 759ms
+ ✓ src/components/QueuedUserTurn.test.tsx (34 tests) 842ms
+ ✓ src/pages/ProjectCoordinatorSection.test.tsx (13 tests) 707ms
+ ✓ src/components/WorkspaceView.openItemDelivery.test.tsx (3 tests) 697ms
+ ✓ src/pages/FollowingPage.test.tsx (11 tests) 409ms
+ ✓ src/components/SessionCreatedTasksStrip.test.tsx (18 tests) 609ms
+ ✓ src/components/TaskDetailPanel.share.test.tsx (4 tests) 504ms
+ ✓ src/copyLanguage.test.ts (2 tests) 541ms
+ ✓ src/components/StartProjectCard.test.tsx (37 tests) 516ms
+ ✓ src/pages/ProjectsPage.status.test.tsx (7 tests) 442ms
+ ✓ src/components/WatchEditor.test.tsx (8 tests) 451ms
+ ✓ src/components/WorkspaceView.jumpToStart.test.tsx (3 tests) 788ms
+ ✓ src/components/WorkspaceView.retryMessage.test.tsx (3 tests) 529ms
+ ✓ src/components/Transcript.test.tsx (125 tests) 726ms
+ ✓ src/components/RunnerEngines.claudeAccount.test.tsx (10 tests) 428ms
+ ✓ src/pages/AdminUsersPage.signIn.test.tsx (4 tests) 549ms
+ ✓ src/components/RunnerEngines.antigravityAccounts.test.tsx (18 tests) 551ms
+ ✓ src/components/RunnerEngines.accounts.test.tsx (12 tests) 397ms
+ ✓ src/components/RunnerEngines.kimiAccounts.test.tsx (19 tests) 548ms
+ ✓ src/pages/TaskListView.taskUrl.test.tsx (10 tests) 618ms
+ ✓ src/pages/RunnerDetailPage.kimiAccount.test.tsx (3 tests) 413ms
+ ✓ src/components/ui/boundary.test.ts (1 test) 427ms
+ ✓ src/components/RunnerEngines.removeAccount.test.tsx (12 tests) 711ms
+ ✓ src/pages/RunnerDetailPage.modelRouting.test.tsx (10 tests) 608ms
+ ✓ src/pages/RunnerDetailPage.engines.test.tsx (10 tests) 650ms
+ ✓ src/pages/AdminUsersPage.disable.test.tsx (5 tests) 579ms
+ ✓ src/components/ProjectProgressStatus.test.tsx (52 tests) 561ms
+ ✓ src/components/ui/Menu.test.tsx (20 tests) 447ms
+ ✓ src/components/ApprovalPanel.questionWrap.test.tsx (2 tests) 616ms
+ ✓ src/components/ProjectDoneSettlementCard.nativeParity.test.tsx (12 tests) 291ms
+ ✓ src/components/ReviewCard.test.tsx (22 tests) 487ms
+ ✓ src/components/RunnerEngines.duplicateAccount.test.tsx (9 tests) 454ms
+ ✓ src/components/WikiReviewPage.challenge.test.tsx (4 tests) 408ms
+ ✓ src/pages/ProjectsPage.automatic.test.tsx (7 tests) 385ms
+ ✓ src/App.infrastructure.test.tsx (10 tests) 455ms
+ ✓ src/components/TasksSidePanel.workspaceStep.test.tsx (9 tests) 431ms
+ ✓ src/pages/SetupPage.test.tsx (10 tests) 229ms
+ ✓ src/components/Transcript.settledReply.test.tsx (2 tests) 497ms
+ ✓ src/components/WorkspaceView.streamOrder.test.tsx (1 test) 480ms
+ ✓ src/components/AcceptanceConfirmationCard.test.tsx (41 tests) 514ms
+ ✓ src/components/WorkspaceView.composerMenu.test.tsx (6 tests) 433ms
+ ✓ src/components/Transcript.localArtifact.test.tsx (9 tests) 293ms
+ ✓ src/App.loginNext.test.tsx (8 tests) 261ms
+ ✓ src/pages/LoginPage.google.test.tsx (34 tests) 434ms
+ ✓ src/pages/SharedTaskPage.test.tsx (9 tests) 439ms
+ ✓ src/pages/RunnerDetailPage.selfUpdate.test.tsx (19 tests) 403ms
+ ✓ src/components/CriteriaDecisionCard.test.tsx (36 tests) 456ms
+ ✓ src/pages/ProjectDetailPanorama.test.tsx (9 tests) 369ms
+ ✓ src/components/DeepSeekBalance.test.tsx (22 tests) 373ms
+ ✓ src/components/WatchRelations.test.tsx (16 tests) 309ms
+ ✓ src/components/TasksSidePanel.projects.test.tsx (12 tests) 387ms
+ ✓ src/components/RunnerEngines.singleAccount.test.tsx (24 tests) 368ms
+ ✓ src/pages/ProfilePage.signInMethods.test.tsx (10 tests) 275ms
+ ✓ src/components/OpenItemDeliveryCard.test.tsx (6 tests) 196ms
+ ✓ src/components/TasksSidePanel.admin.test.tsx (4 tests) 333ms
+ ✓ src/pages/ProjectsPage.test.tsx (103 tests) 446ms
+ ✓ src/components/EvidenceDecisionCard.test.tsx (63 tests) 356ms
+ ✓ src/components/ProjectRunSettings.test.tsx (15 tests) 260ms
+ ✓ src/pages/ProviderConnectPage.deepseek.test.tsx (10 tests) 391ms
+ ✓ src/components/OrbitLinkCard.test.tsx (15 tests) 339ms
+ ✓ src/pages/TaskListView.createdIn.test.tsx (5 tests) 245ms
+ ✓ src/components/WikiRunPage.test.tsx (6 tests) 250ms
+ ✓ src/pages/RunnerDetailPage.antigravityAccount.test.tsx (3 tests) 349ms
+ ✓ src/components/WatchCard.test.tsx (9 tests) 237ms
+ ✓ src/pages/TaskListView.outsideProjects.test.tsx (8 tests) 253ms
+ ✓ src/components/WorkspaceView.projectIntent.test.tsx (4 tests) 378ms
+ ✓ src/pages/AdminSignInPage.test.tsx (5 tests) 215ms
+ ✓ src/components/Transcript.watchWake.test.tsx (8 tests) 225ms
+ ✓ src/components/WikiShareButton.test.tsx (3 tests) 276ms
+ ✓ src/components/ProjectShareControls.test.tsx (5 tests) 252ms
+ ✓ src/pages/ProjectsPagePhone.test.tsx (7 tests) 298ms
+ ✓ src/pages/InfrastructurePage.keys.test.tsx (4 tests) 435ms
+ ✓ src/pages/ProjectsPage.delete.test.tsx (4 tests) 293ms
+ ✓ src/components/AccountPause.test.tsx (9 tests) 356ms
+ ✓ src/components/Transcript.backgroundJobs.test.tsx (4 tests) 192ms
+ ✓ src/components/ProjectDoneConversation.test.tsx (12 tests) 276ms
+ ✓ src/components/RunnerEngines.antigravityGoogle.test.tsx (14 tests) 331ms
+ ✓ src/components/LandingJobsSheet.test.tsx (10 tests) 267ms
+ ✓ src/pages/ProfilePage.revokeAccessTokens.test.tsx (3 tests) 324ms
+ ✓ src/components/TaskStartCard.test.tsx (11 tests) 255ms
+ ✓ src/components/RunnerEngines.accountFold.test.tsx (8 tests) 309ms
+ ✓ src/pages/TaskListView.scopeMenu.test.tsx (8 tests) 301ms
+ ✓ src/components/WikiHome.window.test.tsx (5 tests) 158ms
+ ✓ src/pages/SharedWikiPage.test.tsx (4 tests) 246ms
+ ✓ src/pages/AdminUsersPage.accessTokens.test.tsx (1 test) 210ms
+ ✓ src/components/ProjectBlockers.test.tsx (11 tests) 213ms
+ ✓ src/pages/ProfilePage.password.test.tsx (3 tests) 258ms
+ ✓ src/components/SessionReplyCard.test.tsx (8 tests) 227ms
+ ✓ src/pages/ProviderPoolPage.access.test.tsx (5 tests) 237ms
+ ✓ src/pages/TaskListView.toolbarHeight.test.tsx (2 tests) 203ms
+ ✓ src/components/Transcript.referencedTask.test.tsx (8 tests) 257ms
+ ✓ src/components/Transcript.controlPlaneNote.test.tsx (11 tests) 284ms
+ ✓ src/pages/SettingsPage.modelRouting.test.tsx (6 tests) 243ms
+ ✓ src/components/TaskDetailPanel.test.tsx (65 tests) 281ms
+ ✓ src/components/CoordinatorQuestionCard.test.tsx (18 tests) 255ms
+ ✓ src/components/AcceptanceConfirmationCard.preview.test.tsx (2 tests) 151ms
+ ✓ src/pages/CliLoginPage.test.tsx (9 tests) 163ms
+ ✓ src/indexCss.test.ts (2 tests) 85ms
+ ✓ src/components/DecisionRail.exceptions.test.tsx (8 tests) 114ms
+ ✓ src/pages/InfrastructurePage.antigravity.test.tsx (2 tests) 241ms
+ ✓ src/pages/ProviderConnectPage.gemini.test.tsx (3 tests) 154ms
+ ✓ src/components/DecisionRail.pointer.test.tsx (12 tests) 143ms
+ ✓ src/pages/ProjectsPage.readyToClose.test.tsx (2 tests) 134ms
+ ✓ src/components/CoordinatorQuestionRecord.test.tsx (23 tests) 101ms
+ ✓ src/pages/TaskListView.test.tsx (33 tests) 170ms
+ ✓ src/components/CriteriaChangeCard.test.tsx (10 tests) 111ms
+ ✓ src/pages/ProjectsPage.newTask.test.tsx (3 tests) 106ms
+ ✓ src/App.googleSignIn.test.tsx (1 test) 88ms
+ ✓ src/pages/WikiPage.test.tsx (24 tests) 93ms
+ ✓ src/components/CriteriaDecisionCard.receipt.test.tsx (2 tests) 44ms
+ ✓ src/pages/ProjectsPageProductionSnapshot.test.tsx (13 tests) 54ms
+ ✓ src/pages/SettingsPage.accessTokens.test.tsx (2 tests) 81ms
+ ✓ src/pages/TaskDetailPage.test.tsx (8 tests) 47ms
+ ✓ src/pages/ProjectTaskRow.opening.test.tsx (7 tests) 58ms
+ ✓ src/components/CriteriaDecisionCard.sessionSwitch.test.tsx (3 tests) 53ms
+ ✓ src/components/CardHotkey.test.tsx (19 tests) 65ms
+ ✓ src/pages/TaskRoute.test.tsx (6 tests) 50ms
+ ✓ src/api.test.ts (20 tests) 26ms
+ ✓ src/components/TaskScheduleEditor.test.tsx (26 tests) 44ms
+ ✓ src/pages/ProjectTasksTopology.test.tsx (19 tests) 31ms
+ ✓ src/components/RunnerEngines.dsh.test.tsx (6 tests) 183ms
+ ✓ src/components/RunnerEngines.kimiSite.test.tsx (6 tests) 257ms
+ ✓ src/components/ProjectStartedCard.test.tsx (10 tests) 256ms
+ ✓ src/components/Transcript.turnFoot.test.tsx (10 tests) 308ms
+ ✓ src/components/SessionMessageCard.test.tsx (9 tests) 276ms
+ ✓ src/components/ProjectReadyToRun.test.tsx (13 tests) 269ms
+ ✓ src/components/ProjectWhyNotDoneGate.test.tsx (23 tests) 214ms
+ ✓ src/components/ProjectSections.test.tsx (8 tests) 71ms
+ ✓ src/components/Transcript.backgroundTasks.test.tsx (7 tests) 240ms
+ ✓ src/components/TasksSidePanel.wikiWorkspace.test.tsx (5 tests) 157ms
+ ✓ src/components/SessionOutputs.commitFailure.test.tsx (8 tests) 139ms
+ ✓ src/components/ProjectDoneSettlementCard.closeout.test.tsx (13 tests) 182ms
+ ✓ src/components/RunnerEngines.loginLapse.test.tsx (4 tests) 152ms
+ ✓ src/lib/toast.test.tsx (18 tests) 157ms
+ ✓ src/components/WikiActivityPage.test.tsx (19 tests) 148ms
+ ✓ src/components/WikiMaintenanceStatus.test.tsx (21 tests) 100ms
+ ✓ src/components/TaskInputs.test.tsx (5 tests) 75ms
+ ✓ src/components/Transcript.turnEnd.test.tsx (7 tests) 128ms
+ ✓ src/components/OwnerConfirmationReview.test.tsx (19 tests) 152ms
+ ✓ src/components/ManagedRunnerNotice.test.tsx (7 tests) 77ms
+ ✓ src/components/WikiRunsCard.test.tsx (5 tests) 78ms
+ ✓ src/components/ProjectAcceptanceCard.test.tsx (37 tests) 131ms
+ ✓ src/lib/sessionExport.test.tsx (4 tests) 105ms
+ ✓ src/components/ProjectProgressStatus.chat.test.tsx (21 tests) 131ms
+ ✓ src/components/OwnerConfirmationCard.test.tsx (22 tests) 106ms
+ ✓ src/components/ProjectCrossingsCard.move.test.tsx (3 tests) 90ms
+ ✓ src/components/Transcript.antigravity.test.tsx (6 tests) 95ms
+ ✓ src/components/ProjectDependencyGraph.test.tsx (45 tests) 94ms
+ ✓ src/lib/sessionExport.download.test.tsx (3 tests) 89ms
+ ✓ src/components/ProjectPromotionCard.test.tsx (54 tests) 132ms
+ ✓ src/components/ProjectPromotionCard.chat.test.tsx (15 tests) 78ms
+ ✓ src/components/RunnerEngines.test.tsx (40 tests) 64ms
+ ✓ src/components/OrbitReferenceLinks.test.tsx (8 tests) 75ms
+ ✓ src/lib/paneTransition.test.ts (13 tests) 72ms
+ ✓ src/components/Transcript.inserts.test.tsx (7 tests) 72ms
+ ✓ src/lib/taskSorting.test.ts (7 tests) 8ms
+ ✓ src/components/TaskDetailPanel.reopen.test.tsx (10 tests) 57ms
+ ✓ src/components/WikiEntryDrawer.test.tsx (10 tests) 27ms
+ ✓ src/components/Transcript.streamingOrder.test.tsx (6 tests) 51ms
+ ✓ src/components/RunNeverStartedCard.test.tsx (15 tests) 29ms
+ ✓ src/components/NewSessionProviderHero.test.tsx (13 tests) 41ms
+ ✓ src/components/MergeRecoveryPanel.test.tsx (12 tests) 40ms
+ ✓ src/components/ProjectTasksGraph.test.tsx (2 tests) 67ms
+ ✓ src/components/WikiReviewPage.test.tsx (12 tests) 43ms
+ ✓ src/components/ProjectSettlementCard.test.tsx (29 tests) 57ms
+ ✓ src/components/ProjectCoordinatorCard.test.tsx (37 tests) 40ms
+ ✓ src/components/Transcript.dsh.test.tsx (4 tests) 49ms
+ ✓ src/components/TasksSidePanel.wiki.test.tsx (8 tests) 63ms
+ ✓ src/lib/orbitLink.test.ts (37 tests) 42ms
+ ✓ src/components/TaskAttributionCard.test.tsx (13 tests) 41ms
+ ✓ src/components/WikiReviewPage.phone.test.tsx (2 tests) 32ms
+ ✓ src/lib/theme.test.tsx (5 tests) 38ms
+ ✓ src/components/WorkspaceView.projectBackLink.test.ts (8 tests) 37ms
+ ✓ src/lib/useControlPlane.projects.test.tsx (14 tests) 40ms
+ ✓ src/components/ProjectPanoramaHeader.test.tsx (63 tests) 61ms
+ ✓ src/components/SameOriginLink.test.tsx (7 tests) 32ms
+ ✓ src/components/WikiContextNote.test.tsx (3 tests) 37ms
+ ✓ src/components/ProjectIntegrationLine.test.tsx (12 tests) 26ms
+ ✓ src/components/TasksSidePanel.test.tsx (35 tests) 31ms
+ ✓ src/components/ProjectProgressStatus.handling.test.tsx (10 tests) 20ms
+ ✓ src/lib/projectAttention.test.ts (61 tests) 38ms
+ ✓ src/components/Transcript.thinking.test.tsx (7 tests) 33ms
+ ✓ src/lib/runRequestResend.test.ts (7 tests) 24ms
+ ✓ src/components/ProjectCrossingsCard.test.tsx (19 tests) 44ms
+ ✓ src/lib/useSessionProjectData.test.tsx (7 tests) 32ms
+ ✓ src/pages/SettingsPage.test.tsx (5 tests) 30ms
+ ✓ src/components/ProjectTaskPanel.test.tsx (5 tests) 37ms
+ ✓ src/lib/taskSchedule.test.ts (29 tests) 25ms
+ ✓ src/pages/ProfilePage.test.tsx (3 tests) 18ms
+ ✓ src/components/DecisionRail.test.tsx (33 tests) 25ms
+ ✓ src/components/ClaudeHistoryOffer.test.tsx (9 tests) 28ms
+ ✓ src/lib/runnerAttention.test.ts (111 tests) 23ms
+ ✓ src/lib/sharedPools.test.ts (16 tests) 16ms
+ ✓ src/components/RunnerSignIn.test.tsx (28 tests) 20ms
+ ✓ src/lib/findMatches.test.ts (21 tests) 15ms
+ ✓ src/lib/foldHead.test.ts (5 tests) 24ms
+ ✓ src/lib/deepseekBalance.test.ts (10 tests) 12ms
+ ✓ src/lib/codexResetCredit.test.ts (38 tests) 13ms
+ ✓ src/lib/acceptedUserTurn.test.ts (21 tests) 5ms
+ ✓ src/components/WorkspaceView.sessionLine.test.tsx (31 tests) 14ms
+ ✓ src/lib/wikiArticles.test.ts (13 tests) 14ms
+ ✓ src/components/WorkspaceView.recapRow.test.tsx (2 tests) 402ms
+ ✓ src/components/ProjectChainProgress.test.tsx (10 tests) 18ms
+ ✓ src/components/WorkspaceView.statusGlyph.test.tsx (7 tests) 27ms
+ ✓ src/lib/wikiPlan.test.ts (42 tests) 21ms
+ ✓ src/components/EvidenceDecisionReceipt.test.tsx (6 tests) 19ms
+ ✓ src/components/LandTaskStatus.test.tsx (4 tests) 21ms
+ ✓ src/lib/sessionLifecycleApi.test.ts (8 tests) 19ms
+ ✓ src/lib/providerPools.test.ts (23 tests) 16ms
+ ✓ src/components/SessionReplyCard.queued.test.tsx (1 test) 21ms
+ ✓ src/components/CriteriaDecisionCard.settled.test.tsx (12 tests) 17ms
+ ✓ src/lib/useDelayedFlag.test.tsx (4 tests) 19ms
+ ✓ src/lib/taskDependencyGraph.test.ts (30 tests) 16ms
+ ✓ src/pages/ProviderConnectPage.test.tsx (5 tests) 21ms
+ ✓ src/lib/sessionProjects.test.ts (31 tests) 14ms
+ ✓ src/lib/searchHighlight.test.ts (14 tests) 12ms
+ ✓ src/lib/wikiDocs.test.ts (17 tests) 14ms
+ ✓ src/lib/sessionProviderChoices.test.ts (70 tests) 20ms
+ ✓ src/lib/sessionFolders.test.ts (24 tests) 11ms
+ ✓ src/components/ProjectDoneSettlementCard.test.tsx (5 tests) 20ms
+ ✓ src/lib/watches.test.ts (42 tests) 13ms
+ ✓ src/components/TaskDependencyList.test.tsx (2 tests) 17ms
+ ✓ src/lib/planUsage.test.ts (13 tests) 10ms
+ ✓ src/lib/accessTokens.test.ts (5 tests) 12ms
+ ✓ src/lib/sessionImport.test.ts (3 tests) 7ms
+ ✓ src/components/CardAction.test.tsx (4 tests) 11ms
+ ✓ src/components/ProjectProgressStatus.doneRequest.test.tsx (2 tests) 13ms
+ ✓ src/lib/slashCommands.test.ts (12 tests) 9ms
+ ✓ src/lib/runRequestToken.test.ts (10 tests) 10ms
+ ✓ src/lib/scrollbarAutohide.test.ts (4 tests) 9ms
+ ✓ src/wikiHomeLayout.test.ts (15 tests) 6ms
+ ✓ src/components/MentionDeliveryNotes.test.tsx (7 tests) 9ms
+ ✓ src/lib/backgroundWake.test.ts (15 tests) 8ms
+ ✓ src/components/DecisionRail.settlement.test.tsx (14 tests) 14ms
+ ✓ src/lib/wikiReviewMode.test.ts (14 tests) 8ms
+ ✓ src/lib/workspaceDefaults.test.ts (53 tests) 10ms
+ ✓ src/lib/wiki.test.ts (24 tests) 7ms
+ ✓ src/lib/interruptAndSend.test.ts (4 tests) 7ms
+ ✓ src/lib/markdownText.test.ts (15 tests) 7ms
+ ✓ src/lib/transcriptDeepLink.test.ts (5 tests) 10ms
+ ✓ src/lib/dshRuntime.test.ts (15 tests) 8ms
+ ✓ src/pages/ProjectsPageRowSortKeysVisible.test.tsx (3 tests) 3ms
+ ✓ src/lib/wikiSpace.test.ts (29 tests) 6ms
+ ✓ src/lib/referencedTask.test.ts (10 tests) 5ms
+ ✓ src/components/TaskDependencyGraph.test.tsx (7 tests) 7ms
+ ✓ src/lib/wikiHealth.test.ts (21 tests) 6ms
+ ✓ src/lib/wikiRuns.test.ts (30 tests) 6ms
+ ✓ src/components/ApprovalPanel.dsh.test.tsx (3 tests) 8ms
+ ✓ src/lib/runnerSlots.test.ts (26 tests) 6ms
+ ✓ src/lib/composerRefs.test.ts (16 tests) 6ms
+ ✓ src/components/WorkspaceView.queuedTurn.test.tsx (8 tests) 6ms
+ ✓ src/lib/sessionState.test.ts (25 tests) 7ms
+ ✓ src/components/WorkOverviewReadiness.acceptance.test.tsx (6 tests) 6ms
+ ✓ src/components/WorkspaceView.exceptionPlacement.test.tsx (3 tests) 6ms
+ ✓ src/lib/projectAttention.doneRequest.test.ts (7 tests) 5ms
+ ✓ src/lib/taskRunHandoff.test.ts (11 tests) 6ms
+ ✓ src/lib/sessionGrouping.test.ts (12 tests) 5ms
+ ✓ src/lib/transcriptStore.test.ts (18 tests) 5ms
+ ✓ src/lib/codexLogin.test.ts (9 tests) 7ms
+ ✓ src/pages/EnrollPage.test.tsx (2 tests) 7ms
+ ✓ src/lib/deliveredMessage.test.ts (24 tests) 5ms
+ ✓ src/lib/toastFeed.test.ts (12 tests) 5ms
+ ✓ src/lib/clipboard.test.ts (5 tests) 4ms
+ ✓ src/lib/backgroundJobs.test.ts (11 tests) 5ms
+ ✓ src/lib/projectMerge.test.ts (13 tests) 5ms
+ ✓ src/lib/batchGraph.test.ts (15 tests) 4ms
+ ✓ src/lib/reseedActiveSnapshot.test.ts (4 tests) 4ms
+ ✓ src/lib/sessionProjectLanding.test.ts (8 tests) 4ms
+ ✓ src/components/WorkspaceView.compactingAfterInit.test.tsx (4 tests) 4ms
+ ✓ src/lib/accountLogin.test.ts (4 tests) 3ms
+ ✓ src/lib/taskDeletion.test.ts (3 tests) 3ms
+ ✓ src/lib/wikiRollout.test.ts (7 tests) 4ms
+ ✓ src/nginxConf.test.ts (5 tests) 3ms
+ ✓ src/lib/coordinatorChat.test.ts (5 tests) 4ms
+ ✓ src/lib/tagColor.test.ts (4 tests) 4ms
+ ✓ src/lib/composerSendState.test.ts (9 tests) 4ms
+ ✓ src/lib/transcriptPaint.test.ts (15 tests) 4ms
+ ✓ src/lib/taskFilters.test.ts (25 tests) 5ms
+ ✓ src/lib/sessionSwipe.test.ts (10 tests) 4ms
+ ✓ src/lib/sessionCapabilities.test.ts (19 tests) 4ms
+ ✓ src/lib/queuedTurnRestore.test.ts (4 tests) 3ms
+ ✓ src/lib/wikiContext.test.ts (5 tests) 4ms
+ ✓ src/lib/ansi.test.ts (5 tests) 2ms
+ ✓ src/lib/liveTaskProgress.test.ts (4 tests) 3ms
+ ✓ src/lib/eventFull.test.ts (3 tests) 3ms
+ ✓ src/lib/backgroundShells.test.ts (5 tests) 3ms
+ ✓ src/lib/thinkingDraft.test.ts (8 tests) 3ms
+ ✓ src/lib/idCodec.test.ts (12 tests) 4ms
+ ✓ src/lib/taskSelection.test.ts (15 tests) 4ms
+ ✓ src/lib/sessionTags.test.ts (2 tests) 3ms
+ ✓ src/lib/liveToolOutputs.test.ts (8 tests) 3ms
+ ✓ src/lib/decisionReceipt.test.ts (7 tests) 3ms
+ ✓ src/lib/startingAnchor.test.ts (7 tests) 3ms
+ ✓ src/components/WorkspaceView.decisionStrip.test.tsx (4 tests) 3ms
+ ✓ src/components/ui/Floating.test.tsx (4 tests) 9ms
+ ✓ src/lib/taskOutcome.test.ts (9 tests) 3ms
+ ✓ src/lib/workspaceOrder.test.ts (6 tests) 3ms
+ ✓ src/lib/sessionActivity.test.ts (8 tests) 3ms
+ ✓ src/components/ui/Tooltip.test.tsx (3 tests) 157ms
+ ✓ src/lib/turnPlacement.test.ts (2 tests) 3ms
+ ✓ src/lib/sessionTurnIntent.test.ts (6 tests) 2ms
+ ✓ src/lib/promptSuggestion.test.ts (14 tests) 3ms
+ ✓ src/lib/tailPinning.test.ts (9 tests) 3ms
+ ✓ src/lib/sessionDetailPolling.test.ts (4 tests) 2ms
+ ✓ src/lib/statusPalette.test.ts (3 tests) 4ms
+ ✓ src/lib/steerDeliveryParity.test.ts (2 tests) 2ms
+ ✓ src/lib/taskPages.test.ts (5 tests) 2ms
+ ✓ src/lib/contextSeed.test.ts (3 tests) 3ms
+ ✓ src/lib/streamAnchor.test.ts (5 tests) 2ms
+ ✓ src/lib/engineAccounts.test.ts (2 tests) 2ms
+ ✓ src/lib/plainPreview.test.ts (7 tests) 3ms
+ ✓ src/lib/outcomeSurfaces.contract.test.ts (1 test) 2ms
+ ✓ src/lib/steerDelivery.test.ts (6 tests) 3ms
+ ✓ src/lib/providerGlyphs.test.ts (1 test) 2ms
+ ✓ src/lib/providerAdmin.test.ts (4 tests) 2ms
+ ✓ src/lib/wikiImport.test.ts (2 tests) 2ms
+
+ Test Files  387 passed (387)
+      Tests  5040 passed (5040)
+   Start at  11:03:39
+   Duration  266.68s (tests 50%, import 34%, environment 14%, transform 2%)
+
+     Import  859 modules were evaluated 2984 times · 173.85s total, 34% of tracked time
+             ~49.49s faster with isolate: false — shared modules are evaluated once per worker instead of once per file
+             learn more: https://vitest.dev/guide/improving-performance#test-isolation
+
