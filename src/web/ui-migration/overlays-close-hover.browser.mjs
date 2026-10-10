@@ -1,8 +1,8 @@
 import { test, expect } from '@playwright/test';
 
-// The dialog's Close at rest and under the pointer: the old AntD modal's and the Orbit dialog's, the overlays
-// fixture's appearance pair, in this project's theme. The replaced Close took a stronger hover background
-// than the controls' shared one.
+// The dialog's Close at rest and under the pointer, the overlays fixture's appearance sample, in this project's
+// theme. The replaced Close took a stronger hover background than the controls' shared one, and the dialog's
+// Close takes it too.
 const fixture = '/ui-migration/overlays.html';
 
 const read = (close) => close.evaluate((el) => {
@@ -33,30 +33,26 @@ test('the dialog Close takes the replaced modal Close hover background', async (
   await page.goto(fixture);
   await expect(page.getByTestId('theme')).toHaveText(info.project.use.colorScheme);
   await page.evaluate(() => document.fonts.ready);
-  const results = {};
-  for (const system of ['AntD', 'Orbit']) {
-    await page.getByRole('button', { name: `${system} dialog`, exact: true }).click();
-    const dialog = page.getByRole('dialog', { name: 'Edit workspace' });
-    await settled(dialog);
-    const close = dialog.getByRole('button', { name: 'Close', exact: true });
-    await page.mouse.move(0, 0);
-    await finished(close);
-    const rest = await read(close);
-    await close.hover();
-    await finished(close);
-    const hover = await read(close);
-    const box = await close.boundingBox();
-    await info.attach(`${system}-close-hover`, { body: await page.screenshot({ animations: 'disabled',
-      clip: { x: box.x - 16, y: box.y - 16, width: box.width + 32, height: box.height + 32 } }), contentType: 'image/png' });
-    results[system] = { rest, hover };
-    await page.mouse.move(0, 0);
-    await page.keyboard.press('Escape');
-    await expect(dialog).not.toBeVisible();
-  }
+  await page.getByRole('button', { name: 'Orbit dialog', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Edit workspace' });
+  await settled(dialog);
+  const close = dialog.getByRole('button', { name: 'Close', exact: true });
+  await page.mouse.move(0, 0);
+  await finished(close);
+  const rest = await read(close);
+  await close.hover();
+  await finished(close);
+  const hover = await read(close);
+  const box = await close.boundingBox();
+  await info.attach('Orbit-close-hover', { body: await page.screenshot({ animations: 'disabled',
+    clip: { x: box.x - 16, y: box.y - 16, width: box.width + 32, height: box.height + 32 } }), contentType: 'image/png' });
+  const results = { Orbit: { rest, hover } };
+  await page.mouse.move(0, 0);
+  await page.keyboard.press('Escape');
+  await expect(dialog).not.toBeVisible();
   await info.attach('close-hover', { body: JSON.stringify(results, null, 2), contentType: 'application/json' });
-  expect(results.AntD.rest.hovered).toBe(false);
-  expect(results.AntD.hover.hovered).toBe(true);
-  expect(results.AntD.hover.background).toBe(info.project.use.colorScheme === 'dark' ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.06)');
-  expect(results.Orbit).toEqual(results.AntD);
+  expect(results.Orbit.rest.hovered).toBe(false);
+  expect(results.Orbit.hover.hovered).toBe(true);
+  expect(results.Orbit.hover.background).toBe(info.project.use.colorScheme === 'dark' ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.06)');
   expect(errors).toEqual([]);
 });

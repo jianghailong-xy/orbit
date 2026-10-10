@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 // The reference overlays inside the app's page frame (overlays.html?app-frame): the page scrolls in
 // .app-view and the document never does. The first notice leaves lib/toast's screen-reader live region
 // at the end of <body>; from then on, opening and closing an overlay must still leave the page where it
-// was scrolled, as the replaced AntD overlays do (docs/evidence/base-ui-migration/webkit-scroll-lock).
+// was scrolled, as the replaced overlays did (docs/evidence/base-ui-migration/webkit-scroll-lock).
 const fixture = '/ui-migration/overlays.html?app-frame';
 const errors = new WeakMap();
 test.beforeEach(async ({ page }, info) => {
@@ -53,10 +53,10 @@ test('a notice leaves the document one viewport high, with no scrollbar of its o
   expect(after.documentScrollbar).toBe(0);
 });
 
-for (const kind of ['dialog', 'right drawer', 'bottom drawer', 'confirm']) for (const system of ['Orbit', 'AntD']) {
-  test(`${system} ${kind} leaves the page where it was scrolled, before and after a notice`, async ({ page }, info) => {
-    const trigger = page.getByRole('button', { name: `${system} ${kind}`, exact: true });
-    const overlay = page.getByRole(system === 'Orbit' && kind === 'confirm' ? 'alertdialog' : 'dialog');
+for (const kind of ['dialog', 'right drawer', 'bottom drawer', 'confirm']) {
+  test(`Orbit ${kind} leaves the page where it was scrolled, before and after a notice`, async ({ page }, info) => {
+    const trigger = page.getByRole('button', { name: `Orbit ${kind}`, exact: true });
+    const overlay = page.getByRole(kind === 'confirm' ? 'alertdialog' : 'dialog');
     const states = [];
     for (const when of ['before a notice', 'after a notice']) {
       if (when === 'after a notice') await notice(page);
@@ -73,13 +73,13 @@ for (const kind of ['dialog', 'right drawer', 'bottom drawer', 'confirm']) for (
       await expect.poll(() => locked(page)).toBe(true);
       const open = await frame(page);
       states.push({ when, step: 'open', ...open });
-      expect.soft(open.pageScrollTop, `${system} ${kind} open ${when}`).toBe(scrolled);
+      expect.soft(open.pageScrollTop, `${kind} open ${when}`).toBe(scrolled);
       await overlay.getByRole('button', { name: 'Cancel', exact: true }).click();
       await expect(overlay).toHaveCount(0);
       await expect.poll(() => locked(page)).toBe(false);
       const closed = await frame(page);
       states.push({ when, step: 'closed', ...closed });
-      expect.soft(closed.pageScrollTop, `${system} ${kind} closed ${when}`).toBe(scrolled);
+      expect.soft(closed.pageScrollTop, `${kind} closed ${when}`).toBe(scrolled);
     }
     await info.attach('scroll-positions', { body: JSON.stringify(states, null, 2), contentType: 'application/json' });
   });
