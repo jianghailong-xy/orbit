@@ -340,6 +340,12 @@ const READ_CUT_MARKER = '\n…（后略）\n';
  * from the snapshot, and each file's text whole from a `read` at that commit (owner 2026-10-08), served from the
  * read cache when it is already held and read from the runner once otherwise (`prepare`). A directory shows as
  * `git show <sha>:<dir>` shows a tree — the runner's writer read a directory that way — from the snapshot's paths.
+ *
+ * A path that is no file or directory of the commit but holds a wildcard (`gitWildcard`) shows as an empty file. Git
+ * takes such a `<sha>:<path>` for a pathspec (`looks_like_pathspec`), and `git show` exits 0 printing nothing: the
+ * runner's writer read an empty file, found no section and no symbol in it, and took a code path's head and a
+ * contract with nothing in them. The documents' build, the maintenance run's comparison and its proposal check all
+ * read through this, so the server reads such a source as the runner does until the runner's path is removed (P11).
  */
 export class WikiDocsSnapshotRepo implements WikiDocRepo {
   private readonly texts = new Map<string, WikiDocShown | null>();
@@ -369,7 +375,7 @@ export class WikiDocsSnapshotRepo implements WikiDocRepo {
       const slash = rest.indexOf('/');
       children.add(slash < 0 ? rest : `${rest.slice(0, slash)}/`);
     }
-    if (children.size === 0) return null;
+    if (children.size === 0) return gitWildcard(path) ? { text: '', cut: false } : null;
     const listed = [...children].sort((a, b) => Buffer.compare(Buffer.from(a), Buffer.from(b)));
     return { text: `tree ${this.sha}:${path}\n\n${listed.map((child) => `${child}\n`).join('')}`, cut: false };
   }
@@ -414,6 +420,15 @@ export class WikiDocsSnapshotRepo implements WikiDocRepo {
       this.waiting.shift()?.();
     }
   }
+}
+
+/** Whether git reads a path as a pattern: a wildcard in it — `*`, `?` or `[` — that no backslash escapes. */
+function gitWildcard(path: string): boolean {
+  for (let i = 0; i < path.length; i += 1) {
+    if (path[i] === '\\') i += 1;
+    else if (path[i] === '*' || path[i] === '?' || path[i] === '[') return true;
+  }
+  return false;
 }
 
 /**
