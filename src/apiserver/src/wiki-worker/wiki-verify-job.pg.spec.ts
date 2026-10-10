@@ -32,6 +32,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { after, afterEach, test } from 'node:test';
 
 import type { PrismaClient } from '@prisma/client';
+import { WIKI_JOB } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -41,6 +42,7 @@ import type { PushService } from '../push/push.service';
 import type { RealtimeService } from '../realtime/realtime.service';
 import { WikiService, type WikiPrincipal } from '../wiki/wiki.service';
 import { WikiJobExecutor, WIKI_JOB_RUNNERS, type WikiJobRunner } from './wiki-job-executor';
+import { claimWikiJobs, reclaimExpiredWikiJobs } from './wiki-jobs';
 import { WikiModelRequestQueue } from './wiki-model-queue.service';
 import { WikiModelStatusProbe } from './wiki-model-status';
 import { readWikiSystemModel, type WikiSystemModelConfig } from './wiki-system-model';
@@ -225,9 +227,20 @@ afterEach(async () => {
   }
 });
 
+/**
+ * The lease this spec's worker claims under: the deployment's own — the same lease and renewal every claim
+ * outside a spec gets. No case of this spec is about a lease running out, so the harness must not claim under
+ * a shortened one: the 400 ms it used to be let a stall of the event loop longer than the lease hand the job
+ * to the sweep of the next pass mid-run, so the case read the second attempt's work. wiki-jobs.pg.spec.ts is
+ * the one file that claims under a short lease on purpose: there the lease is the subject. The last case of
+ * this file pins this margin the deterministic way.
+ */
+const HARNESS_LEASE_MS = WIKI_JOB.leaseSeconds * 1000;
+const HARNESS_RENEW_MS = WIKI_JOB.renewSeconds * 1000;
+
 /** The worker under test, its kind map the one the worker module builds — with this spec's wiki service. */
 function worker(h: Harness): { queue: WikiModelRequestQueue; executor: WikiJobExecutor } {
-  const options = { leaseMs: 400, renewMs: 100, partialMs: 40, pollMs: 30 };
+  const options = { leaseMs: HARNESS_LEASE_MS, renewMs: HARNESS_RENEW_MS, partialMs: 40, pollMs: 30 };
   const config_ = config(h);
   const queue = new WikiModelRequestQueue(
     h.prisma as unknown as PrismaService, config_,
@@ -272,6 +285,17 @@ async function pass(
     await delay(30);
   }
   assert.fail(`the worker did not finish: ${JSON.stringify(await jobs(h))}`);
+}
+
+/**
+ * Block the event loop for `ms` (the loaded host's own stall, here on demand): no timer of this process fires
+ * while it runs, which is what a busy machine does to the lease renewals of a worker on it.
+ */
+function stallEventLoop(ms: number): void {
+  const until = Date.now() + ms;
+  while (Date.now() < until) {
+    /* the loop is the point */
+  }
 }
 
 /** A valid pitfall, retitled per use. */
@@ -528,3 +552,33 @@ test('a NUL in the answer: as \\u0000 the verdict is recorded without it; raw, i
     process.env.ORBIT_WIKI_EXECUTOR = 'runner';
   }
 });
+
+test('the lease this harness claims under outlives a two-second stall: the sweep finds nothing to take over', { skip, timeout: 60_000 }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const fx = await fixture(h);
+  process.env.ORBIT_WIKI_EXECUTOR = 'server';
+  await propose(h, fx, 'The job the stall is spent on');
+  const [job] = await jobs(h, fx.sessionId);
+  assert.ok(job);
+  // The claim this spec's worker makes, made by hand so the sweep can be run in the same synchronous window
+  // the loop resumes in — the call the next pass makes a moment later. Under the 400 ms lease this harness
+  // used to claim under, the stall below spent it and that sweep took the job over: the row came back
+  // 'queued', its attempt counted, LEASE_EXPIRED. The mechanism's own cases are wiki-jobs.pg.spec.ts's; what
+  // this pins is the lease THIS spec's worker claims under.
+  const [claimed] = await claimWikiJobs(h.prisma as unknown as PrismaService, {
+    workerId: randomUUID(), kinds: ['verify'], owners: [h.ownerId], limit: 1, leaseMs: HARNESS_LEASE_MS,
+  });
+  assert.equal(claimed?.id, job.id, 'the queued verification was not the one claimed');
+  stallEventLoop(2_000);
+  assert.deepEqual(
+    await reclaimExpiredWikiJobs(h.prisma as unknown as PrismaService, 4), [],
+    'a two-second stall spent the lease: the next pass would take the job over mid-run',
+  );
+  const { rows: [row] } = await h.sql.query<{ state: string; attempts: number; failure_kind: string | null }>(
+    'SELECT "state", "attempts", "failure_kind" FROM "wiki_job" WHERE "id" = $1', [job.id],
+  );
+  assert.deepEqual(row, { state: 'running', attempts: 0, failure_kind: null }, 'the stall cost the job its attempt');
+  process.env.ORBIT_WIKI_EXECUTOR = 'runner';
+});
+
