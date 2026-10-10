@@ -210,9 +210,9 @@ test('task model suggestions survive create, batch, update, clearing and approva
     for (const enabled of [true, false]) {
       // Rendered for an owner with smart model selection on, the only owner they ask a tier of.
       for (const form of [buildCoordinatorInstructions('model hints', randomUUID(), enabled, true), buildCoordinatorDeliveryInstructions(randomUUID(), enabled, true)]) {
-        assert.match(form, /每个任务填 modelHint（S\/M\/L\/XL）和一句 modelHintReason/);
-        assert.match(form, /缺建议的任务也用 task_update 补上/);
-        assert.match(form, /引擎用 engine 字段指定，provider 只决定用哪份凭据/);
+        assert.match(form, /every task you create a modelHint \(S\/M\/L\/XL\) and a one-sentence modelHintReason/);
+        assert.match(form, /in the project without one, add it with task_update/);
+        assert.match(form, /The engine is set with the engine field; provider only decides which credential is used/);
       }
     }
   });
