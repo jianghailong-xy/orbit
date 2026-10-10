@@ -601,14 +601,14 @@ test('the conversational opening no longer offers the criteria or DONE as its ow
     // It still says what project_update IS for.
     assert.match(opening, /project_update/);
     // And no longer sells it as the way to rewrite the exam or to record that the goal was met.
-    assert.doesNotMatch(opening, /project_update[^。]*验收标准/);
-    assert.doesNotMatch(opening, /status\s*记成\s*DONE/);
+    assert.doesNotMatch(opening, /project_update[^.]*acceptance criteria/);
+    assert.doesNotMatch(opening, /status\s*(?:as|to|=)\s*DONE/);
     // Naming the two, and naming who decides them, rather than falling silent: a coordinator that
     // is told nothing goes looking, which is the same wasted turn by another route.
-    assert.match(opening, /验收标准/);
+    assert.match(opening, /acceptance criteria/);
     assert.match(opening, /DONE/);
-    assert.match(opening, /账号所有者通道记录/);
-    assert.match(opening, /不是服务器对“真人在场”的密码学证明/);
+    assert.match(opening, /recorded through the account owner’s channel/);
+    assert.match(opening, /not a cryptographic proof by the server that a real person is present/);
   }
 });
 

@@ -1642,7 +1642,7 @@ test('the message an integration item is delivered as carries what its payload k
       const [reported] = await itemTurns(stack.db, checked.coordinatorSessionId!);
       assert.ok(reported, 'the item was not queued on the coordinator');
       assert.ok(
-        reported.content?.includes('MERGE_CHECK 的退出码是 2'),
+        reported.content?.includes('MERGE_CHECK exited with code 2'),
         `the message does not say which check failed and what it returned — ${reported.content}`,
       );
       assert.ok(
