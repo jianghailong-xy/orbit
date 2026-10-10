@@ -1113,6 +1113,20 @@ struct ProjectDetailView: View {
                                 .compactMap { $0 }.joined(separator: " · "))
                             .font(.orbitLabel)
                             .foregroundStyle(.secondary)
+                        // The coordinator's own line in the session list — its recap first, the raw
+                        // last reply without one, and what it is doing while it works — read off the
+                        // list's own row, as the status read carries none of it, and drawn as the
+                        // row draws it. Nothing while the lists hold no row for it.
+                        if let listed = model.session(id: session.id) {
+                            let line = SessionLine.make(for: listed, live: true,
+                                                        watching: model.watches?.summary(for: listed.id),
+                                                        recaps: model.user?.preferences?.showRecaps ?? true)
+                            line.listText
+                                .font(.orbitListSubtitle)
+                                .foregroundStyle(line.listColor)
+                                .lineLimit(2)
+                                .padding(.top, 2)
+                        }
                         if status.state == .live && finished {
                             Text(ProjectPage.finishedCoordinatorNote)
                                 .font(.orbitLabel)

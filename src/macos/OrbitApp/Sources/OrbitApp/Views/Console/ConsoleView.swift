@@ -579,8 +579,8 @@ struct TranscriptView: View {
     @Environment(\.openApprovalReview) private var openApprovalReview
     @Environment(\.openPromotionReview) private var openPromotionReview
     let console: ConsoleModel
-    /// The sticky "↑ Your question" header folds away while a phone's composer holds the keyboard,
-    /// with the rest of the console's chrome (`ConsoleView.foldsChrome`).
+    /// The sticky "↑ Your question" header — and, on iOS, the recap bar above it — folds away while a
+    /// phone's composer holds the keyboard, with the rest of the console's chrome (`ConsoleView.foldsChrome`).
     var hidesStickyQuestion = false
     /// Keep the preview's place while its sheet refreshes or the conversation keeps streaming.
     var reviewingCard = false
@@ -690,11 +690,50 @@ struct TranscriptView: View {
             chrome(follows(rowsList, proxy), proxy)
         }
         // macOS shows the session state in this band; iOS carries it in the nav-bar subtitle
-        // (`ConsoleNavTitle`) instead, matching the web header, so the band is retired there.
+        // (`ConsoleNavTitle`) instead, matching the web header, so the band is retired there — and
+        // what is left under its nav bar is the conversation's recap, when it has one.
         #if os(macOS)
         .safeAreaInset(edge: .top, spacing: 0) { statusBar }
+        #else
+        .safeAreaInset(edge: .top, spacing: 0) {
+            if !hidesStickyQuestion { recapBar }
+        }
         #endif
     }
+
+    /// The server's recap of this conversation (0418) as the top of the chat page shows it: the list
+    /// row's own `recapText`, off the same cached `Session` the header reads (`app.session(id:)`), or
+    /// nil — nothing drawn — without one or with the account's Session recaps switch off
+    /// (`SessionLine.headerRecap`). `now` dates its "5m ago".
+    private func headerRecap(now: Date) -> SessionLine? {
+        SessionLine.headerRecap(for: app.session(id: console.sessionID),
+                                recaps: app.user?.preferences?.showRecaps ?? true, now: now)
+    }
+
+    /// The recap line itself, drawn as a session row draws its recap (`SessionLine.listText`), and
+    /// wrapping to a second line rather than losing the end of its sentence.
+    private func recapText(_ recap: SessionLine) -> some View {
+        recap.listText
+            .font(.orbitListSubtitle)
+            .foregroundStyle(.secondary)
+            .lineLimit(2)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    #if os(iOS)
+    /// Under the nav bar and over the sticky question, in the bar's material with the sticky
+    /// question's hairline under it. Read again every minute, for its "5m ago".
+    private var recapBar: some View {
+        TimelineView(.everyMinute) { context in
+            if let recap = headerRecap(now: context.date) {
+                recapText(recap)
+                    .padding(.horizontal, 16).padding(.vertical, 7)
+                    .background(.bar)
+                    .overlay(alignment: .bottom) { VStack(spacing: 0) { Divider() } }
+            }
+        }
+    }
+    #endif
 
     /// Split out of `body`, and out of each other, because as one expression this chain is long
     /// enough that the iOS type-checker gives up on it — "unable to type-check this expression in
@@ -1192,21 +1231,30 @@ struct TranscriptView: View {
 
     #if os(macOS)
     private var statusBar: some View {
-        HStack(spacing: 8) {
-            Circle().fill(console.connected ? .green : .orange).frame(width: 7, height: 7)
-            Text(headerStatus)
-                .font(.caption).foregroundStyle(.secondary)
-            if let session = app.session(id: console.sessionID) {
-                SessionCoordinatorBadge(session: session)
-            }
-            Spacer()
-            if !console.state.pendingApprovals.isEmpty {
-                Label("\(console.state.pendingApprovals.count) pending", systemImage: "hand.raised.fill")
-                    .font(.caption).foregroundStyle(.orange)
-            }
-            if !console.state.background.isEmpty {
-                Label("\(console.state.background.count) background", systemImage: "gearshape.2")
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 8) {
+                Circle().fill(console.connected ? .green : .orange).frame(width: 7, height: 7)
+                Text(headerStatus)
                     .font(.caption).foregroundStyle(.secondary)
+                if let session = app.session(id: console.sessionID) {
+                    SessionCoordinatorBadge(session: session)
+                }
+                Spacer()
+                if !console.state.pendingApprovals.isEmpty {
+                    Label("\(console.state.pendingApprovals.count) pending", systemImage: "hand.raised.fill")
+                        .font(.caption).foregroundStyle(.orange)
+                }
+                if !console.state.background.isEmpty {
+                    Label("\(console.state.background.count) background", systemImage: "gearshape.2")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            // The conversation's recap under its state, when it has one. Read again every minute,
+            // for its "5m ago".
+            TimelineView(.everyMinute) { context in
+                if let recap = headerRecap(now: context.date) {
+                    recapText(recap).padding(.top, 4)
+                }
             }
         }
         .padding(.horizontal, 16).padding(.vertical, 6)

@@ -49,6 +49,8 @@ class SessionLineCopyParityTest {
 
     @Test fun everyBuiltLineIsOneSwiftLiteral() {
         assertSentence(line, "SessionLine.swift", SessionLineCopy.recapWithTime("§"), "§" to "\\(clock)")
+        // The chat page's header dates the same word by how long ago it was written (`recapAgo`).
+        assertSentence(line, "SessionLine.swift", SessionLineCopy.recapWithTime("§"), "§" to "\\(ago)")
         assertSentence(line, "SessionLine.swift", SessionLineCopy.runningTool("\\(fmtTool(t))"))
         assertSentence(line, "SessionLine.swift", SessionLineCopy.sent("\\(plainPreview(text))"))
         assertSentence(line, "SessionLine.swift", SessionLineCopy.ongoing("\\(subagentRunningLabel(n))"))

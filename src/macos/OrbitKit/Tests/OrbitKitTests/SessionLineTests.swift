@@ -215,4 +215,39 @@ final class SessionLineTests: XCTestCase {
                                                      recapText: recap, recapAt: nil), live: true),
                        .init(text: "Background process running…", tone: .background))
     }
+
+    /// The chat page's recap line: the same recap at the top of the conversation, dated by how long
+    /// ago the server wrote it. Nothing without a recap — never the raw reply, which the page holds in
+    /// full below it — and nothing with the switch off; live state does not hide it.
+    func testTheChatPageHeaderShowsTheRecapAndNothingElse() {
+        let now = Date()
+        func at(_ secondsAgo: TimeInterval) -> String {
+            ISO8601DateFormatter().string(from: now.addingTimeInterval(-secondsAgo))
+        }
+        let parked = session(status: .awaitingInput, lastAssistantText: "Committed the row change.",
+                             recapText: "  Moved the recap onto the list row.\n", recapAt: at(5 * 60))
+        XCTAssertEqual(SessionLine.headerRecap(for: parked, recaps: true, now: now),
+                       .init(text: "Moved the recap onto the list row.", tone: .preview, label: "Recap · 5m ago"))
+        // Working: the page's header says what is happening; this line says what the conversation has been.
+        let working = session(status: .running, lastToolUse: "Bash",
+                              recapText: "Moved the recap onto the list row.", recapAt: at(5 * 60))
+        XCTAssertEqual(SessionLine.headerRecap(for: working, recaps: true, now: now)?.label, "Recap · 5m ago")
+        // Older, and just written: the transcript's own relative words.
+        XCTAssertEqual(SessionLine.headerRecap(for: session(status: .awaitingInput, recapText: "Shipped.",
+                                                            recapAt: at(3 * 86_400)), recaps: true, now: now)?.label,
+                       "Recap · 3d ago")
+        XCTAssertEqual(SessionLine.headerRecap(for: session(status: .awaitingInput, recapText: "Shipped.",
+                                                            recapAt: at(0)), recaps: true, now: now)?.label,
+                       "Recap · just now")
+        // No time on it: the word alone, as on the list row.
+        XCTAssertEqual(SessionLine.headerRecap(for: session(status: .awaitingInput, recapText: "Shipped.", recapAt: nil),
+                                               recaps: true, now: now)?.label, "Recap")
+        // The switch off, no recap, a blank one, or no session read yet: nothing at all — not the reply.
+        XCTAssertNil(SessionLine.headerRecap(for: parked, recaps: false, now: now))
+        XCTAssertNil(SessionLine.headerRecap(for: session(status: .awaitingInput, lastAssistantText: "All done."),
+                                             recaps: true, now: now))
+        XCTAssertNil(SessionLine.headerRecap(for: session(status: .awaitingInput, lastAssistantText: "All done.",
+                                                          recapText: " \n ", recapAt: at(60)), recaps: true, now: now))
+        XCTAssertNil(SessionLine.headerRecap(for: nil, recaps: true, now: now))
+    }
 }

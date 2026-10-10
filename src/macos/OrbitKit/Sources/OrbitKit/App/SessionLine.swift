@@ -136,7 +136,29 @@ public struct SessionLine: Equatable, Sendable {
             : "Recap · \(dayTime.string(from: at)), \(clock)"
     }
 
-    /// The word the recap line is marked with, on its own and in `recapLabel` above.
+    /// The chat page's own recap line (0418): the sentence the server wrote about the whole
+    /// conversation, at the top of the conversation it sums up — the list row's `recapText`, off the
+    /// same `Session`, under the same muted word. Nil, so nothing is drawn, when the account turned
+    /// Session recaps off and when the session has no recap: the page under it already holds the
+    /// whole transcript, so there is no reply to fall back to. Nor does live state hide it, as it
+    /// does on a list row — the page says what is happening in its own header, and this is the
+    /// summary beside it. Its time is relative ("Recap · 5m ago", the transcript's own
+    /// `RelativeTime.format`) where the list row prints the clock.
+    public static func headerRecap(for s: Session?, recaps: Bool, now: Date = Date()) -> SessionLine? {
+        guard recaps, let r = s?.recapText?.trimmingCharacters(in: .whitespacesAndNewlines), !r.isEmpty else {
+            return nil
+        }
+        return SessionLine(text: r, tone: .preview, label: recapAgo(s?.recapAt, now: now))
+    }
+
+    /// The header recap's prefix: the word, and how long ago the server wrote it. A recap with no
+    /// readable time keeps the word alone, as the list row's label does.
+    static func recapAgo(_ recapAt: String?, now: Date = Date()) -> String {
+        guard let recapAt, let ago = RelativeTime.format(recapAt, now: now) else { return recapWord }
+        return "Recap · \(ago)"
+    }
+
+    /// The word the recap line is marked with, on its own and in `recapLabel` / `recapAgo` above.
     static let recapWord = "Recap"
     // Built once and reused, like `RelativeTime`'s: "5:38 PM" and "Wed, Aug 6" — what the web's
     // `toLocaleTimeString`/`toLocaleDateString` calls produce in its default locale.

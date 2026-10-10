@@ -270,7 +270,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                                 }
                                 Destination.DRAFT -> NewSessionComposer(app, signedIn.handle, route, data, ::open)
                                 Destination.TASKS, Destination.TASK, Destination.LIST -> TasksScreen(app, signedIn.handle, route, revision, ::open) { navigation = navigation.back() }
-                                Destination.PROJECTS, Destination.PROJECT -> ProjectsScreen(app, signedIn.handle, route, revision, ::open) { navigation = navigation.back() }
+                                Destination.PROJECTS, Destination.PROJECT -> ProjectsScreen(app, signedIn.handle, route, revision, ::open, data) { navigation = navigation.back() }
                                 Destination.WIKI, Destination.WIKI_ENTRY, Destination.WIKI_BROWSE, Destination.WIKI_INDEX,
                                 Destination.WIKI_ARTICLE, Destination.WIKI_DOC, Destination.WIKI_REVIEW, Destination.WIKI_SETTINGS,
                                 Destination.WIKI_RUN, Destination.WIKI_JOB, Destination.WIKI_PLAN, Destination.WIKI_PLAN_DOC, Destination.WIKI_PLAN_SECTION,

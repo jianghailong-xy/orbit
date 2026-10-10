@@ -94,6 +94,30 @@ class SessionLineTest {
             SessionLine.make(recapped, live = true, recaps = false, now = now))
     }
 
+    /** The chat page's recap line (Swift `testTheChatPageHeaderShowsTheRecapAndNothingElse`): the same recap at the top of the
+     * conversation, dated by how long ago it was written. Nothing without a recap — never the raw reply, which the page holds in full —
+     * and nothing with the switch off; live state does not hide it. */
+    @Test fun theChatPageHeaderShowsTheRecapAndNothingElse() {
+        fun at(secondsAgo: Long) = now.minusSeconds(secondsAgo).toString()
+        val parked = session("AWAITING_INPUT", "Committed the row change.", recapText = "  $recap\n", recapAt = at(5 * 60))
+        assertEquals(SessionLine(recap, Tone.PREVIEW, "Recap · 5m ago"), SessionLine.headerRecap(parked, recaps = true, now = now))
+        // Working: the page's header says what is happening; this line says what the conversation has been.
+        assertEquals("Recap · 5m ago", SessionLine.headerRecap(session("RUNNING", lastToolUse = "Bash", recapText = recap, recapAt = at(5 * 60)),
+            recaps = true, now = now)?.label)
+        // Older, and just written: the transcript's own relative words.
+        assertEquals("Recap · 3d ago", SessionLine.headerRecap(session("AWAITING_INPUT", recapText = recap, recapAt = at(3 * 86_400)),
+            recaps = true, now = now)?.label)
+        assertEquals("Recap · just now", SessionLine.headerRecap(session("AWAITING_INPUT", recapText = recap, recapAt = at(0)),
+            recaps = true, now = now)?.label)
+        // No time on it: the word alone, as on the list row.
+        assertEquals("Recap", SessionLine.headerRecap(session("AWAITING_INPUT", recapText = recap), recaps = true, now = now)?.label)
+        // The switch off, no recap, a blank one, or no session read yet: nothing at all — not the reply.
+        assertNull(SessionLine.headerRecap(parked, recaps = false, now = now))
+        assertNull(SessionLine.headerRecap(session("AWAITING_INPUT", "All done."), recaps = true, now = now))
+        assertNull(SessionLine.headerRecap(session("AWAITING_INPUT", "All done.", recapText = " \n ", recapAt = at(60)), recaps = true, now = now))
+        assertNull(SessionLine.headerRecap(null, recaps = true, now = now))
+    }
+
     /** Every live line still outranks the recap: it is newer work, not older prose. */
     @Test fun liveLinesOutrankTheRecap() {
         assertEquals(Tone.APPROVAL, line(session("AWAITING_INPUT", pendingApprovals = 1, recapText = recap, recapAt = recapAt)).tone)

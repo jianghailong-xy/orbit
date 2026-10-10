@@ -43,12 +43,21 @@ import io.orbitd.android.core.auth.AuthState
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.cards.*
 import io.orbitd.android.core.net.ApiError
+import io.orbitd.android.directory.DirectoryData
+import io.orbitd.android.directory.DirectorySession
+import io.orbitd.android.directory.SessionLine
+import io.orbitd.android.directory.listColor
+import io.orbitd.android.directory.listText
+import io.orbitd.android.management.LocalSessionRecaps
 import io.orbitd.android.navigation.*
 import io.orbitd.android.cards.CardFocus
 import io.orbitd.android.taskprojects.*
 import io.orbitd.android.tasks.OfflineNote
 import io.orbitd.android.text.*
 import io.orbitd.android.ui.LocalOrbitColors
+import io.orbitd.android.watch.WatchSessionSummary
+import io.orbitd.android.watch.WatchStore
+import io.orbitd.android.watch.watchKey
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
@@ -59,13 +68,15 @@ import kotlinx.serialization.json.*
 import java.time.Instant
 import java.util.UUID
 
-/** Projects keep the host's object stack, the A03 handle and A04's invalidation stream. */
+/** Projects keep the host's object stack, the A03 handle and A04's invalidation stream. [directory] is the one the session list draws,
+ * which the coordinator card reads its conversation's line from. */
 @Composable
-fun ProjectsScreen(app: OrbitApplication, handle: SessionHandle, route: OrbitRoute, revision: Long, open: (OrbitRoute) -> Unit, back: () -> Unit = {}) {
+fun ProjectsScreen(app: OrbitApplication, handle: SessionHandle, route: OrbitRoute, revision: Long, open: (OrbitRoute) -> Unit,
+    directory: DirectoryData = DirectoryData(), back: () -> Unit = {}) {
     val resources = LocalReaderResources.current ?: remember(handle) { ReaderResources(app.session, handle) }
     CompositionLocalProvider(LocalReaderResources provides resources) {
         val id = route.id
-        if (id == null) ProjectIndex(app, handle, revision, open) else ProjectDetail(app, handle, id, revision, open, back)
+        if (id == null) ProjectIndex(app, handle, revision, open) else ProjectDetail(app, handle, id, revision, open, directory, back)
     }
 }
 
@@ -265,12 +276,15 @@ private sealed interface ProjectDialog {
 }
 
 @Composable
-private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: String, revision: Long, open: (OrbitRoute) -> Unit, back: () -> Unit) {
+private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: String, revision: Long, open: (OrbitRoute) -> Unit,
+    directory: DirectoryData, back: () -> Unit) {
     val api = remember(handle) { ProjectApi(app.session, handle) { app.canWrite(handle) } }
     val state = remember(handle, id) { ProjectPageState() }
     DisposableEffect(state) { state.attached = true; onDispose { state.attached = false } }
     val scope = rememberCoroutineScope()
     val live by app.realtime.state.collectAsState()
+    // The watches a parked coordinator waits on, which its line says instead of its recap (as the session list's row does).
+    val watches by remember(handle) { WatchStore.of(app.session, handle, app.processScope).state }.collectAsState()
     val auth by app.session.state.collectAsState()
     val connected = writable(live, handle, (auth as? AuthState.SignedIn)?.handle)
     val clipboard = LocalClipboardManager.current
@@ -454,8 +468,12 @@ private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: Stri
         }) }
         openItemsAttention(state, doc, enabled, openSheet = { dialog = ProjectDialog.OpenItems }, startOwn = { dialog = ProjectDialog.Start })
         overviewSection(state, doc, now, openTask) { dialog = ProjectDialog.LandingJobs }
-        coordinatorSection(state, doc, now, enabled, openCoordinator = { openCoordinator() }, replace = { finished ->
-            if (finished) replaceCoordinator() else dialog = ProjectDialog.Replace })
+        // The coordinator's own row in the session list, which the card's line is read off: the status read carries none of it.
+        val coordinatorID = state.coordinator?.obj("coordination")?.obj("session")?.text("id")
+        val listed = coordinatorID?.let { coordinator -> (directory.sessions["open"].orEmpty() + directory.sessions["completed"].orEmpty())
+            .firstOrNull { ObjectId.same(it.id, coordinator) } }
+        coordinatorSection(state, doc, now, enabled, listed, listed?.let { watches.summaries[watchKey(it.id)] },
+            openCoordinator = { openCoordinator() }, replace = { finished -> if (finished) replaceCoordinator() else dialog = ProjectDialog.Replace })
         if (started != false) item(key = "runs") {
             RunSettingsSection(state, doc, now, enabled, editMergeCheck = { dialog = ProjectDialog.MergeCheck },
                 integration = { body -> if (body != null && body.isNotEmpty()) write("${RunSettings.notSaved} — ") { api.updateIntegration(id, body, revision(doc) + body) } },
@@ -923,7 +941,8 @@ internal fun LandingJobsSheet(lines: List<LandingJobLine>, retry: suspend (Strin
     }
 }
 
-private fun LazyListScope.coordinatorSection(state: ProjectPageState, doc: JsonObject, now: Instant, enabled: Boolean, openCoordinator: () -> Unit, replace: (Boolean) -> Unit) {
+private fun LazyListScope.coordinatorSection(state: ProjectPageState, doc: JsonObject, now: Instant, enabled: Boolean, listed: DirectorySession?,
+    watching: WatchSessionSummary?, openCoordinator: () -> Unit, replace: (Boolean) -> Unit) {
     val status = state.coordinator ?: return
     val pill = ProjectPage.coordinatorPill(status)
     val coordination = status.obj("coordination") ?: JsonObject(emptyMap())
@@ -935,6 +954,12 @@ private fun LazyListScope.coordinatorSection(state: ProjectPageState, doc: JsonO
                 Text(session.text("title") ?: "Coordinator", fontWeight = FontWeight.SemiBold)
                 Text(listOfNotNull(ProjectPage.lastActive(session, status.text("readAt")), ProjectPage.coordinatorOrdinal(coordination.text("coordinatorGeneration"))).joinToString(" · "),
                     style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                // The coordinator's own line in the session list — its recap first, the raw last reply without one, what it is doing
+                // while it works — drawn as the list draws it. Nothing while the list holds no row for it.
+                listed?.let { SessionLine.make(it, live = true, watching = watching, recaps = LocalSessionRecaps.current) }?.let { line ->
+                    Text(line.listText(), Modifier.padding(top = 2.dp).testTag("project-coordinator-line"), maxLines = 2,
+                        overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium, color = line.listColor())
+                }
                 if (status.text("state") == "LIVE" && finished) Text(ProjectPage.finishedCoordinatorNote, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 4.dp))
             } }
             coordination.text("workspaceName")?.let { Labeled("Workspace", it) }

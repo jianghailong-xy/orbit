@@ -7,6 +7,7 @@ import io.orbitd.android.projects.ProjectTime
 import io.orbitd.android.projects.StartProjectCopy
 import io.orbitd.android.tasks.OwnerConfirmationCopy
 import io.orbitd.android.watch.WatchSessionSummary
+import io.orbitd.android.watch.WatchTime
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -80,8 +81,24 @@ data class SessionLine(val text: String, val tone: Tone, val label: String? = nu
         }
 
         private fun sentLine(text: String) = SessionLine(SessionLineCopy.sent(plainPreview(text)), Tone.PREVIEW)
+
+        /** The chat page's own recap line (OrbitKit `SessionLine.headerRecap`): the server's recap of the whole conversation, the
+         * list row's own [DirectorySession.recapText] under the same muted word, dated by how long ago it was written ("Recap · 5m
+         * ago"). Null — nothing drawn — with the account's Session recaps switch off and when there is no recap: the page holds the
+         * whole transcript, so there is no reply to fall back to. Live state does not hide it, as it does on a list row: the page
+         * says what is happening in its own header, and this is the summary beside it. */
+        internal fun headerRecap(s: DirectorySession?, recaps: Boolean, now: Instant = Instant.now()): SessionLine? {
+            if (!recaps) return null
+            val recap = s?.recapText?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+            return SessionLine(recap, Tone.PREVIEW, recapAgo(s.recapAt, now))
+        }
     }
 }
+
+/** The header recap's prefix (Swift `recapAgo`): the word, and how long ago the server wrote it in the transcript's own relative
+ * words (`RelativeTime.format`, [WatchTime.format] here). A recap with no readable time keeps the word alone, as [recapLabel] does. */
+internal fun recapAgo(recapAt: String?, now: Instant): String =
+    WatchTime.format(recapAt, now)?.let { SessionLineCopy.recapWithTime(it) } ?: SessionLineCopy.recap
 
 /** The recap's prefix: what the line is, and when the server wrote it ([DirectorySession.recapAt]). A recap whose time the payload
  * does not carry — an older control plane — keeps the word without one. A bare clock time is today's; on another day the date joins

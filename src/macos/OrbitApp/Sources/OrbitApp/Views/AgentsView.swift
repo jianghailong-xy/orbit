@@ -1578,13 +1578,9 @@ struct AgentSessionRow: View {
                          recaps: app.user?.preferences?.showRecaps ?? true)
     }
 
-    /// The second line as one text run: the recap's muted label, a space, then the line. Built by
-    /// concatenation (not an HStack) so the label and the text truncate together as one line, the
-    /// way web's inline spans do. Lines with no label — all but the recap — are the text alone.
-    private var lineText: Text {
-        guard let label = line.label else { return Text(line.text) }
-        return Text("\(label) ").foregroundStyle(.tertiary) + Text(line.text)
-    }
+    /// The second line as one text run: the recap's muted label, a space, then the line
+    /// (`SessionLine.listText`, which every other place a recap shows draws it with too).
+    private var lineText: Text { line.listText }
 
     var body: some View {
         #if os(iOS)

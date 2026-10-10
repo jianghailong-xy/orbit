@@ -63,7 +63,9 @@ struct SessionProjectRowView: View {
     private var secondLine: some View {
         HStack(spacing: 7) {
             progressChip
-            Text(row.line.text)
+            // With the recap's muted "Recap · 5:38 PM" in front when the line is the recap, as a
+            // session row draws its own.
+            row.line.listText
                 .font(.orbitListSubtitle)
                 .foregroundStyle(lineColor)
                 .lineLimit(1)

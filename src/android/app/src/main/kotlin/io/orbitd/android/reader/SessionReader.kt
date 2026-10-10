@@ -46,8 +46,10 @@ import io.orbitd.android.core.net.HttpMethod
 import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.core.realtime.*
 import io.orbitd.android.directory.*
+import io.orbitd.android.management.LocalSessionRecaps
 import io.orbitd.android.navigation.*
 import io.orbitd.android.text.*
+import java.time.Instant
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import kotlinx.serialization.json.*
@@ -244,6 +246,10 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                         modifier = Modifier.alpha(if (reconnecting) 1f else 0f)
                             .then(if (reconnecting) Modifier else Modifier.clearAndSetSemantics { })) { Text("Retry") }
                 }
+                // The conversation's recap, off the row the session list draws (the detail's own copy for a session the list
+                // does not hold). Folds away while a phone's composer holds the keyboard, with the rest of the chrome.
+                SessionRecapLine(data.sessions["open"]?.firstOrNull { ObjectId.same(it.id, route.id) } ?: listed,
+                    hidden = composerFocused && compact)
                 state.error?.let { StatusMessage("Couldn't load messages", it, model::retry) }
                 // The needs-you bar, under the header and over the transcript (iOS `NeedsYouBannerView` in the console's top
                 // inset). Its press here unpins the reader and shows the waiting card, which the card rail brings into view.
@@ -347,6 +353,19 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
             if (dialog is DirectoryDialog.Purge) leave()
         } }
     }
+}
+
+/** The server's recap of this conversation (0418) under the reader's header (OrbitKit `SessionLine.headerRecap`), drawn as the session
+ * list draws a recap — "Recap · 5m ago", muted, then the sentence — and wrapping to a second line rather than losing its end. Nothing
+ * without one, or with the account's Session recaps switch off. Its "5m ago" is read again every minute. */
+@Composable
+private fun SessionRecapLine(session: DirectorySession?, hidden: Boolean) {
+    var now by remember { mutableStateOf(Instant.now()) }
+    LaunchedEffect(Unit) { while (true) { delay(60_000); now = Instant.now() } }
+    val recap = SessionLine.headerRecap(session, LocalSessionRecaps.current, now)
+    if (recap == null || hidden) return
+    Text(recap.listText(), Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 8.dp).testTag("session-recap"),
+        maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
 }
 
 private fun sessionLabel(session: SessionState?, row: DirectorySession? = null): String {

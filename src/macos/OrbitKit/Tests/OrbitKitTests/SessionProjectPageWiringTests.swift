@@ -211,7 +211,8 @@ final class SessionProjectPageWiringTests: XCTestCase {
         XCTAssertTrue(firstLine.contains(".fixedSize()"))
         XCTAssertFalse(firstLine.contains(".fixedSize(horizontal: regular, vertical: false)"))
         XCTAssertFalse(row.contains(".bold()") || row.contains(".semibold"), "项目条目标题与会话行同一字重（owner 10-04）")
-        XCTAssertTrue(row.contains("row.line.text"))
+        // The line as a session row draws its own: the recap's label in front of a recap.
+        XCTAssertTrue(row.contains("row.line.listText"))
         XCTAssertFalse(row.contains("SessionCoordinatorBadge"))
         XCTAssertFalse(row.contains("NeedsYouCountCapsule"), "attention is a dot, never a count")
         XCTAssertTrue(row.contains("SpinnerGlyph(color: .secondary)"))

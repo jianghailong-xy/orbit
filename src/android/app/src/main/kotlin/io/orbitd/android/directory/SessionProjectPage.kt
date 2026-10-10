@@ -95,20 +95,26 @@ internal fun SessionProjectRowView(row: SessionProjectRow, onOpen: () -> Unit, o
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                 ProjectProgressChip(row.taskCounts, row.runningCount, row.status)
                 // The line, with the recap's muted label when it has one (web draws it in the row's quiet tone).
-                Text(row.line.label?.let { label -> buildAnnotatedString {
-                        withStyle(SpanStyle(color = MaterialTheme.colorScheme.onSurfaceVariant)) { append("$label ") }
-                        append(row.line.text)
-                    } } ?: AnnotatedString(row.line.text),
-                    Modifier.testTag("project-row-line"), maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.bodyMedium, color = lineColor(row.line.tone))
+                Text(row.line.listText(), Modifier.testTag("project-row-line"), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.bodyMedium, color = row.line.listColor())
             }
         },
         trailingContent = { IconButton(onOptions) { Icon(painterResource(R.drawable.ic_more), "Options for ${row.title}") } },
         modifier = Modifier.clickable(role = Role.Button, onClick = onOpen).semantics { stateDescription = words }.testTag("project-row:${row.projectId}"))
 }
 
+/** The line as a session list draws it: the recap's muted label, a space, then the text, in one run so the two truncate together;
+ * a line with no label is its text alone. The project row, the chat page's recap and the project page's coordinator card all draw
+ * a [SessionLine] this way (iOS `SessionLine.listText`). */
 @Composable
-private fun lineColor(tone: SessionLine.Tone): Color = when (tone) {
+internal fun SessionLine.listText(): AnnotatedString = label?.let { label -> buildAnnotatedString {
+    withStyle(SpanStyle(color = MaterialTheme.colorScheme.onSurfaceVariant)) { append("$label ") }
+    append(text)
+} } ?: AnnotatedString(text)
+
+/** The line's colour: amber while it waits on you, the working colour while it works, muted otherwise. */
+@Composable
+internal fun SessionLine.listColor(): Color = when (tone) {
     SessionLine.Tone.APPROVAL -> LocalOrbitColors.current.needsYou
     SessionLine.Tone.RUNNING -> MaterialTheme.colorScheme.primary
     else -> MaterialTheme.colorScheme.onSurfaceVariant
