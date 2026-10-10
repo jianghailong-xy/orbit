@@ -60,13 +60,16 @@ xcrun simctl bootstatus "$UDID" -b >/dev/null 2>&1 || true
 xcodegen generate >/dev/null || fail "xcodegen generate"
 
 # 3. One arm of the A/B: build, keep the ATS block that actually landed in the .app, install, run.
-run_arm() { # name [plist-override]
-  local name="$1" plist="${2:-}" extra=()
-  [ -n "$plist" ] && extra=(INFOPLIST_FILE="$plist")
-  echo "==> $name: build"
+# Both arms name their plist on the command line rather than relying on the project's setting: the
+# shipped file is passed explicitly, so an arm cannot quietly run against the other one's plist —
+# and no empty array is ever expanded, which bash 3.2 (the runner's /bin/bash) reads as unbound
+# under `set -u`.
+run_arm() { # name plist
+  local name="$1" plist="$2"
+  echo "==> $name: build ($plist)"
   if ! xcodebuild build -project ATSProbe.xcodeproj -scheme ATSProbe \
       -destination "id=$UDID" -derivedDataPath ".dd-$name" -configuration Debug \
-      CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO "${extra[@]}" \
+      CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO INFOPLIST_FILE="$plist" \
       > "$OUT/build-$name.log" 2>&1; then
     tail -40 "$OUT/build-$name.log" >&2
     return 1
@@ -84,7 +87,7 @@ run_arm() { # name [plist-override]
   cat "$OUT/$name.txt"
 }
 
-run_arm shipped || fail "the shipped arm's build/run did not finish"
+run_arm shipped "$PWD/../../../../src/ios/Support/Info.plist" || fail "the shipped arm's build/run did not finish"
 run_arm control "$PWD/InfoControl.plist" || fail "the control arm's build/run did not finish"
 
 SHIPPED=$(cat "$OUT/shipped.txt")
