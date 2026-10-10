@@ -7,7 +7,9 @@ composer's model menu lists only the credentials that engine runs.
 
 Revision 2 merges main as it stood after the Android composer work A07c (main `56c21bdd2`, then the project tip `c5447f6bf`).
 A07c had built its composer on the earlier model, where the provider decides the engine. The merge keeps this task's model and
-every A07c feature; see [Merged with A07c](#merged-with-a07c-revision-2).
+every A07c feature; see [Merged with A07c](#merged-with-a07c-revision-2). Revision 3 does the same for A07d, DeepSeek
+Harness on Android (main `23bdaa967`), then takes in the project tip `4b3d6a1cf`; see
+[Merged with A07d](#merged-with-a07d-revision-3).
 
 ## What changed (src/android/app/src/main/kotlin/io/orbitd/android)
 
@@ -45,6 +47,76 @@ model: the engine first, and credentials by engine compatibility. A07c's feature
 Retired with the earlier model: the one flat provider list (`choices`, `sameRuntime`), `executingRuntime`, the title's
 "→ next engine" (a session never changes engine), and `OpenCodeKeys` with its `opencode/<slug>` choices and `orbit-<slug>/` model
 ids (contract §1.3, §3.3: the server stores the key and a bare model, and normalizes the old encoding on write).
+
+## Merged with A07d (revision 3)
+
+Revision 3 starts from revision 2's tip `5730ff4ba`. It merges main `23bdaa967`, which brings in A07d, DeepSeek Harness on
+Android, from project 34ZZn8fmemArxvl2CsCFp (`3e7ec4f00`). It then merges the project tip `4b3d6a1cf` with `--no-ff`
+(`4f3dd4dc9`). A07d had built its Harness reads on the earlier model's `executingRuntime`. Two files conflicted:
+
+| File | T9 | A07d | Resolved |
+| --- | --- | --- | --- |
+| `composer/ProviderChoices.kt` | engine questions moved to `ProviderEngines`; `executingRuntime` and `engineTitle` retired | `engine(detail, providers)` and `engineFromKeys(detail)` on `executingRuntime` | T9's file plus A07d's two helpers, now asked of `ProviderEngines.sessionEngine`. A session's engine is the one it records. A draft's is the one its workspace last ran (`lastEngine`) until a pick names another. Otherwise it is the provider's default engine, read from the account's rows. |
+| `reader/SessionConsole.kt` | `engine` from `ProviderEngines.sessionEngine`; `executesAntigravity` on it | `engine` and `executesDsh` from `ProviderChoices.engine` | T9's `engine`, with A07d's `executesDsh` on it |
+
+A07d's features are kept on this model:
+
+| A07d (A07-5) | Kept as |
+| --- | --- |
+| A Harness session's approval cards offer Allow and Deny only | unchanged: the cards read the session's `engine`, or else the console's |
+| Repair card for a missing or rejected key (Update the API key, Retry), a missing CLI (Install), a runner too old, an unsupported platform: in the transcript, and above the composer while the session is queued | unchanged card. Update the API key changed with the split, see below. |
+| A `!` command stays in the box with why, from the box and from + → Shell command | unchanged; it now also covers a draft whose workspace last ran Harness |
+| The chip says "Picked by DeepSeek Harness" while no model is reported | unchanged; drafts included |
+| Harness's engine page installs it (`DshInstallSection`) | under T9's status line ("Ready · each session uses the DeepSeek key it was started with", or why it can't run) and above its footer |
+
+One behaviour changed with the split. A07d's Update the API key opened the session's own key. Failing that, it opened "a key
+Harness runs on", then the retired `/providers/new/deepseek-harness` form. Every DeepSeek key runs Harness, so another key's
+page can't stand in for the session's. The button now opens the session's key, or else `/infrastructure#keys`, which is what
+the web's `onEditDshKey` does (`22d4038c7`).
+
+A07d's repair wording also tied the key to the engine. The coordinator ruled that T9 fixes it in this round (project criterion 7;
+ruling 34dKOJkbgptS9bVg6PGKi, which takes `src/android/core/src/{main,test}/kotlin/io/orbitd/android/core/cards/` into
+T9's paths). In `core/cards/DshRuntime.kt`, NEEDS_KEY and INVALID_KEY now say what OrbitKit's `DshRuntime.swift` and the
+web's `Transcript.tsx` say, word for word. INVALID_KEY reads as their sentence does when no key name is given, which is also how
+iOS's card shows it:
+
+| Repair | Before (A07d) | Now |
+| --- | --- | --- |
+| NEEDS_KEY title | DeepSeek Harness needs an API key | DeepSeek Harness needs a DeepSeek key |
+| NEEDS_KEY detail | This session has no DeepSeek Harness key to run on. Add or re-enable the key in Infrastructure, then send your message again. | This session has no DeepSeek key to run on. Add or re-enable a DeepSeek key in Infrastructure, then send your message again. |
+| INVALID_KEY detail | Update the key in Infrastructure, then send your message again. Connecting a key does not check it — the first request does. | Update the DeepSeek key in Infrastructure, then send your message again. |
+
+`PRESET_SLUG` (`deepseek-harness`) is removed with its comment. Nothing reads it any more, because Update the API key no longer
+opens that form. Nothing else in core changed (`647870c4d`).
+
+Main's tests that pinned the earlier model. Only their expectations changed; none was deleted or skipped:
+
+| Test | Before | Now, and why |
+| --- | --- | --- |
+| `DshSessionShellTest.aSessionWithNoKeyIsSentToConnectOne` | no key of the session's opens `/providers/new/deepseek-harness`; the card says "DeepSeek Harness needs an API key" | lists another DeepSeek key that isn't the session's and expects `/infrastructure#keys`, as above; the card's words as in the table |
+| `DshSessionShellTest.aKeyDeepSeekRejectedIsACardThatOpensTheKeyAndSendsTheMessageAgain` | "Update the key in Infrastructure, … the first request does." | "Update the DeepSeek key in Infrastructure, then send your message again." |
+| `DshSessionShellTest.anotherEnginesSessionKeepsItsLine` | asserts no "DeepSeek Harness needs an API key" | asserts no "DeepSeek Harness needs a DeepSeek key" |
+| core `DshRuntimeTest.eachRepairSaysWhatStopsTheSessionAndWhereItIsFixed` | the old NEEDS_KEY title and detail, the old INVALID_KEY detail | the new words |
+| androidTest `DshStackDeviceTest.s2_aKeyDeepSeekRejectedIsTheRepairCard` | waits for "Update the key in Infrastructure, then send your message again." | waits for "Update the DeepSeek key in Infrastructure, then send your message again." (`982dff187`); compiled, not run (it needs A11's isolated stack) |
+
+New: `ProviderChoicesTest.theEngineASessionRunsOnIsTheOneItRecordsElseItsProviders` covers the recorded engine, a draft's
+`lastEngine` and its pick, a key's own engine, a legacy `dsh` row, the built-in alias and `engineFromKeys`.
+`DshSessionShellTest.aDraftOnHarnessKeepsItsShellCommandToo` covers a draft whose workspace last ran Harness: its chip says
+the runtime picks, and its `!` command stays in the box with no session created (`e828fa1b1`). Every other A07d test passes
+unchanged.
+
+Checks on the revision 3 tree (`982dff187`; HPC, one Gradle build at a time):
+
+- Android gate `test lintDebug assembleDebug`: exit 0. App unit tests 1214/1214 in debug and 1214/1214 in release (157 classes
+  each), core 202/202 (25 classes), no failures, errors or skips. Lint: 0 errors, 39 warnings.
+- 83 unit-test classes name OrbitKit, a Swift file, `src/web` or `src/shared` in their source. Every class that reads those
+  sources is among them, including the nine Swift-reading `*CopyParityTest` and `ProviderEnginesTest`, which reads the shared
+  TypeScript. All 83 pass in that gate: 1453 runs, none failed or skipped. No Android parity test reads the Harness repair
+  wording. A separate check compares it with OrbitKit's `DshRuntime.swift` and the web's
+  `Transcript.tsx`/`RunNeverStartedCard.tsx`: it matches word for word, and no old wording is left under `src/android`.
+- `assembleDebugAndroidTest` compiles.
+- On the emulator, with the APKs of `4f3dd4dc9`: ComposerDeviceTest 10/10, and the kit's journeys 7/7 in each theme. Since then
+  only the Harness repair card's words and test strings have changed.
 
 ## Unit tests (src/android/app/src/test/kotlin/io/orbitd/android)
 
@@ -97,6 +169,11 @@ from this branch's own server and runner (`2c835ffb9`; `src/android/scripts/a11-
 first run read Codex where it expected Claude Code, because the stack's workspace last ran Codex and a new session starts there; the
 journey now picks Claude Code first, and passes on the same stack with the APKs of `7cada1bb2`.
 
+Revision 3: the same ten `ComposerDeviceTest` journeys pass on the APKs of `4f3dd4dc9`, the merge with A07d and the project
+tip (OK, 10 tests). `647870c4d`, which came after, changes only the Harness repair card's words, which no journey here reads.
+`ComposerStackDeviceTest` was not run again. The merge touched no Provider list. It touched only A07d's Harness reads, which
+`DshSessionShellTest` covers in the Gradle gate.
+
 ## Screenshots
 
 Taken on the shared API 36 emulator (`emulator-5554`, 1080×2400) with the debug APK built from the commit named in
@@ -129,9 +206,19 @@ status bar (`run-log/2827350e5/pixel-compare.txt`). Only the changed ones were r
   Code page.
 - Kept, 12 files: `13`–`15` are identical. `10`–`12` differ only in the task's relative time ("15h ago" against "16h ago").
 
+Revision 3 retook every screen on `4f3dd4dc9` (the kit's 7 journeys pass in both themes) and compared each with the committed
+set the same way (`run-log/4f3dd4dc9/pixel-compare.txt`, `region-diff.txt`). `647870c4d` changes only the Harness repair card's
+words, which none of these screens shows. The merge changed none of these screens, so none was replaced:
+
+- 27 files are identical below the status bar.
+- `10`–`12` in both themes differ only in one 36×26 box, the task's relative time ("15h ago" against "21h ago").
+- `09` dark: the dialog is identical. The new capture also drew the composer behind the dialog's scrim, which shows outside the
+  dialog and through its two bottom corners. The committed capture had not drawn it yet. `09` light, which has it in both, is
+  identical.
+
 `run-log/<commit>/` keeps each run's own record: the instrumentation output per theme, the device and APK identity, the input
 hashes, the result of each journey, and the fixture's tally of what the app sent. `24eebcbe2` took the kept screens, `2827350e5`
-the replaced ones.
+the replaced ones, and `4f3dd4dc9` is revision 3's check.
 
 To repeat it: build the app and test APKs with the kit's journeys compiled in (any init script that adds `kit/` to the
 `androidTest` source set), then run `kit/run.sh <app.apk> <test.apk> <new dir>`. It holds `/var/lib/orbit/android/ui.lock`
