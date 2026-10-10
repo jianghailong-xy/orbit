@@ -42,10 +42,12 @@ public enum ProjectPage {
     /// Pending landing / On project branch / On main (the branch lane dropped on a `MAIN` line), and draws
     /// the lanes outside that sum only when they are non-zero; one that does not draws the seven
     /// lanes, Done carrying its share of the whole. `started` is whether anybody has started the
-    /// project; only `false` changes anything — Ready's footnote.
+    /// project; only `false` changes anything — Ready's footnote. `main` is the project's main branch
+    /// by name, which the lanes about it say.
     public static func overviewCells(_ b: ProjectPanoramaBuckets, taskCount: Int,
                                      line: IntegrationLine?, started: Bool? = nil,
-                                     paused: Bool = false, manualReadyCount: Int = 0) -> [OverviewCell] {
+                                     paused: Bool = false, manualReadyCount: Int = 0,
+                                     main: String = RunSettings.defaultMainBranch) -> [OverviewCell] {
         let readyFootnote = started == false ? readyUntilStarted : paused ? readyWhilePaused
             : b.ready > 0 && manualReadyCount == b.ready ? "can start manually" : "can start now"
         if reportsIntegrationLanes(b) {
@@ -64,10 +66,10 @@ public enum ProjectPage {
             if line != .main {
                 lanes.append(OverviewCell(key: "onIntegrationLine", label: "On project branch",
                                           value: b.onIntegrationLine ?? 0,
-                                          footnote: "not on main yet", glyph: .branch))
+                                          footnote: "not on \(main) yet", glyph: .branch))
             }
-            lanes.append(OverviewCell(key: "onUpstream", label: "On main", value: b.onUpstream ?? 0,
-                                      footnote: "landed on main", glyph: .check))
+            lanes.append(OverviewCell(key: "onUpstream", label: "On \(main)", value: b.onUpstream ?? 0,
+                                      footnote: "landed on \(main)", glyph: .check))
             let extras = [
                 OverviewCell(key: "doneNotIntegrated", label: "Done", value: b.doneNotIntegrated ?? 0,
                              footnote: "nothing to land", glyph: .check),
@@ -191,6 +193,15 @@ public enum ProjectPage {
         "CHECK": "checking", "VERIFY": "verifying", "PUSH": "pushing",
     ]
 
+    /// The two above for a project whose main branch is `main` by name — web's `jobWords` and
+    /// `jobPhases`: a merge names the branch it goes into, and the sync takes that branch in.
+    public static func integrationJobWords(_ main: String) -> [String: String] {
+        integrationJobWords.merging(["LAND_PROMOTION": "Merge to \(main)"]) { $1 }
+    }
+    public static func integrationPhaseWords(_ main: String) -> [String: String] {
+        integrationPhaseWords.merging(["MAIN_SYNC": "syncing \(main)"]) { $1 }
+    }
+
     /// The state word for a job whose runner has stopped reporting — web's `LANDING_NO_REPORT`.
     ///
     /// A fact about the REPORTS and nothing else: the runner is silent, which is not "this job is
@@ -256,6 +267,8 @@ public enum ProjectPage {
     /// leaves the reading of the reports here, from the runner's heartbeat: a claimed job whose
     /// runner has gone quiet reads "No report" for as long as it stays quiet — never "timed out",
     /// which is the job's own verdict to give and arrives as the server's `blockingReason`.
+    ///
+    /// A merge and a sync name the project's main branch, which the view carries (`upstreamRef`).
     public static func landingLine(_ view: ProjectIntegrationView, now: Date = Date(),
                                    updatedAt: Date? = nil, refreshFailed: Bool = false) -> LandingLine? {
         guard let inFlight = view.inFlight else { return nil }
@@ -271,7 +284,8 @@ public enum ProjectPage {
         let silent = listed == nil && running
             && (heartbeatAt.map { now.timeIntervalSince($0) > 600 } ?? true)
         let unavailable = cannotRead(now: now, updatedAt: updatedAt, refreshFailed: refreshFailed)
-        let word = integrationJobWords[inFlight.kind ?? ""] ?? "Integration"
+        let main = RunSettings.mainBranchName(view.upstreamRef)
+        let word = integrationJobWords(main)[inFlight.kind ?? ""] ?? "Integration"
         let what = jobs > 1 ? landingJobsCount(jobs, timedOut: timedOutJobs) : inFlight.taskTitle
         // What the job waited for a runner before it was claimed — the row's own `inFlight` carries
         // it, and only a CLAIMED job has one to show: a queued job's whole clock is that wait.
@@ -281,7 +295,8 @@ public enum ProjectPage {
         }
         return liveLine(word: word, what: what, running: running, phase: inFlight.phase,
                         startedAt: inFlight.startedAt, heartbeatAt: inFlight.heartbeatAt, now: now,
-                        updatedAt: updatedAt, unavailable: unavailable, silent: silent, wait: wait)
+                        updatedAt: updatedAt, unavailable: unavailable, main: main, silent: silent,
+                        wait: wait)
     }
 
     /// What a job waited for a runner before its clock began, from the server's own measurement:
@@ -297,15 +312,16 @@ public enum ProjectPage {
     public static func landingJobLines(_ view: ProjectIntegrationView, now: Date = Date(),
                                        updatedAt: Date? = nil, refreshFailed: Bool = false) -> [LandingJobLine] {
         let unavailable = cannotRead(now: now, updatedAt: updatedAt, refreshFailed: refreshFailed)
+        let main = RunSettings.mainBranchName(view.upstreamRef)
         return (view.inFlightJobs ?? []).map { job in
-            let word = integrationJobWords[job.kind] ?? "Integration"
+            let word = integrationJobWords(main)[job.kind] ?? "Integration"
             let line = job.timedOut && !unavailable
                 ? timedOutLine(job, word: word, what: job.taskTitle, now: now)
                 : liveLine(word: word, what: job.taskTitle, running: job.state == "RUNNING", phase: job.phase,
                            startedAt: job.startedAt, heartbeatAt: job.heartbeatAt, now: now,
-                           updatedAt: updatedAt, unavailable: unavailable)
+                           updatedAt: updatedAt, unavailable: unavailable, main: main)
             return LandingJobLine(jobId: job.jobId, taskId: job.taskId, line: line,
-                                  detail: landingJobDetail(job), retryable: job.retryable)
+                                  detail: landingJobDetail(job, main: main), retryable: job.retryable)
         }
     }
 
@@ -317,9 +333,11 @@ public enum ProjectPage {
     /// A job running or waiting its turn, as the row draws it. `unavailable` freezes the clock at the
     /// last update the app had and stops the row claiming activity; `silent` freezes it at the last
     /// REPORT instead — the same freeze, reached from the runner's silence rather than this app's read.
+    /// `main` is the project's main branch by name, which a sync names.
     private static func liveLine(word: String, what: String?, running: Bool, phase: String?,
                                  startedAt: String, heartbeatAt: String?, now: Date, updatedAt: Date?,
-                                 unavailable: Bool, silent: Bool = false, wait: String? = nil) -> LandingLine {
+                                 unavailable: Bool, main: String, silent: Bool = false,
+                                 wait: String? = nil) -> LandingLine {
         // A queued job's heartbeat and phase can be an earlier claim's: only a running job's count.
         let reported = heartbeatAt.flatMap(RelativeTime.parse)
         let lastUpdate = running ? (reported ?? updatedAt) : updatedAt
@@ -340,7 +358,7 @@ public enum ProjectPage {
         return LandingLine(what: what, running: running && !unavailable && !silent,
                            state: unavailable ? "Update unavailable"
                                : silent ? landingNoReport
-                                   : running ? (integrationPhaseWords[phase ?? ""] ?? "running") : "queued",
+                                   : running ? (integrationPhaseWords(main)[phase ?? ""] ?? "running") : "queued",
                            clock: landingClock(elapsed), word: word,
                            clockLabel: running ? "Elapsed" : "Queued for",
                            updated: report, wait: wait)
@@ -358,8 +376,9 @@ public enum ProjectPage {
     }
 
     /// The line under a job: what a timed-out job's runner did, or which generation a retried job is
-    /// and who asked for it. Whether a push may have happened is read off the step it stopped at.
-    private static func landingJobDetail(_ job: ProjectIntegrationJob) -> String? {
+    /// and who asked for it. Whether a push may have happened is read off the step it stopped at —
+    /// a sync, of `main`, the project's main branch by name.
+    private static func landingJobDetail(_ job: ProjectIntegrationJob, main: String) -> String? {
         // An instant the clock cannot read is said to be one, as the web says it, never a wrong time.
         func time(_ iso: String) -> String {
             RelativeTime.parse(iso).map { landingClockTime($0) } ?? "--:--"
@@ -367,7 +386,7 @@ public enum ProjectPage {
         if job.timedOut {
             // A runner with no name is "The runner", as the web's truthiness reads an empty one.
             let runner = job.runnerName.flatMap { $0.isEmpty ? nil : "Runner \($0)" } ?? "The runner"
-            let step = integrationPhaseWords[job.phase ?? ""] ?? "running"
+            let step = integrationPhaseWords(main)[job.phase ?? ""] ?? "running"
             let push = job.phase == "PUSH" || job.phase == "VERIFY" ? landingMayHaveBeenPushed : landingNoPushRecorded
             return "\(runner) took it at \(time(job.startedAt)) · stopped at \(step) · \(push)"
         }
@@ -474,8 +493,10 @@ public enum ProjectPage {
 
     /// The criterion's work in words, or nil when the read did not answer for it (which is also
     /// what an older server's document draws). An unrecognised clause or action prints as itself —
-    /// dropping it would under-report exactly when there is more to say.
-    public static func criterionWork(_ c: ProjectCriterion, integrationRef: String?) -> CriterionWork? {
+    /// dropping it would under-report exactly when there is more to say. Where met work is says
+    /// `main`, the project's main branch by name.
+    public static func criterionWork(_ c: ProjectCriterion, integrationRef: String?,
+                                     main: String = RunSettings.defaultMainBranch) -> CriterionWork? {
         guard let satisfied = c.satisfied else { return nil }
         var landing: String?
         var warning: String?
@@ -483,8 +504,8 @@ public enum ProjectPage {
             switch raw {
             case "ON_INTEGRATION_LINE":
                 landing = "on \(integrationRef ?? "the project branch")"
-                warning = "not on main yet"
-            case "LANDED": landing = "on main"
+                warning = "not on \(main) yet"
+            case "LANDED": landing = "on \(main)"
             case "UNKNOWN": landing = "no merge receipt either way"
             default: landing = raw
             }
@@ -706,16 +727,17 @@ public enum ProjectPage {
 
     /// The line row's facts, in order: "⎇ project/x", "7 commits ahead of main", "synced with main
     /// 12m ago", "Running jobs 1 · Queued 0", "Last landing check ✓ passing". Nil when no
-    /// line has been decided.
+    /// line has been decided. Main is the project's main branch by name, which the view carries.
     public static func integrationFacts(_ view: ProjectIntegrationView, now: Date) -> [String]? {
         guard let line = view.line, line != .unknown else { return nil }
         let branchLine = line == .projectBranch
+        let main = RunSettings.mainBranchName(view.upstreamRef)
         var facts: [String] = [branchLine ? (view.ref ?? "project branch") : (view.upstreamRef ?? "main")]
         if branchLine, let ahead = view.commitsAheadOfUpstream {
-            facts.append("\(ahead) commit\(ahead == 1 ? "" : "s") ahead of main at last measurement")
+            facts.append("\(ahead) commit\(ahead == 1 ? "" : "s") ahead of \(main) at last measurement")
         }
         if branchLine, let synced = view.lastUpstreamSyncAt, let ago = RelativeTime.ago(synced, now: now) {
-            facts.append("synced with main \(ago)")
+            facts.append("synced with \(main) \(ago)")
         }
         facts.append("Running jobs \(view.integratingCount) · Queued \(view.queuedCount)")
         let tip: String
@@ -821,7 +843,7 @@ public enum ProjectPage {
         case "ERROR": return Tag(text: "Integration error · \(who)", tone: .danger)
         case "AWAITING_OWNER": return Tag(text: "Awaiting your approval", tone: .warning)
         case "ON_INTEGRATION_LINE": return Tag(text: "On \(ref ?? "the project branch")", tone: .success)
-        case "ON_UPSTREAM": return Tag(text: "On \(upstreamRef ?? "main")", tone: .success)
+        case "ON_UPSTREAM": return Tag(text: "On \(RunSettings.mainBranchName(upstreamRef))", tone: .success)
         default: return nil
         }
     }
