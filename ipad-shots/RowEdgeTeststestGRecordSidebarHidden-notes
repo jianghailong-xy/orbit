@@ -1,0 +1,6 @@
+[G1] pressing 9 label="Back" id="" frame=(434.5, 36.0, 36.0, 36.0) hittable=true
+[G1] window (0.0, 0.0, 1376.0, 1032.0)
+[G1] bar 0 id="Infrastructure" frame=(0.0, 32.0, 420.0, 106.0)
+[G1] bar 1 id="Mac Studio" frame=(420.5, 32.0, 955.5, 54.0)
+[G1] top button 9 label="Show Sidebar" id="" frame=(14.0, 36.0, 36.0, 36.0) hittable=true
+[G1] sidebar showing: false

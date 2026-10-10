@@ -1,0 +1,7 @@
+F: row 1 label="会话列表左滑按钮, 13m ago, Tags: iOS, 左滑按钮在 SessionRowActions 里，改成圆形。" id="" frame=(0.0, 661.0, 420.0, 75.5) hittable=true
+[F1] drag from (2, 698) to (170, 698)
+[F1] row action showing: 9 label="Complete" id="" frame=(10.75, 665.5, 58.5, 67.0) hittable=true
+[F1] row action showing: 9 label="Pin" id="" frame=(86.5, 665.5, 47.0, 67.0) hittable=true
+F1: sidebar false
+[F2] drag from (2, 698) to (560, 698)
+F2: sidebar false

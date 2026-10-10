@@ -1,0 +1,300 @@
+    cd /Users/runner/work/orbit/orbit/.ipad-probe
+    /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -Xlinker -reproducible -target arm64-apple-ios17.0-simulator -bundle -isysroot /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk -O0 -L/Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Intermediates.noindex/EagerLinkingTBDs/Debug-iphonesimulator -L/Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Products/Debug-iphonesimulator -L/Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib -F/Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Intermediates.noindex/EagerLinkingTBDs/Debug-iphonesimulator -F/Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Products/Debug-iphonesimulator -iframework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks -iframework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk/Developer/Library/Frameworks -filelist /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Intermediates.noindex/IpadProbe.build/Debug-iphonesimulator/IpadProbeUITests.build/Objects-normal/arm64/IpadProbeUITests.LinkFileList -Xlinker -rpath -Xlinker /usr/lib/swift -Xlinker -rpath -Xlinker @loader_path/Frameworks -Xlinker -rpath -Xlinker @executable_path/Frameworks -Xlinker -dead_strip -Xlinker -object_path_lto -Xlinker /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Intermediates.noindex/IpadProbe.build/Debug-iphonesimulator/IpadProbeUITests.build/Objects-normal/arm64/IpadProbeUITests_lto.o -rdynamic -Xlinker -no_deduplicate -Xlinker -objc_abi_version -Xlinker 2 -Xlinker -dependency_info -Xlinker /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Intermediates.noindex/IpadProbe.build/Debug-iphonesimulator/IpadProbeUITests.build/Objects-normal/arm64/IpadProbeUITests_dependency_info.dat -fobjc-link-runtime -L/Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/iphonesimulator -L/usr/lib/swift -Xlinker -add_ast_path -Xlinker /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Intermediates.noindex/IpadProbe.build/Debug-iphonesimulator/IpadProbeUITests.build/Objects-normal/arm64/IpadProbeUITests.swiftmodule @/Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Intermediates.noindex/IpadProbe.build/Debug-iphonesimulator/IpadProbeUITests.build/Objects-normal/arm64/IpadProbeUITests-linker-args.resp -Xlinker -needed_framework -Xlinker XCTest -framework XCTest -Xlinker -needed-lXCTestSwiftSupport -lXCTestSwiftSupport -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __entitlements -Xlinker /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Intermediates.noindex/IpadProbe.build/Debug-iphonesimulator/IpadProbeUITests.build/IpadProbeUITests.xctest-Simulated.xcent -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __ents_der -Xlinker /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Intermediates.noindex/IpadProbe.build/Debug-iphonesimulator/IpadProbeUITests.build/IpadProbeUITests.xctest-Simulated.xcent.der -Xlinker -no_adhoc_codesign -o /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Products/Debug-iphonesimulator/IpadProbeUITests-Runner.app/PlugIns/IpadProbeUITests.xctest/IpadProbeUITests
+
+ProcessInfoPlistFile /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Products/Debug-iphonesimulator/IpadProbeUITests-Runner.app/PlugIns/IpadProbeUITests.xctest/Info.plist /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Intermediates.noindex/IpadProbe.build/Debug-iphonesimulator/IpadProbeUITests.build/empty-IpadProbeUITests.plist (in target 'IpadProbeUITests' from project 'IpadProbe')
+    cd /Users/runner/work/orbit/orbit/.ipad-probe
+    builtin-infoPlistUtility /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Intermediates.noindex/IpadProbe.build/Debug-iphonesimulator/IpadProbeUITests.build/empty-IpadProbeUITests.plist -producttype com.apple.product-type.bundle.ui-testing -expandbuildsettings -format binary -platform iphonesimulator -additionalcontentfile /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Intermediates.noindex/IpadProbe.build/Debug-iphonesimulator/IpadProbeUITests.build/ProductTypeInfoPlistAdditions.plist -o /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Products/Debug-iphonesimulator/IpadProbeUITests-Runner.app/PlugIns/IpadProbeUITests.xctest/Info.plist
+
+ExtractAppIntentsMetadata (in target 'IpadProbeUITests' from project 'IpadProbe')
+    cd /Users/runner/work/orbit/orbit/.ipad-probe
+    /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsmetadataprocessor --toolchain-dir /var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-v17.6.109.0.YAbSLJ/Metal.xctoolchain --module-name IpadProbeUITests --sdk-root /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk --xcode-version 17F113 --platform-family iOS --deployment-target 17.0 --bundle-identifier io.orbitd.ipadprobe.uitests --output /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Products/Debug-iphonesimulator/IpadProbeUITests-Runner.app/PlugIns/IpadProbeUITests.xctest --target-triple arm64-apple-ios17.0-simulator --binary-file /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Products/Debug-iphonesimulator/IpadProbeUITests-Runner.app/PlugIns/IpadProbeUITests.xctest/IpadProbeUITests --dependency-file /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Intermediates.noindex/IpadProbe.build/Debug-iphonesimulator/IpadProbeUITests.build/Objects-normal/arm64/IpadProbeUITests_dependency_info.dat --stringsdata-file /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Intermediates.noindex/IpadProbe.build/Debug-iphonesimulator/IpadProbeUITests.build/Objects-normal/arm64/ExtractedAppShortcutsMetadata.stringsdata --source-file-list /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Intermediates.noindex/IpadProbe.build/Debug-iphonesimulator/IpadProbeUITests.build/Objects-normal/arm64/IpadProbeUITests.SwiftFileList --metadata-file-list /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Intermediates.noindex/IpadProbe.build/Debug-iphonesimulator/IpadProbeUITests.build/IpadProbeUITests.DependencyMetadataFileList --static-metadata-file-list /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Intermediates.noindex/IpadProbe.build/Debug-iphonesimulator/IpadProbeUITests.build/IpadProbeUITests.DependencyStaticMetadataFileList --swift-const-vals-list /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Intermediates.noindex/IpadProbe.build/Debug-iphonesimulator/IpadProbeUITests.build/Objects-normal/arm64/IpadProbeUITests.SwiftConstValuesFileList --compile-time-extraction --deployment-aware-processing --validate-assistant-intents --no-app-shortcuts-localization
+2026-10-10 03:16:31.522 appintentsmetadataprocessor[40628:106720] Starting appintentsmetadataprocessor export
+2026-10-10 03:16:31.524 appintentsmetadataprocessor[40628:106720] warning: Metadata extraction skipped. No AppIntents.framework dependency found.
+
+CopySwiftLibs /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Products/Debug-iphonesimulator/IpadProbeUITests-Runner.app/PlugIns/IpadProbeUITests.xctest (in target 'IpadProbeUITests' from project 'IpadProbe')
+    cd /Users/runner/work/orbit/orbit/.ipad-probe
+    builtin-swiftStdLibTool --copy --verbose --sign - --scan-executable /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Products/Debug-iphonesimulator/IpadProbeUITests-Runner.app/PlugIns/IpadProbeUITests.xctest/IpadProbeUITests --scan-folder /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Products/Debug-iphonesimulator/IpadProbeUITests-Runner.app/PlugIns/IpadProbeUITests.xctest/Frameworks --scan-folder /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Products/Debug-iphonesimulator/IpadProbeUITests-Runner.app/PlugIns/IpadProbeUITests.xctest/PlugIns --scan-folder /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Products/Debug-iphonesimulator/IpadProbeUITests-Runner.app/PlugIns/IpadProbeUITests.xctest/SystemExtensions --scan-folder /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Products/Debug-iphonesimulator/IpadProbeUITests-Runner.app/PlugIns/IpadProbeUITests.xctest/Extensions --platform iphonesimulator --toolchain /var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-v17.6.109.0.YAbSLJ/Metal.xctoolchain --toolchain /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --destination /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Products/Debug-iphonesimulator/IpadProbeUITests-Runner.app/PlugIns/IpadProbeUITests.xctest/Frameworks --strip-bitcode --scan-executable /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/libXCTestSwiftSupport.dylib --strip-bitcode-tool /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/bitcode_strip --emit-dependency-info /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Intermediates.noindex/IpadProbe.build/Debug-iphonesimulator/IpadProbeUITests.build/SwiftStdLibToolInputDependencies.dep --filter-for-swift-os
+
+AppIntentsSSUTraining (in target 'IpadProbeUITests' from project 'IpadProbe')
+    cd /Users/runner/work/orbit/orbit/.ipad-probe
+    /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsnltrainingprocessor --infoplist-path /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Products/Debug-iphonesimulator/IpadProbeUITests-Runner.app/PlugIns/IpadProbeUITests.xctest/Info.plist --temp-dir-path /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Intermediates.noindex/IpadProbe.build/Debug-iphonesimulator/IpadProbeUITests.build/ssu --bundle-id io.orbitd.ipadprobe.uitests --product-path /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Products/Debug-iphonesimulator/IpadProbeUITests-Runner.app/PlugIns/IpadProbeUITests.xctest --extracted-metadata-path /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Products/Debug-iphonesimulator/IpadProbeUITests-Runner.app/PlugIns/IpadProbeUITests.xctest/Metadata.appintents --metadata-file-list /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Intermediates.noindex/IpadProbe.build/Debug-iphonesimulator/IpadProbeUITests.build/IpadProbeUITests.DependencyMetadataFileList --source-file /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Products/Debug-iphonesimulator/IpadProbeUITests-Runner.app/PlugIns/IpadProbeUITests.xctest/Info.plist --archive-ssu-assets
+2026-10-10 03:16:31.552 appintentsnltrainingprocessor[40629:106722] Parsing options for appintentsnltrainingprocessor
+2026-10-10 03:16:31.552 appintentsnltrainingprocessor[40629:106722] Starting AppIntents SSU YAML Generation
+2026-10-10 03:16:31.552 appintentsnltrainingprocessor[40629:106722] No AppShortcuts found - Skipping.
+
+MkDir /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Products/Debug-iphonesimulator/IpadProbeUITests-Runner.app (in target 'IpadProbeUITests' from project 'IpadProbe')
+    cd /Users/runner/work/orbit/orbit/.ipad-probe
+    /bin/mkdir -p /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Products/Debug-iphonesimulator/IpadProbeUITests-Runner.app
+
+CopyAndPreserveArchs /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Products/Debug-iphonesimulator/IpadProbeUITests-Runner.app/IpadProbeUITests-Runner (in target 'IpadProbeUITests' from project 'IpadProbe')
+    cd /Users/runner/work/orbit/orbit/.ipad-probe
+    /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/lipo /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Xcode/Agents/XCTRunner.app/XCTRunner -output /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Products/Debug-iphonesimulator/IpadProbeUITests-Runner.app/IpadProbeUITests-Runner -extract arm64
+
+CopyPlistFile /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Products/Debug-iphonesimulator/IpadProbeUITests-Runner.app/Info.plist /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Xcode/Agents/XCTRunner.app/Info.plist (in target 'IpadProbeUITests' from project 'IpadProbe')
+    cd /Users/runner/work/orbit/orbit/.ipad-probe
+    builtin-copyPlist --validate --convert xml1 --macro-expansion WRAPPEDPRODUCTNAME IpadProbeUITests-Runner --macro-expansion WRAPPEDPRODUCTBUNDLEIDENTIFIER io.orbitd.ipadprobe.uitests.xctrunner --macro-expansion TESTPRODUCTNAME IpadProbeUITests --macro-expansion TESTPRODUCTBUNDLEIDENTIFIER io.orbitd.ipadprobe.uitests --copy-value UIDeviceFamily /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Products/Debug-iphonesimulator/IpadProbeUITests-Runner.app/PlugIns/IpadProbeUITests.xctest/Info.plist --outdir /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Products/Debug-iphonesimulator/IpadProbeUITests-Runner.app -- /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Xcode/Agents/XCTRunner.app/Info.plist
+
+Copy /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Products/Debug-iphonesimulator/IpadProbeUITests-Runner.app/PkgInfo /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Xcode/Agents/XCTRunner.app/PkgInfo (in target 'IpadProbeUITests' from project 'IpadProbe')
+    cd /Users/runner/work/orbit/orbit/.ipad-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Xcode/Agents/XCTRunner.app/PkgInfo /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Products/Debug-iphonesimulator/IpadProbeUITests-Runner.app
+
+Copy /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Products/Debug-iphonesimulator/IpadProbeUITests-Runner.app/Frameworks/libXCTestSwiftSupport.dylib /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/libXCTestSwiftSupport.dylib (in target 'IpadProbeUITests' from project 'IpadProbe')
+    cd /Users/runner/work/orbit/orbit/.ipad-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/libXCTestSwiftSupport.dylib /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Products/Debug-iphonesimulator/IpadProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Products/Debug-iphonesimulator/IpadProbeUITests-Runner.app/Frameworks/XCUnit.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCUnit.framework (in target 'IpadProbeUITests' from project 'IpadProbe')
+    cd /Users/runner/work/orbit/orbit/.ipad-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCUnit.framework /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Products/Debug-iphonesimulator/IpadProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Products/Debug-iphonesimulator/IpadProbeUITests-Runner.app/Frameworks/XCUIAutomation.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/XCUIAutomation.framework (in target 'IpadProbeUITests' from project 'IpadProbe')
+    cd /Users/runner/work/orbit/orbit/.ipad-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/XCUIAutomation.framework /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Products/Debug-iphonesimulator/IpadProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Products/Debug-iphonesimulator/IpadProbeUITests-Runner.app/Frameworks/XCTestSupport.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTestSupport.framework (in target 'IpadProbeUITests' from project 'IpadProbe')
+    cd /Users/runner/work/orbit/orbit/.ipad-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTestSupport.framework /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Products/Debug-iphonesimulator/IpadProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Products/Debug-iphonesimulator/IpadProbeUITests-Runner.app/Frameworks/XCTestCore.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTestCore.framework (in target 'IpadProbeUITests' from project 'IpadProbe')
+    cd /Users/runner/work/orbit/orbit/.ipad-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTestCore.framework /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Products/Debug-iphonesimulator/IpadProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Products/Debug-iphonesimulator/IpadProbeUITests-Runner.app/Frameworks/XCTest.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/XCTest.framework (in target 'IpadProbeUITests' from project 'IpadProbe')
+    cd /Users/runner/work/orbit/orbit/.ipad-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/XCTest.framework /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Products/Debug-iphonesimulator/IpadProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Products/Debug-iphonesimulator/IpadProbeUITests-Runner.app/Frameworks/XCTAutomationSupport.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTAutomationSupport.framework (in target 'IpadProbeUITests' from project 'IpadProbe')
+    cd /Users/runner/work/orbit/orbit/.ipad-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTAutomationSupport.framework /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Products/Debug-iphonesimulator/IpadProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Products/Debug-iphonesimulator/IpadProbeUITests-Runner.app/Frameworks/Testing.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/Testing.framework (in target 'IpadProbeUITests' from project 'IpadProbe')
+    cd /Users/runner/work/orbit/orbit/.ipad-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/Testing.framework /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Products/Debug-iphonesimulator/IpadProbeUITests-Runner.app/Frameworks
+
+CodeSign /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Products/Debug-iphonesimulator/IpadProbeUITests-Runner.app/PlugIns/IpadProbeUITests.xctest (in target 'IpadProbeUITests' from project 'IpadProbe')
+    cd /Users/runner/work/orbit/orbit/.ipad-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --generate-entitlement-der /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Products/Debug-iphonesimulator/IpadProbeUITests-Runner.app/PlugIns/IpadProbeUITests.xctest
+
+CodeSign /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Products/Debug-iphonesimulator/IpadProbeUITests-Runner.app (in target 'IpadProbeUITests' from project 'IpadProbe')
+    cd /Users/runner/work/orbit/orbit/.ipad-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --generate-entitlement-der /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Products/Debug-iphonesimulator/IpadProbeUITests-Runner.app
+/Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Products/Debug-iphonesimulator/IpadProbeUITests-Runner.app: replacing existing signature
+
+RegisterExecutionPolicyException /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Products/Debug-iphonesimulator/IpadProbeUITests-Runner.app/PlugIns/IpadProbeUITests.xctest (in target 'IpadProbeUITests' from project 'IpadProbe')
+    cd /Users/runner/work/orbit/orbit/.ipad-probe
+    builtin-RegisterExecutionPolicyException /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Products/Debug-iphonesimulator/IpadProbeUITests-Runner.app/PlugIns/IpadProbeUITests.xctest
+
+Touch /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Products/Debug-iphonesimulator/IpadProbeUITests-Runner.app/PlugIns/IpadProbeUITests.xctest (in target 'IpadProbeUITests' from project 'IpadProbe')
+    cd /Users/runner/work/orbit/orbit/.ipad-probe
+    /usr/bin/touch -c /Users/runner/work/orbit/orbit/.ipad-probe/.dd/Build/Products/Debug-iphonesimulator/IpadProbeUITests-Runner.app/PlugIns/IpadProbeUITests.xctest
+
+2026-10-10 03:17:18.264844+0000 IpadProbeUITests-Runner[41998:110470] [Default] Running tests...
+2026-10-10 03:17:18.332242+0000 IpadProbeUITests-Runner[41998:110470] [UIKit App Config] Update the Info.plist: Launch screens will soon be required.
+objc[41998]: Class UIAccessibilityLoaderWebShared is implemented in both /Library/Developer/CoreSimulator/Volumes/iOS_23F77/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebCore.axbundle/WebCore (0x1069b4310) and /Library/Developer/CoreSimulator/Volumes/iOS_23F77/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebKit.axbundle/WebKit (0x1069e8398). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+    t =      nans Interface orientation changed to Portrait
+Test Suite 'Selected tests' started at 2026-10-10 03:17:22.878.
+Test Suite 'IpadProbeUITests.xctest' started at 2026-10-10 03:17:22.879.
+Test Suite 'RowEdgeTests' started at 2026-10-10 03:17:22.879.
+Test Case '-[IpadProbeUITests.RowEdgeTests testF_RowUnderTheEdge]' started.
+    t =     0.00s Start Test at 2026-10-10 03:17:22.880
+    t =     0.81s Set Up
+    t =     0.81s Setting device orientation to Landscape Left
+    t =     0.82s     Device orientation changed to Landscape Left
+    t =     1.16s     Interface orientation changed to Landscape Right
+    t =     2.34s     Wait for com.apple.DocumentManager.DockFolderViewService to idle
+    t =     2.55s     Wait for com.apple.springboard to idle
+    t =     3.63s Open io.orbitd.ipadprobe
+    t =     3.64s     Launch io.orbitd.ipadprobe
+2026-10-10 03:17:29.188 xcodebuild[27874:75889] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-10 03:17:29.196 xcodebuild[27874:75889] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =    12.27s         Setting up automation session
+    t =    18.34s         Wait for io.orbitd.ipadprobe to idle
+    t =    22.27s Waiting 60.0s for Any (First Match) to exist
+    t =    23.29s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    23.29s         Checking existence of `Any (First Match)`
+    t =    26.70s Checking existence of `Any (First Match)`
+    t =    27.74s Find the Any (First Match)
+    t =    29.00s Find the "会话列表左滑按钮, 13m ago, Tags: iOS, 左滑按钮在 SessionRowActions 里，改成圆形。" Other
+    t =    29.78s Find the "会话列表左滑按钮, 13m ago, Tags: iOS, 左滑按钮在 SessionRowActions 里，改成圆形。" Other
+    t =    30.78s Find the "会话列表左滑按钮, 13m ago, Tags: iOS, 左滑按钮在 SessionRowActions 里，改成圆形。" Other
+    t =    31.41s Find the "会话列表左滑按钮, 13m ago, Tags: iOS, 左滑按钮在 SessionRowActions 里，改成圆形。" Other
+    t =    32.15s Checking existence of `"会话列表左滑按钮, 13m ago, Tags: iOS, 左滑按钮在 SessionRowActions 里，改成圆形。" Other`
+    t =    32.73s Find the "会话列表左滑按钮, 13m ago, Tags: iOS, 左滑按钮在 SessionRowActions 里，改成圆形。" Other
+    t =    33.33s Find the Window (First Match)
+    t =    33.36s Find the Window (First Match)
+    t =    33.42s Press Window at {{0.0, 0.0}, {1376.0, 1032.0}}[0.00, 0.00] -> (2.0, 698.8) for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {1376.0, 1032.0}}[0.00, 0.00] -> (170.0, 698.8) with velocity of 900.00 pixels per second, and then hold for 0.1 seconds 
+    t =    33.42s     Wait for io.orbitd.ipadprobe to idle
+    t =    33.42s     Find the Window at {{0.0, 0.0}, {1376.0, 1032.0}}
+    t =    33.46s     Check for interrupting elements affecting Window
+    t =    33.92s         Wait for com.apple.springboard to idle
+    t =    34.01s     Synthesize event
+    t =    34.02s         Find the Window at {{0.0, 0.0}, {1376.0, 1032.0}}
+    t =    34.12s         Find the Window at {{0.0, 0.0}, {1376.0, 1032.0}}
+    t =    34.17s         Find the Window at {{0.0, 0.0}, {1376.0, 1032.0}}
+    t =    34.19s         Find the Window at {{0.0, 0.0}, {1376.0, 1032.0}}
+    t =    34.23s         Find the Window at {{0.0, 0.0}, {1376.0, 1032.0}}
+    t =    34.93s     Wait for io.orbitd.ipadprobe to idle
+    t =    36.86s Added attachment named 'F1-short-edge-swipe-on-a-row'
+    t =    36.87s Requesting snapshot of accessibility hierarchy for app with pid 42934
+    t =    38.90s Requesting snapshot of accessibility hierarchy for app with pid 42934
+    t =    39.32s Added attachment named 'tree-F1.txt'
+    t =    39.33s Checking existence of `Button (First Match)`
+    t =    40.09s Checking existence of `Button (First Match)`
+    t =    40.57s Find the Button (First Match)
+    t =    41.02s Find the "Complete" Button
+    t =    41.44s Find the "Complete" Button
+    t =    41.79s Find the "Complete" Button
+    t =    42.18s Find the "Complete" Button
+    t =    42.51s Checking existence of `Button (First Match)`
+    t =    42.79s Checking existence of `Button (First Match)`
+    t =    43.16s Find the Button (First Match)
+    t =    43.46s Find the "Pin" Button
+    t =    43.73s Find the "Pin" Button
+    t =    43.97s Find the "Pin" Button
+    t =    44.26s Find the "Pin" Button
+    t =    44.54s Checking existence of `Button (First Match)`
+    t =    44.90s Checking existence of `"Settings" Button`
+    t =    45.09s Tap Window (First Match)[0.75, 0.30]
+    t =    45.09s     Wait for io.orbitd.ipadprobe to idle
+    t =    45.09s     Find the Window (First Match)
+    t =    45.11s     Check for interrupting elements affecting Window
+    t =    45.25s         Wait for com.apple.springboard to idle
+    t =    45.30s     Synthesize event
+    t =    45.33s         Find the Window at {{0.0, 0.0}, {1376.0, 1032.0}}
+    t =    45.34s         Find the Window at {{0.0, 0.0}, {1376.0, 1032.0}}
+    t =    45.37s         Find the Window at {{0.0, 0.0}, {1376.0, 1032.0}}
+    t =    45.67s     Wait for io.orbitd.ipadprobe to idle
+    t =    47.18s Find the Window (First Match)
+    t =    47.22s Press Window at {{0.0, 0.0}, {1376.0, 1032.0}}[0.00, 0.00] -> (2.0, 698.8) for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {1376.0, 1032.0}}[0.00, 0.00] -> (560.0, 698.8) with velocity of 900.00 pixels per second, and then hold for 0.1 seconds 
+    t =    47.22s     Wait for io.orbitd.ipadprobe to idle
+    t =    47.23s     Find the Window at {{0.0, 0.0}, {1376.0, 1032.0}}
+    t =    47.25s     Check for interrupting elements affecting Window
+    t =    47.42s         Wait for com.apple.springboard to idle
+    t =    47.44s     Synthesize event
+    t =    47.47s         Find the Window at {{0.0, 0.0}, {1376.0, 1032.0}}
+    t =    47.49s         Find the Window at {{0.0, 0.0}, {1376.0, 1032.0}}
+    t =    47.51s         Find the Window at {{0.0, 0.0}, {1376.0, 1032.0}}
+    t =    47.52s         Find the Window at {{0.0, 0.0}, {1376.0, 1032.0}}
+    t =    47.54s         Find the Window at {{0.0, 0.0}, {1376.0, 1032.0}}
+    t =    48.54s     Wait for io.orbitd.ipadprobe to idle
+    t =    52.52s Added attachment named 'F2-long-edge-swipe-on-a-row'
+    t =    52.52s Checking existence of `Button (First Match)`
+    t =    52.96s Checking existence of `Button (First Match)`
+    t =    53.40s Checking existence of `Button (First Match)`
+    t =    53.84s Checking existence of `"Settings" Button`
+    t =    54.02s Terminate io.orbitd.ipadprobe:42934
+    t =    55.06s Tear Down
+    t =    55.07s     Added attachment named 'RowEdgeTeststestFRowUnderTheEdge-notes.txt'
+    t =    55.07s     Setting device orientation to Portrait
+    t =    55.08s         Device orientation changed to Portrait
+    t =    55.20s         Interface orientation changed to Portrait
+    t =    55.90s         Wait for com.apple.DocumentManager.DockFolderViewService to idle
+    t =    56.20s         Wait for com.apple.springboard to idle
+Test Case '-[IpadProbeUITests.RowEdgeTests testF_RowUnderTheEdge]' passed (56.899 seconds).
+Test Case '-[IpadProbeUITests.RowEdgeTests testG_RecordSidebarHidden]' started.
+    t =     0.00s Start Test at 2026-10-10 03:18:19.781
+    t =     0.08s Set Up
+    t =     0.08s Setting device orientation to Landscape Left
+    t =     0.08s     Device orientation changed to Landscape Left
+    t =     0.15s     Interface orientation changed to Landscape Right
+    t =     0.24s     Wait for com.apple.DocumentManager.DockFolderViewService to idle
+    t =     0.73s     Wait for com.apple.springboard to idle
+    t =     1.75s Open io.orbitd.ipadprobe
+    t =     1.75s     Launch io.orbitd.ipadprobe
+2026-10-10 03:18:21.540 xcodebuild[27874:75889] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-10 03:18:21.541 xcodebuild[27874:75889] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     2.87s         Setting up automation session
+    t =     5.01s         Wait for io.orbitd.ipadprobe to idle
+    t =     7.33s Waiting 60.0s for "Back" Button to exist
+    t =     8.35s     Checking `Expect predicate `existsNoRetry == 1` for object "Back" Button`
+    t =     8.35s         Checking existence of `"Back" Button`
+    t =    11.66s Waiting 8.0s for "Back" Button to exist
+    t =    12.68s     Checking `Expect predicate `existsNoRetry == 1` for object "Back" Button`
+    t =    12.68s         Checking existence of `"Back" Button`
+    t =    12.78s Checking existence of `"Back" Button`
+    t =    12.85s Find the "Back" Button
+    t =    12.94s Find the "Back" Button
+    t =    13.02s Find the "Back" Button
+    t =    13.14s Find the "Back" Button
+    t =    13.23s Find the "Back" Button
+    t =    13.33s Tap "Back" Button
+    t =    13.33s     Wait for io.orbitd.ipadprobe to idle
+    t =    13.33s     Find the "Back" Button
+    t =    13.41s     Check for interrupting elements affecting "Back" Button
+    t =    13.50s         Wait for com.apple.springboard to idle
+    t =    13.52s     Synthesize event
+    t =    14.06s     Wait for io.orbitd.ipadprobe to idle
+    t =    19.02s Added attachment named 'G1-record-sidebar-hidden'
+    t =    19.03s Find the Window (First Match)
+    t =    19.07s Get all elements bound by index for: Descendants matching type NavigationBar
+    t =    19.19s Find the NavigationBar (Element at index 0)
+    t =    19.27s Find the "Infrastructure" NavigationBar
+    t =    19.35s Find the NavigationBar (Element at index 1)
+    t =    19.43s Find the "Mac Studio" NavigationBar
+    t =    19.51s Get all elements bound by index for: Descendants matching type Button
+    t =    19.59s Checking existence of `Button (Element at index 0)`
+    t =    19.66s Find the Button (Element at index 0)
+    t =    19.73s Checking existence of `Button (Element at index 1)`
+    t =    19.80s Find the Button (Element at index 1)
+    t =    19.87s Checking existence of `Button (Element at index 2)`
+    t =    19.95s Find the Button (Element at index 2)
+    t =    20.03s Checking existence of `Button (Element at index 3)`
+    t =    20.12s Find the Button (Element at index 3)
+    t =    20.20s Checking existence of `Button (Element at index 4)`
+    t =    20.29s Find the Button (Element at index 4)
+    t =    20.36s Checking existence of `Button (Element at index 5)`
+    t =    20.46s Find the Button (Element at index 5)
+    t =    20.54s Checking existence of `Button (Element at index 6)`
+    t =    20.62s Find the Button (Element at index 6)
+    t =    20.73s Checking existence of `Button (Element at index 7)`
+    t =    20.81s Find the Button (Element at index 7)
+    t =    20.89s Checking existence of `Button (Element at index 8)`
+    t =    20.97s Find the Button (Element at index 8)
+    t =    21.10s Checking existence of `Button (Element at index 9)`
+    t =    21.19s Find the Button (Element at index 9)
+    t =    21.28s Checking existence of `Button (Element at index 10)`
+    t =    21.35s Find the Button (Element at index 10)
+    t =    21.44s Checking existence of `Button (Element at index 11)`
+    t =    21.52s Find the Button (Element at index 11)
+    t =    21.60s Checking existence of `Button (Element at index 12)`
+    t =    21.67s Find the Button (Element at index 12)
+    t =    21.75s Checking existence of `Button (Element at index 13)`
+    t =    21.82s Find the Button (Element at index 13)
+    t =    21.92s Checking existence of `"Show Sidebar" Button`
+    t =    21.99s Find the "Show Sidebar" Button
+    t =    22.08s Find the "Show Sidebar" Button
+    t =    22.17s Find the "Show Sidebar" Button
+    t =    22.28s Find the "Show Sidebar" Button
+    t =    22.39s Find the "Show Sidebar" Button
+    t =    22.48s Checking existence of `"Settings" Button`
+    t =    22.62s Checking existence of `"Settings" Button`
+    t =    22.74s Terminate io.orbitd.ipadprobe:45037
+    t =    23.76s Tear Down
+    t =    23.76s     Added attachment named 'RowEdgeTeststestGRecordSidebarHidden-notes.txt'
+    t =    23.76s     Setting device orientation to Portrait
+    t =    23.83s         Device orientation changed to Portrait
+    t =    23.92s         Interface orientation changed to Portrait
+    t =    23.92s         Wait for com.apple.DocumentManager.DockFolderViewService to idle
+    t =    23.93s         Wait for com.apple.springboard to idle
+Test Case '-[IpadProbeUITests.RowEdgeTests testG_RecordSidebarHidden]' passed (24.117 seconds).
+Test Suite 'RowEdgeTests' passed at 2026-10-10 03:18:43.898.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 81.016 (81.019) seconds
+Test Suite 'IpadProbeUITests.xctest' passed at 2026-10-10 03:18:43.899.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 81.016 (81.020) seconds
+Test Suite 'Selected tests' passed at 2026-10-10 03:18:43.900.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 81.016 (81.021) seconds
+2026-10-10 03:19:08.140 xcodebuild[27874:75889] [MT] IDETestOperationsObserverDebug: 156.177 elapsed -- Testing started completed.
+2026-10-10 03:19:08.140 xcodebuild[27874:75889] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-10 03:19:08.140 xcodebuild[27874:75889] [MT] IDETestOperationsObserverDebug: 156.177 sec, +156.177 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/runner/work/orbit/orbit/.ipad-probe/results/ipad.xcresult
+
+** TEST SUCCEEDED **
+
+Testing started

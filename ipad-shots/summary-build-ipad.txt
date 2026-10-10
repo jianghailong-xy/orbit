@@ -1,0 +1,8 @@
+Test Case '-[IpadProbeUITests.RowEdgeTests testF_RowUnderTheEdge]' started.
+Test Case '-[IpadProbeUITests.RowEdgeTests testF_RowUnderTheEdge]' passed (56.899 seconds).
+Test Case '-[IpadProbeUITests.RowEdgeTests testG_RecordSidebarHidden]' started.
+Test Case '-[IpadProbeUITests.RowEdgeTests testG_RecordSidebarHidden]' passed (24.117 seconds).
+	 Executed 2 tests, with 0 failures (0 unexpected) in 81.016 (81.019) seconds
+	 Executed 2 tests, with 0 failures (0 unexpected) in 81.016 (81.020) seconds
+	 Executed 2 tests, with 0 failures (0 unexpected) in 81.016 (81.021) seconds
+** TEST SUCCEEDED **

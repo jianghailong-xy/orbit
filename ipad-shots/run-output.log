@@ -1,0 +1,33 @@
+==> stub ready after 2s
+==> runtimes:
+iOS 26.2 (26.2 - 23C54) - com.apple.CoreSimulator.SimRuntime.iOS-26-2
+iOS 26.4 (26.4.1 - 23E254a) - com.apple.CoreSimulator.SimRuntime.iOS-26-4
+iOS 26.5 (26.5 - 23F77) - com.apple.CoreSimulator.SimRuntime.iOS-26-5
+==> iPad: iPad Pro 13-inch (M5)  runtime: com.apple.CoreSimulator.SimRuntime.iOS-26-5
+Test Case '-[IpadProbeUITests.RowEdgeTests testF_RowUnderTheEdge]' started.
+Test Case '-[IpadProbeUITests.RowEdgeTests testF_RowUnderTheEdge]' passed (56.899 seconds).
+Test Case '-[IpadProbeUITests.RowEdgeTests testG_RecordSidebarHidden]' started.
+Test Case '-[IpadProbeUITests.RowEdgeTests testG_RecordSidebarHidden]' passed (24.117 seconds).
+	 Executed 2 tests, with 0 failures (0 unexpected) in 81.016 (81.019) seconds
+	 Executed 2 tests, with 0 failures (0 unexpected) in 81.016 (81.020) seconds
+	 Executed 2 tests, with 0 failures (0 unexpected) in 81.016 (81.021) seconds
+** TEST SUCCEEDED **
+total 7640
+drwxr-xr-x  18 runner  staff      576 Oct 10 03:19 .
+drwxr-xr-x  14 runner  staff      448 Oct 10 03:12 ..
+drwxr-xr-x  11 runner  staff      352 Oct 10 03:19 attachments
+-rw-r--r--   1 runner  staff      262 Oct 10 03:19 Complete Issue Description.txt
+-rw-r--r--   1 runner  staff      103 Oct 10 03:08 device.txt
+-rw-r--r--   1 runner  staff  1235994 Oct 10 03:17 F1-short-edge-swipe-on-a-row.png
+-rw-r--r--   1 runner  staff  1273019 Oct 10 03:18 F2-long-edge-swipe-on-a-row.png
+-rw-r--r--   1 runner  staff   594029 Oct 10 03:18 G1-record-sidebar-hidden.png
+-rw-r--r--   1 runner  staff      546 Oct 10 03:19 not-served.txt
+-rw-r--r--   1 runner  staff     5616 Oct 10 03:18 requests.log
+-rw-r--r--   1 runner  staff      470 Oct 10 03:19 RowEdgeTeststestFRowUnderTheEdge-notes
+-rw-r--r--@  1 runner  staff      470 Oct 10 03:18 RowEdgeTeststestFRowUnderTheEdge-notes.txt
+-rw-r--r--   1 runner  staff      360 Oct 10 03:19 RowEdgeTeststestGRecordSidebarHidden-notes
+-rw-r--r--@  1 runner  staff      360 Oct 10 03:18 RowEdgeTeststestGRecordSidebarHidden-notes.txt
+-rw-r--r--   1 runner  staff       49 Oct 10 03:08 stub.out
+-rw-r--r--   1 runner  staff    49208 Oct 10 03:19 tree-F1
+-rw-r--r--@  1 runner  staff    49208 Oct 10 03:18 tree-F1.txt
+-rw-r--r--   1 runner  staff   653688 Oct 10 03:19 xcodebuild-ipad.log
