@@ -1,0 +1,6 @@
+Test Case '-[LraMacProbeUITests.LoginShotTests test8MacWindow]' started.
+Test Case '-[LraMacProbeUITests.LoginShotTests test8MacWindow]' passed (30.939 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 30.939 (30.941) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 30.939 (30.942) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 30.939 (30.943) seconds
+** TEST SUCCEEDED **
