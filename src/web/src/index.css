@@ -7049,6 +7049,16 @@ button.composer-usage:focus-visible {
 .composer-attach-eye {
   font-size: 14px;
 }
+/* An image handed back out of a sent message is drawn by ui/Image (AttachmentImage, variant chip):
+   it fills the chip the same way. */
+.composer-attach .orbit-image {
+  width: 48px;
+  height: 48px;
+  display: block;
+}
+.composer-attach .orbit-image-cover {
+  border-radius: inherit;
+}
 /* Dim + center a spinner over a thumbnail still uploading. */
 .composer-attach-spin {
   position: absolute;
@@ -7449,9 +7459,9 @@ button.chat-jump-start:hover {
   width: fit-content;
   max-width: 100%;
 }
-/* AntD wraps each <Image> in a .ant-image; round it so the hover mask is clipped to the
-   image's corners, and hint clickability with a zoom cursor. */
-.chat-images .ant-image {
+/* A standalone image (ui/Image) is wrapped in an .orbit-image; round it so the hover mask is clipped
+   to the image's corners, and hint clickability with a zoom cursor. */
+.chat-images .orbit-image {
   border-radius: 8px;
   overflow: hidden;
   cursor: zoom-in;
@@ -7464,7 +7474,7 @@ button.chat-jump-start:hover {
   font-size: 12px;
 }
 /* A transcript thumbnail that opens the session-wide left/right preview pager. Mirrors the
-   AntD .ant-image thumbnail (rounded, zoom cursor) and paints the mask as a hover overlay. */
+   .orbit-image thumbnail (rounded, zoom cursor) and paints the mask as a hover overlay. */
 .chat-image-btn {
   position: relative;
   display: inline-flex;
@@ -7511,7 +7521,7 @@ button.chat-jump-start:hover {
   background: var(--fill-inset);
   color: var(--text-3);
 }
-.md .ant-image {
+.md .orbit-image {
   display: block;
   width: fit-content;
   max-width: 100%;
