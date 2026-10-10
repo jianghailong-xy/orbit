@@ -17,10 +17,12 @@
 #   control-public  http://1.1.1.1/            an IP literal that is not this machine
 #   shipped-public  same URL, shipped keys
 #
-# Asserted: the three shipped arms answer, and control-named is refused with
-# NSURLErrorDomain -1022. Reported, not asserted: the two control arms over IP literals — an OS that
-# no longer refuses them (measured: iOS 26 simulator) answers 200, and that reading is the finding,
-# not a failure. docs/evidence/ios-http-ip/README.md.
+# Asserted: the shipped app answers a self-hosted IP and a public IP literal, and the two control
+# arms that ATS must refuse before any connection is made — a named host and a public IP literal —
+# come back refused with NSURLErrorDomain -1022. Reported, not asserted: the control arm over the
+# *local* IP (an OS that no longer refuses a directly-reachable address answers 200, and that
+# reading is the finding, not a failure) and shipped-named, the one arm that needs a third-party
+# site to answer and so can time out on its own. docs/evidence/ios-http-ip/README.md.
 set -uo pipefail
 cd "$(dirname "$0")"
 
@@ -131,16 +133,18 @@ need() { # label glob what
     *) echo "!! $1: $3 — got: $line" >&2; STATUS=1 ;;
   esac
 }
+# ATS refuses before any connection is opened, so a `-1022` expectation cannot flake on the far end
+# of the URL; an `ok` expectation can, and shipped-named is left reported for that reason.
 need shipped        "PROBE result=ok*" "the shipped app could not reach a self-hosted server by IP"
-need shipped-named  "PROBE result=ok*" "the shipped app could not reach a named host over http"
 need shipped-public "PROBE result=ok*" "the shipped app could not reach a public IP literal over http"
 need control-named  "*code=-1022*"     "the control app was NOT refused a named host over http, so this run exercised no ATS at all"
+need control-public "*code=-1022*"     "the control app was NOT refused a public IP literal, so this OS does not apply the iOS 17 rule to it"
 
 { echo "url:              $PROBE_URL"
   echo "shipped:          $(cat "$OUT/shipped.txt")          (self-hosted by IP, shipped plist)"
   echo "control:          $(cat "$OUT/control.txt")          (same URL, no ATS dictionary)"
   echo "control-named:    $(cat "$OUT/control-named.txt")    (named http host, no ATS dictionary)"
-  echo "shipped-named:    $(cat "$OUT/shipped-named.txt")    (named http host, shipped plist)"
+  echo "shipped-named:    $(cat "$OUT/shipped-named.txt")    (named http host, shipped plist — the one arm a third party can fail)"
   echo "control-public:   $(cat "$OUT/control-public.txt")   (public IP literal, no ATS dictionary)"
   echo "shipped-public:   $(cat "$OUT/shipped-public.txt")   (public IP literal, shipped plist)"
 } | tee "$OUT/summary.txt"
