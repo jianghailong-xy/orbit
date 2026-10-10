@@ -5,7 +5,7 @@ import {
   type WikiPlanTopic,
   type WikiPlanVersion,
 } from '@orbit/shared';
-import { PAST_THE_READ, wikiDocCleanPath, wikiDocCodePieces, wikiDocContract, wikiDocDocSection, type WikiDocRepo } from './wiki-docs-writer';
+import { PAST_THE_READ, wikiDocCodePieces, wikiDocContract, wikiDocDocSection, type WikiDocRepo } from './wiki-docs-writer';
 import { cutRunes, goTrimSpace } from './wiki-import-extract';
 import {
   emptyWikiPlanHeader,
@@ -384,10 +384,9 @@ export function assembleWikiMaintainProposal(
 export function wikiMaintainProposalSection(
   at: string,
   draft: WikiPlanSectionDraft,
-  read: WikiDocRepo,
+  repo: WikiDocRepo,
   topics: readonly WikiPlanTopic[],
 ): { section: WikiPlanSection; problems: string[] } {
-  const repo = gitShows(read);
   const problems: string[] = [];
   const section: WikiPlanSection = {
     title: draft.title,
@@ -464,30 +463,6 @@ export function wikiMaintainProposalPaths(answer: WikiMaintainProposalAnswer): s
     ...draft.code.map((source) => source.path),
     ...draft.contracts,
   ]);
-}
-
-/**
- * The files as the runner's `git show <sha>:<path>` shows them. A path that is no file or directory of the commit
- * but holds a wildcard — an unescaped `*`, `?` or `[` — is taken by git for a pathspec (`looks_like_pathspec`), and
- * `git show` exits 0 printing nothing: on the runner it is a file, an empty one, so its check finds no section and
- * no symbol in it and takes it whole. The documents step's reader answers it as no file; the proposal's check
- * answers as the runner does.
- */
-function gitShows(repo: WikiDocRepo): WikiDocRepo {
-  return {
-    sha: repo.sha,
-    show: (path) => repo.show(path) ?? (gitWildcard(wikiDocCleanPath(path)) ? { text: '', cut: false } : null),
-    under: (dir) => repo.under(dir),
-  };
-}
-
-/** Whether git reads a path as a pattern: a wildcard in it that no backslash escapes. */
-function gitWildcard(path: string): boolean {
-  for (let i = 0; i < path.length; i += 1) {
-    if (path[i] === '\\') i += 1;
-    else if (path[i] === '*' || path[i] === '?' || path[i] === '[') return true;
-  }
-  return false;
 }
 
 /** The numbers a run's proposal is held to, re-exported for the job: rounds at most, items at most. */

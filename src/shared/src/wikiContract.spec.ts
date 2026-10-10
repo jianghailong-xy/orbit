@@ -1631,6 +1631,9 @@ describe('wiki contract', () => {
     expect(server.steps).toEqual({ ...WIKI_DOCS_BUILD_JOB.steps });
     // A file is shown only once its read landed, a read another section started included (2026-10-09).
     expect(server.shown).toMatch(/waits for that read/u);
+    // A path holding a wildcard is read as the runner's git show read it, a pathspec: an empty file (2026-10-10).
+    expect(server.wildcard).toMatch(/pathspec/u);
+    expect(CONTRACT.docs.build.repository).toMatch(/server\.wildcard/u);
     expect([server.maxTokens, server.repoWaitSeconds, server.readsInFlight, server.readAttempts])
       .toEqual([WIKI_DOCS_BUILD_JOB.maxTokens, WIKI_DOCS_BUILD_JOB.repoWaitSeconds, WIKI_DOCS_BUILD_JOB.readsInFlight, WIKI_DOCS_BUILD_JOB.readAttempts]);
     // Owner-initiated: above background maintenance (jobs.priority), as the import is.
