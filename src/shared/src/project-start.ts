@@ -19,6 +19,12 @@ import type { IntegrationLine } from './project-progress';
  * - `projectBranchName` — the project branch as a full `refs/heads/…` ref, only with
  *   `PROJECT_BRANCH`. Absent on a request means `refs/heads/project/<project id>`, or the branch the
  *   project already names.
+ * - `upstreamRef` — the project's main branch as a full `refs/heads/…` ref: where its line comes
+ *   from and what its work is merged into, with either line. On a start it is the owner's choice,
+ *   recorded as such; on a coordinator's request it is a suggestion. Absent asks for nothing: the
+ *   project keeps the main branch it stands on — for a new binding, the one this account chose
+ *   last for the same repository, else `refs/heads/main`. In a start's record it is the main branch
+ *   the start left the project on, present when the start or the request it answered named one.
  * - `automatic` — `project.coordinator_enabled`: the coordinator runs the project for the owner.
  * - `maxConcurrentTasks` — how many of its tasks may be in flight at once.
  * - `mergeCheckCommand` — the check run on the combined tree before anything lands; null for none.
@@ -26,12 +32,14 @@ import type { IntegrationLine } from './project-progress';
 export interface ProjectStartSettings {
   line: IntegrationLine;
   projectBranchName?: string;
+  upstreamRef?: string;
   automatic: boolean;
   maxConcurrentTasks: number;
   mergeCheckCommand: string | null;
 }
 
-/** One of the settings above, as a difference names it. `line` covers the branch name too. */
+/** One of the settings above, as a difference names it. `line` covers the branch name and the
+ *  main branch too. */
 export type ProjectStartSettingKey = 'line' | 'automatic' | 'maxConcurrentTasks' | 'mergeCheckCommand';
 
 /** Every setting, in the order a card lists them. */
@@ -222,7 +230,8 @@ function storedMergeCheck(command: string | null | undefined): string | null {
  * Which of `settings` are not what `asked` asked for, in card order.
  *
  * A branch name the request did not give is not a difference: absent asks for whichever project
- * branch the project has. A merge check is compared as stored, so whitespace is not one either.
+ * branch the project has, and whichever main branch. A merge check is compared as stored, so
+ * whitespace is not one either.
  */
 export function differingStartSettings(
   asked: ProjectStartSettings,
@@ -234,6 +243,7 @@ export function differingStartSettings(
     || (asked.line === 'PROJECT_BRANCH'
       && asked.projectBranchName !== undefined
       && asked.projectBranchName !== settings.projectBranchName)
+    || (asked.upstreamRef !== undefined && asked.upstreamRef !== settings.upstreamRef)
   ) {
     differs.add('line');
   }

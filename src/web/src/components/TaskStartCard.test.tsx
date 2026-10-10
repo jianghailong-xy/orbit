@@ -51,7 +51,10 @@ const CARD: Card = {
   auto: true,
 };
 
-/** The brief as the agent reads it (tasks.service.ts `buildTaskExecutionPrompt`), abridged. */
+/**
+ * The brief as the agent read it (tasks.service.ts `buildTaskExecutionPrompt`), abridged — in the
+ * Chinese it was written in until 2026-10, which every older transcript holds.
+ */
 const BRIEF = [
   '请开始执行任务「runner + web：配额按账户归属」。',
   '',
@@ -283,6 +286,30 @@ describe('the turn that starts a task run', () => {
 
     expect(card()).toBeNull();
     expect(container.querySelector('.chat-user .md')?.textContent).toContain('请开始执行任务「runner + web：配额按账户归属」。');
+  });
+
+  // The card is the payload's and never read out of the brief, so the English the brief is written in
+  // now is the same card, and with no card recorded the same bubble.
+  it('draws an English brief as the same card, and as the same bubble without one', async () => {
+    const english = [
+      `Start the task “${CARD.title}”.`,
+      '',
+      'Task description:',
+      CARD.description,
+      '',
+      'Follow these steps:',
+      '1. First use task_get to read the task in full with its comment history.',
+      '2. Do the task.',
+    ].join('\n');
+
+    await mount([started(CARD, { text: english })]);
+    expect(card()!.querySelector('.tsc-title')?.textContent).toBe(CARD.title);
+    expect(container.querySelector('.chat-user'), 'the brief was also drawn as the owner\'s message').toBeNull();
+    expect(card()!.querySelector('details.tsc-raw pre')?.textContent).toBe(english);
+
+    await mount([started(undefined, { text: english })]);
+    expect(card()).toBeNull();
+    expect(container.querySelector('.chat-user .md')?.textContent).toContain(`Start the task “${CARD.title}”.`);
   });
 
   it('says what each judgment is in the task panel\'s own words', () => {

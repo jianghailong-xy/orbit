@@ -481,8 +481,9 @@ export const WIKI_PLAN_SERVER_JOB = {
   snapshotWaitSeconds: 300,
   readWaitSeconds: 300,
   /** Every call's whole system prompt, word for word the runner's (wikiPlanSystemPrompt). */
-  systemPrompt: '你是这个仓库的文档主编。你根据给你的材料规划产品与技术文档。只使用材料里出现的文件路径、'
-    + '章节标题、符号、项目名，不编造。用中文写，代码名、路径、命令保留原文。只输出要求的内容。',
+  systemPrompt: "You are the chief editor of this repository's documentation. You plan its product and technical documents from the "
+    + 'materials you are given. Use only the file paths, section headings, symbols and project names that appear in the materials, '
+    + 'and invent none. Write in English; keep code names, paths and commands as they are. Output only what is asked for.',
   /**
    * The repository's materials, cut to the runner's caps, in characters: the overview a catalogue, a category's
    * details and a document's outline read; the structure and the documents' heading tree a catalogue and the

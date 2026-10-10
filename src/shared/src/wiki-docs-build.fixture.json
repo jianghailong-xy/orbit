@@ -248,35 +248,35 @@
   },
   "answers": {
     "merge": {
-      "s2": "D1 | 采用 | 设计文档讲投递\nC1 | 采用 | 代码\n- [K1] ｜ 合并到 [D1] ｜ 契约与设计说的是一件事\n现状：\n- 先存后投 [D1]\n1. 契约写成至少一次 [K1]\n",
-      "s3": "S1 | 采用 | owner 原话\nS3 | 采用 | 交付评论\nS5 | 合并到 S1 | 同一件事\nS6 | 舍弃 | 与本节无关\nS2 | 采用 | 不该出现\n现状：\n- 全量测试在宿主上跑 [S1]\n",
-      "s4": "D1 | 采用 | 契约文档\nC1 | 舍弃 | 方法太短\nC2 | 合并到 C9 | 目标不在本节\nC3 |   采用\n现状：\n- 调度 [C2]\n",
+      "s2": "D1 | adopt | the design doc covers delivery\nC1 | adopt | the code\n- [K1] ｜ merge into [D1] ｜ the contract and the design say the same thing\nCurrent state:\n- store first, then deliver [D1]\n1. the contract says at least once [K1]\n",
+      "s3": "S1 | adopt | the owner's words\nS3 | adopt | a delivery comment\nS5 | merge into S1 | the same thing\nS6 | drop | unrelated to this section\nS2 | adopt | should not appear\nCurrent state:\n- the full suite runs on the host [S1]\n",
+      "s4": "D1 | adopt | the contract document\nC1 | Drop | the method is too short\nC2 | merge into C9 | the target is not in this section\nC3 |   adopt\ncurrent state:\n- scheduling [C2]\n",
       "s5": "",
-      "s6": "D1 | 采用 | 通配符读到的文件\n现状：\n- 来源读成一个空文件 [D1]\n"
+      "s6": "D1 | adopt | the file the wildcard read\nCurrent state:\n- the source reads as an empty file [D1]\n"
     },
     "write": {
       "s2": [
-        "### turn 怎么投递\n一轮 turn 先落库再投递，至少投递一次[D1]。runner 通过出站轮询领取工作，不开入站端口[C1]。契约把投递写成至少一次、按 turn id 幂等[K1]。序号在重生后保持单调[D1][S9]，优先级仍是 [P0]。\n\n引文：\n[D1] 「A turn is stored before it is delivered」\n[D1] 「Seq stays monotonic across respawn」\n[C1] 「keeps the heartbeat going. It never opens an inbound port.」\n[K1] 「The contract says delivery is exactly once」\n"
+        "### How a turn is delivered\nA turn is stored before it is delivered, and delivered at least once[D1]. The runner takes its work by polling outbound, and opens no inbound port[C1]. The contract writes delivery as at least once, idempotent on the turn id[K1]. The sequence stays monotonic across a respawn[D1][S9], and the priority is still [P0].\n\nQuotes:\n[D1] \"A turn is stored before it is delivered\"\n[D1] \"Seq stays monotonic across respawn\"\n[C1] \"keeps the heartbeat going. It never opens an inbound port.\"\n[K1] \"The contract says delivery is exactly once\"\n"
       ],
       "s3": [
-        "### 约定\n运行约定有两条。全量测试必须在 `runner 宿主` 上跑，不能在引擎 Bash 里跑。整包跑完要看 0 FAIL[S1][S3]。\n\n引文：\n[S1] 「全量测试在 runner 宿主上跑」\n",
-        "### 约定\n全量测试必须在 `runner 宿主` 上跑，不能在引擎 Bash 里跑[S1]。整包跑完要看 0 FAIL[S3]。\n\n引文：\n[S1] 「全量测试在 runner 宿主上跑」\n"
+        "### Conventions\nThere are two conventions for running. The full suite must run on the `runner host`, never in the engine's Bash. After the whole package has run, look for 0 FAIL[S1][S3].\n\nQuotes:\n[S1] \"全量测试在 runner 宿主上跑\"\n",
+        "### Conventions\nThe full suite must run on the `runner host`, never in the engine's Bash[S1]. After the whole package has run, look for 0 FAIL[S3].\n\nQuotes:\n[S1] \"全量测试在 runner 宿主上跑\"\n"
       ],
       "s4": [
-        "### 调度接口 Scheduler\n`Scheduler.claim` 领取下一轮[C2]，`dispatchTurn` 只投递一次[C4]【D1, C3】。租约 60 秒[C5]。\n\n**引文：**\n[C2]: 「Claim the next turn for a runner」\n【C4】「hands a claimed turn to its runner exactly once」\n[D1] “The run reads its dossiers”\n- [C5] 『LEASE_SECONDS = 60』\n"
+        "### The Scheduler interface\n`Scheduler.claim` claims the next turn[C2], and `dispatchTurn` delivers it only once[C4]【D1, C3】. The lease is 60 seconds[C5].\n\n**Quotes:**\n[C2]: \"Claim the next turn for a runner\"\n【C4】\"hands a claimed turn to its runner exactly once\"\n[D1] “The run reads its dossiers”\n- [C5] 『LEASE_SECONDS = 60』\n"
       ],
       "s5": [
-        "本篇讲设计[D1]。\n\n引文：\n[D1] 「# Design」\n"
+        "This document covers the design[D1].\n\nQuotes:\n[D1] \"# Design\"\n"
       ],
       "s6": [
-        "带通配符的来源读成一个空文件[D1]。\n\n引文：\n[D1] 「docs/*.md」\n"
+        "A source with a wildcard reads as an empty file[D1].\n\nQuotes:\n[D1] \"docs/*.md\"\n"
       ]
     },
     "repair": {
       "s2": "[K1] 「\"delivery\": \"at least once, idempotent on the turn id\"」\n",
-      "s3": "[S3] 「在 runner 宿主上跑完整包」\n"
+      "s3": "[S3] \"在 runner 宿主上跑完整包\"\n"
     },
-    "overview": "### 总览\n一轮先存后投，至少投递一次[F1]。运行约定是全量测试在 runner 宿主上跑[F4]。调度只投递一次[F6][F99]。\n"
+    "overview": "### Overview\nA turn is stored first and delivered after, at least once[F1]. The convention for running is that the full suite runs on the runner host[F4]. Scheduling delivers only once[F6][F99].\n"
   },
   "sections": [
     {
@@ -413,10 +413,10 @@
         }
       ],
       "fingerprint": "89425167f62018caac7700ca64fc0113c2a869343f0ded057ec9a1700fb84de8",
-      "mergePrompt": "# 任务：为文档《会话运行模型》的第 2 节做「归并」：把下面的材料合成这一节要写的「现状」\n\n## 这一节\n第 2 节「turn 怎么投递」（流程，约 400 字）：一轮 turn 从落库到投递。\n\n## 材料（D=设计文档章节，C=代码，K=契约，都取自 origin/main；S=会话等一手记录的原文，已脱敏）\n[D1] 设计文档 docs/design.md § 2. Delivery（L7–L14，origin/main）\n## 2. Delivery\n\nA turn is stored before it is delivered, and delivered at least once.\nDelivery is idempotent on the turn's id.\n\n### 2.1 Retries\n\nA lost delivery is retried after the lease expires.\n\n[C1] 代码 src/runloop.go · runLoop（L3–L9，origin/main）\n```\n// runLoop claims work from the server and keeps the heartbeat going.\n// It never opens an inbound port.\nfunc runLoop() {\n\tfor {\n\t\tclaim()\n\t}\n}\n```\n\n[K1] 契约 contracts/session.contract.json（L1–L4，origin/main）\n{\n  \"name\": \"session\",\n  \"delivery\": \"at least once, idempotent on the turn id\"\n}\n\n## 归并规则（owner 已定）\n1. 同一件事有多条材料时合成一条现状；新决定覆盖旧的。\n2. 证据分量：决定（owner 原话与拍板、判据修订）> 合并记录（合并回执、交付评论）> 命令与测试输出 > 报错原文；同一分量取时间最新的一条。S 材料的标题写了它的证据分量和日期。\n3. 不能当证据：agent 的猜测（「可能」「我怀疑」「估计」）、后来被推翻的说法、与本节无关的材料。\n4. 讲机制的节以设计文档和代码为准；会话材料只用来说明「为什么」「坑」「决策」。代码与文档说法不一致时，以 origin/main 上的代码为准，并把不一致写进现状。\n5. 被推翻的旧说法不进现状；如果它能解释当初为什么这么设计，可以写成「曾经……后来改为……」，并注明新旧两条材料。\n\n## 输出格式\n先逐条写处置，每条材料一行，一条不漏：\n<编号> | 采用 | <一句理由>\n<编号> | 合并到 <编号> | <一句理由>\n<编号> | 舍弃 | <一句理由>\n然后写：\n现状：\n- <一条要点，一句话> [<编号>][<编号>]\n（3–8 条要点，每条标出依据的材料编号）\n",
+      "mergePrompt": "# Task: the \"merge\" for the document «会话运行模型», section 2: combine the materials below into the \"current state\" this section is to write\n\n## This section\nSection 2 «turn 怎么投递» (flow, about 400 characters): 一轮 turn 从落库到投递。\n\n## Materials (D = a design document's section, C = code, K = a contract, all from origin/main; S = the original words of a session or another first-hand record, redacted)\n[D1] design doc docs/design.md § 2. Delivery (L7–L14, origin/main)\n## 2. Delivery\n\nA turn is stored before it is delivered, and delivered at least once.\nDelivery is idempotent on the turn's id.\n\n### 2.1 Retries\n\nA lost delivery is retried after the lease expires.\n\n[C1] code src/runloop.go · runLoop (L3–L9, origin/main)\n```\n// runLoop claims work from the server and keeps the heartbeat going.\n// It never opens an inbound port.\nfunc runLoop() {\n\tfor {\n\t\tclaim()\n\t}\n}\n```\n\n[K1] contract contracts/session.contract.json (L1–L4, origin/main)\n{\n  \"name\": \"session\",\n  \"delivery\": \"at least once, idempotent on the turn id\"\n}\n\n## Merge rules (set by the owner)\n1. When several materials are about the same thing, combine them into one current state; a newer decision overrides an older one.\n2. Weight of evidence: decision (the owner's own words and rulings, criterion revisions) > merge record (merge receipts, delivery comments) > command and test output > error text; within one weight, take the newest. An S material's header gives its weight and its date.\n3. Not evidence: an agent's guesses (\"probably\", \"I suspect\", \"my guess is\"), statements later overturned, material unrelated to this section.\n4. A section on a mechanism goes by the design documents and the code; session material only explains \"why\", \"pitfalls\" and \"decisions\". Where the code and a document disagree, the code on origin/main wins, and the disagreement goes into the current state.\n5. A statement that was overturned stays out of the current state; if it explains why the design was once made that way, it may be written as \"it used to be …, and was changed to …\", naming both the old and the new material.\n\n## Output format\nFirst write what becomes of each material, one line a material, leaving none out:\n<id> | adopt | <one sentence of reason>\n<id> | merge into <id> | <one sentence of reason>\n<id> | drop | <one sentence of reason>\nThen write:\nCurrent state:\n- <one point, in one sentence> [<id>][<id>]\n(3–8 points, each marked with the ids of the materials it rests on)\n",
       "state": [
-        "先存后投 [D1]",
-        "契约写成至少一次 [K1]"
+        "store first, then deliver [D1]",
+        "the contract says at least once [K1]"
       ],
       "merged": [
         {
@@ -437,7 +437,7 @@
           "text": "## 2. Delivery\n\nA turn is stored before it is delivered, and delivered at least once.\nDelivery is idempotent on the turn's id.\n\n### 2.1 Retries\n\nA lost delivery is retried after the lease expires.",
           "action": "adopt",
           "into": "",
-          "reason": "设计文档讲投递",
+          "reason": "the design doc covers delivery",
           "handed": true
         },
         {
@@ -458,7 +458,7 @@
           "text": "// runLoop claims work from the server and keeps the heartbeat going.\n// It never opens an inbound port.\nfunc runLoop() {\n\tfor {\n\t\tclaim()\n\t}\n}",
           "action": "adopt",
           "into": "",
-          "reason": "代码",
+          "reason": "the code",
           "handed": true
         },
         {
@@ -479,14 +479,14 @@
           "text": "{\n  \"name\": \"session\",\n  \"delivery\": \"at least once, idempotent on the turn id\"\n}",
           "action": "merge",
           "into": "D1",
-          "reason": "契约与设计说的是一件事",
+          "reason": "the contract and the design say the same thing",
           "handed": true
         }
       ],
-      "writePrompt": "# 任务：写文档《会话运行模型》的第 2 节\n\n## 这篇文档\n- 读者带着的问题：一个会话怎么运转？\n- 写给谁：新加入的开发者：读完能讲清一轮怎么投递；运维\n- 全篇大纲：\n  1. 总览（概述）—— 这篇讲什么。\n  2. turn 怎么投递（流程）—— 一轮 turn 从落库到投递。　← 本节\n  3. 约定（约定）—— 运行测试的约定。\n  4. 调度接口 Scheduler（接口）—— `dispatchTurn` 和 `Scheduler.claim` 怎么领取与投递。\n  5. 数据与配置（数据与配置）—— 数据。\n  6. 通配符来源（流程）—— 来源路径带通配符时读到什么。\n\n## 本节\n「turn 怎么投递」（流程，约 400 字）：一轮 turn 从落库到投递。\n\n## 归并后的现状（上一步的结果）\n- 先存后投 [D1]\n- 契约写成至少一次 [K1]\n\n## 可用材料（只可引用这些，编号不变）\n[D1] 设计文档 docs/design.md § 2. Delivery（L7–L14，origin/main）\n## 2. Delivery\n\nA turn is stored before it is delivered, and delivered at least once.\nDelivery is idempotent on the turn's id.\n\n### 2.1 Retries\n\nA lost delivery is retried after the lease expires.\n\n[C1] 代码 src/runloop.go · runLoop（L3–L9，origin/main）\n```\n// runLoop claims work from the server and keeps the heartbeat going.\n// It never opens an inbound port.\nfunc runLoop() {\n\tfor {\n\t\tclaim()\n\t}\n}\n```\n\n[K1] 契约 contracts/session.contract.json（L1–L4，origin/main）\n{\n  \"name\": \"session\",\n  \"delivery\": \"at least once, idempotent on the turn id\"\n}\n\n## 写法\n- 写成连贯的技术文档段落：先讲是什么，再讲怎么运转、为什么。不要逐条罗列材料，不要写「材料显示」「根据会话记录」这类话。\n- 每个陈述事实的句子，各自在句末标出依据的材料编号，如 [D1] 或 [C2][S3]。「决策与理由」「已知的坑」「约定」这类段落也要逐句标注，不能只在段末标一次。\n- 讲机制（概念、流程、接口、数据、运维）只依据 D/C/K 材料；S 材料只用来讲为什么、已知的坑、决策。\n- 契约和设计文档里的缩写与编号（例如 SR50、PAC §12、G0–G6 这类）第一次出现时，先用半句话说明它指什么，再用；说明不了就不用缩写，直接说它指的那件事。\n- 过渡句、概括句可以不标编号，但不能带出材料里没有的新事实（新的名字、数字、路径、结论）。\n- 不写材料里没有的事实。材料之间有冲突时写现状，必要时用一句话交代变化。\n- 代码名、路径、命令用反引号，照原文写。长度约 400 字。\n\n## 引文\n正文之后另起一行写「引文：」，为正文里用到的每个编号各写一行逐字引文：从该材料原文里原样抄出支撑你那句话的一小段（10–80 字，一字不改，不翻译，不把两处拼在一起，不加省略号）。正文里出现的每一个编号都必须有一行引文。\n[D1] 「……」\n[S3] 「……」\n\n## 输出格式\n只输出下面这些，不要前言：\n### turn 怎么投递\n<正文>\n\n引文：\n[编号] 「逐字引文」\n",
+      "writePrompt": "# Task: write the document «会话运行模型», section 2\n\n## This document\n- The question the reader comes with: 一个会话怎么运转？\n- Written for: 新加入的开发者：读完能讲清一轮怎么投递; 运维\n- The whole document's outline:\n  1. 总览 (overview) — 这篇讲什么。\n  2. turn 怎么投递 (flow) — 一轮 turn 从落库到投递。  ← this section\n  3. 约定 (conventions) — 运行测试的约定。\n  4. 调度接口 Scheduler (interface) — `dispatchTurn` 和 `Scheduler.claim` 怎么领取与投递。\n  5. 数据与配置 (data and configuration) — 数据。\n  6. 通配符来源 (flow) — 来源路径带通配符时读到什么。\n\n## This section\n«turn 怎么投递» (flow, about 400 characters): 一轮 turn 从落库到投递。\n\n## The current state after the merge (the result of the step before)\n- store first, then deliver [D1]\n- the contract says at least once [K1]\n\n## The materials you may use (cite only these, by the ids they have)\n[D1] design doc docs/design.md § 2. Delivery (L7–L14, origin/main)\n## 2. Delivery\n\nA turn is stored before it is delivered, and delivered at least once.\nDelivery is idempotent on the turn's id.\n\n### 2.1 Retries\n\nA lost delivery is retried after the lease expires.\n\n[C1] code src/runloop.go · runLoop (L3–L9, origin/main)\n```\n// runLoop claims work from the server and keeps the heartbeat going.\n// It never opens an inbound port.\nfunc runLoop() {\n\tfor {\n\t\tclaim()\n\t}\n}\n```\n\n[K1] contract contracts/session.contract.json (L1–L4, origin/main)\n{\n  \"name\": \"session\",\n  \"delivery\": \"at least once, idempotent on the turn id\"\n}\n\n## How to write\n- Write coherent paragraphs of technical documentation: first what it is, then how it works and why. Do not list the materials one by one, and do not write phrases such as \"the materials show\" or \"according to the session records\".\n- Every sentence that states a fact ends with the ids of the materials it rests on, such as [D1] or [C2][S3]. Paragraphs of decisions and reasons, known pitfalls, conventions and the like are marked sentence by sentence too, never only once at the end of the paragraph.\n- A mechanism (concepts, flow, interface, data, operations) rests only on D/C/K materials; S materials only tell why, the known pitfalls and the decisions.\n- An abbreviation or a number from a contract or a design document (such as SR50, PAC §12 or G0–G6) is explained in half a sentence where it first appears, before it is used; if you cannot explain it, do not use the abbreviation, and say directly the thing it stands for.\n- Transition and summary sentences may go without ids, but must not bring in a new fact the materials do not have (a new name, number, path or conclusion).\n- Write no fact the materials do not have. Where materials conflict, write the current state, with a sentence on the change where one is needed.\n- Code names, paths and commands go in backticks, written as in the original. About 400 characters long.\n\n## Quotes\nAfter the body, on a line of its own, write \"Quotes:\", then a line of verbatim quote for each id the body uses: a short passage copied exactly from that material's original that supports your sentence (10–80 characters, not a character changed, not translated, not two places joined together, no ellipsis). Every id that appears in the body must have a line of quote.\n[D1] \"……\"\n[S3] \"……\"\n\n## Output format\nOutput only what follows, with no preamble:\n### turn 怎么投递\n<body>\n\nQuotes:\n[id] \"verbatim quote\"\n",
       "lonely": [],
       "againPrompt": "",
-      "body": "一轮 turn 先落库再投递，至少投递一次[D1]。runner 通过出站轮询领取工作，不开入站端口[C1]。契约把投递写成至少一次、按 turn id 幂等[K1]。序号在重生后保持单调[D1][S9]，优先级仍是 [P0]。",
+      "body": "A turn is stored before it is delivered, and delivered at least once[D1]. The runner takes its work by polling outbound, and opens no inbound port[C1]. The contract writes delivery as at least once, idempotent on the turn id[K1]. The sequence stays monotonic across a respawn[D1][S9], and the priority is still [P0].",
       "quotes": {
         "C1": [
           "keeps the heartbeat going. It never opens an inbound port."
@@ -503,8 +503,8 @@
       "unfound": [
         "K1"
       ],
-      "repairPrompt": "# 任务：给下面几个脚注补逐字引文\n\n你刚写的一节里，这些编号的引文缺了，或者在材料原文里找不到。请为每个编号从它的材料原文里原样抄出一段支撑那些句子的文字（10–80 字，一字不改，不翻译，不把两处拼在一起，不加省略号）。\n\n## [K1] 标在这些句子上：\n- 契约把投递写成至少一次、按 turn id 幂等[K1]。\n材料原文：\n{\n  \"name\": \"session\",\n  \"delivery\": \"at least once, idempotent on the turn id\"\n}\n\n## 输出格式\n每个编号一行，只输出这些：\n[编号] 「逐字引文」\n",
-      "markdown": "一轮 turn 先落库再投递，至少投递一次[1]。runner 通过出站轮询领取工作，不开入站端口[2]。契约把投递写成至少一次、按 turn id 幂等[3]。序号在重生后保持单调[1]，优先级仍是 [P0]。",
+      "repairPrompt": "# Task: give the footnotes below their verbatim quotes\n\nIn the section you just wrote, the quotes for these ids were missing, or could not be found in their materials' originals. For each id, copy exactly from its material's original a passage that supports those sentences (10–80 characters, not a character changed, not translated, not two places joined together, no ellipsis).\n\n## [K1] marks these sentences:\n- The contract writes delivery as at least once, idempotent on the turn id[K1].\nThe material's original:\n{\n  \"name\": \"session\",\n  \"delivery\": \"at least once, idempotent on the turn id\"\n}\n\n## Output format\nOne line an id, and only these:\n[id] \"verbatim quote\"\n",
+      "markdown": "A turn is stored before it is delivered, and delivered at least once[1]. The runner takes its work by polling outbound, and opens no inbound port[2]. The contract writes delivery as at least once, idempotent on the turn id[3]. The sequence stays monotonic across a respawn[1], and the priority is still [P0].",
       "footnotes": [
         {
           "kind": "design_doc",
@@ -557,7 +557,7 @@
           "ref": "docs/design.md#L7-14",
           "action": "adopt",
           "into": null,
-          "reason": "设计文档讲投递"
+          "reason": "the design doc covers delivery"
         },
         {
           "material": "C1",
@@ -565,7 +565,7 @@
           "ref": "src/runloop.go#L3-9",
           "action": "adopt",
           "into": null,
-          "reason": "代码"
+          "reason": "the code"
         },
         {
           "material": "K1",
@@ -573,7 +573,7 @@
           "ref": "contracts/session.contract.json#L1-4",
           "action": "merge",
           "into": "D1",
-          "reason": "契约与设计说的是一件事"
+          "reason": "the contract and the design say the same thing"
         }
       ]
     },
@@ -748,7 +748,7 @@
           "text": "About “Runner 托管后台作业” — Orbit has not recorded it done. Every criterion is met.\n\nBlocked:\n(no criterion is individually blocked)",
           "action": "filtered",
           "into": "",
-          "reason": "平台自动生成的复查模板消息（项目结算卡片发出），不是 owner 原话",
+          "reason": "a review template message the platform generated (a project's settlement card sends it), not the owner's words",
           "handed": false
         },
         {
@@ -790,7 +790,7 @@
           "text": "交付：在 runner 宿主上跑完整包，env -u 清掉会话变量后 0 FAIL。",
           "action": "filtered",
           "into": "",
-          "reason": "与 S3 的原文相同，只留一条",
+          "reason": "the same original as S3: kept once",
           "handed": false
         },
         {
@@ -837,9 +837,9 @@
         }
       ],
       "fingerprint": "8de38c2d4861618a95ef0b33dee0dc709462292136efdb76a836dd5f1e3d9522",
-      "mergePrompt": "# 任务：为文档《会话运行模型》的第 3 节做「归并」：把下面的材料合成这一节要写的「现状」\n\n## 这一节\n第 3 节「约定」（约定，约 400 字）：运行测试的约定。\n\n## 材料（D=设计文档章节，C=代码，K=契约，都取自 origin/main；S=会话等一手记录的原文，已脱敏）\n[S1] 记录原文 · owner 原话 ·  · 「」 · 证据分量：决定\n全量测试在 runner 宿主上跑，别在引擎的 Bash 里跑。\n\n[S3] 记录原文 · agent 交付评论 ·  · 「」 · 证据分量：合并记录\n交付：在 runner 宿主上跑完整包，env -u 清掉会话变量后 0 FAIL。\n\n[S5] 记录原文 · 命令输出 ·  · 「」，经条目《全量测试在宿主上跑》 · 证据分量：命令输出\n$ go test ./...\nok  orbit 412.7s\nthe suite ran on the runner host: 0 FAIL\n\n[S6] 记录原文 · owner 原话 ·  · 「」 · 证据分量：决定\n今天午饭吃了面。\n\n## 归并规则（owner 已定）\n1. 同一件事有多条材料时合成一条现状；新决定覆盖旧的。\n2. 证据分量：决定（owner 原话与拍板、判据修订）> 合并记录（合并回执、交付评论）> 命令与测试输出 > 报错原文；同一分量取时间最新的一条。S 材料的标题写了它的证据分量和日期。\n3. 不能当证据：agent 的猜测（「可能」「我怀疑」「估计」）、后来被推翻的说法、与本节无关的材料。\n4. 讲机制的节以设计文档和代码为准；会话材料只用来说明「为什么」「坑」「决策」。代码与文档说法不一致时，以 origin/main 上的代码为准，并把不一致写进现状。\n5. 被推翻的旧说法不进现状；如果它能解释当初为什么这么设计，可以写成「曾经……后来改为……」，并注明新旧两条材料。\n\n## 输出格式\n先逐条写处置，每条材料一行，一条不漏：\n<编号> | 采用 | <一句理由>\n<编号> | 合并到 <编号> | <一句理由>\n<编号> | 舍弃 | <一句理由>\n然后写：\n现状：\n- <一条要点，一句话> [<编号>][<编号>]\n（3–8 条要点，每条标出依据的材料编号）\n",
+      "mergePrompt": "# Task: the \"merge\" for the document «会话运行模型», section 3: combine the materials below into the \"current state\" this section is to write\n\n## This section\nSection 3 «约定» (conventions, about 400 characters): 运行测试的约定。\n\n## Materials (D = a design document's section, C = code, K = a contract, all from origin/main; S = the original words of a session or another first-hand record, redacted)\n[S1] record · the owner's words ·  · «» · weight: decision\n全量测试在 runner 宿主上跑，别在引擎的 Bash 里跑。\n\n[S3] record · agent delivery comment ·  · «» · weight: merge record\n交付：在 runner 宿主上跑完整包，env -u 清掉会话变量后 0 FAIL。\n\n[S5] record · command output ·  · «», via entry «全量测试在宿主上跑» · weight: command output\n$ go test ./...\nok  orbit 412.7s\nthe suite ran on the runner host: 0 FAIL\n\n[S6] record · the owner's words ·  · «» · weight: decision\n今天午饭吃了面。\n\n## Merge rules (set by the owner)\n1. When several materials are about the same thing, combine them into one current state; a newer decision overrides an older one.\n2. Weight of evidence: decision (the owner's own words and rulings, criterion revisions) > merge record (merge receipts, delivery comments) > command and test output > error text; within one weight, take the newest. An S material's header gives its weight and its date.\n3. Not evidence: an agent's guesses (\"probably\", \"I suspect\", \"my guess is\"), statements later overturned, material unrelated to this section.\n4. A section on a mechanism goes by the design documents and the code; session material only explains \"why\", \"pitfalls\" and \"decisions\". Where the code and a document disagree, the code on origin/main wins, and the disagreement goes into the current state.\n5. A statement that was overturned stays out of the current state; if it explains why the design was once made that way, it may be written as \"it used to be …, and was changed to …\", naming both the old and the new material.\n\n## Output format\nFirst write what becomes of each material, one line a material, leaving none out:\n<id> | adopt | <one sentence of reason>\n<id> | merge into <id> | <one sentence of reason>\n<id> | drop | <one sentence of reason>\nThen write:\nCurrent state:\n- <one point, in one sentence> [<id>][<id>]\n(3–8 points, each marked with the ids of the materials it rests on)\n",
       "state": [
-        "全量测试在宿主上跑 [S1]"
+        "the full suite runs on the host [S1]"
       ],
       "merged": [
         {
@@ -860,7 +860,7 @@
           "text": "全量测试在 runner 宿主上跑，别在引擎的 Bash 里跑。",
           "action": "adopt",
           "into": "",
-          "reason": "owner 原话",
+          "reason": "the owner's words",
           "handed": true
         },
         {
@@ -881,7 +881,7 @@
           "text": "About “Runner 托管后台作业” — Orbit has not recorded it done. Every criterion is met.\n\nBlocked:\n(no criterion is individually blocked)",
           "action": "filtered",
           "into": "",
-          "reason": "平台自动生成的复查模板消息（项目结算卡片发出），不是 owner 原话",
+          "reason": "a review template message the platform generated (a project's settlement card sends it), not the owner's words",
           "handed": false
         },
         {
@@ -902,7 +902,7 @@
           "text": "交付：在 runner 宿主上跑完整包，env -u 清掉会话变量后 0 FAIL。",
           "action": "adopt",
           "into": "",
-          "reason": "交付评论",
+          "reason": "a delivery comment",
           "handed": true
         },
         {
@@ -923,7 +923,7 @@
           "text": "交付：在 runner 宿主上跑完整包，env -u 清掉会话变量后 0 FAIL。",
           "action": "filtered",
           "into": "",
-          "reason": "与 S3 的原文相同，只留一条",
+          "reason": "the same original as S3: kept once",
           "handed": false
         },
         {
@@ -944,7 +944,7 @@
           "text": "$ go test ./...\nok  orbit 412.7s\nthe suite ran on the runner host: 0 FAIL",
           "action": "merge",
           "into": "S1",
-          "reason": "同一件事",
+          "reason": "the same thing",
           "handed": true
         },
         {
@@ -965,16 +965,16 @@
           "text": "今天午饭吃了面。",
           "action": "drop",
           "into": "",
-          "reason": "与本节无关",
+          "reason": "unrelated to this section",
           "handed": true
         }
       ],
-      "writePrompt": "# 任务：写文档《会话运行模型》的第 3 节\n\n## 这篇文档\n- 读者带着的问题：一个会话怎么运转？\n- 写给谁：新加入的开发者：读完能讲清一轮怎么投递；运维\n- 全篇大纲：\n  1. 总览（概述）—— 这篇讲什么。\n  2. turn 怎么投递（流程）—— 一轮 turn 从落库到投递。\n  3. 约定（约定）—— 运行测试的约定。　← 本节\n  4. 调度接口 Scheduler（接口）—— `dispatchTurn` 和 `Scheduler.claim` 怎么领取与投递。\n  5. 数据与配置（数据与配置）—— 数据。\n  6. 通配符来源（流程）—— 来源路径带通配符时读到什么。\n\n## 本节\n「约定」（约定，约 400 字）：运行测试的约定。\n\n## 归并后的现状（上一步的结果）\n- 全量测试在宿主上跑 [S1]\n\n## 可用材料（只可引用这些，编号不变）\n[S1] 记录原文 · owner 原话 ·  · 「」 · 证据分量：决定\n全量测试在 runner 宿主上跑，别在引擎的 Bash 里跑。\n\n[S3] 记录原文 · agent 交付评论 ·  · 「」 · 证据分量：合并记录\n交付：在 runner 宿主上跑完整包，env -u 清掉会话变量后 0 FAIL。\n\n[S5] 记录原文 · 命令输出 ·  · 「」，经条目《全量测试在宿主上跑》 · 证据分量：命令输出\n$ go test ./...\nok  orbit 412.7s\nthe suite ran on the runner host: 0 FAIL\n\n## 写法\n- 写成连贯的技术文档段落：先讲是什么，再讲怎么运转、为什么。不要逐条罗列材料，不要写「材料显示」「根据会话记录」这类话。\n- 每个陈述事实的句子，各自在句末标出依据的材料编号，如 [D1] 或 [C2][S3]。「决策与理由」「已知的坑」「约定」这类段落也要逐句标注，不能只在段末标一次。\n- 讲机制（概念、流程、接口、数据、运维）只依据 D/C/K 材料；S 材料只用来讲为什么、已知的坑、决策。\n- 契约和设计文档里的缩写与编号（例如 SR50、PAC §12、G0–G6 这类）第一次出现时，先用半句话说明它指什么，再用；说明不了就不用缩写，直接说它指的那件事。\n- 过渡句、概括句可以不标编号，但不能带出材料里没有的新事实（新的名字、数字、路径、结论）。\n- 不写材料里没有的事实。材料之间有冲突时写现状，必要时用一句话交代变化。\n- 代码名、路径、命令用反引号，照原文写。长度约 400 字。\n\n## 引文\n正文之后另起一行写「引文：」，为正文里用到的每个编号各写一行逐字引文：从该材料原文里原样抄出支撑你那句话的一小段（10–80 字，一字不改，不翻译，不把两处拼在一起，不加省略号）。正文里出现的每一个编号都必须有一行引文。\n[D1] 「……」\n[S3] 「……」\n\n## 输出格式\n只输出下面这些，不要前言：\n### 约定\n<正文>\n\n引文：\n[编号] 「逐字引文」\n",
+      "writePrompt": "# Task: write the document «会话运行模型», section 3\n\n## This document\n- The question the reader comes with: 一个会话怎么运转？\n- Written for: 新加入的开发者：读完能讲清一轮怎么投递; 运维\n- The whole document's outline:\n  1. 总览 (overview) — 这篇讲什么。\n  2. turn 怎么投递 (flow) — 一轮 turn 从落库到投递。\n  3. 约定 (conventions) — 运行测试的约定。  ← this section\n  4. 调度接口 Scheduler (interface) — `dispatchTurn` 和 `Scheduler.claim` 怎么领取与投递。\n  5. 数据与配置 (data and configuration) — 数据。\n  6. 通配符来源 (flow) — 来源路径带通配符时读到什么。\n\n## This section\n«约定» (conventions, about 400 characters): 运行测试的约定。\n\n## The current state after the merge (the result of the step before)\n- the full suite runs on the host [S1]\n\n## The materials you may use (cite only these, by the ids they have)\n[S1] record · the owner's words ·  · «» · weight: decision\n全量测试在 runner 宿主上跑，别在引擎的 Bash 里跑。\n\n[S3] record · agent delivery comment ·  · «» · weight: merge record\n交付：在 runner 宿主上跑完整包，env -u 清掉会话变量后 0 FAIL。\n\n[S5] record · command output ·  · «», via entry «全量测试在宿主上跑» · weight: command output\n$ go test ./...\nok  orbit 412.7s\nthe suite ran on the runner host: 0 FAIL\n\n## How to write\n- Write coherent paragraphs of technical documentation: first what it is, then how it works and why. Do not list the materials one by one, and do not write phrases such as \"the materials show\" or \"according to the session records\".\n- Every sentence that states a fact ends with the ids of the materials it rests on, such as [D1] or [C2][S3]. Paragraphs of decisions and reasons, known pitfalls, conventions and the like are marked sentence by sentence too, never only once at the end of the paragraph.\n- A mechanism (concepts, flow, interface, data, operations) rests only on D/C/K materials; S materials only tell why, the known pitfalls and the decisions.\n- An abbreviation or a number from a contract or a design document (such as SR50, PAC §12 or G0–G6) is explained in half a sentence where it first appears, before it is used; if you cannot explain it, do not use the abbreviation, and say directly the thing it stands for.\n- Transition and summary sentences may go without ids, but must not bring in a new fact the materials do not have (a new name, number, path or conclusion).\n- Write no fact the materials do not have. Where materials conflict, write the current state, with a sentence on the change where one is needed.\n- Code names, paths and commands go in backticks, written as in the original. About 400 characters long.\n\n## Quotes\nAfter the body, on a line of its own, write \"Quotes:\", then a line of verbatim quote for each id the body uses: a short passage copied exactly from that material's original that supports your sentence (10–80 characters, not a character changed, not translated, not two places joined together, no ellipsis). Every id that appears in the body must have a line of quote.\n[D1] \"……\"\n[S3] \"……\"\n\n## Output format\nOutput only what follows, with no preamble:\n### 约定\n<body>\n\nQuotes:\n[id] \"verbatim quote\"\n",
       "lonely": [
-        "运行约定有两条。"
+        "There are two conventions for running."
       ],
-      "againPrompt": "# 任务：写文档《会话运行模型》的第 3 节\n\n## 这篇文档\n- 读者带着的问题：一个会话怎么运转？\n- 写给谁：新加入的开发者：读完能讲清一轮怎么投递；运维\n- 全篇大纲：\n  1. 总览（概述）—— 这篇讲什么。\n  2. turn 怎么投递（流程）—— 一轮 turn 从落库到投递。\n  3. 约定（约定）—— 运行测试的约定。　← 本节\n  4. 调度接口 Scheduler（接口）—— `dispatchTurn` 和 `Scheduler.claim` 怎么领取与投递。\n  5. 数据与配置（数据与配置）—— 数据。\n  6. 通配符来源（流程）—— 来源路径带通配符时读到什么。\n\n## 本节\n「约定」（约定，约 400 字）：运行测试的约定。\n\n## 归并后的现状（上一步的结果）\n- 全量测试在宿主上跑 [S1]\n\n## 可用材料（只可引用这些，编号不变）\n[S1] 记录原文 · owner 原话 ·  · 「」 · 证据分量：决定\n全量测试在 runner 宿主上跑，别在引擎的 Bash 里跑。\n\n[S3] 记录原文 · agent 交付评论 ·  · 「」 · 证据分量：合并记录\n交付：在 runner 宿主上跑完整包，env -u 清掉会话变量后 0 FAIL。\n\n[S5] 记录原文 · 命令输出 ·  · 「」，经条目《全量测试在宿主上跑》 · 证据分量：命令输出\n$ go test ./...\nok  orbit 412.7s\nthe suite ran on the runner host: 0 FAIL\n\n## 写法\n- 写成连贯的技术文档段落：先讲是什么，再讲怎么运转、为什么。不要逐条罗列材料，不要写「材料显示」「根据会话记录」这类话。\n- 每个陈述事实的句子，各自在句末标出依据的材料编号，如 [D1] 或 [C2][S3]。「决策与理由」「已知的坑」「约定」这类段落也要逐句标注，不能只在段末标一次。\n- 讲机制（概念、流程、接口、数据、运维）只依据 D/C/K 材料；S 材料只用来讲为什么、已知的坑、决策。\n- 契约和设计文档里的缩写与编号（例如 SR50、PAC §12、G0–G6 这类）第一次出现时，先用半句话说明它指什么，再用；说明不了就不用缩写，直接说它指的那件事。\n- 过渡句、概括句可以不标编号，但不能带出材料里没有的新事实（新的名字、数字、路径、结论）。\n- 不写材料里没有的事实。材料之间有冲突时写现状，必要时用一句话交代变化。\n- 代码名、路径、命令用反引号，照原文写。长度约 400 字。\n\n## 引文\n正文之后另起一行写「引文：」，为正文里用到的每个编号各写一行逐字引文：从该材料原文里原样抄出支撑你那句话的一小段（10–80 字，一字不改，不翻译，不把两处拼在一起，不加省略号）。正文里出现的每一个编号都必须有一行引文。\n[D1] 「……」\n[S3] 「……」\n\n## 输出格式\n只输出下面这些，不要前言：\n### 约定\n<正文>\n\n引文：\n[编号] 「逐字引文」\n\n\n## 上一稿的问题\n上一稿有段落只在段末标了一次编号，前面陈述事实的句子没有标：\n- 运行约定有两条。\n这次每个陈述事实的句子都要在句末标出它自己依据的编号。\n",
-      "body": "全量测试必须在 `runner 宿主` 上跑，不能在引擎 Bash 里跑[S1]。整包跑完要看 0 FAIL[S3]。",
+      "againPrompt": "# Task: write the document «会话运行模型», section 3\n\n## This document\n- The question the reader comes with: 一个会话怎么运转？\n- Written for: 新加入的开发者：读完能讲清一轮怎么投递; 运维\n- The whole document's outline:\n  1. 总览 (overview) — 这篇讲什么。\n  2. turn 怎么投递 (flow) — 一轮 turn 从落库到投递。\n  3. 约定 (conventions) — 运行测试的约定。  ← this section\n  4. 调度接口 Scheduler (interface) — `dispatchTurn` 和 `Scheduler.claim` 怎么领取与投递。\n  5. 数据与配置 (data and configuration) — 数据。\n  6. 通配符来源 (flow) — 来源路径带通配符时读到什么。\n\n## This section\n«约定» (conventions, about 400 characters): 运行测试的约定。\n\n## The current state after the merge (the result of the step before)\n- the full suite runs on the host [S1]\n\n## The materials you may use (cite only these, by the ids they have)\n[S1] record · the owner's words ·  · «» · weight: decision\n全量测试在 runner 宿主上跑，别在引擎的 Bash 里跑。\n\n[S3] record · agent delivery comment ·  · «» · weight: merge record\n交付：在 runner 宿主上跑完整包，env -u 清掉会话变量后 0 FAIL。\n\n[S5] record · command output ·  · «», via entry «全量测试在宿主上跑» · weight: command output\n$ go test ./...\nok  orbit 412.7s\nthe suite ran on the runner host: 0 FAIL\n\n## How to write\n- Write coherent paragraphs of technical documentation: first what it is, then how it works and why. Do not list the materials one by one, and do not write phrases such as \"the materials show\" or \"according to the session records\".\n- Every sentence that states a fact ends with the ids of the materials it rests on, such as [D1] or [C2][S3]. Paragraphs of decisions and reasons, known pitfalls, conventions and the like are marked sentence by sentence too, never only once at the end of the paragraph.\n- A mechanism (concepts, flow, interface, data, operations) rests only on D/C/K materials; S materials only tell why, the known pitfalls and the decisions.\n- An abbreviation or a number from a contract or a design document (such as SR50, PAC §12 or G0–G6) is explained in half a sentence where it first appears, before it is used; if you cannot explain it, do not use the abbreviation, and say directly the thing it stands for.\n- Transition and summary sentences may go without ids, but must not bring in a new fact the materials do not have (a new name, number, path or conclusion).\n- Write no fact the materials do not have. Where materials conflict, write the current state, with a sentence on the change where one is needed.\n- Code names, paths and commands go in backticks, written as in the original. About 400 characters long.\n\n## Quotes\nAfter the body, on a line of its own, write \"Quotes:\", then a line of verbatim quote for each id the body uses: a short passage copied exactly from that material's original that supports your sentence (10–80 characters, not a character changed, not translated, not two places joined together, no ellipsis). Every id that appears in the body must have a line of quote.\n[D1] \"……\"\n[S3] \"……\"\n\n## Output format\nOutput only what follows, with no preamble:\n### 约定\n<body>\n\nQuotes:\n[id] \"verbatim quote\"\n\n\n## What was wrong with the last draft\nSome paragraphs of the last draft marked their ids only once, at the end, and the sentences before that state facts carry none:\n- There are two conventions for running.\nThis time, every sentence that states a fact ends with the ids it rests on itself.\n",
+      "body": "The full suite must run on the `runner host`, never in the engine's Bash[S1]. After the whole package has run, look for 0 FAIL[S3].",
       "quotes": {
         "S1": [
           "全量测试在 runner 宿主上跑"
@@ -986,8 +986,8 @@
       "unfound": [
         "S3"
       ],
-      "repairPrompt": "# 任务：给下面几个脚注补逐字引文\n\n你刚写的一节里，这些编号的引文缺了，或者在材料原文里找不到。请为每个编号从它的材料原文里原样抄出一段支撑那些句子的文字（10–80 字，一字不改，不翻译，不把两处拼在一起，不加省略号）。\n\n## [S3] 标在这些句子上：\n- 整包跑完要看 0 FAIL[S3]。\n材料原文：\n交付：在 runner 宿主上跑完整包，env -u 清掉会话变量后 0 FAIL。\n\n## 输出格式\n每个编号一行，只输出这些：\n[编号] 「逐字引文」\n",
-      "markdown": "全量测试必须在 `runner 宿主` 上跑，不能在引擎 Bash 里跑[1]。整包跑完要看 0 FAIL[2]。",
+      "repairPrompt": "# Task: give the footnotes below their verbatim quotes\n\nIn the section you just wrote, the quotes for these ids were missing, or could not be found in their materials' originals. For each id, copy exactly from its material's original a passage that supports those sentences (10–80 characters, not a character changed, not translated, not two places joined together, no ellipsis).\n\n## [S3] marks these sentences:\n- After the whole package has run, look for 0 FAIL[S3].\nThe material's original:\n交付：在 runner 宿主上跑完整包，env -u 清掉会话变量后 0 FAIL。\n\n## Output format\nOne line an id, and only these:\n[id] \"verbatim quote\"\n",
+      "markdown": "The full suite must run on the `runner host`, never in the engine's Bash[1]. After the whole package has run, look for 0 FAIL[2].",
       "footnotes": [
         {
           "kind": "turn",
@@ -1020,7 +1020,7 @@
           "ref": "0199c2a1-0000-7000-8000-000000000001",
           "action": "adopt",
           "into": null,
-          "reason": "owner 原话"
+          "reason": "the owner's words"
         },
         {
           "material": "S2",
@@ -1028,7 +1028,7 @@
           "ref": "0199c2a1-0000-7000-8000-000000000002",
           "action": "filtered",
           "into": null,
-          "reason": "平台自动生成的复查模板消息（项目结算卡片发出），不是 owner 原话"
+          "reason": "a review template message the platform generated (a project's settlement card sends it), not the owner's words"
         },
         {
           "material": "S3",
@@ -1036,7 +1036,7 @@
           "ref": "comment-1",
           "action": "adopt",
           "into": null,
-          "reason": "交付评论"
+          "reason": "a delivery comment"
         },
         {
           "material": "S4",
@@ -1044,7 +1044,7 @@
           "ref": "comment-2",
           "action": "filtered",
           "into": null,
-          "reason": "与 S3 的原文相同，只留一条"
+          "reason": "the same original as S3: kept once"
         },
         {
           "material": "S5",
@@ -1052,7 +1052,7 @@
           "ref": "call-1",
           "action": "merge",
           "into": "S1",
-          "reason": "同一件事"
+          "reason": "the same thing"
         },
         {
           "material": "S6",
@@ -1060,7 +1060,7 @@
           "ref": "turn-lunch",
           "action": "drop",
           "into": null,
-          "reason": "与本节无关"
+          "reason": "unrelated to this section"
         }
       ]
     },
@@ -1369,9 +1369,9 @@
         }
       ],
       "fingerprint": "d4f6c8aac5493ed6d3178420b0b08c5bbd7574c90916ce79c1080776b662421f",
-      "mergePrompt": "# 任务：为文档《会话运行模型》的第 4 节做「归并」：把下面的材料合成这一节要写的「现状」\n\n## 这一节\n第 4 节「调度接口 Scheduler」（接口，约 500 字）：`dispatchTurn` 和 `Scheduler.claim` 怎么领取与投递。\n\n## 材料（D=设计文档章节，C=代码，K=契约，都取自 origin/main；S=会话等一手记录的原文，已脱敏）\n[D1] 设计文档 docs/contract.md § 19.4 `orbit wiki maintain --space <id> [--json]`（L11–L13，origin/main）\n### 19.4 `orbit wiki maintain --space <id> [--json]`\n\nThe run reads its dossiers, writes its entries and advances the cursor.\n\n[C1] 代码 src/scheduler.ts · Scheduler.claim（L8–L11，origin/main）\n```\n  /** Claim the next turn for a runner, or null when there is none. */\n  async claim(runner: string): Promise<string | null> {\n    return this.queue.pop(runner);\n  }\n```\n\n[C2] 代码 src/scheduler.ts（L1–L4，origin/main）\n```\n// The scheduler: claims a session for a runner and hands it the next turn.\nimport { Queue } from './queue';\n\n/** A scheduler of turns. */\n```\n\n[C3] 代码 src/scheduler.ts · Scheduler（L4–L12，origin/main）\n```\n/** A scheduler of turns. */\nexport class Scheduler {\n  constructor(private readonly queue: Queue) {}\n\n  /** Claim the next turn for a runner, or null when there is none. */\n  async claim(runner: string): Promise<string | null> {\n    return this.queue.pop(runner);\n  }\n}\n```\n\n[C4] 代码 src/scheduler.ts · dispatchTurn（L14–L17，origin/main）\n```\n// dispatchTurn hands a claimed turn to its runner exactly once.\nexport function dispatchTurn(turn: string): boolean {\n  return turn !== '';\n}\n```\n\n[C5] 代码 src/scheduler.ts · LEASE_SECONDS（L19–L20，origin/main）\n```\nexport const LEASE_SECONDS = 60;\n\n```\n\n[K1] 契约 contracts/session.contract.json（L1–L4，origin/main）\n{\n  \"name\": \"session\",\n  \"delivery\": \"at least once, idempotent on the turn id\"\n}\n\n## 归并规则（owner 已定）\n1. 同一件事有多条材料时合成一条现状；新决定覆盖旧的。\n2. 证据分量：决定（owner 原话与拍板、判据修订）> 合并记录（合并回执、交付评论）> 命令与测试输出 > 报错原文；同一分量取时间最新的一条。S 材料的标题写了它的证据分量和日期。\n3. 不能当证据：agent 的猜测（「可能」「我怀疑」「估计」）、后来被推翻的说法、与本节无关的材料。\n4. 讲机制的节以设计文档和代码为准；会话材料只用来说明「为什么」「坑」「决策」。代码与文档说法不一致时，以 origin/main 上的代码为准，并把不一致写进现状。\n5. 被推翻的旧说法不进现状；如果它能解释当初为什么这么设计，可以写成「曾经……后来改为……」，并注明新旧两条材料。\n\n## 输出格式\n先逐条写处置，每条材料一行，一条不漏：\n<编号> | 采用 | <一句理由>\n<编号> | 合并到 <编号> | <一句理由>\n<编号> | 舍弃 | <一句理由>\n然后写：\n现状：\n- <一条要点，一句话> [<编号>][<编号>]\n（3–8 条要点，每条标出依据的材料编号）\n",
+      "mergePrompt": "# Task: the \"merge\" for the document «会话运行模型», section 4: combine the materials below into the \"current state\" this section is to write\n\n## This section\nSection 4 «调度接口 Scheduler» (interface, about 500 characters): `dispatchTurn` 和 `Scheduler.claim` 怎么领取与投递。\n\n## Materials (D = a design document's section, C = code, K = a contract, all from origin/main; S = the original words of a session or another first-hand record, redacted)\n[D1] design doc docs/contract.md § 19.4 `orbit wiki maintain --space <id> [--json]` (L11–L13, origin/main)\n### 19.4 `orbit wiki maintain --space <id> [--json]`\n\nThe run reads its dossiers, writes its entries and advances the cursor.\n\n[C1] code src/scheduler.ts · Scheduler.claim (L8–L11, origin/main)\n```\n  /** Claim the next turn for a runner, or null when there is none. */\n  async claim(runner: string): Promise<string | null> {\n    return this.queue.pop(runner);\n  }\n```\n\n[C2] code src/scheduler.ts (L1–L4, origin/main)\n```\n// The scheduler: claims a session for a runner and hands it the next turn.\nimport { Queue } from './queue';\n\n/** A scheduler of turns. */\n```\n\n[C3] code src/scheduler.ts · Scheduler (L4–L12, origin/main)\n```\n/** A scheduler of turns. */\nexport class Scheduler {\n  constructor(private readonly queue: Queue) {}\n\n  /** Claim the next turn for a runner, or null when there is none. */\n  async claim(runner: string): Promise<string | null> {\n    return this.queue.pop(runner);\n  }\n}\n```\n\n[C4] code src/scheduler.ts · dispatchTurn (L14–L17, origin/main)\n```\n// dispatchTurn hands a claimed turn to its runner exactly once.\nexport function dispatchTurn(turn: string): boolean {\n  return turn !== '';\n}\n```\n\n[C5] code src/scheduler.ts · LEASE_SECONDS (L19–L20, origin/main)\n```\nexport const LEASE_SECONDS = 60;\n\n```\n\n[K1] contract contracts/session.contract.json (L1–L4, origin/main)\n{\n  \"name\": \"session\",\n  \"delivery\": \"at least once, idempotent on the turn id\"\n}\n\n## Merge rules (set by the owner)\n1. When several materials are about the same thing, combine them into one current state; a newer decision overrides an older one.\n2. Weight of evidence: decision (the owner's own words and rulings, criterion revisions) > merge record (merge receipts, delivery comments) > command and test output > error text; within one weight, take the newest. An S material's header gives its weight and its date.\n3. Not evidence: an agent's guesses (\"probably\", \"I suspect\", \"my guess is\"), statements later overturned, material unrelated to this section.\n4. A section on a mechanism goes by the design documents and the code; session material only explains \"why\", \"pitfalls\" and \"decisions\". Where the code and a document disagree, the code on origin/main wins, and the disagreement goes into the current state.\n5. A statement that was overturned stays out of the current state; if it explains why the design was once made that way, it may be written as \"it used to be …, and was changed to …\", naming both the old and the new material.\n\n## Output format\nFirst write what becomes of each material, one line a material, leaving none out:\n<id> | adopt | <one sentence of reason>\n<id> | merge into <id> | <one sentence of reason>\n<id> | drop | <one sentence of reason>\nThen write:\nCurrent state:\n- <one point, in one sentence> [<id>][<id>]\n(3–8 points, each marked with the ids of the materials it rests on)\n",
       "state": [
-        "调度 [C2]"
+        "scheduling [C2]"
       ],
       "merged": [
         {
@@ -1392,7 +1392,7 @@
           "text": "### 19.4 `orbit wiki maintain --space <id> [--json]`\n\nThe run reads its dossiers, writes its entries and advances the cursor.",
           "action": "adopt",
           "into": "",
-          "reason": "契约文档",
+          "reason": "the contract document",
           "handed": true
         },
         {
@@ -1413,7 +1413,7 @@
           "text": "  /** Claim the next turn for a runner, or null when there is none. */\n  async claim(runner: string): Promise<string | null> {\n    return this.queue.pop(runner);\n  }",
           "action": "drop",
           "into": "",
-          "reason": "方法太短",
+          "reason": "the method is too short",
           "handed": true
         },
         {
@@ -1434,7 +1434,7 @@
           "text": "// The scheduler: claims a session for a runner and hands it the next turn.\nimport { Queue } from './queue';\n\n/** A scheduler of turns. */",
           "action": "adopt",
           "into": "",
-          "reason": "（合并目标 C9 不是本节交给模型的材料，按采用）目标不在本节",
+          "reason": "(the merge target C9 is no material handed to the model for this section: read as adopt) the target is not in this section",
           "handed": true
         },
         {
@@ -1455,7 +1455,7 @@
           "text": "/** A scheduler of turns. */\nexport class Scheduler {\n  constructor(private readonly queue: Queue) {}\n\n  /** Claim the next turn for a runner, or null when there is none. */\n  async claim(runner: string): Promise<string | null> {\n    return this.queue.pop(runner);\n  }\n}",
           "action": "adopt",
           "into": "",
-          "reason": "归并没有写理由",
+          "reason": "the merge gave no reason",
           "handed": true
         },
         {
@@ -1476,7 +1476,7 @@
           "text": "// dispatchTurn hands a claimed turn to its runner exactly once.\nexport function dispatchTurn(turn: string): boolean {\n  return turn !== '';\n}",
           "action": "adopt",
           "into": "",
-          "reason": "归并没有写这条的处置，按采用交给写作",
+          "reason": "the merge said nothing of this material: adopted and handed to the writing",
           "handed": true
         },
         {
@@ -1497,7 +1497,7 @@
           "text": "export const LEASE_SECONDS = 60;\n",
           "action": "adopt",
           "into": "",
-          "reason": "归并没有写这条的处置，按采用交给写作",
+          "reason": "the merge said nothing of this material: adopted and handed to the writing",
           "handed": true
         },
         {
@@ -1518,14 +1518,14 @@
           "text": "{\n  \"name\": \"session\",\n  \"delivery\": \"at least once, idempotent on the turn id\"\n}",
           "action": "adopt",
           "into": "",
-          "reason": "归并没有写这条的处置，按采用交给写作",
+          "reason": "the merge said nothing of this material: adopted and handed to the writing",
           "handed": true
         }
       ],
-      "writePrompt": "# 任务：写文档《会话运行模型》的第 4 节\n\n## 这篇文档\n- 读者带着的问题：一个会话怎么运转？\n- 写给谁：新加入的开发者：读完能讲清一轮怎么投递；运维\n- 全篇大纲：\n  1. 总览（概述）—— 这篇讲什么。\n  2. turn 怎么投递（流程）—— 一轮 turn 从落库到投递。\n  3. 约定（约定）—— 运行测试的约定。\n  4. 调度接口 Scheduler（接口）—— `dispatchTurn` 和 `Scheduler.claim` 怎么领取与投递。　← 本节\n  5. 数据与配置（数据与配置）—— 数据。\n  6. 通配符来源（流程）—— 来源路径带通配符时读到什么。\n\n## 本节\n「调度接口 Scheduler」（接口，约 500 字）：`dispatchTurn` 和 `Scheduler.claim` 怎么领取与投递。\n\n## 归并后的现状（上一步的结果）\n- 调度 [C2]\n\n## 可用材料（只可引用这些，编号不变）\n[D1] 设计文档 docs/contract.md § 19.4 `orbit wiki maintain --space <id> [--json]`（L11–L13，origin/main）\n### 19.4 `orbit wiki maintain --space <id> [--json]`\n\nThe run reads its dossiers, writes its entries and advances the cursor.\n\n[C2] 代码 src/scheduler.ts（L1–L4，origin/main）\n```\n// The scheduler: claims a session for a runner and hands it the next turn.\nimport { Queue } from './queue';\n\n/** A scheduler of turns. */\n```\n\n[C3] 代码 src/scheduler.ts · Scheduler（L4–L12，origin/main）\n```\n/** A scheduler of turns. */\nexport class Scheduler {\n  constructor(private readonly queue: Queue) {}\n\n  /** Claim the next turn for a runner, or null when there is none. */\n  async claim(runner: string): Promise<string | null> {\n    return this.queue.pop(runner);\n  }\n}\n```\n\n[C4] 代码 src/scheduler.ts · dispatchTurn（L14–L17，origin/main）\n```\n// dispatchTurn hands a claimed turn to its runner exactly once.\nexport function dispatchTurn(turn: string): boolean {\n  return turn !== '';\n}\n```\n\n[C5] 代码 src/scheduler.ts · LEASE_SECONDS（L19–L20，origin/main）\n```\nexport const LEASE_SECONDS = 60;\n\n```\n\n[K1] 契约 contracts/session.contract.json（L1–L4，origin/main）\n{\n  \"name\": \"session\",\n  \"delivery\": \"at least once, idempotent on the turn id\"\n}\n\n## 写法\n- 写成连贯的技术文档段落：先讲是什么，再讲怎么运转、为什么。不要逐条罗列材料，不要写「材料显示」「根据会话记录」这类话。\n- 每个陈述事实的句子，各自在句末标出依据的材料编号，如 [D1] 或 [C2][S3]。「决策与理由」「已知的坑」「约定」这类段落也要逐句标注，不能只在段末标一次。\n- 讲机制（概念、流程、接口、数据、运维）只依据 D/C/K 材料；S 材料只用来讲为什么、已知的坑、决策。\n- 契约和设计文档里的缩写与编号（例如 SR50、PAC §12、G0–G6 这类）第一次出现时，先用半句话说明它指什么，再用；说明不了就不用缩写，直接说它指的那件事。\n- 过渡句、概括句可以不标编号，但不能带出材料里没有的新事实（新的名字、数字、路径、结论）。\n- 不写材料里没有的事实。材料之间有冲突时写现状，必要时用一句话交代变化。\n- 代码名、路径、命令用反引号，照原文写。长度约 500 字。\n\n## 引文\n正文之后另起一行写「引文：」，为正文里用到的每个编号各写一行逐字引文：从该材料原文里原样抄出支撑你那句话的一小段（10–80 字，一字不改，不翻译，不把两处拼在一起，不加省略号）。正文里出现的每一个编号都必须有一行引文。\n[D1] 「……」\n[S3] 「……」\n\n## 输出格式\n只输出下面这些，不要前言：\n### 调度接口 Scheduler\n<正文>\n\n引文：\n[编号] 「逐字引文」\n",
+      "writePrompt": "# Task: write the document «会话运行模型», section 4\n\n## This document\n- The question the reader comes with: 一个会话怎么运转？\n- Written for: 新加入的开发者：读完能讲清一轮怎么投递; 运维\n- The whole document's outline:\n  1. 总览 (overview) — 这篇讲什么。\n  2. turn 怎么投递 (flow) — 一轮 turn 从落库到投递。\n  3. 约定 (conventions) — 运行测试的约定。\n  4. 调度接口 Scheduler (interface) — `dispatchTurn` 和 `Scheduler.claim` 怎么领取与投递。  ← this section\n  5. 数据与配置 (data and configuration) — 数据。\n  6. 通配符来源 (flow) — 来源路径带通配符时读到什么。\n\n## This section\n«调度接口 Scheduler» (interface, about 500 characters): `dispatchTurn` 和 `Scheduler.claim` 怎么领取与投递。\n\n## The current state after the merge (the result of the step before)\n- scheduling [C2]\n\n## The materials you may use (cite only these, by the ids they have)\n[D1] design doc docs/contract.md § 19.4 `orbit wiki maintain --space <id> [--json]` (L11–L13, origin/main)\n### 19.4 `orbit wiki maintain --space <id> [--json]`\n\nThe run reads its dossiers, writes its entries and advances the cursor.\n\n[C2] code src/scheduler.ts (L1–L4, origin/main)\n```\n// The scheduler: claims a session for a runner and hands it the next turn.\nimport { Queue } from './queue';\n\n/** A scheduler of turns. */\n```\n\n[C3] code src/scheduler.ts · Scheduler (L4–L12, origin/main)\n```\n/** A scheduler of turns. */\nexport class Scheduler {\n  constructor(private readonly queue: Queue) {}\n\n  /** Claim the next turn for a runner, or null when there is none. */\n  async claim(runner: string): Promise<string | null> {\n    return this.queue.pop(runner);\n  }\n}\n```\n\n[C4] code src/scheduler.ts · dispatchTurn (L14–L17, origin/main)\n```\n// dispatchTurn hands a claimed turn to its runner exactly once.\nexport function dispatchTurn(turn: string): boolean {\n  return turn !== '';\n}\n```\n\n[C5] code src/scheduler.ts · LEASE_SECONDS (L19–L20, origin/main)\n```\nexport const LEASE_SECONDS = 60;\n\n```\n\n[K1] contract contracts/session.contract.json (L1–L4, origin/main)\n{\n  \"name\": \"session\",\n  \"delivery\": \"at least once, idempotent on the turn id\"\n}\n\n## How to write\n- Write coherent paragraphs of technical documentation: first what it is, then how it works and why. Do not list the materials one by one, and do not write phrases such as \"the materials show\" or \"according to the session records\".\n- Every sentence that states a fact ends with the ids of the materials it rests on, such as [D1] or [C2][S3]. Paragraphs of decisions and reasons, known pitfalls, conventions and the like are marked sentence by sentence too, never only once at the end of the paragraph.\n- A mechanism (concepts, flow, interface, data, operations) rests only on D/C/K materials; S materials only tell why, the known pitfalls and the decisions.\n- An abbreviation or a number from a contract or a design document (such as SR50, PAC §12 or G0–G6) is explained in half a sentence where it first appears, before it is used; if you cannot explain it, do not use the abbreviation, and say directly the thing it stands for.\n- Transition and summary sentences may go without ids, but must not bring in a new fact the materials do not have (a new name, number, path or conclusion).\n- Write no fact the materials do not have. Where materials conflict, write the current state, with a sentence on the change where one is needed.\n- Code names, paths and commands go in backticks, written as in the original. About 500 characters long.\n\n## Quotes\nAfter the body, on a line of its own, write \"Quotes:\", then a line of verbatim quote for each id the body uses: a short passage copied exactly from that material's original that supports your sentence (10–80 characters, not a character changed, not translated, not two places joined together, no ellipsis). Every id that appears in the body must have a line of quote.\n[D1] \"……\"\n[S3] \"……\"\n\n## Output format\nOutput only what follows, with no preamble:\n### 调度接口 Scheduler\n<body>\n\nQuotes:\n[id] \"verbatim quote\"\n",
       "lonely": [],
       "againPrompt": "",
-      "body": "`Scheduler.claim` 领取下一轮[C2]，`dispatchTurn` 只投递一次[C4]【D1, C3】。租约 60 秒[C5]。\n\n**引文：**\n[C2]: 「Claim the next turn for a runner」\n【C4】「hands a claimed turn to its runner exactly once」\n[D1] “The run reads its dossiers”\n- [C5] 『LEASE_SECONDS = 60』",
+      "body": "`Scheduler.claim` claims the next turn[C2], and `dispatchTurn` delivers it only once[C4]【D1, C3】. The lease is 60 seconds[C5].\n\n**Quotes:**\n[C2]: \"Claim the next turn for a runner\"\n【C4】\"hands a claimed turn to its runner exactly once\"\n[D1] “The run reads its dossiers”\n- [C5] 『LEASE_SECONDS = 60』",
       "quotes": {},
       "unfound": [
         "C2",
@@ -1534,8 +1534,8 @@
         "C3",
         "C5"
       ],
-      "repairPrompt": "# 任务：给下面几个脚注补逐字引文\n\n你刚写的一节里，这些编号的引文缺了，或者在材料原文里找不到。请为每个编号从它的材料原文里原样抄出一段支撑那些句子的文字（10–80 字，一字不改，不翻译，不把两处拼在一起，不加省略号）。\n\n## [C2] 标在这些句子上：\n- `Scheduler.claim` 领取下一轮[C2]，`dispatchTurn` 只投递一次[C4]【D1, C3】。\n- [C2]: 「Claim the next turn for a runner」\n材料原文：\n// The scheduler: claims a session for a runner and hands it the next turn.\nimport { Queue } from './queue';\n\n/** A scheduler of turns. */\n\n## [C4] 标在这些句子上：\n- `Scheduler.claim` 领取下一轮[C2]，`dispatchTurn` 只投递一次[C4]【D1, C3】。\n- 【C4】「hands a claimed turn to its runner exactly once」\n材料原文：\n// dispatchTurn hands a claimed turn to its runner exactly once.\nexport function dispatchTurn(turn: string): boolean {\n  return turn !== '';\n}\n\n## [D1] 标在这些句子上：\n- `Scheduler.claim` 领取下一轮[C2]，`dispatchTurn` 只投递一次[C4]【D1, C3】。\n- [D1] “The run reads its dossiers”\n材料原文：\n### 19.4 `orbit wiki maintain --space <id> [--json]`\n\nThe run reads its dossiers, writes its entries and advances the cursor.\n\n## [C3] 标在这些句子上：\n- `Scheduler.claim` 领取下一轮[C2]，`dispatchTurn` 只投递一次[C4]【D1, C3】。\n材料原文：\n/** A scheduler of turns. */\nexport class Scheduler {\n  constructor(private readonly queue: Queue) {}\n\n  /** Claim the next turn for a runner, or null when there is none. */\n  async claim(runner: string): Promise<string | null> {\n    return this.queue.pop(runner);\n  }\n}\n\n## [C5] 标在这些句子上：\n- 租约 60 秒[C5]。\n- - [C5] 『LEASE_SECONDS = 60』\n材料原文：\nexport const LEASE_SECONDS = 60;\n\n\n## 输出格式\n每个编号一行，只输出这些：\n[编号] 「逐字引文」\n",
-      "markdown": "`Scheduler.claim` 领取下一轮[1]，`dispatchTurn` 只投递一次[2][3][4]。租约 60 秒[5]。\n\n**引文：**\n[1]: 「Claim the next turn for a runner」\n[2]「hands a claimed turn to its runner exactly once」\n[3] “The run reads its dossiers”\n- [5] 『LEASE_SECONDS = 60』",
+      "repairPrompt": "# Task: give the footnotes below their verbatim quotes\n\nIn the section you just wrote, the quotes for these ids were missing, or could not be found in their materials' originals. For each id, copy exactly from its material's original a passage that supports those sentences (10–80 characters, not a character changed, not translated, not two places joined together, no ellipsis).\n\n## [C2] marks these sentences:\n- `Scheduler.claim` claims the next turn[C2], and `dispatchTurn` delivers it only once[C4]【D1, C3】.\n- [C2]: \"Claim the next turn for a runner\"\nThe material's original:\n// The scheduler: claims a session for a runner and hands it the next turn.\nimport { Queue } from './queue';\n\n/** A scheduler of turns. */\n\n## [C4] marks these sentences:\n- `Scheduler.claim` claims the next turn[C2], and `dispatchTurn` delivers it only once[C4]【D1, C3】.\n- 【C4】\"hands a claimed turn to its runner exactly once\"\nThe material's original:\n// dispatchTurn hands a claimed turn to its runner exactly once.\nexport function dispatchTurn(turn: string): boolean {\n  return turn !== '';\n}\n\n## [D1] marks these sentences:\n- `Scheduler.claim` claims the next turn[C2], and `dispatchTurn` delivers it only once[C4]【D1, C3】.\n- [D1] “The run reads its dossiers”\nThe material's original:\n### 19.4 `orbit wiki maintain --space <id> [--json]`\n\nThe run reads its dossiers, writes its entries and advances the cursor.\n\n## [C3] marks these sentences:\n- `Scheduler.claim` claims the next turn[C2], and `dispatchTurn` delivers it only once[C4]【D1, C3】.\nThe material's original:\n/** A scheduler of turns. */\nexport class Scheduler {\n  constructor(private readonly queue: Queue) {}\n\n  /** Claim the next turn for a runner, or null when there is none. */\n  async claim(runner: string): Promise<string | null> {\n    return this.queue.pop(runner);\n  }\n}\n\n## [C5] marks these sentences:\n- The lease is 60 seconds[C5].\n- - [C5] 『LEASE_SECONDS = 60』\nThe material's original:\nexport const LEASE_SECONDS = 60;\n\n\n## Output format\nOne line an id, and only these:\n[id] \"verbatim quote\"\n",
+      "markdown": "`Scheduler.claim` claims the next turn[1], and `dispatchTurn` delivers it only once[2][3][4]. The lease is 60 seconds[5].\n\n**Quotes:**\n[1]: \"Claim the next turn for a runner\"\n[2]\"hands a claimed turn to its runner exactly once\"\n[3] “The run reads its dossiers”\n- [5] 『LEASE_SECONDS = 60』",
       "footnotes": [
         {
           "kind": "code",
@@ -1614,7 +1614,7 @@
           "ref": "docs/contract.md#L11-13",
           "action": "adopt",
           "into": null,
-          "reason": "契约文档"
+          "reason": "the contract document"
         },
         {
           "material": "C1",
@@ -1622,7 +1622,7 @@
           "ref": "src/scheduler.ts#L8-11",
           "action": "drop",
           "into": null,
-          "reason": "方法太短"
+          "reason": "the method is too short"
         },
         {
           "material": "C2",
@@ -1630,7 +1630,7 @@
           "ref": "src/scheduler.ts#L1-4",
           "action": "adopt",
           "into": null,
-          "reason": "（合并目标 C9 不是本节交给模型的材料，按采用）目标不在本节"
+          "reason": "(the merge target C9 is no material handed to the model for this section: read as adopt) the target is not in this section"
         },
         {
           "material": "C3",
@@ -1638,7 +1638,7 @@
           "ref": "src/scheduler.ts#L4-12",
           "action": "adopt",
           "into": null,
-          "reason": "归并没有写理由"
+          "reason": "the merge gave no reason"
         },
         {
           "material": "C4",
@@ -1646,7 +1646,7 @@
           "ref": "src/scheduler.ts#L14-17",
           "action": "adopt",
           "into": null,
-          "reason": "归并没有写这条的处置，按采用交给写作"
+          "reason": "the merge said nothing of this material: adopted and handed to the writing"
         },
         {
           "material": "C5",
@@ -1654,7 +1654,7 @@
           "ref": "src/scheduler.ts#L19-20",
           "action": "adopt",
           "into": null,
-          "reason": "归并没有写这条的处置，按采用交给写作"
+          "reason": "the merge said nothing of this material: adopted and handed to the writing"
         },
         {
           "material": "K1",
@@ -1662,7 +1662,7 @@
           "ref": "contracts/session.contract.json#L1-4",
           "action": "adopt",
           "into": null,
-          "reason": "归并没有写这条的处置，按采用交给写作"
+          "reason": "the merge said nothing of this material: adopted and handed to the writing"
         }
       ]
     },
@@ -1716,7 +1716,7 @@
         }
       ],
       "fingerprint": "3b76435187a4042d06c8d0a77983ef028d121826fa3ec0161df3f1d44994c985",
-      "mergePrompt": "# 任务：为文档《会话运行模型》的第 5 节做「归并」：把下面的材料合成这一节要写的「现状」\n\n## 这一节\n第 5 节「数据与配置」（数据与配置，约 200 字）：数据。\n\n## 材料（D=设计文档章节，C=代码，K=契约，都取自 origin/main；S=会话等一手记录的原文，已脱敏）\n[D1] 设计文档 docs/design.md § Design（L1–L1，origin/main）\n# Design\n\n## 归并规则（owner 已定）\n1. 同一件事有多条材料时合成一条现状；新决定覆盖旧的。\n2. 证据分量：决定（owner 原话与拍板、判据修订）> 合并记录（合并回执、交付评论）> 命令与测试输出 > 报错原文；同一分量取时间最新的一条。S 材料的标题写了它的证据分量和日期。\n3. 不能当证据：agent 的猜测（「可能」「我怀疑」「估计」）、后来被推翻的说法、与本节无关的材料。\n4. 讲机制的节以设计文档和代码为准；会话材料只用来说明「为什么」「坑」「决策」。代码与文档说法不一致时，以 origin/main 上的代码为准，并把不一致写进现状。\n5. 被推翻的旧说法不进现状；如果它能解释当初为什么这么设计，可以写成「曾经……后来改为……」，并注明新旧两条材料。\n\n## 输出格式\n先逐条写处置，每条材料一行，一条不漏：\n<编号> | 采用 | <一句理由>\n<编号> | 合并到 <编号> | <一句理由>\n<编号> | 舍弃 | <一句理由>\n然后写：\n现状：\n- <一条要点，一句话> [<编号>][<编号>]\n（3–8 条要点，每条标出依据的材料编号）\n",
+      "mergePrompt": "# Task: the \"merge\" for the document «会话运行模型», section 5: combine the materials below into the \"current state\" this section is to write\n\n## This section\nSection 5 «数据与配置» (data and configuration, about 200 characters): 数据。\n\n## Materials (D = a design document's section, C = code, K = a contract, all from origin/main; S = the original words of a session or another first-hand record, redacted)\n[D1] design doc docs/design.md § Design (L1–L1, origin/main)\n# Design\n\n## Merge rules (set by the owner)\n1. When several materials are about the same thing, combine them into one current state; a newer decision overrides an older one.\n2. Weight of evidence: decision (the owner's own words and rulings, criterion revisions) > merge record (merge receipts, delivery comments) > command and test output > error text; within one weight, take the newest. An S material's header gives its weight and its date.\n3. Not evidence: an agent's guesses (\"probably\", \"I suspect\", \"my guess is\"), statements later overturned, material unrelated to this section.\n4. A section on a mechanism goes by the design documents and the code; session material only explains \"why\", \"pitfalls\" and \"decisions\". Where the code and a document disagree, the code on origin/main wins, and the disagreement goes into the current state.\n5. A statement that was overturned stays out of the current state; if it explains why the design was once made that way, it may be written as \"it used to be …, and was changed to …\", naming both the old and the new material.\n\n## Output format\nFirst write what becomes of each material, one line a material, leaving none out:\n<id> | adopt | <one sentence of reason>\n<id> | merge into <id> | <one sentence of reason>\n<id> | drop | <one sentence of reason>\nThen write:\nCurrent state:\n- <one point, in one sentence> [<id>][<id>]\n(3–8 points, each marked with the ids of the materials it rests on)\n",
       "state": [],
       "merged": [
         {
@@ -1737,14 +1737,14 @@
           "text": "# Design",
           "action": "adopt",
           "into": "",
-          "reason": "归并没有写这条的处置，按采用交给写作",
+          "reason": "the merge said nothing of this material: adopted and handed to the writing",
           "handed": true
         }
       ],
-      "writePrompt": "# 任务：写文档《会话运行模型》的第 5 节\n\n## 这篇文档\n- 读者带着的问题：一个会话怎么运转？\n- 写给谁：新加入的开发者：读完能讲清一轮怎么投递；运维\n- 全篇大纲：\n  1. 总览（概述）—— 这篇讲什么。\n  2. turn 怎么投递（流程）—— 一轮 turn 从落库到投递。\n  3. 约定（约定）—— 运行测试的约定。\n  4. 调度接口 Scheduler（接口）—— `dispatchTurn` 和 `Scheduler.claim` 怎么领取与投递。\n  5. 数据与配置（数据与配置）—— 数据。　← 本节\n  6. 通配符来源（流程）—— 来源路径带通配符时读到什么。\n\n## 本节\n「数据与配置」（数据与配置，约 200 字）：数据。\n\n## 归并后的现状（上一步的结果）\n（无）\n\n## 可用材料（只可引用这些，编号不变）\n[D1] 设计文档 docs/design.md § Design（L1–L1，origin/main）\n# Design\n\n## 写法\n- 写成连贯的技术文档段落：先讲是什么，再讲怎么运转、为什么。不要逐条罗列材料，不要写「材料显示」「根据会话记录」这类话。\n- 每个陈述事实的句子，各自在句末标出依据的材料编号，如 [D1] 或 [C2][S3]。「决策与理由」「已知的坑」「约定」这类段落也要逐句标注，不能只在段末标一次。\n- 讲机制（概念、流程、接口、数据、运维）只依据 D/C/K 材料；S 材料只用来讲为什么、已知的坑、决策。\n- 契约和设计文档里的缩写与编号（例如 SR50、PAC §12、G0–G6 这类）第一次出现时，先用半句话说明它指什么，再用；说明不了就不用缩写，直接说它指的那件事。\n- 过渡句、概括句可以不标编号，但不能带出材料里没有的新事实（新的名字、数字、路径、结论）。\n- 不写材料里没有的事实。材料之间有冲突时写现状，必要时用一句话交代变化。\n- 代码名、路径、命令用反引号，照原文写。长度约 200 字。\n\n## 引文\n正文之后另起一行写「引文：」，为正文里用到的每个编号各写一行逐字引文：从该材料原文里原样抄出支撑你那句话的一小段（10–80 字，一字不改，不翻译，不把两处拼在一起，不加省略号）。正文里出现的每一个编号都必须有一行引文。\n[D1] 「……」\n[S3] 「……」\n\n## 输出格式\n只输出下面这些，不要前言：\n### 数据与配置\n<正文>\n\n引文：\n[编号] 「逐字引文」\n",
+      "writePrompt": "# Task: write the document «会话运行模型», section 5\n\n## This document\n- The question the reader comes with: 一个会话怎么运转？\n- Written for: 新加入的开发者：读完能讲清一轮怎么投递; 运维\n- The whole document's outline:\n  1. 总览 (overview) — 这篇讲什么。\n  2. turn 怎么投递 (flow) — 一轮 turn 从落库到投递。\n  3. 约定 (conventions) — 运行测试的约定。\n  4. 调度接口 Scheduler (interface) — `dispatchTurn` 和 `Scheduler.claim` 怎么领取与投递。\n  5. 数据与配置 (data and configuration) — 数据。  ← this section\n  6. 通配符来源 (flow) — 来源路径带通配符时读到什么。\n\n## This section\n«数据与配置» (data and configuration, about 200 characters): 数据。\n\n## The current state after the merge (the result of the step before)\n(none)\n\n## The materials you may use (cite only these, by the ids they have)\n[D1] design doc docs/design.md § Design (L1–L1, origin/main)\n# Design\n\n## How to write\n- Write coherent paragraphs of technical documentation: first what it is, then how it works and why. Do not list the materials one by one, and do not write phrases such as \"the materials show\" or \"according to the session records\".\n- Every sentence that states a fact ends with the ids of the materials it rests on, such as [D1] or [C2][S3]. Paragraphs of decisions and reasons, known pitfalls, conventions and the like are marked sentence by sentence too, never only once at the end of the paragraph.\n- A mechanism (concepts, flow, interface, data, operations) rests only on D/C/K materials; S materials only tell why, the known pitfalls and the decisions.\n- An abbreviation or a number from a contract or a design document (such as SR50, PAC §12 or G0–G6) is explained in half a sentence where it first appears, before it is used; if you cannot explain it, do not use the abbreviation, and say directly the thing it stands for.\n- Transition and summary sentences may go without ids, but must not bring in a new fact the materials do not have (a new name, number, path or conclusion).\n- Write no fact the materials do not have. Where materials conflict, write the current state, with a sentence on the change where one is needed.\n- Code names, paths and commands go in backticks, written as in the original. About 200 characters long.\n\n## Quotes\nAfter the body, on a line of its own, write \"Quotes:\", then a line of verbatim quote for each id the body uses: a short passage copied exactly from that material's original that supports your sentence (10–80 characters, not a character changed, not translated, not two places joined together, no ellipsis). Every id that appears in the body must have a line of quote.\n[D1] \"……\"\n[S3] \"……\"\n\n## Output format\nOutput only what follows, with no preamble:\n### 数据与配置\n<body>\n\nQuotes:\n[id] \"verbatim quote\"\n",
       "lonely": [],
       "againPrompt": "",
-      "body": "本篇讲设计[D1]。",
+      "body": "This document covers the design[D1].",
       "quotes": {
         "D1": [
           "# Design"
@@ -1752,7 +1752,7 @@
       },
       "unfound": [],
       "repairPrompt": "",
-      "markdown": "本篇讲设计[1]。",
+      "markdown": "This document covers the design[1].",
       "footnotes": [
         {
           "kind": "design_doc",
@@ -1780,7 +1780,7 @@
           "ref": "docs/design.md#L1-1",
           "action": "adopt",
           "into": null,
-          "reason": "归并没有写这条的处置，按采用交给写作"
+          "reason": "the merge said nothing of this material: adopted and handed to the writing"
         }
       ]
     },
@@ -1895,7 +1895,7 @@
           "text": "",
           "action": "filtered",
           "into": "",
-          "reason": "与 D1 的原文相同，只留一条",
+          "reason": "the same original as D1: kept once",
           "handed": false
         },
         {
@@ -1916,14 +1916,14 @@
           "text": "",
           "action": "filtered",
           "into": "",
-          "reason": "与 D1 的原文相同，只留一条",
+          "reason": "the same original as D1: kept once",
           "handed": false
         }
       ],
       "fingerprint": "25f77687af2c29047225e1431ad4db57962fbec1d37b19e415476d43f42cfb5c",
-      "mergePrompt": "# 任务：为文档《会话运行模型》的第 6 节做「归并」：把下面的材料合成这一节要写的「现状」\n\n## 这一节\n第 6 节「通配符来源」（流程，约 300 字）：来源路径带通配符时读到什么。\n\n## 材料（D=设计文档章节，C=代码，K=契约，都取自 origin/main；S=会话等一手记录的原文，已脱敏）\n[D1] 设计文档 docs/*.md § docs/*.md（L1–L1，origin/main）\n\n\n## 归并规则（owner 已定）\n1. 同一件事有多条材料时合成一条现状；新决定覆盖旧的。\n2. 证据分量：决定（owner 原话与拍板、判据修订）> 合并记录（合并回执、交付评论）> 命令与测试输出 > 报错原文；同一分量取时间最新的一条。S 材料的标题写了它的证据分量和日期。\n3. 不能当证据：agent 的猜测（「可能」「我怀疑」「估计」）、后来被推翻的说法、与本节无关的材料。\n4. 讲机制的节以设计文档和代码为准；会话材料只用来说明「为什么」「坑」「决策」。代码与文档说法不一致时，以 origin/main 上的代码为准，并把不一致写进现状。\n5. 被推翻的旧说法不进现状；如果它能解释当初为什么这么设计，可以写成「曾经……后来改为……」，并注明新旧两条材料。\n\n## 输出格式\n先逐条写处置，每条材料一行，一条不漏：\n<编号> | 采用 | <一句理由>\n<编号> | 合并到 <编号> | <一句理由>\n<编号> | 舍弃 | <一句理由>\n然后写：\n现状：\n- <一条要点，一句话> [<编号>][<编号>]\n（3–8 条要点，每条标出依据的材料编号）\n",
+      "mergePrompt": "# Task: the \"merge\" for the document «会话运行模型», section 6: combine the materials below into the \"current state\" this section is to write\n\n## This section\nSection 6 «通配符来源» (flow, about 300 characters): 来源路径带通配符时读到什么。\n\n## Materials (D = a design document's section, C = code, K = a contract, all from origin/main; S = the original words of a session or another first-hand record, redacted)\n[D1] design doc docs/*.md § docs/*.md (L1–L1, origin/main)\n\n\n## Merge rules (set by the owner)\n1. When several materials are about the same thing, combine them into one current state; a newer decision overrides an older one.\n2. Weight of evidence: decision (the owner's own words and rulings, criterion revisions) > merge record (merge receipts, delivery comments) > command and test output > error text; within one weight, take the newest. An S material's header gives its weight and its date.\n3. Not evidence: an agent's guesses (\"probably\", \"I suspect\", \"my guess is\"), statements later overturned, material unrelated to this section.\n4. A section on a mechanism goes by the design documents and the code; session material only explains \"why\", \"pitfalls\" and \"decisions\". Where the code and a document disagree, the code on origin/main wins, and the disagreement goes into the current state.\n5. A statement that was overturned stays out of the current state; if it explains why the design was once made that way, it may be written as \"it used to be …, and was changed to …\", naming both the old and the new material.\n\n## Output format\nFirst write what becomes of each material, one line a material, leaving none out:\n<id> | adopt | <one sentence of reason>\n<id> | merge into <id> | <one sentence of reason>\n<id> | drop | <one sentence of reason>\nThen write:\nCurrent state:\n- <one point, in one sentence> [<id>][<id>]\n(3–8 points, each marked with the ids of the materials it rests on)\n",
       "state": [
-        "来源读成一个空文件 [D1]"
+        "the source reads as an empty file [D1]"
       ],
       "merged": [
         {
@@ -1944,7 +1944,7 @@
           "text": "",
           "action": "adopt",
           "into": "",
-          "reason": "通配符读到的文件",
+          "reason": "the file the wildcard read",
           "handed": true
         },
         {
@@ -1965,7 +1965,7 @@
           "text": "",
           "action": "filtered",
           "into": "",
-          "reason": "与 D1 的原文相同，只留一条",
+          "reason": "the same original as D1: kept once",
           "handed": false
         },
         {
@@ -1986,14 +1986,14 @@
           "text": "",
           "action": "filtered",
           "into": "",
-          "reason": "与 D1 的原文相同，只留一条",
+          "reason": "the same original as D1: kept once",
           "handed": false
         }
       ],
-      "writePrompt": "# 任务：写文档《会话运行模型》的第 6 节\n\n## 这篇文档\n- 读者带着的问题：一个会话怎么运转？\n- 写给谁：新加入的开发者：读完能讲清一轮怎么投递；运维\n- 全篇大纲：\n  1. 总览（概述）—— 这篇讲什么。\n  2. turn 怎么投递（流程）—— 一轮 turn 从落库到投递。\n  3. 约定（约定）—— 运行测试的约定。\n  4. 调度接口 Scheduler（接口）—— `dispatchTurn` 和 `Scheduler.claim` 怎么领取与投递。\n  5. 数据与配置（数据与配置）—— 数据。\n  6. 通配符来源（流程）—— 来源路径带通配符时读到什么。　← 本节\n\n## 本节\n「通配符来源」（流程，约 300 字）：来源路径带通配符时读到什么。\n\n## 归并后的现状（上一步的结果）\n- 来源读成一个空文件 [D1]\n\n## 可用材料（只可引用这些，编号不变）\n[D1] 设计文档 docs/*.md § docs/*.md（L1–L1，origin/main）\n\n\n## 写法\n- 写成连贯的技术文档段落：先讲是什么，再讲怎么运转、为什么。不要逐条罗列材料，不要写「材料显示」「根据会话记录」这类话。\n- 每个陈述事实的句子，各自在句末标出依据的材料编号，如 [D1] 或 [C2][S3]。「决策与理由」「已知的坑」「约定」这类段落也要逐句标注，不能只在段末标一次。\n- 讲机制（概念、流程、接口、数据、运维）只依据 D/C/K 材料；S 材料只用来讲为什么、已知的坑、决策。\n- 契约和设计文档里的缩写与编号（例如 SR50、PAC §12、G0–G6 这类）第一次出现时，先用半句话说明它指什么，再用；说明不了就不用缩写，直接说它指的那件事。\n- 过渡句、概括句可以不标编号，但不能带出材料里没有的新事实（新的名字、数字、路径、结论）。\n- 不写材料里没有的事实。材料之间有冲突时写现状，必要时用一句话交代变化。\n- 代码名、路径、命令用反引号，照原文写。长度约 300 字。\n\n## 引文\n正文之后另起一行写「引文：」，为正文里用到的每个编号各写一行逐字引文：从该材料原文里原样抄出支撑你那句话的一小段（10–80 字，一字不改，不翻译，不把两处拼在一起，不加省略号）。正文里出现的每一个编号都必须有一行引文。\n[D1] 「……」\n[S3] 「……」\n\n## 输出格式\n只输出下面这些，不要前言：\n### 通配符来源\n<正文>\n\n引文：\n[编号] 「逐字引文」\n",
+      "writePrompt": "# Task: write the document «会话运行模型», section 6\n\n## This document\n- The question the reader comes with: 一个会话怎么运转？\n- Written for: 新加入的开发者：读完能讲清一轮怎么投递; 运维\n- The whole document's outline:\n  1. 总览 (overview) — 这篇讲什么。\n  2. turn 怎么投递 (flow) — 一轮 turn 从落库到投递。\n  3. 约定 (conventions) — 运行测试的约定。\n  4. 调度接口 Scheduler (interface) — `dispatchTurn` 和 `Scheduler.claim` 怎么领取与投递。\n  5. 数据与配置 (data and configuration) — 数据。\n  6. 通配符来源 (flow) — 来源路径带通配符时读到什么。  ← this section\n\n## This section\n«通配符来源» (flow, about 300 characters): 来源路径带通配符时读到什么。\n\n## The current state after the merge (the result of the step before)\n- the source reads as an empty file [D1]\n\n## The materials you may use (cite only these, by the ids they have)\n[D1] design doc docs/*.md § docs/*.md (L1–L1, origin/main)\n\n\n## How to write\n- Write coherent paragraphs of technical documentation: first what it is, then how it works and why. Do not list the materials one by one, and do not write phrases such as \"the materials show\" or \"according to the session records\".\n- Every sentence that states a fact ends with the ids of the materials it rests on, such as [D1] or [C2][S3]. Paragraphs of decisions and reasons, known pitfalls, conventions and the like are marked sentence by sentence too, never only once at the end of the paragraph.\n- A mechanism (concepts, flow, interface, data, operations) rests only on D/C/K materials; S materials only tell why, the known pitfalls and the decisions.\n- An abbreviation or a number from a contract or a design document (such as SR50, PAC §12 or G0–G6) is explained in half a sentence where it first appears, before it is used; if you cannot explain it, do not use the abbreviation, and say directly the thing it stands for.\n- Transition and summary sentences may go without ids, but must not bring in a new fact the materials do not have (a new name, number, path or conclusion).\n- Write no fact the materials do not have. Where materials conflict, write the current state, with a sentence on the change where one is needed.\n- Code names, paths and commands go in backticks, written as in the original. About 300 characters long.\n\n## Quotes\nAfter the body, on a line of its own, write \"Quotes:\", then a line of verbatim quote for each id the body uses: a short passage copied exactly from that material's original that supports your sentence (10–80 characters, not a character changed, not translated, not two places joined together, no ellipsis). Every id that appears in the body must have a line of quote.\n[D1] \"……\"\n[S3] \"……\"\n\n## Output format\nOutput only what follows, with no preamble:\n### 通配符来源\n<body>\n\nQuotes:\n[id] \"verbatim quote\"\n",
       "lonely": [],
       "againPrompt": "",
-      "body": "带通配符的来源读成一个空文件[D1]。",
+      "body": "A source with a wildcard reads as an empty file[D1].",
       "quotes": {
         "D1": [
           "docs/*.md"
@@ -2002,8 +2002,8 @@
       "unfound": [
         "D1"
       ],
-      "repairPrompt": "# 任务：给下面几个脚注补逐字引文\n\n你刚写的一节里，这些编号的引文缺了，或者在材料原文里找不到。请为每个编号从它的材料原文里原样抄出一段支撑那些句子的文字（10–80 字，一字不改，不翻译，不把两处拼在一起，不加省略号）。\n\n## [D1] 标在这些句子上：\n- 带通配符的来源读成一个空文件[D1]。\n材料原文：\n\n\n## 输出格式\n每个编号一行，只输出这些：\n[编号] 「逐字引文」\n",
-      "markdown": "带通配符的来源读成一个空文件[1]。",
+      "repairPrompt": "# Task: give the footnotes below their verbatim quotes\n\nIn the section you just wrote, the quotes for these ids were missing, or could not be found in their materials' originals. For each id, copy exactly from its material's original a passage that supports those sentences (10–80 characters, not a character changed, not translated, not two places joined together, no ellipsis).\n\n## [D1] marks these sentences:\n- A source with a wildcard reads as an empty file[D1].\nThe material's original:\n\n\n## Output format\nOne line an id, and only these:\n[id] \"verbatim quote\"\n",
+      "markdown": "A source with a wildcard reads as an empty file[1].",
       "footnotes": [
         {
           "kind": "design_doc",
@@ -2030,7 +2030,7 @@
           "ref": "docs/*.md#L1-1",
           "action": "adopt",
           "into": null,
-          "reason": "通配符读到的文件"
+          "reason": "the file the wildcard read"
         },
         {
           "material": "C1",
@@ -2038,7 +2038,7 @@
           "ref": "src/*.go#L1-1",
           "action": "filtered",
           "into": null,
-          "reason": "与 D1 的原文相同，只留一条"
+          "reason": "the same original as D1: kept once"
         },
         {
           "material": "K1",
@@ -2046,7 +2046,7 @@
           "ref": "contracts/[s]ession.contract.json#L1-1",
           "action": "filtered",
           "into": null,
-          "reason": "与 D1 的原文相同，只留一条"
+          "reason": "the same original as D1: kept once"
         }
       ]
     }
@@ -2055,11 +2055,11 @@
     "key": "s1",
     "fingerprint": "3085247a5a5d17db3bcbaabf19dd2bc15b18d99ce021045cb85c07d1387589a3",
     "sections": [
-      "【第 2 节 turn 怎么投递】\n一轮 turn 先落库再投递，至少投递一次[F1]。runner 通过出站轮询领取工作，不开入站端口[F2]。契约把投递写成至少一次、按 turn id 幂等[F3]。序号在重生后保持单调[F1]，优先级仍是 [P0]。",
-      "【第 3 节 约定】\n全量测试必须在 `runner 宿主` 上跑，不能在引擎 Bash 里跑[F4]。整包跑完要看 0 FAIL[F5]。",
-      "【第 4 节 调度接口 Scheduler】\n`Scheduler.claim` 领取下一轮[F6]，`dispatchTurn` 只投递一次[F7][F8][F9]。租约 60 秒[F10]。\n\n**引文：**\n[F6]: 「Claim the next turn for a runner」\n[F7]「hands a claimed turn to its runner exactly once」\n[F8] “The run reads its dossiers”\n- [F10] 『LEASE_SECONDS = 60』",
-      "【第 5 节 数据与配置】\n本篇讲设计[F11]。",
-      "【第 6 节 通配符来源】\n带通配符的来源读成一个空文件[F12]。"
+      "[Section 2: turn 怎么投递]\nA turn is stored before it is delivered, and delivered at least once[F1]. The runner takes its work by polling outbound, and opens no inbound port[F2]. The contract writes delivery as at least once, idempotent on the turn id[F3]. The sequence stays monotonic across a respawn[F1], and the priority is still [P0].",
+      "[Section 3: 约定]\nThe full suite must run on the `runner host`, never in the engine's Bash[F4]. After the whole package has run, look for 0 FAIL[F5].",
+      "[Section 4: 调度接口 Scheduler]\n`Scheduler.claim` claims the next turn[F6], and `dispatchTurn` delivers it only once[F7][F8][F9]. The lease is 60 seconds[F10].\n\n**Quotes:**\n[F6]: \"Claim the next turn for a runner\"\n[F7]\"hands a claimed turn to its runner exactly once\"\n[F8] “The run reads its dossiers”\n- [F10] 『LEASE_SECONDS = 60』",
+      "[Section 5: 数据与配置]\nThis document covers the design[F11].",
+      "[Section 6: 通配符来源]\nA source with a wildcard reads as an empty file[F12]."
     ],
     "notes": [
       {
@@ -2244,8 +2244,8 @@
         }
       }
     ],
-    "prompt": "# 任务：写文档《会话运行模型》的第 1 节「总览」（概述，约 300 字）\n\n## 这篇文档\n- 读者带着的问题：一个会话怎么运转？\n- 写给谁：新加入的开发者：读完能讲清一轮怎么投递；运维\n- 这一节要概括：这篇讲什么。\n\n## 下文各节已经写好（正文里的 [F编号] 是它们的脚注）\n【第 2 节 turn 怎么投递】\n一轮 turn 先落库再投递，至少投递一次[F1]。runner 通过出站轮询领取工作，不开入站端口[F2]。契约把投递写成至少一次、按 turn id 幂等[F3]。序号在重生后保持单调[F1]，优先级仍是 [P0]。\n\n【第 3 节 约定】\n全量测试必须在 `runner 宿主` 上跑，不能在引擎 Bash 里跑[F4]。整包跑完要看 0 FAIL[F5]。\n\n【第 4 节 调度接口 Scheduler】\n`Scheduler.claim` 领取下一轮[F6]，`dispatchTurn` 只投递一次[F7][F8][F9]。租约 60 秒[F10]。\n\n**引文：**\n[F6]: 「Claim the next turn for a runner」\n[F7]「hands a claimed turn to its runner exactly once」\n[F8] “The run reads its dossiers”\n- [F10] 『LEASE_SECONDS = 60』\n\n【第 5 节 数据与配置】\n本篇讲设计[F11]。\n\n【第 6 节 通配符来源】\n带通配符的来源读成一个空文件[F12]。\n\n## 这些脚注的逐字引文\n[F1] 「A turn is stored before it is delivered」\n[F2] 「keeps the heartbeat going. It never opens an inbound port.」\n[F3] 「\"delivery\": \"at least once, idempotent on the turn id\"」\n[F4] 「全量测试在 runner 宿主上跑」\n[F5] 「在 runner 宿主上跑完整包」\n[F6] （无引文）\n[F7] （无引文）\n[F8] （无引文）\n[F9] （无引文）\n[F10] （无引文）\n[F11] 「# Design」\n[F12] 「docs/*.md」\n\n## 写法\n- 用一两段话告诉读者：这篇讲的东西是什么、怎么运转、读完能知道什么；点出最重要的几件事。\n- 只概括下文已经写了的内容，不引入新事实。每个陈述事实的句子在句末沿用下文该事实所用的 [F编号]，只用上面列出的编号。\n- 不写「本文将介绍」这类空话。\n\n## 输出格式\n只输出下面这些，不要前言：\n### 总览\n<正文>\n",
-    "markdown": "一轮先存后投，至少投递一次[1]。运行约定是全量测试在 runner 宿主上跑[2]。调度只投递一次[3]。",
+    "prompt": "# Task: write the document «会话运行模型», section 1 «总览» (the overview, about 300 characters)\n\n## This document\n- The question the reader comes with: 一个会话怎么运转？\n- Written for: 新加入的开发者：读完能讲清一轮怎么投递; 运维\n- What this section sums up: 这篇讲什么。\n\n## The sections below, already written (the [F<n>] in their text are their footnotes)\n[Section 2: turn 怎么投递]\nA turn is stored before it is delivered, and delivered at least once[F1]. The runner takes its work by polling outbound, and opens no inbound port[F2]. The contract writes delivery as at least once, idempotent on the turn id[F3]. The sequence stays monotonic across a respawn[F1], and the priority is still [P0].\n\n[Section 3: 约定]\nThe full suite must run on the `runner host`, never in the engine's Bash[F4]. After the whole package has run, look for 0 FAIL[F5].\n\n[Section 4: 调度接口 Scheduler]\n`Scheduler.claim` claims the next turn[F6], and `dispatchTurn` delivers it only once[F7][F8][F9]. The lease is 60 seconds[F10].\n\n**Quotes:**\n[F6]: \"Claim the next turn for a runner\"\n[F7]\"hands a claimed turn to its runner exactly once\"\n[F8] “The run reads its dossiers”\n- [F10] 『LEASE_SECONDS = 60』\n\n[Section 5: 数据与配置]\nThis document covers the design[F11].\n\n[Section 6: 通配符来源]\nA source with a wildcard reads as an empty file[F12].\n\n## Those footnotes' verbatim quotes\n[F1] \"A turn is stored before it is delivered\"\n[F2] \"keeps the heartbeat going. It never opens an inbound port.\"\n[F3] \"\"delivery\": \"at least once, idempotent on the turn id\"\"\n[F4] \"全量测试在 runner 宿主上跑\"\n[F5] \"在 runner 宿主上跑完整包\"\n[F6] (no quote)\n[F7] (no quote)\n[F8] (no quote)\n[F9] (no quote)\n[F10] (no quote)\n[F11] \"# Design\"\n[F12] \"docs/*.md\"\n\n## How to write\n- In a paragraph or two, tell the reader what this document is about, how it works and what they will know once they have read it; point out the few most important things.\n- Sum up only what the sections below already say, and bring in no new fact. Every sentence that states a fact ends with the [F<n>] the section below uses for that fact, using only the ids listed above.\n- Write no empty phrases such as \"this document will introduce\".\n\n## Output format\nOutput only what follows, with no preamble:\n### 总览\n<body>\n",
+    "markdown": "A turn is stored first and delivered after, at least once[1]. The convention for running is that the full suite runs on the runner host[2]. Scheduling delivers only once[3].",
     "footnotes": [
       {
         "kind": "design_doc",

@@ -47,7 +47,7 @@ test('the block says who sent the message, in the contract’s words and the pub
     block,
     `<orbit-session-message from-session="${uuidToBase62(SENDER)}" from-title="Worker: criterion 3" `
       + `from-agent="orbit" task="${uuidToBase62(TASK)}">\n`
-      + '这条消息来自另一个 Orbit 会话，不是账号 owner 本人。\n'
+      + 'This message comes from another Orbit session, not from the account owner.\n'
       + '</orbit-session-message>',
   );
 });

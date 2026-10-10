@@ -323,7 +323,7 @@ async function compose(
     const members = group.map((i) => entries[i]);
     names.push(await nameGroup(context, tally, `${at}/name-${g + 1}`, topicTitle, members, names));
   }
-  const lines = groups.map((group, g) => `- ${names[g]}（${group.length} 条）`).join('\n');
+  const lines = groups.map((group, g) => `- ${names[g]} (${count(group.length, 'entry', 'entries')})`).join('\n');
   const top = groups.flatMap((group) => group.slice(0, 2).map((i) => entries[i])).slice(0, WIKI_ARTICLE_RULES.entriesPerArticle);
   const written = await inParallel(groups.length + 1, WIKI_ARTICLES_JOB.parallel, async (i) => {
     if (i === groups.length) {
@@ -421,6 +421,11 @@ async function inParallel<T>(n: number, limit: number, call: (i: number) => Prom
   if (platform !== undefined) throw platform;
   if (failed.length > 0) throw failed[0];
   return results;
+}
+
+/** `1 entry`, `3 entries`: the runner's `wikiCount`. */
+function count(n: number, one: string, many: string): string {
+  return n === 1 ? `1 ${one}` : `${n} ${many}`;
 }
 
 /** What a refusal of the articles' own routes says, in one line: its code and message. */
