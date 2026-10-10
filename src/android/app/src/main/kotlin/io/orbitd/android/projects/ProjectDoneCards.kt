@@ -83,7 +83,7 @@ private fun ProjectDoneQuestion(doc: JsonObject, request: JsonObject?, confirmed
                 Modifier.padding(top = 6.dp).clickable(role = Role.Button) { criteriaOpen = !criteriaOpen }.testTag("$tag-criteria"),
                 style = MaterialTheme.typography.labelMedium, color = accent)
         }
-        Text(ProjectDone.cardTally(counts), Modifier.testTag("$tag-tally"), style = MaterialTheme.typography.labelMedium, color = muted)
+        Text(ProjectDone.cardTally(counts, ProjectDone.mainBranch(doc)), Modifier.testTag("$tag-tally"), style = MaterialTheme.typography.labelMedium, color = muted)
         if (criteriaOpen) DonePanel {
             criteria.forEachIndexed { index, criterion ->
                 if (index > 0) HorizontalDivider()
@@ -91,7 +91,7 @@ private fun ProjectDoneQuestion(doc: JsonObject, request: JsonObject?, confirmed
                     DoneOrdinal("${criterion.ordinal ?: index + 1}")
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Text(criterion.text, style = MaterialTheme.typography.bodySmall)
-                        Text(ProjectDone.criterionState(criterion), style = MaterialTheme.typography.labelMedium, color = muted)
+                        Text(ProjectDone.criterionState(criterion, ProjectDone.mainBranch(doc)), style = MaterialTheme.typography.labelMedium, color = muted)
                     }
                 }
             }

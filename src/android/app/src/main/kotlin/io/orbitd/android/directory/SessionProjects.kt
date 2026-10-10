@@ -6,6 +6,7 @@ import io.orbitd.android.navigation.ObjectId
 import io.orbitd.android.projects.ProjectAttention
 import io.orbitd.android.projects.ProjectPage
 import io.orbitd.android.projects.ProjectTime
+import io.orbitd.android.projects.RunSettings
 import io.orbitd.android.watch.WatchSessionSummary
 import io.orbitd.android.watch.watchKey
 import java.text.Collator
@@ -120,7 +121,8 @@ object SessionProjectGrouping {
                     else -> collator.compare(a.id, b.id)
                 }
             }
-            val landing = SessionProjectCopy.landingLine(summary?.obj("integration"), now)
+            // The row's `mainBranch` (`GET /projects/sidebar`) names the merge and the sync.
+            val landing = SessionProjectCopy.landingLine(summary?.obj("integration"), now, RunSettings.mainBranchName(summary?.text("mainBranch")))
             val held = summary?.obj("attention")?.obj("coordinatorItems")
             val (selected, target) = when {
                 coordinator != null && coordinatorLine?.tone == SessionLine.Tone.APPROVAL -> coordinatorLine to SessionProjectRow.Target.Session(coordinator.id)
@@ -191,7 +193,9 @@ object SessionProjectCopy {
     fun pageNotStarted(tasks: Int) = "Not started · $tasks ${if (tasks == 1) "task" else "tasks"}"
     /** The start row when the coordinator has asked: since when, what it suggests, and the press that opens the start card. */
     fun startAsked(ago: String) = "asked $ago"
-    fun startSuggestion(settings: JsonObject) = "${if (settings.text("line") == "MAIN") "Directly into main" else "Project branch"} · " +
+    /** …directly into the main branch the start opens with, [main] — the suggestion's own when nothing else is read. */
+    fun startSuggestion(settings: JsonObject, main: String = RunSettings.mainBranchName(settings.text("upstreamRef"))) =
+        "${if (settings.text("line") == "MAIN") RunSettings.lineMain(main) else "Project branch"} · " +
         "Automatic ${if (settings.flag("automatic")) "on" else "off"} · ${settings.number("maxConcurrentTasks") ?: 1} at a time"
     const val startReview = "Review and start"
     /** …and when nobody has, beside the owner's own Start…. */
@@ -205,16 +209,16 @@ object SessionProjectCopy {
     /** The project page's landing line, shortened for a row: "Merge to main · queued · 13m", "Landing · checking · 4m · <task>";
      * null when nothing is in flight, and "Landing · N jobs" from a server that sends only the count. A silent runner is said in
      * the state slot, never as a timeout: that is the job's own verdict, the server's to give. */
-    fun landingLine(integration: JsonObject?, now: Instant): SessionLine? {
+    fun landingLine(integration: JsonObject?, now: Instant, main: String = RunSettings.defaultMainBranch): SessionLine? {
         val count = integration?.number("activeJobCount") ?: 0
         val job = integration?.obj("inFlight")
             ?: return if (count > 0) SessionLine("Landing · $count ${if (count == 1) "job" else "jobs"}", SessionLine.Tone.QUEUED) else null
         val running = job.text("state") == "RUNNING"
         val heartbeat = ProjectTime.parse(job.text("heartbeatAt"))
         val silent = running && (heartbeat?.let { ProjectTime.between(it, now) > 600 } ?: true)
-        val word = ProjectPage.integrationJobWords[job.text("kind").orEmpty()] ?: "Integration"
+        val word = ProjectPage.jobWords(main)[job.text("kind").orEmpty()] ?: "Integration"
         val state = if (!running) "queued" else if (silent) landingSilentWord(heartbeat?.let { (max(0.0, ProjectTime.between(it, now)) / 60).toInt() })
-            else ProjectPage.integrationPhaseWords[job.text("phase").orEmpty()] ?: "running"
+            else ProjectPage.phaseWords(main)[job.text("phase").orEmpty()] ?: "running"
         val text = listOfNotNull(if (count > 1) "$word $count jobs" else word, state, ProjectAttention.elapsedLabel(job.text("startedAt"), now),
             if (count > 1) null else job.text("taskTitle")).filter { it.isNotEmpty() }.joinToString(" · ")
         return SessionLine(text, if (running && !silent) SessionLine.Tone.RUNNING else SessionLine.Tone.QUEUED)

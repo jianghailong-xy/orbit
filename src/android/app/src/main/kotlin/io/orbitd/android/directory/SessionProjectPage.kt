@@ -442,7 +442,7 @@ private fun ProgressCard(project: JsonObject?, members: List<DirectorySession>, 
             } else Text((project?.text("status") ?: members.firstOrNull()?.projectMembership?.projectStatus)?.let(SessionProjectCopy::statusLabel) ?: "Project",
                 Modifier.testTag("project-sessions-progress-line"), style = MaterialTheme.typography.labelMedium, color = muted)
         }
-        project?.let { StartProjectCopy.pageRow(it.text("status") ?: "UNKNOWN", ProjectDoc.started(it), state.openItems) }?.let { StartLine(it, openStart) }
+        project?.let { StartProjectCopy.pageRow(it.text("status") ?: "UNKNOWN", ProjectDoc.started(it), state.openItems) }?.let { StartLine(it, state.integration, openStart) }
         // A merge job's line belongs to the merge card, not to tasks landing on the project branch.
         state.integration?.let { ProjectMergeCard.progressLandingLine(it, now, state.integrationReadAt, state.integrationReadFailed) }?.let { line ->
             HorizontalDivider(Modifier.padding(start = 12.dp))
@@ -455,7 +455,7 @@ private fun ProgressCard(project: JsonObject?, members: List<DirectorySession>, 
  * start, since when, what it suggests, and Review and start — or, with none, the owner's own Start…, quiet. Either opens the start
  * card over the page, and only that card's Start starts anything. */
 @Composable
-private fun StartLine(row: StartProjectCopy.PageRow, openStart: (StartSheet) -> Unit) {
+private fun StartLine(row: StartProjectCopy.PageRow, integration: JsonObject?, openStart: (StartSheet) -> Unit) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     Column(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, bottom = 12.dp).testTag("project-sessions-start"), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         when (row) {
@@ -468,8 +468,10 @@ private fun StartLine(row: StartProjectCopy.PageRow, openStart: (StartSheet) -> 
                             Text(SessionProjectCopy.startAsked(it), style = MaterialTheme.typography.labelMedium, color = muted, maxLines = 1)
                         }
                     }
+                    // Directly into the main branch the start card opens with, off the integration read the landing line holds.
                     row.row.obj("startRequest")?.obj("settings")?.let {
-                        Text(SessionProjectCopy.startSuggestion(it), Modifier.padding(start = 15.dp), style = MaterialTheme.typography.labelMedium, color = muted)
+                        Text(SessionProjectCopy.startSuggestion(it, StartProjectCopy.startMainBranch(it.text("upstreamRef"), integration)), Modifier.padding(start = 15.dp),
+                            style = MaterialTheme.typography.labelMedium, color = muted)
                     }
                 }
                 Button(onClick = { openStart(StartSheet.ASKED) }, modifier = Modifier.fillMaxWidth().testTag("project-sessions-review-start")

@@ -102,7 +102,7 @@ internal fun PromotionReceiptSheet(promotion: JsonObject, close: () -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Provenance()
                 PromotionRow("Commit", PromotionCards.mergedLine(promotion))
-                PromotionTasksRow("Now on main", PromotionCards.nowOnMainLine(promotion), PromotionCards.allTaskTitles(promotion))
+                PromotionTasksRow(PromotionCards.nowOn(PromotionCards.mainBranch(promotion)), PromotionCards.nowOnMainLine(promotion), PromotionCards.allTaskTitles(promotion))
                 PromotionRow("Checks", PromotionCards.checksLine(promotion))
                 PromotionRow("Landed", PromotionCards.landsLine(promotion))
                 PromotionCards.changesLine(promotion)?.let { PromotionRow("Changes", it) }
@@ -162,7 +162,7 @@ internal fun PromotionReview(view: JsonObject?, criteriaMet: Pair<Int, Int>?, ho
                         }
                         PromotionStage.MERGED -> {
                             PromotionRow("Commit", PromotionCards.mergedLine(view, now))
-                            PromotionTasksRow("Now on main", PromotionCards.nowOnMainLine(view), PromotionCards.allTaskTitles(view))
+                            PromotionTasksRow(PromotionCards.nowOn(PromotionCards.mainBranch(view)), PromotionCards.nowOnMainLine(view), PromotionCards.allTaskTitles(view))
                             PromotionCards.revertLine(view)?.let { PromotionRow("Undo", it) }
                         }
                         PromotionStage.BLOCKED -> PromotionRow("Why", PromotionCards.blockedLine(view))
@@ -183,7 +183,8 @@ internal fun PromotionReview(view: JsonObject?, criteriaMet: Pair<Int, Int>?, ho
                 when (stage) {
                     PromotionStage.ASKING_YOU -> {
                         Button(onClick = confirm, enabled = pressable && PromotionCards.confirmable(view),
-                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("$tag:CONFIRM_MERGE")) { Text(PromotionCards.mergeToMain) }
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("$tag:CONFIRM_MERGE")) {
+                            Text(view?.let { PromotionCards.mergeTo(PromotionCards.mainBranch(it)) } ?: PromotionCards.mergeToMain) }
                         OutlinedButton(onClick = decline, enabled = pressable,
                             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("$tag:DECLINE_MERGE")) { Text(PromotionCards.notNow) }
                     }

@@ -115,7 +115,7 @@ private fun Asking(view: JsonObject, criteriaMet: Pair<Int, Int>?, tint: Color, 
     }
     Row(Modifier.padding(top = 2.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Button(onClick = { act(merge::confirm) }, enabled = !acting && PromotionCards.confirmable(view),
-            modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("project-merge-card:confirm")) { Text(PromotionCards.mergeToMain) }
+            modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("project-merge-card:confirm")) { Text(PromotionCards.mergeTo(PromotionCards.mainBranch(view))) }
         OutlinedButton(onClick = { act(merge::decline) }, enabled = !acting,
             modifier = Modifier.heightIn(min = 48.dp).testTag("project-merge-card:decline")) { Text(PromotionCards.notNow) }
     }
