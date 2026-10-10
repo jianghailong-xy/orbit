@@ -458,13 +458,22 @@ const ORBIT_SESSION_BRANCHES = 'orbit/';
  * The branches a project's main branch can be chosen from: the local branches the runner reported
  * for the newest session of the project's coordination workspace that reported any
  * (`session.merge_targets` — refreshed on every heartbeat while a session runs and once more when
- * it ends), without Orbit's `orbit/*` session branches. `reportedAt` is when that session's row was
- * last written, which is no earlier than the report.
+ * it ends), without Orbit's `orbit/*` session branches and without this account's project branches.
+ * `reportedAt` is when that session's row was last written, which is no earlier than the report.
+ *
+ * The account's project branches are the `integration_ref` of each binding of the project's owner
+ * that differs from its `upstream_ref`: a line onto a project branch. A landing leaves that branch
+ * behind in the coordination workspace's checkout, and it is never any project's main branch —
+ * chosen, the project would merge into another project's branch. A line straight onto main has the
+ * main branch itself for its `integration_ref`, so that branch stays, and so does a branch that is
+ * only named `project/…`.
  *
  * Newest by creation rather than by last report, so the read walks the workspace's
  * `(workspace_id, created_at DESC)` index and stops at the first session with a report: the row
  * that reads this polls, and a coordination workspace can hold thousands of sessions, all of them
- * reporting the same repository. Null when no session there has reported a branch, or the project
+ * reporting the same repository. The account's project branches are read in the same statement,
+ * once, through `project_codebase_owner_idx`, and each reported name is compared against them
+ * there. Null when no session there has reported a branch, when none is left, or when the project
  * has no coordination workspace.
  */
 export async function readBranchCandidates(
@@ -476,7 +485,16 @@ export async function readBranchCandidates(
     workspaceName: string;
     reportedAt: Date;
   }>>(Prisma.sql`
-    SELECT s."merge_targets" AS "names", w."name" AS "workspaceName", s."updated_at" AS "reportedAt"
+    SELECT ARRAY(
+             SELECT b."name"
+               FROM unnest(s."merge_targets") WITH ORDINALITY AS b("name", "ord")
+              WHERE ('refs/heads/' || b."name") <> ALL (ARRAY(
+                      SELECT c."integration_ref"
+                        FROM "project_codebase" c
+                       WHERE c."owner_id" = p."owner_id"
+                         AND c."integration_ref" <> c."upstream_ref"))
+              ORDER BY b."ord") AS "names",
+           w."name" AS "workspaceName", s."updated_at" AS "reportedAt"
       FROM "project" p
       JOIN "workspace" w ON w."id" = p."coordinator_workspace_id"
       JOIN LATERAL (

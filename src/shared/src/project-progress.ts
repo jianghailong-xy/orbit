@@ -76,7 +76,8 @@ export interface ProjectLastMainBranch<Instant = string> {
 /**
  * The branches a project's main branch can be chosen from (§1.6): the local branches the runner
  * last reported for a session of the project's coordination workspace (`session.merge_targets`),
- * without Orbit's own `orbit/*` session branches.
+ * without Orbit's own `orbit/*` session branches and without the account's project branches (the
+ * branch each of its projects on a project branch integrates into).
  */
 export interface ProjectBranchCandidates<Instant = string> {
   names: string[];
