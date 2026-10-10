@@ -366,4 +366,29 @@ final class NeedsYouLogicTests: XCTestCase {
         XCTAssertEqual(NeedsYouLogic.banner(waiting: [row])?.text,
                        "Approve merge to main · Integration line")
     }
+
+    /// A merge approval names the branch it asks to merge into: the item's project's main branch, as
+    /// `GET /sessions` and `session.updated` carry it (`ownerItems[].mainBranch`) — and main for an
+    /// item that names none (no repository bound, or an older server).
+    func testAMergeApprovalNamesTheProjectsMainBranch() throws {
+        let json = """
+        {"id":"c1","status":"RUNNING","pendingApprovals":1,"projectTitle":"Payments",
+         "ownerItems":[{"itemId":"i1","kind":"PROMOTION_APPROVAL","title":"Merge 3 tasks into master?",
+                        "since":"2026-09-13T10:00:00Z","mainBranch":"master"}]}
+        """
+        let row = try JSONDecoder().decode(Session.self, from: Data(json.utf8))
+        XCTAssertEqual(row.ownerItems?.first?.mainBranch, "master")
+        XCTAssertEqual(NeedsYouLogic.banner(waiting: [row])?.text, "Approve merge to master · Payments")
+        XCTAssertEqual(NeedsYouLogic.oldestItemWord(row.ownerItems), "Approve merge to master")
+
+        let unbound = try JSONDecoder().decode(Session.self, from: Data(
+            json.replacingOccurrences(of: #""mainBranch":"master""#, with: #""mainBranch":null"#).utf8))
+        XCTAssertNil(unbound.ownerItems?.first?.mainBranch)
+        XCTAssertEqual(NeedsYouLogic.banner(waiting: [unbound])?.text, "Approve merge to main · Payments")
+        // A branch this build cannot read costs the branch, never the row it arrived on.
+        let garbled = try JSONDecoder().decode(Session.self, from: Data(
+            json.replacingOccurrences(of: #""mainBranch":"master""#, with: #""mainBranch":7"#).utf8))
+        XCTAssertEqual(garbled.ownerItems?.first?.kind, .promotionApproval)
+        XCTAssertEqual(NeedsYouLogic.banner(waiting: [garbled])?.text, "Approve merge to main · Payments")
+    }
 }

@@ -655,6 +655,60 @@ final class ProjectPageTests: XCTestCase {
                        "Update unavailable")
     }
 
+    // MARK: The project's main branch, by name
+
+    /// Where the page says work goes, it names the project's main branch: the integration read's
+    /// `upstreamRef` for the landing row, its jobs and the line row's facts, and the branch its host
+    /// hands the lanes and the criteria. A read that names none says main, as it always did.
+    func testThePageNamesTheProjectsMainBranch() throws {
+        let merging = ProjectIntegrationView(upstreamRef: "master", inFlight: .init(
+            state: "RUNNING", startedAt: iso(80), kind: "LAND_PROMOTION", phase: "MAIN_SYNC", heartbeatAt: iso(0)))
+        let line = try XCTUnwrap(ProjectPage.landingLine(merging, now: Self.now, updatedAt: Self.now))
+        XCTAssertEqual(line.word, "Merge to master")
+        XCTAssertEqual(line.state, "syncing master")
+        let unnamed = ProjectIntegrationView(inFlight: merging.inFlight)
+        XCTAssertEqual(ProjectPage.landingLine(unnamed, now: Self.now, updatedAt: Self.now)?.word, "Merge to main")
+        XCTAssertEqual(ProjectPage.landingLine(unnamed, now: Self.now, updatedAt: Self.now)?.state, "syncing main")
+
+        // The jobs a press on the row lists, and where a timed-out one stopped.
+        let jobs = ProjectIntegrationView(upstreamRef: "master", inFlight: merging.inFlight, inFlightJobs: [
+            job("j-sync", phase: "MAIN_SYNC", started: 6_630, heartbeat: 6_620, timedOut: true),
+            job("j-merge", kind: "LAND_PROMOTION", state: "QUEUED", phase: nil, taskId: nil, title: nil,
+                started: 2_468, queued: 2_468, heartbeat: nil, runner: nil, limit: nil),
+        ])
+        let lines = ProjectPage.landingJobLines(jobs, now: Self.now, updatedAt: Self.now)
+        XCTAssertEqual(lines.first?.detail?.hasSuffix("stopped at syncing master · no push recorded"), true)
+        XCTAssertEqual(lines.last?.line.word, "Merge to master")
+
+        // The Work overview's lanes and the criteria, by the branch their host passes.
+        let b = ProjectPanoramaBuckets(running: 0, ready: 0, blocked: 0, done: 5, integrating: 1,
+                                       onIntegrationLine: 2, onUpstream: 2, doneNotIntegrated: 0)
+        let cells = ProjectPage.overviewCells(b, taskCount: 5, line: .projectBranch, main: "master")
+        XCTAssertEqual(cells.first { $0.key == "onIntegrationLine" }?.footnote, "not on master yet")
+        XCTAssertEqual(cells.first { $0.key == "onUpstream" }?.label, "On master")
+        XCTAssertEqual(cells.first { $0.key == "onUpstream" }?.footnote, "landed on master")
+        XCTAssertEqual(ProjectPage.overviewCells(b, taskCount: 5, line: .projectBranch)
+                        .first { $0.key == "onUpstream" }?.label, "On main")
+        let landed = ProjectCriterion(id: "c1", ordinal: 1, text: "A", satisfied: true, landing: "LANDED")
+        let onBranch = ProjectCriterion(id: "c2", ordinal: 2, text: "B", satisfied: true,
+                                        landing: "ON_INTEGRATION_LINE")
+        XCTAssertEqual(ProjectPage.criterionWork(landed, integrationRef: nil, main: "master")?.landing, "on master")
+        XCTAssertEqual(ProjectPage.criterionWork(onBranch, integrationRef: "project/x", main: "master")?.landingWarning,
+                       "not on master yet")
+
+        // The line row's facts and a landed task's tag.
+        let branch = ProjectIntegrationView(line: .projectBranch, ref: "project/x", upstreamRef: "master",
+                                            commitsAheadOfUpstream: 1, lastUpstreamSyncAt: iso(720))
+        let facts = try XCTUnwrap(ProjectPage.integrationFacts(branch, now: Self.now))
+        XCTAssertEqual(Array(facts.prefix(3)), ["project/x", "1 commit ahead of master at last measurement",
+                                                "synced with master 12m ago"])
+        XCTAssertEqual(ProjectPage.integrationFacts(ProjectIntegrationView(line: .main, upstreamRef: "master"),
+                                                    now: Self.now)?.first, "master")
+        let onUpstream = ProjectTaskRow(id: "t", title: "t", integration: .init(state: "ON_UPSTREAM"))
+        XCTAssertEqual(ProjectPage.integrationTag(onUpstream, ref: nil, upstreamRef: "master")?.text, "On master")
+        XCTAssertEqual(ProjectPage.integrationTag(onUpstream, ref: nil, upstreamRef: nil)?.text, "On main")
+    }
+
     // MARK: Tasks
 
     func testUnfinishedWorkKeepsItsWorkLaneDespiteAnEarlierLanding() {
