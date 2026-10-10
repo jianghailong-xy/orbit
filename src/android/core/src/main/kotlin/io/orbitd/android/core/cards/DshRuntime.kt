@@ -13,8 +13,6 @@ import kotlinx.serialization.json.booleanOrNull
 object DshRuntime {
     /** The engine's own name, as a session's `engine` and a runner's engine report say it. */
     const val ENGINE = "dsh"
-    /** The preset a Harness key was connected from; the web's form for it is where a key is connected. */
-    const val PRESET_SLUG = "deepseek-harness"
     /** The heartbeat capability the server requires before it creates, resumes or hands out a Harness session. */
     const val RUNNER_CAPABILITY = "provider:dsh"
     /** What a `!` command gets on Harness, which has no shell bridge: the command stays in the composer rather than going out to fail. */
@@ -48,10 +46,9 @@ object DshRuntime {
 
     /** What went wrong in a Harness session, when the runner's or the server's message says so, and what its repair card says. */
     enum class Repair(private val title: String, val detail: String) {
-        NEEDS_KEY("DeepSeek Harness needs an API key",
-            "This session has no DeepSeek Harness key to run on. Add or re-enable the key in Infrastructure, then send your message again."),
-        INVALID_KEY("DeepSeek rejected this API key",
-            "Update the key in Infrastructure, then send your message again. Connecting a key does not check it — the first request does."),
+        NEEDS_KEY("DeepSeek Harness needs a DeepSeek key",
+            "This session has no DeepSeek key to run on. Add or re-enable a DeepSeek key in Infrastructure, then send your message again."),
+        INVALID_KEY("DeepSeek rejected this API key", "Update the DeepSeek key in Infrastructure, then send your message again."),
         UPDATE_RUNNER("Waiting for a newer runner", "This runner predates DeepSeek Harness. It updates itself when no session is running on it."),
         NOT_INSTALLED("DeepSeek Harness isn't installed on this runner", "Install it from Infrastructure, then send your message again."),
         UNSUPPORTED_PLATFORM("DeepSeek Harness can't run on this runner",

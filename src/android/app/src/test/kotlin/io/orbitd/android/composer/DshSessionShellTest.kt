@@ -73,7 +73,7 @@ class DshSessionShellTest : ComposerShellTest() {
             "(request_id: 64d2f58d-15e2-4744-aafd-d463abb21741) ")
         signIn(); openSession()
         awaitText("DeepSeek rejected this API key")
-        assertTrue(shows("Update the key in Infrastructure, then send your message again. Connecting a key does not check it — the first request does."))
+        assertTrue(shows("Update the DeepSeek key in Infrastructure, then send your message again."))
         assertFalse("the card stands in for the runner's line", has(hasText("Authentication Fails", substring = true)))
         compose.onNode(hasText("Update the API key") and hasClickAction()).performScrollTo().performClick()
         await { shadowOf(compose.activity).peekNextStartedActivity() != null }
@@ -92,8 +92,8 @@ class DshSessionShellTest : ComposerShellTest() {
             "presetSlug":"deepseek","engines":["claude","opencode","dsh"]}]""".encodeToByteArray()) }
         failure("DSH_CREDENTIAL_MISSING: configure a DeepSeek Harness API key")
         signIn(); openSession()
-        awaitText("DeepSeek Harness needs an API key")
-        assertTrue(shows("This session has no DeepSeek Harness key to run on. Add or re-enable the key in Infrastructure, then send your message again."))
+        awaitText("DeepSeek Harness needs a DeepSeek key")
+        assertTrue(shows("This session has no DeepSeek key to run on. Add or re-enable a DeepSeek key in Infrastructure, then send your message again."))
         compose.onNode(hasText("Update the API key") and hasClickAction()).performScrollTo().performClick()
         await { shadowOf(compose.activity).peekNextStartedActivity() != null }
         assertEquals("https://a07c.test/infrastructure#keys", shadowOf(compose.activity).nextStartedActivity.dataString)
@@ -132,7 +132,7 @@ class DshSessionShellTest : ComposerShellTest() {
         failure("DSH_CREDENTIAL_MISSING: configure a DeepSeek Harness API key")
         signIn(); openSession()
         awaitText("DSH_CREDENTIAL_MISSING: configure a DeepSeek Harness API key")
-        assertFalse(shows("DeepSeek Harness needs an API key"))
+        assertFalse(shows("DeepSeek Harness needs a DeepSeek key"))
     }
 
     @Test fun aShellCommandOnHarnessStaysInTheComposerWithWhy() {
