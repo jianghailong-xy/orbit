@@ -221,11 +221,13 @@ public struct LoginWaysIn: Equatable, Sendable {
 
     /// - card: how the card's account got in last time; nil for the full form (no remembered account,
     ///   or "Use another account").
-    /// - methods: what the page's server offers, `.passwordOnly` until it has answered, so Google is
-    ///   never offered before, or without, that server's yes.
-    /// - answered: whether `methods` is that server's own answer yet.
+    /// - methods: what the page's server offers (`.passwordOnly` for a server that can't say).
+    /// - answered: whether `methods` is the page's own server's answer yet. Google is never offered
+    ///   before, or without, that server's yes — not even another server's for the moment after a
+    ///   switch.
     public static func offered(card: RememberedAccount.Method?, methods: SignInMethods,
                                answered: Bool) -> LoginWaysIn {
+        let google = answered && methods.google
         switch card {
         case .password:
             return LoginWaysIn(password: true, google: false)
@@ -233,10 +235,9 @@ public struct LoginWaysIn: Equatable, Sendable {
             // Nothing while the server is asked, rather than a password field that would vanish;
             // the password when the server doesn't offer Google, or can't be reached.
             guard answered else { return LoginWaysIn(password: false, google: false) }
-            return methods.google ? LoginWaysIn(password: false, google: true)
-                                  : LoginWaysIn(password: true, google: false)
+            return LoginWaysIn(password: !google, google: google)
         case .unknown, nil:
-            return LoginWaysIn(password: true, google: methods.google)
+            return LoginWaysIn(password: true, google: google)
         }
     }
 }

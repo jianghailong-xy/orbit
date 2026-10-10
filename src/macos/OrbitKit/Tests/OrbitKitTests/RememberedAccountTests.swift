@@ -279,10 +279,13 @@ final class RememberedAccountTests: XCTestCase {
             XCTAssertTrue(both.or)
             XCTAssertEqual(LoginWaysIn.offered(card: card, methods: .passwordOnly, answered: false),
                            LoginWaysIn(password: true, google: false))
+            XCTAssertEqual(LoginWaysIn.offered(card: card, methods: .passwordOnly, answered: true),
+                           LoginWaysIn(password: true, google: false))
         }
     }
 
-    /// GoogleSignInWiringTests' rule, kept under the card: no Google before, or without, the server's yes.
+    /// GoogleSignInWiringTests' rule, kept under the card: no Google before, or without, the server's
+    /// yes — and an answer that isn't this server's (the one before a switch) is no yes.
     func testGoogleIsNeverOfferedWithoutTheServersYes() {
         let noGoogle = [SignInMethods.passwordOnly, SignInMethods(password: true, google: false, googleSignup: true)]
         for card in [RememberedAccount.Method.password, .google, .unknown, nil] {
@@ -292,6 +295,8 @@ final class RememberedAccountTests: XCTestCase {
                                    "\(String(describing: card)) \(methods) answered=\(answered)")
                 }
             }
+            XCTAssertFalse(LoginWaysIn.offered(card: card, methods: google, answered: false).google,
+                           "\(String(describing: card)): another server's yes")
         }
     }
 }
