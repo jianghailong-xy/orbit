@@ -256,23 +256,26 @@ export function stopSessionIdFor(
  * something going, the pick cannot touch it and lands on the next turn; with nothing going, the
  * next message is the next turn. Null when there is nothing to say, which includes picking what is
  * already running: that is not a switch.
+ *
+ * Said by the credentials' names, and with "uses": the engine stays — a session's engine never
+ * changes — and only the credential it spends moves (board 5 ②).
  */
 export function providerSwitchNote({
   from,
   to,
   liveRun,
 }: {
-  /** What the session/run is on now, or null when this end does not know. */
+  /** The credential the session/run is on now, by its name, or null when this end does not know. */
   from: string | null;
-  /** What the reader just picked. */
+  /** The credential the reader just picked, by its name. */
   to: string;
   /** A run of this task is going right now. */
   liveRun: boolean;
 }): string | null {
   if (!from || !to || from === to) return null;
   return liveRun
-    ? `The turn in flight finishes on ${from}. Your next one runs on ${to}.`
-    : `Your next message runs on ${to}.`;
+    ? `The turn in flight finishes on ${from}. Your next one uses ${to}.`
+    : `Your next message uses ${to}.`;
 }
 
 export interface TaskRunEntryView {

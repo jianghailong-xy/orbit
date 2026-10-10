@@ -128,9 +128,12 @@ export interface NeverStartedFacts {
 
 export interface NeverStartedInput {
   session: NeverStartedSession & { engineStartedAt?: string | null };
-  /** The built-in runtime that would execute this session (`runtimeForProvider`), for the
+  /** The engine that would execute this session — its own, recorded at its creation — for the
    *  engine-named sentences below. */
   runtime: string;
+  /** The key the session runs on, as a sentence names it (`the DeepSeek key “DeepSeek 2”`,
+   *  sessionProviderChoices' keyName), for the sentence about a key its vendor rejected. */
+  keyName?: string | null;
   /** The machine, as the user named it — the repair cards' `runnerName`. */
   runnerName?: string | null;
 }
@@ -166,11 +169,12 @@ const MACHINE_COPY = {
   unsupportedWhy: (machine: string) => `DeepSeek Harness can’t run on ${machine}`, // DshRepairCard
   unsupportedBody:
     'DeepSeek Harness 0.2.0-rc.2 runs on Linux x64 runners with Node 26 only. Move this work to a runner that can.',
-  dshKeyWhy: 'DeepSeek Harness needs an API key', // DshRepairCard
-  dshKeyBody: 'This session has no DeepSeek Harness key to run on. Add or re-enable the key in Infrastructure, then send your message again.',
+  dshKeyWhy: 'DeepSeek Harness needs a DeepSeek key', // DshRepairCard
+  dshKeyBody: 'This session has no DeepSeek key to run on. Add or re-enable a DeepSeek key in Infrastructure, then send your message again.',
   dshBadKeyWhy: 'DeepSeek rejected this API key', // DshRepairCard
-  dshBadKeyBody:
-    'Update the key in Infrastructure, then send your message again. Connecting a key does not check it — the first request does.',
+  /** DshRepairCard's, naming the key when the session's is known. */
+  dshBadKeyBody: (keyName: string | null | undefined) =>
+    `Update ${keyName ?? 'the DeepSeek key'} in Infrastructure, then send your message again.`,
   antigravityAuthWhy: 'Antigravity needs authentication', // AntigravityRepairCard
   antigravityAuthBody:
     'Sign in with Google on this runner, or connect a Gemini API key in Infrastructure.',
@@ -282,7 +286,7 @@ function machineCause(input: NeverStartedInput, error: string): NeverStartedFact
       subject: null,
       detail: null,
       why: bad ? MACHINE_COPY.dshBadKeyWhy : MACHINE_COPY.dshKeyWhy,
-      body: bad ? MACHINE_COPY.dshBadKeyBody : MACHINE_COPY.dshKeyBody,
+      body: bad ? MACHINE_COPY.dshBadKeyBody(input.keyName) : MACHINE_COPY.dshKeyBody,
       next: null,
       actions: ['open-providers', task ? 'start-again' : 'send-again'],
       foot: MACHINE_COPY.waitingFoot,

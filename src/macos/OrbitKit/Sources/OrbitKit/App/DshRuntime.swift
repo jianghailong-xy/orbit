@@ -81,7 +81,7 @@ public enum DshRuntime {
 
         public var title: String {
             switch self {
-            case .needsKey: return "DeepSeek Harness needs an API key"
+            case .needsKey: return "DeepSeek Harness needs a DeepSeek key"
             case .invalidKey: return "DeepSeek rejected this API key"
             case .updateRunner: return "Waiting for a newer runner"
             case .notInstalled: return "DeepSeek Harness isn't installed on this runner"
@@ -89,12 +89,17 @@ public enum DshRuntime {
             }
         }
 
-        public var detail: String {
+        public var detail: String { detail(keyName: nil) }
+
+        /// The same, naming the session's key where the caller knows it — as a sentence names it,
+        /// `the DeepSeek key “DeepSeek 2”` (web `keyName`): one DeepSeek key runs on Claude Code, OpenCode
+        /// and Harness alike, and there can be several, so neither the engine nor "the key" says which.
+        public func detail(keyName: String?) -> String {
             switch self {
             case .needsKey:
-                return "This session has no DeepSeek Harness key to run on. Add or re-enable the key in Infrastructure, then send your message again."
+                return "This session has no DeepSeek key to run on. Add or re-enable a DeepSeek key in Infrastructure, then send your message again."
             case .invalidKey:
-                return "Update the key in Infrastructure, then send your message again. Connecting a key does not check it — the first request does."
+                return "Update \(keyName ?? "the DeepSeek key") in Infrastructure, then send your message again."
             case .updateRunner:
                 return "This runner predates DeepSeek Harness. It updates itself when no session is running on it."
             case .notInstalled: return "Install it from Infrastructure, then send your message again."

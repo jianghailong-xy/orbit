@@ -5,7 +5,7 @@ import {
   localStatusRows,
   openSlash,
   pickSlash,
-  slashAssetMatchesProvider,
+  slashAssetMatchesEngine,
   slashCommandName,
   slashMatches,
   slashToken,
@@ -34,14 +34,14 @@ describe('slashCommands', () => {
     expect(supportsRunnerSlashAssets('opencode')).toBe(false);
     expect(supportsRunnerSlashAssets('codex')).toBe(false);
     expect(supportsRunnerSlashAssets('claude')).toBe(true);
-    expect(slashAssetMatchesProvider(undefined, 'opencode')).toBe(false);
-    expect(slashAssetMatchesProvider('claude', 'opencode')).toBe(false);
+    expect(slashAssetMatchesEngine(undefined, 'opencode')).toBe(false);
+    expect(slashAssetMatchesEngine('claude', 'opencode')).toBe(false);
   });
 
   it('treats Antigravity slash input as a prompt too — agy runs with its slash commands off', () => {
     expect(supportsRunnerSlashAssets('antigravity')).toBe(false);
-    expect(slashAssetMatchesProvider(undefined, 'antigravity')).toBe(false);
-    expect(slashAssetMatchesProvider('claude', 'antigravity')).toBe(false);
+    expect(slashAssetMatchesEngine(undefined, 'antigravity')).toBe(false);
+    expect(slashAssetMatchesEngine('claude', 'antigravity')).toBe(false);
   });
 
   it('reads slash-led prose as text, not as a command', () => {
@@ -73,20 +73,37 @@ describe('slashCommands', () => {
     expect(supportsRunnerSlashAssets('claude')).toBe(true);
   });
 
-  it('keeps runtime slash registries isolated by provider', () => {
-    expect(slashAssetMatchesProvider(undefined, 'claude')).toBe(true);
-    expect(slashAssetMatchesProvider('claude', 'claude')).toBe(true);
-    expect(slashAssetMatchesProvider('kimi', 'claude')).toBe(false);
+  it('keeps each engine’s slash registry to itself', () => {
+    expect(slashAssetMatchesEngine(undefined, 'claude')).toBe(true);
+    expect(slashAssetMatchesEngine('claude', 'claude')).toBe(true);
+    expect(slashAssetMatchesEngine('kimi', 'claude')).toBe(false);
 
-    expect(slashAssetMatchesProvider('kimi', 'kimi')).toBe(true);
-    expect(slashAssetMatchesProvider(undefined, 'kimi')).toBe(false);
-    expect(slashAssetMatchesProvider('claude', 'kimi')).toBe(false);
+    expect(slashAssetMatchesEngine('kimi', 'kimi')).toBe(true);
+    expect(slashAssetMatchesEngine(undefined, 'kimi')).toBe(false);
+    expect(slashAssetMatchesEngine('claude', 'kimi')).toBe(false);
 
-    expect(slashAssetMatchesProvider(undefined, 'codex')).toBe(false);
-    expect(slashAssetMatchesProvider('kimi', 'codex')).toBe(false);
-    // Configured providers use the Claude runtime and inherit legacy untagged assets.
-    expect(slashAssetMatchesProvider(undefined, 'moonshot')).toBe(true);
-    expect(slashAssetMatchesProvider('kimi', 'moonshot')).toBe(false);
+    expect(slashAssetMatchesEngine(undefined, 'codex')).toBe(false);
+    expect(slashAssetMatchesEngine('kimi', 'codex')).toBe(false);
+  });
+
+  it('asks the session’s engine, never its provider’s slug', () => {
+    // A key's slug names no engine. Read as one, a Moonshot key's session (on Kimi Code) got Claude's
+    // commands, and a Responses key's session (on Codex) a registry Codex does not have: the caller
+    // hands over the engine the session records instead.
+    expect(supportsRunnerSlashAssets('kimi')).toBe(true);
+    expect(slashAssetMatchesEngine('kimi', 'kimi')).toBe(true);
+    expect(slashAssetMatchesEngine(undefined, 'kimi')).toBe(false);
+    // DeepSeek Harness has none of its own; the same DeepSeek key on Claude Code has Claude Code's.
+    expect(supportsRunnerSlashAssets('dsh')).toBe(false);
+    expect(slashAssetMatchesEngine('claude', 'dsh')).toBe(false);
+    expect(slashAssetMatchesEngine(undefined, 'claude')).toBe(true);
+  });
+
+  it('says which engine and which credential the session runs on in /status', () => {
+    const rows = localStatusRows({ surface: 'Web', engine: 'DeepSeek Harness', provider: 'DeepSeek 2' });
+    expect(rows).toContainEqual({ label: 'Engine', value: 'DeepSeek Harness' });
+    expect(rows).toContainEqual({ label: 'Provider', value: 'DeepSeek 2' });
+    expect(rows.findIndex((row) => row.label === 'Engine')).toBeLessThan(rows.findIndex((row) => row.label === 'Provider'));
   });
 
   it("ranks the CLI's built-in registry below the user's own assets", () => {
