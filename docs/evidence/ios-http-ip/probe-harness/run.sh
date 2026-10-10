@@ -92,16 +92,24 @@ build_variant() { # variant plist
   } > "$OUT/app-ats-$variant.txt"
 }
 
-# 4. One launch per arm: install the variant's app, hand it the URL, read its one line back.
+# 4. One launch per arm: install the variant's app, hand it the URL, read its one line back. An
+# arm that comes back with no line at all is retried once — run 38015680419's control-public launch
+# exited silently, and the same launch was clean in every other arm, so a missing line is read as
+# the simulator dropping an attach rather than as an answer.
 launch_arm() { # label variant url
-  local label="$1" variant="$2" url="$3"
-  echo "==> $label: $url"
+  local label="$1" variant="$2" url="$3" attempt line
   local app=".dd-$variant/Build/Products/Debug-iphonesimulator/ATSProbe.app"
-  xcrun simctl uninstall "$UDID" io.orbitd.atsprobe >/dev/null 2>&1 || true
-  xcrun simctl install "$UDID" "$app" || return 1
-  SIMCTL_CHILD_PROBE_URL="$url" xcrun simctl launch --console "$UDID" io.orbitd.atsprobe \
-    > "$OUT/console-$label.log" 2>&1 || true
-  grep -m1 '^PROBE ' "$OUT/console-$label.log" > "$OUT/$label.txt" || echo "PROBE result=missing" > "$OUT/$label.txt"
+  for attempt in 1 2; do
+    echo "==> $label: $url (attempt $attempt)"
+    xcrun simctl uninstall "$UDID" io.orbitd.atsprobe >/dev/null 2>&1 || true
+    xcrun simctl install "$UDID" "$app" || return 1
+    SIMCTL_CHILD_PROBE_URL="$url" xcrun simctl launch --console "$UDID" io.orbitd.atsprobe \
+      > "$OUT/console-$label.log" 2>&1 || true
+    grep -m1 '^PROBE ' "$OUT/console-$label.log" > "$OUT/$label.txt" || echo "PROBE result=missing" > "$OUT/$label.txt"
+    line=$(cat "$OUT/$label.txt")
+    [ "$line" = "PROBE result=missing" ] || break
+    sleep 3
+  done
   cat "$OUT/$label.txt"
 }
 
