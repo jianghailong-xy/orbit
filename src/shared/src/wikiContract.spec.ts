@@ -1795,6 +1795,7 @@ describe('wiki contract', () => {
     expect(server.rules.proposalRoundsMax).toBe(WIKI_MAINTAIN_JOB.proposalRoundsMax);
     expect(server.rules.proposalItemsMax).toBe(WIKI_MAINTAIN_JOB.proposalItemsMax);
     expect(server.rules.repoWaitSeconds).toBe(WIKI_MAINTAIN_JOB.repoWaitSeconds);
+    expect(server.rules.anchorDiffsMax).toBe(WIKI_MAINTAIN_JOB.anchorDiffsMax);
     expect(server.rules.docsExcluded).toEqual([...WIKI_MAINTAIN_JOB.docsExcluded]);
     // The batch sizes are the contract's own limits, and the entry cap the maintenance job's.
     expect(WIKI_MAINTAIN_JOB.opsPerChangeset).toBe(WIKI_LIMITS.opsPerChangeset);

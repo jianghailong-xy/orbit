@@ -1,4 +1,4 @@
-import { WIKI_KINDS, type WikiPlanMaterials } from '@orbit/shared';
+import { WIKI_KINDS, type WikiPlanMaterials, type WikiPlanTopic } from '@orbit/shared';
 import { cutRunes, goTrimSpace } from './wiki-import-extract';
 import { goCompare, goTrim } from './wiki-plan-format';
 
@@ -107,7 +107,7 @@ export function wikiPlanSpaceText(m: WikiPlanMaterials): string {
 }
 
 /** The topics on one line: what a section's session condition may name. */
-export function wikiPlanTopicsBrief(m: WikiPlanMaterials): string {
+export function wikiPlanTopicsBrief(m: { topics: readonly WikiPlanTopic[] }): string {
   if (m.topics.length === 0) return '（这个 space 还没有主题：会话条件里不写主题）';
   return `现有主题（slug「名称」·active 条目数）：${m.topics.map((t) => `${t.slug}「${t.title}」·${t.active}`).join('；')}`;
 }

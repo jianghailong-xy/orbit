@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
-import { WIKI_REPO_OPS, type WikiPlanVersion, type WikiRepoFileRead } from '@orbit/shared';
+import { WIKI_REPO_OPS, type WikiPlanTopic, type WikiPlanVersion, type WikiRepoFileRead } from '@orbit/shared';
 
 import { WikiDocsSnapshotRepo } from './wiki-docs-build-job';
 import {
@@ -21,8 +21,8 @@ import {
  * assembleWikiProposal, wikiProposalSection) makes of a set of answers on a checkout of the fixture's files — the
  * problems it hands back to the model, and the session conditions of the sections it would send — and this holds the
  * server's check to the same answers, the files read through the reader the maintenance job reads them with
- * (`WikiDocsSnapshotRepo`). The Go side holds itself to the same file (wiki_maintain_proposal_fixture_test.go), and
- * writes it.
+ * (`WikiDocsSnapshotRepo`), and a section's topics held to the space's (the fixture's `topics`, as the affected read
+ * hands them over). The Go side holds itself to the same file (wiki_maintain_proposal_fixture_test.go), and writes it.
  *
  * Word for word, save three problems the server words in English (AGENTS.md section 5) where the runner's are in
  * Chinese — a section with no sources, a line that is no line of a section, a part that is no part of a session
@@ -34,6 +34,7 @@ const FIXTURE = JSON.parse(readFileSync(path.resolve(__dirname, '../../../shared
   files: Record<string, string>;
   plan: WikiPlanVersion;
   items: WikiMaintainProposalItem[];
+  topics: WikiPlanTopic[];
   cases: Array<{ name: string; answer: string; problems: string[]; sessions: Array<{ entryKinds: string[]; topics: string[] } | null> }>;
 };
 
@@ -74,7 +75,7 @@ async function check(answerText: string): Promise<{ problems: string[]; sessions
   const repo = snapshotOf(FIXTURE.files);
   const answer = parseWikiMaintainProposal(answerText);
   await repo.prepare(wikiMaintainProposalPaths(answer));
-  const { request, problems } = assembleWikiMaintainProposal(wikiMaintainPlanOf(FIXTURE.plan), answer, FIXTURE.items, repo);
+  const { request, problems } = assembleWikiMaintainProposal(wikiMaintainPlanOf(FIXTURE.plan), answer, FIXTURE.items, repo, FIXTURE.topics);
   const sections = request.change.doc.sections;
   const fresh = sections.length >= answer.sections.length ? sections.slice(sections.length - answer.sections.length) : [];
   return {
@@ -107,7 +108,15 @@ test('a file the read cut short is missing past the cut, and says so — the run
   const repo = snapshotOf({ [doc]: text }, (file, whole, size) => ({ path: file, state: 'cut', text: `${whole.slice(0, whole.indexOf('## 2.'))}…（后略）\n`, sizeBytes: size }));
   await repo.prepare([doc]);
   const draft = parseWikiMaintainProposal(`### 1. 早晚 | flow | 300\n讲什么：早与晚。\n- 文档：${doc} § 1. Early\n- 文档：${doc} § 2. Late\n`).sections[0];
-  assert.deepEqual(wikiMaintainProposalSection('第 1 节', draft, repo).problems, [
+  assert.deepEqual(wikiMaintainProposalSection('第 1 节', draft, repo, FIXTURE.topics).problems, [
     `第 1 节的文档 ${doc} 里没有章节 "2. Late"：原样抄新知识里列出的章节标题，或不写 § (past the first ${WIKI_REPO_OPS.boundedChars} characters a read of the file gives)`,
+  ]);
+});
+
+test('a space with no topic yet takes none: a section\'s topic is refused, and the model told to name none, as the gate tells it', () => {
+  // The run's context offers the default topics to a space with none of its own; the gate takes only the space's rows.
+  const draft = parseWikiMaintainProposal('### 1. 坑 | pitfalls | 300\n讲什么：坑。\n- 会话：关键词 rebase；主题 storage-topic；要找：owner 的原话\n').sections[0];
+  assert.deepEqual(wikiMaintainProposalSection('第 1 节', draft, snapshotOf({}), []).problems, [
+    '第 1 节: "storage-topic" is not a topic of this space: （这个 space 还没有主题：会话条件里不写主题）',
   ]);
 });
