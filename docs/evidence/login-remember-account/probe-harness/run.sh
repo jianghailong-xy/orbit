@@ -67,14 +67,30 @@ xcrun simctl list devices | grep "$IPHONE_UDID" || true
 defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool false || true
 xcrun simctl boot "$IPHONE_UDID" 2>/dev/null || true
 xcrun simctl bootstatus "$IPHONE_UDID" -b >/dev/null 2>&1 || true
-xcrun simctl status_bar "$IPHONE_UDID" override --time "9:41" --batteryState charged --batteryLevel 100 \
+xcrun simctl status_bar "$IPHONE_UDID" override --time "9:41" --batteryState discharging --batteryLevel 100 \
   --cellularMode active --cellularBars 4 --wifiBars 3 2>/dev/null || true
 for domain in com.apple.Preferences com.apple.keyboard.preferences; do
   xcrun simctl spawn "$IPHONE_UDID" defaults write "$domain" DidShowContinuousPathIntroduction -bool true 2>/dev/null || true
 done
 
+# The simulator's own pictures, on the test's request (ProbeCase.hostShot): iOS keeps a password
+# field's keyboard and dots out of the screenshots a UI test takes.
+shooter() {  # $1 shots dir
+  while true; do
+    if [ -f "$1/host-shot.request" ]; then
+      name=$(cat "$1/host-shot.request"); rm -f "$1/host-shot.request"
+      xcrun simctl io "$IPHONE_UDID" screenshot --type=png "$1/$name.png.part" > /dev/null 2>&1 \
+        && mv "$1/$name.png.part" "$1/$name.png" && echo "==> host shot $name" || echo "==> host shot $name failed"
+    fi
+    sleep 0.2
+  done
+}
+
 serve "$OUT/ios/requests.log"
+shooter "$OUT/ios" &
+SHOOTER_PID=$!
 run_pass ios LraProbe "id=$IPHONE_UDID" "$OUT/ios"
+kill "$SHOOTER_PID" 2>/dev/null || true
 serve "$OUT/mac/requests.log"
 run_pass mac LraMacProbe "platform=macOS" "$OUT/mac"
 kill "$STUB_PID" 2>/dev/null || true

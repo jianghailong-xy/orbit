@@ -55,11 +55,19 @@ class ProbeCase: XCTestCase {
         for bundle in ["com.apple.UserNotificationCenter", "com.apple.CoreServicesUIAgent"] where running.contains(bundle) {
             let agent = XCUIApplication(bundleIdentifier: bundle)
             for title in ["Allow", "Don't Allow", "OK"] {
-                let button = agent.buttons[title]
+                // The dialog's own button: the Touch Bar repeats each one under the same title.
+                let inDialog = agent.dialogs.buttons[title].firstMatch
+                let button = inDialog.exists ? inDialog : agent.buttons[title].firstMatch
                 if button.exists { note("dismissed a system prompt via \(title) (\(bundle))"); button.click(); return }
             }
         }
         #endif
+    }
+
+    /// The first text field a finger can reach: the account card's email is a text field too (the
+    /// system's username), but nobody can tap it.
+    func reachableTextField(_ app: XCUIApplication) -> XCUIElement {
+        app.textFields.allElementsBoundByIndex.first(where: { $0.exists && $0.isHittable }) ?? app.textFields.firstMatch
     }
 
     /// Change the stub's state (`{"google": false}`, `{"methods_delay": 8}`).
@@ -200,6 +208,29 @@ class ProbeCase: XCTestCase {
         #else
         save(XCUIScreen.main.screenshot().pngRepresentation, name)
         #endif
+    }
+
+    /// A picture the simulator takes of its own display (`simctl io screenshot`, run.sh's shooter),
+    /// for what iOS keeps out of the test's screenshots: the keyboard of a password field and its
+    /// dots. Falls back to the test's own picture, with a note, when nothing answers.
+    func hostShot(_ name: String) {
+        mark(name)
+        settle(0.6)
+        guard let dir = ProcessInfo.processInfo.environment["SHOTS_DIR"] else { shot(name); return }
+        let picture = URL(fileURLWithPath: dir).appendingPathComponent("\(name).png")
+        try? FileManager.default.removeItem(at: picture)
+        try? name.write(to: URL(fileURLWithPath: dir).appendingPathComponent("host-shot.request"),
+                        atomically: true, encoding: .utf8)
+        let deadline = Date().addingTimeInterval(20)
+        while Date() < deadline {
+            if let data = try? Data(contentsOf: picture), data.count > 1000 {
+                note("\(name): taken by the simulator (\(data.count) bytes)")
+                return
+            }
+            Thread.sleep(forTimeInterval: 0.5)
+        }
+        note("\(name): the simulator's shooter never answered; the test's own picture instead")
+        shot(name)
     }
 
     private func save(_ png: Data, _ name: String) {

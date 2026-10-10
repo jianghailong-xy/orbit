@@ -117,6 +117,9 @@ final class LoginShotTests: ProbeCase {
     }
 
     /// ⑤ The keyboard up: the brand folds into one row; the card, the password and Sign In stay above it.
+    /// iOS keeps a password field's keyboard and dots out of the test's own screenshots, so the
+    /// simulator takes this one; a second picture shows the password in the clear, whose keyboard
+    /// any screenshot keeps.
     func test5KeyboardUp() {
         for dark in [false, true] {
             let s = dark ? "dark" : "light"
@@ -126,8 +129,14 @@ final class LoginShotTests: ProbeCase {
             if !app.keyboards.firstMatch.waitForExistence(timeout: 8) { note("keyboard-\(s): no software keyboard") }
             field.typeText("correcthors")
             settle(1.5)
-            shot("5-keyboard-up-\(s)")
+            hostShot("5-keyboard-up-\(s)")
             note("keyboard-\(s): card \(describe(card(app))) keyboard \(describe(app.keyboards.firstMatch))")
+            press(app, "Show password", "keyboard-\(s)")
+            let shown = reachableTextField(app)
+            shown.tap()
+            settle(1.5)
+            shot("5b-keyboard-up-password-shown-\(s)")
+            note("keyboard-\(s): shown field \(describe(shown)) keyboard \(describe(app.keyboards.firstMatch))")
             app.terminate()
         }
     }
@@ -239,8 +248,9 @@ final class LoginShotTests: ProbeCase {
     }
 
     private func switchServer(_ app: XCUIApplication, to address: String) {
-        let field = app.textFields.firstMatch
+        let field = reachableTextField(app)
         if !field.waitForExistence(timeout: 5) { XCTFail("server: no address field"); return }
+        note("server: address field \(describe(field))")
         field.tap()
         field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 40) + address)
         press(app, "Save", "server")
