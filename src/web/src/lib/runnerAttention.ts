@@ -115,7 +115,10 @@ export type AttentionRunner = Pick<
 export interface AttentionWorkspace {
   id: string;
   name: string;
-  /** The provider its last interactive session ran on: a built-in engine or a configured provider. */
+  /** The engine its last interactive session ran on (null when nobody can tell, absent from an older
+   *  server) and the credential it spent: an engine's own sign-in on the runner — the engine's name —
+   *  or a key or pool, which the runner's sign-in and quota have nothing to do with. */
+  lastEngine?: string | null;
   lastProvider?: string | null;
   workDir?: string | null;
   /** BIGINT columns, which the API sends as strings (main.ts BigInt.toJSON); numbers work too. */
@@ -374,9 +377,13 @@ function namesPhrase(names: string[]): string {
   return names[0] ?? '';
 }
 
-/** The workspaces whose sessions run on this built-in engine's login on this machine. */
+/** The workspaces whose sessions run on this engine's own sign-in on this machine: the engine is
+ *  theirs and so is its credential. One that runs the engine on a key (Claude Code on a DeepSeek key)
+ *  does not depend on the sign-in at all. */
 function workspacesOn(workspaces: ReadonlyArray<AttentionWorkspace>, engine: LoginEngine): string[] {
-  return workspaces.filter((w) => w.lastProvider === engine).map((w) => w.name);
+  return workspaces
+    .filter((w) => w.lastProvider === engine && (w.lastEngine ?? engine) === engine)
+    .map((w) => w.name);
 }
 
 function signedOutItems(

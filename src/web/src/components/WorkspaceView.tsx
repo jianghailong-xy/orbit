@@ -162,19 +162,21 @@ import {
   permissionModeSupported,
   contextWindowFor,
   DEFAULT_MODEL,
-  defaultModelForProvider,
+  defaultEngineOf,
+  defaultModelFor,
+  defaultModelKey,
   effectiveSessionEffort,
   effectiveSessionModel,
-  effortOptionsForProvider,
+  effortOptionsFor,
+  isLoginProvider,
   livePinnedModel,
-  modelOptionsForProvider,
-  newSessionEffortForProvider,
-  newSessionModelForProvider,
-  openCodeChoiceKey,
-  providerChoiceFor,
-  normalizeEffortForProvider,
+  modelOptionsFor,
+  newSessionEffortFor,
+  newSessionModelFor,
+  normalizeEffortFor,
   providerIdentityResolved,
-  runtimeForProvider,
+  sessionEngineOf,
+  sessionPick,
   supportsAuto,
 } from '../lib/workspaceDefaults';
 import {
@@ -183,7 +185,7 @@ import {
   localStatusRows,
   openSlash,
   pickSlash as replaceSlashToken,
-  slashAssetMatchesProvider,
+  slashAssetMatchesEngine,
   slashCommandName,
   slashMatches as getSlashMatches,
   slashToken as getSlashToken,
@@ -203,16 +205,18 @@ import {
   type ContextSeedState,
 } from '../lib/contextSeed';
 import { SessionOutputs } from './SessionOutputs';
-import { NewSessionProviderHero } from './NewSessionProviderHero';
+import { BrandMark, NewSessionProviderHero } from './NewSessionProviderHero';
 import { ManagedRunnerNotice } from './ManagedRunnerNotice';
 import { managedRunnerStatusQuery, type ManagedRunner } from '../lib/managedRunner';
 import {
+  currentEngineChoice,
   currentProviderChoice,
-  engineChoiceFor,
   engineChoices,
   engineTitleFor,
-  providerChoices,
-  sameRuntimeChoices,
+  keyName,
+  providerNameOn,
+  type ChoiceSources,
+  type ProviderChoice,
 } from '../lib/sessionProviderChoices';
 import { BackgroundShellsTray } from './BackgroundShellsTray';
 import { SessionCreatedTasksStrip } from './SessionCreatedTasksStrip';
@@ -410,6 +414,7 @@ import {
   accountToStartOn,
   AgentProvider,
   CONTINUE_MESSAGE,
+  ENGINE_CLI_NAMES,
   derivePermissionSemantics,
   fastModeAvailable,
   isAccountEngine,
@@ -2073,10 +2078,12 @@ export function WorkspaceView({
   const modelPreferenceMut = useMutation({
     // Keep rapid picks in order, including across a composer remount.
     scope: { id: 'model-preferences' },
-    mutationFn: ({ provider, model }: { provider: string; model: string }) =>
+    // Remembered per engine and provider (`<engine>:<provider>`, docs/provider-engine-contract.md
+    // §6.5): one key's model on Claude Code is not its model on DeepSeek Harness.
+    mutationFn: ({ engine, provider, model }: { engine: string; provider: string; model: string }) =>
       api('/users/me/preferences', {
         method: 'PATCH',
-        body: { defaultModels: { [provider]: model } },
+        body: { defaultModels: { [defaultModelKey(engine, provider)]: model } },
       }),
   });
   // Runtime catalogs and configured providers arrive asynchronously. Track whether the user has
@@ -3418,26 +3425,25 @@ export function WorkspaceView({
     );
   }, [workspacesForRunner, lockedWorkspaceId]);
 
-  // The New Session provider pick, scoped to the workspace it was made under: switching workspaces means
-  // switching projects, so the previous pick must not follow. Kept as {workspaceId, provider} rather
-  // than reset by an effect so the stale value is never readable for a render.
-  const [draftProviderPick, setDraftProviderPick] = useState<{
+  // The New Session pick, scoped to the workspace it was made under: switching workspaces means
+  // switching projects, so the previous pick must not follow. Kept as {workspaceId, engine, provider}
+  // rather than reset by an effect so the stale value is never readable for a render. The hero picks
+  // the engine and the composer's Provider menu a credential it runs on; a new session sends both
+  // (docs/provider-engine-contract.md §3.2).
+  const [draftPick, setDraftPick] = useState<{
     workspaceId?: string;
+    engine: AgentProvider;
     provider: string;
   } | null>(null);
-  // What was picked, as the Provider menu names it — which for a key run on OpenCode is
-  // `opencode/<slug>` (openCodeKeyChoice) — and the provider that pick creates the session with.
-  const draftChoice =
-    draftProviderPick && draftProviderPick.workspaceId === workspaceId ? draftProviderPick.provider : null;
-  const draftProvider = draftChoice && openCodeChoiceKey(draftChoice) ? AgentProvider.OPENCODE : draftChoice;
-  // The provider a NEW session would run: an explicit pick, else what this project last ran on.
-  // `lastProvider` is derived server-side from the workspace's most recent interactive session — an
-  // workspace holds no provider of its own (apiserver workspaces/workspace-provider.ts). `provider` is the
-  // deprecated alias of the same derived value, still served for older native builds.
+  const draftHere = draftPick && draftPick.workspaceId === workspaceId ? draftPick : null;
+  // What a NEW session would run: an explicit pick, else what this project last ran on — the engine
+  // and the provider of its most recent interactive session, derived server-side (apiserver
+  // workspaces/workspace-provider.ts): a workspace holds neither of its own. `provider` is the
+  // deprecated alias of `lastProvider`, still served for older native builds.
   const lastWorkspaceProvider = pickedWorkspace?.lastProvider ?? pickedWorkspace?.provider ?? 'claude';
-  const pickedProvider: string = draftProvider ?? lastWorkspaceProvider;
-  // The Provider-menu identity of that pick: the model space, the model seed and the menu's tick.
-  const pickedChoice: string = draftChoice ?? lastWorkspaceProvider;
+  const lastWorkspaceEngine = sessionEngineOf(pickedWorkspace?.lastEngine, lastWorkspaceProvider, configuredProviders);
+  const pickedEngine: AgentProvider = draftHere?.engine ?? lastWorkspaceEngine;
+  const pickedProvider: string = draftHere?.provider ?? lastWorkspaceProvider;
   // The managed runner's default workspace has no engine for a first session until its runner has
   // been ready with one (`initialProvider`): before that the server refuses the session with
   // MODEL_UNAVAILABLE, so the draft offers no default engine and shows the runner's state instead.
@@ -3482,12 +3488,26 @@ export function WorkspaceView({
       ? endedProviderPick?.provider
       : null;
   const pendingResumeAccount = pendingResumeProvider ? (endedProviderPick?.account ?? null) : null;
-  // The provider this composer talks to: a live session's own, an ended session's pending pick,
-  // else the one picked for the draft. Declared here (not next to its other consumers) because
-  // the `/` autocomplete memo below needs it.
-  const shownProvider: string = selected
-    ? (pendingResumeProvider ?? selected.provider ?? detailForSelected?.provider ?? 'claude')
-    : pickedProvider;
+  // The engine a session runs on is the one it recorded, and it never changes — whichever provider
+  // the session is moved to. A row an older replica wrote is placed by its provider (sessionEngineOf).
+  const selectedEngine: AgentProvider = sessionEngineOf(
+    selected?.engine ?? detailForSelected?.engine,
+    selected?.provider ?? detailForSelected?.provider,
+    configuredProviders,
+  );
+  // The session's own provider and model, with an OpenCode session an older client started on a key
+  // read as that key and its bare model (sessionPick, contract §3.3).
+  const selectedPick = sessionPick(
+    selectedEngine,
+    selected?.provider ?? detailForSelected?.provider ?? 'claude',
+    selected?.model,
+  );
+  // The engine and provider this composer talks to: the session's — with an ended session's pending
+  // pick, which only ever moves it to another credential of the same engine — else the draft's.
+  // Declared here (not next to their other consumers) because the `/` autocomplete memo below needs
+  // them.
+  const shownEngine: AgentProvider = selected ? selectedEngine : pickedEngine;
+  const shownProvider: string = selected ? (pendingResumeProvider ?? selectedPick.provider) : pickedProvider;
   const shownProviderCapabilitiesResolved = providerIdentityResolved(
     shownProvider,
     configuredProvidersLoaded,
@@ -3495,11 +3515,9 @@ export function WorkspaceView({
   // Codex has no slash registry: its app-server takes the prompt verbatim (no expansion of
   // `~/.codex/prompts`, nothing in the protocol for it), so `/anything` is plain text there.
   // Claude's commands and skills are meaningless in that session — don't offer them, and
-  // don't gate sending on them. `/status` is ours and stays.
-  // DeepSeek Harness has no runner slash registry either; its configured slug is read as its runtime.
-  const slashProvider =
-    runtimeForProvider(shownProvider, configuredProviders) === AgentProvider.DSH ? AgentProvider.DSH : shownProvider;
-  const codexComposer = !supportsRunnerSlashAssets(slashProvider);
+  // don't gate sending on them. `/status` is ours and stays. Read off the engine, never the
+  // provider's slug: a key on Codex's protocol runs on Codex all the same.
+  const codexComposer = !supportsRunnerSlashAssets(shownEngine);
   // The selected session's permission mode as the SERVER resolves it: its own stored mode, else
   // the owner's account default, else Auto (common/permission-mode.ts). Reading the session row
   // alone would show one fixed mode for every session that never stored one — and since the pills
@@ -3518,8 +3536,9 @@ export function WorkspaceView({
       | null
       | undefined) ?? null;
   const effectiveSelectedModel = effectiveSessionModel(
+    shownEngine,
     shownProvider,
-    selected?.model,
+    selectedPick.model,
     detailForSelected?.workspace?.model ?? selected?.workspace?.model ?? selectedWorkspaceFromList?.model,
     runner.modelCatalog,
     configuredProviders,
@@ -3536,7 +3555,8 @@ export function WorkspaceView({
   // last generation's model seeds the current default instead of an id that is no longer offered.
   const selectedModelDefault = selected
     ? livePinnedModel(
-        selected.model,
+        selectedPick.model,
+        shownEngine,
         shownProvider,
         runner.modelCatalog,
         configuredProviders,
@@ -3545,12 +3565,14 @@ export function WorkspaceView({
       livePinnedModel(
         detailForSelected?.workspace?.model ??
           workspacesForRunner.find((a) => a.id === selected.workspace?.id)?.model,
+        shownEngine,
         shownProvider,
         runner.modelCatalog,
         configuredProviders,
         runner.runtimeDefaultModels,
       ) ??
-      defaultModelForProvider(
+      defaultModelFor(
+        shownEngine,
         shownProvider,
         runner.modelCatalog,
         configuredProviders,
@@ -3567,12 +3589,16 @@ export function WorkspaceView({
     const decision = decideContextSeed(effortSeedState.current, contextKey, true);
     effortSeedState.current = decision.state;
     if (!decision.apply) return;
-    const provider = selected.provider ?? detailForSelected?.provider ?? 'claude';
     const owningWorkspace = workspacesForRunner.find((a) => a.id === selected.workspace?.id);
+    // By the session's engine, on the model it runs: Harness's levels are its catalogue row's own.
     setEffort(
-      normalizeEffortForProvider(
-        provider,
+      normalizeEffortFor(
+        selectedEngine,
+        selectedPick.provider,
         selected.effort ?? detailForSelected?.workspace?.effort ?? owningWorkspace?.effort ?? '',
+        effectiveSelectedModel,
+        runner.modelCatalog,
+        configuredProviders,
       ),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -3588,8 +3614,9 @@ export function WorkspaceView({
   }, [selected?.id, live]);
 
   const pickedModelDefault = pickedWorkspace
-    ? newSessionModelForProvider(
-        pickedChoice,
+    ? newSessionModelFor(
+        pickedEngine,
+        pickedProvider,
         me.data?.preferences?.defaultModels,
         runner.modelCatalog,
         configuredProviders,
@@ -3601,70 +3628,53 @@ export function WorkspaceView({
     configuredProvidersLoaded,
   );
 
-  // Everything that could run a session on this machine: engines first — with the health this
-  // runner reported, since the session runs there — then this account's providers. The New
-  // Session hero offers it by engine; the composer's Provider menu offers the same-runtime slice.
+  // Everything that could run a session on this machine, by engine — with the health this runner
+  // reported, since the session runs there — and under each engine the credentials it runs on. The
+  // New Session hero offers the engines; the composer's Provider menu offers the credentials of the
+  // session's engine.
   const providerWorkspace = selected
     ? (workspacesQ.data ?? []).find((workspace) => workspace.id === selected.workspace?.id)
     : pickedWorkspace;
   const antigravityKeyAvailable = providerWorkspace
     ? providerWorkspace.antigravityKeyAvailableByRunner?.[runner.id] === true
     : runner.antigravity?.envKeyAvailable === true;
-  const providerChoicesForRunner = useMemo(
-    () =>
-      providerChoices(
-        configuredProviders,
-        runner.modelCatalog,
-        runner.runtimeDefaultModels,
-        runner.engines,
-        accountPools,
-        runner.planUsage,
-        runner.antigravity,
-        antigravityKeyAvailable,
-        runner,
-      ),
-    [
-      configuredProviders,
-      runner,
-      runner.modelCatalog,
-      runner.runtimeDefaultModels,
-      runner.engines,
-      accountPools,
-      runner.planUsage,
-      runner.antigravity,
+  const choiceSources = useMemo<ChoiceSources>(
+    () => ({
+      configured: configuredProviders,
+      modelCatalog: runner.modelCatalog,
+      runtimeDefaultModels: runner.runtimeDefaultModels,
+      engineHealth: runner.engines,
+      pools: accountPools,
+      planUsage: runner.planUsage,
+      antigravity: runner.antigravity,
       antigravityKeyAvailable,
-    ],
+      dshRunner: runner,
+    }),
+    [configuredProviders, runner, accountPools, antigravityKeyAvailable],
   );
-  const currentProviderChoiceForDraft = useMemo(
-    () =>
-      currentProviderChoice(
-        pickedChoice,
-        providerChoicesForRunner,
-        runner.modelCatalog,
-        configuredProviders,
-        runner.runtimeDefaultModels,
-        runner.antigravity,
-      ),
-    [
-      pickedChoice,
-      providerChoicesForRunner,
-      runner.modelCatalog,
-      configuredProviders,
-      runner.runtimeDefaultModels,
-      runner.antigravity,
-    ],
-  );
-  // The New Session hero's engines, each landing on the draft's pick when it holds it, else on what
-  // this workspace last ran there. The current one is the engine of the pick itself — synthesized
-  // when no group holds it (`opencode`, a removed provider) or holds it but cannot run it.
+  // The New Session hero's engines, each landing on the draft's pick when it is that engine's, else on
+  // what this workspace last ran there. The current one is the pick's own engine on the pick's own
+  // provider — drawn as it is even when that provider is no longer on offer (a key since removed).
   const draftEngines = useMemo(
     () =>
-      engineChoices(providerChoicesForRunner, configuredProviders, [pickedChoice, lastWorkspaceProvider]),
-    [providerChoicesForRunner, configuredProviders, pickedChoice, lastWorkspaceProvider],
+      engineChoices(choiceSources, [
+        { engine: pickedEngine, provider: pickedProvider },
+        { engine: lastWorkspaceEngine, provider: lastWorkspaceProvider },
+      ]),
+    [choiceSources, pickedEngine, pickedProvider, lastWorkspaceEngine, lastWorkspaceProvider],
   );
-  const currentDraftEngine =
-    draftEngines.find((engine) => engine.provider.slug === pickedChoice) ??
-    engineChoiceFor(currentProviderChoiceForDraft, configuredProviders);
+  const currentDraftEngine = useMemo(
+    () => currentEngineChoice(pickedEngine, pickedProvider, draftEngines, choiceSources),
+    [pickedEngine, pickedProvider, draftEngines, choiceSources],
+  );
+  // The credentials the composer's engine runs on here — the Provider menu's rows — and how any one
+  // provider of it reads, listed or not (a key since removed, the legacy built-in `dsh`).
+  const shownEngineProviders = useMemo(
+    () => draftEngines.find((engine) => engine.slug === shownEngine)?.providers ?? [],
+    [draftEngines, shownEngine],
+  );
+  const shownProviderChoice = (provider: string): ProviderChoice =>
+    currentProviderChoice(shownEngine, provider, shownEngineProviders, choiceSources);
   // What a switch just changed. Shown under the summary and cleared on a timer: the model move
   // is a silent side effect otherwise, and so is the write-back that remembers the pick.
   const [providerSwitchNote, setProviderSwitchNote] = useState<string | null>(null);
@@ -3690,39 +3700,43 @@ export function WorkspaceView({
   // What the pick on an ended session will actually do, and when. It replaces a four-second
   // `Model → X`, which named the change but not its timing — and the timing is the question,
   // because a run keeps its provider for its whole life.
+  // Said by the credentials' own names: the engine stays, only the credential moves.
   const composerProviderNote = pendingResumeProvider
     ? providerSwitchNoteFor({
-        from: selected?.provider ?? detailForSelected?.provider ?? null,
-        to: pendingResumeProvider,
+        from: selected ? providerNameOn(shownEngine, shownProviderChoice(selectedPick.provider)) : null,
+        to: providerNameOn(shownEngine, shownProviderChoice(pendingResumeProvider)),
         liveRun: taskRunIsGoing,
       })
     : null;
   // Where a routed message landed. Kept as state rather than a toast because it survives the
   // navigation that follows it: the reader arrives in the other run already knowing why.
   const [handedOverTo, setHandedOverTo] = useState<string | null>(null);
-  const pickDraftProvider = (slug: string): void => {
-    setDraftProviderPick({ workspaceId, provider: slug });
-    const picked = providerChoicesForRunner.find((c) => c.slug === slug);
-    // The pick binds this session and nothing else. Later sessions follow it only because the
-    // default is read back from what this project last ran — no config is being rewritten.
+  // The draft's engine, on a credential it runs on: the hero picks the engine (landing where it
+  // says), the Provider menu a credential of the draft's engine. The pick binds this session and
+  // nothing else. Later sessions follow it only because the default is read back from what this
+  // project last ran — no config is being rewritten.
+  const pickDraft = (engine: AgentProvider, provider: string): void => {
+    setDraftPick({ workspaceId, engine, provider });
+    const picked = draftEngines.find((row) => row.slug === engine)?.providers.find((c) => c.slug === provider);
     setProviderSwitchNote(picked ? `Model → ${picked.modelLabel}` : null);
     if (providerNoteTimer.current) clearTimeout(providerNoteTimer.current);
     providerNoteTimer.current = setTimeout(() => setProviderSwitchNote(null), 4000);
   };
-  // An account row under an engine: that engine, on that account — or on Automatic (`null`). Like the
-  // provider, it binds the session being drafted and rewrites no workspace setting.
-  const pickDraftAccount = (slug: string, account: string | null): void => {
-    if (slug !== pickedChoice) pickDraftProvider(slug);
-    setDraftAccountPick(account === null ? null : { workspaceId, engine: slug, account });
+  // An account row under the draft engine's own sign-in: that sign-in, on that account — or on
+  // Automatic (`null`). Like the provider, it binds the session being drafted and rewrites no
+  // workspace setting.
+  const pickDraftAccount = (engine: AccountEngine, account: string | null): void => {
+    if (pickedProvider !== engine) pickDraft(engine as AgentProvider, engine);
+    setDraftAccountPick(account === null ? null : { workspaceId, engine, account });
   };
 
-  // The provider is part of the draft's seed context: picking a different one has to re-seed
-  // Model (each provider owns its own model space) and re-clamp Mode, which is exactly what a
-  // context change does — including resetting `dirty`, so a model chosen for the old provider
-  // never carries into the new one's namespace.
+  // The engine and provider are the draft's seed context: picking a different one has to re-seed
+  // Model (the model space is the pair's) and re-clamp Mode, which is exactly what a context change
+  // does — including resetting `dirty`, so a model chosen for the old pair never carries into the
+  // new one's namespace.
   const modelContextKey = selectedId
     ? `session:${selectedId}`
-    : `draft:${runner.id}:${workspaceId ?? 'none'}:${pickedChoice}`;
+    : `draft:${runner.id}:${workspaceId ?? 'none'}:${pickedEngine}:${pickedProvider}`;
   const effortContextKey = selectedId
     ? `session:${selectedId}:${live ? 'live' : 'ended'}`
     : modelContextKey;
@@ -3749,6 +3763,7 @@ export function WorkspaceView({
         ? clampPermissionModeForModel(
             'auto',
             pickedModelDefault ?? DEFAULT_MODEL,
+            pickedEngine,
             pickedProvider,
             configuredProviders,
             runner.modelCatalog,
@@ -3762,6 +3777,7 @@ export function WorkspaceView({
             ? clampPermissionModeForModel(
                 effectivePermissionMode,
                 selectedModelDefault ?? DEFAULT_MODEL,
+                shownEngine,
                 shownProvider,
                 configuredProviders,
                 runner.modelCatalog,
@@ -3787,8 +3803,8 @@ export function WorkspaceView({
     if (
       !live &&
       shownProviderCapabilitiesResolved &&
-      ((mode === 'Auto' && !supportsAuto(model, shownProvider, configuredProviders, runner.modelCatalog)) ||
-        !permissionModeSupported(MODE_TO_PERMISSION[mode], shownProvider, configuredProviders))
+      ((mode === 'Auto' && !supportsAuto(model, shownEngine, shownProvider, configuredProviders, runner.modelCatalog)) ||
+        !permissionModeSupported(MODE_TO_PERMISSION[mode], shownEngine))
     ) {
       setMode('Default');
     }
@@ -3798,6 +3814,7 @@ export function WorkspaceView({
     mode,
     model,
     runner.modelCatalog,
+    shownEngine,
     shownProvider,
     shownProviderCapabilitiesResolved,
   ]);
@@ -3809,9 +3826,9 @@ export function WorkspaceView({
   // choice made before that request finishes.
   useEffect(() => {
     if (selectedId) return;
-    const provider = pickedProvider;
-    const seed = newSessionEffortForProvider(
-      provider,
+    const seed = newSessionEffortFor(
+      pickedEngine,
+      pickedProvider,
       me.data?.preferences?.defaultEffort,
       pickedWorkspace?.effort,
       pickedModelDefault,
@@ -3824,6 +3841,7 @@ export function WorkspaceView({
   }, [
     selectedId,
     effortContextKey,
+    pickedEngine,
     pickedProvider,
     pickedModelDefault,
     pickedWorkspace?.effort,
@@ -3854,10 +3872,10 @@ export function WorkspaceView({
   const selectedIsQueued = selected
     ? sessionRunStateOf(selectedStartingSession) === 'QUEUED'
     : false;
-  const antigravityQueueRepair = selectedIsQueued && runtimeForProvider(shownProvider, configuredProviders) === 'antigravity'
+  const antigravityQueueRepair = selectedIsQueued && selectedEngine === AgentProvider.ANTIGRAVITY
     ? antigravityRepair(selectedStartingSession?.error ?? '')
     : null;
-  const dshQueueRepair = selectedIsQueued && runtimeForProvider(shownProvider, configuredProviders) === AgentProvider.DSH
+  const dshQueueRepair = selectedIsQueued && selectedEngine === AgentProvider.DSH
     ? dshRepair(selectedStartingSession?.error ?? '')
     : null;
   const queuedNoticeScope = selectedId
@@ -3882,13 +3900,12 @@ export function WorkspaceView({
     STARTING_NOTICE_DELAY_MS,
     waitingNoticeScope(selectedId, selectedStartingSession),
   );
-  // The engine that would have executed THIS session — its own provider, never the composer's
-  // pending pick: choosing another provider for the next turn does not rename the engine that
-  // could not start this one (the same reading `outageProvider` makes for the quota card).
-  const selectedRuntime = runtimeForProvider(
-    detailForSelected?.provider ?? selected?.provider,
-    configuredProviders,
-  );
+  // The engine that would have executed THIS session: its own, which no provider pick changes.
+  const selectedRuntime = selectedEngine;
+  // The key the session runs on, as the cards about a key its vendor rejected name it (board 8): the
+  // session's own — the credential that failed, never a pick held for the next turn.
+  const selectedKeyRow = configuredProviders.find((p) => p.slug === selectedPick.provider);
+  const selectedKeyName = selected && selectedKeyRow ? keyName(selectedKeyRow) : undefined;
   // Whether this run never became one, and why — see RunNeverStartedCard. Read off the MERGED row,
   // because the SOURCE columns only ride the detail payload. Deliberately outside the delayed-notice
   // machinery above: this is a fact, not a wait that might still end, so it is not held back the ten
@@ -3899,6 +3916,7 @@ export function WorkspaceView({
         ? runNeverStarted({
             session: selectedSession as NeverStartedSession,
             runtime: selectedRuntime,
+            keyName: selectedKeyName,
             runnerName: runner.displayName || runner.name,
           })
         : null,
@@ -3908,6 +3926,7 @@ export function WorkspaceView({
       selectedTrashed,
       selectedMissing,
       selectedRuntime,
+      selectedKeyName,
       runner.displayName,
       runner.name,
     ],
@@ -5775,7 +5794,9 @@ export function WorkspaceView({
             selected.provider ??
             detailForSelected?.provider ??
             'claude';
-          const wireEffort = normalizeEffortForProvider(
+          // By the session's own engine, which the resume keeps whatever provider it carries.
+          const wireEffort = normalizeEffortFor(
+            selectedEngine,
             provider,
             effort,
             model,
@@ -5826,11 +5847,12 @@ export function WorkspaceView({
         // established "start a new session" behavior instead of sending an invalid resume.
       }
       const provider = pickedProvider;
-      // Harness levels are opaque catalogue values, so they are checked against the model's own row.
+      // By the engine the session will run on. Harness levels are opaque catalogue values, so they are
+      // checked against the model's own row.
       const wireEffort =
-        runtimeForProvider(provider, configuredProviders) === AgentProvider.DSH
-          ? normalizeEffortForProvider(provider, effort, model, runner.modelCatalog, configuredProviders)
-          : normalizeEffortForProvider(provider, effort);
+        pickedEngine === AgentProvider.DSH
+          ? normalizeEffortFor(pickedEngine, provider, effort, model, runner.modelCatalog, configuredProviders)
+          : normalizeEffortFor(pickedEngine, provider, effort);
       const providerResolved = providerIdentityResolved(
         provider,
         configuredProvidersLoaded,
@@ -5860,9 +5882,10 @@ export function WorkspaceView({
         prompt: content,
         assignedRunnerId: runner.id,
         workspaceId,
-        // Only an explicit pick travels: leaving it off keeps the server's inherit-from-workspace
-        // path, so a session started without touching the hero behaves exactly as before.
-        provider: draftProvider ?? undefined,
+        // Only an explicit pick travels, and it is the pair — the engine the hero picked and the
+        // credential of it (docs/provider-engine-contract.md §3.2). Leaving both off keeps the
+        // server's inherit-from-workspace path, which re-checks that pair as it starts the session.
+        ...(draftHere ? { engine: draftHere.engine, provider: draftHere.provider } : {}),
         model: createModel,
         permissionMode: createPermissionMode,
         // Send even '' (Default) explicitly: the composer already seeds the pill from the workspace's
@@ -6968,7 +6991,8 @@ export function WorkspaceView({
           ? 'not found'
           : null,
       workspaceName: shownWorkspaceName,
-      provider: shownProvider,
+      engine: ENGINE_CLI_NAMES[shownEngine],
+      provider: providerNameOn(shownEngine, shownProviderChoice(shownProvider)),
       model: shownModel,
       permissionMode: shownMode,
       effort: shownEffort,
@@ -6977,7 +7001,7 @@ export function WorkspaceView({
       fastMode: fastModeUsable && shownFastMode,
       contextTokens,
       contextWindow:
-        shownProvider === 'opencode' && shownModel === ''
+        shownEngine === AgentProvider.OPENCODE && shownModel === ''
           ? undefined
           : (reportedContextWindow ??
             contextWindowFor(shownModel, runner.modelCatalog, configuredProviders, shownProvider)),
@@ -7154,7 +7178,7 @@ export function WorkspaceView({
     if (c.startsWith('!')) {
       // DeepSeek Harness has no shell bridge (the runner settles such a turn as a refusal), so the
       // command is kept in the composer rather than sent to fail.
-      if (runtimeForProvider(shownProvider, configuredProviders) === AgentProvider.DSH) {
+      if (shownEngine === AgentProvider.DSH) {
         message.warning('DeepSeek Harness sessions don’t run ! shell commands', 'Ask the agent to run it instead.');
         return;
       }
@@ -7351,11 +7375,11 @@ export function WorkspaceView({
         })),
       ].filter(
         (it) =>
-          slashAssetMatchesProvider(it.provider, slashProvider) &&
+          slashAssetMatchesEngine(it.provider, shownEngine) &&
           (!it.workspaceId || it.workspaceId === composerWorkspaceId),
       )),
     ],
-    [runner.commands, runner.skills, composerWorkspaceId, codexComposer, slashProvider],
+    [runner.commands, runner.skills, composerWorkspaceId, codexComposer, shownEngine],
   );
   const slashMatches = useMemo(() => {
     const items = runner.online ? slashItems : slashItems.filter((it) => it.type === 'local');
@@ -7570,8 +7594,9 @@ export function WorkspaceView({
   // online — see configEditable); otherwise they're editable and reflect local state.
   const selectedWorkspace = workspacesForRunner.find((a) => a.id === selected?.workspace?.id);
   const effectiveModel = effectiveSessionModel(
+    shownEngine,
     shownProvider,
-    selected?.model,
+    selectedPick.model,
     detailForSelected?.workspace?.model ?? selectedWorkspace?.model,
     runner.modelCatalog,
     configuredProviders,
@@ -7583,11 +7608,10 @@ export function WorkspaceView({
   // only thing that can be inheriting here is nothing.
   const effectiveFastMode: boolean = selected?.fastMode === true;
   const shownModel: string = live ? effectiveModel : model;
-  // The Provider-menu identity the composer is on: the provider, except that an OpenCode session on
-  // a configured key is on that key (`opencode/<slug>`) — whose models are the ones it lists.
-  const shownChoice: string = selected ? providerChoiceFor(shownProvider, shownModel) : pickedChoice;
+  // The models of the pair the composer is on: a key brings its own table to every engine that runs
+  // it, OpenCode included, and DeepSeek Harness lists its runner's catalogue.
   const catalogModelOptions = shownProviderCapabilitiesResolved
-    ? modelOptionsForProvider(shownChoice, runner.modelCatalog, configuredProviders)
+    ? modelOptionsFor(shownEngine, shownProvider, runner.modelCatalog, configuredProviders)
     : [];
   // Runtime configuration can name a valid model that is not in the reported catalog yet. Keep
   // that effective default/selectable session value visible in the picker instead of rendering a
@@ -7718,10 +7742,11 @@ export function WorkspaceView({
           : shownProvider === 'kimi'
             ? shownKimiAccount
             : 'default';
-  // The engine whose account the composer names — built-in Codex, Claude, Antigravity or Kimi, not an
-  // account pool — and the account it names in the quota gauge's popover, once the runner has more than
-  // one to tell apart.
-  const shownAccountEngine: AccountEngine | null = !shownPool && isAccountEngine(shownProvider) ? shownProvider : null;
+  // The engine whose account the composer names — Codex, Claude, Antigravity or Kimi on its own sign-in
+  // on the runner, never a key or an account pool: accounts are the sign-in's alone — and the account
+  // it names in the quota gauge's popover, once the runner has more than one to tell apart.
+  const shownAccountEngine: AccountEngine | null =
+    isLoginProvider(shownProvider) && shownProvider === shownEngine && isAccountEngine(shownEngine) ? shownEngine : null;
   const shownAccountsHere = shownAccountEngine ? accountsOf(runner, shownAccountEngine) : [];
   const shownAccountRow =
     shownAccountsHere.length >= 2
@@ -7734,36 +7759,46 @@ export function WorkspaceView({
     ? (shownPoolAccount?.member.planUsage ?? null)
     : shownAccountEngine && shownAccount !== 'default'
       ? accountPlanUsage(runnerUsage, shownAccountEngine, shownAccount)
-      : sessionPlanUsage(shownProvider, runnerUsage, configuredProviders);
-  // Where this session could move without changing CLI. Offered on the three routes that actually
-  // carry a provider: a live session's config PATCH, the resume that revives an ended one, and the
-  // draft's create — whose engine the hero above picks, so here too it is the same-runtime slice. A
+      : sessionPlanUsage(shownEngine, shownProvider, runnerUsage, configuredProviders);
+  // The user's own keys, every one — the turned-off ones too, which GET /providers leaves out: where a
+  // session's key is fixed (DeepSeek Harness's own, a Gemini key for Antigravity), and what became of
+  // a key the Provider menu no longer lists.
+  const shownProviderListed = shownEngineProviders.some((choice) => choice.slug === shownProvider);
+  const ownKeys = useQuery({
+    queryKey: PROVIDERS_LIST_KEY,
+    queryFn: () => api<ProviderRow[]>(PROVIDERS_BASE),
+    enabled:
+      shownEngine === AgentProvider.ANTIGRAVITY ||
+      shownEngine === AgentProvider.DSH ||
+      (!!selected && !shownProviderListed && !isLoginProvider(shownProvider) && shownProvider !== AgentProvider.OPENCODE),
+  });
+  // What became of the session's own key when its engine's menu no longer lists it: turned off — its
+  // page is where it is turned back on — or deleted, which nothing here undoes. The engine stays
+  // either way; a credential of the same engine below fixes the session (board 5, case 4). Null for
+  // anything else, the legacy built-in `dsh` included: that is no key of the user's.
+  const shownKeyGone: { status: string; href?: string } | null = (() => {
+    if (!selected || shownProviderListed || isLoginProvider(shownProvider) || shownProvider === AgentProvider.OPENCODE) return null;
+    if (configuredProviders.some((p) => p.slug === shownProvider) || !ownKeys.data) return null;
+    const row = ownKeys.data.find((p) => p.slug === shownProvider);
+    if (row) return row.enabled ? null : { status: 'Turned off', href: `/providers/${encodeId(row.id)}` };
+    return shownProvider === AgentProvider.DSH ? null : { status: 'Key deleted' };
+  })();
+  // Where this session could move without changing engine: the credentials its engine runs on here.
+  // Offered on the three routes that actually carry a provider: a live session's config PATCH, the
+  // resume that revives an ended one, and the draft's create — whose engine the hero above picks. A
   // terminal session that can't be resumed would start a NEW session on send, where the workspace
-  // decides. A single entry means there is nowhere to go, and the pill stays out of the composer
-  // entirely — the common case, one Claude sign-in and no configured providers.
+  // decides. A single entry means there is nowhere to go, and the Provider row stays out of the menu
+  // entirely — the common case, one Claude sign-in and no keys. The one row that is not among them is
+  // the session's own provider when its engine no longer lists it (a key turned off or deleted, the
+  // legacy built-in `dsh`): it has no natural position, so it leads.
   const providerSwitchChoices = useMemo(
-    () =>
-      live || resumable || !selected
-        ? sameRuntimeChoices(
-            shownChoice,
-            providerChoicesForRunner,
-            configuredProviders,
-            runner.modelCatalog,
-            runner.runtimeDefaultModels,
-            runner.antigravity,
-          )
-        : [],
-    [
-      live,
-      resumable,
-      selected,
-      shownChoice,
-      providerChoicesForRunner,
-      configuredProviders,
-      runner.modelCatalog,
-      runner.runtimeDefaultModels,
-      runner.antigravity,
-    ],
+    (): ProviderChoice[] =>
+      !(live || resumable || !selected)
+        ? []
+        : shownProviderListed
+          ? shownEngineProviders
+          : [currentProviderChoice(shownEngine, shownProvider, shownEngineProviders, choiceSources), ...shownEngineProviders],
+    [live, resumable, selected, shownProviderListed, shownEngineProviders, shownEngine, shownProvider, choiceSources],
   );
   const { tokens: contextTokens, window: reportedContextWindow } = lastContextReading(events);
   // Remedy + retry for a sign-in failure card in the transcript. Retry is offered only when
@@ -7858,16 +7893,13 @@ export function WorkspaceView({
   // and either way the button must not promise an attempt it is not making. Both cards draw it
   // disabled from this, and both handlers refuse a re-entry that reaches them anyway.
   const retryInFlight = send.isPending || resendFromSession.isPending;
-  const geminiProviders = useQuery({
-    queryKey: PROVIDERS_LIST_KEY,
-    queryFn: () => api<ProviderRow[]>(PROVIDERS_BASE),
-    enabled: shownProvider === 'antigravity' || runtimeForProvider(shownProvider, configuredProviders) === AgentProvider.DSH,
-  });
-  // A Harness session's key is its own provider row; that row's page is where the key is fixed.
-  const dshProviderRow = geminiProviders.data?.find((p) => p.slug === shownProvider && p.runtime === AgentProvider.DSH);
-  const geminiProvider = geminiProviders.data?.find((p) => p.presetSlug === 'gemini' && p.runtime === 'antigravity');
+  // The key a Harness session runs on is the session's own provider — whichever DeepSeek key that
+  // is — and its page is where the key is fixed.
+  const dshProviderRow =
+    selectedEngine === AgentProvider.DSH ? ownKeys.data?.find((p) => p.slug === selectedPick.provider) : undefined;
+  const geminiProvider = ownKeys.data?.find((p) => p.presetSlug === 'gemini' && p.runtime === 'antigravity');
   const geminiChoice = providerSwitchChoices.find((c) =>
-    c.kind === 'byok' && configuredProviders.some((p) => p.slug === c.slug && p.presetSlug === 'gemini' && p.runtime === 'antigravity'),
+    c.kind === 'key' && configuredProviders.some((p) => p.slug === c.slug && p.presetSlug === 'gemini' && p.runtime === 'antigravity'),
   );
   const installAntigravity = useMutation({
     mutationFn: () => api(`/runners/${encodeId(runner.id)}/install`, { method: 'POST', body: { engine: 'antigravity' } }),
@@ -8020,6 +8052,7 @@ export function WorkspaceView({
           ? clampPermissionModeForModel(
               effectivePermissionMode,
               effectiveModel,
+              shownEngine,
               shownProvider,
               configuredProviders,
               runner.modelCatalog,
@@ -8027,14 +8060,18 @@ export function WorkspaceView({
           : effectivePermissionMode
       ] ?? 'Default')
     : mode;
-  const shownEffort: string = normalizeEffortForProvider(
+  // Effort is the engine's vocabulary, never the provider slug's: a key on Codex's protocol offers
+  // Codex's levels, a key under OpenCode OpenCode's variants.
+  const shownEffort: string = normalizeEffortFor(
+    shownEngine,
     shownProvider,
     live ? effectiveEffort : effort,
     shownModel,
     runner.modelCatalog,
     configuredProviders,
   );
-  const shownEffortOptions = effortOptionsForProvider(
+  const shownEffortOptions = effortOptionsFor(
+    shownEngine,
     shownProvider,
     shownModel,
     runner.modelCatalog,
@@ -8042,42 +8079,32 @@ export function WorkspaceView({
   );
   // Whether this session has a fast lane to offer at all — Claude's `/fast` on the models that
   // carry it, Codex's "Fast" service tier on a model whose row in this runner's catalogue
-  // advertises it. The runtime, never the slug: a configured (BYOK) identity borrows one.
+  // advertises it. The engine, never the slug: a key runs on whichever engine the session has.
   // Unresolved means no, which is the safe direction: a pill that appears and then vanishes is
   // worse than one that appears a moment late, and this is the same fact the server polices at
   // dispatch.
   const fastModeUsable =
-    shownProviderCapabilitiesResolved &&
-    fastModeAvailable(
-      runtimeForProvider(shownProvider, configuredProviders),
-      shownModel,
-      runner.modelCatalog,
-    );
+    shownProviderCapabilitiesResolved && fastModeAvailable(shownEngine, shownModel, runner.modelCatalog);
   const shownFastMode: boolean = live ? effectiveFastMode : fastMode;
   // What a permission mode ACTUALLY means on the engine that will run it. Derived with the same
-  // shared table the server stamps onto the session payload, so the picker cannot drift from it.
-  //
-  // Only for built-in engines: a configured (BYOK) slug borrows a runtime this screen cannot name,
-  // and telling someone "you will be asked" for a session that might be running on Codex is
-  // exactly the false assurance this is here to remove. Unknown => say nothing.
-  //
-  // DeepSeek Harness is the exception: a configured Harness key can only run on Harness (its runtime
-  // can't change, providers.service), so its slug names the runtime as surely as a built-in does.
-  const shownRuntime = runtimeForProvider(shownProvider, configuredProviders);
-  const shownProviderIsBuiltin =
-    Object.values(AgentProvider).some((p) => p === shownProvider) || shownRuntime === AgentProvider.DSH;
+  // shared table the server stamps onto the session payload, so the picker cannot drift from it —
+  // from the session's own engine, which a key no longer hides. A key (or pool) on Claude Code owns
+  // its model space, which Claude's per-model Auto list cannot speak for (supportsAuto), so its model
+  // is left out of that one question.
+  const shownOnOwnModels =
+    shownEngine === AgentProvider.CLAUDE &&
+    !isLoginProvider(shownProvider) &&
+    configuredProviders.some((p) => p.slug === shownProvider);
   const permissionSemanticsFor = useCallback(
     (label: string) =>
-      shownProviderIsBuiltin
-        ? derivePermissionSemantics(
-            shownRuntime,
-            MODE_TO_PERMISSION[label],
-            shownModel,
-            runner.runsAsRoot,
-            runner.modelCatalog,
-          )
-        : undefined,
-    [shownRuntime, shownProviderIsBuiltin, shownModel, runner.runsAsRoot, runner.modelCatalog],
+      derivePermissionSemantics(
+        shownEngine,
+        MODE_TO_PERMISSION[label],
+        shownOnOwnModels ? undefined : shownModel,
+        runner.runsAsRoot,
+        runner.modelCatalog,
+      ),
+    [shownEngine, shownOnOwnModels, shownModel, runner.runsAsRoot, runner.modelCatalog],
   );
   // Model, Mode, Effort & Provider can be changed any time on a live session (the runner must be
   // online to act on it), and none of them aborts the running turn. When the change lands is the
@@ -8395,8 +8422,10 @@ export function WorkspaceView({
   };
   // `account`, when the pick was one of the engine's accounts listed under it rather than the engine's
   // own row: the switch lands the session there (SessionConfigDto.account) — Automatic's pick otherwise.
+  // Every row is a credential of the session's own engine, so no pick here changes the engine — the
+  // server refuses one that would (ENGINE_IMMUTABLE, PROVIDER_ENGINE_INCOMPATIBLE).
   const pickProvider = (v: string, account?: string): void => {
-    if (v === shownChoice) {
+    if (v === shownProvider) {
       if (account !== undefined) pickAccount(account, false);
       return;
     }
@@ -8408,35 +8437,31 @@ export function WorkspaceView({
     if (picked?.unavailable) {
       navigate(
         picked.fixHref ??
-          `/infrastructure?runner=${encodeId(runner.id)}&engine=${picked.fixEngine ?? picked.slug}`,
+          `/infrastructure?runner=${encodeId(runner.id)}&engine=${picked.fixEngine ?? shownEngine}`,
       );
       return;
     }
     // A draft holds the pick for its create. Model, mode and effort re-seed on their own: the
     // provider is part of the draft's seed context (`modelContextKey`).
     if (!selected) {
-      if (account === undefined) pickDraftProvider(v);
-      else pickDraftAccount(v, account === AUTOMATIC_ACCOUNT ? null : account);
+      if (account === undefined) pickDraft(shownEngine, v);
+      else if (isAccountEngine(v)) pickDraftAccount(v, account === AUTOMATIC_ACCOUNT ? null : account);
       return;
     }
-    // Within OpenCode a key is part of the model (`orbit-<slug>/<model>`), so moving between its own
-    // config and its keys is a model change, onto the default of the one picked.
-    if (shownProvider === AgentProvider.OPENCODE && runtimeForProvider(v, configuredProviders) === AgentProvider.OPENCODE) {
-      pickModel(defaultModelForProvider(v, runner.modelCatalog, configuredProviders, runner.runtimeDefaultModels));
-      return;
-    }
-    // Each provider owns its model space, so carry the running model only when the new one offers
-    // it (two Anthropic accounts do; a third-party endpoint with its own list does not) and
-    // otherwise take that provider's default. Mode and effort follow the model, exactly as a model
+    // Each credential owns its model space on the engine, so carry the running model only when the
+    // new one offers it (two Anthropic accounts do; a third-party endpoint with its own list does not)
+    // and otherwise take that one's default. Mode and effort follow the model, exactly as a model
     // switch makes them.
-    const nextModel = modelOptionsForProvider(v, runner.modelCatalog, configuredProviders).some(
+    const nextModel = modelOptionsFor(shownEngine, v, runner.modelCatalog, configuredProviders).some(
       (option) => option.value === shownModel,
     )
       ? shownModel
-      : defaultModelForProvider(v, runner.modelCatalog, configuredProviders, runner.runtimeDefaultModels);
-    const drop = shownMode === 'Auto' && !supportsAuto(nextModel, v, configuredProviders, runner.modelCatalog);
+      : defaultModelFor(shownEngine, v, runner.modelCatalog, configuredProviders, runner.runtimeDefaultModels);
+    const drop =
+      shownMode === 'Auto' && !supportsAuto(nextModel, shownEngine, v, configuredProviders, runner.modelCatalog);
     const currentEffort = live ? effectiveEffort : effort;
-    const nextEffort = normalizeEffortForProvider(
+    const nextEffort = normalizeEffortFor(
+      shownEngine,
       v,
       currentEffort,
       nextModel,
@@ -8481,11 +8506,12 @@ export function WorkspaceView({
   const authErrorHelp: AuthErrorHelp = useMemo(
     () => ({
       provider: shownProvider,
+      keyName: selectedKeyName,
       runnerName: runner.displayName || runner.name,
       runnerId: runner.id,
       runnerVersion: runner.version,
       googleLogin: runner.antigravity?.googleLogin,
-      runtime: runtimeForProvider(shownProvider, configuredProviders),
+      runtime: shownEngine,
       onConnectGemini: () => navigate(geminiProvider ? `/providers/${encodeId(geminiProvider.id)}` : '/providers/new/gemini'),
       onSwitchToGemini: geminiChoice && !geminiChoice.unavailable && !selectedTrashed && !selectedMissing
         ? () => pickProvider(geminiChoice.slug)
@@ -8527,6 +8553,8 @@ export function WorkspaceView({
     // rebuild this every render and re-render the card through the context.
     [
       shownProvider,
+      shownEngine,
+      selectedKeyName,
       runner.name,
       runner.displayName,
       runner.id,
@@ -8570,21 +8598,23 @@ export function WorkspaceView({
         ...prev,
         preferences: {
           ...prev.preferences,
-          defaultModels: { ...prev.preferences?.defaultModels, [shownChoice]: v },
+          defaultModels: { ...prev.preferences?.defaultModels, [defaultModelKey(shownEngine, shownProvider)]: v },
         },
       } : prev,
     );
-    modelPreferenceMut.mutate({ provider: shownChoice, model: v });
+    modelPreferenceMut.mutate({ engine: shownEngine, provider: shownProvider, model: v });
     if (v === shownModel) {
       modelSeedState.current = dirtyContextSeed(modelContextKey);
       return;
     }
     // Switching to a model that can't do Auto while Auto is selected would send a mode claude
     // rejects — snap back to Default.
-    const drop = shownMode === 'Auto' && !supportsAuto(v, shownProvider, configuredProviders, runner.modelCatalog);
+    const drop =
+      shownMode === 'Auto' && !supportsAuto(v, shownEngine, shownProvider, configuredProviders, runner.modelCatalog);
     // An OpenCode variant is model-defined: a model switch can strip it.
     const currentEffort = live ? effectiveEffort : effort;
-    const nextEffort = normalizeEffortForProvider(
+    const nextEffort = normalizeEffortFor(
+      shownEngine,
       shownProvider,
       currentEffort,
       v,
@@ -8614,7 +8644,8 @@ export function WorkspaceView({
   const pickEffort = (v: string): void => {
     if (v === shownEffort) return;
     effortSeedState.current = dirtyContextSeed(effortContextKey);
-    const normalized = normalizeEffortForProvider(
+    const normalized = normalizeEffortFor(
+      shownEngine,
       shownProvider,
       v,
       shownModel,
@@ -8688,19 +8719,175 @@ export function WorkspaceView({
     const route = detailForSelected?.route;
     return selected?.taskId && route?.applied && route.level && route.model === shownModel ? route : null;
   })();
-  // The menu's title: the engine this session runs on — and, while a standing pick will carry the
-  // next turn to a different one, where it is going (`Claude Code → Codex`). Same fact
-  // `providerSwitchNote` says in words, said as the pair it is about.
-  const engineTitle = useMemo(
-    () =>
-      engineTitleFor(
-        selected?.provider ?? detailForSelected?.provider ?? shownProvider,
-        configuredProviders,
-        pendingResumeProvider,
-      ),
-    [selected?.provider, detailForSelected?.provider, shownProvider, pendingResumeProvider, configuredProviders],
-  );
+  // The menu's title: the engine this session runs on — its own, recorded when it started and never
+  // changed, so no pick below can move it (board 5 ③); a draft's is the one the hero picked.
+  const engineTitle = useMemo(() => engineTitleFor(shownEngine), [shownEngine]);
   const engineTitleGlyph = engineTitle.glyphKey ? PROVIDER_GLYPHS[engineTitle.glyphKey] : undefined;
+  // What the Provider row says it is on: an engine's own sign-in by the account in use — Automatic
+  // while Orbit picks it — OpenCode's own configuration by that, anything else by its own name.
+  const shownProviderRow = providerSwitchChoices.find((choice) => choice.slug === shownProvider);
+  const shownProviderValue =
+    shownProviderRow?.kind === 'login'
+      ? accountsOffered && sessionAutomatic
+        ? 'Automatic'
+        : (shownAccountLabel ?? shownProviderRow.label)
+      : shownProviderRow?.kind === 'opencode'
+        ? 'Own sign-in'
+        : (shownProviderRow?.label ?? shownProvider);
+  // One credential's row — and, under an engine's own sign-in, its accounts. On the sign-in the
+  // session is on, those are the ones it moves between (switchAccount); on a session spending a key
+  // or a pool of the same engine, the ones a switch onto the sign-in lands on (pickProvider with the
+  // account).
+  const providerRows = (choice: ProviderChoice): NonNullable<MenuProps['items']> => {
+    // Carry the reason on the row itself, where it answers the question being asked ("why can't I
+    // pick Claude?"). It stays pickable rather than greyed because picking it does something useful
+    // — it goes where the fix is (see pickProvider), which is the New Session hero's behaviour for
+    // the same engine. The running provider is exempt: it is the chip's own provider, and needs no
+    // parenthetical.
+    const blocked = !!choice.unavailable && choice.slug !== shownProvider;
+    const here = choice.slug === shownAccountEngine;
+    const engine: AccountEngine | null = choice.kind === 'login' && isAccountEngine(choice.slug) ? choice.slug : null;
+    const accounts = here ? (accountsOffered ? accountRows : []) : engine && !blocked ? accountRowsFor(engine) : [];
+    const automatic =
+      accounts.length > 0 && (here ? automaticHere : !!engine && automaticOfferedOn(engine, shownWorkspaceRow));
+    const pick = (account: string, signedOut: boolean) => {
+      if (here) return pickAccount(account, signedOut);
+      if (signedOut) {
+        navigate(`/infrastructure?runner=${encodeId(runner.id)}&engine=${engine}`);
+        return;
+      }
+      pickProvider(engine!, account);
+    };
+    // An engine's own sign-in with more than one account is its accounts: the sign-in row itself
+    // would name nothing they do not.
+    const rows: NonNullable<MenuProps['items']> =
+      accounts.length > 0
+        ? []
+        : [
+            {
+              key: `provider:${choice.slug}`,
+              // Distinguishable at a glance from a credential that is ready to run, without being
+              // inert: the identity is dimmed, the call to action is not.
+              className: blocked ? 'composer-provider-fix' : undefined,
+              label: (
+                <span className="scope-menu-row">
+                  <span className="composer-provider-name">
+                    {(choice.kind === 'pool' || choice.kind === 'key') && <BrandMark choice={choice} size={16} />}
+                    {blocked ? `${providerNameOn(shownEngine, choice)} — ${choice.unavailable}, fix it →` : choice.label}
+                    {choice.labelDetail && <small className="np-label-detail">{choice.labelDetail}</small>}
+                  </span>
+                  {checkSlot(choice.slug === shownProvider)}
+                </span>
+              ),
+              onClick: () => pickProvider(choice.slug),
+            },
+          ];
+    return [
+      ...rows,
+      ...(automatic
+        ? [
+            {
+              key: `${choice.slug}-account:automatic`,
+              className: 'composer-account-row',
+              label: (
+                <span className="scope-menu-row">
+                  <span className="composer-account-row-name">Automatic</span>
+                  {menuValue('Switches to soonest reset')}
+                  {checkSlot(here && sessionAutomatic)}
+                </span>
+              ),
+              onClick: () => pick(AUTOMATIC_ACCOUNT, false),
+            },
+          ]
+        : []),
+      ...accounts.map((account) => ({
+        key: `${choice.slug}-account:${account.id}`,
+        className: `composer-account-row${account.nearLimit ? ' near-limit' : ''}${
+          account.unavailable ? ' composer-provider-fix' : ''
+        }`,
+        label: (
+          <span className="scope-menu-row">
+            <span className="composer-account-row-name">
+              {account.unavailable ? `${account.label} — ${account.unavailable}, sign in →` : account.label}
+            </span>
+            {!account.unavailable && account.quota && menuValue(account.quota)}
+            {checkSlot(here && account.id === shownAccount && !sessionAutomatic)}
+          </span>
+        ),
+        onClick: () => pick(account.id, !!account.unavailable),
+      })),
+    ];
+  };
+  // The session's own provider when its engine no longer lists it — a key turned off or deleted, the
+  // legacy built-in `dsh` — first, under its own heading, saying what became of it: a turned-off key
+  // opens its page, where it is turned back on; a deleted one is no choice at all (board 5 ④).
+  const sessionKeyRow = (choice: ProviderChoice): NonNullable<MenuProps['items']>[number] => ({
+    key: `provider:${choice.slug}`,
+    disabled: shownKeyGone?.status === 'Key deleted',
+    className: shownKeyGone ? 'composer-provider-gone' : undefined,
+    label: (
+      <span className="scope-menu-row">
+        <span className="composer-provider-name">
+          <BrandMark choice={choice} size={16} />
+          {choice.label}
+          {choice.labelDetail && <small className="np-label-detail">{choice.labelDetail}</small>}
+        </span>
+        {shownKeyGone ? (
+          <span className="scope-menu-value is-warning">
+            <span className="scope-menu-value-text">{shownKeyGone.status === 'Key deleted' ? 'Deleted' : shownKeyGone.status}</span>
+          </span>
+        ) : (
+          checkSlot(true)
+        )}
+      </span>
+    ),
+    onClick: () => (shownKeyGone?.href ? navigate(shownKeyGone.href) : undefined),
+  });
+  // The submenu, grouped by where a credential comes from (board 4 ④): the runner's own sign-in (or
+  // OpenCode's own configuration on it), the account pools, the keys — only what the session's engine
+  // runs (the compatibility table), never another engine's.
+  const providerGroup = (key: string, label: string, choices: ProviderChoice[]): NonNullable<MenuProps['items']> =>
+    choices.length === 0
+      ? []
+      : [{ key: `provider-group:${key}`, type: 'group' as const, label, children: choices.flatMap(providerRows) }];
+  // The machine the session's engine runs on, as its sign-in group names it.
+  const runnerLabel = runner.displayName || runner.name;
+  const listedChoices = shownProviderListed ? providerSwitchChoices : providerSwitchChoices.slice(1);
+  const ownCredential = listedChoices.filter((c) => c.kind === 'login' || c.kind === 'opencode');
+  // A Claude subscription token is the one key on Anthropic's protocol OpenCode does not run, so its
+  // absence under OpenCode is said rather than left to be wondered about (board 4 ⑤).
+  const subscriptionOnly =
+    shownEngine === AgentProvider.OPENCODE
+      ? configuredProviders.filter(
+          (p) => p.runtime === AgentProvider.CLAUDE && p.engines?.length === 1 && p.engines[0] === AgentProvider.CLAUDE,
+        )
+      : [];
+  const providerMenuGroups: NonNullable<MenuProps['items']> = [
+    ...(!shownProviderListed && providerSwitchChoices[0]
+      ? [{ key: 'provider-group:session', type: 'group' as const, label: "This session's key", children: [sessionKeyRow(providerSwitchChoices[0])] }]
+      : []),
+    ...providerGroup(
+      'machine',
+      ownCredential.some((c) => c.kind === 'login' && !c.unavailable) ? `Signed in on ${runnerLabel}` : `On ${runnerLabel}`,
+      ownCredential,
+    ),
+    ...providerGroup('pools', 'Account pools', listedChoices.filter((c) => c.kind === 'pool')),
+    ...providerGroup('keys', 'API keys', listedChoices.filter((c) => c.kind === 'key')),
+    ...(subscriptionOnly.length > 0
+      ? [
+          {
+            key: 'provider-foot',
+            type: 'group' as const,
+            label: (
+              <span className="composer-provider-foot">
+                {subscriptionOnly.map((p) => p.label).join(', ')} {subscriptionOnly.length === 1 ? 'isn’t' : 'aren’t'} here: a
+                subscription token runs on Claude Code only.
+              </span>
+            ),
+          },
+        ]
+      : []),
+  ];
   const modelMenuItems: MenuProps['items'] = [
     // The menu's own title, and not a control: the one fact none of the rows below states is which
     // CLI executes at all. It is never picked here — a run keeps its engine for its whole life, and
@@ -8726,14 +8913,6 @@ export function WorkspaceView({
             )}
           </span>
           <span className="composer-engine-title-name">{engineTitle.name}</span>
-          {engineTitle.nextName && (
-            <>
-              <span className="composer-engine-title-arrow" aria-hidden="true">
-                →
-              </span>
-              <span className="composer-engine-title-name">{engineTitle.nextName}</span>
-            </>
-          )}
         </span>
       ),
     },
@@ -8759,10 +8938,10 @@ export function WorkspaceView({
           { key: 'smart-route-divider', type: 'divider' as const },
         ]
       : []),
-    // Only when there is somewhere to go: a second account with the same vendor, another endpoint on
-    // the same CLI, or another of the runner's Codex accounts. One entry means no switch is possible,
-    // and the row is left out rather than shown inert — the common case, one Claude sign-in and no
-    // configured providers.
+    // Only when there is somewhere to go: another credential the session's engine runs — a key, a
+    // pool, its own sign-in — or another of the runner's accounts. One entry means no switch is
+    // possible, and the row is left out rather than shown inert — the common case, one Claude sign-in
+    // and no keys.
     ...(providerSwitchChoices.length > 1 || accountsOffered
       ? [
           {
@@ -8770,84 +8949,16 @@ export function WorkspaceView({
             label: (
               <span className="scope-menu-row">
                 Provider
-                {menuValue(providerSwitchChoices.find((c) => c.slug === shownChoice)?.label ?? shownChoice)}
+                {shownKeyGone ? (
+                  <span className="scope-menu-value is-warning">
+                    <span className="scope-menu-value-text">{shownKeyGone.status}</span>
+                  </span>
+                ) : (
+                  menuValue(shownProviderValue)
+                )}
               </span>
             ),
-            children: providerSwitchChoices.flatMap((choice) => {
-              // Carry the reason on the row itself, where it answers the question being asked
-              // ("why can't I pick Claude?"). It stays pickable rather than greyed because picking
-              // it does something useful — it goes where the fix is (see pickProvider), which is
-              // the New Session hero's behaviour for the same row. The running provider is
-              // exempt: it is the chip's own provider, and needs no parenthetical.
-              const blocked = !!choice.unavailable && choice.slug !== shownChoice;
-              // Each built-in engine's accounts under it: on the
-              // engine the session is on, the ones it moves between (switchAccount); under another,
-              // the ones a switch onto that engine lands on (pickProvider with the account).
-              const here = choice.slug === shownAccountEngine;
-              const engine: AccountEngine | null = isAccountEngine(choice.slug) ? choice.slug : null;
-              const accounts = here ? (accountsOffered ? accountRows : []) : engine && !blocked ? accountRowsFor(engine) : [];
-              const automatic =
-                accounts.length > 0 && (here ? automaticHere : !!engine && automaticOfferedOn(engine, shownWorkspaceRow));
-              const pick = (account: string, signedOut: boolean) => {
-                if (here) return pickAccount(account, signedOut);
-                if (signedOut) {
-                  navigate(`/infrastructure?runner=${encodeId(runner.id)}&engine=${engine}`);
-                  return;
-                }
-                pickProvider(engine!, account);
-              };
-              return [
-                {
-                  key: `provider:${choice.slug}`,
-                  // Distinguishable at a glance from a provider that is ready to run, without being
-                  // inert: the identity is dimmed, the call to action is not.
-                  className: blocked ? 'composer-provider-fix' : undefined,
-                  label: (
-                    <span className="scope-menu-row">
-                      {blocked
-                        ? `${choice.label} — ${choice.unavailable}, fix it →`
-                        : choice.label}
-                      {choice.labelDetail && <small className="np-label-detail">{choice.labelDetail}</small>}
-                      {/* With its accounts listed, the tick is on the account the session runs on. */}
-                      {checkSlot(choice.slug === shownChoice && accounts.length === 0)}
-                    </span>
-                  ),
-                  onClick: () => pickProvider(choice.slug),
-                },
-                ...(automatic
-                  ? [
-                      {
-                        key: `${choice.slug}-account:automatic`,
-                        className: 'composer-account-row',
-                        label: (
-                          <span className="scope-menu-row">
-                            <span className="composer-account-row-name">Automatic</span>
-                            {menuValue('Switches to soonest reset')}
-                            {checkSlot(here && sessionAutomatic)}
-                          </span>
-                        ),
-                        onClick: () => pick(AUTOMATIC_ACCOUNT, false),
-                      },
-                    ]
-                  : []),
-                ...accounts.map((account) => ({
-                  key: `${choice.slug}-account:${account.id}`,
-                  className: `composer-account-row${account.nearLimit ? ' near-limit' : ''}${
-                    account.unavailable ? ' composer-provider-fix' : ''
-                  }`,
-                  label: (
-                    <span className="scope-menu-row">
-                      <span className="composer-account-row-name">
-                        {account.unavailable ? `${account.label} — ${account.unavailable}, sign in →` : account.label}
-                      </span>
-                      {!account.unavailable && account.quota && menuValue(account.quota)}
-                      {checkSlot(here && account.id === shownAccount && !sessionAutomatic)}
-                    </span>
-                  ),
-                  onClick: () => pick(account.id, !!account.unavailable),
-                })),
-              ];
-            }),
+            children: providerMenuGroups,
           },
           { key: 'provider-divider', type: 'divider' as const },
         ]
@@ -10382,7 +10493,7 @@ export function WorkspaceView({
                   answerable={answerableApprovalIds.has(a.id)}
                   onChatAbout={startChatReply}
                   onDecline={startDeclineReply}
-                  rememberable={approvalRememberOffered(runtimeForProvider(shownProvider, configuredProviders))}
+                  rememberable={approvalRememberOffered(shownEngine)}
                 />
               ))}
               {!selectedTrashed && queuedTailEvents.map(({ turn: q, event }) => {
@@ -10485,7 +10596,7 @@ export function WorkspaceView({
                 <NewSessionProviderHero
                   current={currentDraftEngine}
                   engines={draftEngines}
-                  onPick={pickDraftProvider}
+                  onPick={pickDraft}
                   runnerId={runner.id}
                   currentModelLabel={shownModelLabel}
                   // Nothing to choose until we know which workspace (and so which project) this runs in.
@@ -11216,7 +11327,7 @@ export function WorkspaceView({
                   const semantics = permissionSemanticsFor(m);
                   const runnable =
                     permissionModeAvailableOnRunner(MODE_TO_PERMISSION[m], runner.runsAsRoot) &&
-                    permissionModeSupported(MODE_TO_PERMISSION[m], shownProvider, configuredProviders);
+                    permissionModeSupported(MODE_TO_PERMISSION[m], shownEngine);
                   const shortNote = semantics?.shortNote;
                   return {
                     value: m,
@@ -11319,7 +11430,7 @@ export function WorkspaceView({
             )}
             {/* Context stays visible even before the first turn reports tokens — a New Session reads
                 "—". Rightmost pill, to the right of plan usage. */}
-            {!(shownProvider === 'opencode' && shownModel === '') && (
+            {!(shownEngine === AgentProvider.OPENCODE && shownModel === '') && (
               <ContextWindowIndicator
                 tokens={contextTokens}
                 reportedWindow={reportedContextWindow}

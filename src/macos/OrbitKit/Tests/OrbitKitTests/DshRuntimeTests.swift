@@ -162,7 +162,7 @@ final class DshRuntimeTests: XCTestCase {
         let ready = SessionProviderChoices.choices(configured: configured, catalog: catalog, dshState: .ready)
         let row = ready.first { $0.slug == "deepseek-harness" }!
         XCTAssertNil(row.unavailable)
-        XCTAssertEqual(row.labelDetail, "Harness")
+        XCTAssertEqual(row.labelDetail, "DeepSeek Harness")
         XCTAssertEqual(row.modelLabel, "DeepSeek V4 Pro")
         XCTAssertEqual(ready.first { $0.slug == "deepseek" }?.labelDetail, "Claude Code")
         XCTAssertFalse(ready.contains { $0.setup })
@@ -177,7 +177,7 @@ final class DshRuntimeTests: XCTestCase {
 
         let none = SessionProviderChoices.choices(configured: [deepseek], catalog: catalog, dshState: .ready)
         let setup = none.first { $0.setup }!
-        XCTAssertEqual(setup.unavailable, "Add API key")
+        XCTAssertEqual(setup.unavailable, "Connect a DeepSeek key")
         XCTAssertEqual(setup.fixEngine, DshRuntime.connectFix)
         XCTAssertFalse(SessionProviderChoices.choices(configured: [deepseek], dshState: .updateRunner).contains { $0.setup })
         XCTAssertFalse(SessionProviderChoices.choices(configured: [deepseek], dshState: nil).contains { $0.setup })
@@ -203,7 +203,7 @@ final class DshRuntimeTests: XCTestCase {
         let none = SessionProviderChoices.engines(
             SessionProviderChoices.choices(configured: [deepseek], catalog: catalog, dshState: .ready), configured: [deepseek])
         let connect = none.first { $0.slug == "dsh" }!
-        XCTAssertEqual(connect.unavailable, "Add API key")
+        XCTAssertEqual(connect.unavailable, "Connect a DeepSeek key")
         XCTAssertEqual(connect.fixEngine, DshRuntime.connectFix)
         XCTAssertFalse(none.first { $0.slug == "claude" }!.provider.setup)
     }
@@ -245,12 +245,28 @@ final class DshRuntimeTests: XCTestCase {
         for repair in [DshRuntime.Repair.needsKey, .invalidKey, .updateRunner] {
             XCTAssertTrue(transcript.contains("'\(repair.title)'"), "web lost \(repair.title)")
         }
-        for repair in [DshRuntime.Repair.needsKey, .invalidKey, .notInstalled] {
+        for repair in [DshRuntime.Repair.needsKey, .notInstalled] {
             XCTAssertTrue(transcript.contains("'\(repair.detail)'"), "web lost \(repair.detail)")
         }
+        // A rejected key is named at both ends (`the DeepSeek key “DeepSeek 2”`), so the web's sentence is a
+        // template with the name in it, and "the DeepSeek key" where there is none.
+        let template = "Update ${help.keyName ?? 'the DeepSeek key'} in Infrastructure, then send your message again."
+        XCTAssertTrue(transcript.contains("`\(template)`"), "web lost \(template)")
+        let slot = "${help.keyName ?? 'the DeepSeek key'}"
+        XCTAssertEqual(DshRuntime.Repair.invalidKey.detail, template.replacingOccurrences(of: slot, with: "the DeepSeek key"))
+        let named = "the DeepSeek key “DeepSeek 2”"
+        XCTAssertEqual(DshRuntime.Repair.invalidKey.detail(keyName: named), template.replacingOccurrences(of: slot, with: named))
+        // The picker: the row that connects a key says what the web's says, and a key row that still says
+        // which engine it runs on names it as the shared table does (ENGINE_CLI_NAMES).
         let choices = try source("src/web/src/lib/sessionProviderChoices.ts")
-        for text in ["'Add API key'", "labelDetail: 'Harness'", "labelDetail: 'Claude Code'"] {
-            XCTAssertTrue(choices.contains(text), "web picker lost \(text)")
+        let connect = try XCTUnwrap(SessionProviderChoices.choices(configured: [deepseek], dshState: .ready)
+            .first { $0.setup }?.unavailable)
+        XCTAssertTrue(choices.contains("unavailable: '\(connect)'"), "web picker lost \(connect)")
+        let names = try source("src/shared/src/providerEngines.ts")
+        let rows = SessionProviderChoices.choices(configured: [harness, deepseek], catalog: catalog, dshState: .ready)
+        for (engine, slug) in [("DSH", "deepseek-harness"), ("CLAUDE", "deepseek")] {
+            let label = try XCTUnwrap(rows.first { $0.slug == slug }?.labelDetail)
+            XCTAssertTrue(names.contains("[AgentProvider.\(engine)]: '\(label)',"), "ENGINE_CLI_NAMES has no \(engine): '\(label)'")
         }
     }
 

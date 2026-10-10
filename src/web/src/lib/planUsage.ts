@@ -71,25 +71,26 @@ export function codexAccountPlanUsage(
 }
 
 /**
- * The quota to show for a session running on `provider`.
+ * The quota to show for a session on `engine` spending `provider`.
  *
  * Quota belongs to the credential the session actually spends, so the lookup follows the same
- * order dispatch does: a configured provider bills its own key and reports against that account,
- * while a built-in engine runs on the runner's own login and reports through the heartbeat. A
- * configured slug therefore never falls back to the runner's numbers — those are a different
- * subscription — and simply has no gauge when its credential has no quota to report.
+ * order dispatch does: an engine's own sign-in runs on the runner's login and reports through the
+ * heartbeat, while a key (or pool) bills its own account and reports against that — on whichever
+ * engine runs it. A key therefore never falls back to the runner's numbers — those are a different
+ * subscription — and simply has no gauge when its credential has no quota to report. OpenCode's own
+ * configuration and the legacy built-in `dsh` report none.
  */
 export function sessionPlanUsage(
+  engine: string,
   provider: string,
   runnerUsage: PlanUsage | null | undefined,
   configured?: ConfiguredProvider[] | null,
 ): PlanUsageSnapshot | null {
-  // A configured row that shadows a built-in slug is not what dispatch runs (isBuiltinProvider
-  // wins), so its credential is not the one being spent either.
+  // An engine's own sign-in: the slug is the engine's name. A configured row that shadows it is not
+  // what dispatch runs (isBuiltinProvider wins), so its credential is not the one being spent either.
+  if (provider === engine) return planUsageSnapshotForProvider(runnerUsage, engine);
   const builtin = Object.values(AgentProvider).some((p) => p === provider);
-  const row = builtin ? undefined : configured?.find((p) => p.slug === provider);
-  if (row) return row.planUsage ?? null;
-  return planUsageSnapshotForProvider(runnerUsage, provider);
+  return (builtin ? undefined : configured?.find((p) => p.slug === provider))?.planUsage ?? null;
 }
 
 /** Split a runner's possibly multi-runtime quota payload into display sections. */
