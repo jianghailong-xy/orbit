@@ -27,7 +27,13 @@ test('P2 encrypted dsh dispatch keeps concurrent provider keys and endpoints sep
     assert.equal(executions[i].env?.ORBIT_DSH_BASE_URL, rows[i].baseUrl);
     assert.ok(!JSON.stringify(rows[i]).includes(keys[i]), 'stored provider data must be encrypted');
   }
-  const service = new ProvidersService({ modelProvider: { findMany: async () => rows } } as never, {} as never, {} as never);
+  // `session`/`providerPool` answer the last-used read listMine makes (provider-last-used.ts) with
+  // nothing used, which is what a synthetic owner has.
+  const service = new ProvidersService({
+    modelProvider: { findMany: async () => rows },
+    session: { groupBy: async () => [] },
+    providerPool: { findMany: async () => [] },
+  } as never, {} as never, {} as never);
   for (const views of [await service.listMine('synthetic-owner'), await service.listShared()]) {
     const api = JSON.stringify(views);
     for (const key of keys) assert.ok(!api.includes(key));

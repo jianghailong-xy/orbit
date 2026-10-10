@@ -329,10 +329,11 @@ describe('the composer model control', { timeout: 60_000 }, () => {
     await click(row('model:gpt-6.1-sol'), 'GPT-6.1-Sol');
     await settle();
     expect(chip()?.textContent).toBe('GPT-6.1-SolDefault');
+    // Remembered for the pair it was picked on — Codex on its own sign-in (contract §6.5).
     expect(client?.getQueryData<{ preferences: unknown }>(['user', 'me'])?.preferences)
-      .toMatchObject({ defaultModels: { codex: 'gpt-6.1-sol' } });
+      .toMatchObject({ defaultModels: { 'codex:codex': 'gpt-6.1-sol' } });
     expect(apiMock.mock.calls.filter(([p]) => p === '/users/me/preferences').map(([, o]) => o?.body))
-      .toEqual([{ defaultModels: { codex: 'gpt-6.1-sol' } }]);
+      .toEqual([{ defaultModels: { 'codex:codex': 'gpt-6.1-sol' } }]);
 
     await act(async () => {
       root!.render(
@@ -391,8 +392,10 @@ describe('the composer model control', { timeout: 60_000 }, () => {
     await open();
     await click(row('model:claude-sonnet-5'), 'another model');
     await settle();
+    // Under the session's own pair — its engine and the key it spends — not the key alone, which
+    // runs on several engines.
     expect(apiMock.mock.calls.filter(([p]) => p === '/users/me/preferences').map(([, o]) => o?.body))
-      .toEqual([{ defaultModels: { 'anthropic-2': 'claude-sonnet-5' } }]);
+      .toEqual([{ defaultModels: { 'claude:anthropic-2': 'claude-sonnet-5' } }]);
     expect(configCalls()).toHaveLength(1);
   });
 

@@ -205,6 +205,34 @@ final class ProjectPageTests: XCTestCase {
         XCTAssertEqual(empty.subtitle, "No open items")
     }
 
+    // MARK: The ending, where the progress card was
+
+    /// A project's sessions page draws its ending in the progress card's place — the settled card
+    /// the conversation draws — only off a read that says DONE and carries the projection's counts
+    /// to tally; an open project, and a read without them, keep the progress card
+    /// (docs/mocks/project-done-sessions-page, owner decision 2026-10-10).
+    func testTheEndingStandsOnlyForAReadThatSaysDoneAndCanTallyIt() {
+        let projection = ProjectDerivedDone(
+            done: true, criteria: [ProjectDoneCriterion(definitionId: "c1", satisfied: true)],
+            counts: ProjectDoneCounts(criteria: 1, met: 1, landed: 1, onMain: 1))
+        XCTAssertTrue(ProjectPage.drawsEnding(
+            ProjectDoneSubject(title: "t", status: "DONE", derivedDone: projection)))
+        XCTAssertTrue(ProjectPage.drawsEnding(
+            ProjectDoneSubject(title: "t", status: "DONE", derivedDone: projection, doneBy: .owner)),
+                      "the owner's own record draws the same ending, spelled by its badge")
+        XCTAssertFalse(ProjectPage.drawsEnding(
+            ProjectDoneSubject(title: "t", status: "OPEN", derivedDone: projection)),
+                       "an open project keeps its progress card")
+        XCTAssertFalse(ProjectPage.drawsEnding(
+            ProjectDoneSubject(title: "t", status: "DONE",
+                               derivedDone: ProjectDerivedDone(counts: nil))),
+                       "the older projection — no unified counts — keeps it too, as it draws none")
+        XCTAssertFalse(ProjectPage.drawsEnding(
+            ProjectDoneSubject(title: "t", status: "DONE")),
+                       "and so does a read that carries no projection at all")
+        XCTAssertFalse(ProjectPage.drawsEnding(nil), "a read that has not answered is not an ending")
+    }
+
     func testWaitingLabelCountsDownToTheOwner() {
         XCTAssertEqual(ProjectPage.waitingLabel(item(.integrationConflict, assignee: .coordinator,
                                                      waited: 18 * 60, escalateIn: 102 * 60), now: Self.now),

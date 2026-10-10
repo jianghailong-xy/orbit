@@ -2404,6 +2404,10 @@ final class AppModel {
     /// The open items of the project whose sessions page is showing, read only while nobody has
     /// started it: what the progress card's start row is drawn from (`StartProject.pageRow`).
     private(set) var projectSessionsOpenItems: ProjectOpenItemsView?
+    /// The project as its sessions page's ending is drawn from, read only while the project is done
+    /// (`ProjectPage.drawsEnding`): the criteria document's own subject, the same read the
+    /// conversation's settled card keeps.
+    private(set) var projectSessionsDone: ProjectDoneSubject?
 
     var projectSessionsColumn: SessionProjectAddress? { nav.projectSessionsColumn }
 
@@ -2484,6 +2488,7 @@ final class AppModel {
             projectSessionsIntegrationReadAt = nil
             projectSessionsIntegrationReadFailed = false
             projectSessionsOpenItems = nil
+            projectSessionsDone = nil
         }
         projectSessionsLoading = true
         defer { if projectSessionsAddress == address { projectSessionsLoading = false } }
@@ -2592,6 +2597,25 @@ final class AppModel {
         let items = try? await api.projectOpenItems(projectID: address.projectID)
         guard projectSessionsAddress == address, !Task.isCancelled, let items else { return }
         projectSessionsOpenItems = items
+    }
+
+    /// One poll of what the page's ending is drawn from (docs/mocks/project-done-sessions-page,
+    /// owner decision 2026-10-10): the project document's own subject — the same read, and the same
+    /// card, the conversation's settled branch keeps — while the project is done. The sidebar's rows
+    /// are the Open projects, so a row that is not Open, or none at all, is the state that may be
+    /// done; the document is the only read that says which. A project that is not done reads nothing
+    /// and keeps nothing, and a read that fails keeps the last answer rather than drawing none.
+    func loadProjectDone(_ address: SessionProjectAddress) async {
+        guard let api else { return }
+        let key = PublicID.storageKey(address.projectID)
+        let row = projects?.sidebarProjects.first { PublicID.storageKey($0.id) == key }
+        guard row?.status != .open else {
+            if projectSessionsAddress == address { projectSessionsDone = nil }
+            return
+        }
+        let document = try? await api.projectCriteria(projectID: address.projectID)
+        guard projectSessionsAddress == address, !Task.isCancelled, let document else { return }
+        projectSessionsDone = document.doneSubject
     }
 
     /// A member may belong to another Workspace. Carry its record into the console's cache, which

@@ -25,7 +25,7 @@ import { settleUnrunWakeTurns } from '../runner-api/wake-turn-withdraw';
 import { linkNotFound } from '../share-links/share-link';
 import { freshRunningBgJobs } from './background-job-activity';
 import { CLEARED_RUNNING_WORK } from './running-work';
-import { resolveLegacyArtifactPath } from './legacy-artifact-path';
+import { resolveLegacyArtifactPath, runEventPayloadMentions } from './legacy-artifact-path';
 import { isWorktreeArtifactPath, readWorktreeArtifactRequest } from './worktree-artifact';
 import { isOrbitAuthoredTurn } from './orbit-authored-turn';
 import { readSessionProjectMembership, sessionInProjectSql, sessionProjectMembershipSql } from './session-project-membership';
@@ -4425,7 +4425,7 @@ export class SessionsService {
     rawPath: string | undefined,
   ): Promise<{ data: Buffer; mimeType: string; disposition: string }> {
     const resolved = await this.resolveLegacyArtifactPath(sessionId, rawPath);
-    const mentioned = await this.legacyArtifactPathIsMentioned(sessionId, resolved.original);
+    const mentioned = await runEventPayloadMentions(this.prisma, sessionId, resolved.original);
     if (!mentioned) throw new NotFoundException('artifact not found');
 
     const filename = path.basename(resolved.file);
@@ -4506,14 +4506,6 @@ export class SessionsService {
       throw new NotFoundException('artifact not found');
     }
     return realFile;
-  }
-
-  private async legacyArtifactPathIsMentioned(sessionId: string, artifactPath: string): Promise<boolean> {
-    const rows = await this.prisma.runEvent.findMany({
-      where: { sessionId },
-      select: { payload: true },
-    });
-    return rows.some((row) => (JSON.stringify(row.payload) ?? '').includes(artifactPath));
   }
 
   private async getLegacyArtifactAttachment(

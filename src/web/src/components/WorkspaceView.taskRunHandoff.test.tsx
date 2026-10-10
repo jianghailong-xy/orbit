@@ -388,10 +388,9 @@ describe('sending into a run the platform has already replaced', { timeout: 60_0
     await act(async () => {
       await vi.waitFor(() => expect(providerNote()).not.toBe(''), { timeout: 20_000, interval: 20 });
     });
+    // By the credentials' names, and "uses": the engine stays, only the credential moves (board 5 ②).
     const note = providerNote();
-    expect(note).toContain('deepseek');
-    expect(note).toContain('claude');
-    expect(note.toLowerCase()).toContain('next');
+    expect(note).toBe('The turn in flight finishes on Claude Code. Your next one uses DeepSeek.');
     // It is not a four-second flash: nothing removes it while the pick stands.
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 4_500));
@@ -416,7 +415,8 @@ describe('sending into a run the platform has already replaced', { timeout: 60_0
     await act(async () => {
       await vi.waitFor(() => expect(providerNote()).not.toBe(''), { timeout: 20_000, interval: 20 });
     });
-    await pickProvider('Claude');
+    // The runner's own Claude sign-in, by the account it runs on.
+    await pickProvider('Default');
     expect(providerNote()).toBe('');
 
     await type('继续干活');
