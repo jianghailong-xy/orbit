@@ -111,9 +111,16 @@ class ComposerDeviceTest {
         awaitText("Fixture Two"); appClick("Fixture Two")
         compose.waitUntil(5000) { stats()["config"]!!.jsonObject["model"]?.jsonPrimitive?.content == "fixture-model-2" }
         ready()
-        compose.onNodeWithText("Second account").performScrollTo().performClick()
-        compose.waitUntil(5000) { stats()["config"]!!.jsonObject["account"]?.jsonPrimitive?.content == "1a2b3c4d" }
-        compose.onNode(hasText("Expired account") and hasText("Not signed in, sign in →")).performScrollTo().assertIsEnabled()
+        // Pressed through its click action once pressable, as appClick does: the menu re-lays out when the model change is read back
+        // (Fixture Two has no Effort section), and a touch injected meanwhile can land between rows.
+        val second = hasText("Second account") and hasClickAction()
+        compose.waitUntil(10000) { compose.onAllNodes(second and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(second).performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
+        compose.waitUntil(10000) { stats()["config"]!!.jsonObject["account"]?.jsonPrimitive?.content == "1a2b3c4d" }
+        // The menu's rows are pressable again once the move the fixture just took is settled in the app and the session read again.
+        val expired = hasText("Expired account") and hasText("Not signed in, sign in →")
+        compose.waitUntil(10000) { compose.onAllNodes(expired and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(expired).performScrollTo().assertIsEnabled()
         compose.onNodeWithText("Close").performClick()
         control("""{"status":"RUNNING"}"""); compose.runOnIdle { app.realtime.refreshSession() }; awaitText("Stop")
         clickSendWhenEnabled(); awaitText("Stop requested.")
@@ -433,20 +440,19 @@ class ComposerDeviceTest {
         login(); compose.onNodeWithContentDescription("Back").performClick()
         awaitText("New session"); compose.onAllNodesWithText("New session")[0].performClick()
         compose.onNodeWithTag("composer-input").performTextInput("账户草稿")
-        // Claude's accounts come first and Codex's second (A07-3, A07-10): the last of a label is Codex's, the first Claude's.
-        // Rows of the Provider section only: the Effort section above it has a "Default" of its own, drawn before the
-        // runner's accounts arrive. Read in the menu's own order: a row scrolled out of the dialog has no bounds to compare.
+        // The Provider section lists the draft's engine's accounts alone (A07-10 on the provider/engine split): Codex's first, the
+        // workspace's engine; Claude Code's once the Engine list moves the draft there. Rows below its heading only: the Effort
+        // section above it has a "Default" of its own, and so does the heading's current credential, a line of text that is no row.
         fun inSection(label:String):List<Int> {
             val all=compose.onAllNodes(hasAnyAncestor(isDialog()) and hasText("",substring=true)).fetchSemanticsNodes()
             val heading=all.indexOfFirst { node -> node.config.getOrNull(SemanticsProperties.Text)?.any { it.text=="Provider" }==true }
             if (heading<0) return emptyList()
-            val below=all.drop(heading+1).map { it.id }.toSet()
+            val below=all.drop(heading+1).filter { it.config.contains(SemanticsActions.OnClick) }.map { it.id }.toSet()
             return compose.onAllNodesWithText(label).fetchSemanticsNodes().withIndex().filter { it.value.id in below }.map { it.index }
         }
-        fun choose(label:String, current:String="fixture-model", first:Boolean=false) {
+        fun choose(label:String, current:String="fixture-model") {
             appClick(current); compose.waitUntil(15000) { inSection(label).isNotEmpty() }
-            val section=inSection(label)
-            compose.onAllNodesWithText(label)[if (first) section.first() else section.last()].performScrollTo().performClick()
+            compose.onAllNodesWithText(label)[inSection(label).single()].performScrollTo().performClick()
             compose.onNodeWithText("Close").performClick()
         }
         fun quota(label:String) {
@@ -457,11 +463,16 @@ class ComposerDeviceTest {
         choose("Second account"); quota("Primary: 71%")
         choose("Default"); quota("Primary: 23%")
         choose("Automatic"); quota("No quota reported for this account.")
-        choose("Default", first=true); quota("Primary: 11%")
+        // Claude Code's accounts are under Claude Code: the engine first, then the account — the draft lands on its Default.
+        compose.onNodeWithTag("new-session-engine").performClick()
+        compose.waitUntil(15000) { compose.onAllNodesWithTag("engine:claude").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("engine:claude").performClick(); awaitText("Claude Code ⌄")
+        quota("Primary: 11%")
         choose("Claude account","claude-model"); quota("No quota reported for this account.")
-        choose("Automatic","claude-model", first=true); clickSendWhenEnabled()
+        choose("Automatic","claude-model"); clickSendWhenEnabled()
         awaitText("Created conversation")
         val request=stats()["creations"]!!.jsonArray.single().jsonObject
+        assertEquals("claude",request["engine"]!!.jsonPrimitive.content)
         assertEquals("claude",request["provider"]!!.jsonPrimitive.content)
         assertNull(request["claudeAccount"]); assertNull(request["codexAccount"])
     }
@@ -518,8 +529,9 @@ class ComposerDeviceTest {
         .mapNotNull { it.config.getOrNull(SemanticsProperties.Text)?.joinToString(" | ") { t -> t.text } }
     private fun controls() = stats()["controls"]!!.jsonArray.map { it.jsonObject }
 
-    /** A07-13 the engine over the menu, A07-3 the engines in iOS's order, A07-10 each engine's accounts with Automatic first,
-     * A07-6 a key listed again under OpenCode and a new session on it, A07-4 Antigravity named by its credential. */
+    /** A07-13 the engine over the menu, A07-3 the engines in the boards' order, A07-10 each engine's accounts with Automatic first,
+     * A07-6 a key under OpenCode and a new session on it, A07-4 Antigravity CLI's sign-in named by its credential — on the
+     * provider/engine split: the Engine list first, then only that engine's credentials. */
     @Test fun a07cModelMenuEnginesAccountsAndKeys() = journey("a07c-model-menu") {
         login("""{"runnerExtra":{"capabilities":["codex-account-move/v1"],
             "antigravity":{"supported":true,"installed":true,"version":"1.2.16","envKeyAvailable":true,"authSource":"google","googleLogin":"available"},
@@ -538,24 +550,39 @@ class ComposerDeviceTest {
         compose.onNodeWithText("Close").performClick()
         compose.onNodeWithContentDescription("Back").performClick()
         awaitText("New session"); compose.onAllNodesWithText("New session")[0].performClick()
-        appClick("fixture-model"); awaitText("Switches to soonest reset")
+        fun engineList(): List<String> {
+            compose.onNodeWithTag("new-session-engine").performClick()
+            compose.waitUntil(15000) { compose.onAllNodesWithTag("engine:claude").fetchSemanticsNodes().isNotEmpty() }
+            return dialogTexts()
+        }
+        val engines = engineList()
+        File(evidence,"a07c-draft-engines.txt").writeText(engines.joinToString("\n"))
+        val order = listOf("Claude Code", "Codex", "Kimi Code", "Antigravity CLI", "OpenCode")
+        assertEquals("the engines in the boards' order, whatever the runner's", order,
+            engines.map { it.substringBefore(" | ").removeSuffix(" | ✓") }.filter { it in order })
+        capture("a07c-draft-engine-list")
+        compose.onNodeWithTag("engine:antigravity").performClick(); awaitText("Antigravity CLI ⌄")
+        compose.onNodeWithTag("composer-model").performClick(); awaitText("Google account")
+        capture("a07c-draft-antigravity-sign-in")
+        compose.onNodeWithText("Close").performClick()
+        engineList(); compose.onNodeWithTag("engine:opencode").performClick(); awaitText("OpenCode ⌄")
+        compose.onNodeWithTag("composer-model").performClick(); awaitText("OpenCode's own sign-in")
         val all = dialogTexts()
         File(evidence,"a07c-draft-menu.txt").writeText(all.joinToString("\n"))
-        // The Provider section, below the menu's own title (the draft's engine, A07-13).
-        val rows = all.drop(all.indexOf("Provider") + 1)
-        val order = listOf("Claude", "Codex", "Antigravity · Google account", "Kimi", "DeepSeek", "OpenCode")
-        assertEquals(order, rows.filter { row -> order.any { row == it || row == "✓ $it" } }.map { it.removePrefix("✓ ") }.distinct())
-        capture("a07c-draft-provider-list")
-        compose.onAllNodes(hasText("DeepSeek") and hasClickAction() and hasAnyAncestor(isDialog()))[1].performScrollTo()
+        // OpenCode's Provider section: its own sign-in, then the keys it runs — the DeepSeek key, by its own name.
+        val rows = all.drop(all.indexOf("Provider") + 2)
+        assertEquals(listOf("On Fixture runner", "✓ OpenCode's own sign-in | opencode auth", "API keys", "DeepSeek"), rows.filter { it != "Close" })
+        compose.onNode(hasText("DeepSeek") and hasClickAction() and hasAnyAncestor(isDialog())).performScrollTo()
         capture("a07c-draft-opencode-keys")
-        compose.onAllNodes(hasText("DeepSeek") and hasClickAction() and hasAnyAncestor(isDialog()))[1].performClick()
+        compose.onNode(hasText("DeepSeek") and hasClickAction() and hasAnyAncestor(isDialog())).performClick()
         awaitText("✓ DeepSeek Chat")
         compose.onNodeWithText("Close").performClick()
         compose.onNodeWithTag("composer-input").performTextInput("A07-6 on OpenCode with the DeepSeek key")
         clickSendWhenEnabled(); awaitText("Created conversation")
         val created = stats()["creations"]!!.jsonArray.single().jsonObject
-        assertEquals("opencode", created["provider"]!!.jsonPrimitive.content)
-        assertEquals("orbit-deepseek/deepseek-chat", created["model"]!!.jsonPrimitive.content)
+        assertEquals("opencode", created["engine"]!!.jsonPrimitive.content)
+        assertEquals("deepseek", created["provider"]!!.jsonPrimitive.content)
+        assertEquals("deepseek-chat", created["model"]!!.jsonPrimitive.content)
     }
 
     /** The auto-retry card (baseline): a spent quota counts down to its reset, and its switch turns the armed retry off. */
@@ -669,6 +696,7 @@ class ComposerDeviceTest {
         compose.waitUntil(10000) { controls().any { it["action"]?.jsonPrimitive?.content == "retry-message" } }
         val retry = controls().last { it["action"]?.jsonPrimitive?.content == "retry-message" }
         assertEquals("custom-codex", retry["body"]!!.jsonObject["provider"]!!.jsonPrimitive.content)
+        assertEquals("the pick travels with the session's engine", "codex", retry["body"]!!.jsonObject["engine"]!!.jsonPrimitive.content)
         capture("a07c-retry-on-pick")
     }
 

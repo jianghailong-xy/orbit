@@ -240,7 +240,7 @@ final class RunnerPageFormatTests: XCTestCase {
         XCTAssertEqual(RunnerPageFormat.engineName("claude"), "Claude Code")
         XCTAssertEqual(RunnerPageFormat.engineName("kimi"), "Kimi Code")
         XCTAssertEqual(RunnerPageFormat.engineName("opencode"), "OpenCode")
-        XCTAssertEqual(RunnerPageFormat.engineName("antigravity"), "Antigravity")
+        XCTAssertEqual(RunnerPageFormat.engineName("antigravity"), "Antigravity CLI")
         XCTAssertEqual(RunnerPageFormat.engineName("gemini"), "gemini")
         let agy = try runner(Self.macMiniJSON, ["engines": [["engine": "gemini", "installed": true],
                                                            ["engine": "antigravity", "installed": true],

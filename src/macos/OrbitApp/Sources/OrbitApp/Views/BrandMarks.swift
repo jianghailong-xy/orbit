@@ -88,13 +88,14 @@ enum AgentBrand {
     /// Resolve from a preset key or provider slug. Engine slugs map to the preset they run
     /// (`claude` → Anthropic, `codex` → OpenAI), mirroring web's `ENGINE_PRESET`; `antigravity` is
     /// its own mark, not Gemini's — the Gemini preset runs on it, but is named for the models a key
-    /// buys, and the engine is the CLI.
+    /// buys, and the engine is the CLI. DeepSeek Harness (`dsh`) wears DeepSeek's whale, the keys it
+    /// runs on, as web's `brandForProvider` gives it.
     static func from(_ provider: String?) -> AgentBrand {
         switch provider?.lowercased() {
         case "codex", "openai":            return .codex
         case "claude", "anthropic", nil:   return .claude
         case "gemini", "google":           return .gemini
-        case "deepseek", "deepseek-harness": return .deepseek
+        case "deepseek", "deepseek-harness", "dsh": return .deepseek
         case "kimi", "moonshot":           return .kimi
         case "glm", "zai", "z.ai":         return .glm
         case "minimax":                    return .minimax

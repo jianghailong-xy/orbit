@@ -101,22 +101,23 @@ final class ConsoleModel {
     /// session it creates is filed in — the create request carries it as `folderId`
     /// (docs/session-folders-move-design.md §3.3). Nil for a draft opened from a list.
     private let draftFolderID: String?
+    /// Where this draft's or session's credential comes from: an engine's own sign-in (the engine's
+    /// name), OpenCode's own configuration, an account pool or a key — one `engine` runs.
     private(set) var provider = "claude"
-    /// Draft only: an explicit provider pick (the hero's engine, or the composer's Provider menu), as opposed to the agent's
-    /// own. Non-nil means the create request carries it AND the pick is remembered on the agent
-    /// once the session exists — so the next draft here opens on it without the override.
-    private(set) var draftProviderOverride: String?
-    /// Draft only: the picker identity of that pick when it is not the provider itself — a configured
-    /// key run on OpenCode (`OpenCodeKeys.choice`), whose session is created on `opencode`. It is
-    /// the model space the draft seeds from, so a re-seed cannot drop the key for OpenCode's own.
-    private(set) var draftChoice: String?
-    /// The picker identity this draft or session is on (web `providerChoiceFor`): the provider,
-    /// except that OpenCode on a configured key is on that key — whose models the composer lists and
-    /// whose row the Provider menu ticks.
-    var providerChoice: String {
-        if isDraft, let draftChoice { return draftChoice }
-        return OpenCodeKeys.choice(provider: provider, model: modelID)
+    /// The engine this session recorded, which never changes — or a draft's: the hero's pick, else what
+    /// its workspace last ran on. Nil from an older server; `engine` then places the row by its provider.
+    private(set) var recordedEngine: String?
+    /// The engine — the CLI on the runner — this draft or session runs on, fixed for a session's life
+    /// (docs/provider-engine-contract.md §1.1). Its models, efforts, permission modes, fast lane and
+    /// slash commands are asked of it, never of the provider's slug.
+    var engine: String {
+        ProviderEngines.sessionEngine(recordedEngine, provider: provider, configured: configuredProviders)
     }
+    /// Draft only: an explicit pick — the hero's engine with the credential it lands on, or a credential
+    /// of the draft's engine from the composer's Provider menu. Non-nil means the create request carries
+    /// the pair (contract §3.2); the next draft here opens on it because the workspace's default is read
+    /// back from what it last ran.
+    private(set) var draftPick: EnginePick?
     /// Draft only: a Codex account picked under Codex in the composer's Provider menu (`default` or a slot
     /// id). Nil leaves it to the workspace: its own pick, else Automatic — the account with the most
     /// room, which the server chooses when it creates the session.
@@ -176,10 +177,8 @@ final class ConsoleModel {
         return EngineAuth.antigravityRepair(sessionError)
     }
 
-    /// A DeepSeek Harness key: a configured row whose runtime is `dsh` (its runtime can never change).
-    var executesDsh: Bool {
-        SessionProviderChoices.executingRuntime(provider, configured: configuredProviders) == "dsh"
-    }
+    /// A DeepSeek Harness session or draft: its engine, whichever DeepSeek key it spends.
+    var executesDsh: Bool { engine == "dsh" }
 
     /// Whether this console's runner can start Harness — nil before any runner snapshot is read,
     /// which claims nothing (`DshRuntime.state`).
@@ -229,23 +228,45 @@ final class ConsoleModel {
             && !antigravityInstalling && runnerInstall?.inFlight != true
     }
 
-    /// Where a Harness key is fixed: the session's own key row in the web app's Providers, or the
-    /// connect form when the account has none. These clients do not edit keys themselves.
-    func dshKeyURL() async -> URL {
-        let keys = try? await api.personalProviders()
-        if let key = keys?.first(where: { $0.slug == provider && $0.runtime == "dsh" }) ?? keys?.first(where: { $0.runtime == "dsh" }),
-           let id = key.providerID {
-            return api.baseURL.appendingPathComponent("providers/\(id)")
-        }
-        return api.baseURL.appendingPathComponent("providers/new/\(DshRuntime.presetSlug)")
+    /// The provider this session itself is on — the credential its runs spend — even while a pick held
+    /// for its next resume has replaced `provider` (`pendingResumeFrom`).
+    var sessionProvider: String { pendingResumeFrom ?? provider }
+
+    /// The key this session runs on, as the cards about a key its vendor rejected name it (board 8):
+    /// `the DeepSeek key “DeepSeek 2”`. The session's own — the credential that failed, never a pick
+    /// held for the next turn. Nil when it runs on no key of the account's (a sign-in, a key since
+    /// removed).
+    var sessionKeyName: String? {
+        guard !isDraft, let key = ProviderEngines.configuredRow(sessionProvider, configuredProviders) else { return nil }
+        return SessionProviderChoices.keyName(key)
     }
 
-    /// The web page a picker row's `fixEngine` is fixed on — connecting a Harness key, which these
-    /// clients don't do themselves — or nil when the fix is that engine's page on the runner, in the app
-    /// (`AppModel.openRunnerEngine`), where an engine is signed in and installed.
+    /// Where a DeepSeek Harness session's key is fixed: the page of the DeepSeek key the session runs on
+    /// — whichever of the account's DeepSeek keys that is — in the web app; with no such key, the web's
+    /// API keys, where one is connected or turned back on (web `onEditDshKey`). These clients do not edit
+    /// keys themselves.
+    func dshKeyURL() async -> URL {
+        let keys = try? await api.personalProviders()
+        if let key = keys?.first(where: { $0.slug == sessionProvider }), let id = key.providerID {
+            return api.baseURL.appendingPathComponent("providers/\(id)")
+        }
+        let page = api.baseURL.appendingPathComponent("infrastructure")
+        var keysSection = URLComponents(url: page, resolvingAgainstBaseURL: false)
+        keysSection?.fragment = "keys"
+        return keysSection?.url ?? page
+    }
+
+    /// A key's own page in the web app, where it is changed or turned back on.
+    func webKeyURL(_ providerID: String) -> URL {
+        api.baseURL.appendingPathComponent("providers/\(providerID)")
+    }
+
+    /// The web page a picker row's `fixEngine` is fixed on — connecting a DeepSeek key for DeepSeek
+    /// Harness, which these clients don't do themselves — or nil when the fix is that engine's page on the
+    /// runner, in the app (`AppModel.openRunnerEngine`), where an engine is signed in and installed.
     func webFixURL(engine: String) -> URL? {
         guard engine == DshRuntime.connectFix else { return nil }
-        return api.baseURL.appendingPathComponent("providers/new/\(DshRuntime.presetSlug)")
+        return api.baseURL.appendingPathComponent("providers/new/\(DshRuntime.keyPreset)")
     }
 
     func installDsh() async {
@@ -258,14 +279,12 @@ final class ConsoleModel {
         } catch { statusMessage = "Couldn't install DeepSeek Harness — \(APIClient.failureReason(error))." }
     }
 
-    var executesAntigravity: Bool {
-        provider == "antigravity" || configuredProviders.first { $0.slug == provider }?.runtime == "antigravity"
-    }
+    var executesAntigravity: Bool { engine == "antigravity" }
 
     var geminiSwitchChoice: ProviderChoice? {
         providerSwitchChoices.first { choice in
             let configured = configuredProviders.first { $0.slug == choice.slug }
-            return choice.kind == .byok && choice.slug != provider && choice.unavailable == nil
+            return choice.kind == .key && choice.slug != provider && choice.unavailable == nil
                 && configured?.presetSlug == "gemini" && configured?.runtime == "antigravity"
         }
     }
@@ -460,8 +479,8 @@ final class ConsoleModel {
     /// What the runner's own engine logins report, verbatim. Kept whole rather than resolved on
     /// arrival so the gauge follows a provider switch made after the fetch — see `planUsage`.
     private(set) var runnerPlanUsage: PlanUsage?
-    /// The quota for the credential *this* session spends: the configured provider's own, or the
-    /// runner login's for a built-in engine (web parity — see `AgentDefaults.planUsage`). On an
+    /// The quota for the credential *this* session spends: a key's own, or the runner login's for an
+    /// engine's own sign-in (web parity — see `AgentDefaults.planUsage`). On an
     /// account pool that is the quota of the account it runs on (`poolAccount`), never the pool's —
     /// and none at all while no account can be named.
     var planUsage: PlanUsageSnapshot? {
@@ -472,7 +491,7 @@ final class ConsoleModel {
         if let engine = accountEngine, engine == "antigravity" || account(for: engine) != CodexAccounts.defaultID {
             return CodexAccounts.snapshot(engineUsage(engine), account: account(for: engine))
         }
-        return AgentDefaults.planUsage(for: provider, runner: runnerPlanUsage,
+        return AgentDefaults.planUsage(engine: engine, provider: provider, runner: runnerPlanUsage,
                                        configured: configuredProviders)
     }
 
@@ -650,10 +669,11 @@ final class ConsoleModel {
         default: return nil
         }
     }
-    /// The engine whose account this draft or session names: the built-in Codex, Claude, Antigravity or
-    /// Kimi engine, not an account pool. Nil for everything else.
+    /// The engine whose account this draft or session names: Codex, Claude, Antigravity or Kimi on its
+    /// own sign-in on the runner — never a key or an account pool: accounts are the sign-in's alone.
+    /// Nil for everything else.
     var accountEngine: String? {
-        currentPool == nil && RunnerPageFormat.keepsAccounts(provider) ? provider : nil
+        currentPool == nil && provider == engine && RunnerPageFormat.keepsAccounts(provider) ? provider : nil
     }
     /// The runner's accounts of `engine`, as its heartbeat reports them.
     func engineAccounts(_ engine: String) -> [RunnerEngineAccount] {
@@ -1028,7 +1048,10 @@ final class ConsoleModel {
         // stream, so the value there is inert.
         self.stream = URLSessionEventStream(baseURL: baseURL, token: { tokenStore.token(for: baseURL) })
         self.agentName = agent.name
+        // What this workspace last ran on: the engine as well as the credential — a DeepSeek key it ran
+        // on DeepSeek Harness opens on Harness, not on the key's own Claude Code.
         self.provider = agent.defaultProvider
+        self.recordedEngine = agent.lastEngine
         // The parent's pools too, so a workspace that runs on one opens on its tile and badge rather
         // than waiting for this draft's own read.
         self.providerPools = providerPools
@@ -1049,7 +1072,7 @@ final class ConsoleModel {
         let seed = AgentDefaults.defaultPermissionMode
         self.permissionMode = providerCapabilitiesResolved
             ? AgentDefaults.clampPermissionMode(
-                seed, for: defaultModel, provider: provider,
+                seed, for: defaultModel, engine: engine, provider: provider,
                 configured: configuredProviders, catalog: modelCatalog)
             : seed
         // The account's last-picked effort is the interactive default. `agent.effort` is the legacy
@@ -1057,7 +1080,7 @@ final class ConsoleModel {
         // the resolver deliberately preserves an explicit account "" (Default).
         self.effort = AgentDefaults.newSessionEffort(
             accountDefault: accountDefaultEffort, legacyWorkspaceDefault: agent.effort,
-            for: provider, model: defaultModel, catalog: modelCatalog,
+            for: engine, provider: provider, model: defaultModel, catalog: modelCatalog,
             configured: configuredProviders)
         wireWorktree()
     }
@@ -1081,13 +1104,14 @@ final class ConsoleModel {
     /// the config; the draft's catalogue names it without another asynchronous runner read.
     func adoptCreatedSession(_ session: Session, from draft: ConsoleModel) {
         provider = session.provider ?? draft.provider
+        recordedEngine = session.engine ?? draft.engine
         modelCatalog = draft.modelCatalog
         configuredProviders = draft.configuredProviders
         configuredProvidersLoaded = draft.configuredProvidersLoaded
         providerPools = draft.providerPools
         sharedPools = draft.sharedPools
         modelID = session.model ?? AgentDefaults.defaultModel(
-            for: provider, catalog: modelCatalog, configured: configuredProviders)
+            engine: engine, provider: provider, catalog: modelCatalog, configured: configuredProviders)
         permissionMode = PermissionMode(rawValue: session.permissionMode ?? "") ?? draft.permissionMode
         effort = Effort(rawValue: session.effort ?? draft.effort.rawValue) ?? draft.effort
         fastMode = session.fastMode ?? draft.fastMode
@@ -1997,15 +2021,22 @@ final class ConsoleModel {
         if let providers = try? await api.providers() {
             adoptProviders(providers, pools: pools ?? providerPools, shared: shared ?? sharedPools)
         }
+        // What became of the session's own key, when its engine's menu no longer lists it (board iOS 5
+        // ④): only the account's own keys still hold one that is turned off.
+        if configuredProvidersLoaded, !providerListed, !ProviderEngines.isLoginProvider(provider),
+           provider != "opencode", !configuredProviders.contains(where: { $0.slug == provider }) {
+            ownKeys = try? await api.personalProviders()
+        }
         // A stored model the Runtime has since retired is no longer something this session can
         // run — the server drops it at dispatch too — so re-resolve it exactly like a model-less
         // session rather than leaving a dead id on the pill. Mirrors web's livePinnedModel.
         let storedPin = AgentDefaults.livePin(
-            s.model, provider: provider, catalog: modelCatalog, configured: configuredProviders,
+            ProviderEngines.sessionPick(engine: engine, provider: s.provider ?? provider, model: s.model).model,
+            engine: engine, provider: provider, catalog: modelCatalog, configured: configuredProviders,
             runtimeDefaults: sessionRunner?.runtimeDefaultModels)
         if storedPin == nil, modelSelectionRevision.isPristine {
             modelID = AgentDefaults.refreshedDefaultModel(
-                currentModel: modelID, for: provider, catalog: modelCatalog,
+                currentModel: modelID, engine: engine, provider: provider, catalog: modelCatalog,
                 configured: configuredProviders,
                 runtimeDefaults: sessionRunner?.runtimeDefaultModels,
                 runnerSnapshotLoaded: runnerSnapshotLoaded,
@@ -2013,13 +2044,13 @@ final class ConsoleModel {
         }
         if providerCapabilitiesResolved {
             permissionMode = AgentDefaults.clampPermissionMode(
-                permissionMode, for: modelID, provider: provider,
+                permissionMode, for: modelID, engine: engine, provider: provider,
                 configured: configuredProviders, catalog: modelCatalog)
         }
         // OpenCode variants are model-defined, so this is the first point where a stored
         // value can be validated against the runner catalog.
         effort = AgentDefaults.normalizedEffort(
-            effort, for: provider, model: modelID, catalog: modelCatalog,
+            effort, for: engine, provider: provider, model: modelID, catalog: modelCatalog,
             configured: configuredProviders)
         // A LIVE session pushes later pill edits to the server (PATCH /config); record the
         // adopted values so `applyConfig` can distinguish a real user edit from this adopt.
@@ -2032,18 +2063,27 @@ final class ConsoleModel {
     /// List seeds and the later detail read resolve the same settings. A model-less session keeps
     /// using the cached Runtime default while the runner refresh is in flight.
     private func adoptSessionConfiguration(_ session: Session) {
-        provider = session.provider ?? "claude"
+        // The session's engine never changes; a row an older replica wrote is placed by its provider.
+        // An OpenCode session an older client started on a key is read as that key and its bare model
+        // (contract §3.3) — and stays on OpenCode, which the key alone would not say.
+        recordedEngine = session.engine
+        let ownEngine = ProviderEngines.sessionEngine(session.engine, provider: session.provider,
+                                                      configured: configuredProviders)
+        let pick = ProviderEngines.sessionPick(engine: ownEngine, provider: session.provider ?? "claude",
+                                               model: session.model)
+        if pick.provider != session.provider { recordedEngine = ownEngine }
+        provider = pick.provider
         // A picker edit made while REST was in flight always wins over the server's seed.
         if modelSelectionRevision.isPristine {
-            modelID = session.model ?? AgentDefaults.effectiveDefaultModel(
-                for: provider, catalog: modelCatalog, configured: configuredProviders,
+            modelID = pick.model ?? AgentDefaults.defaultModel(
+                engine: engine, provider: provider, catalog: modelCatalog, configured: configuredProviders,
                 runtimeDefaults: runtimeDefaultModels)
         }
         permissionMode = AgentDefaults.resolvePermissionMode(
             session: session.permissionMode, accountDefault: accountDefaultPermissionMode())
         effort = AgentDefaults.normalizeEffort(
             Effort(rawValue: session.effort ?? session.agent?.effort ?? "") ?? .default,
-            for: provider)
+            for: engine)
         // Fast mode belongs to the session; it is never inherited from the workspace.
         fastMode = session.fastMode == true
         if ComposerLogic.isLive(status: session.effectiveRunStatus), session.model != nil,
@@ -2149,7 +2189,7 @@ final class ConsoleModel {
         modelSelectionRevision.markUserEdit()
         let clamped = providerCapabilitiesResolved
             ? AgentDefaults.clampPermissionMode(
-                permissionMode, for: model, provider: provider,
+                permissionMode, for: model, engine: engine, provider: provider,
                 configured: configuredProviders, catalog: modelCatalog)
             : permissionMode
         let changedPermissionMode = clamped != permissionMode
@@ -2157,26 +2197,52 @@ final class ConsoleModel {
         return changedPermissionMode
     }
 
-    /// Where this session could move without changing CLI, for the composer's Provider menu.
-    /// Offered on the three routes that actually carry a provider: a live session's config PATCH, the
-    /// resume that revives an ended one, and a draft's create — whose engine the new-session hero
-    /// picks, so here too it is the same-runtime slice. `availability` excludes an ended session that
-    /// cannot be revived at all — `canSend` already folds "terminal and not resumable" into
-    /// `.blocked`. One entry means there is nowhere to go, and the composer omits the menu entirely —
-    /// the common case of a single sign-in and no configured providers.
+    /// What the pickers judge this draft's or session's engine and credentials by: the account's keys
+    /// and pools, and the runner it runs on (web `choiceSources`).
+    var choiceSources: ChoiceSources {
+        ChoiceSources(configured: configuredProviders, catalog: modelCatalog, runtimeDefaults: runtimeDefaultModels,
+                      engines: runnerEngines, pools: allPools, planUsage: runnerPlanUsage,
+                      antigravity: runnerAntigravity, antigravityKeyAvailable: antigravityKeyAvailable,
+                      dshState: dshRunnerState)
+    }
+
+    /// The credentials this session's engine runs on here (`SessionProviderChoices.providers`): its own
+    /// sign-in or OpenCode's own configuration, the account pools and every key it runs — the composer's
+    /// Provider menu.
+    var engineProviders: [ProviderChoice] {
+        SessionProviderChoices.providers(for: engine, sources: choiceSources)
+    }
+
+    /// Whether the menu lists the provider this draft or session is on.
+    var providerListed: Bool { engineProviders.contains { $0.slug == provider } }
+
+    /// Where this session could move without changing engine, for the composer's Provider menu: the
+    /// credentials its engine runs on here. Offered on the three routes that actually carry a provider:
+    /// a live session's config PATCH, the resume that revives an ended one, and a draft's create —
+    /// whose engine the new-session hero picks. `availability` excludes an ended session that cannot be
+    /// revived at all — `canSend` already folds "terminal and not resumable" into `.blocked`. One entry
+    /// means there is nowhere to go, and the composer omits the menu entirely — the common case of a
+    /// single sign-in and no keys. The one row that is not among them is the session's own provider when
+    /// its engine no longer lists it (a key turned off or deleted, the legacy built-in `dsh`): it has no
+    /// natural position, so it leads (web `providerSwitchChoices`).
     var providerSwitchChoices: [ProviderChoice] {
         guard isDraft || isLive || availability != .blocked else { return [] }
-        return SessionProviderChoices.sameRuntime(
-            providerChoice,
-            in: SessionProviderChoices.choices(configured: configuredProviders,
-                                               catalog: modelCatalog, engines: runnerEngines,
-                                               pools: allPools,
-                                               antigravity: runnerAntigravity,
-                                               antigravityKeyAvailable: antigravityKeyAvailable,
-                                               dshState: dshRunnerState),
-            configured: configuredProviders,
-            catalog: modelCatalog,
-            antigravity: runnerAntigravity)
+        let listed = engineProviders
+        if listed.contains(where: { $0.slug == provider }) { return listed }
+        return [SessionProviderChoices.current(engine: engine, provider: provider, in: listed, sources: choiceSources)]
+            + listed
+    }
+
+    /// The account's own keys — the turned-off ones too, which GET /providers leaves out — read when this
+    /// session's provider is a key its engine's menu does not list: what became of it (`keyGone`).
+    private(set) var ownKeys: [ConfiguredProvider]?
+
+    /// What became of this session's own key when its engine's menu no longer lists it: turned off or
+    /// deleted (board iOS 5 ④). Nil for anything else.
+    var keyGone: SessionProviderChoices.KeyGone? {
+        guard !isDraft else { return nil }
+        return SessionProviderChoices.keyGone(provider: provider, listed: providerListed,
+                                              configured: configuredProviders, ownKeys: ownKeys)
     }
 
     /// Move an existing session to another provider on the same runtime. The model comes along only
@@ -2190,23 +2256,15 @@ final class ConsoleModel {
     /// Automatic's pick otherwise.
     func selectProvider(_ slug: String, account: String? = nil) async {
         if isDraft {
-            // A draft holds the pick for its create (`pickDraftProvider` re-seeds what follows it);
-            // a blocked row is refused here as below.
+            // A draft holds the pick for its create (`pickDraft` re-seeds what follows it); a blocked
+            // row is refused here as below.
             guard providerSwitchChoices.first(where: { $0.slug == slug })?.unavailable == nil else { return }
             if let account { pickDraftAccount(slug, account == CodexAccounts.automaticID ? nil : account) }
-            else { pickDraftProvider(slug) }
+            else { pickDraft(engine: engine, provider: slug) }
             return
         }
-        if slug == providerChoice {
+        if slug == provider {
             if let account { await switchAccount(account) }
-            return
-        }
-        // Within OpenCode a key is part of the model (`OpenCodeKeys`), so moving between its own config
-        // and its keys is a model change, onto the default of the one picked (web parity).
-        if provider == "opencode", slug == "opencode" || OpenCodeKeys.choiceKey(slug) != nil {
-            let next = AgentDefaults.defaultModel(for: slug, catalog: modelCatalog, configured: configuredProviders)
-            let clamped = selectModel(next)
-            await applyConfig(model: next, permissionMode: clamped ? permissionMode.rawValue : nil)
             return
         }
         // Read before the assignment below, because what the note is ABOUT is the move from one to
@@ -2214,27 +2272,43 @@ final class ConsoleModel {
         // for its whole life, so a pick made over something that is going lands on the next turn.
         let from = provider
         // The menu greys these out; refuse here too, so a stale render can't move a session onto
-        // a CLI this runner can't start.
+        // a credential this runner can't start.
         guard providerSwitchChoices.first(where: { $0.slug == slug })?.unavailable == nil else { return }
+        // Every row is a credential of the session's own engine, so no pick here changes the engine —
+        // the server refuses one that would (ENGINE_IMMUTABLE, PROVIDER_ENGINE_INCOMPATIBLE). Fix the
+        // engine before the provider it was read from moves (contract §1.1).
+        let engine = self.engine
+        recordedEngine = engine
+        // Each credential owns its model space on the engine, so carry the running model only when the
+        // new one offers it (two Anthropic accounts do; a third-party endpoint with its own list does
+        // not) and otherwise take that one's default. Mode and effort follow the model.
         let offersCurrent = AgentDefaults
-            .models(for: slug, catalog: modelCatalog, configured: configuredProviders)
+            .models(engine: engine, provider: slug, catalog: modelCatalog, configured: configuredProviders)
             .contains { $0.id == modelID }
         let nextModel = offersCurrent
             ? modelID
-            : AgentDefaults.defaultModel(for: slug, catalog: modelCatalog,
-                                         configured: configuredProviders)
+            : AgentDefaults.defaultModel(engine: engine, provider: slug, catalog: modelCatalog,
+                                         configured: configuredProviders, runtimeDefaults: runtimeDefaultModels)
         let nextMode = providerCapabilitiesResolved
-            ? AgentDefaults.clampPermissionMode(permissionMode, for: nextModel, provider: slug,
+            ? AgentDefaults.clampPermissionMode(permissionMode, for: nextModel, engine: engine, provider: slug,
                                                 configured: configuredProviders,
                                                 catalog: modelCatalog)
             : permissionMode
-        let nextEffort = AgentDefaults.normalizedEffort(effort, for: slug, model: nextModel,
+        let nextEffort = AgentDefaults.normalizedEffort(effort, for: engine, provider: slug, model: nextModel,
                                                         catalog: modelCatalog,
                                                         configured: configuredProviders)
-        providerSwitchNote = TaskRunHandoff.providerSwitchNote(from: from, to: slug, liveRun: isLive)
+        // Said by the credentials' own names: the engine stays, only the credential moves (board iOS 5).
+        let choices = providerSwitchChoices
+        func name(_ slug: String) -> String {
+            SessionProviderChoices.providerName(
+                on: engine,
+                choices.first { $0.slug == slug }
+                    ?? SessionProviderChoices.current(engine: engine, provider: slug, in: choices, sources: choiceSources))
+        }
+        providerSwitchNote = TaskRunHandoff.providerSwitchNote(from: name(from), to: name(slug), liveRun: isLive)
         // A held pick replaces `provider` before the resume carries it, so remember what the session
-        // is actually on for as long as the pick stands: the model menu's title reads the pair
-        // (`SessionProviderChoices.engineTitle`), and only the stored half can name what is running.
+        // is actually on for as long as the pick stands: the key a card about a rejected key names is
+        // the session's own (`sessionProvider`).
         if !isLive, pendingResumeProvider == nil { pendingResumeFrom = from }
         provider = slug
         if nextModel != modelID {
@@ -2257,38 +2331,38 @@ final class ConsoleModel {
                           effort: nextEffort.rawValue, provider: slug, account: account)
     }
 
-    /// Pick a provider for this draft (an engine on the new-session hero, or a provider of it in the
-    /// composer's Provider menu). Each provider owns its own model
-    /// space, so the model can't survive the switch — it is re-seeded from the incoming provider's
-    /// remembered model or default, and the mode/effort pills are re-clamped to what it accepts. The seed is
-    /// marked pristine again on purpose: a model chosen for the outgoing provider is not a choice
-    /// about this one, and keeping it would pin an id the new provider may not even offer.
-    func pickDraftProvider(_ slug: String) {
-        guard isDraft, slug != providerChoice else { return }
-        // A key run on OpenCode creates the session on `opencode`; the key rides in its model.
-        let engine = OpenCodeKeys.choiceKey(slug) == nil ? slug : "opencode"
-        draftChoice = engine == slug ? nil : slug
-        draftProviderOverride = engine
-        provider = engine
+    /// Pick the engine and a credential of it for this draft: an engine on the new-session hero, landing
+    /// where it says, or a credential of the draft's engine in the composer's Provider menu. The model
+    /// space is the pair's, so the model can't survive the switch — it is re-seeded from what was last
+    /// picked for the incoming pair, or its default, and the mode/effort pills are re-clamped to what it
+    /// accepts. The seed is marked pristine again on purpose: a model chosen for the outgoing pair is not
+    /// a choice about this one, and keeping it would pin an id the new one may not even offer.
+    func pickDraft(engine: String, provider slug: String) {
+        guard isDraft, engine != self.engine || slug != provider else { return }
+        draftPick = EnginePick(engine: engine, provider: slug)
+        recordedEngine = engine
+        provider = slug
         modelID = draftModelSeed(AgentDefaults.defaultModel(
-            for: slug, catalog: modelCatalog, configured: configuredProviders))
+            engine: engine, provider: slug, catalog: modelCatalog, configured: configuredProviders,
+            runtimeDefaults: runtimeDefaultModels))
         modelSelectionRevision = ModelSelectionRevision()
         if providerCapabilitiesResolved {
             permissionMode = AgentDefaults.clampPermissionMode(
-                permissionMode, for: modelID, provider: engine, configured: configuredProviders,
+                permissionMode, for: modelID, engine: engine, provider: slug, configured: configuredProviders,
                 catalog: modelCatalog)
         }
-        effort = AgentDefaults.normalizedEffort(effort, for: engine, model: modelID,
+        effort = AgentDefaults.normalizedEffort(effort, for: engine, provider: slug, model: modelID,
                                                 catalog: modelCatalog,
                                                 configured: configuredProviders)
     }
 
-    /// Pick one of the runner's accounts of `slug` for this draft — or Automatic (`nil`) — from the rows
-    /// under that engine in the composer's Provider menu. Picks the engine too, when it isn't the one
-    /// picked. Like the provider, it binds the session being drafted and rewrites no workspace setting.
+    /// Pick one of the runner's accounts of `slug` — an engine's own sign-in — for this draft, or
+    /// Automatic (`nil`), from the rows under it in the composer's Provider menu. Picks the sign-in too,
+    /// when it isn't the one picked. Like the provider, it binds the session being drafted and rewrites
+    /// no workspace setting.
     func pickDraftAccount(_ slug: String, _ account: String?) {
         guard isDraft else { return }
-        if slug != providerChoice { pickDraftProvider(slug) }
+        if slug != provider { pickDraft(engine: slug, provider: slug) }
         draftCodexAccount = slug == "codex" ? account : nil
         draftClaudeAccount = slug == "claude" ? account : nil
         draftAntigravityAccount = slug == "antigravity" ? account : nil
@@ -2348,30 +2422,33 @@ final class ConsoleModel {
         if loaded { adoptProviders(providers, pools: providerPools) }
         if modelSelectionRevision.isPristine,
            AgentDefaults.isBuiltInProvider(provider) || loaded {
-            // `defaultModel` is the parent's, computed for the AGENT's provider. Once this draft
-            // has been pointed somewhere else, that value belongs to a different model space —
-            // resolve the picked provider's own default instead of dragging the agent's back in.
-            let fallback = draftProviderOverride == nil
+            // `defaultModel` is the parent's, computed for the WORKSPACE's engine and provider. Once
+            // this draft has been pointed somewhere else, that value belongs to a different model space
+            // — resolve the picked pair's own default instead of dragging the workspace's back in.
+            let fallback = draftPick == nil
                 ? defaultModel
-                : AgentDefaults.defaultModel(for: providerChoice, catalog: modelCatalog,
-                                             configured: configuredProviders)
+                : AgentDefaults.defaultModel(engine: engine, provider: provider, catalog: modelCatalog,
+                                             configured: configuredProviders, runtimeDefaults: runtimeDefaultModels)
             modelID = draftModelSeed(fallback)
         }
         if providerCapabilitiesResolved {
             permissionMode = AgentDefaults.clampPermissionMode(
-                permissionMode, for: modelID, provider: provider,
+                permissionMode, for: modelID, engine: engine, provider: provider,
                 configured: configuredProviders, catalog: modelCatalog)
         }
-        // The provider list is also where a configured model declares the efforts it accepts.
+        // The provider list is also where a key's model declares the efforts it accepts on Claude Code.
         effort = AgentDefaults.normalizedEffort(
-            effort, for: provider, model: modelID, catalog: modelCatalog,
+            effort, for: engine, provider: provider, model: modelID, catalog: modelCatalog,
             configured: configuredProviders)
     }
 
+    /// The model a draft starts on: the last one picked for its engine and provider (`<engine>:<provider>`
+    /// in the account's remembered models, read in contract §6.5's order), else `fallback`.
     private func draftModelSeed(_ fallback: String, runtimeDefaults: [String: String]? = nil) -> String {
         AgentDefaults.newSessionModel(
-            for: providerChoice, accountModels: accountDefaultModels(), fallback: fallback,
-            catalog: modelCatalog, configured: configuredProviders, runtimeDefaults: runtimeDefaults)
+            engine: engine, provider: provider, accountModels: accountDefaultModels(), fallback: fallback,
+            catalog: modelCatalog, configured: configuredProviders,
+            runtimeDefaults: runtimeDefaults ?? runtimeDefaultModels)
     }
 
     /// A picker change on a LIVE session is pushed to the server immediately (PATCH /config,
@@ -2434,17 +2511,17 @@ final class ConsoleModel {
         guard isDraft, effortSelectionRevision.isPristine else { return }
         effort = AgentDefaults.newSessionEffort(
             accountDefault: accountDefault, legacyWorkspaceDefault: legacyWorkspaceDefault,
-            for: provider, model: modelID, catalog: modelCatalog,
+            for: engine, provider: provider, model: modelID, catalog: modelCatalog,
             configured: configuredProviders)
     }
 
     // MARK: `/` autocomplete
 
-    /// The catalog this session's provider can actually invoke. Derived, not filtered at load
-    /// time, because the provider is known later than the runner catalog.
+    /// The catalog this session's engine can actually invoke — never its provider's slug: a DeepSeek
+    /// key on Claude Code has Claude Code's commands, and the same key on DeepSeek Harness none. Derived,
+    /// not filtered at load time, because the engine is known later than the runner catalog.
     var composerSlashItems: [SlashCommandInfo] {
-        // A Harness key's slug names its runtime, which has no runner slash registry.
-        ComposerSlash.forProvider(items: slashItems, provider: executesDsh ? "dsh" : provider)
+        ComposerSlash.forEngine(items: slashItems, engine: engine)
     }
     var hasCommands: Bool { composerSlashItems.contains { $0.type == "command" } }
     var hasSkills: Bool { composerSlashItems.contains { $0.type == "skill" } }
@@ -2536,7 +2613,9 @@ final class ConsoleModel {
                 if fromComposer { composerText = "" }
                 return
             }
-            if replyContext == nil, provider != "codex", provider != "opencode", provider != "antigravity" {
+            // Asked of the engine: Codex, OpenCode, Antigravity and DeepSeek Harness take slash text as
+            // an ordinary prompt, whichever key they run on.
+            if replyContext == nil, !["codex", "opencode", "antigravity", "dsh"].contains(engine) {
                 if command.isEmpty {
                     statusMessage = "Pick a slash command before sending"
                     return
@@ -3033,7 +3112,7 @@ final class ConsoleModel {
     }
 
     private func showStatusCommand() {
-        let window: Int? = provider == "opencode" && modelID.isEmpty
+        let window: Int? = engine == "opencode" && modelID.isEmpty
             ? nil
             : state.contextWindow ?? AgentDefaults.contextWindow(for: modelID, catalog: modelCatalog,
                                                                  configured: configuredProviders,
@@ -3044,7 +3123,10 @@ final class ConsoleModel {
             sessionTitle: isDraft ? nil : "Current session",
             sessionStatus: isDraft ? nil : sessionStatus.rawValue,
             agentName: agentName,
-            provider: provider,
+            engine: ProviderEngines.cliName(engine),
+            provider: SessionProviderChoices.providerName(
+                on: engine, SessionProviderChoices.current(engine: engine, provider: provider,
+                                                           in: engineProviders, sources: choiceSources)),
             model: modelID,
             permissionMode: permissionMode.rawValue,
             effort: effort.label,
@@ -3086,9 +3168,11 @@ final class ConsoleModel {
                 // a placeholder. Omit it so the server applies the configured provider's own
                 // default instead of persisting a guessed Claude model.
                 prompt: text, agentId: agent.id,
-                // Only an explicit hero pick travels: omitting it lets the server start the
-                // session where this project last started, as an untouched draft always did.
-                provider: draftProviderOverride,
+                // Only an explicit pick travels, and it is the pair — the engine the hero picked and the
+                // credential of it (contract §3.2). Leaving both off keeps the server's
+                // inherit-from-workspace path, which re-checks that pair as it starts the session.
+                engine: draftPick?.engine,
+                provider: draftPick?.provider,
                 model: providerCapabilitiesResolved ? modelID : nil,
                 permissionMode: permissionMode.rawValue, effort: effort.rawValue,
                 // Sent only when on, like every other override that has an "off" default: a
@@ -3110,8 +3194,7 @@ final class ConsoleModel {
             pendingAttachments = []
             // The pick was this session's binding; nothing to write back. The next draft here
             // opens on it anyway, because the default is read from what the project last ran.
-            draftProviderOverride = nil
-            draftChoice = nil
+            draftPick = nil
             draftCodexAccount = nil
             draftClaudeAccount = nil
             draftAntigravityAccount = nil
@@ -3162,7 +3245,7 @@ final class ConsoleModel {
         // immediately. Re-resolve only while no explicit picker action has ever occurred.
         if draftAgent != nil, modelSelectionRevision.isPristine {
             let fallback = AgentDefaults.refreshedDefaultModel(
-                currentModel: modelID, for: provider, catalog: modelCatalog,
+                currentModel: modelID, engine: engine, provider: provider, catalog: modelCatalog,
                 configured: configuredProviders, runtimeDefaults: runtimeDefaults,
                 runnerSnapshotLoaded: runnerSnapshotLoaded,
                 configuredProvidersLoaded: configuredProvidersLoaded)
@@ -3170,14 +3253,14 @@ final class ConsoleModel {
         }
         if providerCapabilitiesResolved {
             permissionMode = AgentDefaults.clampPermissionMode(
-                permissionMode, for: modelID, provider: provider,
+                permissionMode, for: modelID, engine: engine, provider: provider,
                 configured: configuredProviders, catalog: modelCatalog)
         }
         applySlashItems(from: agentRunner)
         // OpenCode variants are model-defined, so this is the first point where a stored
         // value can be validated against the runner catalog.
         effort = AgentDefaults.normalizedEffort(
-            effort, for: provider, model: modelID, catalog: modelCatalog,
+            effort, for: engine, provider: provider, model: modelID, catalog: modelCatalog,
             configured: configuredProviders)
     }
 

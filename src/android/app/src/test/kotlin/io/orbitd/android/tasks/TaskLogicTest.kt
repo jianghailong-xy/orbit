@@ -235,4 +235,26 @@ class TaskLogicTest {
         assertEquals(listOf("ws1"), mentionedWorkspaceIds("hi @Ada", listOf(json("""{"id":"ws1","name":"ada"}"""), json("""{"id":"ws2","name":"Adam"}"""))))
         assertEquals(emptyList<String>(), mentionedWorkspaceIds("mail@Ada", listOf(json("""{"id":"ws1","name":"Ada"}"""))))
     }
+
+    /** A task's run pins (board 6; docs/provider-engine-contract.md §1.2, §3.5): the Engine row pins an engine, keeping a pinned
+     * credential only where the new engine runs it; the Provider row pins a credential with the engine it runs on here, or takes
+     * it back to the engine's default; Assignee's takes every pin back. The model pin goes with every move. */
+    @Test fun theEnginePinComesFirstAndAProviderIsPinnedWithItsEngine() {
+        val deepSeek = listOf("claude", "opencode", "dsh")
+        assertEquals(TaskPin(TaskPin.Pin("dsh")), TaskPins.engine("dsh", null, null, emptyList()))
+        assertEquals("a DeepSeek key Harness runs stays pinned", TaskPin(TaskPin.Pin("dsh")), TaskPins.engine("dsh", "claude", "deepseek", deepSeek))
+        assertEquals("a GLM key Harness can't run gives way to the engine's default",
+            TaskPin(TaskPin.Pin("dsh"), TaskPin.Pin(null)), TaskPins.engine("dsh", "claude", "glm", listOf("claude", "opencode")))
+        assertEquals(TaskPin(TaskPin.Pin(null), TaskPin.Pin(null)), TaskPins.engine(null, "dsh", "deepseek", deepSeek))
+        assertNull(TaskPins.engine("dsh", "dsh", "deepseek", deepSeek))
+        assertNull(TaskPins.engine(null, null, null, emptyList()))
+        assertEquals(TaskPin(TaskPin.Pin("dsh"), TaskPin.Pin("deepseek-2")), TaskPins.provider("deepseek-2", "deepseek", "dsh"))
+        assertEquals("Engine default", TaskPin(provider = TaskPin.Pin(null)), TaskPins.provider(null, "deepseek-2", "dsh"))
+        assertNull(TaskPins.provider(null, null, "dsh"))
+        assertNull(TaskPins.provider("deepseek-2", "deepseek-2", "dsh"))
+        // On the wire: a pin left out stays, null takes it back, and the model always goes.
+        assertEquals(json("""{"engine":"dsh","provider":null,"model":null}"""), TaskPin(TaskPin.Pin("dsh"), TaskPin.Pin(null)).request())
+        assertEquals(json("""{"engine":"dsh","model":null}"""), TaskPin(TaskPin.Pin("dsh")).request())
+        assertEquals(json("""{"provider":null,"model":null}"""), TaskPin(provider = TaskPin.Pin(null)).request())
+    }
 }

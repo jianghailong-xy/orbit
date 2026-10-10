@@ -188,7 +188,7 @@ class DshStackDeviceTest {
         keep("a07d-stack-rejected-session", failed)
         signIn(); openSession("rejected")
         awaitText("DeepSeek rejected this API key")
-        awaitText("Update the key in Infrastructure, then send your message again.")
+        awaitText("Update the DeepSeek key in Infrastructure, then send your message again.")
         awaitText("Update the API key")
         awaitText("Retry — re-send my last message")
         assertFalse("the card stands in for the runner's line", has(hasText("Authentication Fails", substring = true)))

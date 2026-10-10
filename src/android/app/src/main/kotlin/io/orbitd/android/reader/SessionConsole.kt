@@ -4,7 +4,7 @@ import androidx.compose.runtime.*
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.composer.ComposerCatalog
 import io.orbitd.android.composer.ComposerModel
-import io.orbitd.android.composer.ProviderChoices
+import io.orbitd.android.composer.ProviderEngines
 import io.orbitd.android.composer.ProviderOption
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.cards.DshRuntime
@@ -38,10 +38,10 @@ internal class SessionConsole(val app: OrbitApplication, val handle: SessionHand
     val runnerName get() = runner?.let(RunnerPage::displayName)?.takeIf { it.isNotEmpty() }
         ?: (detail?.get("assignedRunner") as? JsonObject)?.let { it.string("displayName") ?: it.string("name") }
     val runnerVersion get() = runner?.string("version") ?: (detail?.get("assignedRunner") as? JsonObject)?.string("version")
-    /** The CLI that runs this session is Antigravity: its own provider, or a key that borrows it. */
-    val executesAntigravity get() = ProviderChoices.executingRuntime(provider, providers) == "antigravity"
-    /** The CLI that runs this session, as the server says it — or, from one that doesn't, the one its provider borrows. */
-    val engine get() = detail?.let { ProviderChoices.engine(it, providers) }
+    /** The engine this session runs on for good: the one it records, else the one its provider ran on before engines were. */
+    val engine get() = ProviderEngines.sessionEngine(detail?.string("engine"), provider, providers)
+    /** The CLI that runs this session is Antigravity: on its own sign-in, or on a key it runs. */
+    val executesAntigravity get() = engine == ProviderEngines.ANTIGRAVITY
     val executesDsh get() = engine == DshRuntime.ENGINE
 
     /** Re-read the runner and the providers: on a card's first appearance, and back from the page that fixes it. */
@@ -89,19 +89,20 @@ internal class SessionConsole(val app: OrbitApplication, val handle: SessionHand
         return if (key != null) "$origin/providers/$key" else "$origin/providers/new/gemini"
     }
 
-    /** The account's Gemini key on Antigravity this session may move to now: same CLI, runnable here. */
+    /** The account's Gemini key this session may move to now: one its engine runs, runnable here. */
     val geminiSwitch: ProviderOption? get() {
         val runner = runner ?: return null
         val catalog = ComposerCatalog(runner, providers)
-        val choices = catalog.sameRuntime(provider, catalog.choices(detail?.let(catalog::antigravityKeyAvailable) ?: false))
-        return choices.firstOrNull { choice ->
+        return catalog.credentials(engine, detail?.let(catalog::antigravityKeyAvailable) ?: false).firstOrNull { choice ->
             val row = providers.firstOrNull { it.string("slug") == choice.id }
             choice.id != provider && choice.unavailable == null && row?.string("presetSlug") == "gemini" && row.string("runtime") == "antigravity"
         }
     }
 
+    /** Onto [choice], on the engine the session already runs (contract §3.5). */
     fun switchTo(choice: ProviderOption) = composer.config(buildJsonObject {
-        put("provider", choice.id); put("model", choice.models.firstOrNull()?.get("value")?.jsonPrimitive?.contentOrNull ?: ""); put("effort", "")
+        put("provider", choice.id); put("engine", engine)
+        put("model", choice.models.firstOrNull()?.get("value")?.jsonPrimitive?.contentOrNull ?: ""); put("effort", "")
     })
 
     /** The failed message again, now that what stopped it is fixed — on the provider picked in the composer, if any (A07-8). */
@@ -118,15 +119,13 @@ internal class SessionConsole(val app: OrbitApplication, val handle: SessionHand
 
     fun installDsh() { if (canInstallDsh) install(DshRuntime.ENGINE, "DeepSeek Harness") }
 
-    /** Where Update the API key goes, on the web: the session's own key, else a key Harness runs on, else the form that connects one.
-     * These clients don't edit keys themselves. */
+    /** Where Update the API key goes, on the web (`onEditDshKey`): the page of the DeepSeek key this session runs on, else
+     * Infrastructure's API keys, where one is connected or turned back on — every DeepSeek key runs Harness, so no other key's page
+     * stands in for the session's. These clients don't edit keys themselves. */
     suspend fun dshKeyUrl(): String {
         val origin = handle.account.server.trimEnd('/')
         val mine = runCatching { (management.get("providers/mine") as? JsonArray)?.filterIsInstance<JsonObject>() }.getOrNull().orEmpty()
-        val key = mine.firstOrNull { it.string("slug") == provider } ?: mine.firstOrNull { row ->
-            row.string("runtime") == DshRuntime.ENGINE || (row["engines"] as? JsonArray)?.any { (it as? JsonPrimitive)?.contentOrNull == DshRuntime.ENGINE } == true
-        }
-        return key?.string("id")?.let { "$origin/providers/$it" } ?: "$origin/providers/new/${DshRuntime.PRESET_SLUG}"
+        return mine.firstOrNull { it.string("slug") == provider }?.string("id")?.let { "$origin/providers/$it" } ?: "$origin/infrastructure#keys"
     }
 
     // MARK: auto-retry (iOS `AutoRetryCardView`'s reads and presses on `ConsoleModel`)

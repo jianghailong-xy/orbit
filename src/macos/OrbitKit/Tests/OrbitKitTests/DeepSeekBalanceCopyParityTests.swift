@@ -71,7 +71,7 @@ final class DeepSeekBalanceCopyParityTests: XCTestCase {
     }
 
     /// A key's line is every engine it runs on, as the server lists them (`engines`, default first): a
-    /// Harness key folded into DeepSeek's runs on Claude Code and OpenCode too.
+    /// key made from the retired DeepSeek Harness preset runs on Claude Code and OpenCode too.
     func testAHarnessKeysLineIsWhereItRunsAsTheWebSaysIt() throws {
         // Infrastructure's API keys: each engine by its CLI's name, a dot between (web's `KeyEngines`).
         let keys = try web(Self.keys)

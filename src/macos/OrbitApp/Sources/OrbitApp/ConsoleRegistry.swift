@@ -101,10 +101,13 @@ final class ConsoleRegistry {
                     accountDefaultEffort: String? = nil,
                     folderID: String? = nil,
                     onCreated: @escaping (Session) -> Void) -> ConsoleModel {
+        let configured = configuredProviders
+            + ProviderPools.asProviders(SharedPools.asProviderPools(sharedPools) + providerPools)
+        // The model last picked for what the workspace last ran on — its engine and its provider.
         let seed = AgentDefaults.newSessionModel(
-            for: agent.defaultProvider, accountModels: accountDefaultModels(), fallback: defaultModel,
-            catalog: modelCatalog, configured: configuredProviders
-                + ProviderPools.asProviders(SharedPools.asProviderPools(sharedPools) + providerPools))
+            engine: agent.defaultEngine(configured: configured), provider: agent.defaultProvider,
+            accountModels: accountDefaultModels(), fallback: defaultModel,
+            catalog: modelCatalog, configured: configured)
         let model = ConsoleModel(draftFor: agent, defaultModel: seed,
                                  configuredProviders: configuredProviders,
                                  configuredProvidersLoaded: configuredProvidersLoaded,

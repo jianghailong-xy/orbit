@@ -28,6 +28,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.R
+import io.orbitd.android.composer.ProviderEngines
 import io.orbitd.android.directory.DirectoryData
 import io.orbitd.android.directory.LoadingMessage
 import io.orbitd.android.navigation.OrbitRoute
@@ -383,9 +384,12 @@ internal fun wikiWorkspaceRows(reads: WikiMaintenanceReads, data: DirectoryData)
     return rows.map { (id, name, runner) -> WikiWorkspaceRow(name, WikiPickerOption(id, WikiModeLogic.workspaceLabel(name, runner?.let(names::get)))) }
 }
 
-/** The providers the server takes for maintenance: configured ones on the Claude Code runtime, by their default model. */
+/** The providers the server takes for maintenance, by their default model: the keys Claude Code runs, by the compatibility table
+ * (each key's `engines`, docs/provider-engine-contract.md §3.5) — a maintenance run starts a clean Claude Code, and a DeepSeek key
+ * runs there as well as on DeepSeek Harness. A Claude subscription token is one of them; a key no engine of Claude's protocol speaks
+ * is not. */
 internal fun wikiProviderOptions(providers: JsonArray?): List<WikiPickerOption> = providers.orEmpty().filterIsInstance<JsonObject>()
-    .filter { it["runtime"].text() == "claude" }.mapNotNull { provider ->
+    .let { rows -> rows.filter { ProviderEngines.CLAUDE in ProviderEngines.providerEngines(it["slug"].text(), rows) } }.mapNotNull { provider ->
         provider["slug"].text()?.let { slug ->
             WikiPickerOption(slug, WikiModeLogic.providerLabel(slug, provider["defaultModel"].text() ?: (provider["models"] as? JsonArray)?.firstOrNull()["value"].text()))
         }

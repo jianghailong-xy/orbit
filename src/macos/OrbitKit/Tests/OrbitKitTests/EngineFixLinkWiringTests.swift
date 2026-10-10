@@ -6,9 +6,10 @@ import XCTest
 /// the press stays in the app: it opens that engine's page on the runner (`AppModel.openRunnerEngine`),
 /// which carries the install for every engine a row can name — the sign-in engines and OpenCode — beside
 /// their sign-ins. `ConsoleModel.webFixURL` answers only the one fix these clients don't make themselves:
-/// connecting a Harness key, on the web's connect form. Before the Infrastructure page the login engines
-/// and OpenCode were sent to the web Providers page, because the runner's own page had no install for
-/// them — so "Not installed, sign in →" promised a press that couldn't be made there; it can now.
+/// connecting a DeepSeek key for DeepSeek Harness, on the web's connect form. Before the Infrastructure
+/// page the login engines and OpenCode were sent to the web Providers page, because the runner's own page
+/// had no install for them — so "Not installed, sign in →" promised a press that couldn't be made there;
+/// it can now.
 ///
 /// `ConsoleModel.swift` and the views compile only under SwiftUI, so this reads the source the way the
 /// other wiring checks do.
@@ -53,15 +54,17 @@ final class EngineFixLinkWiringTests: XCTestCase {
 
     // MARK: the link
 
-    /// Harness's connect-a-key row is the one press that leaves the app: that row is about a key to paste,
-    /// and its page is the web's connect form. Every other engine is nil, which sends the press to the
-    /// engine's page in the app — no engine goes to the web's Providers list any more.
-    func testOnlyTheHarnessConnectFormIsAWebLink() throws {
+    /// DeepSeek Harness's connect-a-key row is the one press that leaves the app: that row is about a
+    /// DeepSeek key to connect, and its page is the web's DeepSeek connect form. Every other engine is nil,
+    /// which sends the press to the engine's page in the app — no engine goes to the web's Providers list
+    /// any more.
+    func testOnlyTheDeepSeekConnectFormIsAWebLink() throws {
         let fix = try webFix()
         XCTAssertTrue(fix.contains("guard engine == DshRuntime.connectFix else { return nil }"),
                       "an engine other than the connect-a-key row has a web link again")
-        XCTAssertTrue(fix.contains("return api.baseURL.appendingPathComponent(\"providers/new/\\(DshRuntime.presetSlug)\")"),
-                      "the connect-a-key row no longer opens the Harness connect form")
+        XCTAssertTrue(fix.contains("return api.baseURL.appendingPathComponent(\"providers/new/\\(DshRuntime.keyPreset)\")"),
+                      "the connect-a-key row no longer opens the DeepSeek connect form")
+        XCTAssertEqual(DshRuntime.keyPreset, "deepseek", "web's DSH_CONNECT_HREF, /providers/new/deepseek")
         XCTAssertFalse(try source(Self.console).contains("func providersURL("),
                        "a `/providers?runner=&engine=` link is back")
     }
@@ -73,9 +76,9 @@ final class EngineFixLinkWiringTests: XCTestCase {
     /// machine runs it.
     func testTheRowsNameTheEngineTheyWantFixed() {
         let missing = ["claude", "codex", "kimi", "opencode"].map { RunnerEngineHealth(engine: $0, installed: false) }
-        let choices = SessionProviderChoices.choices(configured: [], engines: missing)
         for engine in ["claude", "codex", "kimi", "opencode"] {
-            let row = choices.first { $0.slug == engine }
+            let row = SessionProviderChoices.providers(for: engine, sources: ChoiceSources(configured: [], engines: missing))
+                .first { $0.slug == engine }
             XCTAssertEqual(row?.unavailable, "Not installed", engine)
             XCTAssertEqual(row?.fixEngine, engine, "\(engine)'s row asks for its own engine to be fixed")
         }
