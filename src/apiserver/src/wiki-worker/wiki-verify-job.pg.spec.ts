@@ -254,7 +254,7 @@ function worker(h: Harness): { queue: WikiModelRequestQueue; executor: WikiJobEx
     h.prisma as unknown as PrismaService, config_,
     new WikiModelStatusProbe(h.prisma as unknown as PrismaService, config_), undefined, options,
   );
-  const runners: Record<string, WikiJobRunner> = { ...WIKI_JOB_RUNNERS, verify: wikiVerifyJobRunner(h.service, MODEL) };
+  const runners: Record<string, WikiJobRunner> = { ...WIKI_JOB_RUNNERS, verify: wikiVerifyJobRunner(h.service, MODEL, h.prisma as unknown as PrismaService) };
   const executor = new WikiJobExecutor(h.prisma as unknown as PrismaService, queue, options, runners);
   live.push({ queue, executor });
   return { queue, executor };

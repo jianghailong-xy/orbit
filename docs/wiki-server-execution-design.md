@@ -218,6 +218,7 @@ apiserver（API 进程）                  wiki-worker（新服务，同一镜�
   - 重试：`attempts`、`next_attempt_at`
   - 租约：`lease_owner`、`lease_generation`、`lease_deadline_at`
   - 结果：`progress`、`report`、`error`；`failure_kind`，取值为 infra / content
+  - 带到重放：作业没结束时 `report` 只暂存 `{ carry }`——之前的尝试做完、重放不会再做的部分（2026-10-10）；结束时的报告并进它，交还、重放过的作业报告的也是整个作业（契约 §24.10）
   - 时间：`created_at`、`started_at`、`ended_at`
 - 领取：照 `watch_delivery` 的做法。
   - 用 `UPDATE … FROM (SELECT … FOR UPDATE SKIP LOCKED)` 领取，每次领取给这一行一个新代数；

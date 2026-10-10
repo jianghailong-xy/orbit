@@ -69,7 +69,9 @@
  *      at the section's commit, where it still is — and the rename is withdrawn by its old path, `to` where it went;
  *  19. a rename that changed the file as well, and a deleted file no sentence cites: the sections citing either end of
  *      the rename and the one citing the deleted file are written again, and the old path is withdrawn, the new not;
- *  20. a worker stopped mid-run hands the run back, and the report the replay ends with is the whole run's (contract
+ *  20. a run's tokens are its own requests, each once (P10 round 93: the documents step's calls were counted twice,
+ *      once as each was asked and again from the build's summary): the run's and the documents step's;
+ *  21. a worker stopped mid-run hands the run back, and the report the replay ends with is the whole run's (contract
  *      `jobs.carry`): stopped in the documents step, the dossiers the run read, the ops it recorded, the verdicts and
  *      the anchor checks before the stop are counted with the sections written after it — exactly what the same run
  *      reports when nothing stops it; stopped between the run's own verdicts, the verdict recorded before the stop is
@@ -106,7 +108,7 @@ import { WikiHealth } from '../wiki/wiki-health';
 import { WikiPlans } from '../wiki/wiki-plan';
 import { WikiRefusalError, WikiService, type WikiPrincipal } from '../wiki/wiki.service';
 import { WikiRepoOps, type WikiRepoOpWake } from './wiki-repo-ops';
-import { WIKI_ANCHOR_RULES, WIKI_JOB, WIKI_LIMITS, WIKI_MAINTAIN_JOB, WIKI_REPO_OP_CAPABILITY, WIKI_REPO_OP_READ_CAPABILITY, WIKI_REPO_OPS } from '@orbit/shared';
+import { WIKI_ANCHOR_RULES, WIKI_DOCS_BUILD_JOB, WIKI_JOB, WIKI_LIMITS, WIKI_MAINTAIN_JOB, WIKI_REPO_OP_CAPABILITY, WIKI_REPO_OP_READ_CAPABILITY, WIKI_REPO_OPS } from '@orbit/shared';
 import { WikiJobExecutor, WIKI_JOB_RUNNERS, type WikiJobRunner } from './wiki-job-executor';
 import { claimWikiJobs, reclaimExpiredWikiJobs, WIKI_JOB_HANDED_BACK } from './wiki-jobs';
 import { WikiModelRequestQueue } from './wiki-model-queue.service';
@@ -2719,13 +2721,38 @@ async function writtenSections(h: Harness, spaceId: string): Promise<number> {
     `SELECT count(*)::int AS n FROM "wiki_doc_section" x JOIN "wiki_doc" d ON d."id" = x."doc_id" WHERE d."space_id" = $1`, [spaceId])).rows[0].n;
 }
 
-/** The calls a job made: its requests, each once, with the tokens they reported. */
-async function callsOf(h: Harness, jobId: string): Promise<{ calls: number; input: number; output: number }> {
+/**
+ * The calls a job made: its requests — of the steps named, or every one — each once, with the tokens they reported. Every
+ * request of these cases answers, so each is a call.
+ */
+async function callsOf(h: Harness, jobId: string, steps?: readonly string[]): Promise<{ calls: number; input: number; output: number }> {
   const { rows: [row] } = await h.sql.query<{ calls: number; input: number; output: number }>(
     `SELECT count(*)::int AS "calls", COALESCE(sum("input_tokens"), 0)::int AS "input", COALESCE(sum("output_tokens"), 0)::int AS "output"
-       FROM "wiki_model_request" WHERE "job_id" = $1 AND "state" = 'succeeded'`, [jobId]);
+       FROM "wiki_model_request" WHERE "job_id" = $1 AND "state" = 'succeeded' AND ($2::text[] IS NULL OR "step" = ANY($2::text[]))`,
+    [jobId, steps ? [...steps] : null]);
   return row;
 }
+
+test('a run\'s tokens are its own requests, each once: the documents\' calls are counted once, in the run\'s tokens and the step\'s (P10 round 93)', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const fx = await fixture(h);
+  h.maintenance.dossierPage = readerAt(h, [fx]);
+  await handBackPlan(h, fx);
+  const extract = extractor(fx, 2);
+  h.model.answer = (hit) => (hit.prompt.includes('==== CASE FILE ====') || hit.prompt.includes('## Your answer') ? extract(hit) : writerAnswer(hit.prompt));
+  await pass(h, worker(h), async () => ['succeeded', 'failed'].includes((await jobOf(h, fx.jobId)).state), { files: { 'src/app.go': APP_GO } });
+  assert.equal((await jobOf(h, fx.jobId)).state, 'succeeded');
+  const report = (await runRow(h, fx.runId)).report as { tokens: Record<string, number>; docs: { tokens: Record<string, number>; sections: Record<string, number> } };
+  assert.deepEqual(report.docs.sections, { written: 3, unchanged: 0, failed: 0 }, 'the documents step made calls of its own');
+  // The run's tokens: every request of the job, once — extraction, verification, the documents' sections.
+  const all = await callsOf(h, fx.jobId);
+  assert.deepEqual(report.tokens, { input: all.input, output: all.output, calls: all.calls }, 'the run\'s tokens are its requests\', each once');
+  // The documents step's: its sections' requests and the plan proposal's, once — not again on top of the run's.
+  const docs = await callsOf(h, fx.jobId, [...Object.values(WIKI_DOCS_BUILD_JOB.steps), WIKI_MAINTAIN_JOB.steps.planProposal]);
+  assert.ok(docs.calls > 0);
+  assert.deepEqual(report.docs.tokens, { input: docs.input, output: docs.output, calls: docs.calls }, 'the step\'s tokens are its requests\', each once');
+});
 
 test('a worker stopped in the documents step hands the run back, and the report the replay ends with is the whole run\'s', { skip }, async () => {
   const h = await boot();
@@ -2782,6 +2809,11 @@ test('a worker stopped in the documents step hands the run back, and the report 
   const calls = await callsOf(h, stopped.jobId);
   assert.deepEqual(report.tokens, { input: calls.input, output: calls.output, calls: calls.calls });
   assert.equal(report.tokens && (report.tokens as Record<string, number>).calls, (await callsOf(h, straight.jobId)).calls);
+  // The articles a run that recorded ops owes are asked by the whole run's report: the stopped run, whose ops were all
+  // recorded before the stop, owes its space the articles job the straight run's end queued for its own.
+  const articles = async (spaceId: string): Promise<number> => (await h.sql.query<{ n: number }>(
+    `SELECT count(*)::int AS n FROM "wiki_job" WHERE "space_id" = $1 AND "kind" = 'articles'`, [spaceId])).rows[0].n;
+  assert.deepEqual([await articles(straight.spaceId), await articles(stopped.spaceId)], [1, 1]);
 });
 
 test('a worker stopped between the run\'s own verdicts hands the run back, and the report the replay ends with counts the verdict recorded before the stop', { skip }, async () => {
