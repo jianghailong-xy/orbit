@@ -1,0 +1,15 @@
+p0 files ref 252 del 252 same file list True | screenshots {"antialias": 10, "beyond": 1, "identical": 241, "missing": 0} | traces differing 0 of 0 | tests {"notPassedDel": 11, "notPassedRef": 11, "total": 112} | captures with style deltas 0 of 252
+p52 files ref 240 del 240 same file list True | screenshots {"antialias": 1, "beyond": 2, "identical": 237, "missing": 0} | traces differing 2 of 56 | tests {"notPassedDel": 0, "notPassedRef": 0, "total": 56} | captures with style deltas 0 of 240
+p53att files ref 44 del 44 same file list True | screenshots {"antialias": 0, "beyond": 0, "identical": 44, "missing": 0} | traces differing 8 of 8 | tests {"notPassedDel": 0, "notPassedRef": 0, "total": 8} | captures with style deltas 0 of 44
+p52 trace-semantics exit 1
+p53att trace-semantics exit 1
+p52 traces: tests 56 steps 516 semantic differences 2 missing 0 viewer names differing 0
+p53att traces: tests 8 steps 60 semantic differences 24 missing 0
+  differing fields {'focus': 24}
+   24 × focus: {"name": "eye", "role": "button"} -> {"name": "screenshot.png", "role": "button"}
+# Standard P0 (ui-migration/playwright.config.mjs, expected screenshots = P0.2 originals + registered layers) on the delivery
+# 01713ca80 and on the reference 8b245fb69 (the delivery with the fix reverted), round f1.
+failing tests: delivery 6, reference 6; same tests: True; same first lines: True
+standard P0 actual screenshots: delivery 6 reference 6 same names True byte-identical 6
+overlays:  184 passed (8.5m); head: 01713ca80794e84e570378824d1632c5076ee314 exit=0
+choices:  20 failed; 756 passed (49.2m); head: 01713ca80794e84e570378824d1632c5076ee314 exit=1

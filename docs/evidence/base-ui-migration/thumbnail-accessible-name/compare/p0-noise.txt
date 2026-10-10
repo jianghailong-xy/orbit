@@ -1,0 +1,7 @@
+p0 ref|del: identical 241, antialias 10, beyond 1; largest chromium-dark-desktop/breakpoint-639-projects.png {"pixels": 7, "max": 4}
+p0 ref2|del2: identical 248, antialias 4, beyond 0; largest chromium-light-phone/projects-search-empty.png {"pixels": 12, "max": 2}
+p0 ref|ref2: identical 239, antialias 11, beyond 2; largest chromium-dark-desktop/breakpoint-639-projects.png {"pixels": 7, "max": 4}
+p0 del|del2: identical 242, antialias 9, beyond 1; largest chromium-light-phone/task-action-focus.png {"pixels": 2, "max": 3}
+p0 ref|del2: identical 237, antialias 13, beyond 2; largest chromium-dark-desktop/breakpoint-639-projects.png {"pixels": 7, "max": 4}
+p0 ref2|del: identical 242, antialias 9, beyond 1; largest chromium-light-phone/task-action-focus.png {"pixels": 2, "max": 3}
+p0: 252 names; names with more than one image in any run: 19; drawn only by ref 9, only by del 6

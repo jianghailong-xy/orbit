@@ -5,6 +5,8 @@ import './Image.css';
 export interface ImageProps {
   src: string;
   alt?: string;
+  /** The button's name when it is not `alt`: a picture that stays decorative (`alt=""`) still opens the viewer. */
+  label?: string;
   /** On the `<img>`, which is sized by the caller's class, as on the replaced Image. */
   className?: string;
   /** Drawn over the picture on hover and keyboard focus, on a 30% black wash (the replaced `preview.mask`). */
@@ -13,12 +15,12 @@ export interface ImageProps {
 
 /**
  * A picture that opens on its own in the full-screen viewer (ImagePreview) when pressed, or on Enter or Space — the
- * replaced Image with its preview. The wrapper is a button named by `alt`; the `<img>` fills its width at its own
- * aspect ratio unless the caller's class says otherwise. Pictures that page together (the transcript's) use
- * ImagePreview with `group` instead. The wrapper and the cover are spans, styled as the replaced divs were, so a
- * Markdown picture — inside the `<p>` react-markdown wraps it in — is still valid HTML.
+ * replaced Image with its preview. The wrapper is a button named by `label`, else by `alt`; the `<img>` fills its
+ * width at its own aspect ratio unless the caller's class says otherwise. Pictures that page together (the
+ * transcript's) use ImagePreview with `group` instead. The wrapper and the cover are spans, styled as the replaced
+ * divs were, so a Markdown picture — inside the `<p>` react-markdown wraps it in — is still valid HTML.
  */
-export function Image({ src, alt, className, cover }: ImageProps) {
+export function Image({ src, alt, label, className, cover }: ImageProps) {
   const [open, setOpen] = useState(false);
   const [origin, setOrigin] = useState<{ x: number; y: number } | null>(null);
   // The viewer grows from the middle of what was pressed, as the replaced one did.
@@ -33,7 +35,7 @@ export function Image({ src, alt, className, cover }: ImageProps) {
         className="orbit-image"
         role="button"
         tabIndex={0}
-        aria-label={alt}
+        aria-label={label ?? alt}
         onClick={(event: MouseEvent) => show(event.target)}
         onKeyDown={(event: KeyboardEvent) => {
           if (event.key !== 'Enter' && event.key !== ' ') return;
