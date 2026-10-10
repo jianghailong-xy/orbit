@@ -192,8 +192,9 @@ class ProjectSessionsShellTest {
         signIn(); openAlpha()
         compose.onNodeWithTag("project-row:${ProjectShell.LAUNCH}").performClick()
         await { exists(hasTestTag("project-sessions-ending-settled")) }
-        compose.onNode(hasTestTag("project-sessions-ending-settled") and hasText("This project is done"), useUnmergedTree = true).assertExists()
-        compose.onNode(hasTestTag("project-sessions-ending-settled") and hasText("recorded by Orbit"), useUnmergedTree = true).assertExists()
+        val ending = hasAnyAncestor(hasTestTag("project-sessions-ending-settled"))
+        compose.onNode(hasText("This project is done") and ending, useUnmergedTree = true).assertExists()
+        compose.onNode(hasText("recorded by Orbit") and ending, useUnmergedTree = true).assertExists()
         compose.onNode(hasTestTag("project-sessions-ending-settled-tally"), useUnmergedTree = true)
             .assert(hasText("6 criteria · 5 on main · 1 no code to land"))
         // The card it stands in for — one that would say nothing but "Done" — is gone, and the document was read for it.
@@ -214,7 +215,8 @@ class ProjectSessionsShellTest {
         // The current read, recorded by the owner: the same ending, spelled by its badge.
         ProjectShell.doneCounts = true
         await { exists(hasTestTag("project-sessions-ending-settled")) }
-        compose.onNode(hasTestTag("project-sessions-ending-settled") and hasText("recorded by you"), useUnmergedTree = true).assertExists()
+        compose.onNode(hasText("recorded by you") and hasAnyAncestor(hasTestTag("project-sessions-ending-settled")),
+            useUnmergedTree = true).assertExists()
         compose.onAllNodesWithTag("project-sessions-progress").assertCountEquals(0)
     }
 
