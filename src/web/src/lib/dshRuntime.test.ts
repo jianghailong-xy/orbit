@@ -1,19 +1,22 @@
 import { describe, expect, it } from 'vitest';
-import { derivePermissionSemantics, DSH_PERMISSION_MODES, type RunnerEngineHealth } from '@orbit/shared';
+import { AgentProvider, derivePermissionSemantics, DSH_PERMISSION_MODES, type RunnerEngineHealth } from '@orbit/shared';
 import { DSH_CONNECT_HREF, dshRepair, dshRunnerState } from './dshRuntime';
-import { engineChoices, providerChoices, runtimeSummary, sameRuntimeChoices } from './sessionProviderChoices';
-import { supportsRunnerSlashAssets, slashAssetMatchesProvider } from './slashCommands';
+import { engineChoices, engineProviders, runtimeSummary, type ChoiceSources } from './sessionProviderChoices';
+import { supportsRunnerSlashAssets, slashAssetMatchesEngine } from './slashCommands';
 import {
   clampPermissionModeForModel,
-  defaultModelForProvider,
-  effortOptionsForProvider,
+  defaultEngineOf,
+  defaultModelFor,
+  effortOptionsFor,
   MODE_OPTIONS,
-  modelOptionsForProvider,
-  normalizeEffortForProvider,
+  modelOptionsFor,
+  normalizeEffortFor,
   permissionModeSupported,
-  runtimeForProvider,
+  providerEngines,
   type ConfiguredProvider,
 } from './workspaceDefaults';
+
+const { CLAUDE, OPENCODE, DSH } = AgentProvider;
 
 // A row from the retired DeepSeek Harness preset, as GET /providers serves it until the migration folds
 // it into a DeepSeek key: runtime dsh, no static models (P1a).
@@ -25,8 +28,9 @@ const harness: ConfiguredProvider = {
   defaultModel: null,
   presetSlug: 'deepseek-harness',
   modelsFromRuntime: true,
+  engines: ['dsh', 'claude', 'opencode'],
 };
-// The existing DeepSeek preset, which keeps borrowing Claude Code.
+// A DeepSeek key: Claude Code by default, and DeepSeek Harness and OpenCode on the same key.
 const deepseek: ConfiguredProvider = {
   slug: 'deepseek',
   label: 'DeepSeek',
@@ -34,7 +38,9 @@ const deepseek: ConfiguredProvider = {
   models: [{ value: 'deepseek-v4-pro', label: 'DeepSeek V4 Pro' }],
   defaultModel: 'deepseek-v4-pro',
   presetSlug: 'deepseek',
+  engines: ['claude', 'opencode', 'dsh'],
 };
+const deepseek2: ConfiguredProvider = { ...deepseek, slug: 'deepseek-2', label: 'DeepSeek 2' };
 // Opaque ACP tokens, the shape P1a's catalogue preserves.
 const token = '["deepseek", "deepseek-v4-pro"]';
 const catalog = {
@@ -84,7 +90,8 @@ describe('dshRunnerState', () => {
 
 describe('dshRepair', () => {
   it('maps the runner codes and key-rejection evidence, and nothing vaguer', () => {
-    expect(dshRepair('DSH_CREDENTIAL_MISSING: configure a DeepSeek Harness API key for this session')).toBe('needsKey');
+    // The runner's own wording, as an older runner still writes it.
+    expect(dshRepair('DSH_CREDENTIAL_MISSING: DeepSeek Harness runs on a DeepSeek API key, and this session has none; connect one in Orbit')).toBe('needsKey');
     expect(dshRepair('dsh session/prompt (-32603): Invalid API key provided')).toBe('invalidKey');
     expect(dshRepair('dsh session/prompt (-32603): authentication_error status 401')).toBe('invalidKey');
     expect(dshRepair('DeepSeek Harness requires a newer Orbit runner with dsh support; update this runner first')).toBe(
@@ -129,131 +136,127 @@ describe('dshRepair failure semantics (D2)', () => {
   });
 });
 
-describe('DeepSeek Harness identity in the pickers', () => {
-  it('resolves the retired Harness preset’s row to the dsh runtime, and both DeepSeek rows to Anthropic’s protocol', () => {
-    expect(runtimeForProvider('deepseek-harness', [harness, deepseek])).toBe('dsh');
-    expect(runtimeForProvider('dsh', [])).toBe('dsh');
-    expect(runtimeForProvider('deepseek', [harness, deepseek])).toBe('claude');
+describe('DeepSeek Harness in the pickers, by the engine', () => {
+  it('runs on every DeepSeek key, a row from the retired preset by default', () => {
+    expect(providerEngines('deepseek-harness', [harness, deepseek])).toEqual(['dsh', 'claude', 'opencode']);
+    expect(providerEngines('deepseek', [harness, deepseek])).toEqual(['claude', 'opencode', 'dsh']);
+    expect(defaultEngineOf('deepseek', [harness, deepseek])).toBe('claude');
     // Whichever engine runs them, both rows speak Anthropic's protocol: that is what their pages say,
     // never an engine.
     expect(runtimeSummary('dsh')).toBe('Anthropic-compatible');
     expect(runtimeSummary('claude')).toBe('Anthropic-compatible');
+    // The legacy built-in `dsh`: DeepSeek Harness on the key its workspace's environment holds.
+    expect(providerEngines('dsh', [])).toEqual(['dsh']);
   });
 
-  it('lists models from the runner catalogue and never falls back to a Claude model', () => {
-    expect(modelOptionsForProvider('deepseek-harness', catalog, [harness]).map((o) => o.value)).toEqual([
-      token,
-      '["deepseek", "deepseek-v4-flash"]',
-    ]);
-    expect(defaultModelForProvider('deepseek-harness', catalog, [harness])).toBe(token);
-    expect(modelOptionsForProvider('deepseek-harness', null, [harness])).toEqual([]);
-    expect(defaultModelForProvider('deepseek-harness', null, [harness])).toBe('');
+  it('lists models from the runner catalogue on whichever DeepSeek key, and never falls back to a Claude model', () => {
+    for (const [slug, configured] of [['deepseek-harness', [harness]], ['deepseek', [deepseek]]] as const) {
+      expect(modelOptionsFor(DSH, slug, catalog, [...configured]).map((o) => o.value)).toEqual([token, '["deepseek", "deepseek-v4-flash"]']);
+      expect(defaultModelFor(DSH, slug, catalog, [...configured])).toBe(token);
+      expect(modelOptionsFor(DSH, slug, null, [...configured])).toEqual([]);
+      expect(defaultModelFor(DSH, slug, null, [...configured])).toBe('');
+    }
+    // The same DeepSeek key on Claude Code lists the key's own models.
+    expect(modelOptionsFor(CLAUDE, 'deepseek', catalog, [deepseek]).map((o) => o.value)).toEqual(['deepseek-v4-pro']);
   });
 
   it("offers the model's own reasoning levels, Default only for an unreported model", () => {
-    expect(effortOptionsForProvider('deepseek-harness', token, catalog, [harness])).toEqual([
+    expect(effortOptionsFor(DSH, 'deepseek-2', token, catalog, [deepseek2])).toEqual([
       { value: '', label: 'Default' },
       { value: 'off', label: 'Off' },
       { value: 'low', label: 'Low' },
       { value: 'high', label: 'High' },
       { value: 'max', label: 'Max' },
     ]);
-    expect(effortOptionsForProvider('deepseek-harness', '["deepseek", "deepseek-v4-flash"]', catalog, [harness])).toEqual([
+    expect(effortOptionsFor(DSH, 'deepseek-2', '["deepseek", "deepseek-v4-flash"]', catalog, [deepseek2])).toEqual([
       { value: '', label: 'Default' },
     ]);
-    expect(normalizeEffortForProvider('deepseek-harness', 'off', token, catalog, [harness])).toBe('off');
-    expect(normalizeEffortForProvider('deepseek-harness', 'medium', token, catalog, [harness])).toBe('');
-    expect(normalizeEffortForProvider('deepseek-harness', 'max', 'unknown', catalog, [harness])).toBe('');
+    expect(normalizeEffortFor(DSH, 'deepseek-2', 'off', token, catalog, [deepseek2])).toBe('off');
+    expect(normalizeEffortFor(DSH, 'deepseek-2', 'medium', token, catalog, [deepseek2])).toBe('');
+    expect(normalizeEffortFor(DSH, 'deepseek-2', 'max', 'unknown', catalog, [deepseek2])).toBe('');
   });
 
   it('offers exactly the permission modes the shared table honors, and clamps the rest to Default', () => {
-    const offered = MODE_OPTIONS.map((m) => m.value).filter((mode) => permissionModeSupported(mode, 'deepseek-harness', [harness]));
+    const offered = MODE_OPTIONS.map((m) => m.value).filter((mode) => permissionModeSupported(mode, DSH));
     expect(offered).toEqual(['default', 'auto', 'dontAsk']);
     expect([...offered].sort()).toEqual([...DSH_PERMISSION_MODES].sort());
     for (const mode of MODE_OPTIONS.map((m) => m.value)) {
-      expect(permissionModeSupported(mode, 'deepseek-harness', [harness])).toBe(
-        derivePermissionSemantics('dsh', mode, token).honored,
-      );
-      // Every other runtime keeps every mode.
-      expect(permissionModeSupported(mode, 'deepseek', [harness, deepseek])).toBe(true);
+      expect(permissionModeSupported(mode, DSH)).toBe(derivePermissionSemantics('dsh', mode, token).honored);
+      // Every other engine keeps every mode — the same DeepSeek key on Claude Code included.
+      expect(permissionModeSupported(mode, CLAUDE)).toBe(true);
     }
-    expect(clampPermissionModeForModel('plan', token, 'deepseek-harness', [harness], catalog)).toBe('default');
-    expect(clampPermissionModeForModel('bypassPermissions', token, 'deepseek-harness', [harness], catalog)).toBe('default');
-    expect(clampPermissionModeForModel('acceptEdits', token, 'deepseek-harness', [harness], catalog)).toBe('default');
-    expect(clampPermissionModeForModel('auto', token, 'deepseek-harness', [harness], catalog)).toBe('auto');
-    expect(clampPermissionModeForModel('dontAsk', token, 'deepseek-harness', [harness], catalog)).toBe('dontAsk');
-    expect(clampPermissionModeForModel('plan', 'deepseek-v4-pro', 'deepseek', [deepseek], catalog)).toBe('plan');
+    expect(clampPermissionModeForModel('plan', token, DSH, 'deepseek', [deepseek], catalog)).toBe('default');
+    expect(clampPermissionModeForModel('bypassPermissions', token, DSH, 'deepseek', [deepseek], catalog)).toBe('default');
+    expect(clampPermissionModeForModel('acceptEdits', token, DSH, 'deepseek', [deepseek], catalog)).toBe('default');
+    expect(clampPermissionModeForModel('auto', token, DSH, 'deepseek', [deepseek], catalog)).toBe('auto');
+    expect(clampPermissionModeForModel('dontAsk', token, DSH, 'deepseek', [deepseek], catalog)).toBe('dontAsk');
+    expect(clampPermissionModeForModel('plan', 'deepseek-v4-pro', CLAUDE, 'deepseek', [deepseek], catalog)).toBe('plan');
   });
 
   it('withholds runner slash commands from Harness sessions', () => {
     expect(supportsRunnerSlashAssets('dsh')).toBe(false);
-    expect(slashAssetMatchesProvider(undefined, 'dsh')).toBe(false);
-    expect(slashAssetMatchesProvider('claude', 'dsh')).toBe(false);
+    expect(slashAssetMatchesEngine(undefined, 'dsh')).toBe(false);
+    expect(slashAssetMatchesEngine('claude', 'dsh')).toBe(false);
   });
 });
 
-describe('providerChoices for DeepSeek Harness', () => {
-  const choicesOn = (runner: Parameters<typeof dshRunnerState>[0], configured = [harness, deepseek]) =>
-    providerChoices(configured, catalog, undefined, runner?.engines ?? null, [], null, undefined, false, runner);
-
-  it('labels both DeepSeek rows by the agent that runs them and offers Harness ready on its key', () => {
-    const choices = choicesOn(capable([health()]));
-    const dsh = choices.find((c) => c.slug === 'deepseek-harness')!;
-    expect(dsh).toMatchObject({ label: 'DeepSeek Harness', kind: 'byok', labelDetail: 'Harness', modelLabel: 'DeepSeek V4 Pro' });
-    expect(dsh.unavailable).toBeUndefined();
-    expect(dsh.glyphKey).toBe('deepseek-harness');
-    expect(choices.find((c) => c.slug === 'deepseek')).toMatchObject({ labelDetail: 'Claude Code' });
-    expect(choices.some((c) => c.setup)).toBe(false);
+describe('the engine and credentials of DeepSeek Harness', () => {
+  const sourcesOn = (runner: Parameters<typeof dshRunnerState>[0], configured = [harness, deepseek]): ChoiceSources => ({
+    configured,
+    modelCatalog: catalog,
+    engineHealth: runner?.engines ?? null,
+    dshRunner: runner,
   });
 
-  it('keeps Harness’s key listed where Harness can’t run, with the reason and the Infrastructure row that fixes it', () => {
+  it('lists every key it runs on by the key’s own name, ready on a capable runner', () => {
+    const rows = engineProviders(DSH, sourcesOn(capable([health()])));
+    expect(rows.map((row) => [row.slug, row.label, row.kind])).toEqual([
+      ['deepseek-harness', 'DeepSeek Harness', 'key'],
+      ['deepseek', 'DeepSeek', 'key'],
+    ]);
+    expect(rows.every((row) => !row.unavailable && !row.labelDetail)).toBe(true);
+    expect(rows[1].modelLabel).toBe('DeepSeek V4 Pro');
+    expect(rows[0].glyphKey).toBe('deepseek-harness');
+  });
+
+  it('keeps a key listed where Harness cannot run, with the reason and the engine row that fixes it', () => {
     for (const [runner, reason] of [
       [{ capabilities: [], engines: [health()] }, 'Update runner'],
       [capable([health({ installed: false, version: undefined })]), 'Not installed'],
       [capable([health({ installed: false, installationError: 'DSH_PLATFORM_UNSUPPORTED: darwin' })]), 'Not supported here'],
       [capable([health({ dsh: { ...health().dsh!, versionCompatible: false } })]), 'Unsupported version'],
     ] as const) {
-      const dsh = choicesOn(runner).find((c) => c.slug === 'deepseek-harness')!;
-      expect(dsh.unavailable).toBe(reason);
-      expect(dsh.fixEngine).toBe('dsh');
+      const row = engineProviders(DSH, sourcesOn(runner)).find((c) => c.slug === 'deepseek')!;
+      expect(row.unavailable).toBe(reason);
+      expect(row.fixEngine).toBe('dsh');
     }
-    // Only Harness depends on the dsh report: the Claude-borrowing DeepSeek row is unaffected.
-    expect(choicesOn({ capabilities: [], engines: [health()] }).find((c) => c.slug === 'deepseek')!.unavailable).toBeUndefined();
+    // Only Harness depends on the dsh report: the same key on Claude Code is unaffected.
+    expect(engineProviders(CLAUDE, sourcesOn({ capabilities: [], engines: [health()] })).find((c) => c.slug === 'deepseek')!.unavailable).toBeUndefined();
   });
 
-  it('offers to connect a key when none is configured on a runner that can run Harness', () => {
-    const setup = choicesOn(capable([health()]), [deepseek]).find((c) => c.setup)!;
-    expect(setup).toMatchObject({ label: 'DeepSeek Harness', unavailable: 'Add API key', fixHref: DSH_CONNECT_HREF });
-    // Not on an old runner (the key could not run there either), and never in a runtime's switch menu.
-    expect(choicesOn({ capabilities: [], engines: null }, [deepseek]).some((c) => c.setup)).toBe(false);
-    const all = choicesOn(capable([health()]), [deepseek]);
-    expect(sameRuntimeChoices('claude', all, [deepseek]).some((c) => c.setup)).toBe(false);
+  it('offers to connect a DeepSeek key when there is none, on a runner that can run Harness', () => {
+    const connect = engineChoices(sourcesOn(capable([health()]), [])).find((e) => e.slug === 'dsh')!;
+    expect(connect).toMatchObject({ label: 'DeepSeek Harness', provider: null, unavailable: 'Connect a DeepSeek key', fixHref: DSH_CONNECT_HREF });
+    expect(DSH_CONNECT_HREF).toBe('/providers/new/deepseek');
+    // Not on an old runner (no key could run there either), and never among another engine's credentials.
+    expect(engineChoices(sourcesOn({ capabilities: [], engines: null }, [])).some((e) => e.slug === 'dsh')).toBe(false);
+    expect(engineProviders(CLAUDE, sourcesOn(capable([health()]), [])).every((row) => row.kind === 'login')).toBe(true);
   });
 
-  it('lets a running Harness session move only between the keys Harness runs on', () => {
-    const second = { ...harness, slug: 'deepseek-harness-2', label: 'Work key' };
-    const configured = [harness, second, deepseek];
-    const choices = choicesOn(capable([health()]), configured);
-    expect(sameRuntimeChoices('deepseek-harness', choices, configured).map((c) => c.slug)).toEqual([
-      'deepseek-harness',
-      'deepseek-harness-2',
-    ]);
+  it('lets a running Harness session move between every DeepSeek key', () => {
+    const rows = engineProviders(DSH, sourcesOn(capable([health()]), [harness, deepseek2, deepseek]));
+    expect(rows.map((row) => row.slug)).toEqual(['deepseek-harness', 'deepseek-2', 'deepseek']);
   });
 
-  it('groups the keys Harness runs on and the connect row under one DeepSeek Harness engine in the hero', () => {
-    const ready = choicesOn(capable([health()]));
-    const engines = engineChoices(ready, [harness, deepseek]);
+  it('lands on the first DeepSeek key, while the same key under Claude Code is a pick of Claude Code’s', () => {
+    const engines = engineChoices(sourcesOn(capable([health()])));
     const dsh = engines.find((e) => e.slug === 'dsh')!;
     expect(dsh).toMatchObject({ label: 'DeepSeek Harness', glyphKey: 'deepseek-harness' });
-    expect(dsh.provider.slug).toBe('deepseek-harness');
-    // The Claude-borrowing DeepSeek key stays under Claude, named as such.
-    const claude = engines.find((e) => e.slug === 'claude')!;
-    expect(engineChoices(ready, [harness, deepseek], ['deepseek']).find((e) => e.slug === 'claude')!.provider.slug).toBe('deepseek');
-    expect(claude.slug).toBe('claude');
-
-    const none = engineChoices(choicesOn(capable([health()]), [deepseek]), [deepseek]);
-    const connect = none.find((e) => e.slug === 'dsh')!;
-    expect(connect).toMatchObject({ label: 'DeepSeek Harness', unavailable: 'Add API key', fixHref: DSH_CONNECT_HREF });
-    expect(none.find((e) => e.slug === 'claude')!.provider.setup).toBeUndefined();
+    expect(dsh.provider?.slug).toBe('deepseek-harness');
+    expect(engines.find((e) => e.slug === 'claude')!.provider?.slug).toBe('claude');
+    const picked = engineChoices(sourcesOn(capable([health()])), [{ engine: 'claude', provider: 'deepseek' }]);
+    expect(picked.find((e) => e.slug === 'claude')!.provider?.slug).toBe('deepseek');
+    expect(picked.find((e) => e.slug === 'dsh')!.provider?.slug).toBe('deepseek-harness');
+    expect(engines.find((e) => e.slug === OPENCODE)!.providers.map((row) => row.slug)).toEqual(['opencode', 'deepseek-harness', 'deepseek']);
   });
 });

@@ -24,6 +24,7 @@ import {
   ENGINE_CLI_NAMES,
   isAccountEngine,
   isEngine,
+  keyDialect,
   planUsageBlockedUntil,
   planUsageReported,
   RunEventType,
@@ -287,6 +288,7 @@ import {
   adminOnlyProviderRefusal,
   engineIncompatibleMessage,
   isBuiltinProvider,
+  keyCredential,
   usableProviderScope,
   usableProviderSql,
 } from '../providers/custom-provider';
@@ -5901,6 +5903,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         labels: item.labels ? normalizeTaskLabels(item.labels) : [],
         assigneeId: item.assigneeId ?? null,
         listId: item.listId ?? null,
+        engine: item.engine ?? null,
         provider: item.provider ?? null,
         model: item.model ?? null,
         modelHint: item.modelHint ?? null,
@@ -11833,9 +11836,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * the window resets (a weekly limit means days of them).
    *
    * `assignee` is the engine and credential the run would be created on (dispatchEngines). A run on a
-   * key spends the key's own quota, which no runner reports: it is never held here, and never blind
-   * (docs/provider-engine-contract.md §4.5) — the slug of a key is in no runner's snapshot, so judged
-   * like a sign-in it read as a quota nobody reports, and every usage-limit failure damped it.
+   * key spends the key's own quota, which no runner reports: it is never held here, and an API key is
+   * never blind (docs/provider-engine-contract.md §4.5) — the slug of a key is in no runner's snapshot,
+   * so judged like a sign-in it read as a quota nobody reports, and every usage-limit failure damped it.
+   * A key holding a Claude subscription token is the exception: it has the subscription's windows and
+   * prints its "hit your … limit" like a sign-in, so with nothing reporting them it is blind.
    *
    * The quota is the one the task's run would spend: its runner's for its provider, because one
    * runner can host workspaces on several runtimes and only some of their quotas may be spent — and
@@ -11894,9 +11899,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           ).map((w) => [w.id, w]),
     );
     const now = this.now();
-    // One pool read per owner's slug per pass, and one key read.
+    // One pool read per owner's slug per pass, and one key read: null for a slug that is no key.
     const pools = new Map<string, Date | null>();
-    const keys = new Map<string, boolean>();
+    const keys = new Map<string, { subscription: boolean } | null>();
     for (const t of tasks) {
       const assignee = t.assignee;
       if (!assignee?.runnerId) continue;
@@ -11910,18 +11915,21 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         continue;
       }
       // What the runner reports is its own sign-ins' quota. A run on a key spends the key's own, which
-      // no runner sees: it is neither held by the runner's numbers nor blind for the want of them
-      // (docs/provider-engine-contract.md §4.5). Asked only of a credential that is no sign-in and no
-      // pool with something to go by — a pool that reports nothing stays blind, as it always was.
+      // no runner sees: it is never held by the runner's numbers (docs/provider-engine-contract.md
+      // §4.5). An API key is not blind for the want of them either: it is metered per token and has no
+      // window to run out. A Claude subscription token has the subscription's, and hits them like a
+      // sign-in does, so it is blind: a usage limit it hits holds the task off the way one on a sign-in
+      // nobody reports does (QUOTA_BLIND_RETRY_BACKOFF_MS), rather than the sweep re-dispatching it
+      // every minute until the window resets. Asked only of a credential that is no sign-in and no pool
+      // with something to go by — a pool that reports nothing stays blind, as it always was.
       if (assignee.login === false) {
         const key = `${t.ownerId}:${assignee.provider}`;
-        if (!keys.has(key)) {
-          keys.set(key, (await this.prisma.modelProvider.findFirst({
-            where: { slug: assignee.provider, OR: [{ ownerId: t.ownerId }, { ownerId: null }] },
-            select: { id: true },
-          })) !== null);
+        if (!keys.has(key)) keys.set(key, await this.keyQuota(t.ownerId, assignee.provider));
+        const quota = keys.get(key);
+        if (quota) {
+          if (quota.subscription) blind.add(t.id);
+          continue;
         }
-        if (keys.get(key)) continue;
       }
       const runner = runnerById.get(assignee.runnerId);
       // Antigravity's quota travels with its engine health, and is weighed with the rest here.
@@ -11949,6 +11957,23 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * The key `slug` names for `ownerId`, as the quota gate weighs it: whether it holds a Claude
+   * subscription token, or null when the slug is no key of theirs. The compatibility table's own
+   * judgment (keyCredential, shared providerEngines.ts), which needs the key decrypted — so it is
+   * decrypted only for a key on Anthropic's protocol, the one protocol a subscription token runs on.
+   */
+  private async keyQuota(ownerId: string, slug: string): Promise<{ subscription: boolean } | null> {
+    const row = await this.prisma.modelProvider.findFirst({
+      where: { slug, OR: [{ ownerId }, { ownerId: null }] },
+      select: { runtime: true, baseUrl: true, apiKeyEnc: true, presetSlug: true },
+    });
+    if (!row) return null;
+    if (keyDialect(row.runtime) !== 'anthropic') return { subscription: false };
+    const credential = keyCredential(row);
+    return { subscription: credential.kind === 'key' && credential.subscriptionToken };
+  }
+
+  /**
    * Of `taskIds`, which must NOT be auto-run right now because their previous runs failed:
    * either the task is still inside the backoff window for its failure count, or it has
    * burned through MAX_AUTO_RUN_FAILURES and is left for a human. Counting every FAILED
@@ -11961,8 +11986,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * permanently un-runnable after one quota outage — exactly the tasks that should pick
    * themselves back up once the window resets.
    *
-   * `quotaBlindTaskIds` are the ones whose runner reports no quota snapshot to judge by. Only
-   * those get the flat QUOTA_BLIND_RETRY_BACKOFF_MS hold after a usage-limit failure. A task
+   * `quotaBlindTaskIds` are the ones whose quota nothing reports a snapshot of to judge by: a
+   * sign-in its runner reports nothing for, a pool with nothing to go by, or a key holding a Claude
+   * subscription token (quotaGate).
+   * Only those get the flat QUOTA_BLIND_RETRY_BACKOFF_MS hold after a usage-limit failure. A task
    * whose runner *does* report a healthy quota is dispatched at once instead: that report is
    * positive evidence the window reset, and delaying it would be the very "un-runnable fleet"
    * this exemption exists to prevent.

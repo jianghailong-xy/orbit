@@ -59,7 +59,7 @@ import {
 } from '../lib/deliveredMessage';
 import { steerDeliveryState } from '../lib/steerDelivery';
 import { BatchGraph } from './BatchGraph';
-import { buildBatchGraph, describeShape, shouldDraw, type BatchTaskInput } from '../lib/batchGraph';
+import { buildBatchGraph, describeShape, type BatchTaskInput } from '../lib/batchGraph';
 import { RunnerSignIn } from './RunnerSignIn';
 import { AppLink } from './AppLink';
 import { SameOriginLink } from './SameOriginLink';
@@ -178,12 +178,17 @@ export const EventFullCtx = createContext<((seq: number) => Promise<any>) | null
  * diagnosis alone — a logged-out viewer can neither sign that runner in nor retry.
  */
 export interface AuthErrorHelp {
-  /** Session's provider slug — a built-in runtime or a configured provider. */
+  /** Session's provider slug — an engine's own sign-in on the runner, or a key or pool. */
   provider: string;
+  /** The session's key as a sentence names it, lowercase — `the DeepSeek key “DeepSeek 2”`: its
+   *  vendor and the name its owner gave it, never its slug or an engine (one key runs on several).
+   *  Absent when the session runs on no key this account still has. */
+  keyName?: string;
   /** Runner display name, so the card names the machine to fix. */
   runnerName?: string;
   /** Runner id, which unlocks signing in from the browser instead of on that machine. */
   runnerId?: string;
+  /** The engine the session runs on — its own, fixed for its life. */
   runtime?: string;
   googleLogin?: 'available' | 'needs_update' | 'unsupported_platform';
   runnerVersion?: string | null;
@@ -221,8 +226,9 @@ export type AntigravityRepair = 'needsKey' | 'updateRunner' | 'notInstalled';
 
 /**
  * A DeepSeek Harness session that could not run, as the remedy rather than the runner's sentence.
- * Its credential is a configured key, never a sign-in on the runner, so every key problem is fixed
- * on that provider's own page; everything else is about the machine (dshRepair says which).
+ * Its credential is a DeepSeek key — the same key Claude Code and OpenCode run on — never a sign-in on
+ * the runner, so every key problem is fixed on that key's own page; everything else is about the
+ * machine (dshRepair says which).
  */
 export function DshRepairCard({ repair, help, seq }: { repair: DshRepair; help: AuthErrorHelp; seq?: number }) {
   const machine = help.runnerName || 'this runner';
@@ -233,7 +239,7 @@ export function DshRepairCard({ repair, help, seq }: { repair: DshRepair; help: 
         <WarningFilled className="chat-authfix-icon" />
         <div className="chat-authfix-title">
           {repair === 'needsKey'
-            ? 'DeepSeek Harness needs an API key'
+            ? 'DeepSeek Harness needs a DeepSeek key'
             : repair === 'invalidKey'
               ? 'DeepSeek rejected this API key'
               : repair === 'updateRunner'
@@ -245,9 +251,9 @@ export function DshRepairCard({ repair, help, seq }: { repair: DshRepair; help: 
       </div>
       <div className="chat-authfix-desc">
         {repair === 'needsKey'
-          ? 'This session has no DeepSeek Harness key to run on. Add or re-enable the key in Infrastructure, then send your message again.'
+          ? 'This session has no DeepSeek key to run on. Add or re-enable a DeepSeek key in Infrastructure, then send your message again.'
           : repair === 'invalidKey'
-            ? 'Update the key in Infrastructure, then send your message again. Connecting a key does not check it — the first request does.'
+            ? `Update ${help.keyName ?? 'the DeepSeek key'} in Infrastructure, then send your message again.`
             : repair === 'updateRunner'
               ? `${machine} runs Orbit runner ${help.runnerVersion || 'an unknown version'}, which predates DeepSeek Harness. The runner updates itself when no session is running on it.`
               : repair === 'notInstalled'
@@ -1988,9 +1994,11 @@ function AuthErrorCard({ message, seq }: { message: string; seq?: number }) {
         )
       ) : help ? (
         <>
+          {/* The key by its vendor and its own name — the same key may run on Claude Code, OpenCode and
+              DeepSeek Harness, so the engine is no way to name it, and its slug is nobody's. */}
           <div className="chat-authfix-desc">
-            The API key for <code>{help.provider}</code> was rejected. Update it in Infrastructure, then
-            send your message again.
+            {help.keyName ? `${help.keyName.charAt(0).toUpperCase()}${help.keyName.slice(1)}` : 'The API key'} was
+            rejected. Update it in Infrastructure, then send your message again.
           </div>
           {help.onUseApiKey && (
             <button className="chat-authfix-go" onClick={help.onUseApiKey} type="button">
@@ -3920,7 +3928,9 @@ function describeTool(name: string, input: any, isShell?: boolean, answer?: stri
         summary: shape || undefined,
         body: tasks.length ? (
           <div className="tool-batch">
-            {shouldDraw(graph) ? <BatchGraph tasks={tasks} /> : null}
+            {/* The record lists the titles either way, so the picture stands where it fits and
+                leaves nothing in its place when it does not. */}
+            <BatchGraph tasks={tasks} fallback={null} />
             <ul className="dag-approval-ops">
               {tasks.map((t, n) => (
                 <li key={n} className="dag-op">
