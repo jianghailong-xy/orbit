@@ -1,4 +1,4 @@
-import { useId, useRef, useState, type CSSProperties, type Ref } from 'react';
+import { useId, useRef, useState, type CSSProperties, type ReactNode, type Ref } from 'react';
 import { Combobox as BaseCombobox } from '@base-ui/react/combobox';
 import { CloseCircleFilled, DownOutlined, LoadingOutlined, SearchOutlined } from '@ant-design/icons';
 import { SelectEmpty } from './SelectEmpty';
@@ -11,12 +11,16 @@ export interface ComboboxProps<Value extends string = string> extends Omit<Selec
   /** Remote searches supply already-filtered options. */
   filter?: boolean;
   onSearch?: (query: string) => void;
+  /** Words above and below the options — what they are, what choosing one decides — which neither
+   *  the arrow keys nor the search reach. */
+  header?: ReactNode;
+  footer?: ReactNode;
 }
 
 export function Combobox<Value extends string = string>({ options, value, onValueChange, id, name, disabled, loading,
   placeholder, clearable, clearLabel = 'Clear selection', size = 'middle', variant = 'outlined', showArrow = true,
   matchTriggerWidth = true, emptyContent = <SelectEmpty />, renderOption, renderValue, className, style, ref, filter = true, onSearch,
-  open, onOpenChange, side = 'bottom', align = 'start', popupClassName, popupStyle, returnFocus, ...aria }: ComboboxProps<Value>) {
+  header, footer, open, onOpenChange, side = 'bottom', align = 'start', popupClassName, popupStyle, returnFocus, ...aria }: ComboboxProps<Value>) {
   const [query, setQuery] = useState('');
   const selectedId = useId();
   const updateQuery = (next: string) => { setQuery(next); onSearch?.(next); };
@@ -67,6 +71,7 @@ export function Combobox<Value extends string = string>({ options, value, onValu
         className="orbit-floating-positioner orbit-choice-positioner" data-match-width={matchTriggerWidth}
         style={{ zIndex: layer.zIndex, '--orbit-choice-anchor-width': anchorWidth === undefined ? undefined : `${anchorWidth}px` } as CSSProperties}>
         <BaseCombobox.Popup className={`orbit-select-popup${popupClassName ? ` ${popupClassName}` : ''}`} style={popupStyle} finalFocus={returnFocus}>
+          {header}
           <BaseCombobox.Empty className="orbit-select-empty" role="status">{emptyContent}</BaseCombobox.Empty>
           <BaseCombobox.List className="orbit-select-list">
             {grouped ? (group: { label: string; items: SelectOption<Value>[] }) => <BaseCombobox.Group key={group.label || group.items[0]?.value} items={group.items}>
@@ -74,6 +79,7 @@ export function Combobox<Value extends string = string>({ options, value, onValu
               <BaseCombobox.Collection>{item}</BaseCombobox.Collection>
             </BaseCombobox.Group> : item}
           </BaseCombobox.List>
+          {footer}
         </BaseCombobox.Popup>
       </BaseCombobox.Positioner>
     </BaseCombobox.Portal>

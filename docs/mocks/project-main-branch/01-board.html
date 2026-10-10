@@ -1,0 +1,211 @@
+<!doctype html>
+<!-- Design mock: a project's main branch (project_codebase.upstream_ref) shown and chosen on the web — a
+     Main branch row on "Start this project?" and in the project page's How it runs, locked with the line —
+     and every sentence that says where work goes naming that branch instead of "main". Every frame is a
+     screenshot of the real web app (vite + index.css, Chromium, deviceScaleFactor 2) fed by
+     src/web/ui-migration's fixtures plus a payments project whose repository's main branch is master.
+     "现在" is main 5b794d643; "改后" is the same tree with the change in it (shared types, lib/projectStart.ts,
+     StartProjectCard.tsx, ProjectRunSettings.tsx, ProjectIntegrationLine.tsx, a new MainBranchSelect.tsx and
+     index.css). The start card is drawn at the approved 720 px (docs/mocks/start-card-web-width, commit
+     6bd2990a4, not on main yet), injected as one CSS rule into both trees. Dashed outlines and labels are
+     drawn on top. Kit: /var/tmp/upstream-branch-mock (patch/apply.py, then patch/apply-memory.py for the remembered
+     choice, are the proposal as code). -->
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>项目的主分支：在 Web 上看得见、选得了，文案跟着叫它的名字</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<style>
+  .m-sheet { width: 1840px; }
+  .m-sub { line-height: 1.75; max-width: 1700px; }
+  .m-sub code, .m-cap code, .rules code, .files code, .ask code { font-size: 11.5px; }
+  .row2 { display: flex; gap: 40px; align-items: flex-start; }
+  .row3 { display: flex; gap: 34px; align-items: flex-start; }
+  .col { display: flex; flex-direction: column; gap: 22px; min-width: 0; }
+  .fig { position: relative; }
+  .shot { display: block; width: 100%; border-radius: 10px; box-shadow: 0 0 0 1px rgba(15, 23, 42, .08), 0 1px 3px rgba(15, 23, 42, .06); }
+  .m-cap { font-size: 12.5px; line-height: 1.75; color: var(--text-2); margin: 10px 2px 0; }
+  .m-cap b { color: var(--text-1); }
+  .fl { font-size: 12.5px; font-weight: 700; color: var(--text-1); margin: 0 0 8px 2px; display: flex; gap: 8px; align-items: center; }
+  .fl span.d { font-weight: 400; color: var(--text-3); }
+  .mk { position: absolute; border: 1.5px dashed var(--warning-solid); border-radius: 7px; pointer-events: none; }
+  .mk-l { position: absolute; white-space: nowrap; font-size: 12px; font-weight: 700; color: #fff;
+          background: var(--warning-solid); border-radius: 5px; padding: 1px 7px; }
+  .mk-l-right { left: calc(100% + 10px); top: 50%; transform: translateY(-50%); }
+  .mk-l-left { right: calc(100% + 10px); top: 50%; transform: translateY(-50%); }
+  .mk-l-above { left: 50%; bottom: calc(100% + 6px); transform: translateX(-50%); }
+  .mk-l-below { left: 50%; top: calc(100% + 6px); transform: translateX(-50%); }
+  .mk-l-below-left { left: 0; top: calc(100% + 5px); }
+  .mk-l-se { left: calc(100% + 12px); top: calc(100% + 4px); }
+  .m-k.rec { background: #e8f7ee; color: #16833a; }
+  .m-k.alt { background: #fff1e8; color: #c2410c; }
+  .rules { border-collapse: collapse; font-size: 12.5px; line-height: 1.65; width: 100%; }
+  .rules th, .rules td { border: 1px solid #dde0e6; padding: 8px 11px; text-align: left; vertical-align: top; }
+  .rules th { background: #f5f6f8; font-weight: 600; color: var(--text-1); white-space: nowrap; }
+  .rules td:first-child { font-weight: 600; color: var(--text-1); }
+  .rules td.same { color: var(--text-3); }
+  .rules td.chg { color: #0958d9; font-weight: 600; }
+  .grid-bottom { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 26px; align-items: start; }
+  .files { margin: 0; padding: 12px 16px; list-style: none; background: #f5f6f8; border-radius: 8px;
+           font-size: 12.5px; line-height: 1.75; color: #3f4652; }
+  .files li + li { margin-top: 6px; }
+  .files b { color: var(--text-1); }
+  .ask { margin-top: 14px; padding: 12px 16px; border-radius: 8px; background: #fff8e6; border: 1px solid #f5d79e;
+         font-size: 12.5px; line-height: 1.8; color: #5c4210; }
+  .ask b { color: #3d2b08; }
+  .ask ol { margin: 6px 0 0; padding-left: 20px; }
+  .ask li + li { margin-top: 6px; }
+  .ask ul { margin: 2px 0 0; padding-left: 18px; }
+  .ask .rec { color: #16833a; font-weight: 700; }
+</style>
+</head>
+<body class="m">
+<section class="m-sheet">
+  <h1 class="m-h1 zh">项目的主分支：在 Web 上看得见、选得了，文案跟着叫它的名字</h1>
+  <p class="m-sub zh">现在每个项目都有自己的主分支（<code>project_codebase.upstream_ref</code>：任务从它开始，做完的工作最后合进它），默认 <code>refs/heads/main</code>，平台不去仓库里猜。但 Web、iOS、Android 都没有地方看到或改它，只能在终端跑 <code>orbit project update --upstream-ref</code> 或调 API；界面上所有说「合进哪里」的句子又一律写死 main。仓库主分支叫 master 的项目，按下 Start 后任务一启动就报 <code>BASE_REF_NOT_FOUND</code>；一旦开始集成，线就锁住，再也改不了。
+  下面每张图都是真实 Web 页面的截图，不是画的：「现在」是 main <code>5b794d643</code>，「改后」是同一份代码加上这次的改动跑出来的。例子是一个仓库主分支叫 <code>master</code> 的支付项目（工作区 <code>payments-api</code>，本地分支 develop / master / release/2.4）。虚线和标签是标注。同一个仓库选过一次，以后的新项目自动带上（⑥）。<b>主分支是 main 的项目，除了多出 Main branch 这一行、锁定说明多半句，其它文字不变。</b></p>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh"><span class="m-k">开始卡片</span>协调者对话里的 Start this project?（按已批准的 720 宽画，那次改动 6bd2990a4 还没合进 main）</div>
+    <div class="row2">
+      <div>
+        <div class="fl zh"><span class="m-k">现在</span>① 卡上没有主分支这一项</div>
+        <div class="fig" style="width:748px"><img class="shot" src="01a-start-today.png" alt=""><span class="mk" style="left:36.362%;top:8.465%;width:55.268%;height:3.245%"><span class="mk-l mk-l-below-left zh">协调者知道是 master，卡上却没地方填</span></span><span class="mk" style="left:45.81%;top:45.974%;width:13.839%;height:3.097%"><span class="mk-l mk-l-above zh">写死 main</span></span><span class="mk" style="left:3.61%;top:69.218%;width:92.781%;height:8.702%"><span class="mk-l mk-l-below zh">没有选主分支的地方</span></span></div>
+        <p class="m-cap zh" style="width:748px">协调者在话里说了主分支是 master，可 How it runs 里没有这一项。按下 Start，项目绑到 <code>refs/heads/main</code>；这个仓库没有 main，任务一启动就报 <code>BASE_REF_NOT_FOUND</code>，只能去终端改。Automatic 那句也写着 merges into main。</p>
+      </div>
+      <div>
+        <div class="fl zh"><span class="m-k new">改后</span>② 多一行 Main branch <span class="m-k rec">推荐：方案 A</span></div>
+        <div class="fig" style="width:748px"><img class="shot" src="01b-start-proposal.png" alt=""><span class="mk" style="left:45.81%;top:42.641%;width:15.397%;height:2.873%"><span class="mk-l mk-l-above zh">跟着叫 master</span></span><span class="mk" style="left:3.61%;top:71.45%;width:92.781%;height:8.071%"><span class="mk-l mk-l-below zh">新增：协调者建议的 master</span></span></div>
+        <p class="m-cap zh" style="width:748px">Tasks land on 下面多一行 <b>Main branch</b>，值是协调者在请求里建议的 <code>master</code>（方案 A）。卡上所有说「合进哪里」的句子都换成 master。按下 Start 时连同 <code>upstreamRef: refs/heads/master</code> 一起写入，任务从 master 开始。</p>
+      </div>
+    </div>
+    <div class="row3" style="margin-top:26px">
+      <div>
+        <div class="fl zh"><span class="m-k state">状态</span>③ 打开下拉</div>
+        <div class="fig" style="width:718px"><img class="shot" src="01c-menu.png" alt=""><span class="mk" style="left:53.482%;top:60.843%;width:42.618%;height:6.997%"><span class="mk-l mk-l-left zh">runner 报上来的分支</span></span></div>
+        <p class="m-cap zh" style="width:718px">列出 runner 给这个工作区报上来的本地分支，和会话状态栏 Merge 菜单是同一份（去掉 Orbit 自己的 <code>orbit/*</code>）。最下面一句说明这一项决定什么。</p>
+      </div>
+      <div class="col">
+        <div>
+          <div class="fl zh"><span class="m-k state">状态</span>④ 列表里没有：直接输入</div>
+          <div class="fig" style="width:716px"><img class="shot" src="01d-typed.png" alt=""><span class="mk" style="left:55.168%;top:46.654%;width:15.939%;height:11.957%"><span class="mk-l mk-l-left zh">手输的分支</span></span></div>
+          <p class="m-cap zh" style="width:716px">远端才有、runner 还没报上来的分支，直接输入后选 Use。不像分支名的（带空格、<code>..</code>、<code>~^:?*[</code> 等）不出现 Use。runner 一个分支都没报时，下拉只能输入。</p>
+        </div>
+        <div>
+          <div class="fl zh"><span class="m-k alt">可选</span>⑤ 方案 B：主分支不在列表里时提示一句</div>
+          <div class="fig" style="width:718px"><img class="shot" src="01e-option-b.png" alt=""><span class="mk" style="left:1.671%;top:57.999%;width:96.657%;height:18.621%"><span class="mk-l mk-l-below zh">方案 B 才有</span></span></div>
+          <p class="m-cap zh" style="width:718px">协调者没建议主分支时（比如旧版协调者），值是 main。main 不在报上来的分支里，就在这一行下面用琥珀色说一句。只提示，不拦 Start，因为列表是工作区的本地分支，不一定和远端一致。</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh"><span class="m-k new">记住</span>同一个仓库的下一个项目：直接带上你上次选的</div>
+    <div class="row2">
+      <div>
+        <div class="fl zh"><span class="m-k new">改后</span>⑥ 第二个项目，主分支已经是 master</div>
+        <div class="fig" style="width:748px"><img class="shot" src="01k-memory-start.png" alt=""><span class="mk" style="left:5.214%;top:70.441%;width:89.572%;height:7.703%"><span class="mk-l mk-l-below zh">你上次给这个仓库选的</span></span></div>
+        <p class="m-cap zh" style="width:748px">两天前你给 acme/payments-api 的第一个项目选了 master。这次协调者没建议，卡上直接就是 master，下面一行小字说明它从哪来。改成别的也行，改了就成为这个仓库新的「上次」。</p>
+      </div>
+      <div class="col">
+        <div>
+          <div class="fl zh"><span class="m-k new">改后</span>⑦ 下拉里标出上次选的</div>
+          <div class="fig" style="width:716px"><img class="shot" src="01l-memory-menu.png" alt=""><span class="mk" style="left:62.572%;top:47.114%;width:9.748%;height:9.703%"></span></div>
+          <p class="m-cap zh" style="width:716px">上次选的分支后面标 last chosen，和会话 Merge 菜单在当前目标后面标 selected 是同一个做法。</p>
+        </div>
+        <ul class="files zh" style="width:716px">
+          <li><b>新项目的初始值</b>，取第一个有的：这个项目自己已经选过的 → 你上次给同一个仓库选的 → 协调者建议的（方案 A）→ main。你自己的选择排在协调者建议前面。</li>
+          <li><b>什么算一次选择</b>：开始卡片上按 Start（卡上显示的那个就算你选的）、How it runs 里按 Save、终端 <code>orbit project update --upstream-ref</code>、API。</li>
+          <li><b>记在哪</b>：服务端，按「账号 + 仓库」记。Web、iOS、Android、终端看到的都一样；同一个仓库换台机器、换个工作区也一样。</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh"><span class="m-k">项目页</span>How it runs（项目已开始）和标题下的集成行</div>
+    <div class="row2">
+      <div>
+        <div class="fl zh"><span class="m-k">现在</span>⑧ 主分支已改成 master，页面还写 main</div>
+        <div class="fig" style="width:840px"><img class="shot" src="01f-run-today.png" alt=""><span class="mk" style="left:20.417%;top:43.286%;width:13.073%;height:3.674%"><span class="mk-l mk-l-right zh">实际是 master</span></span><span class="mk" style="left:25.426%;top:64.851%;width:17.493%;height:3.355%"><span class="mk-l mk-l-right zh">写死 main</span></span><span class="mk" style="left:22.054%;top:92.807%;width:10.785%;height:3.355%"></span></div>
+        <p class="m-cap zh" style="width:840px">这个项目的主分支已经在终端改成 master，页面上却写着 Directly into main、merges the branch into main、merges into main，也看不到、改不了主分支。</p>
+      </div>
+      <div>
+        <div class="fl zh"><span class="m-k new">改后</span>⑨ 多一行 Main branch，文案叫 master</div>
+        <div class="fig" style="width:840px"><img class="shot" src="01g-run-proposal.png" alt=""><span class="mk" style="left:2.917%;top:47.111%;width:33.333%;height:5.22%"><span class="mk-l mk-l-right zh">新增</span></span><span class="mk" style="left:20.417%;top:37.221%;width:14.57%;height:3.159%"><span class="mk-l mk-l-right zh">跟着叫 master</span></span><span class="mk" style="left:17.917%;top:54.666%;width:28.267%;height:5.357%"><span class="mk-l mk-l-right zh">也是这个仓库以后的默认</span></span><span class="mk" style="left:25.426%;top:69.776%;width:18.709%;height:2.885%"></span><span class="mk" style="left:22.054%;top:93.814%;width:11.921%;height:2.885%"></span></div>
+        <p class="m-cap zh" style="width:840px">Tasks land on 下面多一行 <b>Main branch</b>，用的是开始卡片上同一个下拉。项目开始后、开始集成前都能改，按 Save 写入（<code>PATCH /projects/:id/integration</code> 的 <code>upstreamRef</code>，和线一起发）。在这里改，也就改了这个仓库以后新项目的默认值，下面那句小字说的就是这个。</p>
+      </div>
+    </div>
+    <div class="row2" style="margin-top:26px">
+      <div>
+        <div class="fl zh"><span class="m-k state">状态</span>⑩ 开始集成以后：和线一起锁住</div>
+        <div class="fig" style="width:840px"><img class="shot" src="01h-run-locked.png" alt=""><span class="mk" style="left:17.917%;top:37.748%;width:30.938%;height:17.593%"><span class="mk-l mk-l-left zh">锁定后只读</span></span></div>
+        <p class="m-cap zh" style="width:840px">集成一开始，线和主分支就一起锁住（服务端 409 <code>INTEGRATION_LINE_LOCKED</code>，数据库触发器兜底）。下拉变灰；原来写在线下面的锁定说明挪到这一行下面，加上 and its main branch，并且叫 master。</p>
+      </div>
+      <div class="col">
+        <div>
+          <div class="fl zh"><span class="m-k">现在</span>⑪ 标题下的集成行</div>
+          <div class="fig" style="width:840px"><img class="shot" src="01i-line-today.png" alt=""><span class="mk" style="left:34.202%;top:20.614%;width:9.417%;height:25.301%"><span class="mk-l mk-l-below zh">写死 main</span></span><span class="mk" style="left:57.937%;top:20.614%;width:11.428%;height:25.301%"></span></div>
+        </div>
+        <div>
+          <div class="fl zh"><span class="m-k new">改后</span>⑪ 同一行</div>
+          <div class="fig" style="width:840px"><img class="shot" src="01j-line-proposal.png" alt=""><span class="mk" style="left:34.202%;top:20.614%;width:10.689%;height:25.301%"><span class="mk-l mk-l-below zh">跟着叫 master</span></span><span class="mk" style="left:59.208%;top:20.614%;width:12.699%;height:25.301%"></span></div>
+          <p class="m-cap zh" style="width:840px">ahead of main、synced with main 改成项目的主分支名。直接合进主分支的项目，这一行本来就显示主分支名，不变。</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="grid-bottom">
+      <div>
+        <div class="m-stage-l zh"><span class="m-k state">规则</span>改了什么、没改什么</div>
+        <table class="rules zh">
+          <tr><th>情况</th><th>现在</th><th>改后</th></tr>
+          <tr><td>谁能改主分支</td><td>账号所有者，只能用 CLI 或 API</td><td class="chg">还是只有账号所有者，多了 Web：开始卡片、项目页 How it runs。agent 会话照旧 403</td></tr>
+          <tr><td>新项目的默认值</td><td>一律 <code>main</code>，平台不探测</td><td class="chg">你上次给同一个仓库选的（⑥）；第一次才用协调者的建议（方案 A）或 main。平台仍然不去仓库里猜</td></tr>
+          <tr><td>什么算一次选择</td><td>—</td><td class="chg">开始卡片按 Start、How it runs 按 Save、终端、API。删掉那个项目，就退回更早的一次</td></tr>
+          <tr><td>下拉里有什么</td><td>—</td><td class="chg">runner 报上来的工作区本地分支（和会话 Merge 菜单同一份），也可以手输；一个都没报时只能手输。上次选的标 last chosen（⑦）</td></tr>
+          <tr><td>项目开始后、集成前</td><td>只能用 CLI 改</td><td class="chg">How it runs 里改，按 Save 写入（⑨）</td></tr>
+          <tr><td>集成开始后</td><td>改会被 409 拒绝</td><td class="chg">下拉变灰，一句话说明为什么（⑩）；规则本身不变</td></tr>
+          <tr><td>说「合进哪里」的文案</td><td>一律写 main</td><td class="chg">叫项目的主分支名。本板改的是设置这一带的 18 句（<code>lib/projectStart.ts</code> 16 句、集成行 2 处）；项目页别处还有二十多句，见待你定 2</td></tr>
+          <tr><td>主分支就是 main 的项目</td><td>—</td><td class="same">除了多出 Main branch 一行、锁定说明多半句，其它文字不变</td></tr>
+          <tr><td>没有仓库的项目（工作区没记录远端）</td><td>—</td><td class="same">不显示这一行：没有分支可合</td></tr>
+          <tr><td>手机网页</td><td>—</td><td class="same">同一张卡、同一行，在审阅弹窗里</td></tr>
+          <tr><td>输入校验</td><td>服务端要求 <code>refs/heads/…</code></td><td class="same">界面只收分支名，自动加 <code>refs/heads/</code>；服务端规则不变</td></tr>
+        </table>
+      </div>
+      <div>
+        <div class="m-stage-l zh"><span class="m-k state">改动</span>要动的文件</div>
+        <ul class="files zh">
+          <li><b>Web</b>：<code>lib/projectStart.ts</code>（Main branch 的文案；16 句带 main 的文案改成按分支名生成，参数默认 main）；新组件 <code>MainBranchSelect.tsx</code>（开始卡片和 How it runs 共用）；<code>StartProjectCard.tsx</code>（新一行，Start 时带 <code>upstreamRef</code>，对话里的卡多读一次 integration）；<code>ProjectRunSettings.tsx</code>（新一行，Save 时带 <code>upstreamRef</code>）；<code>ProjectIntegrationLine.tsx</code>；两处都显示「上次选的」（⑥⑦⑨）；<code>index.css</code> 加 <code>.main-branch-*</code>（全表查过，没有重名）。本板就是这份代码跑出来的。</li>
+          <li><b>共享类型</b>：<code>ProjectStartSettings.upstreamRef?</code>；<code>ProjectIntegrationView.branches?</code>（下拉的候选：分支名、工作区名、上报时间）、<code>lastMainBranch?</code>（上次选的分支和仓库）、<code>upstreamChosenAt?</code>。</li>
+          <li><b>服务端</b>：<code>POST /projects/:id/start</code> 收 <code>upstreamRef</code>，经 <code>startProjectLine</code> 写进 <code>configureProjectIntegration</code>，已锁定就不动；协调者的开始请求可以带它（方案 A）；integration 读接口加 <code>branches</code>，取协调工作区最近一次上报的 <code>session.mergeTargets</code>。<code>project_codebase</code> 加一列 <code>upstream_ref_chosen_at</code>（一个迁移）：每次写主分支都记下时间；新项目绑定仓库时（开始卡片，或没经过开始卡片、第一次集成时的 <code>bind()</code>）默认取同一账号、同一仓库最近选过的，没有才 main。合同 L6 的默认值要跟着改写。</li>
+          <li><b>runner</b>：MCP 工具 <code>project_request_start</code> 加 <code>upstreamRef</code> 参数，说明里写「填仓库的默认分支（<code>git symbolic-ref refs/remotes/origin/HEAD</code>）」（方案 A；只在这个仓库还没记住选择时用得上）。</li>
+          <li><b>别处写死 main 的二十多句</b>（待你定 2 选「都改」才动）：<code>ProjectPanoramaHeader</code> 的 On main、landed on main、Merge to main；<code>ProjectPromotionCard</code> 的 Merge to main、Merged into main；<code>OwnerConfirmationCard</code> 的 Not on main yet 等 4 句；<code>ProjectAcceptanceCard</code>、<code>ProjectShareControls</code>、<code>projectDone.ts</code> 的 on main；<code>projectAttention.ts</code>、<code>WorkspaceView</code> 的 Approve merge to main；<code>ProjectProgressStatus</code>、<code>ProjectSettlementCard</code>、<code>sessionProjects.ts</code>，以及「Project started」卡的一行摘要。约 12 个文件；合并卡有几处本来就用了真实分支名，现在是混着的。</li>
+          <li><b>测试</b>：Web vitest（文案、写入内容、锁定态）；apiserver pg spec（开始时写入主分支、锁定后不动）；OrbitKit、Android 的文案对照测试会跟着变。</li>
+        </ul>
+        <div class="ask zh">
+          <b>待你定</b>（每项第一个是我的推荐）
+          <ol>
+            <li>放在哪：<span class="rec">开始卡片和项目页 How it runs 都放</span> ／ 只放 How it runs（要在按 Start 之前先去项目页改）</li>
+            <li>文案：<span class="rec">所有说「合进哪里」的地方都叫主分支名</span>（本板 18 句，加上别处二十多句；可以分两步做） ／ 只改本板这 18 句，别处暂时还写 main ／ 一律写 main，只在新的一行显示分支名</li>
+            <li>第一次（这个仓库还没记住选择）怎么防止选了仓库里没有的分支：
+              <ul>
+                <li><span class="rec">A：协调者请求开始时一并建议主分支</span>，它在仓库里，读 <code>origin/HEAD</code> 就知道；卡上和线、并发数这些建议一样显示，你按 Start 才写入。平台自己仍然不探测（L6 不变），卡上也不加警告（沿用 10-07「Start 卡不放检查警告」）。</li>
+                <li>B：在 A 之外，主分支不在 runner 报上来的分支里时，提示一句（⑤）。</li>
+                <li>C：都不加。选错了，任务启动时报 <code>BASE_REF_NOT_FOUND</code>，再去项目页改。</li>
+              </ul>
+            </li>
+            <li>记的范围：<span class="rec">按仓库</span>（主分支是仓库的事，同一仓库两台机器、两个工作区都一样） ／ 按工作区（和会话 Merge 菜单一样，换个工作区要重选） ／ 整个账号记一个（几个仓库分支名不一样时会带错）</li>
+            <li>iOS、macOS、Android：<span class="rec">一起改</span>（三端文案有对照测试锁在一起；SwiftUI 只能在 CI 上编译，要走 probe 分支看截图） ／ 这次只改 Web，先放宽对照测试</li>
+          </ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+</body>
+</html>
