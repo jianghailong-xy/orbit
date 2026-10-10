@@ -1,0 +1,743 @@
+{
+ "beyond": [
+  {
+   "clusters": [
+    [
+     [
+      98,
+      317
+     ],
+     [
+      105,
+      129
+     ],
+     2179,
+     247
+    ],
+    [
+     [
+      316,
+      317
+     ],
+     [
+      105,
+      108
+     ],
+     5,
+     162
+    ],
+    [
+     [
+      101,
+      119
+     ],
+     [
+      140,
+      143
+     ],
+     76,
+     204
+    ],
+    [
+     [
+      101,
+      204
+     ],
+     [
+      229,
+      231
+     ],
+     312,
+     157
+    ],
+    [
+     [
+      98,
+      207
+     ],
+     [
+      331,
+      341
+     ],
+     647,
+     224
+    ],
+    [
+     [
+      206,
+      207
+     ],
+     [
+      331,
+      335
+     ],
+     7,
+     164
+    ]
+   ],
+   "max": 255,
+   "pixels": 19286,
+   "shot": "chromium-dark-phone/p52-diagram-focus.png"
+  },
+  {
+   "clusters": [
+    [
+     [
+      98,
+      317
+     ],
+     [
+      105,
+      129
+     ],
+     2179,
+     255
+    ],
+    [
+     [
+      316,
+      317
+     ],
+     [
+      105,
+      108
+     ],
+     5,
+     8
+    ],
+    [
+     [
+      101,
+      119
+     ],
+     [
+      140,
+      143
+     ],
+     76,
+     204
+    ],
+    [
+     [
+      101,
+      204
+     ],
+     [
+      229,
+      231
+     ],
+     312,
+     157
+    ],
+    [
+     [
+      98,
+      207
+     ],
+     [
+      331,
+      341
+     ],
+     647,
+     224
+    ],
+    [
+     [
+      206,
+      207
+     ],
+     [
+      331,
+      335
+     ],
+     7,
+     9
+    ]
+   ],
+   "max": 255,
+   "pixels": 19334,
+   "shot": "chromium-light-phone/p52-diagram-focus.png"
+  }
+ ],
+ "missing": [],
+ "screenshots": {
+  "antialias": 1,
+  "beyond": 2,
+  "identical": 237,
+  "missing": 0
+ },
+ "styleDeltas": {},
+ "tests": {
+  "notPassedDel": [],
+  "notPassedRef": [],
+  "total": 56
+ },
+ "traces": {
+  "differing": {
+   "chromium-dark-phone :: P5.2 the transcript’s pictures › load through the authorized route, hold their place while they do, and fail in place": [
+    {
+     "del": {
+      "antd": [],
+      "chips": [
+       "Download p52-gone.png"
+      ],
+      "focus": {
+       "name": "Layout diagram",
+       "role": "button"
+      },
+      "lock": {
+       "body": "auto",
+       "html": "visible"
+      },
+      "objectUrls": {
+       "created": 6,
+       "live": 6,
+       "revoked": 0
+      },
+      "pictures": [
+       {
+        "at": "1",
+        "box": [
+         98.41,
+         -21.08,
+         220,
+         137.5
+        ],
+        "class": "chat-image",
+        "opens": "group",
+        "picture": "userWide"
+       },
+       {
+        "at": "1",
+        "box": [
+         98.41,
+         122.42,
+         110,
+         220
+        ],
+        "class": "chat-image",
+        "opens": "group",
+        "picture": "userTall"
+       },
+       {
+        "at": "2",
+        "box": [
+         26,
+         486.59,
+         338,
+         226
+        ],
+        "class": "md-image",
+        "opens": "alone",
+        "picture": "markdown"
+       },
+       {
+        "at": "2",
+        "box": [
+         26,
+         754.98,
+         338,
+         212
+        ],
+        "class": "md-image",
+        "opens": "alone",
+        "picture": "artifact"
+       },
+       {
+        "at": "3",
+        "box": [
+         27,
+         1018.98,
+         337.98,
+         219.98
+        ],
+        "class": "chat-image",
+        "opens": "group",
+        "picture": "result"
+       },
+       {
+        "at": "6",
+        "box": [
+         98.41,
+         1303.97,
+         220,
+         220
+        ],
+        "class": "chat-image",
+        "opens": "group",
+        "picture": "later"
+       },
+       {
+        "at": "8",
+        "box": [
+         27,
+         1841.33,
+         337.98,
+         225.33
+        ],
+        "class": "chat-image",
+        "opens": "group",
+        "picture": "clipped"
+       },
+       {
+        "at": "11",
+        "box": [
+         144,
+         2131.66,
+         220,
+         137.5
+        ],
+        "class": "chat-image",
+        "opens": "group",
+        "picture": "putBack"
+       }
+      ],
+      "placeholders": [
+       {
+        "at": "6",
+        "box": [
+         98.41,
+         1529.97,
+         120,
+         90
+        ],
+        "class": "chat-image chat-image-loading"
+       }
+      ],
+      "requests": [],
+      "scroll": {
+       "gap": 1649,
+       "height": 2431,
+       "top": 110
+      },
+      "step": "keyboard focus on a picture on its own",
+      "url": "/sessions/2zwQZ2hd93IvLb59t6p1c",
+      "viewer": null
+     },
+     "ref": {
+      "antd": [],
+      "chips": [
+       "Download p52-gone.png"
+      ],
+      "focus": {
+       "name": "Layout diagram",
+       "role": "button"
+      },
+      "lock": {
+       "body": "auto",
+       "html": "visible"
+      },
+      "objectUrls": {
+       "created": 6,
+       "live": 6,
+       "revoked": 0
+      },
+      "pictures": [
+       {
+        "at": "1",
+        "box": [
+         98.41,
+         -24.08,
+         220,
+         137.5
+        ],
+        "class": "chat-image",
+        "opens": "group",
+        "picture": "userWide"
+       },
+       {
+        "at": "1",
+        "box": [
+         98.41,
+         119.42,
+         110,
+         220
+        ],
+        "class": "chat-image",
+        "opens": "group",
+        "picture": "userTall"
+       },
+       {
+        "at": "2",
+        "box": [
+         26,
+         483.59,
+         338,
+         226
+        ],
+        "class": "md-image",
+        "opens": "alone",
+        "picture": "markdown"
+       },
+       {
+        "at": "2",
+        "box": [
+         26,
+         751.98,
+         338,
+         212
+        ],
+        "class": "md-image",
+        "opens": "alone",
+        "picture": "artifact"
+       },
+       {
+        "at": "3",
+        "box": [
+         27,
+         1015.98,
+         337.98,
+         219.98
+        ],
+        "class": "chat-image",
+        "opens": "group",
+        "picture": "result"
+       },
+       {
+        "at": "6",
+        "box": [
+         98.41,
+         1300.97,
+         220,
+         220
+        ],
+        "class": "chat-image",
+        "opens": "group",
+        "picture": "later"
+       },
+       {
+        "at": "8",
+        "box": [
+         27,
+         1838.33,
+         337.98,
+         225.33
+        ],
+        "class": "chat-image",
+        "opens": "group",
+        "picture": "clipped"
+       },
+       {
+        "at": "11",
+        "box": [
+         144,
+         2128.66,
+         220,
+         137.5
+        ],
+        "class": "chat-image",
+        "opens": "group",
+        "picture": "putBack"
+       }
+      ],
+      "placeholders": [
+       {
+        "at": "6",
+        "box": [
+         98.41,
+         1526.97,
+         120,
+         90
+        ],
+        "class": "chat-image chat-image-loading"
+       }
+      ],
+      "requests": [],
+      "scroll": {
+       "gap": 1646,
+       "height": 2431,
+       "top": 113
+      },
+      "step": "keyboard focus on a picture on its own",
+      "url": "/sessions/2zwQZ2hd93IvLb59t6p1c",
+      "viewer": null
+     },
+     "step": "keyboard focus on a picture on its own"
+    }
+   ],
+   "chromium-light-phone :: P5.2 the transcript’s pictures › load through the authorized route, hold their place while they do, and fail in place": [
+    {
+     "del": {
+      "antd": [],
+      "chips": [
+       "Download p52-gone.png"
+      ],
+      "focus": {
+       "name": "Layout diagram",
+       "role": "button"
+      },
+      "lock": {
+       "body": "auto",
+       "html": "visible"
+      },
+      "objectUrls": {
+       "created": 6,
+       "live": 6,
+       "revoked": 0
+      },
+      "pictures": [
+       {
+        "at": "1",
+        "box": [
+         98.41,
+         -24.08,
+         220,
+         137.5
+        ],
+        "class": "chat-image",
+        "opens": "group",
+        "picture": "userWide"
+       },
+       {
+        "at": "1",
+        "box": [
+         98.41,
+         119.42,
+         110,
+         220
+        ],
+        "class": "chat-image",
+        "opens": "group",
+        "picture": "userTall"
+       },
+       {
+        "at": "2",
+        "box": [
+         26,
+         483.59,
+         338,
+         226
+        ],
+        "class": "md-image",
+        "opens": "alone",
+        "picture": "markdown"
+       },
+       {
+        "at": "2",
+        "box": [
+         26,
+         751.98,
+         338,
+         212
+        ],
+        "class": "md-image",
+        "opens": "alone",
+        "picture": "artifact"
+       },
+       {
+        "at": "3",
+        "box": [
+         27,
+         1015.98,
+         337.98,
+         219.98
+        ],
+        "class": "chat-image",
+        "opens": "group",
+        "picture": "result"
+       },
+       {
+        "at": "6",
+        "box": [
+         98.41,
+         1300.97,
+         220,
+         220
+        ],
+        "class": "chat-image",
+        "opens": "group",
+        "picture": "later"
+       },
+       {
+        "at": "8",
+        "box": [
+         27,
+         1838.33,
+         337.98,
+         225.33
+        ],
+        "class": "chat-image",
+        "opens": "group",
+        "picture": "clipped"
+       },
+       {
+        "at": "11",
+        "box": [
+         144,
+         2128.66,
+         220,
+         137.5
+        ],
+        "class": "chat-image",
+        "opens": "group",
+        "picture": "putBack"
+       }
+      ],
+      "placeholders": [
+       {
+        "at": "6",
+        "box": [
+         98.41,
+         1526.97,
+         120,
+         90
+        ],
+        "class": "chat-image chat-image-loading"
+       }
+      ],
+      "requests": [],
+      "scroll": {
+       "gap": 1646,
+       "height": 2431,
+       "top": 113
+      },
+      "step": "keyboard focus on a picture on its own",
+      "url": "/sessions/2zwQZ2hd93IvLb59t6p1c",
+      "viewer": null
+     },
+     "ref": {
+      "antd": [],
+      "chips": [
+       "Download p52-gone.png"
+      ],
+      "focus": {
+       "name": "Layout diagram",
+       "role": "button"
+      },
+      "lock": {
+       "body": "auto",
+       "html": "visible"
+      },
+      "objectUrls": {
+       "created": 6,
+       "live": 6,
+       "revoked": 0
+      },
+      "pictures": [
+       {
+        "at": "1",
+        "box": [
+         98.41,
+         -21.08,
+         220,
+         137.5
+        ],
+        "class": "chat-image",
+        "opens": "group",
+        "picture": "userWide"
+       },
+       {
+        "at": "1",
+        "box": [
+         98.41,
+         122.42,
+         110,
+         220
+        ],
+        "class": "chat-image",
+        "opens": "group",
+        "picture": "userTall"
+       },
+       {
+        "at": "2",
+        "box": [
+         26,
+         486.59,
+         338,
+         226
+        ],
+        "class": "md-image",
+        "opens": "alone",
+        "picture": "markdown"
+       },
+       {
+        "at": "2",
+        "box": [
+         26,
+         754.98,
+         338,
+         212
+        ],
+        "class": "md-image",
+        "opens": "alone",
+        "picture": "artifact"
+       },
+       {
+        "at": "3",
+        "box": [
+         27,
+         1018.98,
+         337.98,
+         219.98
+        ],
+        "class": "chat-image",
+        "opens": "group",
+        "picture": "result"
+       },
+       {
+        "at": "6",
+        "box": [
+         98.41,
+         1303.97,
+         220,
+         220
+        ],
+        "class": "chat-image",
+        "opens": "group",
+        "picture": "later"
+       },
+       {
+        "at": "8",
+        "box": [
+         27,
+         1841.33,
+         337.98,
+         225.33
+        ],
+        "class": "chat-image",
+        "opens": "group",
+        "picture": "clipped"
+       },
+       {
+        "at": "11",
+        "box": [
+         144,
+         2131.66,
+         220,
+         137.5
+        ],
+        "class": "chat-image",
+        "opens": "group",
+        "picture": "putBack"
+       }
+      ],
+      "placeholders": [
+       {
+        "at": "6",
+        "box": [
+         98.41,
+         1529.97,
+         120,
+         90
+        ],
+        "class": "chat-image chat-image-loading"
+       }
+      ],
+      "requests": [],
+      "scroll": {
+       "gap": 1649,
+       "height": 2431,
+       "top": 110
+      },
+      "step": "keyboard focus on a picture on its own",
+      "url": "/sessions/2zwQZ2hd93IvLb59t6p1c",
+      "viewer": null
+     },
+     "step": "keyboard focus on a picture on its own"
+    }
+   ]
+  },
+  "equal": 54,
+  "total": 56
+ }
+}

@@ -1,0 +1,31 @@
+tree: /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/del
+head: 01713ca80794e84e570378824d1632c5076ee314
+uncommitted:
+source under test: 503b7b2dab65 Image.tsx, 2 PREVIEW_IMAGE_LABEL lines in WorkspaceView.tsx
+tests: f8766daf9666 b87335e42983 
+
+
+ RUN  v5.0.2 /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/del/src/web
+
+ ✓ src/components/ui/ImagePreview.test.tsx > ImagePreview > opens on the picture asked for, named by it, with focus on Close and the position under it 104ms
+ ✓ src/components/ui/ImagePreview.test.tsx > ImagePreview > pages with the arrows and with ←/→, and stops at either end 51ms
+ ✓ src/components/ui/ImagePreview.test.tsx > ImagePreview > shows a single picture with neither the position nor the arrows, and ←/→ do nothing 19ms
+ ✓ src/components/ui/ImagePreview.test.tsx > ImagePreview > zooms with the buttons, the wheel and a double click, and never below its own size 48ms
+ ✓ src/components/ui/ImagePreview.test.tsx > ImagePreview > turns and flips the picture 44ms
+ ✓ src/components/ui/ImagePreview.test.tsx > ImagePreview > shows the next picture at its own size, at once 33ms
+ ✓ src/components/ui/ImagePreview.test.tsx > ImagePreview > moves with a drag and settles back in the middle when it fits the window 25ms
+ ✓ src/components/ui/ImagePreview.test.tsx > ImagePreview > closes on Esc, on Close and on the mask — not on the picture — and focus goes back where it was 66ms
+ ✓ src/components/ui/ImagePreview.test.tsx > ImagePreview > comes back at its own size after it was closed zoomed 35ms
+ ✓ src/components/ui/ImagePreview.test.tsx > ImagePreview > draws nothing while closed 6ms
+ ✓ src/components/ui/ImagePreview.test.tsx > Image > is a button named by the picture, holding the picture and the cover drawn over it 6ms
+ ✓ src/components/ui/ImagePreview.test.tsx > Image > is named by its label when the picture is decorative, and the picture stays so 17ms
+ ✓ src/components/ui/ImagePreview.test.tsx > Image > opens the picture on its own on a press, on Enter and on Space 66ms
+ ✓ src/components/ui/ImagePreview.test.tsx > Image > grows the viewer from the middle of what was pressed 18ms
+ ✓ src/components/WorkspaceView.composerThumbnail.test.tsx > the thumbnail of a staged picture > is a button named by its file, or "Preview image" when the file has no name, over a decorative picture 211ms
+
+ Test Files  2 passed (2)
+      Tests  15 passed (15)
+   Start at  21:38:27
+   Duration  3.38s (transform 43%, import 27%, tests 16%, environment 14%)
+
+exit=0
