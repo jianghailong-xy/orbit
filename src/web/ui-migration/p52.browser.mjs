@@ -367,12 +367,14 @@ test.describe('P5.2 the transcript’s pictures', () => {
     trace.push({ step: 'keyboard order', order });
     await capture('p52-viewer-focus', { focused: page.locator(':focus') });
 
-    // While open: the page behind does not scroll.
-    const before = await page.locator(CONVERSATION).evaluate((el) => el.scrollTop);
-    await page.mouse.move(40, 120);
-    await page.mouse.wheel(0, -400);
-    await settled(page);
-    trace.push({ ...(await observe(page, fixtures, 'wheel over the mask')), scrolledBehind: (await page.locator(CONVERSATION).evaluate((el) => el.scrollTop)) !== before });
+    // While open: the page behind does not scroll under a desktop's wheel (Playwright has no wheel in mobile WebKit).
+    if (!phone(testInfo)) {
+      const before = await page.locator(CONVERSATION).evaluate((el) => el.scrollTop);
+      await page.mouse.move(40, 120);
+      await page.mouse.wheel(0, -400);
+      await settled(page);
+      trace.push({ ...(await observe(page, fixtures, 'wheel over the mask')), scrolledBehind: (await page.locator(CONVERSATION).evaluate((el) => el.scrollTop)) !== before });
+    }
 
     // Close: Escape, the close button, the mask — not the picture.
     await page.keyboard.press('Escape');
