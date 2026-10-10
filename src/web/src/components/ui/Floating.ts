@@ -155,6 +155,41 @@ export function useSubmenuPlacement(anchor: RefObject<Element | null>, slide = f
   return { positioner, sideOffset, collisionAvoidance: { fallbackAxisSide: 'none' } as const };
 }
 
+/** An anchor as Base UI wraps an element itself (Floating UI's VirtualElement). */
+interface VirtualAnchor {
+  getBoundingClientRect: () => DOMRect;
+  getClientRects: () => DOMRectList;
+  contextElement: Element;
+}
+
+/**
+ * The anchor of a list whose own choices resize its field while it is open, as a multiple select's
+ * chips wrap onto another row or back. Floating UI follows a resized anchor from its ResizeObserver,
+ * inside the browser's resize-observation step. Where the resize turns the list over to the other
+ * side (a field near the viewport's bottom edge), Base UI keeps that side by rendering the new
+ * placement, and that restarts Floating UI's tracking: a new ResizeObserver starts observing the
+ * field and the positioner in the middle of the step. Neither is deeper than the field the step has
+ * just reported, so the browser skips both and reports "ResizeObserver loop completed with
+ * undelivered notifications" (WebKit raises it as a page error). A field that changed size in a
+ * commit is handed to Base UI as a new anchor in that commit instead: the list is placed, turned
+ * over and tracked anew before the step, which then reports the new observers' first sizes.
+ */
+export function useResizingAnchor(open: boolean, anchor: RefObject<Element | null>) {
+  const [reference, setReference] = useState<RefObject<Element | null> | VirtualAnchor>(anchor);
+  const size = useRef<string | null>(null);
+  useLayoutEffect(() => {
+    const node = anchor.current;
+    if (!open || !node) { size.current = null; return; }
+    const { width, height } = node.getBoundingClientRect();
+    const next = `${width}x${height}`;
+    if (size.current !== null && size.current !== next) {
+      setReference({ getBoundingClientRect: () => node.getBoundingClientRect(), getClientRects: () => node.getClientRects(), contextElement: node });
+    }
+    size.current = next;
+  });
+  return reference;
+}
+
 /** The anchor's exact width while open; Base UI's own --anchor-width is snapped to device pixels. */
 export function useAnchorWidth(open: boolean, anchor: RefObject<HTMLElement | null>): number | undefined {
   const [width, setWidth] = useState<number>();
