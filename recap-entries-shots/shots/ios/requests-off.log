@@ -1,0 +1,259 @@
+05:50:39 [recaps-off] stub on :8765 recaps=OFF args=[--recaps-off] pid=49772
+05:50:40 [recaps-off] "GET /api/sessions HTTP/1.1" 200 -
+05:51:24 [recaps-off] RESET (nothing is mutable in this stub)
+05:51:24 [recaps-off] "POST /__reset HTTP/1.1" 200 -
+05:51:33 [recaps-off] "GET /api/task-lists HTTP/1.1" 200 -
+05:51:33 [recaps-off] "GET /api/projects/sidebar HTTP/1.1" 200 -
+05:51:33 [recaps-off] "GET /api/agents HTTP/1.1" 200 -
+05:51:33 [recaps-off] "GET /api/users/me HTTP/1.1" 200 -
+05:51:33 [recaps-off] "GET /api/events HTTP/1.1" 200 -
+05:51:33 [recaps-off] "GET /api/wiki/spaces HTTP/1.1" 200 -
+05:51:34 [recaps-off] "GET /api/runners HTTP/1.1" 200 -
+05:51:34 [recaps-off] "GET /api/agents HTTP/1.1" 200 -
+05:51:34 [recaps-off] "GET /api/tasks/page?limit=1&listId=none&projectId=none&counts=total HTTP/1.1" 200 -
+05:51:34 [recaps-off] "GET /api/sessions?view=open&since= HTTP/1.1" 200 -
+05:51:34 [recaps-off] "GET /api/runners HTTP/1.1" 200 -
+05:51:34 [recaps-off] "GET /api/providers HTTP/1.1" 200 -
+05:51:34 [recaps-off] "GET /api/providers HTTP/1.1" 200 -
+05:51:34 [recaps-off] "GET /api/wiki/spaces HTTP/1.1" 200 -
+05:51:34 [recaps-off] "GET /api/watches?state=ACTIVE HTTP/1.1" 200 -
+05:51:34 [recaps-off] "GET /api/session-folders HTTP/1.1" 200 -
+05:51:34 [recaps-off] "GET /api/providers/pools HTTP/1.1" 200 -
+05:51:34 [recaps-off] "GET /api/providers/pools HTTP/1.1" 200 -
+05:51:34 [recaps-off] "GET /api/watches?state=PAUSED HTTP/1.1" 200 -
+05:51:34 [recaps-off] "GET /api/providers/shared-pools HTTP/1.1" 200 -
+05:51:34 [recaps-off] "GET /api/providers/shared-pools HTTP/1.1" 200 -
+05:51:34 [recaps-off] "GET /api/watches HTTP/1.1" 200 -
+05:51:34 [recaps-off] "GET /api/watches?needsAttention=true HTTP/1.1" 200 -
+05:51:34 [recaps-off] "GET /api/session-tags HTTP/1.1" 200 -
+05:51:34 [recaps-off] "GET /api/projects HTTP/1.1" 200 -
+05:51:34 [recaps-off] "GET /api/users/me HTTP/1.1" 200 -
+05:51:35 [recaps-off] "GET /api/agents HTTP/1.1" 200 -
+05:51:35 [recaps-off] "GET /api/sessions?view=open HTTP/1.1" 200 -
+05:51:35 [recaps-off] "GET /api/session-folders HTTP/1.1" 200 -
+05:51:35 [recaps-off] "GET /api/runners HTTP/1.1" 200 -
+05:51:35 [recaps-off] "GET /api/sessions?view=open HTTP/1.1" 200 -
+05:51:35 [recaps-off] "GET /api/providers HTTP/1.1" 200 -
+05:51:35 [recaps-off] "GET /api/watches?state=ACTIVE HTTP/1.1" 200 -
+05:51:35 [recaps-off] "GET /api/projects HTTP/1.1" 200 -
+05:51:35 [recaps-off] "GET /api/projects/sidebar HTTP/1.1" 200 -
+05:51:35 [recaps-off] "GET /api/providers/pools HTTP/1.1" 200 -
+05:51:35 [recaps-off] "GET /api/watches?state=PAUSED HTTP/1.1" 200 -
+05:51:35 [recaps-off] "GET /api/providers/shared-pools HTTP/1.1" 200 -
+05:51:35 [recaps-off] "GET /api/watches HTTP/1.1" 200 -
+05:51:35 [recaps-off] "GET /api/task-lists HTTP/1.1" 200 -
+05:51:35 [recaps-off] "GET /api/watches?needsAttention=true HTTP/1.1" 200 -
+05:51:35 [recaps-off] "GET /api/tasks/page?limit=1&listId=none&projectId=none&counts=total HTTP/1.1" 200 -
+05:51:35 [recaps-off] "GET /api/projects/sidebar HTTP/1.1" 200 -
+05:51:35 [recaps-off] "GET /api/projects HTTP/1.1" 200 -
+05:51:36 [recaps-off] NOT SERVED /api/auth/capabilities
+05:51:36 [recaps-off] "GET /api/auth/capabilities HTTP/1.1" 404 -
+05:51:38 [recaps-off] "GET /api/sessions/S1 HTTP/1.1" 200 -
+05:51:38 [recaps-off] "GET /api/sessions/S1/events/page?tail=200&maxPayload=2048 HTTP/1.1" 200 -
+05:51:38 [recaps-off] "GET /api/sessions/S1/created-tasks HTTP/1.1" 200 -
+05:51:38 [recaps-off] NOT SERVED /api/tasks/evidence-decisions/pending?decidingSessionId=S1
+05:51:38 [recaps-off] "GET /api/sessions/S1/approvals?status=PENDING HTTP/1.1" 200 -
+05:51:38 [recaps-off] "GET /api/tasks/evidence-decisions/pending?decidingSessionId=S1 HTTP/1.1" 404 -
+05:51:38 [recaps-off] "GET /api/sessions/S1/events?sinceSeq=3&maxPayload=2048 HTTP/1.1" 200 -
+05:51:38 [recaps-off] NOT SERVED /api/sessions/S1/background
+05:51:38 [recaps-off] "GET /api/sessions/S1/background HTTP/1.1" 404 -
+05:51:39 [recaps-off] "GET /api/sessions/S1 HTTP/1.1" 200 -
+05:51:39 [recaps-off] "GET /api/sessions/S1/turns?view=active HTTP/1.1" 200 -
+05:51:39 [recaps-off] "GET /api/runners HTTP/1.1" 200 -
+05:51:39 [recaps-off] NOT SERVED /api/tasks/evidence-decisions/pending?decidingSessionId=S1
+05:51:39 [recaps-off] "GET /api/providers/pools HTTP/1.1" 200 -
+05:51:39 [recaps-off] "GET /api/tasks/evidence-decisions/pending?decidingSessionId=S1 HTTP/1.1" 404 -
+05:51:39 [recaps-off] NOT SERVED /api/projects/P1/acceptance/criteria-decisions/pending
+05:51:39 [recaps-off] "GET /api/providers/shared-pools HTTP/1.1" 200 -
+05:51:39 [recaps-off] "GET /api/projects/P1/acceptance/criteria-decisions/pending HTTP/1.1" 404 -
+05:51:39 [recaps-off] "GET /api/providers HTTP/1.1" 200 -
+05:51:39 [recaps-off] NOT SERVED /api/projects/P1/acceptance/confirmation
+05:51:39 [recaps-off] "GET /api/projects/P1/acceptance/confirmation HTTP/1.1" 404 -
+05:51:39 [recaps-off] "GET /api/projects/P1 HTTP/1.1" 200 -
+05:51:39 [recaps-off] "GET /api/projects/P1/open-items HTTP/1.1" 200 -
+05:51:39 [recaps-off] NOT SERVED /api/projects/P1/promotions/current
+05:51:39 [recaps-off] "GET /api/projects/P1/promotions/current HTTP/1.1" 404 -
+05:51:39 [recaps-off] NOT SERVED /api/projects/P1/promotions/merged
+05:51:39 [recaps-off] "GET /api/projects/P1/promotions/merged HTTP/1.1" 404 -
+05:51:40 [recaps-off] "GET /api/sessions?view=open HTTP/1.1" 200 -
+05:51:44 [recaps-off] "GET /api/sessions?view=open HTTP/1.1" 200 -
+05:51:47 [recaps-off] RESET (nothing is mutable in this stub)
+05:51:47 [recaps-off] "POST /__reset HTTP/1.1" 200 -
+05:51:55 [recaps-off] "GET /api/users/me HTTP/1.1" 200 -
+05:51:55 [recaps-off] "GET /api/agents HTTP/1.1" 200 -
+05:51:55 [recaps-off] "GET /api/task-lists HTTP/1.1" 200 -
+05:51:55 [recaps-off] "GET /api/projects/sidebar HTTP/1.1" 200 -
+05:51:55 [recaps-off] "GET /api/projects HTTP/1.1" 200 -
+05:51:56 [recaps-off] "GET /api/runners HTTP/1.1" 200 -
+05:51:56 [recaps-off] "GET /api/tasks/page?limit=1&listId=none&projectId=none&counts=total HTTP/1.1" 200 -
+05:51:56 [recaps-off] "GET /api/events HTTP/1.1" 200 -
+05:51:56 [recaps-off] "GET /api/users/me HTTP/1.1" 200 -
+05:51:56 [recaps-off] "GET /api/agents HTTP/1.1" 200 -
+05:51:56 [recaps-off] "GET /api/providers HTTP/1.1" 200 -
+05:51:56 [recaps-off] "GET /api/sessions?view=open&since= HTTP/1.1" 200 -
+05:51:56 [recaps-off] "GET /api/runners HTTP/1.1" 200 -
+05:51:56 [recaps-off] "GET /api/providers/pools HTTP/1.1" 200 -
+05:51:56 [recaps-off] "GET /api/sessions?view=open HTTP/1.1" 200 -
+05:51:56 [recaps-off] "GET /api/providers HTTP/1.1" 200 -
+05:51:56 [recaps-off] "GET /api/providers/pools HTTP/1.1" 200 -
+05:51:56 [recaps-off] "GET /api/watches?state=ACTIVE HTTP/1.1" 200 -
+05:51:56 [recaps-off] "GET /api/watches?state=ACTIVE HTTP/1.1" 200 -
+05:51:56 [recaps-off] "GET /api/wiki/spaces HTTP/1.1" 200 -
+05:51:56 [recaps-off] "GET /api/providers/shared-pools HTTP/1.1" 200 -
+05:51:56 [recaps-off] "GET /api/session-folders HTTP/1.1" 200 -
+05:51:56 [recaps-off] "GET /api/providers/shared-pools HTTP/1.1" 200 -
+05:51:56 [recaps-off] "GET /api/watches?state=PAUSED HTTP/1.1" 200 -
+05:51:56 [recaps-off] "GET /api/watches?state=PAUSED HTTP/1.1" 200 -
+05:51:56 [recaps-off] "GET /api/watches HTTP/1.1" 200 -
+05:51:56 [recaps-off] "GET /api/watches HTTP/1.1" 200 -
+05:51:56 [recaps-off] "GET /api/watches?needsAttention=true HTTP/1.1" 200 -
+05:51:56 [recaps-off] "GET /api/watches?needsAttention=true HTTP/1.1" 200 -
+05:51:56 [recaps-off] "GET /api/session-tags HTTP/1.1" 200 -
+05:51:56 [recaps-off] "GET /api/wiki/spaces HTTP/1.1" 200 -
+05:51:56 [recaps-off] "GET /api/sessions?view=open HTTP/1.1" 200 -
+05:51:56 [recaps-off] "GET /api/agents HTTP/1.1" 200 -
+05:51:56 [recaps-off] "GET /api/projects HTTP/1.1" 200 -
+05:51:56 [recaps-off] "GET /api/projects/sidebar HTTP/1.1" 200 -
+05:51:57 [recaps-off] "GET /api/session-folders HTTP/1.1" 200 -
+05:51:57 [recaps-off] "GET /api/projects/sidebar HTTP/1.1" 200 -
+05:51:57 [recaps-off] "GET /api/projects HTTP/1.1" 200 -
+05:51:57 [recaps-off] "GET /api/runners HTTP/1.1" 200 -
+05:51:57 [recaps-off] NOT SERVED /api/auth/capabilities
+05:51:57 [recaps-off] "GET /api/auth/capabilities HTTP/1.1" 404 -
+05:51:57 [recaps-off] "GET /api/providers HTTP/1.1" 200 -
+05:51:57 [recaps-off] "GET /api/providers/pools HTTP/1.1" 200 -
+05:51:57 [recaps-off] "GET /api/providers/shared-pools HTTP/1.1" 200 -
+05:51:57 [recaps-off] "GET /api/task-lists HTTP/1.1" 200 -
+05:51:57 [recaps-off] "GET /api/tasks/page?limit=1&listId=none&projectId=none&counts=total HTTP/1.1" 200 -
+05:52:01 [recaps-off] "GET /api/sessions?view=open HTTP/1.1" 200 -
+05:52:02 [recaps-off] RESET (nothing is mutable in this stub)
+05:52:02 [recaps-off] "POST /__reset HTTP/1.1" 200 -
+05:52:06 [recaps-off] "GET /api/users/me HTTP/1.1" 200 -
+05:52:06 [recaps-off] "GET /api/agents HTTP/1.1" 200 -
+05:52:06 [recaps-off] "GET /api/task-lists HTTP/1.1" 200 -
+05:52:06 [recaps-off] "GET /api/projects/sidebar HTTP/1.1" 200 -
+05:52:06 [recaps-off] "GET /api/projects HTTP/1.1" 200 -
+05:52:07 [recaps-off] "GET /api/agents HTTP/1.1" 200 -
+05:52:07 [recaps-off] "GET /api/users/me HTTP/1.1" 200 -
+05:52:07 [recaps-off] "GET /api/tasks/page?limit=1&listId=none&projectId=none&counts=total HTTP/1.1" 200 -
+05:52:07 [recaps-off] "GET /api/runners HTTP/1.1" 200 -
+05:52:07 [recaps-off] "GET /api/events HTTP/1.1" 200 -
+05:52:07 [recaps-off] "GET /api/providers HTTP/1.1" 200 -
+05:52:07 [recaps-off] "GET /api/sessions?view=open&since= HTTP/1.1" 200 -
+05:52:07 [recaps-off] "GET /api/providers HTTP/1.1" 200 -
+05:52:07 [recaps-off] "GET /api/providers/pools HTTP/1.1" 200 -
+05:52:07 [recaps-off] "GET /api/providers/pools HTTP/1.1" 200 -
+05:52:07 [recaps-off] "GET /api/sessions?view=open HTTP/1.1" 200 -
+05:52:07 [recaps-off] "GET /api/providers/shared-pools HTTP/1.1" 200 -
+05:52:07 [recaps-off] "GET /api/providers/shared-pools HTTP/1.1" 200 -
+05:52:07 [recaps-off] "GET /api/watches?state=ACTIVE HTTP/1.1" 200 -
+05:52:07 [recaps-off] "GET /api/wiki/spaces HTTP/1.1" 200 -
+05:52:07 [recaps-off] "GET /api/watches?state=ACTIVE HTTP/1.1" 200 -
+05:52:07 [recaps-off] "GET /api/session-folders HTTP/1.1" 200 -
+05:52:07 [recaps-off] "GET /api/watches?state=PAUSED HTTP/1.1" 200 -
+05:52:07 [recaps-off] "GET /api/watches?state=PAUSED HTTP/1.1" 200 -
+05:52:07 [recaps-off] "GET /api/session-tags HTTP/1.1" 200 -
+05:52:07 [recaps-off] "GET /api/watches HTTP/1.1" 200 -
+05:52:07 [recaps-off] "GET /api/watches HTTP/1.1" 200 -
+05:52:07 [recaps-off] "GET /api/watches?needsAttention=true HTTP/1.1" 200 -
+05:52:07 [recaps-off] "GET /api/watches?needsAttention=true HTTP/1.1" 200 -
+05:52:07 [recaps-off] "GET /api/sessions?view=open HTTP/1.1" 200 -
+05:52:07 [recaps-off] "GET /api/wiki/spaces HTTP/1.1" 200 -
+05:52:07 [recaps-off] "GET /api/session-folders HTTP/1.1" 200 -
+05:52:07 [recaps-off] "GET /api/agents HTTP/1.1" 200 -
+05:52:07 [recaps-off] "GET /api/projects/sidebar HTTP/1.1" 200 -
+05:52:07 [recaps-off] "GET /api/projects HTTP/1.1" 200 -
+05:52:07 [recaps-off] "GET /api/projects/sidebar HTTP/1.1" 200 -
+05:52:07 [recaps-off] "GET /api/projects HTTP/1.1" 200 -
+05:52:07 [recaps-off] "GET /api/runners HTTP/1.1" 200 -
+05:52:07 [recaps-off] NOT SERVED /api/auth/capabilities
+05:52:07 [recaps-off] "GET /api/auth/capabilities HTTP/1.1" 404 -
+05:52:07 [recaps-off] "GET /api/providers HTTP/1.1" 200 -
+05:52:07 [recaps-off] "GET /api/providers/pools HTTP/1.1" 200 -
+05:52:07 [recaps-off] "GET /api/providers/shared-pools HTTP/1.1" 200 -
+05:52:08 [recaps-off] "GET /api/task-lists HTTP/1.1" 200 -
+05:52:08 [recaps-off] "GET /api/tasks/page?limit=1&listId=none&projectId=none&counts=total HTTP/1.1" 200 -
+05:52:11 [recaps-off] NOT SERVED /api/projects/P1/promotions/current
+05:52:11 [recaps-off] "GET /api/projects/sidebar HTTP/1.1" 200 -
+05:52:11 [recaps-off] "GET /api/projects/P1/promotions/current HTTP/1.1" 404 -
+05:52:11 [recaps-off] NOT SERVED /api/projects/P1/integration
+05:52:11 [recaps-off] "GET /api/projects HTTP/1.1" 200 -
+05:52:11 [recaps-off] "GET /api/projects/P1/integration HTTP/1.1" 404 -
+05:52:11 [recaps-off] "GET /api/sessions?view=completed&projectId=P1 HTTP/1.1" 200 -
+05:52:11 [recaps-off] "GET /api/sessions?view=open&projectId=P1 HTTP/1.1" 200 -
+05:52:11 [recaps-off] NOT SERVED /api/projects/P1/promotions/merged
+05:52:11 [recaps-off] "GET /api/projects/P1/promotions/merged HTTP/1.1" 404 -
+05:52:12 [recaps-off] "GET /api/sessions?view=open HTTP/1.1" 200 -
+05:52:15 [recaps-off] NOT SERVED /api/projects/P1/integration
+05:52:15 [recaps-off] "GET /api/projects/P1/integration HTTP/1.1" 404 -
+05:52:15 [recaps-off] NOT SERVED /api/projects/P1/promotions/current
+05:52:15 [recaps-off] "GET /api/projects/P1/promotions/current HTTP/1.1" 404 -
+05:52:15 [recaps-off] NOT SERVED /api/projects/P1/promotions/merged
+05:52:15 [recaps-off] "GET /api/projects/P1/promotions/merged HTTP/1.1" 404 -
+05:52:16 [recaps-off] "GET /api/sessions?view=open HTTP/1.1" 200 -
+05:52:18 [recaps-off] RESET (nothing is mutable in this stub)
+05:52:18 [recaps-off] "POST /__reset HTTP/1.1" 200 -
+05:52:21 [recaps-off] "GET /api/wiki/spaces HTTP/1.1" 200 -
+05:52:21 [recaps-off] "GET /api/agents HTTP/1.1" 200 -
+05:52:21 [recaps-off] "GET /api/users/me HTTP/1.1" 200 -
+05:52:21 [recaps-off] "GET /api/task-lists HTTP/1.1" 200 -
+05:52:21 [recaps-off] "GET /api/projects/sidebar HTTP/1.1" 200 -
+05:52:21 [recaps-off] "GET /api/tasks/page?limit=1&listId=none&projectId=none&counts=total HTTP/1.1" 200 -
+05:52:21 [recaps-off] "GET /api/events HTTP/1.1" 200 -
+05:52:21 [recaps-off] "GET /api/agents HTTP/1.1" 200 -
+05:52:21 [recaps-off] "GET /api/users/me HTTP/1.1" 200 -
+05:52:21 [recaps-off] "GET /api/runners HTTP/1.1" 200 -
+05:52:21 [recaps-off] "GET /api/sessions?view=open&since= HTTP/1.1" 200 -
+05:52:21 [recaps-off] "GET /api/providers HTTP/1.1" 200 -
+05:52:21 [recaps-off] "GET /api/providers HTTP/1.1" 200 -
+05:52:21 [recaps-off] "GET /api/sessions?view=open HTTP/1.1" 200 -
+05:52:21 [recaps-off] "GET /api/providers/pools HTTP/1.1" 200 -
+05:52:21 [recaps-off] "GET /api/providers/pools HTTP/1.1" 200 -
+05:52:21 [recaps-off] "GET /api/session-folders HTTP/1.1" 200 -
+05:52:21 [recaps-off] "GET /api/watches?state=ACTIVE HTTP/1.1" 200 -
+05:52:21 [recaps-off] "GET /api/watches?state=ACTIVE HTTP/1.1" 200 -
+05:52:21 [recaps-off] "GET /api/wiki/spaces HTTP/1.1" 200 -
+05:52:22 [recaps-off] "GET /api/providers/shared-pools HTTP/1.1" 200 -
+05:52:22 [recaps-off] "GET /api/providers/shared-pools HTTP/1.1" 200 -
+05:52:22 [recaps-off] "GET /api/watches?state=PAUSED HTTP/1.1" 200 -
+05:52:22 [recaps-off] "GET /api/watches?state=PAUSED HTTP/1.1" 200 -
+05:52:22 [recaps-off] "GET /api/agents HTTP/1.1" 200 -
+05:52:22 [recaps-off] "GET /api/projects HTTP/1.1" 200 -
+05:52:22 [recaps-off] "GET /api/watches HTTP/1.1" 200 -
+05:52:22 [recaps-off] "GET /api/watches HTTP/1.1" 200 -
+05:52:22 [recaps-off] "GET /api/watches?needsAttention=true HTTP/1.1" 200 -
+05:52:22 [recaps-off] "GET /api/watches?needsAttention=true HTTP/1.1" 200 -
+05:52:22 [recaps-off] "GET /api/session-tags HTTP/1.1" 200 -
+05:52:22 [recaps-off] "GET /api/runners HTTP/1.1" 200 -
+05:52:22 [recaps-off] "GET /api/projects HTTP/1.1" 200 -
+05:52:22 [recaps-off] "GET /api/sessions?view=open HTTP/1.1" 200 -
+05:52:22 [recaps-off] "GET /api/projects/sidebar HTTP/1.1" 200 -
+05:52:22 [recaps-off] "GET /api/session-folders HTTP/1.1" 200 -
+05:52:22 [recaps-off] "GET /api/providers HTTP/1.1" 200 -
+05:52:22 [recaps-off] NOT SERVED /api/auth/capabilities
+05:52:22 [recaps-off] "GET /api/auth/capabilities HTTP/1.1" 404 -
+05:52:22 [recaps-off] "GET /api/projects/sidebar HTTP/1.1" 200 -
+05:52:22 [recaps-off] "GET /api/projects HTTP/1.1" 200 -
+05:52:22 [recaps-off] "GET /api/providers/pools HTTP/1.1" 200 -
+05:52:22 [recaps-off] "GET /api/providers/shared-pools HTTP/1.1" 200 -
+05:52:22 [recaps-off] "GET /api/task-lists HTTP/1.1" 200 -
+05:52:22 [recaps-off] "GET /api/tasks/page?limit=1&listId=none&projectId=none&counts=total HTTP/1.1" 200 -
+05:52:24 [recaps-off] "GET /api/projects/sidebar HTTP/1.1" 200 -
+05:52:24 [recaps-off] "GET /api/projects HTTP/1.1" 200 -
+05:52:24 [recaps-off] NOT SERVED /api/projects/P1/panorama
+05:52:24 [recaps-off] "GET /api/projects/P1/panorama HTTP/1.1" 404 -
+05:52:24 [recaps-off] "GET /api/projects/P1 HTTP/1.1" 200 -
+05:52:24 [recaps-off] NOT SERVED /api/projects/P1/integration
+05:52:24 [recaps-off] "GET /api/projects/P1/open-items HTTP/1.1" 200 -
+05:52:24 [recaps-off] "GET /api/projects/P1/coordinator/status HTTP/1.1" 200 -
+05:52:24 [recaps-off] "GET /api/projects/P1/handoffs HTTP/1.1" 200 -
+05:52:24 [recaps-off] "GET /api/projects/P1/integration HTTP/1.1" 404 -
+05:52:25 [recaps-off] NOT SERVED /api/projects/P1/panorama/ready?limit=5
+05:52:25 [recaps-off] "GET /api/projects/P1/panorama/ready?limit=5 HTTP/1.1" 404 -
+05:52:25 [recaps-off] "GET /api/projects/P1/tasks/page?limit=100 HTTP/1.1" 200 -
+05:52:25 [recaps-off] NOT SERVED /api/projects/P1/dependency-graph
+05:52:25 [recaps-off] "GET /api/projects/P1/dependency-graph HTTP/1.1" 404 -
+05:52:25 [recaps-off] NOT SERVED /api/projects/P1/share
+05:52:25 [recaps-off] "GET /api/projects/P1/share HTTP/1.1" 404 -
+05:52:26 [recaps-off] "GET /api/sessions?view=open HTTP/1.1" 200 -
+05:52:30 [recaps-off] "GET /__log HTTP/1.1" 200 -

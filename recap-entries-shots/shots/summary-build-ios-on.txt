@@ -1,0 +1,6 @@
+Test Case '-[RecapEntriesProbeUITests.RecapEntriesShotTests testIPhoneShowsTheRecapOnTheChatPageAndTheProjectEntries]' started.
+Test Case '-[RecapEntriesProbeUITests.RecapEntriesShotTests testIPhoneShowsTheRecapOnTheChatPageAndTheProjectEntries]' passed (120.218 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 120.218 (120.221) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 120.218 (120.222) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 120.218 (120.225) seconds
+** TEST SUCCEEDED **

@@ -1,0 +1,12 @@
+ios-chat-with-recap: the recap under its label and time: yes
+ios-chat-with-recap: never the raw reply in its place: yes
+ios-chat-with-recap: the conversation itself is below: yes
+ios-list-with-recap: P1's row says its coordinator's recap under its label: yes
+ios-list-with-recap: S4's row says its recap under its label: yes
+ios-project-sessions-with-recap: the coordinator's row says its recap under its label: yes
+ios-project-sessions-with-recap: the member's row says its recap under its label: yes
+ios-project-sessions-with-recap: the member without one keeps its reply, unlabelled: yes
+ios-project-with-recap: in view after 0 move(s) at (32.0, 329.3333333333333, 335.3333333333333, 37.99999999999994)
+ios-project-with-recap: the coordinator card says its recap under its label: yes
+ios-project-with-recap: never the raw reply in its place: yes
+ios-project-with-recap: the card's own lines are still there: yes

@@ -1,0 +1,11 @@
+mac-chat-with-recap: no window after launch; pressing ⌘N
+mac-chat-with-recap: 1 window(s)
+mac-chat-with-recap: the recap under its label and time: yes
+mac-chat-with-recap: never the raw reply in its place: yes
+mac-chat-with-recap: the conversation itself is below: yes
+mac-project-with-recap: no window after launch; pressing ⌘N
+mac-project-with-recap: 1 window(s)
+mac-project-with-recap: in view after 0 move(s) at (317.0, 238.0, 406.0, 13.0)
+mac-project-with-recap: the coordinator card says its recap under its label: yes
+mac-project-with-recap: never the raw reply in its place: yes
+mac-project-with-recap: the card's own lines are still there: yes

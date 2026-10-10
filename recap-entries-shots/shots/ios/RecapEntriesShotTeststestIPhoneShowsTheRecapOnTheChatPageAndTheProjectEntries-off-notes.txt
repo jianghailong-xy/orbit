@@ -1,0 +1,13 @@
+ios-chat-with-recaps-off: no Recap · label anywhere: yes
+ios-chat-with-recaps-off: the recap sentence is not drawn: yes
+ios-chat-with-recaps-off: the conversation itself is below: yes
+ios-list-with-recaps-off: P1's row says its coordinator's raw reply: yes
+ios-list-with-recaps-off: S4's row says its raw reply: yes
+ios-list-with-recaps-off: no Recap · label anywhere: yes
+ios-project-sessions-with-recaps-off: the coordinator's row says its raw reply: yes
+ios-project-sessions-with-recaps-off: the member's row says its raw reply: yes
+ios-project-sessions-with-recaps-off: no Recap · label anywhere: yes
+ios-project-with-recaps-off: in view after 0 move(s) at (32.0, 329.3333333333333, 329.6666666666667, 17.999999999999943)
+ios-project-with-recaps-off: the coordinator card says its raw reply: yes
+ios-project-with-recaps-off: no Recap · label anywhere: yes
+ios-project-with-recaps-off: the card's own lines are still there: yes

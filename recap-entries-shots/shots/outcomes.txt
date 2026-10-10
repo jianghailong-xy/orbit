@@ -1,0 +1,20 @@
+capture=success
+run=https://github.com/jianghailong-xy/orbit/actions/runs/38027764157
+sha=d722c87bb3b9725b983e792f2d8438382556895f
+== displays ==
+0, 0, 1024, 768
+== date ==
+utc 2026-10-10T05:53:02Z
+local 2026-10-10T05:53:02 UTC
+== stub logs (the mode each pass served) ==
+==> .recap-entries-probe/shots/mac/requests-on.log <==
+05:35:03 [recaps-on] stub on :8765 recaps=on args=[] pid=7859
+
+==> .recap-entries-probe/shots/mac/requests-off.log <==
+05:42:08 [recaps-off] stub on :8765 recaps=OFF args=[--recaps-off] pid=22237
+
+==> .recap-entries-probe/shots/ios/requests-on.log <==
+05:43:36 [recaps-on] stub on :8765 recaps=on args=[] pid=26381
+
+==> .recap-entries-probe/shots/ios/requests-off.log <==
+05:50:39 [recaps-off] stub on :8765 recaps=OFF args=[--recaps-off] pid=49772

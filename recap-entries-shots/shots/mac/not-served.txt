@@ -1,0 +1,12 @@
+   4 NOT SERVED /api/tasks/evidence-decisions/pending?decidingSessionId=S1
+   4 NOT SERVED /api/projects/P1/panorama/ready?limit=5
+   4 NOT SERVED /api/projects/P1/panorama
+   4 NOT SERVED /api/projects/P1/integration
+   4 NOT SERVED /api/auth/capabilities
+   2 NOT SERVED /api/sessions/S1/background
+   2 NOT SERVED /api/projects/P1/share
+   2 NOT SERVED /api/projects/P1/promotions/merged
+   2 NOT SERVED /api/projects/P1/promotions/current
+   2 NOT SERVED /api/projects/P1/dependency-graph
+   2 NOT SERVED /api/projects/P1/acceptance/criteria-decisions/pending
+   2 NOT SERVED /api/projects/P1/acceptance/confirmation

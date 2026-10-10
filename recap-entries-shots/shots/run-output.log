@@ -1,0 +1,104 @@
+==> iPhone 22452A91-4697-4369-8812-53ADB77EB73B
+==> stub ready on 127.0.0.1:8765 (pid 7859, after 2s, flags: )
+==> mac-on (recaps-on)
+Test Case '-[RecapEntriesMacProbeUITests.RecapEntriesShotTests testMacShowsTheRecapOnTheChatPageAndTheProjectPage]' started.
+Test Case '-[RecapEntriesMacProbeUITests.RecapEntriesShotTests testMacShowsTheRecapOnTheChatPageAndTheProjectPage]' passed (75.157 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 75.157 (75.158) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 75.157 (75.159) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 75.157 (75.160) seconds
+** TEST SUCCEEDED **
+==> stub ready on 127.0.0.1:8765 (pid 22237, after 2s, flags: --recaps-off)
+==> mac-off (recaps-off)
+Test Case '-[RecapEntriesMacProbeUITests.RecapEntriesShotTests testMacShowsTheRecapOnTheChatPageAndTheProjectPage]' started.
+Test Case '-[RecapEntriesMacProbeUITests.RecapEntriesShotTests testMacShowsTheRecapOnTheChatPageAndTheProjectPage]' passed (57.122 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 57.122 (57.122) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 57.122 (57.123) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 57.122 (57.124) seconds
+** TEST SUCCEEDED **
+==> stub ready on 127.0.0.1:8765 (pid 26381, after 2s, flags: )
+==> ios-on (recaps-on)
+Test Case '-[RecapEntriesProbeUITests.RecapEntriesShotTests testIPhoneShowsTheRecapOnTheChatPageAndTheProjectEntries]' started.
+Test Case '-[RecapEntriesProbeUITests.RecapEntriesShotTests testIPhoneShowsTheRecapOnTheChatPageAndTheProjectEntries]' passed (120.218 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 120.218 (120.221) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 120.218 (120.222) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 120.218 (120.225) seconds
+** TEST SUCCEEDED **
+==> stub ready on 127.0.0.1:8765 (pid 49772, after 2s, flags: --recaps-off)
+==> ios-off (recaps-off)
+Test Case '-[RecapEntriesProbeUITests.RecapEntriesShotTests testIPhoneShowsTheRecapOnTheChatPageAndTheProjectEntries]' started.
+Test Case '-[RecapEntriesProbeUITests.RecapEntriesShotTests testIPhoneShowsTheRecapOnTheChatPageAndTheProjectEntries]' passed (66.868 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 66.868 (66.870) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 66.868 (66.871) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 66.868 (66.873) seconds
+** TEST SUCCEEDED **
+.recap-entries-probe/run.sh: line 114: 49772 Terminated: 15          python3 -u stub.py 8765 "$1" "${@:2}" > "$1.out" 2>&1
+/Users/runner/work/orbit/orbit/.recap-entries-probe/shots/ios:
+total 5200
+drwxr-xr-x  33 runner  staff    1056 Oct 10 05:53 .
+drwxr-xr-x   5 runner  staff     160 Oct 10 05:53 ..
+drwxr-xr-x  14 runner  staff     448 Oct 10 05:53 attachments-ios-off
+drwxr-xr-x  14 runner  staff     448 Oct 10 05:50 attachments-ios-on
+-rw-r--r--   1 runner  staff     262 Oct 10 05:50 Complete Issue Description.txt
+-rw-r--r--   1 runner  staff  388927 Oct 10 05:48 ios-chat-with-recap.png
+-rw-r--r--   1 runner  staff  187541 Oct 10 05:51 ios-chat-with-recaps-off.png
+-rw-r--r--   1 runner  staff  148643 Oct 10 05:49 ios-list-with-recap.png
+-rw-r--r--   1 runner  staff  138265 Oct 10 05:52 ios-list-with-recaps-off.png
+-rw-r--r--   1 runner  staff  171464 Oct 10 05:49 ios-project-sessions-with-recap.png
+-rw-r--r--   1 runner  staff  161574 Oct 10 05:52 ios-project-sessions-with-recaps-off.png
+-rw-r--r--   1 runner  staff  251064 Oct 10 05:49 ios-project-with-recap.png
+-rw-r--r--   1 runner  staff  243330 Oct 10 05:52 ios-project-with-recaps-off.png
+-rw-r--r--@  1 runner  staff   17111 Oct 10 05:52 ios-requests-off.txt
+-rw-r--r--@  1 runner  staff   17708 Oct 10 05:49 ios-requests-on.txt
+-rw-r--r--   1 runner  staff     621 Oct 10 05:53 not-served.txt
+-rw-r--r--@  1 runner  staff     934 Oct 10 05:52 RecapEntriesShotTeststestIPhoneShowsTheRecapOnTheChatPageAndTheProjectEntries-off-notes.txt
+-rw-r--r--@  1 runner  staff     914 Oct 10 05:49 RecapEntriesShotTeststestIPhoneShowsTheRecapOnTheChatPageAndTheProjectEntries-on-notes.txt
+-rw-r--r--   1 runner  staff   17161 Oct 10 05:52 requests-off.log
+-rw-r--r--   1 runner  staff       0 Oct 10 05:50 requests-off.log.out
+-rw-r--r--   1 runner  staff   17757 Oct 10 05:49 requests-on.log
+-rw-r--r--   1 runner  staff       0 Oct 10 05:43 requests-on.log.out
+-rw-r--r--@  1 runner  staff   15465 Oct 10 05:48 tree-ios-chat-with-recap.txt
+-rw-r--r--@  1 runner  staff   15290 Oct 10 05:51 tree-ios-chat-with-recaps-off.txt
+-rw-r--r--@  1 runner  staff   13479 Oct 10 05:49 tree-ios-list-with-recap.txt
+-rw-r--r--@  1 runner  staff   13299 Oct 10 05:52 tree-ios-list-with-recaps-off.txt
+-rw-r--r--@  1 runner  staff   15496 Oct 10 05:49 tree-ios-project-sessions-with-recap.txt
+-rw-r--r--@  1 runner  staff   15310 Oct 10 05:52 tree-ios-project-sessions-with-recaps-off.txt
+-rw-r--r--@  1 runner  staff   18041 Oct 10 05:49 tree-ios-project-with-recap.txt
+-rw-r--r--@  1 runner  staff   17995 Oct 10 05:52 tree-ios-project-with-recaps-off.txt
+-rw-r--r--   1 runner  staff     420 Oct 10 05:53 writes.txt
+-rw-r--r--   1 runner  staff   20399 Oct 10 05:52 xcodebuild-ios-off.log
+-rw-r--r--   1 runner  staff  695003 Oct 10 05:50 xcodebuild-ios-on.log
+
+/Users/runner/work/orbit/orbit/.recap-entries-probe/shots/mac:
+total 2960
+drwxr-xr-x  32 runner  staff    1024 Oct 10 05:53 .
+drwxr-xr-x   5 runner  staff     160 Oct 10 05:53 ..
+drwxr-xr-x  11 runner  staff     352 Oct 10 05:43 attachments-mac-off
+drwxr-xr-x  11 runner  staff     352 Oct 10 05:42 attachments-mac-on
+-rw-r--r--   1 runner  staff   88534 Oct 10 05:42 mac-chat-with-recap.png
+-rw-r--r--   1 runner  staff   83872 Oct 10 05:43 mac-chat-with-recaps-off.png
+-rw-r--r--   1 runner  staff   91155 Oct 10 05:42 mac-project-with-recap.png
+-rw-r--r--   1 runner  staff   89625 Oct 10 05:43 mac-project-with-recaps-off.png
+-rw-r--r--   1 runner  staff    9179 Oct 10 05:43 mac-requests-off.txt
+-rw-r--r--   1 runner  staff    9227 Oct 10 05:42 mac-requests-on.txt
+-rw-r--r--   1 runner  staff   87274 Oct 10 05:41 mac-window-mac-chat-with-recap.png
+-rw-r--r--   1 runner  staff   89994 Oct 10 05:41 mac-window-mac-project-with-recap.png
+-rw-r--r--   1 runner  staff   14541 Oct 10 05:42 no-window-mac-chat-with-recap.txt
+-rw-r--r--   1 runner  staff   14672 Oct 10 05:43 no-window-mac-chat-with-recaps-off.txt
+-rw-r--r--   1 runner  staff   14672 Oct 10 05:42 no-window-mac-project-with-recap.txt
+-rw-r--r--   1 runner  staff   14541 Oct 10 05:43 no-window-mac-project-with-recaps-off.txt
+-rw-r--r--   1 runner  staff     621 Oct 10 05:53 not-served.txt
+-rw-r--r--   1 runner  staff     332 Oct 10 05:53 recap-entries-window-mac-chat-with-recap.log
+-rw-r--r--   1 runner  staff     169 Oct 10 05:53 recap-entries-window-mac-project-with-recap.log
+-rw-r--r--   1 runner  staff     684 Oct 10 05:43 RecapEntriesShotTeststestMacShowsTheRecapOnTheChatPageAndTheProjectPage-off-notes.txt
+-rw-r--r--   1 runner  staff     656 Oct 10 05:42 RecapEntriesShotTeststestMacShowsTheRecapOnTheChatPageAndTheProjectPage-on-notes.txt
+-rw-r--r--   1 runner  staff    9229 Oct 10 05:43 requests-off.log
+-rw-r--r--   1 runner  staff       0 Oct 10 05:42 requests-off.log.out
+-rw-r--r--   1 runner  staff    9276 Oct 10 05:41 requests-on.log
+-rw-r--r--   1 runner  staff       0 Oct 10 05:35 requests-on.log.out
+-rw-r--r--   1 runner  staff   22588 Oct 10 05:42 tree-mac-chat-with-recap.txt
+-rw-r--r--   1 runner  staff   22479 Oct 10 05:43 tree-mac-chat-with-recaps-off.txt
+-rw-r--r--   1 runner  staff   28842 Oct 10 05:42 tree-mac-project-with-recap.txt
+-rw-r--r--   1 runner  staff   28839 Oct 10 05:43 tree-mac-project-with-recaps-off.txt
+-rw-r--r--   1 runner  staff     210 Oct 10 05:53 writes.txt
+-rw-r--r--   1 runner  staff   26814 Oct 10 05:43 xcodebuild-mac-off.log
+-rw-r--r--   1 runner  staff  688337 Oct 10 05:42 xcodebuild-mac-on.log

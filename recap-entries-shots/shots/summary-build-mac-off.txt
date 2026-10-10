@@ -1,0 +1,6 @@
+Test Case '-[RecapEntriesMacProbeUITests.RecapEntriesShotTests testMacShowsTheRecapOnTheChatPageAndTheProjectPage]' started.
+Test Case '-[RecapEntriesMacProbeUITests.RecapEntriesShotTests testMacShowsTheRecapOnTheChatPageAndTheProjectPage]' passed (57.122 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 57.122 (57.122) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 57.122 (57.123) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 57.122 (57.124) seconds
+** TEST SUCCEEDED **
