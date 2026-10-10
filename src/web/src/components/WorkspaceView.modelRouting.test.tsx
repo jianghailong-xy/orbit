@@ -2,7 +2,6 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { App as AntApp } from 'antd';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Runner } from './TasksSidePanel';
@@ -169,14 +168,12 @@ describe('the model chip on a task run smart selection picked', { timeout: 60_00
       nextRoot.render(
         <QueryClientProvider client={nextClient}>
           <MemoryRouter initialEntries={[`/sessions/${SESSION}`]}>
-            <AntApp>
-              <Where />
-              {/* As the app routes them: the console holds a session, and the task page is apart. */}
-              <Routes>
-                <Route path="/sessions/:id" element={<WorkspaceView runner={RUNNER} />} />
-                <Route path="/tasks/:id" element={<div className="task-page-probe" />} />
-              </Routes>
-            </AntApp>
+            <Where />
+            {/* As the app routes them: the console holds a session, and the task page is apart. */}
+            <Routes>
+              <Route path="/sessions/:id" element={<WorkspaceView runner={RUNNER} />} />
+              <Route path="/tasks/:id" element={<div className="task-page-probe" />} />
+            </Routes>
           </MemoryRouter>
         </QueryClientProvider>,
       );
@@ -192,16 +189,16 @@ describe('the model chip on a task run smart selection picked', { timeout: 60_00
       el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
     });
   };
-  /** Menu rows by the key rc-menu stamps into `data-menu-id`. */
-  const row = (key: string) =>
-    Array.from(document.querySelectorAll<HTMLElement>('.composer-model-menu .ant-dropdown-menu-item')).find((el) =>
-      el.getAttribute('data-menu-id')?.endsWith(`-${key}`),
+  /** A row of the chip's menu, by what it says (without the tick a picked row carries). */
+  const row = (label: string) =>
+    Array.from(document.querySelectorAll<HTMLElement>('.composer-model-menu [role="menuitem"]')).find(
+      (el) => (el.textContent ?? '').trim() === label,
     );
-  /** Open the chip's menu, and wait for antd's portal to hold its model rows. */
+  /** Open the chip's menu, and wait for its portal to hold its model rows. */
   const open = async () => {
     await click(chip(), 'the model chip');
     await act(async () => {
-      await vi.waitFor(() => expect(row('model:claude-opus-5-5')).toBeDefined(), { timeout: 20_000, interval: 20 });
+      await vi.waitFor(() => expect(row('Opus 5.5')).toBeDefined(), { timeout: 20_000, interval: 20 });
     });
   };
   const note = () => document.querySelector<HTMLElement>('.composer-model-menu .composer-route-note');
@@ -275,14 +272,15 @@ describe('the model chip on a task run smart selection picked', { timeout: 60_00
       'Changing the model here applies to this run only. To fix the model for every run, set it on the task.',
     ]);
     // The models are still the ones to change it to, for this run.
-    expect(['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-fable-5-1'].map((m) => row(`model:${m}`)?.textContent))
-      .toEqual(['Opus 5.5', 'Sonnet 5.5', 'Fable 5.1']);
+    const models = Array.from(document.querySelectorAll<HTMLElement>('.composer-model-menu > [role="menuitem"]:not([aria-haspopup])'))
+      .filter((el) => !el.classList.contains('composer-engine-title') && !el.querySelector('.composer-route-open'));
+    expect(models.map((el) => el.textContent)).toEqual(['Opus 5.5', 'Sonnet 5.5', 'Fable 5.1']);
     // The way to the task is the menu's last row.
-    const rows = Array.from(document.querySelectorAll<HTMLElement>('.composer-model-menu > .ant-dropdown-menu-item'));
-    expect(rows.at(-1)?.getAttribute('data-menu-id')?.endsWith('-open-task')).toBe(true);
-    expect(row('open-task')?.textContent).toBe('Open task ›');
+    const rows = Array.from(document.querySelectorAll<HTMLElement>('.composer-model-menu > [role="menuitem"]'));
+    expect(rows.at(-1)).toBe(row('Open task ›'));
+    expect(rows.at(-1)?.querySelector('.composer-route-open')?.textContent).toBe('Open task ›');
 
-    await click(row('open-task'), 'Open task');
+    await click(row('Open task ›'), 'Open task');
     await act(async () => {
       await vi.waitFor(() => expect(where).toBe(`/tasks/${TASK}`), { timeout: 20_000, interval: 20 });
     });
@@ -297,7 +295,7 @@ describe('the model chip on a task run smart selection picked', { timeout: 60_00
     expect(chip()?.getAttribute('aria-label')).toBe('Model Opus 5.5, effort High');
     await open();
     expect(note()).toBeNull();
-    expect(row('open-task')).toBeUndefined();
+    expect(row('Open task ›')).toBeUndefined();
   });
 
   it('leaves a task run on an Agent without smart selection as it was, though it records what it would pick', async () => {
@@ -309,7 +307,7 @@ describe('the model chip on a task run smart selection picked', { timeout: 60_00
     expect(chip()?.classList.contains('is-smart')).toBe(false);
     await open();
     expect(note()).toBeNull();
-    expect(row('open-task')).toBeUndefined();
+    expect(row('Open task ›')).toBeUndefined();
   });
 
   it('drops the mark once this run is on a model smart selection did not pick', async () => {
@@ -342,7 +340,7 @@ describe('the model chip on a task run smart selection picked', { timeout: 60_00
       expect(chip()?.getAttribute('aria-label')).toBe('Model Opus 5.5, effort High');
       await open();
       expect(note()).toBeNull();
-      expect(row('open-task')).toBeUndefined();
+      expect(row('Open task ›')).toBeUndefined();
       expect(document.querySelector('.composer-model-menu')?.textContent).not.toContain('✦');
     });
   }

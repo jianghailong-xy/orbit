@@ -64,3 +64,32 @@ describe('Popover arrow', () => {
     expect(popup()!.querySelector('.np-list')?.textContent).toBe('Claude');
   });
 });
+
+describe('Popover on a trigger that is not a button', () => {
+  it('makes the span a button that a click, Enter and Space open (P5.3: the composer’s context gauge)', async () => {
+    for (const open of ['click', 'Enter', ' '] as const) {
+      await act(async () => root!.render(
+        <Popover title="Context" nativeButton={false} trigger={<span className="composer-usage" aria-label="Context window 42%">42%</span>}>
+          <div className="cu-pop">Context window</div>
+        </Popover>,
+      ));
+      await settle();
+      const trigger = container!.querySelector<HTMLElement>('.composer-usage')!;
+      expect(trigger.getAttribute('role')).toBe('button');
+      expect(trigger.tabIndex).toBe(0);
+      await act(async () => {
+        trigger.focus();
+        if (open === 'click') trigger.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+        else {
+          trigger.dispatchEvent(new KeyboardEvent('keydown', { key: open, bubbles: true, cancelable: true }));
+          trigger.dispatchEvent(new KeyboardEvent('keyup', { key: open, bubbles: true, cancelable: true }));
+        }
+      });
+      await settle();
+      expect(document.querySelector('.orbit-popover .cu-pop'), `opened by ${JSON.stringify(open)}`).not.toBeNull();
+      await act(async () => root!.render(<></>));
+      await settle();
+    }
+  });
+});
+

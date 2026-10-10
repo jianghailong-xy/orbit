@@ -1,0 +1,3602 @@
+{
+ "antd": {
+  "del": {
+   "classes": [
+    "ant-app"
+   ],
+   "steps": 592,
+   "tests": 56
+  },
+  "ref": {
+   "classes": [
+    "ant-app",
+    "ant-btn",
+    "ant-btn-circle",
+    "ant-btn-color-dangerous",
+    "ant-btn-color-default",
+    "ant-btn-color-primary",
+    "ant-btn-dangerous",
+    "ant-btn-default",
+    "ant-btn-icon",
+    "ant-btn-icon-only",
+    "ant-btn-primary",
+    "ant-btn-text",
+    "ant-btn-variant-outlined",
+    "ant-btn-variant-solid",
+    "ant-btn-variant-text",
+    "ant-dropdown",
+    "ant-dropdown-css-var",
+    "ant-dropdown-menu",
+    "ant-dropdown-menu-css-var",
+    "ant-dropdown-menu-item",
+    "ant-dropdown-menu-item-active",
+    "ant-dropdown-menu-item-danger",
+    "ant-dropdown-menu-item-divider",
+    "ant-dropdown-menu-item-group",
+    "ant-dropdown-menu-item-group-list",
+    "ant-dropdown-menu-item-group-title",
+    "ant-dropdown-menu-item-icon",
+    "ant-dropdown-menu-item-only-child",
+    "ant-dropdown-menu-item-selected",
+    "ant-dropdown-menu-light",
+    "ant-dropdown-menu-root",
+    "ant-dropdown-menu-sub",
+    "ant-dropdown-menu-submenu",
+    "ant-dropdown-menu-submenu-active",
+    "ant-dropdown-menu-submenu-arrow",
+    "ant-dropdown-menu-submenu-arrow-icon",
+    "ant-dropdown-menu-submenu-expand-icon",
+    "ant-dropdown-menu-submenu-open",
+    "ant-dropdown-menu-submenu-placement-leftBottom",
+    "ant-dropdown-menu-submenu-placement-leftTop",
+    "ant-dropdown-menu-submenu-placement-rightBottom",
+    "ant-dropdown-menu-submenu-placement-rightTop",
+    "ant-dropdown-menu-submenu-popup",
+    "ant-dropdown-menu-submenu-title",
+    "ant-dropdown-menu-submenu-vertical",
+    "ant-dropdown-menu-title-content",
+    "ant-dropdown-menu-vertical",
+    "ant-dropdown-open",
+    "ant-dropdown-placement-bottomLeft",
+    "ant-dropdown-placement-bottomRight",
+    "ant-dropdown-placement-topLeft",
+    "ant-dropdown-placement-topRight",
+    "ant-dropdown-trigger",
+    "ant-image",
+    "ant-image-cover",
+    "ant-image-cover-center",
+    "ant-image-css-var",
+    "ant-image-img",
+    "ant-image-preview",
+    "ant-image-preview-actions",
+    "ant-image-preview-actions-action",
+    "ant-image-preview-actions-action-disabled",
+    "ant-image-preview-actions-action-flipX",
+    "ant-image-preview-actions-action-flipY",
+    "ant-image-preview-actions-action-rotateLeft",
+    "ant-image-preview-actions-action-rotateRight",
+    "ant-image-preview-actions-action-zoomIn",
+    "ant-image-preview-actions-action-zoomOut",
+    "ant-image-preview-body",
+    "ant-image-preview-close",
+    "ant-image-preview-footer",
+    "ant-image-preview-img",
+    "ant-image-preview-mask",
+    "ant-image-preview-movable",
+    "ant-input",
+    "ant-input-borderless",
+    "ant-input-css-var",
+    "ant-modal",
+    "ant-modal-body",
+    "ant-modal-confirm",
+    "ant-modal-confirm-body",
+    "ant-modal-confirm-body-has-title",
+    "ant-modal-confirm-body-wrapper",
+    "ant-modal-confirm-btns",
+    "ant-modal-confirm-confirm",
+    "ant-modal-confirm-content",
+    "ant-modal-confirm-paragraph",
+    "ant-modal-confirm-title",
+    "ant-modal-container",
+    "ant-modal-mask",
+    "ant-modal-wrap",
+    "ant-popover",
+    "ant-popover-arrow",
+    "ant-popover-container",
+    "ant-popover-content",
+    "ant-popover-css-var",
+    "ant-popover-open",
+    "ant-popover-placement-topRight",
+    "ant-popover-title",
+    "ant-result",
+    "ant-result-404",
+    "ant-result-extra",
+    "ant-result-icon",
+    "ant-result-image",
+    "ant-result-subtitle",
+    "ant-result-title",
+    "ant-select",
+    "ant-select-borderless",
+    "ant-select-content",
+    "ant-select-content-has-value",
+    "ant-select-css-var",
+    "ant-select-dropdown",
+    "ant-select-dropdown-list",
+    "ant-select-dropdown-list-holder",
+    "ant-select-dropdown-list-holder-inner",
+    "ant-select-dropdown-placement-topLeft",
+    "ant-select-focused",
+    "ant-select-input",
+    "ant-select-item",
+    "ant-select-item-option",
+    "ant-select-item-option-active",
+    "ant-select-item-option-content",
+    "ant-select-item-option-selected",
+    "ant-select-open",
+    "ant-select-single",
+    "ant-select-sm",
+    "ant-spin",
+    "ant-spin-dot",
+    "ant-spin-dot-holder",
+    "ant-spin-dot-item",
+    "ant-spin-dot-spin",
+    "ant-spin-section",
+    "ant-spin-spinning",
+    "ant-tooltip",
+    "ant-tooltip-arrow",
+    "ant-tooltip-container",
+    "ant-tooltip-css-var",
+    "ant-tooltip-open",
+    "ant-tooltip-placement-top",
+    "ant-zoom-big",
+    "ant-zoom-big-leave",
+    "ant-zoom-big-leave-active"
+   ],
+   "steps": 592,
+   "tests": 56
+  }
+ },
+ "missing": [],
+ "semantic": [
+  {
+   "fields": {
+    "dialogs": [
+     [
+      {
+       "buttons": [
+        "close",
+        "flipY",
+        "flipX",
+        "rotateLeft",
+        "rotateRight",
+        "zoomOut (disabled)",
+        "zoomIn"
+       ],
+       "role": "dialog",
+       "text": "",
+       "title": ""
+      }
+     ],
+     [
+      {
+       "buttons": [
+        "Close",
+        "Flip vertically",
+        "Flip horizontally",
+        "Rotate left",
+        "Rotate right",
+        "Zoom out (disabled)",
+        "Zoom in"
+       ],
+       "role": "dialog",
+       "text": "",
+       "title": ""
+      }
+     ]
+    ],
+    "focus": [
+     {
+      "name": "close",
+      "role": "button"
+     },
+     {
+      "name": "Close",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 3,
+   "step": "the picture opened",
+   "test": "chromium-dark-desktop :: P5.3 the session workspace › attachments: pasted, dropped, a picked picture previewed, removed"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "Add attachment",
+      "role": "button"
+     },
+     {
+      "name": "FileImageShellSkillCommand",
+      "role": "menu"
+     }
+    ]
+   },
+   "index": 0,
+   "step": "the + menu",
+   "test": "chromium-dark-desktop :: P5.3 the session workspace › the + menu, shell mode, and the pickers on the toolbar"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "",
+      "role": "combobox"
+     },
+     {
+      "name": "Default",
+      "role": "option"
+     }
+    ]
+   },
+   "index": 4,
+   "step": "the mode list",
+   "test": "chromium-dark-desktop :: P5.3 the session workspace › the + menu, shell mode, and the pickers on the toolbar"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "",
+      "role": "combobox"
+     },
+     {
+      "name": "Plan",
+      "role": "combobox"
+     }
+    ]
+   },
+   "index": 5,
+   "step": "Plan picked",
+   "test": "chromium-dark-desktop :: P5.3 the session workspace › the + menu, shell mode, and the pickers on the toolbar"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "Model Opus 5.5, effort Max",
+      "role": "button"
+     },
+     {
+      "name": "Claude CodeProviderorbitd@ClaudeOpus 5.5Sonnet 5.5Fable 5.1E",
+      "role": "menu"
+     }
+    ]
+   },
+   "index": 6,
+   "step": "the model menu",
+   "test": "chromium-dark-desktop :: P5.3 the session workspace › the + menu, shell mode, and the pickers on the toolbar"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "Model Opus 5.5, effort High",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 9,
+   "step": "High picked",
+   "test": "chromium-dark-desktop :: P5.3 the session workspace › the + menu, shell mode, and the pickers on the toolbar"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "Model Sonnet 5.5, effort High",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 10,
+   "step": "Sonnet 5.5 picked",
+   "test": "chromium-dark-desktop :: P5.3 the session workspace › the + menu, shell mode, and the pickers on the toolbar"
+  },
+  {
+   "fields": {
+    "dialogs": [
+     [],
+     [
+      {
+       "buttons": [],
+       "role": "dialog",
+       "text": "ContextContext window18%182k / 1M tokens",
+       "title": "Context"
+      }
+     ]
+    ],
+    "focus": [
+     "body",
+     {
+      "name": "Model Sonnet 5.5, effort High",
+      "role": "button"
+     }
+    ],
+    "tips": [
+     [
+      "ContextContext window18%182k / 1M tokens"
+     ],
+     []
+    ]
+   },
+   "index": 11,
+   "step": "the context popover",
+   "test": "chromium-dark-desktop :: P5.3 the session workspace › the + menu, shell mode, and the pickers on the toolbar"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "More actions",
+      "role": "button"
+     },
+     {
+      "name": "Find in session · Ctrl FTagsDesignOpsCompleteRename…Move…Cop",
+      "role": "menu"
+     }
+    ]
+   },
+   "index": 0,
+   "step": "the header menu",
+   "test": "chromium-dark-desktop :: P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "Rename…",
+      "role": "menuitem"
+     }
+    ]
+   },
+   "index": 1,
+   "step": "Ops put on, the menu still open",
+   "test": "chromium-dark-desktop :: P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "Complete",
+      "role": "menuitem"
+     }
+    ]
+   },
+   "index": 2,
+   "step": "Design taken off",
+   "test": "chromium-dark-desktop :: P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "More actions",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 3,
+   "step": "Esc closes it",
+   "test": "chromium-dark-desktop :: P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "More actions",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 7,
+   "step": "Share closed",
+   "test": "chromium-dark-desktop :: P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "More actions",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 9,
+   "step": "Move closed",
+   "test": "chromium-dark-desktop :: P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "More actions",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 10,
+   "step": "Delete: to Trash at once",
+   "test": "chromium-dark-desktop :: P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "Ends the run and moves to Completed",
+      "role": "menuitem"
+     },
+     {
+      "name": "CompleteCtrl DPinRename…Share…Move…Delete",
+      "role": "menu"
+     }
+    ]
+   },
+   "index": 4,
+   "step": "a row’s menu",
+   "test": "chromium-dark-desktop :: P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder"
+  },
+  {
+   "fields": {
+    "dialogs": [
+     [
+      {
+       "buttons": [
+        "Cancel",
+        "Move to Trash"
+       ],
+       "role": "dialog",
+       "text": "Move to Trash?Move to Trash?Its public link is paused while the session is in Trash. Restoring the session turns the link back on.CancelMove to Trash",
+       "title": "Move to Trash?"
+      }
+     ],
+     [
+      {
+       "buttons": [
+        "Cancel",
+        "Move to Trash"
+       ],
+       "role": "alertdialog",
+       "text": "Move to Trash?Its public link is paused while the session is in Trash. Restoring the session turns the link back on.CancelMove to Trash",
+       "title": "Move to Trash?"
+      }
+     ]
+    ],
+    "focus": [
+     {
+      "name": "Move to Trash",
+      "role": "button"
+     },
+     {
+      "name": "Cancel",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 8,
+   "step": "Delete asks first",
+   "test": "chromium-dark-desktop :: P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "More actions",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 9,
+   "step": "Cancel",
+   "test": "chromium-dark-desktop :: P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "OpenCompletedTrashFilter by TagGroup by TagNew Folder…",
+      "role": "menu"
+     }
+    ]
+   },
+   "index": 10,
+   "step": "the scope menu",
+   "test": "chromium-dark-desktop :: P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "Switch view, filter and group",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 12,
+   "step": "filtered to Ops",
+   "test": "chromium-dark-desktop :: P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "Release1",
+      "role": "button"
+     },
+     {
+      "name": "Rename…Delete Folder…",
+      "role": "menu"
+     }
+    ]
+   },
+   "index": 15,
+   "step": "a folder’s menu",
+   "test": "chromium-dark-desktop :: P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder"
+  },
+  {
+   "fields": {
+    "dialogs": [
+     [
+      {
+       "buttons": [
+        "Cancel",
+        "Delete"
+       ],
+       "role": "dialog",
+       "text": "Delete “Release”?Delete “Release”?Its sessions move back to the list. No session is deleted.CancelDelete",
+       "title": "Delete “Release”?"
+      }
+     ],
+     [
+      {
+       "buttons": [
+        "Cancel",
+        "Delete"
+       ],
+       "role": "alertdialog",
+       "text": "Delete “Release”?Its sessions move back to the list. No session is deleted.CancelDelete",
+       "title": "Delete “Release”?"
+      }
+     ]
+    ],
+    "focus": [
+     {
+      "name": "Delete",
+      "role": "button"
+     },
+     {
+      "name": "Cancel",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 16,
+   "step": "Delete Folder… asks first",
+   "test": "chromium-dark-desktop :: P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "Move to Open",
+      "role": "menuitem"
+     },
+     {
+      "name": "Move to OpenDelete Permanently…",
+      "role": "menu"
+     }
+    ]
+   },
+   "index": 18,
+   "step": "a trashed row’s menu",
+   "test": "chromium-dark-desktop :: P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder"
+  },
+  {
+   "fields": {
+    "dialogs": [
+     [
+      {
+       "buttons": [
+        "Cancel",
+        "Delete permanently"
+       ],
+       "role": "dialog",
+       "text": "Delete permanently?Delete permanently?This session and its full transcript will be permanently deleted. This cannot be undone.CancelDelete permanently",
+       "title": "Delete permanently?"
+      }
+     ],
+     [
+      {
+       "buttons": [
+        "Cancel",
+        "Delete permanently"
+       ],
+       "role": "alertdialog",
+       "text": "Delete permanently?This session and its full transcript will be permanently deleted. This cannot be undone.CancelDelete permanently",
+       "title": "Delete permanently?"
+      }
+     ]
+    ],
+    "focus": [
+     {
+      "name": "Delete permanently",
+      "role": "button"
+     },
+     {
+      "name": "Cancel",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 19,
+   "step": "Delete Permanently… asks first",
+   "test": "chromium-dark-desktop :: P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder"
+  },
+  {
+   "fields": {
+    "dialogs": [
+     [
+      {
+       "buttons": [
+        "close",
+        "flipY",
+        "flipX",
+        "rotateLeft",
+        "rotateRight",
+        "zoomOut (disabled)",
+        "zoomIn"
+       ],
+       "role": "dialog",
+       "text": "",
+       "title": ""
+      }
+     ],
+     [
+      {
+       "buttons": [
+        "Close",
+        "Flip vertically",
+        "Flip horizontally",
+        "Rotate left",
+        "Rotate right",
+        "Zoom out (disabled)",
+        "Zoom in"
+       ],
+       "role": "dialog",
+       "text": "",
+       "title": ""
+      }
+     ]
+    ],
+    "focus": [
+     {
+      "name": "close",
+      "role": "button"
+     },
+     {
+      "name": "Close",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 2,
+   "step": "the picture opened",
+   "test": "chromium-dark-phone :: P5.3 the session workspace › attachments: pasted, dropped, a picked picture previewed, removed"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "Add attachment",
+      "role": "button"
+     },
+     {
+      "name": "FileImageShellSkillCommand",
+      "role": "menu"
+     }
+    ]
+   },
+   "index": 0,
+   "step": "the + menu",
+   "test": "chromium-dark-phone :: P5.3 the session workspace › the + menu, shell mode, and the pickers on the toolbar"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "",
+      "role": "combobox"
+     },
+     {
+      "name": "Default",
+      "role": "option"
+     }
+    ]
+   },
+   "index": 4,
+   "step": "the mode list",
+   "test": "chromium-dark-phone :: P5.3 the session workspace › the + menu, shell mode, and the pickers on the toolbar"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "",
+      "role": "combobox"
+     },
+     {
+      "name": "Plan",
+      "role": "combobox"
+     }
+    ]
+   },
+   "index": 5,
+   "step": "Plan picked",
+   "test": "chromium-dark-phone :: P5.3 the session workspace › the + menu, shell mode, and the pickers on the toolbar"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "Model Opus 5.5, effort Max",
+      "role": "button"
+     },
+     {
+      "name": "Claude CodeProviderorbitd@ClaudeOpus 5.5Sonnet 5.5Fable 5.1E",
+      "role": "menu"
+     }
+    ]
+   },
+   "index": 6,
+   "step": "the model menu",
+   "test": "chromium-dark-phone :: P5.3 the session workspace › the + menu, shell mode, and the pickers on the toolbar"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "Model Opus 5.5, effort High",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 9,
+   "step": "High picked",
+   "test": "chromium-dark-phone :: P5.3 the session workspace › the + menu, shell mode, and the pickers on the toolbar"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "Model Sonnet 5.5, effort High",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 10,
+   "step": "Sonnet 5.5 picked",
+   "test": "chromium-dark-phone :: P5.3 the session workspace › the + menu, shell mode, and the pickers on the toolbar"
+  },
+  {
+   "fields": {
+    "dialogs": [
+     [],
+     [
+      {
+       "buttons": [],
+       "role": "dialog",
+       "text": "ContextContext window18%182k / 1M tokens",
+       "title": "Context"
+      }
+     ]
+    ],
+    "focus": [
+     "body",
+     {
+      "name": "ContextContext window18%182k / 1M tokens",
+      "role": "dialog"
+     }
+    ],
+    "tips": [
+     [
+      "ContextContext window18%182k / 1M tokens"
+     ],
+     []
+    ]
+   },
+   "index": 11,
+   "step": "the context popover",
+   "test": "chromium-dark-phone :: P5.3 the session workspace › the + menu, shell mode, and the pickers on the toolbar"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "More actions",
+      "role": "button"
+     },
+     {
+      "name": "Find in session · Ctrl FTagsDesignOpsCompleteRename…Move…Cop",
+      "role": "menu"
+     }
+    ]
+   },
+   "index": 0,
+   "step": "the header menu",
+   "test": "chromium-dark-phone :: P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "Rename…",
+      "role": "menuitem"
+     }
+    ]
+   },
+   "index": 1,
+   "step": "Ops put on, the menu still open",
+   "test": "chromium-dark-phone :: P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "Complete",
+      "role": "menuitem"
+     }
+    ]
+   },
+   "index": 2,
+   "step": "Design taken off",
+   "test": "chromium-dark-phone :: P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "More actions",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 3,
+   "step": "Esc closes it",
+   "test": "chromium-dark-phone :: P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "More actions",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 7,
+   "step": "Share closed",
+   "test": "chromium-dark-phone :: P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "More actions",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 9,
+   "step": "Move closed",
+   "test": "chromium-dark-phone :: P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "More actions",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 10,
+   "step": "Delete: to Trash at once",
+   "test": "chromium-dark-phone :: P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "CompleteCtrl DPinRename…Share…Move…Delete",
+      "role": "menu"
+     }
+    ]
+   },
+   "index": 1,
+   "step": "a held press: the row’s menu",
+   "test": "chromium-dark-phone :: P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "OpenCompletedTrashFilter by TagGroup by TagNew Folder…",
+      "role": "menu"
+     }
+    ]
+   },
+   "index": 3,
+   "step": "the scope menu",
+   "test": "chromium-dark-phone :: P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "Switch view, filter and group",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 5,
+   "step": "filtered to Ops",
+   "test": "chromium-dark-phone :: P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "Rename…Delete Folder…",
+      "role": "menu"
+     }
+    ]
+   },
+   "index": 8,
+   "step": "a folder’s menu",
+   "test": "chromium-dark-phone :: P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder"
+  },
+  {
+   "fields": {
+    "dialogs": [
+     [
+      {
+       "buttons": [
+        "Cancel",
+        "Delete"
+       ],
+       "role": "dialog",
+       "text": "Delete “Release”?Delete “Release”?Its sessions move back to the list. No session is deleted.CancelDelete",
+       "title": "Delete “Release”?"
+      }
+     ],
+     [
+      {
+       "buttons": [
+        "Cancel",
+        "Delete"
+       ],
+       "role": "alertdialog",
+       "text": "Delete “Release”?Its sessions move back to the list. No session is deleted.CancelDelete",
+       "title": "Delete “Release”?"
+      }
+     ]
+    ],
+    "focus": [
+     {
+      "name": "Delete",
+      "role": "button"
+     },
+     {
+      "name": "Cancel",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 9,
+   "step": "Delete Folder… asks first",
+   "test": "chromium-dark-phone :: P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "Switch view, filter and group",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 10,
+   "step": "the folder deleted",
+   "test": "chromium-dark-phone :: P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder"
+  },
+  {
+   "fields": {
+    "dialogs": [
+     [
+      {
+       "buttons": [
+        "close",
+        "flipY",
+        "flipX",
+        "rotateLeft",
+        "rotateRight",
+        "zoomOut (disabled)",
+        "zoomIn"
+       ],
+       "role": "dialog",
+       "text": "",
+       "title": ""
+      }
+     ],
+     [
+      {
+       "buttons": [
+        "Close",
+        "Flip vertically",
+        "Flip horizontally",
+        "Rotate left",
+        "Rotate right",
+        "Zoom out (disabled)",
+        "Zoom in"
+       ],
+       "role": "dialog",
+       "text": "",
+       "title": ""
+      }
+     ]
+    ],
+    "focus": [
+     {
+      "name": "close",
+      "role": "button"
+     },
+     {
+      "name": "Close",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 3,
+   "step": "the picture opened",
+   "test": "chromium-light-desktop :: P5.3 the session workspace › attachments: pasted, dropped, a picked picture previewed, removed"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "Add attachment",
+      "role": "button"
+     },
+     {
+      "name": "FileImageShellSkillCommand",
+      "role": "menu"
+     }
+    ]
+   },
+   "index": 0,
+   "step": "the + menu",
+   "test": "chromium-light-desktop :: P5.3 the session workspace › the + menu, shell mode, and the pickers on the toolbar"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "",
+      "role": "combobox"
+     },
+     {
+      "name": "Default",
+      "role": "option"
+     }
+    ]
+   },
+   "index": 4,
+   "step": "the mode list",
+   "test": "chromium-light-desktop :: P5.3 the session workspace › the + menu, shell mode, and the pickers on the toolbar"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "",
+      "role": "combobox"
+     },
+     {
+      "name": "Plan",
+      "role": "combobox"
+     }
+    ]
+   },
+   "index": 5,
+   "step": "Plan picked",
+   "test": "chromium-light-desktop :: P5.3 the session workspace › the + menu, shell mode, and the pickers on the toolbar"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "Model Opus 5.5, effort Max",
+      "role": "button"
+     },
+     {
+      "name": "Claude CodeProviderorbitd@ClaudeOpus 5.5Sonnet 5.5Fable 5.1E",
+      "role": "menu"
+     }
+    ]
+   },
+   "index": 6,
+   "step": "the model menu",
+   "test": "chromium-light-desktop :: P5.3 the session workspace › the + menu, shell mode, and the pickers on the toolbar"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "Model Opus 5.5, effort High",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 9,
+   "step": "High picked",
+   "test": "chromium-light-desktop :: P5.3 the session workspace › the + menu, shell mode, and the pickers on the toolbar"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "Model Sonnet 5.5, effort High",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 10,
+   "step": "Sonnet 5.5 picked",
+   "test": "chromium-light-desktop :: P5.3 the session workspace › the + menu, shell mode, and the pickers on the toolbar"
+  },
+  {
+   "fields": {
+    "dialogs": [
+     [],
+     [
+      {
+       "buttons": [],
+       "role": "dialog",
+       "text": "ContextContext window18%182k / 1M tokens",
+       "title": "Context"
+      }
+     ]
+    ],
+    "focus": [
+     "body",
+     {
+      "name": "Model Sonnet 5.5, effort High",
+      "role": "button"
+     }
+    ],
+    "tips": [
+     [
+      "ContextContext window18%182k / 1M tokens"
+     ],
+     []
+    ]
+   },
+   "index": 11,
+   "step": "the context popover",
+   "test": "chromium-light-desktop :: P5.3 the session workspace › the + menu, shell mode, and the pickers on the toolbar"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "More actions",
+      "role": "button"
+     },
+     {
+      "name": "Find in session · Ctrl FTagsDesignOpsCompleteRename…Move…Cop",
+      "role": "menu"
+     }
+    ]
+   },
+   "index": 0,
+   "step": "the header menu",
+   "test": "chromium-light-desktop :: P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "Rename…",
+      "role": "menuitem"
+     }
+    ]
+   },
+   "index": 1,
+   "step": "Ops put on, the menu still open",
+   "test": "chromium-light-desktop :: P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "Complete",
+      "role": "menuitem"
+     }
+    ]
+   },
+   "index": 2,
+   "step": "Design taken off",
+   "test": "chromium-light-desktop :: P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "More actions",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 3,
+   "step": "Esc closes it",
+   "test": "chromium-light-desktop :: P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "More actions",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 7,
+   "step": "Share closed",
+   "test": "chromium-light-desktop :: P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "More actions",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 9,
+   "step": "Move closed",
+   "test": "chromium-light-desktop :: P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "More actions",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 10,
+   "step": "Delete: to Trash at once",
+   "test": "chromium-light-desktop :: P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "Ends the run and moves to Completed",
+      "role": "menuitem"
+     },
+     {
+      "name": "CompleteCtrl DPinRename…Share…Move…Delete",
+      "role": "menu"
+     }
+    ]
+   },
+   "index": 4,
+   "step": "a row’s menu",
+   "test": "chromium-light-desktop :: P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder"
+  },
+  {
+   "fields": {
+    "dialogs": [
+     [
+      {
+       "buttons": [
+        "Cancel",
+        "Move to Trash"
+       ],
+       "role": "dialog",
+       "text": "Move to Trash?Move to Trash?Its public link is paused while the session is in Trash. Restoring the session turns the link back on.CancelMove to Trash",
+       "title": "Move to Trash?"
+      }
+     ],
+     [
+      {
+       "buttons": [
+        "Cancel",
+        "Move to Trash"
+       ],
+       "role": "alertdialog",
+       "text": "Move to Trash?Its public link is paused while the session is in Trash. Restoring the session turns the link back on.CancelMove to Trash",
+       "title": "Move to Trash?"
+      }
+     ]
+    ],
+    "focus": [
+     {
+      "name": "Move to Trash",
+      "role": "button"
+     },
+     {
+      "name": "Cancel",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 8,
+   "step": "Delete asks first",
+   "test": "chromium-light-desktop :: P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "More actions",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 9,
+   "step": "Cancel",
+   "test": "chromium-light-desktop :: P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "OpenCompletedTrashFilter by TagGroup by TagNew Folder…",
+      "role": "menu"
+     }
+    ]
+   },
+   "index": 10,
+   "step": "the scope menu",
+   "test": "chromium-light-desktop :: P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "Switch view, filter and group",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 12,
+   "step": "filtered to Ops",
+   "test": "chromium-light-desktop :: P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "Release1",
+      "role": "button"
+     },
+     {
+      "name": "Rename…Delete Folder…",
+      "role": "menu"
+     }
+    ]
+   },
+   "index": 15,
+   "step": "a folder’s menu",
+   "test": "chromium-light-desktop :: P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder"
+  },
+  {
+   "fields": {
+    "dialogs": [
+     [
+      {
+       "buttons": [
+        "Cancel",
+        "Delete"
+       ],
+       "role": "dialog",
+       "text": "Delete “Release”?Delete “Release”?Its sessions move back to the list. No session is deleted.CancelDelete",
+       "title": "Delete “Release”?"
+      }
+     ],
+     [
+      {
+       "buttons": [
+        "Cancel",
+        "Delete"
+       ],
+       "role": "alertdialog",
+       "text": "Delete “Release”?Its sessions move back to the list. No session is deleted.CancelDelete",
+       "title": "Delete “Release”?"
+      }
+     ]
+    ],
+    "focus": [
+     {
+      "name": "Delete",
+      "role": "button"
+     },
+     {
+      "name": "Cancel",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 16,
+   "step": "Delete Folder… asks first",
+   "test": "chromium-light-desktop :: P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "Move to Open",
+      "role": "menuitem"
+     },
+     {
+      "name": "Move to OpenDelete Permanently…",
+      "role": "menu"
+     }
+    ]
+   },
+   "index": 18,
+   "step": "a trashed row’s menu",
+   "test": "chromium-light-desktop :: P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder"
+  },
+  {
+   "fields": {
+    "dialogs": [
+     [
+      {
+       "buttons": [
+        "Cancel",
+        "Delete permanently"
+       ],
+       "role": "dialog",
+       "text": "Delete permanently?Delete permanently?This session and its full transcript will be permanently deleted. This cannot be undone.CancelDelete permanently",
+       "title": "Delete permanently?"
+      }
+     ],
+     [
+      {
+       "buttons": [
+        "Cancel",
+        "Delete permanently"
+       ],
+       "role": "alertdialog",
+       "text": "Delete permanently?This session and its full transcript will be permanently deleted. This cannot be undone.CancelDelete permanently",
+       "title": "Delete permanently?"
+      }
+     ]
+    ],
+    "focus": [
+     {
+      "name": "Delete permanently",
+      "role": "button"
+     },
+     {
+      "name": "Cancel",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 19,
+   "step": "Delete Permanently… asks first",
+   "test": "chromium-light-desktop :: P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder"
+  },
+  {
+   "fields": {
+    "dialogs": [
+     [
+      {
+       "buttons": [
+        "close",
+        "flipY",
+        "flipX",
+        "rotateLeft",
+        "rotateRight",
+        "zoomOut (disabled)",
+        "zoomIn"
+       ],
+       "role": "dialog",
+       "text": "",
+       "title": ""
+      }
+     ],
+     [
+      {
+       "buttons": [
+        "Close",
+        "Flip vertically",
+        "Flip horizontally",
+        "Rotate left",
+        "Rotate right",
+        "Zoom out (disabled)",
+        "Zoom in"
+       ],
+       "role": "dialog",
+       "text": "",
+       "title": ""
+      }
+     ]
+    ],
+    "focus": [
+     {
+      "name": "close",
+      "role": "button"
+     },
+     {
+      "name": "Close",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 2,
+   "step": "the picture opened",
+   "test": "chromium-light-phone :: P5.3 the session workspace › attachments: pasted, dropped, a picked picture previewed, removed"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "Add attachment",
+      "role": "button"
+     },
+     {
+      "name": "FileImageShellSkillCommand",
+      "role": "menu"
+     }
+    ]
+   },
+   "index": 0,
+   "step": "the + menu",
+   "test": "chromium-light-phone :: P5.3 the session workspace › the + menu, shell mode, and the pickers on the toolbar"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "",
+      "role": "combobox"
+     },
+     {
+      "name": "Default",
+      "role": "option"
+     }
+    ]
+   },
+   "index": 4,
+   "step": "the mode list",
+   "test": "chromium-light-phone :: P5.3 the session workspace › the + menu, shell mode, and the pickers on the toolbar"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "",
+      "role": "combobox"
+     },
+     {
+      "name": "Plan",
+      "role": "combobox"
+     }
+    ]
+   },
+   "index": 5,
+   "step": "Plan picked",
+   "test": "chromium-light-phone :: P5.3 the session workspace › the + menu, shell mode, and the pickers on the toolbar"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "Model Opus 5.5, effort Max",
+      "role": "button"
+     },
+     {
+      "name": "Claude CodeProviderorbitd@ClaudeOpus 5.5Sonnet 5.5Fable 5.1E",
+      "role": "menu"
+     }
+    ]
+   },
+   "index": 6,
+   "step": "the model menu",
+   "test": "chromium-light-phone :: P5.3 the session workspace › the + menu, shell mode, and the pickers on the toolbar"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "Model Opus 5.5, effort High",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 9,
+   "step": "High picked",
+   "test": "chromium-light-phone :: P5.3 the session workspace › the + menu, shell mode, and the pickers on the toolbar"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "Model Sonnet 5.5, effort High",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 10,
+   "step": "Sonnet 5.5 picked",
+   "test": "chromium-light-phone :: P5.3 the session workspace › the + menu, shell mode, and the pickers on the toolbar"
+  },
+  {
+   "fields": {
+    "dialogs": [
+     [],
+     [
+      {
+       "buttons": [],
+       "role": "dialog",
+       "text": "ContextContext window18%182k / 1M tokens",
+       "title": "Context"
+      }
+     ]
+    ],
+    "focus": [
+     "body",
+     {
+      "name": "ContextContext window18%182k / 1M tokens",
+      "role": "dialog"
+     }
+    ],
+    "tips": [
+     [
+      "ContextContext window18%182k / 1M tokens"
+     ],
+     []
+    ]
+   },
+   "index": 11,
+   "step": "the context popover",
+   "test": "chromium-light-phone :: P5.3 the session workspace › the + menu, shell mode, and the pickers on the toolbar"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "More actions",
+      "role": "button"
+     },
+     {
+      "name": "Find in session · Ctrl FTagsDesignOpsCompleteRename…Move…Cop",
+      "role": "menu"
+     }
+    ]
+   },
+   "index": 0,
+   "step": "the header menu",
+   "test": "chromium-light-phone :: P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "Rename…",
+      "role": "menuitem"
+     }
+    ]
+   },
+   "index": 1,
+   "step": "Ops put on, the menu still open",
+   "test": "chromium-light-phone :: P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "Complete",
+      "role": "menuitem"
+     }
+    ]
+   },
+   "index": 2,
+   "step": "Design taken off",
+   "test": "chromium-light-phone :: P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "More actions",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 3,
+   "step": "Esc closes it",
+   "test": "chromium-light-phone :: P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "More actions",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 7,
+   "step": "Share closed",
+   "test": "chromium-light-phone :: P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "More actions",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 9,
+   "step": "Move closed",
+   "test": "chromium-light-phone :: P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "More actions",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 10,
+   "step": "Delete: to Trash at once",
+   "test": "chromium-light-phone :: P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "CompleteCtrl DPinRename…Share…Move…Delete",
+      "role": "menu"
+     }
+    ]
+   },
+   "index": 1,
+   "step": "a held press: the row’s menu",
+   "test": "chromium-light-phone :: P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "OpenCompletedTrashFilter by TagGroup by TagNew Folder…",
+      "role": "menu"
+     }
+    ]
+   },
+   "index": 3,
+   "step": "the scope menu",
+   "test": "chromium-light-phone :: P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "Switch view, filter and group",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 5,
+   "step": "filtered to Ops",
+   "test": "chromium-light-phone :: P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "Rename…Delete Folder…",
+      "role": "menu"
+     }
+    ]
+   },
+   "index": 8,
+   "step": "a folder’s menu",
+   "test": "chromium-light-phone :: P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder"
+  },
+  {
+   "fields": {
+    "dialogs": [
+     [
+      {
+       "buttons": [
+        "Cancel",
+        "Delete"
+       ],
+       "role": "dialog",
+       "text": "Delete “Release”?Delete “Release”?Its sessions move back to the list. No session is deleted.CancelDelete",
+       "title": "Delete “Release”?"
+      }
+     ],
+     [
+      {
+       "buttons": [
+        "Cancel",
+        "Delete"
+       ],
+       "role": "alertdialog",
+       "text": "Delete “Release”?Its sessions move back to the list. No session is deleted.CancelDelete",
+       "title": "Delete “Release”?"
+      }
+     ]
+    ],
+    "focus": [
+     {
+      "name": "Delete",
+      "role": "button"
+     },
+     {
+      "name": "Cancel",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 9,
+   "step": "Delete Folder… asks first",
+   "test": "chromium-light-phone :: P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "Switch view, filter and group",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 10,
+   "step": "the folder deleted",
+   "test": "chromium-light-phone :: P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder"
+  },
+  {
+   "fields": {
+    "dialogs": [
+     [
+      {
+       "buttons": [
+        "close",
+        "flipY",
+        "flipX",
+        "rotateLeft",
+        "rotateRight",
+        "zoomOut (disabled)",
+        "zoomIn"
+       ],
+       "role": "dialog",
+       "text": "",
+       "title": ""
+      }
+     ],
+     [
+      {
+       "buttons": [
+        "Close",
+        "Flip vertically",
+        "Flip horizontally",
+        "Rotate left",
+        "Rotate right",
+        "Zoom out (disabled)",
+        "Zoom in"
+       ],
+       "role": "dialog",
+       "text": "",
+       "title": ""
+      }
+     ]
+    ],
+    "focus": [
+     {
+      "name": "close",
+      "role": "button"
+     },
+     {
+      "name": "Close",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 3,
+   "step": "the picture opened",
+   "test": "webkit-dark-desktop :: P5.3 the session workspace › attachments: pasted, dropped, a picked picture previewed, removed"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "Add attachment",
+      "role": "button"
+     },
+     {
+      "name": "FileImageShellSkillCommand",
+      "role": "menu"
+     }
+    ]
+   },
+   "index": 0,
+   "step": "the + menu",
+   "test": "webkit-dark-desktop :: P5.3 the session workspace › the + menu, shell mode, and the pickers on the toolbar"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "",
+      "role": "combobox"
+     },
+     {
+      "name": "Default",
+      "role": "option"
+     }
+    ]
+   },
+   "index": 4,
+   "step": "the mode list",
+   "test": "webkit-dark-desktop :: P5.3 the session workspace › the + menu, shell mode, and the pickers on the toolbar"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "",
+      "role": "combobox"
+     },
+     {
+      "name": "Plan",
+      "role": "combobox"
+     }
+    ]
+   },
+   "index": 5,
+   "step": "Plan picked",
+   "test": "webkit-dark-desktop :: P5.3 the session workspace › the + menu, shell mode, and the pickers on the toolbar"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "Model Opus 5.5, effort Max",
+      "role": "button"
+     },
+     {
+      "name": "Claude CodeProviderorbitd@ClaudeOpus 5.5Sonnet 5.5Fable 5.1E",
+      "role": "menu"
+     }
+    ]
+   },
+   "index": 6,
+   "step": "the model menu",
+   "test": "webkit-dark-desktop :: P5.3 the session workspace › the + menu, shell mode, and the pickers on the toolbar"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "Model Opus 5.5, effort High",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 9,
+   "step": "High picked",
+   "test": "webkit-dark-desktop :: P5.3 the session workspace › the + menu, shell mode, and the pickers on the toolbar"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "Model Sonnet 5.5, effort High",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 10,
+   "step": "Sonnet 5.5 picked",
+   "test": "webkit-dark-desktop :: P5.3 the session workspace › the + menu, shell mode, and the pickers on the toolbar"
+  },
+  {
+   "fields": {
+    "dialogs": [
+     [],
+     [
+      {
+       "buttons": [],
+       "role": "dialog",
+       "text": "ContextContext window18%182k / 1M tokens",
+       "title": "Context"
+      }
+     ]
+    ],
+    "focus": [
+     "body",
+     {
+      "name": "Model Sonnet 5.5, effort High",
+      "role": "button"
+     }
+    ],
+    "tips": [
+     [
+      "ContextContext window18%182k / 1M tokens"
+     ],
+     []
+    ]
+   },
+   "index": 11,
+   "step": "the context popover",
+   "test": "webkit-dark-desktop :: P5.3 the session workspace › the + menu, shell mode, and the pickers on the toolbar"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "More actions",
+      "role": "button"
+     },
+     {
+      "name": "Find in session · Ctrl FTagsDesignOpsCompleteRename…Move…Cop",
+      "role": "menu"
+     }
+    ]
+   },
+   "index": 0,
+   "step": "the header menu",
+   "test": "webkit-dark-desktop :: P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "More actions",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 3,
+   "step": "Esc closes it",
+   "test": "webkit-dark-desktop :: P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "More actions",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 7,
+   "step": "Share closed",
+   "test": "webkit-dark-desktop :: P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "More actions",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 9,
+   "step": "Move closed",
+   "test": "webkit-dark-desktop :: P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "More actions",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 10,
+   "step": "Delete: to Trash at once",
+   "test": "webkit-dark-desktop :: P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "Ends the run and moves to Completed",
+      "role": "menuitem"
+     },
+     {
+      "name": "CompleteCtrl DPinRename…Share…Move…Delete",
+      "role": "menu"
+     }
+    ]
+   },
+   "index": 4,
+   "step": "a row’s menu",
+   "test": "webkit-dark-desktop :: P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder"
+  },
+  {
+   "fields": {
+    "dialogs": [
+     [
+      {
+       "buttons": [
+        "Cancel",
+        "Move to Trash"
+       ],
+       "role": "dialog",
+       "text": "Move to Trash?Move to Trash?Its public link is paused while the session is in Trash. Restoring the session turns the link back on.CancelMove to Trash",
+       "title": "Move to Trash?"
+      }
+     ],
+     [
+      {
+       "buttons": [
+        "Cancel",
+        "Move to Trash"
+       ],
+       "role": "alertdialog",
+       "text": "Move to Trash?Its public link is paused while the session is in Trash. Restoring the session turns the link back on.CancelMove to Trash",
+       "title": "Move to Trash?"
+      }
+     ]
+    ],
+    "focus": [
+     {
+      "name": "Move to Trash",
+      "role": "button"
+     },
+     {
+      "name": "Cancel",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 8,
+   "step": "Delete asks first",
+   "test": "webkit-dark-desktop :: P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "More actions",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 9,
+   "step": "Cancel",
+   "test": "webkit-dark-desktop :: P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "OpenCompletedTrashFilter by TagGroup by TagNew Folder…",
+      "role": "menu"
+     }
+    ]
+   },
+   "index": 10,
+   "step": "the scope menu",
+   "test": "webkit-dark-desktop :: P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "Switch view, filter and group",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 12,
+   "step": "filtered to Ops",
+   "test": "webkit-dark-desktop :: P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "Release1",
+      "role": "button"
+     },
+     {
+      "name": "Rename…Delete Folder…",
+      "role": "menu"
+     }
+    ]
+   },
+   "index": 15,
+   "step": "a folder’s menu",
+   "test": "webkit-dark-desktop :: P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder"
+  },
+  {
+   "fields": {
+    "dialogs": [
+     [
+      {
+       "buttons": [
+        "Cancel",
+        "Delete"
+       ],
+       "role": "dialog",
+       "text": "Delete “Release”?Delete “Release”?Its sessions move back to the list. No session is deleted.CancelDelete",
+       "title": "Delete “Release”?"
+      }
+     ],
+     [
+      {
+       "buttons": [
+        "Cancel",
+        "Delete"
+       ],
+       "role": "alertdialog",
+       "text": "Delete “Release”?Its sessions move back to the list. No session is deleted.CancelDelete",
+       "title": "Delete “Release”?"
+      }
+     ]
+    ],
+    "focus": [
+     {
+      "name": "Delete",
+      "role": "button"
+     },
+     {
+      "name": "Cancel",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 16,
+   "step": "Delete Folder… asks first",
+   "test": "webkit-dark-desktop :: P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "Move to Open",
+      "role": "menuitem"
+     },
+     {
+      "name": "Move to OpenDelete Permanently…",
+      "role": "menu"
+     }
+    ]
+   },
+   "index": 18,
+   "step": "a trashed row’s menu",
+   "test": "webkit-dark-desktop :: P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder"
+  },
+  {
+   "fields": {
+    "dialogs": [
+     [
+      {
+       "buttons": [
+        "Cancel",
+        "Delete permanently"
+       ],
+       "role": "dialog",
+       "text": "Delete permanently?Delete permanently?This session and its full transcript will be permanently deleted. This cannot be undone.CancelDelete permanently",
+       "title": "Delete permanently?"
+      }
+     ],
+     [
+      {
+       "buttons": [
+        "Cancel",
+        "Delete permanently"
+       ],
+       "role": "alertdialog",
+       "text": "Delete permanently?This session and its full transcript will be permanently deleted. This cannot be undone.CancelDelete permanently",
+       "title": "Delete permanently?"
+      }
+     ]
+    ],
+    "focus": [
+     {
+      "name": "Delete permanently",
+      "role": "button"
+     },
+     {
+      "name": "Cancel",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 19,
+   "step": "Delete Permanently… asks first",
+   "test": "webkit-dark-desktop :: P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder"
+  },
+  {
+   "fields": {
+    "dialogs": [
+     [
+      {
+       "buttons": [
+        "close",
+        "flipY",
+        "flipX",
+        "rotateLeft",
+        "rotateRight",
+        "zoomOut (disabled)",
+        "zoomIn"
+       ],
+       "role": "dialog",
+       "text": "",
+       "title": ""
+      }
+     ],
+     [
+      {
+       "buttons": [
+        "Close",
+        "Flip vertically",
+        "Flip horizontally",
+        "Rotate left",
+        "Rotate right",
+        "Zoom out (disabled)",
+        "Zoom in"
+       ],
+       "role": "dialog",
+       "text": "",
+       "title": ""
+      }
+     ]
+    ],
+    "focus": [
+     {
+      "name": "close",
+      "role": "button"
+     },
+     {
+      "name": "Close",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 2,
+   "step": "the picture opened",
+   "test": "webkit-dark-phone :: P5.3 the session workspace › attachments: pasted, dropped, a picked picture previewed, removed"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "Add attachment",
+      "role": "button"
+     },
+     {
+      "name": "FileImageShellSkillCommand",
+      "role": "menu"
+     }
+    ]
+   },
+   "index": 0,
+   "step": "the + menu",
+   "test": "webkit-dark-phone :: P5.3 the session workspace › the + menu, shell mode, and the pickers on the toolbar"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "",
+      "role": "combobox"
+     },
+     {
+      "name": "Default",
+      "role": "option"
+     }
+    ]
+   },
+   "index": 4,
+   "step": "the mode list",
+   "test": "webkit-dark-phone :: P5.3 the session workspace › the + menu, shell mode, and the pickers on the toolbar"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "",
+      "role": "combobox"
+     },
+     {
+      "name": "Plan",
+      "role": "combobox"
+     }
+    ]
+   },
+   "index": 5,
+   "step": "Plan picked",
+   "test": "webkit-dark-phone :: P5.3 the session workspace › the + menu, shell mode, and the pickers on the toolbar"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "Model Opus 5.5, effort Max",
+      "role": "button"
+     },
+     {
+      "name": "Claude CodeProviderorbitd@ClaudeOpus 5.5Sonnet 5.5Fable 5.1E",
+      "role": "menu"
+     }
+    ]
+   },
+   "index": 6,
+   "step": "the model menu",
+   "test": "webkit-dark-phone :: P5.3 the session workspace › the + menu, shell mode, and the pickers on the toolbar"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "Model Opus 5.5, effort High",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 9,
+   "step": "High picked",
+   "test": "webkit-dark-phone :: P5.3 the session workspace › the + menu, shell mode, and the pickers on the toolbar"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "Model Sonnet 5.5, effort High",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 10,
+   "step": "Sonnet 5.5 picked",
+   "test": "webkit-dark-phone :: P5.3 the session workspace › the + menu, shell mode, and the pickers on the toolbar"
+  },
+  {
+   "fields": {
+    "dialogs": [
+     [],
+     [
+      {
+       "buttons": [],
+       "role": "dialog",
+       "text": "ContextContext window18%182k / 1M tokens",
+       "title": "Context"
+      }
+     ]
+    ],
+    "focus": [
+     "body",
+     {
+      "name": "ContextContext window18%182k / 1M tokens",
+      "role": "dialog"
+     }
+    ],
+    "tips": [
+     [
+      "ContextContext window18%182k / 1M tokens"
+     ],
+     []
+    ]
+   },
+   "index": 11,
+   "step": "the context popover",
+   "test": "webkit-dark-phone :: P5.3 the session workspace › the + menu, shell mode, and the pickers on the toolbar"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "More actions",
+      "role": "button"
+     },
+     {
+      "name": "Find in session · Ctrl FTagsDesignOpsCompleteRename…Move…Cop",
+      "role": "menu"
+     }
+    ]
+   },
+   "index": 0,
+   "step": "the header menu",
+   "test": "webkit-dark-phone :: P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "More actions",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 3,
+   "step": "Esc closes it",
+   "test": "webkit-dark-phone :: P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "More actions",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 7,
+   "step": "Share closed",
+   "test": "webkit-dark-phone :: P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "More actions",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 9,
+   "step": "Move closed",
+   "test": "webkit-dark-phone :: P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "More actions",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 10,
+   "step": "Delete: to Trash at once",
+   "test": "webkit-dark-phone :: P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "OpenCompletedTrashFilter by TagGroup by TagNew Folder…",
+      "role": "menu"
+     }
+    ]
+   },
+   "index": 2,
+   "step": "the scope menu",
+   "test": "webkit-dark-phone :: P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "Switch view, filter and group",
+      "role": "button"
+     }
+    ],
+    "leftOpen": [
+     [
+      "AllDesignOps"
+     ],
+     []
+    ]
+   },
+   "index": 4,
+   "step": "filtered to Ops",
+   "test": "webkit-dark-phone :: P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder"
+  },
+  {
+   "fields": {
+    "leftOpen": [
+     [
+      "AllDesignOps"
+     ],
+     []
+    ]
+   },
+   "index": 5,
+   "step": "New Folder… in place",
+   "test": "webkit-dark-phone :: P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "Rename…Delete Folder…",
+      "role": "menu"
+     }
+    ]
+   },
+   "index": 7,
+   "step": "a folder’s menu",
+   "test": "webkit-dark-phone :: P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder"
+  },
+  {
+   "fields": {
+    "dialogs": [
+     [
+      {
+       "buttons": [
+        "Cancel",
+        "Delete"
+       ],
+       "role": "dialog",
+       "text": "Delete “Release”?Delete “Release”?Its sessions move back to the list. No session is deleted.CancelDelete",
+       "title": "Delete “Release”?"
+      }
+     ],
+     [
+      {
+       "buttons": [
+        "Cancel",
+        "Delete"
+       ],
+       "role": "alertdialog",
+       "text": "Delete “Release”?Its sessions move back to the list. No session is deleted.CancelDelete",
+       "title": "Delete “Release”?"
+      }
+     ]
+    ],
+    "focus": [
+     {
+      "name": "Delete",
+      "role": "button"
+     },
+     {
+      "name": "Cancel",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 8,
+   "step": "Delete Folder… asks first",
+   "test": "webkit-dark-phone :: P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "Switch view, filter and group",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 9,
+   "step": "the folder deleted",
+   "test": "webkit-dark-phone :: P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder"
+  },
+  {
+   "fields": {
+    "dialogs": [
+     [
+      {
+       "buttons": [
+        "close",
+        "flipY",
+        "flipX",
+        "rotateLeft",
+        "rotateRight",
+        "zoomOut (disabled)",
+        "zoomIn"
+       ],
+       "role": "dialog",
+       "text": "",
+       "title": ""
+      }
+     ],
+     [
+      {
+       "buttons": [
+        "Close",
+        "Flip vertically",
+        "Flip horizontally",
+        "Rotate left",
+        "Rotate right",
+        "Zoom out (disabled)",
+        "Zoom in"
+       ],
+       "role": "dialog",
+       "text": "",
+       "title": ""
+      }
+     ]
+    ],
+    "focus": [
+     {
+      "name": "close",
+      "role": "button"
+     },
+     {
+      "name": "Close",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 3,
+   "step": "the picture opened",
+   "test": "webkit-light-desktop :: P5.3 the session workspace › attachments: pasted, dropped, a picked picture previewed, removed"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "Add attachment",
+      "role": "button"
+     },
+     {
+      "name": "FileImageShellSkillCommand",
+      "role": "menu"
+     }
+    ]
+   },
+   "index": 0,
+   "step": "the + menu",
+   "test": "webkit-light-desktop :: P5.3 the session workspace › the + menu, shell mode, and the pickers on the toolbar"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "",
+      "role": "combobox"
+     },
+     {
+      "name": "Default",
+      "role": "option"
+     }
+    ]
+   },
+   "index": 4,
+   "step": "the mode list",
+   "test": "webkit-light-desktop :: P5.3 the session workspace › the + menu, shell mode, and the pickers on the toolbar"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "",
+      "role": "combobox"
+     },
+     {
+      "name": "Plan",
+      "role": "combobox"
+     }
+    ]
+   },
+   "index": 5,
+   "step": "Plan picked",
+   "test": "webkit-light-desktop :: P5.3 the session workspace › the + menu, shell mode, and the pickers on the toolbar"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "Model Opus 5.5, effort Max",
+      "role": "button"
+     },
+     {
+      "name": "Claude CodeProviderorbitd@ClaudeOpus 5.5Sonnet 5.5Fable 5.1E",
+      "role": "menu"
+     }
+    ]
+   },
+   "index": 6,
+   "step": "the model menu",
+   "test": "webkit-light-desktop :: P5.3 the session workspace › the + menu, shell mode, and the pickers on the toolbar"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "Model Opus 5.5, effort High",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 9,
+   "step": "High picked",
+   "test": "webkit-light-desktop :: P5.3 the session workspace › the + menu, shell mode, and the pickers on the toolbar"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "Model Sonnet 5.5, effort High",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 10,
+   "step": "Sonnet 5.5 picked",
+   "test": "webkit-light-desktop :: P5.3 the session workspace › the + menu, shell mode, and the pickers on the toolbar"
+  },
+  {
+   "fields": {
+    "dialogs": [
+     [],
+     [
+      {
+       "buttons": [],
+       "role": "dialog",
+       "text": "ContextContext window18%182k / 1M tokens",
+       "title": "Context"
+      }
+     ]
+    ],
+    "focus": [
+     "body",
+     {
+      "name": "Model Sonnet 5.5, effort High",
+      "role": "button"
+     }
+    ],
+    "tips": [
+     [
+      "ContextContext window18%182k / 1M tokens"
+     ],
+     []
+    ]
+   },
+   "index": 11,
+   "step": "the context popover",
+   "test": "webkit-light-desktop :: P5.3 the session workspace › the + menu, shell mode, and the pickers on the toolbar"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "More actions",
+      "role": "button"
+     },
+     {
+      "name": "Find in session · Ctrl FTagsDesignOpsCompleteRename…Move…Cop",
+      "role": "menu"
+     }
+    ]
+   },
+   "index": 0,
+   "step": "the header menu",
+   "test": "webkit-light-desktop :: P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "More actions",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 3,
+   "step": "Esc closes it",
+   "test": "webkit-light-desktop :: P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "More actions",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 7,
+   "step": "Share closed",
+   "test": "webkit-light-desktop :: P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "More actions",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 9,
+   "step": "Move closed",
+   "test": "webkit-light-desktop :: P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "More actions",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 10,
+   "step": "Delete: to Trash at once",
+   "test": "webkit-light-desktop :: P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "Ends the run and moves to Completed",
+      "role": "menuitem"
+     },
+     {
+      "name": "CompleteCtrl DPinRename…Share…Move…Delete",
+      "role": "menu"
+     }
+    ]
+   },
+   "index": 4,
+   "step": "a row’s menu",
+   "test": "webkit-light-desktop :: P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder"
+  },
+  {
+   "fields": {
+    "dialogs": [
+     [
+      {
+       "buttons": [
+        "Cancel",
+        "Move to Trash"
+       ],
+       "role": "dialog",
+       "text": "Move to Trash?Move to Trash?Its public link is paused while the session is in Trash. Restoring the session turns the link back on.CancelMove to Trash",
+       "title": "Move to Trash?"
+      }
+     ],
+     [
+      {
+       "buttons": [
+        "Cancel",
+        "Move to Trash"
+       ],
+       "role": "alertdialog",
+       "text": "Move to Trash?Its public link is paused while the session is in Trash. Restoring the session turns the link back on.CancelMove to Trash",
+       "title": "Move to Trash?"
+      }
+     ]
+    ],
+    "focus": [
+     {
+      "name": "Move to Trash",
+      "role": "button"
+     },
+     {
+      "name": "Cancel",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 8,
+   "step": "Delete asks first",
+   "test": "webkit-light-desktop :: P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "More actions",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 9,
+   "step": "Cancel",
+   "test": "webkit-light-desktop :: P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "OpenCompletedTrashFilter by TagGroup by TagNew Folder…",
+      "role": "menu"
+     }
+    ]
+   },
+   "index": 10,
+   "step": "the scope menu",
+   "test": "webkit-light-desktop :: P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "Switch view, filter and group",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 12,
+   "step": "filtered to Ops",
+   "test": "webkit-light-desktop :: P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "Release1",
+      "role": "button"
+     },
+     {
+      "name": "Rename…Delete Folder…",
+      "role": "menu"
+     }
+    ]
+   },
+   "index": 15,
+   "step": "a folder’s menu",
+   "test": "webkit-light-desktop :: P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder"
+  },
+  {
+   "fields": {
+    "dialogs": [
+     [
+      {
+       "buttons": [
+        "Cancel",
+        "Delete"
+       ],
+       "role": "dialog",
+       "text": "Delete “Release”?Delete “Release”?Its sessions move back to the list. No session is deleted.CancelDelete",
+       "title": "Delete “Release”?"
+      }
+     ],
+     [
+      {
+       "buttons": [
+        "Cancel",
+        "Delete"
+       ],
+       "role": "alertdialog",
+       "text": "Delete “Release”?Its sessions move back to the list. No session is deleted.CancelDelete",
+       "title": "Delete “Release”?"
+      }
+     ]
+    ],
+    "focus": [
+     {
+      "name": "Delete",
+      "role": "button"
+     },
+     {
+      "name": "Cancel",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 16,
+   "step": "Delete Folder… asks first",
+   "test": "webkit-light-desktop :: P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "Move to Open",
+      "role": "menuitem"
+     },
+     {
+      "name": "Move to OpenDelete Permanently…",
+      "role": "menu"
+     }
+    ]
+   },
+   "index": 18,
+   "step": "a trashed row’s menu",
+   "test": "webkit-light-desktop :: P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder"
+  },
+  {
+   "fields": {
+    "dialogs": [
+     [
+      {
+       "buttons": [
+        "Cancel",
+        "Delete permanently"
+       ],
+       "role": "dialog",
+       "text": "Delete permanently?Delete permanently?This session and its full transcript will be permanently deleted. This cannot be undone.CancelDelete permanently",
+       "title": "Delete permanently?"
+      }
+     ],
+     [
+      {
+       "buttons": [
+        "Cancel",
+        "Delete permanently"
+       ],
+       "role": "alertdialog",
+       "text": "Delete permanently?This session and its full transcript will be permanently deleted. This cannot be undone.CancelDelete permanently",
+       "title": "Delete permanently?"
+      }
+     ]
+    ],
+    "focus": [
+     {
+      "name": "Delete permanently",
+      "role": "button"
+     },
+     {
+      "name": "Cancel",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 19,
+   "step": "Delete Permanently… asks first",
+   "test": "webkit-light-desktop :: P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder"
+  },
+  {
+   "fields": {
+    "dialogs": [
+     [
+      {
+       "buttons": [
+        "close",
+        "flipY",
+        "flipX",
+        "rotateLeft",
+        "rotateRight",
+        "zoomOut (disabled)",
+        "zoomIn"
+       ],
+       "role": "dialog",
+       "text": "",
+       "title": ""
+      }
+     ],
+     [
+      {
+       "buttons": [
+        "Close",
+        "Flip vertically",
+        "Flip horizontally",
+        "Rotate left",
+        "Rotate right",
+        "Zoom out (disabled)",
+        "Zoom in"
+       ],
+       "role": "dialog",
+       "text": "",
+       "title": ""
+      }
+     ]
+    ],
+    "focus": [
+     {
+      "name": "close",
+      "role": "button"
+     },
+     {
+      "name": "Close",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 2,
+   "step": "the picture opened",
+   "test": "webkit-light-phone :: P5.3 the session workspace › attachments: pasted, dropped, a picked picture previewed, removed"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "Add attachment",
+      "role": "button"
+     },
+     {
+      "name": "FileImageShellSkillCommand",
+      "role": "menu"
+     }
+    ]
+   },
+   "index": 0,
+   "step": "the + menu",
+   "test": "webkit-light-phone :: P5.3 the session workspace › the + menu, shell mode, and the pickers on the toolbar"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "",
+      "role": "combobox"
+     },
+     {
+      "name": "Default",
+      "role": "option"
+     }
+    ]
+   },
+   "index": 4,
+   "step": "the mode list",
+   "test": "webkit-light-phone :: P5.3 the session workspace › the + menu, shell mode, and the pickers on the toolbar"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "",
+      "role": "combobox"
+     },
+     {
+      "name": "Plan",
+      "role": "combobox"
+     }
+    ]
+   },
+   "index": 5,
+   "step": "Plan picked",
+   "test": "webkit-light-phone :: P5.3 the session workspace › the + menu, shell mode, and the pickers on the toolbar"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "Model Opus 5.5, effort Max",
+      "role": "button"
+     },
+     {
+      "name": "Claude CodeProviderorbitd@ClaudeOpus 5.5Sonnet 5.5Fable 5.1E",
+      "role": "menu"
+     }
+    ]
+   },
+   "index": 6,
+   "step": "the model menu",
+   "test": "webkit-light-phone :: P5.3 the session workspace › the + menu, shell mode, and the pickers on the toolbar"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "Model Opus 5.5, effort High",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 9,
+   "step": "High picked",
+   "test": "webkit-light-phone :: P5.3 the session workspace › the + menu, shell mode, and the pickers on the toolbar"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "Model Sonnet 5.5, effort High",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 10,
+   "step": "Sonnet 5.5 picked",
+   "test": "webkit-light-phone :: P5.3 the session workspace › the + menu, shell mode, and the pickers on the toolbar"
+  },
+  {
+   "fields": {
+    "dialogs": [
+     [],
+     [
+      {
+       "buttons": [],
+       "role": "dialog",
+       "text": "ContextContext window18%182k / 1M tokens",
+       "title": "Context"
+      }
+     ]
+    ],
+    "focus": [
+     "body",
+     {
+      "name": "ContextContext window18%182k / 1M tokens",
+      "role": "dialog"
+     }
+    ],
+    "tips": [
+     [
+      "ContextContext window18%182k / 1M tokens"
+     ],
+     []
+    ]
+   },
+   "index": 11,
+   "step": "the context popover",
+   "test": "webkit-light-phone :: P5.3 the session workspace › the + menu, shell mode, and the pickers on the toolbar"
+  },
+  {
+   "fields": {
+    "focus": [
+     {
+      "name": "More actions",
+      "role": "button"
+     },
+     {
+      "name": "Find in session · Ctrl FTagsDesignOpsCompleteRename…Move…Cop",
+      "role": "menu"
+     }
+    ]
+   },
+   "index": 0,
+   "step": "the header menu",
+   "test": "webkit-light-phone :: P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "More actions",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 3,
+   "step": "Esc closes it",
+   "test": "webkit-light-phone :: P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "More actions",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 7,
+   "step": "Share closed",
+   "test": "webkit-light-phone :: P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "More actions",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 9,
+   "step": "Move closed",
+   "test": "webkit-light-phone :: P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "More actions",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 10,
+   "step": "Delete: to Trash at once",
+   "test": "webkit-light-phone :: P5.3 the session workspace › the conversation header: its menu and tags, Find, Rename…, Share, Move, Delete"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "OpenCompletedTrashFilter by TagGroup by TagNew Folder…",
+      "role": "menu"
+     }
+    ]
+   },
+   "index": 2,
+   "step": "the scope menu",
+   "test": "webkit-light-phone :: P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "Switch view, filter and group",
+      "role": "button"
+     }
+    ],
+    "leftOpen": [
+     [
+      "AllDesignOps"
+     ],
+     []
+    ]
+   },
+   "index": 4,
+   "step": "filtered to Ops",
+   "test": "webkit-light-phone :: P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder"
+  },
+  {
+   "fields": {
+    "leftOpen": [
+     [
+      "AllDesignOps"
+     ],
+     []
+    ]
+   },
+   "index": 5,
+   "step": "New Folder… in place",
+   "test": "webkit-light-phone :: P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "Rename…Delete Folder…",
+      "role": "menu"
+     }
+    ]
+   },
+   "index": 7,
+   "step": "a folder’s menu",
+   "test": "webkit-light-phone :: P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder"
+  },
+  {
+   "fields": {
+    "dialogs": [
+     [
+      {
+       "buttons": [
+        "Cancel",
+        "Delete"
+       ],
+       "role": "dialog",
+       "text": "Delete “Release”?Delete “Release”?Its sessions move back to the list. No session is deleted.CancelDelete",
+       "title": "Delete “Release”?"
+      }
+     ],
+     [
+      {
+       "buttons": [
+        "Cancel",
+        "Delete"
+       ],
+       "role": "alertdialog",
+       "text": "Delete “Release”?Its sessions move back to the list. No session is deleted.CancelDelete",
+       "title": "Delete “Release”?"
+      }
+     ]
+    ],
+    "focus": [
+     {
+      "name": "Delete",
+      "role": "button"
+     },
+     {
+      "name": "Cancel",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 8,
+   "step": "Delete Folder… asks first",
+   "test": "webkit-light-phone :: P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder"
+  },
+  {
+   "fields": {
+    "focus": [
+     "body",
+     {
+      "name": "Switch view, filter and group",
+      "role": "button"
+     }
+    ]
+   },
+   "index": 9,
+   "step": "the folder deleted",
+   "test": "webkit-light-phone :: P5.3 the session workspace › the session list: a row’s menu, a held press, the scope menu, a folder"
+  }
+ ],
+ "steps": 594,
+ "tests": 56
+}

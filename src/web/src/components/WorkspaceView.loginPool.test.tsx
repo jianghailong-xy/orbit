@@ -2,7 +2,6 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { App as AntApp } from 'antd';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Runner } from './TasksSidePanel';
@@ -40,9 +39,8 @@ const apiMock = vi.mocked(api);
 const { WorkspaceView } = await import('./WorkspaceView');
 const { encodeId } = await import('../lib/idCodec');
 // The two pure reads the composer makes: the account the session detail names (as its member), and
-// the words the pill's tooltip says about it. The tooltip itself opens only on a real hover, which
-// jsdom's synthetic events never reach antd with — so the copy is asserted here, on the same values
-// the mounted composer reads.
+// the words the pill's tooltip says about it. The tooltip itself opens on a hover, which this mount
+// never makes — so the copy is asserted here, on the same values the mounted composer reads.
 const { poolAccountHelp } = await import('../lib/providerPools');
 const { poolSessionLoginMember } = await import('../lib/codexLogin');
 
@@ -189,11 +187,9 @@ describe('the composer account pill on a login-pool session', { timeout: 60_000 
       nextRoot.render(
         <QueryClientProvider client={nextClient}>
           <MemoryRouter initialEntries={[`/sessions/${SESSION}`]}>
-            <AntApp>
-              <Routes>
-                <Route path="/sessions/:id" element={<WorkspaceView runner={RUNNER} />} />
-              </Routes>
-            </AntApp>
+            <Routes>
+              <Route path="/sessions/:id" element={<WorkspaceView runner={RUNNER} />} />
+            </Routes>
           </MemoryRouter>
         </QueryClientProvider>,
       );

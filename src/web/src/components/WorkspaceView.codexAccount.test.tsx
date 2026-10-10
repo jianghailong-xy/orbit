@@ -2,7 +2,6 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { App as AntApp } from 'antd';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Runner } from './TasksSidePanel';
@@ -148,11 +147,9 @@ describe('the runner account a session runs on', { timeout: 60_000 }, () => {
       nextRoot.render(
         <QueryClientProvider client={nextClient}>
           <MemoryRouter initialEntries={[entry]}>
-            <AntApp>
-              <Routes>
-                <Route path="*" element={<WorkspaceView runner={runner} />} />
-              </Routes>
-            </AntApp>
+            <Routes>
+              <Route path="*" element={<WorkspaceView runner={runner} />} />
+            </Routes>
           </MemoryRouter>
         </QueryClientProvider>,
       );
@@ -179,7 +176,7 @@ describe('the runner account a session runs on', { timeout: 60_000 }, () => {
   /** Which Codex account the quota gauge's popover names (portaled out of the mount), and the note
    *  under it: opened by a press, as on a phone. */
   const gaugeAccount = async () => {
-    if (!document.querySelector('.ant-popover:not(.ant-popover-hidden) .cu-pop')) await click(usage());
+    if (!document.querySelector('.orbit-popover:not([data-closed]) .cu-pop')) await click(usage());
     return {
       name: document.querySelector('.cu-account-name')?.textContent ?? null,
       note: document.querySelector('.cu-account .cu-reset')?.textContent ?? null,
@@ -493,16 +490,18 @@ describe('the runner account a session runs on', { timeout: 60_000 }, () => {
     });
   };
   const providerMenuRows = async () => {
-    await click(mounted().querySelector('button.composer-model-chip'));
-    await render(() => document.querySelector('.ant-dropdown-menu'));
-    const provider = [...document.querySelectorAll<HTMLElement>('.ant-dropdown-menu-submenu-title')].find((el) =>
+    // A press on the chip of a menu already open closes it: the menu is opened once.
+    if (!document.querySelector('[role="menu"]:not([data-closed])')) await click(mounted().querySelector('button.composer-model-chip'));
+    await render(() => document.querySelector('[role="menu"]:not([data-closed])'));
+    // A row that opens a level down.
+    const provider = [...document.querySelectorAll<HTMLElement>('[role="menuitem"][aria-haspopup="menu"]')].find((el) =>
       el.textContent?.startsWith('Provider'),
     );
     if (!provider) return null;
     await click(provider);
     // Its items too: the submenu opens on a later frame than the title does.
-    await render(() => document.querySelector('.ant-dropdown-menu-submenu-popup .ant-dropdown-menu-item'));
-    return [...document.querySelectorAll<HTMLElement>('.ant-dropdown-menu-submenu-popup .ant-dropdown-menu-item')];
+    await render(() => document.querySelector('[role="menu"][data-nested] [role="menuitem"]'));
+    return [...document.querySelectorAll<HTMLElement>('[role="menu"][data-nested] [role="menuitem"]')];
   };
   /** A row's words, without the vendor mark drawn before a key's or a pool's name. */
   const rowName = (row: HTMLElement): string => {
@@ -514,7 +513,7 @@ describe('the runner account a session runs on', { timeout: 60_000 }, () => {
   const rowText = (row: HTMLElement) => `${rowName(row)}${row.querySelector('.scope-menu-check svg') ? ' ✓' : ''}`;
   /** The Provider submenu's headings: where its credentials come from. */
   const providerGroups = () =>
-    [...document.querySelectorAll('.ant-dropdown-menu-submenu-popup .ant-dropdown-menu-item-group-title')].map((el) => el.textContent);
+    [...document.querySelectorAll('[role="menu"][data-nested] .orbit-menu-group-label')].map((el) => el.textContent);
 
   it('a live Codex session moves to another account from the Provider menu, and back onto Automatic', async () => {
     runner = { ...RUNNER, capabilities: ['codex-account-move/v1'] } as unknown as Runner;

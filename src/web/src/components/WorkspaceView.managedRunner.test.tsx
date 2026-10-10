@@ -4,7 +4,6 @@ import { resolve } from 'node:path';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { App as AntApp } from 'antd';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import type { ManagedRunnerStatus } from '@orbit/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -226,14 +225,12 @@ async function open(workspaceId: string, entry = `/workspaces/${workspaceId}/new
     root!.render(
       <QueryClientProvider client={client!}>
         <MemoryRouter initialEntries={[entry]}>
-          <AntApp>
-            <Routes>
-              <Route element={<WorkspaceConsole />}>
-                <Route path="workspaces/:id/*" />
-                <Route path="sessions/:id" />
-              </Route>
-            </Routes>
-          </AntApp>
+          <Routes>
+            <Route element={<WorkspaceConsole />}>
+              <Route path="workspaces/:id/*" />
+              <Route path="sessions/:id" />
+            </Route>
+          </Routes>
         </MemoryRouter>
       </QueryClientProvider>,
     );

@@ -3118,10 +3118,6 @@ button.toast--pill:focus-visible {
   line-height: 16px;
   color: var(--text-3);
 }
-.session-col .ant-segmented {
-  flex: none;
-  margin: 0 0 8px;
-}
 .session-col-list {
   flex: 1;
   min-height: 0;
@@ -3335,6 +3331,11 @@ html[data-theme='dark'] .session-tag-chip {
   color: var(--text-2);
   font-size: 12px;
   line-height: 1;
+}
+/* The conversation header's tags: a picked one under the pointer takes the deeper tint the replaced
+   menu gave a selected row's hover. */
+.workspace-header-menu .orbit-menu-item[data-selected][data-highlighted] {
+  background: var(--orbit-option-selected-bg);
 }
 .session-row.active {
   background: var(--brand-tint);
@@ -5375,7 +5376,9 @@ html[data-theme='dark'] .session-tag-chip {
   outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
-.session-row-menu {
+/* A held press's menu hangs from a point, not a control, so it has no width to match: the replaced dropdown kept this
+   floor for it, while a kebab's menu matched the 32px kebab and so its own items. */
+.orbit-menu.session-press-menu {
   min-width: 240px;
 }
 .session-row-menu .session-menu-label {
@@ -6102,7 +6105,10 @@ html[data-theme='dark'] .session-tag-chip {
     0 10px 30px rgba(31, 35, 41, 0.04);
   transition: border-color 0.15s, box-shadow 0.15s;
 }
-.composer-box:focus-within {
+.composer-box:focus-within,
+/* Its `+`, its model control or one of its pickers open: focus is in that control's popup, still the
+   box's own, so the box keeps the rim it had when the control was pressed. */
+.composer-box:has(.composer-attach-btn[data-popup-open], .composer-model-chip[data-popup-open], .orbit-select[data-open]) {
   border-color: color-mix(in srgb, var(--text-1) 28%, var(--border));
   box-shadow:
     0 3px 14px rgba(31, 35, 41, 0.08),
@@ -6113,7 +6119,8 @@ html[data-theme='dark'] .session-tag-chip {
    of the draft, so clicking away and back must not make it look like an ordinary message
    again. Listed after :focus-within (equal specificity) so it wins over the focused rim. */
 .composer-box-shell,
-.composer-box-shell:focus-within {
+.composer-box-shell:focus-within,
+.composer-box-shell:has(.composer-model-chip[data-popup-open], .orbit-select[data-open]) {
   border-color: var(--error);
 }
 /* Drop-to-upload hint: covers the whole session pane while files are dragged over it. Sits
@@ -6177,35 +6184,38 @@ html[data-theme='dark'] .session-tag-chip {
 }
 /* The `+` and Send are the toolbar's two ends: 32px circles, placed by the toolbar's side padding
    so the `+`'s left arm starts on the text's line (see `.composer-toolbar`). */
-.composer-box .composer-attach-btn.ant-btn,
-.composer-box .composer-send.ant-btn {
+.composer-box .composer-attach-btn.orbit-button,
+.composer-box .composer-send.orbit-button {
   flex: none;
   width: 32px;
   min-width: 32px;
   height: 32px;
   border-radius: 50%;
 }
-.composer-box .composer-attach-btn.ant-btn {
+/* The line grows with the 16px, as the replaced button's unitless line height did: it is where the shell prompt's
+   `❯` sits. */
+.composer-box .composer-attach-btn.orbit-button {
   color: var(--text-1);
   font-size: 16px;
+  line-height: 1.5714285714;
 }
-/* A Send with nothing to send is a quiet grey disc, not antd's outlined ghost: the circle keeps
+/* A Send with nothing to send is a quiet grey disc, not an outlined ghost: the circle keeps
    its place and shape, and only the colour says it is waiting for text. */
-.composer-box .composer-send.ant-btn:disabled {
+.composer-box .composer-send.orbit-button:disabled {
   border-color: transparent;
   background: var(--border);
   color: var(--bg-raised);
 }
 /* The `+` becomes a shell prompt while the draft is a `!cmd` — same 32px slot, so the
    composer doesn't reflow on the mode switch. Clicking it leaves shell mode (see exitShell);
-   antd tints a text button's label on hover, so the colour is pinned through :hover too. */
-.composer-box .composer-shell-btn.ant-btn,
-.composer-box .composer-shell-btn.ant-btn:hover {
+   a text button tints its label on hover, so the colour is pinned through :hover too. */
+.composer-box .composer-shell-btn.orbit-button,
+.composer-box .composer-shell-btn.orbit-button:hover {
   color: var(--error);
   font-family: var(--font-mono, ui-monospace, monospace);
   font-weight: 700;
 }
-.composer-box .composer-shell-btn.ant-btn:hover {
+.composer-box .composer-shell-btn.orbit-button:hover {
   background: var(--error-bg);
 }
 /* ── Composer chips ───────────────────────────────────────────────────────────────────────
@@ -6219,7 +6229,6 @@ html[data-theme='dark'] .session-tag-chip {
   min-width: 0;
 }
 .composer-field .composer-mirror,
-.composer-field textarea.ant-input,
 .composer-field textarea.orbit-textarea {
   font: inherit;
   font-size: 15px;
@@ -6242,7 +6251,6 @@ html[data-theme='dark'] .session-tag-chip {
   color: var(--text-1);
 }
 /* The input keeps the caret and the selection; the mirror behind it supplies the glyphs. */
-.composer-field textarea.ant-input,
 .composer-field textarea.orbit-textarea {
   position: relative;
   background: transparent;
@@ -6251,22 +6259,19 @@ html[data-theme='dark'] .session-tag-chip {
   caret-color: var(--text-1);
 }
 /* The glyphs above are transparent so the mirror can draw them — and a placeholder inherits that
-   too, with no mirror behind it to draw it instead. Give it back its own colour (antd's placeholder
-   grey, which it carries as `color`), or an empty composer is a blank card with no prompt in it. */
-.composer-field textarea.ant-input::placeholder,
+   too, with no mirror behind it to draw it instead. Give it back its own colour (the field's
+   placeholder grey, which it carries as `color`), or an empty composer is a blank card with no prompt
+   in it. */
 .composer-field textarea.orbit-textarea::placeholder {
   -webkit-text-fill-color: currentColor;
 }
-.composer-field textarea.ant-input::selection,
 .composer-field textarea.orbit-textarea::selection {
   background: rgba(22, 119, 255, 0.25);
   -webkit-text-fill-color: var(--text-1);
 }
-/* antd 6 gives `variant="borderless"` inputs their own brand-coloured `:focus-visible` outline
-   (antd 5 set `outline: none` there). Inside the composer that paints a second blue ring around
-   the textarea, nested inside the box's own `:focus-within` border — one focus affordance, drawn
-   twice. The box border stays; this one goes. */
-.composer-field textarea.ant-input:focus-visible,
+/* A borderless textarea has its own brand-coloured `:focus-visible` outline. Inside the composer
+   that paints a second blue ring around the textarea, nested inside the box's own `:focus-within`
+   border — one focus affordance, drawn twice. The box border stays; this one goes. */
 .composer-field textarea.orbit-textarea:focus-visible {
   outline: none;
 }
@@ -6395,7 +6400,6 @@ html[data-theme='dark'] .session-tag-chip {
 .composer-box-shell .composer-mirror {
   display: none;
 }
-.composer-box-shell .composer-field textarea.ant-input,
 .composer-box-shell .composer-field textarea.orbit-textarea {
   -webkit-text-fill-color: var(--error);
 }
@@ -6403,17 +6407,14 @@ html[data-theme='dark'] .session-tag-chip {
 /* `resize: none` because the composer has its own top drag handle (native corner grip would
    fight autoSize). Padding is NOT set here: it lives in the shared `.composer-field` block, where
    the mirror behind the textarea takes the same value. */
-.composer-box textarea.ant-input,
 .composer-box textarea.orbit-textarea {
   resize: none;
 }
 /* `!cmd` shell mode: the draft runs raw on the runner instead of going to the agent, so the
    composer takes on the same red mono treatment as the queued bubble it becomes (and as the
-   CLI's own `!` input) — the mode is visible while typing, not only after sending. Both
-   selectors because antd may hand `className` to the textarea itself or to a wrapper; the
-   `.composer-box` prefix keeps this above antd's own `.ant-input` colour. */
-.composer-box textarea.composer-shell,
-.composer-box .composer-shell textarea {
+   CLI's own `!` input) — the mode is visible while typing, not only after sending. The
+   `.composer-box` prefix keeps this above the textarea's own colour. */
+.composer-box textarea.composer-shell {
   color: var(--error);
   caret-color: var(--error);
   font-family: var(--font-mono, ui-monospace, monospace);
@@ -6510,15 +6511,21 @@ html[data-theme='dark'] .session-tag-chip {
   min-width: 0;
   padding: 4px 13.43px 7px;
 }
-/* One quiet text size for the toolbar's words. AntD's borderless Selects otherwise render
-   their value at 14px / colorText — a size and a shade heavier than the model's effort and the
+/* One quiet text size for the toolbar's words. The borderless Selects otherwise render their
+   value at 14px in the text colour — a size and a shade heavier than the model's effort and the
    usage percents beside them — so pull the selected value down to match. The disabled
-   (non-editable) shade is left to AntD so a read-only control still reads as read-only. */
-.composer-toolbar .ant-select-content-has-value,
-.composer-toolbar .ant-select-placeholder {
+   (non-editable) shade is left to the Select so a read-only control still reads as read-only. */
+.composer-toolbar .orbit-select .orbit-choice-value {
   font-size: 13px;
+  /* As the replaced select drew its value at this size: the line its own text makes, and 6px after it. */
+  line-height: 1.5714285714285714;
+  margin-right: 6px;
 }
-.composer-toolbar .ant-select:not(.ant-select-disabled) .ant-select-content-has-value {
+/* So the picker is as tall as that line and its border, not the small select's fixed 24px. */
+.composer-toolbar .orbit-select[data-size='small'] {
+  height: auto;
+}
+.composer-toolbar .orbit-select:not([data-disabled], [data-empty]) .orbit-choice-value {
   color: var(--text-2);
 }
 /* The model control: "Opus 5.5 Max" — the model in the text colour, the effort after it in the
@@ -6543,7 +6550,7 @@ html[data-theme='dark'] .session-tag-chip {
   white-space: nowrap;
   cursor: pointer;
 }
-.composer-model-chip.ant-dropdown-open {
+.composer-model-chip[data-popup-open] {
   background: var(--bg-hover);
 }
 .composer-model-chip:focus-visible {
@@ -6568,22 +6575,34 @@ html[data-theme='dark'] .session-tag-chip {
 .composer-model-chip:disabled .composer-model-effort {
   color: var(--text-3);
 }
-.composer-model-menu.ant-dropdown-menu {
-  min-width: 200px;
+.orbit-menu.composer-model-menu {
+  min-width: max(200px, var(--orbit-menu-anchor-width, var(--anchor-width)));
 }
-/* The menu's own title: the engine this session runs on. A display, not a control — no chevron,
-   no pointer, no hover fill — and the rule under it keeps the one fact nothing here can change
-   apart from the rows that pick. `→` shows only while a standing pick will carry the next turn to
-   another engine. */
-.ant-dropdown-menu-item.composer-engine-title,
-.ant-dropdown-menu-item.composer-engine-title:hover {
-  cursor: default;
-  background: transparent;
+/* The rows that open a level down — Provider, Effort and Speed here, Filter by Tag in the session list's
+   scope menu — as the replaced submenu titles drew them (the account menu's Appearance row has the same
+   rule): the row ends 24px in, and its arrow — 12px, in the icon colour — sits 8px from the row's end,
+   out of the flow, centred as the replaced arrow's line box put it. */
+.composer-model-menu .orbit-menu-item[aria-haspopup],
+.session-scope-popup .orbit-menu-item[aria-haspopup] {
+  position: relative;
+  padding-right: 24px;
+}
+.composer-model-menu .orbit-menu-submenu-icon,
+.session-scope-popup .orbit-menu-submenu-icon {
+  position: absolute;
+  top: calc(50% - 5.5px);
+  right: 8px;
+  margin: 0;
+  color: var(--text-3);
+  font-size: 12px;
+}
+/* The menu's own title: the engine this session runs on. It picks nothing — no chevron — and the
+   rule under it keeps the one fact nothing here can change apart from the rows that pick. `→` shows
+   only while a standing pick will carry the next turn to another engine. The row is otherwise drawn
+   as the menu's rows are (padding, corner, pointer, hover fill), as the replaced menu drew it: that
+   menu's own item rules outranked the padding, margin, corner, cursor and hover this rule once set. */
+.orbit-menu-item.composer-engine-title {
   border-bottom: 1px solid var(--border-subtle);
-  border-radius: 0;
-  margin-bottom: 4px;
-  padding-top: 3px;
-  padding-bottom: 9px;
 }
 .composer-engine-title-row {
   display: flex;
@@ -6615,7 +6634,7 @@ html[data-theme='dark'] .session-tag-chip {
 .composer-model-chip.is-smart {
   background: var(--brand-tint);
 }
-.composer-model-chip.is-smart.ant-dropdown-open {
+.composer-model-chip.is-smart[data-popup-open] {
   background: var(--brand-tint-hover);
 }
 .composer-model-chip.is-smart .composer-model-name {
@@ -6721,8 +6740,8 @@ html[data-theme='dark'] .session-tag-chip {
    would otherwise override these. */
 @media (max-width: 600px) {
   /* Bigger round ends for a thumb: 36px circles instead of the pointer's 32. */
-  .composer-box .composer-attach-btn.ant-btn,
-  .composer-box .composer-send.ant-btn {
+  .composer-box .composer-attach-btn.orbit-button,
+  .composer-box .composer-send.orbit-button {
     width: 36px;
     min-width: 36px;
     height: 36px;
@@ -6750,7 +6769,7 @@ html[data-theme='dark'] .session-tag-chip {
      never do. */
   .composer-toolbar > .composer-pill,
   .composer-toolbar > .composer-usage,
-  .composer-toolbar > .ant-btn {
+  .composer-toolbar > .orbit-button {
     flex: none;
   }
   .composer-toolbar > .composer-model-pill,
@@ -6759,63 +6778,14 @@ html[data-theme='dark'] .session-tag-chip {
     min-width: 0;
     flex-shrink: 1;
   }
-  .composer-pill-workspace .ant-select {
+  .composer-pill-workspace .orbit-select {
     min-width: 0;
   }
-  /* ── The `+` menu ─────────────────────────────────────────────────────────────────────────
-     One menu, two clients — and the phone is the one that can be held next to the iOS app, so
-     here it takes the native menu's box: 250 wide, 42.4px rows, 17px type, a 26px corner, and a
-     rule between the two groups inset 24 from either edge. Every number is measured off the
-     phone screenshot in docs/mocks/composer-attach-menu-phone.html, and pinned by
-     WorkspaceView.composerMenu.test.tsx so it cannot drift back to antd's defaults.
-     Desktop keeps antd's density on purpose: that menu is a pointer menu at the foot of a pane,
-     and a 250px card there would be the wrong size for the surface it opens on. */
-  .composer-attach-menu.ant-dropdown-menu {
-    /* 250 is where it rests, and it is a floor rather than a width because one row's label is
-       longer than the others: "Shell (session unavailable)" needs the whole 250 before it fits,
-       and a card that wraps THAT into two lines stops looking like the native menu it is
-       copying. So the card grows to fit its widest row, up to what the phone can show. */
-    min-width: 250px;
-    width: max-content;
-    max-width: calc(100vw - 44px);
-    padding: 10px 0;
-    border-radius: 26px;
-    box-shadow:
-      0 18px 44px rgba(0, 0, 0, 0.17),
-      0 2px 8px rgba(0, 0, 0, 0.06);
-  }
-  .composer-attach-menu .ant-dropdown-menu-item {
-    display: flex;
-    align-items: center;
-    height: 42.4px;
-    padding: 0 0 0 31px;
-    border-radius: 0;
-    font-size: 17px;
-    /* antd leaves this to the row it draws; a native menu row is one line, always. */
-    white-space: nowrap;
-  }
-  /* The glyph box and the gap after it: 31 + 19 + 16 lands the word 66 from the card's edge,
-     which is where the native menu has it. */
-  .composer-attach-menu .ant-dropdown-menu-item .ant-dropdown-menu-item-icon {
-    min-width: 19px;
-    font-size: 19px;
-  }
-  /* Glyphs are drawn in the native menu's secondary tone — but only on a row that can be used,
-     so an unavailable one keeps antd's dimmed colour instead of reading as enabled. */
-  .composer-attach-menu .ant-dropdown-menu-item:not(.ant-dropdown-menu-item-disabled)
-    .ant-dropdown-menu-item-icon {
-    color: #8a8a8e;
-  }
-  .composer-attach-menu .ant-dropdown-menu-item .ant-dropdown-menu-item-icon + span {
-    margin-inline-start: 16px;
-  }
-  /* The rule between the two groups: 9.5 + 1 + 9.5 = the 20pt band the native menu leaves, and
-     the line itself drawn as the background antd already uses so no border has to be undone. */
-  .composer-attach-menu .ant-dropdown-menu-item-divider {
-    height: 1px;
-    margin: 9.5px 24px;
-    background-color: #eaeaea;
-  }
+  /* The `+` menu takes the native menu's box on a phone — 250 wide, 42.4px rows, 17px type, a 26px
+     corner — as the Orbit Menu's `attachment` variant (ui/Floating.css), pinned by
+     WorkspaceView.composerMenu.test.tsx. Desktop keeps the ordinary menu's density on purpose: that
+     menu is a pointer menu at the foot of a pane, and a 250px card there would be the wrong size for
+     the surface it opens on. */
 }
 /* Popover body: one gauge per subscription window (reuses .runner-util for the bar). */
 .cu-pop {
@@ -7056,13 +7026,6 @@ button.composer-usage:focus-visible {
   width: 48px;
   height: 48px;
 }
-/* Ant Design's Image wraps the <img> in a .ant-image div; make it fill the chip
-   so the thumbnail (and its click-to-zoom hover mask) covers the full 48x48. */
-.composer-attach .ant-image {
-  width: 48px;
-  height: 48px;
-  display: block;
-}
 .composer-attach-thumb {
   width: 48px;
   height: 48px;
@@ -7071,14 +7034,12 @@ button.composer-usage:focus-visible {
   display: block;
   cursor: zoom-in;
 }
-.composer-attach .ant-image-cover {
-  border-radius: inherit;
-}
 .composer-attach-eye {
   font-size: 14px;
 }
-/* An image handed back out of a sent message is drawn by ui/Image (AttachmentImage, variant chip):
-   it fills the chip the same way. */
+/* ui/Image wraps the <img> in a .orbit-image span, for an image picked here as for one handed back
+   out of a sent message (AttachmentImage, variant chip); make it fill the chip so the thumbnail (and
+   its click-to-zoom hover cover) covers the full 48x48. */
 .composer-attach .orbit-image {
   width: 48px;
   height: 48px;
@@ -17923,12 +17884,12 @@ button.chat-jump-start:hover {
 /* The same row in the composer model menu's Provider submenu, where the row is one string rather
    than three elements: dim it as unavailable, but leave it pickable — choosing it opens the sign-in it
    names, so greying it out would take away the only thing it is there to offer. */
-.ant-dropdown-menu-item.composer-provider-fix .scope-menu-row {
+.orbit-menu-item.composer-provider-fix .scope-menu-row {
   color: var(--text-3);
 }
 /* A session's own key that is gone — turned off, or deleted — dimmed under its own heading, with
    what became of it on the right in the warning colour (board 5 ④). */
-.ant-dropdown-menu-item.composer-provider-gone .scope-menu-row {
+.orbit-menu-item.composer-provider-gone .scope-menu-row {
   color: var(--text-3);
 }
 /* A credential in the Provider submenu: a key's or a pool's vendor mark before its name, since one
@@ -17951,7 +17912,7 @@ button.chat-jump-start:hover {
 /* A Codex account under Codex in that submenu: indented under its engine, its own quota on the right
    where the other rows say their value, orange once a window is nearly spent. Names are often emails,
    so the name gives way before the quota does. */
-.ant-dropdown-menu-item.composer-account-row .scope-menu-row {
+.orbit-menu-item.composer-account-row .scope-menu-row {
   padding-left: 14px;
 }
 .composer-account-row-name {
