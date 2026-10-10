@@ -1,0 +1,189 @@
+# TEMPORARY (probe branch, never merged): placed as .github/workflows/client.yml on the
+# probe/login-remember-account branch. It runs client.yml's two compile gates on the change (the Mac
+# app and OrbitKit's tests on macOS, the iPhone app for the simulator), and photographs the login page
+# remembering the last account — iPhone light and dark, and the Mac window — against
+# .lra-probe/stub.py. The report job pushes the pictures, notes, request logs and build log tails to
+# probe/login-remember-account-results, which a clone can read.
+name: Client CI (macOS + iOS)
+
+on:
+  push:
+    branches: ["probe/login-remember-account"]
+
+concurrency:
+  group: client-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # client.yml's macOS gate, its two steps kept apart so a red test can't hide whether OrbitApp builds.
+  macos:
+    name: macOS (build + test)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7
+      - name: Select latest Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Toolchain
+        run: swift --version && xcodebuild -version
+      - name: Test OrbitKit (macOS)
+        id: kit
+        continue-on-error: true
+        working-directory: src/macos/OrbitKit
+        run: |
+          swift test 2>&1 | tee "$GITHUB_WORKSPACE/orbitkit-test.log"
+          exit "${PIPESTATUS[0]}"
+      - name: Build OrbitApp
+        id: build
+        continue-on-error: true
+        working-directory: src/macos/OrbitApp
+        run: |
+          swift build 2>&1 | tee "$GITHUB_WORKSPACE/orbitapp-build.log"
+          exit "${PIPESTATUS[0]}"
+      - name: Summaries
+        if: always()
+        run: |
+          mkdir -p out/macos
+          grep -E "error:|Executed [0-9]+ tests|with [0-9]+ failures|failed \(" orbitkit-test.log | head -300 > out/macos/orbitkit-test-summary.txt || true
+          tail -60 orbitkit-test.log > out/macos/orbitkit-test-tail.txt || true
+          grep -E "error:|warning: .*(LoginView|AppModel|RememberedAccount)" orbitapp-build.log | head -300 > out/macos/orbitapp-build-errors.txt || true
+          tail -80 orbitapp-build.log > out/macos/orbitapp-build-tail.txt || true
+          echo "kit=${{ steps.kit.outcome }} build=${{ steps.build.outcome }}" > out/macos/outcomes.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: macos-out
+          path: out
+      - name: Fail as the gate would
+        if: steps.kit.outcome != 'success' || steps.build.outcome != 'success'
+        run: exit 1
+
+  # client.yml's iOS gate, as it stands: the real Orbit app, built for the simulator.
+  ios:
+    name: iOS (generate + build)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7
+      - name: Select latest Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Toolchain
+        run: swift --version && xcodebuild -version && xcodegen --version
+      - name: Generate Xcode project
+        working-directory: src/ios
+        run: xcodegen generate
+      - name: Build for iOS Simulator
+        id: build
+        continue-on-error: true
+        working-directory: src/ios
+        run: |
+          xcodebuild \
+            -project Orbit.xcodeproj \
+            -scheme Orbit \
+            -destination 'generic/platform=iOS Simulator' \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            build 2>&1 | tee "$GITHUB_WORKSPACE/ios-build.log"
+          exit "${PIPESTATUS[0]}"
+      - name: Summaries
+        if: always()
+        run: |
+          mkdir -p out/ios
+          grep -E "error:|\*\* BUILD" ios-build.log | head -300 > out/ios/ios-build-summary.txt || true
+          tail -60 ios-build.log > out/ios/ios-build-tail.txt || true
+          echo "build=${{ steps.build.outcome }}" > out/ios/outcomes.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ios-out
+          path: out
+      - name: Fail as the gate would
+        if: steps.build.outcome != 'success'
+        run: exit 1
+
+  shots:
+    name: Login page (iPhone + Mac)
+    runs-on: macos-26
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+      - name: Select latest Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Toolchain
+        run: swift --version && xcodebuild -version && xcodegen --version && sw_vers
+      # project.yml's `../src` paths are relative to the repository root, so the harness runs from a
+      # copy of itself placed there.
+      - name: Stage the harness at the repository root
+        run: |
+          mkdir -p .lra-probe
+          cp -R docs/evidence/login-remember-account/probe-harness/. .lra-probe/
+      - name: Build, drive and capture
+        id: capture
+        continue-on-error: true
+        run: |
+          bash .lra-probe/run.sh 2>&1 | tee run-output.log
+          exit "${PIPESTATUS[0]}"
+      - name: Keep the build's errors and the run's output beside the shots
+        if: always()
+        run: |
+          P=.lra-probe
+          mkdir -p "$P/shots"
+          cp run-output.log "$P/shots/run-output.log" 2>/dev/null || true
+          for log in "$P"/build-*.log; do
+            [ -f "$log" ] || continue
+            base=$(basename "$log" .log)
+            grep -E "error:|Test Case|Executed|\*\* TEST|\*\* BUILD|XCTAssert|failed" "$log" | head -400 > "$P/shots/summary-$base.txt" || true
+            tail -300 "$log" > "$P/shots/tail-$base.txt" || true
+          done
+          find "$P/shots" -name 'xcodebuild-*.log' -size +20M -exec gzip -9 {} \;
+          rm -rf "$P/shots/ios/attachments" "$P/shots/mac/attachments"
+          echo "capture=${{ steps.capture.outcome }}" > "$P/shots/outcomes.txt"
+          echo "sha=${{ github.sha }}" >> "$P/shots/outcomes.txt"
+          mkdir -p out/shots
+          cp -R "$P/shots/." out/shots/
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: shots
+          path: out
+
+  report:
+    name: Push the results where a clone can read them
+    needs: [macos, ios, shots]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+      - name: Push to probe/login-remember-account-results
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd out
+          {
+            echo "run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            echo "sha: ${{ github.sha }}"
+            echo "macos: ${{ needs.macos.result }}"
+            echo "ios: ${{ needs.ios.result }}"
+            echo "shots: ${{ needs.shots.result }}"
+          } > RESULTS.txt
+          cat RESULTS.txt
+          git init -q
+          git config user.name "orbit-probe"
+          git config user.email "probe@orbit.invalid"
+          git checkout -q -b results
+          git add -A
+          git commit -q -m "probe results for ${{ github.sha }} (run ${{ github.run_id }})"
+          git push -q -f "https://x-access-token:${TOKEN}@github.com/${{ github.repository }}.git" \
+            results:refs/heads/probe/login-remember-account-results
