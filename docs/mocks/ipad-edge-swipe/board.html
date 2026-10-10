@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>ipad-edge-swipe</title>
+<style>
+  /* Mock fonts for a Linux render; a Mac resolves -apple-system / PingFang first and never reaches them. */
+  @font-face { font-family: "MockInter"; src: url("file:///tmp/mockfonts/Inter.ttf"); font-weight: 100 900; }
+  @font-face { font-family: "MockSC"; src: url("file:///tmp/mockfonts/NotoSansSC.ttf"); font-weight: 100 900; }
+  @font-face { font-family: "MockMono"; src: url("file:///tmp/mockfonts/JetBrainsMono.ttf"); font-weight: 100 900; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { margin: 0; width: max-content; background: #eef0f3; }
+  .m-sheet {
+    width: 1720px; padding: 16px 20px 24px; background: #eef0f3; color: #1f2329;
+    font-family: -apple-system, "SF Pro Text", "PingFang SC", "MockInter", "MockSC", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  section { padding: 20px 20px 18px; }
+  code, .mono { font-family: "SF Mono", Menlo, "MockMono", monospace; }
+  h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.2px; }
+  .lede { margin-top: 8px; font-size: 15px; color: #4b5260; line-height: 1.65; max-width: 1640px; }
+  .lede b { color: #1f2329; }
+  .lede code, .note code, .notes code { font-size: 12.5px; background: #e2e5ea; border-radius: 4px; padding: 0 4px; }
+  h2 { font-size: 17px; font-weight: 700; margin: 0 0 12px; display: flex; align-items: baseline; gap: 10px; }
+  #part-1 h2 { margin-top: 22px; }
+  h2 small { font-size: 13px; font-weight: 400; color: #6b7280; }
+  .row { display: flex; gap: 18px; align-items: flex-start; }
+  .tile { flex: none; width: 495px; }
+  .tile.port { width: 372px; }
+  .cap { font-size: 14px; font-weight: 700; margin-bottom: 8px; display: flex; gap: 8px; align-items: baseline; }
+  .cap span { font-weight: 400; color: #6b7280; font-size: 12.5px; }
+  .cap .rec { color: #16833a; font-weight: 700; font-size: 12.5px; }
+  .cap .now { color: #c2410c; font-weight: 700; font-size: 12.5px; }
+  .note { margin-top: 9px; font-size: 12.5px; color: #4b5260; line-height: 1.6; }
+  .note b { color: #1f2329; }
+  .then { flex: none; align-self: center; display: flex; flex-direction: column; align-items: center; gap: 6px;
+    color: #9aa0a8; font-size: 12px; width: 54px; text-align: center; line-height: 1.35; }
+  .then svg { width: 34px; height: 20px; }
+
+  /* ── an iPad screen: the probe's screenshot, scaled ── */
+  .pad { position: relative; overflow: hidden; border-radius: 14px; background: #fff;
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.10), 0 6px 18px rgba(0,0,0,0.06); }
+  .pad > img { position: absolute; left: 0; top: 0; display: block; }
+
+  /* ── annotations ── */
+  .co { position: absolute; z-index: 6; width: 20px; height: 20px; border-radius: 10px; background: #e0460f; color: #fff;
+    font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 0 2px #fff; }
+  .mk { position: absolute; z-index: 5; outline: 1.5px dashed #e0460f; outline-offset: 2px; border-radius: 8px; }
+  .mk > .co { top: -13px; right: -13px; }
+  .band { position: absolute; z-index: 4; background: rgba(224,70,15,0.16); box-shadow: inset 0 0 0 1.5px rgba(224,70,15,0.75); border-radius: 3px; }
+  .stamp { position: absolute; z-index: 7; padding: 3px 9px; border-radius: 7px; font-size: 12.5px; font-weight: 700; white-space: nowrap;
+    background: #fff; color: #c2410c; box-shadow: 0 0 0 1.5px #e0460f, 0 2px 8px rgba(0,0,0,0.12); }
+  .stamp.ok { color: #16833a; box-shadow: 0 0 0 1.5px #16a34a, 0 2px 8px rgba(0,0,0,0.12); }
+  .stamp.plain { color: #4b5260; box-shadow: 0 0 0 1px rgba(0,0,0,0.18), 0 2px 8px rgba(0,0,0,0.10); font-weight: 600; }
+  svg.gest { position: absolute; z-index: 6; overflow: visible; pointer-events: none; }
+
+  .g-side { display: inline-block; width: 17px; height: 14px; vertical-align: -2px; margin: 0 2px;
+    background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 20'><rect x='1.2' y='1.2' width='21.6' height='17.6' rx='4' fill='none' stroke='%231f2329' stroke-width='1.8'/><path d='M8.6 1.6v16.8' stroke='%231f2329' stroke-width='1.8'/><path d='M3.8 5.6h2.4M3.8 8.6h2.4M3.8 11.6h2.4' stroke='%231f2329' stroke-width='1.5' stroke-linecap='round'/></svg>") center / contain no-repeat; }
+  /* ── tables and notes ── */
+  .panel { background: #fff; border-radius: 14px; box-shadow: 0 0 0 1px rgba(0,0,0,0.06); padding: 18px 22px; }
+  table.rules { width: 100%; border-collapse: collapse; font-size: 13.5px; line-height: 1.55; }
+  table.rules th { text-align: left; font-size: 12.5px; color: #6b7280; font-weight: 600; padding: 0 12px 8px 0; border-bottom: 1px solid #e5e7eb; }
+  table.rules td { padding: 10px 12px 10px 0; border-bottom: 1px solid #eceef1; vertical-align: top; }
+  table.rules tr:last-child td { border-bottom: none; }
+  table.rules td:first-child { width: 33%; }
+  table.rules b { color: #111; }
+  .yes { color: #16833a; font-weight: 700; }
+  .none { color: #9aa0a8; }
+  .notes { background: #fff; border-radius: 14px; padding: 18px 22px; box-shadow: 0 0 0 1px rgba(0,0,0,0.06);
+    display: grid; grid-template-columns: 1.15fr 0.9fr 1.2fr; gap: 6px 30px; font-size: 13px; line-height: 1.62; color: #2b303b; }
+  .notes h3 { font-size: 14px; margin: 0 0 6px; color: #111; }
+  .notes h3.more { margin-top: 14px; }
+  .notes h4 { font-size: 13px; margin: 8px 0 2px; color: #111; }
+  .notes ul, .notes ol { padding-left: 18px; }
+  .notes li { margin: 2px 0; }
+  .notes b { color: #111; }
+  .notes .pick { color: #16833a; font-weight: 700; }
+  .notes .cost { display: inline-block; font-size: 11.5px; font-weight: 700; color: #7c3aed; margin-left: 2px; }
+  .facts { margin-top: 12px; display: grid; grid-template-columns: 1fr 1fr; gap: 6px 30px; font-size: 13px; line-height: 1.6; color: #2b303b; }
+  .facts b { color: #111; }
+</style>
+</head>
+<body>
+<div class="m-sheet">
+
+<section id="part-head">
+<h1>iPad 侧边右滑 —— 和 iPhone 同一个规则</h1>
+<p class="lede">
+  iPhone 上从屏幕左边缘往右滑，有两种结果：在列表页拉出抽屉，在推进来的页面返回上一页。iPad 今天两样都靠不住：
+  系统自带的「右滑拉出侧栏」只在空白处起手才灵，<b>手指落在会话行上，这一下就成了这一行自己的右滑（完成 · 置顶），滑到底直接执行</b>；
+  栏里带「‹ 返回」的页面（文件夹、项目的会话页、Runner 的引擎页、项目下的任务）右滑从来不返回，只会拉出侧栏；侧栏上左滑也收不起来。
+  改成：<b>哪一栏左上角有 ‹，从这一栏左边缘右滑就是返回；最左一栏没有 ‹ 时，从屏幕左边缘右滑拉出侧栏；在侧栏上左滑收起。</b>
+  和点 <i class="g-side"></i> / ‹ 是同一个动作。图全是 iPad Pro 13 英寸模拟器（iOS 26.5）上的真实界面，「今天」一栏是同一个手势在现在的版本上实际滑出来的结果；数据是编的，红色手指、色条、编号是标注。
+</p>
+</section>
+
+<section id="part-1">
+<h2>① 列表页 · 侧栏收起时，从屏幕左边缘右滑 <small>最常见的一下：手指几乎总是落在某一行上</small></h2>
+<div class="row">
+  <div class="tile"><div class="cap">起手 <span>同一个手势：左边缘 20pt 内按下，往右滑</span></div><div class="pad" id="f-1a"></div>
+    <div class="note"><b>①</b> 红条是起手区：最左一栏左边缘约 20pt 的一条。<b>②</b> 今天打开侧栏只能点左上角的 <i class="g-side"></i>。</div></div>
+  <div class="then"><svg viewBox="0 0 34 20"><path d="M2 10h26M21 3l8 7-8 7" fill="none" stroke="#9aa0a8" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>松手后</div>
+  <div class="tile"><div class="cap">今天 <span class="now">现状</span><span>行抢走了这一下</span></div><div class="pad" id="f-1b"></div>
+    <div class="note">拉开的是手指下这一行的右滑按钮（完成 · 置顶），侧栏没出来。滑得长一点就直接执行第一个：探针里这一下把会话<b>标成了完成</b>（<code>POST …/complete</code>，假服务器拒了，所以图上看不出），落在项目行上则是<b>置顶</b>。</div></div>
+  <div class="tile"><div class="cap">改后 <span class="rec">推荐</span><span>边缘归侧栏</span></div><div class="pad" id="f-1c"></div>
+    <div class="note">侧栏出来，和点 <i class="g-side"></i> 一模一样；会话列表和对话往右让。行的右滑从行中间起手，照旧是完成 · 置顶。</div></div>
+</div>
+</section>
+
+<section id="part-2">
+<h2>② 侧栏开着 · 在侧栏上往左滑 <small>和 iPhone 往左推回抽屉一样</small></h2>
+<div class="row">
+  <div class="tile"><div class="cap">起手 <span>侧栏上任意位置，横着往左</span></div><div class="pad" id="f-2a"></div>
+    <div class="note">手指落在侧栏的一行上（探针就是这么滑的）。侧栏里的行没有滑动按钮，所以整条侧栏都能起手；竖着滑照旧是滚动。</div></div>
+  <div class="then"><svg viewBox="0 0 34 20"><path d="M2 10h26M21 3l8 7-8 7" fill="none" stroke="#9aa0a8" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>松手后</div>
+  <div class="tile"><div class="cap">今天 <span class="now">现状</span><span>当成了点按</span></div><div class="pad" id="f-2b"></div>
+    <div class="note">侧栏没收；手指下那一行被当成点了一下——这里打开了「Runner 自动升级与回滚」的会话页。收起只能点侧栏顶上的 <i class="g-side"></i>。</div></div>
+  <div class="tile"><div class="cap">改后 <span class="rec">推荐</span><span>侧栏收起</span></div><div class="pad" id="f-2c"></div>
+    <div class="note">回到 ① 起手那一屏，和点 <i class="g-side"></i> 一样。</div></div>
+</div>
+</section>
+
+<section id="part-3">
+<h2>③ 列表栏里带 ‹ 的页 · 文件夹、项目的会话页 <small>这一栏有 ‹，左边缘就是「返回」</small></h2>
+<div class="row">
+  <div class="tile"><div class="cap">起手 <span>侧栏收起时，这一栏的左边缘就是屏幕左边缘</span></div><div class="pad" id="f-3a"></div>
+    <div class="note"><b>③</b> 这一栏左上角有 ‹（回到工作区的会话）。项目的会话页是同一个样子、同一个 ‹。</div></div>
+  <div class="then"><svg viewBox="0 0 34 20"><path d="M2 10h26M21 3l8 7-8 7" fill="none" stroke="#9aa0a8" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>松手后</div>
+  <div class="tile"><div class="cap">今天 <span class="now">现状</span><span>拉出了侧栏，页没退</span></div><div class="pad" id="f-3b"></div>
+    <div class="note">系统的手势把侧栏拉了出来，文件夹页还在原地，想回列表还得点 ‹。</div></div>
+  <div class="tile"><div class="cap">改后 <span class="rec">推荐</span><span>返回上一页</span></div><div class="pad" id="f-3c"></div>
+    <div class="note">回到 orbit 的会话列表，和点 ‹ 一样，右边的对话不动。再从边缘右滑一次，才是拉出侧栏——和 iPhone 推进来的页面一样：先退，再开抽屉。</div></div>
+</div>
+</section>
+
+<section id="part-4">
+<h2>④ 详情栏里带 ‹ 的页 · Runner 的引擎页、项目下的任务 <small>从详情栏的左边缘（中间那条分隔线）起手</small></h2>
+<div class="row">
+  <div class="tile"><div class="cap">起手 <span>详情栏左边缘的 20pt</span></div><div class="pad" id="f-4a"></div>
+    <div class="note"><b>④</b> 详情栏左上角有 ‹（回到这台机器）。项目下的任务页的 ‹（回到项目）同理。</div></div>
+  <div class="then"><svg viewBox="0 0 34 20"><path d="M2 10h26M21 3l8 7-8 7" fill="none" stroke="#9aa0a8" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>松手后</div>
+  <div class="tile"><div class="cap">今天 <span class="now">现状</span><span>拉出了侧栏，页没退</span></div><div class="pad" id="f-4b"></div>
+    <div class="note">从中间这条线起手，系统也是去拉侧栏：左边两栏被推开，引擎页还在。</div></div>
+  <div class="tile"><div class="cap">改后 <span class="rec">推荐</span><span>返回上一页</span></div><div class="pad" id="f-4c"></div>
+    <div class="note">回到 Mac Studio 这台机器的页，和点 ‹ 一样；左边两栏不动。</div></div>
+</div>
+</section>
+
+<section id="part-5">
+<h2>规则 · 一张表 <small>起手在哪一栏的左边缘，就由这一栏回答</small></h2>
+<div class="row">
+  <div class="panel" style="flex:1">
+    <table class="rules">
+      <tr><th>从哪儿起手</th><th>这一栏左上角有 ‹</th><th>没有 ‹</th></tr>
+      <tr><td><b>最左一栏的左边缘</b><br>侧栏收起时就是屏幕左边缘</td><td class="yes">返回上一页（③）</td><td class="yes">拉出侧栏（①）</td></tr>
+      <tr><td><b>列表栏的左边缘</b><br>侧栏开着时，挨着侧栏那条线</td><td class="yes">返回上一页</td><td class="none">不接手，照旧</td></tr>
+      <tr><td><b>详情栏的左边缘</b><br>列表栏右边那条分隔线</td><td class="yes">返回上一页（④）</td><td class="none">不接手，照旧（系统照样可拉侧栏）</td></tr>
+      <tr><td><b>侧栏上，横着往左</b></td><td colspan="2" class="yes">收起侧栏（②）</td></tr>
+    </table>
+    <div class="facts">
+      <div><b>起手区</b>：栏左边缘约 20pt 的一条，和系统返回手势同一个位置。从这里起手，横向为主往右，就归边缘；行中间起手的右滑照旧是这一行的完成 · 置顶。</div>
+      <div><b>判定</b>：松手时往右滑过约 60pt，或者快速一甩，就执行；滑一半又拉回去就算了。点按、竖着滚动都不受影响。</div>
+      <div><b>竖屏</b>：仍是三栏，侧栏是盖在列表上的（系统的样子，见右图），规则一样；点侧栏外面照旧收起。</div>
+      <div><b>窄窗口</b>（分屏 1/3、台前调度的小窗）：本来就走 iPhone 的抽屉外壳，已经是这套手势，不改。Mac 不改。</div>
+    </div>
+  </div>
+  <div class="tile port"><div class="cap">竖屏 · 侧栏出来的样子 <span>系统现成的</span></div><div class="pad" id="f-5a"></div></div>
+</div>
+</section>
+
+<section id="part-6">
+<div class="notes">
+  <div>
+    <h3>待定 · 要你拍板</h3>
+    <h4>① 起手区</h4>
+    <ol>
+      <li><span class="pick">A. 只认栏左边缘约 20pt（推荐）</span>：和系统返回手势同一个位置；行的右滑（完成 · 置顶）从行中间起手照旧，两者不打架。</li>
+      <li>B. 栏里任意位置右滑都算（iOS 26 的 iPhone 推进页就是这样）：好够，但在会话行上右滑分不清是「返回 / 拉侧栏」还是「完成」，满滑还会直接把会话完成。</li>
+    </ol>
+    <h4>② 跟不跟手</h4>
+    <ol>
+      <li><span class="pick">A. 松手决定，动画和点按钮一样（推荐）</span>：侧栏是系统分栏，只有开 / 关两态；栏里的返回页下面也没有「上一页」可以露出来。</li>
+      <li>B. 跟手：侧栏随手指拉出、页面随手指滑走。侧栏要接管系统私有的分栏手势；返回要把列表栏、详情栏改成真的导航栈（推翻文件夹设计 §3.3「中间栏没有自己的导航栈」），代价大。</li>
+    </ol>
+  </div>
+  <div>
+    <h3>变与不变</h3>
+    <ul>
+      <li>只改 iPad 宽屏（三栏）的手势；<i class="g-side"></i> 和 ‹ 按钮照旧都在</li>
+      <li>右滑 = 点 ‹ / 点 <i class="g-side"></i>，没有新动作、新页面</li>
+      <li>iPhone、窄窗口 iPad、Mac 不变</li>
+      <li>行中间起手的右滑（完成 · 置顶）、竖向滚动、点按不变</li>
+      <li>空白处起手的右滑，系统照样拉出侧栏（今天就这样）</li>
+    </ul>
+    <h3 class="more">顺手看到的（不在这次范围）</h3>
+    <ul>
+      <li>侧栏顶上的标题「Orbit」在 iPad 上被挤成「O…」（①改后图）</li>
+      <li>Infrastructure 选中的机器行，副标题是橙字压在蓝底上（④图）</li>
+    </ul>
+  </div>
+  <div>
+    <h3>落地（按代价排）</h3>
+    <ol>
+      <li><b>栏边缘手势</b><span class="cost">小</span>：一个 iOS 专用的小部件，挂在三栏各自的导航视图上；只接左边缘 20pt 起手、横向为主的拖动，接手时让行的滑动和列表滚动等它，不接手时什么都不碰。</li>
+      <li><b>侧栏</b><span class="cost">小</span>：<code>MainView</code> 里最左一栏边缘右滑 → <code>columnVisibility = .all</code>，侧栏上左滑 → 收起；和 <i class="g-side"></i> 写的是同一个状态，「上次开着还是关着」照旧记住。</li>
+      <li><b>四个 ‹ 页</b><span class="cost">小</span>：文件夹页、项目的会话页、引擎页 / 名称页、项目下的任务页，在已有的 ‹ 旁边挂同一个动作（<code>leaveFolder</code> / <code>leaveProjectSessions</code> / <code>nav.pop()</code>），各 1–2 行。</li>
+      <li><b>验证</b><span class="cost">中</span>：这次拍图的 iPad 探针改成改前 / 改后两组，横屏竖屏各滑一遍，带上「行中间右滑仍是完成 · 置顶」；OrbitKit <code>swift test</code>；iPhone 抽屉和系统返回回归。</li>
+    </ol>
+  </div>
+</div>
+</section>
+
+<script>
+const S = 0.36;
+const ARROW = (x1, y, x2, ghost) => {
+  const c = ghost ? 'rgba(224,70,15,0.45)' : '#e0460f';
+  const dir = x2 > x1 ? 1 : -1;
+  const hx = x2 * S, hy = y * S;
+  return `<svg class="gest" style="left:0;top:0" width="1" height="1">
+    <circle cx="${x1 * S}" cy="${hy}" r="10" fill="${ghost ? 'rgba(224,70,15,0.10)' : 'rgba(224,70,15,0.16)'}" stroke="${c}" stroke-width="1.6"/>
+    <circle cx="${x1 * S}" cy="${hy}" r="4.5" fill="${c}"/>
+    <path d="M${x1 * S + dir * 12} ${hy}H${hx}" stroke="${c}" stroke-width="3" stroke-linecap="round" fill="none"/>
+    <path d="M${hx - dir * 9} ${hy - 7}L${hx + dir * 1} ${hy}L${hx - dir * 9} ${hy + 7}" stroke="${c}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  </svg>`;
+};
+function frame(id, src, marks = [], w = 1376, h = 1032) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.style.width = (w * S) + 'px';
+  el.style.height = (h * S) + 'px';
+  let html = `<img src="shots/${src}.png" style="width:${w * S}px;height:${h * S}px">`;
+  for (const m of marks) {
+    if (m.t === 'band') html += `<div class="band" style="left:${m.x * S}px;top:${m.y * S}px;width:${m.w * S}px;height:${m.h * S}px"></div>`;
+    if (m.t === 'swipe') html += ARROW(m.x1, m.y, m.x2, m.ghost);
+    if (m.t === 'box') html += `<div class="mk" style="left:${m.x * S}px;top:${m.y * S}px;width:${m.w * S}px;height:${m.h * S}px">${m.n ? `<span class="co">${m.n}</span>` : ''}</div>`;
+    if (m.t === 'stamp') html += `<div class="stamp ${m.cls || ''}" style="left:${m.x * S}px;top:${m.y * S}px">${m.text}</div>`;
+  }
+  el.innerHTML = html;
+}
+// ① list, sidebar hidden — the finger lands on the 会话列表左滑按钮 row (0, 661, 420, 75.5)
+frame('f-1a', 'A1-list-sidebar-hidden', [
+  { t: 'band', x: 0, y: 32, w: 20, h: 1000 },
+  { t: 'swipe', x1: 10, y: 699, x2: 300 },
+  { t: 'box', x: 14, y: 36, w: 36, h: 36, n: 2 },
+  { t: 'stamp', x: 26, y: 330, text: '① 起手区', cls: 'plain' },
+]);
+frame('f-1b', 'F1-short-edge-swipe-on-a-row', [
+  { t: 'box', x: 8, y: 663, w: 130, h: 72 },
+  { t: 'stamp', x: 150, y: 745, text: '拉开了这一行的 完成 · 置顶' },
+]);
+frame('f-1c', 'A3-sidebar-by-button', [
+  { t: 'stamp', x: 360, y: 925, text: '侧栏出来了', cls: 'ok' },
+]);
+// ② sidebar open — a leftward drag over it
+frame('f-2a', 'A3-sidebar-by-button', [
+  { t: 'swipe', x1: 216, y: 516, x2: 30 },
+]);
+frame('f-2b', 'A4-after-left-swipe-on-sidebar', [
+  { t: 'box', x: 18, y: 490, w: 300, h: 44 },
+  { t: 'stamp', x: 360, y: 925, text: '侧栏没收，还打开了手指下那个项目' },
+]);
+frame('f-2c', 'A1-list-sidebar-hidden', [
+  { t: 'stamp', x: 450, y: 925, text: '侧栏收起', cls: 'ok' },
+]);
+// ③ a folder's page in the list column, sidebar hidden
+frame('f-3a', 'B1-folder-page', [
+  { t: 'band', x: 0, y: 32, w: 20, h: 1000 },
+  { t: 'swipe', x1: 10, y: 640, x2: 300 },
+  { t: 'box', x: 70, y: 36, w: 36, h: 36, n: 3 },
+]);
+frame('f-3b', 'B2-after-edge-swipe', [
+  { t: 'box', x: 350, y: 36, w: 36, h: 36 },
+  { t: 'stamp', x: 360, y: 925, text: '侧栏出来了，文件夹页还在' },
+]);
+frame('f-3c', 'A1-list-sidebar-hidden', [
+  { t: 'stamp', x: 450, y: 925, text: '回到 orbit 的会话列表', cls: 'ok' },
+]);
+// ④ the engine page in the detail column
+frame('f-4a', 'D1-engine-page', [
+  { t: 'band', x: 420.5, y: 32, w: 20, h: 1000 },
+  { t: 'swipe', x1: 431, y: 600, x2: 720 },
+  { t: 'box', x: 434.5, y: 36, w: 36, h: 36, n: 4 },
+]);
+frame('f-4b', 'D2-after-detail-edge-swipe', [
+  { t: 'stamp', x: 830, y: 925, text: '侧栏出来了，引擎页还在' },
+]);
+frame('f-4c', 'G1-record-sidebar-hidden', [
+  { t: 'stamp', x: 450, y: 925, text: '回到 Mac Studio', cls: 'ok' },
+]);
+// portrait: the sidebar as the system lays it out
+frame('f-5a', 'E2-after-edge-swipe', [], 1032, 1376);
+</script>
+
+</div>
+</body>
+</html>
