@@ -2,7 +2,6 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { App as AntApp } from 'antd';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Runner } from './TasksSidePanel';
@@ -123,9 +122,7 @@ async function mount(sessionId: string): Promise<void> {
     nextRoot.render(
       <QueryClientProvider client={nextClient}>
         <MemoryRouter initialEntries={[`/sessions/${sessionId}`]}>
-          <AntApp>
-            <WorkspaceView runner={RUNNER} />
-          </AntApp>
+          <WorkspaceView runner={RUNNER} />
         </MemoryRouter>
       </QueryClientProvider>,
     );
@@ -156,26 +153,26 @@ const listRow = (title: string): HTMLElement => {
   return found;
 };
 
-/** Opens the conversation header's ⋯ menu and hands back the popup antd mounted. */
+/** Opens the conversation header's ⋯ menu and hands back the popup the menu mounted. */
 async function openHeaderMenu(): Promise<HTMLElement> {
   await click(mounted().querySelector('.workspace-header button[title="More actions"]'), 'the header ⋯ button');
   await act(async () => {
-    await vi.waitFor(() => expect(document.querySelector('.ant-dropdown:not(.ant-dropdown-hidden) .ant-dropdown-menu')).not.toBeNull(), {
+    await vi.waitFor(() => expect(document.querySelector('[role="menu"]:not([data-closed])')).not.toBeNull(), {
       timeout: 10_000,
       interval: 20,
     });
   });
-  return document.querySelector<HTMLElement>('.ant-dropdown:not(.ant-dropdown-hidden) .ant-dropdown-menu')!;
+  return document.querySelector<HTMLElement>('[role="menu"]:not([data-closed])')!;
 }
 
 /** The menu's rows below the tags, top to bottom; a divider is a row of its own. */
 const drawn = (menu: HTMLElement): string[] =>
-  [...menu.querySelectorAll(':scope > .ant-dropdown-menu-item, :scope > .ant-dropdown-menu-item-divider')].map((el) =>
-    el.classList.contains('ant-dropdown-menu-item-divider') ? '─' : (el.textContent ?? '').trim(),
+  [...menu.querySelectorAll(':scope > [role="menuitem"], :scope > [role="separator"]')].map((el) =>
+    el.getAttribute('role') === 'separator' ? '─' : (el.textContent ?? '').trim(),
   );
 
 const item = (menu: HTMLElement, label: string): HTMLElement => {
-  const found = [...menu.querySelectorAll<HTMLElement>('.ant-dropdown-menu-item')].find((el) =>
+  const found = [...menu.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((el) =>
     (el.textContent ?? '').trim().startsWith(label),
   );
   if (!found) throw new Error(`no ${label} row in the menu:\n${menu.outerHTML}`);
@@ -367,16 +364,17 @@ describe('a shared session in the session list and its conversation', { timeout:
     const menu = await openHeaderMenu();
     await click(item(menu, 'Delete'), 'Delete');
 
-    const confirm = document.querySelector<HTMLElement>('.ant-modal-confirm');
+    const confirm = document.querySelector<HTMLElement>('[role="alertdialog"]');
     expect(confirm, 'no question before trashing a shared session').not.toBeNull();
-    expect(confirm!.querySelector('.ant-modal-confirm-title')?.textContent).toBe('Move to Trash?');
-    expect(confirm!.querySelector('.ant-modal-confirm-content')?.textContent).toBe(
+    // Named by its title, described by its sentence.
+    expect(document.getElementById(confirm!.getAttribute('aria-labelledby') ?? '')?.textContent).toBe('Move to Trash?');
+    expect(document.getElementById(confirm!.getAttribute('aria-describedby') ?? '')?.textContent).toBe(
       'Its public link is paused while the session is in Trash. Restoring the session turns the link back on.',
     );
     expect(writes, 'trashed before it was confirmed').toEqual([]);
 
     await click(
-      [...confirm!.querySelectorAll('.ant-btn')].find((b) => b.textContent?.trim() === 'Move to Trash'),
+      [...confirm!.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Move to Trash'),
       'Move to Trash',
     );
     expect(writes).toEqual([`DELETE /sessions/${SHARED_PUBLIC}`]);
@@ -386,7 +384,7 @@ describe('a shared session in the session list and its conversation', { timeout:
     await mount(PLAIN_PUBLIC);
     const menu = await openHeaderMenu();
     await click(item(menu, 'Delete'), 'Delete');
-    expect(document.querySelector('.ant-modal-confirm')).toBeNull();
+    expect(document.querySelector('[role="alertdialog"]')).toBeNull();
     expect(writes).toEqual([`DELETE /sessions/${PLAIN_PUBLIC}`]);
   });
 });

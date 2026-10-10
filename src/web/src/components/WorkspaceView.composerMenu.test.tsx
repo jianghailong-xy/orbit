@@ -4,17 +4,19 @@ import { resolve } from 'node:path';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { App as AntApp } from 'antd';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Runner } from './TasksSidePanel';
 
-/** The stylesheet itself, as text — the working directory is not the same under every runner. */
-const stylesPath = [resolve(process.cwd(), 'src/index.css'), resolve(process.cwd(), 'src/web/src/index.css')].find(
-  existsSync,
-);
-if (!stylesPath) throw new Error('index.css not found from the test working directory');
-const indexCss = readFileSync(stylesPath, 'utf8');
+/** A stylesheet itself, as text — the working directory is not the same under every runner. */
+const stylesheet = (path: string): string => {
+  const found = [resolve(process.cwd(), 'src', path), resolve(process.cwd(), 'src/web/src', path)].find(existsSync);
+  if (!found) throw new Error(`${path} not found from the test working directory`);
+  return readFileSync(found, 'utf8');
+};
+const indexCss = stylesheet('index.css');
+/** The Orbit Menu's stylesheet, which holds the `attachment` variant the `+` menu asks for. */
+const menuCss = stylesheet('components/ui/Floating.css');
 
 /**
  * The composer's `+` menu.
@@ -27,9 +29,10 @@ const indexCss = readFileSync(stylesPath, 'utf8');
  * groups — which is what the phone screenshot this was reported from was missing. See
  * docs/mocks/composer-attach-menu-phone.html.
  *
- * The same two clients want different DENSITY, so the phone half of that lives in index.css under
- * the phone breakpoint and is pinned here too: jsdom has no layout engine, so the metrics are read
- * off the stylesheet the way WorkspaceView.projectBackLink.test.ts reads its flex contract.
+ * The same two clients want different DENSITY, so the phone half of that lives in the Orbit Menu's
+ * `attachment` variant (ui/Floating.css) under the phone breakpoint and is pinned here too: jsdom has
+ * no layout engine, so the metrics are read off the stylesheet the way
+ * WorkspaceView.projectBackLink.test.ts reads its flex contract.
  */
 
 vi.mock('../api', async (importOriginal) => {
@@ -102,16 +105,14 @@ describe('the composer + menu', { timeout: 60_000 }, () => {
       nextRoot.render(
         <QueryClientProvider client={nextClient}>
           <MemoryRouter initialEntries={[`/sessions/${SESSION_PUBLIC}`]}>
-            <AntApp>
-              <WorkspaceView runner={RUNNER} />
-            </AntApp>
+            <WorkspaceView runner={RUNNER} />
           </MemoryRouter>
         </QueryClientProvider>,
       );
     });
   };
 
-  /** Opens the menu the way a thumb does, and hands back the popup as antd mounted it. */
+  /** Opens the menu the way a thumb does, and hands back the popup as the menu mounted it. */
   const openMenu = async (): Promise<HTMLElement> => {
     await mount();
     await act(async () => {
@@ -137,15 +138,15 @@ describe('the composer + menu', { timeout: 60_000 }, () => {
 
   /** What the menu draws, top to bottom. The divider counts as a row: it is what groups them. */
   const drawn = (menu: HTMLElement): (string | undefined)[] =>
-    [...menu.querySelectorAll('.ant-dropdown-menu-item, .ant-dropdown-menu-item-divider')].map((el) => {
-      if (el.classList.contains('ant-dropdown-menu-item-divider')) return '─';
+    [...menu.querySelectorAll('[role="menuitem"], [role="separator"]')].map((el) => {
+      if (el.getAttribute('role') === 'separator') return '─';
       // Shell appends what one particular session cannot do. Which session this is has nothing to
       // do with the order the menu draws its rows in, which is what this test is about.
       return el.textContent?.trim().replace(/ \(session unavailable\)$/, '');
     });
 
   const item = (menu: HTMLElement, label: string): HTMLElement => {
-    const found = [...menu.querySelectorAll<HTMLElement>('.ant-dropdown-menu-item')].find((el) =>
+    const found = [...menu.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((el) =>
       el.textContent?.trim().startsWith(label),
     );
     if (!found) throw new Error(`no ${label} row in the menu:\n${menu.outerHTML}`);
@@ -217,6 +218,8 @@ describe('the composer + menu', { timeout: 60_000 }, () => {
     const menu = await openMenu();
 
     expect(drawn(menu)).toEqual(['File', 'Image', '─', 'Shell', 'Skill', 'Command']);
+    // …in the variant that sizes it like the native one on a phone (below).
+    expect(menu.dataset.variant).toBe('attachment');
   });
 
   it('gives Command and Shell the glyphs the native menu gives them', async () => {
@@ -254,31 +257,37 @@ function phoneBlocks(css: string): Array<[number, number]> {
 }
 
 describe('the composer menu on a phone', () => {
-  const css = indexCss;
+  const css = menuCss;
   const ranges = phoneBlocks(css);
   const phone = ranges.map(([from, to]) => css.slice(from, to)).join('\n');
   const desktop = ranges.reduceRight((acc, [from, to]) => acc.slice(0, from) + acc.slice(to), css);
+  const box = /\.orbit-menu\[data-variant='attachment'\]\s*\{([^}]*)\}/.exec(phone)?.[1] ?? '';
+  const row = /\.orbit-menu\[data-variant='attachment'\] \.orbit-menu-item\s*\{([^}]*)\}/.exec(phone)?.[1] ?? '';
 
   it('is sized like the native one', () => {
-    expect(phone).toContain('.composer-attach-menu');
-    // The box, in the numbers the iOS screenshot measures: 250 wide, 42.4 rows, 17px type,
-    // a 26px corner, and the divider inset 24 from either edge.
-    expect(phone).toMatch(/\.composer-attach-menu\.ant-dropdown-menu\s*\{[^}]*min-width:\s*250px/);
-    expect(phone).toMatch(/\.composer-attach-menu\.ant-dropdown-menu\s*\{[^}]*border-radius:\s*26px/);
-    expect(phone).toMatch(/\.composer-attach-menu \.ant-dropdown-menu-item\s*\{[^}]*height:\s*42\.4px/);
-    expect(phone).toMatch(/\.composer-attach-menu \.ant-dropdown-menu-item\s*\{[^}]*font-size:\s*17px/);
-    expect(phone).toMatch(/composer-attach-menu[^{]*\.ant-dropdown-menu-item-divider\s*\{[^}]*margin:\s*9\.5px 24px/);
+    // The box, in the numbers the iOS screenshot measures: 250 wide, 42.4 rows, 17px type and
+    // a 26px corner.
+    expect(box).toMatch(/min-width:\s*250px/);
+    expect(box).toMatch(/border-radius:\s*26px/);
+    expect(row).toMatch(/height:\s*42\.4px/);
+    expect(row).toMatch(/font-size:\s*17px/);
+    // The rule between the two groups is the menu's own, as the phone has drawn it all along: the
+    // 9.5px/24px inset this file pinned under the replaced menu never reached the screen, that
+    // menu's own rule outranking it (measured in docs/evidence/base-ui-migration/p2.2/revision-2).
+    expect(phone).not.toMatch(/orbit-menu-separator/);
     // One row's label ("Shell (session unavailable)") is wider than 250 at 17px. A card that
     // wraps it stops reading as the native menu, so 250 is a floor and the row stays one line.
-    expect(phone).toMatch(/\.composer-attach-menu\.ant-dropdown-menu\s*\{[^}]*width:\s*max-content/);
-    expect(phone).toMatch(/\.composer-attach-menu \.ant-dropdown-menu-item\s*\{[^}]*white-space:\s*nowrap/);
+    expect(box).toMatch(/width:\s*max-content/);
+    expect(desktop).toMatch(/\.orbit-menu-item\s*\{[^}]*white-space:\s*nowrap/);
   });
 
-  it('leaves the desktop menu at antd density', () => {
+  it('leaves the desktop menu at the ordinary density', () => {
     // Desktop is the box the mock's "before" column measured; a phone-sized menu there would be a
     // menu nobody asked for, so the metrics must not leak out of the breakpoint.
     expect(desktop).not.toContain('42.4px');
-    expect(desktop).not.toMatch(/composer-attach-menu[^}]*250px/);
+    expect(desktop).not.toMatch(/attachment[^}]*250px/);
+    // Nor does the page restyle the `+` menu around the variant, at either size.
+    expect(indexCss).not.toMatch(/\.composer-attach-menu[^{]*\{/);
   });
 });
 
@@ -300,22 +309,22 @@ describe('the composer card, 24px in', () => {
   it('starts the thumbnails and the text where the corner stops curving', () => {
     expect(px(desktop, /\.composer-box\s*\{[^}]*border-radius:\s*([\d.]+)px/)).toBe(24);
     // 1px of border + 23. The mirror behind the textarea claims the same declaration, and so does
-    // the Orbit Textarea that is to replace the AntD field (P3.1).
+    // the Orbit Textarea the composer types in.
     expect(desktop).toMatch(
-      /\.composer-field \.composer-mirror,\s*\.composer-field textarea\.ant-input,\s*\.composer-field textarea\.orbit-textarea\s*\{[^}]*padding:\s*12px 23px 2px/,
+      /\.composer-field \.composer-mirror,\s*\.composer-field textarea\.orbit-textarea\s*\{[^}]*padding:\s*12px 23px 2px/,
     );
     expect(desktop).toMatch(/\.composer-attachments\s*\{[^}]*padding:\s*12px 23px 0/);
   });
 
   it("puts the +'s left arm on that line too, at both sizes, with Send mirroring it", () => {
-    const icon = px(desktop, /\.composer-box \.composer-attach-btn\.ant-btn\s*\{[^}]*font-size:\s*([\d.]+)px/);
+    const icon = px(desktop, /\.composer-box \.composer-attach-btn\.orbit-button\s*\{[^}]*font-size:\s*([\d.]+)px/);
     // PlusOutlined draws its bar from x=152 of its 64–960 viewBox.
     const margin = ((152 - 64) / 896) * icon;
     const leftArm = (sheet: string) =>
       1 +
       // Three values, so the right side (Send's) is the same as the left.
       px(sheet, /\.composer-toolbar\s*\{[^}]*padding:\s*[\d.]+px ([\d.]+)px [\d.]+px;/) +
-      (px(sheet, /\.composer-box \.composer-send\.ant-btn\s*\{[^}]*\swidth:\s*([\d.]+)px/) - icon) / 2 +
+      (px(sheet, /\.composer-box \.composer-send\.orbit-button\s*\{[^}]*\swidth:\s*([\d.]+)px/) - icon) / 2 +
       margin;
     expect(leftArm(desktop)).toBeCloseTo(24, 1);
     expect(leftArm(phone)).toBeCloseTo(24, 1);

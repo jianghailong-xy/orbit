@@ -20,17 +20,20 @@ export interface PopoverProps extends FloatingProps {
   /** The room kept from the viewport's edges as the popover slides back inside it (default 8px); 0 for one the
    *  replaced popover slid flush to the edge (`align.overflow.shiftX`): the Plan usage popover on a phone. */
   collisionPadding?: number;
+  /** False when the trigger is not a `<button>` but a span the page draws as a pill (P5.3: the composer's context
+   *  gauge): the popover gives it the button role, a Tab stop, and Enter and Space. */
+  nativeButton?: boolean;
 }
 
 export function Popover({ trigger, title, children, openOnHover = false, disabled, initialFocus, pointAtCenter = false, arrow = true,
-  collisionPadding = 8, side = 'top', align = 'center', popupClassName, popupStyle, returnFocus, ...state }: PopoverProps) {
+  collisionPadding = 8, nativeButton = true, side = 'top', align = 'center', popupClassName, popupStyle, returnFocus, ...state }: PopoverProps) {
   const layer = useFloating(state);
   const popup = useRef<HTMLDivElement>(null);
   const anchor = useRef<HTMLButtonElement>(null);
   const pointAt = pointAtCenter && align !== 'center' ? align : undefined;
   const { positionerRef, ...offsets } = useWholePixelOffsets(anchor, arrow ? 12 : 4, collisionPadding, pointAt);
   return <BasePopover.Root open={layer.open} onOpenChange={layer.setOpen} modal={false}>
-    <BasePopover.Trigger ref={anchor} render={trigger} disabled={disabled} openOnHover={openOnHover} delay={100} closeDelay={100} />
+    <BasePopover.Trigger ref={anchor} render={trigger} disabled={disabled} openOnHover={openOnHover} delay={100} closeDelay={100} nativeButton={nativeButton} />
     <BasePopover.Portal container={layer.container()}>
       <BasePopover.Positioner ref={positionerRef} side={side} align={align} {...offsets} collisionPadding={pointAt ? 0 : collisionPadding} positionMethod={layer.positionMethod} className="orbit-floating-positioner" style={{ zIndex: layer.zIndex }}>
         <BasePopover.Popup ref={popup} initialFocus={initialFocus ?? popup} finalFocus={returnFocus}

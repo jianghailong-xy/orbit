@@ -1,0 +1,18 @@
+[
+ {
+  "menus": [],
+  "flaky": 0,
+  "scope": "Open"
+ },
+ {
+  "menus": [],
+  "flaky": 0,
+  "scope": "Open"
+ },
+ {
+  "menus": [],
+  "flaky": 0,
+  "scope": "Open"
+ }
+]
+active <span class="session-scope-menu on" title="Switch view, filter and group" role="button" tabindex="0" aria-haspopup="menu" aria-expanded="false" id="base-ui-_r_b

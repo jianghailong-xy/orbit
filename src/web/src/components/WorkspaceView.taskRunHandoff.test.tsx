@@ -2,7 +2,6 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { App as AntApp } from 'antd';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Runner } from './TasksSidePanel';
@@ -227,12 +226,10 @@ describe('sending into a run the platform has already replaced', { timeout: 60_0
       nextRoot.render(
         <QueryClientProvider client={nextClient}>
           <MemoryRouter initialEntries={[`/sessions/${DEAD_PUBLIC}`]}>
-            <AntApp>
-              <Probe />
-              <Routes>
-                <Route path="*" element={<WorkspaceView runner={RUNNER} />} />
-              </Routes>
-            </AntApp>
+            <Probe />
+            <Routes>
+              <Route path="*" element={<WorkspaceView runner={RUNNER} />} />
+            </Routes>
           </MemoryRouter>
         </QueryClientProvider>,
       );
@@ -343,7 +340,7 @@ describe('sending into a run the platform has already replaced', { timeout: 60_0
     });
     const providerRow = (): HTMLElement | undefined =>
       Array.from(
-        document.querySelectorAll<HTMLElement>('.composer-model-menu .ant-dropdown-menu-submenu-title'),
+        document.querySelectorAll<HTMLElement>('.composer-model-menu [role="menuitem"][aria-haspopup="menu"]'),
       ).find((el) => el.textContent?.includes('Provider'));
     await act(async () => {
       await vi.waitFor(() => expect(providerRow()).toBeDefined(), { timeout: 20_000, interval: 20 });
@@ -351,12 +348,10 @@ describe('sending into a run the platform has already replaced', { timeout: 60_0
     await act(async () => {
       providerRow()!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
     });
-    // rc-menu names each row after its key (`data-menu-id` ends in it), which is how the provider
-    // rows are told apart from the model rows that can carry the same words.
+    // The rows of the level the Provider row opened, which is how the provider rows are told apart
+    // from the model rows that can carry the same words.
     const providerOptions = (): HTMLElement[] =>
-      Array.from(document.querySelectorAll<HTMLElement>('.ant-dropdown-menu-item')).filter((el) =>
-        el.getAttribute('data-menu-id')?.includes('provider:'),
-      );
+      Array.from(document.querySelectorAll<HTMLElement>('[role="menu"][data-nested] [role="menuitem"]'));
     await act(async () => {
       await vi.waitFor(() => expect(providerOptions().length).toBeGreaterThan(1), {
         timeout: 20_000,
