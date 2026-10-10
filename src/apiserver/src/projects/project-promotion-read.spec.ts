@@ -87,6 +87,9 @@ function prismaStub(
 ): PrismaService {
   const reads: Reads = over.reads ?? {};
   const tx = {
+    // The generation the candidate's next job takes: raw SQL, read under this client
+    // (see queuePromotionJob's comment).
+    $queryRaw: async () => [{ generation: 0 }],
     projectPromotion: {
       findFirst: async () => row(over.promotion),
       updateMany: async () => ({ count: 1 }),
@@ -94,7 +97,6 @@ function prismaStub(
     },
     projectCodebase: { findUnique: async () => ({ canonicalRepoUrl: 'git@example.com:repo.git' }) },
     projectIntegrationJob: {
-      aggregate: async () => ({ _max: { generation: 0 } }),
       createManyAndReturn: async () => [{ id: 'job-1' }],
     },
     projectOpenItem: { updateMany: async () => ({ count: 0 }) },

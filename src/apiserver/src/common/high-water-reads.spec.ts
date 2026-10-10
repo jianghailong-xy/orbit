@@ -10,11 +10,12 @@
  *   run_event (claim, reclaim)   5125 events → 5125 heap blocks, 5172 buffers, 16.0 s cold
  *   conversation_turn (shell)    1500 turns → 1260 heap blocks, 1263 buffers, 1.2 s cold
  *   task (public page)          200k tasks  → sequential scan, 3087 buffers
+ *   integration job (promotion) 300k jobs   → parallel sequential scan, 4919 buffers
  *
- * `max(seq)` / `max(updated_at)` over the same indexes is one index tuple in ~4 buffers, so these
- * four sites read it that way. The shape below is what keeps them doing so — and the delegates are
- * banned outright on the two tables whose every aggregate is a per-scope scan, so a new call site
- * cannot quietly reintroduce it.
+ * `max(seq)` / `max(updated_at)` / `max(generation)` over the same indexes is one index tuple in
+ * ~4 buffers, so these five sites read it that way. The shape below is what keeps them doing so —
+ * and the delegates are banned outright on the two tables whose every aggregate is a per-scope
+ * scan, so a new call site cannot quietly reintroduce it.
  *
  * This half of the guarantee needs no database: it decides what ships, and runs wherever the suite
  * runs. What these reads must return (0 for a session with no events, the newest task activity) is
@@ -63,6 +64,10 @@ test('every high-water read keeps the raw shape the planner can push down', () =
     {
       file: 'src/apiserver/src/share-links/public-project.ts',
       shape: /SELECT\s+max\("updated_at"\)\s+AS "at"\s+FROM "task"\s+WHERE "owner_id" = \$\{[A-Za-z_.]+\}::uuid\s+AND "project_id" = \$\{[A-Za-z_.]+\}::uuid/,
+    },
+    {
+      file: 'src/apiserver/src/projects/project-integration-job.ts',
+      shape: /SELECT\s+max\("generation"\)\s+AS "generation"\s+FROM "project_integration_job"\s+WHERE "promotion_id" = \$\{[A-Za-z_.]+\}::uuid\s+AND "kind" = \$\{[A-Za-z_.]+\}/,
     },
   ];
   for (const { file, shape } of sites) {
