@@ -1,0 +1,2436 @@
+{
+  "chromium-dark-desktop/breakpoint-599-dialog.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-dark-desktop/breakpoint-599-dialog.png",
+    "sha256": "a8d4c1687cfd60124091621fd0e8c145174237323c52e66d98e00065b9a80a04",
+    "mainCommits": [
+      "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+  },
+  "chromium-dark-desktop/breakpoint-599-share.png": {
+    "layer": "p0.2",
+    "path": "p0.2/screenshots/chromium-dark-desktop/breakpoint-599-share.png",
+    "sha256": "44f28d51b4be65e5cc57341f000ed1206a135ce13df4c7fc6da3cf5a19d753a6"
+  },
+  "chromium-dark-desktop/breakpoint-601-dialog.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-dark-desktop/breakpoint-601-dialog.png",
+    "sha256": "2a1f94c39e54e2fd22a5875296d5a37d9bbeeae9dfe9613a2f81532c7833ba96",
+    "mainCommits": [
+      "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+  },
+  "chromium-dark-desktop/breakpoint-601-share.png": {
+    "layer": "p0.2",
+    "path": "p0.2/screenshots/chromium-dark-desktop/breakpoint-601-share.png",
+    "sha256": "ee7f345a8ae0c4427599e6e3183daa54c3eba4a5f1b8c5db7ba724b043be8e77"
+  },
+  "chromium-dark-desktop/breakpoint-639-graph.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-dark-desktop/breakpoint-639-graph.png",
+    "sha256": "9dccdcef4db9de1e43491be08841f32a1fd4e401a3e0f7649b408ec732d360d3",
+    "mainCommits": [
+      "93d3ec5804a15f240290f5c0971983c6fb7e9c5c"
+    ]
+  },
+  "chromium-dark-desktop/breakpoint-639-projects.png": {
+    "layer": "p0.2",
+    "path": "p0.2/screenshots/chromium-dark-desktop/breakpoint-639-projects.png",
+    "sha256": "128218565194f26290e5d44d9f724f74a51878e3e96152eb21a171cc104deeca"
+  },
+  "chromium-dark-desktop/breakpoint-641-graph.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-dark-desktop/breakpoint-641-graph.png",
+    "sha256": "dbc687038cf25a5c797413d1ffe5850c001fed431ad5b1a863e80945ee1a9ca7",
+    "mainCommits": [
+      "93d3ec5804a15f240290f5c0971983c6fb7e9c5c"
+    ]
+  },
+  "chromium-dark-desktop/breakpoint-641-projects.png": {
+    "layer": "p0.2",
+    "path": "p0.2/screenshots/chromium-dark-desktop/breakpoint-641-projects.png",
+    "sha256": "171027981201740cffbe4ebaefe52aad282bd8057b008e589311252eb12c283c"
+  },
+  "chromium-dark-desktop/breakpoint-959-session.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-dark-desktop/breakpoint-959-session.png",
+    "sha256": "d1c379a13d2cf864d563698f84cae58bdcfe9269ef5edd2a58b3daf4c033a2c9",
+    "mainCommits": [
+      "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+      "9d3751ec2633eba68eb3bee149782795d0426442"
+    ]
+  },
+  "chromium-dark-desktop/breakpoint-959-wiki.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-dark-desktop/breakpoint-959-wiki.png",
+    "sha256": "1d3587a25559632c81f1520e585c66b1d0eacc324de3af12f5da1390ade1e96b",
+    "mainCommits": [
+      "6c4e0ac0e2fef2afbfa51e4b0aefa4c3470a80eb",
+      "2f9cc095f83f199997909e64dfdf7f2c0e023b2b",
+      "2ba6765d9de2db57218f67ee57e6132e044ceb1b"
+    ]
+  },
+  "chromium-dark-desktop/breakpoint-961-session.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-dark-desktop/breakpoint-961-session.png",
+    "sha256": "c188301f26ca40f218afa644a6b3fbff1e9ef6d83d4e98c7955856ff2d091213",
+    "mainCommits": [
+      "918034e7290646c96cf35dc6604a4831e59505ff",
+      "f5bdd7fd395452e85fab89aeba2870740c932f80",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+      "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+      "9d3751ec2633eba68eb3bee149782795d0426442"
+    ]
+  },
+  "chromium-dark-desktop/breakpoint-961-wiki.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-dark-desktop/breakpoint-961-wiki.png",
+    "sha256": "92b1f659d4a160ba376169c8a1bb7e777224e2039c9b8476d9347303ee104bbe",
+    "mainCommits": [
+      "e64d0c72a85190e77b94ea114c5f3da4592e5ccf",
+      "6c4e0ac0e2fef2afbfa51e4b0aefa4c3470a80eb",
+      "2f9cc095f83f199997909e64dfdf7f2c0e023b2b",
+      "a884fda36851b6257d6777efbc038c325cd75a45",
+      "2ba6765d9de2db57218f67ee57e6132e044ceb1b",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+    ]
+  },
+  "chromium-dark-desktop/notification-error.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-dark-desktop/notification-error.png",
+    "sha256": "4d050829259093fdd073e3678b0ddba82b6ae0d9a0e20c2d1ea3992b5386519a",
+    "mainCommits": [
+      "918034e7290646c96cf35dc6604a4831e59505ff",
+      "f5bdd7fd395452e85fab89aeba2870740c932f80",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+      "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+      "9d3751ec2633eba68eb3bee149782795d0426442"
+    ]
+  },
+  "chromium-dark-desktop/profile-validation.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-dark-desktop/profile-validation.png",
+    "sha256": "4f9aef5bbdd513d5ef67c85b2af28762c530d457a80aa3f9d50d3e0e248c505d",
+    "mainCommits": [
+      "d233a6cd02e834f33b1eacd8153fdd0638f85b7a",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+    ]
+  },
+  "chromium-dark-desktop/profile.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-dark-desktop/profile.png",
+    "sha256": "7521aef91eca4d1e95a7bf104b7b0ba705e91457859d0cbd1ca7bc552b6773ce",
+    "mainCommits": [
+      "d233a6cd02e834f33b1eacd8153fdd0638f85b7a",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+    ]
+  },
+  "chromium-dark-desktop/project-graph-fullscreen.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-dark-desktop/project-graph-fullscreen.png",
+    "sha256": "af2e8aecb2e0956c2f0bb80ed91fbe0e6d44567bedb80eabbe7e3a96c8d9c092",
+    "mainCommits": [
+      "93d3ec5804a15f240290f5c0971983c6fb7e9c5c",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+    ]
+  },
+  "chromium-dark-desktop/project-graph.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-dark-desktop/project-graph.png",
+    "sha256": "ef6f29167f86dbd5647d05ef3d1d8cdcfce17bfff013b8c0bdb80610ab8faa36",
+    "mainCommits": [
+      "93d3ec5804a15f240290f5c0971983c6fb7e9c5c",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+    ]
+  },
+  "chromium-dark-desktop/project-overview.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-dark-desktop/project-overview.png",
+    "sha256": "4b2ce6c920055a57c4cd4c3ef48e616394460b09f4b2ad066e428095fd7fc693",
+    "mainCommits": [
+      "93d3ec5804a15f240290f5c0971983c6fb7e9c5c",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+    ]
+  },
+  "chromium-dark-desktop/projects-error.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-dark-desktop/projects-error.png",
+    "sha256": "d5cca31aba9993385c5192197d08fab73d0b658ec04b1eee1f000d6d946ffaf5",
+    "mainCommits": [
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+    ]
+  },
+  "chromium-dark-desktop/projects-list.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-dark-desktop/projects-list.png",
+    "sha256": "035ab67a19a0c3bd8ed1e7bd8297681f00eaa11cde7e49a809a96f9d14c5afc0",
+    "mainCommits": [
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+    ]
+  },
+  "chromium-dark-desktop/projects-loading.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-dark-desktop/projects-loading.png",
+    "sha256": "8998c10fd3543010ea773f3fc2398edad288232db80f4c1e3bd4de0be540e91e",
+    "mainCommits": [
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+    ]
+  },
+  "chromium-dark-desktop/projects-search-empty.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-dark-desktop/projects-search-empty.png",
+    "sha256": "23d5d9992dd5753221d0a94daef2c41fa611077ab3923453f419aa951323264f",
+    "mainCommits": [
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+    ]
+  },
+  "chromium-dark-desktop/session-attachment-menu.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-dark-desktop/session-attachment-menu.png",
+    "sha256": "530e19fd74305b1937f0a938ab1034111a0acc48b5bda6d7047e51d14820782b",
+    "mainCommits": [
+      "918034e7290646c96cf35dc6604a4831e59505ff",
+      "f5bdd7fd395452e85fab89aeba2870740c932f80",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+      "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+      "9d3751ec2633eba68eb3bee149782795d0426442"
+    ]
+  },
+  "chromium-dark-desktop/session-attachment-staged.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-dark-desktop/session-attachment-staged.png",
+    "sha256": "965e331b55d13b24ee5ba9cbeefa4d691d767ed06765def0c3e3e634338f2048",
+    "mainCommits": [
+      "918034e7290646c96cf35dc6604a4831e59505ff",
+      "f5bdd7fd395452e85fab89aeba2870740c932f80",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+      "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+      "9d3751ec2633eba68eb3bee149782795d0426442"
+    ]
+  },
+  "chromium-dark-desktop/session-composer-focus.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-dark-desktop/session-composer-focus.png",
+    "sha256": "f840964ec7f258ee816774ac00d60e9f434044051c2226f009fd746ec3d82d9e",
+    "mainCommits": [
+      "918034e7290646c96cf35dc6604a4831e59505ff",
+      "f5bdd7fd395452e85fab89aeba2870740c932f80",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+      "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+      "9d3751ec2633eba68eb3bee149782795d0426442"
+    ]
+  },
+  "chromium-dark-desktop/session-idle.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-dark-desktop/session-idle.png",
+    "sha256": "aa1b6e6e88ab6511bd777fab4d962d7b043f3c0604fb8bd017df779405884fd8",
+    "mainCommits": [
+      "918034e7290646c96cf35dc6604a4831e59505ff",
+      "f5bdd7fd395452e85fab89aeba2870740c932f80",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+      "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+      "9d3751ec2633eba68eb3bee149782795d0426442"
+    ]
+  },
+  "chromium-dark-desktop/session-streaming.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-dark-desktop/session-streaming.png",
+    "sha256": "f3d446b92e09a6313de27a995550927fda4caed33368c44b5abb1b3feda025a0",
+    "mainCommits": [
+      "918034e7290646c96cf35dc6604a4831e59505ff",
+      "f5bdd7fd395452e85fab89aeba2870740c932f80",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+      "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+      "9d3751ec2633eba68eb3bee149782795d0426442"
+    ]
+  },
+  "chromium-dark-desktop/settings-saved.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-dark-desktop/settings-saved.png",
+    "sha256": "8f7ec8b463f419562c2e28d85d6a7e176f2fa5767e7494c5484e9980e93f862f",
+    "mainCommits": [
+      "4088d37e6d26243196161355e658d3e303939bf3",
+      "def134095f8031d3a2498dbfc9677e684bca0e67",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+    ]
+  },
+  "chromium-dark-desktop/settings.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-dark-desktop/settings.png",
+    "sha256": "0bb811ccda2151e9fffa9a3c57046cb1e86874602147a2e8a9522851914d00cc",
+    "mainCommits": [
+      "4088d37e6d26243196161355e658d3e303939bf3",
+      "def134095f8031d3a2498dbfc9677e684bca0e67",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+    ]
+  },
+  "chromium-dark-desktop/task-action-focus.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-dark-desktop/task-action-focus.png",
+    "sha256": "bb2c4bfaf16435afa05cacbd40c5b05d0385c34e782562064486e2900b1d2aa9",
+    "mainCommits": [
+      "4088d37e6d26243196161355e658d3e303939bf3",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+    ]
+  },
+  "chromium-dark-desktop/task-action-hover.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-dark-desktop/task-action-hover.png",
+    "sha256": "d5289d46f71f9e1c6dec13a9c7a1dda296a548fad0488ded7de21a98cc94f24d",
+    "mainCommits": [
+      "4088d37e6d26243196161355e658d3e303939bf3",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+    ]
+  },
+  "chromium-dark-desktop/task-action-menu.png": {
+    "layer": "accepted",
+    "path": "p0-drift/accepted/screenshots/chromium-dark-desktop/task-action-menu.png",
+    "sha256": "f25867226da7cf56e5ddb500545e331cf56447d14a8b9dfca4fd5ce072c01fee",
+    "replaces": {
+      "layer": "p0-drift",
+      "sha256": "7af4c91081813d74bebd31f87e1cdb8ce87b8b239ccbd85e061e0c1034796b45"
+    },
+    "decision": {
+      "taskId": "34Za39ACSBoCkYKc80Md8",
+      "evidenceRevision": 2,
+      "evidenceDigest": "302ca1f5051c1f3fd04abf89c1dff51c86cfbdcb9326fc3f7abf70e9ee9809bc",
+      "verdict": "CONFIRM",
+      "document": "p3.2/README.md"
+    }
+  },
+  "chromium-dark-desktop/task-detail.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-dark-desktop/task-detail.png",
+    "sha256": "285423c4359a840c4aa6ed959ce9aab93dfc98f17b774fa33d27ce67de573b72",
+    "mainCommits": [
+      "4088d37e6d26243196161355e658d3e303939bf3",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+    ]
+  },
+  "chromium-dark-desktop/task-public-share.png": {
+    "layer": "p0.2",
+    "path": "p0.2/screenshots/chromium-dark-desktop/task-public-share.png",
+    "sha256": "7b0843aed860e884a277b1090b01150873daf095e649a531c84da56f31f6ff2c"
+  },
+  "chromium-dark-desktop/task-share-dialog.png": {
+    "layer": "accepted",
+    "path": "p0-drift/accepted/screenshots/chromium-dark-desktop/task-share-dialog.png",
+    "sha256": "4d8e1b6a6796a0432cca1f79b8528047b8afbd8ce4baa79a6cbf99d2ead5ba38",
+    "replaces": {
+      "layer": "p0-drift",
+      "sha256": "31621a609fbd9d82fdfe83bcacf5506a7c1efdf48b1419aaf77a9e3274fc53f3"
+    },
+    "decision": {
+      "taskId": "34Za39ACSBoCkYKc80Md8",
+      "evidenceRevision": 2,
+      "evidenceDigest": "302ca1f5051c1f3fd04abf89c1dff51c86cfbdcb9326fc3f7abf70e9ee9809bc",
+      "verdict": "CONFIRM",
+      "document": "p3.2/README.md"
+    }
+  },
+  "chromium-dark-desktop/wiki-home.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-dark-desktop/wiki-home.png",
+    "sha256": "f9cead60b48f95558e5b22f601f5fc6b7dbfe7a9263efaadb2320e3e8c21900f",
+    "mainCommits": [
+      "6c4e0ac0e2fef2afbfa51e4b0aefa4c3470a80eb",
+      "2f9cc095f83f199997909e64dfdf7f2c0e023b2b",
+      "a884fda36851b6257d6777efbc038c325cd75a45",
+      "2ba6765d9de2db57218f67ee57e6132e044ceb1b",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+    ]
+  },
+  "chromium-dark-desktop/wiki-new-entry.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-dark-desktop/wiki-new-entry.png",
+    "sha256": "e9da2ac92546dee57853d1642f092ec90ba86b972017c26093226d8469987896",
+    "mainCommits": [
+      "6c4e0ac0e2fef2afbfa51e4b0aefa4c3470a80eb",
+      "2f9cc095f83f199997909e64dfdf7f2c0e023b2b",
+      "a884fda36851b6257d6777efbc038c325cd75a45",
+      "2ba6765d9de2db57218f67ee57e6132e044ceb1b",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+    ]
+  },
+  "chromium-dark-phone/notification-error.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-dark-phone/notification-error.png",
+    "sha256": "0bb67799ae1d1a18ef0702ea11e88ede710a8af9d83bd4445ee6243cf4c30295",
+    "mainCommits": [
+      "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+      "9d3751ec2633eba68eb3bee149782795d0426442"
+    ]
+  },
+  "chromium-dark-phone/profile-validation.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-dark-phone/profile-validation.png",
+    "sha256": "b731dfb5d4103529a87fce22ee1fe8d6f8e27fa00be2d9ff0abcd6361a1af37f",
+    "mainCommits": [
+      "d233a6cd02e834f33b1eacd8153fdd0638f85b7a"
+    ]
+  },
+  "chromium-dark-phone/profile.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-dark-phone/profile.png",
+    "sha256": "5a266cd0deb90ba08e9bd2503f7ccc2b7ab44a87b225141d513078815a7b6020",
+    "mainCommits": [
+      "d233a6cd02e834f33b1eacd8153fdd0638f85b7a"
+    ]
+  },
+  "chromium-dark-phone/project-graph-fullscreen.png": {
+    "layer": "p0.2",
+    "path": "p0.2/screenshots/chromium-dark-phone/project-graph-fullscreen.png",
+    "sha256": "c21d31f9bfb0dc2207b9838505fb5d8b9c962c9a8be513e1a2bf224de3392b04"
+  },
+  "chromium-dark-phone/project-graph.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-dark-phone/project-graph.png",
+    "sha256": "e4eacd8d6f1f434a1b99f982fd58beddfbf115cd51082843a62f855b70d6f296",
+    "mainCommits": [
+      "93d3ec5804a15f240290f5c0971983c6fb7e9c5c"
+    ]
+  },
+  "chromium-dark-phone/project-overview.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-dark-phone/project-overview.png",
+    "sha256": "8b50e9973cde6c3822b2359f961fcb3a44ea8c834bad202c5bfee91d0022855c",
+    "mainCommits": [
+      "93d3ec5804a15f240290f5c0971983c6fb7e9c5c"
+    ]
+  },
+  "chromium-dark-phone/projects-error.png": {
+    "layer": "p0.2",
+    "path": "p0.2/screenshots/chromium-dark-phone/projects-error.png",
+    "sha256": "e63566cbeea337d9474a12267eaec1a86a7a4bea7649be9b5e50f2816347ca57"
+  },
+  "chromium-dark-phone/projects-list.png": {
+    "layer": "p0.2",
+    "path": "p0.2/screenshots/chromium-dark-phone/projects-list.png",
+    "sha256": "0a8be67e46e7baf377b8e9f6842165a46ef713ff5e8fd1e168307d75859328ea"
+  },
+  "chromium-dark-phone/projects-loading.png": {
+    "layer": "p0.2",
+    "path": "p0.2/screenshots/chromium-dark-phone/projects-loading.png",
+    "sha256": "1614aa0e4d60b611754415281630f307085f93381245f3c1d8129de81d20f69f"
+  },
+  "chromium-dark-phone/projects-search-empty.png": {
+    "layer": "p0.2",
+    "path": "p0.2/screenshots/chromium-dark-phone/projects-search-empty.png",
+    "sha256": "ad4d2042668ddad43527cfa4a22f729c1271e432b892838579c492924b0ec0c0"
+  },
+  "chromium-dark-phone/session-attachment-menu.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-dark-phone/session-attachment-menu.png",
+    "sha256": "168e58d666bea0fff181ca97fb04d8f15d743efa4272ed0249e9f69e35b8e497",
+    "mainCommits": [
+      "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+      "9d3751ec2633eba68eb3bee149782795d0426442"
+    ]
+  },
+  "chromium-dark-phone/session-attachment-staged.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-dark-phone/session-attachment-staged.png",
+    "sha256": "b78e6218a0c662f3125aae854c8bcc5e059549bbd1f1adfede9001f4ece20149",
+    "mainCommits": [
+      "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+      "9d3751ec2633eba68eb3bee149782795d0426442"
+    ]
+  },
+  "chromium-dark-phone/session-composer-focus.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-dark-phone/session-composer-focus.png",
+    "sha256": "1bca9354ac731ebe9939e0b73d0392027554d92475c9b0cc8d614fd1c8c4e5a4",
+    "mainCommits": [
+      "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+      "9d3751ec2633eba68eb3bee149782795d0426442"
+    ]
+  },
+  "chromium-dark-phone/session-idle.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-dark-phone/session-idle.png",
+    "sha256": "52f2e0d5f6c6dfe54426e26e6f3365b5137d5b3ccd92505cc66195c7a97cc9b9",
+    "mainCommits": [
+      "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+      "9d3751ec2633eba68eb3bee149782795d0426442"
+    ]
+  },
+  "chromium-dark-phone/session-streaming.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-dark-phone/session-streaming.png",
+    "sha256": "da8d1128bbe1de1ea6ab62716f7cbfe24ffa9152b0e04cbf51c4841d401a5a6a",
+    "mainCommits": [
+      "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+      "9d3751ec2633eba68eb3bee149782795d0426442"
+    ]
+  },
+  "chromium-dark-phone/settings-saved.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-dark-phone/settings-saved.png",
+    "sha256": "5df35df360fb8b4736c962e56fc10b6c1a597a02e7547f018819a3cb0f09e3ad",
+    "mainCommits": [
+      "4088d37e6d26243196161355e658d3e303939bf3",
+      "def134095f8031d3a2498dbfc9677e684bca0e67"
+    ]
+  },
+  "chromium-dark-phone/settings.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-dark-phone/settings.png",
+    "sha256": "8f82671d9eb1e7be57baf347d90ee0dceaa116886417b7c0db662c599e7b2bcf",
+    "mainCommits": [
+      "4088d37e6d26243196161355e658d3e303939bf3",
+      "def134095f8031d3a2498dbfc9677e684bca0e67"
+    ]
+  },
+  "chromium-dark-phone/task-action-focus.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-dark-phone/task-action-focus.png",
+    "sha256": "9097e69a0f389aacfd7f25db4e7cbbaa9413a5fcc8c3f47c6642974e23858cf0",
+    "mainCommits": [
+      "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+  },
+  "chromium-dark-phone/task-action-hover.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-dark-phone/task-action-hover.png",
+    "sha256": "3e47867e4cdf3710a16b92938ac20ef59aa94ade1de5f703e7e3378142011a44",
+    "mainCommits": [
+      "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+  },
+  "chromium-dark-phone/task-action-menu.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-dark-phone/task-action-menu.png",
+    "sha256": "e77181cf1e960d5963338baf99832793b2ce71c21bebcb5e4b4c04427eea4396",
+    "mainCommits": [
+      "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+  },
+  "chromium-dark-phone/task-detail.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-dark-phone/task-detail.png",
+    "sha256": "576c9b73f78356ac8f27f52e0aa76eaf0096267743998f7d1507df6ecedaef87",
+    "mainCommits": [
+      "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+  },
+  "chromium-dark-phone/task-public-share.png": {
+    "layer": "p0.2",
+    "path": "p0.2/screenshots/chromium-dark-phone/task-public-share.png",
+    "sha256": "6f5d09a6629db5b8f5bef019b2f244b5a751b90d1dc6691403d7f138a120117b"
+  },
+  "chromium-dark-phone/task-share-dialog.png": {
+    "layer": "accepted",
+    "path": "p0-drift/accepted/screenshots/chromium-dark-phone/task-share-dialog.png",
+    "sha256": "c017cc3caa5ff1a215de2998d9e52f413ed92cb2d8168393a060dbf7b5dfba37",
+    "replaces": {
+      "layer": "p0-drift",
+      "sha256": "6d1ce3bffeb87baeb167a332d61a134932b1e9960a9a67ca313763b527c50e27"
+    },
+    "decision": {
+      "taskId": "34Za39ACSBoCkYKc80Md8",
+      "evidenceRevision": 2,
+      "evidenceDigest": "302ca1f5051c1f3fd04abf89c1dff51c86cfbdcb9326fc3f7abf70e9ee9809bc",
+      "verdict": "CONFIRM",
+      "document": "p3.2/README.md"
+    }
+  },
+  "chromium-dark-phone/wiki-contents.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-dark-phone/wiki-contents.png",
+    "sha256": "57864eac86c00aaa15516ce2f74b0348c5b611a31e492218775cd600ecbee0dc",
+    "mainCommits": [
+      "2f9cc095f83f199997909e64dfdf7f2c0e023b2b",
+      "2ba6765d9de2db57218f67ee57e6132e044ceb1b"
+    ]
+  },
+  "chromium-dark-phone/wiki-home.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-dark-phone/wiki-home.png",
+    "sha256": "170b95ca2bbd0c99eef4e9c042dd0447d7b9b92e8a2c90eb15409d67b4b1e7fe",
+    "mainCommits": [
+      "6c4e0ac0e2fef2afbfa51e4b0aefa4c3470a80eb",
+      "2f9cc095f83f199997909e64dfdf7f2c0e023b2b",
+      "2ba6765d9de2db57218f67ee57e6132e044ceb1b"
+    ]
+  },
+  "chromium-dark-phone/wiki-new-entry.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-dark-phone/wiki-new-entry.png",
+    "sha256": "46134d646fac295df159e7e15acb746882c6a4be178f9d151dfc23ac99119717",
+    "mainCommits": [
+      "6c4e0ac0e2fef2afbfa51e4b0aefa4c3470a80eb",
+      "2f9cc095f83f199997909e64dfdf7f2c0e023b2b",
+      "2ba6765d9de2db57218f67ee57e6132e044ceb1b"
+    ]
+  },
+  "chromium-light-desktop/breakpoint-599-dialog.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-light-desktop/breakpoint-599-dialog.png",
+    "sha256": "819762ce17b65952fc13a4e11f6ebeffc6dcab7cec9037b909250bf7ca114bf5",
+    "mainCommits": [
+      "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+  },
+  "chromium-light-desktop/breakpoint-599-share.png": {
+    "layer": "p0.2",
+    "path": "p0.2/screenshots/chromium-light-desktop/breakpoint-599-share.png",
+    "sha256": "59ce81b7b27542bb3ab9d6ba0afd48d6cde516ada450c3d9b9471094deaf9f88"
+  },
+  "chromium-light-desktop/breakpoint-601-dialog.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-light-desktop/breakpoint-601-dialog.png",
+    "sha256": "3f66283d449cc36db8f55ebd23dccca124b4f3a161dac7bce5f7c3c84ffad278",
+    "mainCommits": [
+      "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+  },
+  "chromium-light-desktop/breakpoint-601-share.png": {
+    "layer": "p0.2",
+    "path": "p0.2/screenshots/chromium-light-desktop/breakpoint-601-share.png",
+    "sha256": "e0fb7cefb5368a5b2e9afa660dc01f53e7d60ced1470bdb42a2ac11976f8ee22"
+  },
+  "chromium-light-desktop/breakpoint-639-graph.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-light-desktop/breakpoint-639-graph.png",
+    "sha256": "0868ab643d46c3ae512a6229e2a9fe0d941e6a7b03a3d5bc87c7973e34a9cf68",
+    "mainCommits": [
+      "93d3ec5804a15f240290f5c0971983c6fb7e9c5c"
+    ]
+  },
+  "chromium-light-desktop/breakpoint-639-projects.png": {
+    "layer": "p0.2",
+    "path": "p0.2/screenshots/chromium-light-desktop/breakpoint-639-projects.png",
+    "sha256": "ae90a2a736a1e9c8e37d46fab052605547a542cfe727219138967e5778c54319"
+  },
+  "chromium-light-desktop/breakpoint-641-graph.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-light-desktop/breakpoint-641-graph.png",
+    "sha256": "cc7502b07bebb6759e34ce970b6728dce6b416cb411cc7703eade9cba50c1b07",
+    "mainCommits": [
+      "93d3ec5804a15f240290f5c0971983c6fb7e9c5c"
+    ]
+  },
+  "chromium-light-desktop/breakpoint-641-projects.png": {
+    "layer": "p0.2",
+    "path": "p0.2/screenshots/chromium-light-desktop/breakpoint-641-projects.png",
+    "sha256": "3280498edea4698f4159a7e0acf77f6c16f3d0fa73bb67100c2fe0a9d4ec0089"
+  },
+  "chromium-light-desktop/breakpoint-959-session.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-light-desktop/breakpoint-959-session.png",
+    "sha256": "d634a613f04a1991b4f65b9912311c7a7339670bfa938bdf3c9fd270d718a9bc",
+    "mainCommits": [
+      "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+      "9d3751ec2633eba68eb3bee149782795d0426442"
+    ]
+  },
+  "chromium-light-desktop/breakpoint-959-wiki.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-light-desktop/breakpoint-959-wiki.png",
+    "sha256": "d5bbbb804d0e7bb6f0fdae575a3ba054cdc3db303da0a4195d91b2b7629d6bcf",
+    "mainCommits": [
+      "6c4e0ac0e2fef2afbfa51e4b0aefa4c3470a80eb",
+      "2f9cc095f83f199997909e64dfdf7f2c0e023b2b",
+      "2ba6765d9de2db57218f67ee57e6132e044ceb1b"
+    ]
+  },
+  "chromium-light-desktop/breakpoint-961-session.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-light-desktop/breakpoint-961-session.png",
+    "sha256": "1776b646b7701c0f9c9127d45cddb20ccba3ba0d7e0302d54515934ed95d3a1d",
+    "mainCommits": [
+      "918034e7290646c96cf35dc6604a4831e59505ff",
+      "f5bdd7fd395452e85fab89aeba2870740c932f80",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+      "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+      "9d3751ec2633eba68eb3bee149782795d0426442"
+    ]
+  },
+  "chromium-light-desktop/breakpoint-961-wiki.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-light-desktop/breakpoint-961-wiki.png",
+    "sha256": "8a78ac02b0c7a81c9b28da7583341ac3e5297afa5fdf4b8c14bc30c2d8619152",
+    "mainCommits": [
+      "6c4e0ac0e2fef2afbfa51e4b0aefa4c3470a80eb",
+      "2f9cc095f83f199997909e64dfdf7f2c0e023b2b",
+      "a884fda36851b6257d6777efbc038c325cd75a45",
+      "2ba6765d9de2db57218f67ee57e6132e044ceb1b",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+    ]
+  },
+  "chromium-light-desktop/notification-error.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-light-desktop/notification-error.png",
+    "sha256": "02163be60a67b18b187b8609a66ec56ba886abeca8ebbdb6901171309d62ec05",
+    "mainCommits": [
+      "918034e7290646c96cf35dc6604a4831e59505ff",
+      "f5bdd7fd395452e85fab89aeba2870740c932f80",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+      "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+      "9d3751ec2633eba68eb3bee149782795d0426442"
+    ]
+  },
+  "chromium-light-desktop/profile-validation.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-light-desktop/profile-validation.png",
+    "sha256": "15e140cacae184750b390fccd5ab0fbcfff55459e4f1f2404094eccc52a027cb",
+    "mainCommits": [
+      "d233a6cd02e834f33b1eacd8153fdd0638f85b7a",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+    ]
+  },
+  "chromium-light-desktop/profile.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-light-desktop/profile.png",
+    "sha256": "0f9986c6bfc461fa8860ba98f030239219ac557c32f1ce8393ff1800724eec15",
+    "mainCommits": [
+      "d233a6cd02e834f33b1eacd8153fdd0638f85b7a",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+    ]
+  },
+  "chromium-light-desktop/project-graph-fullscreen.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-light-desktop/project-graph-fullscreen.png",
+    "sha256": "a216d34fc7810ddba043beb1747bb01d5f2ad728400ff13a9fc8e5a1887b0b05",
+    "mainCommits": [
+      "93d3ec5804a15f240290f5c0971983c6fb7e9c5c",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+    ]
+  },
+  "chromium-light-desktop/project-graph.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-light-desktop/project-graph.png",
+    "sha256": "200967342d72d2a9cd5f62e8c4a0cbed9b3b7c202811f66703537bf5024b9364",
+    "mainCommits": [
+      "93d3ec5804a15f240290f5c0971983c6fb7e9c5c",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+    ]
+  },
+  "chromium-light-desktop/project-overview.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-light-desktop/project-overview.png",
+    "sha256": "5b355e0cd35c3ef3a009971a60aba332cd5804e987984813596e7eb359891703",
+    "mainCommits": [
+      "93d3ec5804a15f240290f5c0971983c6fb7e9c5c",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+    ]
+  },
+  "chromium-light-desktop/projects-error.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-light-desktop/projects-error.png",
+    "sha256": "1b56e0a8bfcdc0f816854113a7f8d5c851bda1690a23e9947ba3e07214a6e8f6",
+    "mainCommits": [
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+    ]
+  },
+  "chromium-light-desktop/projects-list.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-light-desktop/projects-list.png",
+    "sha256": "992ff55f6473f1f0e30f0d38e4a65253bc7bd586d4556234d0488f528ec949ae",
+    "mainCommits": [
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+    ]
+  },
+  "chromium-light-desktop/projects-loading.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-light-desktop/projects-loading.png",
+    "sha256": "1799070d992b94a61cd1c6b1b2bb12961c76e2c522e55eeb9d54b7d96a546eb5",
+    "mainCommits": [
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+    ]
+  },
+  "chromium-light-desktop/projects-search-empty.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-light-desktop/projects-search-empty.png",
+    "sha256": "488ca122caf1d5252c9785f4cb7bbdfe636c81e55aa45306c81e7dcc8e61801e",
+    "mainCommits": [
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+    ]
+  },
+  "chromium-light-desktop/session-attachment-menu.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-light-desktop/session-attachment-menu.png",
+    "sha256": "b378568cfe0b508b6a89e59b03f3b71e7061b9b2c22fbf9b35e8ba071196f142",
+    "mainCommits": [
+      "918034e7290646c96cf35dc6604a4831e59505ff",
+      "f5bdd7fd395452e85fab89aeba2870740c932f80",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+      "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+      "9d3751ec2633eba68eb3bee149782795d0426442"
+    ]
+  },
+  "chromium-light-desktop/session-attachment-staged.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-light-desktop/session-attachment-staged.png",
+    "sha256": "2368bda2093938fcf0d1ec44da790de831d0724623a6434e3a94c89afce4fa51",
+    "mainCommits": [
+      "918034e7290646c96cf35dc6604a4831e59505ff",
+      "f5bdd7fd395452e85fab89aeba2870740c932f80",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+      "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+      "9d3751ec2633eba68eb3bee149782795d0426442"
+    ]
+  },
+  "chromium-light-desktop/session-composer-focus.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-light-desktop/session-composer-focus.png",
+    "sha256": "aa4169d0376e39726f0acef882a50203a514b88ad4ec5100d451d9f075aae3fa",
+    "mainCommits": [
+      "918034e7290646c96cf35dc6604a4831e59505ff",
+      "f5bdd7fd395452e85fab89aeba2870740c932f80",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+      "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+      "9d3751ec2633eba68eb3bee149782795d0426442"
+    ]
+  },
+  "chromium-light-desktop/session-idle.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-light-desktop/session-idle.png",
+    "sha256": "b163c150f293226b8a72a1a8749c66cdb5491fda0bbeda24e26c695c20236db9",
+    "mainCommits": [
+      "918034e7290646c96cf35dc6604a4831e59505ff",
+      "f5bdd7fd395452e85fab89aeba2870740c932f80",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+      "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+      "9d3751ec2633eba68eb3bee149782795d0426442"
+    ]
+  },
+  "chromium-light-desktop/session-streaming.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-light-desktop/session-streaming.png",
+    "sha256": "31cdf7d87171305ab37b73d2b85ec38d2350f07cf021985d3ee8eaf74fcb7a8c",
+    "mainCommits": [
+      "918034e7290646c96cf35dc6604a4831e59505ff",
+      "f5bdd7fd395452e85fab89aeba2870740c932f80",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+      "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+      "9d3751ec2633eba68eb3bee149782795d0426442"
+    ]
+  },
+  "chromium-light-desktop/settings-saved.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-light-desktop/settings-saved.png",
+    "sha256": "a108623d260df558f209a179a44cb60ac9b3ea70b5b53e6ef986fdab1f99c13c",
+    "mainCommits": [
+      "4088d37e6d26243196161355e658d3e303939bf3",
+      "def134095f8031d3a2498dbfc9677e684bca0e67",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+    ]
+  },
+  "chromium-light-desktop/settings.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-light-desktop/settings.png",
+    "sha256": "6f6c1abcefc6f9dd164b0dc764d0259f54720c512fdd15e27aa704139f646b7a",
+    "mainCommits": [
+      "4088d37e6d26243196161355e658d3e303939bf3",
+      "def134095f8031d3a2498dbfc9677e684bca0e67",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+    ]
+  },
+  "chromium-light-desktop/task-action-focus.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-light-desktop/task-action-focus.png",
+    "sha256": "59d812cafe17054aa3036ee13382ac7c1972780014f13e6b2e33d233ae442397",
+    "mainCommits": [
+      "4088d37e6d26243196161355e658d3e303939bf3",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+    ]
+  },
+  "chromium-light-desktop/task-action-hover.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-light-desktop/task-action-hover.png",
+    "sha256": "40e6f75f0a244a054f9052658fc4956888b9c6c25f2b69e998c8c6973d982895",
+    "mainCommits": [
+      "4088d37e6d26243196161355e658d3e303939bf3",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+    ]
+  },
+  "chromium-light-desktop/task-action-menu.png": {
+    "layer": "accepted",
+    "path": "p0-drift/accepted/screenshots/chromium-light-desktop/task-action-menu.png",
+    "sha256": "e9234a96e06fc13c50eac67f15521d088dcaf10f7577a2ee8210693dd174f76f",
+    "replaces": {
+      "layer": "p0-drift",
+      "sha256": "a96c90d797da2516fed17d9a236df05942ccdeb16752a73aaa36de00f87de355"
+    },
+    "decision": {
+      "taskId": "34Za39ACSBoCkYKc80Md8",
+      "evidenceRevision": 2,
+      "evidenceDigest": "302ca1f5051c1f3fd04abf89c1dff51c86cfbdcb9326fc3f7abf70e9ee9809bc",
+      "verdict": "CONFIRM",
+      "document": "p3.2/README.md"
+    }
+  },
+  "chromium-light-desktop/task-detail.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-light-desktop/task-detail.png",
+    "sha256": "8887e70f502bea4d48cd92d31becfd7eb632e1a6d3a3b8103acf4dcf5227930c",
+    "mainCommits": [
+      "4088d37e6d26243196161355e658d3e303939bf3",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+    ]
+  },
+  "chromium-light-desktop/task-public-share.png": {
+    "layer": "p0.2",
+    "path": "p0.2/screenshots/chromium-light-desktop/task-public-share.png",
+    "sha256": "b6a708a53434ccc519901b82e9a02d6240bf241f48537f7378458d58c01480ab"
+  },
+  "chromium-light-desktop/task-share-dialog.png": {
+    "layer": "accepted",
+    "path": "p0-drift/accepted/screenshots/chromium-light-desktop/task-share-dialog.png",
+    "sha256": "64f02d0417b70ffaa52c5a74be668ae4ebdc99d7ce407e90924b2c2629f36828",
+    "replaces": {
+      "layer": "p0-drift",
+      "sha256": "4e17a8be17426fb9f30176b813a601723dc34dea6fe0608c5c83c322ccc49fc8"
+    },
+    "decision": {
+      "taskId": "34Za39ACSBoCkYKc80Md8",
+      "evidenceRevision": 2,
+      "evidenceDigest": "302ca1f5051c1f3fd04abf89c1dff51c86cfbdcb9326fc3f7abf70e9ee9809bc",
+      "verdict": "CONFIRM",
+      "document": "p3.2/README.md"
+    }
+  },
+  "chromium-light-desktop/wiki-home.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-light-desktop/wiki-home.png",
+    "sha256": "1ba1bc049828ef9251cf91bc2963ed2e2abfd012df428cbd8a94fbb57a696a28",
+    "mainCommits": [
+      "6c4e0ac0e2fef2afbfa51e4b0aefa4c3470a80eb",
+      "2f9cc095f83f199997909e64dfdf7f2c0e023b2b",
+      "a884fda36851b6257d6777efbc038c325cd75a45",
+      "2ba6765d9de2db57218f67ee57e6132e044ceb1b",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+    ]
+  },
+  "chromium-light-desktop/wiki-new-entry.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-light-desktop/wiki-new-entry.png",
+    "sha256": "c6936e21529463f165cd853adb9dbedcb7ca9e6df200e77819068b6cf1747b81",
+    "mainCommits": [
+      "6c4e0ac0e2fef2afbfa51e4b0aefa4c3470a80eb",
+      "2f9cc095f83f199997909e64dfdf7f2c0e023b2b",
+      "a884fda36851b6257d6777efbc038c325cd75a45",
+      "2ba6765d9de2db57218f67ee57e6132e044ceb1b",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+    ]
+  },
+  "chromium-light-phone/notification-error.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-light-phone/notification-error.png",
+    "sha256": "878d8cd0da0bef99c79d05b778c7d1a06a2406bafcbf916df41da2b664a3c96e",
+    "mainCommits": [
+      "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+      "9d3751ec2633eba68eb3bee149782795d0426442"
+    ]
+  },
+  "chromium-light-phone/profile-validation.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-light-phone/profile-validation.png",
+    "sha256": "7dbf1cb9fcf6a0226df7fc47439c92d18e0c846bb3fdd7ad808ae216d4cc5495",
+    "mainCommits": [
+      "d233a6cd02e834f33b1eacd8153fdd0638f85b7a"
+    ]
+  },
+  "chromium-light-phone/profile.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-light-phone/profile.png",
+    "sha256": "4b966dec5ba6f0ccd0a48719d9682fc2758c7656d2dcfb956e9fa000fb9a880f",
+    "mainCommits": [
+      "d233a6cd02e834f33b1eacd8153fdd0638f85b7a"
+    ]
+  },
+  "chromium-light-phone/project-graph-fullscreen.png": {
+    "layer": "p0.2",
+    "path": "p0.2/screenshots/chromium-light-phone/project-graph-fullscreen.png",
+    "sha256": "5bbdd1f3349bec5251905e2d57de03894d1e270ba0977c708fd63efc0cd7da27"
+  },
+  "chromium-light-phone/project-graph.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-light-phone/project-graph.png",
+    "sha256": "e607f487ff68030704825e83535601e49155e5334a0d8793ebbadce6e8cfd90c",
+    "mainCommits": [
+      "93d3ec5804a15f240290f5c0971983c6fb7e9c5c"
+    ]
+  },
+  "chromium-light-phone/project-overview.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-light-phone/project-overview.png",
+    "sha256": "da93eb5caa592200f94152830ac5947ba390c485a080cc798cb201f8b44ce836",
+    "mainCommits": [
+      "93d3ec5804a15f240290f5c0971983c6fb7e9c5c"
+    ]
+  },
+  "chromium-light-phone/projects-error.png": {
+    "layer": "p0.2",
+    "path": "p0.2/screenshots/chromium-light-phone/projects-error.png",
+    "sha256": "18b3b9c5652c13f68d4647f4640ebbd5efb441bbb6f52231b7d3dcaa3d0fe41b"
+  },
+  "chromium-light-phone/projects-list.png": {
+    "layer": "p0.2",
+    "path": "p0.2/screenshots/chromium-light-phone/projects-list.png",
+    "sha256": "93c9a517fbfe60397330c8a4e8866c2d3984ffad74e009bdda4299a8e190d07e"
+  },
+  "chromium-light-phone/projects-loading.png": {
+    "layer": "p0.2",
+    "path": "p0.2/screenshots/chromium-light-phone/projects-loading.png",
+    "sha256": "f6b89be306f058e88fd69868e5e74027cd3cc836f8203346ae7c46d8f6731247"
+  },
+  "chromium-light-phone/projects-search-empty.png": {
+    "layer": "p0.2",
+    "path": "p0.2/screenshots/chromium-light-phone/projects-search-empty.png",
+    "sha256": "64ab73ad7ea02e255dab79dcbb156f55ac0f8c6d31ac3b60d17074ffeb0c27c8"
+  },
+  "chromium-light-phone/session-attachment-menu.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-light-phone/session-attachment-menu.png",
+    "sha256": "a6a5ebb78abd9f4705227e4ee6a44aa7c2152a59c5c58789be177bee5369216f",
+    "mainCommits": [
+      "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+      "9d3751ec2633eba68eb3bee149782795d0426442"
+    ]
+  },
+  "chromium-light-phone/session-attachment-staged.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-light-phone/session-attachment-staged.png",
+    "sha256": "5dfd09ce9aa97558b6f997e64e0f1f740a8605d0a40fd23d48218b5fb7a67af1",
+    "mainCommits": [
+      "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+      "9d3751ec2633eba68eb3bee149782795d0426442"
+    ]
+  },
+  "chromium-light-phone/session-composer-focus.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-light-phone/session-composer-focus.png",
+    "sha256": "b461ffa052a168826ec2726b85e4b2c3c9b6e759fc307f8f505f36be33c1539d",
+    "mainCommits": [
+      "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+      "9d3751ec2633eba68eb3bee149782795d0426442"
+    ]
+  },
+  "chromium-light-phone/session-idle.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-light-phone/session-idle.png",
+    "sha256": "3f3ec1501c81ec3ed0166179202077ecd8d3d68914caafc6ebe7a881dd818b02",
+    "mainCommits": [
+      "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+      "9d3751ec2633eba68eb3bee149782795d0426442"
+    ]
+  },
+  "chromium-light-phone/session-streaming.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-light-phone/session-streaming.png",
+    "sha256": "3dd7f87ec080eb8f595dcf68897bd916acc3c307eca95b50fce4afa9439dbdd7",
+    "mainCommits": [
+      "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+      "9d3751ec2633eba68eb3bee149782795d0426442"
+    ]
+  },
+  "chromium-light-phone/settings-saved.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-light-phone/settings-saved.png",
+    "sha256": "a658d52a2efee3aa75953ac59bdddb74f03ff13aa7860e724bfd65d1e7b5bed9",
+    "mainCommits": [
+      "4088d37e6d26243196161355e658d3e303939bf3",
+      "def134095f8031d3a2498dbfc9677e684bca0e67"
+    ]
+  },
+  "chromium-light-phone/settings.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-light-phone/settings.png",
+    "sha256": "6003bc62f9224ed1ed6e6f7c83b2e60da52c36301a90f5be81f6673c05791d5d",
+    "mainCommits": [
+      "4088d37e6d26243196161355e658d3e303939bf3",
+      "def134095f8031d3a2498dbfc9677e684bca0e67"
+    ]
+  },
+  "chromium-light-phone/task-action-focus.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-light-phone/task-action-focus.png",
+    "sha256": "a5cc6b5ff4e3271fba1a28fa363198a68088f93e7503719debfc9c45cdbd8780",
+    "mainCommits": [
+      "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+  },
+  "chromium-light-phone/task-action-hover.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-light-phone/task-action-hover.png",
+    "sha256": "943385fabd800c138a907017f3b448b8e11502f44a37c509c62c905f9566fe79",
+    "mainCommits": [
+      "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+  },
+  "chromium-light-phone/task-action-menu.png": {
+    "layer": "accepted",
+    "path": "p0-drift/accepted/screenshots/chromium-light-phone/task-action-menu.png",
+    "sha256": "e56a4013d7ca61276147b755cd38afdb2109d0f7711b553982e096cb599e906b",
+    "replaces": {
+      "layer": "p0-drift",
+      "sha256": "0c3321ffc316ed378af8ec6a533bc9d0b654e920010d035d4fe1f457a8c5bc34"
+    },
+    "decision": {
+      "taskId": "34Za39ACSBoCkYKc80Md8",
+      "evidenceRevision": 2,
+      "evidenceDigest": "302ca1f5051c1f3fd04abf89c1dff51c86cfbdcb9326fc3f7abf70e9ee9809bc",
+      "verdict": "CONFIRM",
+      "document": "p3.2/README.md"
+    }
+  },
+  "chromium-light-phone/task-detail.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-light-phone/task-detail.png",
+    "sha256": "6feae9c387374442f7c327031c13f39e2a48f7e4d592c3ec35973c2596821990",
+    "mainCommits": [
+      "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+  },
+  "chromium-light-phone/task-public-share.png": {
+    "layer": "p0.2",
+    "path": "p0.2/screenshots/chromium-light-phone/task-public-share.png",
+    "sha256": "f074c9b7219930eaa0f74135d2661ec1f2c39a764d2a8b26f8b7119d0a03d048"
+  },
+  "chromium-light-phone/task-share-dialog.png": {
+    "layer": "accepted",
+    "path": "p0-drift/accepted/screenshots/chromium-light-phone/task-share-dialog.png",
+    "sha256": "cef516ca7e9386056eaf81eef87ce712a73e7e50e749c42459bc5fdad3fb245b",
+    "replaces": {
+      "layer": "p0-drift",
+      "sha256": "0febd9470f9fca3ebaa95dad6964afd57e7c2309186de562935b3cff39aa96bf"
+    },
+    "decision": {
+      "taskId": "34Za39ACSBoCkYKc80Md8",
+      "evidenceRevision": 2,
+      "evidenceDigest": "302ca1f5051c1f3fd04abf89c1dff51c86cfbdcb9326fc3f7abf70e9ee9809bc",
+      "verdict": "CONFIRM",
+      "document": "p3.2/README.md"
+    }
+  },
+  "chromium-light-phone/wiki-contents.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-light-phone/wiki-contents.png",
+    "sha256": "852535b3aef10af0e58aca89b6cd3f2886c2ea7907566afdcf207cf99e9bf809",
+    "mainCommits": [
+      "2f9cc095f83f199997909e64dfdf7f2c0e023b2b",
+      "2ba6765d9de2db57218f67ee57e6132e044ceb1b"
+    ]
+  },
+  "chromium-light-phone/wiki-home.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-light-phone/wiki-home.png",
+    "sha256": "748a8043f39f9d6a6371c2aab74f9a24e36f4c9356e53b4a8c28de07e7b2a818",
+    "mainCommits": [
+      "6c4e0ac0e2fef2afbfa51e4b0aefa4c3470a80eb",
+      "2f9cc095f83f199997909e64dfdf7f2c0e023b2b",
+      "2ba6765d9de2db57218f67ee57e6132e044ceb1b"
+    ]
+  },
+  "chromium-light-phone/wiki-new-entry.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/chromium-light-phone/wiki-new-entry.png",
+    "sha256": "dbbd58f8dbff203c9ad9fbfec1fc4bdae29805d4cc4e39888b53591335012d38",
+    "mainCommits": [
+      "6c4e0ac0e2fef2afbfa51e4b0aefa4c3470a80eb",
+      "2f9cc095f83f199997909e64dfdf7f2c0e023b2b",
+      "2ba6765d9de2db57218f67ee57e6132e044ceb1b"
+    ]
+  },
+  "webkit-dark-desktop/breakpoint-599-dialog.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-dark-desktop/breakpoint-599-dialog.png",
+    "sha256": "8c5d0b084ac0beba8e29b40deaf69beaffa3aad3c4fe9f00fce02384f1caa1d6",
+    "mainCommits": [
+      "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+  },
+  "webkit-dark-desktop/breakpoint-599-share.png": {
+    "layer": "p0.2",
+    "path": "p0.2/screenshots/webkit-dark-desktop/breakpoint-599-share.png",
+    "sha256": "a13dc7a2bd275eb9226cedae966421816dd8b1e267553fd5d84d20b29cd3a8b1"
+  },
+  "webkit-dark-desktop/breakpoint-601-dialog.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-dark-desktop/breakpoint-601-dialog.png",
+    "sha256": "739fb7badcdb926e3d3b97da5c419dbb1e525ca09fd40960a446f15592e62791",
+    "mainCommits": [
+      "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+  },
+  "webkit-dark-desktop/breakpoint-601-share.png": {
+    "layer": "p0.2",
+    "path": "p0.2/screenshots/webkit-dark-desktop/breakpoint-601-share.png",
+    "sha256": "21772b0dd8ec4d76faf756b79fd95381ebfcf33a939dd1e1d5a11aae76a8aae7"
+  },
+  "webkit-dark-desktop/breakpoint-639-graph.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-dark-desktop/breakpoint-639-graph.png",
+    "sha256": "476a58610951bdb0c6486ab8f0b0d496ec01fc241b0329a18e050dc4b66cac14",
+    "mainCommits": [
+      "93d3ec5804a15f240290f5c0971983c6fb7e9c5c"
+    ]
+  },
+  "webkit-dark-desktop/breakpoint-639-projects.png": {
+    "layer": "p0.2",
+    "path": "p0.2/screenshots/webkit-dark-desktop/breakpoint-639-projects.png",
+    "sha256": "777b8188a81db6a12b62b0660d39897dc1ae30ea73343c7d9749009993a561b1"
+  },
+  "webkit-dark-desktop/breakpoint-641-graph.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-dark-desktop/breakpoint-641-graph.png",
+    "sha256": "e9f81625d0b41ee3df3dfb01d99797a253fc3ae85d558b3711d10ff91d411f6a",
+    "mainCommits": [
+      "93d3ec5804a15f240290f5c0971983c6fb7e9c5c"
+    ]
+  },
+  "webkit-dark-desktop/breakpoint-641-projects.png": {
+    "layer": "p0.2",
+    "path": "p0.2/screenshots/webkit-dark-desktop/breakpoint-641-projects.png",
+    "sha256": "589c6221709e40bb575bef86da73375800e2fe47982cffe88270320a98c6cc79"
+  },
+  "webkit-dark-desktop/breakpoint-959-session.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-dark-desktop/breakpoint-959-session.png",
+    "sha256": "35be5e51f19df1a58a4880ae198273ef25e0b232a0d3247190cf79bd5485b578",
+    "mainCommits": [
+      "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+      "9d3751ec2633eba68eb3bee149782795d0426442"
+    ]
+  },
+  "webkit-dark-desktop/breakpoint-959-wiki.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-dark-desktop/breakpoint-959-wiki.png",
+    "sha256": "a9fd597d8a3269e1897b536cac47d07598d0c6118cc3db9105c4ea1eb4dba82d",
+    "mainCommits": [
+      "6c4e0ac0e2fef2afbfa51e4b0aefa4c3470a80eb",
+      "2f9cc095f83f199997909e64dfdf7f2c0e023b2b",
+      "2ba6765d9de2db57218f67ee57e6132e044ceb1b"
+    ]
+  },
+  "webkit-dark-desktop/breakpoint-961-session.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-dark-desktop/breakpoint-961-session.png",
+    "sha256": "a62142f4b0403a171f7f99a3e55b57fe0e6276a283f15f035bf4aa1c5a465429",
+    "mainCommits": [
+      "918034e7290646c96cf35dc6604a4831e59505ff",
+      "f5bdd7fd395452e85fab89aeba2870740c932f80",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+      "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+      "9d3751ec2633eba68eb3bee149782795d0426442"
+    ]
+  },
+  "webkit-dark-desktop/breakpoint-961-wiki.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-dark-desktop/breakpoint-961-wiki.png",
+    "sha256": "9f84cd8e542cff492e0a859e90720fb8f5507198f110c0757d2f1e2cae30a3ed",
+    "mainCommits": [
+      "6c4e0ac0e2fef2afbfa51e4b0aefa4c3470a80eb",
+      "2f9cc095f83f199997909e64dfdf7f2c0e023b2b",
+      "a884fda36851b6257d6777efbc038c325cd75a45",
+      "2ba6765d9de2db57218f67ee57e6132e044ceb1b",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+    ]
+  },
+  "webkit-dark-desktop/notification-error.png": {
+    "layer": "accepted",
+    "path": "p0-drift/accepted/screenshots/webkit-dark-desktop/notification-error.png",
+    "sha256": "81d4258380981e3d42b523842c8078ba8143ad978c886a3113888aba0415c2a3",
+    "replaces": {
+      "layer": "p0-drift",
+      "sha256": "d12982adfe17589b6c970851d0d2a80d5c8c35cfd37d9da72f6b28f4cb557797"
+    },
+    "decision": {
+      "taskId": "34cBi0yt6bFcSmbJFgDPj",
+      "evidenceRevision": 1,
+      "evidenceDigest": "fdb19816d1e31af2dc3463fe3e359c68b7ba86084f284f24009f8b92dc468e7c",
+      "verdict": "CONFIRM",
+      "document": "webkit-scroll-lock/README.md"
+    }
+  },
+  "webkit-dark-desktop/profile-validation.png": {
+    "layer": "accepted",
+    "path": "p0-drift/accepted/screenshots/webkit-dark-desktop/profile-validation.png",
+    "sha256": "58f0e4f9a87920c1cd63294d295a003e0367e6be82eb055cf484b6e033e15036",
+    "replaces": {
+      "layer": "p0-drift",
+      "sha256": "52a0f5eb9e5e9a474dc8c828ac753791e27146e693e4f9f535bae273b7019a3e"
+    },
+    "decision": {
+      "taskId": "34cBi0yt6bFcSmbJFgDPj",
+      "evidenceRevision": 1,
+      "evidenceDigest": "fdb19816d1e31af2dc3463fe3e359c68b7ba86084f284f24009f8b92dc468e7c",
+      "verdict": "CONFIRM",
+      "document": "webkit-scroll-lock/README.md"
+    }
+  },
+  "webkit-dark-desktop/profile.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-dark-desktop/profile.png",
+    "sha256": "6defe597090a656474f02256dcd705e11579786e5ecb95874918ec7eaeb11b3f",
+    "mainCommits": [
+      "d233a6cd02e834f33b1eacd8153fdd0638f85b7a",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+    ]
+  },
+  "webkit-dark-desktop/project-graph-fullscreen.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-dark-desktop/project-graph-fullscreen.png",
+    "sha256": "0cb2ef59f78c848d260081a13a12d9b9fadddc49fb5eb7f57bc33ced3bc7b811",
+    "mainCommits": [
+      "93d3ec5804a15f240290f5c0971983c6fb7e9c5c",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+    ]
+  },
+  "webkit-dark-desktop/project-graph.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-dark-desktop/project-graph.png",
+    "sha256": "06577c22c0720c2438957b08f13813d201764dc5b6d28efcbc880fc7f0fab709",
+    "mainCommits": [
+      "93d3ec5804a15f240290f5c0971983c6fb7e9c5c",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+    ]
+  },
+  "webkit-dark-desktop/project-overview.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-dark-desktop/project-overview.png",
+    "sha256": "9f91a985250ff64c1def13cf72c1f265b23cf52013640c2f0e30f590dee6e94e",
+    "mainCommits": [
+      "93d3ec5804a15f240290f5c0971983c6fb7e9c5c",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+    ]
+  },
+  "webkit-dark-desktop/projects-error.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-dark-desktop/projects-error.png",
+    "sha256": "6ab5b1696fb70c385db9063e2b3d21665717c5d008b46e8c5a25084977be0cef",
+    "mainCommits": [
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+    ]
+  },
+  "webkit-dark-desktop/projects-list.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-dark-desktop/projects-list.png",
+    "sha256": "5f659c07a445b1c945bdc4cfc75e255fc32f478ac02ef3039f8a3d072a291657",
+    "mainCommits": [
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+    ]
+  },
+  "webkit-dark-desktop/projects-loading.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-dark-desktop/projects-loading.png",
+    "sha256": "817cdf28cd285876e0fe50bebcb0e76e8c7b5891abbf41fdb2c09f9ddcd3474d",
+    "mainCommits": [
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+    ]
+  },
+  "webkit-dark-desktop/projects-search-empty.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-dark-desktop/projects-search-empty.png",
+    "sha256": "05d3164d954f27561f156669f5ff19cabdd28e7c4fc6374f9f12745fc181b48f",
+    "mainCommits": [
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+    ]
+  },
+  "webkit-dark-desktop/session-attachment-menu.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-dark-desktop/session-attachment-menu.png",
+    "sha256": "d1e6b1f57069efbeae6903474d4725880454821e156f3b8898b4a0e6587c0c17",
+    "mainCommits": [
+      "918034e7290646c96cf35dc6604a4831e59505ff",
+      "f5bdd7fd395452e85fab89aeba2870740c932f80",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+      "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+      "9d3751ec2633eba68eb3bee149782795d0426442"
+    ]
+  },
+  "webkit-dark-desktop/session-attachment-staged.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-dark-desktop/session-attachment-staged.png",
+    "sha256": "e5c3f985e38a722a0019d5131c37f900a2d0e78f6ac8e9fd744e6aec7e68bfa7",
+    "mainCommits": [
+      "918034e7290646c96cf35dc6604a4831e59505ff",
+      "f5bdd7fd395452e85fab89aeba2870740c932f80",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+      "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+      "9d3751ec2633eba68eb3bee149782795d0426442"
+    ]
+  },
+  "webkit-dark-desktop/session-composer-focus.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-dark-desktop/session-composer-focus.png",
+    "sha256": "fd5fe622aa53377a3eddbcc89e75b701e48431d57c6e3d932f6f7ce0cb944088",
+    "mainCommits": [
+      "918034e7290646c96cf35dc6604a4831e59505ff",
+      "f5bdd7fd395452e85fab89aeba2870740c932f80",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+      "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+      "9d3751ec2633eba68eb3bee149782795d0426442"
+    ]
+  },
+  "webkit-dark-desktop/session-idle.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-dark-desktop/session-idle.png",
+    "sha256": "ee5201ad43c0dcfd4abfa3f08dffc0c0835811ff5191e8871cd7ee92e89f93c1",
+    "mainCommits": [
+      "918034e7290646c96cf35dc6604a4831e59505ff",
+      "f5bdd7fd395452e85fab89aeba2870740c932f80",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+      "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+      "9d3751ec2633eba68eb3bee149782795d0426442"
+    ]
+  },
+  "webkit-dark-desktop/session-streaming.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-dark-desktop/session-streaming.png",
+    "sha256": "3380786e2d908c22bc5374d71d61c7d7d60b5d0a7a1be0417d2f7df939fd2474",
+    "mainCommits": [
+      "918034e7290646c96cf35dc6604a4831e59505ff",
+      "f5bdd7fd395452e85fab89aeba2870740c932f80",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+      "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+      "9d3751ec2633eba68eb3bee149782795d0426442"
+    ]
+  },
+  "webkit-dark-desktop/settings-saved.png": {
+    "layer": "accepted",
+    "path": "p0-drift/accepted/screenshots/webkit-dark-desktop/settings-saved.png",
+    "sha256": "e7bb335b8da6f305b7a8cff0cbc1529bf848c8515a89eb85da601393573f2887",
+    "replaces": {
+      "layer": "p0-drift",
+      "sha256": "9f4cbab3da76449c9b15a04849d5a152217d55a3399b8357be53f6bf7a032bee"
+    },
+    "decision": {
+      "taskId": "34cBi0yt6bFcSmbJFgDPj",
+      "evidenceRevision": 1,
+      "evidenceDigest": "fdb19816d1e31af2dc3463fe3e359c68b7ba86084f284f24009f8b92dc468e7c",
+      "verdict": "CONFIRM",
+      "document": "webkit-scroll-lock/README.md"
+    }
+  },
+  "webkit-dark-desktop/settings.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-dark-desktop/settings.png",
+    "sha256": "ee8599f88fded863da3da0b5579a9dce8ca79864c24d65a3b58bf7989ec65998",
+    "mainCommits": [
+      "4088d37e6d26243196161355e658d3e303939bf3",
+      "d233a6cd02e834f33b1eacd8153fdd0638f85b7a",
+      "def134095f8031d3a2498dbfc9677e684bca0e67",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+    ]
+  },
+  "webkit-dark-desktop/task-action-focus.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-dark-desktop/task-action-focus.png",
+    "sha256": "7faa28663bc162938edc882005f5a05705b8ba29135819b77e022ca165e88304",
+    "mainCommits": [
+      "4088d37e6d26243196161355e658d3e303939bf3",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+    ]
+  },
+  "webkit-dark-desktop/task-action-hover.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-dark-desktop/task-action-hover.png",
+    "sha256": "be683362036780de6db46769c038be14826da479299ce77c9b4231734136b916",
+    "mainCommits": [
+      "4088d37e6d26243196161355e658d3e303939bf3",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+    ]
+  },
+  "webkit-dark-desktop/task-action-menu.png": {
+    "layer": "accepted",
+    "path": "p0-drift/accepted/screenshots/webkit-dark-desktop/task-action-menu.png",
+    "sha256": "f021d6622b6b3c0172481654af3c951ecc8c9e841407397a6b8f73166e8d9d71",
+    "replaces": {
+      "layer": "p0-drift",
+      "sha256": "bc9adad4cf04c7645a341086ac12f630e58586155fa044e4733380d5708ea406"
+    },
+    "decision": {
+      "taskId": "34Za39ACSBoCkYKc80Md8",
+      "evidenceRevision": 2,
+      "evidenceDigest": "302ca1f5051c1f3fd04abf89c1dff51c86cfbdcb9326fc3f7abf70e9ee9809bc",
+      "verdict": "CONFIRM",
+      "document": "p3.2/README.md"
+    }
+  },
+  "webkit-dark-desktop/task-detail.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-dark-desktop/task-detail.png",
+    "sha256": "0c44cd621c41bef3d91b4245dc5f87e95c650e90a9076da8b59f64bd4d77b2a4",
+    "mainCommits": [
+      "4088d37e6d26243196161355e658d3e303939bf3",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+    ]
+  },
+  "webkit-dark-desktop/task-public-share.png": {
+    "layer": "p0.2",
+    "path": "p0.2/screenshots/webkit-dark-desktop/task-public-share.png",
+    "sha256": "6276adb67d96e6a368aceae885fb8ce0c5ac067b4db96d7103661f761da19852"
+  },
+  "webkit-dark-desktop/task-share-dialog.png": {
+    "layer": "accepted",
+    "path": "p0-drift/accepted/screenshots/webkit-dark-desktop/task-share-dialog.png",
+    "sha256": "b25516ca0e3d7e25fe5bad276b3d5fc30725f41c171f00c7f29dfa962d9f8d6e",
+    "replaces": {
+      "layer": "p0-drift",
+      "sha256": "16239de70c56fda957b05d03c3b0dd762972620680e5c601bedf25e3220086e4"
+    },
+    "decision": {
+      "taskId": "34Za39ACSBoCkYKc80Md8",
+      "evidenceRevision": 2,
+      "evidenceDigest": "302ca1f5051c1f3fd04abf89c1dff51c86cfbdcb9326fc3f7abf70e9ee9809bc",
+      "verdict": "CONFIRM",
+      "document": "p3.2/README.md"
+    }
+  },
+  "webkit-dark-desktop/wiki-home.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-dark-desktop/wiki-home.png",
+    "sha256": "b0d0c8f9ffe58d3e330cb719898968f1381632457fc1d13a260adfb2703ee778",
+    "mainCommits": [
+      "6c4e0ac0e2fef2afbfa51e4b0aefa4c3470a80eb",
+      "2f9cc095f83f199997909e64dfdf7f2c0e023b2b",
+      "a884fda36851b6257d6777efbc038c325cd75a45",
+      "2ba6765d9de2db57218f67ee57e6132e044ceb1b",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+    ]
+  },
+  "webkit-dark-desktop/wiki-new-entry.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-dark-desktop/wiki-new-entry.png",
+    "sha256": "23a571354596a6542377ac7d6c11c0f6c2aa9792e80aa004642023d122038376",
+    "mainCommits": [
+      "6c4e0ac0e2fef2afbfa51e4b0aefa4c3470a80eb",
+      "2f9cc095f83f199997909e64dfdf7f2c0e023b2b",
+      "a884fda36851b6257d6777efbc038c325cd75a45",
+      "2ba6765d9de2db57218f67ee57e6132e044ceb1b",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+    ]
+  },
+  "webkit-dark-phone/notification-error.png": {
+    "layer": "accepted",
+    "path": "p0-drift/accepted/screenshots/webkit-dark-phone/notification-error.png",
+    "sha256": "3354b55c94dde9139364cbf417ff3a9ec88ced8c38f868db2d4b40291085d02f",
+    "replaces": {
+      "layer": "p0.2",
+      "sha256": "f5d6ab570e4a9c77bfb60c69d1dccc3ba90caa1f14ef699e7dc34223ce4c0dc8"
+    },
+    "decision": {
+      "taskId": "34cBi0yt6bFcSmbJFgDPj",
+      "evidenceRevision": 1,
+      "evidenceDigest": "fdb19816d1e31af2dc3463fe3e359c68b7ba86084f284f24009f8b92dc468e7c",
+      "verdict": "CONFIRM",
+      "document": "webkit-scroll-lock/README.md"
+    }
+  },
+  "webkit-dark-phone/profile-validation.png": {
+    "layer": "accepted",
+    "path": "p0-drift/accepted/screenshots/webkit-dark-phone/profile-validation.png",
+    "sha256": "0f3a4108c15f1319245ea6e51311cd7bf410c28ba0bbfd3986ac0dff64089b2e",
+    "replaces": {
+      "layer": "p0-drift",
+      "sha256": "ce6c213d39f304c18197c2af5c35b77e85568ba7afad10dbbee18b3d9103e498"
+    },
+    "decision": {
+      "taskId": "34cBi0yt6bFcSmbJFgDPj",
+      "evidenceRevision": 1,
+      "evidenceDigest": "fdb19816d1e31af2dc3463fe3e359c68b7ba86084f284f24009f8b92dc468e7c",
+      "verdict": "CONFIRM",
+      "document": "webkit-scroll-lock/README.md"
+    }
+  },
+  "webkit-dark-phone/profile.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-dark-phone/profile.png",
+    "sha256": "c8a40a2b778c4dd00909bcbafc3230fc6e5847b9daeb032431774cb03ef68cb8",
+    "mainCommits": [
+      "d233a6cd02e834f33b1eacd8153fdd0638f85b7a"
+    ]
+  },
+  "webkit-dark-phone/project-graph-fullscreen.png": {
+    "layer": "p0.2",
+    "path": "p0.2/screenshots/webkit-dark-phone/project-graph-fullscreen.png",
+    "sha256": "dafed8c223afc325c5a996329bfd9cfbce6156da713e453b682a61b250dc0c74"
+  },
+  "webkit-dark-phone/project-graph.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-dark-phone/project-graph.png",
+    "sha256": "b1f23376cf9ec3565b06a65ebfa095109ca1afe1e7c806e8b9824abc43592df4",
+    "mainCommits": [
+      "93d3ec5804a15f240290f5c0971983c6fb7e9c5c"
+    ]
+  },
+  "webkit-dark-phone/project-overview.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-dark-phone/project-overview.png",
+    "sha256": "156df04993ddc8a6e80510fe2507d10666ac60ccf10647793a50922819aeecdf",
+    "mainCommits": [
+      "93d3ec5804a15f240290f5c0971983c6fb7e9c5c"
+    ]
+  },
+  "webkit-dark-phone/projects-error.png": {
+    "layer": "p0.2",
+    "path": "p0.2/screenshots/webkit-dark-phone/projects-error.png",
+    "sha256": "4ec3d1663023cdc43821c11098ac7215ca8a8cd3a51965837e90aec423ab73f3"
+  },
+  "webkit-dark-phone/projects-list.png": {
+    "layer": "p0.2",
+    "path": "p0.2/screenshots/webkit-dark-phone/projects-list.png",
+    "sha256": "dd29ed7d5494935dd15fc54f81ae1f43395340b8236ef3da30e32b5c178ae94c"
+  },
+  "webkit-dark-phone/projects-loading.png": {
+    "layer": "p0.2",
+    "path": "p0.2/screenshots/webkit-dark-phone/projects-loading.png",
+    "sha256": "9bd2154df1f3083598c6b03cbe712d74831da45803db139a39dd6ec49f65795a"
+  },
+  "webkit-dark-phone/projects-search-empty.png": {
+    "layer": "p0.2",
+    "path": "p0.2/screenshots/webkit-dark-phone/projects-search-empty.png",
+    "sha256": "0fbfd38a6877dc70206f8109e0796ee70eca21f12bd4f40dec04db65c2b1c671"
+  },
+  "webkit-dark-phone/session-attachment-menu.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-dark-phone/session-attachment-menu.png",
+    "sha256": "68a1afbe1b4c4e0cd467651288ac0e9d934707019239071cd2b7a03a162ca0d3",
+    "mainCommits": [
+      "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+      "9d3751ec2633eba68eb3bee149782795d0426442"
+    ]
+  },
+  "webkit-dark-phone/session-attachment-staged.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-dark-phone/session-attachment-staged.png",
+    "sha256": "36a81d09c68ab0c71af0a6351af68e4d5a894ea8c55f456e6dbfd303fb1f349d",
+    "mainCommits": [
+      "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+      "9d3751ec2633eba68eb3bee149782795d0426442"
+    ]
+  },
+  "webkit-dark-phone/session-composer-focus.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-dark-phone/session-composer-focus.png",
+    "sha256": "a7be3cf19bcfe9461ad917790f80f11e29708d6821f8218be091c730c2a284b1",
+    "mainCommits": [
+      "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+      "9d3751ec2633eba68eb3bee149782795d0426442"
+    ]
+  },
+  "webkit-dark-phone/session-idle.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-dark-phone/session-idle.png",
+    "sha256": "4e8339818a1b5a806cf9a7f37f32ae583274795e8f49b832503ff25570d0992c",
+    "mainCommits": [
+      "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+      "9d3751ec2633eba68eb3bee149782795d0426442"
+    ]
+  },
+  "webkit-dark-phone/session-streaming.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-dark-phone/session-streaming.png",
+    "sha256": "5532bf7d9d85d756bcdd19a1beabc25c4b498d679bde87566b61b80c01e53719",
+    "mainCommits": [
+      "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+      "9d3751ec2633eba68eb3bee149782795d0426442"
+    ]
+  },
+  "webkit-dark-phone/settings-saved.png": {
+    "layer": "accepted",
+    "path": "p0-drift/accepted/screenshots/webkit-dark-phone/settings-saved.png",
+    "sha256": "40656db95780414b9ffba66014745816e1eba22a958fad4a30ef14ea625db8a5",
+    "replaces": {
+      "layer": "p0-drift",
+      "sha256": "ce46c1231e9b8837f1ecc9bc0e030398068559f709d8fefeb6a2d39f1d74c69a"
+    },
+    "decision": {
+      "taskId": "34cBi0yt6bFcSmbJFgDPj",
+      "evidenceRevision": 1,
+      "evidenceDigest": "fdb19816d1e31af2dc3463fe3e359c68b7ba86084f284f24009f8b92dc468e7c",
+      "verdict": "CONFIRM",
+      "document": "webkit-scroll-lock/README.md"
+    }
+  },
+  "webkit-dark-phone/settings.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-dark-phone/settings.png",
+    "sha256": "afce26a702816d0b13e6376e7d91150ee59e06577002012f5e76061a90590cc3",
+    "mainCommits": [
+      "4088d37e6d26243196161355e658d3e303939bf3",
+      "d233a6cd02e834f33b1eacd8153fdd0638f85b7a",
+      "def134095f8031d3a2498dbfc9677e684bca0e67"
+    ]
+  },
+  "webkit-dark-phone/task-action-focus.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-dark-phone/task-action-focus.png",
+    "sha256": "13ca053623da6f62927955f55fa180f6107e1e979c2270e7bc7d14c9558cd3a1",
+    "mainCommits": [
+      "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+  },
+  "webkit-dark-phone/task-action-hover.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-dark-phone/task-action-hover.png",
+    "sha256": "e9220c872625dbd51f7ab7b37c71601a6bd11feff91e9723b00ecbfe10afbd71",
+    "mainCommits": [
+      "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+  },
+  "webkit-dark-phone/task-action-menu.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-dark-phone/task-action-menu.png",
+    "sha256": "14491174b4c4c8a2cf0d58d529486f5e0f3c611cf5a25a75dfdeab2bc14334cd",
+    "mainCommits": [
+      "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+  },
+  "webkit-dark-phone/task-detail.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-dark-phone/task-detail.png",
+    "sha256": "2f4e3bf6e61142a194da499676fe95fa2eb51a3a83133220f329b928e231c982",
+    "mainCommits": [
+      "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+  },
+  "webkit-dark-phone/task-public-share.png": {
+    "layer": "p0.2",
+    "path": "p0.2/screenshots/webkit-dark-phone/task-public-share.png",
+    "sha256": "22a4ffc866526331018f0bc0b52fdcfec4a3ff2bf9f9e6bb562c0bf60cd76c2c"
+  },
+  "webkit-dark-phone/task-share-dialog.png": {
+    "layer": "accepted",
+    "path": "p0-drift/accepted/screenshots/webkit-dark-phone/task-share-dialog.png",
+    "sha256": "aca1f92577e858e3dc309c07c0a4748aa568fe2ca059376d6cad0995e3676478",
+    "replaces": {
+      "layer": "p0-drift",
+      "sha256": "aadbd69e2cc9ddbd99231921ee84895dc912510ab63446e6541b9ef20f6a9a38"
+    },
+    "decision": {
+      "taskId": "34Za39ACSBoCkYKc80Md8",
+      "evidenceRevision": 2,
+      "evidenceDigest": "302ca1f5051c1f3fd04abf89c1dff51c86cfbdcb9326fc3f7abf70e9ee9809bc",
+      "verdict": "CONFIRM",
+      "document": "p3.2/README.md"
+    }
+  },
+  "webkit-dark-phone/wiki-contents.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-dark-phone/wiki-contents.png",
+    "sha256": "3384758be6181749dd2f6a4afe5c40f3df30743a445d9323874789a42d87abc9",
+    "mainCommits": [
+      "2f9cc095f83f199997909e64dfdf7f2c0e023b2b",
+      "2ba6765d9de2db57218f67ee57e6132e044ceb1b"
+    ]
+  },
+  "webkit-dark-phone/wiki-home.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-dark-phone/wiki-home.png",
+    "sha256": "9a19d303b85015f090fb4e32d206bbd461043fd08d830d5b95076329c4ce4b41",
+    "mainCommits": [
+      "6c4e0ac0e2fef2afbfa51e4b0aefa4c3470a80eb",
+      "2f9cc095f83f199997909e64dfdf7f2c0e023b2b",
+      "2ba6765d9de2db57218f67ee57e6132e044ceb1b"
+    ]
+  },
+  "webkit-dark-phone/wiki-new-entry.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-dark-phone/wiki-new-entry.png",
+    "sha256": "cf5ca334f49d2003cdbb8ed98655c61949794d01fc332b1e7d4c919c4b5ff22d",
+    "mainCommits": [
+      "6c4e0ac0e2fef2afbfa51e4b0aefa4c3470a80eb",
+      "2f9cc095f83f199997909e64dfdf7f2c0e023b2b",
+      "2ba6765d9de2db57218f67ee57e6132e044ceb1b"
+    ]
+  },
+  "webkit-light-desktop/breakpoint-599-dialog.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-light-desktop/breakpoint-599-dialog.png",
+    "sha256": "d313c25aabdce69aa1325bdacebcf61e8481227f8e1d418605b4cbf73d47c837",
+    "mainCommits": [
+      "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+  },
+  "webkit-light-desktop/breakpoint-599-share.png": {
+    "layer": "p0.2",
+    "path": "p0.2/screenshots/webkit-light-desktop/breakpoint-599-share.png",
+    "sha256": "741c28464f8492cf3ccb401b49068847be37cfed2afa722e15fb60a2e1c9a598"
+  },
+  "webkit-light-desktop/breakpoint-601-dialog.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-light-desktop/breakpoint-601-dialog.png",
+    "sha256": "5b01cec08d945ae1a3c2cf42b89624b4e428d786e5a73ec08ec1dca108260a9a",
+    "mainCommits": [
+      "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+  },
+  "webkit-light-desktop/breakpoint-601-share.png": {
+    "layer": "p0.2",
+    "path": "p0.2/screenshots/webkit-light-desktop/breakpoint-601-share.png",
+    "sha256": "118113262d6073fd94a5374e522748c402216e4a8b9695ae10980d9e0ed6b5e3"
+  },
+  "webkit-light-desktop/breakpoint-639-graph.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-light-desktop/breakpoint-639-graph.png",
+    "sha256": "1526b3fa2ecabe44617dd542da23085c5fd50884368bc90a7fd2850fe201301f",
+    "mainCommits": [
+      "93d3ec5804a15f240290f5c0971983c6fb7e9c5c"
+    ]
+  },
+  "webkit-light-desktop/breakpoint-639-projects.png": {
+    "layer": "p0.2",
+    "path": "p0.2/screenshots/webkit-light-desktop/breakpoint-639-projects.png",
+    "sha256": "d62edba5fe757c10a1d20f3f50ca945650778236273b55ad7295115329879098"
+  },
+  "webkit-light-desktop/breakpoint-641-graph.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-light-desktop/breakpoint-641-graph.png",
+    "sha256": "a64f537c7410cbd1da286e5b9c8e11f18e425a1747cc1a5361ddec1124b8a4d1",
+    "mainCommits": [
+      "93d3ec5804a15f240290f5c0971983c6fb7e9c5c"
+    ]
+  },
+  "webkit-light-desktop/breakpoint-641-projects.png": {
+    "layer": "p0.2",
+    "path": "p0.2/screenshots/webkit-light-desktop/breakpoint-641-projects.png",
+    "sha256": "dbd43b5f7243bd667bfb9f3948243355c76d717477c5ca7b6164ecf8a1f3ccb7"
+  },
+  "webkit-light-desktop/breakpoint-959-session.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-light-desktop/breakpoint-959-session.png",
+    "sha256": "3d2dcca109d5a7f20c373f11e64352a5989c9e05cbafb6f296b81958ddcc5d05",
+    "mainCommits": [
+      "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+      "9d3751ec2633eba68eb3bee149782795d0426442"
+    ]
+  },
+  "webkit-light-desktop/breakpoint-959-wiki.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-light-desktop/breakpoint-959-wiki.png",
+    "sha256": "8ffae3dddf66cc572c0d0005bd013af4006839db1e60565f6e6242b72479bc4b",
+    "mainCommits": [
+      "6c4e0ac0e2fef2afbfa51e4b0aefa4c3470a80eb",
+      "2f9cc095f83f199997909e64dfdf7f2c0e023b2b",
+      "2ba6765d9de2db57218f67ee57e6132e044ceb1b"
+    ]
+  },
+  "webkit-light-desktop/breakpoint-961-session.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-light-desktop/breakpoint-961-session.png",
+    "sha256": "392c03f40fa7f1e7a09991d619369f2fd136bfc16aaeabc432551ca45d6e36e0",
+    "mainCommits": [
+      "918034e7290646c96cf35dc6604a4831e59505ff",
+      "f5bdd7fd395452e85fab89aeba2870740c932f80",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+      "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+      "9d3751ec2633eba68eb3bee149782795d0426442"
+    ]
+  },
+  "webkit-light-desktop/breakpoint-961-wiki.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-light-desktop/breakpoint-961-wiki.png",
+    "sha256": "d18c04e6fe42b9069e139425ae15cdee3e9d2f12dde3589e2e173997e22ebef3",
+    "mainCommits": [
+      "6c4e0ac0e2fef2afbfa51e4b0aefa4c3470a80eb",
+      "2f9cc095f83f199997909e64dfdf7f2c0e023b2b",
+      "a884fda36851b6257d6777efbc038c325cd75a45",
+      "2ba6765d9de2db57218f67ee57e6132e044ceb1b",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+    ]
+  },
+  "webkit-light-desktop/notification-error.png": {
+    "layer": "accepted",
+    "path": "p0-drift/accepted/screenshots/webkit-light-desktop/notification-error.png",
+    "sha256": "aedb996376254d90b3516e24f7b9a7dcbfdc5ee12199f468daf72a0a622e8af4",
+    "replaces": {
+      "layer": "p0-drift",
+      "sha256": "f71ec3a6eb401180c4ef3c2afdb95a9f939f69a723f1edb59527c7884ce6b324"
+    },
+    "decision": {
+      "taskId": "34cBi0yt6bFcSmbJFgDPj",
+      "evidenceRevision": 1,
+      "evidenceDigest": "fdb19816d1e31af2dc3463fe3e359c68b7ba86084f284f24009f8b92dc468e7c",
+      "verdict": "CONFIRM",
+      "document": "webkit-scroll-lock/README.md"
+    }
+  },
+  "webkit-light-desktop/profile-validation.png": {
+    "layer": "accepted",
+    "path": "p0-drift/accepted/screenshots/webkit-light-desktop/profile-validation.png",
+    "sha256": "d2e26d04427a7bae6e44cf9dadd0e4ea1c7a4c3722b8792b7ef2b5bd177e8038",
+    "replaces": {
+      "layer": "p0-drift",
+      "sha256": "93218ccee8fd996ba118008834cd9aba8da2f39f3267397403da2f6d9032fae4"
+    },
+    "decision": {
+      "taskId": "34cBi0yt6bFcSmbJFgDPj",
+      "evidenceRevision": 1,
+      "evidenceDigest": "fdb19816d1e31af2dc3463fe3e359c68b7ba86084f284f24009f8b92dc468e7c",
+      "verdict": "CONFIRM",
+      "document": "webkit-scroll-lock/README.md"
+    }
+  },
+  "webkit-light-desktop/profile.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-light-desktop/profile.png",
+    "sha256": "79d972e84ded03469b5ffb3c7657bec5343c67e8e3b1e5022e7acccdc39ad0e9",
+    "mainCommits": [
+      "d233a6cd02e834f33b1eacd8153fdd0638f85b7a",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+    ]
+  },
+  "webkit-light-desktop/project-graph-fullscreen.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-light-desktop/project-graph-fullscreen.png",
+    "sha256": "c0be1eba38a1d396f9574e78b7bece78e74e8749959d9885635de2964383d105",
+    "mainCommits": [
+      "93d3ec5804a15f240290f5c0971983c6fb7e9c5c",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+    ]
+  },
+  "webkit-light-desktop/project-graph.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-light-desktop/project-graph.png",
+    "sha256": "4418d20aba11b05a761e5ff5d9421c9ff28d82b3150978768566ef12a46b962c",
+    "mainCommits": [
+      "93d3ec5804a15f240290f5c0971983c6fb7e9c5c",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+    ]
+  },
+  "webkit-light-desktop/project-overview.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-light-desktop/project-overview.png",
+    "sha256": "97e1f90a776f69d667d961b033e9e145b726a29cbd35dd04a31b887170e8ecd1",
+    "mainCommits": [
+      "93d3ec5804a15f240290f5c0971983c6fb7e9c5c",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+    ]
+  },
+  "webkit-light-desktop/projects-error.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-light-desktop/projects-error.png",
+    "sha256": "7cc413b1b1758145ff73ef947c25b8703b1513a3b41117f23481249cff32f56e",
+    "mainCommits": [
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+    ]
+  },
+  "webkit-light-desktop/projects-list.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-light-desktop/projects-list.png",
+    "sha256": "1dfdaf476b4e0f7385ae97be36add3a0968e3960ce451bb83ed66c28f3a2a850",
+    "mainCommits": [
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+    ]
+  },
+  "webkit-light-desktop/projects-loading.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-light-desktop/projects-loading.png",
+    "sha256": "6eab08b15d3dffb67ece9e7eaa05e09bd7f90234842acb5d3fe2750a5471afc4",
+    "mainCommits": [
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+    ]
+  },
+  "webkit-light-desktop/projects-search-empty.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-light-desktop/projects-search-empty.png",
+    "sha256": "1ae048000ee7f69e69fea77535c6cb44f0d6772c6d8d24c7fc287280e7e8da8f",
+    "mainCommits": [
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+    ]
+  },
+  "webkit-light-desktop/session-attachment-menu.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-light-desktop/session-attachment-menu.png",
+    "sha256": "ada0146ca40b298d2e0d292029eb032f644735d607e7040fa45c52461928688e",
+    "mainCommits": [
+      "918034e7290646c96cf35dc6604a4831e59505ff",
+      "f5bdd7fd395452e85fab89aeba2870740c932f80",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+      "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+      "9d3751ec2633eba68eb3bee149782795d0426442"
+    ]
+  },
+  "webkit-light-desktop/session-attachment-staged.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-light-desktop/session-attachment-staged.png",
+    "sha256": "fcf7368837dd65fc6152431c92ca6e24d0efcfa405967029463fbc49e91c4e0b",
+    "mainCommits": [
+      "918034e7290646c96cf35dc6604a4831e59505ff",
+      "f5bdd7fd395452e85fab89aeba2870740c932f80",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+      "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+      "9d3751ec2633eba68eb3bee149782795d0426442"
+    ]
+  },
+  "webkit-light-desktop/session-composer-focus.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-light-desktop/session-composer-focus.png",
+    "sha256": "175eff365b40469e27bfa3d18c2d85c25b4260ccb12de80f8d82b7dfff0df9b8",
+    "mainCommits": [
+      "918034e7290646c96cf35dc6604a4831e59505ff",
+      "f5bdd7fd395452e85fab89aeba2870740c932f80",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+      "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+      "9d3751ec2633eba68eb3bee149782795d0426442"
+    ]
+  },
+  "webkit-light-desktop/session-idle.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-light-desktop/session-idle.png",
+    "sha256": "8e131649be7f67ddb840ff81a276863ed0cf632a4e243154fecad3aa16efd4b2",
+    "mainCommits": [
+      "918034e7290646c96cf35dc6604a4831e59505ff",
+      "f5bdd7fd395452e85fab89aeba2870740c932f80",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+      "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+      "9d3751ec2633eba68eb3bee149782795d0426442"
+    ]
+  },
+  "webkit-light-desktop/session-streaming.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-light-desktop/session-streaming.png",
+    "sha256": "ac2f649ac3556f1cfa5708f18baea2c4eba5b0f2e91f3d4c21f3424d35c8e8a6",
+    "mainCommits": [
+      "918034e7290646c96cf35dc6604a4831e59505ff",
+      "f5bdd7fd395452e85fab89aeba2870740c932f80",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40",
+      "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+      "9d3751ec2633eba68eb3bee149782795d0426442"
+    ]
+  },
+  "webkit-light-desktop/settings-saved.png": {
+    "layer": "accepted",
+    "path": "p0-drift/accepted/screenshots/webkit-light-desktop/settings-saved.png",
+    "sha256": "676287ec035cae6e8efab01d34f54f5eb698449dfab38570f4bcc7b861b1cafe",
+    "replaces": {
+      "layer": "p0-drift",
+      "sha256": "7fb81b5733dd607a66a469727f8cfc5fab817b2b9d8aff9dc4c4c0fefa7cb773"
+    },
+    "decision": {
+      "taskId": "34cBi0yt6bFcSmbJFgDPj",
+      "evidenceRevision": 1,
+      "evidenceDigest": "fdb19816d1e31af2dc3463fe3e359c68b7ba86084f284f24009f8b92dc468e7c",
+      "verdict": "CONFIRM",
+      "document": "webkit-scroll-lock/README.md"
+    }
+  },
+  "webkit-light-desktop/settings.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-light-desktop/settings.png",
+    "sha256": "1ca8d75ff9a133c0097f7eaeada5f60b68fb0027a4959fcfc1b9a051c0c6f6f9",
+    "mainCommits": [
+      "4088d37e6d26243196161355e658d3e303939bf3",
+      "d233a6cd02e834f33b1eacd8153fdd0638f85b7a",
+      "def134095f8031d3a2498dbfc9677e684bca0e67",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+    ]
+  },
+  "webkit-light-desktop/task-action-focus.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-light-desktop/task-action-focus.png",
+    "sha256": "1d94d4e73e7373beab30cb3fd01872777b8880c625c7c8b55b9fc7cae4736e0e",
+    "mainCommits": [
+      "4088d37e6d26243196161355e658d3e303939bf3",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+    ]
+  },
+  "webkit-light-desktop/task-action-hover.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-light-desktop/task-action-hover.png",
+    "sha256": "9e55133ae4566a884b98bf4876200997b3d322b7bce1521cc46c6450fa652dc9",
+    "mainCommits": [
+      "4088d37e6d26243196161355e658d3e303939bf3",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+    ]
+  },
+  "webkit-light-desktop/task-action-menu.png": {
+    "layer": "accepted",
+    "path": "p0-drift/accepted/screenshots/webkit-light-desktop/task-action-menu.png",
+    "sha256": "1d9a855f85f816adb23963b43c84dec303bdadce91b9c373bd73ecdc733624cc",
+    "replaces": {
+      "layer": "p0-drift",
+      "sha256": "36b9d7ee7bff653f16c5f96e7c2e2efaf68edf659eec5761d4578f71fb4c7194"
+    },
+    "decision": {
+      "taskId": "34Za39ACSBoCkYKc80Md8",
+      "evidenceRevision": 2,
+      "evidenceDigest": "302ca1f5051c1f3fd04abf89c1dff51c86cfbdcb9326fc3f7abf70e9ee9809bc",
+      "verdict": "CONFIRM",
+      "document": "p3.2/README.md"
+    }
+  },
+  "webkit-light-desktop/task-detail.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-light-desktop/task-detail.png",
+    "sha256": "f2fee0d8b8fb84406b40c5954ceb2234ffb5a89a3c70fd029995a5e71d9f189e",
+    "mainCommits": [
+      "4088d37e6d26243196161355e658d3e303939bf3",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+    ]
+  },
+  "webkit-light-desktop/task-public-share.png": {
+    "layer": "p0.2",
+    "path": "p0.2/screenshots/webkit-light-desktop/task-public-share.png",
+    "sha256": "3486e927411e0d117ac162a1ad6299c8226e6641e8fa71f929d6e990cda70a56"
+  },
+  "webkit-light-desktop/task-share-dialog.png": {
+    "layer": "accepted",
+    "path": "p0-drift/accepted/screenshots/webkit-light-desktop/task-share-dialog.png",
+    "sha256": "b6bb1d236105d93b5d9465e7704d0b06085bf4aae500c9dbc6fe75a1ceefa927",
+    "replaces": {
+      "layer": "p0-drift",
+      "sha256": "f5e3fec75e233fb1e63a765a39c08e6be9d40ccbae2e58c181e66b4d6a2645a9"
+    },
+    "decision": {
+      "taskId": "34Za39ACSBoCkYKc80Md8",
+      "evidenceRevision": 2,
+      "evidenceDigest": "302ca1f5051c1f3fd04abf89c1dff51c86cfbdcb9326fc3f7abf70e9ee9809bc",
+      "verdict": "CONFIRM",
+      "document": "p3.2/README.md"
+    }
+  },
+  "webkit-light-desktop/wiki-home.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-light-desktop/wiki-home.png",
+    "sha256": "d3f746a766ed07b05b87e6973b80ec05de0e0527ea82fd418e135d617a3643f9",
+    "mainCommits": [
+      "6c4e0ac0e2fef2afbfa51e4b0aefa4c3470a80eb",
+      "2f9cc095f83f199997909e64dfdf7f2c0e023b2b",
+      "a884fda36851b6257d6777efbc038c325cd75a45",
+      "2ba6765d9de2db57218f67ee57e6132e044ceb1b",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+    ]
+  },
+  "webkit-light-desktop/wiki-new-entry.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-light-desktop/wiki-new-entry.png",
+    "sha256": "b968378236aae49e545acbd48a3a0f3c62a98f48accf561b31a7ce217214cfd3",
+    "mainCommits": [
+      "6c4e0ac0e2fef2afbfa51e4b0aefa4c3470a80eb",
+      "2f9cc095f83f199997909e64dfdf7f2c0e023b2b",
+      "a884fda36851b6257d6777efbc038c325cd75a45",
+      "2ba6765d9de2db57218f67ee57e6132e044ceb1b",
+      "33e0e2e09ac16ca5f82847bf3ffb245b1cf5c66b",
+      "cbe6a663545e891da1e3fc9dae3efdf104c11e40"
+    ]
+  },
+  "webkit-light-phone/notification-error.png": {
+    "layer": "accepted",
+    "path": "p0-drift/accepted/screenshots/webkit-light-phone/notification-error.png",
+    "sha256": "a10102f4bcd92c8f6295caf9b560bb5cb0b25d0de28deb98696a8a71b3f7799d",
+    "replaces": {
+      "layer": "p0.2",
+      "sha256": "a29eb4ac4bf476776583d8bce42555fc88d73139ad58f662741c4dc7070c37c8"
+    },
+    "decision": {
+      "taskId": "34cBi0yt6bFcSmbJFgDPj",
+      "evidenceRevision": 1,
+      "evidenceDigest": "fdb19816d1e31af2dc3463fe3e359c68b7ba86084f284f24009f8b92dc468e7c",
+      "verdict": "CONFIRM",
+      "document": "webkit-scroll-lock/README.md"
+    }
+  },
+  "webkit-light-phone/profile-validation.png": {
+    "layer": "accepted",
+    "path": "p0-drift/accepted/screenshots/webkit-light-phone/profile-validation.png",
+    "sha256": "0fc4f654253d7a41ec2cb664221f70105190aafc6c9c89238ff86f7f51d328db",
+    "replaces": {
+      "layer": "p0-drift",
+      "sha256": "bfa643b8bbc55d3d3713d2b37eba287ee0306b74a3c93eb35d4c38c7a8d893d8"
+    },
+    "decision": {
+      "taskId": "34Za39Do3N6tkmIMP0GBP",
+      "evidenceRevision": 1,
+      "evidenceDigest": "9477611a4499f613621b9dcc7e7c99a7dce050f1caca7ffa22fd95ca60467d57",
+      "verdict": "CONFIRM",
+      "document": "p4.1/README.md"
+    }
+  },
+  "webkit-light-phone/profile.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-light-phone/profile.png",
+    "sha256": "19d4e052db4726179df29fce1df55b4163df1d49e304f41a1d5d59dcde3bd8ae",
+    "mainCommits": [
+      "d233a6cd02e834f33b1eacd8153fdd0638f85b7a"
+    ]
+  },
+  "webkit-light-phone/project-graph-fullscreen.png": {
+    "layer": "p0.2",
+    "path": "p0.2/screenshots/webkit-light-phone/project-graph-fullscreen.png",
+    "sha256": "4c25fd1acefe818d78cf63f75e7dd4598c1561095580096c0db02a569e631e64"
+  },
+  "webkit-light-phone/project-graph.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-light-phone/project-graph.png",
+    "sha256": "47bd30854211a436140c04fc248055dd75cdb8d6ca0cc5a6e02107921acd6673",
+    "mainCommits": [
+      "93d3ec5804a15f240290f5c0971983c6fb7e9c5c"
+    ]
+  },
+  "webkit-light-phone/project-overview.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-light-phone/project-overview.png",
+    "sha256": "73f6ecab0a3b68b03ee01528f4437df6f58a2f94b483b36458b20e74abd4a7b8",
+    "mainCommits": [
+      "93d3ec5804a15f240290f5c0971983c6fb7e9c5c"
+    ]
+  },
+  "webkit-light-phone/projects-error.png": {
+    "layer": "p0.2",
+    "path": "p0.2/screenshots/webkit-light-phone/projects-error.png",
+    "sha256": "bf80fed79089ba055f584a8c3f09ea5c857dc2a0710fc771538ace5574c12e1e"
+  },
+  "webkit-light-phone/projects-list.png": {
+    "layer": "p0.2",
+    "path": "p0.2/screenshots/webkit-light-phone/projects-list.png",
+    "sha256": "d8c22faa736fa636a094f19f954394c6597eea76c4a7288dc2173a710ee99ede"
+  },
+  "webkit-light-phone/projects-loading.png": {
+    "layer": "p0.2",
+    "path": "p0.2/screenshots/webkit-light-phone/projects-loading.png",
+    "sha256": "1d31a39992a6f1c3e68ebc1f45a64291ccf7b7035f156f784648001a61a538e1"
+  },
+  "webkit-light-phone/projects-search-empty.png": {
+    "layer": "p0.2",
+    "path": "p0.2/screenshots/webkit-light-phone/projects-search-empty.png",
+    "sha256": "10c4ed86c0df40dc2c46924299bfedb98587fb9aad287c79a24eda51b9bca774"
+  },
+  "webkit-light-phone/session-attachment-menu.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-light-phone/session-attachment-menu.png",
+    "sha256": "3679f8fe036fe466f814f120a438064b9db0e1980bc38e37beb876b6bec84b28",
+    "mainCommits": [
+      "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+      "9d3751ec2633eba68eb3bee149782795d0426442"
+    ]
+  },
+  "webkit-light-phone/session-attachment-staged.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-light-phone/session-attachment-staged.png",
+    "sha256": "7a80441f270b94d3cedc9e322dd73eb83fcf3e44fd2818c4d46fc4c6f4864fe2",
+    "mainCommits": [
+      "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+      "9d3751ec2633eba68eb3bee149782795d0426442"
+    ]
+  },
+  "webkit-light-phone/session-composer-focus.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-light-phone/session-composer-focus.png",
+    "sha256": "9965a9ad9fb4fd41df6cadaa322839cfe673cd642fbc044185616976b3bcae24",
+    "mainCommits": [
+      "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+      "9d3751ec2633eba68eb3bee149782795d0426442"
+    ]
+  },
+  "webkit-light-phone/session-idle.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-light-phone/session-idle.png",
+    "sha256": "aeb56f4ec5131861d28b3596bf98ad2387783038023de4f5ac4870749a45bfd8",
+    "mainCommits": [
+      "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+      "9d3751ec2633eba68eb3bee149782795d0426442"
+    ]
+  },
+  "webkit-light-phone/session-streaming.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-light-phone/session-streaming.png",
+    "sha256": "1b4eb6cb1361e48ed512b5c8ee350f1fb342f16223b46bdf769ec5c5fa45d8d1",
+    "mainCommits": [
+      "3960c19c2aa3442357844a90fa6b5ddff9d3672c",
+      "9d3751ec2633eba68eb3bee149782795d0426442"
+    ]
+  },
+  "webkit-light-phone/settings-saved.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-light-phone/settings-saved.png",
+    "sha256": "bef63df2b75db164429ebe54d9801da5f60f07d560baba15c84e25f9a00c713f",
+    "mainCommits": [
+      "4088d37e6d26243196161355e658d3e303939bf3",
+      "def134095f8031d3a2498dbfc9677e684bca0e67"
+    ]
+  },
+  "webkit-light-phone/settings.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-light-phone/settings.png",
+    "sha256": "4e25c276d7a5863fca4936879170859516dc5b6e6f773e7a1d6c8bd84eae30ef",
+    "mainCommits": [
+      "4088d37e6d26243196161355e658d3e303939bf3",
+      "d233a6cd02e834f33b1eacd8153fdd0638f85b7a",
+      "def134095f8031d3a2498dbfc9677e684bca0e67"
+    ]
+  },
+  "webkit-light-phone/task-action-focus.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-light-phone/task-action-focus.png",
+    "sha256": "64f5b2f9c9f00018242c5310c4dad11917fbf9afd7cb6e9a10d962fdfd377479",
+    "mainCommits": [
+      "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+  },
+  "webkit-light-phone/task-action-hover.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-light-phone/task-action-hover.png",
+    "sha256": "601b5038dd0d6fb4327ef991d11a964626efa3307cdca2942d887f9ac3a92329",
+    "mainCommits": [
+      "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+  },
+  "webkit-light-phone/task-action-menu.png": {
+    "layer": "accepted",
+    "path": "p0-drift/accepted/screenshots/webkit-light-phone/task-action-menu.png",
+    "sha256": "b76ada09c93876dbafd24922c0925821413b2fc37381795c68889bbe7e31e802",
+    "replaces": {
+      "layer": "p0-drift",
+      "sha256": "2d9968586ceced3ebd162925c124857952d3d86e4cd579dae2af860aef79085e"
+    },
+    "decision": {
+      "taskId": "34Za39ACSBoCkYKc80Md8",
+      "evidenceRevision": 2,
+      "evidenceDigest": "302ca1f5051c1f3fd04abf89c1dff51c86cfbdcb9326fc3f7abf70e9ee9809bc",
+      "verdict": "CONFIRM",
+      "document": "p3.2/README.md"
+    }
+  },
+  "webkit-light-phone/task-detail.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-light-phone/task-detail.png",
+    "sha256": "6eec7569389d085b263fe4af2d4ab2405bd75443327bd5f49227660d1af87fca",
+    "mainCommits": [
+      "4088d37e6d26243196161355e658d3e303939bf3"
+    ]
+  },
+  "webkit-light-phone/task-public-share.png": {
+    "layer": "p0.2",
+    "path": "p0.2/screenshots/webkit-light-phone/task-public-share.png",
+    "sha256": "56c69301dbb0bd027839303054f7b662214884705f362549d21f350cc604a209"
+  },
+  "webkit-light-phone/task-share-dialog.png": {
+    "layer": "accepted",
+    "path": "p0-drift/accepted/screenshots/webkit-light-phone/task-share-dialog.png",
+    "sha256": "292b5453d2281d6cadbd81af4661ca8108ff209320bb0f1111a2495908fe06b5",
+    "replaces": {
+      "layer": "p0-drift",
+      "sha256": "eb49983c732ff7fe8048bd72c9d0633b4196463e0495d9ba139a8db525c4f6a3"
+    },
+    "decision": {
+      "taskId": "34Za39ACSBoCkYKc80Md8",
+      "evidenceRevision": 2,
+      "evidenceDigest": "302ca1f5051c1f3fd04abf89c1dff51c86cfbdcb9326fc3f7abf70e9ee9809bc",
+      "verdict": "CONFIRM",
+      "document": "p3.2/README.md"
+    }
+  },
+  "webkit-light-phone/wiki-contents.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-light-phone/wiki-contents.png",
+    "sha256": "20ea1c28980a475031ff17c284b1e280c3bc99c9979905936f9a8916338c637b",
+    "mainCommits": [
+      "2f9cc095f83f199997909e64dfdf7f2c0e023b2b",
+      "2ba6765d9de2db57218f67ee57e6132e044ceb1b"
+    ]
+  },
+  "webkit-light-phone/wiki-home.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-light-phone/wiki-home.png",
+    "sha256": "d578763aa2034724bed41da335ef5badbbd60916e6e209eb9a5f83e4b0bcaa11",
+    "mainCommits": [
+      "6c4e0ac0e2fef2afbfa51e4b0aefa4c3470a80eb",
+      "2f9cc095f83f199997909e64dfdf7f2c0e023b2b",
+      "2ba6765d9de2db57218f67ee57e6132e044ceb1b"
+    ]
+  },
+  "webkit-light-phone/wiki-new-entry.png": {
+    "layer": "p0-drift",
+    "path": "p0-drift/reference/screenshots/webkit-light-phone/wiki-new-entry.png",
+    "sha256": "67ce4f6fb9ce491215e82a2c62b5e7bc963b294dacf3564465e81619d65e9da0",
+    "mainCommits": [
+      "6c4e0ac0e2fef2afbfa51e4b0aefa4c3470a80eb",
+      "2f9cc095f83f199997909e64dfdf7f2c0e023b2b",
+      "2ba6765d9de2db57218f67ee57e6132e044ceb1b"
+    ]
+  }
+}

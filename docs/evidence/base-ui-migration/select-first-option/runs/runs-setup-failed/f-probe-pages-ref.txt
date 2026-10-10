@@ -1,0 +1,16 @@
+argv: env PROBE_OUTPUT=/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-probe-pages-ref-out PROBE_PORT=4531 npx playwright test --config ui-migration/probe-pages.config.mjs
+tree: /mnt/data/tmp/34coPBk43ULRuisicUTAy/ref HEAD f492dbb30fa24718061f69ca93ef1df5a05f4fa0
+uncommitted: 
+start: 2026-10-09T22:34:22Z load: 30.26 28.81 33.04
+mem: 3661M available, swap 8604M free
+disk: / 7146M available
+cgroup: 0::/system.slice/run-p90404-i58774888.scope
+Error: /mnt/data/tmp/34coPBk43ULRuisicUTAy/ref/src/web/ui-migration/probe-pages.config.mjs does not exist
+    at resolveConfigFile2 (/root/.orbit/worktrees/b02d6caa-7306-5c0d-a31b-dc04fd4510ec/node_modules/playwright/lib/common/index.js:1480:11)
+    at resolveConfigLocation (/root/.orbit/worktrees/b02d6caa-7306-5c0d-a31b-dc04fd4510ec/node_modules/playwright/lib/common/index.js:1461:30)
+    at Object.loadConfigFromFile (/root/.orbit/worktrees/b02d6caa-7306-5c0d-a31b-dc04fd4510ec/node_modules/playwright/lib/common/index.js:1490:27)
+    at runTests (/root/.orbit/worktrees/b02d6caa-7306-5c0d-a31b-dc04fd4510ec/node_modules/playwright/lib/cli/testActions.js:46:51)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async _Command.<anonymous> (/root/.orbit/worktrees/b02d6caa-7306-5c0d-a31b-dc04fd4510ec/node_modules/playwright/lib/program.js:55:7)
+end: 2026-10-09T22:34:29Z load: 30.08 28.80 33.01
+exit=1
