@@ -77,7 +77,7 @@
 | 术语 | 定义 | 不是什么 |
 |---|---|---|
 | **集成线** | 代码项目的任务完成后由平台自动落地的 ref：`project_codebase.integration_ref`。两种：`MAIN`（等于 `upstream_ref`）与 `PROJECT_BRANCH`（`refs/heads/project/<name>`） | 不是 `workspace.defaultMergeTarget`（PSC SR2） |
-| **upstream / main** | `project_codebase.upstream_ref`。本文说「main」都指它 | 不是 runner 自动探测的分支（L6） |
+| **upstream / main** | `project_codebase.upstream_ref`。本文说「main」都指它。新绑定默认取这个账号在同一仓库上次选的，没有才 `refs/heads/main`（L6） | 不是 runner 或平台自动探测的分支（L6） |
 | **代码任务** | 满足 `isCodeTask`（§1.1）的任务，只由已提交行判定 | 不由标题或描述推断 |
 | **集成作业** | `project_integration_job` 的一行：落地会话里的一次尝试（修订 12，§2.9）；`session_id` 是源工作会话，`landing_id` 指所属落地 | 本身不是会话，不启动 engine |
 | **落地会话** | `kind='LANDING'`（线上 `sessionKind`）的会话：一个落地主体的地址、记录与实时状态（修订 12，§2.9） | 不能发消息、不接收轮次、不做判断 |
@@ -139,6 +139,15 @@
 | `merge_check_command` | text NULL | 项目级合并检查命令，在组合树上执行（J-S5、M-S3）；NULL 表示没有 |
 | `merge_check_timeout_seconds` | int NULL | CHECK > 0；NULL = 3600，与任务验收命令的默认预算相同 |
 
+迁移 0422 再加一列和一个索引（L6）：
+
+| 列 / 索引 | 类型 | 约束与语义 |
+|---|---|---|
+| `upstream_ref_chosen_at` | timestamptz(3) NULL | 账号所有者写 `upstreamRef` 的时刻（L6）。NULL：这个项目自己没选过——还是默认值，或是新绑定从记忆里带过来的值 |
+| `project_codebase_upstream_choice_idx` | `(owner_id, canonical_repo_url, upstream_ref_chosen_at DESC) WHERE upstream_ref_chosen_at IS NOT NULL` | 新绑定读「这个账号在同一仓库上次选的」用的范围；schema.prisma 里写成普通索引（部分谓词写不出来，同 `authority_runner_id` 那条） |
+
+0270 的锁定触发器与 0231 的 `project_codebase_config_guard` 都不点这一列：锁定后照样能记一次选择，记它也不算配置变化，不动 `config_revision`。
+
 迁移 0270 新增触发器 `project_codebase_integration_lock`（BEFORE UPDATE）：`OLD.integration_started_at IS NOT NULL` 时，拒绝改动 `integration_ref`、`upstream_ref`、`canonical_repo_url`、`ref_authority`、`remote_name`、`authority_runner_id`，也拒绝把 `integration_started_at` 改回 NULL；错误信息以 `INTEGRATION_LINE_LOCKED` 开头。沿用 0231 的约束：ref 必须是 `refs/` 全名（SR9）；不得新增 `work_dir` / `workspace_id` / `default_merge_target` / `enable_worktree`（SR10，`project-codebase-schema.pg.spec.ts` 断言它们缺席）。
 
 派生值（不存列）：
@@ -165,7 +174,7 @@
 1. `INSERT INTO project_codebase … ON CONFLICT (project_id, slot) DO NOTHING`，再 `SELECT … FOR UPDATE` 取回这一行。串行化靠代码库行锁，不锁 `project` 行。锁序：`task` → `project_codebase` → `project_integration_job` → `project_open_item`，写进 `src/apiserver/src/common/lock-order.ts`。
 2. 新插入的行取值：
    - `canonical_repo_url`：该任务工作会话所在 workspace 的 `repo_url`，经 PSC SR36 的规范化函数处理。为 NULL 时不插入代码库行、不入队作业，改为生成 `INTEGRATION_ERROR` 待办（`error_code = INTEGRATION_REPOSITORY_UNKNOWN`，§4.2）。
-   - `upstream_ref = 'refs/heads/main'`（L6）。
+   - `upstream_ref`：这个账号在同一仓库上次选的（L6 的记忆），没有才 `'refs/heads/main'`；`upstream_ref_chosen_at` 为 NULL。
    - `integration_ref`：`MAIN` → 等于 `upstream_ref`；`PROJECT_BRANCH` → `refs/heads/project/<projectPublicId>`（附录 A-Q1）。
    - `ref_authority = 'REMOTE'`，`remote_name = 'origin'`（附录 A-Q2）。
    - `integration_ref_source = 'DEFAULT_RULE'`。
@@ -189,11 +198,19 @@ interface UpdateProjectIntegrationDto {
 }
 ```
 
-没有代码库行时创建：`canonical_repo_url` 取项目协调工作区的 `repo_url`，缺失则 409 `INTEGRATION_REPOSITORY_UNKNOWN`。写 `project.exception_escalation_seconds` 的方法里不得出现 `status:` 键（`project-status-write-sites.spec.ts` 按「同一方法内有 `.project.update` 且有 `status:`」认写入方）。
+没有代码库行时创建：`canonical_repo_url` 取项目协调工作区的 `repo_url`，缺失则 409 `INTEGRATION_REPOSITORY_UNKNOWN`；`upstream_ref` 与 `integration_ref` 先取 L6 的记忆，没有才 `refs/heads/main`，再按本次设置改写。写 `project.exception_escalation_seconds` 的方法里不得出现 `status:` 键（`project-status-write-sites.spec.ts` 按「同一方法内有 `.project.update` 且有 `status:`」认写入方）。
 
 `workspace.repo_url` 可手动填写，也由 runner 的目录探测自动补空：读取工作目录的 `origin`，去掉 URL 中的凭据后随下一次心跳上报；服务端仅在 workspace 的 runner、原始 `workDir` 仍匹配且 `repo_url` 为 NULL 或空字符串时回填。新建和既有工作区都走这条路径；旧 runner 未上报、目录不存在或没有 origin 时不写，不覆盖已有地址，也不改变已建立的项目代码库绑定。检测是异步的，尚无地址时应提示等待 runner 检测或在工作区设置填写 Repository URL。
 
-**L6（upstream 不探测）**：apiserver 没有仓库可问。`upstream_ref` 默认 `refs/heads/main`，owner 可在锁定前改。runner 在作业里发现它不存在时，作业以 `ERROR / BASE_REF_NOT_FOUND` 结束并生成待办（§2.6），**不回退到 master**：产品与仓库无关（owner 决定 3），猜分支名就是在为仓库约定做特判。
+**L6（upstream 记住上次的选择，不探测）**：upstream 默认取这个账号在同一仓库上次选的；没有才 `refs/heads/main`；平台仍不去仓库里探测。apiserver 没有仓库可问，记住的是 owner 说过的，不是平台猜的。owner 可在锁定前改（L4）。
+
+- **记录**：账号所有者每次写 `upstreamRef`，同一条 UPDATE 里把 `upstream_ref_chosen_at` 写成 `now()`。这些门都经过 `configureProjectIntegration`：开始门 `POST /projects/:id/start`（经 `startProjectLine`，仅在线未锁定时）、`PATCH /projects/:id/integration`、`PATCH /projects/:id` 与 `POST /projects` 的 `integration`、CLI `orbit project update --upstream-ref`（终端里，不带会话）。写的值与原值相同也记：这是 owner 又说了一次。带 acting session 的请求照旧 403（L5、L5-b），什么都不记。
+- **记忆的读法**：同 `owner_id`、同 `canonical_repo_url`、`upstream_ref_chosen_at` 非空的行里最新那行（同一毫秒按 `id`）的 `upstream_ref`（`rememberedUpstreamRef`，走 `project_codebase_upstream_choice_idx`）。仓库按 PSC SR36 规范化后比较，同一仓库的不同写法算同一个；别的账号、别的仓库的选择互不影响。
+- **新绑定**：`bind()` 新建的行，`upstream_ref` 与 `integration_ref` 都先取记忆，没有才 `refs/heads/main`；新行的 `upstream_ref_chosen_at` 为 NULL（它带的是记忆，不是这个项目自己的选择）。三个入口都走它：开始门、`PATCH …/integration`（及项目更新的 `integration`）的首次绑定、没经过开始卡片的项目的第一次集成（L3）。已有的绑定不随记忆改变。
+- **开始门**：`POST /projects/:id/start` 收可选 `upstreamRef`（全名，与 `UpdateProjectIntegrationDto` 同一条 `refs/heads/` 校验，`CODEBASE_AUTHORITY_INVALID`）。线未锁定时连同线一起写入并记时间；已锁定时照旧只写合并检查，不写 upstream、不记时间，`differsFromRequest` 记 `line`。没有仓库的项目带它 → 409 `INTEGRATION_REPOSITORY_UNKNOWN`，与项目分支、合并检查同一条。`started_with.settings.upstreamRef`：开始门或它回答的开始请求带了 `upstreamRef` 时，记开始之后项目所在的 upstream（全名）；都没带时不记。
+- **开始请求**：`project_request_start`（`POST /runner/projects/:id/start-requests`）收可选 `upstreamRef`，原样存进 `START_REQUEST` 的 `settings`。它只是建议，不写代码库行、不记时间。没有仓库时带它 → `START_REPOSITORY_UNKNOWN`。协调者在 `project_get` 的 `integration.lastMainBranch` 有值时不填；没有时在仓库里读 `git symbolic-ref --short refs/remotes/origin/HEAD` 填。
+- **开始卡片的初始值**，取第一个有的：这个项目自己已选的（`upstreamChosenAt` 非空时的 `upstreamRef`）→ 同仓库上次选的（`lastMainBranch`）→ 协调者建议的（开始请求的 `settings.upstreamRef`）→ `main`。
+- runner 在作业里发现 upstream 不存在时，作业以 `ERROR / BASE_REF_NOT_FOUND` 结束并生成待办（§2.6），**不回退到 master**：产品与仓库无关（owner 决定 3），猜分支名就是在为仓库约定做特判。
 
 **L7（平台合并不回写）**：集成作业（§2）与晋升（§3）不读、不写 `workspace.default_merge_target`。它的写入方保持现状：`SessionsService.mergeToMain` 在用户显式选目标时回写，另有 workspace 创建与更新、runner agent 路由、`clone-result`。
 
@@ -264,6 +281,10 @@ export function receiptIsLandingEvidence(receipt: LandingReceiptFacts, branches:
 |---|---|---|---|
 | `line` | `'MAIN' \| 'PROJECT_BRANCH'` | 代码库行 | `NOT_DECIDED` |
 | `ref` / `upstreamRef` | string | 两个 ref 的短名 | `NOT_DECIDED` |
+| `upstreamChosenAt` | Date | `upstream_ref_chosen_at`（L6） | null：这个项目自己没选过（默认值，或新绑定带过来的记忆），或没有代码库行 |
+| `lastMainBranch` | `{ branch, repository, chosenAt }` | L6 的记忆：这个账号在本项目仓库上次选的主分支；`branch`、`repository` 都是短名 | null：这个账号在该仓库没选过，或项目没有仓库 |
+| `repository` | string | 项目仓库的短名：规范化 URL 的最后两段（如 `acme/payments-api`）；有代码库行取它的，没有时取协调工作区 `repo_url` 规范化后的 | null：两者都没有，此时没有主分支可选（客户端不显示 Main branch 一行） |
+| `branches` | `{ names, workspaceName, reportedAt }` | 主分支下拉的候选：协调工作区里最新创建的、上报过 `session.merge_targets` 的会话的那份（runner 报的本地分支），去掉 `orbit/*`；`workspaceName` 是协调工作区名，`reportedAt` 是那个会话行最后一次写入的时间（runner 每次心跳和收尾都重报）。按创建时间取，读 `(workspace_id, created_at DESC)` 索引、遇到第一条有上报的就停：这条读口 30 秒轮询一次，协调工作区可以有上千个会话，报的是同一个仓库 | null：没有会话上报过分支，或没有协调工作区 |
 | `source` | `'EXPLICIT' \| 'DEFAULT_RULE'` | `integration_ref_source` | `NOT_DECIDED` |
 | `locked` / `startedAt` | bool / Date | `integration_started_at` | — |
 | `mergeCheckCommand` / `mergeCheckTimeoutSeconds` | string / number | 代码库行 | `NOT_CONFIGURED` |
@@ -274,7 +295,7 @@ export function receiptIsLandingEvidence(receipt: LandingReceiptFacts, branches:
 | `inFlightJobs` | `ProjectIntegrationJob[]` | 两个计数数到的每个作业，顺序同 `inFlight`（先运行中，再按领取或入队时刻、`id`），首条就是 `inFlight` 描述的那个；带任务、代数、runner 名、谁要求的重跑，以及读时判定的超时（`timedOut` / `limitSeconds`，见 J-T9）。**要求**（修订 12，新字段一律可选）：每一项还带 §7.2 给 `inFlight` 加的那些可选字段——`landingSessionId`、`promotionId`、`round`、`check{name,index,count,budgetSeconds,startedAt}`、`outputMovedAt`、`progressProtocol`、`typicalMs`；本修订原先提的 `landings[]`（最多 3 条）由它取代，落地行动态行与项目 sessions 页的 Landings 组都读它；`timedOut` / `limitSeconds` 按 §7.2 V6 的唯一定义算，不另立规则 | 旧服务端不带 |
 | `mergeCheckOnTip` | `'PASSING' \| 'FAILING' \| 'UNKNOWN'` | 最近一条终态 `LAND_TASK`：`LANDED` / `ALREADY_LANDED` → PASSING；`CHECK_FAILED` → FAILING；其余（含 `NOTHING_TO_LAND`——没有可检的树）→ UNKNOWN | — |
 
-项目列表行带 `integration: { line, ref } | null`（§7.1）。
+项目列表行带 `integration: { line, ref } | null`（§7.1）。项目文档（`project_get`）的 `integration` 是上表的设置一半，另带 `upstreamChosenAt` 与 `lastMainBranch`：协调者靠 `lastMainBranch` 判断开始请求要不要建议主分支（L6）。它们多花项目文档一条语句（`readMainBranchMemory`，按项目一条），`repository` 与 `branches` 只在本接口。
 
 ### 1.7 测试
 
@@ -286,6 +307,8 @@ export function receiptIsLandingEvidence(receipt: LandingReceiptFacts, branches:
 4. `switching the line after integration started is refused INTEGRATION_LINE_LOCKED`（服务层与触发器各断言一次）
 5. `a receipt into the project branch makes its serving task landed`（改动前在 main 上跑红：`DEFAULT_BRANCH_NAMES` 读成 UNKNOWN）
 6. `platform-initiated merges leave workspace.defaultMergeTarget unchanged`
+
+`src/apiserver/src/projects/project-main-branch.pg.spec.ts`（L6）：开始门写入并记时间；同账号同仓库的下一个项目按上次选的绑定（PATCH 与不带主分支的开始门），更新的选择覆盖旧的；别的仓库、别的账号互不影响；没经过开始卡片的项目第一次集成也取记忆；线开始后另一个主分支 409、什么都不记；agent 会话 403，终端 CLI 记录；`GET /projects/:id/integration` 的四个新字段与项目文档的 `lastMainBranch`；开始请求保存 `upstreamRef`。
 
 另：`project-criterion-landing.ts` 的纯函数补 `ON_INTEGRATION_LINE` 与 Legacy 两例（放同目录的 `project-criterion-landing.spec.ts`）。runner：`TestWorktreeForksFromIntegrationRefTip`（判据 5，`src/runner-go/worktree_test.go`；真实 git 仓库，main 与项目分支 tip 不同，断言基线 = 项目分支 tip 而非 workDir HEAD），外加 `TestWorktreeRefusesUnlandedRequiredContains`。
 
@@ -1546,6 +1569,7 @@ interface ProjectListAttention {
 | 0273 `project_promotion` | 一张表；两处外键 | 无 | `project_promotion_terminal_guard` |
 | 0274 `project_fuse_episode` | 两张表；一处外键 | 无 | 恢复后不可变 |
 | 0265–0269（自选） | `project_blocker` 两列与 CHECK；`project_criteria_decision_reply` | 无 | 无 |
+| 0422 `project_codebase_upstream_ref_chosen_at` | `project_codebase.upstream_ref_chosen_at` 与部分索引 `project_codebase_upstream_choice_idx`（L6） | 无 | 无 |
 
 全部迁移只加表、加可空列或常量默认列（常量默认值不重写表），不做 DML，不改 `task` / `session` / `run_event` / `conversation_turn` 上的触发器，不用 `project_acceptance_` 前缀，表名与约束名不含 `judgment`。
 
@@ -1569,7 +1593,7 @@ interface ProjectListAttention {
 | 名字 | `project-provenance-epoch.spec.ts`（SC7：`sourceSessionId`、`triggerEvent`、`trigger_event` 等七个名字） | 新代码不用这些名字（本文用 `asked_by_session_id`、`acting_session_id`） |
 | 写 `project` 行 | `project-status-write-sites.spec.ts`、`project-status-frozen-list.spec.ts` | 写项目设置与覆盖值的方法里不出现 `status:` 键 |
 | 锁序 | `src/apiserver/src/common/lock-order.spec.ts`（`events` 1 条、`turnComplete` 4 条 session 写） | 不在这两处加 session 写；新表的锁级写进 `lock-order.ts` |
-| 项目详情读 | `project-get-query-count.pg.spec.ts`（17 条） | §1.4 的一条代码库读 → 18；其余新数据走新接口 |
+| 项目详情读 | `project-get-query-count.pg.spec.ts`（17 条） | §1.4 的一条代码库读 → 18；其余新数据走新接口。L6 的记忆读又加一条（24 → 25，2026-10-10） |
 | 满足度模块引用者 | `project-criterion-satisfaction.pg.spec.ts`（只许 8 个文件提到它） | 新文件不 import 它；晋升卡的「n of m met」在客户端计算 |
 | `COORDINATOR_WAKE_EVENTS` 闭集 | `coordinator-wake.spec.ts`（钉 0250 / 0243 为最新）、`coordinator-disabled-negatives.spec.ts`（`WIRED` 生产者清单与关闭开关对照）、`completion-input.spec.ts`、`project-criterion-declaration-staleness.pg.spec.ts` | 不加事件则不动；新增对既有事实构造函数的调用点要进 `WIRED` 并补关闭对照 |
 | wake 处置 | `wake-disposition.spec.ts`（STRANDED 对所有事件开判断） | C4 改动 `ATTEMPT_ENDED_UNSETTLED` 的处置，按新规则重述该 spec |
@@ -1725,7 +1749,7 @@ SELECT count(*) FROM project_coordinator_wake
 | Q1 | 项目分支叫什么 | `project/<projectPublicId>`，锁定前可在设置里改名 | 按项目标题生成 ASCII slug（`project/bg-jobs`），标题无法生成时回退 publicId |
 | Q2 | workspace 没有远端时怎么办 | 拒绝集成，生成 `INTEGRATION_ERROR / INTEGRATION_REPOSITORY_UNKNOWN` 待办 | 允许 `RUNNER_LOCAL` 权威，绑定到该 workspace 的 runner |
 | Q3 | 开始集成后能否换线 | v1 不能；要换，先合入 main 或放弃当前项目分支（owner 手工处理） | v1 就提供「放弃项目分支并解锁」的 owner 操作 |
-| Q4 | upstream 是否自动探测 | 不探测，默认 `refs/heads/main`，找不到就报错 | 第一条作业时由 runner 读远端 HEAD 并记录 |
+| Q4 | upstream 是否自动探测 | 不探测。默认取这个账号在同一仓库上次选的，没有才 `refs/heads/main`；某个仓库第一次用时由协调者在开始请求里建议（它在仓库里读 origin/HEAD），owner 在开始卡片上定；找不到就报错（L6，owner 2026-10-09） | 第一条作业时由 runner 读远端 HEAD 并记录 |
 | Q5 | 推送时目标被别人推进 | LAND_TASK 同一作业内最多再做 2 轮 fetch → rebase → 检查，之后 ERROR / TARGET_MOVED；修订 12 已定 LAND_PROMOTION 第一次即交回（J-T13，owner 2026-10-04） | LAND_TASK 也 0 轮，立刻生成待办 |
 | Q6 | 确认卡的「Not now」 | 该候选记为 `DECLINED`，项目分支再落地新任务时出新卡 | 暂缓 N 小时后重新提醒（对人的时钟，允许） |
 | Q7 | `MAIN` 线任务合入 main 的方式 | rebase 后 fast-forward | 与项目分支一样用 `merge --no-ff` |
@@ -1762,3 +1786,4 @@ SELECT count(*) FROM project_coordinator_wake
 - **v1 修订 14**（2026-10-09 owner 批准方案 A；设计图 `docs/mocks/coordinator-question-answered/`）：答完或撤回的协调者提问在对话里留下记录。§4.8 的读口多返回可选的 `closedQuestions`：`COORDINATOR_QUESTION` 里已回答与已撤回的，按 `resolvedAt` 新的在前，最多 50 条，每条带当时的问题（与 `question` 同形）、`answer`（选项索引或 null、文字或 null）、`resolvedAt`、第一条 ANSWER 投递的会话与时间（没有就是 null）、撤回理由与 `resolvedBy`；还开着的提问照旧只在 `needsYou`。§5.2 的 R10 改为「答复后卡片成为记录」，R12 改为「撤回后卡片不再消失，而是成为 Withdrawn 记录」。客户端（OrbitKit、web 协调会话）把记录画在 `resolvedAt` 那一刻，与判据裁决、证据、合并的回执同一条放置规则，并拿掉原来的提问卡；记录不计入 open questions 与 needs-you 计数；项目页不变。缘由：owner 2026-10-09 的截图里，对话中两张答过的卡只剩「Answered」和一行选项名，当时问了什么、有哪些选项、推荐的是哪个都看不到了——读口只返回开着的提问（`needsYou`），`settled` 组特意不收提问，iOS/macOS 的 Answered 状态只在本机内存里（重启或换设备就没了），web 答完一刷新卡片当场消失；而问题原文、选项、答复、撤回理由和投递记录一直都在服务端的行上。取舍：（1）按条数封顶不按天，理由见 §4.8；（2）不加迁移、不加索引，一个项目的提问是几十条的量级，`(project_id, state, waiting_since)` 已能把扫描限在本项目；（3）卡上只写问题开头和回答（方案 A），选项在详情里原样回放，不在卡上列（方案 B 未采纳）；（4）把协调会话收到的那条 `From Orbit · owner answer` 消息画成一行（设计图第 4 步）与提示词里「推荐项不要写进选项名」（第 5 步）不在本修订。
 - **v1 修订 15**（2026-10-09，修复任务；起因是项目 `34PBlWiEZytRLTcPufJht`）：两处改动，都是把已经发生的事实记下来，而不是留给读者去猜。其一，§2.4 J-S4：REBASE 的结果就是 base 时，不推送、不 VERIFY，答 `NOTHING_TO_LAND`。此前推送是空操作，VERIFY 照样通过，于是报 LANDED 并写回执。当天这条线从 main tip 重建，一批任务的提交在 rebase 时全被当作「补丁已在上游」跳过，每一条都这样记了账。新增作业列 `source_fully_applied`（0410）与线上字段 `sourceFullyApplied`，区分两种空结果：分支带着提交、目标已全部有了（TRUE），和分支没有提交（FALSE；J-S3 的空分支同样报 FALSE）。J8 与 J-T1e 像对 `ALREADY_LANDED` 一样对待全部已应用的答案：判得太早的退回 `QUEUED`；工作结束在别的分支上的，补排那条分支、不写回执；除这条分支外没有会话报告过工作时写回执，并解决该任务的集成类待办。§1.4 只在 base 就是 upstream 时让它退出合取（`jobSawWorkOnUpstream`）；线领先 main 时任务读 `ON_INTEGRATION_LINE`。旧的读法一条都没有放宽。其二，§3.2：`project_promotion` 增 `blocked_reason`（0409），由写 `BLOCKED` 的同一条语句记下作业的答案，重新检查时清空。web 的合入卡把 `ALREADY_LANDED` 读作 nothing to merge，把 `ERROR` 读作 the merge stopped on an error — no check failed，不再从空的 `checks` / `conflicts` 推成「检查没过」；0409 之前的行照旧推断。OrbitKit 的同一张卡（`PromotionCards.blockedLine` / `blockedReason`）这次没有改，仍按旧推断。
 - **v1 修订 16**（2026-10-10，修复任务 `34d07GXpcVg7MEt8duMFZ`；起因是 2026-10-09 生产事故，项目 `34bmzOkov3xN2yLPrnsCk` 合进 main 的候选 `EgpMcrpirt5G2yVGJimfS` 卡死）：三条改动，把「晋升作业超时无处可去」和「旧确认撞约束」两个洞补上。其一（a），§2.2 J-T9 与 §4.7 H1：候选重检门（`integration_retry` 带 `promotionId`）对**已超时**的 `CHECK_PROMOTION` 开放——候选 CHECKING（不只是 BLOCKED）且最新检查 RUNNING、按 §7.2 V6 已沉默超过时限时，同一事务先按 J-T9 的比较并交换把它结束为 `ERROR · RUNNER_LOST`（`claim_generation + 1`，迟到的结果被拒），再重排下一代 `CHECK_PROMOTION`；没超时的照旧 409 `INTEGRATION_RETRY_IN_FLIGHT`；`LAND_PROMOTION` 的超时不走这扇门（它答的是已确认的合入，归 J-T3 接管或 J-T10 放弃门）；owner 的用户门同一套规则，超时重排不要求归 owner 的待办。其二（b），§4.7 H1 与 §3.2 列注释：重检随候选回到 CHECKING 的那条 UPDATE 清掉上一次的确认（`confirmed_by_user_id` / `confirmed_at` 清空、`confirmed_automatically` 复位 false）。缘由：owner 13:00 按过的确认留在后来 BLOCKED 的候选上，重查通过后 Automatic 写 `confirmed_automatically = true` 撞 `project_promotion_automatic_chk`（0301），结果 500、runner 放弃、作业永留 RUNNING 占住 `#check:<project>`。重检查的是新的合入问题，旧确认回答的是旧检查；选了「在重排处清」而不是「在自动确认处让路」，因为留着旧确认对不开 Automatic 的项目同样是假话——行上写着某人某时刻确认过，而那个检查结果早已作废。不开 Automatic 的项目行为不变：检查通过照常出 owner 的卡，owner 此前按过不覆盖新的问题。其三（c），§3.3 M-T13：回执退役候选时，RUNNING 且已沉默超过时限的检查作业不再只写 `cancel_requested_at`——那会让一行作业永远占住检查串行槽（`claimOne` 不重发带取消请求的行，而死去的 runner 也永远答不出来），而是当场按 J-T9 的比较并交换结束为 `ERROR · RUNNER_LOST`；仍在回报期内的才只写 `cancel_requested_at`，由 J-T12 收口。M-T6 的 supersede 路径不动：它把检查作业直接写成 CANCELLED，作业当场终态、不占位。测试：`integration-retry.pg.spec.ts` 复现生产这一例（修复前 P2039、修复后结果被接受、候选按所选语义走到 MERGED），并覆盖超时重排（协调会话与 owner 两个入口、CHECKING 准入、未超时拒绝、迟到结果被拒）；`promotion-landed-by-receipt.pg.spec.ts` 的 (10) 覆盖被取代候选不再占位、同 serial key 的下一个检查照常可领。
+- **v1 修订 17**（2026-10-10；owner 2026-10-09 批准项目 `34cjQN5ynG6eIH5A0neeu`「项目主分支」的五项，设计图 `docs/mocks/project-main-branch/`）：L6 从「upstream 不探测、默认 `refs/heads/main`」改为「upstream 默认取这个账号在同一仓库上次选的；没有才 `refs/heads/main`；平台仍不去仓库里探测」。迁移 0422 给 `project_codebase` 加 `upstream_ref_chosen_at` 与部分索引 `project_codebase_upstream_choice_idx`（§1.1、§8.1）；owner 每次写 `upstreamRef` 都记时间，`bind()` 新建的绑定先取记忆（§1.2 L3 第 2 步、L6）；开始门与协调者的开始请求都收可选 `upstreamRef`（共享类型 `ProjectStartSettings.upstreamRef`），开始门写进 `started_with`，开始请求只存建议；`GET /projects/:id/integration` 加 `repository`、`branches`、`lastMainBranch`、`upstreamChosenAt`，项目文档的 `integration` 加后两个（§1.6，项目详情读 24 → 25 条语句）。缘由：主分支不叫 main 的仓库（master、develop、trunk）每个项目都要手工改 upstream，否则任务启动就报 `BASE_REF_NOT_FOUND`。L4、L5、L5-b 不变：锁定后另一个主分支照旧 409，agent 会话写线字段照旧 403。测试：`project-main-branch.pg.spec.ts`。
