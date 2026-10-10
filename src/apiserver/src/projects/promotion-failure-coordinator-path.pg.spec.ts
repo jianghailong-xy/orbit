@@ -420,7 +420,7 @@ test('a failed promotion gives the coordinator only usable named doors, and inte
       assert.doesNotMatch(message, /promotion_recheck/);
       assert.doesNotMatch(message, /supersedesTaskId/);
       assert.match(message, /promotionId/);
-      assert.match(message, /go test.*10 分钟/);
+      assert.match(message, /go test.*10-minute/);
 
       const retried = await stack.openItems.retryPromotionCheck(
         w.ownerId,

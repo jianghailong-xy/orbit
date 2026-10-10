@@ -55,20 +55,8 @@ const ALLOWED: Record<string, [count: number, why: string]> = {
   'src/web/src/lib/wikiArticles.ts': [1, 'sorts Chinese titles by their pinyin initials'],
 
   // The coordinator's judgment turn.
-  'src/apiserver/src/projects/coordinator-judgment-opening.ts': [312, TO_ENGLISH],
-
-  // The coordinator's opening, open items and wake dispositions.
-  'src/apiserver/src/projects/coordinator-opening.ts': [68, TO_ENGLISH],
-  'src/apiserver/src/projects/project-open-item.ts': [231, TO_ENGLISH],
-  'src/apiserver/src/projects/wake-disposition.service.ts': [8, TO_ENGLISH],
 
   // The task brief and the notes delivered into sessions.
-  'src/apiserver/src/tasks/task-execution-prompt.ts': [35, TO_ENGLISH],
-  'src/apiserver/src/tasks/reference-expansion.ts': [33, TO_ENGLISH],
-  'src/apiserver/src/sessions/session-message.ts': [7, TO_ENGLISH],
-  'src/apiserver/src/sessions/session-request.ts': [20, TO_ENGLISH],
-  'src/apiserver/src/sessions/session-request.service.ts': [4, TO_ENGLISH],
-  'src/apiserver/src/runner-api/resume-continuation.ts': [4, TO_ENGLISH],
 
   // The wiki: its topics, the prompts that write it and the prose it writes, on the server and the runner.
   'src/runner-go/wiki_articles.go': [7, TO_ENGLISH],

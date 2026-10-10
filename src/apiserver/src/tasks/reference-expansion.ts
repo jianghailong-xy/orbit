@@ -113,7 +113,7 @@ export class ReferenceExpansionService {
         take: 4,
       }),
     ]);
-    const counts = byStatus.map((r) => `${r.status} ${r._count._all}`).join(' / ') || '(无任务)';
+    const counts = byStatus.map((r) => `${r.status} ${r._count._all}`).join(' / ') || '(no tasks)';
     const causes = failures.reduce<Partial<Record<FailureCause, number>>>((acc, s) => {
       const c = classifyFailure(s.error);
       acc[c] = (acc[c] ?? 0) + 1;
@@ -122,23 +122,24 @@ export class ReferenceExpansionService {
     const causeLine =
       Object.entries(causes)
         .map(([k, v]) => `${k} ${v}`)
-        .join(' / ') || '无';
+        .join(' / ') || 'none';
     return [
       `<referenced-list id="${uuidToBase62(list.id)}">`,
-      `  标题   ${list.title}`,
-      `  规模   ${counts}`,
-      `  在跑   ${live}`,
-      `  失败归因 ${causeLine}`,
-      `  策略   ${list.paused ? '已暂停' : '运行中'} · 并发上限 ${list.maxConcurrent ?? '无'} · ` +
-        `作业指导 ${list.instructions ? '已设置' : '无'} · 完成时验收 ${list.verifyOnDone ? '开' : '关'}`,
+      `  Title       ${list.title}`,
+      `  Tasks       ${counts}`,
+      `  Running     ${live}`,
+      `  Failures    ${causeLine}`,
+      `  Policy      ${list.paused ? 'paused' : 'running'} · concurrency cap ${list.maxConcurrent ?? 'none'} · ` +
+        `instructions ${list.instructions ? 'set' : 'none'} · verify on done ${list.verifyOnDone ? 'on' : 'off'}`,
       ...(conditions.length > 0
         ? [
-            `  控制面观察 ${conditions
-              .map((c) => `${c.kind}(${c.detail}，最近 ${c.lastSeenAt.toISOString()})`)
-              .join('；')}`,
+            `  Conditions  ${conditions
+              .map((c) => `${c.kind}(${c.detail}, last seen ${c.lastSeenAt.toISOString()})`)
+              .join('; ')}`,
           ]
         : []),
-      `  明细请用 tasklist_get / task_list / task_get 自取——这里只给形状，不给内容。`,
+      `  For the details, fetch them yourself with tasklist_get / task_list / task_get — this gives ` +
+        `the shape, not the contents.`,
       `</referenced-list>`,
     ].join('\n');
   }
@@ -172,14 +173,17 @@ export class ReferenceExpansionService {
     });
     const lastLine = lastRun
       ? `${lastRun.status}${lastRun.error ? ` (${classifyFailure(lastRun.error)})` : ''}, ${lastRun.numTurns} turns`
-      : '从未运行';
+      : 'never run';
+    // Read back by the clients, which draw the block as a card (web lib/referencedTask.ts, OrbitKit
+    // Transcript/ReferencedTask.swift): a label or a sentence reworded here is reworded there too.
     return [
       `<referenced-task id="${uuidToBase62(task.id)}">`,
-      `  标题   ${task.title}`,
-      `  状态   ${task.status}${task.isForeman ? ' · 协调任务' : ''}${task.verifiesTaskId ? ' · 验收任务' : ''}`,
-      `  所属   ${task.list?.title ?? '(无列表)'} · 负责 ${task.assignee?.name ?? '(未指派)'}`,
-      `  运行   共 ${runs} 次，其中执行过 turn 的 ${executed} 次；最近一次：${lastLine}`,
-      `  详情请用 task_get 自取。`,
+      `  Title    ${task.title}`,
+      `  Status   ${task.status}${task.isForeman ? ' · coordinating task' : ''}` +
+        `${task.verifiesTaskId ? ' · verification task' : ''}`,
+      `  List     ${task.list?.title ?? '(no list)'} · assignee ${task.assignee?.name ?? '(unassigned)'}`,
+      `  Runs     ${runs} in total, ${executed} of them took a turn; last: ${lastLine}`,
+      `  For the details, fetch them yourself with task_get.`,
       `</referenced-task>`,
     ].join('\n');
   }

@@ -29,8 +29,8 @@ import {
  * The writer's deterministic half (wiki-docs-writer.ts), case for case the unit cases of
  * `src/runner-go/wiki_docs_build_test.go` and `wiki_docs_test.go` — the material's cap and filter, the merge read
  * strictly, a quote found in a file and its lines, the fingerprint, a section's heading — and, where the server
- * reads the repository differently from a checkout, a file the read cut short and a directory shown as git shows a
- * tree.
+ * reads the repository differently from a checkout, a file the read cut short, a directory shown as git shows a
+ * tree, and a path holding a wildcard shown as git shows a pathspec.
  */
 
 const CONTRACT = JSON.parse(readFileSync(path.resolve(__dirname, '../../../../contracts/wiki.contract.json'), 'utf8')) as {
@@ -247,6 +247,34 @@ test('a directory shows as `git show <sha>:<dir>` shows a tree — the runner\'s
   const code = wikiDocCodePieces(repo, 'contracts', [], ['json']);
   assert.deepEqual([code.pieces.length, code.missing], [0, []]);
   assert.equal(wikiDocContract(repo, 'contracts/sub')?.text, `tree ${sha}:contracts/sub\n\nb.json`);
+});
+
+test('a path that is no file or directory of the commit but holds a wildcard shows as git shows a pathspec: an empty file', async () => {
+  // git 2.47.3: `git show <sha>:'src/*.go'` exits 0 printing nothing, `git show <sha>:'src/\*.go'` exits 128, and a
+  // file or directory whose own name holds the wildcard is shown as itself.
+  const sha = 'f'.repeat(40);
+  const files = ['src/x.go', 'src/[v].go', 'lib/[v1]/a.go'];
+  const reads: string[][] = [];
+  const repo = new WikiDocsSnapshotRepo(sha, new Map(files.map((one) => [one, 10])), [...files].sort(), async (paths) => {
+    reads.push([...paths]);
+    return new Map(paths.map((one) => [one, file(one, 'found', `${one}\n`, 10)]));
+  });
+  await repo.prepare(['src/*.go', 'src/[v].go']);
+  assert.deepEqual(reads, [['src/[v].go']], 'a pattern is no file to read');
+  for (const pattern of ['src/*.go', '`src/nope/*.go`', 'docs/de?ign.md', 'contracts/[a].json']) {
+    assert.deepEqual(repo.show(pattern), { text: '', cut: false }, pattern);
+  }
+  assert.equal(repo.show('src/\\*.go'), null, 'an escaped wildcard is no pattern');
+  assert.deepEqual(repo.show('src/[v].go'), { text: 'src/[v].go\n', cut: false });
+  assert.deepEqual(repo.show('lib/[v1]'), { text: `tree ${sha}:lib/[v1]\n\na.go\n`, cut: false });
+  // The writer finds nothing in it, as the runner's did: a code path's head and a contract with nothing in them, a
+  // document from its top, and a symbol or a heading named in it missing.
+  const head = wikiDocCodePieces(repo, 'src/*.go', [], ['go']);
+  assert.deepEqual([head.pieces.map((p) => [p.kind, p.path, p.lines, p.text]), head.missing], [[['code', 'src/*.go', { start: 1, end: 1 }, '']], []]);
+  assert.deepEqual(wikiDocCodePieces(repo, 'src/*.go', ['runLoop'], []), { pieces: [], missing: ['src/*.go :: runLoop'] });
+  assert.equal(wikiDocContract(repo, 'contracts/*.json')?.text, '');
+  assert.equal(wikiDocDocSection(repo, 'docs/*.md', '').piece?.text, '');
+  assert.equal(wikiDocDocSection(repo, 'docs/*.md', '2. Delivery').piece, null);
 });
 
 test('a file another section is already reading is shown only once that read landed (v27, 2026-10-09: «was shown before it was read»)', async () => {

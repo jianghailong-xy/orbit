@@ -82,8 +82,8 @@ const BASELINE = {
   effort: AGENT_EFFORT, permissionMode: 'auto',
 };
 /** The coordinator paragraph that asks for a tier, by its first words and its last sentence. */
-const HINT_HEAD = '给你创建的每个任务填 modelHint';
-const HINT_TAIL = '引擎用 engine 字段指定，provider 只决定用哪份凭据（登录、账号池或 key），须是该引擎能用的。';
+const HINT_HEAD = 'Give every task you create a modelHint';
+const HINT_TAIL = 'The engine is set with the engine field; provider only decides which credential is used (a sign-in, an account pool or a key), and must be one that engine can use.';
 const CONTEXT_TAG = '<orbit_project_coordinator_context>';
 
 /** Publishes nothing: every realtime / queue call is a no-op. */
