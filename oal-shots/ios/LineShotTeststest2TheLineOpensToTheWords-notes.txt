@@ -1,0 +1,9 @@
+sheet: line 9 label="Sent to the coordinator · 08:29" value="" frame=(0.0, 447.0, 402.0, 39.666666666666686) hittable=true
+sheet texts: Orbit ¦ New session ¦ What the coordinator was told ¦ Workspaces ¦ Wiki 服务端执行 ¦ Project coordinator ¦ Waiting for your reply · Open · 10h ago ¦ Projects ¦ Tasks ¦ Wiki ¦ orbit-develop ¦  · HPC ¦ Message… ¦ Default ¦ Opus 5.5 ¦ High ¦ Sent to the coordinator · 08:29 ¦ From Orbit · owner answer: you asked "灰度回退之后的收尾都做完了：
+
+- 新版本部署之后，维护任务恢复了，第一轮成功跑完，把所有锚点重新检查了一遍。
+- 灰度期间写错的结论已经清零，失败计数也归零。
+- 三处修复都已经在生产上。
+
+请批准重开灰度，做法和第一次一样：名单里仍只有你的账号，只重建两个服务。". The owner answered: 现在重开，接受这个代价（推荐） (2026-10-10T00:29:23.122Z). ¦ 10h ago ¦ Answered ¦ 08:29 ¦ 灰度回退之后的收尾都做完了： 新版本部署之后，维护任务恢复了，第一轮成功跑完，把所有锚点重新检查了一遍。 灰度期间写错的结论已经清零，失败计数也归零。 三处修复都已经在生产上。 请批准重开灰度，做法和第一次一样：名单里仍只有你的账号，只重建两个服务。 ¦ 现在重开，接受这个代价（推荐） ¦ View details ¦ Sent to the coordinator · 08:29
+sheet buttons: Sheet Grabber ¦ Search sessions ¦ New session ¦ Settings ¦ Back ¦ Wiki 服务端执行, Project coordinator, Waiting for your reply · Open · 10h ago ¦ Session actions ¦ Close ¦ Projects ¦ Tasks ¦ Wiki ¦ orbit-develop,  · HPC ¦ Add ¦ Default ¦ Model Opus 5.5, effort High ¦ Context window not reported yet ¦ Arrow Up Circle ¦ Copy ¦ Answered, 08:29, 灰度回退之后的收尾都做完了： 新版本部署之后，维护任务恢复了，第一轮成功跑完，把所有锚点重新检查了一遍。 灰度期间写错的结论已经清零，失败计数也归零。 三处修复都已经在生产上。 请批准重开灰度，做法和第一次一样：名单里仍只有你的账号，只重建两个服务。, 现在重开，接受这个代价（推荐）, View details ¦ Sent to the coordinator · 08:29

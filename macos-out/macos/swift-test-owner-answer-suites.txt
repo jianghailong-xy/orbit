@@ -1,0 +1,74 @@
+Test Case '-[OrbitKitTests.AcceptedTurnPlaceholderTests testADeliveryReceiptIsNotDrawnInTheTail]' started.
+Test Case '-[OrbitKitTests.AcceptedTurnPlaceholderTests testADeliveryReceiptIsNotDrawnInTheTail]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.AcceptedTurnPlaceholderTests testAHeadReportedUndeliveredSaysSo]' started.
+Test Case '-[OrbitKitTests.AcceptedTurnPlaceholderTests testAHeadReportedUndeliveredSaysSo]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.AcceptedTurnPlaceholderTests testAHeadTheListingNoLongerNamesGoesUnlessItIsNewerThanTheListing]' started.
+Test Case '-[OrbitKitTests.AcceptedTurnPlaceholderTests testAHeadTheListingNoLongerNamesGoesUnlessItIsNewerThanTheListing]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.AcceptedTurnPlaceholderTests testAListingThatRacedTheEchoDoesNotDrawTheTurnAgain]' started.
+Test Case '-[OrbitKitTests.AcceptedTurnPlaceholderTests testAListingThatRacedTheEchoDoesNotDrawTheTurnAgain]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.AcceptedTurnPlaceholderTests testAListingWithoutPlacementIsTheQueueAsBefore]' started.
+Test Case '-[OrbitKitTests.AcceptedTurnPlaceholderTests testAListingWithoutPlacementIsTheQueueAsBefore]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.AcceptedTurnPlaceholderTests testAnAcceptedCommandHasNoPlaceholder]' started.
+Test Case '-[OrbitKitTests.AcceptedTurnPlaceholderTests testAnAcceptedCommandHasNoPlaceholder]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.AcceptedTurnPlaceholderTests testAnIdleSendIsNotDrawnTwiceWhenItsListingBeatsItsPostResponse]' started.
+Test Case '-[OrbitKitTests.AcceptedTurnPlaceholderTests testAnIdleSendIsNotDrawnTwiceWhenItsListingBeatsItsPostResponse]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.AcceptedTurnPlaceholderTests testAQueuedSendThatReachesTheHeadBeforeItsTagIsTheSameRow]' started.
+Test Case '-[OrbitKitTests.AcceptedTurnPlaceholderTests testAQueuedSendThatReachesTheHeadBeforeItsTagIsTheSameRow]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.AcceptedTurnPlaceholderTests testATurnMovingUpFromTheQueueStaysOnScreenUntilItsEchoReplacesIt]' started.
+Test Case '-[OrbitKitTests.AcceptedTurnPlaceholderTests testATurnMovingUpFromTheQueueStaysOnScreenUntilItsEchoReplacesIt]' passed (0.002 seconds).
+Test Case '-[OrbitKitTests.AcceptedTurnPlaceholderTests testEveryFieldTheServerListsIsOneThisEndDecodes]' started.
+Test Case '-[OrbitKitTests.AcceptedTurnPlaceholderTests testEveryFieldTheServerListsIsOneThisEndDecodes]' passed (0.005 seconds).
+Test Case '-[OrbitKitTests.AcceptedTurnPlaceholderTests testTheAcceptedHeadIsDrawnAsItsCardWhereItsEchoWillLandWithNoCancel]' started.
+Test Case '-[OrbitKitTests.AcceptedTurnPlaceholderTests testTheAcceptedHeadIsDrawnAsItsCardWhereItsEchoWillLandWithNoCancel]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.AcceptedTurnPlaceholderTests testTheConsoleReadsTheActiveViewAndEveryFieldItsRowsCarry]' started.
+Test Case '-[OrbitKitTests.AcceptedTurnPlaceholderTests testTheConsoleReadsTheActiveViewAndEveryFieldItsRowsCarry]' passed (0.011 seconds).
+Test Case '-[OrbitKitTests.AcceptedTurnPlaceholderTests testTheEchoTakesOverThePlaceholdersRowAndTheTurnIsDrawnOnce]' started.
+Test Case '-[OrbitKitTests.AcceptedTurnPlaceholderTests testTheEchoTakesOverThePlaceholdersRowAndTheTurnIsDrawnOnce]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.AcceptedTurnPlaceholderTests testTheHeadGoesWithItsOwnTurnsEnd]' started.
+Test Case '-[OrbitKitTests.AcceptedTurnPlaceholderTests testTheHeadGoesWithItsOwnTurnsEnd]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.AcceptedTurnPlaceholderTests testTheHeadIsKeptInASnapshotAndAnOlderSnapshotStillRestores]' started.
+Test Case '-[OrbitKitTests.AcceptedTurnPlaceholderTests testTheHeadIsKeptInASnapshotAndAnOlderSnapshotStillRestores]' passed (0.004 seconds).
+Test Case '-[OrbitKitTests.AcceptedTurnPlaceholderTests testThePlaceholderIsTheCardItsEchoIsDrawnAs]' started.
+Test Case '-[OrbitKitTests.AcceptedTurnPlaceholderTests testThePlaceholderIsTheCardItsEchoIsDrawnAs]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.OwnerAnswerCopyParityTests testEveryFieldOfTheCardIsCalledWhatTheSharedDeclarationCallsIt]' started.
+Test Case '-[OrbitKitTests.OwnerAnswerCopyParityTests testEveryFieldOfTheCardIsCalledWhatTheSharedDeclarationCallsIt]' passed (0.005 seconds).
+Test Case '-[OrbitKitTests.OwnerAnswerCopyParityTests testTheLineIsTheWebLineWordForWord]' started.
+Test Case '-[OrbitKitTests.OwnerAnswerCopyParityTests testTheLineIsTheWebLineWordForWord]' passed (0.024 seconds).
+Test Case '-[OrbitKitTests.OwnerAnswerCopyParityTests testTheReaderRequiresTheSameFieldsAndTheSameKinds]' started.
+Test Case '-[OrbitKitTests.OwnerAnswerCopyParityTests testTheReaderRequiresTheSameFieldsAndTheSameKinds]' passed (0.006 seconds).
+Test Case '-[OrbitKitTests.OwnerAnswerCopyParityTests testTheWebTranscriptDrawsTheLineFromTheCard]' started.
+Test Case '-[OrbitKitTests.OwnerAnswerCopyParityTests testTheWebTranscriptDrawsTheLineFromTheCard]' passed (0.005 seconds).
+Test Case '-[OrbitKitTests.OwnerAnswerTests testAPayloadThatIsNotACardIsNone]' started.
+Test Case '-[OrbitKitTests.OwnerAnswerTests testAPayloadThatIsNotACardIsNone]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.OwnerAnswerTests testASnapshotKeepsTheCard]' started.
+Test Case '-[OrbitKitTests.OwnerAnswerTests testASnapshotKeepsTheCard]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.OwnerAnswerTests testReadsEveryFieldOfTheCard]' started.
+Test Case '-[OrbitKitTests.OwnerAnswerTests testReadsEveryFieldOfTheCard]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.OwnerAnswerTests testTheEchoCarriesTheCardAndKeepsItsWords]' started.
+Test Case '-[OrbitKitTests.OwnerAnswerTests testTheEchoCarriesTheCardAndKeepsItsWords]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.OwnerAnswerTests testTheLineSaysWhatAVersionHandedToTheCoordinatorSays]' started.
+Test Case '-[OrbitKitTests.OwnerAnswerTests testTheLineSaysWhatAVersionHandedToTheCoordinatorSays]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.OwnerAnswerTests testTheStickyBarDoesNotPointAtTheLine]' started.
+Test Case '-[OrbitKitTests.OwnerAnswerTests testTheStickyBarDoesNotPointAtTheLine]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.QueuedTurnCardsTests testAQueuedRowCarriesTheCardsItsEchoWillCarry]' started.
+Test Case '-[OrbitKitTests.QueuedTurnCardsTests testAQueuedRowCarriesTheCardsItsEchoWillCarry]' passed (0.004 seconds).
+Test Case '-[OrbitKitTests.QueuedTurnCardsTests testARowCarryingEveryCardFillsEveryField]' started.
+Test Case '-[OrbitKitTests.QueuedTurnCardsTests testARowCarryingEveryCardFillsEveryField]' passed (0.002 seconds).
+Test Case '-[OrbitKitTests.QueuedTurnCardsTests testEachCardIsOnARowFirstSeenInAListing]' started.
+Test Case '-[OrbitKitTests.QueuedTurnCardsTests testEachCardIsOnARowFirstSeenInAListing]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.QueuedTurnCardsTests testEachCardIsOnARowReconciledInPlace]' started.
+Test Case '-[OrbitKitTests.QueuedTurnCardsTests testEachCardIsOnARowReconciledInPlace]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.QueuedTurnCardsTests testEveryCardABubbleCanCarryIsCarriedOffTheQueueAndCoveredHere]' started.
+Test Case '-[OrbitKitTests.QueuedTurnCardsTests testEveryCardABubbleCanCarryIsCarriedOffTheQueueAndCoveredHere]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.UserTurnRowWiringTests testAQueuedTurnDrawsNoBubbleForTheBlocksItsCardDraws]' started.
+Test Case '-[OrbitKitTests.UserTurnRowWiringTests testAQueuedTurnDrawsNoBubbleForTheBlocksItsCardDraws]' passed (0.002 seconds).
+Test Case '-[OrbitKitTests.UserTurnRowWiringTests testBothNativeClientsDrawTheOneRow]' started.
+Test Case '-[OrbitKitTests.UserTurnRowWiringTests testBothNativeClientsDrawTheOneRow]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.UserTurnRowWiringTests testEveryCardTakesTheQueuesOneCancelAndASteerGetsNone]' started.
+Test Case '-[OrbitKitTests.UserTurnRowWiringTests testEveryCardTakesTheQueuesOneCancelAndASteerGetsNone]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.UserTurnRowWiringTests testTheRowAsksAboutEveryCardTheQueueCarries]' started.
+Test Case '-[OrbitKitTests.UserTurnRowWiringTests testTheRowAsksAboutEveryCardTheQueueCarries]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.UserTurnRowWiringTests testTheTaskStartCardCarriesTheQueuesLine]' started.
+Test Case '-[OrbitKitTests.UserTurnRowWiringTests testTheTaskStartCardCarriesTheQueuesLine]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.UserTurnRowWiringTests testTheTranscriptAndTheQueueDrawAUserTurnThroughTheOneRow]' started.
+Test Case '-[OrbitKitTests.UserTurnRowWiringTests testTheTranscriptAndTheQueueDrawAUserTurnThroughTheOneRow]' passed (0.715 seconds).

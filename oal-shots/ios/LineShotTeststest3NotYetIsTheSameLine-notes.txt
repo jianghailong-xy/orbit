@@ -1,0 +1,3 @@
+not-yet: line 9 label="Sent to the coordinator · 08:41" value="" frame=(0.0, 275.0, 402.0, 39.666666666666686) hittable=true
+not-yet texts: Orbit ¦ New session ¦ Workspaces ¦ Wiki 服务端执行：收尾 ¦ Project coordinator ¦ Waiting for your reply · Open · 10h ago ¦ Projects ¦ Tasks ¦ Wiki ¦ orbit-develop ¦  · HPC ¦ Message… ¦ Default ¦ Opus 5.5 ¦ High ¦ 10h ago ¦ Sent to the coordinator · 08:41
+not-yet buttons: Search sessions ¦ New session ¦ Settings ¦ Back ¦ Wiki 服务端执行：收尾, Project coordinator, Waiting for your reply · Open · 10h ago ¦ Session actions ¦ Projects ¦ Tasks ¦ Wiki ¦ orbit-develop,  · HPC ¦ Add ¦ Default ¦ Model Opus 5.5, effort High ¦ Context window not reported yet ¦ Arrow Up Circle ¦ Copy ¦ Sent to the coordinator · 08:41

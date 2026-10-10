@@ -1,0 +1,40 @@
+==> stub ready after 2s
+==> iPhone 22452A91-4697-4369-8812-53ADB77EB73B
+Test Case '-[OalProbeUITests.LineShotTests test1TheLineUnderTheAnsweredCard]' started.
+Test Case '-[OalProbeUITests.LineShotTests test1TheLineUnderTheAnsweredCard]' passed (86.191 seconds).
+Test Case '-[OalProbeUITests.LineShotTests test2TheLineOpensToTheWords]' started.
+Test Case '-[OalProbeUITests.LineShotTests test2TheLineOpensToTheWords]' passed (54.866 seconds).
+Test Case '-[OalProbeUITests.LineShotTests test3NotYetIsTheSameLine]' started.
+Test Case '-[OalProbeUITests.LineShotTests test3NotYetIsTheSameLine]' passed (42.178 seconds).
+Test Case '-[OalProbeUITests.LineShotTests test4AQueuedAnswerIsTheSameLine]' started.
+Test Case '-[OalProbeUITests.LineShotTests test4AQueuedAnswerIsTheSameLine]' passed (40.948 seconds).
+Test Case '-[OalProbeUITests.LineShotTests test5TheClockFollowsTheDevice]' started.
+Test Case '-[OalProbeUITests.LineShotTests test5TheClockFollowsTheDevice]' passed (16.130 seconds).
+	 Executed 5 tests, with 0 failures (0 unexpected) in 240.313 (240.323) seconds
+	 Executed 5 tests, with 0 failures (0 unexpected) in 240.313 (240.325) seconds
+	 Executed 5 tests, with 0 failures (0 unexpected) in 240.313 (240.327) seconds
+** TEST SUCCEEDED **
+.oal-probe/run.sh: line 53:  2923 Terminated: 15          python3 -u stub.py 8765 "$OUT/ios/requests.log" > "$OUT/ios/stub.out" 2>&1
+total 5936
+drwxr-xr-x  22 runner  staff     704 Oct 10 10:48 .
+drwxr-xr-x   3 runner  staff      96 Oct 10 10:33 ..
+drwxr-xr-x  15 runner  staff     480 Oct 10 10:48 attachments
+-rw-r--r--   1 runner  staff  333064 Oct 10 10:45 ios-01-answered-then-line.png
+-rw-r--r--   1 runner  staff   13500 Oct 10 10:45 ios-01b-the-line.png
+-rw-r--r--   1 runner  staff  565308 Oct 10 10:45 ios-02-told-sheet.png
+-rw-r--r--   1 runner  staff  249654 Oct 10 10:46 ios-03-not-yet-line.png
+-rw-r--r--   1 runner  staff  447421 Oct 10 10:46 ios-03b-not-yet-sheet.png
+-rw-r--r--   1 runner  staff  289161 Oct 10 10:47 ios-04-queued-line.png
+-rw-r--r--   1 runner  staff  333397 Oct 10 10:47 ios-05-line-en-us.png
+-rw-r--r--@  1 runner  staff    1690 Oct 10 10:45 LineShotTeststest1TheLineUnderTheAnsweredCard-notes.txt
+-rw-r--r--@  1 runner  staff    2302 Oct 10 10:46 LineShotTeststest2TheLineOpensToTheWords-notes.txt
+-rw-r--r--@  1 runner  staff     811 Oct 10 10:46 LineShotTeststest3NotYetIsTheSameLine-notes.txt
+-rw-r--r--@  1 runner  staff    1710 Oct 10 10:47 LineShotTeststest4AQueuedAnswerIsTheSameLine-notes.txt
+-rw-r--r--@  1 runner  staff     127 Oct 10 10:47 LineShotTeststest5TheClockFollowsTheDevice-notes.txt
+-rw-r--r--   1 runner  staff    1431 Oct 10 10:48 not-served.txt
+-rw-r--r--   1 runner  staff   20871 Oct 10 10:47 requests.log
+-rw-r--r--   1 runner  staff      79 Oct 10 10:33 stub.out
+-rw-r--r--@  1 runner  staff   18959 Oct 10 10:45 tree-line.txt
+-rw-r--r--@  1 runner  staff   17768 Oct 10 10:47 tree-queued.txt
+-rw-r--r--@  1 runner  staff   22658 Oct 10 10:45 tree-sheet.txt
+-rw-r--r--   1 runner  staff  669993 Oct 10 10:48 xcodebuild-ios.log

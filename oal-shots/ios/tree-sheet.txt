@@ -1,0 +1,247 @@
+Attributes: Application, 0x10563af80, pid: 21030, label: 'OalProbe'
+Element subtree:
+ →Application, 0x10563af80, pid: 21030, label: 'OalProbe'
+    Window (Main), 0x11659d900, {{0.0, 0.0}, {402.0, 874.0}}
+      Other, 0x11659fc00, {{0.0, 0.0}, {402.0, 874.0}}
+        Other, 0x11659fd40, {{0.0, 0.0}, {402.0, 874.0}}
+          Other, 0x11659f0c0, {{-402.0, -874.0}, {1206.0, 2622.0}}, identifier: 'PopoverDismissRegion', label: 'dismiss popup'
+          Other, 0x11659f200, {{0.0, 0.0}, {402.0, 874.0}}
+            Other, 0x11659ca00, {{0.0, 0.0}, {402.0, 874.0}}
+              StaticText, 0x11659f340, {{22.0, 84.8}, {52.3, 26.3}}, label: 'Orbit'
+              Button, 0x11659cdc0, {{251.7, 76.0}, {44.0, 44.0}}, identifier: 'magnifyingglass', label: 'Search sessions'
+              CollectionView, 0x11659cf00, {{0.0, 128.0}, {305.7, 746.0}}
+                Other, 0x11659d040, {{0.0, -1364.0}, {305.7, 3206.0}}
+                Cell, 0x11659d180, {{0.0, 128.0}, {305.3, 44.3}}
+                  Other, 0x11659d2c0, {{0.0, 128.0}, {305.3, 44.3}}
+                    Other, 0x11659d680, {{0.0, 128.0}, {305.3, 44.3}}
+                      Other, 0x11659ed00, {{0.0, 128.0}, {305.3, 44.3}}
+                  Other, 0x11659ee40, {{0.0, 128.0}, {305.3, 44.3}}
+                    Other, 0x11659ef80, {{0.0, 128.0}, {305.3, 44.3}}
+                      Other, 0x11659cc80, {{0.0, 128.0}, {305.3, 44.3}}
+                        Button, 0x11659f480, {{0.0, 128.0}, {305.3, 44.3}}, label: 'Projects'
+                          Image, 0x11659f5c0, {{26.3, 142.3}, {15.3, 15.3}}, identifier: 'square.grid.2x2', label: 'Grid View'
+                          StaticText, 0x11659f700, {{58.0, 140.0}, {62.3, 20.3}}, label: 'Projects'
+                Cell, 0x11659d400, {{0.0, 172.3}, {305.3, 44.3}}
+                  Other, 0x11659d540, {{0.0, 172.3}, {305.3, 44.3}}
+                    Other, 0x11659da40, {{0.0, 172.3}, {305.3, 44.3}}
+                      Other, 0x11659fe80, {{0.0, 172.3}, {305.3, 44.3}}
+                  Other, 0x11659f840, {{0.0, 172.3}, {305.3, 44.3}}
+                    Other, 0x11659f980, {{0.0, 172.3}, {305.3, 44.3}}
+                      Other, 0x11659fac0, {{0.0, 172.3}, {305.3, 44.3}}
+                        Button, 0x11659c780, {{0.0, 172.3}, {305.3, 44.3}}, label: 'Tasks'
+                          Image, 0x11659c8c0, {{24.7, 186.0}, {18.7, 17.0}}, identifier: 'checklist', label: 'checklist'
+                          StaticText, 0x11659cb40, {{58.0, 184.3}, {43.0, 20.3}}, label: 'Tasks'
+                Cell, 0x11659c640, {{0.0, 216.7}, {305.3, 44.3}}
+                  Other, 0x11659d7c0, {{0.0, 216.7}, {305.3, 44.3}}
+                    Other, 0x11658f700, {{0.0, 216.7}, {305.3, 44.3}}
+                      Other, 0x11658f200, {{0.0, 216.7}, {305.3, 44.3}}
+                  Other, 0x11658f340, {{0.0, 216.7}, {305.3, 44.3}}
+                    Other, 0x11658f480, {{0.0, 216.7}, {305.3, 44.3}}
+                      Other, 0x11658f5c0, {{0.0, 216.7}, {305.3, 44.3}}
+                        Button, 0x11658f840, {{0.0, 216.7}, {305.3, 44.3}}, label: 'Wiki'
+                          Image, 0x11658fc00, {{27.0, 230.0}, {14.0, 18.0}}, identifier: 'book.closed', label: 'book.closed'
+                          StaticText, 0x11658fd40, {{58.0, 228.7}, {32.7, 20.3}}, label: 'Wiki'
+                Cell, 0x11658fe80, {{0.0, 261.0}, {305.3, 44.7}}
+                  Other, 0x11658f980, {{0.0, 261.0}, {305.3, 44.7}}
+                    Other, 0x11658fac0, {{0.0, 261.0}, {305.3, 44.7}}
+                      Other, 0x1164d4c80, {{0.0, 261.0}, {305.3, 44.7}}
+                  Other, 0x1164d5680, {{0.0, 261.0}, {305.3, 44.7}}
+                    Other, 0x1164d6d00, {{0.0, 261.0}, {305.3, 44.7}}
+                      Other, 0x1164d4f00, {{0.0, 261.0}, {305.3, 44.7}}
+                        StaticText, 0x1164d5040, {{0.0, 261.0}, {305.3, 44.7}}, label: 'Workspaces'
+                Cell, 0x1164d7200, {{0.0, 305.7}, {305.3, 44.3}}
+                  Other, 0x1164d57c0, {{0.0, 305.7}, {305.3, 44.3}}
+                    Other, 0x1164d7480, {{0.0, 305.7}, {305.3, 44.3}}
+                      Other, 0x1164d5540, {{0.0, 305.7}, {305.3, 44.3}}
+                  Other, 0x1164d5400, {{0.0, 305.7}, {305.3, 44.3}}
+                    Other, 0x1164d52c0, {{0.0, 305.7}, {305.3, 44.3}}
+                      Other, 0x1164d7980, {{0.0, 305.7}, {305.3, 44.3}}
+                        Button, 0x1164d5180, {{0.0, 305.7}, {305.3, 44.3}}, label: 'orbit-develop,  · HPC'
+                          Other, 0x1164d5900, {{24.7, 320.0}, {19.0, 15.3}}, label: 'Runner offline'
+                            Image, 0x1164d6a80, {{24.7, 320.0}, {19.0, 15.3}}, identifier: 'folder', label: 'Move'
+                          StaticText, 0x1164d6bc0, {{58.0, 317.7}, {103.0, 20.3}}, label: 'orbit-develop'
+                          StaticText, 0x1164d7340, {{161.0, 317.7}, {47.7, 20.3}}, label: ' · HPC'
+                Other, 0x1165a8000, {{272.3, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                  Other, 0x1165a8140, {{299.3, 649.7}, {3.0, 221.3}}
+                Other, 0x1165a8280, {{272.3, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                  Other, 0x1165a83c0, {{299.3, 649.7}, {3.0, 221.3}}
+              Button, 0x1165a8500, {{10.0, 788.7}, {165.0, 43.0}}, label: 'New session'
+                Image, 0x1165a8640, {{31.0, 801.0}, {18.3, 18.3}}, identifier: 'square.and.pencil', label: 'Compose'
+                StaticText, 0x1165a8780, {{57.0, 799.8}, {100.0, 20.3}}, label: 'New session'
+              Button, 0x1165a88c0, {{251.7, 788.0}, {44.0, 44.0}}, identifier: 'gearshape', label: 'Settings'
+              Other, 0x1165a8a00, {{0.0, 0.0}, {402.0, 874.0}}
+                NavigationBar, 0x1165a8b40, {{0.0, 62.0}, {402.0, 54.0}}, identifier: '_TtGC7SwiftUI29PresentationHosting'
+                  Button, 0x1165a8c80, {{16.0, 62.0}, {44.0, 44.0}}, identifier: 'BackButton', label: 'Back'
+                  Other, 0x1165a8dc0, {{80.0, 66.7}, {242.0, 34.7}}
+                    Other, 0x1165a8f00, {{80.0, 66.7}, {242.0, 34.7}}
+                      Button, 0x1165a9040, {{80.0, 66.7}, {242.0, 34.7}}, label: 'Wiki 服务端执行, Project coordinator, Waiting for your reply · Open · 10h ago'
+                        StaticText, 0x1165a9180, {{89.5, 66.7}, {122.7, 20.3}}, label: 'Wiki 服务端执行'
+                        StaticText, 0x1165a92c0, {{218.0, 69.3}, {77.7, 15.3}}, label: 'Project coordinator'
+                        Image, 0x1165a9400, {{304.3, 70.7}, {7.3, 12.3}}, identifier: 'chevron.right', label: 'Forward'
+                        StaticText, 0x1165a9540, {{100.3, 88.0}, {201.3, 13.3}}, label: 'Waiting for your reply · Open · 10h ago'
+                  Other, 0x1165a9680, {{346.0, 66.0}, {36.0, 36.0}}, label: 'Session actions'
+                    Other, 0x1165a97c0, {{346.0, 66.0}, {36.0, 36.0}}
+                      Button, 0x1165a9900, {{350.0, 66.0}, {28.0, 36.0}}, label: 'Session actions'
+                        Button, 0x1165a9a40, {{350.0, 66.0}, {28.0, 36.0}}
+                          Image, 0x1165a9b80, {{354.0, 82.0}, {20.0, 4.3}}, identifier: 'ellipsis', label: 'More'
+                Other, 0x1165a9cc0, {{0.0, 0.0}, {402.0, 874.0}}
+                  Other, 0x1165a9e00, {{0.0, 0.0}, {402.0, 874.0}}
+                    Other, 0x1165a9f40, {{0.0, 0.0}, {402.0, 874.0}}
+                      Other, 0x1165aa080, {{0.0, 0.0}, {402.0, 874.0}}
+                        Other, 0x1165aa1c0, {{0.0, 116.0}, {402.0, 623.0}}
+                        CollectionView, 0x1165aa300, {{0.0, 0.0}, {402.0, 739.0}}
+                          Other, 0x1165aa440, {{0.0, -1362.0}, {402.0, 3409.7}}
+                          Other, 0x1165aa580, {{0.0, 0.0}, {402.0, 739.0}}
+                            Other, 0x1165aa6c0, {{0.0, 0.0}, {402.0, 170.8}}
+                          Other, 0x1165aa800, {{0.0, 0.0}, {402.0, 739.0}}
+                          Cell, 0x1165aa940, {{0.0, 116.0}, {402.0, 97.0}}
+                            Other, 0x1165aaa80, {{0.0, 116.0}, {402.0, 97.0}}
+                              Other, 0x1165aabc0, {{0.0, 116.0}, {402.0, 97.0}}
+                                Other, 0x1165aad00, {{0.0, 116.0}, {402.0, 97.0}}
+                            Other, 0x1165aae40, {{0.0, 116.0}, {402.0, 97.0}}
+                              Other, 0x1165aaf80, {{0.0, 116.0}, {402.0, 97.0}}
+                                Other, 0x1165ab0c0, {{0.0, 116.0}, {402.0, 97.0}}
+                                  TextView, 0x1165ab200, {{104.0, 130.0}, {270.0, 50.0}}, value: 灰度回退之后的收尾做完了吗？做完了就...
+                                    TextView, 0x1165ab340, {{104.0, 130.0}, {270.0, 49.3}}, label: '灰度回退之后的收尾做完了吗？做完了就问我什么时候重开灰度。'
+                                    Other, 0x1165ab480, {{341.0, 130.0}, {30.0, 50.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                                      Other, 0x1165ab5c0, {{368.0, 133.0}, {3.0, 44.0}}
+                                    Other, 0x1165ab700, {{104.0, 152.0}, {270.0, 25.0}}, label: 'Horizontal scroll bar, 1 page', value: 0%
+                                      Other, 0x1165ab840, {{107.0, 174.0}, {264.0, 3.0}}
+                                  Button, 0x1165ab980, {{310.7, 191.7}, {28.0, 15.0}}, identifier: 'doc.on.doc', label: 'Copy'
+                                  StaticText, 0x1165abac0, {{344.7, 192.3}, {41.3, 13.3}}, label: '10h ago'
+                          Cell, 0x1165abc00, {{0.0, 213.0}, {402.0, 62.0}}
+                            Other, 0x1165abd40, {{0.0, 213.0}, {402.0, 62.0}}
+                              Other, 0x1165abe80, {{0.0, 213.0}, {402.0, 62.0}}
+                                Other, 0x1165bc000, {{0.0, 213.0}, {402.0, 62.0}}
+                            Other, 0x1165bc140, {{0.0, 213.0}, {402.0, 62.0}}
+                              Other, 0x1165bc280, {{0.0, 213.0}, {402.0, 62.0}}
+                                Other, 0x1165bc3c0, {{0.0, 213.0}, {402.0, 62.0}}
+                                  TextView, 0x1165bc500, {{16.0, 219.0}, {361.0, 50.0}}, value: 收尾都做完了。我用 ask_owne...
+                                    TextView, 0x1165bc640, {{16.0, 219.0}, {361.0, 49.3}}, label: '收尾都做完了。我用 ask_owner 问你什么时候重开灰度，你答复之前我不动生产。'
+                                    Other, 0x1165bc780, {{344.0, 219.0}, {30.0, 50.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                                      Other, 0x1165bc8c0, {{371.0, 222.0}, {3.0, 44.0}}
+                                    Other, 0x1165bca00, {{16.0, 241.0}, {361.0, 25.0}}, label: 'Horizontal scroll bar, 1 page', value: 0%
+                                      Other, 0x1165bcb40, {{19.0, 263.0}, {355.0, 3.0}}
+                          Cell, 0x1165bcc80, {{0.0, 275.0}, {402.0, 172.0}}
+                            Other, 0x1165bcdc0, {{0.0, 275.0}, {402.0, 172.0}}
+                              Other, 0x1165bcf00, {{0.0, 275.0}, {402.0, 172.0}}
+                                Other, 0x1165bd040, {{0.0, 275.0}, {402.0, 172.0}}
+                            Other, 0x1165bd180, {{0.0, 275.0}, {402.0, 172.0}}
+                              Other, 0x1165bd2c0, {{0.0, 275.0}, {402.0, 172.0}}
+                                Other, 0x1165bd400, {{0.0, 275.0}, {402.0, 172.0}}
+                                  Button, 0x1165bd540, {{0.0, 275.0}, {402.0, 172.0}}, label: 'Answered, 08:29, 灰度回退之后的收尾都做完了： 新版本部署之后，维护任务恢复了，第一轮成功跑完，把所有锚点重新检查了一遍。 灰度期间写错的结论已经清零，失败计数也归零。 三处修复都已经在生产上。 请批准重开灰度，做法和第一次一样：名单里仍只有你的账号，只重建两个服务。, 现在重开，接受这个代价（推荐）, View details', Selected
+                                    Image, 0x1165bd680, {{35.0, 300.3}, {12.0, 11.3}}, identifier: 'questionmark.bubble.fill', label: 'questionmark.bubble.fill'
+                                    StaticText, 0x1165bd7c0, {{60.0, 295.8}, {79.7, 20.3}}, label: 'Answered'
+                                    StaticText, 0x1165bd900, {{335.7, 298.2}, {36.3, 15.7}}, label: '08:29'
+                                    StaticText, 0x1165bda40, {{30.0, 329.0}, {339.0, 33.7}}, label: '灰度回退之后的收尾都做完了： 新版本部署之后，维护任务恢复了，第一轮成功跑完，把所有锚点重新检查了一遍。 灰度期间写错的结论已经清零，失败计数也归零。 三处修复都已经在生产上。 请批准重开灰度，做法和第一次一样：名单里仍只有你的账号，只重建两个服务。'
+                                    Image, 0x1165bdb80, {{31.0, 373.7}, {11.0, 11.0}}, identifier: 'checkmark.circle.fill', label: 'Selected', Selected
+                                    StaticText, 0x1165bdcc0, {{49.0, 366.7}, {253.0, 20.3}}, label: '现在重开，接受这个代价（推荐）'
+                                    StaticText, 0x1165bde00, {{30.0, 411.3}, {76.7, 15.7}}, label: 'View details'
+                                    Image, 0x1165bdf40, {{364.7, 413.3}, {6.7, 11.7}}, identifier: 'chevron.right', label: 'Forward'
+                          Cell, 0x1165be080, {{0.0, 447.0}, {402.0, 39.7}}
+                            Other, 0x1165be1c0, {{0.0, 447.0}, {402.0, 39.7}}
+                              Other, 0x1165be300, {{0.0, 447.0}, {402.0, 39.7}}
+                                Other, 0x1165be440, {{0.0, 447.0}, {402.0, 39.7}}
+                            Other, 0x1165be580, {{0.0, 447.0}, {402.0, 39.7}}
+                              Other, 0x1165be6c0, {{0.0, 447.0}, {402.0, 39.7}}
+                                Other, 0x1165be800, {{0.0, 447.0}, {402.0, 39.7}}
+                                  Button, 0x1165be940, {{0.0, 447.0}, {402.0, 39.7}}, label: 'Sent to the coordinator · 08:29'
+                                    Image, 0x1165bea80, {{91.3, 462.0}, {12.0, 9.7}}, identifier: 'arrow.right', label: 'Right'
+                                    StaticText, 0x1165bebc0, {{110.8, 459.0}, {187.3, 15.7}}, label: 'Sent to the coordinator · 08:29'
+                                    Image, 0x1165bed00, {{306.3, 462.0}, {5.7, 9.7}}, identifier: 'chevron.right', label: 'Forward'
+                          Cell, 0x1165bee40, {{0.0, 486.7}, {402.0, 62.0}}
+                            Other, 0x1165bef80, {{0.0, 486.7}, {402.0, 62.0}}
+                              Other, 0x1165bf0c0, {{0.0, 486.7}, {402.0, 62.0}}
+                                Other, 0x1165bf200, {{0.0, 486.7}, {402.0, 62.0}}
+                            Other, 0x1165bf340, {{0.0, 486.7}, {402.0, 62.0}}
+                              Other, 0x1165bf480, {{0.0, 486.7}, {402.0, 62.0}}
+                                Other, 0x1165bf5c0, {{0.0, 486.7}, {402.0, 62.0}}
+                                  TextView, 0x1165bf700, {{16.0, 492.7}, {354.0, 50.0}}, value: 收到：现在重开灰度。我先切流量，再盯...
+                                    TextView, 0x1165bf840, {{16.0, 492.7}, {354.0, 49.3}}, label: '收到：现在重开灰度。我先切流量，再盯第一轮维护跑完。'
+                                    Other, 0x1165bf980, {{337.0, 492.7}, {30.0, 50.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                                      Other, 0x1165bfac0, {{364.0, 495.7}, {3.0, 44.0}}
+                                    Other, 0x1165bfc00, {{16.0, 514.7}, {354.0, 25.0}}, label: 'Horizontal scroll bar, 1 page', value: 0%
+                                      Other, 0x1165bfd40, {{19.0, 536.7}, {348.0, 3.0}}
+                          Cell, 0x1165bfe80, {{0.0, 548.7}, {402.0, 21.0}}
+                            Other, 0x1165c8000, {{0.0, 548.7}, {402.0, 21.0}}
+                              Other, 0x1165c8140, {{0.0, 548.7}, {402.0, 21.0}}
+                                Other, 0x1165c8280, {{0.0, 548.7}, {402.0, 21.0}}
+                            Other, 0x1165c83c0, {{0.0, 548.7}, {402.0, 21.0}}
+                              Other, 0x1165c8500, {{0.0, 548.7}, {402.0, 21.0}}
+                                Other, 0x1165c8640, {{0.0, 548.7}, {402.0, 21.0}}
+                                  Other, 0x1165c8780, {{0.0, 548.7}, {402.0, 21.0}}
+                          Other, 0x1165c88c0, {{369.0, 116.0}, {30.0, 623.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                            Other, 0x1165c8a00, {{396.0, 288.3}, {3.0, 447.7}}
+                          Other, 0x1165c8b40, {{369.0, 116.0}, {30.0, 623.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                            Other, 0x1165c8c80, {{396.0, 288.3}, {3.0, 447.7}}
+                        Other, 0x1165c8dc0, {{201.0, 739.0}, {0.0, 0.0}}
+                        TextView, 0x1165c8f00, {{32.0, 754.0}, {338.0, 22.0}}
+                          StaticText, 0x1165c9040, {{32.0, 754.0}, {338.0, 20.3}}, label: 'Message…'
+                          Other, 0x1165c9180, {{337.0, 754.0}, {30.0, 22.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                            Other, 0x1165c92c0, {{364.0, 737.0}, {3.0, 36.0}}
+                          Other, 0x1165c9400, {{32.0, 762.0}, {338.0, 11.0}}, label: 'Horizontal scroll bar, 1 page', value: 0%
+                            Other, 0x1165c9540, {{35.0, 770.0}, {332.0, 3.0}}
+                        Button, 0x1165c9680, {{24.0, 790.0}, {32.0, 32.0}}, label: 'Add'
+                          Button, 0x1165c97c0, {{24.0, 790.0}, {32.0, 32.0}}
+                            Image, 0x1165c9900, {{24.0, 790.0}, {32.0, 32.0}}, identifier: 'plus', label: 'Add'
+                        Button, 0x1165c9a40, {{64.0, 797.0}, {51.0, 18.0}}, label: 'Default'
+                          Button, 0x1165c9b80, {{64.0, 797.0}, {51.0, 18.0}}
+                            StaticText, 0x1165c9cc0, {{64.0, 797.0}, {51.0, 18.0}}, label: 'Default'
+                        Button, 0x1165c9e00, {{212.7, 797.0}, {101.3, 18.0}}, label: 'Model Opus 5.5, effort High'
+                          Button, 0x1165c9f40, {{212.7, 797.0}, {101.3, 18.0}}
+                            StaticText, 0x1165ca080, {{212.7, 797.0}, {64.3, 18.0}}, label: 'Opus 5.5'
+                            StaticText, 0x1165ca1c0, {{282.0, 797.0}, {32.0, 18.0}}, label: 'High'
+                        Button, 0x1165ca300, {{322.1, 798.1}, {15.8, 15.8}}, label: 'Context window not reported yet'
+                        Button, 0x1165ca440, {{346.0, 790.0}, {32.0, 32.0}}, identifier: 'arrow.up.circle.fill', label: 'Arrow Up Circle', Disabled
+                Other, 0x1165ca580, {{0.0, 0.0}, {402.0, 874.0}}
+                  Other, 0x1165ca6c0, {{0.0, 0.0}, {402.0, 874.0}}
+      Other, 0x1165ca800, {{0.0, 0.0}, {402.0, 874.0}}
+        Other, 0x1165ca940, {{-402.0, -874.0}, {1206.0, 2622.0}}, identifier: 'PopoverDismissRegion', label: 'dismiss popup'
+        Other, 0x1165caa80, {{8.0, 415.0}, {386.0, 451.0}}
+          Button, 0x1165cabc0, {{164.5, 410.2}, {73.0, 24.0}}, label: 'Sheet Grabber', value: Half screen
+          Other, 0x1165cad00, {{8.0, 415.0}, {386.0, 451.0}}
+            Other, 0x1165cae40, {{8.0, 415.0}, {386.0, 451.0}}
+              Other, 0x1165caf80, {{8.0, 415.0}, {386.0, 451.0}}
+                Other, 0x1165cb0c0, {{8.0, 415.0}, {386.0, 451.0}}
+                  Other, 0x1165cb200, {{8.0, 415.0}, {386.0, 451.0}}
+                    NavigationBar, 0x1165cb340, {{8.0, 430.4}, {386.0, 51.9}}, identifier: 'What the coordinator was told'
+                      StaticText, 0x1165cb480, {{86.1, 441.6}, {229.8, 19.8}}, label: 'What the coordinator was told'
+                      Button, 0x1165cb5c0, {{340.2, 434.2}, {34.6, 34.6}}, identifier: 'xmark', label: 'Close'
+                    Other, 0x1165cb700, {{8.0, 415.0}, {386.0, 451.0}}
+                      Other, 0x1165cb840, {{8.0, 415.0}, {386.0, 451.0}}
+                        Other, 0x1165cb980, {{8.0, 415.0}, {386.0, 451.0}}
+                          Other, 0x1165cbac0, {{8.0, 415.0}, {386.0, 451.0}}
+                            ScrollView, 0x1165cbc00, {{8.0, 415.0}, {386.0, 451.0}}
+                              Other, 0x1165cbd40, {{8.0, 415.0}, {386.0, 451.0}}
+                                Other, 0x1165cbe80, {{8.0, 415.0}, {386.0, 119.8}}
+                              Other, 0x1165d0000, {{8.0, 415.0}, {386.0, 451.0}}
+                              Other, 0x1165d0140, {{8.0, 482.2}, {386.0, 245.2}}
+                                StaticText, 0x1165d0280, {{23.4, 497.6}, {179.9, 15.0}}, label: 'Sent to the coordinator · 08:29'
+                                StaticText, 0x1165d03c0, {{23.4, 524.2}, {355.3, 187.9}}, label: 'From Orbit · owner answer: you asked "灰度回退之后的收尾都做完了：
+
+- 新版本部署之后，维护任务恢复了，第一轮成功跑完，把所有锚点重新检查了一遍。
+- 灰度期间写错的结论已经清零，失败计数也归零。
+- 三处修复都已经在生产上。
+
+请批准重开灰度，做法和第一次一样：名单里仍只有你的账号，只重建两个服务。". The owner answered: 现在重开，接受这个代价（推荐） (2026-10-10T00:29:23.122Z).'
+                              Other, 0x1165d0500, {{362.3, 482.2}, {28.8, 329.8}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                                Other, 0x1165d0640, {{388.2, 591.1}, {2.9, 226.0}}
+                              Other, 0x1165d0780, {{362.3, 482.2}, {28.8, 329.8}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                                Other, 0x1165d08c0, {{388.2, 591.1}, {2.9, 226.0}}
+                    Other, 0x1165d0a00, {{8.0, 415.0}, {386.0, 451.0}}
+                      Other, 0x1165d0b40, {{8.0, 415.0}, {386.0, 451.0}}
+          Other, 0x1165d0c80, {{8.0, 415.0}, {386.0, 451.0}}
+            Other, 0x1165d0dc0, {{8.0, 415.0}, {386.0, 451.0}}
+              Other, 0x1165d0f00, {{8.0, 415.0}, {386.0, 451.0}}
+                Other, 0x1165d1040, {{8.0, 415.0}, {386.0, 451.0}}
+                  Other, 0x1165d1180, {{8.0, 415.0}, {386.0, 451.0}}
+                    Other, 0x1165d12c0, {{8.0, 415.0}, {386.0, 451.0}}
+                Other, 0x1165d1400, {{8.0, 415.0}, {386.0, 451.0}}
+                  Other, 0x1165d1540, {{8.0, 415.0}, {386.0, 451.0}}
+Path to element:
+ →Application, 0x10563af80, pid: 21030, label: 'OalProbe'
+Query chain:
+ →Find: Target Application 'io.orbitd.oalprobe'
+  Output: {
+    Application, 0x1165d1680, pid: 21030, label: 'OalProbe'
+  }

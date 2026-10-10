@@ -1,0 +1,14 @@
+Test Case '-[OalProbeUITests.LineShotTests test1TheLineUnderTheAnsweredCard]' started.
+Test Case '-[OalProbeUITests.LineShotTests test1TheLineUnderTheAnsweredCard]' passed (86.191 seconds).
+Test Case '-[OalProbeUITests.LineShotTests test2TheLineOpensToTheWords]' started.
+Test Case '-[OalProbeUITests.LineShotTests test2TheLineOpensToTheWords]' passed (54.866 seconds).
+Test Case '-[OalProbeUITests.LineShotTests test3NotYetIsTheSameLine]' started.
+Test Case '-[OalProbeUITests.LineShotTests test3NotYetIsTheSameLine]' passed (42.178 seconds).
+Test Case '-[OalProbeUITests.LineShotTests test4AQueuedAnswerIsTheSameLine]' started.
+Test Case '-[OalProbeUITests.LineShotTests test4AQueuedAnswerIsTheSameLine]' passed (40.948 seconds).
+Test Case '-[OalProbeUITests.LineShotTests test5TheClockFollowsTheDevice]' started.
+Test Case '-[OalProbeUITests.LineShotTests test5TheClockFollowsTheDevice]' passed (16.130 seconds).
+	 Executed 5 tests, with 0 failures (0 unexpected) in 240.313 (240.323) seconds
+	 Executed 5 tests, with 0 failures (0 unexpected) in 240.313 (240.325) seconds
+	 Executed 5 tests, with 0 failures (0 unexpected) in 240.313 (240.327) seconds
+** TEST SUCCEEDED **
