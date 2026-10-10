@@ -1,0 +1,90 @@
+/* The proposed web pieces, drawn with the shipped tokens (index.css is the live page's own). Every
+   class is rsx-prefixed: index.css has bare short classes that would otherwise collide. */
+:root {
+  --rsx-line: var(--brand);
+  --rsx-amber: var(--warning-solid);
+  --rsx-red: var(--error-solid);
+  --rsx-grid: var(--border-subtle);
+  --rsx-hatch: rgba(143, 149, 158, 0.28);
+  --rsx-cross: rgba(31, 35, 41, 0.45);
+}
+.rsx-svg { display: block; overflow: visible; }
+
+/* ── Infrastructure: the three meters on a machine's head ── */
+.rsx-vitals { flex: none; display: flex; gap: 14px; align-items: center; padding: 0 16px 0 8px; align-self: center; }
+.rsx-vital { width: 68px; }
+.rsx-vital-top { display: flex; align-items: baseline; justify-content: space-between; font-size: 11.5px; line-height: 16px; }
+.rsx-vital-k { color: var(--text-3); }
+.rsx-vital-v { color: var(--text-1); font-weight: 600; font-variant-numeric: tabular-nums; }
+.rsx-vital-v.warn { color: var(--warning); }
+.rsx-vital-v.bad { color: var(--error); }
+.rsx-vital-bar { height: 4px; margin-top: 4px; border-radius: 2px; background: var(--border-subtle); overflow: hidden; }
+.rsx-vital-bar > i { display: block; height: 100%; border-radius: 2px; background: var(--brand); }
+.rsx-vital-bar.warn > i { background: var(--warning-solid); }
+.rsx-vital-bar.bad > i { background: var(--error-solid); }
+.rsx-vitals.off .rsx-vital-v, .rsx-vitals.off .rsx-vital-k { color: var(--text-4, #bbbfc4); }
+.rsx-vitals.off .rsx-vital-bar > i { background: var(--text-4, #c9cdd4); }
+
+/* ── Runner page: Resources ── */
+.rsx-head-right { display: flex; align-items: center; gap: 10px; }
+.rsx-updated { font-size: 12px; color: var(--text-3); }
+.rsx-box { border: 1px solid var(--border-subtle); border-radius: 10px; background: var(--bg-raised); }
+.rsx-row { display: grid; grid-template-columns: 168px minmax(0, 1fr); gap: 16px; align-items: center; padding: 11px 14px; position: relative; }
+.rsx-row + .rsx-row { border-top: 1px solid var(--border-subtle); }
+.rsx-k { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.rsx-k > span { font-size: 13px; color: var(--text-2); }
+.rsx-k > span em { font-style: normal; color: var(--text-3); }
+.rsx-k > b { font-size: 20px; line-height: 24px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--text-1); }
+.rsx-k > b.warn { color: var(--warning); }
+.rsx-k > b.bad { color: var(--error); }
+.rsx-s { margin-top: 2px; font-size: 12px; line-height: 17px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.rsx-s .sw { display: inline-block; width: 12px; height: 0; border-top: 1.5px dashed var(--text-3); vertical-align: middle; margin-right: 5px; }
+.rsx-s.bad { color: var(--error); }
+.rsx-scale { position: absolute; right: 14px; top: 6px; font-size: 10px; color: var(--text-3); }
+.rsx-axis-row { padding: 2px 14px 8px calc(14px + 168px + 16px); border-top: 1px solid var(--border-subtle); }
+.rsx-axis { margin-top: 4px; }
+.rsx-legend { display: flex; gap: 14px; align-items: center; font-size: 11.5px; color: var(--text-3); padding: 0 14px 10px calc(14px + 168px + 16px); }
+.rsx-legend i { display: inline-block; vertical-align: middle; margin-right: 5px; }
+.rsx-legend .tri { width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 6px solid var(--error-solid); }
+.rsx-legend .hat { width: 12px; height: 9px; background: repeating-linear-gradient(45deg, rgba(143,149,158,.45) 0 2px, transparent 2px 4px); }
+.rsx-legend .amb { width: 12px; height: 2px; background: var(--warning-solid); }
+.rsx-legend .lim { width: 12px; border-top: 1.5px dashed var(--warning-solid); }
+
+/* the hover read-out */
+.rsx-tip { position: absolute; z-index: 5; min-width: 196px; padding: 9px 11px; border-radius: 8px; background: var(--bg-raised);
+  box-shadow: 0 6px 24px rgba(15, 23, 42, 0.16), 0 0 0 1px rgba(15, 23, 42, 0.06); font-size: 12px; line-height: 19px; }
+.rsx-tip-t { font-weight: 600; color: var(--text-1); margin-bottom: 3px; }
+.rsx-tip-r { display: flex; justify-content: space-between; gap: 14px; color: var(--text-2); }
+.rsx-tip-r b { font-weight: 600; color: var(--text-1); font-variant-numeric: tabular-nums; }
+.rsx-tip-r b.warn { color: var(--warning); }
+.rsx-tip-r b.bad { color: var(--error); }
+.rsx-tip-n { margin-top: 5px; padding-top: 5px; border-top: 1px solid var(--border-subtle); color: var(--error); font-weight: 500; }
+
+/* ── Runner page: Using It Now ── */
+.rsx-use-head { display: grid; grid-template-columns: minmax(0, 1fr) 84px 72px 14px; gap: 10px; padding: 0 14px 6px; font-size: 12px; color: var(--text-3); }
+.rsx-use-head > span:nth-child(n+2) { text-align: right; }
+.rsx-use { display: grid; grid-template-columns: minmax(0, 1fr) 84px 72px 14px; gap: 10px; align-items: center; padding: 8px 14px; }
+.rsx-use + .rsx-use { border-top: 1px solid var(--border-subtle); }
+.rsx-use-t { font-size: 13px; color: var(--text-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rsx-use-m { font-size: 12px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rsx-use-n { text-align: right; font-size: 13px; font-variant-numeric: tabular-nums; color: var(--text-1); }
+.rsx-use-n i { display: block; height: 3px; margin: 4px 0 0 auto; border-radius: 2px; background: var(--brand); opacity: .55; }
+.rsx-use.muted .rsx-use-t, .rsx-use.muted .rsx-use-n { color: var(--text-2); }
+.rsx-use.muted .rsx-use-n i { background: var(--text-3); }
+.rsx-use .rsx-go { color: var(--text-3); font-size: 13px; }
+.rsx-use-sum { font-size: 12px; color: var(--text-3); }
+
+/* ── Runner page: Disks (side column) ── */
+.rsx-disk { padding: 11px 14px 12px; }
+.rsx-disk + .rsx-disk { border-top: 1px solid var(--border-subtle); }
+.rsx-disk-top { display: flex; align-items: baseline; justify-content: space-between; font-size: 13px; }
+.rsx-disk-top b { font-weight: 600; color: var(--text-1); font-family: ui-monospace, SFMono-Regular, Menlo, "DejaVu Sans Mono", monospace; font-size: 12.5px; }
+.rsx-disk-top span { font-weight: 600; font-variant-numeric: tabular-nums; }
+.rsx-disk-top span.warn { color: var(--warning); }
+.rsx-disk-bar { position: relative; height: 6px; margin-top: 7px; border-radius: 3px; background: var(--border-subtle); }
+.rsx-disk-bar > i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 3px; background: var(--brand); }
+.rsx-disk-bar.warn > i { background: var(--warning-solid); }
+.rsx-disk-bar > u { position: absolute; top: -3px; bottom: -3px; width: 2px; border-radius: 1px; background: var(--text-1); text-decoration: none; }
+.rsx-disk-s { margin-top: 6px; font-size: 12px; line-height: 17px; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.rsx-disk-r { margin-top: 2px; font-size: 12px; line-height: 17px; color: var(--text-3); }
+.rsx-disk-r b { font-weight: 500; color: var(--text-2); }

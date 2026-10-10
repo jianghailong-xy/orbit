@@ -1,0 +1,465 @@
+<!doctype html>
+<!-- DESIGN MOCK (2026-10-10). Runners report CPU, memory and disk; the clients show them on the machine list,
+     on the machine page (now + 24 h / 7 d history + who is using it), and raise Needs Attention before work fails.
+     Web frames are this branch's real build (9498167b9) with the proposal injected into the live DOM
+     (web.js + web.css, capture kit in /mnt/data/tmp/runner-resources/kit); iPhone and Android frames are drawn
+     (phones.js on ../antigravity-accounts/kit.css). "Today" phone frames are real screenshots from
+     docs/evidence. Numbers: kit.js — HPC's real readings at 2026-10-10 12:03 CST, the rest of the day drawn
+     to match its real events. Names and session titles are samples (public repo).
+     Render: node /mnt/data/tmp/runner-resources/render/render.mjs <this file> <outdir>. -->
+<html lang="zh-CN">
+<meta charset="utf-8">
+<title>Runner 上报 CPU / 内存 / 硬盘 — 设计图</title>
+<link rel="stylesheet" href="../antigravity-accounts/kit.css">
+<link rel="stylesheet" href="phones.css">
+<style>
+  :root { --warning-solid: #F08A24; --text-2: #4d4d56; --rsx-cross: rgba(0,0,0,.45); }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 36px; background: #e9e9ee; color: #16161a; width: 2010px;
+         font: 15px/1.6 "Inter", "Noto Sans SC", sans-serif; -webkit-font-smoothing: antialiased; }
+  .part { background: #f7f7f9; border-radius: 26px; padding: 30px 34px 34px; }
+  .part + .part { margin-top: 30px; }
+  h1 { font-size: 27px; line-height: 1.3; margin: 0 0 12px; letter-spacing: -.01em; }
+  h2 { font-size: 21px; margin: 0 0 6px; }
+  .lede { color: #4d4d56; font-size: 15.5px; max-width: 1880px; margin: 0 0 6px; }
+  .lede b, .b-cap b, .b-note b, .b-opt b, .b-step b { color: #16161a; }
+  code { font-family: "DejaVu Sans Mono", monospace; font-size: 12.5px; background: #e4e4ea; border-radius: 4px; padding: 1px 5px; }
+  .b-tag { display: inline-block; font: 600 12.5px/1 "Inter", "Noto Sans SC", sans-serif; padding: 5px 9px; border-radius: 7px; margin-bottom: 10px; }
+  .b-tag.now { background: #ffe1dc; color: #b3261e; }
+  .b-tag.new { background: #dfe8ff; color: #2346c4; }
+  .b-tag.alt { background: #efe3ff; color: #6a2bb8; }
+  .b-row { display: flex; gap: 38px; align-items: flex-start; margin-top: 24px; }
+  .b-fig { margin: 0; flex: none; }
+  .b-shot { position: relative; border-radius: 12px; overflow: hidden; box-shadow: 0 8px 26px rgba(0,0,0,.08); background: #fff; }
+  .b-shot > img { display: block; }
+  .b-shot.ph-real { border-radius: 46px; box-shadow: 0 0 0 9px #1d1d1f, 0 0 0 10px #4a4a4e, 0 18px 40px rgba(15,23,42,.25); margin: 10px; }
+  .b-shot.and-real { border-radius: 30px; box-shadow: 0 0 0 8px #202124, 0 0 0 9px #44464b, 0 18px 40px rgba(15,23,42,.25); margin: 10px; }
+  .b-cap { margin-top: 14px; font-size: 14px; line-height: 1.7; color: #4d4d56; }
+  .b-cap > b:first-child { display: block; font-size: 15px; margin-bottom: 2px; }
+  .b-cap ol { margin: 4px 0 0; padding: 0; list-style: none; }
+  .b-cap li { margin-top: 6px; padding-left: 28px; position: relative; }
+  .b-cap li .b-n { position: absolute; left: 0; top: 2px; }
+  .b-n { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: #F08A24;
+       color: #fff; font: 700 12px/1 "Inter", sans-serif; }
+  .b-card { background: #fff; border-radius: 22px; padding: 18px 22px; box-shadow: 0 8px 26px rgba(0,0,0,.08); }
+  .b-card h3 { margin: 0 0 8px; font-size: 17px; }
+  .b-note { font-size: 14px; line-height: 1.75; color: #4d4d56; }
+  .b-note p { margin: 0 0 8px; } .b-note p:last-child { margin-bottom: 0; }
+  .b-note ul { margin: 4px 0 8px; padding-left: 18px; } .b-note li { margin-top: 3px; }
+  .b-miss { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 4px; }
+  .b-miss span { padding: 4px 10px; border-radius: 8px; background: #ffe9e5; color: #b3261e; font-size: 13.5px; font-weight: 600; }
+  .ph-wrap-b { display: flex; flex-direction: column; }
+  .b-fig .ph, .b-fig .and { margin: 10px; }
+
+  /* the data flow */
+  .flow { display: grid; grid-template-columns: 1fr 70px 1fr 70px 1fr; align-items: stretch; margin-top: 22px; }
+  .flow .box { background: #fff; border-radius: 18px; padding: 18px 20px; box-shadow: 0 6px 20px rgba(0,0,0,.07); font-size: 14px; line-height: 1.65; color: #3a3a42; }
+  .flow .box h4 { margin: 0 0 8px; font-size: 16px; color: #16161a; display: flex; align-items: center; gap: 8px; }
+  .flow .box h4 small { font-weight: 500; color: #8a8a8e; font-size: 12.5px; }
+  .flow .box ul { margin: 0; padding-left: 18px; }
+  .flow .box li { margin: 2px 0; }
+  .flow .arrow { display: flex; flex-direction: column; align-items: center; justify-content: center; color: #6c6c74; font-size: 12px; text-align: center; gap: 4px; }
+  .flow .arrow i { font-style: normal; font-size: 30px; line-height: 1; color: #9a9aa3; }
+  .flow .sub { margin-top: 10px; padding-top: 10px; border-top: 1px dashed #dcdce2; }
+  table.b-t { width: 100%; border-collapse: collapse; font-size: 13.5px; line-height: 1.55; background: #fff; border-radius: 16px; overflow: hidden; box-shadow: 0 6px 20px rgba(0,0,0,.06); }
+  table.b-t th, table.b-t td { text-align: left; vertical-align: top; padding: 9px 12px; border-top: 1px solid #ececf1; }
+  table.b-t th { background: #f0f0f4; font-weight: 600; color: #3a3a42; border-top: 0; }
+  table.b-t td:first-child { font-weight: 600; color: #16161a; white-space: nowrap; }
+  table.b-t td.na { color: #a0a0a8; }
+  pre.b-json { margin: 0; padding: 14px 16px; background: #1f2128; color: #e6e6ea; border-radius: 14px; font: 12px/1.6 "DejaVu Sans Mono", monospace; white-space: pre; overflow: hidden; }
+  pre.b-json b { color: #8fb6ff; font-weight: 400; } pre.b-json i { color: #9ad59a; font-style: normal; } pre.b-json s { color: #8a8a96; text-decoration: none; }
+  .b-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; margin-top: 24px; align-items: start; }
+  .b-grid3 { display: grid; grid-template-columns: 1.15fr 1fr 0.85fr; gap: 26px; margin-top: 24px; align-items: start; }
+
+  /* decisions */
+  .b-q { margin-top: 28px; }
+  .b-q:first-of-type { margin-top: 18px; }
+  .b-q h3 { font-size: 18px; margin: 0 0 4px; display: flex; gap: 10px; align-items: center; }
+  .b-q .b-ctx { font-size: 14.5px; color: #4d4d56; margin: 0 0 12px; max-width: 1800px; }
+  .b-opts { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+  .b-opt { background: #fff; border-radius: 20px; padding: 16px 20px; border: 2px solid transparent; box-shadow: 0 6px 20px rgba(0,0,0,.06); font-size: 14px; line-height: 1.7; color: #4d4d56; }
+  .b-opt.rec { border-color: #3e69f6; }
+  .b-opt h4 { margin: 0 0 6px; font-size: 16px; color: #2346c4; }
+  .b-opt.alt h4 { color: #6a2bb8; }
+  .b-opt ul { margin: 0; padding-left: 18px; } .b-opt li { margin-top: 3px; }
+  .qn { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; border: 2px solid #16161a; font: 700 14px/1 Inter, sans-serif; }
+
+  /* landing */
+  .b-steps { margin-top: 10px; border-top: 1px solid #e3e3e8; }
+  .b-step { display: grid; grid-template-columns: 44px 1fr; gap: 6px 14px; padding: 16px 0; border-bottom: 1px solid #e3e3e8; }
+  .b-step .num { width: 30px; height: 30px; border-radius: 8px; background: #2346c4; color: #fff; display: grid; place-items: center; font: 700 15px/1 Inter, sans-serif; margin-top: 2px; }
+  .b-step .num.g { background: #8e8e96; }
+  .b-step .t { font-size: 16px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+  .b-step .t em { font-style: normal; font-size: 12.5px; font-weight: 600; padding: 3px 8px; border-radius: 6px; background: #e3e9ff; color: #2346c4; }
+  .b-step .t em.g { background: #ececf1; color: #5b5b66; }
+  .b-step .d { grid-column: 2; font-size: 14.5px; line-height: 1.75; color: #4d4d56; }
+</style>
+<body>
+
+<!-- ───────────────────────────── 1 · today ───────────────────────────── -->
+<section class="part" id="part-1">
+  <h1>Runner 上报 CPU / 内存 / 硬盘 —— 设计图</h1>
+  <p class="lede">现在 runner 只报一样东西：<b>每个工作区目录所在那块盘还剩多少</b>，客户端从里面挑最紧的一块画成 Capacity 里的 Disk 条。CPU、内存一个数都没有，也没有历史。</p>
+  <p class="lede">HPC 今天 12:03 的真实状态：24 核 load 27.9；14 GB 内存只剩 2 GB 可用，swap 用了 22 / 43 GB；开机 7.5 天内核因内存不足杀了 <b>33 次</b>进程，昨天 16:30 那次把 runner 一起停掉了（服务是 <code>OOMPolicy=stop</code>），3 分钟后才回来；<code>/</code> 897 / 915 GB。这些在 Orbit 里一个都看不到，只能 ssh 上去查。</p>
+  <div class="b-row">
+    <figure class="b-fig" style="width:920px">
+      <div class="b-tag now">现在 · Web 机器页（这个分支的真实构建）</div>
+      <div class="b-shot" id="s-today-runner"><img src="web-today-runner.png" width="920" alt=""></div>
+      <div class="b-cap"><ol>
+        <li><span class="b-n">1</span>唯一的资源读数：Capacity 里的 <b>Disk</b>，取各工作区目录所在盘里最紧的一块。开了 worktree 的会话写在 <code>~/.orbit/worktrees</code>，那块盘如果没有工作区目录在上面，根本不报。</li>
+        <li><span class="b-n">2</span>唯一的资源提醒是「Disk 99% full」。内存被耗尽、进程被杀、runner 被连带停掉，界面上什么都没有（只会显示几分钟 Offline）。</li>
+      </ol></div>
+  <div class="b-card" style="margin-top:26px">
+    <h3>现在缺的</h3>
+    <div class="b-miss"><span>CPU / load</span><span>内存 / swap</span><span>被 OOM 杀进程</span><span>Worktrees 那块盘</span><span>每块盘各自多满</span><span>历史曲线</span><span>谁占着机器</span></div>
+    <div class="b-note"><p>心跳每 30 s 一次、本来就会改写 runner 那一行，三端也本来每 15 s 拉一次 <code>GET /runners</code>——加这些数不需要新的通道。</p></div>
+  </div>
+    </figure>
+    <figure class="b-fig" style="width:900px">
+      <div class="b-tag now">现在 · Web Infrastructure → Machines</div>
+      <div class="b-shot" id="s-today-machines"><img src="web-today-machines.png" width="900" alt=""></div>
+      <div class="b-cap"><ol>
+        <li><span class="b-n">3</span>机器列表上只有槽位条（6 / 8 running）和一行磁盘提醒。<b>槽位不满 ≠ 机器不忙</b>：HPC 用了 6 个槽时 CPU 已经 97%、内存只剩 2 GB。</li>
+      </ol></div>
+      <div class="b-row" style="margin-top:18px;gap:30px">
+        <figure class="b-fig">
+          <div class="b-tag now">现在 · iPhone（真机截图）</div>
+          <div class="b-shot ph-real" id="s-today-ios" style="width:393px"><img src="../../evidence/infrastructure-page/p4/ios-03-infrastructure-machines-light.png" width="393" alt=""></div>
+        </figure>
+        <figure class="b-fig">
+          <div class="b-tag now">现在 · Android（真机截图）</div>
+          <div class="b-shot and-real" id="s-today-and" style="width:393px"><img src="../../evidence/kimi-accounts-android/kimi-runner-one.png" width="393" alt=""></div>
+        </figure>
+      </div>
+      <div class="b-cap"><ol>
+        <li><span class="b-n">4</span>iPhone / Mac（同一套 SwiftUI）：机器行只有槽位条和登录状态。</li>
+        <li><span class="b-n">5</span>Android：Capacity 里同一根 Disk 条（这张是测试机，100 GB 盘）。</li>
+      </ol></div>
+    </figure>
+  </div>
+</section>
+
+<!-- ───────────────────────────── 2 · web ───────────────────────────── -->
+<section class="part" id="part-2">
+  <h2>改后 · Web</h2>
+  <p class="lede">只加三块，不改现有布局：<b>机器卡片头上三根小条</b>；机器页主栏最上面 <b>Resources</b>（现在的数 + 曲线）和 <b>Using It Now</b>（谁在用）；侧栏 Capacity 的 Disk 一行展开成 <b>Disks</b>（每块盘一行）。下面三张都是真实页面，把新的部分插进去截的。</p>
+  <div class="b-row">
+    <figure class="b-fig" style="width:900px">
+      <div class="b-tag new">改后 · Infrastructure → Machines</div>
+      <div class="b-shot" id="s-after-machines"><img src="web-after-machines.png" width="900" alt=""></div>
+    </figure>
+    <div class="b-cap" style="flex:1;margin-top:34px"><ol>
+      <li><span class="b-n">1</span><b>CPU / Mem / Disk 三根条</b>，每台机器对齐在同一列，扫一眼就能比。≥ 90% 变琥珀；内存 24 小时内有 OOM 记录就是红色；Disk 取 Orbit 会写的盘里最满的一块，低于 Keep Free 时琥珀（和今天的磁盘提醒同一条规则）。</li>
+      <li><span class="b-n">2</span>第三行提醒多一种：<b>Out of memory 4× in 24 h</b>，红色，排在磁盘前面。</li>
+      <li><span class="b-n">3</span>离线的机器：CPU、内存是「此刻」的数，离线就写 —；盘留最后一次读数（灰）——关着机盘不会自己变空。</li>
+    </ol></div>
+  </div>
+  <div class="b-row">
+    <figure class="b-fig" style="width:920px">
+      <div class="b-tag new">改后 · 机器页（HPC）</div>
+      <div class="b-shot" id="s-after-runner"><img src="web-after-runner.png" width="920" alt=""></div>
+    </figure>
+    <div style="flex:1;min-width:0">
+      <div class="b-cap" style="margin-top:34px"><ol>
+        <li><span class="b-n">4</span>Needs Attention 新卡 <b>Out of memory</b>（红）：几点、几次、runner 有没有因此掉线、现在用了多少。按钮 <b>Lower Max Concurrent</b> 跳到 Capacity 的输入框（和 Set a Reserve… 跳到 Keep Free 一样）。</li>
+        <li><span class="b-n">5</span><b>Resources</b>：每个指标一行，左边是现在的数和一句话，右边是曲线。内存行带 swap 虚线和 OOM 红三角；磁盘行画 Keep Free 虚线（纵轴 95–100%，标在右上角）；斜线阴影是 runner 离线（昨天 16:30–16:33）。</li>
+        <li><span class="b-n">6</span><b>1h / 24h / 7d</b>：分别 1 分钟、5 分钟、30 分钟一个点。</li>
+        <li><span class="b-n">7</span><b>Using It Now</b>：现在每个会话占多少（会话的引擎 + 它跑的命令 + 它的后台任务），点开进会话；最后一行是 Orbit 以外的进程（模拟器、Docker…），写出最大的三个进程名。机器不忙时这一块可以默认收起。</li>
+        <li><span class="b-n">8</span>Capacity 只留两个设置：Max Concurrent、Keep Free。</li>
+        <li><span class="b-n">9</span><b>Disks</b>：Orbit 会写的每块盘一行，写明上面放了什么（Worktrees / Repos / Home / Temp / 哪个工作区）；Keep Free 的位置在条上画一道竖线。<code>/data</code>（NFS，87%）Orbit 不写，就不列。</li>
+      </ol></div>
+      <figure class="b-fig" style="margin-top:22px">
+        <div class="b-tag new">改后 · 鼠标停在 11:42</div>
+        <div class="b-shot" id="s-after-hover" style="width:606px"><img src="web-after-hover.png" width="606" alt=""></div>
+        <div class="b-cap"><ol><li><span class="b-n">10</span>三行同一根竖线，读数一起出：11:42 那一刻 CPU 100%、内存 98%、随后杀了一个进程——一眼看出是同时发生的，不用去翻日志。</li></ol></div>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────────── 3 · iPhone / Mac ───────────────────────────── -->
+<section class="part" id="part-3">
+  <h2>改后 · iPhone / Mac</h2>
+  <p class="lede">iPhone 和 Mac 是同一套 SwiftUI（Mac 在右侧详情栏里，图更宽）。机器行加三根条；机器页加一节 <b>Resources</b>，点进去是 <b>Resources 页</b>：大图、每块盘、谁在用。曲线用系统自带的 Swift Charts（iOS 17 / macOS 14 都有）。</p>
+  <div class="b-row" style="gap:30px">
+    <figure class="b-fig" id="f-ios1" style="width:413px">
+      <div class="b-tag new">Infrastructure → Machines</div>
+      <div id="p-ios1"></div>
+      <div class="b-cap"><ol>
+        <li><span class="b-n">1</span>每台机器多一行三根小条，和 Web 同色同阈值。</li>
+        <li><span class="b-n">2</span>第三行提醒多 Out of memory（红）。</li>
+        <li><span class="b-n">3</span>离线：CPU、内存写 —，盘留最后读数（灰）。</li>
+      </ol></div>
+    </figure>
+    <figure class="b-fig" id="f-ios2" style="width:413px">
+      <div class="b-tag new">机器页（HPC）</div>
+      <div id="p-ios2"></div>
+      <div class="b-cap"><ol>
+        <li><span class="b-n">4</span>Needs Attention 多一行 Out of memory；Lower Max Concurrent 滚到 Capacity 的步进器。</li>
+        <li><span class="b-n">5</span>新的 <b>Resources</b> 一节：三行，每行一根 24 小时小曲线 + 现在的数，点哪行都进 Resources 页。</li>
+        <li><span class="b-n">6</span>Using It Now 一行：几个会话在跑，点进去看每个占多少。Capacity 里的 Disk 那行去掉。</li>
+      </ol></div>
+    </figure>
+    <figure class="b-fig" id="f-ios3" style="width:413px">
+      <div class="b-tag new">Resources 页</div>
+      <div id="p-ios3"></div>
+      <div class="b-cap"><ol>
+        <li><span class="b-n">7</span>1 Hour / 24 Hours / 7 Days。三张卡各一张大图，和 Web 同样的标记（琥珀段、红三角、离线斜线、Keep Free 虚线）。</li>
+        <li><span class="b-n">8</span>手指按住拖：气泡读出那一刻（11:42，内存 98%，杀了 1 个进程）。</li>
+      </ol></div>
+    </figure>
+    <figure class="b-fig" id="f-ios4" style="width:413px">
+      <div class="b-tag new">Resources 页 · 往下</div>
+      <div id="p-ios4"></div>
+      <div class="b-cap"><ol>
+        <li><span class="b-n">9</span><b>Disks</b>：每块盘一行，写明放了什么；Keep Free 一道竖线。</li>
+        <li><span class="b-n">10</span><b>Using It Now</b>：每个会话占几核、几 GB，点开进会话；Other processes 是 Orbit 以外的。</li>
+      </ol></div>
+    </figure>
+  </div>
+</section>
+
+<!-- ───────────────────────────── 4 · Android ───────────────────────────── -->
+<section class="part" id="part-4">
+  <h2>改后 · Android</h2>
+  <p class="lede">结构和 iPhone 一样：Settings → Runners 的每台机器加三根条；机器页加 Resources 一节；点进去是 Resources 页。曲线用 Compose Canvas 自己画（App 里没有图表库，也不需要引）。</p>
+  <div class="b-row" style="gap:30px">
+    <figure class="b-fig" id="f-and1" style="width:432px">
+      <div class="b-tag new">Settings → Runners</div>
+      <div id="p-and1"></div>
+      <div class="b-cap"><ol>
+        <li><span class="b-n">1</span>三根条，和另外两端同色同阈值。</li>
+        <li><span class="b-n">2</span>提醒行多 Out of memory。</li>
+      </ol></div>
+    </figure>
+    <figure class="b-fig" id="f-and2" style="width:432px">
+      <div class="b-tag new">机器页（HPC）</div>
+      <div id="p-and2"></div>
+      <div class="b-cap"><ol>
+        <li><span class="b-n">3</span>Needs Attention 多一行 Out of memory；按钮跳到 Max Concurrent 的 − / +。</li>
+        <li><span class="b-n">4</span>Resources 一节：三行小曲线 + Using It Now，点进 Resources 页。Capacity 里的 Disk 那行去掉。</li>
+      </ol></div>
+    </figure>
+    <figure class="b-fig" id="f-and3" style="width:432px">
+      <div class="b-tag new">Resources 页</div>
+      <div id="p-and3"></div>
+      <div class="b-cap"><ol>
+        <li><span class="b-n">5</span>Material 的分段按钮 1h / 24h / 7d。</li>
+        <li><span class="b-n">6</span>Using It Now 在图下面；Disks 再往下（同 iPhone）。</li>
+      </ol></div>
+    </figure>
+    <div class="b-card" style="flex:1;margin-top:46px">
+      <h3>三端一起的规则</h3>
+      <div class="b-note">
+        <p>什么时候变色、什么时候进 Needs Attention、文案怎么写，三端<b>只有一份</b>：</p>
+        <ul>
+          <li>判断写在 <code>runnerAttention.ts</code>，Swift 的 <code>RunnerAttention</code>、Kotlin 的 <code>RunnerPage</code> 各镜像一份，三边都对着 <code>runnerAttention.cases.json</code> 跑测试——今天的磁盘提醒就是这么做的。</li>
+          <li>英文文案进 <code>runnerCopy.ts</code>，Swift / Kotlin 的对照测试直接读它。</li>
+          <li>刷新沿用现在的节奏：列表和机器页每 15 s 拉 <code>GET /runners</code>；曲线只在 Resources 打开时拉，60 s 一次。</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────────── 5 · data ───────────────────────────── -->
+<section class="part" id="part-5">
+  <h2>数据从哪来</h2>
+  <p class="lede">runner 每 5 秒读一次本机，攒成「每分钟一条」，跟着现有的 30 秒心跳送上去；服务端存「此刻」和「每分钟」两份；三端照旧轮询。<b>不新开连接，不加 runner 依赖</b>（runner 是纯 Go 标准库、<code>CGO_ENABLED=0</code>）。</p>
+  <div class="flow">
+    <div class="box">
+      <h4>Runner <small>每 5 s 读，每分钟汇总</small></h4>
+      <ul>
+        <li>CPU：<code>/proc/stat</code> 两次之差；load：<code>/proc/loadavg</code></li>
+        <li>内存：<code>MemTotal − MemAvailable</code>；swap</li>
+        <li>OOM：<code>/proc/vmstat</code> 的 <code>oom_kill</code> 增量</li>
+        <li>盘：Worktrees、Repos、Home、Temp、各工作区目录各 <code>statfs</code> 一次，按设备去重</li>
+        <li>谁在用（每 30 s）：每个会话的进程组 + 它的后台任务，<code>/proc/&lt;pid&gt;/stat</code> 求和</li>
+      </ul>
+      <div class="sub">心跳多一个字段 <code>resources</code>：此刻的数 + 没送出去的分钟汇总（断线时最多攒 60 分钟，回来一次补齐）+ 各会话用量。约 1–2 KB。</div>
+    </div>
+    <div class="arrow"><i>→</i>每 30 s<br>心跳</div>
+    <div class="box">
+      <h4>apiserver</h4>
+      <ul>
+        <li><code>runner.resources</code>（JSON）：此刻的数，和 <code>lastHeartbeatAt</code> 走<b>同一条</b> UPDATE，不多一条语句</li>
+        <li><code>runner_resource_minute</code>：每台每分钟 1 行（平均 + 最高 + OOM 次数 + 各盘已用），像 <code>PoolUsage</code> 账本那样攒 2 s 一批写；保留 7 天，每小时清一次 → 每台约 1 万行</li>
+        <li>OOM 次数、离线区间由服务端从分钟表算出来，放进 <code>resources</code></li>
+      </ul>
+      <div class="sub"><code>GET /api/runners</code> 每台多带 <code>resources</code><br><code>GET /api/runners/:id/resources?range=1h|24h|7d</code> 返回曲线（1 / 5 / 30 分钟一个点）</div>
+    </div>
+    <div class="arrow"><i>→</i>轮询<br>15 s / 60 s</div>
+    <div class="box">
+      <h4>Web · iPhone · Mac · Android</h4>
+      <ul>
+        <li>机器列表：三根条 + 第三行提醒（来自 <code>GET /runners</code>）</li>
+        <li>机器页：Needs Attention、Resources 现在的数、Using It Now、Disks</li>
+        <li>曲线：打开 Resources 时取，开着时 60 s 刷新</li>
+        <li>边界：runner 太旧 → 「Update this runner to see CPU and memory」；Windows → 「Not reported on Windows」（和今天的盘一样）；离线 → 最后读数变灰并写报告时间；容器里的托管 runner → 总量用容器限额</li>
+      </ul>
+    </div>
+  </div>
+  <div class="b-grid3">
+    <div>
+      <table class="b-t">
+        <tr><th>指标</th><th>Linux</th><th>macOS</th><th>Windows</th></tr>
+        <tr><td>CPU %</td><td>整机所有核，<code>/proc/stat</code></td><td>每分钟一次 <code>top -l 2 -n 0</code>（不用 cgo）</td><td class="na">不报</td></tr>
+        <tr><td>Load</td><td><code>/proc/loadavg</code></td><td><code>sysctl vm.loadavg</code></td><td class="na">—</td></tr>
+        <tr><td>内存</td><td>总量 − 可用（缓存不算用掉）</td><td><code>hw.memsize</code> + <code>vm_stat</code></td><td class="na">—</td></tr>
+        <tr><td>Swap</td><td><code>SwapTotal − SwapFree</code></td><td><code>vm.swapusage</code></td><td class="na">—</td></tr>
+        <tr><td>OOM</td><td><code>oom_kill</code> 增量</td><td class="na">没有对应物（先压缩、换页）</td><td class="na">—</td></tr>
+        <tr><td>盘</td><td colspan="2"><code>statfs</code>，可用 = Bavail（和今天一样，不算 root 预留）；Linux 另报 inode 用量，≥ 80% 才显示</td><td class="na">不报（同今天）</td></tr>
+        <tr><td>谁在用</td><td><code>/proc/&lt;pid&gt;</code></td><td><code>ps -o pid,pgid,%cpu,rss</code></td><td class="na">—</td></tr>
+        <tr><td>容器内</td><td colspan="3">托管 runner 的 pod：总量取 cgroup 的 <code>memory.max</code> / <code>cpu.max</code>，不拿节点的数</td></tr>
+      </table>
+    </div>
+    <div>
+<pre class="b-json"><s>// 心跳里新增的字段（示意）</s>
+<b>"resources"</b>: {
+  <b>"at"</b>: <i>"2026-10-10T04:03:20Z"</i>,
+  <b>"cpu"</b>: { <b>"cores"</b>: 24, <b>"busyPct"</b>: 97.2, <b>"load"</b>: [27.9, 26.3, 27.4] },
+  <b>"memory"</b>: { <b>"totalBytes"</b>: 15032385536, <b>"usedBytes"</b>: 12992153600,
+              <b>"swapTotalBytes"</b>: 46170898432, <b>"swapUsedBytes"</b>: 23622320128 },
+  <b>"oomKills"</b>: 33,            <s>// 开机以来，服务端算增量</s>
+  <b>"disks"</b>: [{ <b>"mount"</b>: <i>"/"</i>, <b>"totalBytes"</b>: 982473277440,
+              <b>"freeBytes"</b>: 9878424166, <b>"inodesUsedPct"</b>: 18,
+              <b>"holds"</b>: [<i>"worktrees"</i>, <i>"repos"</i>, <i>"home"</i>, <i>"temp"</i>, <i>"workspace:…"</i>] }],
+  <b>"minutes"</b>: [{ <b>"at"</b>: <i>"…04:02:00Z"</i>, <b>"cpuAvg"</b>: 96.1, <b>"cpuMax"</b>: 100,
+                <b>"memAvg"</b>: 85.9, <b>"memMax"</b>: 87.0, <b>"oomKills"</b>: 0, … }],
+  <b>"sessions"</b>: [{ <b>"sessionId"</b>: <i>"…"</i>, <b>"cpuCores"</b>: 6.2, <b>"rssBytes"</b>: 2040109465 }],
+  <b>"other"</b>: { <b>"cpuCores"</b>: 8.9, <b>"rssBytes"</b>: 2791728742,
+             <b>"top"</b>: [<i>"qemu-system-x86_64"</i>, <i>"dockerd"</i>, <i>"java"</i>] }
+}</pre>
+    </div>
+    <div class="b-card">
+      <h3>提醒规则（三端同一份）</h3>
+      <div class="b-note">
+        <p><b style="color:#b3261e">Out of memory（红）</b>：24 小时内有 OOM 杀进程。按钮 Lower Max Concurrent。</p>
+        <p><b style="color:#b35a00">Memory 9x% used（琥珀）</b>：5 分钟平均 ≥ 90%，且没有 OOM。</p>
+        <p><b style="color:#b35a00">Disk 99% full（已有）</b>：低于 Keep Free；没设时剩不到 10%。改为看 Disks 里<b>每一块</b>盘。</p>
+        <p><b>CPU</b>：不进 Needs Attention，5 分钟平均 ≥ 90% 时条变琥珀（见待定 ③）。</p>
+        <p style="color:#8a8a8e">成本：runner 每 5 s 读几个 <code>/proc</code> 文件；每 30 s 扫一遍进程（HPC 上约 4,000 个，几十毫秒）。服务端每次心跳不多语句，分钟表一天每台 1,440 行。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────────── 6 · decide ───────────────────────────── -->
+<section class="part" id="part-6">
+  <h2>待定 · 要你拍板</h2>
+  <div class="b-q">
+    <h3><span class="qn">1</span>历史曲线存不存、存多久</h3>
+    <p class="b-ctx">「监控」的另一半是回头看：昨天 16:30 runner 为什么停了、HPC 是不是每天下午都满。</p>
+    <div class="b-opts">
+      <div class="b-opt rec"><h4>A（推荐）· 服务端按分钟存 7 天</h4><ul>
+        <li>新表 <code>runner_resource_minute</code>，每台每分钟 1 行，7 天约 1 万行；每小时清一次。</li>
+        <li>三端有 1h / 24h / 7d 曲线、悬停 / 拖动读数。</li></ul></div>
+      <div class="b-opt alt"><h4>B · 只存「此刻」</h4><ul>
+        <li>不加表，只在 runner 那一行多一个 JSON；三端只有数字和条，没有曲线。</li>
+        <li>最便宜；但出了事以后，看不到当时的样子。</li></ul></div>
+    </div>
+  </div>
+  <div class="b-q">
+    <h3><span class="qn">2</span>「谁在用」这次做不做</h3>
+    <p class="b-ctx">CPU 100% 时，下一个问题一定是「谁」。runner 本来就把每个会话放在自己的进程组里管着（停会话时整组杀），多算一次 CPU 和内存就有了。</p>
+    <div class="b-opts">
+      <div class="b-opt rec"><h4>A（推荐）· 这次一起做，只看此刻</h4><ul>
+        <li>Using It Now：每个会话几核、几 GB，点开进会话；Orbit 以外的进程合成一行，写最大的三个名字。</li>
+        <li>不存历史（存历史要按会话建表，量大，以后再说）。</li></ul></div>
+      <div class="b-opt alt"><h4>B · 先只做整机</h4><ul>
+        <li>这期只有 CPU / 内存 / 盘，Using It Now 留到下一期。</li></ul></div>
+    </div>
+  </div>
+  <div class="b-q">
+    <h3><span class="qn">3</span>提醒和拦截做到哪</h3>
+    <p class="b-ctx">今天磁盘有拦截（低于 Keep Free 就不再自动派任务）。内存、CPU 要不要也拦？HPC 一整天 load 27.9 / 24 核、内存 86% 加 22 GB swap——按阈值拦，它大半天都派不了活。</p>
+    <div class="b-opts">
+      <div class="b-opt rec"><h4>A（推荐）· 只提醒，不加新拦截</h4><ul>
+        <li>内存（OOM、5 分钟 ≥ 90%）和磁盘进 Needs Attention；CPU 只变色。</li>
+        <li>调节手段还是 Max Concurrent，提醒卡上直接给按钮。先看一周真实数据，再定要不要拦、拦在哪。</li></ul></div>
+      <div class="b-opt alt"><h4>B · 加内存拦截，CPU 也提醒</h4><ul>
+        <li>像 Keep Free 一样：内存 5 分钟平均 ≥ X%，或刚发生 OOM 的 30 分钟内，不往这台自动派新任务。</li>
+        <li>CPU 连续 30 分钟 ≥ 95% 进 Needs Attention。</li></ul></div>
+    </div>
+  </div>
+  <div class="b-q">
+    <h3><span class="qn">4</span>Keep Free 也看 Worktrees 那块盘（这次顺带发现的）</h3>
+    <p class="b-ctx">现在的拦截只比「工作区目录所在的盘」，可开了 worktree 的会话写在 runner 自己的 <code>~/.orbit/worktrees</code>。工作区在大盘、home 在小盘的机器（比如工作区放 <code>/mnt/data</code>，home 在 <code>/</code>）：小盘满了照样派，派过去的会话再写满它。</p>
+    <div class="b-opts">
+      <div class="b-opt rec"><h4>A（推荐）· 两块都看，取更紧的</h4><ul>
+        <li>开了 worktree 的工作区，用「工作区目录的盘」和「Worktrees 的盘」里剩得更少的那块比 Keep Free。</li>
+        <li>runner 自己清理旧 worktree 时量的本来就是 Worktrees 那块盘，两边说法一致。</li></ul></div>
+      <div class="b-opt alt"><h4>B · 不动</h4><ul>
+        <li>只是在 Disks 里看得到 Worktrees 那块盘，拦截规则照旧。</li></ul></div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────────── 7 · landing ───────────────────────────── -->
+<section class="part" id="part-7">
+  <h2>落地（按代价排）</h2>
+  <div class="b-steps">
+    <div class="b-step"><span class="num">1</span><div class="t">Runner：采样 + 心跳带 <code>resources</code><em>runner</em></div>
+      <div class="d">Linux 全量；macOS 是 CPU / 内存 / swap / 盘；Windows 不报。每分钟汇总、断线补报 60 分钟；每个会话的进程组 + 后台任务求和。Go 测试用假的 <code>/proc</code> 目录喂数。</div></div>
+    <div class="b-step"><span class="num">2</span><div class="t">服务端：存、算、两个读接口<em>server</em></div>
+      <div class="d"><code>runner.resources</code> 列 + <code>runner_resource_minute</code> 表（迁移号先扫各分支，现在最大 0421）+ 每小时清理；<code>GET /runners</code> 带此刻的数，<code>GET /runners/:id/resources</code> 返回曲线。新表要过五个普查：db-write inventory、PUBLIC_ID_FIELDS、迁移台账、租户隔离、PAT scope。</div></div>
+    <div class="b-step"><span class="num">3</span><div class="t">共享规则和文案<em>三端</em></div>
+      <div class="d"><code>runnerAttention</code>（Web）/ <code>RunnerAttention</code>（Swift）/ <code>RunnerPage</code>（Kotlin）加 OOM、内存、多盘；<code>runnerAttention.cases.json</code> 加用例；英文文案进 <code>runnerCopy.ts</code>。</div></div>
+    <div class="b-step"><span class="num">4</span><div class="t">Web：三根条、Resources、Using It Now、Disks<em>web</em></div>
+      <div class="d">曲线手写 SVG，不引图表库；Capacity 去掉 Disk 一行。</div></div>
+    <div class="b-step"><span class="num">5</span><div class="t">iPhone / Mac：同上<em>ios · mac</em></div>
+      <div class="d">Swift Charts；机器行、机器页 Resources 一节、Resources 页。用 macOS 26 的 CI 模拟器出改前 / 改后截图。</div></div>
+    <div class="b-step"><span class="num">6</span><div class="t">Android：同上<em>android</em></div>
+      <div class="d">Compose Canvas 画曲线；Runners 列表、机器页、Resources 页；共享模拟器上截图。</div></div>
+    <div class="b-step"><span class="num">7</span><div class="t">Keep Free 看两块盘（④ 选 A 才做）<em>server · runner</em></div>
+      <div class="d">服务端 <code>diskBelowFloor</code> 和 runner 的 <code>belowFloor</code> 一起改：开了 worktree 的工作区取两块盘里更紧的。</div></div>
+    <div class="b-step"><span class="num g">8</span><div class="t">另起 · 以后再说<em class="g">另起任务</em></div>
+      <div class="d">OOM 推送通知；自动派活时优先挑空闲的机器；GPU（HPC 有卡，<code>nvidia-smi</code>）；runner 被 OOM 连带停掉时，重启后说明原因。</div></div>
+  </div>
+  <p class="b-note" style="margin-top:16px">建议：1–3 先做（数据和规则一个任务），4 / 5 / 6 三端并行，7 看 ④；整件事 6–7 个任务，适合开一个 Orbit 项目。</p>
+</section>
+
+<script src="../antigravity-accounts/glyphs.js"></script>
+<script src="../antigravity-accounts/kit.js"></script>
+<script src="kit.js"></script>
+<script src="phones.js"></script>
+<script>
+  const P = RSX.phones;
+  const put = (id, html) => { document.getElementById(id).outerHTML = html; };
+  put('p-ios1', P.iosInfrastructure()); put('p-ios2', P.iosMachine()); put('p-ios3', P.iosResources()); put('p-ios4', P.iosResourcesLower());
+  put('p-and1', P.androidList()); put('p-and2', P.androidRunner()); put('p-and3', P.androidResources());
+
+  // Marks on the screenshots: boxes are the live elements' own (capture.mjs BOXES), in CSS px of the 1x image.
+  const SHOT_MARKS = {
+    's-today-runner': [[[631, 316, 288, 58], 1], [[0, 106, 920, 103], 2]],
+    's-today-machines': [[[72, 120, 626, 29], 3]],
+    's-today-ios': [[[16, 134, 361, 220], 4]],
+    's-today-and': [[[14, 270, 366, 56], 5]],
+    's-after-machines': [[[456, 98, 256, 24], 1], [[72, 132, 370, 16], 2], [[399, 279, 256, 24], 3]],
+    's-after-runner': [[[0, 106, 455, 140], 4], [[0, 311, 606, 319], 5], [[505, 275, 101, 24], 6], [[0, 763, 606, 339], 7], [[630, 310, 290, 86], 8], [[630, 540, 290, 217], 9]],
+    's-after-hover': [[[358, 95, 221, 146], 10]],
+  };
+  window.drawMarks = () => {
+    for (const [id, list] of Object.entries(SHOT_MARKS)) {
+      const host = document.getElementById(id);
+      const pad = 4;
+      host.insertAdjacentHTML('beforeend', list.map(([[x, y, w, h], n]) => {
+        const rx = Math.max(2, x - pad), ry = Math.max(2, y - pad);
+        const rw = Math.min(host.clientWidth - rx - 2, w + 2 * pad), rh = h + 2 * pad;
+        const mx = Math.min(host.clientWidth - 24, rx + rw - 12), my = Math.max(2, ry - 12);
+        return `<span class="ring" style="left:${rx}px;top:${ry}px;width:${rw}px;height:${rh}px"></span><span class="mk-n" style="left:${mx}px;top:${my}px">${n}</span>`;
+      }).join(''));
+    }
+    const ph = (fig) => document.querySelector(`#${fig} .ph, #${fig} .and`);
+    const ring = (fig, sel, n, padding = 4) => ringMark(ph(fig), sel, n, padding);
+    ring('f-ios1', '#ix-hpc .ix-meters', 1); ring('f-ios1', '#ix-hpc .ix-att', 2); ring('f-ios1', '#ix-tp .ix-meters', 3);
+    ring('f-ios2', '#ix-att .ix-at', 4, 2); ring('f-ios2', '#ix-resources', 5, 3); ring('f-ios2', '#ix-using', 6, 1);
+    ring('f-ios3', '.ix-seg', 7, 3); ring('f-ios3', '.ix-bub', 8, 3);
+    ring('f-ios4', '#ix-disks', 9, 3); ring('f-ios4', '#ix-use', 10, 3);
+    ring('f-and1', '#and-hpc .and-meters', 1); ring('f-and1', '#and-hpc .and-att', 2);
+    ring('f-and2', '.and-at', 3, 2); ring('f-and2', '#and-resources', 4, 3);
+    ring('f-and3', '.and-segs', 5, 3); ring('f-and3', '#and-use', 6, 3);
+  };
+</script>
+</body>
+</html>
