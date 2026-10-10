@@ -90,7 +90,9 @@ export interface WikiVerifyTarget {
   /**
    * Why the model's answer about an op was not a verdict in an earlier pass, by op id: the pass asks about
    * those ops again with the prompt saying so and the numbers duplicateOf may be (contract
-   * `maintenance.job.run.steps`, verify).
+   * `maintenance.job.run.steps`, verify). A pass given it is that second pass, and asks each op under a unit
+   * of its own, `<opId>#retry` (`maintenance.job.server.verify`): the first pass's unit holds the first asking,
+   * and the queue would refuse it asked again with another prompt.
    */
   refused?: ReadonlyMap<string, string> | null;
   /**
@@ -170,7 +172,8 @@ export async function verifyWikiOps(
     for (const item of page.items) {
       if (max > 0 && report.looked >= max) return report;
       report.looked += 1;
-      const stop = await verifyOneOp(context, wiki, principal, model, item, target.refused?.get(item.opId) ?? '', report, target.recorded);
+      const unit = target.refused ? `${item.opId}#retry` : item.opId;
+      const stop = await verifyOneOp(context, wiki, principal, model, item, unit, target.refused?.get(item.opId) ?? '', report, target.recorded);
       if (stop) return report;
     }
     if (page.next === null) return report;
@@ -179,8 +182,8 @@ export async function verifyWikiOps(
 }
 
 /**
- * Ask about one op and report what the model said. `refused` is why its last answer was not a verdict, when an
- * earlier pass asked: the prompt says so, and names the numbers a duplicate may give. Answers whether the pass
+ * Ask about one op, under `unit`, and report what the model said. `refused` is why its last answer was not a verdict,
+ * when an earlier pass asked: the prompt says so, and names the numbers a duplicate may give. Answers whether the pass
  * must stop — the server says the space left Automatic, and nothing after that would be recorded.
  */
 async function verifyOneOp(
@@ -189,6 +192,7 @@ async function verifyOneOp(
   principal: WikiPrincipal,
   model: string,
   item: WikiVerificationItem,
+  unit: string,
   refused: string,
   report: WikiVerifyReport,
   recorded?: (verdict: string) => Promise<void>,
@@ -203,7 +207,7 @@ async function verifyOneOp(
   };
   let answer: string;
   try {
-    const settled = await context.ask(WIKI_VERIFY_JOB.step, item.opId, {
+    const settled = await context.ask(WIKI_VERIFY_JOB.step, unit, {
       system: WIKI_VERIFY_SYSTEM_PROMPT,
       prompt,
       maxTokens: WIKI_VERIFY_JOB.maxTokens,

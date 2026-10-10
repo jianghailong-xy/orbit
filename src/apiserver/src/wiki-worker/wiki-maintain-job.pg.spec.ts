@@ -74,9 +74,16 @@
  *  21. a worker stopped mid-run hands the run back, and the report the replay ends with is the whole run's (contract
  *      `jobs.carry`): stopped in the documents step, the dossiers the run read, the ops it recorded, the verdicts and
  *      the anchor checks before the stop are counted with the sections written after it — exactly what the same run
- *      reports when nothing stops it; stopped between the run's own verdicts, the verdict recorded before the stop is
- *      counted; stopped between two anchors operations, every entry is counted checked once, none of the first
- *      operation's as skipped.
+ *      reports when nothing stops it; stopped between the run's own verdicts, the replay verifies the run's own ops the
+ *      stop left waiting — its job's, though it recorded none of them itself (`maintenance.job.server.verify`) — and
+ *      the report is the straight run's, every verdict once; stopped on the call of an op whose neighbours the run's
+ *      verdicts then made live, the replay's question is another, and the second pass asks it under the op's retry
+ *      unit; stopped between two anchors operations, every entry is counted checked once, none of the first
+ *      operation's as skipped;
+ *  22. the second verification pass (2026-10-10): an op whose first answer is no verdict is asked again under a unit of
+ *      its own, `<opId>#retry`, its prompt the first one with why that answer was not taken, as the runner's second
+ *      pass words it — where the second pass used to ask under the first pass's unit, which the queue refused as asked
+ *      before with another call, so it never reached the model.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/wiki-worker/wiki-maintain-job.pg.spec.ts
  *
@@ -116,6 +123,7 @@ import { WikiModelStatusProbe } from './wiki-model-status';
 import { readWikiSystemModel, type WikiSystemModelConfig } from './wiki-system-model';
 import { wikiMaintainJobPrincipal, wikiMaintainJobRunner, type WikiMaintainJobDeps } from './wiki-maintain-job';
 import { wikiStoredText } from './wiki-stored-text';
+import { wikiVerifyRetrySuffix } from './wiki-verify';
 
 const URL_ = process.env.COORDINATOR_PG_URL;
 const skip = !URL_;
@@ -446,6 +454,9 @@ const REPO_WAKE: WikiRepoOpWake = {
   },
 };
 
+/** What the runs of a case said as they went (`WikiJobContext.log`), every worker's; cleared by `clearWork`. */
+const runLog: string[] = [];
+
 /** The worker under test, its kind map the one the worker module builds — with this spec's services. */
 function worker(h: Harness, over: { repoWaitMs?: number; wake?: boolean } = {}): { queue: WikiModelRequestQueue; executor: WikiJobExecutor } {
   const options = { leaseMs: HARNESS_LEASE_MS, renewMs: HARNESS_RENEW_MS, partialMs: 40, pollMs: 30 };
@@ -466,7 +477,17 @@ function worker(h: Harness, over: { repoWaitMs?: number; wake?: boolean } = {}):
     repoWaitMs: over.repoWaitMs ?? 5_000,
     ...(over.wake === true ? { repoWake: REPO_WAKE } : {}),
   };
-  const runners: Record<string, WikiJobRunner> = { ...WIKI_JOB_RUNNERS, maintain: wikiMaintainJobRunner(deps) };
+  const maintain = wikiMaintainJobRunner(deps);
+  const runners: Record<string, WikiJobRunner> = {
+    ...WIKI_JOB_RUNNERS,
+    maintain: (context) => maintain({
+      ...context,
+      log: (message) => {
+        runLog.push(message);
+        context.log(message);
+      },
+    }),
+  };
   const executor = new WikiJobExecutor(h.prisma as unknown as PrismaService, queue, options, runners);
   live.push({ queue, executor });
   return { queue, executor };
@@ -484,6 +505,7 @@ async function clearWork(h: Harness): Promise<void> {
   await h.sql.query('DELETE FROM "wiki_job" WHERE "owner_id" = $1', [h.ownerId]);
   await h.sql.query('DELETE FROM "wiki_model_request" WHERE "owner_id" = $1', [h.ownerId]);
   await h.sql.query('DELETE FROM "wiki_model_status"');
+  runLog.length = 0;
   h.model.hits.length = 0;
   h.model.answer = () => '[]';
   h.model.hold = async () => undefined;
@@ -843,6 +865,55 @@ test('a server run reads, checks, proposes, advances, verifies and re-checks the
   const articles = jobs.filter((job) => job.kind === 'articles');
   assert.equal(articles.length, 1);
   assert.equal(articles[0]!.state, 'queued');
+});
+
+test('an op whose first answer is no verdict is asked again under a unit of its own, `<opId>#retry`, told why as the runner tells it, and gets its verdict there', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const fx = await fixture(h);
+  const page = pageOf(fx);
+  h.maintenance.dossierPage = (async () => page) as unknown as WikiMaintenance['dossierPage'];
+  // The first asking about each op is answered in prose, which is no verdict; the second — the one that says why the last
+  // answer was not taken — with a verdict.
+  const extract = extractor(fx, 2);
+  h.model.answer = (hit) => (!hit.prompt.includes('==== CASE FILE ====') && hit.prompt.includes('## Your answer')
+    && !hit.prompt.includes('## Your last answer was not taken')
+    ? 'The records bear every part of it out.'
+    : extract(hit));
+  await pass(h, worker(h), async () => ['succeeded', 'failed'].includes((await jobOf(h, fx.jobId)).state));
+  const job = await jobOf(h, fx.jobId);
+  assert.equal(job.state, 'succeeded', job.error ?? '');
+
+  // No asking was refused as one made before with another call: the second pass reached the model, op by op.
+  assert.deepEqual(runLog.filter((line) => line.includes('already exists with a different call')), []);
+  assert.equal(runLog.filter((line) => line.includes('no verdict — the model\'s answer is not a verdict (no JSON object in it)')).length, 3);
+  assert.equal(h.model.hits.filter((hit) => hit.prompt.includes('## Your last answer was not taken')).length, 3);
+
+  // Every op of the run's own got its verdict on the second asking: none is left waiting.
+  const ops = await h.prisma.wikiChangesetOp.findMany({
+    where: { ownerId: h.ownerId, changeset: { jobId: fx.jobId } }, orderBy: { id: 'asc' }, select: { id: true, decision: true, verificationVerdict: true },
+  });
+  assert.equal(ops.length, 3);
+  assert.deepEqual(ops.map((op) => [op.decision === 'verifying', op.verificationVerdict]), ops.map(() => [false, 'supported']));
+
+  // Each op was asked twice, each time under a unit of its own: the first pass's is the op's id, the second's `<opId>#retry`.
+  const requests = (await h.sql.query<{ unit: string; state: string; request: { prompt: string } }>(
+    `SELECT "unit", "state", "request" FROM "wiki_model_request" WHERE "job_id" = $1 AND "step" = 'verify'`, [fx.jobId])).rows;
+  assert.deepEqual(requests.map((row) => [row.unit, row.state]).sort(), ops.flatMap((op) => [[op.id, 'succeeded'], [`${op.id}#retry`, 'succeeded']]).sort());
+  // The second asking is the first one's prompt and why its answer was not taken, in the words of the runner's second pass
+  // (Go's wikiVerifyRetrySuffix, ported byte for byte): no entry is listed, so the op is no duplicate.
+  for (const op of ops) {
+    const first = requests.find((row) => row.unit === op.id)!.request.prompt;
+    const again = requests.find((row) => row.unit === `${op.id}#retry`)!.request.prompt;
+    assert.equal(again, first + wikiVerifyRetrySuffix('no JSON object in it', []));
+  }
+
+  // The report: the three verdicts and none left over, and every request a call, the second pass's included, each once.
+  const report = (await runRow(h, fx.runId)).report as Record<string, unknown>;
+  assert.deepEqual(report.verification, { verified: 3, failed: 0, waitingForNextRun: 0, adopted: { ops: 0, verified: 0, failed: 0 } });
+  assert.equal((await callsOf(h, fx.jobId, ['verify'])).calls, 6);
+  const calls = await callsOf(h, fx.jobId);
+  assert.deepEqual(report.tokens, { input: calls.input, output: calls.output, calls: calls.calls });
 });
 
 // ── The documents step, with a plan the owner confirmed ────────────────────────────────────────
@@ -2816,14 +2887,21 @@ test('a worker stopped in the documents step hands the run back, and the report 
   assert.deepEqual([await articles(straight.spaceId), await articles(stopped.spaceId)], [1, 1]);
 });
 
-test('a worker stopped between the run\'s own verdicts hands the run back, and the report the replay ends with counts the verdict recorded before the stop', { skip }, async () => {
-  const h = await boot();
-  await clearWork(h);
+/** The run's own ops, by whether they have their verdict: the ops of its job's changesets. */
+async function ownVerdicts(h: Harness, jobId: string): Promise<{ verdicts: number; waiting: number }> {
+  return (await h.sql.query<{ verdicts: number; waiting: number }>(
+    `SELECT count(*) FILTER (WHERE o."verification_verdict" IS NOT NULL)::int AS "verdicts",
+            count(*) FILTER (WHERE o."decision" = 'verifying')::int AS "waiting"
+       FROM "wiki_changeset_op" o JOIN "wiki_changeset" c ON c."id" = o."changeset_id" WHERE c."job_id" = $1`, [jobId])).rows[0];
+}
+
+/**
+ * A run stopped while the call of its `held`-th verdict is in flight — the verdicts before it recorded — and taken over by
+ * the next worker, beside what the same run reports on a space of the same shape when nothing stops it.
+ */
+async function stoppedInVerify(h: Harness, held: number): Promise<{ stopped: Fixture; whole: Record<string, unknown>; report: Record<string, unknown> }> {
   const fixtures: Fixture[] = [];
   h.maintenance.dossierPage = readerAt(h, fixtures);
-  const verdicts = async (jobId: string): Promise<number> => (await h.sql.query<{ n: number }>(
-    `SELECT count(*)::int AS n FROM "wiki_changeset_op" o JOIN "wiki_changeset" c ON c."id" = o."changeset_id"
-      WHERE c."job_id" = $1 AND o."verification_verdict" IS NOT NULL`, [jobId])).rows[0].n;
 
   // What the run reports when nothing stops it.
   const straight = await fixture(h);
@@ -2831,10 +2909,10 @@ test('a worker stopped between the run\'s own verdicts hands the run back, and t
   h.model.answer = extractor(straight, 2);
   await pass(h, worker(h), async () => ['succeeded', 'failed'].includes((await jobOf(h, straight.jobId)).state));
   assert.equal((await jobOf(h, straight.jobId)).state, 'succeeded');
-  const whole = (await runRow(h, straight.runId)).report as Record<string, unknown>;
+  assert.deepEqual(await ownVerdicts(h, straight.jobId), { verdicts: 3, waiting: 0 });
 
-  // The same run in a space of the same shape: its ops recorded and the cursor moved, the first verdict recorded, and the
-  // second verdict's call held while the worker stops.
+  // The same run in a space of the same shape: its ops recorded and the cursor moved, the verdicts before the held one
+  // recorded, and the held one's call in flight while the worker stops.
   const stopped = await fixture(h);
   fixtures.push(stopped);
   let asked = 0;
@@ -2846,34 +2924,77 @@ test('a worker stopped between the run\'s own verdicts hands the run back, and t
   h.model.hold = async (hit) => {
     if (!hit.prompt.includes('## Your answer')) return;
     asked += 1;
-    if (asked < 2) return;
+    if (asked < held) return;
     holding = true;
     await released;
   };
   const first = worker(h);
-  await pass(h, first, async () => holding && (await verdicts(stopped.jobId)) === 1);
+  await pass(h, first, async () => holding && (await ownVerdicts(h, stopped.jobId)).verdicts === held - 1);
   await first.executor.onModuleDestroy();
   await first.queue.onModuleDestroy();
   release();
   h.model.hold = async () => undefined;
   assert.deepEqual(await jobAfterStop(h, stopped.jobId), { state: 'queued', next_attempt_at: null, attempts: 0, failure_kind: null, error: WIKI_JOB_HANDED_BACK });
+  assert.deepEqual(await ownVerdicts(h, stopped.jobId), { verdicts: held - 1, waiting: 4 - held }, 'what the stop left waiting');
 
+  // The next worker takes it over. It reads no dossier and records no op — the cursor stands past them — and verifies
+  // the run's own ops all the same: they are its job's.
   await pass(h, worker(h), async () => ['succeeded', 'failed'].includes((await jobOf(h, stopped.jobId)).state));
   assert.equal((await jobOf(h, stopped.jobId)).state, 'succeeded');
-  const report = (await runRow(h, stopped.runId)).report as Record<string, unknown>;
-  // The dossiers it read, the ops it recorded and the cursor it moved before the stop: the run's, as the straight run's.
-  // (Its anchors are not: only the op whose verdict was recorded went live, so the replay has one entry to check.)
-  const pipeline = (r: Record<string, unknown>) => ({
-    sessions: r.sessions, dossiers: r.dossiers, unchanged: r.unchanged, offTopic: r.offTopic, entries: r.entries, ops: r.ops,
-    cursorAdvanced: r.cursorAdvanced, docs: runTotals({ docs: r.docs }).docs,
-  });
-  assert.deepEqual(pipeline(report), pipeline(whole), 'the pipeline before the stop is the run\'s');
-  // The verdict recorded before the stop is the run's; the replay records none of the run's own (it verifies only the
-  // ops it recorded itself, and its page held none).
-  assert.equal(await verdicts(stopped.jobId), 1);
-  assert.equal((report.verification as Record<string, number>).verified, 1, 'the verdict recorded before the stop');
+  return {
+    stopped,
+    whole: (await runRow(h, straight.runId)).report as Record<string, unknown>,
+    report: (await runRow(h, stopped.runId)).report as Record<string, unknown>,
+  };
+}
+
+test('a worker stopped between the run\'s own verdicts hands the run back, and the replay verifies the run\'s ops the stop left waiting: each gets its verdict, and the report counts each once', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const { stopped, whole, report } = await stoppedInVerify(h, 2);
+  assert.deepEqual(await ownVerdicts(h, stopped.jobId), { verdicts: 3, waiting: 0 }, 'every op of the run\'s own has its verdict');
+  assert.deepEqual([(report.ops as Record<string, number>).recorded, report.cursorAdvanced], [3, true], 'the ops the attempt before the stop recorded');
+  // The verdicts are the run's, each once: the one recorded before the stop, carried, and the replay's two.
+  assert.equal((report.verification as Record<string, number>).verified, 3);
+  // And the whole report is the straight run's: the dossiers, the ops, the cursor, the verdicts, the anchors of the three
+  // entries they made live, the documents and the calls. The op whose call the stop cut off is asked the same question
+  // again, so the replay meets that call's request instead of making another.
+  assert.deepEqual(runTotals(report), runTotals(whole), 'the stopped run reports what the straight one does');
   const calls = await callsOf(h, stopped.jobId);
   assert.deepEqual(report.tokens, { input: calls.input, output: calls.output, calls: calls.calls });
+  assert.deepEqual(runLog.filter((line) => line.includes('already exists with a different call')), []);
+});
+
+test('a worker stopped on the call of an op whose neighbours the run\'s verdicts then made live: the replay\'s question is another, asked under the op\'s retry unit, and the op gets its verdict there', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const { stopped, whole, report } = await stoppedInVerify(h, 3);
+  assert.deepEqual(await ownVerdicts(h, stopped.jobId), { verdicts: 3, waiting: 0 }, 'every op of the run\'s own has its verdict');
+  assert.equal((report.verification as Record<string, number>).verified, 3, 'the two verdicts carried and the replay\'s, each once');
+  // The third op's neighbours are the first two's entries: proposed when the page was read before the stop, and live once
+  // their verdicts were in. The question the replay reads lists them, so it is not the one whose call the stop cut off: the
+  // queue holds that call's answer under the op's id and hands it back to no other question, and the second pass asks the
+  // op again under its retry unit — the question as the list reads it now.
+  const ops = await h.prisma.wikiChangesetOp.findMany({ where: { ownerId: h.ownerId, changeset: { jobId: stopped.jobId } }, orderBy: { id: 'asc' }, select: { id: true } });
+  const held = ops[2]!.id;
+  const requests = (await h.sql.query<{ unit: string; state: string; request: { prompt: string } }>(
+    `SELECT "unit", "state", "request" FROM "wiki_model_request" WHERE "job_id" = $1 AND "step" = 'verify'`, [stopped.jobId])).rows;
+  assert.deepEqual(requests.map((row) => [row.unit, row.state]).sort(), [...ops.map((op) => [op.id, 'succeeded']), [`${held}#retry`, 'succeeded']].sort());
+  const before = requests.find((row) => row.unit === held)!.request.prompt;
+  const again = requests.find((row) => row.unit === `${held}#retry`)!.request.prompt;
+  assert.ok(!before.includes('- E1: ') && again.includes('- E1: ') && again.includes('- E2: '), 'the replay\'s question lists the two entries the verdicts made live');
+  assert.ok(!again.includes('## Your last answer was not taken'), 'nothing the model said was refused: the question changed');
+  const refusedAsAsked = runLog.filter((line) => line.includes('already exists with a different call'));
+  assert.equal(refusedAsAsked.length, 1, refusedAsAsked.join('\n'));
+  assert.ok(refusedAsAsked[0]!.startsWith(`op ${held} (`) && refusedAsAsked[0]!.includes(`'verify/${held}'`), refusedAsAsked[0]);
+  // Every call the run made, once: the question the stop cut off, answered after it, among them. The rest of the report is
+  // the straight run's.
+  const calls = await callsOf(h, stopped.jobId);
+  assert.deepEqual(report.tokens, { input: calls.input, output: calls.output, calls: calls.calls });
+  assert.equal(calls.calls, (whole.tokens as Record<string, number>).calls + 1);
+  const { tokens: _tokens, ...rest } = runTotals(report);
+  const { tokens: _wholeTokens, ...wholeRest } = runTotals(whole);
+  assert.deepEqual(rest, wholeRest, 'the stopped run reports what the straight one does, but the one call more');
 });
 
 test('a worker stopped between two anchors operations hands the run back, and the report the replay ends with counts every entry checked once', { skip }, async () => {
