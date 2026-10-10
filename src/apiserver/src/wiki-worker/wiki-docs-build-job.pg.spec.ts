@@ -23,7 +23,11 @@
  *      the way: the plan's reads, the runner door's material and the build's own;
  *  11. a worker that stops while the build waits for its reads hands the job back (design §5.4): no REPO_OP_FAILED,
  *      no read asked again — the third read, waiting for a slot, is never asked — nothing counted, and the next worker
- *      takes the job over.
+ *      takes the job over;
+ *  12. a worker stopped once the build's first section is written hands the job back, and the next one finishes it: the
+ *      report the replay ends with — the job's and the plan job's — is the whole build's (contract `jobs.carry`): the
+ *      section written before the stop is written, not unchanged, every section once and every call once, exactly what
+ *      the same build reports when nothing stops it.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/wiki-worker/wiki-docs-build-job.pg.spec.ts
  *
@@ -91,6 +95,8 @@ interface FakeModel {
   hits: Hit[];
   /** Every prompt answered as a writer that cites what it was handed would answer it. */
   answer: (prompt: string) => string;
+  /** Waited for before a call is answered: a case holds a call here while it stops the worker. */
+  before: (prompt: string) => Promise<void>;
   close: () => Promise<void>;
 }
 
@@ -123,13 +129,13 @@ function writerAnswer(prompt: string): string {
 
 async function fakeModel(): Promise<FakeModel> {
   const sockets = new Set<Socket>();
-  const model = { base: '', hits: [] as Hit[], answer: writerAnswer } as unknown as FakeModel;
+  const model = { base: '', hits: [] as Hit[], answer: writerAnswer, before: async () => undefined } as unknown as FakeModel;
   const server = createServer((request: IncomingMessage, response: ServerResponse) => {
     let raw = '';
     request.on('data', (chunk: Buffer) => {
       raw += chunk.toString();
     });
-    request.on('end', () => {
+    request.on('end', () => void (async () => {
       if (request.url === '/health') {
         response.writeHead(200, { 'content-type': 'application/json' });
         response.end('{}');
@@ -138,6 +144,7 @@ async function fakeModel(): Promise<FakeModel> {
       const body = JSON.parse(raw) as { system?: string; messages?: Array<{ content?: string }> };
       const prompt = body.messages?.[0]?.content ?? '';
       model.hits.push({ prompt, system: body.system ?? '', body: body as Record<string, unknown>, authorization: String(request.headers.authorization ?? '') });
+      await model.before(prompt);
       const text = model.answer(prompt);
       response.writeHead(200, { 'content-type': 'text/event-stream' });
       const event = (name: string, data: unknown) => `event: ${name}\ndata: ${JSON.stringify(data)}\n\n`;
@@ -146,7 +153,7 @@ async function fakeModel(): Promise<FakeModel> {
       response.write(event('message_delta', { type: 'message_delta', delta: { stop_reason: 'end_turn' }, usage: { output_tokens: 20 } }));
       response.write(event('message_stop', { type: 'message_stop' }));
       response.end();
-    });
+    })());
   });
   server.on('connection', (socket: Socket) => {
     sockets.add(socket);
@@ -1162,4 +1169,123 @@ test('a worker that stops while the build waits for its reads hands the job back
   assert.equal(ended.state, 'succeeded', JSON.stringify(ended));
   assert.equal((await jobAfterStop(h, jobId)).attempts, 0, 'the stop counted nothing');
   assert.deepEqual([ended.report?.written, ended.report?.failed], [4, 0]);
+});
+
+// ── 12. a worker stopped mid-build: the report is the whole build's ──────────────────────────────────
+
+interface BuildSectionRun {
+  key: string;
+  kind: string;
+  outcome: string;
+  pieces: number;
+  actions: Record<string, number>;
+  footnotes: Record<string, number>;
+  calls: number;
+  usage: { inputTokens: number; outputTokens: number };
+}
+
+interface BuildJobReport {
+  written: number;
+  unchanged: number;
+  failed: number;
+  calls: number;
+  usage: { inputTokens: number; outputTokens: number };
+  docs: Array<{ slug: string; status?: string; counts?: Record<string, number>; sections: BuildSectionRun[] }>;
+  build: { planVersion: number; repoSha: string; docs: Record<string, number>; sections: Record<string, number>; tokens: Record<string, number>; model: string | null };
+}
+
+/** A build report's totals and sections: what two builds of the same plan on two spaces of the same shape must agree on. */
+function buildTotals(report: BuildJobReport): Record<string, unknown> {
+  const { seconds: _seconds, ...build } = report.build as BuildJobReport['build'] & { seconds?: number };
+  return {
+    written: report.written, unchanged: report.unchanged, failed: report.failed, calls: report.calls, usage: report.usage, build,
+    docs: report.docs.map((doc) => ({
+      slug: doc.slug, status: doc.status, counts: doc.counts,
+      sections: doc.sections.map((section) => ({
+        key: section.key, kind: section.kind, outcome: section.outcome, pieces: section.pieces, actions: section.actions,
+        footnotes: section.footnotes, calls: section.calls, usage: section.usage,
+      })),
+    })),
+  };
+}
+
+test('a worker stopped once the first section is written hands the build back, and the report the replay ends with is the whole build\'s', { skip, timeout: 240_000 }, async () => {
+  const h = await boot();
+  await modelUp(h);
+  const HEAD = createHash('sha1').update(`head-${randomUUID()}`).digest('hex');
+  try {
+    // What the build reports when nothing stops it.
+    const straight = await scene(h, 'straight');
+    const straightPlan = await draft(h, straight, planFor(straight));
+    executor('canary', [straight.owner.id]);
+    await confirm(h, straight, straightPlan);
+    const [wholeRow] = await builds(h, straight.spaceId);
+    playRunner(h, straight.runner.id, () => tree(HEAD));
+    const through = worker(h);
+    const whole = await runToEnd(h, through, wholeRow.job_id!);
+    assert.equal(whole.state, 'succeeded', JSON.stringify(whole));
+    await through.executor.onModuleDestroy();
+    await through.queue.onModuleDestroy();
+
+    // The same plan in a space of the same shape: the conventions, whose material is the records', are held at their
+    // first call while the section read from the repository is written; then the worker stops.
+    const stopped = await scene(h, 'stopped');
+    const stoppedPlan = await draft(h, stopped, planFor(stopped));
+    executor('canary', [straight.owner.id, stopped.owner.id]);
+    await confirm(h, stopped, stoppedPlan);
+    const [row] = await builds(h, stopped.spaceId);
+    playRunner(h, stopped.runner.id, () => tree(HEAD));
+    let holding = false;
+    let release: () => void = () => undefined;
+    const released = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    h.model.before = async (prompt) => {
+      if (!prompt.includes(KEYWORD)) return;
+      holding = true;
+      await released;
+    };
+    const writtenSections = async () => (await h.sql.query<{ n: number }>(
+      `SELECT count(*)::int AS n FROM "wiki_doc_section" x JOIN "wiki_doc" d ON d."id" = x."doc_id" WHERE d."space_id" = $1`, [stopped.spaceId])).rows[0].n;
+    const first = worker(h);
+    await passes(first, async () => holding && (await writtenSections()) === 1, 'the first section written and the conventions held');
+    // SIGTERM: the build's wait for the held call is cancelled and the job handed back; the call is let go with it.
+    await first.executor.onModuleDestroy();
+    await first.queue.onModuleDestroy();
+    release();
+    h.model.before = async () => undefined;
+    const back = (await h.sql.query<{ state: string; attempts: number; error: string | null }>(
+      'SELECT "state","attempts","error" FROM "wiki_job" WHERE "id" = $1', [row.job_id])).rows[0];
+    assert.deepEqual(back, { state: 'queued', attempts: 0, error: WIKI_JOB_HANDED_BACK }, 'the build is handed back, nothing counted');
+
+    // The next worker takes it over: the section written before the stop is left as it is by its fingerprint, and the
+    // conventions and the overview are written.
+    const ended = await runToEnd(h, worker(h), row.job_id!);
+    assert.equal(ended.state, 'succeeded', JSON.stringify(ended));
+    assert.equal(await writtenSections(), 3);
+    const report = ended.report as unknown as BuildJobReport;
+    // What the same build reports when nothing stops it, to the section and the call.
+    assert.deepEqual(buildTotals(report), buildTotals(whole.report as unknown as BuildJobReport), 'the stopped build reports what the straight one does');
+    // Every section written, once: the one written before the stop too.
+    assert.deepEqual([report.written, report.unchanged, report.failed], [3, 0, 0]);
+    assert.deepEqual(report.docs.flatMap((doc) => doc.sections.map((section) => section.outcome)), ['written', 'written', 'written']);
+    // Its calls are the job's requests, each once: the call the stop cut off was asked again under its own row.
+    const requests = await h.prisma.wikiModelRequest.findMany({ where: { jobId: row.job_id! }, select: { state: true, inputTokens: true, outputTokens: true } });
+    assert.ok(requests.every((request) => request.state === 'succeeded'), JSON.stringify(requests));
+    const usage = {
+      inputTokens: requests.reduce((total, request) => total + (request.inputTokens ?? 0), 0),
+      outputTokens: requests.reduce((total, request) => total + (request.outputTokens ?? 0), 0),
+    };
+    assert.equal(report.calls, requests.length);
+    assert.deepEqual(report.usage, usage);
+    assert.equal(report.docs.flatMap((doc) => doc.sections).reduce((total, section) => total + section.calls, 0), requests.length, 'each call counted on its section once');
+    // The plan job's report, which the plan page reads, is the whole build's as well.
+    const [plan] = await builds(h, stopped.spaceId);
+    assert.deepEqual(
+      [plan.outcome, (plan.report as { sections?: unknown })?.sections, (plan.report as { tokens?: unknown })?.tokens],
+      ['succeeded', { written: 3, unchanged: 0, failed: 0 }, { input: usage.inputTokens, output: usage.outputTokens, calls: requests.length }],
+    );
+  } finally {
+    h.model.before = async () => undefined;
+  }
 });
