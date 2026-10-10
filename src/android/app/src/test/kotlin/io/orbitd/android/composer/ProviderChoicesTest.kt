@@ -85,6 +85,25 @@ class ProviderChoicesTest {
         assertEquals("Claude Code", legacy("nonsense"))
     }
 
+    /** A07-5's reads on the split: the engine a session runs on is the one it records, whatever key it spends — a draft's, the one
+     * its workspace last ran until a pick names another — else its provider's own; only a key or a pool, from a server that records
+     * no engine, leaves it to the account's keys. */
+    @Test fun theEngineASessionRunsOnIsTheOneItRecordsElseItsProviders() {
+        fun engine(detail: String, rows: List<JsonObject> = listOf(deepseek, harness)) = ProviderChoices.engine(obj(detail), rows)
+        assertEquals("dsh", engine("""{"engine":"dsh","provider":"deepseek"}"""))
+        assertEquals("claude", engine("""{"engine":"claude","provider":"deepseek"}"""))
+        assertEquals("a draft on its workspace's last", "dsh", engine("""{"lastEngine":"dsh","provider":"deepseek"}"""))
+        assertEquals("a draft's pick", "opencode", engine("""{"engine":"opencode","lastEngine":"dsh","provider":"deepseek"}"""))
+        assertEquals("a DeepSeek key's own engine", "claude", engine("""{"provider":"deepseek"}"""))
+        assertEquals("a row still on the retired runtime", "dsh", engine("""{"provider":"deepseek-harness"}"""))
+        assertEquals("the legacy built-in", "dsh", engine("""{"provider":"dsh"}""", emptyList()))
+        assertEquals("a key not read yet", "claude", engine("""{"provider":"deepseek-harness"}""", emptyList()))
+        assertTrue(ProviderChoices.engineFromKeys(obj("""{"provider":"deepseek"}""")))
+        assertFalse("the server said it", ProviderChoices.engineFromKeys(obj("""{"engine":"claude","provider":"deepseek"}""")))
+        assertFalse("an engine's own name says it", ProviderChoices.engineFromKeys(obj("""{"provider":"dsh"}""")))
+        assertFalse(ProviderChoices.engineFromKeys(obj("""{"provider":"codex"}""")))
+    }
+
     /** A pick held for the resume is a credential of the session's own engine, sent with that engine: the title never moves to
      * another (it said "OpenCode → Claude Code" when a held key could take the next turn to another CLI). */
     @Test fun aHeldPickNeverChangesTheEngineTitle() {

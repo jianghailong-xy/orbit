@@ -152,6 +152,21 @@ class DshSessionShellTest : ComposerShellTest() {
         assertFalse(has(hasTestTag("composer-input") and hasText("!")))
     }
 
+    /** A new session whose workspace last ran Harness is a Harness draft until a pick says otherwise (contract §3.4): its `!` command
+     * stays in the composer too, no session is created for it, and its chip says the runtime picks. */
+    @Test fun aDraftOnHarnessKeepsItsShellCommandToo() {
+        ComposerShell.providers = """[{"slug":"deepseek","label":"DeepSeek","runtime":"claude","presetSlug":"deepseek","engines":["claude","opencode","dsh"],"models":[]}]"""
+        ComposerShell.workspace = mapOf("provider" to JsonPrimitive("deepseek"), "lastProvider" to JsonPrimitive("deepseek"),
+            "lastEngine" to JsonPrimitive("dsh"), "model" to JsonPrimitive(""))
+        signIn(); openDraft()
+        await { has(hasContentDescription("Model Picked by DeepSeek Harness, effort Default")) }
+        compose.onNodeWithTag("composer-input").performTextInput("!ls -la")
+        compose.onNodeWithTag("composer-send").performClick()
+        awaitText("DeepSeek Harness sessions don't run ! shell commands — ask the agent to run it instead.")
+        assertTrue("the command stays where it was typed", has(hasTestTag("composer-input") and hasText("!ls -la")))
+        assertFalse(ComposerShell.calls.contains("POST sessions"))
+    }
+
     @Test fun aShellCommandOnAnotherEngineGoesOut() {
         signIn(); openSession()
         compose.onNodeWithTag("composer-input").performTextInput("!ls -la")
