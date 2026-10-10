@@ -10471,12 +10471,17 @@ button.chat-jump-start:hover {
   display: none;
 }
 /* On a wide screen it is a dialog with no title of its own (the card's head asks the question), so
-   no title row: only the close button, over the card. The replaced modal's line height was unitless:
+   no title row: only the close button, above the card. The replaced modal's line height was unitless:
    the card's smaller text keeps its proportional line (the Dialog shell stays at 22px). */
 .start-card-dialog.orbit-overlay {
   line-height: 1.5714285714285714;
 }
+/* The close floats at the dialog's own top-right (12px in, a 32px box), and the dialog's 20px
+   padding left the card's top-right corner under it: an ✕ cutting through the card's border reads as
+   a mistake. The empty title row reserves the rest of the button and the 12px it keeps from the
+   dialog's edges, so the card starts under the close rather than under its corner. */
 .start-card-dialog > .orbit-overlay-header {
+  height: 36px;
   margin-bottom: 0;
 }
 .start-card-dialog .orbit-overlay-title:empty {
