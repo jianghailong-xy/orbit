@@ -359,12 +359,16 @@ private fun ModelChoices(model: ComposerModel, state: ComposerState, detail: Jso
     val chosen = detail.text("model") ?: ""
     val enabled = usable && !state.busy && catalog != null && state.draft.pending == null
     fun change(key: String, value: String) { model.config(buildJsonObject { put(key, value) }) }
-    AlertDialog(onDismissRequest = close, title = { Text("Model and account") }, text = {
+    AlertDialog(onDismissRequest = close, title = {
+        // The engine this session runs on for good (iOS 0557592f8), over everything below that picks for the next turn — in the
+        // dialog's head, so it stays in view as the Provider list scrolls.
+        Column {
+            Text("Model and account")
+            Text(ProviderEngines.cliName(engine), Modifier.padding(top = 4.dp).testTag("composer-engine-title"), style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }, text = {
         Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
-            // The engine this session runs on for good (iOS 0557592f8), over everything below that picks for the next turn.
-            Text(ProviderEngines.cliName(engine), Modifier.testTag("composer-engine-title"), fontWeight = FontWeight.SemiBold, maxLines = 1,
-                overflow = TextOverflow.Ellipsis)
-            HorizontalDivider(Modifier.padding(vertical = 8.dp))
             // A task run on smart selection's pick opens on why it is this model, and on where to fix the model for every run.
             smart?.let { SmartRouteNote(it); HorizontalDivider(Modifier.padding(vertical = 8.dp)) }
             if (state.catalogLoading) CircularProgressIndicator()

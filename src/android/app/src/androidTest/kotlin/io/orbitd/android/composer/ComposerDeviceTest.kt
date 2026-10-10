@@ -113,9 +113,10 @@ class ComposerDeviceTest {
         ready()
         compose.onNodeWithText("Second account").performScrollTo().performClick()
         compose.waitUntil(5000) { stats()["config"]!!.jsonObject["account"]?.jsonPrimitive?.content == "1a2b3c4d" }
-        // The menu's rows are pressable again once the move the fixture just took is settled in the app.
-        ready()
-        compose.onNode(hasText("Expired account") and hasText("Not signed in, sign in →")).performScrollTo().assertIsEnabled()
+        // The menu's rows are pressable again once the move the fixture just took is settled in the app and the session read again.
+        val expired = hasText("Expired account") and hasText("Not signed in, sign in →")
+        compose.waitUntil(10000) { compose.onAllNodes(expired and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(expired).performScrollTo().assertIsEnabled()
         compose.onNodeWithText("Close").performClick()
         control("""{"status":"RUNNING"}"""); compose.runOnIdle { app.realtime.refreshSession() }; awaitText("Stop")
         clickSendWhenEnabled(); awaitText("Stop requested.")
