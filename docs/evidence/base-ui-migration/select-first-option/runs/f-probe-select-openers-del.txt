@@ -1,0 +1,51 @@
+argv: env PROBE_OUTPUT=/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-probe-select-openers-del-out PROBE_PORT=4521 npx playwright test --config ui-migration/probe.config.mjs ui-migration/probe-select-openers.browser.mjs
+tree: /mnt/data/tmp/34coPBk43ULRuisicUTAy/del HEAD a755f816a1800280719ecabf060bd6b7ad271776
+uncommitted: 
+start: 2026-10-10T01:54:25Z load: 52.65 53.46 47.91
+mem: 3970M available, swap 18342M free
+disk: / 19124M available
+cgroup: 0::/system.slice/run-p2403104-i61085992.scope
+P0 expected screenshots: 44 P0.2 originals, 183 main drift references, 25 accepted migration differences.
+
+Running 12 tests using 1 worker
+
+PROBE chromium-light-desktop no value antd {"arrowUpOpensOn":"closed","clickOpensOn":"Never","afterArrowDown":"7 days","reopenedOn":"closed","hovered":"7 days","afterLeaving":"7 days","enterAfterLeaving":"7 | list open"}
+PROBE chromium-light-desktop no value orbit {"arrowUpOpensOn":"7 days","clickOpensOn":"Never","afterArrowDown":"7 days","reopenedOn":"Never","hovered":"7 days","afterLeaving":"none","enterAfterLeaving":"null | list open"}
+  ✓   1 [chromium-light-desktop] › ui-migration/probe-select-openers.browser.mjs:17:36 › select openers: no value (9.1s)
+PROBE chromium-light-desktop a value antd {"arrowUpOpensOn":"closed","clickOpensOn":"7 days","afterArrowDown":"Never","reopenedOn":"7 days","hovered":"7 days","afterLeaving":"7 days","enterAfterLeaving":"7 | list open"}
+PROBE chromium-light-desktop a value orbit {"arrowUpOpensOn":"7 days","clickOpensOn":"7 days","afterArrowDown":"30 days","reopenedOn":"7 days","hovered":"7 days","afterLeaving":"none","enterAfterLeaving":"7 | list open"}
+  ✓   2 [chromium-light-desktop] › ui-migration/probe-select-openers.browser.mjs:17:36 › select openers: a value (8.3s)
+PROBE chromium-light-desktop first option disabled antd {"arrowUpOpensOn":"closed","clickOpensOn":"7 days","afterArrowDown":"7 days","reopenedOn":"closed","hovered":"7 days","afterLeaving":"7 days","enterAfterLeaving":"7 | list closed"}
+PROBE chromium-light-desktop first option disabled orbit {"arrowUpOpensOn":"7 days","clickOpensOn":"7 days","afterArrowDown":"30 days","reopenedOn":"7 days","hovered":"7 days","afterLeaving":"none","enterAfterLeaving":"null | list open"}
+  ✓   3 [chromium-light-desktop] › ui-migration/probe-select-openers.browser.mjs:17:36 › select openers: first option disabled (7.7s)
+PROBE chromium-dark-desktop no value antd {"arrowUpOpensOn":"closed","clickOpensOn":"Never","afterArrowDown":"7 days","reopenedOn":"closed","hovered":"7 days","afterLeaving":"7 days","enterAfterLeaving":"7 | list closed"}
+PROBE chromium-dark-desktop no value orbit {"arrowUpOpensOn":"7 days","clickOpensOn":"Never","afterArrowDown":"7 days","reopenedOn":"Never","hovered":"7 days","afterLeaving":"none","enterAfterLeaving":"null | list open"}
+  ✓   4 [chromium-dark-desktop] › ui-migration/probe-select-openers.browser.mjs:17:36 › select openers: no value (8.6s)
+PROBE chromium-dark-desktop a value antd {"arrowUpOpensOn":"closed","clickOpensOn":"7 days","afterArrowDown":"Never","reopenedOn":"7 days","hovered":"7 days","afterLeaving":"7 days","enterAfterLeaving":"7 | list open"}
+PROBE chromium-dark-desktop a value orbit {"arrowUpOpensOn":"7 days","clickOpensOn":"7 days","afterArrowDown":"30 days","reopenedOn":"7 days","hovered":"7 days","afterLeaving":"none","enterAfterLeaving":"7 | list open"}
+  ✓   5 [chromium-dark-desktop] › ui-migration/probe-select-openers.browser.mjs:17:36 › select openers: a value (7.6s)
+PROBE chromium-dark-desktop first option disabled antd {"arrowUpOpensOn":"closed","clickOpensOn":"7 days","afterArrowDown":"7 days","reopenedOn":"closed","hovered":"7 days","afterLeaving":"7 days","enterAfterLeaving":"7 | list closed"}
+PROBE chromium-dark-desktop first option disabled orbit {"arrowUpOpensOn":"7 days","clickOpensOn":"7 days","afterArrowDown":"30 days","reopenedOn":"7 days","hovered":"7 days","afterLeaving":"none","enterAfterLeaving":"null | list open"}
+  ✓   6 [chromium-dark-desktop] › ui-migration/probe-select-openers.browser.mjs:17:36 › select openers: first option disabled (8.1s)
+PROBE webkit-light-desktop no value antd {"arrowUpOpensOn":"closed","clickOpensOn":"Never","afterArrowDown":"7 days","reopenedOn":"closed","hovered":"7 days","afterLeaving":"7 days","enterAfterLeaving":"7 | list closed"}
+PROBE webkit-light-desktop no value orbit {"arrowUpOpensOn":"7 days","clickOpensOn":"Never","afterArrowDown":"7 days","reopenedOn":"Never","hovered":"Never","afterLeaving":"none","enterAfterLeaving":"null | list open"}
+  ✓   7 [webkit-light-desktop] › ui-migration/probe-select-openers.browser.mjs:17:36 › select openers: no value (5.9s)
+PROBE webkit-light-desktop a value antd {"arrowUpOpensOn":"closed","clickOpensOn":"7 days","afterArrowDown":"Never","reopenedOn":"7 days","hovered":"7 days","afterLeaving":"7 days","enterAfterLeaving":"7 | list open"}
+PROBE webkit-light-desktop a value orbit {"arrowUpOpensOn":"7 days","clickOpensOn":"7 days","afterArrowDown":"30 days","reopenedOn":"7 days","hovered":"7 days","afterLeaving":"none","enterAfterLeaving":"7 | list open"}
+  ✓   8 [webkit-light-desktop] › ui-migration/probe-select-openers.browser.mjs:17:36 › select openers: a value (5.5s)
+PROBE webkit-light-desktop first option disabled antd {"arrowUpOpensOn":"closed","clickOpensOn":"7 days","afterArrowDown":"7 days","reopenedOn":"closed","hovered":"7 days","afterLeaving":"7 days","enterAfterLeaving":"7 | list closed"}
+PROBE webkit-light-desktop first option disabled orbit {"arrowUpOpensOn":"7 days","clickOpensOn":"7 days","afterArrowDown":"30 days","reopenedOn":"7 days","hovered":"7 days","afterLeaving":"none","enterAfterLeaving":"null | list open"}
+  ✓   9 [webkit-light-desktop] › ui-migration/probe-select-openers.browser.mjs:17:36 › select openers: first option disabled (5.2s)
+PROBE webkit-dark-desktop no value antd {"arrowUpOpensOn":"closed","clickOpensOn":"Never","afterArrowDown":"7 days","reopenedOn":"closed","hovered":"7 days","afterLeaving":"7 days","enterAfterLeaving":"7 | list closed"}
+PROBE webkit-dark-desktop no value orbit {"arrowUpOpensOn":"7 days","clickOpensOn":"Never","afterArrowDown":"7 days","reopenedOn":"Never","hovered":"Never","afterLeaving":"none","enterAfterLeaving":"null | list open"}
+  ✓  10 [webkit-dark-desktop] › ui-migration/probe-select-openers.browser.mjs:17:36 › select openers: no value (6.0s)
+PROBE webkit-dark-desktop a value antd {"arrowUpOpensOn":"closed","clickOpensOn":"7 days","afterArrowDown":"Never","reopenedOn":"7 days","hovered":"7 days","afterLeaving":"7 days","enterAfterLeaving":"7 | list open"}
+PROBE webkit-dark-desktop a value orbit {"arrowUpOpensOn":"7 days","clickOpensOn":"7 days","afterArrowDown":"30 days","reopenedOn":"7 days","hovered":"7 days","afterLeaving":"none","enterAfterLeaving":"7 | list open"}
+  ✓  11 [webkit-dark-desktop] › ui-migration/probe-select-openers.browser.mjs:17:36 › select openers: a value (5.8s)
+PROBE webkit-dark-desktop first option disabled antd {"arrowUpOpensOn":"closed","clickOpensOn":"7 days","afterArrowDown":"7 days","reopenedOn":"closed","hovered":"7 days","afterLeaving":"7 days","enterAfterLeaving":"7 | list closed"}
+PROBE webkit-dark-desktop first option disabled orbit {"arrowUpOpensOn":"7 days","clickOpensOn":"7 days","afterArrowDown":"30 days","reopenedOn":"7 days","hovered":"7 days","afterLeaving":"none","enterAfterLeaving":"null | list open"}
+  ✓  12 [webkit-dark-desktop] › ui-migration/probe-select-openers.browser.mjs:17:36 › select openers: first option disabled (5.4s)
+
+  12 passed (1.9m)
+end: 2026-10-10T01:56:54Z load: 49.63 52.08 48.21
+exit=0

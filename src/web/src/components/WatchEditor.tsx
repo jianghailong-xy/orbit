@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Checkbox, Modal, Radio, Select } from 'antd';
 import {
   WATCH_LIMITS,
   type UpdateWatchRequest,
@@ -29,6 +28,11 @@ import {
   type ConditionChoice,
 } from '../lib/watches';
 import { WatchTargetLink, useNow } from './WatchParts';
+import { Button } from './ui/Button';
+import { Checkbox } from './ui/Checkbox';
+import { Combobox } from './ui/Combobox';
+import { Dialog } from './ui/Dialog';
+import { Radio, RadioGroup } from './ui/Radio';
 
 export type WatchEditorMode =
   | { kind: 'create'; targets: readonly { kind: WatchTargetKind; id: string }[] }
@@ -125,18 +129,27 @@ export function WatchEditorModal({ mode, onClose }: { mode: WatchEditorMode; onC
   const kept = editing ? expiryLabel(editing, now) : null;
 
   return (
-    <Modal
+    <Dialog
       open
       title={editing ? 'Edit watch' : `Follow ${several ? `${targets.length} ${noun}s` : noun}`}
-      okText={editing ? 'Save' : 'Follow'}
-      okButtonProps={{ disabled: !canSave }}
-      confirmLoading={save.isPending}
-      onOk={() => {
-        setError(null);
-        save.mutate();
-      }}
-      onCancel={onClose}
-      destroyOnHidden
+      onClose={onClose}
+      className="watch-editor-dialog"
+      footer={
+        <>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button
+            variant="primary"
+            disabled={!canSave}
+            loading={save.isPending}
+            onClick={() => {
+              setError(null);
+              save.mutate();
+            }}
+          >
+            {editing ? 'Save' : 'Follow'}
+          </Button>
+        </>
+      }
     >
       <div className="watch-editor">
         <div className="watch-editor-field">
@@ -165,32 +178,31 @@ export function WatchEditorModal({ mode, onClose }: { mode: WatchEditorMode; onC
           ) : (
             <>
               {several && (
-                <Radio.Group
+                <RadioGroup
                   className="watch-editor-aggregation"
-                  optionType="button"
+                  variant="button"
                   size="small"
                   value={choice.aggregation}
-                  onChange={(e) =>
+                  onValueChange={(value) =>
                     setChoice({
                       ...choice,
-                      aggregation: e.target.value,
-                      orAnyFails: e.target.value === 'ALL' && choice.orAnyFails,
+                      aggregation: value,
+                      orAnyFails: value === 'ALL' && choice.orAnyFails,
                     })
                   }
-                  options={[
-                    { value: 'ALL', label: `All ${targets.length}` },
-                    { value: 'ANY', label: 'Any one' },
-                  ]}
-                />
+                >
+                  <Radio value="ALL">{`All ${targets.length}`}</Radio>
+                  <Radio value="ANY">Any one</Radio>
+                </RadioGroup>
               )}
-              <Radio.Group
+              <RadioGroup
                 className="watch-editor-options"
                 value={choice.leaf}
-                onChange={(e) =>
+                onValueChange={(value) =>
                   setChoice({
                     ...choice,
-                    leaf: e.target.value,
-                    orAnyFails: e.target.value !== 'TASK_FAILED' && choice.orAnyFails,
+                    leaf: value,
+                    orAnyFails: value !== 'TASK_FAILED' && choice.orAnyFails,
                   })
                 }
               >
@@ -200,11 +212,11 @@ export function WatchEditorModal({ mode, onClose }: { mode: WatchEditorMode; onC
                     <span className="watch-editor-hint">{LEAF_COPY[leaf].hint}</span>
                   </Radio>
                 ))}
-              </Radio.Group>
+              </RadioGroup>
               {kind === 'TASK' && several && choice.aggregation === 'ALL' && choice.leaf !== 'TASK_FAILED' && (
                 <Checkbox
                   checked={!!choice.orAnyFails}
-                  onChange={(e) => setChoice({ ...choice, orAnyFails: e.target.checked })}
+                  onCheckedChange={(checked) => setChoice({ ...choice, orAnyFails: checked })}
                 >
                   Or as soon as any of them fails
                 </Checkbox>
@@ -224,10 +236,10 @@ export function WatchEditorModal({ mode, onClose }: { mode: WatchEditorMode; onC
             </div>
           ) : (
             <>
-              <Radio.Group
+              <RadioGroup
                 className="watch-editor-options"
                 value={action}
-                onChange={(e) => setAction(e.target.value)}
+                onValueChange={(value) => setAction(value)}
               >
                 <Radio value="NOTIFY_USER">
                   <span className="watch-editor-option">Notify me</span>
@@ -238,7 +250,7 @@ export function WatchEditorModal({ mode, onClose }: { mode: WatchEditorMode; onC
                     Queues one turn in that session, behind any turn it is running.
                   </span>
                 </Radio>
-              </Radio.Group>
+              </RadioGroup>
               {action === 'RESUME_SESSION' && (
                 <SessionPicker
                   value={observer}
@@ -252,17 +264,20 @@ export function WatchEditorModal({ mode, onClose }: { mode: WatchEditorMode; onC
 
         <div className="watch-editor-field">
           <div className="watch-editor-label">{editing ? 'Deadline' : 'Stop watching after'}</div>
-          <Radio.Group
+          <RadioGroup
             className="watch-editor-ttl"
-            optionType="button"
+            variant="button"
             size="small"
             value={ttl}
-            onChange={(e) => setTtl(e.target.value)}
-            options={[
-              ...(editing ? [{ value: KEEP_DEADLINE, label: kept ? `Keep (${kept.text})` : 'Keep' }] : []),
-              ...TTL_CHOICES.map((c) => ({ value: c.seconds, label: c.label })),
-            ]}
-          />
+            onValueChange={(value) => setTtl(value)}
+          >
+            {editing && <Radio value={KEEP_DEADLINE}>{kept ? `Keep (${kept.text})` : 'Keep'}</Radio>}
+            {TTL_CHOICES.map((c) => (
+              <Radio key={c.seconds} value={c.seconds}>
+                {c.label}
+              </Radio>
+            ))}
+          </RadioGroup>
           <span className="watch-editor-hint">
             {editing && ttl !== KEEP_DEADLINE ? 'Counted from now. ' : ''}
             If the condition has not held by then, the watch expires
@@ -277,7 +292,7 @@ export function WatchEditorModal({ mode, onClose }: { mode: WatchEditorMode; onC
           </div>
         )}
       </div>
-    </Modal>
+    </Dialog>
   );
 }
 
@@ -296,18 +311,19 @@ function SessionPicker({
   const search = useQuery(sessionSearchQuery(query));
   const hits = (search.data?.hits ?? []).filter((hit) => !exclude.some((id) => sameResourceId(id, hit.id)));
   return (
-    <Select
+    <Combobox
       className="watch-editor-session"
-      value={value}
+      value={value ?? null}
       placeholder="Pick the session to resume"
-      showSearch={{ filterOption: false, onSearch: setQuery }}
+      filter={false}
+      onSearch={setQuery}
       loading={search.isFetching}
-      notFoundContent={search.isFetching ? 'Searching…' : 'No matching session'}
+      emptyContent={search.isFetching ? 'Searching…' : 'No matching session'}
       options={hits.map((hit) => ({
         value: hit.id,
         label: hit.agent?.name ? `${hit.title} · ${hit.agent.name}` : hit.title,
       }))}
-      onChange={(id) => onChange(id)}
+      onValueChange={(id) => onChange(id ?? undefined)}
     />
   );
 }

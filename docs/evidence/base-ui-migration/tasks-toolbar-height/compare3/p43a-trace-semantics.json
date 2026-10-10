@@ -1,0 +1,50 @@
+{
+ "tests": 112,
+ "steps": 944,
+ "semantic": [],
+ "presentation": {
+  "focus": 4,
+  "dialogs": 0
+ },
+ "examples": {
+  "focus": [
+   {
+    "test": "chromium-dark-desktop :: P4.3a a project page › the header: status questions, a refusal, the share menu and the delete question",
+    "step": "reopened",
+    "ref": "body",
+    "del": {
+     "role": "button",
+     "name": "More project actions"
+    }
+   },
+   {
+    "test": "chromium-dark-phone :: P4.3a a project page › the header: status questions, a refusal, the share menu and the delete question",
+    "step": "recorded as done",
+    "ref": {
+     "role": "button",
+     "name": "More project actions"
+    },
+    "del": "body"
+   },
+   {
+    "test": "webkit-dark-phone :: P4.3a a project page › open items and the run queue: run, and resuming a paused list",
+    "step": "list resumed",
+    "ref": "body",
+    "del": {
+     "role": "button",
+     "name": "Resume list Accessibility for Record keyboard focus"
+    }
+   },
+   {
+    "test": "webkit-light-phone :: P4.3a a project page › open items and the run queue: run, and resuming a paused list",
+    "step": "list resumed",
+    "ref": {
+     "role": "button",
+     "name": "Resume list Accessibility for Record keyboard focus"
+    },
+    "del": "body"
+   }
+  ],
+  "dialogs": []
+ }
+}

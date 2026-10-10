@@ -1,0 +1,14 @@
+argv: env TASKS_TOOLBAR_OUTPUT=/mnt/data/tmp/34coPBqt8gi229cVNds0E/runs/resident-fix-r3-out npx playwright test --config ui-migration/tasks-toolbar.config.mjs
+tree: fix
+head: 423aa3fdb4da9eb51aee4fa198488ac77a4c76fe
+uncommitted:
+load: 49.90 43.73 38.46 12/3926 2237328
+memory: 2327 MB available
+disk: / 22148M available, TMPDIR /mnt/data/tmp/34coPBqt8gi229cVNds0E/tmp
+started: 2026-10-10T01:39:16Z
+
+Error: Timed out waiting 30000ms from config.webServer.
+
+exit=1
+load: 47.03 44.04 38.90 8/3824 2243485
+ended: 2026-10-10T01:40:17Z

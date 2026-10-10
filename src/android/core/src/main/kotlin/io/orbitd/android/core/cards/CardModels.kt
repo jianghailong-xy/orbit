@@ -90,7 +90,10 @@ fun approvalQuestions(input: JsonObject): List<CardQuestion> = input.objects("qu
 
 /** A source read, not a UI flag, grants each door. Unknown states/actions stay read-only. */
 object CardCatalog {
-    fun session(id: String, snapshot: SessionSnapshot, now: java.time.Instant = java.time.Instant.now()): List<InteractionCard> = buildList {
+    /** [engine] is the CLI running the session: the server says it (`engine`); a reader that knows better from the account's keys,
+     * on a server that doesn't, says it here. */
+    fun session(id: String, snapshot: SessionSnapshot, now: java.time.Instant = java.time.Instant.now(),
+        engine: String? = snapshot.detail.text("engine")): List<InteractionCard> = buildList {
         val detail = snapshot.detail
         val wireId = detail.text("id") ?: id
         val projectId = detail.text("projectId") ?: detail.obj("project")?.text("id")
@@ -107,8 +110,10 @@ object CardCatalog {
                 CardFamily.DAG -> listOf(CardVerb.CHANGE_DAG, CardVerb.CHAT)
                 CardFamily.BLOCKER -> listOf(CardVerb.RESOLVE_BLOCKER, CardVerb.CHAT)
                 // One of Orbit's own asks (iOS `Approvals.isOrbitAsk`): saying no is a conversation, and there is no standing yes.
+                // DeepSeek Harness answers each ask once and keeps no rule (iOS cef6c8e0d): there, a card is Allow and Deny alone.
                 else -> if (approval.toolName == ApprovalRules.mergeCheckChange) listOf(CardVerb.ALLOW, CardVerb.CHAT) else listOf(CardVerb.ALLOW, CardVerb.DENY) +
-                    if (ApprovalRules.remember(approval.toolName, approval.input).isEmpty()) emptyList() else listOf(CardVerb.REMEMBER)
+                    if (!DshRuntime.rememberOffered(engine) || ApprovalRules.remember(approval.toolName, approval.input).isEmpty()) emptyList()
+                    else listOf(CardVerb.REMEMBER)
             }
             val title = when (family) {
                 CardFamily.QUESTION -> "Your input is needed"

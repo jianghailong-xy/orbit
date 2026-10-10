@@ -247,7 +247,7 @@ final class TaskDetailCopyParityTests: XCTestCase {
         assertSays(web, "{ended.length} ended {ended.length === 1 ? 'watch' : 'watches'}", in: Self.followedBy)
 
         let editor = try source(Self.watchEditor)
-        assertSays(editor, "okText={editing ? 'Save' : '\(TaskDetailCopy.follow)'}", in: Self.watchEditor)
+        assertSays(editor, "{editing ? 'Save' : '\(TaskDetailCopy.follow)'}", in: Self.watchEditor)
         XCTAssertEqual(TaskDetailCopy.followTask, "\(TaskDetailCopy.follow) task", "the sheet's title for one task")
         assertSays(editor, "`Follow ${several ? `${targets.length} ${noun}s` : noun}`", in: Self.watchEditor)
         assertSays(editor, "<div className=\"watch-editor-label\">\(TaskDetailCopy.watchingLabel)</div>", in: Self.watchEditor)

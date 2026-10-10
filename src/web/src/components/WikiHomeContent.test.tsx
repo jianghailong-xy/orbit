@@ -3,7 +3,6 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { App as AntApp } from 'antd';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WikiDocsDirectory } from '@orbit/shared';
 import type { WikiEntry } from '../lib/wiki';
@@ -192,11 +191,9 @@ async function open(client = new QueryClient({ defaultOptions: { queries: { retr
     root.render(
       <QueryClientProvider client={client}>
         <MemoryRouter initialEntries={['/wiki/orbit']}>
-          <AntApp>
-            <Routes>
-              <Route path="/wiki/:space" element={<WikiPage route="home" />} />
-            </Routes>
-          </AntApp>
+          <Routes>
+            <Route path="/wiki/:space" element={<WikiPage route="home" />} />
+          </Routes>
         </MemoryRouter>
       </QueryClientProvider>,
     );
@@ -343,7 +340,7 @@ describe('the home’s first read (design §12.3.6, mock 31 ⑦)', () => {
     expect(container.querySelector('.wk-home-state .wk-sk')).toBeTruthy();
     expect(container.querySelector('.wk-home-sk')?.getAttribute('aria-busy')).toBe('true');
     expect(all('.wk-home-sk .wk-pl-doc')).toHaveLength(4);
-    expect(container.querySelector('.ant-spin')).toBeNull();
+    expect(container.querySelector('[role="status"][aria-label="Loading"]')).toBeNull();
     await act(async () => answer(DOCS));
     await settle();
     expect(container.querySelector('.wk-sk')).toBeNull();

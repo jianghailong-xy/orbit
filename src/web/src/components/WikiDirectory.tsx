@@ -1,7 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Button } from 'antd';
 import {
   AppstoreOutlined,
   CloseOutlined,
@@ -34,6 +33,7 @@ import {
   wikiDirectoryGroups,
   wikiIndexPath,
 } from '../lib/wikiArticles';
+import { Button } from './ui/Button';
 
 /**
  * The category directory (criterion 10, mocks 11 ③, 12 ③, 13 ①, 15 ①③; by the plan since its second

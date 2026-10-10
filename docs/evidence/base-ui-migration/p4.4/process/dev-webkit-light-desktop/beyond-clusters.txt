@@ -1,0 +1,1 @@
+webkit-light-desktop   p44-doc-footnote-44.png        all= 14647 gt2=  4370 max=205 clusters=  9 [1576px x992-1255 y728-751 m155] [1056px x808-983 y728-751 m152] [881px x808-1255 y776-791 m19]

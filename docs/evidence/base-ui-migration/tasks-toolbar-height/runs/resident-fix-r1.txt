@@ -1,0 +1,65 @@
+argv: env TASKS_TOOLBAR_OUTPUT=/mnt/data/tmp/34coPBqt8gi229cVNds0E/runs/resident-fix-r1-out npx playwright test --config ui-migration/tasks-toolbar.config.mjs
+tree: fix
+head: 423aa3fdb4da9eb51aee4fa198488ac77a4c76fe
+uncommitted:
+load: 26.71 31.31 36.97 13/3491 2132058
+memory: 4234 MB available
+disk: / 24146M available, TMPDIR /mnt/data/tmp/34coPBqt8gi229cVNds0E/tmp
+started: 2026-10-10T01:27:02Z
+
+
+Running 48 tests using 1 worker
+
+  ✓   1 [chromium-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:54:3 › a task open, Space checks it (run 1) (1.6s)
+  ✓   2 [chromium-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:65:3 › a task open, a row checked, then the task closed (run 1) (1.2s)
+  ✓   3 [chromium-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:77:3 › a row checked, then a task opened, the window widened and narrowed (run 1) (1.1s)
+  ✓   4 [chromium-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:54:3 › a task open, Space checks it (run 2) (638ms)
+  ✓   5 [chromium-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:65:3 › a task open, a row checked, then the task closed (run 2) (821ms)
+  ✓   6 [chromium-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:77:3 › a row checked, then a task opened, the window widened and narrowed (run 2) (699ms)
+  ✓   7 [chromium-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:54:3 › a task open, Space checks it (run 3) (514ms)
+  ✓   8 [chromium-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:65:3 › a task open, a row checked, then the task closed (run 3) (644ms)
+  ✓   9 [chromium-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:77:3 › a row checked, then a task opened, the window widened and narrowed (run 3) (681ms)
+  ✓  10 [chromium-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:54:3 › a task open, Space checks it (run 4) (563ms)
+  ✓  11 [chromium-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:65:3 › a task open, a row checked, then the task closed (run 4) (700ms)
+  ✓  12 [chromium-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:77:3 › a row checked, then a task opened, the window widened and narrowed (run 4) (731ms)
+  ✓  13 [chromium-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:54:3 › a task open, Space checks it (run 1) (949ms)
+  ✓  14 [chromium-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:65:3 › a task open, a row checked, then the task closed (run 1) (674ms)
+  ✓  15 [chromium-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:77:3 › a row checked, then a task opened, the window widened and narrowed (run 1) (835ms)
+  ✓  16 [chromium-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:54:3 › a task open, Space checks it (run 2) (577ms)
+  ✓  17 [chromium-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:65:3 › a task open, a row checked, then the task closed (run 2) (681ms)
+  ✓  18 [chromium-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:77:3 › a row checked, then a task opened, the window widened and narrowed (run 2) (797ms)
+  ✓  19 [chromium-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:54:3 › a task open, Space checks it (run 3) (591ms)
+  ✓  20 [chromium-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:65:3 › a task open, a row checked, then the task closed (run 3) (744ms)
+  ✓  21 [chromium-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:77:3 › a row checked, then a task opened, the window widened and narrowed (run 3) (739ms)
+  ✓  22 [chromium-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:54:3 › a task open, Space checks it (run 4) (644ms)
+  ✓  23 [chromium-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:65:3 › a task open, a row checked, then the task closed (run 4) (776ms)
+  ✓  24 [chromium-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:77:3 › a row checked, then a task opened, the window widened and narrowed (run 4) (752ms)
+  ✓  25 [webkit-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:54:3 › a task open, Space checks it (run 1) (1.2s)
+  ✓  26 [webkit-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:65:3 › a task open, a row checked, then the task closed (run 1) (1.2s)
+  ✓  27 [webkit-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:77:3 › a row checked, then a task opened, the window widened and narrowed (run 1) (1.3s)
+  ✓  28 [webkit-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:54:3 › a task open, Space checks it (run 2) (1.1s)
+  ✓  29 [webkit-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:65:3 › a task open, a row checked, then the task closed (run 2) (1.2s)
+  ✓  30 [webkit-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:77:3 › a row checked, then a task opened, the window widened and narrowed (run 2) (1.4s)
+  ✓  31 [webkit-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:54:3 › a task open, Space checks it (run 3) (1.2s)
+  ✓  32 [webkit-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:65:3 › a task open, a row checked, then the task closed (run 3) (2.1s)
+  ✓  33 [webkit-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:77:3 › a row checked, then a task opened, the window widened and narrowed (run 3) (1.2s)
+  ✓  34 [webkit-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:54:3 › a task open, Space checks it (run 4) (1.1s)
+  ✓  35 [webkit-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:65:3 › a task open, a row checked, then the task closed (run 4) (1.3s)
+  ✓  36 [webkit-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:77:3 › a row checked, then a task opened, the window widened and narrowed (run 4) (1.4s)
+  ✓  37 [webkit-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:54:3 › a task open, Space checks it (run 1) (1.5s)
+  ✓  38 [webkit-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:65:3 › a task open, a row checked, then the task closed (run 1) (1.1s)
+  ✓  39 [webkit-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:77:3 › a row checked, then a task opened, the window widened and narrowed (run 1) (1.2s)
+  ✓  40 [webkit-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:54:3 › a task open, Space checks it (run 2) (932ms)
+  ✓  41 [webkit-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:65:3 › a task open, a row checked, then the task closed (run 2) (1.1s)
+  ✓  42 [webkit-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:77:3 › a row checked, then a task opened, the window widened and narrowed (run 2) (1.3s)
+  ✓  43 [webkit-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:54:3 › a task open, Space checks it (run 3) (977ms)
+  ✓  44 [webkit-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:65:3 › a task open, a row checked, then the task closed (run 3) (1.2s)
+  ✓  45 [webkit-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:77:3 › a row checked, then a task opened, the window widened and narrowed (run 3) (1.2s)
+  ✓  46 [webkit-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:54:3 › a task open, Space checks it (run 4) (962ms)
+  ✓  47 [webkit-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:65:3 › a task open, a row checked, then the task closed (run 4) (1.1s)
+  ✓  48 [webkit-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:77:3 › a row checked, then a task opened, the window widened and narrowed (run 4) (1.2s)
+
+  48 passed (1.4m)
+exit=0
+load: 21.58 28.32 35.38 9/3144 2146091
+ended: 2026-10-10T01:28:32Z

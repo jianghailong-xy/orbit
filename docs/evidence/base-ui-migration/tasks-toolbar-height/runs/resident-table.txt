@@ -1,0 +1,89 @@
+tree  project                step                               off/runs  toolbar heights        bar heights
+base  chromium-dark-desktop  Space with a task open               0/8    {34: 8}                {34: 8}
+base  chromium-dark-desktop  a row checked with a task open       0/8    {34: 8}                {34: 8}
+base  chromium-dark-desktop  a row checked, no task open          0/8    {34: 8}                {34: 8}
+base  chromium-dark-desktop  a task opened                        0/8    {34: 8}                {34: 8}
+base  chromium-dark-desktop  the task closed                      0/8    {34: 8}                {34: 8}
+base  chromium-dark-desktop  the window back at 1280px            0/8    {34: 8}                {34: 8}
+base  chromium-dark-desktop  the window widened to 1920px         0/8    {34: 8}                {34: 8}
+base  chromium-light-desktop Space with a task open               0/8    {34: 8}                {34: 8}
+base  chromium-light-desktop a row checked with a task open       0/8    {34: 8}                {34: 8}
+base  chromium-light-desktop a row checked, no task open          0/8    {34: 8}                {34: 8}
+base  chromium-light-desktop a task opened                        0/8    {34: 8}                {34: 8}
+base  chromium-light-desktop the task closed                      0/8    {34: 8}                {34: 8}
+base  chromium-light-desktop the window back at 1280px            0/8    {34: 8}                {34: 8}
+base  chromium-light-desktop the window widened to 1920px         0/8    {34: 8}                {34: 8}
+base  webkit-dark-desktop    Space with a task open               2/8    {42: 6, 34: 2}         {42: 8}
+base  webkit-dark-desktop    a row checked with a task open       2/8    {42: 6, 34: 2}         {42: 8}
+base  webkit-dark-desktop    a row checked, no task open          0/8    {34: 8}                {34: 8}
+base  webkit-dark-desktop    a task opened                        0/8    {42: 8}                {42: 8}
+base  webkit-dark-desktop    the task closed                      8/8    {42: 8}                {34: 8}
+base  webkit-dark-desktop    the window back at 1280px            8/8    {34: 8}                {42: 8}
+base  webkit-dark-desktop    the window widened to 1920px         6/8    {42: 6, 34: 2}         {34: 8}
+base  webkit-light-desktop   Space with a task open               1/8    {42: 7, 34: 1}         {42: 8}
+base  webkit-light-desktop   a row checked with a task open       2/8    {42: 6, 34: 2}         {42: 8}
+base  webkit-light-desktop   a row checked, no task open          0/8    {34: 8}                {34: 8}
+base  webkit-light-desktop   a task opened                        0/8    {42: 8}                {42: 8}
+base  webkit-light-desktop   the task closed                      8/8    {42: 8}                {34: 8}
+base  webkit-light-desktop   the window back at 1280px            8/8    {34: 8}                {42: 8}
+base  webkit-light-desktop   the window widened to 1920px         8/8    {42: 8}                {34: 8}
+fix   chromium-dark-desktop  Space with a task open               0/20   {34: 20}               {34: 20}
+fix   chromium-dark-desktop  a row checked with a task open       0/20   {34: 20}               {34: 20}
+fix   chromium-dark-desktop  a row checked, no task open          0/20   {34: 20}               {34: 20}
+fix   chromium-dark-desktop  a task opened                        0/20   {34: 20}               {34: 20}
+fix   chromium-dark-desktop  the task closed                      0/20   {34: 20}               {34: 20}
+fix   chromium-dark-desktop  the window back at 1280px            0/20   {34: 20}               {34: 20}
+fix   chromium-dark-desktop  the window widened to 1920px         0/20   {34: 20}               {34: 20}
+fix   chromium-light-desktop Space with a task open               0/20   {34: 20}               {34: 20}
+fix   chromium-light-desktop a row checked with a task open       0/20   {34: 20}               {34: 20}
+fix   chromium-light-desktop a row checked, no task open          0/20   {34: 20}               {34: 20}
+fix   chromium-light-desktop a task opened                        0/20   {34: 20}               {34: 20}
+fix   chromium-light-desktop the task closed                      0/20   {34: 20}               {34: 20}
+fix   chromium-light-desktop the window back at 1280px            0/20   {34: 20}               {34: 20}
+fix   chromium-light-desktop the window widened to 1920px         0/20   {34: 20}               {34: 20}
+fix   webkit-dark-desktop    Space with a task open               0/20   {42: 20}               {42: 20}
+fix   webkit-dark-desktop    a row checked with a task open       0/20   {42: 20}               {42: 20}
+fix   webkit-dark-desktop    a row checked, no task open          0/20   {34: 20}               {34: 20}
+fix   webkit-dark-desktop    a task opened                        0/20   {42: 20}               {42: 20}
+fix   webkit-dark-desktop    the task closed                      0/20   {34: 20}               {34: 20}
+fix   webkit-dark-desktop    the window back at 1280px            0/20   {42: 20}               {42: 20}
+fix   webkit-dark-desktop    the window widened to 1920px         0/20   {34: 20}               {34: 20}
+fix   webkit-light-desktop   Space with a task open               0/20   {42: 20}               {42: 20}
+fix   webkit-light-desktop   a row checked with a task open       0/20   {42: 20}               {42: 20}
+fix   webkit-light-desktop   a row checked, no task open          0/20   {34: 20}               {34: 20}
+fix   webkit-light-desktop   a task opened                        0/20   {42: 20}               {42: 20}
+fix   webkit-light-desktop   the task closed                      0/20   {34: 20}               {34: 20}
+fix   webkit-light-desktop   the window back at 1280px            0/20   {42: 20}               {42: 20}
+fix   webkit-light-desktop   the window widened to 1920px         0/20   {34: 20}               {34: 20}
+
+base  chromium-dark-desktop  tests passed: 24
+base  chromium-light-desktop tests passed: 24
+base  webkit-dark-desktop    tests failed: 18
+base  webkit-dark-desktop    tests passed: 6
+base  webkit-light-desktop   tests failed: 17
+base  webkit-light-desktop   tests passed: 7
+fix   chromium-dark-desktop  tests passed: 60
+fix   chromium-light-desktop tests passed: 60
+fix   webkit-dark-desktop    tests passed: 60
+fix   webkit-light-desktop   tests passed: 60
+
+base  webkit-dark-desktop      2 x Space with a task open: the list starts the toolbar's margin below the bar
+base  webkit-dark-desktop      2 x Space with a task open: the toolbar is as tall as the bar
+base  webkit-dark-desktop      2 x a row checked with a task open: the list starts the toolbar's margin below the bar
+base  webkit-dark-desktop      2 x a row checked with a task open: the toolbar is as tall as the bar
+base  webkit-dark-desktop      8 x the task closed: the list starts the toolbar's margin below the bar
+base  webkit-dark-desktop      8 x the task closed: the toolbar is as tall as the bar
+base  webkit-dark-desktop      8 x the window back at 1280px: the list starts the toolbar's margin below the bar
+base  webkit-dark-desktop      8 x the window back at 1280px: the toolbar is as tall as the bar
+base  webkit-dark-desktop      6 x the window widened to 1920px: the list starts the toolbar's margin below the bar
+base  webkit-dark-desktop      6 x the window widened to 1920px: the toolbar is as tall as the bar
+base  webkit-light-desktop     1 x Space with a task open: the list starts the toolbar's margin below the bar
+base  webkit-light-desktop     1 x Space with a task open: the toolbar is as tall as the bar
+base  webkit-light-desktop     2 x a row checked with a task open: the list starts the toolbar's margin below the bar
+base  webkit-light-desktop     2 x a row checked with a task open: the toolbar is as tall as the bar
+base  webkit-light-desktop     8 x the task closed: the list starts the toolbar's margin below the bar
+base  webkit-light-desktop     8 x the task closed: the toolbar is as tall as the bar
+base  webkit-light-desktop     8 x the window back at 1280px: the list starts the toolbar's margin below the bar
+base  webkit-light-desktop     8 x the window back at 1280px: the toolbar is as tall as the bar
+base  webkit-light-desktop     8 x the window widened to 1920px: the list starts the toolbar's margin below the bar
+base  webkit-light-desktop     8 x the window widened to 1920px: the toolbar is as tall as the bar

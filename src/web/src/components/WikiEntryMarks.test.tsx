@@ -3,7 +3,6 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
-import { App as AntApp } from 'antd';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WikiEntryDetail } from '../lib/wiki';
 import { WikiEntryDrawer } from './WikiEntryDrawer';
@@ -130,9 +129,7 @@ async function mount(over: Partial<WikiEntryDetail> = {}): Promise<void> {
     root.render(
       <QueryClientProvider client={client}>
         <MemoryRouter>
-          <AntApp>
-            <WikiEntryDrawer entryId={ENTRY_ID} spaceSlug="orbit" onClose={() => {}} />
-          </AntApp>
+          <WikiEntryDrawer entryId={ENTRY_ID} spaceSlug="orbit" onClose={() => {}} />
         </MemoryRouter>
       </QueryClientProvider>,
     );
@@ -142,7 +139,7 @@ async function mount(over: Partial<WikiEntryDetail> = {}): Promise<void> {
 }
 
 const actions = (): string[] =>
-  [...container.querySelectorAll<HTMLElement>('.tdp-head-actions > .ant-btn, .tdp-head-actions > .ant-dropdown-trigger')].map(
+  [...container.querySelectorAll<HTMLElement>('.tdp-head-actions > button')].map(
     (node) => (node.textContent ?? '').trim() || (node.getAttribute('aria-label') ?? ''),
   );
 
@@ -179,10 +176,10 @@ describe('an entry a review mode applied', () => {
     await mount();
     await act(async () => button('Reject').click());
     await settle();
-    const menu = document.querySelector<HTMLElement>('.ant-dropdown-menu')!;
-    const items = [...menu.querySelectorAll('.ant-dropdown-menu-item')].map((node) => node.textContent);
+    const menu = document.querySelector<HTMLElement>('[role="menu"]')!;
+    const items = [...menu.querySelectorAll('[role="menuitem"]')].map((node) => node.textContent);
     expect(items).toEqual(['Not true', 'Not useful', 'Duplicate', 'Too specific', 'The reason goes on the record.']);
-    const notUseful = [...menu.querySelectorAll<HTMLElement>('.ant-dropdown-menu-item')].find((node) => node.textContent === 'Not useful')!;
+    const notUseful = [...menu.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((node) => node.textContent === 'Not useful')!;
     await act(async () => notUseful.click());
     await settle();
     expect(posts).toEqual([{ url: `/api/wiki/entries/${ENTRY_ID}/reject`, body: { reason: 'not_useful' } }]);
