@@ -170,7 +170,7 @@ final class LoginShotTests: ProbeCase {
 
     /// A real sign-in against the stub: the empty form (still filled by the pre-card email), a failed
     /// sign-in that remembers nothing, a good one, Sign out — which revokes and keeps the account —
-    /// and a failed sign-in as someone else that changes nothing.
+    /// a failed sign-in as someone else that changes nothing, and a sign-in from the card.
     func test7SignInIsRememberedAndAFailedOneChangesNothing() {
         let app = launch(["-probe.legacy", "alex@example.com"], until: "Email", "real")
         settle(1)
@@ -215,11 +215,25 @@ final class LoginShotTests: ProbeCase {
         settle(1.5)
         shot("7e-the-card-unchanged-light")
         if !card(app).exists { XCTFail("real-other: Alex Morgan's card should be unchanged") }
+
+        // Signing in from the card: only the password is typed; the card's email and domain do the rest.
+        let cardPassword = app.secureTextFields.firstMatch
+        cardPassword.tap()
+        cardPassword.typeText("correct horse")
+        press(app, "Sign In", "from-card")
+        if !appears(app, "Signed in as Alex Morgan", timeout: 20) { XCTFail("from-card: the card's sign-in did not go through") }
+        settle(1)
+        shot("7f-signed-in-from-the-card-light")
+        let attempts = requestsLog().components(separatedBy: "login attempt email=alex@example.com password_ok=True").count - 1
+        note("from-card: good sign-ins for alex@example.com on 127.0.0.1:8765 logged: \(attempts)")
+        if attempts != 2 { XCTFail("from-card: expected the card's sign-in as alex@example.com, saw \(attempts) good attempts") }
+        press(app, "Sign out", "from-card")
+        _ = appears(app, "Use another account", timeout: 15)
         app.terminate()
 
         // Kept on the device: a relaunch that seeds nothing opens on the same card.
         let again = launch(["-probe.keep", "1"], until: "Alex Morgan", "real-relaunch")
-        shot("7f-relaunched-light")
+        shot("7g-relaunched-light")
         again.terminate()
         write(requestsLog(), "requests-at-the-end.log")
     }
