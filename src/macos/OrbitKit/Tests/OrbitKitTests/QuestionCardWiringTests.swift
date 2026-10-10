@@ -88,6 +88,16 @@ final class QuestionCardWiringTests: XCTestCase {
         XCTAssertTrue(cards.contains("guard expanded || needsWholeResult || readsWholeQuestion, card.resultTruncated, !resultResolved,"))
     }
 
+    /// Every text in the replay takes its whole height. Without it the transcript's List cell measured
+    /// the baseline-aligned option rows short and cut each description at two lines, ellipsis and all
+    /// (the iPhone probe's pictures, run 38018707522).
+    func testReplayTextsTakeTheirWholeHeight() throws {
+        let views = try source(Self.views)
+        let replay = code(String(views[try XCTUnwrap(views.range(of: "struct QuestionReplayView: View {")).lowerBound...]))
+        let whole = replay.components(separatedBy: ".fixedSize(horizontal: false, vertical: true)").count - 1
+        XCTAssertEqual(whole, 4, "the question, an option's label and its description, and the words box")
+    }
+
     /// The words are OrbitKit's, which the shared fixture holds to the browser's.
     func testWordsComeFromQuestionRecords() throws {
         let views = code(try source(Self.views))
