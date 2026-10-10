@@ -287,7 +287,9 @@ final class ProjectsWiringTests: XCTestCase {
 
         let row = try slice(view, from: "private func startItem(", to: "private func reviewStart(")
         XCTAssertTrue(row.contains("case .asked(let row):"))
-        XCTAssertTrue(row.contains("StartProject.requestSummary($0.settings)"))
+        XCTAssertTrue(row.contains("StartProject.requestSummary($0.settings, main: StartProject.mainBranch("),
+                      "the request's row says directly into the main branch the start card opens with")
+        XCTAssertTrue(row.contains("suggested: $0.settings.upstreamRef, standing: store.integration))"))
         XCTAssertTrue(row.contains("reviewStart(store)"))
         XCTAssertTrue(row.contains("case .own:"))
         XCTAssertTrue(row.contains("pageSheet = .start"))
@@ -330,6 +332,10 @@ final class ProjectsWiringTests: XCTestCase {
         XCTAssertTrue(sheet.contains("requestId: nil"))
         XCTAssertTrue(sheet.contains("hasCoordinator: document.coordinatorSessionId != nil,"),
                       "a project nobody coordinates yet is told a start with Automatic on opens one")
+        XCTAssertTrue(sheet.contains("StartSettingsDraft(settings, standing: store.integration)"),
+                      "the owner's own card opens on the main branch the integration read puts first")
+        XCTAssertTrue(sheet.contains("branches: store.integration?.branches,"))
+        XCTAssertTrue(sheet.contains("lastMainBranch: store.integration?.lastMainBranch,"))
         XCTAssertFalse(sheet.contains("onChatAbout"), "there is no conversation to talk in over the page")
         let cards = code(try appSource("Views/ApprovalCards.swift"))
         let card = try slice(cards, from: "struct StartProjectCard: View {",
@@ -360,8 +366,8 @@ final class ProjectsWiringTests: XCTestCase {
         XCTAssertTrue(block.contains("if RunSettings.shown(started: document.started) {"))
         XCTAssertTrue(block.contains("sectionHeader(StartProject.howItRuns, detail: RunSettings.appliesFromNextTask)"))
         XCTAssertTrue(block.contains("Text(RunSettings.notLoaded)"))
-        let order = ["lineSetting(", "automaticSetting(", "atMostSetting(", "mergeCheckSetting(",
-                     "escalationSetting(", "pauseSetting("]
+        let order = ["lineSetting(", "mainBranchSetting(", "automaticSetting(", "atMostSetting(",
+                     "mergeCheckSetting(", "escalationSetting(", "pauseSetting("]
         let positions = order.map { block.range(of: $0)?.lowerBound }
         XCTAssertFalse(positions.contains(nil), "the block lost one of \(order)")
         XCTAssertEqual(positions.compactMap { $0 }, positions.compactMap { $0 }.sorted(),
@@ -371,6 +377,22 @@ final class ProjectsWiringTests: XCTestCase {
         XCTAssertTrue(line.contains("if view.locked {"))
         XCTAssertTrue(line.contains("systemImage: \"lock.fill\")"), "a locked line is drawn locked")
         XCTAssertTrue(line.contains("RunSettings.lineLocked(since:"), "and says why it can no longer move")
+        XCTAssertTrue(line.contains("if RunSettings.storedMainBranch(view) == nil {"),
+                      "there, only on a project with no Main branch row: one that has the row says it under the row")
+        XCTAssertTrue(line.contains("RunSettings.lineMain(main)"), "Directly into the main branch it stands on")
+        // Main branch (board ③ ⑧ ⑩): under the line, picked on the start card's sheet and written the
+        // moment it is picked, locked with the line, and drawn only for a project with a repository.
+        let branch = try slice(view, from: "private func mainBranchSetting(", to: "private func automaticSetting(")
+        XCTAssertTrue(branch.contains("if let main = RunSettings.storedMainBranch(view),"))
+        XCTAssertTrue(branch.contains("let note = RunSettings.mainBranchNote(view, since:"))
+        XCTAssertTrue(branch.contains("if view.locked {"))
+        XCTAssertTrue(branch.contains("Label(main, systemImage: \"lock.fill\")"), "a locked branch is drawn locked")
+        XCTAssertTrue(branch.contains("pageSheet = .mainBranch"))
+        let sheet = try slice(view, from: "case .mainBranch:", to: "case .landingJobs:")
+        XCTAssertTrue(sheet.contains("MainBranchPicker(current: main, branches: view.branches,"))
+        XCTAssertTrue(sheet.contains("remembered: view.lastMainBranch?.branch)"))
+        XCTAssertTrue(sheet.contains("notice = await store.updateIntegration(RunSettings.mainBranchWrite(view, to: name))"),
+                      "a pick is written at once, and a refusal says Couldn't do that")
         let option = try slice(view, from: "private func lineOption(", to: "private func automaticSetting(")
         XCTAssertTrue(option.contains("store.updateIntegration(RunSettings.lineWrite(view, to: line))"))
         let automatic = try slice(view, from: "private func automaticSetting(", to: "private func atMostSetting(")
@@ -399,7 +421,8 @@ final class ProjectsWiringTests: XCTestCase {
         let pause = try slice(view, from: "private func pauseSetting(", to: "private func goalSection(")
         XCTAssertTrue(pause.contains("Button(paused ? RunSettings.resume : RunSettings.pause)"))
         XCTAssertTrue(pause.contains("store.setPaused(!paused)"))
-        XCTAssertTrue(pause.contains("RunSettings.pauseFootnote(pausedAt: document.pausedAt, now: now)"))
+        XCTAssertTrue(pause.contains("RunSettings.pauseFootnote(pausedAt: document.pausedAt, now: now, main: main)"),
+                      "and what a pause stops is merges into the main branch the project stands on")
 
         // The writes: the integration door, now written from this client too, and the project's own
         // with `automatic` — never `coordinatorEnabled`, whose off the server also reads as a pause.
