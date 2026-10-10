@@ -206,8 +206,9 @@ final class TaskRunHandoffWiringTests: XCTestCase {
     /// out, and the whole question, because a run keeps its provider for its whole life.
     func testTheComposerSaysWhenAProviderPickTakesHold() throws {
         let model = try source(Self.consoleModel)
-        let select = try section(model, from: "func selectProvider(", to: "func pickDraftProvider(")
-        XCTAssertTrue(select.contains("TaskRunHandoff.providerSwitchNote(from: from, to: slug, liveRun: isLive)"))
+        let select = try section(model, from: "func selectProvider(", to: "func pickDraft(")
+        // Said by the credentials' own names: the engine stays, only the credential moves.
+        XCTAssertTrue(select.contains("TaskRunHandoff.providerSwitchNote(from: name(from), to: name(slug), liveRun: isLive)"))
         XCTAssertTrue(select.contains("let from = provider"),
                       "read before the assignment, or the note describes a move from X to X")
 

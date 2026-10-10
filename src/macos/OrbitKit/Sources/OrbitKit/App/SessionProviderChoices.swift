@@ -445,6 +445,18 @@ public enum SessionProviderChoices {
             labelDetail: "opencode auth")
     }
 
+    /// The protocol a key's endpoint speaks (its row's `runtime`), as a key's page names it: never an
+    /// engine — a key runs on several (`engines`), and the protocol is what decides which (web's
+    /// `runtimeSummary`).
+    public static func runtimeSummary(_ runtime: String?) -> String {
+        switch runtime {
+        case "codex": return "OpenAI-compatible"
+        case "kimi": return "Moonshot API"
+        case "antigravity": return "Gemini API"
+        default: return "Anthropic-compatible"
+        }
+    }
+
     /// A vendor's name, as its keys are called in a sentence (board 8): one key runs on several engines,
     /// so it is never named after one.
     private static let keyVendors: [String: String] = [
@@ -579,6 +591,102 @@ public enum SessionProviderChoices {
     /// `engineTitleFor`.
     public static func engineTitle(_ engine: String) -> String {
         ProviderEngines.cliName(engine)
+    }
+
+    // MARK: - the composer's Provider menu (boards iOS 4 ④⑤ and iOS 5)
+
+    /// What became of a session's own key when its engine's menu no longer lists it (board iOS 5 ④).
+    /// The engine stays either way; a credential of the same engine in the menu fixes the session.
+    public enum KeyGone: Equatable, Sendable {
+        /// Turned off on the web: its page there — `providerID` — is where it is turned back on.
+        case turnedOff(providerID: String?)
+        /// Deleted: nothing here undoes it.
+        case deleted
+
+        /// The Provider row's value, in the warning colour (web's `shownKeyGone.status`).
+        public var status: String {
+            switch self {
+            case .turnedOff: return "Turned off"
+            case .deleted: return "Key deleted"
+            }
+        }
+
+        /// What the key's own row says beside its name.
+        public var rowStatus: String {
+            switch self {
+            case .turnedOff: return "Turned off"
+            case .deleted: return "Deleted"
+            }
+        }
+    }
+
+    /// What became of `provider`, a session's own, when the menu of its engine does not list it: turned
+    /// off — the account's own keys still hold it — or deleted. Nil while it is listed, for an engine's
+    /// own sign-in or OpenCode's own configuration, for a key the catalogue still serves, before the
+    /// account's own keys are read, and for the legacy built-in `dsh`, which is no key of the user's.
+    /// Mirrors web's `shownKeyGone`.
+    public static func keyGone(provider: String, listed: Bool, configured: [ConfiguredProvider],
+                               ownKeys: [ConfiguredProvider]?) -> KeyGone? {
+        guard !listed, !ProviderEngines.isLoginProvider(provider), provider != "opencode",
+              !configured.contains(where: { $0.slug == provider }), let ownKeys else { return nil }
+        if let row = ownKeys.first(where: { $0.slug == provider }) {
+            return row.enabled == false ? .turnedOff(providerID: row.providerID) : nil
+        }
+        return provider == "dsh" ? nil : .deleted
+    }
+
+    /// One group of the Provider submenu, under its heading.
+    public struct MenuGroup: Equatable, Sendable, Identifiable {
+        public let id: String
+        public let title: String
+        public let choices: [ProviderChoice]
+    }
+
+    /// The Provider submenu, grouped by where a credential comes from (board iOS 4 ④, web
+    /// `providerMenuGroups`): the session's own provider first, under its own heading, when its engine no
+    /// longer lists it; then the runner's own sign-in — or OpenCode's own configuration — on that
+    /// machine, the account pools, and the keys. `choices` is the menu's rows, the session's own leading
+    /// when it is not listed (`listed` false). Only what the session's engine runs, never another
+    /// engine's.
+    public static func menuGroups(_ choices: [ProviderChoice], listed: Bool, runnerName: String?) -> [MenuGroup] {
+        let machine = runnerName.flatMap { $0.isEmpty ? nil : $0 } ?? "this runner"
+        let rest = listed ? choices : Array(choices.dropFirst())
+        let own = rest.filter(\.isOwn)
+        let signedIn = own.contains { $0.kind == .login && $0.unavailable == nil }
+        var groups: [MenuGroup] = []
+        if !listed, let session = choices.first {
+            groups.append(MenuGroup(id: "session", title: "This session's key", choices: [session]))
+        }
+        let rows: [(String, String, [ProviderChoice])] = [
+            ("machine", signedIn ? "Signed in on \(machine)" : "On \(machine)", own),
+            ("pools", "Account pools", rest.filter { $0.kind == .pool }),
+            ("keys", "API keys", rest.filter { $0.kind == .key }),
+        ]
+        groups += rows.filter { !$0.2.isEmpty }.map { MenuGroup(id: $0.0, title: $0.1, choices: $0.2) }
+        return groups
+    }
+
+    /// Under OpenCode's Provider menu, why the account's Claude subscription tokens are not in it (board
+    /// iOS 4 ⑤): Anthropic serves one to Claude Code alone. Nil on any other engine, or with none.
+    public static func subscriptionOnlyNote(engine: String, configured: [ConfiguredProvider]) -> String? {
+        guard engine == "opencode" else { return nil }
+        let tokens = configured.filter { $0.runtime == "claude" && $0.engines == ["claude"] }
+        guard !tokens.isEmpty else { return nil }
+        let names = tokens.map(\.label).joined(separator: ", ")
+        return "\(names) \(tokens.count == 1 ? "isn’t" : "aren’t") here: a subscription token runs on Claude Code only."
+    }
+
+    /// What the Provider row says the session is on (web `shownProviderValue`): an engine's own sign-in
+    /// by the account in use — Automatic while Orbit picks it — OpenCode's own configuration as its own
+    /// sign-in, anything else by its own name.
+    public static func providerValue(_ row: ProviderChoice?, provider: String, automatic: Bool,
+                                     accountLabel: String?) -> String {
+        guard let row else { return provider }
+        switch row.kind {
+        case .login: return automatic ? "Automatic" : accountLabel ?? row.label
+        case .opencode: return "Own sign-in"
+        case .pool, .key: return row.label
+        }
     }
 
     /// The label for the model a session on `engine` with `provider` resolves to: the pair's own option

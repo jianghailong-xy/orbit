@@ -58,7 +58,8 @@ final class DshRuntimeTests: XCTestCase {
     }
 
     func testRepairMapsRunnerCodesAndKeyRejectionOnly() {
-        XCTAssertEqual(DshRuntime.repair("DSH_CREDENTIAL_MISSING: configure a DeepSeek Harness API key"), .needsKey)
+        XCTAssertEqual(DshRuntime.repair("DSH_CREDENTIAL_MISSING: DeepSeek Harness runs on a DeepSeek API key, and this session has none; connect one in Orbit (runner and workspace .env credentials are not used)"),
+                       .needsKey)
         XCTAssertEqual(DshRuntime.repair("dsh session/prompt (-32603): Invalid API key"), .invalidKey)
         XCTAssertEqual(DshRuntime.repair("dsh session/prompt (-32603): status 401 authentication_error"), .invalidKey)
         XCTAssertEqual(DshRuntime.repair("DeepSeek Harness requires a newer Orbit runner with dsh support; update this runner first"),

@@ -136,7 +136,7 @@ final class InfrastructurePageWiringTests: XCTestCase {
         for piece in ["keys = model.agents?.ownKeys ?? []", "SharedPools.ownPoolWithAccess(pool, access)",
                       "settled = states.allSatisfy { state in state.map { $0.hasLoaded || $0.lastLoadFailed } ?? false }",
                       "Infrastructure.attention(runners: runners, memberPools: memberPools.map(SharedPools.asProviderPool),",
-                      "Infrastructure.engines(runners: runners, keys: keys,"] {
+                      "Infrastructure.engineCards(runners: runners, keys: keys,"] {
             XCTAssertTrue(read.contains(piece), "the page's lists lost \(piece)")
         }
         let agents = code(try appSource("AgentsModel.swift"))
@@ -150,7 +150,7 @@ final class InfrastructurePageWiringTests: XCTestCase {
                       "model.push(.runnerDetail(runnerID: runnerID))",
                       "model.push(own ? .accountPool(poolID: poolID) : .sharedPool(poolID: poolID))",
                       "guard let runner = Infrastructure.installTarget(model.runners?.runners ?? []) else {",
-                      "addingRunner = true", "openEngine(runner.id, engine.rawValue)"] {
+                      "addingRunner = true", "openEngine(runner.id, engine)"] {
             XCTAssertTrue(presses.contains(piece), "the page's presses lost \(piece)")
         }
         XCTAssertFalse(page.contains("openURL"), "nothing on the page opens the web")

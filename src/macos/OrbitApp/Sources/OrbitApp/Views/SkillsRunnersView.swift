@@ -201,12 +201,12 @@ struct RunnersListView: View {
 
     /// Install on a machine: that engine's page on the first machine online, where Install is — or, with
     /// none online, registering one.
-    private func install(_ engine: LoginEngine) {
+    private func install(_ engine: String) {
         guard let runner = Infrastructure.installTarget(model.runners?.runners ?? []) else {
             addingRunner = true
             return
         }
-        openEngine(runner.id, engine.rawValue)
+        openEngine(runner.id, engine)
     }
 
     /// An engine's page — over its machine's record where the pane shows the record the list selects.
