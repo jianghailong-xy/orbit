@@ -79,16 +79,7 @@ fun rememberReaderLinkHandler(resources: ReaderResources, open: (OrbitRoute) -> 
     var file by remember { mutableStateOf<String?>(null) }
     var message by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(resources.available()) { if (!resources.available()) file = null }
-    file?.takeIf { resources.available() }?.let { source ->
-        val info = resources.metadata(source)
-        val name = info?.first ?: source.substringAfterLast('/').substringAfter(':').ifBlank { "orbit-file" }
-        val mime = info?.second ?: android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(name.substringAfterLast('.', "")) ?: "application/octet-stream"
-        AttachmentActions(name, mime, { resources.bytes(source) }, contentKey = source) { file = null }
-    }
-    message?.let { AlertDialog(onDismissRequest = { message = null }, text = { Text(it) }, confirmButton = {
-        TextButton(onClick = { message = null }) { Text("OK") }
-    }) }
-    return remember(resources, context) { { raw ->
+    val handler: (String) -> Unit = remember(resources, context) { { raw ->
         val route = OrbitLinks.parse(raw, resources.handle.account.server)
         when {
             route != null -> latestOpen(route)
@@ -100,6 +91,16 @@ fun rememberReaderLinkHandler(resources: ReaderResources, open: (OrbitRoute) -> 
             else -> message = "This file or link is unavailable on this device."
         }
     } }
+    file?.takeIf { resources.available() }?.let { source ->
+        val info = resources.metadata(source)
+        val name = info?.first ?: source.substringAfterLast('/').substringAfter(':').ifBlank { "orbit-file" }
+        val mime = info?.second ?: android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(name.substringAfterLast('.', "")) ?: "application/octet-stream"
+        AttachmentActions(name, mime, { resources.bytes(source) }, contentKey = source, open = handler) { file = null }
+    }
+    message?.let { AlertDialog(onDismissRequest = { message = null }, text = { Text(it) }, confirmButton = {
+        TextButton(onClick = { message = null }) { Text("OK") }
+    }) }
+    return handler
 }
 
 @Composable

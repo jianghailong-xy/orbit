@@ -46,6 +46,13 @@ const CONFIGURATION_SHA = '0022dd5f9f8c6b3dae4f0a625509e2b48ef24c37';
 // approved configuration and gateway keeps the removal baseline. No FCM prefix is exempted.
 const SURVIVING_CONFIGURATION_SHA = 'a68a3fe8774e4f181b9584443bfaeb1dca39547e';
 
+// e223d8ee adds exactly one postgres directive after CONFIGURATION_SHA, shm_size: "256m", and the six
+// comment lines that explain it: Docker's default 64MB /dev/shm made a manual VACUUM die with ENOSPC on
+// 2026-10-09. docs/postgres-runtime-settings.md §9 records the account owner's approval. Postgres alone
+// is compared with this pin; every other service keeps the pin it had. New settings still require an
+// explicit review.
+const POSTGRES_CONFIGURATION_SHA = 'e223d8eede64cb71bb6efa5cf712b96f3b3af79b';
+
 const EXPECTED_SERVICES = ['postgres', 'pgbackup', 'apiserver', 'web', 'gateway'];
 // Added by the account owner on 2026-10-07 (see the top of this file), after every pinned commit above.
 const WIKI_WORKER = 'wiki-worker';
@@ -62,6 +69,7 @@ const current = readFileSync(path.join(repo, COMPOSE), 'utf8');
 const baseline = git('show', `${BASELINE_SHA}:${COMPOSE}`);
 const configuration = git('show', `${CONFIGURATION_SHA}:${COMPOSE}`);
 const survivingConfiguration = git('show', `${SURVIVING_CONFIGURATION_SHA}:${COMPOSE}`);
+const postgresConfiguration = git('show', `${POSTGRES_CONFIGURATION_SHA}:${COMPOSE}`);
 
 /**
  * Split a Compose document into its top-level `services:` blocks, in file order. Blank lines and
@@ -105,6 +113,8 @@ const configurationServices = new Map(
   [...services(configuration)].map(([name, block]) => [name, withoutLogging(block)]));
 const survivingConfigurationServices = new Map(
   [...services(survivingConfiguration)].map(([name, block]) => [name, withoutLogging(block)]));
+const postgresConfigurationServices = new Map(
+  [...services(postgresConfiguration)].map(([name, block]) => [name, withoutLogging(block)]));
 
 test('the baseline commit really is the nine-service stack this change removes from', () => {
   assert.deepEqual([...baselineServices.keys()],
@@ -150,7 +160,7 @@ test('(c) nothing was added back: no new service, no new always-on process, no i
 });
 
 test('(i) the postgres service definition matches the approved configuration, byte for byte', () => {
-  assert.equal(currentServices.get('postgres'), configurationServices.get('postgres'));
+  assert.equal(currentServices.get('postgres'), postgresConfigurationServices.get('postgres'));
   // The bind mount whose relative path once served production an empty database.
   assert.match(currentServices.get('postgres'), /- \.\/data\/postgres:\/var\/lib\/postgresql\/data/);
 });

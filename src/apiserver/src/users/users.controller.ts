@@ -154,6 +154,7 @@ export class UsersController {
     if (dto.enableOrchestration !== undefined) merged.enableOrchestration = dto.enableOrchestration;
     if (dto.modelRouting !== undefined) merged.modelRouting = dto.modelRouting;
     if (dto.promptSuggestions !== undefined) merged.promptSuggestions = dto.promptSuggestions;
+    if (dto.recaps !== undefined) merged.recaps = dto.recaps;
     return asMe(await this.prisma.user.update({
       where: { id: user.userId },
       data: { preferences: merged as Prisma.InputJsonValue },

@@ -18,16 +18,25 @@ public struct SessionLine: Equatable, Sendable {
     }
     public let text: String
     public let tone: Tone
-    public init(text: String, tone: Tone) {
+    /// A muted prefix naming what the line is, before `text` — the recap's "Recap · 5:38 PM". Nil on
+    /// every line that is not a recap, which is all but one (the web `SessionLine.label`).
+    public let label: String?
+    public init(text: String, tone: Tone, label: String? = nil) {
         self.text = text
         self.tone = tone
+        self.label = label
     }
 
     /// Build the line for a session. `live` is false in Trash. Always yields a line: a run that
     /// ended before producing any reply still says what happened, so the row can't shrink to a
     /// bare title (iOS sizes its list row from its content — a missing line visibly shortens it).
     /// `watching` is the session as an observer: parked with a live watch that will resume it.
-    public static func make(for s: Session, live: Bool, watching: WatchSessionSummary? = nil) -> SessionLine {
+    /// `recaps` is the account's Session recaps switch (Settings): on unless turned off, and off
+    /// means the row falls through to the raw reply exactly as it did before the recap existed. It
+    /// gates that one line and nothing else — every live line above it is untouched. `now` dates the
+    /// recap's label (a bare clock time today, the date on another day), injectable for tests.
+    public static func make(for s: Session, live: Bool, watching: WatchSessionSummary? = nil,
+                            recaps: Bool = true, now: Date = Date()) -> SessionLine {
         // Somebody is waiting on YOU here, which outranks everything else the row could say: every
         // other line reports what the agent is doing, and this one is the only one you can act on.
         //
@@ -91,6 +100,14 @@ public struct SessionLine: Equatable, Sendable {
         // what the session is left waiting on. The server only keeps it while it stands
         // unanswered, so a non-empty value here always means exactly that.
         if let u = s.lastUserText, !u.isEmpty { return sentLine(u) }
+        // The rolling recap (0418) takes the place of the reply preview it used to show: the sentence
+        // the server wrote about the session, not the raw last reply flattened down to one line. Only
+        // here — below every live line above — so a working session still says what it is doing (web
+        // parity). Off with the account's Session recaps switch, the row falls through to the reply
+        // preview below exactly as it did before the recap existed.
+        if recaps, let r = s.recapText?.trimmingCharacters(in: .whitespacesAndNewlines), !r.isEmpty {
+            return SessionLine(text: r, tone: .preview, label: recapLabel(s.recapAt, now: now))
+        }
         if let a = s.lastAssistantText, !a.isEmpty { return SessionLine(text: plainPreview(a), tone: .preview) }
         // Nothing to preview at all (a run that died before even its user turn was recorded, or an
         // older row from before the server kept the pending message). Fall back to the run's own
@@ -106,6 +123,33 @@ public struct SessionLine: Equatable, Sendable {
     static func sentLine(_ text: String) -> SessionLine {
         SessionLine(text: "You: \(plainPreview(text))", tone: .preview)
     }
+
+    /// The recap's prefix: what the line is, and when the server wrote it (Session.recapAt). A recap
+    /// that arrived with no time on it — an older control plane, or one that never wrote a recapAt —
+    /// keeps the word without one. A bare clock time is today's; on another day the date joins it,
+    /// because "5:38 PM" alone would mislead (the web `recapLabel`).
+    static func recapLabel(_ recapAt: String?, now: Date = Date()) -> String {
+        guard let recapAt, let at = RelativeTime.parse(recapAt) else { return recapWord }
+        let clock = clockTime.string(from: at)
+        return Calendar.current.isDate(at, inSameDayAs: now)
+            ? "Recap · \(clock)"
+            : "Recap · \(dayTime.string(from: at)), \(clock)"
+    }
+
+    /// The word the recap line is marked with, on its own and in `recapLabel` above.
+    static let recapWord = "Recap"
+    // Built once and reused, like `RelativeTime`'s: "5:38 PM" and "Wed, Aug 6" — what the web's
+    // `toLocaleTimeString`/`toLocaleDateString` calls produce in its default locale.
+    private static let clockTime: DateFormatter = {
+        let f = DateFormatter()
+        f.timeStyle = .short
+        return f
+    }()
+    private static let dayTime: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "EEE, MMM d"
+        return f
+    }()
 
     /// Flatten an assistant reply into a single prose line: drop code blocks and the common
     /// markdown markers, then collapse all whitespace. (Length is left to the view's truncation.)

@@ -24,6 +24,7 @@ import { useConfirm } from '../components/ui/ConfirmDialog';
 import { Menu, type MenuItem } from '../components/ui/Menu';
 import { TableEmptyRow, TableFrame } from '../components/ui/Table';
 import { useIsMobile, useMediaQuery } from '../lib/useMediaQuery';
+import { ago } from '../lib/watches';
 import { useToast } from '../lib/toast';
 import type { Runner } from '../components/TasksSidePanel';
 
@@ -39,6 +40,10 @@ interface KeyColumn {
 
 /** From here up the keys table shows its wide columns (the replaced table's `md` breakpoint). */
 const WIDE_KEYS_QUERY = '(min-width: 768px)';
+
+/** The exact time behind a Last used cell's relative one, for its tooltip. */
+const stampOf = (iso: string): string =>
+  new Date(iso).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 
 /** The keys under their vendors (vendorOf): a group each, in the order of each vendor's first key, and
  *  in each its keys in the list's own order. */
@@ -256,12 +261,25 @@ export function InfrastructurePage() {
     ...(wide
       ? [
           { key: 'models', title: 'Models', width: 96, cell: (p: ProviderRow) => (p.models?.length ? `${p.models.length}` : '—') },
-          { key: 'baseUrl', title: 'Endpoint', width: 200, cell: (p: ProviderRow) => <code className="prov-endpoint">{p.baseUrl}</code> },
+          { key: 'baseUrl', title: 'Endpoint', width: 170, cell: (p: ProviderRow) => <code className="prov-endpoint">{p.baseUrl}</code> },
           {
             key: 'enabled',
             title: 'Enabled',
             width: 100,
             cell: (p: ProviderRow) => <Badge tone={p.enabled ? 'green' : 'default'}>{p.enabled ? 'Enabled' : 'Disabled'}</Badge>,
+          },
+          {
+            // When a session last ran on the key: the relative answer the row is read for, with the
+            // exact time on hover; a key nothing has spent says so rather than showing a date.
+            key: 'lastUsed',
+            title: 'Last used',
+            width: 110,
+            cell: (p: ProviderRow) =>
+              p.lastUsedAt ? (
+                <span title={stampOf(p.lastUsedAt)}>{ago(p.lastUsedAt, nowMs)}</span>
+              ) : (
+                <span className="prov-never">Never used</span>
+              ),
           },
         ]
       : []),

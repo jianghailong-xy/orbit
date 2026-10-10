@@ -256,7 +256,8 @@ describe('the existing composer control inventory', () => {
     }).toEqual({ workspace: true, permission: true, model: true });
     expect(toolbar.match(/<span className="composer-pill(?: [^"]*)?">/g) ?? []).toHaveLength(3);
     expect({
-      provider: menu.includes('onClick: () => pickProvider(choice.slug)'),
+      // The Provider row's credentials are grouped (board 4 ④): its submenu is built beside the menu.
+      provider: menu.includes('children: providerMenuGroups') && source.includes('onClick: () => pickProvider(choice.slug)'),
       model: menu.includes('key: `model:${option.value}`'),
       effort: menu.includes('onClick: () => pickEffort(option.value)'),
       fastMode: menu.includes('onClick: () => pickFastMode(option.value)'),

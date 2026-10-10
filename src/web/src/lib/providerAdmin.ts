@@ -33,6 +33,10 @@ export interface ProviderRow {
   followsPreset: boolean;
   enabled: boolean;
   hasApiKey: boolean;
+  /** When a session last RAN on this key — the server's own read (providers/provider-last-used.ts),
+   *  which counts direct and pool-dispatched sessions that actually took a turn — or null for a key
+   *  nothing has spent yet. The keys table shows it beside the enabled state. */
+  lastUsedAt?: string | null;
   /** Why this key may not join an account pool — the server's own admission test, since the key
    *  itself never reaches the browser — or null when it may. */
   poolRefusal?: { reason: string; message: string } | null;

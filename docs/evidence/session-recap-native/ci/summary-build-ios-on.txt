@@ -1,0 +1,6 @@
+Test Case '-[RecapProbeUITests.RecapShotTests testIPhoneShowsTheRecapOnTheSessionList]' started.
+Test Case '-[RecapProbeUITests.RecapShotTests testIPhoneShowsTheRecapOnTheSessionList]' passed (96.926 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 96.926 (96.929) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 96.926 (96.931) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 96.926 (96.933) seconds
+** TEST SUCCEEDED **

@@ -71,6 +71,26 @@ test('model preferences update only the picked provider, mirrored under its engi
   assert.equal((preferences.defaultModels as Record<string, string>).codex, 'gpt-5.6-sol');
 });
 
+test('the session-recap switch writes only when sent, and absent stays absent', async (t) => {
+  const patch = await boot(t);
+  // Absent means on (the clients read it that way), so a patch that does not mention it must not
+  // write it — that is the whole stored shape of an account that never turned recaps off.
+  const unrelated = await patch({ notifyAgentMessage: false });
+  assert.equal(unrelated.status, 200, await unrelated.text());
+  assert.equal('recaps' in preferences, false);
+
+  const off = await patch({ recaps: false });
+  assert.equal(off.status, 200, await off.clone().text());
+  const account = await off.json() as { preferences: Record<string, unknown> };
+  assert.equal(account.preferences.recaps, false);
+  assert.deepEqual(writes.at(-1), { where: { id: USER_ID }, data: { preferences } });
+
+  const malformed = await patch({ recaps: 'off' });
+  assert.equal(malformed.status, 400, await malformed.text());
+  // The rejected write changed nothing: the account is still opted out.
+  assert.equal(preferences.recaps, false);
+});
+
 test('model preferences reject malformed maps and unauthenticated writes', async (t) => {
   const patch = await boot(t);
   for (const defaultModels of ['gpt-6.1-sol', ['gpt-6.1-sol'], { codex: 42 }, { codex: { model: 'gpt-6.1-sol' } }]) {

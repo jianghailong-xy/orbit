@@ -30,6 +30,7 @@ import {
 import { Image } from 'antd';
 import { ReferenceLink, referenceUrlTransform } from '../lib/markdownLinks';
 import { formatThinkingDuration, formatThinkingSize } from '../lib/thinkingDraft';
+import { checkDuration } from '../lib/checkDuration';
 import { quotaWindowKind } from '../lib/quotaWindow';
 import { Fragment, createContext, isValidElement, memo, useContext, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
@@ -59,7 +60,7 @@ import {
 } from '../lib/deliveredMessage';
 import { steerDeliveryState } from '../lib/steerDelivery';
 import { BatchGraph } from './BatchGraph';
-import { buildBatchGraph, describeShape, shouldDraw, type BatchTaskInput } from '../lib/batchGraph';
+import { buildBatchGraph, describeShape, type BatchTaskInput } from '../lib/batchGraph';
 import { RunnerSignIn } from './RunnerSignIn';
 import { AppLink } from './AppLink';
 import { SameOriginLink } from './SameOriginLink';
@@ -178,12 +179,17 @@ export const EventFullCtx = createContext<((seq: number) => Promise<any>) | null
  * diagnosis alone — a logged-out viewer can neither sign that runner in nor retry.
  */
 export interface AuthErrorHelp {
-  /** Session's provider slug — a built-in runtime or a configured provider. */
+  /** Session's provider slug — an engine's own sign-in on the runner, or a key or pool. */
   provider: string;
+  /** The session's key as a sentence names it, lowercase — `the DeepSeek key “DeepSeek 2”`: its
+   *  vendor and the name its owner gave it, never its slug or an engine (one key runs on several).
+   *  Absent when the session runs on no key this account still has. */
+  keyName?: string;
   /** Runner display name, so the card names the machine to fix. */
   runnerName?: string;
   /** Runner id, which unlocks signing in from the browser instead of on that machine. */
   runnerId?: string;
+  /** The engine the session runs on — its own, fixed for its life. */
   runtime?: string;
   googleLogin?: 'available' | 'needs_update' | 'unsupported_platform';
   runnerVersion?: string | null;
@@ -221,8 +227,9 @@ export type AntigravityRepair = 'needsKey' | 'updateRunner' | 'notInstalled';
 
 /**
  * A DeepSeek Harness session that could not run, as the remedy rather than the runner's sentence.
- * Its credential is a configured key, never a sign-in on the runner, so every key problem is fixed
- * on that provider's own page; everything else is about the machine (dshRepair says which).
+ * Its credential is a DeepSeek key — the same key Claude Code and OpenCode run on — never a sign-in on
+ * the runner, so every key problem is fixed on that key's own page; everything else is about the
+ * machine (dshRepair says which).
  */
 export function DshRepairCard({ repair, help, seq }: { repair: DshRepair; help: AuthErrorHelp; seq?: number }) {
   const machine = help.runnerName || 'this runner';
@@ -233,7 +240,7 @@ export function DshRepairCard({ repair, help, seq }: { repair: DshRepair; help: 
         <WarningFilled className="chat-authfix-icon" />
         <div className="chat-authfix-title">
           {repair === 'needsKey'
-            ? 'DeepSeek Harness needs an API key'
+            ? 'DeepSeek Harness needs a DeepSeek key'
             : repair === 'invalidKey'
               ? 'DeepSeek rejected this API key'
               : repair === 'updateRunner'
@@ -245,9 +252,9 @@ export function DshRepairCard({ repair, help, seq }: { repair: DshRepair; help: 
       </div>
       <div className="chat-authfix-desc">
         {repair === 'needsKey'
-          ? 'This session has no DeepSeek Harness key to run on. Add or re-enable the key in Infrastructure, then send your message again.'
+          ? 'This session has no DeepSeek key to run on. Add or re-enable a DeepSeek key in Infrastructure, then send your message again.'
           : repair === 'invalidKey'
-            ? 'Update the key in Infrastructure, then send your message again. Connecting a key does not check it — the first request does.'
+            ? `Update ${help.keyName ?? 'the DeepSeek key'} in Infrastructure, then send your message again.`
             : repair === 'updateRunner'
               ? `${machine} runs Orbit runner ${help.runnerVersion || 'an unknown version'}, which predates DeepSeek Harness. The runner updates itself when no session is running on it.`
               : repair === 'notInstalled'
@@ -501,6 +508,11 @@ type TextNode = {
   // the run (lib/confirmationReviewTurns). Orbit's turns, drawn as their cards.
   reviewRequest?: ConfirmationReviewRequestCard;
   reviewReturn?: ConfirmationReturnCard;
+  // This message opens a turn, so the turn's head row (TurnHead) is drawn under it and over
+  // whatever the turn goes on to write — with the `turn_end` that closed the turn once it has one.
+  // Only a top-level message opens one: a steer joins the turn already running, and a message
+  // inside a sub-workspace is that sub-agent's, which never gets a `turn_end` of its own.
+  turnHead?: { endTs?: string };
 };
 type ResultNode = { kind: 'result'; seq: number; content: any; isError?: boolean; truncated?: boolean };
 type MarkerNode = { kind: 'interrupt'; seq: number };
@@ -967,6 +979,9 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
   // Narration between tool calls is overwritten by whatever follows it, so what is left when the
   // turn ends is the answer the turn ended on.
   let turnReply: string | undefined;
+  // The `turnHead` the turn now open is drawn from — the message that opened it, until its
+  // `turn_end` closes it. What says how long that turn worked once the end arrives.
+  let turnHead: TextNode['turnHead'];
   for (const ev of events) {
     const p = ev.payload ?? {};
     const parent: string | undefined = p.parentToolUseId;
@@ -1056,6 +1071,10 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
             taskStartByParent.set(parentKey(parent), { text, card: taskStart });
           }
           if (ev.turnId) userByTurn.set(ev.turnId, node);
+          if (!parent && !node.steer) {
+            node.turnHead = {};
+            turnHead = node.turnHead;
+          }
           into(parent).push(node);
         }
         break;
@@ -1167,6 +1186,12 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
         // other way.
         const subtype = typeof p.subtype === 'string' ? p.subtype : '';
         const failed = subtype !== '' && !TURN_FINISHED_SUBTYPES.has(subtype) && !turnAccountedFor;
+        // However the turn went, it was working until now: the head row states that span. A
+        // failure is still an end — the answer above the error line took that long to not arrive.
+        if (turnHead) {
+          turnHead.endTs = ev.ts;
+          turnHead = undefined;
+        }
         if (failed) armTaskStartRetry(parent);
         roots.push(
           failed
@@ -1479,12 +1504,18 @@ function NodeList({
     <>
       {items.flatMap((item) => {
         const seqs = item.kind === 'toolGroup' ? item.nodes.map((node) => node.seq) : [item.node.seq];
+        // The row a turn opens with, under its message and over everything the turn writes.
+        const head =
+          item.kind === 'node' && item.node.kind === 'user' && item.node.turnHead ? (
+            <TurnHead key={`head-${item.node.seq}`} startTs={item.node.ts} endTs={item.node.turnHead.endTs} live={live} />
+          ) : null;
         return [
           item.kind === 'toolGroup' ? (
             <ToolGroupView key={item.key} nodes={item.nodes} live={live} />
           ) : (
             <NodeView key={item.node.seq} node={item.node} live={live} />
           ),
+          head,
           ...seqs
             .flatMap((seq) => placed?.get(seq) ?? [])
             .map((insert) => <Fragment key={insert.key}>{insert.element}</Fragment>),
@@ -1988,9 +2019,11 @@ function AuthErrorCard({ message, seq }: { message: string; seq?: number }) {
         )
       ) : help ? (
         <>
+          {/* The key by its vendor and its own name — the same key may run on Claude Code, OpenCode and
+              DeepSeek Harness, so the engine is no way to name it, and its slug is nobody's. */}
           <div className="chat-authfix-desc">
-            The API key for <code>{help.provider}</code> was rejected. Update it in Infrastructure, then
-            send your message again.
+            {help.keyName ? `${help.keyName.charAt(0).toUpperCase()}${help.keyName.slice(1)}` : 'The API key'} was
+            rejected. Update it in Infrastructure, then send your message again.
           </div>
           {help.onUseApiKey && (
             <button className="chat-authfix-go" onClick={help.onUseApiKey} type="button">
@@ -2523,6 +2556,32 @@ function TurnFoot({ node }: { node: DividerNode }) {
       {ts && <span className="chat-time">{formatClock(new Date(ts))}</span>}
     </div>
   );
+}
+
+/**
+ * The head of a turn, over the turn's own output: how long it worked, or has been working — the row
+ * Codex draws above a turn's answer (owner, 2026-10-10). The span runs from the turn's `user`
+ * message to its `turn_end`, both of them stored, so a turn read back later says exactly what the
+ * turn on screen said; while the turn is still open it counts up once a second. A turn whose start
+ * the loaded window doesn't reach states no duration rather than a wrong one, and a turn that
+ * neither ended nor is still running states nothing at all.
+ */
+function TurnHead({ startTs, endTs, live }: { startTs?: string; endTs?: string; live?: boolean }) {
+  const start = startTs ? Date.parse(startTs) : NaN;
+  const end = endTs ? Date.parse(endTs) : NaN;
+  const ended = Number.isFinite(start) && Number.isFinite(end) && end >= start;
+  const ticking = !ended && !!live && Number.isFinite(start);
+  const [, tick] = useReducer((n: number) => n + 1, 0);
+  useEffect(() => {
+    if (!ticking) return undefined;
+    const timer = setInterval(tick, 1000);
+    return () => clearInterval(timer);
+  }, [ticking]);
+  // A turn is never under a second: "Worked for 0s" reads as a bug, not as a measurement.
+  const span = (ms: number) => checkDuration(Math.max(1000, ms));
+  if (ended) return <div className="chat-turn-head">Worked for {span(end - start)}</div>;
+  if (!live) return null;
+  return <div className="chat-turn-head">{ticking ? `Working for ${span(Date.now() - start)}` : 'Working…'}</div>;
 }
 
 // Relative timestamp under a user bubble ("just now", "5m ago", "3h ago", "2d ago",
@@ -3920,7 +3979,9 @@ function describeTool(name: string, input: any, isShell?: boolean, answer?: stri
         summary: shape || undefined,
         body: tasks.length ? (
           <div className="tool-batch">
-            {shouldDraw(graph) ? <BatchGraph tasks={tasks} /> : null}
+            {/* The record lists the titles either way, so the picture stands where it fits and
+                leaves nothing in its place when it does not. */}
+            <BatchGraph tasks={tasks} fallback={null} />
             <ul className="dag-approval-ops">
               {tasks.map((t, n) => (
                 <li key={n} className="dag-op">

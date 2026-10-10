@@ -945,6 +945,17 @@ final class ConsoleModel {
     private static let tailPage = 200
     /// Page size for scroll-up history fetches (web parity — `OLDER_PAGE`). See `loadOlder()`.
     private static let olderPage = 200
+    /// How many `olderPage`-sized pages a reconnect will spend closing its gap over REST before it
+    /// re-seeds from the tail instead (5 × 200). Deliberately the server's own budget: it answers a
+    /// gap wider than `SSE_GAP_CAP` (1000) with `resync` rather than replaying it, so a client that
+    /// paged past 1000 and kept going would be spending transfers on events the server would have
+    /// already told it to drop. See `catchUpToTail`.
+    private static let catchUpPages = 5
+    /// Per-request timeout for the small page reads that gate a first paint or a reconnect's
+    /// catch-up (see `APIClient.makeRequest`). 20s is several times a healthy gzipped page on a
+    /// slow link; a read still idle at that point is a dead socket, and its retry — on a fresh
+    /// connection — lands sooner than the 60s default it would otherwise wait out.
+    private static let pageTimeout: TimeInterval = 20
     /// Ceiling on the transcript items kept in memory, and the hysteresis above it before a trim
     /// fires. See `TranscriptReducer.trimOlder` for what a trim moves; this is only the number.
     ///
@@ -1126,6 +1137,11 @@ final class ConsoleModel {
     /// web's 60s `refetchInterval` on the console's runners query, so the plan-usage gauge keeps up
     /// with the turns running here instead of waiting for a reconnect.
     private var runnerPollTask: Task<Void, Never>?
+    /// The evidence read's re-read every 20 s while a version can wait for this conversation's
+    /// coordinator, or does (`EvidenceDecisions.rereadsQueue`) — web's 20 s `refetchInterval` on the
+    /// same read. Nothing on this session's row moves when a version is queued for it, handed to it
+    /// or decided by it, so nothing else here would re-read it.
+    private var evidencePollTask: Task<Void, Never>?
 
     /// Begin the live SSE loop if it isn't already running. Idempotent (re-focusing the same session
     /// is a no-op) and inert for a draft/session-less console.
@@ -1139,6 +1155,16 @@ final class ConsoleModel {
                 try? await Task.sleep(nanoseconds: 60_000_000_000)
                 guard let self, !Task.isCancelled else { return }
                 await self.refreshRunner()
+            }
+        }
+        evidencePollTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 20_000_000_000)
+                guard let self, !Task.isCancelled else { return }
+                if EvidenceDecisions.rereadsQueue(self.evidenceDecisions, coordinates: self.projectID != nil,
+                                                  pause: self.coordinatorPause) {
+                    await self.refreshEvidenceDecisions()
+                }
             }
         }
     }
@@ -1157,6 +1183,8 @@ final class ConsoleModel {
         createdTasksPollTask = nil
         runnerPollTask?.cancel()
         runnerPollTask = nil
+        evidencePollTask?.cancel()
+        evidencePollTask = nil
         codexResetPollTask?.cancel()
         codexResetPollTask = nil
         codexResetPollingOperationID = nil
@@ -1210,6 +1238,13 @@ final class ConsoleModel {
 
         reconnectPolicy = ReconnectPolicy()
         var isReconnect = false          // the first connect is seeded by `approvalsSeed` above
+        // Whether the window may sit far behind the session and should close that gap before its
+        // first stream connect: a snapshot restored from disk can be hours old, while a window this
+        // run has just seeded from is current by construction.
+        var catchUpPending = !coldOpen
+        // Whether the attempt before this one ended in a drop, so the window may have fallen behind
+        // while it was down. `.resync` leaves this false on purpose: it just re-seeded.
+        var catchUpAfterFailure = false
         while !Task.isCancelled {
             // A window opened at a record stays off the stream until it is back at the tail
             // (`newerCursor`): what the stream carries belongs past the gap, not at this window's end.
@@ -1245,6 +1280,15 @@ final class ConsoleModel {
                 Task { [weak self] in await self?.refreshRunner() }
             }
             isReconnect = true
+            // Close a large gap over compressed REST pages BEFORE the stream opens — see
+            // `catchUpToTail` for why a big gap must not ride the SSE replay. Runs on the first
+            // connect of a restored window and after any failed attempt; the healthy reconnects
+            // (`ended`, a kick, a just-re-seeded `resync`) have nothing to close.
+            if catchUpPending || catchUpAfterFailure {
+                await catchUpToTail()
+            }
+            catchUpPending = false
+            catchUpAfterFailure = false
             let outcome = await withTaskGroup(of: StreamOutcome.self) { group in
                 // The live read, on the main actor (folds into the shared reducer). Ends on a clean
                 // close, throws on a drop, or is cancelled by the kick watcher / view teardown.
@@ -1310,6 +1354,7 @@ final class ConsoleModel {
             // reconnect cursor-less — and a cursor-less replay is server-capped, so the fallback
             // is still a bounded catch-up rather than the full history.
             if outcome == .resync { await reseedFromTailPage() }
+            catchUpAfterFailure = (outcome == .failed)   // the next iteration may need to close a gap
             switch reconnectPolicy.next(after: outcome) {
             case .stop:
                 return
@@ -1328,16 +1373,67 @@ final class ConsoleModel {
     /// the loop the instant a page seeds (applyTailPage advances maxSeq); if all attempts fail the
     /// server still caps a cursor-less replay (SSE_REPLAY_CAP), so it degrades gracefully rather
     /// than dumping the full history.
+    ///
+    /// The short per-request timeout is what makes that retry rule worth anything on a dead socket:
+    /// this page gates the first paint, and waiting out the 60s default on a connection that is
+    /// gone serves nobody — the next attempt opens a fresh one (see `pageTimeout`).
     private func seedTailPage() async {
         for attempt in 0..<3 where reducer.state.maxSeq == 0 {
             if Task.isCancelled { return }
-            if let page = try? await api.eventPage(sessionID: sessionID, tail: Self.tailPage) {
+            if let page = try? await api.eventPage(sessionID: sessionID, tail: Self.tailPage,
+                                                   timeout: Self.pageTimeout) {
                 reducer.applyTailPage(page)   // also records the scroll-up window cursor (hasMoreOlder)
                 publishStateNow()
             } else if attempt < 2 {
                 try? await Task.sleep(nanoseconds: UInt64(300 * (attempt + 1)) * 1_000_000)
             }
         }
+    }
+
+    /// Close a large gap between the loaded window and the session's newest event BEFORE the live
+    /// stream connects, over gzipped REST pages rather than the SSE replay the stream would do.
+    ///
+    /// The gateway compresses `application/json` but deliberately NOT `text/event-stream`
+    /// (gateway/nginx.conf: compression buffers a stream), so a cursor'd replay is the one bulk
+    /// transfer in the console's open path that crosses the network uncompressed — and it is
+    /// all-or-nothing: a drop mid-replay leaves `maxSeq` where it was, so the next attempt asks for
+    /// the same cursor and pays for the whole gap again. That is the shape a Beijing → Cloudflare
+    /// link produced on 2026-10-10: `sinceSeq` stuck while ~700KB was re-pulled every few seconds.
+    /// A page is ~4× smaller on the wire (web's own measurement: 190KB raw → 45KB gzipped) and is
+    /// acknowledged by landing, so however the connection dies, at most the page in flight is lost.
+    ///
+    /// The budget mirrors the server's own policy: it answers a gap wider than `SSE_GAP_CAP` (1000)
+    /// with `resync` rather than replaying it (`catchUpPages` × `olderPage` = the same 1000), so
+    /// past that budget the window is re-seeded from a tail page instead. The reader is at the tail
+    /// either way, and the middle of a gap nobody saw carries nothing the tail page doesn't.
+    ///
+    /// A failed page is not retried here: the stream attempt right after this IS the retry, with
+    /// everything that landed already folded in (that is the whole point — the next attempt resumes
+    /// from the advanced `maxSeq` instead of the gap's start). Nothing to close leaves this a no-op.
+    private func catchUpToTail() async {
+        guard !sessionID.isEmpty, reducer.state.maxSeq > 0 else { return }
+        var cursor = reducer.state.maxSeq
+        for _ in 0..<Self.catchUpPages {
+            // Cheap pre-check: a window opened at a record must not fold anything until its gap
+            // closes (see below for why).
+            if Task.isCancelled || detached { return }
+            guard let page = try? await api.eventPageAfter(sessionID: sessionID, after: cursor,
+                                                           limit: Self.olderPage,
+                                                           timeout: Self.pageTimeout) else { return }
+            // Re-checked AFTER the await, on the main actor, so it is exhaustive: the window became
+            // a record window while this page was in flight (a link was opened on this console —
+            // `openRecord`), and folding a page past its gap would leave a hole in the middle of
+            // the transcript. The stream task bails for the same reason; this is the coarser of the
+            // two, and the check-then-fold below cannot interleave with anything.
+            if Task.isCancelled || detached { return }
+            reducer.appendNewer(page)   // folds exactly as the live stream would (it is `after=` data)
+            publishStateNow()
+            guard let next = page.after else { return }   // this page reached the newest event
+            cursor = next
+        }
+        // Still short of the tail after the whole budget: re-seed, as the server's `resync` would
+        // have. The window is replaced wholesale, so the dropped middle leaves no hole.
+        await reseedFromTailPage()
     }
 
     /// Act on the server's `resync`: drop the loaded window and rebuild it from a tail page.
@@ -1436,9 +1532,10 @@ final class ConsoleModel {
             // and a bar left hanging over it is an offer to answer nothing. A read that has not come
             // back leaves the standing `unread` — "this device cannot say" rather than "there is
             // nothing to answer" — so a reason somebody is mid-sentence over is not thrown away by
-            // one failed poll.
+            // one failed poll. Nor is one typed against a version that waits for the coordinator:
+            // it was opened with Decide it myself, and is still the reader's to send back.
             let standing = evidenceStanding(row.taskId, row.evidenceRevision)
-            if !EvidenceDecisions.isOpen(standing) { replyContext = nil }
+            if !EvidenceDecisions.holdsReply(standing) { replyContext = nil }
         case .planChange, .ownerItem:
             // Nothing answers either of these another way: no call is pending on them, so there is
             // no question that can go out from under the reader mid-sentence — and a sentence about
@@ -1567,8 +1664,12 @@ final class ConsoleModel {
     private func followPendingRecord() async -> Bool {
         guard let record = pendingRecord, !sessionID.isEmpty else { return false }
         pendingRecord = nil
+        // Like the tail seed, this page gates the first paint (a link opens ON it), so it fails
+        // fast rather than waiting out a dead socket — `showTransientStatus` names the record as
+        // not found and the stream's capped replay paints the tail behind it.
         guard let page = try? await api.eventPageAround(sessionID: sessionID, record: record,
-                                                        limit: Self.tailPage),
+                                                        limit: Self.tailPage,
+                                                        timeout: Self.pageTimeout),
               let anchor = page.anchor else {
             showTransientStatus(SessionRecordLink.Copy.notFound)
             return false
@@ -1957,6 +2058,9 @@ final class ConsoleModel {
         guard let session, session.id == sessionID else { return }
         serverStatus = session.effectiveRunStatus
         sessionError = session.error
+        // Why a version waiting for this conversation is waiting: its own run state, error and armed
+        // retry, which only this row carries.
+        coordinatorPause = EvidenceDecisions.coordinatorPause(session)
         sessionSourceState = session.sourceState
         sessionSourceRefusalCode = session.sourceRefusalCode
         sessionSourceRefusalDetail = session.sourceRefusalDetail
@@ -3540,6 +3644,16 @@ final class ConsoleModel {
     /// the same reason. A card is drawn only for the rows `EvidenceDecisions.cardRows` keeps: this
     /// project's, and ones the door would take an answer to from here.
     private(set) var evidenceDecisions: EvidenceDecisionQueue?
+    /// Where this conversation stands as the coordinator its project's queued evidence waits for —
+    /// paused, or back — read off its own row each time the row is adopted (`adoptServerSnapshot`):
+    /// the line every waiting version carries (`EvidenceDecisions.pauseLine`). Paused for a reason
+    /// nobody knows until a row arrives.
+    private(set) var coordinatorPause: CoordinatorPause = .paused(window: nil, retryAt: nil)
+    /// The evidence versions this conversation has drawn as a card the reader could press — asked
+    /// here in `pending`, or opened with Decide it myself — by card id. A card for any other version
+    /// is let go of once the read stops listing it (`EvidenceDecisions.letsGo`): it only ever waited
+    /// for the coordinator, and nobody was asked it.
+    private var engagedEvidence: Set<String> = []
     /// Whether the account owner has confirmed the standard set as it stands.
     private(set) var acceptanceConfirmation: StandardSetConfirmationStanding?
     /// What this project still owes somebody a decision about (contract §4.8), or nil while the
@@ -3715,6 +3829,9 @@ final class ConsoleModel {
                 return nil
             case .criteriaChange:
                 return waiting(CriteriaChanges.isOpen(acceptanceConfirmation), question: true)
+            // A version waiting for the coordinator, folded, and one handed to it, drawn as one line,
+            // are not open: nobody is asking the reader yet, so the bar neither counts nor points at
+            // either (`EvidenceDecisions.isOpen`).
             case .evidenceDecision(let taskID, let evidenceRevision):
                 return waiting(EvidenceDecisions.isOpen(evidenceStanding(taskID, evidenceRevision)),
                                question: true)
@@ -4547,11 +4664,38 @@ final class ConsoleModel {
         if let queue = try? await api.pendingEvidenceDecisions(decidingSessionID: sessionID) {
             evidenceDecisions = queue
             for row in EvidenceDecisions.cardRows(queue: queue, projectId: projectID, sessionId: sessionID) {
+                let kind = DeliveredDecisionCard.Kind.evidenceDecision(taskID: row.taskId,
+                                                                       evidenceRevision: row.evidenceRevision)
+                engagedEvidence.insert(DeliveredDecisionCard(kind: kind).id)
+                deliver(kind)
+            }
+            // The versions this conversation's coordinator holds or is owed, in the slot today's
+            // card goes in and the same kind of card: one per version, which the card draws as one
+            // line once it is handed over, folded while it waits, and as the question it is if it
+            // becomes the reader's (`EvidenceDecisions.standing`), keeping its place throughout.
+            for sent in EvidenceDecisions.sentRows(queue: queue, projectId: projectID) {
+                deliver(.evidenceDecision(taskID: sent.taskId, evidenceRevision: sent.evidenceRevision))
+            }
+            for row in EvidenceDecisions.coordinatorQueueRows(queue: queue, projectId: projectID,
+                                                              sessionId: sessionID) {
                 deliver(.evidenceDecision(taskID: row.taskId, evidenceRevision: row.evidenceRevision))
+            }
+            decisionCards.removeAll { card in
+                guard case .evidenceDecision(let taskID, let evidenceRevision) = card.kind else { return false }
+                return EvidenceDecisions.letsGo(evidenceStanding(taskID, evidenceRevision),
+                                                engaged: engagedEvidence.contains(card.id))
             }
             adoptEvidenceReceipts(queue)
             lastEvidenceRead = Date()
         }
+    }
+
+    /// Decide it myself: the reader opened a version that waits for the coordinator, to decide it
+    /// here. Remembered, so a card the reader has opened stays to say what became of its version
+    /// rather than vanishing from under them (`EvidenceDecisions.letsGo`).
+    func openedEvidence(_ taskID: String, _ evidenceRevision: String) {
+        engagedEvidence.insert(DeliveredDecisionCard(
+            kind: .evidenceDecision(taskID: taskID, evidenceRevision: evidenceRevision)).id)
     }
 
     /// Answer one revision of a task's evidence at the decision door, FROM this session and with
