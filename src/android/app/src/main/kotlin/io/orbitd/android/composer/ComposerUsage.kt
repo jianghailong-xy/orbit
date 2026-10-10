@@ -25,7 +25,7 @@ fun ComposerUsage(model: ComposerModel, state: ComposerState, detail: JsonObject
         (event.fields[key] as? JsonPrimitive)?.longOrNull?.takeIf { it > 0 }
     }
     val tokens = reported("contextTokens") ?: 0
-    val window = reported("contextWindow") ?: state.catalog?.models(OpenCodeKeys.choice(detail.text("provider").orEmpty(), detail.text("model")))
+    val window = reported("contextWindow") ?: state.catalog?.let { it.models(it.engineOf(detail), detail.text("provider").orEmpty()) }
         ?.firstOrNull { it.text("value") == detail.text("model") }?.get("contextWindow")?.jsonPrimitive?.longOrNull?.takeIf { it > 0 }
     val contextLabel = if (window == null) "$tokens tokens" else "$tokens / $window tokens"
     // A07-7: a session on a pool spends one of its accounts at a time, named beside the quota (iOS f929ab1e4) — read once the

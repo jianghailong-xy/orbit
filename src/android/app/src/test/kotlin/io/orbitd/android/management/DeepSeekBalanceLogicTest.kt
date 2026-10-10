@@ -114,15 +114,17 @@ class DeepSeekBalanceLogicTest {
     @Test fun onlyAStoredDeepSeekKeyHasABalance() {
         // GET providers/mine names the endpoint and whether a key is stored.
         val mine = Json.parseToJsonElement("""[
-          {"id": "p1", "slug": "deepseek", "label": "DeepSeek", "runtime": "claude", "presetSlug": "deepseek", "baseUrl": "https://api.deepseek.com/anthropic", "hasApiKey": true, "defaultModel": "deepseek-v4-pro"},
-          {"id": "p2", "slug": "deepseek-harness", "label": "DeepSeek Harness", "runtime": "dsh", "presetSlug": "deepseek-harness", "baseUrl": "https://api.deepseek.com/anthropic", "hasApiKey": true, "defaultModel": ""},
+          {"id": "p1", "slug": "deepseek", "label": "DeepSeek", "runtime": "claude", "presetSlug": "deepseek", "baseUrl": "https://api.deepseek.com/anthropic", "hasApiKey": true, "defaultModel": "deepseek-v4-pro", "engines": ["claude", "opencode", "dsh"]},
+          {"id": "p2", "slug": "deepseek-harness", "label": "DeepSeek Harness", "runtime": "dsh", "presetSlug": "deepseek-harness", "baseUrl": "https://api.deepseek.com/anthropic", "hasApiKey": true, "defaultModel": "", "engines": ["dsh", "claude", "opencode"]},
           {"id": "p3", "slug": "mine", "label": "Mine", "runtime": "codex", "presetSlug": null, "baseUrl": "https://api.deepseek.com/v1", "hasApiKey": true, "defaultModel": null},
           {"id": "p4", "slug": "proxy", "label": "Proxy", "runtime": "claude", "presetSlug": null, "baseUrl": "https://deepseek-proxy.example.com/anthropic", "hasApiKey": true, "defaultModel": null},
           {"id": "p5", "slug": "moonshot", "label": "Kimi", "runtime": "kimi", "presetSlug": "moonshot", "baseUrl": "https://api.moonshot.ai/v1", "hasApiKey": true, "defaultModel": null},
-          {"id": "p6", "slug": "deepseek-2", "label": "Keyless", "runtime": "claude", "presetSlug": "deepseek", "baseUrl": "https://api.deepseek.com/anthropic", "hasApiKey": false, "defaultModel": null}
+          {"id": "p6", "slug": "deepseek-2", "label": "Keyless", "runtime": "claude", "presetSlug": "deepseek", "baseUrl": "https://api.deepseek.com/anthropic", "hasApiKey": false, "defaultModel": null, "engines": ["claude", "opencode", "dsh"]}
         ]""").jsonArray.map { it.jsonObject }
         assertEquals(listOf("p1", "p2", "p3"), mine.filter(DeepSeekBalance::applies).map { it.text("id") })
-        assertEquals(listOf("Claude Code", "DeepSeek Harness", "Codex", "Claude Code", "Claude Code", "Claude Code"), mine.map(DeepSeekBalance::engine))
+        // Where each runs is every engine its protocol allows, the server's answer when it gives one: never one engine per key.
+        assertEquals(listOf(listOf("claude", "opencode", "dsh"), listOf("dsh", "claude", "opencode"), listOf("codex"), listOf("claude"), listOf("kimi"),
+            listOf("claude", "opencode", "dsh")), mine.map(KeyEngines::engines))
         assertEquals("api.deepseek.com", DeepSeekBalance.endpointHost(mine[0]))
         // The pickers' catalogue (GET providers) carries neither, so nothing there reads as a DeepSeek key; a row is matched by slug.
         assertFalse(DeepSeekBalance.applies(json("""{"slug": "deepseek", "label": "DeepSeek", "runtime": "claude", "presetSlug": "deepseek"}""")))
@@ -131,7 +133,7 @@ class DeepSeekBalanceLogicTest {
         assertNull(DeepSeekBalance.key(json("""{"slug": "deepseek-2", "label": "Keyless"}"""), mine))
         assertNull("a shared key, on nobody's own list, opens no page", DeepSeekBalance.key(json("""{"slug": "team-deepseek", "label": "Shared DeepSeek"}"""), mine))
         assertEquals("deepseek-v4-pro", providerKeyLine(mine[0]))
-        assertEquals("Runs on DeepSeek Harness", providerKeyLine(mine[1]))
+        assertNull("a key is not named after an engine; the engines line says where it runs", providerKeyLine(mine[1]))
         assertNull(providerKeyLine(mine[3]))
     }
 }
