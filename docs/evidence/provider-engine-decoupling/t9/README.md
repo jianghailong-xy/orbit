@@ -87,8 +87,15 @@ pass unchanged.
   `a07cModelMenuEnginesAccountsAndKeys` reads the Engine list's order, Antigravity CLI's Google account and OpenCode's keys, and creates
   (opencode, deepseek, deepseek-chat); `a07cRetryCarriesTheProviderPick` also checks the engine sent; `realModelAccountQueueStopPermissionsAndRefresh`
   presses its account row through the row's click action once pressable, as its other presses do.
-- `composer/ComposerStackDeviceTest` (A11's isolated stack): `s1` reads the Engine list, then Claude Code's, Codex's and OpenCode's
-  Provider lists, and opens Antigravity CLI's page from its row.
+- `composer/ComposerStackDeviceTest` (A11's isolated stack): `s1` reads the Engine list, picks Claude Code, then reads Claude Code's,
+  Codex's and OpenCode's Provider lists, and opens Antigravity CLI's page from its row.
+
+Run on the shared API 36 emulator. The ten `ComposerDeviceTest` journeys that read the Provider list or exercise A07c's features
+(new session, controls, draft account, A07c's model menu, auto-retry, continue, Antigravity repair, pool account and reset credit,
+retry on a pick, text and Markdown files) pass on the APKs of `2c835ffb9`. `ComposerStackDeviceTest` ran on an isolated stack built
+from this branch's own server and runner (`2c835ffb9`; `src/android/scripts/a11-stack`, port 3719): `s2`–`s6` pass there. `s1`'s
+first run read Codex where it expected Claude Code, because the stack's workspace last ran Codex and a new session starts there; the
+journey now picks Claude Code first, and passes on the same stack with the APKs of `7cada1bb2`.
 
 ## Screenshots
 
