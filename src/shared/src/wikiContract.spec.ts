@@ -1804,6 +1804,8 @@ describe('wiki contract', () => {
     // The pipeline the kind runs is stated, and no provider is in it.
     expect(CONTRACT.jobs.kindRuns.maintain).toMatch(/maintenance\.job\.server/u);
     expect(server.trigger).toMatch(/MaintenanceJobWriter/u);
+    // A run's end that queued the articles asks for the next round at once (2026-10-10): its own job set aside.
+    expect(server.trigger).toMatch(/A run's end asks too \(the owner's decision of 2026-10-10/u);
     expect(server.identity).toMatch(/wiki_changeset\.job_id/u);
     expect(server.door).toMatch(/WIKI_SERVER_EXECUTES/u);
     expect(server.skip).toMatch(/catch-up active or paused/u);
