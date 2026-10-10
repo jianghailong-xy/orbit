@@ -2,6 +2,7 @@ import type {
   ConfirmationReturnCard,
   ConfirmationReviewRequestCard,
   OpenItemDeliveryCard,
+  OwnerAnswerCard,
   ProjectStartedCard,
   SessionMessageCard,
   SessionReplyCard,
@@ -81,6 +82,23 @@ export function withOpenItemDelivery(
   const stored = { ...payload };
   delete stored.openItemDelivery;
   if (card !== null) stored.openItemDelivery = card;
+  return stored;
+}
+
+/**
+ * The same rule for the turn telling a coordinator what the owner answered (`ownerAnswer`,
+ * projects/project-open-item.ts `readOwnerAnswerCard`): which item, and when this conversation was
+ * handed it, so a client draws one line rather than the owner's bubble. Absent for every other turn,
+ * and a card arriving from the runner is dropped for the reason the rules above give.
+ */
+export function withOwnerAnswer(
+  payload: Record<string, unknown>,
+  card: OwnerAnswerCard | null,
+): Record<string, unknown> {
+  if (typeof payload?.text !== 'string') return payload;
+  const stored = { ...payload };
+  delete stored.ownerAnswer;
+  if (card !== null) stored.ownerAnswer = card;
   return stored;
 }
 

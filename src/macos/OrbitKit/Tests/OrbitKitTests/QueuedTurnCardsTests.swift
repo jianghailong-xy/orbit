@@ -20,6 +20,10 @@ final class QueuedTurnCardsTests: XCTestCase {
             {"itemId": "item-1", "kind": "INTEGRATION_CONFLICT", "title": "Merge conflict on project/34Y7",
              "files": ["src/web/src/components/WorkspaceView.tsx"]}
             """),
+        ("ownerAnswer", "ownerAnswer", """
+            {"itemId": "item-2", "kind": "COORDINATOR_QUESTION", "sessionId": "s-coordinator",
+             "deliveredAt": "2026-10-06T05:39:58.000Z"}
+            """),
         ("taskStart", "taskStart", """
             {"taskId": "01a0cca7-8609-70ed-a0e2-d4b55b832b60", "title": "runner + web：配额按账户归属",
              "completionCriterion": "EVIDENCE_JUDGMENT", "auto": true,
@@ -146,6 +150,8 @@ final class QueuedTurnCardsTests: XCTestCase {
             XCTAssertEqual(filled(b.cards), Set(Self.fixtures.map(\.field)))
             XCTAssertEqual(b.itemCard?.kind, .integrationConflict)
             XCTAssertEqual(b.itemCard?.files, ["src/web/src/components/WorkspaceView.tsx"])
+            XCTAssertEqual(b.ownerAnswer?.kind, .coordinatorQuestion)
+            XCTAssertEqual(b.ownerAnswer?.deliveredAt, "2026-10-06T05:39:58.000Z")
             XCTAssertEqual(b.taskStart?.taskId, "01a0cca7-8609-70ed-a0e2-d4b55b832b60")
             XCTAssertEqual(b.taskStart?.title, "runner + web：配额按账户归属")
             XCTAssertEqual(b.taskStart?.completionCriterion, .evidenceJudgment)

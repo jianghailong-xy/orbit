@@ -52,10 +52,12 @@ internal object StickySummary {
 
     /**
      * Whether the bar may point back at this turn at all: every user turn may, but a background job's news
-     * or a wakeup coming due — a line inside the answer, not the head of one — unless somebody also typed words on it.
+     * or a wakeup coming due — a line inside the answer, not the head of one — unless somebody also typed words on it, and never
+     * the owner's answer handed to the coordinator, which is such a line too (OrbitKit `StickySummary.isAnchor`).
      */
     fun isAnchor(event: RunEvent, cards: List<InteractionCard> = transcriptCards(event)): Boolean {
         if (listOf("sessionMessage", "openItemDelivery", "taskStart", "projectStarted", "watch").any { event.card(cards, it) != null }) return true
+        if (event.card(cards, "ownerAnswer") != null) return false
         if (event.card(cards, "wake") == null) return true
         return event.personWords().isNotBlank()
     }

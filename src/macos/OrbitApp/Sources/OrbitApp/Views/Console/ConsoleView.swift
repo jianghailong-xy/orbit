@@ -30,6 +30,7 @@ struct ConsoleView: View {
     @State private var showShare = false
     @State private var promotionReview: PromotionReviewTarget?
     @State private var promotionReceipt: PromotionReceiptTarget?
+    @State private var ownerAnswerTold: OwnerAnswerTold?
     @State private var approvalReview: ApprovalReviewTarget?
     @State private var approvalReviewDrafts = ApprovalReviewDrafts()
     #if os(iOS)
@@ -238,6 +239,14 @@ struct ConsoleView: View {
                 .sheet(item: $promotionReceipt) { target in
                     PromotionReceiptSheet(promotion: target.promotion)
                 }
+                // The words an answer's line stands for (`OwnerAnswerLineView`), hosted here for the
+                // reason the receipt is: a recycled row cannot dismiss it.
+                .environment(\.openOwnerAnswer, { told in
+                    ownerAnswerTold = told
+                })
+                .sheet(item: $ownerAnswerTold) { told in
+                    OwnerAnswerSheet(told: told)
+                }
                 .environment(approvalReviewDrafts)
                 .environment(\.openApprovalReview, { target in
                     approvalReview = target
@@ -262,6 +271,7 @@ struct ConsoleView: View {
         .onChange(of: sessionID) { _, _ in
             promotionReview = nil
             promotionReceipt = nil
+            ownerAnswerTold = nil
             approvalReview = nil
             approvalReviewDrafts = ApprovalReviewDrafts()
         }
@@ -937,8 +947,9 @@ struct TranscriptView: View {
     // top yet (freshly opened, before the first geometry callback) but we're scrolled below the top, fall
     // back to naming the last question so the header shows at once; at the very top / short transcripts it
     // stays nil. Queued turns are skipped (web's `:not(.chat-queued)`) — they haven't been asked yet — and
-    // so is a watch's wake, a background job's news or a wakeup coming due, a line inside an answer
-    // rather than the head of one (`StickySummary.isAnchor`; web's line carries no `data-sticky-label`).
+    // so is a watch's wake, a background job's news, a wakeup coming due or the owner's answer handed to
+    // the coordinator, a line inside an answer rather than the head of one (`StickySummary.isAnchor`;
+    // web's line carries no `data-sticky-label`).
     //
     // Which turns are questions is read once per published state (`StickyQuestions`, kept on the
     // ruler), so a scroll is a lookup rather than a walk re-reading every turn's text.
@@ -965,7 +976,7 @@ struct TranscriptView: View {
     private func namesAQuestion(_ b: UserBubble) -> Bool {
         !b.queued && StickySummary.isAnchor(text: b.text, note: b.note, itemCard: b.itemCard,
                                             taskStart: b.taskStart, startedCard: b.startedCard,
-                                            sessionMessage: b.sessionMessage)
+                                            sessionMessage: b.sessionMessage, ownerAnswer: b.ownerAnswer)
     }
 
     private var stuckBubble: UserBubble? {

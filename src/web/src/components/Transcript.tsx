@@ -89,6 +89,9 @@ import { parseBackgroundWake } from '../lib/backgroundWake';
 import { parseOpenItemDelivery } from '../lib/openItemDelivery';
 import type { OpenItemDeliveryCard as OpenItemDelivery, ProjectStartedCard as Started } from '@orbit/shared';
 import { OpenItemDeliveryCard } from './OpenItemDeliveryCard';
+import { parseOwnerAnswer } from '../lib/ownerAnswer';
+import type { OwnerAnswerCard as OwnerAnswer } from '@orbit/shared';
+import { OwnerAnswerLine } from './OwnerAnswerLine';
 import { parseTaskStartCard } from '../lib/taskStartCard';
 import type { TaskStartCard as TaskStart } from '@orbit/shared';
 import { TaskStartCard } from './TaskStartCard';
@@ -498,6 +501,11 @@ type TextNode = {
   // instead of a bubble, and the text below is the paragraph the agent was handed, folded. NOT the
   // `delivery` above, which is how far a message got on its way into the engine.
   itemCard?: OpenItemDelivery;
+  // The owner's answer handed to the coordinator, when the control plane recorded which item and when
+  // this conversation was told beside the echo (`ownerAnswer`, lib/ownerAnswer). Nobody typed it
+  // either: drawn as one line, `Sent to the coordinator · 08:29`, that opens to the words the agent
+  // read.
+  ownerAnswer?: OwnerAnswer;
   // The turn that starts a task's run, when the control plane recorded the task its brief was built
   // from beside the echo (`taskStart`, lib/taskStartCard), or the same snapshot carried onto an
   // exact retry. Drawn as the task instead of a bubble, with `text` — the brief written for the
@@ -1033,6 +1041,8 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
         // lib/openItemDelivery). Read off the event rather than out of the text, so a delivery that
         // carries no card keeps the reading it has always had.
         const itemCard = parseOpenItemDelivery(p) ?? undefined;
+        // And for the owner's answer handed to the coordinator (lib/ownerAnswer).
+        const ownerAnswer = parseOwnerAnswer(p) ?? undefined;
         // The same for a task run's opening turn (lib/taskStartCard): use the payload, or the
         // opening payload's snapshot for an exact retry, never infer a new card from text alone.
         const text = recorded ? recorded.text : p.text ? String(p.text) : '';
@@ -1063,6 +1073,7 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
             text,
             note: recorded?.note,
             itemCard,
+            ownerAnswer,
             taskStart,
             startedCard,
             sessionMessage,
@@ -1660,7 +1671,17 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
         const words = node.text.trim() !== '';
         return (
           <>
-            {words && <UserBubble node={{ ...node, note: undefined }} queued={queued} />}
+            {/* Outcomes can ride on the owner's answer handed to the coordinator, whose words are
+                still nobody's message: its line, not a bubble. */}
+            {words && (node.ownerAnswer ? (
+              <OwnerAnswerLine
+                card={node.ownerAnswer}
+                text={node.text}
+                seq={seq}
+                undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
+                queued={queued}
+              />
+            ) : <UserBubble node={{ ...node, note: undefined }} queued={queued} />)}
             <SessionReplyCards
               cards={node.sessionReplies}
               seq={seq}
@@ -1704,6 +1725,22 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
             seq={seq}
             ts={node.ts}
             undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
+            queued={queued}
+          />
+        );
+      }
+      // The owner's answer handed to the coordinator is the platform's message too: the question
+      // replayed in full and the answer, written for the AGENT — a bubble in the reader's name asking
+      // the question a second time. What the reader needs is that it was sent and when, so it is one
+      // line (lib/ownerAnswer) that opens to those words. With no payload the turn keeps its old reading.
+      if (node.ownerAnswer) {
+        return (
+          <OwnerAnswerLine
+            card={node.ownerAnswer}
+            text={node.text}
+            seq={seq}
+            undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
+            attached={node.note && <ControlPlaneNote kind={describeNote(node.note)} text={node.note} />}
             queued={queued}
           />
         );

@@ -7,6 +7,7 @@ import {
   OpenItemDeliveryCard,
   OpenItemFacts,
   OpenItemStage,
+  OwnerAnswerCard,
   OwnerItemKind,
   SessionLifecycleState,
   SessionRunState,
@@ -500,6 +501,55 @@ export const OWNER_ANSWER_TURN_PREFIX = 'owner-answer:v1:';
  */
 export function ownerAnswerTurnId(itemId: string, sessionId: string): string {
   return `${OWNER_ANSWER_TURN_PREFIX}${itemId}:${sessionId}`;
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * The answer a turn tells, read back off the turn's own key — the item and the conversation
+ * `ownerAnswerTurnId` minted it for — or null for any other turn.
+ *
+ * The same reading `openItemIdOfTurn` makes of an item's delivery, with one difference: a caller may
+ * name its own turn under this prefix (no door reserves it), so both halves must be ids before
+ * anything reads a row by them. A key that is not two uuids is not one of ours, and on the
+ * event-ingest path a lookup by it would throw where "not ours" is all it should say.
+ */
+export function ownerAnswerCardOfTurn(
+  clientTurnId: string | null | undefined,
+): { itemId: string; sessionId: string } | null {
+  if (typeof clientTurnId !== 'string' || !clientTurnId.startsWith(OWNER_ANSWER_TURN_PREFIX)) return null;
+  const rest = clientTurnId.slice(OWNER_ANSWER_TURN_PREFIX.length);
+  const cut = rest.lastIndexOf(':');
+  if (cut <= 0) return null;
+  const itemId = rest.slice(0, cut);
+  const sessionId = rest.slice(cut + 1);
+  return UUID.test(itemId) && UUID.test(sessionId) ? { itemId, sessionId } : null;
+}
+
+/**
+ * The answer's turn as a CARD (`OwnerAnswerCard`): which item was answered, and when THIS
+ * conversation was handed the answer — the moment its own ANSWER delivery row was written, in the
+ * turn's transaction (`acknowledgeAnswer`, `acknowledgeDoneRequestDecline`). Not the moment the owner
+ * answered: a coordinator rotated in later is told then (§5.2 R11), and its line says when it was.
+ *
+ * Read off the delivery row because that row is what makes the turn the platform's: a turn under
+ * the key with no row to say it was delivered — a caller's own message, or a delivery whose
+ * transaction never committed — is drawn as what it is, the words, as every answer was before this.
+ * The row is keyed by the conversation, which the caller has checked is the turn's own.
+ */
+export async function readOwnerAnswerCard(
+  db: Pick<Prisma.TransactionClient, 'projectOpenItemDelivery'>,
+  itemId: string,
+  sessionId: string,
+): Promise<OwnerAnswerCard | null> {
+  const delivery = await db.projectOpenItemDelivery.findUnique({
+    where: { itemId_sessionId_purpose: { itemId, sessionId, purpose: 'ANSWER' } },
+    select: { createdAt: true, item: { select: { id: true, kind: true } } },
+  });
+  if (!delivery) return null;
+  const kind = delivery.item.kind;
+  if (kind !== 'COORDINATOR_QUESTION' && kind !== 'DONE_REQUEST') return null;
+  return { itemId: delivery.item.id, kind, sessionId, deliveredAt: delivery.createdAt.toISOString() };
 }
 
 /** What `ask_owner` files, and what the card renders (§5.2 R7, §4.2). */

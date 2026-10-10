@@ -8,6 +8,7 @@ import type {
   ConfirmationReturnCard,
   ConfirmationReviewRequestCard,
   OpenItemDeliveryCard,
+  OwnerAnswerCard,
   ProjectStartedCard,
   SessionMessageCard,
   SessionReplyCard,
@@ -68,6 +69,15 @@ const ITEM: OpenItemDeliveryCard = {
   landing: { receipts: 0, state: 'NOT_KNOWN', upstream: 'main', integration: 'main' },
 };
 const ITEM_TOLD = '【例外待办】Merge conflict: 回填历史 user 事件的 controlPlaneNote\n\n合并时冲突，请处理。';
+
+const ANSWER: OwnerAnswerCard = {
+  itemId: '0198f0e2-1c4a-7b31-9a5e-0d2f3c4b5a70',
+  kind: 'COORDINATOR_QUESTION',
+  sessionId: '0198f0e2-1c4a-7b31-9a5e-0d2f3c4b5a71',
+  deliveredAt: '2026-10-06T05:39:58.000Z',
+};
+const ANSWER_TOLD = 'From Orbit · owner answer: you asked "Merge now, or wait for the review?". '
+  + 'The owner answered: Wait for the review (2026-10-06T05:39:57.512Z).';
 
 const TASK: TaskStartCard = {
   taskId: '01a0cca7-8609-70ed-a0e2-d4b55b832b60',
@@ -199,6 +209,17 @@ const CASES: Case[] = [
     root: '.oic-wrap',
     queuedMark: '.oic.is-queued',
     slot: '.oic-queued',
+    actions: ['Cancel'],
+    acceptable: true,
+  },
+  {
+    name: 'the owner’s answer handed to the coordinator',
+    field: 'ownerAnswer',
+    row: { turnId: 'turn-answer', content: ANSWER_TOLD, createdAt: TS, ownerAnswer: ANSWER, authoredByOrbit: true },
+    echo: { text: ANSWER_TOLD, ownerAnswer: ANSWER },
+    root: '.owner-answer',
+    queuedMark: '.owner-answer.is-queued',
+    slot: '.owner-answer-queued',
     actions: ['Cancel'],
     acceptable: true,
   },
@@ -502,6 +523,7 @@ describe('a turn on the queue is drawn as the card its echo is', () => {
   it('carries every card the snapshot carried onto the placeholder, not a hand-copied few', () => {
     const cards: Required<TurnCards> = {
       openItemDelivery: ITEM,
+      ownerAnswer: ANSWER,
       taskStart: TASK,
       projectStarted: STARTED,
       confirmationReviewRequest: REVIEW_REQUEST,

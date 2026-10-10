@@ -993,6 +993,12 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
     /// The card this queued turn is, read by the same function the runner's echo is read by. Nil
     /// unless `openItemDelivery` is one.
     public var itemCard: OpenItemDelivery? { OpenItemDelivery.parseCard(openItemDelivery) }
+    /// The same for the owner's answer handed to the coordinator (`ownerAnswer`) — held raw for
+    /// `OwnerAnswer.parseCard`, the reader the echo's payload is read by, so the line drawn while the
+    /// answer waits is the line its echo is drawn as. Nil on every other turn, and from a server that
+    /// predates the field.
+    public let ownerAnswer: JSONValue?
+    public var ownerAnswerCard: OwnerAnswer? { OwnerAnswer.parseCard(ownerAnswer) }
     /// The same for the turn that hands a task's run its brief (`taskStart`) — a resumed run's; a
     /// run's opening turn is never listed — held raw for `TaskStart.parseCard`, the reader the echo's
     /// payload is read by. Nil on every other turn, and from a server that predates the field.
@@ -1028,7 +1034,7 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
     /// cards are gathered, so the row reconciled in place and the row first seen in a listing carry
     /// the same ones (`TranscriptReducer.reconcileQueuedTurns`).
     public var cards: TurnCards {
-        TurnCards(itemCard: itemCard, taskStart: taskStartCard, startedCard: startedCard,
+        TurnCards(itemCard: itemCard, ownerAnswer: ownerAnswerCard, taskStart: taskStartCard, startedCard: startedCard,
                   sessionMessage: senderCard, sessionReplies: replyCards,
                   reviewRequest: reviewRequestCard, reviewReturn: reviewReturnCard)
     }
@@ -1039,7 +1045,7 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
 
     public init(turnId: String, kind: String? = nil, content: String,
                 attachments: [Attachment]? = nil, openItemDelivery: JSONValue? = nil,
-                taskStart: JSONValue? = nil,
+                ownerAnswer: JSONValue? = nil, taskStart: JSONValue? = nil,
                 projectStarted: JSONValue? = nil, sessionMessage: JSONValue? = nil,
                 sessionReplies: JSONValue? = nil, authoredByOrbit: Bool? = nil, confirmationReviewRequest: JSONValue? = nil,
                 confirmationReturn: JSONValue? = nil, placement: String? = nil, createdAt: String? = nil,
@@ -1056,6 +1062,7 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
         self.content = content
         self.attachments = attachments
         self.openItemDelivery = openItemDelivery
+        self.ownerAnswer = ownerAnswer
         self.taskStart = taskStart
         self.projectStarted = projectStarted
         self.sessionMessage = sessionMessage

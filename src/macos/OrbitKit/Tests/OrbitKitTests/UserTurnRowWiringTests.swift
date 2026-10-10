@@ -33,7 +33,7 @@ final class UserTurnRowWiringTests: XCTestCase {
 
     /// The cards a user turn can be drawn as.
     private static let cardViews = [
-        "SessionMessageCardView(", "OpenItemDeliveryCardView(", "TaskStartCardView(",
+        "SessionMessageCardView(", "OpenItemDeliveryCardView(", "OwnerAnswerLineView(", "TaskStartCardView(",
         "ProjectStartedCardView(", "ReviewRequestedCardView(", "SentBackByReviewerCardView(",
         "SessionReplyCardsView(", "WatchWakeCardView(", "BackgroundWakeCardView(",
     ]

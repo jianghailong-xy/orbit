@@ -53,6 +53,8 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
     val result = fullResult ?: row.result
     val tool = event.type in setOf("tool_use", "tool_result")
     val cards = remember(shown) { transcriptCards(shown) }
+    // The owner's answer handed to the coordinator: the row is its one line (`OwnerAnswerLineView`), not a message under a heading.
+    val answerLine = cards.singleOrNull()?.takeIf { event.type == "user" && it.key.endsWith(":ownerAnswer") }
     fun loadFull(copy: Boolean = false) { scope.launch {
         loading = true; error = false
         try {
@@ -81,7 +83,7 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
         else -> event.type.replace('_', ' ').replaceFirstChar(Char::uppercase)
     }
     val bg = when { highlighted -> MaterialTheme.colorScheme.secondaryContainer
-        event.type == "user" -> MaterialTheme.colorScheme.surfaceVariant
+        event.type == "user" && answerLine == null -> MaterialTheme.colorScheme.surfaceVariant
         else -> MaterialTheme.colorScheme.surface }
     // The runtime's calls whose work outlives them: a sub-agent (Agent; Task before 2.x) and a Workflow.
     val taskKind = (shown.fields.string("name") ?: shown.fields.string("toolName")).takeIf { event.type == "tool_use" && it in setOf("Agent", "Task", "Workflow") }
@@ -94,6 +96,7 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
     // A07-5: so is a DeepSeek Harness failure on a session Harness runs (iOS e789ce3dc).
     val dshRepair = if (event.type == "error") DshRuntime.repair(shown.body().trim())?.takeIf { console?.executesDsh == true } else null
     Column(Modifier.fillMaxWidth().background(bg).padding(10.dp).testTag(row.key), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (answerLine != null) { TranscriptCardView(answerLine, open, shown); return@Column }
         if (dshRepair != null && console != null) { DshRepairCard(dshRepair, console); return@Column }
         if (repair != null && console != null) { AntigravityRepairCard(repair, console); return@Column }
         if (event.type == "auto_retry" && console != null) {

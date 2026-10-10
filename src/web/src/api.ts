@@ -5,6 +5,7 @@ import type {
   ConfirmationReviewRequestCard,
   ConversationTurnKind,
   OpenItemDeliveryCard,
+  OwnerAnswerCard,
   ProjectStartedCard,
   SessionCapabilities,
   SessionMessageCard,
@@ -633,6 +634,9 @@ export interface TurnCards {
   /** An exception item's delivery carries the item's own fields beside its words (`OpenItemDeliveryCard`),
    *  read by the same function the runner's echo is read by. Absent on every turn a person typed. */
   openItemDelivery?: OpenItemDeliveryCard;
+  /** The owner's answer handed to the coordinator (`OwnerAnswerCard`): which item, and when this
+   *  conversation was told. Its words are written for the agent. Absent on every turn a person typed. */
+  ownerAnswer?: OwnerAnswerCard;
   /** The same for the turn that hands a task's run its brief (`TaskStartCard`): a resumed run's — a
    *  run's opening turn is never listed here. */
   taskStart?: TaskStartCard;

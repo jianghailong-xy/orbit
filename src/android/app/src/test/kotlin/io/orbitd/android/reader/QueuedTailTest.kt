@@ -45,6 +45,24 @@ class QueuedTailTest {
         assertTrue(turn.cancelable)
     }
 
+    /** The owner's answer handed to the coordinator waits as the line its echo will be, and can be withdrawn like any queued turn. */
+    @Test fun aQueuedOwnerAnswerIsItsLine() {
+        val answer = """{"itemId":"01a0d6a9-d763-70e1-b4cf-8793e971b511","kind":"COORDINATOR_QUESTION",
+            "sessionId":"01a0d6a9-d763-70e1-b4cf-8793e971b512","deliveredAt":"2026-10-09T00:29:37.104Z"}"""
+        val turn = queuedTail(rows("""[{"turnId":"t5","kind":"message","content":"From Orbit · owner answer: you asked \"Merge now?\".",
+            "attachments":[],"ownerAnswer":$answer,"authoredByOrbit":true}]"""), emptyList()).single()
+        val card = turn.cards.single()
+        assertTrue(card.key.endsWith(":ownerAnswer"))
+        assertEquals("2026-10-09T00:29:37.104Z", card.source.text("deliveredAt"))
+        assertEquals("From Orbit · owner answer: you asked \"Merge now?\".", turn.event.fields.text("text"))
+        assertTrue(turn.cancelable)
+        val echo = RunEvent("user", 0, buildJsonObject {
+            put("text", "From Orbit · owner answer: you asked \"Merge now?\"."); putJsonArray("attachments") {}
+            put("ownerAnswer", Wire.json.parseToJsonElement(answer))
+        }, "t5")
+        assertEquals(transcriptCards(echo).map { it.title to it.source }, turn.cards.map { it.title to it.source })
+    }
+
     /** The queued row carries exactly the cards its echo will: the same projection over the same keys. */
     @Test fun aQueuedRowCarriesTheCardsItsEchoWillCarry() {
         val turn = queuedTail(rows("""[{"turnId":"t3","kind":"message","content":"x","attachments":[],"sessionReplies":[$reply],

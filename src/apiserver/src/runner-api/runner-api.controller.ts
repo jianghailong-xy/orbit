@@ -294,6 +294,7 @@ import {
   withConfirmationReviewRequest,
   withControlPlaneNote,
   withOpenItemDelivery,
+  withOwnerAnswer,
   withProjectStarted,
   withSessionMessage,
   withSessionReplies,
@@ -5843,8 +5844,9 @@ export class RunnerApiController {
         : [];
       const authoredUserText = new Map(userTurns.map((turn) => [turn.id, turn.content]));
       // The cards those turns are drawn as rather than as the owner's own message — an exception
-      // item's delivery, a task run's brief, a project's start, a confirmation review or its return,
-      // another session's message, the outcomes of this session's requests — read by the function
+      // item's delivery, the owner's answer handed to the coordinator, a task run's brief, a project's
+      // start, a confirmation review or its return, another session's message, the outcomes of this
+      // session's requests — read by the function
       // the queue reads them with (sessions/turn-cards.ts), so a card a queued turn was drawn as is
       // the card its echo is stored with. A batch of ordinary messages costs one indexed read.
       const turnCards = await readTurnCards(
@@ -5860,6 +5862,7 @@ export class RunnerApiController {
         );
         const cards = e.turnId ? turnCards.get(e.turnId) : undefined;
         e.payload = withOpenItemDelivery(e.payload, cards?.openItemDelivery ?? null);
+        e.payload = withOwnerAnswer(e.payload, cards?.ownerAnswer ?? null);
         e.payload = withTaskStart(e.payload, cards?.taskStart ?? null);
         e.payload = withProjectStarted(e.payload, cards?.projectStarted ?? null);
         e.payload = withConfirmationReviewRequest(e.payload, cards?.confirmationReviewRequest ?? null);

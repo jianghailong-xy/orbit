@@ -10122,6 +10122,85 @@ button.chat-jump-start:hover {
   color: var(--text-2);
   font-size: 13px;
 }
+/* The owner's answer handed to the coordinator (components/OwnerAnswerLine.tsx): the same pill, saying
+   the same thing, opening to the words the agent read. Dashed while it still waits on the queue. */
+.owner-answer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.owner-answer-fold {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+}
+.owner-answer-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  margin: 6px auto;
+  padding: 5px 12px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: var(--bg-hover);
+  color: var(--text-2);
+  font-size: 13px;
+  list-style: none;
+  cursor: pointer;
+}
+.owner-answer-line::-webkit-details-marker {
+  display: none;
+}
+.owner-answer-line:focus-visible {
+  outline: 2px solid var(--orbit-focus-color);
+  outline-offset: 2px;
+}
+.owner-answer.is-queued .owner-answer-line {
+  border: 1px dashed var(--border);
+}
+.owner-answer-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.owner-answer-chev {
+  flex: none;
+  opacity: 0.7;
+  transition: transform 0.15s ease;
+}
+.owner-answer-fold[open] .owner-answer-chev {
+  transform: rotate(90deg);
+}
+.owner-answer-told {
+  width: 100%;
+  font-size: 12px;
+}
+.owner-answer-told-head {
+  color: var(--text-3);
+}
+.owner-answer-told pre {
+  max-height: 320px;
+  margin: 6px 0 0;
+  padding: 8px;
+  overflow: auto;
+  border-radius: 6px;
+  background: var(--fill-inset);
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.owner-answer-undelivered {
+  color: var(--warning);
+  font-size: 12px;
+}
+.owner-answer-queued .chat-queued-meta {
+  flex-wrap: wrap;
+  justify-content: center;
+  row-gap: 2px;
+}
 /* ── The owner-confirmation card ──────────────────────────────────────────────────────────
    `OwnerConfirmationCard.tsx`: an OWNER_CONFIRMED task's run has ended its turn, and its owner is
    asked to confirm it done or send it back. The evidence card's frame, with the two facts a person

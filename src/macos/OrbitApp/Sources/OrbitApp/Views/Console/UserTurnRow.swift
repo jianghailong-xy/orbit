@@ -66,6 +66,15 @@ struct UserTurnRow: View {
             OpenItemDeliveryCardView(card: card, text: b.text, ts: b.ts,
                                      undelivered: undelivered,
                                      attached: b.attached, onCancelQueued: cancel)
+        } else if let card = b.ownerAnswer, b.sessionReplies?.isEmpty ?? true {
+            // The owner's answer handed to the coordinator is the platform's message too: the question
+            // replayed in full and the answer, written for the AGENT — as a bubble, the reader's own
+            // question asked a second time. What the reader needs is that it was sent and when, so it
+            // is one line (`ownerAnswer`, `OwnerAnswer.parse`) that opens to those words, queued or
+            // delivered alike. Outcomes riding on it are the replies branch's below. No payload, the
+            // old reading.
+            OwnerAnswerLineView(card: card, text: b.text, undelivered: undelivered,
+                                attached: b.attached, onCancelQueued: cancel)
         } else if let card = b.taskStart {
             // A task run's opening turn is the brief written for the agent — the task, then four
             // steps of protocol — and nobody typed it either. With the task recorded beside it
@@ -108,7 +117,12 @@ struct UserTurnRow: View {
             // blocks the cards draw, so it has no bubble.
             VStack(alignment: .leading, spacing: 6) {
                 if queued == nil, !b.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    UserBubbleView(bubble: withoutNote(b))
+                    // The owner's answer handed to the coordinator is still nobody's message: its line.
+                    if let answer = b.ownerAnswer {
+                        OwnerAnswerLineView(card: answer, text: b.text, undelivered: undelivered)
+                    } else {
+                        UserBubbleView(bubble: withoutNote(b))
+                    }
                 }
                 SessionReplyCardsView(replies: replies, ts: b.ts, attached: replyRest(b),
                                       undelivered: undelivered, onCancelQueued: cancel)

@@ -32,8 +32,8 @@ internal data class QueuedTurn(val turnId: String?, val steer: Boolean, val even
 }
 
 /** The card keys a queued turn carries, the same ones its echo will (`TurnCards`). */
-private val cardKeys = listOf("openItemDelivery", "taskStart", "projectStarted", "confirmationReviewRequest", "confirmationReturn",
-    "sessionMessage", "sessionReplies")
+private val cardKeys = listOf("openItemDelivery", "ownerAnswer", "taskStart", "projectStarted", "confirmationReviewRequest",
+    "confirmationReturn", "sessionMessage", "sessionReplies")
 
 /** The queue as the transcript's tail draws it: every row still waiting, in the listing's order, except one whose echo the window
  * already holds (delivered between the echo and the queue's own re-read) and a receipt or an accepted head. */

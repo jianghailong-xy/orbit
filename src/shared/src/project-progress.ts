@@ -721,6 +721,32 @@ export interface OpenItemDeliveryCard {
 }
 
 /**
+ * What the turn telling a coordinator the owner's answer carries beside its words (§5.2 R10): the
+ * answer to a question it asked (`ask_owner`), or the owner's Not yet… to its request to record the
+ * project done.
+ *
+ * The words are written for the AGENT — `From Orbit · owner answer: you asked "…"`, the question
+ * replayed in full and the answer with its ISO moment — and they stay exactly what they were: a
+ * coordinator rotated in after the answer learns from them what was asked. Without this a client
+ * had nothing else to draw the turn from, and drew the platform's message as a bubble the owner had
+ * typed. Recorded beside the runner's echo like `OpenItemDeliveryCard`, so a client draws the turn as
+ * one line — `Sent to the coordinator · 08:29`, opening to those words.
+ */
+export interface OwnerAnswerCard {
+  /** The item answered, in the uuid spelling every other read of one uses. */
+  itemId: string;
+  /** What was answered: a coordinator's question, or its request to record the project done. */
+  kind: Extract<OpenItemKind, 'COORDINATOR_QUESTION' | 'DONE_REQUEST'>;
+  /** The conversation the answer was delivered to: the one this turn is on. */
+  sessionId: string;
+  /**
+   * When this conversation was handed the answer — its own delivery row's moment, which for a
+   * coordinator rotated in after the answer is when IT was told, not when the owner answered.
+   */
+  deliveredAt: string;
+}
+
+/**
  * What the message telling a coordinator its project was started carries beside its words
  * (apiserver `project-started.ts`), so a client draws it as a card rather than as a bubble the
  * reader typed.

@@ -46,6 +46,21 @@ class StickySummaryTest {
         assertEquals("↑ Your question" to "And also this", StickySummary.of(typed))
     }
 
+    /** The owner's answer handed to the coordinator is a line inside the coordinator's work: the bar keeps the question above it. */
+    @Test fun theOwnersAnswerIsALineAndNeverTakesTheBar() {
+        val answer = user(3, buildJsonObject {
+            put("text", "From Orbit · owner answer: you asked \"Merge now?\". The owner answered: Wait (2026-10-09T00:29:36.828Z).")
+            putJsonObject("ownerAnswer") {
+                put("itemId", "01a0d6a9-d763-70e1-b4cf-8793e971b511"); put("kind", "COORDINATOR_QUESTION")
+                put("sessionId", "01a0d6a9-d763-70e1-b4cf-8793e971b512"); put("deliveredAt", "2026-10-09T00:29:37.104Z")
+            }
+        })
+        assertFalse(StickySummary.isAnchor(answer))
+        val rows = transcriptRows(listOf(user(1, text("Q1")), RunEvent("assistant", 2, text("A1")), answer, RunEvent("assistant", 4, text("A1 cont."))))
+        assertEquals("the answer does not take the bar", "event:1", StickyQuestions(rows).above("event:4")?.key)
+        assertTrue("with no card it is the reader's message, as before", StickySummary.isAnchor(user(5, text("From Orbit · owner answer: …"))))
+    }
+
     @Test fun theIndexStepsBackThroughQuestionsAndSkipsWakes() {
         val rows = transcriptRows(listOf(user(1, text("Q1")), RunEvent("assistant", 2, text("A1")),
             user(3, buildJsonObject { put("text", wake); put("controlPlaneNote", wake) }), RunEvent("assistant", 4, text("A1 cont.")),
