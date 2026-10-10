@@ -284,7 +284,7 @@ export function receiptIsLandingEvidence(receipt: LandingReceiptFacts, branches:
 | `upstreamChosenAt` | Date | `upstream_ref_chosen_at`（L6） | null：这个项目自己没选过（默认值，或新绑定带过来的记忆），或没有代码库行 |
 | `lastMainBranch` | `{ branch, repository, chosenAt }` | L6 的记忆：这个账号在本项目仓库上次选的主分支；`branch`、`repository` 都是短名 | null：这个账号在该仓库没选过，或项目没有仓库 |
 | `repository` | string | 项目仓库的短名：规范化 URL 的最后两段（如 `acme/payments-api`）；有代码库行取它的，没有时取协调工作区 `repo_url` 规范化后的 | null：两者都没有，此时没有主分支可选（客户端不显示 Main branch 一行） |
-| `branches` | `{ names, workspaceName, reportedAt }` | 主分支下拉的候选：协调工作区里最新创建的、上报过 `session.merge_targets` 的会话的那份（runner 报的本地分支），去掉 `orbit/*`；`workspaceName` 是协调工作区名，`reportedAt` 是那个会话行最后一次写入的时间（runner 每次心跳和收尾都重报）。按创建时间取，读 `(workspace_id, created_at DESC)` 索引、遇到第一条有上报的就停：这条读口 30 秒轮询一次，协调工作区可以有上千个会话，报的是同一个仓库 | null：没有会话上报过分支，或没有协调工作区 |
+| `branches` | `{ names, workspaceName, reportedAt }` | 主分支下拉的候选：协调工作区里最新创建的、上报过 `session.merge_targets` 的会话的那份（runner 报的本地分支），去掉 `orbit/*`，也去掉本账号项目的集成分支——同一 owner 的 `project_codebase` 行里，集成线是项目分支（`integration_ref` 与 `upstream_ref` 不同）的那些 `integration_ref` 的短名。落地会把项目分支留在协调工作区的检出里，而它不会是任何项目的主分支。线是 MAIN 的项目，`integration_ref` 就是主分支本身，照常列出；名字只是以 `project/` 开头的用户分支、别的账号的项目分支也照常列出。在服务端去掉：runner 报的 `merge_targets` 不变，会话的 Merge 菜单也读它。`workspaceName` 是协调工作区名，`reportedAt` 是那个会话行最后一次写入的时间（runner 每次心跳和收尾都重报）。按创建时间取，读 `(workspace_id, created_at DESC)` 索引、遇到第一条有上报的就停：这条读口 30 秒轮询一次，协调工作区可以有上千个会话，报的是同一个仓库；本账号的项目分支在同一条语句里经 `project_codebase_owner_idx` 读一次，不逐个名字查 | null：没有会话上报过分支，去掉之后一个不剩，或没有协调工作区 |
 | `source` | `'EXPLICIT' \| 'DEFAULT_RULE'` | `integration_ref_source` | `NOT_DECIDED` |
 | `locked` / `startedAt` | bool / Date | `integration_started_at` | — |
 | `mergeCheckCommand` / `mergeCheckTimeoutSeconds` | string / number | 代码库行 | `NOT_CONFIGURED` |

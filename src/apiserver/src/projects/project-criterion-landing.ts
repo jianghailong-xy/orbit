@@ -168,6 +168,12 @@ export function branchName(ref: string): string {
   return ref.startsWith('refs/heads/') ? ref.slice('refs/heads/'.length) : ref;
 }
 
+/** A project's main branch by name, as the reads whose words say "main" carry it (`mainBranch`):
+ *  its binding's upstream, or null when it has no repository bound — and the words then say main. */
+export function mainBranchOf(codebase: { upstreamRef: string } | null | undefined): string | null {
+  return codebase ? branchName(codebase.upstreamRef) : null;
+}
+
 /** What counts as landed for one project: its binding's two branches, or the legacy pair without one. */
 export function landingBranchesFor(codebase: LandingCodebase | null): LandingBranches {
   if (!codebase) return LEGACY_LANDING_BRANCHES;

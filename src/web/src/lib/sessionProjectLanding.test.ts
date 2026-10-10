@@ -111,3 +111,26 @@ describe('the project row states a landing between the coordinator working and i
       .toBe('Watching P5：接通 Web、macOS 和 iOS');
   });
 });
+
+describe('the landing line, by the project’s main branch', () => {
+  const syncing = integration({
+    inFlight: { taskTitle: 'P5', kind: 'LAND_TASK', phase: 'MAIN_SYNC', state: 'RUNNING', startedAt: ago(4), heartbeatAt: ago(0) },
+  });
+
+  it('names the merge and the sync by the main branch the row carries', () => {
+    expect(lineOf([coordinator()], project({ integration: integration(), mainBranch: 'master' })).line.text)
+      .toBe('Merge to master · queued · 13m');
+    expect(lineOf([coordinator()], project({ integration: syncing, mainBranch: 'master' })).line.text)
+      .toBe('Landing · syncing master · 4m · P5');
+    expect(sessionProjectLandingLine(integration(), NOW, 'master')?.text).toBe('Merge to master · queued · 13m');
+  });
+
+  it('says main as before for a project on main, with no repository bound, or from an older server', () => {
+    for (const mainBranch of ['main', null, undefined]) {
+      expect(lineOf([coordinator()], project({ integration: integration(), mainBranch })).line.text, String(mainBranch))
+        .toBe('Merge to main · queued · 13m');
+      expect(lineOf([coordinator()], project({ integration: syncing, mainBranch })).line.text, String(mainBranch))
+        .toBe('Landing · syncing main · 4m · P5');
+    }
+  });
+});

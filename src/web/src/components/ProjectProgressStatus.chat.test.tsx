@@ -424,6 +424,22 @@ describe('what the coordinator is told', () => {
     expect(context).not.toContain(' · task ');
   });
 
+  it('names the merge being re-checked by the project’s main branch, main as before', () => {
+    const stands = (main?: string) =>
+      openItemChatContext({ projectTitle: 'Wikids', projectId: PROJECT_ID, row: HANDLING_PROMOTION, now: NOW, main })
+        .split('\n')
+        .find((line) => line.startsWith('Where it stands: '));
+    expect(stands('master')).toBe(
+      'Where it stands: being handled — the re-check of the merge into master — generation 2 is queued · asked 1m ago',
+    );
+    // Main by name, and a host that names none.
+    for (const main of ['main', undefined]) {
+      expect(stands(main), String(main)).toBe(
+        'Where it stands: being handled — the re-check of the merge into main — generation 2 is queued · asked 1m ago',
+      );
+    }
+  });
+
   it('escalated while its rerun runs: says both — the rerun in flight, and that it is the owner’s now', () => {
     const both: ProjectOpenItemRow = {
       ...HANDLING_LANDING,

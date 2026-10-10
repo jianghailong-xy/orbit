@@ -1276,11 +1276,14 @@ export function openItemChatContext({
   projectId,
   row,
   now,
+  main = DEFAULT_MAIN_BRANCH,
 }: {
   projectTitle: string | null;
   projectId: string;
   row: ProjectOpenItemRow;
   now: number;
+  /** The project's main branch by name, which a re-check of the merge into main names. */
+  main?: string;
 }): string {
   const what = row.kind === 'FUSE_PAUSED' ? 'pause' : 'exception';
   const reason = row.handling?.reason || row.outcome?.note || null;
@@ -1297,7 +1300,7 @@ export function openItemChatContext({
     row.title,
     ...(row.detailLine ? [row.detailLine] : []),
     ...itemFactLines(row),
-    `Where it stands: ${itemStandingLine(row, now)}`,
+    `Where it stands: ${itemStandingLine(row, now, main)}`,
     ...(reason ? [`${handledByOwner(row) ? 'The owner’s' : 'The coordinator’s'} reason: ${reason}`] : []),
     '',
     `(${ids.join(' · ')})`,

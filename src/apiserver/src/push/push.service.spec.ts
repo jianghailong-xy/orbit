@@ -66,7 +66,7 @@ function ownerItemRow(id: string, coordinatorSessionId: string, over: Record<str
     title: 'Coordinator asks: Take the slower fix?',
     waitingSince: new Date('2026-09-13T10:00:00Z'),
     projectId: 'project-1',
-    project: { coordinatorSessionId },
+    project: { coordinatorSessionId, codebases: [] },
     ...over,
   };
 }

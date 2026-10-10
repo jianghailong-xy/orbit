@@ -36,6 +36,7 @@ import rehypeHighlight from 'rehype-highlight';
 import remarkGfm from 'remark-gfm';
 import { api, getShareLink, type ModelHintLevel, type ModelHintOption, type TaskRunRoute } from '../api';
 import { copyText } from '../lib/clipboard';
+import { mainBranchName } from '../lib/projectStart';
 import { newRunRequestToken, runRequestResend } from '../lib/runRequestToken';
 import { reportTaskRunConflict, type TaskRunConflictToast } from './TaskRunHandoffNotice';
 import { taskRunEntry } from '../lib/taskRunHandoff';
@@ -1185,7 +1186,9 @@ export function TaskDetailPanel({
   // §13.6: the chip says how the task ENDED, not only what its status column holds. A cancelled
   // attempt that was re-run reads as Superseded, in amber, because the work is still happening.
   const status = taskOutcomeChip(task);
-  const landing = landingBadge(q.data?.integration);
+  // Named by the project's main branch, which the task read carries beside its landing.
+  const mainBranch = mainBranchName(q.data?.integration?.mainBranch);
+  const landing = landingBadge(q.data?.integration, mainBranch);
   const supersession = supersessionNote(task);
   const comments = q.data?.comments ?? [];
   const sessions = q.data?.sessions ?? [];
@@ -1517,7 +1520,7 @@ export function TaskDetailPanel({
           {landing ? (
             <section className="tdp-section" aria-label="Task landing">
               <div className="tdp-section-title">Landing</div>
-              <LandTaskStatus integration={q.data.integration} taskStatus={q.data.status} />
+              <LandTaskStatus integration={q.data.integration} taskStatus={q.data.status} main={mainBranch} />
             </section>
           ) : null}
           {/* The check that settles this row, under the row it checks — the relation the database

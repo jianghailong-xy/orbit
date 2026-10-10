@@ -616,6 +616,21 @@ describe('attention by reason', () => {
     });
   });
 
+  it('names the merge an approval asks for by the project’s main branch, main as before', () => {
+    const waiting = attention({ ownerItems: [ownerItem('PROMOTION_APPROVAL', 1, 2 * HOUR)] });
+    expect(attentionChipOf(project({ attention: waiting, mainBranch: 'master' }), NOW)?.text)
+      .toBe('Needs you · Approve merge to master · 2h');
+    // Main by name, no repository bound (null) and an older server (absent) read as they always did.
+    for (const mainBranch of ['main', null, undefined]) {
+      expect(attentionChipOf(project({ attention: waiting, mainBranch }), NOW)?.text, String(mainBranch))
+        .toBe('Needs you · Approve merge to main · 2h');
+    }
+    // Only the merge names a branch.
+    const question = attention({ ownerItems: [ownerItem('COORDINATOR_QUESTION', 1, HOUR)] });
+    expect(attentionChipOf(project({ attention: question, mainBranch: 'master' }), NOW)?.text)
+      .toBe('Needs you · 1 question from coordinator · 1h');
+  });
+
   it('names the coordinator’s own exception in brand, in the lane the project earned', () => {
     // Mock 1's fourth row: work is running, the coordinator is resolving the conflict itself, and
     // the row stays in Running.

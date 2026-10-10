@@ -1958,6 +1958,9 @@ func skipMergeCheckFacts(t *Transport, projectID, taskID, reason string) (map[st
 		Title       string `json:"title"`
 		Integration struct {
 			MergeCheckCommand string `json:"mergeCheckCommand"`
+			// The project's main branch by name, which the card's note says every merge into is
+			// still checked; null with no repository bound.
+			UpstreamRef *string `json:"upstreamRef"`
 		} `json:"integration"`
 	}
 	if err := json.Unmarshal(projectRaw, &project); err != nil {
@@ -2032,6 +2035,7 @@ func skipMergeCheckFacts(t *Transport, projectID, taskID, reason string) (map[st
 		"failure":      summary,
 		"generation":   landing.Generation,
 		"reason":       reason,
+		"mainBranch":   project.Integration.UpstreamRef,
 	}, nil
 }
 

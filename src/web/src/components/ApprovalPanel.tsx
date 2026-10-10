@@ -10,6 +10,7 @@ import { ENTER_HINT, SHORTCUT_HINT, useApproveHotkey, useCardKeyClaim } from './
 import { buildBatchGraph, describeShape } from '../lib/batchGraph';
 import { ReferenceLink, referenceUrlTransform } from '../lib/markdownLinks';
 import { markdownToPlainLines } from '../lib/markdownText';
+import { mainBranchName } from '../lib/projectStart';
 import {
   OWNER_CONFIRMATION_SHOW_ALL,
   OWNER_CONFIRMATION_SHOW_LESS,
@@ -198,6 +199,9 @@ interface SkipMergeCheckInput {
   failure: string;
   /** Why the coordinator says this red is the check's rather than the delivery's. */
   reason: string;
+  /** The project's main branch by name, which every merge into is still checked; main where the
+   *  card names none (no repository bound, or a runner that predates it). */
+  mainBranch: string;
 }
 
 function skipMergeCheckInput(a: ApprovalInfo): SkipMergeCheckInput | null {
@@ -210,6 +214,7 @@ function skipMergeCheckInput(a: ApprovalInfo): SkipMergeCheckInput | null {
     checkCommand: text(obj.checkCommand),
     failure: text(obj.failure),
     reason: text(obj.reason),
+    mainBranch: mainBranchName(text(obj.mainBranch)),
   };
 }
 
@@ -657,7 +662,7 @@ function SkipMergeCheckBody({ input }: { input: SkipMergeCheckInput }): JSX.Elem
       </Markdown>
       <p className="create-criteria-note">
         Once, and only this landing: the project&rsquo;s check command is unchanged, and the next
-        landing and every merge into main are checked as before.
+        landing and every merge into {input.mainBranch} are checked as before.
       </p>
     </div>
   );

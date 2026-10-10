@@ -9,9 +9,9 @@ import {
   type SessionProjectMembership,
 } from '@orbit/shared';
 import type { SessionFolder } from '../api';
-import { JOB_PHASES, JOB_WORDS } from '../components/ProjectPanoramaHeader';
+import { JOB_PHASES, JOB_WORDS, jobPhases, jobWords } from '../components/ProjectPanoramaHeader';
 import { elapsedLabel, type SidebarProject } from './projectAttention';
-import { mainBranchName, runLineMain } from './projectStart';
+import { DEFAULT_MAIN_BRANCH, mainBranchName, runLineMain } from './projectStart';
 import type { SessionListView } from './queries';
 import { sessionFolderListing, type FolderSessionReadings, type SessionFolderRow } from './sessionFolders';
 import type { GroupableSession } from './sessionGrouping';
@@ -123,10 +123,11 @@ export function landingSilentWord(minutes: number | null): string {
  *  project page's row reads it with). That is a fact about the REPORTS: this line never calls a
  *  silent job a timed-out one, because a timeout is the job's own verdict and lives in the server's
  *  `blockingReason` (`LandTaskStatus` prints it as it is). OrbitKit's `SessionProjectCopy.landingLine`
- *  is this line's other half. */
+ *  is this line's other half. A merge and a sync name `main`, the project's main branch. */
 export function sessionProjectLandingLine(
   integration: ProjectListIntegration | null | undefined,
   now: number,
+  main: string = DEFAULT_MAIN_BRANCH,
 ): SessionProjectLine | null {
   const count = integration?.activeJobCount ?? 0;
   const job = integration?.inFlight;
@@ -137,10 +138,10 @@ export function sessionProjectLandingLine(
   // fact with (`LANDING_NO_REPORT`): how long it has been silent, never a verdict about the work.
   const silent = job.state === 'RUNNING' && (!reported || now - heartbeat > INTEGRATION_CLAIM_STALE_MS);
   const running = job.state === 'RUNNING' && !silent;
-  const word = (job.kind && JOB_WORDS[job.kind as keyof typeof JOB_WORDS]) || 'Integration';
+  const word = (job.kind && jobWords(main)[job.kind as keyof typeof JOB_WORDS]) || 'Integration';
   const state = job.state !== 'RUNNING' ? 'queued'
     : silent ? landingSilentWord(reported ? Math.max(0, Math.floor((now - heartbeat) / 60_000)) : null)
-      : (job.phase && JOB_PHASES[job.phase as keyof typeof JOB_PHASES]) || 'running';
+      : (job.phase && jobPhases(main)[job.phase as keyof typeof JOB_PHASES]) || 'running';
   return {
     text: [count > 1 ? `${word} ${count} jobs` : word, state, elapsedLabel(job.startedAt, now),
       count > 1 ? null : job.taskTitle].filter(Boolean).join(' · '),
@@ -237,7 +238,8 @@ export function sessionProjectListing<T extends SessionProjectSession>(
       }
       return a.id.localeCompare(b.id);
     });
-    const landing = sessionProjectLandingLine(summary?.integration, opts.now ?? Date.now());
+    const landing = sessionProjectLandingLine(
+      summary?.integration, opts.now ?? Date.now(), mainBranchName(summary?.mainBranch));
     let line: SessionProjectLine;
     let target: SessionProjectRow<T>['target'];
     if (coordinatorLine?.tone === 'approval') {
