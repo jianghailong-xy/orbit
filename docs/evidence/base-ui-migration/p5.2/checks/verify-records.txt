@@ -47,3 +47,34 @@ $ node src/web/scripts/audit-antd.mjs --check-owners
   }
 }
 exit=0
+
+## At the delivery 211949ed8, after the merges of origin/main 9498167b9 (c0317ce3c) and of the project tips d354b64c5 (9b28cd9c0) and 951882866 (211949ed8)
+$ node src/web/scripts/audit-antd.mjs --check-owners
+{
+  "baseline": {
+    "commit": "211949ed83f7bed7530795ace579dfd685adebea",
+    "scopeHash": "0978dfc13eddf9a52697556bff205c0fdcfbd467792be4c84830e9cc79108c46"
+  },
+  "records": [
+    "2026-10-07.json",
+    "2026-10-07b.json",
+    "2026-10-07c.json",
+    "2026-10-07d.json",
+    "2026-10-08.json",
+    "2026-10-08b.json",
+    "2026-10-09.json",
+    "2026-10-09b.json",
+    "2026-10-09c.json",
+    "2026-10-10.json",
+    "2026-10-10b.json"
+  ],
+  "unowned": [],
+  "pending": [],
+  "owners": {
+    "KEEP": 1,
+    "P5.1": 28,
+    "P5.3": 97,
+    "P6": 42
+  }
+}
+exit=0
