@@ -15,7 +15,8 @@ export interface ImageProps {
  * A picture that opens on its own in the full-screen viewer (ImagePreview) when pressed, or on Enter or Space — the
  * replaced Image with its preview. The wrapper is a button named by `alt`; the `<img>` fills its width at its own
  * aspect ratio unless the caller's class says otherwise. Pictures that page together (the transcript's) use
- * ImagePreview with `group` instead.
+ * ImagePreview with `group` instead. The wrapper and the cover are spans, styled as the replaced divs were, so a
+ * Markdown picture — inside the `<p>` react-markdown wraps it in — is still valid HTML.
  */
 export function Image({ src, alt, className, cover }: ImageProps) {
   const [open, setOpen] = useState(false);
@@ -28,7 +29,7 @@ export function Image({ src, alt, className, cover }: ImageProps) {
   };
   return (
     <>
-      <div
+      <span
         className="orbit-image"
         role="button"
         tabIndex={0}
@@ -41,8 +42,8 @@ export function Image({ src, alt, className, cover }: ImageProps) {
         }}
       >
         <img className={className ? `orbit-image-img ${className}` : 'orbit-image-img'} src={src} alt={alt} />
-        <div className="orbit-image-cover">{cover}</div>
-      </div>
+        <span className="orbit-image-cover">{cover}</span>
+      </span>
       <ImagePreview open={open} onClose={() => setOpen(false)} items={[{ src, alt }]} origin={origin} />
     </>
   );
