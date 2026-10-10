@@ -13,11 +13,16 @@ final class QuestionCardShotTests: ProbeCase {
     func test3TypedAnswer() { photograph("Q3", "3-typed-answer") }
     func test4MultipleChoice() { photograph("Q4", "4-multiple-choice") }
     func test5ReplyInChat() { photograph("Q5", "5-reply-in-chat") }
+    /// A folded Bash card in the same short transcript: the click photographed on a card this change
+    /// does not draw, on both trees — whether an opened card keeps its folded height on the Mac was
+    /// ever this card's alone.
+    func test6BashCard() { photograph("Q6", "6-bash-card", row: "Bash") }
 
-    private func photograph(_ session: String, _ name: String) {
-        let app = launch(session: session, until: label, name)
+    private func photograph(_ session: String, _ name: String, row words: String? = nil) {
+        let words = words ?? label
+        let app = launch(session: session, until: words, name)
         settle(1.5)
-        let row = cardRow(app)
+        let row = cardRow(app, words)
         // As it opens: where the conversation puts the card, its tail in view.
         shot("\(name)-a-as-opened")
         tree(app, "\(name)-as-opened")
@@ -49,11 +54,11 @@ final class QuestionCardShotTests: ProbeCase {
 
     /// The card's row, found by its "Question" text: a label on iOS, a static text's value on macOS
     /// (the first round's Mac pass looked for a label and found none).
-    private func cardRow(_ app: XCUIApplication) -> XCUIElement {
+    private func cardRow(_ app: XCUIApplication, _ words: String) -> XCUIElement {
         #if os(iOS)
-        return text(app, label)
+        return text(app, words)
         #else
-        return app.staticTexts.matching(NSPredicate(format: "value BEGINSWITH %@", label)).firstMatch
+        return app.staticTexts.matching(NSPredicate(format: "value BEGINSWITH %@", words)).firstMatch
         #endif
     }
 

@@ -1,6 +1,9 @@
 import SwiftUI
 import Foundation
 import OrbitKit
+#if os(macOS)
+import AppKit
+#endif
 
 struct ToolFailureSummary {
     let tool: String?
@@ -379,6 +382,9 @@ struct ToolCardView: View {
         // and animates the same cell. One body's worth of delta hid that for a long time; it was
         // the same defect, below the threshold of notice.
         .animation(nil, value: isOpen)
+        #if os(macOS)
+        .background { RowHeightNudge(open: isOpen) }
+        #endif
     }
 
     private var row: some View {
@@ -527,6 +533,50 @@ struct ToolCardView: View {
         .imagePreview($previewTarget, images: previews, ns: previewNS)
     }
 }
+
+#if os(macOS)
+/// Asks the table behind the transcript's List to measure this row again when `open` changes.
+///
+/// SwiftUI's macOS List picks up a row's new height when the transcript's scroll extent changes with
+/// it, and not when one row grows while everything still fits: an opened question card kept its folded
+/// height, its replay clipped top and bottom under the next row, until the transcript was scrolled (the
+/// probe's Mac pass, run 38020631149). This moves nothing: it only says the row's height is stale.
+private struct RowHeightNudge: NSViewRepresentable {
+    let open: Bool
+
+    func makeCoordinator() -> Coordinator { Coordinator(open: open) }
+    func makeNSView(context: Context) -> NSView { NSView(frame: .zero) }
+
+    func updateNSView(_ view: NSView, context: Context) {
+        guard context.coordinator.open != open else { return }
+        context.coordinator.open = open
+        // After SwiftUI has laid the new content into the row, so the height asked for is the new one.
+        DispatchQueue.main.async { [weak view] in
+            guard let view, let table = Self.table(holding: view) else { return }
+            let row = table.row(for: view)
+            guard row >= 0 else { return }
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0
+                table.noteHeightOfRows(withIndexesChanged: IndexSet(integer: row))
+            }
+        }
+    }
+
+    private static func table(holding view: NSView) -> NSTableView? {
+        var next = view.superview
+        while let current = next {
+            if let table = current as? NSTableView { return table }
+            next = current.superview
+        }
+        return nil
+    }
+
+    final class Coordinator {
+        var open: Bool
+        init(open: Bool) { self.open = open }
+    }
+}
+#endif
 
 /// Shape of a `mcp__orbit__session_create` tool result (`{id,title,status,agentName,provider}`).
 private struct SessionCreatePayload: Decodable {
