@@ -10176,6 +10176,7 @@ button.chat-jump-start:hover {
 }
 .owner-answer-told {
   width: 100%;
+  margin-bottom: 8px;
   font-size: 12px;
 }
 .owner-answer-told-head {
