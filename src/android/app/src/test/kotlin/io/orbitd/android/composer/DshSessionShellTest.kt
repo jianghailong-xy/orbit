@@ -84,15 +84,19 @@ class DshSessionShellTest : ComposerShellTest() {
         await { ComposerShell.calls.contains("POST sessions/${ComposerShell.SESSION}/retry-message") }
     }
 
+    /** Every DeepSeek key runs Harness (contract §2.1), so another one is not this session's: the way to a key is Infrastructure's API
+     * keys, where one is connected or turned back on (web `onEditDshKey`) — no longer the retired `deepseek-harness` form. */
     @Test fun aSessionWithNoKeyIsSentToConnectOne() {
         onHarness()
+        ComposerShell.answers["GET providers/mine"] = { ApiResponse(200, """[{"id":"key-ds-2","slug":"deepseek-2","label":"DeepSeek 2","runtime":"claude",
+            "presetSlug":"deepseek","engines":["claude","opencode","dsh"]}]""".encodeToByteArray()) }
         failure("DSH_CREDENTIAL_MISSING: configure a DeepSeek Harness API key")
         signIn(); openSession()
         awaitText("DeepSeek Harness needs an API key")
         assertTrue(shows("This session has no DeepSeek Harness key to run on. Add or re-enable the key in Infrastructure, then send your message again."))
         compose.onNode(hasText("Update the API key") and hasClickAction()).performScrollTo().performClick()
         await { shadowOf(compose.activity).peekNextStartedActivity() != null }
-        assertEquals("https://a07c.test/providers/new/deepseek-harness", shadowOf(compose.activity).nextStartedActivity.dataString)
+        assertEquals("https://a07c.test/infrastructure#keys", shadowOf(compose.activity).nextStartedActivity.dataString)
     }
 
     @Test fun aMissingHarnessIsACardThatInstallsItAndSaysSoWhileItRuns() {

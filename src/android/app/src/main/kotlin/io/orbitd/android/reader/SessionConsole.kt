@@ -119,15 +119,13 @@ internal class SessionConsole(val app: OrbitApplication, val handle: SessionHand
 
     fun installDsh() { if (canInstallDsh) install(DshRuntime.ENGINE, "DeepSeek Harness") }
 
-    /** Where Update the API key goes, on the web: the session's own key, else a key Harness runs on, else the form that connects one.
-     * These clients don't edit keys themselves. */
+    /** Where Update the API key goes, on the web (`onEditDshKey`): the page of the DeepSeek key this session runs on, else
+     * Infrastructure's API keys, where one is connected or turned back on — every DeepSeek key runs Harness, so no other key's page
+     * stands in for the session's. These clients don't edit keys themselves. */
     suspend fun dshKeyUrl(): String {
         val origin = handle.account.server.trimEnd('/')
         val mine = runCatching { (management.get("providers/mine") as? JsonArray)?.filterIsInstance<JsonObject>() }.getOrNull().orEmpty()
-        val key = mine.firstOrNull { it.string("slug") == provider } ?: mine.firstOrNull { row ->
-            row.string("runtime") == DshRuntime.ENGINE || (row["engines"] as? JsonArray)?.any { (it as? JsonPrimitive)?.contentOrNull == DshRuntime.ENGINE } == true
-        }
-        return key?.string("id")?.let { "$origin/providers/$it" } ?: "$origin/providers/new/${DshRuntime.PRESET_SLUG}"
+        return mine.firstOrNull { it.string("slug") == provider }?.string("id")?.let { "$origin/providers/$it" } ?: "$origin/infrastructure#keys"
     }
 
     // MARK: auto-retry (iOS `AutoRetryCardView`'s reads and presses on `ConsoleModel`)
