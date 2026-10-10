@@ -33,3 +33,20 @@
   line-height: 1.5714285714285714;
   text-align: center;
 }
+/* The 404 picture's box, centred above the title: 250×295, with the icon's 24px under it. */
+.orbit-result-image {
+  width: 250px;
+  height: 295px;
+  margin: 0 auto 24px;
+}
+/* The actions under the text, centred, 8px apart. */
+.orbit-result-extra {
+  margin-top: 24px;
+  text-align: center;
+}
+.orbit-result-extra > * {
+  margin-inline-end: 8px;
+}
+.orbit-result-extra > *:last-child {
+  margin-inline-end: 0;
+}

@@ -20,6 +20,8 @@ interface MenuAction {
   children?: MenuItem[];
   /** A class on the item itself, for a row the page styles apart (the account menu's profile row). */
   className?: string;
+  /** The item's native tip, as the replaced item's `title` (P5.3: a session row's Complete that cannot run says why). */
+  title?: string;
   type?: 'item';
 }
 export type MenuItem = MenuAction | { type: 'separator'; key: string }
@@ -39,6 +41,9 @@ export interface MenuProps extends FloatingProps {
    *  search. The items scroll above it; keys pressed in it stay its own, except Escape and Tab, which close the menu
    *  as they do from an item. */
   footer?: ReactNode;
+  /** False when the trigger is not a `<button>` but a span the page draws as a pill or a ⋯ (P5.3): the menu gives it
+   *  the button role, a Tab stop, and Enter and Space. */
+  nativeButton?: boolean;
 }
 
 /**
@@ -100,12 +105,12 @@ function Items({ items, container, zIndex }: { items: MenuItem[]; container: () 
       {item.icon != null && <span className="orbit-menu-icon" aria-hidden>{item.icon}</span>}
       <span className="orbit-menu-label">{item.label}</span>
     </>;
-    const common = { className: itemClass(item), disabled: item.disabled, label: item.textValue,
+    const common = { className: itemClass(item), disabled: item.disabled, label: item.textValue, title: item.title,
       'data-danger': item.danger || undefined, 'data-selected': item.selected || undefined };
     // Disabled actions remain readable but are outside arrow-key navigation,
     // matching the existing workspace menus. They register no selectable item.
     if (item.disabled) return <div key={item.key} role={item.checked === undefined ? 'menuitem' : 'menuitemcheckbox'}
-      aria-disabled="true" aria-checked={item.checked} className={itemClass(item)} data-disabled>{contents}</div>;
+      aria-disabled="true" aria-checked={item.checked} className={itemClass(item)} title={item.title} data-disabled>{contents}</div>;
     if (item.children) return <Submenu key={item.key} item={item} contents={contents} container={container} zIndex={zIndex} />;
     if (item.checked !== undefined) return <BaseMenu.CheckboxItem key={item.key} {...common}
       checked={item.checked} onCheckedChange={item.onCheckedChange} onClick={item.onSelect} closeOnClick={item.closeOnSelect ?? false}>
@@ -115,8 +120,8 @@ function Items({ items, container, zIndex }: { items: MenuItem[]; container: () 
   });
 }
 
-export function Menu({ trigger, items, disabled, variant = 'default', openOnArrowKeys = true, footer, side = 'bottom', align = 'start',
-  popupClassName, popupStyle, returnFocus, ...state }: MenuProps) {
+export function Menu({ trigger, items, disabled, variant = 'default', openOnArrowKeys = true, footer, nativeButton = true, side = 'bottom',
+  align = 'start', popupClassName, popupStyle, returnFocus, ...state }: MenuProps) {
   const layer = useFloating(state);
   const anchor = useRef<HTMLButtonElement>(null);
   const popup = useRef<HTMLDivElement>(null);
@@ -132,7 +137,7 @@ export function Menu({ trigger, items, disabled, variant = 'default', openOnArro
     return () => observer.disconnect();
   }, [layer.open]);
   return <BaseMenu.Root open={layer.open} onOpenChange={layer.setOpen} modal={false}>
-    <BaseMenu.Trigger ref={anchor} render={trigger} disabled={disabled} onClick={(event) => event.stopPropagation()} onKeyDown={(event) => {
+    <BaseMenu.Trigger ref={anchor} render={trigger} disabled={disabled} nativeButton={nativeButton} onClick={(event) => event.stopPropagation()} onKeyDown={(event) => {
       // Keys that beat the focus move go to the highlighted item, else the menu, as Select's do: Home and End
       // move the highlight before an Enter runs it, and Tab and Shift+Tab leave the menu and close it, as they
       // do with focus in it (the menu convention).
