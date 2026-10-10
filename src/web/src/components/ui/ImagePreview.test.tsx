@@ -270,6 +270,16 @@ describe('Image', () => {
     expect(dialog()).toBeNull();
   });
 
+  it('is named by its label when the picture is decorative, and the picture stays so', async () => {
+    await render(<Image src="blob:shot" alt="" label="screenshot.png" className="composer-attach-thumb" cover="eye" />);
+    const wrapper = container!.querySelector<HTMLElement>('[role="button"]')!;
+    expect(wrapper.getAttribute('aria-label')).toBe('screenshot.png');
+    expect(wrapper.querySelector('img')!.getAttribute('alt')).toBe('');
+    // The label names the thumbnail only: the viewer it opens is still named by the picture.
+    await click(wrapper);
+    expect(dialog()?.getAttribute('aria-label')).toBe('Image preview');
+  });
+
   it('opens the picture on its own on a press, on Enter and on Space', async () => {
     const wrapper = await thumbnail();
     await click(wrapper.querySelector('.orbit-image-cover')!);

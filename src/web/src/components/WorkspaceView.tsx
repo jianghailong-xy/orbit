@@ -639,6 +639,9 @@ interface ComposerSendVars {
 const ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_FILE_BYTES = 25 * 1024 * 1024;
+// What a staged picture's thumbnail is called when its file has no name. The thumbnail is the button that opens the
+// picture in the viewer and is named by the file; the picture itself stays decorative (`alt=""`).
+const PREVIEW_IMAGE_LABEL = 'Preview image';
 
 // Compact byte size for a staged file chip ("12 KB", "3.4 MB").
 const fmtBytes = (n: number): string => {
@@ -11005,6 +11008,7 @@ export function WorkspaceView({
                         className="composer-attach-thumb"
                         src={im.previewUrl}
                         alt=""
+                        label={im.name || PREVIEW_IMAGE_LABEL}
                         cover={<EyeOutlined className="composer-attach-eye" />}
                       />
                     ) : (

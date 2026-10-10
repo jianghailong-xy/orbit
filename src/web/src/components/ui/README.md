@@ -189,14 +189,14 @@ field.current?.setSelectionRange(position, position);
 - 基于 Base UI Dialog，模态焦点、Esc、文档滚动锁与弹层层级沿用本目录约定：顶层 z-index 为 1080（被替换预览的 1000+80），在 Orbit 弹层内按层递增。打开时焦点在关闭键（同被替换预览），关闭后回到打开前的位置。打开期间登记为通知的挂载层。
 - 可访问名称：按钮依次为 Close、Previous image、Next image、Flip vertically、Flip horizontally、Rotate left、Rotate right、Zoom out、Zoom in（被替换预览用的是图标名与 `flipY` 这类内部名）。对话框以当前图片的 alt 命名，没有 alt 时为 Image preview。
 - 减少动态效果时，打开/关闭的渐显与放大、缩放旋转的过渡和按钮的过渡都不播放。
-- `Image`：按下即单独打开预览的一张图片。props 有 `src`、`alt`、`className`（加在 `<img>` 上，尺寸由调用方的类决定）和 `cover`（悬停或键盘聚焦时叠在图上的内容，30% 黑底白字）。外层 `.orbit-image` 是行内块，`role=button`，可 Tab 聚焦，以 alt 命名，Enter/Space 打开。内层 `<img>` 带 `.orbit-image-img`，默认宽度 100%、高度自动，同被替换组件；规则 `.orbit-image .orbit-image-img` 的权重高于调用方的单个类。业务样式通过 `.orbit-image`、`.orbit-image-cover` 调整外层，如 `.md .orbit-image`、`.chat-images .orbit-image`、`.composer-attach .orbit-image`。
+- `Image`：按下即单独打开预览的一张图片。props 有 `src`、`alt`、`label`（按钮的名称，不传时取 alt；图片保持装饰性的 `alt=""` 时用它给按钮命名）、`className`（加在 `<img>` 上，尺寸由调用方的类决定）和 `cover`（悬停或键盘聚焦时叠在图上的内容，30% 黑底白字）。外层 `.orbit-image` 是行内块，`role=button`，可 Tab 聚焦，以 `label`（不传时为 alt）命名，Enter/Space 打开。内层 `<img>` 带 `.orbit-image-img`，默认宽度 100%、高度自动，同被替换组件；规则 `.orbit-image .orbit-image-img` 的权重高于调用方的单个类。业务样式通过 `.orbit-image`、`.orbit-image-cover` 调整外层，如 `.md .orbit-image`、`.chat-images .orbit-image`、`.composer-attach .orbit-image`。
 - 授权图片的获取和对象 URL 的生命周期仍归业务侧（Transcript 的 `ResolvedAttachmentImage`、`LocalArtifactImage`）：拿到对象 URL 后再交给这两个组件。预览本身不持有、也不撤销对象 URL。
 
 ```tsx
 // 一组：调用方冻结点击那一刻的列表，并持有当前序号（Transcript 的 ImagePreviewProvider）。
 <ImagePreview group open={open} items={items} current={current} onCurrentChange={setCurrent} onClose={() => setOpen(false)} />
-// 单张：会话输入框里的附件缩略图（P5.3 切换 WorkspaceView 时用法相同）。
-<Image className="composer-attach-thumb" src={objectUrl} alt="" cover={<EyeOutlined className="composer-attach-eye" />} />
+// 单张：会话输入框里的附件缩略图。图片是装饰性的，按钮以文件名命名，没有文件名时为 Preview image。
+<Image className="composer-attach-thumb" src={objectUrl} alt="" label={im.name || PREVIEW_IMAGE_LABEL} cover={<EyeOutlined className="composer-attach-eye" />} />
 ```
 
 真实页面的对照见 [P5.2 证据](../../../../../docs/evidence/base-ui-migration/p5.2/README.md)。
