@@ -4,7 +4,7 @@ import kotlinx.serialization.json.*
 
 /**
  * OrbitKit `SessionProviderChoices`: why a credential, or an engine, can't run on this runner, and where tapping it goes to fix
- * that. Which credentials an engine lists is [ComposerCatalog.credentials]'s question.
+ * that — and the engine a session runs on. Which credentials an engine lists is [ComposerCatalog.credentials]'s question.
  */
 internal object ProviderChoices {
     /** Missing outranks signed out; a runner that reports nothing on the engine claims nothing. */
@@ -32,4 +32,14 @@ internal object ProviderChoices {
     /** The arrow that closes a row's reason, where tapping the row goes: Antigravity's install-or-key row to its engine page, every
      * other engine's signed-out row to a sign-in (iOS d2737d665), and a missing CLI or a runner too old to its engine page. */
     fun fixSuffix(fixEngine: String?, reason: String?) = if (fixEngine != "antigravity" && reason == "Not signed in") ", sign in →" else " →"
+
+    /** The CLI a session (or a draft) runs on, for good: the server's own `engine` where it records one (provider/engine contract
+     * §6.1) — a draft's workspace, the one it last ran (`lastEngine`) — else the engine its provider runs on by default, as the
+     * account's [providers] say for a key or a pool ([ProviderEngines.sessionEngine]). */
+    fun engine(detail: JsonObject, providers: List<JsonObject>) =
+        ProviderEngines.sessionEngine(detail.text("engine") ?: detail.text("lastEngine"), detail.text("provider"), providers)
+
+    /** Whether only the account's keys can say that engine: a server that doesn't say it, on a provider that is no engine's own name
+     * (a key, or a pool). */
+    fun engineFromKeys(detail: JsonObject) = detail.text("engine") == null && detail.text("provider")?.let { !ProviderEngines.isEngine(it) } == true
 }

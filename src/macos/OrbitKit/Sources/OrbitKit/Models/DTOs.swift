@@ -442,6 +442,13 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// yet — the server sets it while the user turn is the frontier and clears it once a reply or
     /// tool lands, so the row shows your pending message instead of the now-stale previous reply.
     public let lastUserText: String?
+    /// The rolling recap the server wrote about this session (0418) and when it wrote it — the
+    /// sentence the list prefers to `lastAssistantText`. Both nil on a session no pass has recapped
+    /// yet, and on a server writing no recaps (ORBIT_RECAP_ENABLED=0): exactly what the row falls
+    /// back from to the raw last reply. The account's Session recaps switch can also hold it back
+    /// (`UserPreferences.recapsEnabled`).
+    public let recapText: String?
+    public let recapAt: String?
     public let runningBgCount: Int?
     /// Of `runningBgCount`, the ones that are jobs with an end (a `bg_run` of kind `job`/`watch`,
     /// never a `service`): the background work a session can be doing with nobody generating in it.
@@ -593,6 +600,8 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         lastAssistantText = try values.decodeIfPresent(String.self, forKey: .lastAssistantText)
         lastToolUse = try values.decodeIfPresent(String.self, forKey: .lastToolUse)
         lastUserText = try values.decodeIfPresent(String.self, forKey: .lastUserText)
+        recapText = try values.decodeIfPresent(String.self, forKey: .recapText)
+        recapAt = try values.decodeIfPresent(String.self, forKey: .recapAt)
         runningBgCount = try values.decodeIfPresent(Int.self, forKey: .runningBgCount)
         runningBgJobCount = try values.decodeIfPresent(Int.self, forKey: .runningBgJobCount)
         runningSubagentCount = try values.decodeIfPresent(Int.self, forKey: .runningSubagentCount)
@@ -623,7 +632,9 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
                 effort: String? = nil, fastMode: Bool? = nil, source: String? = nil,
                 projectId: String? = nil, projectTitle: String? = nil,
                 lastAssistantText: String? = nil,
-                lastToolUse: String? = nil, lastUserText: String? = nil, runningBgCount: Int? = nil,
+                lastToolUse: String? = nil, lastUserText: String? = nil,
+                recapText: String? = nil, recapAt: String? = nil,
+                runningBgCount: Int? = nil,
                 runningBgJobCount: Int? = nil,
                 runningSubagentCount: Int? = nil,
                 engineTurnActive: Bool? = nil,
@@ -689,6 +700,8 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.lastAssistantText = lastAssistantText
         self.lastToolUse = lastToolUse
         self.lastUserText = lastUserText
+        self.recapText = recapText
+        self.recapAt = recapAt
         self.runningBgCount = runningBgCount
         self.runningBgJobCount = runningBgJobCount
         self.runningSubagentCount = runningSubagentCount

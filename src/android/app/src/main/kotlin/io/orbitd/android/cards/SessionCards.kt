@@ -66,8 +66,14 @@ class SessionCardsModel internal constructor(val handle: SessionHandle, val sess
     fun open(key: String) { pressed = null; reviewKey.value = key }
     fun close() { reviewKey.value = null; pressed = null }
 
+    /** The CLI running the session where the server doesn't say it but the account's providers do (the reader's console): an approval
+     * in a DeepSeek Harness session offers no remember (A07-5). */
+    var engine by mutableStateOf<String?>(null); internal set
+
     /** The server's cards now, and the watches this conversation observes. */
-    fun current(session: SessionState): List<InteractionCard> = session.snapshot?.let { CardCatalog.session(session.id, it) }.orEmpty() + watches
+    fun current(session: SessionState): List<InteractionCard> = session.snapshot?.let { snapshot ->
+        CardCatalog.session(session.id, snapshot, engine = snapshot.detail.text("engine") ?: engine)
+    }.orEmpty() + watches
     /** What the rail draws: the current cards, then the ones it saw that the server stopped publishing, kept to say so. Absence is
      * not success. While reconnecting it is what it last saw. */
     fun shown(session: SessionState, current: List<InteractionCard> = current(session)): List<InteractionCard> =

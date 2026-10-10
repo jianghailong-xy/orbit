@@ -18,7 +18,8 @@ public extension Session {
     /// preview line (`lastAssistantText` / `lastToolUse` / `lastUserText`), tags, pin, runner,
     /// background count (and how much of it is work in flight), whether a self-driven turn is
     /// generating, error text — is preserved from this row, which is what makes applying the event
-    /// non-destructive; those fields stay the periodic snapshot's job.
+    /// non-destructive; those fields stay the periodic snapshot's job. The rolling recap beside the
+    /// previews is carried, and owns its field outright: null in the summary clears the row's.
     func applying(_ summary: ControlSessionSummary) -> Session {
         // The workspace the summary puts the session in. Another than the row's is a move to another
         // workspace (docs/session-folders-move-design.md §5.6), and the lists group rows by
@@ -64,6 +65,11 @@ public extension Session {
             owesReplyTo: summary.owesReplyTo,
             taskId: summary.taskId,
             lastTurnAt: summary.lastTurnAt,
+            // Null is a value here, like the previews beside them: the summary is how an already-open
+            // list learns the recap a settle just wrote — and how it lets go of one a manual refresh
+            // dropped — without waiting for the next snapshot.
+            recapText: summary.recapText,
+            recapAt: summary.recapAt,
             // The row's nested agent is richer than the summary's (it carries provider + effort, which
             // the composer reads), so it wins while the session stays in that workspace; the summary
             // fills a row that somehow has none, and replaces the agent of a row that moved.
@@ -152,6 +158,11 @@ public extension Session {
                          owesReplyTo: [SessionRequestPeer]?? = nil,
                          taskId: String? = nil,
                          lastTurnAt: String? = nil,
+                         // Doubly optional like `retryAt`: nil keeps the row's recap, `.some(nil)`
+                         // is the server saying the session has none, `.some(text)` the one just
+                         // written — which travels with its time so the row's label can date it.
+                         recapText: String?? = nil,
+                         recapAt: String?? = nil,
                          agent: SessionAgentRef? = nil,
                          // Doubly optional: nil preserves an older server's omission; .some(nil)
                          // clears a relation the new server explicitly removed.
@@ -195,6 +206,8 @@ public extension Session {
                 lastAssistantText: lastAssistantText,
                 lastToolUse: lastToolUse,
                 lastUserText: lastUserText,
+                recapText: recapText ?? self.recapText,
+                recapAt: recapAt ?? self.recapAt,
                 runningBgCount: runningBgCount,
                 // Read off this row like the fields above: the summary never carries it, so an
                 // event must not be able to stop the background glyph breathing mid-job.

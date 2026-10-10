@@ -22,6 +22,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.OrbitApplication
+import io.orbitd.android.composer.ProviderChoices
 import io.orbitd.android.composer.SessionComposer
 import io.orbitd.android.cards.CardFocus
 import io.orbitd.android.cards.CardReceiptSheet
@@ -41,6 +42,7 @@ import io.orbitd.android.wiki.PageBar
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.cards.OwnerReview
 import io.orbitd.android.core.cards.AntigravityRepair
+import io.orbitd.android.core.cards.DshRuntime
 import io.orbitd.android.core.cards.SessionRunStart
 import io.orbitd.android.core.net.HttpMethod
 import io.orbitd.android.core.protocol.Wire
@@ -173,6 +175,13 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
             AntigravityRepair.of(snapshotDetail?.string("error")) != null
     }
     LaunchedEffect(antigravityFailure, console.runnerId) { if (antigravityFailure) console.reload() }
+    // So is a DeepSeek Harness one (A07-5) — and, from a server that doesn't say a session's engine, a session on a key or a pool,
+    // whose engine the account's providers say: its cards and its failures follow it.
+    val dshFailure = remember(rows, snapshotDetail) {
+        rows.any { it.event.type == "error" && DshRuntime.repair(it.event.body().trim()) != null } || DshRuntime.repair(snapshotDetail?.string("error")) != null
+    }
+    val engineFromKeys = snapshotDetail?.let(ProviderChoices::engineFromKeys) == true
+    LaunchedEffect(dshFailure || engineFromKeys, console.runnerId) { if (dshFailure || engineFromKeys) console.reload() }
     LaunchedEffect(worktree, state.denied) {
         if (!state.denied) worktree.poll { (worktree.state.value.detail ?: snapshotDetail)?.let { it.string("runStatus") ?: it.string("status") } in
             setOf("RUNNING", "AWAITING_INPUT", "INTERRUPTED") }
@@ -199,6 +208,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     }
     // The conversation's cards, and the review a preview opens (A08-2), held outside the transcript's recyclable rows.
     val cards = rememberSessionCards(app, handle, route.id!!)
+    LaunchedEffect(cards, console.engine) { cards.engine = console.engine }
     val reviewStates = rememberSaveableStateHolder()
     val discussCard: ((String) -> Unit)? = if (!composerState.loaded) null else { context ->
         val prior = composer.state.value.draft.text
@@ -322,8 +332,12 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                 // A07-4: a session queued behind the runner's Antigravity gate says what to fix, above the composer (iOS
                 // `queuedAntigravityRepair`).
                 val queuedDetail = console.detail
-                AntigravityRepair.of(queuedDetail?.string("error"))?.takeIf {
-                    console.executesAntigravity && (queuedDetail?.string("runStatus") ?: queuedDetail?.string("status")) == "PENDING"
+                val queued = (queuedDetail?.string("runStatus") ?: queuedDetail?.string("status")) == "PENDING"
+                // A07-5: and behind its DeepSeek Harness gate, first (iOS `queuedDshRepair`).
+                val queuedDsh = DshRuntime.repair(queuedDetail?.string("error"))?.takeIf { console.executesDsh && queued }
+                if (queuedDsh != null) Box(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) { DshRepairCard(queuedDsh, console) }
+                else AntigravityRepair.of(queuedDetail?.string("error"))?.takeIf {
+                    console.executesAntigravity && queued
                 }?.let { Box(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) { AntigravityRepairCard(it, console) } }
                 SessionWatches(app, handle, route.id!!, open = open)
                 // The session's tasks — created here, or waited on by its watches (A08-6) — and its code output, folded with the rest

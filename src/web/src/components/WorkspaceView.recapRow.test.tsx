@@ -88,6 +88,9 @@ class FakeEventSource {
 let container: HTMLDivElement | null = null;
 let root: Root | null = null;
 let client: QueryClient | null = null;
+/** What GET /users/me answers with — `{}` means the account never touched its switches, so the
+ *  recap line is on. A test that turns Session recaps off sets `{ recaps: false }` here. */
+let mePreferences: Record<string, unknown> = {};
 
 const mounted = (): HTMLDivElement => {
   if (!container) throw new Error('WorkspaceView is not mounted');
@@ -110,6 +113,7 @@ const line = (title: string): HTMLElement => {
 
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  mePreferences = {};
   vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => {}, removeItem: () => {} });
   vi.stubGlobal('EventSource', FakeEventSource);
   vi.mocked(getSessionEventPage).mockReset();
@@ -122,7 +126,7 @@ beforeEach(() => {
     const reply = (value: unknown) => Promise.resolve(value) as Promise<never>;
     if (init?.method && init.method !== 'GET') return reply(undefined);
     if (path === '/users/me') {
-      return reply({ id: 'user-1', email: 'reader@example.com', name: 'Reader', createdAt: '2026-01-01T00:00:00Z', preferences: {} });
+      return reply({ id: 'user-1', email: 'reader@example.com', name: 'Reader', createdAt: '2026-01-01T00:00:00Z', preferences: mePreferences });
     }
     if (path === '/workspaces') {
       return reply([{ id: WORKSPACE_PUBLIC, name: 'orbit', runnerId: RUNNER_ID, createdAt: '2026-01-01T00:00:00Z', lastProvider: 'claude' }]);
@@ -177,31 +181,36 @@ afterEach(async () => {
   }
 });
 
+/** Mount the real WorkspaceView on the list, with the reply-only session open, so the recap and
+ *  working rows are drawn from the list's own copy of them rather than the opened session's
+ *  detail — then wait until the recapped row is on screen. */
+async function mountList(): Promise<void> {
+  const nextClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } } });
+  const nextContainer = document.createElement('div');
+  const nextRoot = createRoot(nextContainer);
+  client = nextClient;
+  container = nextContainer;
+  root = nextRoot;
+  document.body.appendChild(nextContainer);
+  await act(async () => {
+    nextRoot.render(
+      <QueryClientProvider client={nextClient}>
+        <MemoryRouter initialEntries={[`/sessions/${REPLY_PUBLIC}`]}>
+          <AntApp>
+            <WorkspaceView runner={RUNNER} />
+          </AntApp>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+  });
+  await act(async () => {
+    await vi.waitFor(() => expect(listRow(RECAPPED.title)).not.toBeNull(), { timeout: 20_000, interval: 20 });
+  });
+}
+
 describe('the session list over a recapped session', { timeout: 60_000 }, () => {
   it('shows the recap and its time, and leaves a reply-only or working row alone', async () => {
-    const nextClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } } });
-    const nextContainer = document.createElement('div');
-    const nextRoot = createRoot(nextContainer);
-    client = nextClient;
-    container = nextContainer;
-    root = nextRoot;
-    document.body.appendChild(nextContainer);
-    // The reply-only session is open, so the recap and working rows are drawn from the list's
-    // own copy of them rather than from the opened session's detail.
-    await act(async () => {
-      nextRoot.render(
-        <QueryClientProvider client={nextClient}>
-          <MemoryRouter initialEntries={[`/sessions/${REPLY_PUBLIC}`]}>
-            <AntApp>
-              <WorkspaceView runner={RUNNER} />
-            </AntApp>
-          </MemoryRouter>
-        </QueryClientProvider>,
-      );
-    });
-    await act(async () => {
-      await vi.waitFor(() => expect(listRow(RECAPPED.title)).not.toBeNull(), { timeout: 20_000, interval: 20 });
-    });
+    await mountList();
 
     // With a recap: its label carries the time the server wrote it, and the line is the recap —
     // not the raw reply it replaced.
@@ -219,5 +228,17 @@ describe('the session list over a recapped session', { timeout: 60_000 }, () => 
     const running = line(RUNNING.title);
     expect(running.querySelector('.session-preview-label')).toBeNull();
     expect(running.textContent).toBe('Running Bash…');
+  });
+
+  // The account's Session recaps switch (Settings): off, the same recapped session falls through
+  // to the raw last reply it showed before the recap existed — the recap is not merely relabelled.
+  it('shows the raw last reply when the account turned Session recaps off', async () => {
+    mePreferences = { recaps: false };
+    await mountList();
+
+    const recapped = line(RECAPPED.title);
+    expect(recapped.querySelector('.session-preview-label')).toBeNull();
+    expect(recapped.textContent).toBe(RECAPPED.lastAssistantText);
+    expect(recapped.textContent).not.toContain(RECAP_TEXT);
   });
 });

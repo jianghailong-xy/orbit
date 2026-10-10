@@ -236,6 +236,14 @@ interface WikiMaintainSnapshot {
   anchors: WikiImportRepo;
 }
 
+/** A written section the documents step compares: where it is written, its plan definition, and the paths its sources name. */
+interface WikiMaintainComparedSection {
+  doc: string;
+  key: string;
+  section: WikiDocsPlanDoc['sections'][number];
+  paths: string[];
+}
+
 /** Why a run ends before it succeeded: the step, and what went wrong there. */
 class WikiMaintainStop extends Error {
   constructor(readonly step: string, readonly cause: Error, readonly kind: 'infra' | 'content') {
@@ -1299,6 +1307,17 @@ class WikiMaintainRun {
    * at, and the files they cite that are gone. Sections are taken by the commit they were written at: one
    * `diff` a commit, its names matched against the paths those sections name; for a section a path of which
    * changed, its pieces are read at both commits and compared.
+   *
+   * THE FILES ARE READ BY COMMIT, NOT BY SECTION (2026-10-10, P10's rounds f098cd24 and 54755b7b). Every diff is
+   * asked first, and then the files: what every touched section names, in one `read` at the head, and — commit by
+   * commit — what the touched sections of one commit name, in one `read` at that commit, compared as soon as it is
+   * read, so one commit's tree is held at a time. The read cache comes first, and more than one operation only where
+   * `repoOps.read.operationBytes` packs them so (`readWikiRepoFiles`). Each section's files used to be read as the
+   * section was compared, at both ends: two operations a touched section, each mostly the wait for the runner's
+   * next heartbeat — 106-108 reads of one file a round, ~430 of the ~590 seconds the comparison took. The same
+   * files are read at the same commits and the sections compared in the same order, so `changed` and `gone` are
+   * what they were. The diffs stay one a commit — none at the head, none for a commit the snapshot does not
+   * reach — and each operation is still asked once the one before it has settled.
    */
   private async repoAffected(
     planVersion: Awaited<ReturnType<PlansVersion>>,
@@ -1309,7 +1328,7 @@ class WikiMaintainRun {
     for (const doc of state.docs) {
       shaOf.set(doc.slug, new Map(doc.sections.map((section) => [section.key, section.repoSha])));
     }
-    const bySha = new Map<string, Array<{ doc: string; key: string; section: WikiDocsPlanDoc['sections'][number]; paths: string[] }>>();
+    const bySha = new Map<string, WikiMaintainComparedSection[]>();
     for (const doc of planVersion.docs) {
       for (const section of doc.sections) {
         const sha = shaOf.get(doc.slug)?.get(section.key);
@@ -1320,7 +1339,15 @@ class WikiMaintainRun {
         bySha.set(sha, list);
       }
     }
-    const changed: Array<{ doc: string; key: string }> = [];
+    // The names: one diff a commit, in the order of their shas — which sections of the commit it touched, and which
+    // of the files they cite it deleted or renamed. A commit the snapshot does not reach has no diff and nothing
+    // to read: its sections are taken as changed.
+    const commits: Array<{
+      sha: string;
+      sections: WikiMaintainComparedSection[];
+      files: Array<{ status: string; path: string; from: string | null }> | null;
+      touched: WikiMaintainComparedSection[];
+    }> = [];
     const goneSeen = new Set<string>();
     const gone: Array<{ path: string; change: string; to?: string }> = [];
     for (const sha of [...bySha.keys()].sort()) {
@@ -1328,27 +1355,42 @@ class WikiMaintainRun {
       if (!(this.snapshot?.index.commits ?? []).some((commit) => commit.toLowerCase() === sha.toLowerCase())) {
         this.jobContext.log(`the snapshot does not have commit ${sha.slice(0, 12)} some sections were written at: `
           + `${sections.length} section(s) are taken as changed`);
-        for (const pending of sections) changed.push({ doc: pending.doc, key: pending.key });
+        commits.push({ sha, sections, files: null, touched: [] });
         continue;
       }
       const diff = await this.diffOf(sha, head);
       if (diff.files.length === 0) continue;
-      const tree = baseTreeOf(this.snapshot!.files, this.snapshot!.sizes, diff.files);
-      const base = this.snapshotRepo(sha, tree.files, tree.sizes);
-      const headRepo = this.snapshotRepo(head, this.snapshot!.files, this.snapshot!.sizes);
+      const touched: WikiMaintainComparedSection[] = [];
       for (const pending of sections) {
-        let touched = false;
+        let touches = false;
         for (const file of diff.files) {
           if (!pathNamed(file.path, pending.paths)) continue;
-          touched = true;
+          touches = true;
           if ((file.status.startsWith('D') || file.status.startsWith('R')) && !goneSeen.has(file.path)) {
             goneSeen.add(file.path);
             gone.push(file.status.startsWith('R') ? { path: file.path, change: 'renamed', to: file.from ?? '' } : { path: file.path, change: 'deleted' });
           }
         }
-        if (!touched) continue;
-        await base.prepare(pending.paths);
-        await headRepo.prepare(pending.paths);
+        if (touches) touched.push(pending);
+      }
+      commits.push({ sha, sections, files: diff.files, touched });
+    }
+    // The files: what every touched section names, read at the head in one read; then, commit by commit, what the
+    // commit's touched sections name, read there in one read and compared section by section, in the order the
+    // comparison has always gone in.
+    const headRepo = this.snapshotRepo(head, this.snapshot?.files ?? [], this.snapshot?.sizes ?? new Map<string, number>());
+    await headRepo.prepare(commits.flatMap((commit) => commit.touched.flatMap((pending) => pending.paths)));
+    const changed: Array<{ doc: string; key: string }> = [];
+    for (const commit of commits) {
+      if (commit.files === null) {
+        for (const pending of commit.sections) changed.push({ doc: pending.doc, key: pending.key });
+        continue;
+      }
+      if (commit.touched.length === 0) continue;
+      const tree = baseTreeOf(this.snapshot!.files, this.snapshot!.sizes, commit.files);
+      const base = this.snapshotRepo(commit.sha, tree.files, tree.sizes);
+      await base.prepare(commit.touched.flatMap((pending) => pending.paths));
+      for (const pending of commit.touched) {
         const before = wikiDocRepoPieces(base, pending.section as never);
         const after = wikiDocRepoPieces(headRepo, pending.section as never);
         if (!samePieces(before.pieces, after.pieces)) changed.push({ doc: pending.doc, key: pending.key });

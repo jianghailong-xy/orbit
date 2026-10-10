@@ -32,6 +32,8 @@ object ManagementFixture {
     val queries = CopyOnWriteArrayList<String>()
     /** The account's switch for smart model selection as users/me's preferences carry it; null leaves it out, as before it was written. */
     @Volatile var modelRouting: Boolean? = null
+    /** The account's Session recaps switch as users/me's preferences carry it; null leaves it out, as before it was written. */
+    @Volatile var recaps: Boolean? = null
     /** GET access-tokens' tokens, newest first; DELETE access-tokens/:id revokes one (REVOKED, by its USER). */
     @Volatile var accessTokens: List<JsonObject> = emptyList()
     @Volatile var accessTokensFail = false
@@ -73,6 +75,8 @@ object ManagementFixture {
     @Volatile var onCode: () -> Unit = {}
     val loginBodies = CopyOnWriteArrayList<JsonObject>()
     val pauseBodies = CopyOnWriteArrayList<String>()
+    /** POST runners/:id/install's bodies, in order; each answers the relay as pending for its engine. */
+    val installBodies = CopyOnWriteArrayList<JsonObject>()
     /** Completing it drops the control stream; a reconnect then never opens. */
     @Volatile var drop = CompletableDeferred<Unit>()
     @Volatile private var opened = 0
@@ -82,9 +86,9 @@ object ManagementFixture {
         viewerRole = "ADMIN"; viewerCreates = true; membersCanAdd = false; membersCanAddAccounts = false; loginState = "ACTIVE"
         secondRunner = false; runnerOrder = listOf(RUNNER, RUNNER_TWO); removedRunners = emptySet(); selfUpdate = null
         runnerEngines = "[]"; runnerExtra = ""; loginRelay = """{"status":null}"""; loginStarted = """{"status":"pending"}"""
-        codeSent = """{"status":"done"}"""; onCode = {}; loginBodies.clear(); pauseBodies.clear()
+        codeSent = """{"status":"done"}"""; onCode = {}; loginBodies.clear(); pauseBodies.clear(); installBodies.clear()
         drop = CompletableDeferred(); opened = 0
-        queries.clear(); modelRouting = null; accessTokens = emptyList(); accessTokensFail = false; providerCatalog = "[]"; providersMine = "[]"
+        queries.clear(); modelRouting = null; recaps = null; accessTokens = emptyList(); accessTokensFail = false; providerCatalog = "[]"; providersMine = "[]"
         balances.clear(); balanceGates.clear(); task = "{}"
     }
 
@@ -110,7 +114,7 @@ object ManagementFixture {
 
     private val now get() = Instant.now()
     private fun user() = """{"id":"$ME","email":"a13@example.test","name":"Fixture","role":"MEMBER","avatarUpdatedAt":null,
-        "preferences":{"theme":"$theme","defaultPermissionMode":"auto","enableOrchestration":true${modelRouting?.let { ",\"modelRouting\":$it" }.orEmpty()}}}"""
+        "preferences":{"theme":"$theme","defaultPermissionMode":"auto","enableOrchestration":true${modelRouting?.let { ",\"modelRouting\":$it" }.orEmpty()}${recaps?.let { ",\"recaps\":$it" }.orEmpty()}}}"""
     private fun workspace() = """{"id":"$WORKSPACE","name":"$workspaceName","runnerId":"$RUNNER","enabled":true,"workDir":"/srv/alpha",
         "lastProvider":"claude","effort":"","modelRouting":false,"env":{},"position":0,"createdAt":"2026-09-01T00:00:00Z"}"""
     private fun runners() = runnerOrder.filter { (it == RUNNER || secondRunner) && it !in removedRunners }.joinToString(",", "[", "]") { if (it == RUNNER) runner() else runnerTwo() }
@@ -148,6 +152,7 @@ object ManagementFixture {
             "users/me/preferences" -> {
                 body()["theme"]?.let { theme = it.jsonPrimitive.content }
                 body()["modelRouting"]?.let { modelRouting = it.jsonPrimitive.boolean }
+                body()["recaps"]?.let { recaps = it.jsonPrimitive.boolean }
                 ok(user())
             }
             "access-tokens" -> if (accessTokensFail) fail(503, "token list failed") else ok("""{"tokens":${JsonArray(accessTokens)}}""")
@@ -175,6 +180,7 @@ object ManagementFixture {
             }
             "runners/$RUNNER/login/code" -> { loginBodies += body(); loginRelay = codeSent; onCode(); ok(loginRelay) }
             "runners/$RUNNER/self-update" -> ok("""{"requestedAt":"$now"}""")
+            "runners/$RUNNER/install" -> { installBodies += body(); ok("""{"status":"pending","engine":${body()["engine"]},"mode":"install"}""") }
             "sessions" -> ok(if (api.query.contains("view" to "open")) "[${sessionRow()}]" else "[]")
             "sessions/$SESSION/share" -> when {
                 shareFails -> fail(503, "share read failed")

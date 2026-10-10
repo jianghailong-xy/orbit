@@ -83,10 +83,11 @@ object SessionProjectGrouping {
     internal fun listing(sessions: List<DirectorySession>, folders: List<Folder>, projects: List<JsonObject>, view: SessionView,
         byTag: Boolean, searching: Boolean = false, folderId: String? = null, runnerOffline: Boolean = false, now: Instant = Instant.now(),
         coordinators: List<DirectorySession> = emptyList(), contentSessions: List<DirectorySession>? = null,
-        watching: Map<String, WatchSessionSummary> = emptyMap(), line: ((DirectorySession) -> SessionLine)? = null): SessionProjectListing {
+        watching: Map<String, WatchSessionSummary> = emptyMap(), recaps: Boolean = true,
+        line: ((DirectorySession) -> SessionLine)? = null): SessionProjectListing {
         if (!listShowsProjects(view, byTag, searching)) return SessionProjectListing(sessions, emptyList(), sessions, sessions.map { SessionProjectEntry.Session(it) })
         fun watch(session: DirectorySession) = watching[watchKey(session.id)]
-        val sessionLine = line ?: { session -> SessionLine.make(session, live = true, watching = watch(session), now = now) }
+        val sessionLine = line ?: { session -> SessionLine.make(session, live = true, watching = watch(session), recaps = recaps, now = now) }
         val coordinatorByProject = mutableMapOf<String, DirectorySession>()
         for (session in coordinators + sessions) session.projectMembership?.takeIf { it.isCoordinator }?.let { coordinatorByProject[key(it.projectId)] = session }
         val groups = linkedMapOf<String, MutableList<DirectorySession>>()

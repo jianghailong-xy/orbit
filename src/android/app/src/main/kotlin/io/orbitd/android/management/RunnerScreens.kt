@@ -60,6 +60,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.currentStateAsState
 import io.orbitd.android.R
+import io.orbitd.android.core.cards.DshRuntime
 import io.orbitd.android.core.net.ApiError
 import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.composer.ProviderEngines
@@ -733,6 +734,9 @@ private fun RunnerEnginePage(api: ManagementApi, id: String, engine: String, rev
                     Text(if (text == RunnerCopy.USES_API_KEYS) RunnerCopy.DSH_READY else text, Modifier.testTag("dsh-engine-status"),
                         style = MaterialTheme.typography.bodySmall, color = Ink.muted)
                 }
+            }
+            if (engine == DshRuntime.ENGINE) DshInstallSection(runner, offline) {
+                scope.launch { show(model.press { api.post("runners/$id/install", buildJsonObject { put("engine", DshRuntime.ENGINE) }) }) }
             }
             if (health != null && health.bool("installed") == true && RunnerPage.isLoginEngine(engine)) {
                 // Every Google sign-in on the page starts above this footer, so Google's terms are said here, once.

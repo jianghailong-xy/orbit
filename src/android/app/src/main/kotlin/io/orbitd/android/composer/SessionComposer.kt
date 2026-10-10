@@ -46,6 +46,7 @@ import androidx.core.content.edit
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.attachments.*
 import io.orbitd.android.core.auth.SessionHandle
+import io.orbitd.android.core.cards.DshRuntime
 import io.orbitd.android.core.net.HttpMethod
 import io.orbitd.android.core.realtime.SessionState
 import io.orbitd.android.management.EngineAccounts
@@ -94,6 +95,8 @@ fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: Str
     val detail = session?.snapshot?.detail ?: JsonObject(emptyMap())
     val effective = JsonObject(detail + draft.resumeConfig)
     val running = detail.text("runState") == "RUNNING" || detail.text("status") == "RUNNING"
+    // DeepSeek Harness takes no ! command, and picks its own model until the runner reports one (A07-5).
+    val dsh = ProviderChoices.engine(effective, state.catalog?.providers.orEmpty()) == DshRuntime.ENGINE
     // The decision behind this task run, while the chip still shows the model it picked (A11-1).
     val smart = smartRoute(detail.text("taskId"), detail["route"] as? JsonObject, effective.text("model").orEmpty(), LocalSmartSelection.current)
     // The engine's guess at the next message, offered in the empty box and taken with a double-tap on it,
@@ -198,7 +201,10 @@ fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: Str
                         listOf("command" to "Command", "skill" to "Skill").forEach { (kind, label) ->
                             DropdownMenuItem(text = { Text(label) }, enabled = usable, onClick = { menu = false; slashScope = kind; model.loadCatalog() })
                         }
-                        DropdownMenuItem(text = { Text("Shell command") }, onClick = { menu = false; if (!draft.text.startsWith("!")) model.edit("!${draft.text}", 1, 1) })
+                        DropdownMenuItem(text = { Text("Shell command") }, onClick = {
+                            menu = false
+                            if (dsh) model.refuse(DshRuntime.SHELL_REFUSAL) else if (!draft.text.startsWith("!")) model.edit("!${draft.text}", 1, 1)
+                        })
                         if (target == null) DropdownMenuItem(text = { Text("Queued messages (${session?.snapshot?.queuedTurns?.size ?: 0})") }, onClick = { menu = false; queued = true })
                         // A pick held for this session travels with the re-send, which would otherwise run on what it already has.
                         if (target == null) DropdownMenuItem(text = { Text("Retry last failed message") }, enabled = usable && !state.busy,
@@ -207,7 +213,8 @@ fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: Str
                             onClick = { menu = false; model.control("auto-retry", HttpMethod.DELETE) })
                     }
                 }
-                ModelChip(effective.text("model")?.ifBlank { "Runtime default" } ?: "Model", effortLabel(effective.text("effort")), smart != null,
+                ModelChip(if (dsh && effective.text("model").isNullOrBlank()) DshRuntime.PICKED_BY else effective.text("model")?.ifBlank { "Runtime default" } ?: "Model",
+                    effortLabel(effective.text("effort")), smart != null,
                     enabled = usable && !state.busy && draft.pending == null && draft.createdSessionId == null, modifier = Modifier.weight(1f)) {
                     models = true; model.loadCatalog()
                 }

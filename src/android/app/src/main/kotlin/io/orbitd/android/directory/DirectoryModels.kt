@@ -35,6 +35,11 @@ data class DirectorySession(
     val pendingApprovals: Int = 0, val runningBgJobCount: Int = 0,
     val confirmationUnderReview: JsonObject? = null,
     val lastAssistantText: String? = null, val lastUserText: String? = null,
+    /** The rolling recap the server wrote about this session and when it wrote it (0418), clipped like the previews beside it; the
+     *  line the list prefers to [lastAssistantText]. Both null on a session no pass has recapped yet, and from a server that writes
+     *  no recaps (`ORBIT_RECAP_ENABLED=0`) — exactly what the row falls back from. The account's Session recaps switch can also hold
+     *  it back (`LocalSessionRecaps`). */
+    val recapText: String? = null, val recapAt: String? = null,
     val tags: List<Tag> = emptyList(), val capabilities: SessionCapabilities? = null,
     // What SessionLine reads beyond the above (OrbitKit `Session`): null from a server that does not send it.
     val runStatus: String? = null, val endReason: String? = null, val error: String? = null, val retryAt: String? = null,
