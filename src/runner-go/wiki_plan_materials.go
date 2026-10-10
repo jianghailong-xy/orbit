@@ -68,7 +68,7 @@ type wikiPlanMaterialsRead struct {
 // projectsText is the owner's projects, oldest first: when, how it stands, how much work it holds.
 func (m *wikiPlanMaterialsRead) projectsText() string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "# 项目标题清单（%s；owner 的全部项目，按创建时间）\n\n| 创建 | 状态 | 任务数 | 会话数 | 标题 |\n|---|---|---|---|---|\n", m.AsOf)
+	fmt.Fprintf(&b, "# Project titles (%s; all of the owner's projects, by when they were created)\n\n| Created | Status | Tasks | Sessions | Title |\n|---|---|---|---|---|\n", m.AsOf)
 	for _, p := range m.Projects {
 		created := p.CreatedAt
 		if len(created) >= 10 {
@@ -77,14 +77,20 @@ func (m *wikiPlanMaterialsRead) projectsText() string {
 		title := strings.NewReplacer("|", "/", "\n", " ").Replace(p.Title)
 		fmt.Fprintf(&b, "| %s | %s | %d | %d | %s |\n", created, p.Status, p.Tasks, p.Sessions, cutRunes(title, 110))
 	}
-	fmt.Fprintf(&b, "\n共 %d 个项目。任务数特别大的是批量数据项目，不是产品功能。\n", len(m.Projects))
+	fmt.Fprintf(&b, "\n%s in all. Projects with a very large number of tasks are bulk data projects, not product features.\n",
+		wikiCount(len(m.Projects), "project", "projects"))
 	return b.String()
 }
 
-var wikiPlanSessionPrefixes = []struct{ prefix, kind string }{
-	{"执行任务：", "任务执行会话"},
-	{"判断：", "判断会话"},
-	{"[VERIFY]", "验证会话"},
+// wikiPlanSessionPrefixes are the title prefixes a session's kind is read from: `Task: ` and `Judgment: ` as
+// Orbit names those sessions, and the `执行任务：` and `判断：` older sessions were named with.
+var wikiPlanSessionPrefixes = []struct {
+	prefix *regexp.Regexp
+	kind   string
+}{
+	{regexp.MustCompile(`^(?:Task:|执行任务：)`), "task run session"},
+	{regexp.MustCompile(`^(?:Judgment:|判断：)`), "judgment session"},
+	{regexp.MustCompile(`^\[VERIFY\]`), "verification session"},
 }
 
 // sessionsText is the space's sessions of the window: by month, kind, engine and project, and their
@@ -92,26 +98,27 @@ var wikiPlanSessionPrefixes = []struct{ prefix, kind string }{
 func (m *wikiPlanMaterialsRead) sessionsText() string {
 	items := m.Sessions.Items
 	var b strings.Builder
-	fmt.Fprintf(&b, "# 近 %d 天的会话（%s；本 space 的 workspace）\n\n共 %d 个会话", m.Sessions.Days, m.AsOf, m.Sessions.Total)
+	fmt.Fprintf(&b, "# Sessions of the last %d days (%s; this space's workspace)\n\n%s in all", m.Sessions.Days, m.AsOf,
+		wikiCount(m.Sessions.Total, "session", "sessions"))
 	if len(items) < m.Sessions.Total {
-		fmt.Fprintf(&b, "，下面读的是最新的 %d 个", len(items))
+		fmt.Fprintf(&b, "; what follows reads the newest %d", len(items))
 	}
-	b.WriteString("。\n\n")
+	b.WriteString(".\n\n")
 	byMonth, byKind, byEngine, byProject := map[string]int{}, map[string]int{}, map[string]int{}, map[string]int{}
 	titles := make([]string, 0, len(items))
 	for _, item := range items {
 		byMonth[item.Month]++
 		title := strings.TrimSpace(item.Title)
-		kind := "自由会话"
+		kind := "free session"
 		for _, p := range wikiPlanSessionPrefixes {
-			if strings.HasPrefix(title, p.prefix) {
+			if prefix := p.prefix.FindString(title); prefix != "" {
 				kind = p.kind
-				title = strings.TrimSpace(strings.TrimPrefix(title, p.prefix))
+				title = strings.TrimSpace(title[len(prefix):])
 				break
 			}
 		}
-		if item.Task && kind == "自由会话" {
-			kind = "任务执行会话"
+		if item.Task && kind == "free session" {
+			kind = "task run session"
 		}
 		byKind[kind]++
 		if item.Provider != nil {
@@ -122,9 +129,9 @@ func (m *wikiPlanMaterialsRead) sessionsText() string {
 		}
 		titles = append(titles, title)
 	}
-	fmt.Fprintf(&b, "按月：%s\n\n按类型：%s\n\n按引擎：%s\n\n", wikiPlanCounts(byMonth, false, 0), wikiPlanCounts(byKind, true, 0), wikiPlanCounts(byEngine, true, 8))
+	fmt.Fprintf(&b, "By month: %s\n\nBy kind: %s\n\nBy engine: %s\n\n", wikiPlanCounts(byMonth, false, 0), wikiPlanCounts(byKind, true, 0), wikiPlanCounts(byEngine, true, 8))
 	if len(byProject) > 0 {
-		b.WriteString("## 会话最多的项目（前 30）\n\n")
+		b.WriteString("## The projects with the most sessions (top 30)\n\n")
 		for _, kv := range wikiPlanTop(byProject, 30) {
 			fmt.Fprintf(&b, "- %d · %s\n", kv.n, cutRunes(kv.key, 100))
 		}
@@ -132,16 +139,18 @@ func (m *wikiPlanMaterialsRead) sessionsText() string {
 	}
 	groups, unclustered := wikiPlanCluster(titles, 36)
 	if len(groups) > 0 {
-		fmt.Fprintf(&b, "## 标题聚类（TF-IDF + 球面 k-means，k=%d；去掉「执行任务：」「判断：」前缀；每组：会话数、高频词、示例标题）\n\n", len(groups))
+		fmt.Fprintf(&b, "## Title clusters (TF-IDF + spherical k-means, k=%d; the \"Task:\" and \"Judgment:\" prefixes taken off; each group: "+
+			"its sessions, frequent terms and example titles)\n\n", len(groups))
 		for i, g := range groups {
-			fmt.Fprintf(&b, "### 组 %d（%d 个，不同标题 %d 个）高频词：%s\n", i+1, g.size, g.distinct, strings.Join(g.terms, " / "))
+			fmt.Fprintf(&b, "### Group %d (%s, %s) frequent terms: %s\n", i+1, wikiCount(g.size, "session", "sessions"),
+				wikiCount(g.distinct, "distinct title", "distinct titles"), strings.Join(g.terms, " / "))
 			for _, title := range g.examples {
 				fmt.Fprintf(&b, "- %s\n", cutRunes(title, 90))
 			}
 			b.WriteString("\n")
 		}
 		if unclustered > 0 {
-			fmt.Fprintf(&b, "（%d 个标题太短或全是常见词，未参与聚类。）\n", unclustered)
+			fmt.Fprintf(&b, "(Not clustered: %s too short or made only of common words.)\n", wikiCount(unclustered, "title", "titles"))
 		}
 	}
 	return b.String()
@@ -151,28 +160,29 @@ func (m *wikiPlanMaterialsRead) sessionsText() string {
 // category, path prefixes, active entries and its newest ones.
 func (m *wikiPlanMaterialsRead) spaceText() string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "# space「%s」现状（%s）\n\n条目是原子事实，kind 取 %s。\n\n## 条目 kind × 状态\n\n", m.Title, m.AsOf, strings.Join(wikiEntryKinds, " / "))
+	fmt.Fprintf(&b, "# The space «%s» as it stands (%s)\n\nAn entry is an atomic fact; its kind is one of %s.\n\n## Entries by kind × status\n\n", m.Title, m.AsOf,
+		strings.Join(wikiEntryKinds, " / "))
 	if len(m.Entries) == 0 {
-		b.WriteString("（还没有条目）\n")
+		b.WriteString("(no entries yet)\n")
 	}
 	for _, e := range m.Entries {
 		fmt.Fprintf(&b, "- %s / %s: %d\n", e.Kind, e.Status, e.Count)
 	}
-	b.WriteString("\n## 现有主题（slug「名称」分类 · active 条目数；路径前缀；最近的几条条目）\n\n")
+	b.WriteString("\n## Existing topics (slug «name» category · active entries; path prefixes; the newest few entries)\n\n")
 	if len(m.Topics) == 0 {
-		b.WriteString("（还没有主题）\n")
+		b.WriteString("(no topics yet)\n")
 	}
 	for _, t := range m.Topics {
 		category := "-"
 		if t.Category != nil && *t.Category != "" {
 			category = *t.Category
 		}
-		fmt.Fprintf(&b, "### %s「%s」 分类 %s · active %d 条\n", t.Slug, t.Title, category, t.Active)
+		fmt.Fprintf(&b, "### %s «%s» category %s · %d active\n", t.Slug, t.Title, category, t.Active)
 		if len(t.PathPrefixes) > 0 {
-			fmt.Fprintf(&b, "路径前缀：%s\n", strings.Join(t.PathPrefixes, " "))
+			fmt.Fprintf(&b, "Path prefixes: %s\n", strings.Join(t.PathPrefixes, " "))
 		}
 		for _, e := range t.Recent {
-			fmt.Fprintf(&b, "- %s：%s\n", e.Kind, cutRunes(e.Title, 70))
+			fmt.Fprintf(&b, "- %s: %s\n", e.Kind, cutRunes(e.Title, 70))
 		}
 		b.WriteString("\n")
 	}
@@ -199,13 +209,13 @@ type wikiPlanTopic struct {
 // wikiPlanTopicsBrief is topics on one line, as the drafting job's materials and the plan's gate list them.
 func wikiPlanTopicsBrief(topics []wikiPlanTopic) string {
 	if len(topics) == 0 {
-		return "（这个 space 还没有主题：会话条件里不写主题）"
+		return "(this space has no topics yet: a session condition names no topic)"
 	}
 	parts := make([]string, 0, len(topics))
 	for _, t := range topics {
-		parts = append(parts, fmt.Sprintf("%s「%s」·%d", t.Slug, t.Title, t.Active))
+		parts = append(parts, fmt.Sprintf("%s «%s» · %d", t.Slug, t.Title, t.Active))
 	}
-	return "现有主题（slug「名称」·active 条目数）：" + strings.Join(parts, "；")
+	return "Existing topics (slug «name» · active entries): " + strings.Join(parts, "; ")
 }
 
 // topicBlocks are the named topics with their newest entries: the materials of one document.
@@ -220,9 +230,9 @@ func (m *wikiPlanMaterialsRead) topicBlocks(slugs []string) string {
 		if !want[t.Slug] {
 			continue
 		}
-		fmt.Fprintf(&b, "### %s「%s」\n", t.Slug, t.Title)
+		fmt.Fprintf(&b, "### %s «%s»\n", t.Slug, t.Title)
 		for _, e := range t.Recent {
-			fmt.Fprintf(&b, "- %s：%s\n", e.Kind, cutRunes(e.Title, 90))
+			fmt.Fprintf(&b, "- %s: %s\n", e.Kind, cutRunes(e.Title, 90))
 		}
 	}
 	return b.String()
@@ -252,7 +262,7 @@ func wikiPlanTop(counts map[string]int, max int) []wikiPlanCount {
 
 func wikiPlanCounts(counts map[string]int, byCount bool, max int) string {
 	if len(counts) == 0 {
-		return "（无）"
+		return "(none)"
 	}
 	var list []wikiPlanCount
 	if byCount {
@@ -267,7 +277,7 @@ func wikiPlanCounts(counts map[string]int, byCount bool, max int) string {
 	for _, kv := range list {
 		parts = append(parts, fmt.Sprintf("%s %d", kv.key, kv.n))
 	}
-	return strings.Join(parts, "，")
+	return strings.Join(parts, ", ")
 }
 
 // ── Clustering the titles ───────────────────────────────────────────────────────────────────────
@@ -283,30 +293,55 @@ var (
 	wikiPlanCJK  = regexp.MustCompile(`[\p{Han}]+`)
 )
 
-type wikiPlanVec map[string]float64
+// wikiPlanVec is a title's terms and their weights, in the order the terms were first met. Every sum over it
+// runs in that order, so titles that tie cluster the same way on every run — and the same way as on the
+// server, whose port of this keeps its terms in a Map, which iterates in that order too.
+type wikiPlanVec struct {
+	terms  []string
+	weight map[string]float64
+}
 
-func wikiPlanNorm(v wikiPlanVec) wikiPlanVec {
+func newWikiPlanVec() *wikiPlanVec { return &wikiPlanVec{weight: map[string]float64{}} }
+
+// add adds x to term's weight; a term met for the first time goes last.
+func (v *wikiPlanVec) add(term string, x float64) {
+	if _, ok := v.weight[term]; !ok {
+		v.terms = append(v.terms, term)
+	}
+	v.weight[term] += x
+}
+
+func (v *wikiPlanVec) clone() *wikiPlanVec {
+	out := &wikiPlanVec{terms: append([]string(nil), v.terms...), weight: make(map[string]float64, len(v.weight))}
+	for term, x := range v.weight {
+		out.weight[term] = x
+	}
+	return out
+}
+
+func wikiPlanNorm(v *wikiPlanVec) *wikiPlanVec {
 	sum := 0.0
-	for _, x := range v {
+	for _, term := range v.terms {
+		x := v.weight[term]
 		sum += x * x
 	}
 	if sum == 0 {
 		return v
 	}
 	n := math.Sqrt(sum)
-	for k, x := range v {
-		v[k] = x / n
+	for _, term := range v.terms {
+		v.weight[term] /= n
 	}
 	return v
 }
 
-func wikiPlanDotVec(a, b wikiPlanVec) float64 {
-	if len(a) > len(b) {
+func wikiPlanDotVec(a, b *wikiPlanVec) float64 {
+	if len(a.terms) > len(b.terms) {
 		a, b = b, a
 	}
 	s := 0.0
-	for k, x := range a {
-		s += x * b[k]
+	for _, term := range a.terms {
+		s += a.weight[term] * b.weight[term]
 	}
 	return s
 }
@@ -315,36 +350,36 @@ func wikiPlanDotVec(a, b wikiPlanVec) float64 {
 // seed is the first title that has any term, and each next the one farthest from every seed), biggest
 // group first. Answers the groups and how many titles had nothing to cluster by.
 func wikiPlanCluster(titles []string, k int) ([]wikiPlanTitleGroup, int) {
-	raw := make([]map[string]float64, len(titles))
+	raw := make([]*wikiPlanVec, len(titles))
 	df := map[string]int{}
 	for i, title := range titles {
-		terms := map[string]float64{}
+		terms := newWikiPlanVec()
 		for _, word := range wikiPlanWord.FindAllString(strings.ToLower(title), -1) {
-			terms["W:"+word] += 2
+			terms.add("W:"+word, 2)
 		}
 		for _, run := range wikiPlanCJK.FindAllString(title, -1) {
 			chars := []rune(run)
 			for j := 0; j+1 < len(chars); j++ {
-				terms["C:"+string(chars[j:j+2])]++
+				terms.add("C:"+string(chars[j:j+2]), 1)
 			}
 		}
 		raw[i] = terms
-		for term := range terms {
+		for _, term := range terms.terms {
 			df[term]++
 		}
 	}
 	n := float64(len(titles))
-	vecs := make([]wikiPlanVec, len(titles))
+	vecs := make([]*wikiPlanVec, len(titles))
 	var idx []int
 	for i, terms := range raw {
-		v := wikiPlanVec{}
-		for term, c := range terms {
+		v := newWikiPlanVec()
+		for _, term := range terms.terms {
 			if d := float64(df[term]); d >= 2 && d <= n*0.3 {
-				v[term] = c * math.Log(1+n/d)
+				v.add(term, terms.weight[term]*math.Log(1+n/d))
 			}
 		}
 		vecs[i] = wikiPlanNorm(v)
-		if len(v) > 0 {
+		if len(v.terms) > 0 {
 			idx = append(idx, i)
 		}
 	}
@@ -381,12 +416,9 @@ func wikiPlanCluster(titles []string, k int) ([]wikiPlanTitleGroup, int) {
 			}
 		}
 	}
-	cents := make([]wikiPlanVec, len(seeds))
+	cents := make([]*wikiPlanVec, len(seeds))
 	for g, s := range seeds {
-		cents[g] = wikiPlanVec{}
-		for term, x := range vecs[s] {
-			cents[g][term] = x
-		}
+		cents[g] = vecs[s].clone()
 	}
 	assign := make(map[int]int, len(idx))
 	for round := 0; round < 8; round++ {
@@ -399,17 +431,17 @@ func wikiPlanCluster(titles []string, k int) ([]wikiPlanTitleGroup, int) {
 			}
 			assign[i] = top
 		}
-		next := make([]wikiPlanVec, len(cents))
+		next := make([]*wikiPlanVec, len(cents))
 		for g := range next {
-			next[g] = wikiPlanVec{}
+			next[g] = newWikiPlanVec()
 		}
 		for _, i := range idx {
-			for term, x := range vecs[i] {
-				next[assign[i]][term] += x
+			for _, term := range vecs[i].terms {
+				next[assign[i]].add(term, vecs[i].weight[term])
 			}
 		}
 		for g := range next {
-			if len(next[g]) > 0 {
+			if len(next[g].terms) > 0 {
 				cents[g] = wikiPlanNorm(next[g])
 			}
 		}
@@ -435,8 +467,8 @@ func wikiPlanCluster(titles []string, k int) ([]wikiPlanTitleGroup, int) {
 		distinct := map[string]bool{}
 		for _, i := range list {
 			distinct[titles[i]] = true
-			for term, x := range vecs[i] {
-				weight[term] += x
+			for _, term := range vecs[i].terms {
+				weight[term] += vecs[i].weight[term]
 			}
 		}
 		terms := make([]string, 0, len(weight))

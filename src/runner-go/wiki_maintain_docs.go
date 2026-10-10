@@ -777,38 +777,38 @@ func wikiProposalPrompt(plan wikiPlanVersionRead, items []wikiProposalItem) stri
 		switch {
 		case item.design != nil:
 			d := item.design
-			fmt.Fprintf(&knowledge, "[%s] 新设计文档 %s", item.ID, d.Path)
+			fmt.Fprintf(&knowledge, "[%s] new design doc %s", item.ID, d.Path)
 			if d.Title != "" {
-				fmt.Fprintf(&knowledge, "「%s」", d.Title)
+				fmt.Fprintf(&knowledge, " «%s»", d.Title)
 			}
-			fmt.Fprintf(&knowledge, "（提交 %s 加入 origin/main", shortWikiHash(d.Commit))
+			fmt.Fprintf(&knowledge, " (added to origin/main in commit %s", shortWikiHash(d.Commit))
 			if d.RenamedFrom != "" {
-				fmt.Fprintf(&knowledge, "，由 %s 改名而来", d.RenamedFrom)
+				fmt.Fprintf(&knowledge, ", renamed from %s", d.RenamedFrom)
 			}
-			knowledge.WriteString("）\n")
+			knowledge.WriteString(")\n")
 			if d.Opening != "" {
-				fmt.Fprintf(&knowledge, "    开头：%s\n", d.Opening)
+				fmt.Fprintf(&knowledge, "    Opening: %s\n", d.Opening)
 			}
 			if len(d.Headings) > 0 {
-				fmt.Fprintf(&knowledge, "    章节：%s\n", strings.Join(d.Headings, "；"))
+				fmt.Fprintf(&knowledge, "    Sections: %s\n", strings.Join(d.Headings, "; "))
 			}
 		case item.entry != nil:
 			e := item.entry
-			fmt.Fprintf(&knowledge, "[%s] 条目（%s）「%s」：%s", item.ID, e.Kind, e.Title, e.Summary)
+			fmt.Fprintf(&knowledge, "[%s] entry (%s) «%s»: %s", item.ID, e.Kind, e.Title, e.Summary)
 			if len(e.AnchorPaths) > 0 {
-				fmt.Fprintf(&knowledge, "；锚点 %s", strings.Join(e.AnchorPaths, "、"))
+				fmt.Fprintf(&knowledge, "; anchors %s", strings.Join(e.AnchorPaths, ", "))
 			}
 			if len(e.Topics) > 0 {
-				fmt.Fprintf(&knowledge, "；主题 %s", strings.Join(e.Topics, "、"))
+				fmt.Fprintf(&knowledge, "; topics %s", strings.Join(e.Topics, ", "))
 			}
 			knowledge.WriteString("\n")
 		}
 	}
 	var catalogue strings.Builder
 	for _, category := range plan.Categories {
-		fmt.Fprintf(&catalogue, "## 大类 `%s`「%s」", category.Key, category.Title)
+		fmt.Fprintf(&catalogue, "## Category `%s` «%s»", category.Key, category.Title)
 		if category.Question != "" {
-			fmt.Fprintf(&catalogue, " —— %s", category.Question)
+			fmt.Fprintf(&catalogue, " — %s", category.Question)
 		}
 		catalogue.WriteString("\n")
 		for _, doc := range plan.Docs {
@@ -817,44 +817,45 @@ func wikiProposalPrompt(plan wikiPlanVersionRead, items []wikiProposalItem) stri
 			}
 			var titles []string
 			for n, section := range doc.Sections {
-				titles = append(titles, fmt.Sprintf("%d.%s（%s）", n+1, section.Title, section.Kind))
+				titles = append(titles, fmt.Sprintf("%d.%s (%s)", n+1, section.Title, section.Kind))
 			}
-			fmt.Fprintf(&catalogue, "- `%s`《%s》｜%s｜含：%s\n  各节：%s\n", doc.Slug, doc.Title, doc.Question, strings.Join(doc.ScopeIn, "；"), strings.Join(titles, " "))
+			fmt.Fprintf(&catalogue, "- `%s` «%s» | %s | Includes: %s\n  Sections: %s\n", doc.Slug, doc.Title, doc.Question, strings.Join(doc.ScopeIn, "; "),
+				strings.Join(titles, " "))
 		}
 	}
 	return `
-# 任务：维护作业的 plan 修改建议
-这个 wiki 的文档按 owner 确认的 plan（第 ` + strconv.Itoa(plan.Version) + ` 版，目录见下）逐节写。维护作业找到了一些新知识，plan 里没有任何一节讲它们（下面「新知识」）。
-请从中挑出能放在一起的一组——讲同一件事、放在同一处读起来连贯的几条（至少一条，挑不出就只挑一条；有新设计文档时先考虑它），建议放进 plan 的哪一篇：放进现有的一篇（给它加一节或几节），或者新增一篇。
-和这一组讲的不是同一件事的新知识，这次不要放，留给下一次维护作业再提：不要为了一次放完，把不相干的知识凑进同一篇或同一节，也不要新增「杂项」「其他」「散落条目」这类没有具体主题的篇。不要改动别的篇，也不要删节。
+# Task: the maintenance run's proposed change to the plan
+This wiki's documents are written section by section to the plan the owner confirmed (version ` + strconv.Itoa(plan.Version) + `; its catalogue is below). The maintenance run found some new knowledge that no section of the plan covers ("New knowledge" below).
+From it, pick one group that belongs together — a few items about the same thing, which read coherently in one place (at least one item; if no group can be picked, pick just one; when there is a new design document, consider it first) — and propose which document of the plan it goes into: an existing document (adding a section or a few to it), or a new one.
+New knowledge that is not about the same thing as this group is not placed this time; leave it for the next maintenance run to propose: do not put unrelated knowledge together into one document or one section to place it all at once, and do not add a document with no specific subject, such as "Miscellaneous", "Other" or "Loose entries". Do not change any other document, and do not delete a section.
 
-## 新知识
+## New knowledge
 ` + knowledge.String() + `
-## plan 的目录
+## The plan's catalogue
 ` + catalogue.String() + `
-## 每一节的材料来源
-- 讲机制的节（concepts / flow / interface / data / ops）：出处写设计文档和代码。新设计文档写「- 文档：<路径> § <章节标题>」，章节标题原样抄上面列出的；不写 § 就是整篇。
-- 已知的坑、决策与理由、约定（pitfalls / decisions / conventions）：出处写去会话里找原话的条件「- 会话：关键词 <词>、<词>；锚点 <路径前缀>；kind <pitfall/decision/convention/…>；主题 <slug>；要找：<要找什么样的原文>」。关键词要选新知识条目里确实出现的词。
-- 只用上面出现过的路径、章节标题和主题；不要编造。
+## Where each section's material comes from
+- A section on a mechanism (concepts / flow / interface / data / ops): its sources are the design documents and the code. For a new design document, write "- Docs: <path> § <section heading>", with the section heading copied exactly from those listed above; without §, it is the whole document.
+- Known pitfalls, decisions and reasons, conventions (pitfalls / decisions / conventions): its source is the conditions to find the words in sessions by, "- Sessions: keywords <word>, <word>; anchors <path prefix>; kind <pitfall/decision/convention/…>; topics <slug>; look for: <what kind of original words to look for>". Choose keywords that really appear in the entries of the new knowledge.
+- Use only the paths, section headings and topics that appear above; invent none.
 
-## 输出格式
-只输出下面的内容，不要前言和总结，不要 JSON：
-放入：<现有一篇的 slug，原样抄目录里反引号中的>（或者写「放入：新篇」）
-理由：<一两句：新知识是什么，为什么放在这里>
-覆盖：<这条建议用到的新知识编号，如 K1、K3>
-如果是新篇，再写这几行：
-大类：<目录里一个大类的 key>
-slug：<新篇的 slug：小写字母、数字，用连字符连接>
-标题：<中文标题>
-问题：<读者带着什么问题来，一句话>
-读者：<谁>：<读完能做什么>
-含：<要点>；<要点>
-篇幅：<a–b 字>
-然后写要新增的节，一节或几节：
-### 1. <节标题> | <type> | <中文字数>
-讲什么：<这一节具体讲什么，1–2 句>
-- 文档：<docs/….md> § <章节标题>
-- 会话：关键词 …；锚点 …；kind …；主题 …；要找：…
+## Output format
+Output only what follows, with no preamble, no summary and no JSON:
+Into: <the slug of an existing document, copied exactly from between the backticks in the catalogue> (or write "Into: new")
+Reason: <a sentence or two: what the new knowledge is, and why it goes here>
+Uses: <the numbers of the new knowledge this proposal uses, such as K1, K3>
+For a new document, also write these lines:
+Category: <the key of a category in the catalogue>
+slug: <the new document's slug: lowercase letters and digits, joined by hyphens>
+Title: <title>
+Question: <the question the reader comes with, in one sentence>
+Audience: <who>: <what they can do once they have read it>
+Includes: <point>; <point>
+Length: <a–b characters>
+Then write the sections to add, one or a few:
+### 1. <section title> | <type> | <length in characters>
+Covers: <what exactly this section says, in 1–2 sentences>
+- Docs: <docs/….md> § <section heading>
+- Sessions: keywords …; anchors …; kind …; topics …; look for: …
 `
 }
 
@@ -864,7 +865,7 @@ func wikiProposalRedo(problems []string) string {
 	if len(listed) > 30 {
 		listed = listed[:30]
 	}
-	return "\n## 上一次的答案有这些问题，请改正后按同样的格式重写整个答案\n- " + strings.Join(listed, "\n- ") + "\n"
+	return "\n## The last answer had these problems: correct them, and write the whole answer again in the same format\n- " + strings.Join(listed, "\n- ") + "\n"
 }
 
 // parseWikiProposal reads the model's answer: its own lines first, then a document's header and sections
@@ -876,21 +877,21 @@ func parseWikiProposal(text string) wikiProposalAnswer {
 		line := strings.TrimSpace(strings.TrimLeft(strings.TrimSpace(raw), "-*•"))
 		label, value := wikiPlanLabel(line)
 		switch strings.ToLower(label) {
-		case "放入":
-			value = strings.Trim(value, "`「」《》 ")
-			if strings.Contains(value, "新篇") || strings.EqualFold(value, "new") {
+		case "into":
+			value = strings.Trim(value, "`「」《》«» ")
+			if lower := strings.ToLower(value); lower == "new" || strings.HasPrefix(lower, "new ") {
 				answer.NewDoc = true
 			} else {
 				answer.Target = value
 			}
 			continue
-		case "理由":
+		case "reason":
 			answer.Reason = value
 			continue
-		case "覆盖":
+		case "uses":
 			answer.Covers = regexp.MustCompile(`K\d+`).FindAllString(strings.ToUpper(value), -1)
 			continue
-		case "大类":
+		case "category":
 			answer.Category = strings.Trim(value, "`「」 ")
 			continue
 		case "slug":
@@ -912,7 +913,7 @@ func assembleWikiProposal(plan wikiPlanVersionRead, answer wikiProposalAnswer, i
 	var problems []string
 	var request wikiPlanProposalRequest
 	if strings.TrimSpace(answer.Reason) == "" {
-		problems = append(problems, "「理由」一行缺了：写明新知识是什么、为什么放在这里")
+		problems = append(problems, "the Reason line is missing: say what the new knowledge is, and why it goes here")
 	}
 	byID := map[string]wikiProposalItem{}
 	for _, item := range items {
@@ -923,7 +924,7 @@ func assembleWikiProposal(plan wikiPlanVersionRead, answer wikiProposalAnswer, i
 	for _, id := range answer.Covers {
 		item, ok := byID[id]
 		if !ok {
-			problems = append(problems, fmt.Sprintf("「覆盖」里的 %s 不是新知识的编号", wikiQuote(id)))
+			problems = append(problems, fmt.Sprintf("%s on the Uses line is not the number of an item of new knowledge", wikiQuote(id)))
 			continue
 		}
 		var fact wikiPlanFact
@@ -938,19 +939,19 @@ func assembleWikiProposal(plan wikiPlanVersionRead, answer wikiProposalAnswer, i
 		}
 	}
 	if len(facts) == 0 {
-		problems = append(problems, "「覆盖」一行缺了：列出这条建议用到的新知识编号，如 K1、K2")
+		problems = append(problems, "the Uses line is missing: list the numbers of the new knowledge this proposal uses, such as K1, K2")
 	}
 	if len(answer.Sections) == 0 {
-		problems = append(problems, "没有要新增的节：至少写一节「### 1. <节标题> | <type> | <中文字数>」")
+		problems = append(problems, "there is no section to add: write one at least, \"### 1. <section title> | <type> | <length in characters>\"")
 	}
 	var sections []wikiPlanSection
 	for i, draft := range answer.Sections {
-		section, check := wikiProposalSection(fmt.Sprintf("第 %d 节", i+1), draft, repo, topics)
+		section, check := wikiProposalSection(fmt.Sprintf("section %d", i+1), draft, repo, topics)
 		problems = append(problems, check...)
 		sections = append(sections, section)
 	}
 	for _, line := range answer.Stray {
-		problems = append(problems, fmt.Sprintf("%s 不是这个格式里的一行：删掉它", wikiQuote(cutRunes(line, 60))))
+		problems = append(problems, fmt.Sprintf("%s is not a line of this format: drop it", wikiQuote(cutRunes(line, 60))))
 	}
 	var doc wikiPlanDoc
 	var category *wikiPlanCategory
@@ -964,23 +965,24 @@ func assembleWikiProposal(plan wikiPlanVersionRead, answer wikiProposalAnswer, i
 			known = known || c.Key == answer.Category
 		}
 		if !known {
-			problems = append(problems, fmt.Sprintf("「大类」%s 不是目录里的大类：原样抄一个大类的 key", wikiQuote(answer.Category)))
+			problems = append(problems, fmt.Sprintf("Category %s is not a category of the catalogue: copy a category's key exactly", wikiQuote(answer.Category)))
 		}
 		if !wikiSlugPattern.MatchString(answer.Slug) {
-			problems = append(problems, fmt.Sprintf("「slug」%s 不是 slug：小写字母和数字，用连字符连接", wikiQuote(answer.Slug)))
+			problems = append(problems, fmt.Sprintf("slug %s is not a slug: lowercase letters and digits, joined by hyphens", wikiQuote(answer.Slug)))
 		}
 		for _, existing := range plan.Docs {
 			if existing.Slug == answer.Slug {
-				problems = append(problems, fmt.Sprintf("slug %s 已经是现有的一篇：新篇要用新的 slug，放进现有的一篇就写「放入：%s」", wikiQuote(answer.Slug), answer.Slug))
+				problems = append(problems, fmt.Sprintf("slug %s is an existing document already: a new document takes a new slug, and to add to the existing one, "+
+					"write \"Into: %s\"", wikiQuote(answer.Slug), answer.Slug))
 			}
 		}
 		if h.Title == "" || h.Question == "" || len(h.Audience) == 0 || len(h.ScopeIn) == 0 {
-			problems = append(problems, "新篇要写全「标题」「问题」「读者」「含」「篇幅」五行")
+			problems = append(problems, "a new document needs all five lines: Title, Question, Audience, Includes and Length")
 		}
 		if min, max, ok := wikiPlanRange(h.Length); ok {
 			doc.Length = wikiPlanLength{Min: min, Max: max}
 		} else {
-			problems = append(problems, fmt.Sprintf("「篇幅」%s 不是篇幅：写成 <a–b 字>", wikiQuote(h.Length)))
+			problems = append(problems, fmt.Sprintf("Length %s is not a length: write it as <a–b characters>", wikiQuote(h.Length)))
 		}
 		doc.Sections = sections
 	default:
@@ -991,11 +993,11 @@ func assembleWikiProposal(plan wikiPlanVersionRead, answer wikiProposalAnswer, i
 			}
 		}
 		if target == nil {
-			problems = append(problems, fmt.Sprintf("「放入」%s 不是目录里的一篇：原样抄一篇的 slug，或写「放入：新篇」", wikiQuote(answer.Target)))
+			problems = append(problems, fmt.Sprintf("Into %s is not a document of the catalogue: copy a document's slug exactly, or write \"Into: new\"", wikiQuote(answer.Target)))
 			break
 		}
 		if target.Protected {
-			problems = append(problems, fmt.Sprintf("%s 是受保护的篇，不能改：放进别的篇，或新增一篇", target.Slug))
+			problems = append(problems, fmt.Sprintf("%s is a protected document and does not change: put it into another document, or add a new one", target.Slug))
 		}
 		doc = wikiPlanDocInput(*target)
 		doc.Protected = false
@@ -1011,15 +1013,15 @@ func wikiProposalSection(at string, draft wikiPlanSectionDraft, repo *wikiDocRep
 	var problems []string
 	section := wikiPlanSection{Title: draft.Title, Kind: wikiUnwrap(draft.Kind), Covers: draft.Covers}
 	if !contains(wikiPlanSectionKinds, section.Kind) {
-		problems = append(problems, fmt.Sprintf("%s的 type %s 不是节的类型：%s 之一", at, wikiQuote(section.Kind), strings.Join(wikiPlanSectionKinds, "、")))
+		problems = append(problems, fmt.Sprintf("%s: the type %s is not a section type: one of %s", at, wikiQuote(section.Kind), strings.Join(wikiPlanSectionKinds, ", ")))
 	}
 	if min, _, ok := wikiPlanRange(draft.Length); ok {
 		section.Length = min
 	} else {
-		problems = append(problems, fmt.Sprintf("%s的字数 %s 不是数字", at, wikiQuote(draft.Length)))
+		problems = append(problems, fmt.Sprintf("%s: the length %s is not a number", at, wikiQuote(draft.Length)))
 	}
 	if strings.TrimSpace(draft.Covers) == "" {
-		problems = append(problems, fmt.Sprintf("%s缺「讲什么」", at))
+		problems = append(problems, fmt.Sprintf("%s has no Covers line", at))
 	}
 	section.Sources.Docs = append([]wikiPlanDocSource{}, draft.Docs...)
 	section.Sources.Code = append([]wikiPlanCodeSource{}, draft.Code...)
@@ -1034,20 +1036,21 @@ func wikiProposalSection(at string, draft wikiPlanSectionDraft, repo *wikiDocRep
 		}
 		if _, ok := repo.docSection(source.Path, heading); !ok {
 			if _, exists := repo.show(source.Path); !exists {
-				problems = append(problems, fmt.Sprintf("%s的文档 %s 在 origin/main 上没有", at, wikiQuote(source.Path)))
+				problems = append(problems, fmt.Sprintf("%s: the document %s is not on origin/main", at, wikiQuote(source.Path)))
 			} else {
-				problems = append(problems, fmt.Sprintf("%s的文档 %s 里没有章节 %s：原样抄新知识里列出的章节标题，或不写 §", at, source.Path, wikiQuote(heading)))
+				problems = append(problems, fmt.Sprintf("%s: the document %s has no section %s: copy a section heading the new knowledge lists exactly, "+
+					"or write no §", at, source.Path, wikiQuote(heading)))
 			}
 		}
 	}
 	for _, source := range draft.Code {
 		if _, missing := repo.codePieces(source.Path, source.Symbols, nil); len(missing) > 0 {
-			problems = append(problems, fmt.Sprintf("%s的代码在 origin/main 上找不到：%s", at, strings.Join(missing, "、")))
+			problems = append(problems, fmt.Sprintf("%s: code not found on origin/main: %s", at, strings.Join(missing, ", ")))
 		}
 	}
 	for _, path := range draft.Contracts {
 		if _, ok := repo.contract(path); !ok {
-			problems = append(problems, fmt.Sprintf("%s的契约 %s 在 origin/main 上没有", at, wikiQuote(path)))
+			problems = append(problems, fmt.Sprintf("%s: the contract %s is not on origin/main", at, wikiQuote(path)))
 		}
 	}
 	if c := draft.Sessions; c != nil {
@@ -1062,7 +1065,8 @@ func wikiProposalSection(at string, draft wikiPlanSectionDraft, repo *wikiDocRep
 			sessions.Until = &until
 		}
 		for _, part := range c.Stray {
-			problems = append(problems, fmt.Sprintf("%s的会话条件里 %s 不是其中一项：只有项目、时间、关键词、锚点、kind、主题和要找", at, wikiQuote(cutRunes(part, 60))))
+			problems = append(problems, fmt.Sprintf("%s: %s is not a part of a session condition: it has projects, dates, keywords, "+
+				"anchors, kinds, topics and what to look for — drop it", at, wikiQuote(cutRunes(part, 60))))
 		}
 		// The server's gate takes a topic only from the space's (plan.gate.references), and lists them with one it
 		// refuses: so is it here, and listed the same, so the round that refuses it can fix it. A document's slug
@@ -1081,10 +1085,12 @@ func wikiProposalSection(at string, draft wikiPlanSectionDraft, repo *wikiDocRep
 		section.Sources.Sessions = sessions
 	}
 	if len(section.Sources.Docs)+len(section.Sources.Code)+len(section.Sources.Contracts) == 0 && section.Sources.Sessions == nil {
-		problems = append(problems, fmt.Sprintf("%s没有写材料来源：机制写「- 文档：」，坑、决策、约定写「- 会话：」", at))
+		problems = append(problems, fmt.Sprintf("%s names no sources: a section on a mechanism names its design documents and code, one on pitfalls, "+
+			"decisions or conventions the sessions to find the words in", at))
 	}
 	for _, line := range draft.Stray {
-		problems = append(problems, fmt.Sprintf("%s里 %s 不是节的一行：节只有讲什么、文档、代码、契约和会话", at, wikiQuote(cutRunes(line, 60))))
+		problems = append(problems, fmt.Sprintf("%s: %s is not a line of a section: a section has what it covers, its documents, "+
+			"code, contracts and sessions, and nothing else — drop it", at, wikiQuote(cutRunes(line, 60))))
 	}
 	return section, problems
 }

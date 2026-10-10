@@ -183,41 +183,42 @@ func newPlanFixture(t *testing.T) maintainFixture {
 
 // ── The model ───────────────────────────────────────────────────────────────────────────────────
 
-const planSkeleton = "## 1. 产品 `product` —— 这个服务是什么、怎么运转\n" +
-	"- 1.1 服务概览 `service-overview`｜这个服务是什么、由哪些部分组成｜含：定位；组件；入口\n" +
-	"- 1.2 存储 `storage`｜数据怎么存、怎么取｜含：Store；保存\n" +
-	"## 2. 开发约定 `dev` —— 给写代码的 agent 看的约定 [agents]\n" +
-	"- 2.1 测试约定 `testing`｜怎么跑测试｜含：go test；夹具\n"
+const planSkeleton = "## 1. Product `product` — What this service is and how it works\n" +
+	"- 1.1 Service overview `service-overview` | What this service is and what it is made of | Includes: purpose; components; entry points\n" +
+	"- 1.2 Storage `storage` | How data is stored and read | Includes: Store; saving\n" +
+	"## 2. Development conventions `dev` — The conventions for the agents that write code [agents]\n" +
+	"- 2.1 Testing conventions `testing` | How to run the tests | Includes: go test; fixtures\n"
 
-const planDetailsProduct = "### 1.1 服务概览\n读者：新加入的开发者：读完能说出服务由哪些部分组成\n含：定位；组件；入口\n不含：存储细节（见 1.2）\n篇幅：800–1200 字\n" +
-	"文档：docs/architecture.md\n代码：src/app/\n契约：contracts/app.contract.json\n主题：storage-topic\n项目：「App 项目」\n\n" +
-	"### 1.2 存储\n读者：写存储代码的人：读完能改 Store\n含：Store 的结构；保存流程\n不含：测试怎么跑（见 2.1）\n篇幅：600–900 字\n" +
-	"文档：docs/wiki-design.md\n代码：src/app/store.go\n契约：无\n主题：无\n项目：无\n"
+const planDetailsProduct = "### 1.1 Service overview\nAudience: developers new to the project: can name the parts of the service once they have read it\n" +
+	"Includes: purpose; components; entry points\nExcludes: storage details (see 1.2)\nLength: 800–1200 characters\nDocs: docs/architecture.md\n" +
+	"Code: src/app/\nContracts: contracts/app.contract.json\nTopics: storage-topic\nProjects: 「App 项目」\n\n### 1.2 Storage\n" +
+	"Audience: people who write storage code: can change Store once they have read it\nIncludes: the structure of Store; the saving flow\n" +
+	"Excludes: how to run the tests (see 2.1)\nLength: 600–900 characters\nDocs: docs/wiki-design.md\nCode: src/app/store.go\nContracts: none\n" +
+	"Topics: none\nProjects: none\n"
 
-const planDetailsDev = "### 2.1 测试约定\n读者：写代码的 agent：读完知道怎么跑测试\n含：go test；夹具\n不含：存储（见 1.2）\n篇幅：400–600 字\n" +
-	"文档：无\n代码：src/web/\n契约：无\n主题：无\n项目：无\n"
+const planDetailsDev = "### 2.1 Testing conventions\nAudience: agents that write code: know how to run the tests once they have read it\nIncludes: go test; fixtures\n" +
+	"Excludes: storage (see 1.2)\nLength: 400–600 characters\nDocs: none\nCode: src/web/\nContracts: none\nTopics: none\nProjects: none\n"
 
-const planOutlineOverview = "### 1. 总览 | overview | 200\n讲什么：概括第 2、3 节。\n" +
-	"### 2. 组件 | concepts | 400\n讲什么：Server 与 Store 两个组件，存储细节见 1.2。\n" +
-	"- 文档：docs/architecture.md § Execution model\n- 代码：src/app/main.go: Server, Serve()\n- 契约：contracts/app.contract.json\n" +
-	"### 3. 已知的坑 | pitfalls | 300\n讲什么：启动时的坑。\n" +
-	"- 会话：项目「App 项目」；时间 2026-09-01 至 今；关键词 启动、端口；锚点 src/app/；kind pitfall；主题 storage-topic；要找：owner 说端口不能写死的原话\n"
+const planOutlineOverview = "### 1. Overview | overview | 200\nCovers: sums up sections 2 and 3.\n### 2. Components | concepts | 400\n" +
+	"Covers: the two components, Server and Store; storage details: see 1.2.\n- Docs: docs/architecture.md § Execution model\n" +
+	"- Code: src/app/main.go: Server, Serve()\n- Contracts: contracts/app.contract.json\n### 3. Known pitfalls | pitfalls | 300\n" +
+	"Covers: the pitfalls at startup.\n" +
+	"- Sessions: projects 「App 项目」; dates 2026-09-01 to now; keywords startup, port; anchors src/app/; kind pitfall; topics storage-topic; look for: the owner's words saying the port must not be hard-coded\n"
 
-const planOutlineStorage = "### 1. 保存流程 | flow | 500\n讲什么：Store.Save 怎么保存。\n" +
-	"- 文档：docs/wiki-design.md § 4.4 锚点\n- 代码：src/app/store.go: Store.Save\n" +
-	"### 2. 约定 | conventions | 200\n讲什么：保存前先校验。\n"
+const planOutlineStorage = "### 1. The saving flow | flow | 500\nCovers: how Store.Save saves.\n- Docs: docs/wiki-design.md § 4.4 锚点\n- Code: src/app/store.go: Store.Save\n" +
+	"### 2. Conventions | conventions | 200\nCovers: validate before saving.\n"
 
 // planOutlineStorageWrong names a symbol, a docs section and a file that are not there, points at a
 // document the plan does not have, and writes a line the format does not have.
-const planOutlineStorageWrong = "### 1. 保存流程 | flow | 500\n讲什么：Store.Load 怎么读，见 9.9。\n" +
-	"- 文档：docs/wiki-design.md § 5. 不存在的章节\n- 代码：src/app/store.go: Store.Save, Store.Load\n- 代码：src/app/missing.go: Foo\n" +
-	"- 备注：这一行不在格式里\n" +
-	"### 2. 约定 | conventions | 200\n讲什么：保存前先校验。\n"
+const planOutlineStorageWrong = "### 1. The saving flow | flow | 500\nCovers: how Store.Load reads, see 9.9.\n- Docs: docs/wiki-design.md § 5. A section that is not there\n" +
+	"- Code: src/app/store.go: Store.Save, Store.Load\n- Code: src/app/missing.go: Foo\n- Note: this line is not in the format\n" +
+	"### 2. Conventions | conventions | 200\nCovers: validate before saving.\n"
 
-const planOutlineTesting = "### 1. 怎么跑测试 | conventions | 300\n讲什么：用 go test 跑，组件见 1.1。\n" +
-	"- 代码：src/web/client.ts: Client.fetchPlan, render()\n"
+const planOutlineTesting = "### 1. How to run the tests | conventions | 300\nCovers: run them with go test; for the components, see 1.1.\n" +
+	"- Code: src/web/client.ts: Client.fetchPlan, render()\n"
 
-const planRules = "## 引用规则\n1. 脚注引一手原文。\n## 归并规则\n1. 新决定覆盖旧的。\n## 维护规则\n1. 只重写受影响的节。\n"
+const planRules = "## Citation rules\n1. A footnote cites the words first said.\n## Merge rules\n1. A newer decision overrides an older one.\n## Maintenance rules\n" +
+	"1. Only the sections affected are written again.\n"
 
 // planModel answers each prompt as the scripted model would, and keeps what it was asked.
 type planModel struct {
@@ -235,18 +236,18 @@ type planModel struct {
 	rounds  int
 }
 
-var planTitleIn = regexp.MustCompile(`《([^》]+)》`)
+var planTitleIn = regexp.MustCompile(`«([^»]+)»`)
 
 func (m *planModel) answer(prompt string) (int, string) {
 	m.mu.Lock()
 	m.prompts = append(m.prompts, prompt)
 	m.mu.Unlock()
 	title := ""
-	if t := planTitleIn.FindStringSubmatch(prompt[strings.LastIndex(prompt, "# 任务"):]); t != nil {
+	if t := planTitleIn.FindStringSubmatch(prompt[strings.LastIndex(prompt, "# Task"):]); t != nil {
 		title = t[1]
 	}
 	switch {
-	case strings.Contains(prompt, "第一步：文档目录的骨架"), strings.Contains(prompt, "# 任务：改正 wiki「"):
+	case strings.Contains(prompt, "step 1: the skeleton of the document catalogue"), strings.Contains(prompt, "# Task: correct the catalogue of the plan of the wiki «"):
 		if m.skeleton != nil {
 			m.mu.Lock()
 			m.skeletons++
@@ -255,31 +256,31 @@ func (m *planModel) answer(prompt string) (int, string) {
 			return http.StatusOK, m.skeleton(n)
 		}
 		return http.StatusOK, planSkeleton
-	case strings.Contains(prompt, "第二步：给大类「产品」"):
+	case strings.Contains(prompt, "step 2: complete each document of the category «Product»"):
 		return http.StatusOK, planDetailsProduct
-	case strings.Contains(prompt, "第二步：给大类「开发约定」"):
+	case strings.Contains(prompt, "step 2: complete each document of the category «Development conventions»"):
 		return http.StatusOK, planDetailsDev
-	case strings.Contains(prompt, "第三步 —— 给《"):
+	case strings.Contains(prompt, "step 3 of drafting the plan — write the outline of «"):
 		if m.outline != nil {
 			if answer := m.outline(title); answer != "" {
 				return http.StatusOK, answer
 			}
 		}
-		return http.StatusOK, map[string]string{"服务概览": planOutlineOverview, "存储": planOutlineStorage, "测试约定": planOutlineTesting}[title]
-	case strings.Contains(prompt, "第四步 —— 三条规则的草案"):
+		return http.StatusOK, map[string]string{"Service overview": planOutlineOverview, "Storage": planOutlineStorage, "Testing conventions": planOutlineTesting}[title]
+	case strings.Contains(prompt, "step 4 of drafting the plan — a draft of the three rules"):
 		return http.StatusOK, planRules
-	case strings.Contains(prompt, "按 owner 的要求修订 plan 的目录"):
+	case strings.Contains(prompt, "revise the catalogue of the plan as the owner asks"):
 		m.mu.Lock()
 		m.rounds++
 		round := m.rounds
 		m.mu.Unlock()
 		return http.StatusOK, m.revise(round, prompt)
-	case strings.Contains(prompt, "# 任务：写新草稿里《"):
+	case strings.Contains(prompt, "# Task: write the audience, scope and outline of «"):
 		return http.StatusOK, m.rewrite(title)
-	case strings.Contains(prompt, "# 任务：改正 plan 里《"):
+	case strings.Contains(prompt, "# Task: correct the document «"):
 		return http.StatusOK, m.redo(title, prompt)
 	}
-	return http.StatusOK, "（不认得的提示）"
+	return http.StatusOK, "(a prompt this model does not know)"
 }
 
 func (m *planModel) asked(marker string) []string {
@@ -387,13 +388,13 @@ func TestWikiPlanDraftsInFourStepsEachStreamedToDisk(t *testing.T) {
 	var order []string
 	for _, request := range vllm.Requests() {
 		switch {
-		case strings.Contains(request.Prompt, "第一步"):
+		case strings.Contains(request.Prompt, "step 1"):
 			order = append(order, "skeleton")
-		case strings.Contains(request.Prompt, "第二步"):
+		case strings.Contains(request.Prompt, "step 2"):
 			order = append(order, "details")
-		case strings.Contains(request.Prompt, "第三步"):
+		case strings.Contains(request.Prompt, "step 3"):
 			order = append(order, "outline")
-		case strings.Contains(request.Prompt, "第四步"):
+		case strings.Contains(request.Prompt, "step 4"):
 			order = append(order, "rules")
 		}
 	}
@@ -413,10 +414,10 @@ func TestWikiPlanDraftsInFourStepsEachStreamedToDisk(t *testing.T) {
 		t.Errorf("an outline was asked for before every category's details: %v", order)
 	}
 	// Each outline was asked with its own document's materials: its docs' whole heading tree and its code's symbols.
-	for _, prompt := range model.asked("第三步 —— 给《存储》") {
+	for _, prompt := range model.asked("write the outline of «Storage»") {
 		if !strings.Contains(prompt, "### docs/wiki-design.md") || !strings.Contains(prompt, "- 4. 写路径") ||
 			!strings.Contains(prompt, "src/app/store.go: Store, Store.Save") {
-			t.Errorf("the outline of 存储 was not given its targeted materials:\n%s", prompt)
+			t.Errorf("the outline of Storage was not given its targeted materials:\n%s", prompt)
 		}
 		if strings.Contains(prompt, "这不是一个章节") || strings.Contains(prompt, "Mock heading") {
 			t.Errorf("a heading inside a code fence, or a mockup's, reached the materials")
@@ -507,11 +508,11 @@ func TestWikiPlanDraftsInFourStepsEachStreamedToDisk(t *testing.T) {
 	if overview.Slug != "service-overview" || overview.Category != "product" || overview.Length != (wikiPlanLength{Min: 800, Max: 1200}) {
 		t.Errorf("the first document: %+v", overview)
 	}
-	if !reflect.DeepEqual(overview.ScopeOut, []wikiPlanScopeOut{{Text: "存储细节", Docs: []string{"storage"}}}) {
+	if !reflect.DeepEqual(overview.ScopeOut, []wikiPlanScopeOut{{Text: "storage details", Docs: []string{"storage"}}}) {
 		t.Errorf("what it leaves to 1.2 is not by its slug: %+v", overview.ScopeOut)
 	}
 	components := overview.Sections[1]
-	if components.Kind != "concepts" || components.Length != 400 || !strings.Contains(components.Covers, "见 1.2") ||
+	if components.Kind != "concepts" || components.Length != 400 || !strings.Contains(components.Covers, "see 1.2") ||
 		!reflect.DeepEqual(components.Sources.Code, []wikiPlanCodeSource{{Path: "src/app/main.go", Symbols: []string{"Server", "Serve()"}}}) ||
 		len(components.Sources.Docs) != 1 || *components.Sources.Docs[0].Section != "Execution model" {
 		t.Errorf("a mechanism section: %+v", components)
@@ -519,7 +520,7 @@ func TestWikiPlanDraftsInFourStepsEachStreamedToDisk(t *testing.T) {
 	sessions := overview.Sections[2].Sources.Sessions
 	if sessions == nil || !reflect.DeepEqual(sessions.Projects, []string{"App 项目"}) || *sessions.Since != "2026-09-01" || sessions.Until != nil ||
 		!reflect.DeepEqual(sessions.EntryKinds, []string{"pitfall"}) || !reflect.DeepEqual(sessions.Topics, []string{"storage-topic"}) ||
-		sessions.Evidence != "owner 说端口不能写死的原话" {
+		sessions.Evidence != "the owner's words saying the port must not be hard-coded" {
 		t.Errorf("a pitfalls section's session condition: %+v", sessions)
 	}
 	head := strings.TrimSpace(mustGit(t, f.checkout, "rev-parse", "origin/main"))
@@ -535,7 +536,7 @@ func TestWikiPlanDraftsInFourStepsEachStreamedToDisk(t *testing.T) {
 	report, _ := end["report"].(map[string]interface{})
 	tokens, _ := report["tokens"].(map[string]interface{})
 	if report["docs"] != float64(3) || report["sections"] != float64(6) || tokens["calls"] != float64(7) || tokens["input"].(float64) <= 0 ||
-		!strings.Contains(fmt.Sprint(report["rulesDraft"]), "## 引用规则") {
+		!strings.Contains(fmt.Sprint(report["rulesDraft"]), "## Citation rules") {
 		t.Errorf("the report: %v", report)
 	}
 	for _, request := range door.of(http.MethodPost, "plan/job/finish") {
@@ -552,12 +553,12 @@ func TestWikiPlanDraftsInFourStepsEachStreamedToDisk(t *testing.T) {
 // ── The count, before any document ──────────────────────────────────────────────────────────────
 
 // planSkeletonFour is planSkeleton with one document more.
-const planSkeletonFour = "## 1. 产品 `product` —— 这个服务是什么、怎么运转\n" +
-	"- 1.1 服务概览 `service-overview`｜这个服务是什么、由哪些部分组成｜含：定位；组件；入口\n" +
-	"- 1.2 存储 `storage`｜数据怎么存、怎么取｜含：Store；保存\n" +
-	"- 1.3 发布渠道 `release-channels`｜版本从哪里发出去｜含：渠道；节奏\n" +
-	"## 2. 开发约定 `dev` —— 给写代码的 agent 看的约定 [agents]\n" +
-	"- 2.1 测试约定 `testing`｜怎么跑测试｜含：go test；夹具\n"
+const planSkeletonFour = "## 1. Product `product` — What this service is and how it works\n" +
+	"- 1.1 Service overview `service-overview` | What this service is and what it is made of | Includes: purpose; components; entry points\n" +
+	"- 1.2 Storage `storage` | How data is stored and read | Includes: Store; saving\n" +
+	"- 1.3 Release channels `release-channels` | Where a version is shipped from | Includes: channels; cadence\n" +
+	"## 2. Development conventions `dev` — The conventions for the agents that write code [agents]\n" +
+	"- 2.1 Testing conventions `testing` | How to run the tests | Includes: go test; fixtures\n"
 
 func TestWikiPlanSendsACatalogueOutsideTheTargetBackBeforeAnyDocument(t *testing.T) {
 	f := newPlanFixture(t)
@@ -580,9 +581,9 @@ func TestWikiPlanSendsACatalogueOutsideTheTargetBackBeforeAnyDocument(t *testing
 	var order []string
 	for _, request := range vllm.Requests() {
 		switch {
-		case strings.Contains(request.Prompt, "第一步"):
+		case strings.Contains(request.Prompt, "step 1"):
 			order = append(order, "catalogue")
-		case strings.Contains(request.Prompt, "第二步"), strings.Contains(request.Prompt, "第三步"), strings.Contains(request.Prompt, "第四步"):
+		case strings.Contains(request.Prompt, "step 2"), strings.Contains(request.Prompt, "step 3"), strings.Contains(request.Prompt, "step 4"):
 			order = append(order, "body")
 			if strings.Contains(request.Prompt, "release-channels") {
 				t.Errorf("a document was written for the catalogue that was sent back:\n%s", request.Prompt)
@@ -592,8 +593,8 @@ func TestWikiPlanSendsACatalogueOutsideTheTargetBackBeforeAnyDocument(t *testing
 	if len(order) != 8 || order[0] != "catalogue" || order[1] != "catalogue" || strings.Count(strings.Join(order, " "), "catalogue") != 2 {
 		t.Errorf("the calls: %v, want the catalogue twice and then the six the draft of three documents asks", order)
 	}
-	again := model.asked("# 任务：改正 wiki「")
-	if len(again) != 1 || !strings.Contains(again[0], "[docCount] plan.docs：the plan has 4 documents; it must have 3 to 3: "+
+	again := model.asked("# Task: correct the catalogue of the plan of the wiki «")
+	if len(again) != 1 || !strings.Contains(again[0], "[docCount] plan.docs: the plan has 4 documents; it must have 3 to 3: "+
 		"merge documents that answer the same reader's question — 1 too many") || !strings.Contains(again[0], "release-channels") {
 		t.Fatalf("the catalogue was not sent back with its count: %d prompts\n%s", len(again), strings.Join(again, "\n----\n"))
 	}
@@ -622,21 +623,21 @@ func TestWikiPlanLeavesACountStillOutsideTheTargetToTheGate(t *testing.T) {
 		t.Fatalf("a catalogue that stayed at three documents for a target of 4–5: %v\n%s", err, printed)
 	}
 	// Each round: the catalogue, then twice more with the count before any document; then the gate judges.
-	if n := len(model.asked("第一步")); n != 9 {
+	if n := len(model.asked("step 1")); n != 9 {
 		t.Errorf("the catalogue was asked for %d times, want 3 in each of 3 rounds", n)
 	}
-	again := model.asked("# 任务：改正 wiki「")
+	again := model.asked("# Task: correct the catalogue of the plan of the wiki «")
 	if len(again) != 8 {
 		t.Fatalf("the catalogue was sent back %d times, want 8", len(again))
 	}
 	for _, prompt := range again {
-		if !strings.Contains(prompt, "[docCount] plan.docs：the plan has 3 documents; it must have 4 to 5: split the broadest documents, "+
+		if !strings.Contains(prompt, "[docCount] plan.docs: the plan has 3 documents; it must have 4 to 5: split the broadest documents, "+
 			"or add the ones the categories are missing — 1 too few") {
 			t.Errorf("a catalogue sent back without its count:\n%s", prompt)
 		}
 	}
 	// The documents were written once: the catalogues sent back kept every one of them.
-	if n := len(model.asked("第二步")) + len(model.asked("第三步 —— 给《")); n != 5 {
+	if n := len(model.asked("step 2")) + len(model.asked("write the outline of «")); n != 5 {
 		t.Errorf("%d details and outlines were asked for, want the first round's 5", n)
 	}
 	if n := len(door.of(http.MethodPost, "plan/drafts")); n != 0 {
@@ -858,13 +859,13 @@ func TestWikiPlanChecksRepositoryAndCrossReferencesAndRedoesWithTheErrors(t *tes
 	door := newFakePlanDoor(t, f)
 	model := &planModel{
 		outline: func(title string) string {
-			if title == "存储" {
+			if title == "Storage" {
 				return planOutlineStorageWrong
 			}
 			return ""
 		},
 		redo: func(title, prompt string) string {
-			return "标题：存储\n" + planOutlineStorage
+			return "Title: Storage\n" + planOutlineStorage
 		},
 	}
 	vllm := newFakeVLLM(t, model.answer)
@@ -887,17 +888,17 @@ func TestWikiPlanChecksRepositoryAndCrossReferencesAndRedoesWithTheErrors(t *tes
 		t.Errorf("the first round: %+v", first)
 	}
 	// Only the document with the errors was written again, with every error, and what it could name instead.
-	redos := model.asked("# 任务：改正 plan 里《")
-	if len(redos) != 1 || !strings.Contains(redos[0], "改正 plan 里《存储》") {
+	redos := model.asked("# Task: correct the document «")
+	if len(redos) != 1 || !strings.Contains(redos[0], "correct the document «Storage»") {
 		t.Fatalf("the redo prompts: %d", len(redos))
 	}
 	for _, want := range []string{
 		`"Store.Load" is no symbol of src/app/store.go`, "it declares: Store; Store.Save",
-		`has no section "5. 不存在的章节"`, "its sections are: 4. 写路径; 4.4 锚点",
+		`has no section "5. A section that is not there"`, "its sections are: 4. 写路径; 4.4 锚点",
 		`"src/app/missing.go" is no file or directory`,
 		`points at "9.9", which is no document of this plan`,
-		`"备注：这一行不在格式里" is not a line of a section`,
-		"1.2《存储》 第 1 节「保存流程」",
+		`"Note: this line is not in the format" is not a line of a section`,
+		"1.2 «Storage», section 1 «The saving flow»",
 	} {
 		if !strings.Contains(redos[0], want) {
 			t.Errorf("the redo prompt does not say %q:\n%s", want, redos[0])
@@ -920,9 +921,9 @@ func TestWikiPlanChecksRepositoryAndCrossReferencesAndRedoesWithTheErrors(t *tes
 func TestWikiPlanGateReadsAKindOrTopicWrappedInBackticksOrQuotesAsItsValue(t *testing.T) {
 	f := newPlanFixture(t)
 	door := newFakePlanDoor(t, f)
-	wrapped := strings.Replace(planOutlineOverview, "kind pitfall；主题 storage-topic", "kind `pitfall`/\"decision\"；主题 \"storage-topic\"", 1)
+	wrapped := strings.Replace(planOutlineOverview, "kind pitfall; topics storage-topic", "kind `pitfall`/\"decision\"; topics \"storage-topic\"", 1)
 	model := &planModel{outline: func(title string) string {
-		if title == "服务概览" {
+		if title == "Service overview" {
 			return wrapped
 		}
 		return ""
@@ -935,7 +936,7 @@ func TestWikiPlanGateReadsAKindOrTopicWrappedInBackticksOrQuotesAsItsValue(t *te
 	if err != nil {
 		t.Fatalf("orbit wiki plan draft: %v\n%s", err, printed)
 	}
-	if len(summary.Report.Attempts) != 1 || summary.Report.Attempts[0].Local != 0 || len(model.asked("# 任务：改正 plan 里《")) != 0 {
+	if len(summary.Report.Attempts) != 1 || summary.Report.Attempts[0].Local != 0 || len(model.asked("# Task: correct the document «")) != 0 {
 		t.Errorf("a wrapped kind or topic was refused: %+v", summary.Report.Attempts)
 	}
 	sessions := draftSent(t, door, 1).Plan.Docs[0].Sections[2].Sources.Sessions
@@ -949,16 +950,16 @@ func TestWikiPlanGateReadsAKindOrTopicWrappedInBackticksOrQuotesAsItsValue(t *te
 func TestWikiPlanGateNamesWhatItRefusesAsAJSONString(t *testing.T) {
 	f := newPlanFixture(t)
 	door := newFakePlanDoor(t, f)
-	wrong := strings.Replace(strings.Replace(planOutlineOverview, "kind pitfall；主题 storage-topic", "kind dicision；主题 storage-topic\u200b", 1),
-		"项目「App 项目」", "项目「`App 项目`」", 1)
+	wrong := strings.Replace(strings.Replace(planOutlineOverview, "kind pitfall; topics storage-topic", "kind dicision; topics storage-topic\u200b", 1),
+		"projects 「App 项目」", "projects 「`App 项目`」", 1)
 	model := &planModel{
 		outline: func(title string) string {
-			if title == "服务概览" {
+			if title == "Service overview" {
 				return wrong
 			}
 			return ""
 		},
-		redo: func(title, prompt string) string { return "标题：服务概览\n" + planOutlineOverview },
+		redo: func(title, prompt string) string { return "Title: Service overview\n" + planOutlineOverview },
 	}
 	vllm := newFakeVLLM(t, model.answer)
 	planSession(t, door.URL, vllm)
@@ -971,14 +972,14 @@ func TestWikiPlanGateNamesWhatItRefusesAsAJSONString(t *testing.T) {
 	if first := summary.Report.Attempts[0]; first.Local != 3 || first.Checks["references"] != 3 {
 		t.Errorf("the first round: %+v", first)
 	}
-	redos := model.asked("# 任务：改正 plan 里《服务概览》")
+	redos := model.asked("# Task: correct the document «Service overview»")
 	if len(redos) != 1 {
 		t.Fatalf("the document was asked again %d times, want once", len(redos))
 	}
 	for _, want := range []string{
-		"sources.sessions.projects[0]：no project is titled \"`App 项目`\": name a project exactly",
-		`sources.sessions.entryKinds[0]："dicision" is no kind of entry: one of principle, convention`,
-		`sources.sessions.topics[0]："storage-topic\u200b" is not a topic of this space`,
+		"sources.sessions.projects[0]: no project is titled \"`App 项目`\": name a project exactly",
+		`sources.sessions.entryKinds[0]: "dicision" is no kind of entry: one of principle, convention`,
+		`sources.sessions.topics[0]: "storage-topic\u200b" is not a topic of this space`,
 	} {
 		if !strings.Contains(redos[0], want) {
 			t.Errorf("the redo prompt does not say %q:\n%s", want, redos[0])
@@ -1007,18 +1008,19 @@ func TestWikiPlanRevisionNamesTheProjectsItHandsTheModelByTitle(t *testing.T) {
 	job["kind"], job["trigger"], job["instructions"] = "revise", "owner", "把存储的约定移到开发约定里。"
 	model := &planModel{
 		revise: func(round int, prompt string) string {
-			return "## 1. 产品 `product` —— 这个服务是什么\n" +
-				"- 1.1 服务概览 `service-overview`｜是什么｜来源：1.1｜含：定位\n" +
-				"- 1.2 存储 `storage`｜怎么存｜来源：1.2｜含：保存\n" +
-				"## 2. 开发约定 `dev` —— 给 agent 的约定 [agents]\n" +
-				"- 2.1 测试约定 `testing`｜怎么跑测试与保存前的校验｜来源：2.1｜含：go test；保存前校验\n" +
-				"### 移到给 agent 的大类的节\n- 1.2 §2 → 2.1\n"
+			return "## 1. Product `product` — What this service is\n" +
+				"- 1.1 Service overview `service-overview` | What it is | Sources: 1.1 | Includes: purpose\n" +
+				"- 1.2 Storage `storage` | How it is stored | Sources: 1.2 | Includes: saving\n" +
+				"## 2. Development conventions `dev` — Conventions for the agents [agents]\n" +
+				"- 2.1 Testing conventions `testing` | How to run the tests, and the validation before saving | Sources: 2.1 | Includes: go test; validate before saving\n" +
+				"### Sections moved into the agents' category\n- 1.2 §2 → 2.1\n"
 		},
 		rewrite: func(title string) string {
-			return "标题：" + title + "\n问题：怎么跑测试？\n读者：写代码的 agent：读完知道怎么跑测试\n含：go test；保存前校验\n篇幅：400–600 字\n" +
-				"### 1. 怎么跑测试 | conventions | 300\n讲什么：用 go test 跑。\n- 代码：src/web/client.ts: render()\n" +
-				"### 2. 保存约定 | conventions | 200\n讲什么：保存前先校验，见 1.2。\n" +
-				"- 会话：项目「App 项目」「p2」；关键词 保存；kind convention；要找：owner 说保存前要校验的原话\n"
+			return "Title: " + title + "\nQuestion: How do I run the tests?\nAudience: agents that write code: know how to run the tests once they have read it\n" +
+				"Includes: go test; validate before saving\nLength: 400–600 characters\n" +
+				"### 1. How to run the tests | conventions | 300\nCovers: run them with go test.\n- Code: src/web/client.ts: render()\n" +
+				"### 2. Saving conventions | conventions | 200\nCovers: validate before saving, see 1.2.\n" +
+				"- Sessions: projects 「App 项目」「p2」; keywords 保存; kind convention; look for: owner 说保存前要校验的原话\n"
 		},
 	}
 	vllm := newFakeVLLM(t, model.answer)
@@ -1029,11 +1031,11 @@ func TestWikiPlanRevisionNamesTheProjectsItHandsTheModelByTitle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("orbit wiki plan revise: %v\n%s", err, printed)
 	}
-	rewrites := model.asked("# 任务：写新草稿里《测试约定》")
+	rewrites := model.asked("# Task: write the audience, scope and outline of «Testing conventions»")
 	if len(rewrites) != 1 {
 		t.Fatalf("the document was rewritten %d times, want once", len(rewrites))
 	}
-	if !strings.Contains(rewrites[0], "- 会话：项目「App 项目」「p2」；关键词 保存；kind convention") || strings.Contains(rewrites[0], appID) {
+	if !strings.Contains(rewrites[0], "- Sessions: projects 「App 项目」「p2」; keywords 保存; kind convention") || strings.Contains(rewrites[0], appID) {
 		t.Errorf("the rewrite does not name the moved section's projects by title, or still shows an id to copy:\n%s", rewrites[0])
 	}
 	if len(summary.Report.Attempts) != 1 || summary.Report.Attempts[0].Local != 0 {
@@ -1114,7 +1116,12 @@ func TestWikiPlanReferencesAreHeldToTheTreeAtItsSha(t *testing.T) {
 		n, ok := now[slug]
 		return n, ok
 	}
-	text, unknown := wikiPlanRenumber("细节见 1.3，另见 1.1、1.2；→ 2.9", rename)
+	text, unknown := wikiPlanRenumber("Details: see 1.3, and see also 1.1, 1.2; → 2.9", rename)
+	if text != "Details: see 1.2, and see also 1.1, 1.2; → 2.9" || !reflect.DeepEqual(unknown, []string{"1.2", "2.9"}) {
+		t.Errorf("renumbered %q, unknown %v", text, unknown)
+	}
+	// A plan version written in Chinese still points with 见, and a revision still renumbers it.
+	text, unknown = wikiPlanRenumber("细节见 1.3，另见 1.1、1.2；→ 2.9", rename)
 	if text != "细节见 1.2，另见 1.1、1.2；→ 2.9" || !reflect.DeepEqual(unknown, []string{"1.2", "2.9"}) {
 		t.Errorf("renumbered %q, unknown %v", text, unknown)
 	}
@@ -1146,12 +1153,12 @@ func TestWikiPlanHandsTheServersErrorsBackAndFailsAtTheLimit(t *testing.T) {
 	if got := planAttempts(door); !reflect.DeepEqual(got, []int{1, 2, 3}) {
 		t.Errorf("the rounds reported were %v", got)
 	}
-	redos := model.asked("# 任务：改正 plan 里《服务概览》")
+	redos := model.asked("# Task: correct the document «Service overview»")
 	if len(redos) != 2 {
 		t.Fatalf("the document was written again %d times, want twice", len(redos))
 	}
 	for _, prompt := range redos {
-		if !strings.Contains(prompt, "[references] 1.1《服务概览》 第 3 节「已知的坑」 · sources.sessions.projects[0]：no project of this account is titled «App 项目»") {
+		if !strings.Contains(prompt, "[references] 1.1 «Service overview», section 3 «Known pitfalls» · sources.sessions.projects[0]: no project of this account is titled «App 项目»") {
 			t.Errorf("the redo does not hand the server's error back:\n%s", prompt)
 		}
 	}
@@ -1223,25 +1230,26 @@ func TestWikiPlanRevisionKeepsProtectedDocumentsMovesOnlyConventionsAndHoldsTheC
 			if round == 1 {
 				// Four documents for a target of three; a section moved out of the protected document, and a
 				// decisions section moved into the agents' category.
-				return "## 1. 产品 `product` —— 这个服务是什么\n" +
-					"- 1.1 服务概览 `service-overview`｜是什么｜来源：1.1｜含：定位\n" +
-					"- 1.2 存储 `storage`｜怎么存｜来源：1.2｜含：保存\n" +
-					"- 1.3 存储决策 `storage-decisions`｜为什么这么存｜来源：无｜含：决策\n" +
-					"## 2. 开发约定 `dev` —— 给 agent 的约定 [agents]\n" +
-					"- 2.1 测试约定 `testing`｜怎么跑测试｜来源：2.1｜含：go test\n" +
-					"### 移到给 agent 的大类的节\n- 1.1 §3 → 2.1\n- 1.2 §3 → 2.1\n"
+				return "## 1. Product `product` — What this service is\n" +
+					"- 1.1 Service overview `service-overview` | What it is | Sources: 1.1 | Includes: purpose\n" +
+					"- 1.2 Storage `storage` | How it is stored | Sources: 1.2 | Includes: saving\n" +
+					"- 1.3 Storage decisions `storage-decisions` | Why it is stored this way | Sources: none | Includes: decisions\n" +
+					"## 2. Development conventions `dev` — Conventions for the agents [agents]\n" +
+					"- 2.1 Testing conventions `testing` | How to run the tests | Sources: 2.1 | Includes: go test\n" +
+					"### Sections moved into the agents' category\n- 1.1 §3 → 2.1\n- 1.2 §3 → 2.1\n"
 			}
-			return "## 1. 产品 `product` —— 这个服务是什么\n" +
-				"- 1.1 服务概览 `service-overview`｜是什么｜来源：1.1｜含：定位\n" +
-				"- 1.2 存储 `storage`｜怎么存｜来源：1.2｜含：保存\n" +
-				"## 2. 开发约定 `dev` —— 给 agent 的约定 [agents]\n" +
-				"- 2.1 测试约定 `testing`｜怎么跑测试与保存前的校验｜来源：2.1｜含：go test；保存前校验\n" +
-				"### 移到给 agent 的大类的节\n- 1.2 §2 → 2.1\n"
+			return "## 1. Product `product` — What this service is\n" +
+				"- 1.1 Service overview `service-overview` | What it is | Sources: 1.1 | Includes: purpose\n" +
+				"- 1.2 Storage `storage` | How it is stored | Sources: 1.2 | Includes: saving\n" +
+				"## 2. Development conventions `dev` — Conventions for the agents [agents]\n" +
+				"- 2.1 Testing conventions `testing` | How to run the tests, and the validation before saving | Sources: 2.1 | Includes: go test; validate before saving\n" +
+				"### Sections moved into the agents' category\n- 1.2 §2 → 2.1\n"
 		},
 		rewrite: func(title string) string {
-			return "标题：" + title + "\n问题：怎么跑测试？\n读者：写代码的 agent：读完知道怎么跑测试\n含：go test；保存前校验\n篇幅：400–600 字\n" +
-				"### 1. 怎么跑测试 | conventions | 300\n讲什么：用 go test 跑。\n- 代码：src/web/client.ts: render()\n" +
-				"### 2. 保存约定 | conventions | 200\n讲什么：保存前先校验，见 1.2。\n"
+			return "Title: " + title + "\nQuestion: How do I run the tests?\nAudience: agents that write code: know how to run the tests once they have read it\n" +
+				"Includes: go test; validate before saving\nLength: 400–600 characters\n" +
+				"### 1. How to run the tests | conventions | 300\nCovers: run them with go test.\n- Code: src/web/client.ts: render()\n" +
+				"### 2. Saving conventions | conventions | 200\nCovers: validate before saving, see 1.2.\n"
 		},
 	}
 	vllm := newFakeVLLM(t, model.answer)
@@ -1256,12 +1264,12 @@ func TestWikiPlanRevisionKeepsProtectedDocumentsMovesOnlyConventionsAndHoldsTheC
 	if first.Server != 0 || first.Checks["docCount"] != 1 || first.Checks["protected"] != 2 {
 		t.Errorf("the first round: %+v", first)
 	}
-	catalogues := model.asked("按 owner 的要求修订 plan 的目录")
+	catalogues := model.asked("revise the catalogue of the plan as the owner asks")
 	if len(catalogues) != 2 {
 		t.Fatalf("the catalogue was asked for %d times, want twice", len(catalogues))
 	}
-	if !strings.Contains(catalogues[0], "把存储的约定移到开发约定里") || !strings.Contains(catalogues[0], "服务概览 `service-overview`［受保护］") ||
-		!strings.Contains(catalogues[0], "§2 保存约定（conventions）") {
+	if !strings.Contains(catalogues[0], "把存储的约定移到开发约定里") || !strings.Contains(catalogues[0], "服务概览 `service-overview` [protected]") ||
+		!strings.Contains(catalogues[0], "§2 保存约定 (conventions)") {
 		t.Errorf("the revision was not asked from the version, its protection and the owner's words:\n%s", catalogues[0])
 	}
 	for _, want := range []string{
@@ -1296,11 +1304,11 @@ func TestWikiPlanRevisionKeepsProtectedDocumentsMovesOnlyConventionsAndHoldsTheC
 		t.Errorf("the document a section moved out of: %v", titles)
 	}
 	testing := sent.Plan.Docs[2]
-	if len(testing.Sections) != 2 || testing.Sections[1].Title != "保存约定" || !strings.Contains(testing.Sections[1].Covers, "见 1.2") {
+	if len(testing.Sections) != 2 || testing.Sections[1].Title != "Saving conventions" || !strings.Contains(testing.Sections[1].Covers, "see 1.2") {
 		t.Errorf("the document the convention moved into: %+v", testing.Sections)
 	}
-	rewrites := model.asked("# 任务：写新草稿里《")
-	if len(rewrites) == 0 || !strings.Contains(rewrites[len(rewrites)-1], "【现在的 1.2 第 2 节（移入本篇）】") {
+	rewrites := model.asked("# Task: write the audience, scope and outline of «")
+	if len(rewrites) == 0 || !strings.Contains(rewrites[len(rewrites)-1], "[Now 1.2, section 2 (moved into this document)]") {
 		t.Errorf("the rewrite was not handed the moved section")
 	}
 }
@@ -1318,8 +1326,8 @@ func TestWikiPlanDraftKeepsTheProtectedDocumentsOfTheVersionItRevises(t *testing
 		r.baseDocs[doc.Slug] = doc
 	}
 	// A catalogue that leaves the protected document out.
-	catalogue := parseWikiPlanCatalogue("## 1. 产品 `product` —— 是什么\n- 1.1 存储 `storage`｜怎么存｜含：保存\n" +
-		"## 2. 开发约定 `dev` —— 约定 [agents]\n- 2.1 测试约定 `testing`｜怎么测｜含：go test\n")
+	catalogue := parseWikiPlanCatalogue("## 1. Product `product` — What it is\n- 1.1 Storage `storage` | How it is stored | Includes: saving\n" +
+		"## 2. Development conventions `dev` — Conventions [agents]\n- 2.1 Testing conventions `testing` | How to test | Includes: go test\n")
 	r.adoptCatalogue(catalogue, false)
 	assembled := r.assemble()
 	found := false
@@ -1335,8 +1343,9 @@ func TestWikiPlanDraftKeepsTheProtectedDocumentsOfTheVersionItRevises(t *testing
 		t.Errorf("a catalogue without the protected document passed: %+v", assembled.errors)
 	}
 	// Named again, it is carried as it was, whatever the model would have written of it.
-	catalogue = parseWikiPlanCatalogue("## 1. 产品 `product` —— 是什么\n- 1.1 另一个标题 `service-overview`｜别的问题｜含：别的\n- 1.2 存储 `storage`｜怎么存｜含：保存\n" +
-		"## 2. 开发约定 `dev` —— 约定 [agents]\n- 2.1 测试约定 `testing`｜怎么测｜含：go test\n")
+	catalogue = parseWikiPlanCatalogue("## 1. Product `product` — What it is\n- 1.1 Another title `service-overview` | Another question | Includes: something else\n" +
+		"- 1.2 Storage `storage` | How it is stored | Includes: saving\n" +
+		"## 2. Development conventions `dev` — Conventions [agents]\n- 2.1 Testing conventions `testing` | How to test | Includes: go test\n")
 	r.adoptCatalogue(catalogue, false)
 	assembled = r.assemble()
 	if want := wikiPlanDocInput(base.Docs[0]); !reflect.DeepEqual(assembled.plan.Docs[0], want) {
@@ -1420,29 +1429,33 @@ func TestWikiPlanWaitsForTheEndpointsHealth(t *testing.T) {
 // ── The line format ─────────────────────────────────────────────────────────────────────────────
 
 func TestWikiPlanReadsTheCompactLineFormat(t *testing.T) {
-	catalogue := parseWikiPlanCatalogue("前言不算\n## 1. 产品 `product` —— 是什么\n- 1.1 概览 `overview`｜是什么｜来源：1.1、1.3｜含：定位；组件\n" +
-		"## 3. 开发约定 `dev` —— 约定 [agents]\n- 3.4 测试 `testing`｜怎么测｜来源：无｜含：go test\n### 移到给 agent 的大类的节\n- 1.2 §4 → 3.4\n- 无\n")
+	catalogue := parseWikiPlanCatalogue("A preamble that does not count\n## 1. Product `product` — What it is\n" +
+		"- 1.1 Overview `overview` | What it is | Sources: 1.1, 1.3 | Includes: purpose; components\n" +
+		"## 3. Development conventions `dev` — Conventions [agents]\n- 3.4 Testing `testing` | How to test | Sources: none | Includes: go test\n" +
+		"### Sections moved into the agents' category\n- 1.2 §4 → 3.4\n- none\n")
 	if catalogue == nil || len(catalogue.Cats) != 2 || len(catalogue.Units) != 2 {
 		t.Fatalf("the catalogue: %+v", catalogue)
 	}
-	if !catalogue.Cats[1].ForAgents || catalogue.Cats[1].Key != "dev" || catalogue.Cats[1].Question != "约定" || catalogue.Cats[0].ForAgents {
+	if !catalogue.Cats[1].ForAgents || catalogue.Cats[1].Key != "dev" || catalogue.Cats[1].Question != "Conventions" || catalogue.Cats[0].ForAgents {
 		t.Errorf("the categories: %+v", catalogue.Cats)
 	}
 	overview := catalogue.Units[0]
-	if overview.Slug != "overview" || !reflect.DeepEqual(overview.Sources, []string{"1.1", "1.3"}) || !reflect.DeepEqual(overview.CardScope, []string{"定位", "组件"}) {
+	if overview.Slug != "overview" || !reflect.DeepEqual(overview.Sources, []string{"1.1", "1.3"}) || !reflect.DeepEqual(overview.CardScope, []string{"purpose", "components"}) {
 		t.Errorf("a card: %+v", overview)
 	}
 	if len(catalogue.Moves) != 1 || catalogue.Moves[0].From != "1.2" || catalogue.Moves[0].Section != 4 || catalogue.Moves[0].Target != catalogue.Units[1] {
 		t.Errorf("the moves: %+v", catalogue.Moves)
 	}
-	if !reflect.DeepEqual(catalogue.Stray, []string{"前言不算"}) {
+	if !reflect.DeepEqual(catalogue.Stray, []string{"A preamble that does not count"}) {
 		t.Errorf("stray: %v", catalogue.Stray)
 	}
-	header, sections, stray := parseWikiPlanDocBody("### 1.2 存储\n读者：甲：读完能改；乙：读完能查\n含：一；二\n不含：三（见 2.1）\n篇幅：1,200–2,000 字\n备注：多余\n" +
-		"### 1. 保存 | Flow | 约 500 字\n讲什么：先存，\n再返回。\n- 文档：docs/a.md § 3. 章节、§ 4. 另一章\n- 代码：src/dir/（a.go、b.go）: A, B.c\n" +
-		"- 会话：项目「甲」「乙」；时间 2026-09-01 至 今；关键词 x、y；锚点 src/；kind pitfall/decision；主题 t1；要找：原话；其余\n- 附注：不在格式里\n")
-	if !reflect.DeepEqual(header.Audience, []string{"甲：读完能改", "乙：读完能查"}) || !reflect.DeepEqual(header.ScopeOut, []string{"三（见 2.1）"}) ||
-		header.Length != "1,200–2,000 字" || !reflect.DeepEqual(stray, []string{"备注：多余"}) {
+	header, sections, stray := parseWikiPlanDocBody("### 1.2 Storage\nAudience: A: can change it once they have read it; B: can look it up once they have read it\nIncludes: one; two\n" +
+		"Excludes: three (see 2.1)\nLength: 1,200–2,000 characters\nNote: extra\n### 1. Saving | Flow | about 500 characters\nCovers: store first,\n" +
+		"then return.\n- Docs: docs/a.md § 3. A section, § 4. Another section\n- Code: src/dir/ (a.go, b.go): A, B.c\n" +
+		"- Sessions: projects 「A」「B」; dates 2026-09-01 to now; keywords x, y; anchors src/; kind pitfall/decision; topics t1; look for: the words said; the rest\n" +
+		"- Aside: not in the format\n")
+	if !reflect.DeepEqual(header.Audience, []string{"A: can change it once they have read it", "B: can look it up once they have read it"}) ||
+		!reflect.DeepEqual(header.ScopeOut, []string{"three (see 2.1)"}) || header.Length != "1,200–2,000 characters" || !reflect.DeepEqual(stray, []string{"Note: extra"}) {
 		t.Errorf("the header: %+v, stray %v", header, stray)
 	}
 	if min, max, ok := wikiPlanRange(header.Length); !ok || min != 1200 || max != 2000 {
@@ -1452,39 +1465,40 @@ func TestWikiPlanReadsTheCompactLineFormat(t *testing.T) {
 		t.Fatalf("sections: %+v", sections)
 	}
 	s := sections[0]
-	if s.Kind != "flow" || s.Covers != "先存， 再返回。" || len(s.Docs) != 2 || *s.Docs[1].Section != "4. 另一章" ||
+	if s.Kind != "flow" || s.Covers != "store first, then return." || len(s.Docs) != 2 || *s.Docs[1].Section != "4. Another section" ||
 		!reflect.DeepEqual(s.Code, []wikiPlanCodeSource{{Path: "src/dir/a.go", Symbols: []string{"A", "B.c"}}, {Path: "src/dir/b.go", Symbols: []string{"A", "B.c"}}}) {
 		t.Errorf("a section: %+v", s)
 	}
 	c := s.Sessions
-	if c == nil || !reflect.DeepEqual(c.Projects, []string{"甲", "乙"}) || c.Since != "2026-09-01" || c.Until != "" ||
-		!reflect.DeepEqual(c.EntryKinds, []string{"pitfall", "decision"}) || c.Evidence != "原话；其余" || !reflect.DeepEqual(s.Stray, []string{"附注：不在格式里"}) {
+	if c == nil || !reflect.DeepEqual(c.Projects, []string{"A", "B"}) || c.Since != "2026-09-01" || c.Until != "" ||
+		!reflect.DeepEqual(c.EntryKinds, []string{"pitfall", "decision"}) || c.Evidence != "the words said; the rest" || !reflect.DeepEqual(s.Stray, []string{"Aside: not in the format"}) {
 		t.Errorf("a session condition: %+v, stray %v", c, s.Stray)
 	}
 
 	// As the real model wrote them: a heading that ends in its own parenthesis, one it wrapped in them, the
 	// whole of a document, a heading whose parenthesis names other sections, two files' symbols on one line,
 	// and a project whose title has 「」 in it.
-	_, sections, _ = parseWikiPlanDocBody("### 1.1 概览\n读者：甲：读完能改\n" +
-		"### 1. 模型 | concepts | 300\n讲什么：数据模型。\n- 文档：docs/a.md § 4. 数据模型（新表 `share_link`）、§ （5. 接口）\n- 文档：docs/b.md § 正文\n" +
-		"- 文档：docs/c.md § 2. 恢复策略（契约 §6.4、§6.5）、§ 3. 下一节\n" +
-		"- 代码：src/a.ts: x; src/b.ts: y, z；w\n- 会话：项目「把「什么算完成」从项目末尾搬到开工前」「甲」；要找：原话\n")
+	_, sections, _ = parseWikiPlanDocBody("### 1.1 Overview\nAudience: A: can change it once they have read it\n### 1. Model | concepts | 300\nCovers: the data model.\n" +
+		"- Docs: docs/a.md § 4. Data model (new table `share_link`), § (5. Interface)\n- Docs: docs/b.md § whole document\n" +
+		"- Docs: docs/c.md § 2. Recovery (contract §6.4, §6.5), § 3. The next section\n- Code: src/a.ts: x; src/b.ts: y, z；w\n" +
+		"- Sessions: projects 「把「什么算完成」从项目末尾搬到开工前」「A」; look for: the words said\n")
 	if len(sections) != 1 {
 		t.Fatalf("sections: %+v", sections)
 	}
 	s = sections[0]
-	if len(s.Docs) != 5 || s.Docs[0].Section == nil || *s.Docs[0].Section != "4. 数据模型（新表 `share_link`）" ||
-		s.Docs[1].Section == nil || *s.Docs[1].Section != "5. 接口" || s.Docs[2].Path != "docs/b.md" || s.Docs[2].Section != nil ||
-		s.Docs[3].Section == nil || *s.Docs[3].Section != "2. 恢复策略（契约 §6.4、§6.5）" || s.Docs[4].Section == nil || *s.Docs[4].Section != "3. 下一节" {
+	if len(s.Docs) != 5 || s.Docs[0].Section == nil || *s.Docs[0].Section != "4. Data model (new table `share_link`)" ||
+		s.Docs[1].Section == nil || *s.Docs[1].Section != "5. Interface" || s.Docs[2].Path != "docs/b.md" || s.Docs[2].Section != nil ||
+		s.Docs[3].Section == nil || *s.Docs[3].Section != "2. Recovery (contract §6.4, §6.5)" || s.Docs[4].Section == nil || *s.Docs[4].Section != "3. The next section" {
 		t.Errorf("the documents' sections: %+v", s.Docs)
 	}
 	if !reflect.DeepEqual(s.Code, []wikiPlanCodeSource{{Path: "src/a.ts", Symbols: []string{"x"}}, {Path: "src/b.ts", Symbols: []string{"y", "z", "w"}}}) {
 		t.Errorf("the code: %+v", s.Code)
 	}
-	if s.Sessions == nil || !reflect.DeepEqual(s.Sessions.Projects, []string{"把「什么算完成」从项目末尾搬到开工前", "甲"}) {
+	if s.Sessions == nil || !reflect.DeepEqual(s.Sessions.Projects, []string{"把「什么算完成」从项目末尾搬到开工前", "A"}) {
 		t.Errorf("the projects: %+v", s.Sessions)
 	}
-	for in, want := range map[string]string{"（4. 写路径）": "4. 写路径", "写路径）": "写路径", "（写路径": "写路径", "（a）（b）": "（a）（b）", "Data model (Prisma)": "Data model (Prisma)"} {
+	for in, want := range map[string]string{"（4. Write path）": "4. Write path", "Write path）": "Write path", "（Write path": "Write path", "（a）（b）": "（a）（b）",
+		"Data model (Prisma)": "Data model (Prisma)"} {
 		if got := wikiPlanUnwrap(in); got != want {
 			t.Errorf("wikiPlanUnwrap(%q) = %q, want %q", in, got, want)
 		}
