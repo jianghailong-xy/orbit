@@ -6,6 +6,9 @@
      logout(), which revokes and deletes the tokens and says nothing on the page it lands on.
      This board: today, the proposal (an account card in place of the Email field), the details (what is
      kept, when it is forgotten, security), the open choices (A/B), and what landing it costs.
+     Decided 10-10: both recommendations (one account, Google sign-ins too); the account belongs to its domain
+     (each domain keeps its own last account, the card names the domain); the logo opens the Server sheet on a
+     double tap instead of three.
      Sample person: "Alex Morgan" / alex@example.com — the repo is public.
      Geometry: iPhone 393×852 pt, safe area 59 / 34. LoginView's own numbers: logo 76 (40 compact),
      form 36 below the header (24 compact), fields 12 apart, radius 14, Sign In 50 high, max width 360.
@@ -209,7 +212,7 @@
           <li>Android：同样只记密码登录的邮箱，不过按服务器各记一份、加密存；Google 也不记（测试里写明 <i>none was typed</i>）。Web 什么都不记，交给浏览器的密码管理器。</li>
         </ul>
         <p style="margin:14px 0 0"><b>结论：</b>用密码的人只被记住了一半（邮箱），用 Google 的人完全没被记住；两种人回来都看不到「这是我的账号」。</p>
-        <p style="margin:10px 0 0"><b>建议的做法：</b>登录成功时记下「这是谁」——名字、邮箱、头像、用哪种方式登录的、在哪个服务器。回到登录页时，Email 框换成这个人的账号卡片，下面只给他上次用的那种登录方式。不记密码、不记 token，退出照旧是真退出。</p>
+        <p style="margin:10px 0 0"><b>建议的做法：</b>登录成功时记下「这是谁」——名字、邮箱、头像、用哪种方式登录的，记在他登录的那个域名下。回到登录页时，打开的还是上次那个域名，Email 框换成这个人的账号卡片，下面只给他上次用的那种登录方式。不记密码、不记 token，退出照旧是真退出。</p>
       </div>
     </figure>
   </div>
@@ -224,7 +227,7 @@
       <span class="tag new">① 用密码登录的人回来</span>
       <div class="phone" id="p-new-pw"></div>
       <div class="cap"><ol>
-        <li><span class="n">1</span>账号卡片：头像、名字、邮箱，和 Email 框同一个圆角、同一个底色。头像有照片用照片，没有用首字母，和抽屉、Settings 顶上那个一样。卡片本身不是按钮。</li>
+        <li><span class="n">1</span>账号卡片：头像、名字、邮箱，第三行是它的域名。卡片属于这个域名：从卡片登录一定登到这个域名，每个域名各记各的上一个人。和 Email 框同一个圆角、同一个底色；头像有照片用照片，没有用首字母，和抽屉、Settings 顶上那个一样。卡片本身不是按钮。</li>
         <li><span class="n">2</span>只剩密码要填，也只给密码这一种：上次用密码登的，就不再摆 or 和 Google 按钮。不自动弹键盘：刚点完 Sign out 的人多半不是要马上登回来。点一下密码框，键盘上照旧有 Passwords（iCloud 钥匙串）。</li>
         <li><span class="n">3</span>Use another account：换成今天的完整登录页（③），想用 Google 或换个人都从这里走。记住的账号不会因此被删。</li>
       </ol></div>
@@ -276,15 +279,16 @@
       <div class="panel">
         <table class="when">
           <tr><th style="width:230px">时机</th><th style="width:96px">记住的账号</th><th>说明</th></tr>
-          <tr><td>密码登录成功</td><td><span class="k w">写入 / 换人</span></td><td>服务器、邮箱、名字、方式 = 密码；有头像就在本机存一份小图</td></tr>
+          <tr><td>密码登录成功</td><td><span class="k w">写入 / 换人</span></td><td>记在这个域名下：邮箱、名字、方式 = 密码；有头像就在本机存一份小图</td></tr>
           <tr><td>Google 登录成功</td><td><span class="k w">写入 / 换人</span></td><td>同上，方式 = Google（邮箱、名字取自 <code>/users/me</code>）</td></tr>
+          <tr><td>升级后第一次打开（还登录着）</td><td><span class="k w">写入</span></td><td>从 <code>/users/me</code> 记下名字、邮箱、头像，记在当前域名下。还不知道上次用的哪种方式，卡片下密码和 Google（服务器提供的话）都给；下次登录后只剩那一种</td></tr>
           <tr><td>登录着改了名字、换/删了头像</td><td><span class="k w">跟着更新</span></td><td>下次回到登录页看到的是新的</td></tr>
           <tr><td>登录失败（密码错、服务器不通）</td><td><span class="k no">不动</span></td><td>打错的邮箱、试过的服务器都不记，今天就是这条规则</td></tr>
           <tr><td>Settings → Sign out</td><td><span class="k keep">保留</span></td><td>照旧当场吊销 refresh token、清钥匙串</td></tr>
           <tr><td>登录过期、被吊销（401）</td><td><span class="k keep">保留</span></td><td>同一个 <code>logout()</code></td></tr>
           <tr><td>点 Use another account</td><td><span class="k keep">保留</span></td><td>只是换一张表；底部 Sign in as … 回到卡片</td></tr>
-          <tr><td>长按卡片 → Remove from this device</td><td><span class="k del">删除</span></td><td>连头像小图一起删</td></tr>
-          <tr><td>隐藏的 Server 面板换了服务器</td><td><span class="k keep">保留</span></td><td>卡片只在当前服务器就是记住的那个时出现；换回来，卡片就回来</td></tr>
+          <tr><td>长按卡片 → Remove from this device</td><td><span class="k del">删除</span></td><td>只删这个域名的，连头像小图一起删</td></tr>
+          <tr><td>logo 连点两下（原来三下），<br>在 Server 面板换了域名</td><td><span class="k keep">保留</span></td><td>每个域名各记各的：换过去，显示那个域名上次登录的人，没有就是空表；换回来，卡片还在</td></tr>
           <tr><td>删掉 App</td><td><span class="k del">删除</span></td><td>UserDefaults 和小图都在 App 里，随 App 一起走</td></tr>
         </table>
         <h3 style="margin-top:18px">安全</h3>
@@ -301,7 +305,8 @@
 
 <!-- ═══════════════ 4 · decide ═══════════════ -->
 <section class="part" id="part-4">
-  <h2>待定 · 要你拍板</h2>
+  <h2>待定 · 10-10 已按推荐定下</h2>
+  <p class="lede">两条都按推荐：只记上一个，用 Google 登录的也记。你另外补了两条，上面的图已经跟着改了：<b>记得对应的域名</b>——每个域名各记各的上一个人，卡片第三行写出域名，从卡片登录一定登到这个域名；<b>logo 连点两下</b>（原来三下）打开 Server 面板。</p>
   <div class="row">
     <figure>
       <span class="tag alt">1 的方案 B · 最近几个账号的列表</span>
@@ -311,7 +316,7 @@
     <div style="width:640px">
       <h3 style="margin:2px 0 12px">1. 记一个，还是记最近几个？</h3>
       <div class="pick">
-        <b style="font-size:16px;color:#2346c4">推荐 A：只记上一个（第 2 部分那样）</b>
+        <b style="font-size:16px;color:#2346c4">推荐 A（已定）：只记上一个，每个域名各一个（第 2 部分那样）</b>
         <ul>
           <li>你要的就是「上次登录的用户」。一台手机通常就是一个人、一个账号，回来时一张卡片、一个密码框，最少的一步。</li>
           <li>换账号随时能换：Use another account 登录成功，卡片就换成新的人。</li>
@@ -329,7 +334,7 @@
     <div style="width:640px">
       <h3 style="margin:2px 0 12px">2. 用 Google 登录的人，也记吗？</h3>
       <div class="pick">
-        <b style="font-size:16px;color:#2346c4">推荐 A：记（第 2 部分 ②）</b>
+        <b style="font-size:16px;color:#2346c4">推荐 A（已定）：记（第 2 部分 ②）</b>
         <ul>
           <li>用 Google 的人回来看到自己的卡片，下面只有 Continue with Google，不用记得当初怎么登的。</li>
           <li>记的是 Orbit 自己 <code>/users/me</code> 返回的名字和邮箱，不是 Google 那边的任何东西；Google 的 token 服务端当场就丢了，这里也碰不到。</li>
@@ -352,13 +357,13 @@
   <div class="steps">
     <ol>
       <li><b>OrbitKit：记住的账号和它的规则</b><span class="cost">只改客户端 · 不动服务端</span><br>
-        一个 <code>RememberedAccount</code>（服务器、邮箱、名字、方式、头像小图），存取、上面那张「什么时候记、什么时候忘」的规则，以及把老的 <code>orbit.email</code> 迁过来（老用户先只显示邮箱，下次登录后补齐名字和头像）。全在 OrbitKit 里，Linux 上 <code>swift test</code> 能跑。</li>
+        一个 <code>RememberedAccount</code>（域名、邮箱、名字、方式、头像小图），按域名存，每个域名一条；存取、上面那张「什么时候记、什么时候忘」的规则。老用户：还登录着的，升级后从 <code>/users/me</code> 补上卡片；已经退出的，空表照旧用 <code>orbit.email</code> 预填，第一次登录后删掉这个旧键。全在 OrbitKit 里，Linux 上 <code>swift test</code> 能跑。</li>
       <li><b>登录页和 AppModel</b><span class="cost">只改客户端</span><br>
-        Email 框换卡片；Use another account / Sign in as …；长按 Remove from this device；两种登录成功、改名、换头像时写入。新文案都是英文（Use another account、Sign in as {name}、Remove from this device）。<code>LoginView</code> 是 iOS 和 Mac 共用的一个文件，<b>Mac 会自动一起变</b>；只要 iOS 的话说一声，多包一层平台判断。</li>
+        Email 框换卡片，从卡片登录用卡片的域名；Use another account / Sign in as …；长按 Remove from this device；两种登录成功、改名、换头像时写入；logo 连点两下（原来三下）打开 Server 面板。新文案都是英文（Use another account、Sign in as {name}、Remove from this device）。<code>LoginView</code> 是 iOS 和 Mac 共用的一个文件，<b>Mac 会自动一起变</b>；只要 iOS 的话说一声，多包一层平台判断。</li>
       <li><b>CI 模拟器截图对照</b><span class="cost">CI</span><br>
         浅色、深色各一套：密码卡片、Google 卡片、空表、长按菜单、键盘弹起，放回这个目录，和这张设计图对照。</li>
       <li class="opt"><b>可选 · Android 照做</b><span class="cost">Android</span><br>
-        Android 已经按服务器加密记邮箱，加名字、头像、方式和同样的卡片。Web 不做：浏览器自己记账号密码。</li>
+        Android 已经按服务器加密记邮箱，加名字、头像、方式和同样的卡片；它的 logo 也是连点三下，跟着改成两下。Web 不做：浏览器自己记账号密码，也没有 Server 面板。</li>
       <li class="opt"><b>可选 · 登录过期时说一句原因</b><span class="cost">只改客户端</span><br>
         今天 401 和主动退出走同一个 <code>logout()</code>，落到登录页什么都不说。可以在卡片上方加一行 <i>Your session expired. Sign in again to continue.</i> 和这次的卡片无关，可以单独做。</li>
     </ol>
@@ -374,6 +379,7 @@ const IC = {
   eye: '<svg width="22" height="14" viewBox="0 0 22 14"><path d="M11 1.5C6.5 1.5 3 4.6 1.6 7c1.4 2.4 4.9 5.5 9.4 5.5s8-3.1 9.4-5.5C19 4.6 15.5 1.5 11 1.5z" fill="none" stroke="rgba(60,60,67,.6)" stroke-width="1.5"/><circle cx="11" cy="7" r="2.8" fill="none" stroke="rgba(60,60,67,.6)" stroke-width="1.5"/></svg>',
   key: '<svg width="13" height="16" viewBox="0 0 13 16"><circle cx="6.5" cy="4.6" r="3.9" fill="none" stroke="#333" stroke-width="1.6"/><path d="M6.5 8.5V15M6.5 11.4h2.6M6.5 13.6h2" stroke="#333" stroke-width="1.6" stroke-linecap="round"/></svg>',
   trash: '<svg width="17" height="19" viewBox="0 0 17 19" fill="none" stroke="#FF3B30" stroke-width="1.6" stroke-linecap="round"><path d="M1.5 4h14M6 4V2h5v2M3.2 4l.9 13h8.8l.9-13M7 7.5v6.5M10 7.5v6.5"/></svg>',
+  globe: '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="rgba(60,60,67,.6)" stroke-width="1.1"><circle cx="6" cy="6" r="5.2"/><ellipse cx="6" cy="6" rx="2.3" ry="5.2"/><path d="M1 6h10M1.8 3.3h8.4M1.8 8.7h8.4"/></svg>',
   server: '<svg width="13" height="12" viewBox="0 0 13 12" fill="none" stroke="rgba(60,60,67,.6)" stroke-width="1.3"><rect x="1" y="1" width="11" height="4" rx="1.2"/><rect x="1" y="7" width="11" height="4" rx="1.2"/><circle cx="3.6" cy="3" r=".6" fill="rgba(60,60,67,.6)"/><circle cx="3.6" cy="9" r=".6" fill="rgba(60,60,67,.6)"/></svg>',
   chev: '<svg width="8" height="13" viewBox="0 0 8 13"><path d="M1.6 1.5 6.4 6.5 1.6 11.5" fill="none" stroke="rgba(60,60,67,.3)" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   plus: '<svg width="16" height="16" viewBox="0 0 16 16"><path d="M8 2v12M2 8h12" stroke="#2E6BFF" stroke-width="2" stroke-linecap="round"/></svg>',
@@ -391,8 +397,8 @@ const PHOTO = '<svg width="40" height="40" viewBox="0 0 40 40"><g clip-path="url
   + '<path d="M5 41C6 31.5 12.5 28 20 28C27.5 28 34 31.5 35 41Z" fill="#2F4858"/><rect x="17.2" y="22" width="5.6" height="7" rx="2" fill="#E9B893"/>'
   + '<circle cx="20" cy="17" r="7.4" fill="#F2C6A2"/><path d="M12.4 17C12 11 15.6 8.6 20 8.6C24.8 8.6 28.2 11.4 27.6 17C26 13.6 23.4 12.6 20 12.7C16.6 12.8 14 13.9 12.4 17Z" fill="#3B2A22"/></g></svg>';
 
-const ALEX = { name: 'Alex Morgan', email: 'alex@example.com', photo: true };
-const ALEX_G = { name: 'Alex Morgan', email: 'alex@example.com', photo: false };
+const ALEX = { name: 'Alex Morgan', email: 'alex@example.com', photo: true, server: 'orbitd.io' };
+const ALEX_G = { name: 'Alex Morgan', email: 'alex@example.com', photo: false, server: 'orbitd.io' };
 
 /* ── LoginView's pieces ── */
 const statusBar = () => `<div class="sb"><span class="time">9:41</span><span class="sys">${IC.signal}${IC.wifi}<span class="bat"><i></i></span></span></div>`;
@@ -408,7 +414,7 @@ const avatar = (a) => a.plus ? `<div class="av plus">${IC.plus}</div>`
   : `<div class="av mono">${(a.name || a.email).trim()[0].toUpperCase()}</div>`;
 const card = (a, o = {}) => `<div class="acct"${mk(o.mk)}>${avatar(a)}<div class="ai">`
   + (a.name ? `<div class="an">${a.name}</div><div class="ae">${a.email}</div>` : `<div class="an" style="font-weight:500">${a.email}</div>`)
-  + (a.server ? `<div class="as">${IC.server}${a.server}</div>` : '')
+  + (a.server ? `<div class="as">${IC.globe}${a.server}</div>` : '')
   + `</div>${o.chev ? `<span class="chev">${IC.chev}</span>` : ''}</div>`;
 const signIn = (on, o = {}) => `<div class="btn${on ? '' : ' off'}"${mk(o.mk)}>Sign In</div>`;
 const or = () => `<div class="or">or</div>`;
@@ -443,11 +449,10 @@ phone('p-new-remove', [card(ALEX), password(''), signIn(false), link('Use anothe
 /* ── details ── */
 phone('p-typing', [card(ALEX, { mk: 7 }), password('••••••••••', { focus: true }), signIn(true), link('Use another account')], { compact: true, extra: keyboard() });
 document.getElementById('variants').insertAdjacentHTML('beforeend', [
-  ['<b>a · 有头像照片</b>：Orbit 里传过的头像，登录时在本机存一份小图', card(ALEX)],
+  ['<b>a · 有头像照片</b>：Orbit 里传过的头像，登录时在本机存一份小图；第三行是域名', card(ALEX)],
   ['<b>b · 没有照片</b>：名字的首字母，和抽屉、Settings 一样', card(ALEX_G)],
-  ['<b>c · 从老版本升上来</b>：只有 <code>orbit.email</code>，先只显示邮箱；下次登录后补齐', card({ email: 'alex@example.com' })],
-  ['<b>d · 自建服务器</b>：多一行服务器地址；orbitd.io 不写', card({ ...ALEX, server: 'orbit.example.com' })],
-  ['<b>e · 太长</b>：名字、邮箱各一行，末尾省略', card({ name: 'Alexandra Montgomery-Fairweather', email: 'alexandra.montgomery-fairweather@example.com', photo: true })],
+  ['<b>c · 自建服务器</b>：第三行是它自己的域名', card({ ...ALEX, server: 'orbit.example.com' })],
+  ['<b>d · 太长</b>：名字、邮箱、域名各一行，末尾省略', card({ name: 'Alexandra Montgomery-Fairweather', email: 'alexandra.montgomery-fairweather@example.com', photo: true, server: 'orbitd.io' })],
 ].map(([k, c]) => `<div class="var"><div class="vk">${k}</div>${c}</div>`).join(''));
 
 /* ── option B: the recent accounts ── */
