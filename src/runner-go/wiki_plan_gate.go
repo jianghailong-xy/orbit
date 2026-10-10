@@ -19,7 +19,7 @@ import (
 //               if it is a convention, only into the agents' category, and never out of a protected one;
 //   references  every file, docs section, symbol and contract is on origin/main at the sha, every project,
 //               topic and entry kind is one there is, every document a scope leaves something to is one
-//               of the plan's, and every `→ 3.2` or `见 3.2` in the text names a document of this plan.
+//               of the plan's, and every `→ 3.2` or `see 3.2` in the text names a document of this plan.
 //
 // Its errors carry the server's paths (`plan.docs[3].sections[1].sources.code[0].symbols[2]`), so one list
 // of errors — this gate's or the server's — is handed back to the model the same way. As the server's, it
@@ -349,11 +349,11 @@ func (g *wikiPlanGate) doc(i int, unit *wikiPlanUnit) wikiPlanDoc {
 	if min, max, ok := wikiPlanRange(h.Length); ok {
 		doc.Length = wikiPlanLength{Min: min, Max: max}
 	} else if unit.HasBody || h.Length != "" {
-		g.fail("schema", path+".length", "篇幅 %s is not a length: write it as <a–b 字>", wikiQuote(h.Length))
+		g.fail("schema", path+".length", "Length %s is not a length: write it as <a–b characters>", wikiQuote(h.Length))
 	}
 	for _, line := range unit.Stray {
-		g.fail("schema", path, "%s is not a field of the plan: a document has 标题, 问题, 读者, 含, 不含 and 篇幅, then its "+
-			"sections — drop it", wikiQuote(cutRunes(line, 80)))
+		g.fail("schema", path, "%s is not a field of the plan: a document has Title, Question, Audience, Includes, Excludes "+
+			"and Length, then its sections — drop it", wikiQuote(cutRunes(line, 80)))
 	}
 	for j, s := range unit.Sections {
 		doc.Sections = append(doc.Sections, g.section(fmt.Sprintf("%s.sections[%d]", path, j), s, unit.Refs))
@@ -371,7 +371,7 @@ func (g *wikiPlanGate) section(path string, s wikiPlanSectionDraft, refs map[str
 	if min, _, ok := wikiPlanRange(s.Length); ok {
 		out.Length = min
 	} else {
-		g.fail("schema", path+".length", "字数 %s is not a number of characters", wikiQuote(s.Length))
+		g.fail("schema", path+".length", "the length %s is not a number of characters", wikiQuote(s.Length))
 	}
 	out.Covers = g.crossRefs(path+".covers", s.Covers, refs)
 	out.Sources.Docs = s.Docs
@@ -391,13 +391,13 @@ func (g *wikiPlanGate) section(path string, s wikiPlanSectionDraft, refs map[str
 			sessions.Until = &until
 		}
 		for _, part := range c.Stray {
-			g.fail("schema", path+".sources.sessions", "%s is not a part of a session condition: it has 项目, 时间, 关键词, 锚点, "+
-				"kind, 主题 and 要找 — drop it", wikiQuote(cutRunes(part, 80)))
+			g.fail("schema", path+".sources.sessions", "%s is not a part of a session condition: it has projects, dates, "+
+				"keywords, anchors, kind, topics and look for — drop it", wikiQuote(cutRunes(part, 80)))
 		}
 		out.Sources.Sessions = sessions
 	}
 	for _, line := range s.Stray {
-		g.fail("schema", path, "%s is not a line of a section: a section has 讲什么, 文档, 代码, 契约 and 会话 lines and "+
+		g.fail("schema", path, "%s is not a line of a section: a section has Covers, Docs, Code, Contracts and Sessions lines and "+
 			"nothing else — drop it", wikiQuote(cutRunes(line, 80)))
 	}
 	g.sources(path, out.Sources, true)

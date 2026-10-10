@@ -61,7 +61,7 @@ interface Asked {
 function fixtureModel(): (prompt: string) => string {
   let named = 0;
   return (prompt) => {
-    if (prompt.includes('起一个简短的中文小标题')) return `好的，这组的小标题是：\n「${FIXTURE.model.names[named++]}」`;
+    if (prompt.includes('Give this group a short English subheading')) return `OK, the subheading for this group is:\n"${FIXTURE.model.names[named++]}"`;
     if (prompt.includes('A previous draft kept only')) return FIXTURE.model.article;
     if (prompt.startsWith(`Write a wiki article titled "${FIXTURE.model.shortFor}",`)) return FIXTURE.model.short;
     return FIXTURE.model.article;
@@ -206,7 +206,7 @@ test('the job asks what the runner asks: every call of wiki-article-writer.fixtu
   const wiki = d.writes.get('wiki')!;
   assert.equal(wiki.articles[0].kind, 'overview');
   assert.deepEqual(wiki.articles[0].notes, FIXTURE.groups.wiki.flatMap((group) => group.slice(0, 2)), 'the overview: the best two of each group');
-  assert.equal(wiki.articles[0].title, '文章写作规则', 'a title is the draft\'s own');
+  assert.equal(wiki.articles[0].title, 'How articles are written', 'a title is the draft\'s own');
   const database = d.writes.get('database')!;
   assert.deepEqual(database.articles.map((part) => part.kind), ['article']);
   assert.deepEqual(database.articles[0].notes, FIXTURE.topics[0].entries.map((entry) => entry.id), 'a small topic cites from all of its entries');
@@ -262,7 +262,7 @@ test('a call that ends in a way that is the work\'s leaves its topic unwritten; 
   const d = door();
   const { ctx, asked } = context((prompt, unit) => {
     if (unit.startsWith('database@')) return new WikiJobContentError('the call ended other: the budget ran out');
-    if (prompt.includes('起一个简短的中文小标题')) return '\n\n';
+    if (prompt.includes('Give this group a short English subheading')) return '\n\n';
     return model(prompt);
   });
   await assert.rejects(runWikiArticlesJob(ctx, deps(d.articles)), (error: unknown) => {
@@ -280,7 +280,7 @@ test('a call that ends in a way that is the work\'s leaves its topic unwritten; 
   assert.equal(titled.length, FIXTURE.groups.wiki.length);
   for (const title of titled) assert.match(title, /^[^/]+\/[^/]+/u, `a group named by its path, not ${title}`);
   const overview = asked.find((one) => one.call.prompt.startsWith('Write the overview of the wiki topic "Wiki"'))!;
-  for (const title of titled) assert.ok(overview.call.prompt.includes(`- ${title}（`), `the overview lists ${title}`);
+  for (const title of titled) assert.ok(overview.call.prompt.includes(`- ${title} (`), `the overview lists ${title}`);
 });
 
 test('a failure that is the platform\'s ends the attempt, and nothing is written', async () => {

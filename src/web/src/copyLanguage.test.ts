@@ -41,7 +41,6 @@ const HAN = /[\u3400-\u4dbf\u4e00-\u9fff]/;
 
 const OLD_NOTES = 'parses what the control plane writes into a transcript; old transcripts hold it in Chinese';
 const OWNER_WORDS = 'recognizes what the owner writes, in Chinese as well as English';
-const TO_ENGLISH = 'still Chinese: being converted to English (owner, 2026-10-09); drop the entry when it is';
 
 /** The files that may hold Chinese, with how many literals and why. */
 const ALLOWED: Record<string, [count: number, why: string]> = {
@@ -59,33 +58,12 @@ const ALLOWED: Record<string, [count: number, why: string]> = {
   // The task brief and the notes delivered into sessions.
 
   // The wiki: its topics, the prompts that write it and the prose it writes, on the server and the runner.
-  'src/shared/src/wikiArticles.ts': [20, TO_ENGLISH],
-  'src/shared/src/wikiPlan.ts': [2, TO_ENGLISH],
-  'src/apiserver/src/wiki-worker/wiki-articles-job.ts': [1, TO_ENGLISH],
-  'src/apiserver/src/wiki-worker/wiki-articles-writer.ts': [8, TO_ENGLISH],
-  'src/apiserver/src/wiki-worker/wiki-docs-build-job.ts': [1, TO_ENGLISH],
-  'src/apiserver/src/wiki-worker/wiki-docs-writer.ts': [72, TO_ENGLISH],
-  'src/apiserver/src/wiki-worker/wiki-maintain-job.ts': [2, TO_ENGLISH],
-  'src/apiserver/src/wiki-worker/wiki-maintain-plan.ts': [55, TO_ENGLISH],
-  'src/apiserver/src/wiki-worker/wiki-maintain.ts': [1, TO_ENGLISH],
-  'src/apiserver/src/wiki-worker/wiki-plan-draft-job.ts': [5, TO_ENGLISH],
-  'src/apiserver/src/wiki-worker/wiki-plan-format.ts': [74, TO_ENGLISH],
-  'src/apiserver/src/wiki-worker/wiki-plan-gate.ts': [7, TO_ENGLISH],
-  'src/apiserver/src/wiki-worker/wiki-plan-materials.ts': [40, TO_ENGLISH],
-  'src/apiserver/src/wiki-worker/wiki-plan-prompts.ts': [93, TO_ENGLISH],
-  'src/apiserver/src/wiki-worker/wiki-plan-repo.ts': [25, TO_ENGLISH],
-  'src/runner-go/wiki_articles.go': [7, TO_ENGLISH],
-  'src/runner-go/wiki_docs_build.go': [68, TO_ENGLISH],
-  'src/runner-go/wiki_maintain.go': [1, TO_ENGLISH],
-  'src/runner-go/wiki_maintain_docs.go': [43, TO_ENGLISH],
-  'src/runner-go/wiki_plan_draft.go': [6, TO_ENGLISH],
-  'src/runner-go/wiki_plan_format.go': [80, TO_ENGLISH],
-  'src/runner-go/wiki_plan_gate.go': [6, TO_ENGLISH],
-  'src/runner-go/wiki_plan_materials.go': [26, TO_ENGLISH],
-  'src/runner-go/wiki_plan_model.go': [2, TO_ENGLISH],
-  'src/runner-go/wiki_plan_prompts.go': [56, TO_ENGLISH],
-  'src/runner-go/wiki_plan_repo.go': [22, TO_ENGLISH],
-  'src/runner-go/wiki_repo_ops.go': [1, TO_ENGLISH],
+  // What the runner keeps are patterns, as the server's port keeps them in regex literals (which this guard skips,
+  // and a Go regexp is a string literal):
+  'src/runner-go/wiki_docs_build.go': [1, "counts the facts of a sentence written in Chinese: a fact token's units"],
+  'src/runner-go/wiki_plan_format.go': [3, 'reads the pointers of plan versions written in Chinese, and the agents mark in Chinese'],
+  'src/runner-go/wiki_plan_materials.go': [2, 'reads the Chinese title prefixes of older task and judgment sessions'],
+  'src/runner-go/wiki_plan_repo.go': [1, OWNER_WORDS],
 };
 
 function sources(dir: string, found: string[] = []): string[] {

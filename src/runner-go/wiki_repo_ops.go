@@ -54,7 +54,7 @@ const (
 	wikiRepoOpFragmentBytes    = 2 << 20
 	wikiRepoOpWholeFileBytes   = 2 << 20
 	wikiRepoOpBoundedChars     = 22000
-	wikiRepoOpAfterwardsMarker = "\n…（后略）\n"
+	wikiRepoOpAfterwardsMarker = "\n… (rest omitted)\n"
 )
 
 // One git command's budget: the snapshot reads a whole tree, which is minutes of work on a cold object
