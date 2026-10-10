@@ -11466,30 +11466,16 @@ button.chat-jump-start:hover {
   color: var(--warning-fg, #ad6800);
   font-weight: 600;
 }
-/* The batch's shape. Nodes read as the same objects the counts above describe, and edges are the
-   quietest thing on the card — the structure should be legible from the arrangement, not from the
-   lines being loud. */
+/* The batch's shape, which is the project page's own canvas (`BatchPlanGraph`): it brings its own
+   card, edge and tone styles, so all this adds is where it sits on the card. */
 .batch-graph {
   margin: 2px 0 8px;
 }
-.batch-graph-edge {
-  fill: none;
-  stroke: color-mix(in srgb, var(--text-3) 55%, transparent);
-  stroke-width: 1.2;
-}
-.batch-graph-node rect {
-  fill: color-mix(in srgb, var(--brand) 12%, var(--bg-raised));
-  stroke: color-mix(in srgb, var(--brand) 34%, transparent);
-  stroke-width: 1;
-}
-.batch-graph-node text {
-  fill: var(--text-1);
-  font-size: 11px;
-}
-/* Waiting on something that is not drawn: dashed, so it never reads as a task ready to start. */
-.batch-graph-node.is-outside rect {
-  stroke-dasharray: 3 2;
-  fill: var(--bg-raised);
+/* What the picture cannot draw: the prerequisites that are tasks nobody put on this canvas. */
+.batch-graph-foot {
+  margin: 6px 0 0;
+  color: var(--text-3);
+  font-size: 11.5px;
 }
 
 .dag-approval-caption {

@@ -59,7 +59,7 @@ import {
 } from '../lib/deliveredMessage';
 import { steerDeliveryState } from '../lib/steerDelivery';
 import { BatchGraph } from './BatchGraph';
-import { buildBatchGraph, describeShape, shouldDraw, type BatchTaskInput } from '../lib/batchGraph';
+import { buildBatchGraph, describeShape, type BatchTaskInput } from '../lib/batchGraph';
 import { RunnerSignIn } from './RunnerSignIn';
 import { AppLink } from './AppLink';
 import { SameOriginLink } from './SameOriginLink';
@@ -3928,7 +3928,9 @@ function describeTool(name: string, input: any, isShell?: boolean, answer?: stri
         summary: shape || undefined,
         body: tasks.length ? (
           <div className="tool-batch">
-            {shouldDraw(graph) ? <BatchGraph tasks={tasks} /> : null}
+            {/* The record lists the titles either way, so the picture stands where it fits and
+                leaves nothing in its place when it does not. */}
+            <BatchGraph tasks={tasks} fallback={null} />
             <ul className="dag-approval-ops">
               {tasks.map((t, n) => (
                 <li key={n} className="dag-op">
