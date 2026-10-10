@@ -1188,7 +1188,8 @@ JSON 里是 `articles.serverExecution`、`articles.job` 与 `jobs.kindRuns.artic
 - **对谁**：执行器开关把账号交给服务端的（`server`，或 `canary` 名单内）。runner 模式下这一节都不发生。
 - **什么时候排**：服务端记下一次维护运行结束的地方（runner 路径是 finish 路由，`finishWikiMaintenanceRun`）判断：运行成功、记下了 op
   （有这次会话的 `maintenance` 来源 changeset）、不是在落后时建的——满足就给空间排一个 `articles` 作业，优先级 0（后台，排在 owner 主动发起
-  的请求之后）。每个空间最多排一个：排队中的作业运行时才读计划，挂起等快照的作业重放时会重读，所以都能覆盖之后结束的运行；已经在跑的
+  的请求之后）。它第一次被领取之前，要先等这个空间的下一轮维护走完，只让这一轮（owner 2026-10-10 定，§24.2）。每个空间最多排一个：
+  排队中的作业运行时才读计划，挂起等快照的作业重放时会重读，所以都能覆盖之后结束的运行；已经在跑的
   作业可能读过计划了，下一次运行结束就在它后面再排一个。排作业失败只记日志，不影响运行本身的结束。P8 的服务端维护作业结束时调同一个入口。
 - **作业做什么**：
   1. 以作业的身份（`origin: 'maintenance'`、无会话、无用户）读计划；空间没有主题时照常先写默认主题；只取指纹变了的主题，一个都没有就直接成功、
@@ -2111,8 +2112,9 @@ JSON 里是 `jobs` 一节；设计见 `docs/wiki-server-execution-design.md` §5
 ### 24.1 表与状态
 
 - `wiki_job`：`id`、`owner_id`、`space_id`（复合外键到 `wiki_space`，随空间删除而删）、`kind`、`input`（JSONB，作业自己的材料，
-  从不含地址和 key）、`priority`（默认 0，owner 主动发起的高于后台维护）、`state`、`waiting_for`、`attempts`、`next_attempt_at`、
-  租约三列（`lease_owner` / `lease_generation` / `lease_deadline_at`）、`progress`、`report`、`error`、`failure_kind`、
+  从不含地址和 key）、`priority`（默认 0，owner 主动发起的高于后台维护；同一空间里维护优先、文章最多让一轮，见 §24.2）、
+  `state`、`waiting_for`、`attempts`、`next_attempt_at`、租约三列（`lease_owner` / `lease_generation` / `lease_deadline_at`）、
+  `progress`、`report`、`error`、`failure_kind`、
   `created_at` / `updated_at` / `started_at` / `ended_at`。
 - `state`：`queued` / `running` / `waiting` / `succeeded` / `failed` / `cancelled`；`waiting_for`：`repo` / `model`（只在 waiting 时非空，
   且此时不占租约）；`failure_kind`：`infra` / `content`。本期还没有代码把作业置为 `waiting`：作业在等模型请求时保持 `running` 并续租，
@@ -2134,7 +2136,22 @@ JSON 里是 `jobs` 一节；设计见 `docs/wiki-server-execution-design.md` §5
 
 - 领取照 `watch_delivery`：一条 `UPDATE "wiki_job" … FROM (SELECT … FOR UPDATE SKIP LOCKED)`，候选是
   `state = 'queued' AND (next_attempt_at IS NULL OR next_attempt_at <= now())`、`attempts` 没到重试上限（§24.4）、本 build 认识的种类、本 worker 服务的账号（§24.5）、
-  且**同一空间没有在跑的作业**；顺序是 `priority DESC, created_at, id`；每条给一个新的 `lease_generation`，`started_at` 取第一次领取。
+  且**同一空间没有在跑的作业**；每个空间只出它自己顺序里的下一个作业（优先级高的先，同一优先级先来先得，等维护的文章作业排到
+  最后、不领，见下一条）；空间之间按各自的位置排——空间里按 `priority DESC, created_at, id` 排第一的那个作业的位置，不管轮到的是它
+  自己还是替它走的维护；每条给一个新的 `lease_generation`，`started_at` 取第一次领取。整条领取仍是一条语句：先用 WITH 读出到期的
+  排队作业和它们等不等维护，再 `UPDATE … FROM (SELECT … FOR UPDATE OF c SKIP LOCKED)`。
+- **维护优先，文章最多让一轮**（owner 2026-10-10 定，`jobs.priority`）：一个还没被领取过的 `articles` 作业，要等它所在空间的「这一轮」
+  维护——这个空间里在它之后建的第一个 `maintain` 作业（优先级不低于它）——结束：这一轮排着、跑着、因 infra 失败退避着，它都不领，
+  所以这一轮先被领走，哪怕它建得晚。这一轮结束以后，再建的维护作业就按先来先得排在它后面：每个文章作业只让这一轮，不会饿死。
+  生产 canary 上，每轮维护结束都会排一个文章作业，几乎所有主题的指纹都被这一轮读进的二十多个会话改了：1d4b9a86 是 673 个请求、
+  156 万输入 token、1.5 小时以上；紧接着排进来的下一轮维护排在它后面，61e91611 等了 1 小时 47 分。
+  - 被领取过的作业（停机交还的、infra 放回队列的、停在仓库操作上的）已经轮到过，不再让；运行中的作业不受影响：变的只是领取哪个
+    排队作业，不打断任何作业。空间里到期的作业都在等这一轮、而这一轮还在退避时，这个空间这次什么都不领，等这一轮到期。
+  - 不改优先级：作业的模型请求带着它的优先级进全部署共用的请求队列（§25.2），给文章作业降优先级，它的请求就会排到所有别的空间的
+    请求后面；`wiki_job_counts_chk` 也要求优先级不小于 0。所以不加迁移，也不加列：「这一轮」从作业行本身读出来（建作业的先后、
+    `started_at`、`state`），不写任何标记。
+  - owner 发起的作业（优先级 1）照旧排在维护和文章作业前面。不同空间互不影响：空间在部署队列里的位置不变，变的只是这个空间里由谁
+    来占这个位置；别的空间的作业、Activity 读到的位置（§24.8）都和以前一样。`ORBIT_WIKI_EXECUTOR=runner` 时照旧什么都不领。
 - 每次领取 `lease_deadline_at = now + 60s`，执行中每 20 秒续租一次；回写（成功、infra 重试、content 失败、停机交还）都按代数比较并交换，
   被接管的旧进程写不进任何一行。
 - 过期回收：`running` 且租约过期的行回到 `queued`，`attempts + 1`，`next_attempt_at = now + 退避`（§24.4），`failure_kind = 'infra'`，
@@ -2150,9 +2167,9 @@ JSON 里是 `jobs` 一节；设计见 `docs/wiki-server-execution-design.md` §5
 - SIGTERM（docker 30 秒宽限，设计 §5.4，owner 2026-10-07 定的方案 A：不等在途请求）：停止领取；取消在跑的作业，每个作业把自己
   **交还**（`jobs.lease.handBack`）并退出。交还是一次按领取代数比较并交换的写入：行直接回到 `queued`，租约三列和 `next_attempt_at`
   清空，`attempts` 不变，`failure_kind` 清空，`error` 写成 `WORKER_STOPPED: the worker was stopped and handed this job back; the next
-  one takes it over at once, without counting an attempt`。新进程第一轮领取就能拿到它，在同一空间里照常按 `priority DESC, created_at, id`
-  排序。请求那一侧照旧（§25.7）：已收到的写进 `partial`，租约截止时间设为现在，由请求的回收带着 partial 重新排队；重放按 `(step, unit)`
-  碰上原来的请求行，写入靠幂等键，不重复写。
+  one takes it over at once, without counting an attempt`。新进程第一轮领取就能拿到它，在同一空间里照常按空间自己的顺序（§24.2）
+  排序；交还的文章作业已经被领取过，不再等维护。请求那一侧照旧（§25.7）：已收到的写进 `partial`，租约截止时间设为现在，由请求的
+  回收带着 partial 重新排队；重放按 `(step, unit)` 碰上原来的请求行，写入靠幂等键，不重复写。
 - **停机交还不计次、不退避**（owner 2026-10-09 定：部署打断不计入尝试次数）。在此之前，停机只把租约截止时间设为现在，回收把它当成
   丢掉的租约，`attempts + 1` 再退避：2026-10-09 生产部署了 4 次，docs_build 79620f23 被打断 3 次；06:56Z 接手时它还在 30 秒的退避里，同空间
   priority 0 的文章作业先被领走，它多等了 40 多分钟。停在仓库操作上等待的作业被停机打断时同样交还（§26.6）。只有被停机打断的那次
@@ -2289,7 +2306,7 @@ op 在等），于是旧版 `orbit wiki verify` 读到空列表就正常退出�
 | `id`、`kind`、`state`、`waitingFor`、`priority`、`attempts` | 作业行本身 |
 | `createdAt`、`updatedAt`、`startedAt`、`endedAt`、`nextAttemptAt` | 时间；`nextAttemptAt` 是 infra 失败后下一次重试的时间 |
 | `failureKind`、`error` | 失败的类别和原因 |
-| `ahead` | 排队（`queued`）时：部署里按领取顺序（`priority DESC, created_at, id`）排在它前面的排队作业数；其余状态为 null |
+| `ahead` | 排队（`queued`）时：部署里按领取顺序（§24.2）排在它前面的排队作业数——各空间的作业占 `priority DESC, created_at, id` 给的位置，由空间自己的顺序决定谁占哪个：等维护的文章作业占这一轮维护的位置，维护占它的；其余状态为 null |
 | `progress` | 流水线自己写的进度（§24.1）读成 `{ step, done, total }`：写了 `done` / `total` 的照读；导入的形状（`notes`、`read`、`failed`）读成「读完或放弃的 note / 交来的 note」；没写为 null |
 | `calls` | 它的调用按状态计数（`total`、`queued`、`running`、`succeeded`、`failed`、`cancelled`），加上报出的输入、输出 token 合计 |
 | `nextCall` | 它排队的调用里队列最先轮到的那个：`{ ahead, enqueuedAt }`；没有排队的为 null |
@@ -2544,7 +2561,8 @@ JSON 里是 `maintenance.job.server` 和 `jobs.kindRuns.maintain`；迁移 `0407
 
 - `ORBIT_WIKI_EXECUTOR` 给这个账号服务端执行时（`server`，或 `canary` 名单内），`considerWikiMaintenance` 的判定读法一字不变
   （到期、当日次数、队列余量、期望位置），写入换成 `MaintenanceJobWriter.makeJob`：一个 `wiki_job`（`kind = maintain`，
-  `input = { runId }`，优先级 0）和它名下的 `wiki_maintenance_run` 行（`job_id` 写在同一事务里，
+  `input = { runId }`，优先级 0，排在本空间比它早建、还没被领取过的文章作业前面，那个文章作业只让这一轮，§24.2）和它名下的
+  `wiki_maintenance_run` 行（`job_id` 写在同一事务里，
   `wiki_maintenance_run_maker_chk` 要求每行恰好一个建者），**不建任务、不建会话**。空间行 `FOR NO KEY UPDATE` 是它的锁：
   两个事实同时到达只建一个作业，进行中的作业像未结束的任务一样挡住下一次（`unfinished`），排队的 plan 作业照旧先走。
 - 服务端这条路上隐藏列表不是必需的：`settings.maintenance.enabled` 与 `workspaceId` 就够。列表存在时，死在里面的维护任务照旧先被

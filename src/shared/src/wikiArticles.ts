@@ -55,7 +55,11 @@ export const WIKI_ARTICLE_ENTRIES_LISTED = 200;
 export const WIKI_ARTICLES_JOB = {
   /** The step every model call of the job is filed under: the queue's default wait limit and call budget. */
   step: 'articles',
-  /** Background work (`jobs.priority`): it is made after a maintenance run, and waits behind what the owner asked for. */
+  /**
+   * Background work (`jobs.priority`): it is made after a maintenance run, and waits behind what the owner asked for.
+   * Until it is first claimed it also waits for its space's next maintenance round — one round, never a second
+   * (the owner's decision of 2026-10-10) — which takes its turn without any change of priority.
+   */
   priority: 0,
   /** max_tokens of one article, overview or subtopic call: far above the 900 characters the server keeps. */
   articleMaxTokens: 4096,

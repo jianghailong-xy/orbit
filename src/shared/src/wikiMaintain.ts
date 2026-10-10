@@ -32,7 +32,11 @@ export const WIKI_MAINTENANCE_JOB = {
  */
 export const WIKI_MAINTAIN_JOB = {
   kind: 'maintain',
-  /** Background work: a fact made the run, and the owner's own asks sort above it (contract `jobs.priority`). */
+  /**
+   * Background work: a fact made the run, and the owner's own asks sort above it (contract `jobs.priority`). It goes
+   * before an articles job of its space made before it that has never been claimed, once (the owner's decision of
+   * 2026-10-10).
+   */
   priority: 0,
   /** The queue's steps: extraction, and the one plan change a run may propose; `plan_*` is the plan's wait limit. */
   steps: { extract: 'extract', planProposal: 'plan_proposal' },

@@ -21,7 +21,12 @@
  *      nothing new; a claim the stop overtakes hands back what it took instead of starting it;
  *   9. a stop against a crash, in one space: the build a stop handed back is the next worker's first claim, ahead of a
  *      lower-priority job of its space, its attempts as they were; the build whose worker crashed — its lease ran out,
- *      nobody handed it back — is counted and backed off 0, 10, then 30 s, as before.
+ *      nobody handed it back — is counted and backed off 0, 10, then 30 s, as before;
+ *  10. maintenance first, an articles job yields one round at most (the owner's decision of 2026-10-10): the round
+ *      queued behind its space's articles job is claimed first, every attempt of it, even while it backs off, and the
+ *      round after finds the articles job ahead; the owner's own work still goes first; another space keeps its place
+ *      in the line; an articles job that has run before yields to nothing; and Activity reads each where the claim
+ *      takes it.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/wiki-worker/wiki-jobs.pg.spec.ts
  *
@@ -42,7 +47,15 @@ import { PrismaService } from '../prisma/prisma.service';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
 import { WikiJobReads } from '../wiki/wiki-job-reads';
 import { WikiJobExecutor, WikiJobInfraError, type WikiJobRunner } from './wiki-job-executor';
-import { claimWikiJobs, enqueueWikiJob, reclaimExpiredWikiJobs } from './wiki-jobs';
+import {
+  claimWikiJobs,
+  enqueueWikiJob,
+  reclaimExpiredWikiJobs,
+  releaseWikiJobLease,
+  requeueWikiJobForInfra,
+  succeedWikiJob,
+  type ClaimedWikiJob,
+} from './wiki-jobs';
 import { WikiModelRequestChannel } from './wiki-model-notify';
 import { enqueueWikiModelRequest, WIKI_MODEL_WAIT_LIMIT_ERROR as WAIT_LIMIT, wikiModelRequestSha256 } from './wiki-model-queue';
 import { wikiSmokeJobInput } from './wiki-smoke-job';
@@ -829,4 +842,161 @@ test('the lease sweep counts each crash of a job one attempt, and backs it off b
     { attempts: 3, backoff: 30, error: LEASE_EXPIRED },
     { attempts: 4, backoff: 30, error: LEASE_EXPIRED },
   ]);
+});
+
+// ── 10. maintenance first, an articles job yields one round at most (the owner's decision of 2026-10-10) ──────────
+
+/** A job of `kind` made `secondsAgo` seconds ago: which of a space's jobs was made first is what the claim reads. */
+async function madeAgo(h: Harness, kind: string, secondsAgo: number, options: { spaceId?: string; priority?: number } = {}): Promise<string> {
+  const id = await job(h, { kind, spaceId: options.spaceId, priority: options.priority });
+  await h.sql.query(`UPDATE "wiki_job" SET "created_at" = now() - make_interval(secs => $2) WHERE "id" = $1`, [id, secondsAgo]);
+  return id;
+}
+
+/** One claim of this spec's account by a worker that runs every kind these cases queue. */
+async function claimed(h: Harness, limit = 1): Promise<ClaimedWikiJob[]> {
+  return claimWikiJobs(h.prisma as unknown as PrismaService, {
+    workerId: randomUUID(), kinds: ['articles', 'maintain', 'docs_build'], owners: [h.owner.id], limit, leaseMs: 60_000,
+  });
+}
+
+/** Where Activity reads each named job of a space (jobs.read): how many queued jobs the claim takes before it. */
+async function aheadIn(h: Harness, spaceId: string, names: Record<string, string>): Promise<Record<string, number | null>> {
+  const { jobs } = await new WikiJobReads(h.prisma as unknown as PrismaService).read(h.owner.id, spaceId);
+  return Object.fromEntries(jobs.filter((one) => names[one.id] !== undefined).map((one) => [names[one.id], one.ahead]));
+}
+
+async function succeeded(h: Harness, one: ClaimedWikiJob | undefined): Promise<void> {
+  if (one) await succeedWikiJob(h.prisma as unknown as PrismaService, { id: one.id, generation: one.leaseGeneration });
+}
+
+test('the round of maintenance queued behind its space\'s articles job is claimed first, and Activity reads it next in line', { skip, timeout: 60_000 }, async () => {
+  const h = await boot();
+  await reset(h);
+  // The canary, 2026-10-10: a run's end queues the articles job its ops owe (673 calls, an hour and a half), and the
+  // space's next round of maintenance, queued after it, waited an hour and 47 minutes behind it.
+  const articles = await madeAgo(h, 'articles', 60);
+  const round = await madeAgo(h, 'maintain', 30);
+  const names = { [articles]: 'articles', [round]: 'round' };
+  // Under the default executor nothing is claimed at all, whatever is queued: the runner path is what it was.
+  process.env.ORBIT_WIKI_EXECUTOR = 'runner';
+  assert.equal(await worker(h).executor.runOnce(), 0);
+  process.env.ORBIT_WIKI_EXECUTOR = 'server';
+  const activity = await aheadIn(h, h.owner.spaceId, names);
+  const first = (await claimed(h)).map((one) => names[one.id]);
+  assert.deepEqual(
+    { activity, first },
+    { activity: { round: 0, articles: 1 }, first: ['round'] },
+    'the round goes first, and Activity reads it next in line with the articles job behind it',
+  );
+});
+
+test('an articles job yields one round, every attempt of it, and the round after it finds the articles job ahead', { skip, timeout: 60_000 }, async () => {
+  const h = await boot();
+  await reset(h);
+  const prisma = h.prisma as unknown as PrismaService;
+  // The run whose end queues the articles job (finishWikiMaintenanceJob): it is running when the job is made, and ends.
+  const run = await madeAgo(h, 'maintain', 120);
+  const [running] = await claimed(h);
+  assert.equal(running?.id, run, 'the run that queues the articles job');
+  const articles = await madeAgo(h, 'articles', 90);
+  await succeeded(h, running);
+  // The next round, made moments later: the first maintenance job made after the articles job, its round.
+  const round = await madeAgo(h, 'maintain', 60);
+  const names: Record<string, string> = { [articles]: 'articles', [round]: 'round' };
+  const order: string[] = [];
+  const take = async (): Promise<ClaimedWikiJob | undefined> => {
+    const [one] = await claimed(h);
+    order.push(one ? names[one.id] ?? one.kind : '(nothing)');
+    return one;
+  };
+  // The round goes first, and finds the space's runner away: put back for infra, on the backoff.
+  const first = await take();
+  if (first) await requeueWikiJobForInfra(prisma, { id: first.id, generation: first.leaseGeneration, error: 'the runner is offline' });
+  await h.sql.query(`UPDATE "wiki_job" SET "next_attempt_at" = now() + interval '10 seconds' WHERE "id" = $1 AND "state" = 'queued'`, [round]);
+  // While it backs off, the articles job still waits for it: the space runs nothing rather than let the articles in.
+  await take();
+  await h.sql.query(`UPDATE "wiki_job" SET "next_attempt_at" = now() WHERE "id" = $1 AND "state" = 'queued'`, [round]);
+  // Its retry is still that round, and this time it ends.
+  await succeeded(h, await take());
+  // The round after it is made: the articles job has yielded its one round and goes first, the new round waits for the
+  // space, and then runs.
+  names[await madeAgo(h, 'maintain', 0)] = 'next round';
+  const third = await take();
+  await take();
+  await succeeded(h, third);
+  await take();
+  assert.deepEqual(order, ['round', '(nothing)', 'round', 'articles', '(nothing)', 'next round']);
+});
+
+test('the owner\'s own work still goes before both the round and the articles job', { skip, timeout: 60_000 }, async () => {
+  const h = await boot();
+  await reset(h);
+  const articles = await madeAgo(h, 'articles', 90);
+  const round = await madeAgo(h, 'maintain', 60);
+  // A build the owner's confirmation made (priority 1, jobs.priority), the newest of the three.
+  const build = await madeAgo(h, 'docs_build', 30, { priority: 1 });
+  const names = { [articles]: 'articles', [round]: 'round', [build]: 'build' };
+  const activity = await aheadIn(h, h.owner.spaceId, names);
+  const order: string[] = [];
+  for (let i = 0; i < 3; i += 1) {
+    const [one] = await claimed(h);
+    order.push(one ? names[one.id] : '(nothing)');
+    await succeeded(h, one);
+  }
+  assert.deepEqual(
+    { activity, order },
+    { activity: { build: 0, round: 1, articles: 2 }, order: ['build', 'round', 'articles'] },
+    'priority first: the build, then the round, then the articles job',
+  );
+});
+
+test('another space is not affected: each space keeps its place in the line, and only which of its own jobs takes it changes', { skip, timeout: 60_000 }, async () => {
+  const h = await boot();
+  await reset(h);
+  // Space one: an articles job and then its round. Space two: an articles job made between the two, and nothing else.
+  const queue = async () => {
+    const articles = await madeAgo(h, 'articles', 90);
+    const theirs = await madeAgo(h, 'articles', 60, { spaceId: h.owner.otherSpaceId });
+    const round = await madeAgo(h, 'maintain', 30);
+    return { [articles]: 'one: articles', [round]: 'one: round', [theirs]: 'two: articles' };
+  };
+  let names = await queue();
+  const activity = { ...await aheadIn(h, h.owner.spaceId, names), ...await aheadIn(h, h.owner.otherSpaceId, names) };
+  // A worker with room for one: space one's place comes first in the line and its round takes it; then space two's turn.
+  const roomForOne = [(await claimed(h, 1)).map((one) => names[one.id]), (await claimed(h, 1)).map((one) => names[one.id])];
+  // A worker with room for both: one claim takes a job of each space, space two's as it always would.
+  await reset(h);
+  names = await queue();
+  const roomForTwo = (await claimed(h, 2)).map((one) => names[one.id]).sort();
+  assert.deepEqual(
+    { activity, roomForOne, roomForTwo },
+    {
+      activity: { 'one: round': 0, 'two: articles': 1, 'one: articles': 2 },
+      roomForOne: [['one: round'], ['two: articles']],
+      roomForTwo: ['one: round', 'two: articles'],
+    },
+    'space two reads and is claimed exactly where it was; space one keeps its place and gives it to its round',
+  );
+});
+
+test('an articles job that has run before yields to nothing: one a stop handed back keeps its turn', { skip, timeout: 60_000 }, async () => {
+  const h = await boot();
+  await reset(h);
+  const prisma = h.prisma as unknown as PrismaService;
+  const articles = await madeAgo(h, 'articles', 60);
+  const [running] = await claimed(h);
+  assert.equal(running?.id, articles, 'alone in its space, the articles job is claimed at once');
+  // The space's next round is made while it runs: nothing of the space is claimed, and the running job is not touched.
+  const round = await madeAgo(h, 'maintain', 0);
+  assert.deepEqual(await claimed(h), [], 'one job per space at a time');
+  assert.equal((await jobRow(h, articles)).state, 'running');
+  // A deploy stops its worker: the job is handed back, queued at once (jobs.lease.handBack). It has had its turn.
+  assert.equal(await releaseWikiJobLease(prisma, { id: articles, generation: running!.leaseGeneration }), true);
+  const names = { [articles]: 'articles', [round]: 'round' };
+  assert.deepEqual(
+    { activity: await aheadIn(h, h.owner.spaceId, names), next: (await claimed(h)).map((one) => names[one.id]) },
+    { activity: { articles: 0, round: 1 }, next: ['articles'] },
+    'the handed-back articles job takes its turn back, ahead of the round made while it ran',
+  );
 });

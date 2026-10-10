@@ -1830,6 +1830,9 @@ describe('wiki contract', () => {
     expect(WIKI_JOB.unexpectedMaxAttempts).toBeLessThan(WIKI_JOB.maxAttempts);
     expect(jobs.retry.limit).toMatch(/settleWikiJobRows/u);
     expect(jobs.lease.claim).toContain('attempts < retry.maxAttempts');
+    // Maintenance first, an articles job yields one round at most (2026-10-10): a space's own order, no priority moved.
+    expect(jobs.priority).toMatch(/an articles job yields one round at most \(the owner's decision of 2026-10-10\)/u);
+    expect(WIKI_ARTICLES_JOB.priority).toBe(WIKI_MAINTAIN_JOB.priority);
     expect(jobs.concurrencyPerWorker).toBe(WIKI_JOB.maxConcurrentPerWorker);
     expect(jobs.pollSeconds).toBe(WIKI_JOB.pollSeconds);
     // The one-job-per-space rule is the claim's and the database's: a partial unique index over space_id.
