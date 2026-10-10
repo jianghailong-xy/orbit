@@ -79,9 +79,20 @@ async function press(locator, testInfo) {
   else await locator.click();
 }
 
+/** Wait until the conversation's scroller has stopped: a follow to the tail may be a smooth scroll still under way. */
+const scrolled = (page) => expect.poll(() => page.evaluate(async (CONVERSATION) => {
+  const scroller = document.querySelector(CONVERSATION);
+  if (!scroller) return 'still';
+  const before = scroller.scrollTop;
+  for (let frame = 0; frame < 3; frame += 1) await new Promise((resolve) => requestAnimationFrame(resolve));
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  return scroller.scrollTop === before ? 'still' : 'scrolling';
+}, CONVERSATION), { timeout: 10_000 }).toBe('still');
+
 async function observe(page, fixtures, step) {
   await settled(page);
   await steady(page);
+  await scrolled(page);
   await frames(page);
   const state = await page.evaluate(({ VIEWER, PICTURE, PROGRESS, SIZES, NAMES, CONVERSATION }) => {
     const shown = (el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== 'hidden'; };
@@ -542,16 +553,20 @@ test.describe('P5.2 the transcript’s pictures', () => {
     await loadAll(page, fixtures);
     const trace = [];
     await top(row(page, 3));
-    // Sample the viewer's root opacity, its body's scale and the picture's scale every frame for half a second.
+    // Sample the viewer's root opacity, its body's scale and the picture's scale every frame: for half a second while
+    // it opens or zooms, and until it is gone (two seconds at most) while it closes — the replaced viewer removes itself
+    // only after its fade has ended, which on a loaded host can be well past half a second.
     const motion = (step) => page.evaluate(async ({ VIEWER, step }) => {
       const samples = [];
       const start = performance.now();
-      while (performance.now() - start < 500) {
+      const limit = step === 'closing' ? 2000 : 500;
+      while (performance.now() - start < limit) {
         const view = [...document.querySelectorAll(VIEWER)].find((el) => el.getBoundingClientRect().width > 0);
         const body = view?.querySelector('.ant-image-preview-body, .orbit-image-preview-body');
         const img = view?.querySelector('img');
         const scale = (el) => (el ? new DOMMatrixReadOnly(getComputedStyle(el).transform === 'none' ? undefined : getComputedStyle(el).transform).a : null);
         samples.push({ opacity: view ? Number(getComputedStyle(view).opacity) : null, body: scale(body), picture: scale(img) });
+        if (step === 'closing' && !view) break;
         await new Promise((resolve) => requestAnimationFrame(resolve));
       }
       const values = (key) => samples.map((sample) => sample[key]).filter((value) => value !== null);
