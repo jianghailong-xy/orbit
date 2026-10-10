@@ -34,11 +34,11 @@
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<!-- Self-hosted Orbit is an address the operator types in: a public IP, a LAN address,
-		     or an http:// host. Named hosts over http are covered by the global exception;
-		     iOS 17 applies ATS to IP literals again, so those get their own entries below.
-		     A /0 entry (0.0.0.0/0, ::/0) is treated as a flag rather than an address and matches
-		     nothing, so each family is listed as its two halves — Apple's workaround for
-		     r.114040682, and what docs/evidence/ios-http-ip/README.md measured on a simulator.
+		     or an http:// host. Named hosts over http are covered by the global exception; iOS 17
+		     stopped exempting IP literals, so those get their own entries below. A /0 entry
+		     (0.0.0.0/0, ::/0) is treated as a flag rather than an address and matches nothing, so
+		     each family is listed as its two halves — Apple's workaround for r.114040682
+		     (docs/evidence/ios-http-ip/ measures what this block does on a simulator).
 		     NSAllowsLocalNetworking is deliberately absent: its presence would make iOS 10+
 		     ignore NSAllowsArbitraryLoads. -->
 		<key>NSAllowsArbitraryLoads</key>
