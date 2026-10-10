@@ -49,20 +49,26 @@ import Foundation
 /// - `projectBranchName` — the project branch as a full `refs/heads/…` ref, only with a project
 ///   branch. Absent on a request means `refs/heads/project/<project id>`, or the branch the project
 ///   already names.
+/// - `upstreamRef` — the project's main branch as a full `refs/heads/…` ref, with either line: where
+///   its tasks start from and its work ends up. On a start it is the owner's choice; on a
+///   coordinator's request, a suggestion. Absent asks for nothing: the project keeps the main branch
+///   it stands on. In a start's record, the main branch the start left the project on.
 /// - `automatic` — `project.coordinator_enabled`: the coordinator runs the project for the owner.
 /// - `maxConcurrentTasks` — how many of its tasks may be in flight at once.
 /// - `mergeCheckCommand` — the check run on the combined tree before anything lands; nil for none.
 public struct ProjectStartSettings: Codable, Equatable, Sendable {
     public let line: IntegrationLine
     public let projectBranchName: String?
+    public let upstreamRef: String?
     public let automatic: Bool
     public let maxConcurrentTasks: Int
     public let mergeCheckCommand: String?
 
-    public init(line: IntegrationLine, projectBranchName: String? = nil, automatic: Bool,
-                maxConcurrentTasks: Int, mergeCheckCommand: String? = nil) {
+    public init(line: IntegrationLine, projectBranchName: String? = nil, upstreamRef: String? = nil,
+                automatic: Bool, maxConcurrentTasks: Int, mergeCheckCommand: String? = nil) {
         self.line = line
         self.projectBranchName = projectBranchName
+        self.upstreamRef = upstreamRef
         self.automatic = automatic
         self.maxConcurrentTasks = maxConcurrentTasks
         self.mergeCheckCommand = mergeCheckCommand
@@ -79,6 +85,7 @@ public struct ProjectStartSettings: Codable, Equatable, Sendable {
                                                    debugDescription: "a line this build does not know")
         }
         projectBranchName = try c.decodeIfPresent(String.self, forKey: .projectBranchName)
+        upstreamRef = try c.decodeIfPresent(String.self, forKey: .upstreamRef)
         automatic = try c.decode(Bool.self, forKey: .automatic)
         maxConcurrentTasks = try c.decode(Int.self, forKey: .maxConcurrentTasks)
         guard maxConcurrentTasks >= 0 else {
@@ -104,6 +111,7 @@ public struct ProjectStartSettings: Codable, Equatable, Sendable {
         }
         return ProjectStartSettings(line: line,
                                     projectBranchName: settings["projectBranchName"]?.stringValue,
+                                    upstreamRef: settings["upstreamRef"]?.stringValue,
                                     automatic: automatic, maxConcurrentTasks: count,
                                     mergeCheckCommand: check)
     }
@@ -221,23 +229,27 @@ public struct ProjectStartRequest: Codable, Equatable, Sendable {
 
 /// The body of `POST /projects/:id/start`: the version of the criteria the owner read, and the
 /// settings on the card. Encoded by hand because the door is exact about absence: the branch name
-/// rides only with a project branch (it refuses one on a line that has none), while the merge check
-/// and the request are sent either way, null when there is none.
+/// rides only with a project branch (it refuses one on a line that has none) and the main branch
+/// only where the card offered one (it refuses one for a project with no repository), while the
+/// merge check and the request are sent either way, null when there is none.
 public struct StartProjectRequestBody: Encodable, Equatable, Sendable {
     public let criteriaDigest: String
     public let line: IntegrationLine
     public let projectBranchName: String?
+    /// The main branch as a full `refs/heads/…` ref: the owner's choice once pressed.
+    public let upstreamRef: String?
     public let automatic: Bool
     public let maxConcurrentTasks: Int
     public let mergeCheckCommand: String?
     public let requestId: String?
 
     public init(criteriaDigest: String, line: IntegrationLine, projectBranchName: String? = nil,
-                automatic: Bool, maxConcurrentTasks: Int, mergeCheckCommand: String? = nil,
-                requestId: String? = nil) {
+                upstreamRef: String? = nil, automatic: Bool, maxConcurrentTasks: Int,
+                mergeCheckCommand: String? = nil, requestId: String? = nil) {
         self.criteriaDigest = criteriaDigest
         self.line = line
         self.projectBranchName = projectBranchName
+        self.upstreamRef = upstreamRef
         self.automatic = automatic
         self.maxConcurrentTasks = maxConcurrentTasks
         self.mergeCheckCommand = mergeCheckCommand
@@ -245,7 +257,7 @@ public struct StartProjectRequestBody: Encodable, Equatable, Sendable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case criteriaDigest, line, projectBranchName, automatic, maxConcurrentTasks
+        case criteriaDigest, line, projectBranchName, upstreamRef, automatic, maxConcurrentTasks
         case mergeCheckCommand, requestId
     }
 
@@ -254,6 +266,7 @@ public struct StartProjectRequestBody: Encodable, Equatable, Sendable {
         try c.encode(criteriaDigest, forKey: .criteriaDigest)
         try c.encode(line, forKey: .line)
         try c.encodeIfPresent(projectBranchName, forKey: .projectBranchName)
+        try c.encodeIfPresent(upstreamRef, forKey: .upstreamRef)
         try c.encode(automatic, forKey: .automatic)
         try c.encode(maxConcurrentTasks, forKey: .maxConcurrentTasks)
         if let mergeCheckCommand {
@@ -382,6 +395,13 @@ public enum StartProject {
     public static let problemsDetail = "conflicts, failed checks"
     public static let mergingIntoMain = "Merging the branch into main"
     public static let eachMergeIntoMain = "Each merge into main"
+    /// The two above, said of the project's main branch — at `main`, word for word the constants.
+    public static func mergingInto(_ main: String) -> String {
+        "Merging the branch into \(main)"
+    }
+    public static func eachMergeInto(_ main: String) -> String {
+        "Each merge into \(main)"
+    }
     public static let criteriaChanges = "Any change to the criteria"
 
     /// "11 reviews": the evidence the owner decides on when Automatic is off.
@@ -428,16 +448,18 @@ public enum StartProject {
     /// owner's to confirm; with Automatic off every EVIDENCE_JUDGMENT task's evidence comes to them,
     /// and so does every problem; a branch merges into main on the owner's word unless Automatic is
     /// on, and a project that lands directly on main never merges by itself; with Automatic on, a
-    /// problem reaches the owner only after the project's escalation window.
+    /// problem reaches the owner only after the project's escalation window. The merges name the
+    /// project's main branch, `main`.
     public static func comesToYou(automatic: Bool, line: IntegrationLine,
                                   ownerConfirmed: [StartPlanNamedTask], evidenceJudged: Int,
-                                  escalationSeconds: Int) -> [ComesToYouItem] {
+                                  escalationSeconds: Int,
+                                  main: String = RunSettings.defaultMainBranch) -> [ComesToYouItem] {
         let confirms: [ComesToYouItem] = ownerConfirmed.count > 3
             ? [ComesToYouItem(text: tasksYouConfirm(ownerConfirmed.count))]
             : ownerConfirmed.map { ComesToYouItem(text: "\($0.label) · \($0.title)", detail: youConfirm) }
         let merges: [ComesToYouItem] = line == .main
-            ? [ComesToYouItem(text: eachMergeIntoMain)]
-            : automatic ? [] : [ComesToYouItem(text: mergingIntoMain)]
+            ? [ComesToYouItem(text: eachMergeInto(main))]
+            : automatic ? [] : [ComesToYouItem(text: mergingInto(main))]
         let criteria = ComesToYouItem(text: criteriaChanges)
         if automatic {
             return confirms + merges + [
@@ -637,19 +659,34 @@ public enum StartProject {
 
     /// The body a press sends: the seal, every setting, and the request it answers. The branch the
     /// coordinator named rides only with a project branch — the door refuses a branch name on a
-    /// line that has none — and an empty merge check is none.
+    /// line that has none — and an empty merge check is none. The main branch on the card is the
+    /// owner's choice once pressed, so it rides whenever the card offered one: a project with no
+    /// repository has none, and the door refuses one for it.
     public static func body(request: ProjectStartRequest, draft: StartSettingsDraft,
                             requestId: String?) -> StartProjectRequestBody {
         let branch = request.settings.projectBranchName ?? ""
         let check = draft.mergeCheckCommand.trimmingCharacters(in: .whitespacesAndNewlines)
+        let upstream = draft.upstream ?? ""
         return StartProjectRequestBody(
             criteriaDigest: request.criteriaDigest,
             line: draft.line,
             projectBranchName: draft.line == .projectBranch && !branch.isEmpty ? branch : nil,
+            upstreamRef: upstream.isEmpty ? nil : RunSettings.mainBranchRef(upstream),
             automatic: draft.automatic,
             maxConcurrentTasks: draft.maxConcurrentTasks,
             mergeCheckCommand: check.isEmpty ? nil : check,
             requestId: requestId)
+    }
+
+    /// The main branch a start opens with, by name: the first of the one this project's owner
+    /// already chose for it, the one they chose last for its repository, the one the coordinator
+    /// suggests, and main (contract L6) — web's `startMainBranch`. An earlier choice of the owner's
+    /// outranks a suggestion; a main branch the project only stands on by default is nobody's
+    /// choice, and a read that failed (`standing` nil) says nothing at all.
+    public static func mainBranch(suggested: String?, standing: ProjectIntegrationView?) -> String {
+        var chosen: String?
+        if let at = standing?.upstreamChosenAt, !at.isEmpty { chosen = standing?.upstreamRef }
+        return RunSettings.mainBranchName(chosen ?? standing?.lastMainBranch?.branch ?? suggested)
     }
 
     /// The project branch as the first option names it: the ref the coordinator named, or the
@@ -787,13 +824,18 @@ public struct StartPlanView: Equatable, Sendable {
 /// state — but it is still bounded by the door's own limits (`complete`).
 public struct StartSettingsDraft: Equatable, Sendable {
     public var line: IntegrationLine
+    /// The main branch by name, `refs/heads/` left off: what the Main branch row shows and the reader
+    /// picks or types — nil for a project with no repository, which has no main branch to choose
+    /// and no row.
+    public var upstream: String?
     public var automatic: Bool
     public var maxConcurrentTasks: Int
     public var mergeCheckCommand: String
 
-    public init(line: IntegrationLine, automatic: Bool, maxConcurrentTasks: Int,
+    public init(line: IntegrationLine, upstream: String? = nil, automatic: Bool, maxConcurrentTasks: Int,
                 mergeCheckCommand: String = "") {
         self.line = line
+        self.upstream = upstream
         self.automatic = automatic
         self.maxConcurrentTasks = maxConcurrentTasks
         self.mergeCheckCommand = mergeCheckCommand
@@ -801,11 +843,23 @@ public struct StartSettingsDraft: Equatable, Sendable {
 
     /// The card's draft of what a suggestion says — with Automatic on whatever was suggested:
     /// delegating is the owner's default (the owner, 2026-10-07), and a coordinator that would keep it
-    /// off says so in its own words, which the card quotes.
-    public init(_ settings: ProjectStartSettings) {
-        self.init(line: settings.line, automatic: true,
+    /// off says so in its own words, which the card quotes. The main branch is the first that
+    /// `StartProject.mainBranch` finds, and only for a project the integration read (`standing`)
+    /// says has a repository: a read that does not say whether it has one offers none.
+    public init(_ settings: ProjectStartSettings, standing: ProjectIntegrationView? = nil) {
+        let repository = standing?.repository ?? ""
+        self.init(line: settings.line,
+                  upstream: repository.isEmpty ? nil
+                      : StartProject.mainBranch(suggested: settings.upstreamRef, standing: standing),
+                  automatic: true,
                   maxConcurrentTasks: settings.maxConcurrentTasks,
                   mergeCheckCommand: settings.mergeCheckCommand ?? "")
+    }
+
+    /// The branch every sentence about where work goes names: the one on the card, or main for a
+    /// project with no repository to have another.
+    public var main: String {
+        upstream ?? RunSettings.defaultMainBranch
     }
 
     /// Whether the draft is a set of settings the door would take: a line, and a whole number of
@@ -830,9 +884,56 @@ public enum RunSettings {
     public static let lineProjectBranch = "A project branch"
     public static let lineProjectBranchHint =
         "Recommended when tasks depend on each other: they land here first and are checked together."
+
+    /// The main branch: the branch a project's tasks start from and its finished work ends up on
+    /// (`project_codebase.upstream_ref`). `main` until the owner chooses another — never probed, never
+    /// `master` by guess (contract L6) — and every sentence here that says where work goes names the
+    /// project's own, so a project on `master` reads "Directly into master" and one on `main` reads
+    /// exactly as it always did. Each such sentence is a function of the branch, beside the constant
+    /// that says it of main: the constants are the words the copy-parity tests read (here and on
+    /// Android), and `StartProjectTests` holds every function, at main, to its constant word for word.
+    public static let defaultMainBranch = "main"
+    public static let mainBranch = "Main branch"
+    public static let mainBranchHint = "Tasks start from it, and the project’s work ends up on it."
+    /// Under the start card's row while it shows the branch remembered for this repository.
+    public static func lastChoiceFor(_ repository: String) -> String {
+        "Your last choice for \(repository)"
+    }
+    /// How it runs: what choosing a main branch there also decides.
+    public static func mainBranchRemembers(_ repository: String) -> String {
+        "New projects in \(repository) start with your last choice."
+    }
+    /// The remembered branch's tag in the picker.
+    public static let lastChosen = "last chosen"
+    /// The picker's head: whose branches it lists, or that there is no list to pick from.
+    public static func branchesIn(_ workspace: String) -> String {
+        "Branches in \(workspace)"
+    }
+    public static let typeABranch = "Type a branch name"
+    /// A typed name the runner never reported, offered as itself.
+    public static func useBranch(_ name: String) -> String {
+        "Use “\(name)”"
+    }
+    /// A main branch as the doors take it, and as a sentence names it: a read's short name or a full
+    /// ref, `main` for none.
+    public static func mainBranchRef(_ name: String) -> String {
+        "refs/heads/\(name)"
+    }
+    public static func mainBranchName(_ ref: String?) -> String {
+        guard let ref, !ref.isEmpty else { return defaultMainBranch }
+        return ref.hasPrefix("refs/heads/") ? String(ref.dropFirst("refs/heads/".count)) : ref
+    }
+
     public static let lineMain = "Directly into main"
     public static let lineMainHint =
         "For a single task or an urgent fix. Every merge into main asks you."
+    /// The two above, said of the project's main branch.
+    public static func lineMain(_ main: String) -> String {
+        "Directly into \(main)"
+    }
+    public static func lineMainHint(_ main: String) -> String {
+        "For a single task or an urgent fix. Every merge into \(main) asks you."
+    }
     public static let automatic = "Automatic"
     /// What Automatic means, on a project branch: the coordinator runs the project, merges included.
     public static let automaticHintProjectBranch =
@@ -851,20 +952,36 @@ public enum RunSettings {
     public static let mergeCheckHint =
         "Runs on the combined tree before anything lands — on the project branch and again before "
         + "main."
+    public static func mergeCheckHint(_ main: String) -> String {
+        "Runs on the combined tree before anything lands — on the project branch and again before "
+            + "\(main)."
+    }
     public static let mergeCheckPlaceholder = "No check — work lands once it rebases cleanly"
     /// Said under an empty merge check while Automatic would merge the branch into main unchecked.
     public static let noMergeCheckWarning =
         "No merge check: with Automatic on, the branch merges into main with nothing run on the "
         + "combined tree."
+    public static func noMergeCheckWarning(_ main: String) -> String {
+        "No merge check: with Automatic on, the branch merges into \(main) with nothing run on the "
+            + "combined tree."
+    }
 
     public static let summaryMergeCheckSet = "merge check set"
     public static let summaryNoMergeCheck = "no merge check"
     /// What a setting that is not what the coordinator suggested says when it is pointed at.
     public static let settingDiffers = "Not what the coordinator suggested"
 
-    /// The Automatic sentence for the line chosen: the merge half follows the line.
-    public static func automaticHint(_ line: IntegrationLine) -> String {
-        line == .main ? automaticHintMain : automaticHintProjectBranch
+    /// The Automatic sentence for the line chosen: the merge half follows the line, and names the
+    /// project's main branch — the two constants above, for a project on main.
+    public static func automaticHint(_ line: IntegrationLine, main: String = defaultMainBranch) -> String {
+        if line == .main {
+            return "The coordinator runs it for you: it decides when each task is done and handles conflicts "
+                + "and failed checks. Merging into \(main) always asks you — a project that lands directly on "
+                + "\(main) never merges by itself. The criteria and anything irreversible stay yours."
+        }
+        return "The coordinator runs it for you: it decides when each task is done, handles conflicts and "
+            + "failed checks, and merges the branch into \(main) once the merge check passes — with a "
+            + "receipt you can revert. The criteria and anything irreversible stay yours."
     }
 
     /// The start card's one sentence under the switch: who decides what, for the line and merge
@@ -882,10 +999,22 @@ public enum RunSettings {
     public static let automaticOffMain =
         "You decide when each task is done, and each merge into main asks you."
 
-    public static func automaticSays(automatic: Bool, line: IntegrationLine, hasMergeCheck: Bool) -> String {
-        guard automatic else { return line == .main ? automaticOffMain : automaticOff }
-        if line == .main { return automaticOnMain }
-        return hasMergeCheck ? automaticOnChecked : automaticOnUnchecked
+    /// The five above, said of the project's main branch.
+    public static func automaticSays(automatic: Bool, line: IntegrationLine, hasMergeCheck: Bool,
+                                     main: String = defaultMainBranch) -> String {
+        guard automatic else {
+            return line == .main
+                ? "You decide when each task is done, and each merge into \(main) asks you."
+                : "You decide when each task is done and when the branch goes into \(main)."
+        }
+        if line == .main {
+            return "The coordinator decides when each task is done. Each merge into \(main) still asks you."
+        }
+        return hasMergeCheck
+            ? "The coordinator decides when each task is done and merges into \(main) once the merge check "
+                + "passes — with a receipt you can revert."
+            : "The coordinator decides when each task is done and merges into \(main) by itself — with a "
+                + "receipt you can revert."
     }
 
     /// The merge check's row on the start card, folded to its value, and what an empty one means.
@@ -936,13 +1065,13 @@ public enum RunSettings {
 
     /// The settings a start left the project running with, in card order: the line, Automatic,
     /// concurrency and the merge check — "project/34Wvw… · Automatic on · 3 tasks at a time · merge
-    /// check set".
+    /// check set". Directly into the main branch the start recorded, main when it recorded none.
     public static func parts(_ settings: ProjectStartSettings,
                              differs: [ProjectStartSettingKey] = []) -> [Part] {
         let tasks = settings.maxConcurrentTasks
         let line: String
         if settings.line == .main {
-            line = lineMain
+            line = lineMain(mainBranchName(settings.upstreamRef))
         } else if let branch = settings.projectBranchName, !branch.isEmpty {
             line = shortBranch(branch)
         } else {

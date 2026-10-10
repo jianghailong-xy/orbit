@@ -500,12 +500,58 @@ public struct ProjectIntegrationJob: Codable, Equatable, Sendable {
     }
 }
 
+/// An account's last choice of main branch for one repository (§1.2 L6) — `@orbit/shared`'s
+/// `ProjectLastMainBranch`: what a new binding of that repository starts from.
+public struct ProjectLastMainBranch: Codable, Equatable, Sendable {
+    /// The branch, short (no `refs/heads/`).
+    public let branch: String
+    /// The repository, short, as `ProjectIntegrationView.repository` gives it.
+    public let repository: String
+    public let chosenAt: String?
+
+    public init(branch: String, repository: String, chosenAt: String? = nil) {
+        self.branch = branch
+        self.repository = repository
+        self.chosenAt = chosenAt
+    }
+}
+
+/// The branches a project's main branch can be chosen from (§1.6) — `@orbit/shared`'s
+/// `ProjectBranchCandidates`: the local branches the runner last reported for a session of the
+/// project's coordination workspace (the list the session's Merge menu offers), without Orbit's own
+/// `orbit/*` session branches.
+public struct ProjectBranchCandidates: Codable, Equatable, Sendable {
+    public let names: [String]
+    /// The coordination workspace they were reported for.
+    public let workspaceName: String
+    public let reportedAt: String?
+
+    public init(names: [String], workspaceName: String, reportedAt: String? = nil) {
+        self.names = names
+        self.workspaceName = workspaceName
+        self.reportedAt = reportedAt
+    }
+}
+
 /// The integration line plus what the queue has done with it — the facts the page's line row draws,
 /// and the settings How it runs edits.
 public struct ProjectIntegrationView: Codable, Equatable, Sendable {
     public let line: IntegrationLine?
     public let ref: String?
+    /// The project's main branch, short (no `refs/heads/`); nil while it has no binding.
     public let upstreamRef: String?
+    /// When the account owner chose this project's main branch (§1.2 L6) — nil while it is still the
+    /// default, or the choice a new binding carried over from the owner's last one for the
+    /// repository, and from a server that predates it.
+    public let upstreamChosenAt: String?
+    /// The main branch this account chose last for this project's repository — what a new binding
+    /// starts from; nil when it never chose one there.
+    public let lastMainBranch: ProjectLastMainBranch?
+    /// The project's repository, short ("acme/payments-api"); nil when nothing names one, and then
+    /// the project has no main branch to choose: no Main branch row is drawn.
+    public let repository: String?
+    /// What its main branch can be chosen from; nil when nothing has been reported.
+    public let branches: ProjectBranchCandidates?
     /// Integration started, so the line can no longer change (§1.2 L4): How it runs draws it
     /// read-only, with the reason.
     public let locked: Bool
@@ -537,6 +583,8 @@ public struct ProjectIntegrationView: Codable, Equatable, Sendable {
     public let inFlightJobs: [ProjectIntegrationJob]?
 
     public init(line: IntegrationLine? = nil, ref: String? = nil, upstreamRef: String? = nil,
+                upstreamChosenAt: String? = nil, lastMainBranch: ProjectLastMainBranch? = nil,
+                repository: String? = nil, branches: ProjectBranchCandidates? = nil,
                 commitsAheadOfUpstream: Int? = nil, lastUpstreamSyncAt: String? = nil,
                 integratingCount: Int = 0, queuedCount: Int = 0, mergeCheckOnTip: String = "UNKNOWN",
                 inFlight: ProjectIntegrationInFlight? = nil, locked: Bool = false,
@@ -546,6 +594,10 @@ public struct ProjectIntegrationView: Codable, Equatable, Sendable {
         self.line = line
         self.ref = ref
         self.upstreamRef = upstreamRef
+        self.upstreamChosenAt = upstreamChosenAt
+        self.lastMainBranch = lastMainBranch
+        self.repository = repository
+        self.branches = branches
         self.locked = locked
         self.startedAt = startedAt
         self.mergeCheckCommand = mergeCheckCommand
@@ -565,6 +617,12 @@ public struct ProjectIntegrationView: Codable, Equatable, Sendable {
         line = try c.decodeIfPresent(IntegrationLine.self, forKey: .line)
         ref = try c.decodeIfPresent(String.self, forKey: .ref)
         upstreamRef = try c.decodeIfPresent(String.self, forKey: .upstreamRef)
+        // The main branch's four facts are read as an older server's absence when this build cannot
+        // read them: the line row and How it runs still draw from the rest, without a Main branch row.
+        upstreamChosenAt = try? c.decodeIfPresent(String.self, forKey: .upstreamChosenAt)
+        lastMainBranch = try? c.decodeIfPresent(ProjectLastMainBranch.self, forKey: .lastMainBranch)
+        repository = try? c.decodeIfPresent(String.self, forKey: .repository)
+        branches = try? c.decodeIfPresent(ProjectBranchCandidates.self, forKey: .branches)
         locked = try c.decodeIfPresent(Bool.self, forKey: .locked) ?? false
         startedAt = try c.decodeIfPresent(String.self, forKey: .startedAt)
         mergeCheckCommand = try c.decodeIfPresent(String.self, forKey: .mergeCheckCommand)
@@ -1043,35 +1101,41 @@ public struct UpdateProjectAuthorizationRequest: Encodable, Equatable, Sendable 
     }
 }
 
-/// `PATCH /projects/:id/integration` (§1.2 L5): the line, the merge check and the escalation
-/// window, as one object so the server validates the whole choice at once. Only what changed is
-/// sent — and the line only while it can still move, because sending the value a locked line
-/// already holds is refused 409. A merge check sent is sent even when it is none: `null` removes it.
+/// `PATCH /projects/:id/integration` (§1.2 L5): the line, the main branch, the merge check and the
+/// escalation window, as one object so the server validates the whole choice at once. Only what
+/// changed is sent — and the line and the main branch only while they can still move, because
+/// sending the value a locked line already holds is refused 409. A merge check sent is sent even
+/// when it is none: `null` removes it.
 public struct UpdateProjectIntegrationRequest: Encodable, Equatable, Sendable {
     public let line: IntegrationLine?
+    /// The main branch as a full `refs/heads/…` ref — the owner's choice, and the one their next
+    /// project in the repository starts with. Nil leaves it alone.
+    public let upstreamRef: String?
     /// `.some(nil)` removes the check; nil leaves it alone.
     public let mergeCheckCommand: String??
     public let exceptionEscalationSeconds: Int?
 
-    public init(line: IntegrationLine? = nil, mergeCheckCommand: String?? = nil,
+    public init(line: IntegrationLine? = nil, upstreamRef: String? = nil, mergeCheckCommand: String?? = nil,
                 exceptionEscalationSeconds: Int? = nil) {
         self.line = line
+        self.upstreamRef = upstreamRef
         self.mergeCheckCommand = mergeCheckCommand
         self.exceptionEscalationSeconds = exceptionEscalationSeconds
     }
 
     /// Whether it says anything at all — a Save with nothing changed at this door sends nothing.
     public var isEmpty: Bool {
-        line == nil && mergeCheckCommand == nil && exceptionEscalationSeconds == nil
+        line == nil && upstreamRef == nil && mergeCheckCommand == nil && exceptionEscalationSeconds == nil
     }
 
     enum CodingKeys: String, CodingKey {
-        case line, mergeCheckCommand, exceptionEscalationSeconds
+        case line, upstreamRef, mergeCheckCommand, exceptionEscalationSeconds
     }
 
     public func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encodeIfPresent(line, forKey: .line)
+        try c.encodeIfPresent(upstreamRef, forKey: .upstreamRef)
         if let check = mergeCheckCommand {
             if let check { try c.encode(check, forKey: .mergeCheckCommand) } else { try c.encodeNil(forKey: .mergeCheckCommand) }
         }
