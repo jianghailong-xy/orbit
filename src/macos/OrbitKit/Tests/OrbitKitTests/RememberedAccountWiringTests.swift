@@ -119,6 +119,8 @@ final class RememberedAccountWiringTests: XCTestCase {
                                     + "                            Button(signInAs) { model.useRememberedAccount() }"))
         XCTAssertEqual(try count(#"if card != nil \{\s*Button\("Use another account"\)"#, in: view), 1)
         XCTAssertEqual(try count(#"\} else if let remembered = model\.rememberedAccount \{"#, in: view), 1)
+        // Text buttons in the link colour on both platforms (a borderless button is grey on the Mac).
+        XCTAssertEqual(try count(#"\{ model\.(useAnotherAccount|useRememberedAccount)\(\) \}\s*\.linkButtonStyle\(\)"#, in: view), 2)
         // Neither forgets anything.
         for name in ["func useAnotherAccount() {", "func useRememberedAccount() {"] {
             XCTAssertFalse(try appModel(name).contains("forget"), name)

@@ -103,13 +103,13 @@ struct LoginView: View {
 
                         if card != nil {
                             Button("Use another account") { model.useAnotherAccount() }
-                                .buttonStyle(.borderless)
+                                .linkButtonStyle()
                                 .padding(.top, 8)
                         } else if let remembered = model.rememberedAccount {
                             // A String, not a key: the name may be an email, which a key would draw as a link.
                             let signInAs = "Sign in as \(remembered.displayName)"
                             Button(signInAs) { model.useRememberedAccount() }
-                                .buttonStyle(.borderless)
+                                .linkButtonStyle()
                                 .padding(.top, 8)
                         }
                     }
