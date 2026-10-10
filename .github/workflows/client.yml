@@ -146,13 +146,13 @@ jobs:
             build
 
   # Whether the iPhone app can sign in to a self-hosted server at an address the operator types in
-  # (http://<ip>) is not a question a compile can answer: since iOS 17 the OS applies ATS to IP
-  # literals again, and the exceptions that answer for it live in src/ios/Support/Info.plist. This
-  # probe builds a one-request app carrying that very file and reads URLSession's answer back from
-  # a simulator, A/B against the same app with no ATS keys — that arm must be refused with
-  # NSURLErrorDomain -1022, which is what proves the other arm's 200 comes from the exceptions.
-  # Dispatch-only and off by default: it costs a Mac runner, and only an edit to the ATS block can
-  # change its answer. Method and readings: docs/evidence/ios-http-ip/README.md.
+  # (http://<ip>) is not a question a compile can answer: the exceptions that decide it live in
+  # src/ios/Support/Info.plist. This probe builds a one-request app carrying that very file and
+  # reads URLSession's answer back from a simulator for six URLs — the same app with no ATS keys
+  # and a named http host among them, and that named host must be refused with -1022, which is what
+  # shows the run exercised ATS at all. Dispatch-only and off by default: it costs a Mac runner,
+  # and only an edit to the ATS block can change its answer. Method and readings:
+  # docs/evidence/ios-http-ip/README.md.
   ios-http-ip-probe:
     name: iOS http://ip ATS probe (simulator)
     if: github.event_name == 'workflow_dispatch' && inputs.ios_http_ip_probe
