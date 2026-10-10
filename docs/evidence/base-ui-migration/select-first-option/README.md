@@ -20,7 +20,8 @@
 | 起点 | `9e9787f7969edc460b69848cfc160d358b25a953`（origin/main，已含项目 tip `baad1a557`） | — |
 | Select | `332fcb1eb93f2b637e87e42103547598f5e28249` | `Select.tsx`、`Select.test.tsx`（+13 个单测）、`ChoicesFixture.tsx`（只在带参数时生效的样例参数）、`ui-migration/choices-first-option.browser.mjs`、`ui/README.md` 一句 |
 | Close | `a755f816a1800280719ecabf060bd6b7ad271776` | `Overlay.css` 一条规则、`foundation.css` 一个变量（明暗各一）、`ui-migration/overlays-close-hover.browser.mjs`、`ui/README.md` 一句 |
-| 证据 | 本目录所在提交 | 只新增本目录 |
+| 证据 | `428fcc830f89d6e7c2cc8f915aa8268a294e4b64` | 只新增本目录 |
+| 落地用的合并 | `9b8e56369b2812bb1d39a361b8e86d090183c185` | 证据提交以 `--no-ff` 合到项目 tip `d580e572d` 上（第一个父提交是项目 tip，第二个是 `428fcc830`），树与 `git merge-tree` 预先算出的相同；相对项目 tip 只多本批的 8 个文件和本目录。线性的分支落地时会按会话记下的起点 rebase，把 main 的历史搬到项目线上；以合并结尾则按 merge 落地。之后的提交只改本目录 |
 
 两处改动各自独立提交、带着自己的用例，可以分别回退。
 
@@ -31,6 +32,7 @@
 | 10-09 19:40 开工 | 项目 tip `baad1a557`（不在 main 里） | 按作业指导在项目 tip 上合并 origin/main `8698b0a20`（只改 apiserver），得 `10ef55456` |
 | 10-09 20:39 最终轮之前 | origin/main `9e9787f79`（`e5404b73b` 把项目线并入 main，项目 tip 已在 main 里） | 按规则直接 rebase 到 origin/main，两个提交的 patch 不变；main 自 `10ef55456` 起改了 11 个文件，没有 `src/web`、`src/shared` |
 | 10-10 00:2x 最终轮中 | origin/main `56c21bdd2` | 按规则先干跑：`git merge-tree --write-tree a755f816a origin/main` 退出 0（树 `790e5dad3`）。main 的 246 个文件（`src/web`、`src/shared` 下 44 个：Infrastructure 与 Provider 页及其测试、`WorkspaceView`、`Transcript`、决策卡片、这些页面在 `index.css` 里的新规则等）没有本批的文件，没有 `ui/` 公共组件、Toast 或弹层；`index.css` 的改动没有一条涉及 Select、选择列表、弹层或对话框；这些文件里 `<Select` 的数量没有变（唯一用到它的 `ProviderConnectPage` 仍是 1 个，值总是一个 runtime）。所以不再跟、不重跑，由落地的合并检查兜底 |
+| 10-10 04:2x 落地用的合并之后 | origin/main `9498167b9`；项目 tip `d580e572d` | [scripts/proof.sh](scripts/proof.sh)（改为从合并的两个父提交算本批的文件）：合并相对项目 tip 只多本批的 8 个产品与用例文件和本目录；main 没有改这些文件、`ui/` 公共组件或 Toast。**与 origin/main 干跑冲突在 `src/web/src/components/WikiSettingsPage.tsx`，项目 tip 单独与 origin/main 干跑也冲突在同一个文件**：P4.4 的 `f0ed9dfc9`（Wiki 设置页迁到 Orbit 组件）与 main 的 `3a3c58c1f`（T7，会话、任务和工作区先选引擎再选 Provider）改了同一处，与本批无关，[报告协调者](#报告协调者) |
 | 10-10 02:3x 交证据前 | origin/main `012f8a20c`（起点之后 139 个提交）；项目 tip `d580e572d`（P4.4 落地，不在 main 里） | [scripts/proof.sh](scripts/proof.sh)：对 origin/main 干跑退出 0，main 没有改本批的文件、`ui/` 公共组件、Toast，`index.css` 没有涉及选择列表、弹层、对话框的行；对项目 tip 干跑也退出 0（只有 `ui/README.md` 两边各加一句）。P4.4 改了本批依赖的全局层（`Floating.ts` 的 `useWholePixelOffsets` 多了一个可选参数 `pointAt`，Select 用的 `useDropdownPlacement` 不传它；Popover、Tooltip 新增的都是可选属性；`index.css` 是 Wiki 页面自己的规则），按规则不 rebase，在临时合并树上跑标准 P0、两个入口和合并检查，见[与 P4.4 的临时合并](#与-p44-的临时合并) |
 
 ## 改动
@@ -191,6 +193,7 @@ P4.3a 的协调者用例（`p43a.browser.mjs` 的 “the coordinator: its menu a
 5. **↓ 遇到禁用项**：旧 AntD 跳过禁用项并从末尾绕回开头，Orbit 停在禁用项上（P2 已知，`Select.test.tsx` 的注释写明 Base UI 的 Select 不传禁用索引）。
 6. **清单**：`audit-antd.mjs --check-owners` 的 2 个未归属使用点已由 P4.4 处理，见[清单复扫](#清单复扫)，不需要再做什么。
 7. **P0 漂移**：项目 tip `d580e572d` 上标准 P0 的设置页在八个环境都失败，起因是 main 的 `83671b995`（设置页的 Session recaps 开关），见[与 P4.4 的临时合并](#与-p44-的临时合并)。需要按 p0-drift 规则另建登记任务。
+8. **项目线与 main 冲突**：项目 tip `d580e572d` 与 origin/main（10-10 04:2x 是 `9498167b9`）合并时冲突在 `src/web/src/components/WikiSettingsPage.tsx`（P4.4 `f0ed9dfc9` 对 main T7 `3a3c58c1f`），本批的分支也因此冲突。本批没有碰这个文件，也没有替别的批次解这个冲突；项目线下一次吸收 main（MAIN_SYNC）会停在这里，需要协调者安排同步。
 
 ## 清单复扫
 
@@ -221,6 +224,7 @@ P4.3a 的协调者用例（`p43a.browser.mjs` 的 “the coordinator: its menu a
 - Drawer 的 Close、Select 清除图标、↑ 打开、指针离开列表、↓ 遇到禁用项五处差异只记录、报告，没有改。
 - 与 P4.4 的临时合并只跑了标准 P0、两个入口和合并检查；P2 键盘窗口用例、同提交对照与探针是在合并之前的树上做的（P4.4 没有改 Select、对话框或它们用到的部分）。
 - apiserver 扫描整个仓库的 spec 在本机只能证明按内容扫描的部分：本机共用的仓库是 shallow，要求完整历史的断言在任何树上都失败。
+- 落地用的合并 `9b8e56369` 与跑过检查的临时合并 `b28e5ae6f` 的 `src` 完全相同（只差本目录），没有在它本身上再跑一遍。项目线与 main 在 `WikiSettingsPage.tsx` 的冲突没有解，本批的分支与最新 origin/main 合并时同样会冲突。
 
 ## 复现
 
