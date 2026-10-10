@@ -799,9 +799,10 @@ public struct TranscriptReducer: Sendable, Codable {
                 // its turn from the one being written into the turn in progress — and a `!cmd`.
                 bubble.steer = SteerDelivery.isSteerKind(turn.kind)
                 bubble.shell = turn.kind == "shell"
-                // Every card the projection carried — an exception item's delivery, a run's brief, a
-                // project's start, another session's message, the outcomes a reply hands back, a
-                // confirmation review's two turns: the console draws the card the moment the turn is
+                // Every card the projection carried — an exception item's delivery, the owner's answer
+                // handed to the coordinator, a run's brief, a project's start, another session's
+                // message, the outcomes a reply hands back, a confirmation review's two turns: the
+                // console draws the card the moment the turn is
                 // queued, the one its echo will be drawn as, where without it the tail would draw
                 // words written for the agent as a message the reader sent (web parity: the queue
                 // tail reads `q.openItemDelivery`, `q.sessionMessage` …). One value for both rows
@@ -1304,6 +1305,8 @@ public struct TranscriptReducer: Sendable, Codable {
         // out of the text, so a delivery that carries no card — every one stored before the payload
         // existed — keeps the reading it has always had.
         let itemCard = OpenItemDelivery.parse(ev.payload)
+        // And for the owner's answer handed to the coordinator (`ownerAnswer`, `OwnerAnswer.parse`).
+        let ownerAnswer = OwnerAnswer.parse(ev.payload)
         // The same for a task run's opening turn (`taskStart`, `TaskStart.parse`): the payload, never
         // the brief's text.
         let taskStart = TaskStart.parse(ev.payload)
@@ -1380,6 +1383,7 @@ public struct TranscriptReducer: Sendable, Codable {
                 b.note = recorded?.note
                 // The card is the event's own: it rides whichever row ends up drawing this turn.
                 b.itemCard = itemCard
+                b.ownerAnswer = ownerAnswer
                 b.taskStart = taskStart
                 b.startedCard = startedCard
                 b.sessionMessage = sessionMessage
@@ -1420,7 +1424,7 @@ public struct TranscriptReducer: Sendable, Codable {
                                 note: recorded?.note,
                                 steer: steer, delivery: delivery,
                                 withdrawable: withdrawable,
-                                itemCard: itemCard, taskStart: taskStart,
+                                itemCard: itemCard, ownerAnswer: ownerAnswer, taskStart: taskStart,
                                 startedCard: startedCard,
                                 sessionMessage: sessionMessage,
                                 sessionReplies: sessionReplies,
