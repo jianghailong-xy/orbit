@@ -55,7 +55,6 @@ const ALLOWED: Record<string, [count: number, why: string]> = {
   'src/web/src/lib/wikiArticles.ts': [1, 'sorts Chinese titles by their pinyin initials'],
 
   // The coordinator's judgment turn.
-  'src/apiserver/src/projects/coordinator-judgment-opening.ts': [312, TO_ENGLISH],
 
   // The coordinator's opening, open items and wake dispositions.
   'src/apiserver/src/projects/coordinator-opening.ts': [68, TO_ENGLISH],

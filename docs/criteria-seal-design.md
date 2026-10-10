@@ -359,7 +359,7 @@ project_criteria_decision
 | 2 | `src/apiserver/src/projects/coordinator-wake.ts`（新函数，抄 `criterionUnlandedFact:530` 的形状） | 造事实：`subjectType: 'PROJECT'`，`subjectVersion` 必须是**被测行的全函数**（建议 `sha256(baseSeal + ':' + actionDigest)`），`detail` 只放展示用信息 |
 | 3 | 新迁移 `02NN_criteria_decision_wake/migration.sql` | 照 `src/apiserver/prisma/migrations/0246_project_acceptance_landed_wake/migration.sql:36-56` **整张清单重写** `project_coordinator_wake_event_chk`（不能只 relax） |
 | 4 | `src/apiserver/src/projects/coordinator-wake.spec.ts:296-303` | 那条三方对账 spec **硬编码了 `0246_project_acceptance_landed_wake` 的路径**，必须改指向新迁移，否则新事件在 TS 侧有、在被读的迁移里没有，断言直接红 |
-| 5 | `src/apiserver/src/projects/coordinator-judgment-opening.ts:60` `describeWakeFact` | 加一个 `case`。⚠️ 这个 `switch` 有 `default`（`:118`），**漏写不会编译报错**，只会静默降级成 `发生了 X，主体是 …`——这是这条链上唯一一处「忘了也不红」的地方 |
+| 5 | `src/apiserver/src/projects/coordinator-judgment-opening.ts:60` `describeWakeFact` | 加一个 `case`。⚠️ 这个 `switch` 有 `default`（`:118`），**漏写不会编译报错**，只会静默降级成 `X happened; its subject is …`——这是这条链上唯一一处「忘了也不红」的地方 |
 | 6 | `src/apiserver/src/projects/coordinator-judgment-opening.ts:281` `buildCoordinatorDeliveryMessage` | 加卡片正文分支。抄 `:287` 的 `PROJECT_ACCEPTANCE_LANDED` 分支：它是唯一一条**把项目状态快照抄进消息**的卡（理由在 `:259-268`），削弱决定卡同理——问的是「这个 diff 该不该生效」，不带 diff 的问题没法答 |
 | 7 | `src/apiserver/src/common/db-write-inventory.ts` | 登记新的写入点（intent INSERT、decision INSERT、commit INSERT）与新触发器；`src/apiserver/src/tasks/failure-continuation-removal.pg.spec.ts:243-254` 拿它和活库逐条对账 |
 | 8 | 生产者本身 | 在决定门/改路写入的提交后边沿调用投递（见 4.2） |

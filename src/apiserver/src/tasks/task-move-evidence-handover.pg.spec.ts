@@ -522,10 +522,10 @@ test('(a) a decidable revision is handed to the target coordinator to decide, an
       const content = message!.content ?? '';
       assert.ok(content.includes(w.title), 'the task is not named by its title');
       assert.ok(content.includes(uuidToBase62(w.task)), 'the task is not named by its id');
-      assert.ok(content.includes(`从项目 ${uuidToBase62(w.projectA)} 移进了这个项目`),
+      assert.ok(content.includes(`moved from project ${uuidToBase62(w.projectA)} into this project`),
         'the message does not say the task moved in from A');
-      assert.ok(content.includes('evidenceRevision 传 "1"'));
-      assert.ok(content.includes(`「${OWN}」`), 'the criterion the evidence quotes is not in it');
+      assert.ok(content.includes('evidenceRevision: "1"'));
+      assert.ok(content.includes(`“${OWN}”`), 'the criterion the evidence quotes is not in it');
       assert.ok(content.includes('task_evidence_decide'));
       // A keeps what it was told before the move, and is told nothing more; the run is told nothing,
       // and nothing was opened to judge it: it went to the conversation B already has.
@@ -615,7 +615,7 @@ test('(b) a revision quoting the criterion the move took back is decided by nobo
       assert.ok(coordinatorSays.includes('to be submitted again'));
       assert.ok(coordinatorSays.includes(`key ${criterionKeyOf(w.criterionB)}`));
       assert.ok(coordinatorSays.includes(uuidToBase62(w.run)), 'it is not told the run was told');
-      assert.ok(!coordinatorSays.includes('evidenceRevision 传'), 'it was asked to decide a revision nobody can');
+      assert.ok(!coordinatorSays.includes('evidenceRevision:'), 'it was asked to decide a revision nobody can');
 
       // Nobody is asked to decide it, and the door would refuse whoever tried: the standard moved.
       assert.deepEqual(await ownerAsked(stack, w, w.coordB, later()), []);
