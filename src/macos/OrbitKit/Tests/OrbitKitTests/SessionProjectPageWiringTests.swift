@@ -377,30 +377,35 @@ final class SessionProjectPageWiringTests: XCTestCase {
         XCTAssertTrue(move.contains("membership.role != .coordinator { return nil }"), "a non-coordinator member cannot move its project")
     }
 
-    func testTheSummaryCardCarriesTheProjectPagesLandingLine() throws {
+    /// The landing left the progress card on 2026-10-11 (docs/mocks/project-landing-card, owner
+    /// decision): it is a card of its own under the progress card, drawn from the page's own
+    /// integration read, and a merge job's is still the merge card's.
+    func testTheProgressCardIsFollowedByTheLandingCardOfItsOwn() throws {
         let source = code(try appSource("Views/SessionProjectPage.swift"))
         let page = try slice(source, from: "struct SessionProjectPage: View {", to: "\n}\n")
+        let first = try slice(page, from: "@ViewBuilder private var firstCard: some View {", to: "\n    }\n")
+        let order = try [XCTUnwrap(first.range(of: "progressCard")?.lowerBound),
+                         XCTUnwrap(first.range(of: "landingCard")?.lowerBound)]
+        XCTAssertEqual(order, order.sorted(), "the landing card is drawn under the progress card")
+        XCTAssertTrue(first.contains("ProjectNotDoneCard(subject: subject, withCoordinator: 0, askedAt: nil)"),
+                      "a done project's ending still takes both their place")
         let card = try slice(page, from: "private var progressCard: some View {", to: "\n    }")
-        let order = try [XCTUnwrap(card.range(of: "progressLine")?.lowerBound),
-                         XCTUnwrap(card.range(of: "landingLine")?.lowerBound)]
-        XCTAssertEqual(order, order.sorted())
-        let landing = try slice(page, from: "@ViewBuilder private var landingLine: some View {", to: "\n    }")
-        XCTAssertTrue(landing.contains("integration.inFlight != nil"), "no landing in flight leaves the card as it was")
+        XCTAssertFalse(card.contains("landingLine"), "the landing is no longer a row inside the progress card")
+
+        let landing = try slice(page, from: "@ViewBuilder private var landingCard: some View {", to: "\n    }")
+        XCTAssertTrue(landing.contains("integration.inFlight != nil"), "no landing in flight draws no card")
         XCTAssertTrue(landing.contains("TimelineView(.periodic(from: .now, by: 1))"))
-        XCTAssertTrue(landing.contains("ProjectMergeCard.progressLandingLine(integration, now: context.date,"),
-                      "a merge job's live line is the merge card's, not the progress card's")
-        XCTAssertTrue(landing.contains("!ProjectMergeCard.isMergeJob(integration.inFlight)"))
+        XCTAssertTrue(landing.contains("ProjectMergeCard.taskLandingCard(integration, now: context.date,"),
+                      "a merge job's is the merge card's, and that is decided in OrbitKit")
         XCTAssertTrue(landing.contains("updatedAt: app.projectSessionsIntegrationReadAt"))
         XCTAssertTrue(landing.contains("refreshFailed: app.projectSessionsIntegrationReadFailed"))
-        XCTAssertTrue(landing.contains("ProjectLandingRow(line: line)"), "the same row the project page draws")
-        // A press opens the jobs the row counts, on a server that lists them; on an older one, the
-        // project page, as it always did.
-        let press = try slice(landing, from: "Button {", to: "} label: {")
-        let steps = try ["if integration.inFlightJobs != nil {", "showsLandingJobs = true", "} else {",
-                         "app.openProject(address.projectID)"].map {
-            try XCTUnwrap(press.range(of: $0)?.lowerBound, "the press keeps `\($0)`")
-        }
-        XCTAssertEqual(steps, steps.sorted())
+        XCTAssertTrue(landing.contains("ProjectLandingCardView("))
+        // The card's press opens the jobs it counts, on a server that lists them; on an older one,
+        // the project page, as the row it replaced always did. Retry is the Jobs sheet's own door.
+        XCTAssertTrue(landing.contains("onOpenJobs: integration.inFlightJobs == nil ? nil : { showsLandingJobs = true },"))
+        XCTAssertTrue(landing.contains("onOpenProject: { app.openProject(address.projectID) },"))
+        XCTAssertTrue(landing.contains("try await app.retryIntegrationJob(address.projectID, jobID: jobID)"))
+        XCTAssertTrue(landing.contains("await app.loadProjectIntegration(address)"))
 
         let app = code(try appSource("AppModel.swift"))
         let load = try slice(app, from: "func loadProjectSessions(_ address: SessionProjectAddress) async {", to: "\n    }")
@@ -418,16 +423,16 @@ final class SessionProjectPageWiringTests: XCTestCase {
                        "the landing is read on arrival and on every poll")
     }
 
-    /// The jobs a landing row counts open over this page (docs/mocks/landing-jobs-sheet), from the
-    /// progress card's row and from the merge card's alike, on a server that lists them. The sheet
-    /// is the page's, not either row's — their TimelineViews redraw every second — and it reads the
+    /// The jobs a landing card counts open over this page (docs/mocks/landing-jobs-sheet), from the
+    /// landing card and from the merge card's row alike, on a server that lists them. The sheet is
+    /// the page's, not either card's — their TimelineViews redraw every second — and it reads the
     /// page's own landing read; a Retry that went through reads it again at once, outside the polls.
     func testTheLandingRowsOpenTheJobsInFlightOverThePage() throws {
         let source = code(try appSource("Views/SessionProjectPage.swift"))
         let page = try slice(source, from: "struct SessionProjectPage: View {", to: "\n}\n")
         XCTAssertTrue(page.contains("@State private var showsLandingJobs = false"))
-        let landing = try slice(page, from: "@ViewBuilder private var landingLine: some View {", to: "\n    }")
-        XCTAssertFalse(landing.contains(".sheet("), "the row redraws every second; the sheet is the page's")
+        let landing = try slice(page, from: "@ViewBuilder private var landingCard: some View {", to: "\n    }")
+        XCTAssertFalse(landing.contains(".sheet("), "the card redraws every second; the sheet is the page's")
         let card = try slice(page, from: "@ViewBuilder private var mergeCard: some View {", to: "\n    }\n")
         XCTAssertTrue(card.contains("onLanding: app.projectSessionsIntegration?.inFlightJobs == nil"))
         XCTAssertTrue(card.contains("? nil : { showsLandingJobs = true },"), "the merge job's row opens the same jobs")
@@ -691,7 +696,7 @@ final class SessionProjectPageWiringTests: XCTestCase {
         let source = code(raw)
         let page = try slice(source, from: "struct SessionProjectPage: View {", to: "\n}\n")
         let card = try slice(page, from: "private var progressCard: some View {", to: "\n    }")
-        let order = try ["progressLine", "startLine", "landingLine"].map {
+        let order = try ["progressLine", "startLine"].map {
             try XCTUnwrap(card.range(of: $0)?.lowerBound)
         }
         XCTAssertEqual(order, order.sorted(), "the start sits under the progress line, inside the card")
@@ -765,8 +770,8 @@ final class SessionProjectPageWiringTests: XCTestCase {
                       "the shared rule — DONE, and a projection to tally — decides the card")
         XCTAssertTrue(card.contains("ProjectNotDoneCard(subject: subject, withCoordinator: 0, askedAt: nil)"),
                       "the settled card the conversation draws, asked nothing and waiting on nobody")
-        XCTAssertTrue(card.contains("} else {\n            progressCard\n        }"),
-                      "and the progress card wherever the ending does not stand")
+        XCTAssertTrue(card.contains("} else {\n            progressCard\n            landingCard\n        }"),
+                      "and the progress card, with the landing card under it, wherever the ending does not stand")
         let subject = try slice(page, from: "private var doneSubject: ProjectDoneSubject? {", to: "\n    }")
         XCTAssertTrue(subject.contains("app.projectSessionsAddress == address ? app.projectSessionsDone : nil"),
                       "never what the model still holds for another address")
