@@ -27,6 +27,8 @@ import androidx.compose.ui.input.key.*
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
@@ -55,11 +57,13 @@ import io.orbitd.android.management.RunnerPage
 import io.orbitd.android.management.personalPermissions
 import io.orbitd.android.tasks.TaskDetailCopy
 import io.orbitd.android.ui.LocalOrbitColors
+import io.orbitd.android.ui.typingFold
 import kotlinx.serialization.json.*
 
 @Composable
 fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: String, session: SessionState?, target: DraftTarget? = null, focusRequest: Int = 0,
-    inputFocusChanged: (Boolean) -> Unit = {}, openTask: ((String) -> Unit)? = null, openRunner: ((runner: String, engine: String) -> Unit)? = null) {
+    inputFocusChanged: (Boolean) -> Unit = {}, foldsChrome: Boolean = false,
+    openTask: ((String) -> Unit)? = null, openRunner: ((runner: String, engine: String) -> Unit)? = null) {
     val model = remember(app, handle, sessionId) { app.composer(handle, sessionId, target) }
     val state by model.state.collectAsState()
     val context = LocalContext.current
@@ -110,6 +114,16 @@ fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: Str
         usable = usable && !state.busy && !state.waiting)
     val send = { spent = standing; model.send() }
     var inputFocused by remember { mutableStateOf(false) }
+    // Android hides its keyboard without taking the field's focus with it, where iOS's first responder resigns. The
+    // reader's chrome fold (iOS `ConsoleView.foldsChrome`) reads this box's editing state, so the keyboard going
+    // hands the page its bar and rows back instead of leaving a phone without them.
+    val focusManager = LocalFocusManager.current
+    var imeWasUp by remember { mutableStateOf(false) }
+    val imeUp = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+    LaunchedEffect(imeUp) {
+        if (imeUp) imeWasUp = true
+        else if (imeWasUp) { imeWasUp = false; if (inputFocused) focusManager.clearFocus() }
+    }
     // Set by the first double-tap that takes a suggestion on this device: from then on the box shows the guess alone,
     // without "Double-tap to use" after it.
     val composerPrefs = remember { context.getSharedPreferences("orbit.composer", Context.MODE_PRIVATE) }
@@ -165,7 +179,9 @@ fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: Str
                     state.uploads[att.id]?.let { LinearProgressIndicator(progress = { it }, modifier = Modifier.fillMaxWidth()) }
                     state.failures[att.id]?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                 }
-                ComposerUsage(model, state, effective, session)
+                // The context line folds away with the page's chrome while this box holds a phone's keyboard
+                // (`foldsChrome`), as the reader's rows above do; the input and its buttons stay where they are.
+                Box(Modifier.fillMaxWidth().typingFold(foldsChrome)) { ComposerUsage(model, state, effective, session) }
             SuggestionTaps(suggestion != null, inputFocused, focusField, useSuggestion) { taps ->
                 OutlinedTextField(field, onValueChange = { field = it; model.edit(it.text, it.selection.start, it.selection.end) },
                     modifier = Modifier.fillMaxWidth().focusRequester(focus).onFocusChanged { inputFocused = it.isFocused; inputFocusChanged(it.isFocused) }
