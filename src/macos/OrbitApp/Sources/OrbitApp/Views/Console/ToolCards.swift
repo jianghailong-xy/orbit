@@ -245,6 +245,28 @@ struct ToolCardView: View {
         if card.name == "Workflow" { return BackgroundSummary.workflow(result) != nil }
         return isBackgroundTask && BackgroundSummary.agentID(result) != nil
     }
+    /// The folded row of a background task still running says what it is on right now: the last
+    /// thing the sub-agent's transcript relayed. Web parity: Transcript.tsx's ToolCard live line.
+    private var liveActivity: String? {
+        guard isBackgroundTask, !isOpen, card.status == .running || taskRunning else { return nil }
+        for item in nestedItems.reversed() {
+            switch item {
+            case .toolCall(let child):
+                let last = ToolDisplay.describe(name: child.name, input: child.input, status: child.status, id: child.id)
+                if let path = last.path { return "\(last.label) \(path.base)" }
+                if let summary = last.summary, !summary.isEmpty { return "\(last.label) \(summary)" }
+                return last.label
+            case .thinking:
+                return "Thinking…"
+            case .assistant(let bubble):
+                let text = bubble.text.isEmpty ? bubble.streamingText : bubble.text
+                if let line = text.split(separator: "\n").first, !line.isEmpty { return String(line) }
+            default:
+                continue
+            }
+        }
+        return nil
+    }
     /// A workflow is named by its receipt once that lands (a resumed run carries no script).
     private var summaryText: String? {
         guard card.name == "Workflow" else { return d.summary }
@@ -354,6 +376,13 @@ struct ToolCardView: View {
         // border + surface so its detail body stays visually grouped (mirrors web `.is-open`).
         VStack(alignment: .leading, spacing: 6) {
             row
+            if let liveActivity {
+                // Indented to the row's label; folded BackgroundTaskViews draw this same line.
+                Text(liveActivity)
+                    .font(.orbitMonoFine).foregroundStyle(.secondary)
+                    .lineLimit(1).truncationMode(.tail)
+                    .padding(.leading, 42)
+            }
             if isOpen {
                 detail
             } else if !questions.isEmpty {

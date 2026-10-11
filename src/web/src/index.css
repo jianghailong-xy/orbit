@@ -9595,6 +9595,17 @@ button.chat-jump-start:hover {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 12px;
 }
+/* A running background task's folded card: the sub-agent's current step, under the label
+   (row padding-left 10 + caret 10 + gap 8 + icon 22 + gap 8). */
+.chat-tool-live {
+  padding: 0 10px 6px 58px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 /* path summary: bold leaf filename + dimmed parent dir */
 .chat-path-file {
   font-weight: 600;
