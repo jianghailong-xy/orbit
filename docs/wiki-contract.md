@@ -894,6 +894,8 @@ JSON 里是 `space.settings.maintenance` 与 `maintenance`；实现在 `src/apis
   `WIKI_NOT_MAINTENANCE_SESSION`，别的 owner 的 space 是普通 404。页从「after 与水位中较后的那个」之后开始，只取已过 120 秒
   宽限的事实（给事务留提交时间），按顺序取到 N 个会话为止（默认 20、最多 50）；返回的 `cursor` 是本页覆盖到的最后一个事实，
   `from` 是本页开始之前的位置：推进到 `from` 等于本页一条都不算处理过，下次从这里翻页会把它重新发出来。
+  页的粒度是会话、不是事实：一个会话自己的事实跨过本页覆盖到的最后一个事实时，它在这一页和下一页各被发一次，两页之间仍不重不漏
+  （`cursor`/`after` 链接着过去）。同一条走法（`pageOf`）也是维护任务期望位置的算法（§19.1），所以这个切法两条路径一致、按它翻页恰好到得了期望位置。
 - 内容照设计 §8.2 第 1 步，外加 agent 自己的轨迹：头部（会话、任务、验收标准、污染标记）；任务会话的开场 prompt（去掉任务模板尾巴）、
   owner 的消息和 steer、打断；AskUserQuestion 问答、ExitPlanMode、带理由的 DENIED；agent 的回复、thinking 里命中信号的句子、
   压缩的工具时间线（命令首行 + 结果首尾行，连续的读 / 改折成一行）；已结算任务最新 3 条 agent 评论和 owner 评论；merge receipt 的 sha；
@@ -1280,7 +1282,8 @@ JSON 里是 `maintenance.job`；迁移 `0320_wiki_maintenance_run`；服务端�
 1. **起点**：`GET …/maintenance/run` 拿 space 与仓库、维护 workspace 的工作目录、主题表、护栏数字和期望位置，同时记下运行开始、是哪个会话。
 2. **checkout**：维护 workspace 的工作目录（`~` 按 runner 账号的家目录展开——会话里 HOME 是干净目录），先 fetch；它的 origin 与 space
    的仓库（`repo_url_norm`、有记录时的根提交）不一致就判失败并说明原因。
-3. **案卷**：从游标翻页到期望位置（`until`）；自上次处理后没变的案卷跳过。
+3. **案卷**：从游标翻页到期望位置（`until`）；自上次处理后没变的案卷跳过。同一会话被相邻两页各发一次时（§16.3），这条路径
+   照旧各读一次、各计一次——只读一次是服务端执行路径 2026-10-11 起的行为（§27.3 第 2 步），两条路径随 P11 一起统一。
 4. **抽取**：每个案卷一次干净的 Claude Code 调本地模型——照演示的 A2+6：8k 案卷、不开 thinking、每例最多 6 条；提示里带 space 的仓库
    名、地址和一两句它是做什么的（取自仓库 README 的开头），要求讲的不是这个仓库的会话回答 `{"offTopic": true}`（键不区分大小写，
    按 encoding/json 读结构体字段的读法）。每条照演示的
@@ -2668,6 +2671,13 @@ JSON 里是 `maintenance.job.server` 和 `jobs.kindRuns.maintain`；迁移 `0407
 1. **仓库**：一次 `snapshot` 仓库操作拿到 origin/main 的 sha 与索引（路径与大小、文档标题与章节、符号、契约、可达提交、
    README 首段）；锚点查快照，不再有 checkout。
 2. **案卷**：`WikiMaintenance.dossierPage` 同一条服务端读法，从游标读到运行期望的位置；已处理过的（`unchanged`）跳过。
+   **同一轮里每个会话的案卷只提取一次**（2026-10-11，P10 第 93 轮：运行 6e6feff0 要提取 31 份案卷只有 18 个会话，7cf172e3 读了
+   30 个会话只有 20 个）。相邻两页各发一次同一个会话时（§16.3），两次的 unit（会话 id）与提示词逐字相同，队列直接复用第一份的请求行，
+   所以并没有多调模型、token 本来就是按调用计的；多算的是运行自己的数字——会话数、案卷数、抽到的条目、丢弃的条目、离题数。
+   会话在两次读页之间来了新记录时两个提示词不再相同，队列以「already exists with a different call」拒绝、整轮失败（生产未发生过）。
+   运行只留最新的一次读，并把它算在最后一次发出它的那一页上（§19.4 第 6 步的同一条规则）：本轮窗口里的事实两次读都在——页只发过了
+   宽限期的事实，案卷按读那一刻的记录现算——所以不丢事实，游标、处理范围和写进 wiki 的内容都不变。
+   runner 路径（§19.4 第 3 步）仍是每页各读一次，随 P11 一起删。
 3. **抽取**：每个案卷一个请求（step `extract`，unit 是案卷的 session id），同一作业最多
    `maintenance.job.rules.extractConcurrency` 个在途；离题回 `{"offTopic": true}`；每条按案卷的行与 spans 检查字段与引文、
    按快照检查锚点、按 `WIKI_MAINTAIN_JOB.planMaxTokens` 之外的同一条提示词重问一次（unit 加 `#retry`，拒绝原因写进提示词）。
