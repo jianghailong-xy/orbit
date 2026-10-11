@@ -1,0 +1,690 @@
+[
+ {
+  "screenshot": "chromium-dark-desktop/task-action-menu.png",
+  "sameSize": true,
+  "bytesIdentical": false,
+  "changedPixels": 45329,
+  "aaOnlyPixels": 780,
+  "beyondPixels": 44549,
+  "maxDelta": 212,
+  "beyondBox": [
+   615,
+   199,
+   1279,
+   842
+  ],
+  "totalPixels": 1152000
+ },
+ {
+  "screenshot": "chromium-dark-desktop/task-share-dialog.png",
+  "sameSize": true,
+  "bytesIdentical": false,
+  "changedPixels": 27463,
+  "aaOnlyPixels": 897,
+  "beyondPixels": 26566,
+  "maxDelta": 117,
+  "beyondBox": [
+   615,
+   291,
+   1279,
+   842
+  ],
+  "totalPixels": 1152000
+ },
+ {
+  "screenshot": "chromium-dark-phone/session-attachment-menu.png",
+  "sameSize": true,
+  "bytesIdentical": false,
+  "changedPixels": 2071,
+  "aaOnlyPixels": 34,
+  "beyondPixels": 2037,
+  "maxDelta": 158,
+  "beyondBox": [
+   39,
+   565,
+   158,
+   755
+  ],
+  "totalPixels": 329160
+ },
+ {
+  "screenshot": "chromium-dark-phone/task-action-menu.png",
+  "sameSize": true,
+  "bytesIdentical": false,
+  "changedPixels": 22969,
+  "aaOnlyPixels": 338,
+  "beyondPixels": 22631,
+  "maxDelta": 212,
+  "beyondBox": [
+   0,
+   278,
+   389,
+   730
+  ],
+  "totalPixels": 329160
+ },
+ {
+  "screenshot": "chromium-dark-phone/task-share-dialog.png",
+  "sameSize": true,
+  "bytesIdentical": false,
+  "changedPixels": 2542,
+  "aaOnlyPixels": 53,
+  "beyondPixels": 2489,
+  "maxDelta": 75,
+  "beyondBox": [
+   0,
+   544,
+   389,
+   730
+  ],
+  "totalPixels": 329160
+ },
+ {
+  "screenshot": "chromium-light-desktop/session-attachment-staged.png",
+  "sameSize": true,
+  "bytesIdentical": false,
+  "changedPixels": 24835,
+  "aaOnlyPixels": 9688,
+  "beyondPixels": 15147,
+  "maxDelta": 53,
+  "beyondBox": [
+   612,
+   732,
+   1268,
+   897
+  ],
+  "totalPixels": 1152000
+ },
+ {
+  "screenshot": "chromium-light-desktop/task-action-menu.png",
+  "sameSize": true,
+  "bytesIdentical": false,
+  "changedPixels": 45581,
+  "aaOnlyPixels": 754,
+  "beyondPixels": 44827,
+  "maxDelta": 255,
+  "beyondBox": [
+   615,
+   199,
+   1279,
+   842
+  ],
+  "totalPixels": 1152000
+ },
+ {
+  "screenshot": "chromium-light-desktop/task-share-dialog.png",
+  "sameSize": true,
+  "bytesIdentical": false,
+  "changedPixels": 27669,
+  "aaOnlyPixels": 997,
+  "beyondPixels": 26672,
+  "maxDelta": 140,
+  "beyondBox": [
+   615,
+   291,
+   1279,
+   842
+  ],
+  "totalPixels": 1152000
+ },
+ {
+  "screenshot": "chromium-light-phone/session-attachment-menu.png",
+  "sameSize": true,
+  "bytesIdentical": false,
+  "changedPixels": 2073,
+  "aaOnlyPixels": 24,
+  "beyondPixels": 2049,
+  "maxDelta": 224,
+  "beyondBox": [
+   39,
+   565,
+   158,
+   755
+  ],
+  "totalPixels": 329160
+ },
+ {
+  "screenshot": "chromium-light-phone/session-attachment-staged.png",
+  "sameSize": true,
+  "bytesIdentical": false,
+  "changedPixels": 15311,
+  "aaOnlyPixels": 5704,
+  "beyondPixels": 9607,
+  "maxDelta": 53,
+  "beyondBox": [
+   5,
+   676,
+   384,
+   841
+  ],
+  "totalPixels": 329160
+ },
+ {
+  "screenshot": "chromium-light-phone/task-action-menu.png",
+  "sameSize": true,
+  "bytesIdentical": false,
+  "changedPixels": 23058,
+  "aaOnlyPixels": 317,
+  "beyondPixels": 22741,
+  "maxDelta": 255,
+  "beyondBox": [
+   0,
+   278,
+   389,
+   730
+  ],
+  "totalPixels": 329160
+ },
+ {
+  "screenshot": "chromium-light-phone/task-share-dialog.png",
+  "sameSize": true,
+  "bytesIdentical": false,
+  "changedPixels": 2552,
+  "aaOnlyPixels": 54,
+  "beyondPixels": 2498,
+  "maxDelta": 85,
+  "beyondBox": [
+   0,
+   544,
+   389,
+   730
+  ],
+  "totalPixels": 329160
+ },
+ {
+  "screenshot": "webkit-dark-desktop/breakpoint-599-dialog.png",
+  "sameSize": true,
+  "bytesIdentical": false,
+  "changedPixels": 15348,
+  "aaOnlyPixels": 729,
+  "beyondPixels": 14619,
+  "maxDelta": 92,
+  "beyondBox": [
+   0,
+   251,
+   598,
+   814
+  ],
+  "totalPixels": 539100
+ },
+ {
+  "screenshot": "webkit-dark-desktop/breakpoint-601-dialog.png",
+  "sameSize": true,
+  "bytesIdentical": false,
+  "changedPixels": 19088,
+  "aaOnlyPixels": 926,
+  "beyondPixels": 18162,
+  "maxDelta": 92,
+  "beyondBox": [
+   0,
+   199,
+   600,
+   814
+  ],
+  "totalPixels": 540900
+ },
+ {
+  "screenshot": "webkit-dark-desktop/notification-error.png",
+  "sameSize": true,
+  "bytesIdentical": false,
+  "changedPixels": 34246,
+  "aaOnlyPixels": 232,
+  "beyondPixels": 34014,
+  "maxDelta": 187,
+  "beyondBox": [
+   633,
+   183,
+   1259,
+   519
+  ],
+  "totalPixels": 1152000
+ },
+ {
+  "screenshot": "webkit-dark-desktop/profile-validation.png",
+  "sameSize": true,
+  "bytesIdentical": false,
+  "changedPixels": 6217,
+  "aaOnlyPixels": 93,
+  "beyondPixels": 6124,
+  "maxDelta": 167,
+  "beyondBox": [
+   16,
+   172,
+   262,
+   391
+  ],
+  "totalPixels": 1152000
+ },
+ {
+  "screenshot": "webkit-dark-desktop/settings-saved.png",
+  "sameSize": true,
+  "bytesIdentical": false,
+  "changedPixels": 80055,
+  "aaOnlyPixels": 1000,
+  "beyondPixels": 79055,
+  "maxDelta": 223,
+  "beyondBox": [
+   496,
+   408,
+   1279,
+   899
+  ],
+  "totalPixels": 1152000
+ },
+ {
+  "screenshot": "webkit-dark-desktop/task-action-menu.png",
+  "sameSize": true,
+  "bytesIdentical": false,
+  "changedPixels": 45106,
+  "aaOnlyPixels": 1091,
+  "beyondPixels": 44015,
+  "maxDelta": 167,
+  "beyondBox": [
+   615,
+   199,
+   1279,
+   842
+  ],
+  "totalPixels": 1152000
+ },
+ {
+  "screenshot": "webkit-dark-desktop/task-share-dialog.png",
+  "sameSize": true,
+  "bytesIdentical": false,
+  "changedPixels": 27604,
+  "aaOnlyPixels": 1182,
+  "beyondPixels": 26422,
+  "maxDelta": 92,
+  "beyondBox": [
+   615,
+   291,
+   1279,
+   842
+  ],
+  "totalPixels": 1152000
+ },
+ {
+  "screenshot": "webkit-dark-phone/notification-error.png",
+  "sameSize": true,
+  "bytesIdentical": false,
+  "changedPixels": 31923,
+  "aaOnlyPixels": 214,
+  "beyondPixels": 31709,
+  "maxDelta": 187,
+  "beyondBox": [
+   26,
+   222,
+   375,
+   576
+  ],
+  "totalPixels": 329160
+ },
+ {
+  "screenshot": "webkit-dark-phone/profile-validation.png",
+  "sameSize": true,
+  "bytesIdentical": false,
+  "changedPixels": 6753,
+  "aaOnlyPixels": 0,
+  "beyondPixels": 6753,
+  "maxDelta": 255,
+  "beyondBox": [
+   0,
+   0,
+   389,
+   843
+  ],
+  "totalPixels": 329160
+ },
+ {
+  "screenshot": "webkit-dark-phone/session-attachment-menu.png",
+  "sameSize": true,
+  "bytesIdentical": false,
+  "changedPixels": 2039,
+  "aaOnlyPixels": 70,
+  "beyondPixels": 1969,
+  "maxDelta": 158,
+  "beyondBox": [
+   39,
+   566,
+   158,
+   755
+  ],
+  "totalPixels": 329160
+ },
+ {
+  "screenshot": "webkit-dark-phone/settings-saved.png",
+  "sameSize": true,
+  "bytesIdentical": false,
+  "changedPixels": 18287,
+  "aaOnlyPixels": 193,
+  "beyondPixels": 18094,
+  "maxDelta": 212,
+  "beyondBox": [
+   16,
+   353,
+   389,
+   843
+  ],
+  "totalPixels": 329160
+ },
+ {
+  "screenshot": "webkit-dark-phone/task-action-focus.png",
+  "sameSize": true,
+  "bytesIdentical": false,
+  "changedPixels": 22169,
+  "aaOnlyPixels": 412,
+  "beyondPixels": 21757,
+  "maxDelta": 167,
+  "beyondBox": [
+   0,
+   278,
+   389,
+   731
+  ],
+  "totalPixels": 329160
+ },
+ {
+  "screenshot": "webkit-dark-phone/task-action-hover.png",
+  "sameSize": true,
+  "bytesIdentical": false,
+  "changedPixels": 22169,
+  "aaOnlyPixels": 412,
+  "beyondPixels": 21757,
+  "maxDelta": 167,
+  "beyondBox": [
+   0,
+   278,
+   389,
+   731
+  ],
+  "totalPixels": 329160
+ },
+ {
+  "screenshot": "webkit-dark-phone/task-action-menu.png",
+  "sameSize": true,
+  "bytesIdentical": false,
+  "changedPixels": 22169,
+  "aaOnlyPixels": 412,
+  "beyondPixels": 21757,
+  "maxDelta": 167,
+  "beyondBox": [
+   0,
+   278,
+   389,
+   731
+  ],
+  "totalPixels": 329160
+ },
+ {
+  "screenshot": "webkit-dark-phone/task-detail.png",
+  "sameSize": true,
+  "bytesIdentical": false,
+  "changedPixels": 22169,
+  "aaOnlyPixels": 412,
+  "beyondPixels": 21757,
+  "maxDelta": 167,
+  "beyondBox": [
+   0,
+   278,
+   389,
+   731
+  ],
+  "totalPixels": 329160
+ },
+ {
+  "screenshot": "webkit-dark-phone/task-share-dialog.png",
+  "sameSize": true,
+  "bytesIdentical": false,
+  "changedPixels": 2588,
+  "aaOnlyPixels": 81,
+  "beyondPixels": 2507,
+  "maxDelta": 75,
+  "beyondBox": [
+   0,
+   376,
+   389,
+   731
+  ],
+  "totalPixels": 329160
+ },
+ {
+  "screenshot": "webkit-light-desktop/breakpoint-599-dialog.png",
+  "sameSize": true,
+  "bytesIdentical": false,
+  "changedPixels": 15458,
+  "aaOnlyPixels": 718,
+  "beyondPixels": 14740,
+  "maxDelta": 123,
+  "beyondBox": [
+   0,
+   251,
+   598,
+   814
+  ],
+  "totalPixels": 539100
+ },
+ {
+  "screenshot": "webkit-light-desktop/breakpoint-601-dialog.png",
+  "sameSize": true,
+  "bytesIdentical": false,
+  "changedPixels": 19231,
+  "aaOnlyPixels": 970,
+  "beyondPixels": 18261,
+  "maxDelta": 123,
+  "beyondBox": [
+   0,
+   199,
+   600,
+   814
+  ],
+  "totalPixels": 540900
+ },
+ {
+  "screenshot": "webkit-light-desktop/notification-error.png",
+  "sameSize": true,
+  "bytesIdentical": false,
+  "changedPixels": 34364,
+  "aaOnlyPixels": 262,
+  "beyondPixels": 34102,
+  "maxDelta": 224,
+  "beyondBox": [
+   633,
+   183,
+   1259,
+   519
+  ],
+  "totalPixels": 1152000
+ },
+ {
+  "screenshot": "webkit-light-desktop/profile-validation.png",
+  "sameSize": true,
+  "bytesIdentical": false,
+  "changedPixels": 6248,
+  "aaOnlyPixels": 83,
+  "beyondPixels": 6165,
+  "maxDelta": 224,
+  "beyondBox": [
+   16,
+   172,
+   262,
+   391
+  ],
+  "totalPixels": 1152000
+ },
+ {
+  "screenshot": "webkit-light-desktop/session-attachment-staged.png",
+  "sameSize": true,
+  "bytesIdentical": false,
+  "changedPixels": 26633,
+  "aaOnlyPixels": 12642,
+  "beyondPixels": 13991,
+  "maxDelta": 53,
+  "beyondBox": [
+   612,
+   731,
+   1268,
+   899
+  ],
+  "totalPixels": 1152000
+ },
+ {
+  "screenshot": "webkit-light-desktop/settings-saved.png",
+  "sameSize": true,
+  "bytesIdentical": false,
+  "changedPixels": 39100,
+  "aaOnlyPixels": 1242,
+  "beyondPixels": 37858,
+  "maxDelta": 224,
+  "beyondBox": [
+   496,
+   408,
+   1279,
+   899
+  ],
+  "totalPixels": 1152000
+ },
+ {
+  "screenshot": "webkit-light-desktop/task-action-menu.png",
+  "sameSize": true,
+  "bytesIdentical": false,
+  "changedPixels": 45417,
+  "aaOnlyPixels": 976,
+  "beyondPixels": 44441,
+  "maxDelta": 224,
+  "beyondBox": [
+   615,
+   199,
+   1279,
+   842
+  ],
+  "totalPixels": 1152000
+ },
+ {
+  "screenshot": "webkit-light-desktop/task-share-dialog.png",
+  "sameSize": true,
+  "bytesIdentical": false,
+  "changedPixels": 27813,
+  "aaOnlyPixels": 1240,
+  "beyondPixels": 26573,
+  "maxDelta": 123,
+  "beyondBox": [
+   615,
+   291,
+   1279,
+   842
+  ],
+  "totalPixels": 1152000
+ },
+ {
+  "screenshot": "webkit-light-phone/notification-error.png",
+  "sameSize": true,
+  "bytesIdentical": false,
+  "changedPixels": 32016,
+  "aaOnlyPixels": 237,
+  "beyondPixels": 31779,
+  "maxDelta": 224,
+  "beyondBox": [
+   26,
+   222,
+   375,
+   576
+  ],
+  "totalPixels": 329160
+ },
+ {
+  "screenshot": "webkit-light-phone/profile-validation.png",
+  "sameSize": true,
+  "bytesIdentical": false,
+  "changedPixels": 4861,
+  "aaOnlyPixels": 3041,
+  "beyondPixels": 1820,
+  "maxDelta": 224,
+  "beyondBox": [
+   114,
+   56,
+   271,
+   99
+  ],
+  "totalPixels": 329160
+ },
+ {
+  "screenshot": "webkit-light-phone/session-attachment-menu.png",
+  "sameSize": true,
+  "bytesIdentical": false,
+  "changedPixels": 2035,
+  "aaOnlyPixels": 55,
+  "beyondPixels": 1980,
+  "maxDelta": 224,
+  "beyondBox": [
+   39,
+   566,
+   158,
+   755
+  ],
+  "totalPixels": 329160
+ },
+ {
+  "screenshot": "webkit-light-phone/session-attachment-staged.png",
+  "sameSize": true,
+  "bytesIdentical": false,
+  "changedPixels": 16075,
+  "aaOnlyPixels": 7070,
+  "beyondPixels": 9005,
+  "maxDelta": 53,
+  "beyondBox": [
+   5,
+   675,
+   384,
+   843
+  ],
+  "totalPixels": 329160
+ },
+ {
+  "screenshot": "webkit-light-phone/settings-saved.png",
+  "sameSize": true,
+  "bytesIdentical": false,
+  "changedPixels": 7720,
+  "aaOnlyPixels": 212,
+  "beyondPixels": 7508,
+  "maxDelta": 224,
+  "beyondBox": [
+   16,
+   354,
+   389,
+   843
+  ],
+  "totalPixels": 329160
+ },
+ {
+  "screenshot": "webkit-light-phone/task-action-menu.png",
+  "sameSize": true,
+  "bytesIdentical": false,
+  "changedPixels": 22321,
+  "aaOnlyPixels": 408,
+  "beyondPixels": 21913,
+  "maxDelta": 224,
+  "beyondBox": [
+   0,
+   278,
+   389,
+   731
+  ],
+  "totalPixels": 329160
+ },
+ {
+  "screenshot": "webkit-light-phone/task-share-dialog.png",
+  "sameSize": true,
+  "bytesIdentical": false,
+  "changedPixels": 2603,
+  "aaOnlyPixels": 79,
+  "beyondPixels": 2524,
+  "maxDelta": 84,
+  "beyondBox": [
+   0,
+   376,
+   389,
+   731
+  ],
+  "totalPixels": 329160
+ }
+]
