@@ -476,19 +476,22 @@ final class ProjectsWiringTests: XCTestCase {
                       "project detail reads remain concurrent")
     }
 
-    /// The Work overview's landing row opens the jobs it counts (docs/mocks/landing-jobs-sheet) on a
-    /// server that lists them, through the page's own sheet rather than one its clock would redraw,
-    /// and stays a row on an older server. A task opens over the page once the sheet is down, as the
-    /// page's rows open theirs, and a Retry goes through the page's store, which reads it again.
+    /// The Work overview's landing is the same card the sessions page draws (owner decision
+    /// 2026-10-11, docs/mocks/project-landing-card): a press opens the jobs it counts
+    /// (docs/mocks/landing-jobs-sheet) on a server that lists them, through the page's own sheet
+    /// rather than one its clock would redraw, and a server that lists none draws the card as a
+    /// read. A task opens over the page once the sheet is down, as the page's rows open theirs, and
+    /// a Retry goes through the page's store, which reads it again.
     func testTheLandingRowOpensTheJobsInFlightOverTheProjectPage() throws {
         let view = code(try appSource("Views/ProjectsView.swift"))
         let row = try slice(view, from: "private func landingRow(_ store: ProjectDetailModel) -> some View {",
                             to: "\n    }\n")
-        XCTAssertTrue(row.contains("if integration.inFlightJobs != nil {"))
-        XCTAssertTrue(row.contains("Button { pageSheet = .landingJobs } label: {"))
-        XCTAssertTrue(row.contains("} else {\n                        ProjectLandingRow(line: line)"),
-                      "an older server's row stays a row")
-        XCTAssertFalse(row.contains(".sheet("), "the row redraws every second; the sheet is the page's")
+        XCTAssertTrue(row.contains("if let card = ProjectMergeCard.taskLandingCard(integration, now: context.date,"))
+        XCTAssertTrue(row.contains("onOpenJobs: integration.inFlightJobs == nil ? nil : { pageSheet = .landingJobs },"))
+        XCTAssertTrue(row.contains("onOpenProject: nil,"),
+                      "on the project's own page a card with no list to open is a read")
+        XCTAssertTrue(row.contains("retry: { jobID in try await store.retryIntegrationJob(jobID) })"))
+        XCTAssertFalse(row.contains(".sheet("), "the card redraws every second; the sheet is the page's")
         let kinds = try slice(view, from: "private enum ProjectPageSheet: String, Identifiable {", to: "\n}\n")
         XCTAssertTrue(kinds.contains("case landingJobs"))
         let sheet = try slice(view, from: "case .landingJobs:", to: "\n                }\n")
@@ -515,7 +518,8 @@ final class ProjectsWiringTests: XCTestCase {
         let jobs = code(try appSource("Views/ProjectLandingJobsSheet.swift"))
         for part in ["TimelineView(.periodic(from: .now, by: 1)) { context in", "let rows = lines(context.date)",
                      "ProjectPage.landingJobsTitle(", ".keyboardShortcut(.cancelAction)",
-                     "ProjectLandingRow(line: row.line)", "if let taskID = row.taskId {",
+                     "ProjectLandingHead(title: row.line.word, head: row.line.head, running: row.line.running,",
+                     "if let what = row.line.what {", "if let taskID = row.taskId {",
                      "Button { openTask(taskID) } label: {", "if row.retryable {",
                      "Text(ProjectPage.landingRetry)", ".font(.orbitLabel.weight(.semibold))",
                      ".buttonStyle(.bordered)", ".buttonBorderShape(.capsule)", ".controlSize(.small)",
@@ -531,12 +535,13 @@ final class ProjectsWiringTests: XCTestCase {
         XCTAssertLessThan(shared.lowerBound, iOS.lowerBound, "the sheet is the Mac's project page's too")
         XCTAssertTrue(jobs.contains("#else\n        .frame(minWidth: 420, idealWidth: 520, minHeight: 420, idealHeight: 560)"))
 
-        // A job the server judged timed out trades the ring for the warning mark, which never spins.
-        let landingRow = code(try appSource("Views/ProjectLandingRow.swift"))
-        for part in ["let ink = line.timedOut ? ProjectPalette.warningInk", "if line.timedOut {",
-                     "Image(systemName: \"exclamationmark.triangle.fill\")", "LandingRing(running: line.running)",
-                     ".foregroundStyle(line.timedOut ? ink : Color.secondary)"] {
-            XCTAssertTrue(landingRow.contains(part), "the landing row keeps `\(part)`")
+        // A job the server judged timed out trades the ring for the warning mark, which never
+        // spins — one rule for every landing row, drawn by the head
+        // (`testTheHeadsWearTheMergedLinesRowAndCarryNoChevron`).
+        let head = code(try appSource("Views/ProjectLandingRow.swift"))
+        for part in ["if timedOut {", "Image(systemName: \"exclamationmark.triangle.fill\")",
+                     "LandingRing(size: 15, running: running)"] {
+            XCTAssertTrue(head.contains(part), "the head keeps `\(part)`")
         }
     }
 }

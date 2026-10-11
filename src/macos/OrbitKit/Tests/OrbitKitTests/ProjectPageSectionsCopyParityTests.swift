@@ -100,7 +100,6 @@ final class ProjectPageSectionsCopyParityTests: XCTestCase {
         assertSays(web, "export const landingNoReportFor = (minutes: number): string => `No report for ${minutes}m`;",
                    in: Self.panorama)
         assertSays(web, "export const LANDING_NO_REPORT_YET = '\(ProjectPage.landingNoReportYet)';", in: Self.panorama)
-        assertSays(web, ">\(ProjectPage.landingWaitLabel) <span className=\"project-landing-wait\">", in: Self.panorama)
         XCTAssertEqual(ProjectPage.landingNoReportFor(11), "No report for 11m")
         // The card the landing is drawn as (owner decision 2026-10-11, docs/mocks/project-landing-card)
         // says the row's words and three of its own; both ends write those three here.

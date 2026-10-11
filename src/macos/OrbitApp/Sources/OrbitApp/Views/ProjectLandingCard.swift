@@ -21,8 +21,10 @@ struct ProjectLandingCardView: View {
     let card: ProjectPage.LandingCard
     /// Opens the jobs the card counts; nil from a server that does not list them.
     let onOpenJobs: (() -> Void)?
-    /// Where a press goes when there is no list to open: the project page.
-    let onOpenProject: () -> Void
+    /// Where a press goes when there is no list to open — the project page, from the sessions page.
+    /// nil on the project page itself, where there is nowhere left to go: the card is then a read,
+    /// exactly as the browser draws a card handed no press.
+    let onOpenProject: (() -> Void)?
     /// One Retry, by job — the Jobs sheet's own door (`app.retryIntegrationJob`).
     let retry: (String) async throws -> Void
     /// A Retry on its way: its button takes no second press.
@@ -38,35 +40,16 @@ struct ProjectLandingCardView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Button {
-                if let onOpenJobs { onOpenJobs() } else { onOpenProject() }
-            } label: {
-                VStack(alignment: .leading, spacing: 8) {
-                    head
-                    if card.jobs.count > 1 {
-                        jobRows
-                    } else if let what = card.what {
-                        Text(what).font(.orbitLabel).lineLimit(2)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    if let target = card.target {
-                        // The branch this lands on, the field the task page's Target row prints,
-                        // cut in the middle when the page is narrow.
-                        Text("\(ProjectPage.landingOnto) \(target)")
-                            .font(.orbitMeta).foregroundStyle(.secondary)
-                            .lineLimit(1).truncationMode(.middle)
-                    }
-                    if card.timedOut, let detail = card.detail {
-                        Text(detail).font(.orbitMeta).foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    } else if !card.timedOut {
-                        Text(ProjectPage.landingNothingToDo).font(.orbitMeta).foregroundStyle(.secondary)
-                    }
+            if onOpenJobs != nil || onOpenProject != nil {
+                Button {
+                    if let onOpenJobs { onOpenJobs() } else { onOpenProject?() }
+                } label: {
+                    content.contentShape(Rectangle())
                 }
-                .contentShape(Rectangle())
+                .buttonStyle(.plain)
+            } else {
+                content
             }
-            .buttonStyle(.plain)
 
             if let jobID = card.retryJobId {
                 HStack(spacing: 8) {
@@ -108,6 +91,34 @@ struct ProjectLandingCardView: View {
             }
         }
         .padding(.vertical, 4)
+    }
+
+    /// Everything the card says above its foot: the head, what is landing, the branch it lands on
+    /// and the sentence — the whole of the press where there is one.
+    private var content: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            head
+            if card.jobs.count > 1 {
+                jobRows
+            } else if let what = card.what {
+                Text(what).font(.orbitLabel).lineLimit(2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            if let target = card.target {
+                // The branch this lands on, the field the task page's Target row prints, cut in the
+                // middle when the page is narrow.
+                Text("\(ProjectPage.landingOnto) \(target)")
+                    .font(.orbitMeta).foregroundStyle(.secondary)
+                    .lineLimit(1).truncationMode(.middle)
+            }
+            if card.timedOut, let detail = card.detail {
+                Text(detail).font(.orbitMeta).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else if !card.timedOut {
+                Text(ProjectPage.landingNothingToDo).font(.orbitMeta).foregroundStyle(.secondary)
+            }
+        }
     }
 
     /// The card's head is the landing row's own, in the merged line's anatomy: the word, the live

@@ -1078,24 +1078,19 @@ describe('the landing card’s styles', () => {
     // reduced-motion blocks rather than the one nearest the rule, since it has others.
     const blocks = [...css.matchAll(/@media \(prefers-reduced-motion: reduce\) \{[\s\S]*?\n\}/g)]
       .map((block) => block[0]);
-    for (const selector of ['.project-landing-running .project-landing-ring',
-      '.landing-head.is-running .landing-head-mark']) {
-      expect(blocks.some((block) => block.includes(selector) && block.includes('animation: none'))).toBe(true);
-    }
+    const selector = '.landing-head.is-running .landing-head-mark';
+    expect(blocks.some((block) => block.includes(selector) && block.includes('animation: none'))).toBe(true);
     expect(css).toContain('@keyframes project-landing-spin');
     // The clock's digits must not shuffle the words beside them as they change.
-    expect(css).toMatch(/\.project-landing-clock \{[\s\S]*?font-variant-numeric: tabular-nums;/);
     expect(css).toMatch(/\.landing-head-right \{[\s\S]*?font-variant-numeric: tabular-nums;/);
-    // The task gets two lines without squeezing the phase or elapsed time off a phone.
-    expect(css).toMatch(/\.project-landing-what \{[\s\S]*?-webkit-line-clamp: 2;/);
+    // The tasks get two lines without squeezing the head's line off a phone — the card's title and
+    // the jobs list's own.
+    expect(css).toMatch(/\.landing-jobs-what \{[\s\S]*?-webkit-line-clamp: 2;/);
     expect(css).toMatch(/\.session-project-landing \.spl-what \{[\s\S]*?-webkit-line-clamp: 2;/);
   });
 
   it('draws a timed-out row’s mark and words in amber, and never spins it', () => {
-    expect(css).toMatch(/\.project-landing-timed-out \.project-landing-ring \{\s*color: var\(--warning-solid\);/);
-    expect(css).toMatch(/\.project-landing-timed-out \.project-landing-clock \{\s*color: var\(--warning\);/);
-    // The spin is a running row's only, and a timed-out row is never drawn as one.
-    expect(css).not.toMatch(/\.project-landing-timed-out[^{]*\{[^}]*animation/);
+    // The spin is a running head's only, and a timed-out one is never drawn as one.
     expect(css).not.toMatch(/\.landing-head\.is-timed-out[^{]*\{[^}]*animation/);
   });
 
