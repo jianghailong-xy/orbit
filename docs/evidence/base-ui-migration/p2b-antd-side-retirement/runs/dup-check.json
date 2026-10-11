@@ -1,0 +1,28 @@
+{"sample":"attachment","system":"antd","run":1,"hash":"ad0da341bf20a2ab34a89d2d7668534357a123eed4ec865b7223a2abf659daf5","rows":11,"text":"dark\nSwitch theme\nAdd attachment"}
+{"sample":"attachment","system":"antd","run":2,"hash":"ad0da341bf20a2ab34a89d2d7668534357a123eed4ec865b7223a2abf659daf5","rows":11,"text":"dark\nSwitch theme\nAdd attachment"}
+{"sample":"attachment","system":"orbit","run":1,"hash":"ad0da341bf20a2ab34a89d2d7668534357a123eed4ec865b7223a2abf659daf5","rows":11,"text":"dark\nSwitch theme\nAdd attachment"}
+{"sample":"attachment","system":"orbit","run":2,"hash":"ad0da341bf20a2ab34a89d2d7668534357a123eed4ec865b7223a2abf659daf5","rows":11,"text":"dark\nSwitch theme\nAdd attachment"}
+{"sample":"submenu","system":"antd","run":1,"hash":"ad0da341bf20a2ab34a89d2d7668534357a123eed4ec865b7223a2abf659daf5","rows":11,"text":"dark\nSwitch theme\nAdd attachment"}
+{"sample":"submenu","system":"antd","run":2,"hash":"ad0da341bf20a2ab34a89d2d7668534357a123eed4ec865b7223a2abf659daf5","rows":11,"text":"dark\nSwitch theme\nAdd attachment"}
+{"sample":"submenu","system":"orbit","run":1,"hash":"ad0da341bf20a2ab34a89d2d7668534357a123eed4ec865b7223a2abf659daf5","rows":11,"text":"dark\nSwitch theme\nAdd attachment"}
+{"sample":"submenu","system":"orbit","run":2,"hash":"ad0da341bf20a2ab34a89d2d7668534357a123eed4ec865b7223a2abf659daf5","rows":11,"text":"dark\nSwitch theme\nAdd attachment"}
+{"sample":"session","system":"antd","run":1,"hash":"839d5b499c5da026b8dbb438f356c305685d4ae009926c8fe2aaffa60762043f","rows":12,"text":"dark\nSwitch theme\nSession actions\nnone"}
+{"sample":"session","system":"antd","run":2,"hash":"839d5b499c5da026b8dbb438f356c305685d4ae009926c8fe2aaffa60762043f","rows":12,"text":"dark\nSwitch theme\nSession actions\nnone"}
+{"sample":"session","system":"orbit","run":1,"hash":"839d5b499c5da026b8dbb438f356c305685d4ae009926c8fe2aaffa60762043f","rows":12,"text":"dark\nSwitch theme\nSession actions\nnone"}
+{"sample":"session","system":"orbit","run":2,"hash":"839d5b499c5da026b8dbb438f356c305685d4ae009926c8fe2aaffa60762043f","rows":12,"text":"dark\nSwitch theme\nSession actions\nnone"}
+{"sample":"expiry","system":"antd","run":1,"hash":"18bbb0bb7d1ed175eaef2f9cb1d77bb49892970e58cd606e6cc2710cd153d34c","rows":16,"text":"dark\nSwitch theme\nNever"}
+{"sample":"expiry","system":"antd","run":2,"hash":"18bbb0bb7d1ed175eaef2f9cb1d77bb49892970e58cd606e6cc2710cd153d34c","rows":16,"text":"dark\nSwitch theme\nNever"}
+{"sample":"expiry","system":"orbit","run":1,"hash":"18bbb0bb7d1ed175eaef2f9cb1d77bb49892970e58cd606e6cc2710cd153d34c","rows":16,"text":"dark\nSwitch theme\nNever"}
+{"sample":"expiry","system":"orbit","run":2,"hash":"18bbb0bb7d1ed175eaef2f9cb1d77bb49892970e58cd606e6cc2710cd153d34c","rows":16,"text":"dark\nSwitch theme\nNever"}
+{"sample":"popconfirm","system":"antd","run":1,"hash":"48a84c5caab0142fdc5b139d7ff914b532b104cab4adf5b8e7b9e60e7db4c1d9","rows":12,"text":"dark\nSwitch theme\nDelete task\nnone"}
+{"sample":"popconfirm","system":"antd","run":2,"hash":"48a84c5caab0142fdc5b139d7ff914b532b104cab4adf5b8e7b9e60e7db4c1d9","rows":12,"text":"dark\nSwitch theme\nDelete task\nnone"}
+{"sample":"popconfirm","system":"orbit","run":1,"hash":"48a84c5caab0142fdc5b139d7ff914b532b104cab4adf5b8e7b9e60e7db4c1d9","rows":12,"text":"dark\nSwitch theme\nDelete task\nnone"}
+{"sample":"popconfirm","system":"orbit","run":2,"hash":"48a84c5caab0142fdc5b139d7ff914b532b104cab4adf5b8e7b9e60e7db4c1d9","rows":12,"text":"dark\nSwitch theme\nDelete task\nnone"}
+{"sample":"search","system":"antd","run":1,"hash":"3903ea4f5f66f7dd790145253be3f0211bb257ee32d8e726bfe66cb9d5a3f0fe","rows":22,"text":"dark\nSwitch theme\nNever"}
+{"sample":"search","system":"antd","run":2,"hash":"3903ea4f5f66f7dd790145253be3f0211bb257ee32d8e726bfe66cb9d5a3f0fe","rows":22,"text":"dark\nSwitch theme\nNever"}
+{"sample":"search","system":"orbit","run":1,"hash":"3903ea4f5f66f7dd790145253be3f0211bb257ee32d8e726bfe66cb9d5a3f0fe","rows":22,"text":"dark\nSwitch theme\nNever"}
+{"sample":"search","system":"orbit","run":2,"hash":"3903ea4f5f66f7dd790145253be3f0211bb257ee32d8e726bfe66cb9d5a3f0fe","rows":22,"text":"dark\nSwitch theme\nNever"}
+{"sample":"multiple","system":"antd","run":1,"hash":"7596df8a6f1580723e83dafd04da1ef8ecf7abc3a5e58fbef0c994e583664bd2","rows":37,"text":"dark\nSwitch theme\nBug\nDocs\n+ 1 ..."}
+{"sample":"multiple","system":"antd","run":2,"hash":"7596df8a6f1580723e83dafd04da1ef8ecf7abc3a5e58fbef0c994e583664bd2","rows":37,"text":"dark\nSwitch theme\nBug\nDocs\n+ 1 ..."}
+{"sample":"multiple","system":"orbit","run":1,"hash":"7596df8a6f1580723e83dafd04da1ef8ecf7abc3a5e58fbef0c994e583664bd2","rows":37,"text":"dark\nSwitch theme\nBug\nDocs\n+ 1 ..."}
+{"sample":"multiple","system":"orbit","run":2,"hash":"7596df8a6f1580723e83dafd04da1ef8ecf7abc3a5e58fbef0c994e583664bd2","rows":37,"text":"dark\nSwitch theme\nBug\nDocs\n+ 1 ..."}
