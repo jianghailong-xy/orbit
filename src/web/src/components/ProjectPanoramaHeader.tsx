@@ -13,6 +13,7 @@ import { api } from '../api';
 import { DEFAULT_MAIN_BRANCH, mainBranchName } from '../lib/projectStart';
 import { projectIntegrationQuery, projectReadyToRunQuery } from '../lib/queries';
 import { LandingJobsSheet } from './LandingJobsSheet';
+import { ProjectLandingCard } from './ProjectLandingCard';
 import { ProjectTaskLink } from './ProjectTaskLink';
 import { Alert } from './ui/Alert';
 import { Button } from './ui/Button';
@@ -536,6 +537,123 @@ export function landingJobLines(
 }
 
 /**
+ * One job of the landing card's body — the landing row's own reading of it, plus the two facts only
+ * a list of them carries: which job it is, and whether the server offers Retry for it.
+ */
+export interface LandingCardJob {
+  jobId: string;
+  /** The task the job lands, which its row opens; null for a promotion or a merge check. */
+  taskId: string | null;
+  title: string | null;
+  state: string;
+  running: boolean;
+  timedOut: boolean;
+  /** The server's `retryable`, never inferred from `timedOut`. */
+  retryable: boolean;
+  /** What a timed-out runner did before it stopped; the job list's own sentence. */
+  detail: string | null;
+}
+
+/**
+ * The landing in flight as a card of its own (owner decision 2026-10-11, mocks in
+ * docs/mocks/project-landing-card): the merge card's shape and language, for the job that lands a
+ * task on the project branch.
+ *
+ * It says what the row could not: which branch the work goes onto, who the several jobs are when
+ * there are several, and — when the server judged a runner silent — where it stopped and whether a
+ * Retry takes it. Nothing here is a new read: every field is the landing line's own, the job list's
+ * own, or the project's own `landTask.targetRef`. Native: `ProjectPage.LandingCard`.
+ */
+export interface LandingCard {
+  /** What is in flight, in the landing row's own word: "Landing", "Merge check". */
+  word: string;
+  /** The head's title: the word alone, or the word and the count while several jobs are in flight
+   *  — "Landing 2 jobs", the row's name slot with the word in front of it. */
+  title: string;
+  state: string;
+  running: boolean;
+  /** The server judged the lead job's runner silent past its limit: the card draws in the warning
+   *  ink, with a triangle where the ring was, and nothing spins. */
+  timedOut: boolean;
+  /** One job's task title, or null while several are in flight — the count is the head's, and the
+   *  bodies are `jobs`. */
+  what: string | null;
+  /** Every job in flight, in the server's order (running first, then the queue oldest first);
+   *  empty from a server that does not list them. */
+  jobs: LandingCardJob[];
+  /** The branch the lead job lands on, short; null when the job is not among the project's
+   *  landings — a promotion, a merge check, or a server that does not list its jobs. */
+  target: string | null;
+  clock: string;
+  clockLabel: string;
+  wait: string | null;
+  updated: string | null;
+  /** What the timed-out lead job's runner did before it stopped, or null. */
+  detail: string | null;
+  /** The job Retry takes, when the server says a retry takes one. */
+  retryJobId: string | null;
+}
+
+/** The card's own three: the branch the work lands on, the sentence that takes the reader off the
+ *  hook while it lands, and the way into the jobs from the card that also offers Retry. */
+export const landingOnto = (ref: string): string => `onto ${ref}`;
+export const LANDING_NOTHING_TO_DO = 'Nothing to do — it lands on its own.';
+export const LANDING_ALL_JOBS = 'All jobs';
+
+/**
+ * The card, or null when nothing is landing — which is what removes it from the page.
+ *
+ * The head is the landing row's: the same word, the same state, the same clock, the same `wait` and
+ * freshness. What the card adds is the branch, the several jobs and the detail under a timed-out
+ * one, all of them read from what the same integration read already carries.
+ */
+export function landingCard(
+  view: ProjectIntegrationView,
+  now: number,
+  observation: { updatedAt?: number; failed?: boolean } = {},
+): LandingCard | null {
+  const line = landingLine(view, now, observation);
+  if (!line) return null;
+  const jobs = landingJobLines(view, now, observation).map((job) => ({
+    jobId: job.jobId,
+    taskId: job.taskId,
+    title: job.line.what,
+    state: job.line.state,
+    running: job.line.running,
+    timedOut: job.line.timedOut,
+    retryable: job.retryable,
+    detail: job.detail,
+  }));
+  // The row's own rule for the name slot, one row down: several jobs are a count in the head and a
+  // row each in the body; one job is its title in the body.
+  const several = view.integratingCount + view.queuedCount > 1;
+  const lead = jobs[0];
+  const landed = lead ? (view.landTasks ?? []).find((task) => task.integration?.landTask?.jobId === lead.jobId) : undefined;
+  const ref = landed?.integration?.landTask?.targetRef;
+  return {
+    word: line.word,
+    title: several && line.what ? `${line.word} ${line.what}` : line.word,
+    state: line.state,
+    running: line.running,
+    timedOut: line.timedOut,
+    what: several ? null : line.what,
+    jobs,
+    target: ref ? shortRef(ref) : null,
+    clock: line.clock,
+    clockLabel: line.clockLabel,
+    wait: line.wait,
+    updated: line.updated,
+    detail: line.timedOut ? lead?.detail ?? null : null,
+    retryJobId: lead?.retryable ? lead.jobId : null,
+  };
+}
+
+/** A branch as a person says it: `project/x`, not `refs/heads/project/x`. */
+function shortRef(ref: string): string {
+  return ref.startsWith('refs/heads/') ? ref.slice('refs/heads/'.length) : ref;
+}
+
+/**
  * The live line itself: a ring, what is being landed, which half of the wait it is in, and how long
  * it has been there.
  *
@@ -948,7 +1066,7 @@ export function ProjectPanoramaHeader({
         paused={paused}
         projectId={projectId}
         manualReady={ready.isError ? null : ready.data?.manualReady ?? null}
-        landing={integration.data ? landingLine(integration.data, now, {
+        landing={integration.data ? landingCard(integration.data, now, {
           updatedAt: integration.dataUpdatedAt, failed: integration.isError,
         }) : null}
         onOpenLanding={listed ? () => setJobsOpen(true) : undefined}
@@ -992,11 +1110,11 @@ export function ProjectPanoramaCard({
   paused?: boolean;
   projectId?: string;
   manualReady?: ProjectManualReady | null;
-  /** The landing in flight, from the header's own integration read. A public project page has no
-   *  such read, so it draws the card without the row. */
-  landing?: LandingLine | null;
-  /** Opens the list of every job in flight, given when the server lists them: the row is then a
-   *  button. Without it the row is only read. */
+  /** The landing in flight, as the card of its own it is drawn as (`landingCard`). A public
+   *  project page has no such read, so it draws the card without it. */
+  landing?: LandingCard | null;
+  /** Opens the list of every job in flight, given when the server lists them: the card is then a
+   *  press. Without it the card is only read. */
   onOpenLanding?: () => void;
 }) {
   const { shape } = panorama;
@@ -1054,9 +1172,9 @@ export function ProjectPanoramaCard({
       {/* Above the cells, because it is the card's one moving part: what the platform is doing with
           work that is already done, while every count over it stands still. It draws nothing at all
           when nothing is landing — an empty state here would be a permanent "0 jobs" row. */}
-      {landing ? (
+      {landing && projectId ? (
         <div style={{ marginBottom: 12 }}>
-          {onOpenLanding ? <LandingRowButton line={landing} onPress={onOpenLanding} /> : <LandingRow line={landing} />}
+          <ProjectLandingCard projectId={projectId} card={landing} onPress={onOpenLanding} dialog />
         </div>
       ) : null}
       <div

@@ -334,8 +334,9 @@ import {
 } from './ProjectPromotionCard';
 import { ProjectMergeStrip, ProjectMergeTimelineRow } from './ProjectMergeStrip';
 import { isMergeJob, projectTimelineSections } from '../lib/projectMerge';
-import { LandingRow, landingLine } from './ProjectPanoramaHeader';
+import { landingCard } from './ProjectPanoramaHeader';
 import { LandingJobsSheet } from './LandingJobsSheet';
+import { ProjectLandingCard } from './ProjectLandingCard';
 import { ProjectStartDialog } from './StartProjectCard';
 import {
   CHAT_FACTS_AS_ARMED,
@@ -1370,11 +1371,13 @@ function SessionProjectStartRow({ start, projectId }: { start: StartPageRow; pro
   );
 }
 
-/** The landing line inside the progress card while a task lands on the project branch (iOS
- *  `SessionProjectPage.landingLine`): the project page's own row, ticking once a second, and a press
- *  that lists every job in flight (`LandingJobsSheet`) — or, from a server that does not list them,
- *  opens the project page. A merge job's line is the merge card's (`ProjectMergeStrip`). Its own
- *  component, so the second hand redraws this line and not the console around it. */
+/** The landing card of a project's sessions page, under the progress card and before the merge card
+ *  (iOS `SessionProjectPage.landingCard`; owner decision 2026-10-11, docs/mocks/project-landing-card):
+ *  the card `landingCard` builds off the project page's own read, ticking once a second while a task
+ *  lands, and a press that lists every job in flight (`LandingJobsSheet`) — or, from a server that
+ *  does not list them, opens the project page. A merge job's is the merge card's
+ *  (`ProjectMergeStrip`). Its own component, so the second hand redraws this card and not the
+ *  console around it. */
 function SessionProjectLanding({ projectId, onOpen }: { projectId: string; onOpen: () => void }) {
   const integration = useQuery(projectIntegrationQuery(projectId));
   const view = integration.data && typeof integration.data === 'object' ? integration.data : null;
@@ -1388,19 +1391,16 @@ function SessionProjectLanding({ projectId, onOpen }: { projectId: string; onOpe
     const timer = setInterval(() => setNow(Date.now()), 1_000);
     return () => clearInterval(timer);
   }, [live]);
-  const line = live && view
-    ? landingLine(view, now, { updatedAt: integration.dataUpdatedAt, failed: integration.isError })
+  const card = live && view
+    ? landingCard(view, now, { updatedAt: integration.dataUpdatedAt, failed: integration.isError })
     : null;
   return (
     <>
-      {line ? (
-        <button type="button" className="session-project-page-landing" aria-haspopup={listed ? 'dialog' : undefined}
-          onClick={listed ? () => setJobsOpen(true) : onOpen}>
-          <LandingRow line={line} />
-          <RightOutlined className="session-project-page-landing-chev" aria-hidden />
-        </button>
+      {card ? (
+        <ProjectLandingCard projectId={projectId} card={card} dialog={listed}
+          onPress={listed ? () => setJobsOpen(true) : onOpen} />
       ) : null}
-      {/* Portalled out of the card, and kept while open even if the line goes, so a list being read
+      {/* Portalled out of the card, and kept while open even if the card goes, so a list being read
           does not vanish under the reader when its last job lands. */}
       {listed || jobsOpen ? (
         <LandingJobsSheet projectId={projectId} open={jobsOpen} onClose={() => setJobsOpen(false)} />
@@ -9503,23 +9503,27 @@ export function WorkspaceView({
             <ProjectWhyNotDoneCard project={pageSettledDoc} />
           )}
           {openProjectId && !pageSettledDoc && (
-            <div className="session-project-page-card">
-              <div className="session-project-page-progress">
-                {pageTaskCounts ? (
-                  <>
-                    <SessionProjectProgressBar counts={pageTaskCounts} runningCount={pageRunningCount} />
-                    <span>
-                      {pageNotStarted
-                        ? SESSION_PROJECT_COPY.pageNotStarted(pageTaskCounts.total)
-                        : SESSION_PROJECT_COPY.pageProgress(pageTaskCounts.done, pageTaskCounts.total, pageRunningCount)}
-                    </span>
-                  </>
-                ) : pageStatus ? <span>{SESSION_PROJECT_COPY.pageStatus(pageStatus)}</span> : null}
+            <>
+              <div className="session-project-page-card">
+                <div className="session-project-page-progress">
+                  {pageTaskCounts ? (
+                    <>
+                      <SessionProjectProgressBar counts={pageTaskCounts} runningCount={pageRunningCount} />
+                      <span>
+                        {pageNotStarted
+                          ? SESSION_PROJECT_COPY.pageNotStarted(pageTaskCounts.total)
+                          : SESSION_PROJECT_COPY.pageProgress(pageTaskCounts.done, pageTaskCounts.total, pageRunningCount)}
+                      </span>
+                    </>
+                  ) : pageStatus ? <span>{SESSION_PROJECT_COPY.pageStatus(pageStatus)}</span> : null}
+                </div>
+                {pageStart ? <SessionProjectStartRow start={pageStart} projectId={openProjectId} /> : null}
               </div>
-              {pageStart ? <SessionProjectStartRow start={pageStart} projectId={openProjectId} /> : null}
+              {/* The landing left the progress card on 2026-10-11: it is a card of its own under it
+                  (docs/mocks/project-landing-card), ahead of the merge card in the same list. */}
               <SessionProjectLanding projectId={openProjectId}
                 onOpen={() => navigate(`/projects/${encodeId(openProjectId)}`)} />
-            </div>
+            </>
           )}
           {openProjectId && (
             <ProjectMergeStrip key={`merge:${openProjectId}`} projectId={openProjectId}

@@ -258,22 +258,34 @@ describe('the list of jobs in flight', () => {
 });
 
 describe('the landing rows that open the list', () => {
-  it('opens it from the Work overview’s row', async () => {
+  it('opens it from the Work overview’s card', async () => {
     await mount(<ProjectPanoramaHeader projectId={PROJECT} projectStatus="OPEN" />);
-    const press = document.querySelector<HTMLButtonElement>('[data-project-block="work-overview"] button.project-landing-press');
+    const press = document.querySelector<HTMLButtonElement>(
+      '[data-project-block="work-overview"] button.spl-press');
     expect(press?.getAttribute('type')).toBe('button');
-    expect(press?.textContent).toContain('2 jobs · 1 timed out');
+    expect(press?.getAttribute('aria-haspopup')).toBe('dialog');
+    // The head counts the jobs, the row each one is in the body, and the lead's own state is the
+    // head's — the same read the list under it draws.
+    expect(press?.querySelector('.spl-title')?.textContent).toBe('Landing 2 jobs · 1 timed out');
+    // Each row is its job's title and its own state word — the lead's running one in the brand,
+    // the queued one grey.
+    expect([...(press?.querySelectorAll('.spl-jobs li') ?? [])].map((row) => [
+      row.querySelector('span:first-child')?.textContent, row.querySelector('span:last-child')?.textContent,
+    ])).toEqual([[C5, 'Timed out'], ['', 'queued']]);
     expect(dialog()).toBeNull();
-    await click(press, 'the Work overview’s landing row');
+    await click(press, 'the Work overview’s landing card');
     expect(dialog()?.querySelector('.orbit-overlay-title')?.textContent).toBe('2 jobs in flight');
     expect(rows()).toHaveLength(2);
   });
 
-  it('keeps the Work overview’s row a line to read from a server that does not list its jobs', async () => {
+  it('keeps the Work overview’s card a read from a server that does not list its jobs', async () => {
     integration = view(undefined, job({ timedOut: false }));
     await mount(<ProjectPanoramaHeader projectId={PROJECT} projectStatus="OPEN" />);
-    expect(document.querySelector('[data-project-block="work-overview"] .project-landing')).not.toBeNull();
-    expect(document.querySelector('.project-landing-press')).toBeNull();
+    const card = document.querySelector('[data-project-block="work-overview"] .session-project-landing');
+    expect(card).not.toBeNull();
+    // Nothing to open, so nothing to press: the same card, as a read.
+    expect(card?.querySelector('button.spl-press')).toBeNull();
+    expect(card?.querySelector('div.spl-press')).not.toBeNull();
   });
 
   it('opens it from the merge card’s row while a merge job is in flight', async () => {

@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { ProjectIntegrationJob, ProjectIntegrationView } from '@orbit/shared';
+import type { ProjectIntegrationJob, ProjectIntegrationView, ProjectLandTask } from '@orbit/shared';
 import {
   JOB_PHASES,
   JOB_WORDS,
@@ -14,6 +14,7 @@ import {
   integrationLanes,
   jobPhases,
   jobWords,
+  landingCard,
   landingClock,
   landingClockTime,
   landingJobLines,
@@ -302,14 +303,37 @@ const integration = (over: Partial<ProjectIntegrationView> = {}): ProjectIntegra
   mergeCheckOnTip: 'PASSING',
   // The report this card was specified against: T2, claimed at 13:58:00, reporting as it works —
   // the claim is the runner's first report, which is what a claimed job looks like on the wire.
-  inFlight: { taskTitle: 'T2 wiki 契約、迁移与共享类型', state: 'RUNNING', kind: 'LAND_TASK', phase: 'CHECK',
+  inFlight: { taskTitle: TITLE, state: 'RUNNING', kind: 'LAND_TASK', phase: 'CHECK',
     startedAt: '2026-09-25T13:58:00Z', heartbeatAt: '2026-09-25T13:58:00Z' },
   ...over,
 });
 
-describe('the landing row', () => {
+/** The task this card was specified against, in the spelling the mock carries it. */
+const TITLE = 'T2 wiki 契約、迁移与共享类型';
+
+/** One job as `inFlightJobs` lists it — by default T2, claimed at 13:58 and reporting as it works. */
+const cardJob = (over: Partial<ProjectIntegrationJob> = {}): ProjectIntegrationJob => ({
+  jobId: 'job-t2',
+  kind: 'LAND_TASK',
+  state: 'RUNNING',
+  phase: 'CHECK',
+  taskId: 'task-t2',
+  taskTitle: TITLE,
+  generation: 1,
+  startedAt: '2026-09-25T13:58:00Z',
+  queuedAt: '2026-09-25T13:57:30Z',
+  heartbeatAt: '2026-09-25T13:58:00Z',
+  runnerName: null,
+  retriedBy: null,
+  timedOut: false,
+  limitSeconds: null,
+  retryable: false,
+  ...over,
+});
+
+describe('the landing card', () => {
   // The clock is read off `now`, so the render has to be told what time it is: the whole point of
-  // the row is the number, and "about a minute" is not what the mock says.
+  // the card is the number, and "about a minute" is not what the mock says.
   const at = (iso: string) => vi.setSystemTime(new Date(iso));
   afterEach(() => vi.useRealTimers());
 
@@ -326,57 +350,131 @@ describe('the landing row', () => {
     return qc;
   }
 
-  it('draws the approved checking line: the ring spins, and the clock counts seconds', () => {
+  it('draws the approved card: the ring, the word, the branch, the three clocks and the sentence', () => {
     // 80 seconds after the claim — the mock's own 1m 20s.
-    const html = renderAt(seeded(), '2026-09-25T13:59:20Z');
+    const html = renderAt(seeded(integration({ inFlightJobs: [cardJob()], landTasks: [landed('job-t2')] })),
+      '2026-09-25T13:59:20Z');
 
-    expect(html).toContain('class="project-landing project-landing-running"');
-    expect(html).toContain('>Landing<');
-    expect(html).toContain('T2 wiki 契約、迁移与共享类型');
-    expect(html).toContain('>checking<');
-    expect(html).toContain('>1m 20s<');
-    // The ring is the Integrating cell's own mark rather than a second spinner drawing, and it
-    // inherited the row's colour rather than carrying one of its own.
+    // The card of its own, in the merge card's shape: a border, a radius and the subtle wash, and
+    // the brand only while the job runs.
+    expect(html).toContain('class="session-project-landing is-running"');
+    expect(html).toContain('class="spl-head"');
+    expect(html).toContain('class="spl-title">Landing<');
+    expect(html).toContain('class="spl-state">checking<');
+    expect(html).toContain('class="spl-chev"');
+    expect(html).toContain(`class="spl-what">${TITLE}<`);
+    expect(html).toContain(`class="spl-ref">onto project/${PROJECT}<`);
+    expect(html).toContain('Elapsed <span class="spl-clock">1m 20s</span>');
+    // The heartbeat is the claim, 80 seconds back: the clock counts them, the freshness rounds
+    // them to the minute the landing row rounds them to.
+    expect(html).toContain('class="u">Updated 1m ago<');
+    expect(html).toContain('class="spl-note">Nothing to do — it lands on its own.<');
+    // The ring is the Integrating cell's own mark, inherited rather than redrawn, and the card
+    // carries no Retry: nothing about this job wants the reader.
     expect(html).toContain('data-glyph="spinner"');
+    expect(html).not.toContain('spl-primary');
+    expect(html).not.toContain('Retry');
   });
 
-  it('draws the approved queued line: grey and still, and counting from the enqueue', () => {
+  it('draws the queued card: still, grey, and counting from the enqueue', () => {
     const html = renderAt(
       seeded(integration({
         integratingCount: 0,
         queuedCount: 1,
-        inFlight: { taskTitle: 'T2 wiki 契約、迁移与共享类型', state: 'QUEUED',
-                    startedAt: '2026-09-25T13:58:40Z' },
+        inFlight: { taskTitle: TITLE, state: 'QUEUED', startedAt: '2026-09-25T13:58:40Z' },
       })),
       '2026-09-25T13:59:20Z',
     );
 
-    expect(html).toContain('class="project-landing"');
-    expect(html).not.toContain('project-landing-running');
+    expect(html).toContain('class="session-project-landing"');
+    expect(html).not.toContain('is-running');
     expect(html).toContain('>queued<');
     expect(html).toContain('>0m 40s<');
+    // Nothing spins, and the spin is not the only thing that says so: "queued" is the word.
+    expect(html).not.toContain('data-glyph="exclamation"');
   });
 
-  it('names the count rather than one task when several are in flight', () => {
+  it('counts the jobs in the head and names each one in the body', () => {
     const html = renderAt(
-      seeded(integration({ integratingCount: 2, queuedCount: 1 })),
+      seeded(integration({
+        integratingCount: 1,
+        queuedCount: 2,
+        inFlight: { taskTitle: TITLE, state: 'RUNNING', kind: 'LAND_TASK', phase: 'CHECK',
+          startedAt: '2026-09-25T13:58:00Z', heartbeatAt: '2026-09-25T13:58:00Z' },
+        inFlightJobs: [
+          cardJob(),
+          cardJob({ jobId: 'job-2', state: 'QUEUED', phase: null, taskId: 'task-d', taskTitle: '维护：dossier 重复发出',
+            startedAt: '2026-09-25T13:58:40Z', heartbeatAt: null, runnerName: null }),
+          cardJob({ jobId: 'job-3', state: 'QUEUED', phase: null, taskId: 'task-e', taskTitle: 'P10 只读核查',
+            startedAt: '2026-09-25T13:58:50Z', heartbeatAt: null, runnerName: null }),
+        ],
+        landTasks: [landed('job-t2')],
+      })),
       '2026-09-25T13:59:20Z',
     );
-    expect(html).toContain('>3 jobs<');
-    expect(html).not.toContain('T2 wiki');
+
+    expect(html).toContain('class="spl-title">Landing 3 jobs<');
+    expect(html).toContain('class="spl-jobs"');
+    expect(html).toContain(`<span>${TITLE}</span><span class="st run">checking</span>`);
+    expect(html).toContain('<span>维护：dossier 重复发出</span><span class="st">queued</span>');
+    expect(html).toContain('<span>P10 只读核查</span><span class="st">queued</span>');
+    // The count is the head's, so no single task is also named beside it.
+    expect(html).not.toContain('spl-what');
   });
 
-  it('draws no row at all while nothing is landing', () => {
+  it('draws no card at all while nothing is landing', () => {
     const qc = newClient();
     qc.setQueryData(panoramaKey, panorama());
     qc.setQueryData(integrationKey, integration({ integratingCount: 0, queuedCount: 0, inFlight: null }));
-    expect(renderAt(qc, '2026-09-25T13:59:20Z')).not.toContain('project-landing');
+    expect(renderAt(qc, '2026-09-25T13:59:20Z')).not.toContain('session-project-landing');
 
-    // ...including when the integration read never answered: the card is the panorama's, and a row
+    // ...including when the integration read never answered: the card is the panorama's, and a card
     // it cannot draw is absent rather than blank.
     const only = newClient();
     only.setQueryData(panoramaKey, panorama());
-    expect(renderAt(only, '2026-09-25T13:59:20Z')).not.toContain('project-landing');
+    expect(renderAt(only, '2026-09-25T13:59:20Z')).not.toContain('session-project-landing');
+  });
+
+  it('turns amber for a runner the server judged silent, and offers Retry where it takes one', () => {
+    // The board's own 9:07 screen: a runner that took the job and said nothing for 11 minutes past
+    // a ten-minute limit.
+    const html = renderAt(
+      seeded(integration({
+        inFlight: { taskTitle: TITLE, state: 'RUNNING', kind: 'LAND_TASK', phase: 'FETCH',
+          startedAt: 'not a date', heartbeatAt: null },
+        inFlightJobs: [cardJob({ phase: 'FETCH', startedAt: 'not a date', heartbeatAt: null,
+          timedOut: true, limitSeconds: 600, retryable: true })],
+      })),
+      '2026-09-25T13:59:20Z',
+    );
+
+    expect(html).toContain('class="session-project-landing is-timed-out"');
+    expect(html).not.toContain('is-running');
+    // A triangle where the ring was, and the words — "Timed out" — that say the same thing without
+    // the colour.
+    expect(html).toContain('data-glyph="exclamation"');
+    expect(html).not.toContain('data-glyph="spinner"');
+    expect(html).toContain('class="spl-title">Landing<');
+    expect(html).toContain('class="spl-state">Timed out<');
+    expect(html).toContain('No report for <span class="spl-clock">');
+    expect(html).toContain('class="u">limit 10m<');
+    // Where the runner stopped, and the press — the jobs list's own door.
+    expect(html).toContain('class="spl-det">The runner took it at --:-- · stopped at fetching · no push recorded<');
+    expect(html).toContain('class="spl-primary"');
+    expect(html).toContain('>Retry<');
+    // A job nobody is waiting on: the same card, with no press at all.
+    const refused = renderAt(
+      seeded(integration({
+        inFlight: { taskTitle: TITLE, state: 'RUNNING', kind: 'LAND_TASK', phase: 'FETCH' },
+        inFlightJobs: [cardJob({ timedOut: true, limitSeconds: 600, retryable: false })],
+      })),
+      '2026-09-25T13:59:20Z',
+    );
+    expect(refused).toContain('is-timed-out');
+    expect(refused).not.toContain('spl-primary');
+    expect(refused).not.toContain('>Retry<');
+    // "Nothing to do" is for a job that lands on its own: nobody is told that of a stopped one.
+    expect(refused).not.toContain('Nothing to do');
   });
 
   it('counts a job the server cannot date from zero rather than printing NaN', () => {
@@ -390,6 +488,23 @@ describe('the landing row', () => {
     // A job that names no task — a promotion, a merge check — keeps the row's word and state.
     expect(html).toContain('>Integration<');
     expect(html).toContain('>running<');
+  });
+
+  it('presses through to the jobs list, and draws no press to a page with nothing to open', () => {
+    // The read the header itself makes: the server lists its jobs, so the card is a press and the
+    // page keeps the list behind it.
+    const listed = renderAt(seeded(integration({ inFlightJobs: [cardJob()] })), '2026-09-25T13:59:20Z');
+    expect(listed).toContain('class="spl-press"');
+    expect(listed).toContain('aria-haspopup="dialog"');
+    // The public project page hands the card in with no such read open to it: the same card, read.
+    const read = renderToStaticMarkup(
+      <MemoryRouter>
+        <ProjectPanoramaCard panorama={panorama()} projectId={PROJECT}
+          landing={landingCard(integration(), Date.parse('2026-09-25T13:59:20Z'))} />
+      </MemoryRouter>,
+    );
+    expect(read).toContain('class="session-project-landing is-running"');
+    expect(read).toContain('<div class="spl-press">');
   });
 });
 
@@ -555,8 +670,24 @@ const merge = (over: Partial<ProjectIntegrationJob> = {}): ProjectIntegrationJob
   ...over,
 });
 
-/** The view of a server that lists its jobs: the counts count them, and `inFlight` is the first. */
-const listing = (jobs: ProjectIntegrationJob[]): ProjectIntegrationView => integration({
+/** One of the project's own landings, as `landTasks` serves it: the branch a job lands on, in the
+ *  spelling the card shows and the task page's Target row prints. */
+const landed = (jobId: string, targetRef = `refs/heads/project/${PROJECT}`): ProjectLandTask => ({
+  taskId: 'task-c5',
+  taskTitle: C5,
+  integration: {
+    state: 'RUNNING', since: null, handler: null, openItemId: null, jobId, checksRunningForMs: null,
+    landTask: {
+      jobId, state: 'RUNNING', phase: 'FETCH', generation: '1', queuedAt: instant(CLAIMED - 60_000),
+      startedAt: instant(CLAIMED), heartbeatAt: null, finishedAt: null, targetRef, waitMs: 32_000,
+      blockingReason: null,
+    },
+  },
+});
+
+/** The view of a server that lists its jobs: the counts count them, `inFlight` is the first, and
+ *  every one of them is on the project branch unless the test says otherwise. */
+const listing = (jobs: ProjectIntegrationJob[], landTasks?: ProjectLandTask[]): ProjectIntegrationView => integration({
   integratingCount: jobs.filter((entry) => entry.state === 'RUNNING').length,
   queuedCount: jobs.filter((entry) => entry.state === 'QUEUED').length,
   inFlight: jobs[0] ? {
@@ -564,6 +695,7 @@ const listing = (jobs: ProjectIntegrationJob[]): ProjectIntegrationView => integ
     startedAt: jobs[0].startedAt, heartbeatAt: jobs[0].heartbeatAt,
   } : null,
   inFlightJobs: jobs,
+  landTasks: landTasks ?? jobs.map((entry) => landed(entry.jobId)),
 });
 
 describe('landingLine, from a server that lists its jobs', () => {
@@ -711,6 +843,76 @@ describe('landingJobLines', () => {
   });
 });
 
+describe('landingCard', () => {
+  it('is the row plus the branch, the job rows and the sentence', () => {
+    const running = job({ timedOut: false, retryable: false, heartbeatAt: instant(NOW - 10_000) });
+    expect(landingCard(listing([running]), NOW, { updatedAt: NOW })).toEqual({
+      word: 'Landing',
+      title: 'Landing',
+      state: 'fetching',
+      running: true,
+      timedOut: false,
+      what: C5,
+      jobs: [{ jobId: 'job-c5', taskId: 'task-c5', title: C5, state: 'fetching', running: true,
+        timedOut: false, retryable: false, detail: null }],
+      target: `project/${PROJECT}`,
+      clock: '110m 26s',
+      clockLabel: 'Elapsed',
+      wait: null,
+      updated: 'Updated just now',
+      detail: null,
+      retryJobId: null,
+    });
+  });
+
+  it('counts several jobs in the head and names each one in the rows', () => {
+    const card = landingCard(listing([job({ timedOut: false, retryable: false }), merge()]), NOW, { updatedAt: NOW })!;
+    expect(card.title).toBe('Landing 2 jobs');
+    expect(card.what).toBeNull();
+    expect(card.jobs.map((entry) => [entry.title, entry.state])).toEqual([[C5, 'fetching'], [null, 'queued']]);
+    // The head is the lead's, and a promotion lands no single task.
+    expect(card.state).toBe('fetching');
+    expect(card.running).toBe(true);
+  });
+
+  it('takes the timed-out detail and the Retry from the lead job’s own row', () => {
+    const card = landingCard(listing([job()]), NOW, { updatedAt: NOW })!;
+    expect(card.timedOut).toBe(true);
+    expect(card.state).toBe('Timed out');
+    expect(card.detail).toBe('Runner workstation-gpu took it at 20:07 · stopped at fetching · no push recorded');
+    expect(card.retryJobId).toBe('job-c5');
+    // The server's answer, not the timeout's.
+    expect(landingCard(listing([job({ retryable: false })]), NOW, { updatedAt: NOW })!.retryJobId).toBeNull();
+    // ...and only the LEAD's: the card describes the job in front, not the one behind it.
+    const fine = job({ jobId: 'job-t2', taskTitle: 'T2', timedOut: false, retryable: false,
+      heartbeatAt: instant(NOW - 5_000) });
+    expect(landingCard(listing([fine, job()]), NOW, { updatedAt: NOW })).toMatchObject({
+      timedOut: false, state: 'fetching', detail: null, retryJobId: null,
+    });
+  });
+
+  it('names no branch it cannot find among the project’s landings', () => {
+    // A merge check lands no task and is on no branch of the project's own.
+    expect(landingCard(listing([job({ kind: 'CHECK_PROMOTION', taskId: null, taskTitle: null })],
+      []), NOW, { updatedAt: NOW })!.target).toBeNull();
+    // `refs/heads/` is not what a person reads, and a landing that names no ref draws no line.
+    expect(landingCard(listing([job({ timedOut: false })], [landed('job-c5', 'main')]), NOW,
+      { updatedAt: NOW })!.target).toBe('main');
+    expect(landingCard(listing([job({ timedOut: false })], [landed('job-c5', '')]), NOW,
+      { updatedAt: NOW })!.target).toBeNull();
+  });
+
+  it('is no card while nothing is landing, and what it can be from an older server', () => {
+    expect(landingCard(integration({ inFlight: null, integratingCount: 0, queuedCount: 0 }), NOW)).toBeNull();
+    const older = landingCard(integration({ inFlightJobs: undefined, landTasks: undefined }), NOW,
+      { updatedAt: NOW })!;
+    expect(older.jobs).toEqual([]);
+    expect(older.target).toBeNull();
+    expect(older.retryJobId).toBeNull();
+    expect(older.what).toBe(TITLE);
+  });
+});
+
 describe('the landing list’s words', () => {
   it('titles the list by how many jobs it holds', () => {
     expect(landingJobsTitle(1)).toBe('1 job in flight');
@@ -735,7 +937,7 @@ describe('the landing list’s words', () => {
   });
 });
 
-describe('the landing row, from a server that lists its jobs', () => {
+describe('the landing card, from a server that lists its jobs', () => {
   afterEach(() => vi.useRealTimers());
 
   /** The header at NOW, its integration read made at NOW too, so the read is fresh. */
@@ -750,25 +952,35 @@ describe('the landing row, from a server that lists its jobs', () => {
 
   it('draws a timed-out job with a still warning mark, and says so in words', () => {
     const html = renderListed(listing([job(), merge()]));
-    expect(html).toContain('class="project-landing project-landing-timed-out"');
-    expect(html).not.toContain('project-landing-running');
+    expect(html).toContain('class="session-project-landing is-timed-out"');
+    expect(html).not.toContain('is-running');
     expect(html).toContain('data-glyph="exclamation"');
     expect(html).not.toContain('data-glyph="spinner"');
-    for (const text of ['>Timed out<', '>2 jobs · 1 timed out<', '>110m<', '>limit 10m<']) expect(html).toContain(text);
+    for (const text of ['>Timed out<', '>Landing 2 jobs · 1 timed out<', '>110m<', '>limit 10m<']) {
+      expect(html).toContain(text);
+    }
     expect(html).toContain('No report for');
+    // Both jobs, one row each, with the lead's own state in the head: nothing on a stopped row
+    // spins, and the row says it in the same word the head does.
+    expect(html).toContain('class="spl-jobs"');
+    expect(html).toContain(`<span>${C5}</span><span class="st">Timed out</span>`);
+    expect(html).toContain('<span></span><span class="st">queued</span>');
   });
 
-  it('makes the row a button that opens the list, and keeps it a line to read from an older server', () => {
+  it('makes the card a press that opens the list, and keeps it a card to read from an older server', () => {
     expect(renderListed(listing([job(), merge()]))).toMatch(
-      /<button type="button" class="project-landing-press" aria-haspopup="dialog"><div class="project-landing project-landing-timed-out">/,
+      /<button type="button" class="spl-press" aria-haspopup="dialog">/,
     );
     // The older server's own report, claimed 80 seconds before NOW. `integration()`'s instants are
     // UTC and NOW is local, so at NOW they are fresh only where the clock is 8+ hours ahead of UTC.
     const older = renderListed(integration({ inFlight: {
       ...integration().inFlight!, startedAt: instant(NOW - 80_000), heartbeatAt: instant(NOW - 80_000),
     } }));
-    expect(older).toContain('class="project-landing project-landing-running"');
-    expect(older).not.toContain('project-landing-press');
+    expect(older).toContain('class="session-project-landing is-running"');
+    // No jobs listed, so nothing opens: the card is drawn to read, and there is no "All jobs" to
+    // offer either.
+    expect(older).toContain('<div class="spl-press">');
+    expect(older).not.toContain('All jobs');
   });
 });
 
@@ -782,7 +994,7 @@ describe('manual ready work', () => {
   }
 
   it('offers the named manual task without diagnosing a runner problem, including during landing', () => {
-    const html = card({ landing: landingLine(integration(), Date.parse('2026-09-25T13:59:20Z')) });
+    const html = card({ landing: landingCard(integration(), Date.parse('2026-09-25T13:59:20Z')) });
     expect(html).toContain('Ready to start');
     expect(html).toContain('1 task is set to start manually.');
     expect(html).toContain('can start manually');
@@ -791,8 +1003,8 @@ describe('manual ready work', () => {
     expect(html).toContain('Open task');
     expect(html).toContain('Landing');
     expect(html).not.toMatch(/Dispatch needs attention|Check providers|var\(--warning-bg\)/);
-    // A card handed no way to open the list draws the row to read, not to press.
-    expect(html).not.toContain('project-landing-press');
+    // A card handed no way to open the list draws the card to read, not to press.
+    expect(html).not.toContain('aria-haspopup');
   });
 
   it('never infers manual dispatch from totals or a missing old-server field', () => {
@@ -813,7 +1025,7 @@ describe('manual ready work', () => {
   });
 });
 
-describe('the landing row’s styles', () => {
+describe('the landing card’s styles', () => {
   const css = readFileSync(fileURLToPath(new URL('../index.css', import.meta.url)), 'utf8');
 
   it('stops the spin for a reader who asked for less motion, and keeps everything else', () => {
@@ -822,13 +1034,17 @@ describe('the landing row’s styles', () => {
     // reduced-motion blocks rather than the one nearest the rule, since it has others.
     const blocks = [...css.matchAll(/@media \(prefers-reduced-motion: reduce\) \{[\s\S]*?\n\}/g)]
       .map((block) => block[0]);
-    expect(blocks.some((block) => block.includes('.project-landing-running .project-landing-ring')
-      && block.includes('animation: none'))).toBe(true);
+    for (const selector of ['.project-landing-running .project-landing-ring',
+      '.session-project-landing.is-running .spl-mark']) {
+      expect(blocks.some((block) => block.includes(selector) && block.includes('animation: none'))).toBe(true);
+    }
     expect(css).toContain('@keyframes project-landing-spin');
     // The clock's digits must not shuffle the words beside them as they change.
     expect(css).toMatch(/\.project-landing-clock \{[\s\S]*?font-variant-numeric: tabular-nums;/);
+    expect(css).toMatch(/\.session-project-landing \.spl-clock \{[\s\S]*?font-variant-numeric: tabular-nums;/);
     // The task gets two lines without squeezing the phase or elapsed time off a phone.
     expect(css).toMatch(/\.project-landing-what \{[\s\S]*?-webkit-line-clamp: 2;/);
+    expect(css).toMatch(/\.session-project-landing \.spl-what \{[\s\S]*?-webkit-line-clamp: 2;/);
   });
 
   it('draws a timed-out row’s mark and words in amber, and never spins it', () => {
@@ -836,6 +1052,20 @@ describe('the landing row’s styles', () => {
     expect(css).toMatch(/\.project-landing-timed-out \.project-landing-clock \{\s*color: var\(--warning\);/);
     // The spin is a running row's only, and a timed-out row is never drawn as one.
     expect(css).not.toMatch(/\.project-landing-timed-out[^{]*\{[^}]*animation/);
+    expect(css).not.toMatch(/\.session-project-landing\.is-timed-out[^{]*\{[^}]*animation/);
+  });
+
+  it('draws the card in the merge card’s shape, and only a running one in brand', () => {
+    expect(css).toMatch(/\.session-project-landing \{[\s\S]*?border: 1px solid var\(--border\);[\s\S]*?border-radius: 10px;[\s\S]*?background: var\(--bg-subtle\);/);
+    // The brand is a RUNNING job's, as the landing row's own rule has it; a queued card wears the
+    // grey the state word does.
+    expect(css).toMatch(/\.session-project-landing\.is-running \.spl-title \{\s*color: var\(--brand\);/);
+    expect(css).toMatch(/\.session-project-landing\.is-running \.spl-clock \{\s*color: var\(--brand\);/);
+    // A runner the server judged silent is the merge card's blocked amber, whole.
+    expect(css).toMatch(/\.session-project-landing\.is-timed-out \{\s*border-color: var\(--warning-border\);[\s\S]*?background: var\(--warning-bg\);/);
+    expect(css).toMatch(/\.session-project-landing\.is-timed-out \.spl-title,[\s\S]*?color: var\(--warning\);/);
+    // Retry is the merge card's primary, and the only press the card itself carries.
+    expect(css).toMatch(/\.session-project-landing \.spl-primary \{[\s\S]*?background: var\(--brand\);/);
   });
 });
 
