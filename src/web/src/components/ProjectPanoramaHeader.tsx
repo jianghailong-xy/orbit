@@ -652,39 +652,6 @@ function shortRef(ref: string): string {
   return ref.startsWith('refs/heads/') ? ref.slice('refs/heads/'.length) : ref;
 }
 
-/**
- * The live line itself: a ring, what is being landed, which half of the wait it is in, and how long
- * it has been there.
- *
- * The ring SPINS while the job runs and stands still while it is queued, and its colour
- * follows the same two states — but neither is the only channel: `checking` and `queued` are the
- * words, and `prefers-reduced-motion` takes the spin away without touching them. A job the server
- * judged timed out trades the ring for a warning mark that never spins, in amber, and says
- * "Timed out".
- */
-export function LandingRow({ line }: { line: LandingLine }) {
-  return (
-    <div className={line.timedOut ? 'project-landing project-landing-timed-out'
-      : line.running ? 'project-landing project-landing-running' : 'project-landing'}>
-      <div className="project-landing-heading">
-        <span className="project-landing-ring">
-          <Glyph shape={line.timedOut ? 'exclamation' : 'spinner'} color="currentColor" size={13} />
-        </span>
-        <span className="project-landing-word">{line.word}</span>
-        <span className="project-landing-state">{line.state}</span>
-      </div>
-      {line.what ? <div className="project-landing-what">{line.what}</div> : null}
-      <div className="project-landing-meta">
-        <span>{line.clockLabel} <span className="project-landing-clock">{line.clock}</span></span>
-        {/* The other half of "how long is this taking": what it waited for a runner before any of
-            the elapsed time began. */}
-        {line.wait ? <span>Waited <span className="project-landing-wait">{line.wait}</span></span> : null}
-        {line.updated ? <span>{line.updated}</span> : null}
-      </div>
-    </div>
-  );
-}
-
 /** "waited 1m 20s" — the wait as a clause of the head's one line rather than a field label: the
  *  label the row used ("Waited") is a column heading, and this is a sentence. */
 export const LANDING_WAITED = 'waited';

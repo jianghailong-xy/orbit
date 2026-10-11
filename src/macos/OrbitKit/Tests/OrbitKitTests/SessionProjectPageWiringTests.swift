@@ -480,7 +480,6 @@ final class SessionProjectPageWiringTests: XCTestCase {
                        "the merge card's landing row draws no disclosure chevron")
         XCTAssertEqual(merge.components(separatedBy: "if let landing { landingRow(landing) }").count - 1, 2,
                        "the checking and the merging card both draw the row a press opens the jobs from")
-        XCTAssertFalse(merge.contains("if let landing { ProjectLandingRow(line: landing) }"))
     }
 
     /// The head the merge check card and the landing card wear (owner decision 2026-10-11, board
@@ -509,6 +508,13 @@ final class SessionProjectPageWiringTests: XCTestCase {
         XCTAssertFalse(cardHead.contains("chevron"),
                        // The card's Retry row keeps its own › into the jobs list; the HEAD has none.
                        "the landing card's head carries no chevron either")
+        // The old compact row is gone from the app (owner decision 2026-10-11): every landing row
+        // — this page's two cards, the jobs list's rows and the Work overview — is this head.
+        for view in ["Views/SessionProjectPage.swift", "Views/ProjectLandingJobsSheet.swift",
+                     "Views/ProjectsView.swift", "Views/ProjectLandingCard.swift"] {
+            XCTAssertFalse(code(try appSource(view)).contains("ProjectLandingRow("),
+                           "\(view) draws the head, not the old row")
+        }
     }
 
     /// The merge into main lives on this page (owner decision 2026-10-06): its card under the

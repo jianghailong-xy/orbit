@@ -169,7 +169,12 @@ describe('the list of jobs in flight', () => {
     expect(rows().map((entry) => entry.getAttribute('data-job'))).toEqual(['job-c5', 'job-merge']);
 
     const c5 = row('job-c5')!;
-    expect(c5.querySelector('.project-landing')?.className).toBe('project-landing project-landing-timed-out');
+    // The row wears the merged line's head (owner decision 2026-10-11): the mark, the word, the
+    // clock — here the state, because a timed-out job has no clock left that moves — and the
+    // state, the wait and the freshness in one line under both.
+    expect(c5.querySelector('.landing-head')?.className).toBe('landing-head is-timed-out');
+    expect(c5.querySelector('.landing-head-title')?.textContent).toBe('Landing');
+    expect(c5.querySelector('.landing-head-right')?.textContent).toBe('Timed out');
     for (const text of ['Landing', 'Timed out', C5, 'No report for', '110m', 'limit 10m']) {
       expect(c5.textContent).toContain(text);
     }
@@ -183,7 +188,7 @@ describe('the list of jobs in flight', () => {
 
     // The merge into main lands no task: word, state and wait alone, nothing to press, no chevron.
     const mergeRow = row('job-merge')!;
-    for (const text of ['Merge to main', 'queued', 'Queued for', '41m 8s']) expect(mergeRow.textContent).toContain(text);
+    for (const text of ['Merge to main', 'queued', '41m 8s']) expect(mergeRow.textContent).toContain(text);
     expect(mergeRow.querySelector('a')).toBeNull();
     expect(mergeRow.querySelector('.landing-jobs-chev')).toBeNull();
     expect(mergeRow.querySelector('button')).toBeNull();
@@ -217,7 +222,7 @@ describe('the list of jobs in flight', () => {
     await settle();
     expect(rows().map((entry) => entry.getAttribute('data-job'))).toEqual(['job-c5-2', 'job-merge']);
     const next = row('job-c5-2')!;
-    expect(next.querySelector('.project-landing')?.className).toBe('project-landing');
+    expect(next.querySelector('.landing-head')?.className).toBe('landing-head');
     expect(next.textContent).toContain('queued');
     expect(next.querySelector('.landing-jobs-detail')?.textContent).toBe('Generation 2 · retried by you at 21:57');
     expect(retryButton('job-c5-2')).toBeNull();

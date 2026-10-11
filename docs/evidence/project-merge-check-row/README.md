@@ -1,7 +1,8 @@
-# Evidence: the merge check card is the merged line's own row
+# Evidence: every landing row is the merged line's own row
 
 Design board: `docs/mocks/project-merge-check-row/01-check-row.{html,png}` (owner picked ② on
-2026-10-11, and asked the Landing card's head to follow: 「②，Landing 卡的头跟着换」).
+2026-10-11, asked the Landing card's head to follow — 「②，Landing 卡的头跟着换」 — and then the
+two hosts still drawing the old compact row: 「Jobs 列表和项目列表也一起换」).
 
 ## What changed
 
@@ -27,15 +28,24 @@ into a row:
   `LandingHead` (`src/web/src/components/ProjectPanoramaHeader.tsx`) — so a card can never word a job
   differently from the row beside it.
 
-Out of scope, deliberately: the jobs list's rows (`ProjectLandingJobsSheet` / `LandingJobsSheet`)
-and the projects list's landing line keep the old compact row.
+**Every** host now draws the head, and the old compact row is gone from both ends:
+
+- the merge check card's live row and the Landing card's head (the first round);
+- the jobs list's rows (`ProjectLandingJobsSheet` / `LandingJobsSheet`) — the head, then the task
+  it lands, then what happened to it, with Retry where the server takes one;
+- the Work overview's landing on the project page — the native one now draws the same **card** the
+  browser already drew there (`ProjectLandingCardView`, one read, one shape, one set of words).
+  On the project's own page there is no second door, so `onOpenProject` is nil there and a server
+  that lists no jobs draws the card as a read, exactly as the browser does;
+- `ProjectLandingRow` / `LandingRow`, the `.project-landing*` styles and the `Waited` label they
+  alone used are removed — one row component per end, one anatomy.
 
 ## Checks
 
 | What | Result |
 | --- | --- |
 | OrbitKit `swift test` (docker `swift:6.1`, repo mounted) | 3736 tests, 5 skipped, **0 failures** |
-| Web `npx vitest run --maxWorkers=2` | **5262 passed**, 0 failed (188 s) |
+| Web `npx vitest run --maxWorkers=2` | **5262 passed**, 0 failed (190 s) |
 | `npx tsc -b` (web) | exit 0 |
 | copy guard (`copyLanguage.test.ts`) | 2 passed |
 | `npm run docs:check` | 32 files, 0 issues |
@@ -57,6 +67,7 @@ any of them again with `-dark`. Shots are in `web/`.
 | `jobs-card.png` | `Landing 2 jobs`, the lead's clocks in the head |
 | `timed-out-card.png` | the amber card: `Timed out` at the right, `No report for 11m · limit 10m` |
 | `project-page-card.png` | the same card inside Work overview |
+| `jobs-list.png` | the jobs list, opened from the card's press: a row per job, the head then the task |
 | `merge-check-dark-card.png`, `checking-dark-card.png` | the same two heads in the dark theme (every ink is a token) |
 
 ## Native

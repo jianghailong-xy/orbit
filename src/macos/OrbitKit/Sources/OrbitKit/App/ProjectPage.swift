@@ -211,7 +211,7 @@ public enum ProjectPage {
     public static let landingNothingToDo = "Nothing to do — it lands on its own."
     public static let landingAllJobs = "All jobs"
     /// "waited 1m 20s" — the wait as a clause of the head's one line rather than a field label: the
-    /// label the row used (`landingWaitLabel`) is a column heading, and this is a sentence.
+    /// row's old `Waited` was a column heading, and this is a sentence.
     public static let landingWaited = "waited"
 
     public static let integrationJobWords = [
@@ -241,9 +241,6 @@ public enum ProjectPage {
     public static func landingNoReportFor(_ minutes: Int) -> String { "No report for \(minutes)m" }
     /// And for a job claimed whose runner has never reported at all.
     public static let landingNoReportYet = "No report yet"
-    /// The landing row's label for what a claimed job waited before its clock began — web's
-    /// `LandingRow`, `landingLine`'s own `wait`.
-    public static let landingWaitLabel = "Waited"
 
     /// "1m 20s" — the landing clock, minutes and seconds ALWAYS, at every length.
     ///

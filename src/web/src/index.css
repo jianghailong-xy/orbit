@@ -18706,87 +18706,6 @@ button.chat-jump-start:hover {
     grid-row: 1 / span 2;
   }
 }
-/* The Work overview's live landing line (ProjectPanoramaHeader): the card's one moving part, shown
-   only while the platform is landing work — which is exactly the minutes its counts stand still and
-   the page reads as stopped. Full width above the cells, with the same hairline under it that
-   separates the cells from each other.
-
-   The ring uses brand blue while a fresh read reports a running job. Queued jobs and unavailable
-   updates remain grey and still. The state words carry the meaning without colour or motion,
-   including under `prefers-reduced-motion` below. */
-.project-landing {
-  padding-bottom: 14px;
-  border-bottom: 1px solid var(--border-subtle);
-  font-size: 13.5px;
-}
-.project-landing-heading {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.project-landing-meta {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  margin-top: 8px;
-  font-size: 12px;
-  color: var(--text-3);
-}
-.project-landing-ring {
-  display: inline-flex;
-  flex: none;
-  color: var(--text-3);
-}
-.project-landing-running .project-landing-ring {
-  color: var(--brand);
-  animation: project-landing-spin 1.6s linear infinite;
-}
-.project-landing-word {
-  flex: none;
-  font-weight: 600;
-  color: var(--text-2);
-}
-.project-landing-running .project-landing-word {
-  color: var(--brand);
-}
-/* The task has its own line so the phase and elapsed clock stay readable on a phone. */
-.project-landing-what {
-  margin-top: 8px;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  overflow: hidden;
-  overflow-wrap: anywhere;
-  color: var(--text-1);
-}
-.project-landing-state,
-.project-landing-clock {
-  flex: none;
-  font-size: 12.5px;
-  color: var(--text-2);
-}
-/* Tabular figures so the count does not shuffle the words beside it as the digits change. */
-.project-landing-clock {
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-.project-landing-running .project-landing-clock {
-  color: var(--brand);
-}
-.project-landing-state {
-  margin-left: auto;
-}
-/* A job the server judged timed out (docs/mocks/landing-jobs-sheet/02-timeout-retry): a warning
-   mark that never spins in place of the ring, and the word, the state and the silence in amber.
-   "Timed out" carries the same fact without the colour. */
-.project-landing-timed-out .project-landing-ring {
-  color: var(--warning-solid);
-}
-.project-landing-timed-out .project-landing-word,
-.project-landing-timed-out .project-landing-state,
-.project-landing-timed-out .project-landing-clock {
-  color: var(--warning);
-}
 /* The head the merge check card and the landing card wear over a job in flight (owner decision
    2026-10-11, board docs/mocks/project-merge-check-row): the timeline's "Merged into main" row one
    moment earlier — the same 28px circle, the word, the live clock at the right of it, and the
@@ -18917,9 +18836,17 @@ div.landing-jobs-open {
   flex: 1;
   min-width: 0;
 }
-.landing-jobs .project-landing {
-  padding-bottom: 0;
-  border-bottom: 0;
+/* The job's task, under the head — the sheet names the jobs, so the title is its own line, two
+   lines at most before the ellipsis. */
+.landing-jobs-what {
+  margin-top: 6px;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  color: var(--text-1);
+  font-size: 13px;
 }
 .landing-jobs-detail {
   margin-top: 6px;
@@ -18958,7 +18885,6 @@ div.landing-jobs-open {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .project-landing-running .project-landing-ring,
   .landing-head.is-running .landing-head-mark {
     animation: none;
   }
