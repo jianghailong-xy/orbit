@@ -4,7 +4,7 @@
 
 **状态**：已实现（2026-10-08）。owner 同日按方案定了 §9 的五项，全部取推荐项；实现中要偏离本文，先改本文。
 2026-10-09 改了 Web 的 Tab 提示（§4.3、§9 补充）；同日在 DeepSeek 端点上测过，放开连 DeepSeek 的 Claude 会话（§1.3、§3.1）；
-同日触屏的 Use 换成拍两下（§4.1、§4.3、§9 补充二）。
+同日触屏的 Use 换成拍两下（§4.1、§4.3、§9 补充二）。2026-10-11 实现 P2：非 Claude 引擎的建议由服务端用 DeepSeek 写（§8）。
 **影响面**：runner-go（Claude 适配）、shared（事件类型）、apiserver（领取载荷、账号偏好、几条读路径的排除）、web、OrbitKit + iOS/macOS、Android。
 
 ---
@@ -149,10 +149,11 @@ Claude 的实现要点（读 2.1.293 内置的 JS 得到，均可在二进制里
 ```
 promptSuggestions =
      owner.preferences.promptSuggestions !== false            // 账号开关，缺省开（§9-④）
-  && session 的引擎是 Claude，连的是测过的端点                 // Anthropic 自己的，或 DeepSeek 的（§1.3）
   && session.runSource ∈ { MANUAL, PROJECT_COORDINATOR }      // TASK_LIST_AUTO 不开（§9-③）
   && session.spawnDepth == 0                                  // 别的会话编排出来的子会话不开
   && 不是 Wiki 维护运行
+  && （引擎是 Claude 且连的是测过的端点                          // Anthropic 自己的，或 DeepSeek 的（§1.3）
+      || 引擎不是 Claude 且服务端有 DEEPSEEK_API_KEY）           // P2：建议由服务端写（§8），没 key 不让 runner 白问
 ```
 
 - 借 Claude runtime 的自定义 ModelProvider 只放开测过的端点：CLI 的「缓存是否已冷」「限流状态」两项判断要在那家的
@@ -353,6 +354,14 @@ transcript reducer 里加三行，按 seq 顺序回放，结果天然正确：
 | OrbitApp | `Views/ComposerView.swift`、`Views/SettingsSheet.swift`、`Views/SettingsAdminView.swift` | 灰字 + 拍两下（iOS，2026-10-09 前是 Use）；macOS Use ⇥ + Tab；iOS 与 macOS 设置开关 |
 | Android | core `Transcript.kt`、app `ComposerData.kt`、`SessionComposer.kt`、`SettingsScreen.kt` + `ic_suggestion.xml`，及两个新测试 | 推导；判断；placeholder + 拍两下（2026-10-09 前是 Use，新测试 `SuggestionDoubleTapTest`）；设置开关 |
 
+P2（2026-10-11，非 Claude 引擎）：
+
+| 层 | 文件 | 改动 |
+| --- | --- | --- |
+| apiserver | `sessions/turn-suggestion.ts`（新）、`runner-api/runner-api.controller.ts`、`common/prompt-suggestions-switch.ts`、`auth/tenant-isolation-runner-cases.ts` | 建议端点与 DeepSeek 生成；开关的非 Claude 分支；隔离普查用例 |
+| runner-go | `orbit_prompt_suggestion.go`（新）、`transport.go`、`session.go` | 成功 turn 结束后向服务端要建议，陈旧即弃，照常发 `prompt_suggestion`（`source: 'orbit'`） |
+| shared | `enums.ts` | 注释：`source` 增加 `'orbit'` |
+
 ---
 
 ## 8. 分期与验收
@@ -361,10 +370,13 @@ transcript reducer 里加三行，按 seq 顺序回放，结果天然正确：
   验收见交付说明：每层的单测与组件测试，以及把关键判断临时去掉后对应测试变红的反向验证。
 - **上线后要看的**：真实 Claude 会话里 `turn_end` 之后 1–2 s 入库一条 `prompt_suggestion`；采纳率（建议文本与下一条
   user turn 的内容对比，SQL 即可）；Claude 账号额度的变化。
-- **P2（可选，非 Claude 引擎）**：turn 结束后，runner 请求服务端 `POST /runner/sessions/:id/turns/:turnId/suggestion`。
+- **P2（非 Claude 引擎，2026-10-11 已实现）**：turn 结束后，runner 请求服务端 `POST /runner/sessions/:id/turns/:turnId/suggestion`。
   服务端用 DeepSeek 生成，输入只有这一轮：owner 消息 ≤600 字、最后一条助手回复 ≤2000 字。照 `naming.ts` 的做法：
   不在热路径上、永不抛错、有并发上限。结果交回 runner，runner 照样发 `prompt_suggestion`（`source: 'orbit'`）。
-  seq 仍由 runner 编号，客户端零改动。
+  seq 仍由 runner 编号，客户端零改动。实现细节：runner 只认真实用户 turn 的 `turn_end`（subtype ∈
+  `success` / `completed`，各家拼法不同）且不带 parentToolUseId 的最后一条助手回复；建议回来前会话已前进
+  （新事件入库或新 turn 在跑）就丢弃；领取开关的非 Claude 分支要求服务端持有 `DEEPSEEK_API_KEY`，没有就不让
+  runner 白问（§3.1）。
 - **P3（可选）**：没人看着的会话暂停生成（`set_prompt_suggestions_paused`，等 CLI 去掉 internal 标记再用）；
   推送通知带上建议，作为快捷回复。
 
@@ -378,7 +390,7 @@ transcript reducer 里加三行，按 seq 顺序回放，结果天然正确：
 | ② | 点 Use 之后 | **只填进输入框**，再点发送 | 直接发送（「提交」「推送」这类建议一碰就执行） |
 | ③ | 哪些会话生成 | **手动会话 + 协调会话** | 只手动会话；也包括任务列表自动跑的会话 |
 | ④ | 缺省开还是关 | **开**，设置里可关 | 关 |
-| ⑤ | 非 Claude 引擎 | **先不做** | 二期用 DeepSeek 补齐（每轮最后一条回复会发给 DeepSeek） |
+| ⑤ | 非 Claude 引擎 | **先不做**（2026-10-11 由 P2 实现取代，见 §8） | 二期用 DeepSeek 补齐（每轮最后一条回复会发给 DeepSeek） |
 
 **补充（owner，2026-10-09）**：「Web 不需要展示 Use Tab 这个，如果要提示 Tab，是否可以展示在提示文字的输入框里」。
 看过 `docs/mocks/prompt-suggestions-web-tab/01-board.png` 后回「按推荐」，四项都取推荐项：
