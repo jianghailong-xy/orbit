@@ -855,12 +855,14 @@ public enum ProjectMergeCard {
         }
     }
 
-    /// The progress card's landing line, minus a merge job: that one is drawn in the merge card.
-    public static func progressLandingLine(_ view: ProjectIntegrationView, now: Date = Date(),
-                                           updatedAt: Date? = nil,
-                                           refreshFailed: Bool = false) -> ProjectPage.LandingLine? {
+    /// A task landing on the project branch, as the card the sessions page draws under its progress
+    /// card — `ProjectPage.landingCard`, minus a merge job: that one is drawn in the merge card
+    /// (owner decision 2026-10-11, docs/mocks/project-landing-card).
+    public static func taskLandingCard(_ view: ProjectIntegrationView, now: Date = Date(),
+                                       updatedAt: Date? = nil,
+                                       refreshFailed: Bool = false) -> ProjectPage.LandingCard? {
         guard !isMergeJob(view.inFlight) else { return nil }
-        return ProjectPage.landingLine(view, now: now, updatedAt: updatedAt, refreshFailed: refreshFailed)
+        return ProjectPage.landingCard(view, now: now, updatedAt: updatedAt, refreshFailed: refreshFailed)
     }
 
     /// The merge job's live line, for the merge card — nil when the job in flight is not one.
