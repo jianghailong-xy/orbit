@@ -1,0 +1,11 @@
+Command: npm run test:ui-choices -w @orbit/web -- choices-first-option.browser.mjs --project=chromium-dark-phone
+Same worktree, same commit, three consecutive runs, each in its own memory-capped scope.
+run1 rc=0 10731 ms
+run2 rc=0 10267 ms
+run3 rc=0 10985 ms
+run1.log: 12 passed (10.1s)
+run2.log: 12 passed (9.7s)
+run3.log: 12 passed (10.4s)
+HEAD=09d94a12f4bb969d69edf75c208d8ab0f9777423 tree=74bc29723385e663cbe65c6e85dff6d701e0a40d
+porcelain-lines=0
+HEAD-after=09d94a12f4bb969d69edf75c208d8ab0f9777423 porcelain=0
