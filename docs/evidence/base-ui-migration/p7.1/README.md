@@ -28,6 +28,8 @@
 
 第 3 步的 `pretest:ui-migration` 会重建 shared 和 Web，所以它跑在**自己的**构建产物上。两次 `src/web/dist` 的逐文件 SHA-256 清单（25 个文件）逐字节相同，见 [checks/dist-hashes.txt](checks/dist-hashes.txt)：第 3 步没有用别的树，也没有改动第 1 步的产物。
 
+**在最终提交上又跑了一遍。** 证据提交 `e065ef2f1` 之后，同样三条命令按同样顺序再跑一次（这一步也用来核对本轮结论不依赖某一次运行）：构建 0（2.25 s）、Vitest 0（213.0 s，仍是 402 个文件、5,247 个用例）、`test:ui-migration` 0（186.2 s，**101 通过、11 跳过、0 意外失败、0 flaky、0 重试**，期望层仍是 44/165/43，252/252 张截图被断言，无缺失/多余/重复），`dist` 在两步之间仍逐字节相同（[checks/run2-commands.json](checks/run2-commands.json)）。两次运行的 `git rev-parse <commit>:src/web` 都是 `31aaca562bae53cc29b959399c9468b25fdf81e9`——证据提交只加 `docs/`，被测的 Web 输入没有变。
+
 ## 环境
 
 按 P0.2 的固定环境执行（[P0.2 README](../p0.2/README.md)）：Debian GNU/Linux 13.7、Node `v26.10.0`、npm `11.19.1`、Playwright **1.63.0** 锁定的 Chromium revision 1243（153.0.8010.12）与 WebKit revision 2359。`environment.mjs` 每次读到的 OS、浏览器清单、56 个字体文件及 SHA-256 与本轮写出的 `environment.json` 与 P0.2 记录**逐字节相同**，SHA-256 `fe69e82445e35a3196501a240c567b71b4039e40e434832ae9fd77f348f9cbdf`（见 [checks/environment.txt](checks/environment.txt)）。没有覆盖环境记录，也没有换字体或浏览器。
@@ -118,4 +120,4 @@ NO_COLOR=1 npm run test:ui-composer   -w @orbit/web
 
 ## 体积
 
-本目录约 264 KB，全部是文本：本 README、`checks/` 下 13 个文件（其中最大的 `p0-report.summary.json` 151 KB，附件正文已按体积约定删除）、以及交付提交三项命令的退出码与逐场景状态。没有 trace 包，没有带附件正文的原始报告，没有截图副本（截图与被引用的证据都在各自批次目录里）。
+本目录约 268 KB，全部是文本：本 README、`checks/` 下 14 个文件（其中最大的 `p0-report.summary.json` 151 KB，附件正文已按体积约定删除）、以及交付提交三项命令的退出码与逐场景状态。没有 trace 包，没有带附件正文的原始报告，没有截图副本（截图与被引用的证据都在各自批次目录里）。
