@@ -76,8 +76,9 @@ struct ProjectSpinnerRing: View {
 /// standing still while the job waits its turn.
 ///
 /// Reduce Motion stops the rotation and nothing else — `checking` and `queued` are the words beside
-/// it, and they are what actually says which half of the wait this is.
-private struct LandingRing: View {
+/// it, and they are what actually says which half of the wait this is. Drawn by the card too
+/// (`ProjectLandingCardView`), so the page has one ring and one rule about motion.
+struct LandingRing: View {
     let running: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var spun = false

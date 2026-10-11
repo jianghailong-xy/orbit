@@ -17,8 +17,9 @@ export const WIKI_MAINTENANCE_JOB = {
   /** The budget the task declares for its check, in seconds: the check reads two rows. */
   checkTimeoutSeconds: 300,
   /**
-   * The most ops ended sessions left waiting that one run of an automatic space adopts and verifies
-   * (contract `reviewModes.verification.adoption`): the rest wait for the next run, oldest first.
+   * The most ops ended sessions — and, for a server run, the space's ended runs — left waiting that one
+   * run of an automatic space adopts and verifies (contract `reviewModes.verification.adoption`): the rest
+   * wait for the next run, oldest first.
    */
   adoptOpsMax: 50,
 } as const;

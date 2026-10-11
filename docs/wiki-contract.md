@@ -536,8 +536,15 @@ owner 2026-09-27 定：Automatic 收下的 op 先由本地模型核实，再按�
     另有一道确定性的闸：接手的 add 若按结论会生效，而 space 里已有一条 active 条目与它的谱系**一字不差**（同种类、同标题、同摘要），
     就按那条的 duplicate 处理——谱系 rejected、`decision_reason = duplicate`、出处按 duplicate 的规则加到那条上（tainted 不加、
     `autoAcceptReinforce` 关着不加），回答 `reinforced`；留痕照记模型给的结论，不写 `verification_duplicate_of`（只有 duplicate 结论才点名）。
-    其余一切同提议者自己的核实：没结论不生效，出处按提议它的会话读，tainted 最多 `unreviewed`，读不到原文的封顶且不计，
-    unsupported 照常计入自动退回，space 不是 Automatic 就拒收。
+    其余一切同提议者自己的核实：没结论不生效，出处按提议它的会话读（作业的 op 照它的作业自己核实时那样读，不按任何会话），
+    tainted 最多 `unreviewed`，读不到原文的封顶且不计，unsupported 照常计入自动退回，space 不是 Automatic 就拒收。
+  - 服务端执行的维护运行（§27，2026-10-11）在 worker 里以自己的作业身份接手，走同一个 `WikiService.listVerifications` /
+    `recordVerifications`（带 adopt）：会话的运行接手的它都接手，另外还接手本 space 已结束的作业留下的——由作业提议
+    （`wiki_changeset.job_id` 有值、没有会话）、作业状态是 succeeded / failed / cancelled、又不是接手它的这个作业的 op。
+    不接手本作业自己的（它以提议者身份核实，§27.3），不接手还在 queued / running / waiting 的作业的，不接手别的 space 的；
+    和会话的 op 合成一个列表，按记下的先后、旧的在前，`adoptOpsMax` 管它们的总数。越权判定放在写结论的地方：这些 op 的结论
+    只收本 space 的 maintain 作业报来的；会话、提议它的作业自己、别的 space 的运行、别种作业报来的，一律 404，和没有这个 op 一样。
+    会话的运行（runner 门）接手的范围一字不变：列表里没有作业的 op，对它报结论照旧 404。
 - **不靠时钟**（选的是「一直等着」）：`verifying` 的 op 没有结论就一直等，不过期、不撤回、不生效，`pendingExpiryDays` 管不到它。
   让它结束等待的只有事实：结论到来；owner 整次撤回（`withdrawn`）；amend 的目标条目离开 active（`withdrawn`）。
 - **离开 Automatic 之后**：space 不再是 Automatic（owner 切走，或下面的退回）时，结论一律 409 拒收，op 原样继续等，
@@ -887,6 +894,8 @@ JSON 里是 `space.settings.maintenance` 与 `maintenance`；实现在 `src/apis
   `WIKI_NOT_MAINTENANCE_SESSION`，别的 owner 的 space 是普通 404。页从「after 与水位中较后的那个」之后开始，只取已过 120 秒
   宽限的事实（给事务留提交时间），按顺序取到 N 个会话为止（默认 20、最多 50）；返回的 `cursor` 是本页覆盖到的最后一个事实，
   `from` 是本页开始之前的位置：推进到 `from` 等于本页一条都不算处理过，下次从这里翻页会把它重新发出来。
+  页的粒度是会话、不是事实：一个会话自己的事实跨过本页覆盖到的最后一个事实时，它在这一页和下一页各被发一次，两页之间仍不重不漏
+  （`cursor`/`after` 链接着过去）。同一条走法（`pageOf`）也是维护任务期望位置的算法（§19.1），所以这个切法两条路径一致、按它翻页恰好到得了期望位置。
 - 内容照设计 §8.2 第 1 步，外加 agent 自己的轨迹：头部（会话、任务、验收标准、污染标记）；任务会话的开场 prompt（去掉任务模板尾巴）、
   owner 的消息和 steer、打断；AskUserQuestion 问答、ExitPlanMode、带理由的 DENIED；agent 的回复、thinking 里命中信号的句子、
   压缩的工具时间线（命令首行 + 结果首尾行，连续的读 / 改折成一行）；已结算任务最新 3 条 agent 评论和 owner 评论；merge receipt 的 sha；
@@ -1273,7 +1282,8 @@ JSON 里是 `maintenance.job`；迁移 `0320_wiki_maintenance_run`；服务端�
 1. **起点**：`GET …/maintenance/run` 拿 space 与仓库、维护 workspace 的工作目录、主题表、护栏数字和期望位置，同时记下运行开始、是哪个会话。
 2. **checkout**：维护 workspace 的工作目录（`~` 按 runner 账号的家目录展开——会话里 HOME 是干净目录），先 fetch；它的 origin 与 space
    的仓库（`repo_url_norm`、有记录时的根提交）不一致就判失败并说明原因。
-3. **案卷**：从游标翻页到期望位置（`until`）；自上次处理后没变的案卷跳过。
+3. **案卷**：从游标翻页到期望位置（`until`）；自上次处理后没变的案卷跳过。同一会话被相邻两页各发一次时（§16.3），这条路径
+   照旧各读一次、各计一次——只读一次是服务端执行路径 2026-10-11 起的行为（§27.3 第 2 步），两条路径随 P11 一起统一。
 4. **抽取**：每个案卷一次干净的 Claude Code 调本地模型——照演示的 A2+6：8k 案卷、不开 thinking、每例最多 6 条；提示里带 space 的仓库
    名、地址和一两句它是做什么的（取自仓库 README 的开头），要求讲的不是这个仓库的会话回答 `{"offTopic": true}`（键不区分大小写，
    按 encoding/json 读结构体字段的读法）。每条照演示的
@@ -2296,7 +2306,8 @@ op 在等），于是旧版 `orbit wiki verify` 读到空列表就正常退出�
 - space 不再是 Automatic 就地停下（`stopped` 写明），剩下的继续等。单条 op 的调用以"这不是平台的错"的方式结束（队列的 content 类）
   算这个 op 的失败，不算整次的失败；平台的错照 §24.4 回队列重试。
 - P8 的维护运行调用同一个函数的另外两个参数：维护的第二遍（带着 `refused` 的 retry 后缀再问一次，`unit = <op id>#retry`，§27.3）
-  和收养（`adopt`，最多 50 条）。
+  和收养（`adopt`，最多 50 条）。收养那一遍的结论也带着 `adopt` 写（2026-10-11 起）：写入方在运行能收养的 op 里找它，已结束会话的
+  op 和已结束作业的 op 都在其中（§7.4）。之前结论不带 `adopt`，写入方只在作业自己的 op 里找，收养到的会话 op 也被 404 拒掉。
 
 **会话这一侧**
 
@@ -2646,7 +2657,8 @@ JSON 里是 `maintenance.job.server` 和 `jobs.kindRuns.maintain`；迁移 `0407
 ### 27.2 运行的身份：作业，而不是会话
 
 - 运行没有会话，所以**运行就是它的 `wiki_job`**：`wiki_changeset.job_id`（0407）记下它，熔断按它统计本次运行此前的改动
-  （`wikiMaintenanceRunChanges`），核实列表按它找自己的 op（`proposerScope`），plan 修改建议的 `author_job_id` 也写它
+  （`wikiMaintenanceRunChanges`），核实列表按它找自己的 op（`proposerScope`），作业结束后本 space 的下一次运行也按它接手那些
+  还在等的 op（§7.4），plan 修改建议的 `author_job_id` 也写它
   （`author_session_id` 为空，`wiki_plan_proposal_author_chk` 要求恰好一个作者）。写入的 principal 是 origin `maintenance`、
   无会话、无 user（与文档构建作业相同）。
 - runner 门不再把运行的模型工作交给会话：`GET …/maintenance/run`、`GET …/spaces/:id/dossiers`、
@@ -2659,6 +2671,13 @@ JSON 里是 `maintenance.job.server` 和 `jobs.kindRuns.maintain`；迁移 `0407
 1. **仓库**：一次 `snapshot` 仓库操作拿到 origin/main 的 sha 与索引（路径与大小、文档标题与章节、符号、契约、可达提交、
    README 首段）；锚点查快照，不再有 checkout。
 2. **案卷**：`WikiMaintenance.dossierPage` 同一条服务端读法，从游标读到运行期望的位置；已处理过的（`unchanged`）跳过。
+   **同一轮里每个会话的案卷只提取一次**（2026-10-11，P10 第 93 轮：运行 6e6feff0 要提取 31 份案卷只有 18 个会话，7cf172e3 读了
+   30 个会话只有 20 个）。相邻两页各发一次同一个会话时（§16.3），两次的 unit（会话 id）与提示词逐字相同，队列直接复用第一份的请求行，
+   所以并没有多调模型、token 本来就是按调用计的；多算的是运行自己的数字——会话数、案卷数、抽到的条目、丢弃的条目、离题数。
+   会话在两次读页之间来了新记录时两个提示词不再相同，队列以「already exists with a different call」拒绝、整轮失败（生产未发生过）。
+   运行只留最新的一次读，并把它算在最后一次发出它的那一页上（§19.4 第 6 步的同一条规则）：本轮窗口里的事实两次读都在——页只发过了
+   宽限期的事实，案卷按读那一刻的记录现算——所以不丢事实，游标、处理范围和写进 wiki 的内容都不变。
+   runner 路径（§19.4 第 3 步）仍是每页各读一次，随 P11 一起删。
 3. **抽取**：每个案卷一个请求（step `extract`，unit 是案卷的 session id），同一作业最多
    `maintenance.job.rules.extractConcurrency` 个在途；离题回 `{"offTopic": true}`；每条按案卷的行与 spans 检查字段与引文、
    按快照检查锚点、按 `WIKI_MAINTAIN_JOB.planMaxTokens` 之外的同一条提示词重问一次（unit 加 `#retry`，拒绝原因写进提示词）。
@@ -2674,13 +2693,18 @@ JSON 里是 `maintenance.job.server` 和 `jobs.kindRuns.maintain`；迁移 `0407
    `rules.adoptOpsMax` 个等待中的 op；没有结论的 op 不上线，不算失败。
    **运行自己的 op 以作业为准**（2026-10-10，`maintenance.job.server.verify`）：Automatic 空间里每次尝试都核实本作业的 changeset
    （`job_id`）里仍在 `verifying` 的 op，不管是哪次尝试记下的，不再只看本次尝试记下了几个。worker 在核实步停机交还后，重放从推进过的
-   游标读，一个 op 都不记，而收养只收已结束会话的 op：以前停机时还在等的 op 没人核实，一直停在 `verifying`。交还前记下的结论随
+   游标读，一个 op 都不记，而没结束的作业的 op 别的运行不收养：以前停机时还在等的 op 没人核实，一直停在 `verifying`。交还前记下的结论随
    `carry` 带过来（§24.10），这些 op 也不在列表里了，报告每个结论只算一次。
    **第二遍用自己的单元**：第二遍把要再问的 op 放在 `<opId>#retry` 下问，和抽取的重问（`<sessionId>#retry`）一样。队列在 op 的 id 下
    存着第一遍的请求，同一单元换了调用就拒绝（§25.1）：以前第二遍每个 op 都以「already exists with a different call」被拒，一次也没
    问到模型。提示词和 runner 的第二遍逐字相同：列表此刻读出的这个 op 的提示词，第一遍的回答不是结论时再加 `wikiVerifyRetrySuffix`。
    交还期间问题变了的 op（它列出的近邻在这期间上线了），重放时在第一个单元下碰到停机前那个问题的请求，队列不把它交给别的问题，
-   由第二遍在重问单元下再问。两遍之后仍没有结论的 op 继续等着、不算失败；收养不收已结束作业的 op，之后的运行也不会再核实它。
+   由第二遍在重问单元下再问。两遍之后仍没有结论的 op 继续等着、不算失败。
+   **作业结束后由下一次运行接手**（2026-10-11，`reviewModes.verification.adoption.who`）：作业结束（succeeded / failed / cancelled）后，
+   本 space 的下一次服务端运行收养它还在等的 op，和已结束会话留下的合在一个列表里，旧的在前，每次最多 `rules.adoptOpsMax` 个，
+   结论带 `adopt` 写，报告计在 `verification.adopted` 里。运行日志「the next run adopts it/them」从此在服务端路径上成立。以前收养只收
+   已结束会话的 op，作业留下的没人再核：2026-10-10 生产上作业 3b2bd5f2 和 61e91611 各留下一个，之后每轮的 adopted 都是 0；
+   服务端收养的结论也不带 `adopt`，写入方只在作业自己的 op 里找，连已结束会话的 op 也 404。
 8. **锚点**：一页一页取 `listWikiAnchorsForJob`，每页至多 `anchorRules.verify.rules.listEntriesMax` 条（2026-10-10 起服务端用列表上限当批量：
    一次 `anchors` 仓库操作就是一次 runner 心跳的等待加一次 fetch，锚点本身每条只有毫秒级，一页越小越是白等；canary 的
    7,600–7,700 条从约 88 次操作降到约 22 次）。待复核的条目不分页攒起来，每满 `listEntriesMax` 条（最后不满的也一样）作为一次

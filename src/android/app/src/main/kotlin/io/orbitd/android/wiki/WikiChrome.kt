@@ -26,26 +26,36 @@ import io.orbitd.android.R
 import io.orbitd.android.navigation.Destination
 import io.orbitd.android.navigation.OrbitRoute
 
-/** The top bar's title and actions for the Wiki and Watch pages: iOS puts them in the navigation bar, which on
- * Android is the shell's TopAppBar. A page binds what its bar says while it is the route on screen. */
+/** The top bar's title, actions and whether it shows at all, for the Wiki and Watch pages and the session reader:
+ * iOS puts them in the navigation bar, which on Android is the shell's TopAppBar. A page binds what its bar says
+ * while it is the route on screen. */
 object PageBar {
     private var owner by mutableStateOf<OrbitRoute?>(null)
     private var title by mutableStateOf<String?>(null)
     private var subtitle by mutableStateOf<String?>(null)
     private var actions by mutableStateOf<(@Composable RowScope.() -> Unit)?>(null)
+    private var folded by mutableStateOf(false)
 
-    /** [subtitle] is the second line iOS draws under a page's title in the bar (a `.principal` title block). */
+    /** [subtitle] is the second line iOS draws under a page's title in the bar (a `.principal` title block).
+     *  [folds] takes the bar away altogether while the page itself gives the screen to its composer
+     *  (iOS `ConsoleView.foldsChrome`): back, title and the page's button come back with the keyboard. */
     @Composable
-    internal fun Bind(route: OrbitRoute, title: String?, subtitle: String? = null, actions: (@Composable RowScope.() -> Unit)? = null) {
+    internal fun Bind(route: OrbitRoute, title: String?, subtitle: String? = null, folds: Boolean = false,
+        actions: (@Composable RowScope.() -> Unit)? = null) {
         DisposableEffect(route) {
             owner = route
-            onDispose { if (owner == route) { owner = null; this@PageBar.title = null; this@PageBar.subtitle = null; this@PageBar.actions = null } }
+            onDispose { if (owner == route) { owner = null; this@PageBar.title = null; this@PageBar.subtitle = null
+                this@PageBar.actions = null; this@PageBar.folded = false } }
         }
-        SideEffect { if (owner == route) { this.title = title; this.subtitle = subtitle; this.actions = actions } }
+        SideEffect { if (owner == route) { this.title = title; this.subtitle = subtitle; this.actions = actions; this.folded = folds } }
     }
 
     /** The bar's title for a Wiki/Watch route, or null to keep the shell's own. */
     fun title(route: OrbitRoute): String? = if (owner == route) title else null
+
+    /** Whether the page on screen has folded the bar away — a phone's composer holding the keyboard
+     *  (iOS `ConsoleView.foldsChrome`). */
+    fun folds(route: OrbitRoute): Boolean = owner == route && folded
 
     /** The bar's title as the page bound it — with its second line when it has one — else [fallback]. */
     @Composable

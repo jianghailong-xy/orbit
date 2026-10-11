@@ -447,6 +447,67 @@ final class ProjectDoneTests: XCTestCase {
         XCTAssertEqual(again.doneSubject, subject)
     }
 
+    // MARK: the project's main branch
+
+    /// Where work landed is said of the project's main branch, which the document the cards read
+    /// carries (`integration.upstreamRef`): the tallies, a row's reason and details, the gaps Orbit
+    /// fills in and the receipt — master by name. Web: `ProjectDoneSettlementCard.test.tsx` › "the
+    /// done cards, by the project's main branch".
+    func testTheCardsNameTheProjectsMainBranch() throws {
+        let criteria = [
+            ProjectDoneCriterion(definitionId: "c1", satisfied: true),
+            ProjectDoneCriterion(definitionId: "c2", satisfied: true, landingReason: .noReceipt),
+        ]
+        let counts = ProjectDoneCounts(criteria: 2, met: 2, landed: 2, onMain: 1, byReason: [.noReceipt: 1])
+        let subject = ProjectDoneSubject(
+            title: "Payments", status: "DONE",
+            criteria: [.init(id: "c1", ordinal: 1, text: "It ships"), .init(id: "c2", ordinal: 2, text: "It is fast")],
+            derivedDone: ProjectDerivedDone(criteria: criteria, counts: counts), doneBy: .owner,
+            upstreamRef: "master")
+        XCTAssertEqual(subject.main, "master")
+        XCTAssertEqual(ProjectDone.tally(counts, main: subject.main),
+                       "2 criteria · 2 met · 1 landed on master · 1 merged outside Orbit")
+        XCTAssertEqual(ProjectDone.cardTally(counts, main: subject.main), "2 met · 1 landed on master · 0 nothing to land")
+        XCTAssertEqual(ProjectDone.receiptTally(subject, record: nil),
+                       "2 criteria met · 1 landed on master · 0 nothing to land · 0 gaps accepted")
+        XCTAssertEqual(ProjectDone.whyNotDoneTally(subject.derivedDone, main: subject.main),
+                       "2 criteria · 1 on master · 1 merged outside Orbit")
+        XCTAssertEqual(ProjectDone.criterionState(criteria[0], main: subject.main), "met · Landed on master")
+        XCTAssertEqual(ProjectDone.rowState(criteria[0], main: subject.main), "Landed on master")
+        XCTAssertEqual(ProjectDone.rowDetail(criteria[0], waitingOnWork: true, main: subject.main),
+                       "Goes to master after the merge check — the coordinator is handling it.")
+        XCTAssertEqual(ProjectDone.rowDetail(criteria[1], waitingOnWork: false, main: subject.main),
+                       "Orbit saw no merge for it. The coordinator checked master has it and asked you to record "
+                           + "the project done.")
+        XCTAssertEqual(ProjectDone.syntheticGaps(subject).map(\.whyNotProven),
+                       ["Orbit cannot prove this criterion is on master: Merged outside Orbit."])
+        // A document that names none is main, word for word as the cards always said it.
+        let unnamed = closeout()
+        XCTAssertEqual(unnamed.main, "main")
+        XCTAssertEqual(ProjectDone.receiptTally(unnamed, record: nil),
+                       "2 criteria met · 1 landed on main · 1 nothing to land · 0 gaps accepted")
+        XCTAssertEqual(ProjectDone.criterionState(ProjectDoneCriterion(definitionId: "c1", satisfied: true)),
+                       "met · Landed on main")
+    }
+
+    /// Both reads the cards are drawn from carry the branch: the project page's document and the
+    /// coordinator conversation's narrow view of the same `GET /projects/:id`.
+    func testBothDocumentReadsCarryTheProjectsMainBranch() throws {
+        let json = #"""
+        {"id":"p1","title":"Payments","status":"OPEN","integration":{"line":"MAIN","upstreamRef":"master"},
+         "derivedDone":{"done":false,"criteria":[],"counts":{"criteria":0,"met":0,"landed":0,"onMain":0}}}
+        """#
+        let page = try JSONDecoder().decode(ProjectDocument.self, from: Data(json.utf8))
+        let console = try JSONDecoder().decode(ProjectCriteriaDocument.self, from: Data(json.utf8))
+        XCTAssertEqual(page.doneSubject.main, "master")
+        XCTAssertEqual(console.doneSubject, page.doneSubject)
+        let cached = try JSONDecoder().decode(ProjectCriteriaDocument.self, from: JSONEncoder().encode(console))
+        XCTAssertEqual(cached.doneSubject.main, "master", "the conversation's read keeps it through its cache")
+        let unbound = try JSONDecoder().decode(ProjectCriteriaDocument.self,
+                                               from: Data(#"{"id":"p1","integration":"nonsense"}"#.utf8))
+        XCTAssertEqual(unbound.doneSubject.main, "main", "a settings half this build cannot read is main")
+    }
+
     func testAnOlderServersDocumentDrawsNoDoneCard() throws {
         let old = #"{"id":"p1","title":"t","status":"OPEN","derivedDone":{"done":false}}"#
         let page = try JSONDecoder().decode(ProjectDocument.self, from: Data(old.utf8))

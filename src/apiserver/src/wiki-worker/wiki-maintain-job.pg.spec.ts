@@ -83,7 +83,26 @@
  *  22. the second verification pass (2026-10-10): an op whose first answer is no verdict is asked again under a unit of
  *      its own, `<opId>#retry`, its prompt the first one with why that answer was not taken, as the runner's second
  *      pass words it — where the second pass used to ask under the first pass's unit, which the queue refused as asked
- *      before with another call, so it never reached the model.
+ *      before with another call, so it never reached the model;
+ *  23. what an ended run left waiting (2026-10-11, `maintenance.job.server.verify`, `reviewModes.verification.adoption`): the
+ *      ops a run's two passes left without a verdict are adopted by the space's next run, which records their verdicts and
+ *      counts them adopted — where the adoption took ended sessions' ops alone, and no later run took them up;
+ *  24. an ended session's op the server's run adopts gets its verdict, reported as adopted — where the writer looked for it
+ *      among the job's own ops and refused it 404;
+ *  25. one adoption list, oldest first, whoever proposed each op — ended sessions and runs that succeeded, failed or were
+ *      cancelled — and at most `adoptOpsMax` a run, the newest left for the next;
+ *  26. another space's ended run's ops, and those of a run of the space that has not ended (put back for a retry, parked on
+ *      a repository operation), are never asked about; and
+ *  27. the writer records an adopted verdict for an ended run's op from the space's maintenance run alone: a session, the run
+ *      that proposed it, another space's run, a job of another kind, the space's run reporting it as its own, and the space's
+ *      run while the proposer has not ended (queued, running, waiting) are each answered 404.
+ *  28. the pages of one run (2026-10-11, P10 round 93: the canary's runs 6e6feff0 and 7cf172e3 read 31 dossiers for 18 sessions
+ *      and 30 sessions for 20): a session whose own facts cross the stop a page ends on is handed out by the next page too, and
+ *      the run extracts it once — four pages hand 16 dossiers out for 14 sessions, the report counts the 14 of each it extracted,
+ *      its 14 calls are its 14 requests, and the cursor stops where the window does; and
+ *  29. a record that arrives between two page reads is read with its session — the run asks about it once, with the newest read,
+ *      where the two differing asks used to be refused as asked before with another call and fail the whole run — and the fact
+ *      that read commits waits past the cursor, for the next run.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/wiki-worker/wiki-maintain-job.pg.spec.ts
  *
@@ -115,7 +134,7 @@ import { WikiHealth } from '../wiki/wiki-health';
 import { WikiPlans } from '../wiki/wiki-plan';
 import { WikiRefusalError, WikiService, type WikiPrincipal } from '../wiki/wiki.service';
 import { WikiRepoOps, type WikiRepoOpWake } from './wiki-repo-ops';
-import { WIKI_ANCHOR_RULES, WIKI_DOCS_BUILD_JOB, WIKI_JOB, WIKI_LIMITS, WIKI_MAINTAIN_JOB, WIKI_REPO_OP_CAPABILITY, WIKI_REPO_OP_READ_CAPABILITY, WIKI_REPO_OPS } from '@orbit/shared';
+import { toUuid, WIKI_ANCHOR_RULES, WIKI_DOCS_BUILD_JOB, WIKI_JOB, WIKI_LIMITS, WIKI_MAINTAIN_JOB, WIKI_MAINTENANCE_JOB, WIKI_REPO_OP_CAPABILITY, WIKI_REPO_OP_READ_CAPABILITY, WIKI_REPO_OPS } from '@orbit/shared';
 import { WikiJobExecutor, WIKI_JOB_RUNNERS, type WikiJobRunner } from './wiki-job-executor';
 import { claimWikiJobs, reclaimExpiredWikiJobs, WIKI_JOB_HANDED_BACK } from './wiki-jobs';
 import { WikiModelRequestQueue } from './wiki-model-queue.service';
@@ -124,6 +143,7 @@ import { readWikiSystemModel, type WikiSystemModelConfig } from './wiki-system-m
 import { wikiMaintainJobPrincipal, wikiMaintainJobRunner, type WikiMaintainJobDeps } from './wiki-maintain-job';
 import { wikiStoredText } from './wiki-stored-text';
 import { wikiVerifyRetrySuffix } from './wiki-verify';
+import { wikiVerifyPrincipal } from './wiki-verify-job';
 
 const URL_ = process.env.COORDINATOR_PG_URL;
 const skip = !URL_;
@@ -3051,4 +3071,440 @@ test('a worker stopped between two anchors operations hands the run back, and th
   const report = (await runRow(h, stopped.runId)).report as Record<string, unknown>;
   assert.deepEqual(runTotals(report), runTotals(whole), 'the stopped run reports what the straight one does');
   assert.deepEqual(report.anchors, { entries: count, changed: 0, missing: 0, skipped: 0 }, 'every entry checked once, none of the first operation\'s skipped');
+});
+
+// ── What ended runs left waiting (2026-10-11, `maintenance.job.server.verify`, `reviewModes.verification.adoption`) ──
+
+/** Every verdict asked answered in prose — no verdict, on either pass — and the case files as `extract` reads them. */
+function noVerdicts(extract: (hit: Hit) => string): (hit: Hit) => string {
+  return (hit) => (hit.prompt.includes('==== CASE FILE ====') ? extract(hit) : 'The records bear every part of it out.');
+}
+
+/** A job's ops, in the order they were recorded: the ops of its changesets, by id. */
+async function opsOfJob(h: Harness, jobId: string): Promise<string[]> {
+  return (await h.sql.query<{ id: string }>(
+    `SELECT o."id" FROM "wiki_changeset_op" o JOIN "wiki_changeset" c ON c."id" = o."changeset_id" WHERE c."job_id" = $1 ORDER BY o."id"`, [jobId],
+  )).rows.map((row) => row.id);
+}
+
+/** The ops still waiting for their verdict in a space, in the order they were recorded. */
+async function waitingIn(h: Harness, spaceId: string): Promise<string[]> {
+  return (await h.sql.query<{ id: string }>(
+    `SELECT o."id" FROM "wiki_changeset_op" o JOIN "wiki_changeset" c ON c."id" = o."changeset_id"
+      WHERE c."space_id" = $1 AND o."decision" = 'verifying' ORDER BY o."id"`, [spaceId],
+  )).rows.map((row) => row.id);
+}
+
+/** The ops a job asked the model about in its verification: its `verify` requests' units. */
+async function verifyUnits(h: Harness, jobId: string): Promise<string[]> {
+  return (await h.sql.query<{ unit: string }>(
+    `SELECT "unit" FROM "wiki_model_request" WHERE "job_id" = $1 AND "step" = 'verify'`, [jobId],
+  )).rows.map((row) => row.unit).sort();
+}
+
+/** One op's decision and verdict. */
+async function verdictOf(h: Harness, opId: string): Promise<[string, string | null]> {
+  const op = await h.prisma.wikiChangesetOp.findUniqueOrThrow({ where: { id: opId }, select: { decision: true, verificationVerdict: true } });
+  return [op.decision, op.verificationVerdict];
+}
+
+/** The run of a maintain job of the fixture's space, ended as `state` says, under which its ops are proposed. */
+async function endedRun(h: Harness, fx: Fixture, state: 'succeeded' | 'failed' | 'cancelled'): Promise<string> {
+  const id = randomUUID();
+  await h.prisma.wikiJob.create({
+    data: {
+      id, ownerId: h.ownerId, spaceId: fx.spaceId, kind: 'maintain', input: {}, state, endedAt: new Date(),
+      ...(state === 'failed' ? { error: 'the run failed', failureKind: 'content' } : {}),
+    },
+  });
+  return id;
+}
+
+/** A maintain job of the fixture's space that has not ended, and is not claimed while a case runs. */
+async function unfinishedRun(h: Harness, fx: Fixture, state: 'queued' | 'waiting'): Promise<string> {
+  const id = randomUUID();
+  await h.prisma.wikiJob.create({
+    data: {
+      id, ownerId: h.ownerId, spaceId: fx.spaceId, kind: 'maintain', input: {}, state,
+      // Put back for a retry an hour away, or parked on a repository operation.
+      ...(state === 'queued' ? { attempts: 1, nextAttemptAt: new Date(Date.now() + 3_600_000) } : { waitingFor: 'repo' }),
+    },
+  });
+  return id;
+}
+
+/** Set a job's state, with what the table's CHECKs ask of it: a lease while running, what it waits for while waiting. */
+async function jobInState(h: Harness, jobId: string, state: 'queued' | 'running' | 'waiting' | 'succeeded'): Promise<void> {
+  await h.sql.query(
+    `UPDATE "wiki_job"
+        SET "state" = $2::text,
+            "lease_owner" = CASE WHEN $2::text = 'running' THEN gen_random_uuid() END,
+            "lease_generation" = CASE WHEN $2::text = 'running' THEN gen_random_uuid() END,
+            "lease_deadline_at" = CASE WHEN $2::text = 'running' THEN now() + interval '1 minute' END,
+            "waiting_for" = CASE WHEN $2::text = 'waiting' THEN 'repo' END,
+            "ended_at" = CASE WHEN $2::text = 'succeeded' THEN now() END
+      WHERE "id" = $1::uuid`,
+    [jobId, state],
+  );
+}
+
+/** The fixture's session, which has ended (SUCCEEDED), as the principal of an agent's proposal in its space. */
+function sessionOf(h: Harness, fx: Fixture): WikiPrincipal {
+  return { origin: 'agent', ownerId: h.ownerId, userId: null, sessionId: fx.sessionId, toolCallId: null };
+}
+
+/** Concepts of these titles proposed into the fixture's space by `principal`, each citing the fixture's tool call: their op ids. */
+async function proposedAs(h: Harness, principal: WikiPrincipal, fx: Fixture, titles: readonly string[]): Promise<string[]> {
+  const answer = await h.service.submitChangeset(principal, fx.spaceId, {
+    ops: titles.map((title) => ({
+      op: 'add',
+      entry: { kind: 'concept', title, summary: `${title}.`, fields: { definition: title, boundaries: title } },
+      sources: [{ kind: 'tool_call', ref: fx.callId }],
+    })),
+    rationale: 'what the spec proposes',
+    idempotencyKey: randomUUID(),
+  });
+  const ops = (answer.ops ?? []) as Array<{ status: string; opId: string }>;
+  assert.deepEqual(ops.map((op) => op.status), titles.map(() => 'pending'), `each waits for its verdict: ${JSON.stringify(answer)}`);
+  return ops.map((op) => toUuid(op.opId));
+}
+
+/** `count` titles of one proposer's own. */
+function titlesOf(who: string, count: number): string[] {
+  return Array.from({ length: count }, (_, i) => `${who} found fact ${i + 1}`);
+}
+
+test('the ops an ended run\'s two passes left without a verdict are the next run\'s to adopt: the space\'s next run verifies them, and its report counts them adopted', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const fx = await fixture(h);
+  h.maintenance.dossierPage = readerAt(h, [fx]);
+  // The first run gets no verdict for any of its three ops on either pass — production's runs 3b2bd5f2 and 61e91611 of
+  // 2026-10-10 — and ends succeeded, its ops waiting, its log naming the next run as the one that adopts them.
+  h.model.answer = noVerdicts(extractor(fx, 2));
+  await pass(h, worker(h), async () => ['succeeded', 'failed'].includes((await jobOf(h, fx.jobId)).state));
+  assert.equal((await jobOf(h, fx.jobId)).state, 'succeeded', (await jobOf(h, fx.jobId)).error ?? '');
+  const waiting = await opsOfJob(h, fx.jobId);
+  assert.equal(waiting.length, 3);
+  assert.deepEqual(await ownVerdicts(h, fx.jobId), { verdicts: 0, waiting: 3 });
+  assert.ok(runLog.includes('3 op(s) of the run\'s own got no verdict: not live, and the next run adopts them'), runLog.join('\n'));
+  assert.deepEqual(((await runRow(h, fx.runId)).report as Record<string, unknown>).verification,
+    { verified: 0, failed: 3, waitingForNextRun: 3, adopted: { ops: 0, verified: 0, failed: 0 } });
+
+  // The space's next run, with nothing new to read and a model that gives its verdicts: it adopts them.
+  runLog.length = 0;
+  h.model.answer = extractor(fx, 2);
+  const next = await runAgain(h, fx);
+  await pass(h, worker(h), async () => ['succeeded', 'failed'].includes((await jobOf(h, next.jobId)).state));
+  assert.equal((await jobOf(h, next.jobId)).state, 'succeeded', (await jobOf(h, next.jobId)).error ?? '');
+  assert.deepEqual(await ownVerdicts(h, fx.jobId), { verdicts: 3, waiting: 0 }, 'every op the ended run left waiting has its verdict');
+  const report = (await runRow(h, next.runId)).report as Record<string, unknown>;
+  assert.deepEqual(report.verification, { verified: 0, failed: 0, waitingForNextRun: 0, adopted: { ops: 3, verified: 3, failed: 0 } },
+    'the report counts them adopted, as an ended session\'s would be');
+  // Asked by the run that adopted them, each once under its own id, and applied as the run's own verdicts apply: live, as Auto.
+  assert.deepEqual(await verifyUnits(h, next.jobId), [...waiting].sort());
+  for (const op of waiting) assert.deepEqual(await verdictOf(h, op), ['auto_applied', 'supported']);
+  const lineages = await h.prisma.wikiChangesetOp.findMany({ where: { id: { in: waiting } }, select: { resultEntryId: true } });
+  const entries = await h.prisma.wikiEntry.findMany({ where: { id: { in: lineages.map((op) => op.resultEntryId!) } }, select: { status: true, trust: true } });
+  assert.deepEqual(entries.map((entry) => [entry.status, entry.trust]), [['active', 'auto'], ['active', 'auto'], ['active', 'auto']]);
+  assert.ok(runLog.includes('adopted 3 op(s) ended sessions and runs left waiting for their verification: 3 verified, 0 without a verdict, '
+    + 'which wait for the next run'), runLog.join('\n'));
+});
+
+test('an ended session\'s op the server\'s run adopts gets its verdict: reported as adopted, it is not refused as none of the job\'s own', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const fx = await fixture(h);
+  noDossiers(h, fx);
+  // The fixture's session proposed into the space and ended (SUCCEEDED) without verifying its op.
+  const [op] = await proposedAs(h, sessionOf(h, fx), fx, ['what the ended session found']);
+  h.model.answer = extractor(fx, 0);
+  await pass(h, worker(h), async () => ['succeeded', 'failed'].includes((await jobOf(h, fx.jobId)).state));
+  assert.equal((await jobOf(h, fx.jobId)).state, 'succeeded', (await jobOf(h, fx.jobId)).error ?? '');
+  // The verdict the run asked for was recorded: the writer found the op among what the run adopts, where it once
+  // answered 404 — no such op of the job's own — and the op kept waiting.
+  assert.deepEqual(runLog.filter((line) => line.includes('the server refused the verdict')), []);
+  assert.deepEqual(await verdictOf(h, op), ['auto_applied', 'supported']);
+  assert.deepEqual(((await runRow(h, fx.runId)).report as { verification: Record<string, unknown> }).verification.adopted, { ops: 1, verified: 1, failed: 0 });
+  assert.deepEqual(await verifyUnits(h, fx.jobId), [op]);
+});
+
+test('the run adopts from one list, oldest first, whoever proposed each op — ended sessions and ended runs, succeeded, failed or cancelled — and no more than adoptOpsMax a run', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const fx = await fixture(h);
+  noDossiers(h, fx);
+  // In the order they were recorded: a succeeded run's ops, an ended session's op, a failed run's, a cancelled run's —
+  // two more than a run adopts, so the newest two are left over: the failed run's last and the cancelled run's.
+  const max = WIKI_MAINTENANCE_JOB.adoptOpsMax;
+  const succeeded = await proposedAs(h, wikiMaintainJobPrincipal(h.ownerId, await endedRun(h, fx, 'succeeded')), fx, titlesOf('the succeeded run', 25));
+  await delay(5);
+  const session = await proposedAs(h, sessionOf(h, fx), fx, ['what the ended session found']);
+  await delay(5);
+  const failed = await proposedAs(h, wikiMaintainJobPrincipal(h.ownerId, await endedRun(h, fx, 'failed')), fx, titlesOf('the failed run', max - 25));
+  await delay(5);
+  const cancelled = await proposedAs(h, wikiMaintainJobPrincipal(h.ownerId, await endedRun(h, fx, 'cancelled')), fx, titlesOf('the cancelled run', 1));
+  const all = await waitingIn(h, fx.spaceId);
+  const sorted = (ids: readonly string[]): string[] => [...ids].sort();
+  assert.deepEqual(all, [...sorted(succeeded), ...session, ...sorted(failed), ...cancelled], 'recorded proposer by proposer');
+  assert.equal(all.length, max + 2);
+
+  // What the run reads is one list of them all, oldest first.
+  const read: string[] = [];
+  let after: string | null = null;
+  do {
+    const page = await h.service.listVerifications(wikiVerifyPrincipal(h.ownerId, null, fx.jobId), fx.spaceId, { adopt: true, after, limit: 20 });
+    read.push(...page.items.map((item) => toUuid(item.opId)));
+    after = page.next;
+  } while (after !== null);
+  assert.deepEqual(read, all, 'one list, in the order the ops were recorded');
+
+  // The run adopts the oldest adoptOpsMax of them: the ended session's among them, the newest left for the next run.
+  h.model.answer = extractor(fx, 0);
+  await pass(h, worker(h), async () => ['succeeded', 'failed'].includes((await jobOf(h, fx.jobId)).state));
+  assert.equal((await jobOf(h, fx.jobId)).state, 'succeeded', (await jobOf(h, fx.jobId)).error ?? '');
+  assert.deepEqual(((await runRow(h, fx.runId)).report as { verification: Record<string, unknown> }).verification.adopted, { ops: max, verified: max, failed: 0 });
+  assert.deepEqual(await verifyUnits(h, fx.jobId), sorted(all.slice(0, max)), 'the oldest adoptOpsMax, each asked once');
+  assert.deepEqual(await waitingIn(h, fx.spaceId), all.slice(max), 'the newest wait for the next run');
+  assert.deepEqual(all.slice(max), [sorted(failed)[failed.length - 1]!, cancelled[0]!]);
+  assert.deepEqual(await verdictOf(h, session[0]!), ['auto_applied', 'supported']);
+
+  // The next run takes up what is left.
+  const next = await runAgain(h, fx);
+  await pass(h, worker(h), async () => ['succeeded', 'failed'].includes((await jobOf(h, next.jobId)).state));
+  assert.equal((await jobOf(h, next.jobId)).state, 'succeeded', (await jobOf(h, next.jobId)).error ?? '');
+  assert.deepEqual(((await runRow(h, next.runId)).report as { verification: Record<string, unknown> }).verification.adopted, { ops: 2, verified: 2, failed: 0 });
+  assert.deepEqual(await verifyUnits(h, next.jobId), sorted(all.slice(max)));
+  assert.deepEqual(await waitingIn(h, fx.spaceId), []);
+});
+
+test('the ops of another space\'s ended run, and of a run of the space that has not ended, are not adopted: the run never asks about them', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const fx = await fixture(h);
+  noDossiers(h, fx);
+  // Another space of the owner's, whose own run has ended without anything to verify.
+  const other = await fixture(h);
+  await jobInState(h, other.jobId, 'succeeded');
+  // The space: an ended run's op, which the run adopts; and the ops of runs that have not ended — one put back for a
+  // retry an hour away, one parked on a repository operation — which are still theirs to verify.
+  const [adoptable] = await proposedAs(h, wikiMaintainJobPrincipal(h.ownerId, await endedRun(h, fx, 'succeeded')), fx, ['what an ended run found']);
+  const [retrying] = await proposedAs(h, wikiMaintainJobPrincipal(h.ownerId, await unfinishedRun(h, fx, 'queued')), fx, ['what a run put back found']);
+  const [parked] = await proposedAs(h, wikiMaintainJobPrincipal(h.ownerId, await unfinishedRun(h, fx, 'waiting')), fx, ['what a parked run found']);
+  // The other space: its ended run's op.
+  const [elsewhere] = await proposedAs(h, wikiMaintainJobPrincipal(h.ownerId, await endedRun(h, other, 'succeeded')), other, ['what another space\'s run found']);
+
+  h.model.answer = extractor(fx, 0);
+  await pass(h, worker(h), async () => ['succeeded', 'failed'].includes((await jobOf(h, fx.jobId)).state));
+  assert.equal((await jobOf(h, fx.jobId)).state, 'succeeded', (await jobOf(h, fx.jobId)).error ?? '');
+  assert.deepEqual(((await runRow(h, fx.runId)).report as { verification: Record<string, unknown> }).verification.adopted, { ops: 1, verified: 1, failed: 0 });
+  assert.deepEqual(await verifyUnits(h, fx.jobId), [adoptable]);
+  assert.deepEqual(await verdictOf(h, adoptable), ['auto_applied', 'supported']);
+  for (const op of [retrying, parked, elsewhere]) {
+    assert.deepEqual(await verdictOf(h, op), ['verifying', null]);
+    const asked = await h.sql.query(`SELECT 1 FROM "wiki_model_request" WHERE "owner_id" = $1 AND "unit" LIKE $2`, [h.ownerId, `${op}%`]);
+    assert.equal(asked.rowCount, 0, `nobody asked about ${op}`);
+  }
+});
+
+test('an adopted verdict for an ended run\'s op is recorded for the space\'s maintenance run alone: a session, the run that proposed it, another space\'s run, a job of another kind, and the space\'s run while the proposer has not ended are each refused 404', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const fx = await fixture(h);
+  const other = await fixture(h);
+  const proposer = await endedRun(h, fx, 'succeeded');
+  const [op] = await proposedAs(h, wikiMaintainJobPrincipal(h.ownerId, proposer), fx, ['what the ended run found']);
+  const articles = randomUUID();
+  await h.prisma.wikiJob.create({ data: { id: articles, ownerId: h.ownerId, spaceId: fx.spaceId, kind: 'articles', input: {}, state: 'queued' } });
+  const verdict = { opId: op, verdict: 'supported', reason: 'the record says this', model: MODEL };
+  const refused = async (principal: WikiPrincipal, who: string, options: { adopt?: boolean } = { adopt: true }): Promise<void> => {
+    const answer = await h.service.recordVerifications(principal, fx.spaceId, [verdict], options);
+    assert.deepEqual(answer.outcomes.map((outcome) => [outcome.status, (outcome as { httpStatus?: number }).httpStatus]), [['refused', 404]],
+      `${who}: ${JSON.stringify(answer.outcomes)}`);
+    const listed = await h.service.listVerifications(principal, fx.spaceId, { ...options, limit: 50 });
+    assert.ok(!listed.items.some((item) => toUuid(item.opId) === op), `${who} is not handed it`);
+  };
+  const runOf = (jobId: string): WikiPrincipal => wikiVerifyPrincipal(h.ownerId, null, jobId);
+
+  // A session — what the runner door's maintenance run reports as — finds no job's op at all.
+  await refused({ origin: 'maintenance', ownerId: h.ownerId, userId: null, sessionId: fx.sessionId, toolCallId: null }, 'a session');
+  // The run that proposed it: its ops are its own to verify, never its to adopt.
+  await refused(runOf(proposer), 'the run that proposed it');
+  // Another space's maintenance run, and a job of the space that is not its maintenance run.
+  await refused(runOf(other.jobId), 'another space\'s run');
+  await refused(runOf(articles), 'a job of another kind');
+  // The space's maintenance run reporting it as its own, not as adopted.
+  await refused(runOf(fx.jobId), 'the space\'s run, as its own op', {});
+  // The space's maintenance run while the run that proposed it has not ended.
+  for (const state of ['queued', 'running', 'waiting'] as const) {
+    await jobInState(h, proposer, state);
+    await refused(runOf(fx.jobId), `the space's run while the proposer is ${state}`);
+  }
+  await jobInState(h, proposer, 'succeeded');
+  assert.deepEqual(await verdictOf(h, op), ['verifying', null], 'nothing of that recorded anything');
+
+  // The space's maintenance run, once the run that proposed it has ended: handed it, and its verdict recorded and applied.
+  const listed = await h.service.listVerifications(runOf(fx.jobId), fx.spaceId, { adopt: true, limit: 50 });
+  assert.deepEqual(listed.items.map((item) => toUuid(item.opId)), [op]);
+  const answer = await h.service.recordVerifications(runOf(fx.jobId), fx.spaceId, [verdict], { adopt: true });
+  assert.deepEqual(answer.outcomes.map((outcome) => outcome.status), ['applied'], JSON.stringify(answer.outcomes));
+  assert.deepEqual(await verdictOf(h, op), ['auto_applied', 'supported']);
+});
+
+// ── A run's pages: one dossier a session ──────────────────────────────────────────────────────────
+
+/** The minute a session of the crossing fixture came to rest at: 2026-09-19T10:<minute>:00Z. */
+function restedAt(minute: number, seconds = 0): Date {
+  return new Date(Date.UTC(2026, 8, 19, 10, minute, seconds));
+}
+
+/** A merge the session recorded at `at`: a fact of its own, and a line in its dossier. */
+function mergedReceipt(h: Harness, sessionId: string, at: Date): Prisma.SessionMergeReceiptUncheckedCreateInput {
+  return {
+    ownerId: h.ownerId, sessionId, result: 'MERGED', sourceBranch: 'orbit/task-spec', sourceSha: 'd'.repeat(40),
+    targetBranch: 'main', targetShaBefore: 'e'.repeat(40), targetShaAfter: 'f'.repeat(40), recordedBy: 'AGENT',
+    idempotencyKey: `spec-${randomUUID()}`, createdAt: at,
+  };
+}
+
+/**
+ * `count` sessions of the space, come to rest a minute apart — five to a page — and two of them carrying a
+ * fact of their own past the last of those: the first's work lands after the tenth minute and the second's
+ * question is answered after the fourteenth, so each is past the page its session was read on and the page
+ * after hands it out again. Their ids, oldest first.
+ */
+async function crossingSessions(h: Harness, fx: Fixture, count: number): Promise<string[]> {
+  await h.prisma.wikiSpaceWorkspace.create({ data: { spaceId: fx.spaceId, ownerId: h.ownerId, workspaceId: fx.workspaceId } });
+  const ids: string[] = [];
+  for (let i = 1; i <= count; i += 1) {
+    const id = randomUUID();
+    await h.prisma.session.create({
+      data: {
+        id, title: `spec page session ${String(i).padStart(2, '0')}`, prompt: 'p', ownerId: h.ownerId, creatorId: h.ownerId,
+        dispatchOrigin: 'USER', status: 'SUCCEEDED', lastTurnAt: restedAt(i), workspaceId: fx.workspaceId,
+      },
+    });
+    ids.push(id);
+  }
+  await h.prisma.sessionMergeReceipt.create({ data: mergedReceipt(h, ids[0]!, restedAt(10, 30)) });
+  await h.prisma.approval.create({
+    data: {
+      sessionId: ids[1]!, toolName: 'AskUserQuestion', input: { questions: [{ question: 'which port' }] },
+      answers: { 'which port': ['the fixture\'s own'] }, status: 'ALLOWED', createdAt: restedAt(14, 30), decidedAt: restedAt(14, 30),
+    },
+  });
+  return ids;
+}
+
+/** One owner-only entry a dossier: counted by the checks, never proposed — a run of these writes no op. */
+function onePrinciple(hit: Hit): string {
+  if (!hit.prompt.includes('==== CASE FILE ====')) return '{"verdict":"supported","reason":"none of this run\'s own"}';
+  return JSON.stringify([{ kind: 'principle', title: 'spec principle', summary: 'a principle only the owner may write' }]);
+}
+
+/**
+ * The reader the run was handed, recording the sessions each page carried. It is the server's own, taken off
+ * the class rather than off the service: the harness's service is one instance for the whole file, and the
+ * cases before these leave a page of their own fixture in its place.
+ */
+function recordingReader(h: Harness, onPage?: (page: number) => Promise<void>): { pages: string[][]; reader: WikiMaintenance['dossierPage'] } {
+  const pages: string[][] = [];
+  const real = WikiMaintenance.prototype.dossierPage.bind(h.maintenance);
+  const reader = (async (ownerId: string, spaceId: string, options?: Parameters<WikiMaintenance['dossierPage']>[2]) => {
+    const page = await real(ownerId, spaceId, options);
+    pages.push(page.dossiers.map((one) => one.sessionId));
+    if (onPage) await onPage(pages.length);
+    return page;
+  }) as unknown as WikiMaintenance['dossierPage'];
+  return { pages, reader };
+}
+
+/** What one ended run of the crossing fixture reports, as the numbers the fix is about. */
+async function crossingReport(h: Harness, fx: Fixture): Promise<{ state: string; sessions: number; dossiers: number; extracted: number; principles: number; calls: number }> {
+  const job = await jobOf(h, fx.jobId);
+  const report = (await runRow(h, fx.runId)).report as { sessions: number; dossiers: number; entries: Record<string, number>; tokens: Record<string, number> };
+  return {
+    state: job.state, sessions: report.sessions, dossiers: report.dossiers,
+    extracted: report.entries.extracted, principles: report.entries.principles, calls: report.tokens.calls,
+  };
+}
+
+test('a session whose facts cross a page is read again on the next page and extracted once: the report counts a distinct dossier, not a page (P10 round 93)', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const fx = await fixture(h);
+  const ids = await crossingSessions(h, fx, 14);
+  h.model.answer = onePrinciple;
+  const { pages, reader } = recordingReader(h);
+  h.maintenance.dossierPage = reader;
+
+  const which = worker(h);
+  await pass(h, which, async () => ['succeeded', 'failed'].includes((await jobOf(h, fx.jobId)).state));
+
+  const cursor = await h.prisma.wikiCursor.findFirstOrThrow({ where: { spaceId: fx.spaceId, source: 'facts' } });
+  assert.deepEqual(
+    {
+      ...(await crossingReport(h, fx)),
+      pages: pages.map((page) => page.length), handedOut: pages.flat().length,
+      cursor: cursor.positionAt?.toISOString() ?? null,
+    },
+    {
+      // 5 + 5 + 5 + 1 sessions handed out over four pages, 16 of them and 14 distinct.
+      state: 'succeeded', pages: [5, 5, 5, 1], handedOut: 16,
+      sessions: 14, dossiers: 14, extracted: 14, principles: 14, calls: 14,
+      // The window is the reader's, not the loop's: the cursor stops at the last fact of it either way.
+      cursor: restedAt(14, 30).toISOString(),
+    },
+  );
+  // The duplication itself: the first session's work landed after the tenth minute and the second's
+  // question was answered after the fourteenth, so each sits on a page of its own after the one it opened.
+  assert.equal(pages.flat().filter((one) => one === ids[0]).length, 2, 'the first session was handed out on two pages');
+  assert.equal(pages.flat().filter((one) => one === ids[1]).length, 2, 'so was the second');
+  assert.deepEqual([pages[0]!.indexOf(ids[0]!), pages[2]!.indexOf(ids[0]!)], [0, 0]);
+  // One ask a session, each under its own id: 14 requests, no `<id>#retry` among them.
+  const asked = await h.sql.query<{ unit: string }>(
+    `SELECT "unit" FROM "wiki_model_request" WHERE "job_id" = $1::uuid AND "step" = 'extract' ORDER BY "unit"`, [fx.jobId],
+  ).then((result) => result.rows.map((row) => row.unit));
+  assert.deepEqual([asked.length, asked.filter((unit) => unit.endsWith('#retry')).length], [14, 0]);
+  assert.deepEqual([...asked].sort(), [...ids].sort(), 'every session of the window, each once');
+});
+
+test('a record that arrives between two page reads is extracted with its session, and the run neither fails nor reads it twice', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const fx = await fixture(h);
+  const ids = await crossingSessions(h, fx, 14);
+  h.model.answer = onePrinciple;
+  // Between the first page and the second: the owner writes to the first session — the one the pages hand
+  // out twice — and its work lands. Its dossier changes under the run, and its merge is a fact of its own
+  // past the window, which the next run reads.
+  const { reader } = recordingReader(h, async (page) => {
+    if (page !== 1) return;
+    await h.prisma.conversationTurn.create({
+      data: {
+        sessionId: ids[0]!, seq: 1, clientTurnId: `spec-${randomUUID()}`, sendIntent: 'NEXT_TURN', kind: 'message',
+        content: 'the fixture takes its port from the runner now', createdAt: restedAt(15),
+      },
+    });
+    await h.prisma.sessionMergeReceipt.create({ data: { ...mergedReceipt(h, ids[0]!, new Date()), sourceSha: '9'.repeat(40) } });
+  });
+  h.maintenance.dossierPage = reader;
+
+  const which = worker(h);
+  await pass(h, which, async () => ['succeeded', 'failed'].includes((await jobOf(h, fx.jobId)).state));
+
+  assert.deepEqual(
+    { ...(await crossingReport(h, fx)), refused: runLog.filter((line) => line.includes('already exists with a different call')).length },
+    { state: 'succeeded', sessions: 14, dossiers: 14, extracted: 14, principles: 14, calls: 14, refused: 0 },
+  );
+  // The one ask for that session carries the newest read of it: the owner's words are in the case file.
+  const asked = h.model.hits.filter((hit) => hit.prompt.includes('SESSION: spec page session 01\n'));
+  assert.equal(asked.length, 1, 'the session was asked about once');
+  const body = asked[0]!.prompt.slice(asked[0]!.prompt.indexOf('SESSION:'));
+  assert.ok(body.includes('the fixture takes its port from the runner now'), body.slice(0, 900));
+  // The fact it recorded mid-run is past the window: the cursor stops at the window's end, not at it.
+  const cursor = await h.prisma.wikiCursor.findFirstOrThrow({ where: { spaceId: fx.spaceId, source: 'facts' } });
+  assert.equal(cursor.positionAt?.toISOString(), restedAt(14, 30).toISOString());
+  assert.equal(await h.prisma.sessionMergeReceipt.count({ where: { sessionId: ids[0]!, createdAt: { gt: cursor.positionAt! } } }), 1,
+    'what the session recorded mid-run is still ahead of the cursor, for the next run');
 });

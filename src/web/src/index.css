@@ -4863,33 +4863,6 @@ html[data-theme='dark'] .session-tag-chip {
   background: var(--brand);
   color: #fff;
 }
-.session-project-page-landing {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 9px 12px 10px;
-  border: 0;
-  border-top: 1px solid var(--border);
-  border-radius: 0 0 10px 10px;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-.session-project-page-landing .project-landing {
-  flex: 1;
-  min-width: 0;
-  padding-bottom: 0;
-  border-bottom: 0;
-  font-size: 12.5px;
-}
-.session-project-page-landing-chev {
-  flex: none;
-  color: var(--text-4);
-  font-size: 11px;
-}
 /* The page with no rows says what is there in the middle, as iOS's empty page does. */
 .session-project-empty {
   display: flex;
@@ -4949,6 +4922,196 @@ html[data-theme='dark'] .session-tag-chip {
 }
 .session-project-progress-bar .failed {
   background: var(--error);
+}
+/* The landing in flight, as a card of its own (owner decision 2026-10-11, mock board
+   docs/mocks/project-landing-card): the merge card's shape, on the project's sessions page under
+   the progress card and inside the project page's Work overview. The row it grew out of was a
+   line inside the progress card and could say none of what this does — which branch the work goes
+   onto, who the several jobs are when there are several, and whether a stopped runner wants the
+   reader at all.
+
+   The wash says which half of the wait it is, exactly as the row did: grey while the job runs or
+   waits its turn, amber for a runner the server has judged silent (`.is-timed-out`, the same pair
+   `.session-project-merge.is-blocked` wears), and the brand on the title and clock only while the
+   job is RUNNING. Colour is never the only channel — `checking` / `queued` / `Timed out` are the
+   words beside the mark, and `prefers-reduced-motion` below stops the spin and nothing else. */
+.session-project-landing {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-subtle);
+  color: var(--text-2);
+  font-size: 12px;
+}
+/* The press is the whole card above its foot: the head can be pressed without the Retry inside the
+   card being pressed with it, and a server that lists no jobs draws the same shape to read. */
+.session-project-landing .spl-press {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.session-project-landing .spl-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.session-project-landing .spl-mark {
+  display: inline-flex;
+  flex: none;
+  color: var(--text-2);
+}
+.session-project-landing.is-running .spl-mark {
+  color: var(--brand);
+  animation: project-landing-spin 1.6s linear infinite;
+}
+.session-project-landing.is-timed-out .spl-mark {
+  color: var(--warning-solid);
+}
+.session-project-landing .spl-title {
+  flex: none;
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 600;
+}
+.session-project-landing.is-running .spl-title {
+  color: var(--brand);
+}
+.session-project-landing .spl-state {
+  margin-left: auto;
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+.session-project-landing .spl-chev {
+  flex: none;
+  color: var(--text-4);
+  font-size: 11px;
+}
+.session-project-landing .spl-what {
+  color: var(--text-1);
+  font-size: 13px;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+/* One row per job, so a title's ellipsis cannot clip the state beside it. */
+.session-project-landing .spl-jobs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.session-project-landing .spl-jobs li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  color: var(--text-1);
+  font-size: 12.5px;
+}
+.session-project-landing .spl-jobs li span:first-child {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.session-project-landing .spl-jobs .st {
+  flex: none;
+  color: var(--text-3);
+}
+.session-project-landing .spl-jobs .st.run {
+  color: var(--brand);
+  font-weight: 600;
+}
+.session-project-landing .spl-ref {
+  font-size: 12px;
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.session-project-landing .spl-meta {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.session-project-landing .spl-meta .u {
+  margin-left: auto;
+}
+.session-project-landing .spl-clock,
+.session-project-landing .spl-wait {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.session-project-landing .spl-clock {
+  color: var(--text-2);
+}
+.session-project-landing.is-running .spl-clock {
+  color: var(--brand);
+}
+.session-project-landing .spl-note {
+  color: var(--text-3);
+}
+.session-project-landing.is-timed-out {
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
+}
+.session-project-landing.is-timed-out .spl-title,
+.session-project-landing.is-timed-out .spl-state,
+.session-project-landing.is-timed-out .spl-clock {
+  color: var(--warning);
+}
+.session-project-landing .spl-det {
+  color: var(--text-3);
+}
+.session-project-landing .spl-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 2px;
+}
+/* The one press the card carries, drawn as the merge card's primary: the same door the jobs list
+   opens (POST …/integration/jobs/:jobId/retry), and only where the server offers it. */
+.session-project-landing .spl-primary {
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--brand);
+  border-radius: 6px;
+  background: var(--brand);
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.session-project-landing .spl-primary:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.session-project-landing .spl-link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--brand);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.session-project-landing .spl-error {
+  color: var(--error);
 }
 /* The merge into main on a project's sessions page, under the progress strip (owner decision
    2026-10-06): one card at four moments. Only the asking card is warm — it is the one thing on the
@@ -18787,7 +18950,8 @@ div.landing-jobs-open {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .project-landing-running .project-landing-ring {
+  .project-landing-running .project-landing-ring,
+  .session-project-landing.is-running .spl-mark {
     animation: none;
   }
 }

@@ -14,7 +14,11 @@
  *   4. the end of a server run that queued its space's articles job asks for the next round (the owner's decision of
  *      2026-10-10): in the canary's own order — the articles job queued at T, the worker's pass at T+5 s, the owner's
  *      next event at T+15 s or T+100 s — the round is made at the end, right behind the articles job, and runs first;
- *      and a run whose end leaves the space no longer due makes none, its articles job running at the next pass.
+ *      and a run whose end leaves the space no longer due makes none, its articles job running at the next pass;
+ *   5. the day counts every run the space's jobs made since midnight UTC, less the catch-up runs the contract
+ *      exempts — a plain run on a local endpoint included, which the space of 2026-10-10 read as no run at all —
+ *      and a due space whose day is used up is held where the runner path holds it, and runs again once the
+ *      owner raises the limit.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/wiki/wiki-maintain-trigger.pg.spec.ts
  *
@@ -40,6 +44,7 @@ import { WikiRefusalError, WikiService } from './wiki.service';
 import { WikiMaintenance } from './wiki-maintenance';
 import { setWikiMaintenance } from './wiki-maintenance-settings';
 import { considerWikiMaintenance, finishWikiMaintenanceJob } from './wiki-maintenance-run';
+import { wikiMaintenanceRunsToday } from './wiki-maintenance-session';
 
 const URL_ = process.env.COORDINATOR_PG_URL;
 const skip = !URL_;
@@ -286,6 +291,86 @@ test('a server run counts against the day the way a task\'s run does, and a loca
   });
   const third = await considerWikiMaintenance(prisma, h.ownerId, fx.spaceId, hints);
   assert.equal(third.made, true, `an uncounted run is no run for the day: ${JSON.stringify(third)}`);
+  delete process.env.ORBIT_WIKI_EXECUTOR;
+});
+
+/**
+ * One finished run a wiki job made, written straight onto its row: the shapes the day's count reads
+ * apart. `catchUp` NULL is a run made while the space was not behind — the ordinary run.
+ */
+async function jobRun(
+  h: Harness,
+  spaceId: string,
+  shape: { catchUp: 'active' | 'paused' | null; local: boolean; outcome: 'succeeded' | 'failed' | 'truncated' },
+): Promise<void> {
+  await h.prisma.wikiMaintenanceRun.create({
+    data: {
+      spaceId, ownerId: h.ownerId, jobId: randomUUID(),
+      catchUp: shape.catchUp, localEndpoint: shape.local, outcome: shape.outcome,
+      startedAt: new Date(), endedAt: new Date(),
+      failureKind: shape.outcome === 'succeeded' ? null : 'content',
+    },
+  });
+}
+
+/** The maintenance settings of the fixture's space, with the day's limit set to `dailyRunLimit`. */
+async function setMaintenanceLimit(h: Harness, fx: Fixture, dailyRunLimit: number): Promise<void> {
+  const space = await h.prisma.wikiSpace.findFirstOrThrow({ where: { id: fx.spaceId } });
+  const settings = (space.settings ?? {}) as Record<string, unknown>;
+  const maintenance = { ...((settings.maintenance ?? {}) as Record<string, unknown>), dailyRunLimit, workspaceId: fx.workspaceId, listId: fx.listId };
+  await h.prisma.wikiSpace.update({ where: { id: fx.spaceId }, data: { settings: { ...settings, maintenance } as never } });
+}
+
+/**
+ * Four runs of the day, one of every shape the contract tells apart (the shapes 2026-10-10 was read from,
+ * P10): the space's runs all sit on a local endpoint — the System model's vLLM — and an ordinary run's
+ * `catch_up` is NULL. Two of them count.
+ */
+async function fourRunsOfTheDay(h: Harness, spaceId: string): Promise<void> {
+  await jobRun(h, spaceId, { catchUp: null, local: true, outcome: 'succeeded' });      // counts
+  await jobRun(h, spaceId, { catchUp: 'active', local: true, outcome: 'succeeded' });  // exempt: catch-up on a local endpoint
+  await jobRun(h, spaceId, { catchUp: null, local: false, outcome: 'succeeded' });     // counts
+  await jobRun(h, spaceId, { catchUp: 'active', local: false, outcome: 'failed' });    // exempt: a catch-up run that failed
+}
+
+test('the day counts the runs a job made, a plain run on a local endpoint included', { skip }, async () => {
+  const h = await boot();
+  process.env.ORBIT_WIKI_EXECUTOR = 'server';
+  const fx = await fixture(h, {
+    settings: { reviewMode: 'manual', maintenance: { enabled: true, workspaceId: 'x', listId: 'x', dailyRunLimit: 8 } },
+  });
+  await setMaintenanceLimit(h, fx, 8);
+  await fourRunsOfTheDay(h, fx.spaceId);
+  const today = await wikiMaintenanceRunsToday(h.prisma as unknown as PrismaService, h.ownerId, fx.spaceId);
+  assert.deepEqual({ limit: today.limit, used: today.used, remaining: today.remaining }, { limit: 8, used: 2, remaining: 6 },
+    'two of the four runs count: the exempt catch-up runs are left out, and no ordinary run with it');
+  delete process.env.ORBIT_WIKI_EXECUTOR;
+});
+
+test('a due space whose day is used up is held, and runs again once the owner raises the limit', { skip }, async () => {
+  const h = await boot();
+  process.env.ORBIT_WIKI_EXECUTOR = 'server';
+  delete process.env.ORBIT_WIKI_EXECUTOR_CANARY_OWNERS;
+  const prisma = h.prisma as unknown as PrismaService;
+  const fx = await fixture(h, {
+    settings: { reviewMode: 'manual', maintenance: { enabled: true, workspaceId: 'x', listId: 'x', dailyRunLimit: 8 } },
+  });
+  await setMaintenanceLimit(h, fx, 8);
+  await fourRunsOfTheDay(h, fx.spaceId);
+
+  // The limit down to what the day already holds: the next fact makes no run, and the space says why.
+  await setMaintenanceLimit(h, fx, 2);
+  const hints = { sessionIds: [fx.sessionId], taskIds: [] as string[] };
+  assert.deepEqual(await considerWikiMaintenance(prisma, h.ownerId, fx.spaceId, hints), { made: false, spaceId: fx.spaceId, why: 'daily_limit_reached' },
+    'the day is used up, and the space is held with the reason the runner path writes');
+  assert.equal(await h.prisma.wikiJob.count({ where: { spaceId: fx.spaceId, kind: 'maintain' } }), 0, 'no run is made');
+  const held = await h.prisma.wikiCursor.findFirstOrThrow({ where: { spaceId: fx.spaceId, source: 'facts' } });
+  assert.equal(held.heldReason, 'daily_limit_reached', 'the cursor carries the hold');
+
+  // Room for one more: the same fact makes the run.
+  await setMaintenanceLimit(h, fx, 3);
+  const made = await considerWikiMaintenance(prisma, h.ownerId, fx.spaceId, hints);
+  assert.equal(made.made, true, `the day has room again: ${JSON.stringify(made)}`);
   delete process.env.ORBIT_WIKI_EXECUTOR;
 });
 
