@@ -81,7 +81,22 @@ y 的实测：650 与 694 分别是「无按钮」「有按钮」两种样例由
 
 ## 回归检查
 
-在交付树（本会话工作树，`62ab70582`）上串行运行，一步一个 memory-capped scope 与私有网络命名空间（[scripts/suites.sh](scripts/suites.sh)；`p0-ref` 跑在起点树 `743d21ab2` 的检出上）。结果表与日志、精简报告在 [runs/suites/](runs/suites/)；本文件在运行中提交过一次，结果表随运行结束补上（见下一个提交）。
+在交付树（本会话工作树，`62ab70582`）上串行运行，一步一个 memory-capped scope 与私有网络命名空间（[scripts/suites.sh](scripts/suites.sh)、[scripts/step.sh](scripts/step.sh)；`*-ref` 跑在起点树 `743d21ab2` 的检出上）。日志与精简报告在 [runs/suites/](runs/suites/)：
+
+| 检查 | 命令（src/web 下） | 结果 |
+| --- | --- | --- |
+| choices 入口，八环境 | `npx playwright test --config ui-migration/choices.config.mjs` | **760 passed**，0 failed（含本条修复的用例，两个 WebKit 手机环境）|
+| overlays 入口，八环境 | `npx playwright test --config ui-migration/overlays.config.mjs` | **120 passed** |
+| 标准 P0（交付） | `npm run test:ui-migration` | **101 passed、11 skipped**，0 failed |
+| 标准 P0（起点树 `743d21ab2`，无修复） | 同上 | 见下（对照） |
+| P2 keyboard-window 第 1 批，Select 序列 3+3 | `… keyboard-window.config.mjs --project chromium-dark-desktop --grep "$SELECT_TARGETS… sample [0-2]$"` | **222 passed** |
+| P2 keyboard-window 第 1 批，其余序列 1+1 | 同配置 `--grep-invert " select-" --grep "(burst\|paced) sample 0$"` | **66 passed** |
+| P2 keyboard-window 第 2 批，Select 序列 3+3 | `KW2_BURST=3 KW2_PACED=3 … keyboard-window-2.config.mjs --grep "$SELECT_TARGETS"` | **294 passed** |
+| P2 keyboard-window 第 2 批，其余序列 1+1 | `KW2_BURST=1 KW2_PACED=1 … --grep-invert " select-"` | 248 passed、**88 failed**：全部是 `antd-*` 目标（`antd-submenu` 30、`antd-session` 30、`antd-dialog` 14、`antd-confirm` 14），`element(s) not found`（P6 起样例不再画 AntD 一侧，这些目标等的是旧 AntD 的菜单项）。对照见下 |
+| P2 keyboard-window 第 2 批，其余序列（起点树 `743d21ab2`，无修复） | 同左，跑在起点树 | 见下（对照） |
+| 合并检查 | `npm run build -w @orbit/web && npm run test -w @orbit/web` | 构建通过；Vitest **403 文件、5250 测试全部通过** |
+
+`audit-antd.mjs --check-owners`（作业指导要求交证据前跑）：`unowned: []`、`pending: []`（[runs/suites/audit-antd.json](runs/suites/audit-antd.json)）。OrbitKit 不涉及：`grep -rln "components/ui/" src/macos` 无命中，`*CopyParityTests` 不读这两个文件。
 
 ## 复现
 
