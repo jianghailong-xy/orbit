@@ -112,6 +112,11 @@ final class ProjectPageSectionsCopyParityTests: XCTestCase {
         // and the count is the one the row already counts.
         assertSays(web, "title: several && line.what ? `${line.word} ${line.what}` : line.word,",
                    in: Self.panorama)
+        // The head both cards wear since 2026-10-11 (board docs/mocks/project-merge-check-row): one
+        // new word, and one composition the two ends run — `ProjectPage.landingHead` /
+        // `landingHead`, which the merge check card and the landing card each read.
+        assertSays(web, "export const LANDING_WAITED = '\(ProjectPage.landingWaited)';", in: Self.panorama)
+        assertSays(web, "export function landingHead(", in: Self.panorama)
     }
 
     func testTheCoordinatorCardsWords() throws {

@@ -1,7 +1,6 @@
 import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 import { queryOptions, useQuery } from '@tanstack/react-query';
-import { RightOutlined } from '@ant-design/icons';
 import {
   INTEGRATION_CLAIM_STALE_MS,
   type IntegrationJobPhase,
@@ -686,14 +685,72 @@ export function LandingRow({ line }: { line: LandingLine }) {
   );
 }
 
-/** The landing row as a press that lists every job in flight (`LandingJobsSheet`): a button, so the
- *  keyboard reaches it, named by the row's own words, with a chevron saying it opens something. */
-export function LandingRowButton({ line, onPress }: { line: LandingLine; onPress: () => void }) {
+/** "waited 1m 20s" — the wait as a clause of the head's one line rather than a field label: the
+ *  label the row used ("Waited") is a column heading, and this is a sentence. */
+export const LANDING_WAITED = 'waited';
+
+/**
+ * The head's two slots (iOS `ProjectPage.landingHead`), from the row's own facts: the live clock at
+ * the right of the title — or the state word for a job that has no clock left that moves — and the
+ * one line under it, where the state, the wait and the freshness go.
+ *
+ * A timed-out job's line is the silence measured against the limit it went past, "No report for
+ * 110m · limit 10m". An older server's "No report" is that same fact said once, so the line is its
+ * own "No report for 5m" and never "No report · No report for 5m". Everything else reads as one
+ * sentence: "checking · waited 1m 20s · updated just now", the freshness's capital folded away.
+ */
+export interface LandingHeadShape {
+  right: string;
+  isClock: boolean;
+  detail: string;
+}
+
+export function landingHead(
+  line: Pick<LandingLine, 'state' | 'timedOut' | 'clockLabel' | 'clock' | 'wait' | 'updated'>,
+): LandingHeadShape {
+  if (line.timedOut) {
+    const silence = `${line.clockLabel} ${line.clock}`;
+    return { right: line.state, isClock: false, detail: [silence, line.updated].filter(Boolean).join(' · ') };
+  }
+  if (line.state === LANDING_NO_REPORT) {
+    return { right: line.clock, isClock: true, detail: line.updated ?? line.state };
+  }
+  const parts = [line.state];
+  if (line.wait) parts.push(`${LANDING_WAITED} ${line.wait}`);
+  if (line.updated) parts.push(line.updated[0].toLowerCase() + line.updated.slice(1));
+  return { right: line.clock, isClock: true, detail: parts.join(' · ') };
+}
+
+/**
+ * The head the merge check card and the landing card wear over a job in flight (owner decision
+ * 2026-10-11, board docs/mocks/project-merge-check-row): the timeline's "Merged into main" row one
+ * moment earlier — the same 28px circle, the word, the live clock at the right of it, and one line
+ * under both. The check and the merge it becomes are then one shape instead of a card collapsing
+ * into a row. iOS draws the same head from the same slots.
+ *
+ * The chevron the heads used to carry is gone: the whole row is the press (the merged line opens its
+ * receipt the same way), and the words beside the clock say what they have to say.
+ */
+export function LandingHead({ title, head, running, timedOut }: {
+  title: string;
+  head: LandingHeadShape;
+  running: boolean;
+  timedOut: boolean;
+}) {
+  const shape = timedOut ? ' is-timed-out' : running ? ' is-running' : '';
   return (
-    <button type="button" className="project-landing-press" aria-haspopup="dialog" onClick={onPress}>
-      <LandingRow line={line} />
-      <RightOutlined className="project-landing-press-chev" aria-hidden />
-    </button>
+    <span className={`landing-head${shape}`}>
+      <span className="landing-head-mark">
+        <Glyph shape={timedOut ? 'exclamation' : 'spinner'} color="currentColor" size={15} />
+      </span>
+      <span className="landing-head-body">
+        <span className="landing-head-line">
+          <span className="landing-head-title">{title}</span>
+          <span className={`landing-head-right${head.isClock ? '' : ' is-word'}`}>{head.right}</span>
+        </span>
+        <span className="landing-head-detail">{head.detail}</span>
+      </span>
+    </span>
   );
 }
 

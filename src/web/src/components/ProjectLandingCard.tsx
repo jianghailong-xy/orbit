@@ -4,10 +4,11 @@ import type { ProjectIntegrationView } from '@orbit/shared';
 import { api } from '../api';
 import { projectIntegrationQuery } from '../lib/queries';
 import {
-  Glyph,
   LANDING_ALL_JOBS,
   LANDING_NOTHING_TO_DO,
   LANDING_WORDS,
+  LandingHead,
+  landingHead,
   landingOnto,
   type LandingCard,
 } from './ProjectPanoramaHeader';
@@ -19,11 +20,12 @@ import {
  * progress card on the project's sessions page and inside the Work overview card on the project
  * page, from the card model `landingCard` builds; iOS draws the same card from the same read.
  *
- * Head: the ring (spinning while the job runs, still while it waits its turn, a triangle when the
- * server judged its runner silent — `prefers-reduced-motion` stops the spin and nothing else), the
- * word, the phase and the chevron. Body: what is landing — the task's title, or one row per job
- * with each one's own state — the branch it lands on, and the three clocks the landing row already
- * counted.
+ * Head: the merged line's own anatomy (owner decision 2026-10-11, board
+ * docs/mocks/project-merge-check-row) — the 28px circle with the ring (spinning while the job runs,
+ * still while it waits its turn, a triangle when the server judged its runner silent;
+ * `prefers-reduced-motion` stops the spin and nothing else), the word, the live clock at the right
+ * of it, and the state, the wait and the freshness in one line under both. Body: what is landing —
+ * the task's title, or one row per job with each one's own state — and the branch it lands on.
  *
  * Read-only apart from Retry, which is the Jobs list's own door
  * (`POST /projects/:id/integration/jobs/:jobId/retry`) and appears only where the server says a
@@ -49,14 +51,8 @@ export function ProjectLandingCard({
   const shape = card.timedOut ? ' is-timed-out' : card.running ? ' is-running' : '';
   const body = (
     <>
-      <span className="spl-head">
-        <span className="spl-mark">
-          <Glyph shape={card.timedOut ? 'exclamation' : 'spinner'} color="currentColor" size={13} />
-        </span>
-        <span className="spl-title">{card.title}</span>
-        <span className="spl-state">{card.state}</span>
-        {onPress ? <span className="spl-chev">›</span> : null}
-      </span>
+      <LandingHead title={card.title} head={landingHead(card)} running={card.running}
+        timedOut={card.timedOut} />
       {card.jobs.length > 1 ? (
         <ul className="spl-jobs">
           {card.jobs.map((job) => (
@@ -72,19 +68,6 @@ export function ProjectLandingCard({
       {/* The branch this lands on — the task page's own Target field, the way every page here says
           a branch. */}
       {card.target ? <span className="spl-ref">{landingOnto(card.target)}</span> : null}
-      <span className="spl-meta">
-        <span>
-          {card.clockLabel} <span className="spl-clock">{card.clock}</span>
-        </span>
-        {/* The other half of "how long is this taking": what the job waited for a runner before any
-            of the elapsed time began. */}
-        {card.wait ? (
-          <span>
-            Waited <span className="spl-wait">{card.wait}</span>
-          </span>
-        ) : null}
-        {card.updated ? <span className="u">{card.updated}</span> : null}
-      </span>
       {card.timedOut ? (
         card.detail ? <span className="spl-det">{card.detail}</span> : null
       ) : (

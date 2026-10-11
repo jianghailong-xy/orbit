@@ -4962,42 +4962,6 @@ html[data-theme='dark'] .session-tag-chip {
   text-align: left;
   cursor: pointer;
 }
-.session-project-landing .spl-head {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.session-project-landing .spl-mark {
-  display: inline-flex;
-  flex: none;
-  color: var(--text-2);
-}
-.session-project-landing.is-running .spl-mark {
-  color: var(--brand);
-  animation: project-landing-spin 1.6s linear infinite;
-}
-.session-project-landing.is-timed-out .spl-mark {
-  color: var(--warning-solid);
-}
-.session-project-landing .spl-title {
-  flex: none;
-  color: var(--text-2);
-  font-size: 13px;
-  font-weight: 600;
-}
-.session-project-landing.is-running .spl-title {
-  color: var(--brand);
-}
-.session-project-landing .spl-state {
-  margin-left: auto;
-  font-size: 12.5px;
-  color: var(--text-2);
-}
-.session-project-landing .spl-chev {
-  flex: none;
-  color: var(--text-4);
-  font-size: 11px;
-}
 .session-project-landing .spl-what {
   color: var(--text-1);
   font-size: 13px;
@@ -5042,37 +5006,12 @@ html[data-theme='dark'] .session-tag-chip {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.session-project-landing .spl-meta {
-  display: flex;
-  gap: 12px;
-  font-size: 12px;
-  color: var(--text-3);
-}
-.session-project-landing .spl-meta .u {
-  margin-left: auto;
-}
-.session-project-landing .spl-clock,
-.session-project-landing .spl-wait {
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-.session-project-landing .spl-clock {
-  color: var(--text-2);
-}
-.session-project-landing.is-running .spl-clock {
-  color: var(--brand);
-}
 .session-project-landing .spl-note {
   color: var(--text-3);
 }
 .session-project-landing.is-timed-out {
   border-color: var(--warning-border);
   background: var(--warning-bg);
-}
-.session-project-landing.is-timed-out .spl-title,
-.session-project-landing.is-timed-out .spl-state,
-.session-project-landing.is-timed-out .spl-clock {
-  color: var(--warning);
 }
 .session-project-landing .spl-det {
   color: var(--text-3);
@@ -18848,29 +18787,98 @@ button.chat-jump-start:hover {
 .project-landing-timed-out .project-landing-clock {
   color: var(--warning);
 }
-/* The landing row as a press that lists every job in flight (LandingRowButton): the row and a
-   chevron, with the row's own spacing and hairline drawn under both. */
-.project-landing-press {
+/* The head the merge check card and the landing card wear over a job in flight (owner decision
+   2026-10-11, board docs/mocks/project-merge-check-row): the timeline's "Merged into main" row one
+   moment earlier — the same 28px circle, the word, the live clock at the right of it, and the
+   state, the wait and the freshness in one line under both. The check and the merge it becomes are
+   one shape. The colour rules carry the head's own state, so it reads the same in either host; the
+   words beside the mark say the same thing without colour. */
+.landing-head {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
+}
+.landing-head-mark {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--bg-hover);
+  color: var(--text-2);
+}
+.landing-head.is-running .landing-head-mark {
+  background: var(--brand-tint);
+  color: var(--brand);
+  animation: project-landing-spin 1.6s linear infinite;
+}
+.landing-head.is-timed-out .landing-head-mark {
+  background: var(--warning-bg);
+  color: var(--warning-solid);
+}
+.landing-head-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.landing-head-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.landing-head-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-1);
+  font-size: 13px;
+  font-weight: 600;
+}
+.landing-head.is-timed-out .landing-head-title {
+  color: var(--warning);
+}
+/* The live number, which is the one thing on the head that moves: tabular digits so it does not
+   jitter as it counts, and the ink the mark wears. */
+.landing-head-right {
+  flex: none;
+  color: var(--text-2);
+  font-size: 12.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.landing-head.is-running .landing-head-right {
+  color: var(--brand);
+}
+.landing-head.is-timed-out .landing-head-right {
+  color: var(--warning);
+}
+.landing-head-detail {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-3);
+  font-size: 12px;
+}
+/* The press that opens the jobs in flight: the whole head, as the merged line is the whole row's
+   press — the chevron the head used to carry is gone. */
+.landing-head-press {
+  display: block;
   width: 100%;
-  padding: 0 0 14px;
+  padding: 0;
   border: 0;
-  border-bottom: 1px solid var(--border-subtle);
   background: transparent;
   color: inherit;
   font: inherit;
   text-align: left;
   cursor: pointer;
 }
-.project-landing-press .project-landing {
-  flex: 1;
-  min-width: 0;
-  padding-bottom: 0;
-  border-bottom: 0;
-}
-.project-landing-press-chev,
 .landing-jobs-chev {
   flex: none;
   color: var(--text-4);
@@ -18951,7 +18959,7 @@ div.landing-jobs-open {
 }
 @media (prefers-reduced-motion: reduce) {
   .project-landing-running .project-landing-ring,
-  .session-project-landing.is-running .spl-mark {
+  .landing-head.is-running .landing-head-mark {
     animation: none;
   }
 }
