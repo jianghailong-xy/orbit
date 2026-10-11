@@ -62,7 +62,7 @@ final class SessionListSwitchWiringTests: XCTestCase {
         let load = try slice(agents, from: "func loadSessions(agentID: String, view: SessionView, reset: Bool = false) async {",
                              to: "\n    }\n")
 
-        let order = try positions(["let isCurrent = { lastSessionQuery.map",
+        let order = try positions(["let isCurrent = { self.lastSessionQuery.map",
                                    "let read = try await api.listSessions(view: view)",
                                    "guard isCurrent() else { return }",
                                    "agentSessions = SessionFilter.forAgent(all, agentID: agentID, view: view)"], in: load)
