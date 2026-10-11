@@ -114,7 +114,7 @@ for (const motion of ['no-preference', 'reduce']) test(`${motion} Dialog Popover
 
 for (const kind of ['attachment', 'expiry', 'search', 'multiple', 'popover', 'tooltip']) test(`reduced motion ${kind} has no transition and dismisses cleanly`, async ({ page }, info) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  await page.goto(`${fixture}?sample=${kind}&system=orbit`);
+  await page.goto(`${fixture}?sample=${kind}`);
   const trigger = page.getByRole('region', { name: 'Appearance sample' }).getByRole(['expiry', 'search', 'multiple'].includes(kind) ? 'combobox' : 'button');
   if (kind === 'tooltip') await trigger.focus();
   else await activate(trigger, info);
@@ -131,7 +131,7 @@ for (const kind of ['attachment', 'expiry', 'search', 'multiple', 'popover', 'to
 
 for (const kind of ['attachment', 'expiry', 'search', 'popover']) test(`normal ${kind} can reopen during exit without stale unmount`, async ({ page }, info) => {
   await page.emulateMedia({ reducedMotion: 'no-preference' });
-  await page.goto(`${fixture}?sample=${kind}&system=orbit`);
+  await page.goto(`${fixture}?sample=${kind}`);
   const trigger = page.getByRole('region', { name: 'Appearance sample' }).getByRole(['expiry', 'search'].includes(kind) ? 'combobox' : 'button');
   await activate(trigger, info);
   const popup = page.locator('.sample-surface');

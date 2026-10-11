@@ -239,20 +239,6 @@ test('async confirmation keeps pending locks, accessible failure feedback and su
   await attach(info, 'confirmation', { requests, pendingCancelDisabled: true, pendingEscapeIgnored: true, failureRetained: true, toastDismissDidNotCancel: true, retrySucceeded: true, focusReturned: true });
 });
 
-test('legacy AntApp confirmation still works with the same notification service', async ({ page }, info) => {
-  await button(page, 'Legacy confirm').click();
-  const legacy = page.getByRole('dialog', { name: 'Legacy confirmation', exact: true });
-  await expect(legacy).toBeVisible();
-  // AntApp's entrance can briefly have a stable hit box at opacity 0 / scale(.2).
-  // Wait for its painted, settled state before the real pointer click.
-  await expect(legacy).toHaveCSS('opacity', '1');
-  await expect(legacy).toHaveCSS('transform', 'none');
-  await legacy.getByRole('button', { name: 'OK', exact: true }).click();
-  await expect(legacy).not.toBeVisible();
-  await expect(notices(page).getByText('Legacy confirmed', { exact: true })).toBeVisible();
-  await shot(info, 'legacy-confirmed', page);
-});
-
 test('retained closed overlays release notifications and normal motion settles at the original origin', async ({ page }, info) => {
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   const finishAnimations = () => page.evaluate(async () => {

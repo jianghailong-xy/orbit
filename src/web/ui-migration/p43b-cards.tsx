@@ -1,19 +1,19 @@
-// The stylesheets in main.tsx's order: the overlays', the review cards' and highlight.js's ahead of the
-// reset and index.css, as the app's production build links them.
+// The stylesheets in main.tsx's order: the app root's first, the overlays', the review cards' and
+// highlight.js's ahead of the reset and index.css, as the app's production build links them.
+import '../src/components/ui/root.css';
 import '../src/components/ui/Overlay.css';
 import '../src/components/ReviewCard.css';
 import 'highlight.js/styles/github.css';
-import 'antd/dist/reset.css';
+import '../src/components/ui/reset.css';
 import '../src/index.css';
 import '../src/components/ui/foundation.css';
-import { App as AntApp, ConfigProvider } from 'antd';
 import { StrictMode, useState, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter } from 'react-router-dom';
 import type { ConfirmationReturnCard, ConfirmationReviewRequestCard, ProjectClosedQuestion } from '@orbit/shared';
-import { ThemeProvider, useThemeMode } from '../src/lib/theme';
-import { darkTheme, lightTheme } from '../src/theme';
+import { ThemeProvider } from '../src/lib/theme';
+import { AppRoot } from '../src/components/ui/AppRoot';
 import { ToastViewport } from '../src/components/ToastViewport';
 import { ReviewRequestedCard, SentBackByReviewerCard } from '../src/components/ConfirmationReviewTurnCards';
 import { AnsweredQuestionCard } from '../src/components/CoordinatorQuestionCard';
@@ -100,56 +100,53 @@ function Section({ name, title, children }: { name: string; title: string; child
 }
 
 function Cards() {
-  const { resolved } = useThemeMode();
   const [startOpen, setStartOpen] = useState(false);
   const [events, setEvents] = useState<string[]>([]);
   const note = (what: string) => () => setEvents((previous) => [...previous, what]);
   return (
-    <ConfigProvider theme={resolved === 'dark' ? darkTheme : lightTheme}>
-      <AntApp>
-        <BrowserRouter>
-          <main style={{ maxWidth: 820, width: '100%', margin: '0 auto', padding: '24px 16px', boxSizing: 'border-box' }}>
-            <h1 tabIndex={-1} style={{ fontSize: 18, margin: '0 0 16px' }}>P4.3b decision cards</h1>
-            <output data-testid="events" style={{ display: 'block', fontSize: 12 }}>{JSON.stringify(events)}</output>
-            <Section name="evidence" title="Evidence decision">
-              <SessionEvidenceDecisionCard sessionId={ids.session} projectId={ids.project} onSendBack={note('evidence: send back')} />
-            </Section>
-            <Section name="owner" title="Owner confirmation">
-              <SessionOwnerConfirmationCard sessionId={ids.session} taskId={ids.ownerTask} onSendBack={note('owner: send back')} />
-            </Section>
-            <Section name="criteria" title="Criteria decision">
-              <SessionCriteriaDecisionCard projectId={ids.project} onDecided={note('criteria: decided')} />
-            </Section>
-            <Section name="strip" title="Decision strip">
-              <SessionDecisionStrip sessionId={ids.session} projectId={ids.project} />
-            </Section>
-            <Section name="review-turns" title="Review turns">
-              <ReviewRequestedCard card={requestCard} ts={at} />
-              <SentBackByReviewerCard card={returnCard} ts={at} />
-            </Section>
-            <Section name="receipt" title="Owner decision receipt">
-              <OwnerDecisionReceipt
-                view={{ title: 'File the September invoices', acceptanceCriteria: 'Every September invoice is filed once.' }}
-                decided={late}
-                reopen={<OwnerConfirmationReopen taskId={ids.receiptTask} projectId={null} status="DONE" />}
-              />
-            </Section>
-            <Section name="question-records" title="Ended coordinator questions">
-              <AnsweredQuestionCard record={answeredQuestion} now={recordsNow} />
-              <AnsweredQuestionCard record={withdrawnQuestion} now={recordsNow} />
-            </Section>
-            <Section name="live-start" title="Start card in a conversation">
-              <SessionStartProjectCard projectId={ids.liveStartProject} />
-            </Section>
-            <Section name="start" title="Start dialog">
-              <button type="button" onClick={() => setStartOpen(true)}>Open the start dialog</button>
-              <ProjectStartDialog projectId={ids.startProject} asked open={startOpen} onClose={() => setStartOpen(false)} />
-            </Section>
-          </main>
-          <ToastViewport />
-        </BrowserRouter>
-      </AntApp>
-    </ConfigProvider>
+    <AppRoot>
+      <BrowserRouter>
+        <main style={{ maxWidth: 820, width: '100%', margin: '0 auto', padding: '24px 16px', boxSizing: 'border-box' }}>
+          <h1 tabIndex={-1} style={{ fontSize: 18, margin: '0 0 16px' }}>P4.3b decision cards</h1>
+          <output data-testid="events" style={{ display: 'block', fontSize: 12 }}>{JSON.stringify(events)}</output>
+          <Section name="evidence" title="Evidence decision">
+            <SessionEvidenceDecisionCard sessionId={ids.session} projectId={ids.project} onSendBack={note('evidence: send back')} />
+          </Section>
+          <Section name="owner" title="Owner confirmation">
+            <SessionOwnerConfirmationCard sessionId={ids.session} taskId={ids.ownerTask} onSendBack={note('owner: send back')} />
+          </Section>
+          <Section name="criteria" title="Criteria decision">
+            <SessionCriteriaDecisionCard projectId={ids.project} onDecided={note('criteria: decided')} />
+          </Section>
+          <Section name="strip" title="Decision strip">
+            <SessionDecisionStrip sessionId={ids.session} projectId={ids.project} />
+          </Section>
+          <Section name="review-turns" title="Review turns">
+            <ReviewRequestedCard card={requestCard} ts={at} />
+            <SentBackByReviewerCard card={returnCard} ts={at} />
+          </Section>
+          <Section name="receipt" title="Owner decision receipt">
+            <OwnerDecisionReceipt
+              view={{ title: 'File the September invoices', acceptanceCriteria: 'Every September invoice is filed once.' }}
+              decided={late}
+              reopen={<OwnerConfirmationReopen taskId={ids.receiptTask} projectId={null} status="DONE" />}
+            />
+          </Section>
+          <Section name="question-records" title="Ended coordinator questions">
+            <AnsweredQuestionCard record={answeredQuestion} now={recordsNow} />
+            <AnsweredQuestionCard record={withdrawnQuestion} now={recordsNow} />
+          </Section>
+          <Section name="live-start" title="Start card in a conversation">
+            <SessionStartProjectCard projectId={ids.liveStartProject} />
+          </Section>
+          <Section name="start" title="Start dialog">
+            <button type="button" onClick={() => setStartOpen(true)}>Open the start dialog</button>
+            <ProjectStartDialog projectId={ids.startProject} asked open={startOpen} onClose={() => setStartOpen(false)} />
+          </Section>
+        </main>
+        <ToastViewport />
+      </BrowserRouter>
+    </AppRoot>
   );
 }
 

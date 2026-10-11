@@ -55,7 +55,7 @@
    together with the surface, rather than cast a shadow through fading content. */
 .orbit-popover, .orbit-tooltip { box-shadow: none; filter: var(--orbit-filter-popover); }
 .orbit-tooltip { --orbit-callout-bg: var(--orbit-tooltip-bg); position: relative; max-width: 250px; min-height: 32px; padding: 6px 8px; color: #fff; background: var(--orbit-tooltip-bg); border-radius: 6px; overflow-wrap: break-word; }
-/* Retains Ant Design's rounded arrow geometry (MIT; ./antd-empty.LICENSE). */
+/* Retains Ant Design's rounded arrow geometry (MIT; the Ant Design license file in this directory). */
 .orbit-floating-arrow { position: absolute; width: 16px; height: 16px; overflow: hidden; pointer-events: none; }
 .orbit-floating-arrow::before { content: ''; position: absolute; bottom: 0; left: 0; width: 16px; height: 8px; background: var(--orbit-callout-bg); clip-path: path('M 0 8 A 4 4 0 0 0 2.82842712474619 6.82842712474619 L 6.585786437626905 3.0710678118654755 A 2 2 0 0 1 9.414213562373096 3.0710678118654755 L 13.17157287525381 6.82842712474619 A 4 4 0 0 0 16 8 Z'); }
 .orbit-floating-arrow[data-side='top'] { bottom: 0; transform: translateY(100%) rotate(180deg); }

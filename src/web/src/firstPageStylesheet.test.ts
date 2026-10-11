@@ -53,15 +53,16 @@ async function productionBuild(): Promise<{ links: string[]; cssOf: Map<string, 
 }
 
 describe('the first page stylesheet', () => {
-  it('is one file: the overlays, review cards and highlight theme, the reset, index.css, then the components', async () => {
+  it('is one file: the app root, the overlays, review cards and highlight theme, the reset, index.css, then the components', async () => {
     const { links, cssOf } = await productionBuild();
     expect(links).toHaveLength(1);
     const sheet = cssOf.get(links[0]) ?? [];
-    expect(sheet.slice(0, 6)).toEqual([
+    expect(sheet.slice(0, 7)).toEqual([
+      'components/ui/root.css',
       'components/ui/Overlay.css',
       'components/ReviewCard.css',
       'highlight.js/styles/github.css',
-      'antd/dist/reset.css',
+      'components/ui/reset.css',
       'index.css',
       'components/ui/foundation.css',
     ]);
