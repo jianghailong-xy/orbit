@@ -96,6 +96,13 @@
  *  27. the writer records an adopted verdict for an ended run's op from the space's maintenance run alone: a session, the run
  *      that proposed it, another space's run, a job of another kind, the space's run reporting it as its own, and the space's
  *      run while the proposer has not ended (queued, running, waiting) are each answered 404.
+ *  28. the pages of one run (2026-10-11, P10 round 93: the canary's runs 6e6feff0 and 7cf172e3 read 31 dossiers for 18 sessions
+ *      and 30 sessions for 20): a session whose own facts cross the stop a page ends on is handed out by the next page too, and
+ *      the run extracts it once — four pages hand 16 dossiers out for 14 sessions, the report counts the 14 of each it extracted,
+ *      its 14 calls are its 14 requests, and the cursor stops where the window does; and
+ *  29. a record that arrives between two page reads is read with its session — the run asks about it once, with the newest read,
+ *      where the two differing asks used to be refused as asked before with another call and fail the whole run — and the fact
+ *      that read commits waits past the cursor, for the next run.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/wiki-worker/wiki-maintain-job.pg.spec.ts
  *
@@ -3342,4 +3349,162 @@ test('an adopted verdict for an ended run\'s op is recorded for the space\'s mai
   const answer = await h.service.recordVerifications(runOf(fx.jobId), fx.spaceId, [verdict], { adopt: true });
   assert.deepEqual(answer.outcomes.map((outcome) => outcome.status), ['applied'], JSON.stringify(answer.outcomes));
   assert.deepEqual(await verdictOf(h, op), ['auto_applied', 'supported']);
+});
+
+// ── A run's pages: one dossier a session ──────────────────────────────────────────────────────────
+
+/** The minute a session of the crossing fixture came to rest at: 2026-09-19T10:<minute>:00Z. */
+function restedAt(minute: number, seconds = 0): Date {
+  return new Date(Date.UTC(2026, 8, 19, 10, minute, seconds));
+}
+
+/** A merge the session recorded at `at`: a fact of its own, and a line in its dossier. */
+function mergedReceipt(h: Harness, sessionId: string, at: Date): Prisma.SessionMergeReceiptUncheckedCreateInput {
+  return {
+    ownerId: h.ownerId, sessionId, result: 'MERGED', sourceBranch: 'orbit/task-spec', sourceSha: 'd'.repeat(40),
+    targetBranch: 'main', targetShaBefore: 'e'.repeat(40), targetShaAfter: 'f'.repeat(40), recordedBy: 'AGENT',
+    idempotencyKey: `spec-${randomUUID()}`, createdAt: at,
+  };
+}
+
+/**
+ * `count` sessions of the space, come to rest a minute apart — five to a page — and two of them carrying a
+ * fact of their own past the last of those: the first's work lands after the tenth minute and the second's
+ * question is answered after the fourteenth, so each is past the page its session was read on and the page
+ * after hands it out again. Their ids, oldest first.
+ */
+async function crossingSessions(h: Harness, fx: Fixture, count: number): Promise<string[]> {
+  await h.prisma.wikiSpaceWorkspace.create({ data: { spaceId: fx.spaceId, ownerId: h.ownerId, workspaceId: fx.workspaceId } });
+  const ids: string[] = [];
+  for (let i = 1; i <= count; i += 1) {
+    const id = randomUUID();
+    await h.prisma.session.create({
+      data: {
+        id, title: `spec page session ${String(i).padStart(2, '0')}`, prompt: 'p', ownerId: h.ownerId, creatorId: h.ownerId,
+        dispatchOrigin: 'USER', status: 'SUCCEEDED', lastTurnAt: restedAt(i), workspaceId: fx.workspaceId,
+      },
+    });
+    ids.push(id);
+  }
+  await h.prisma.sessionMergeReceipt.create({ data: mergedReceipt(h, ids[0]!, restedAt(10, 30)) });
+  await h.prisma.approval.create({
+    data: {
+      sessionId: ids[1]!, toolName: 'AskUserQuestion', input: { questions: [{ question: 'which port' }] },
+      answers: { 'which port': ['the fixture\'s own'] }, status: 'ALLOWED', createdAt: restedAt(14, 30), decidedAt: restedAt(14, 30),
+    },
+  });
+  return ids;
+}
+
+/** One owner-only entry a dossier: counted by the checks, never proposed — a run of these writes no op. */
+function onePrinciple(hit: Hit): string {
+  if (!hit.prompt.includes('==== CASE FILE ====')) return '{"verdict":"supported","reason":"none of this run\'s own"}';
+  return JSON.stringify([{ kind: 'principle', title: 'spec principle', summary: 'a principle only the owner may write' }]);
+}
+
+/**
+ * The reader the run was handed, recording the sessions each page carried. It is the server's own, taken off
+ * the class rather than off the service: the harness's service is one instance for the whole file, and the
+ * cases before these leave a page of their own fixture in its place.
+ */
+function recordingReader(h: Harness, onPage?: (page: number) => Promise<void>): { pages: string[][]; reader: WikiMaintenance['dossierPage'] } {
+  const pages: string[][] = [];
+  const real = WikiMaintenance.prototype.dossierPage.bind(h.maintenance);
+  const reader = (async (ownerId: string, spaceId: string, options?: Parameters<WikiMaintenance['dossierPage']>[2]) => {
+    const page = await real(ownerId, spaceId, options);
+    pages.push(page.dossiers.map((one) => one.sessionId));
+    if (onPage) await onPage(pages.length);
+    return page;
+  }) as unknown as WikiMaintenance['dossierPage'];
+  return { pages, reader };
+}
+
+/** What one ended run of the crossing fixture reports, as the numbers the fix is about. */
+async function crossingReport(h: Harness, fx: Fixture): Promise<{ state: string; sessions: number; dossiers: number; extracted: number; principles: number; calls: number }> {
+  const job = await jobOf(h, fx.jobId);
+  const report = (await runRow(h, fx.runId)).report as { sessions: number; dossiers: number; entries: Record<string, number>; tokens: Record<string, number> };
+  return {
+    state: job.state, sessions: report.sessions, dossiers: report.dossiers,
+    extracted: report.entries.extracted, principles: report.entries.principles, calls: report.tokens.calls,
+  };
+}
+
+test('a session whose facts cross a page is read again on the next page and extracted once: the report counts a distinct dossier, not a page (P10 round 93)', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const fx = await fixture(h);
+  const ids = await crossingSessions(h, fx, 14);
+  h.model.answer = onePrinciple;
+  const { pages, reader } = recordingReader(h);
+  h.maintenance.dossierPage = reader;
+
+  const which = worker(h);
+  await pass(h, which, async () => ['succeeded', 'failed'].includes((await jobOf(h, fx.jobId)).state));
+
+  const cursor = await h.prisma.wikiCursor.findFirstOrThrow({ where: { spaceId: fx.spaceId, source: 'facts' } });
+  assert.deepEqual(
+    {
+      ...(await crossingReport(h, fx)),
+      pages: pages.map((page) => page.length), handedOut: pages.flat().length,
+      cursor: cursor.positionAt?.toISOString() ?? null,
+    },
+    {
+      // 5 + 5 + 5 + 1 sessions handed out over four pages, 16 of them and 14 distinct.
+      state: 'succeeded', pages: [5, 5, 5, 1], handedOut: 16,
+      sessions: 14, dossiers: 14, extracted: 14, principles: 14, calls: 14,
+      // The window is the reader's, not the loop's: the cursor stops at the last fact of it either way.
+      cursor: restedAt(14, 30).toISOString(),
+    },
+  );
+  // The duplication itself: the first session's work landed after the tenth minute and the second's
+  // question was answered after the fourteenth, so each sits on a page of its own after the one it opened.
+  assert.equal(pages.flat().filter((one) => one === ids[0]).length, 2, 'the first session was handed out on two pages');
+  assert.equal(pages.flat().filter((one) => one === ids[1]).length, 2, 'so was the second');
+  assert.deepEqual([pages[0]!.indexOf(ids[0]!), pages[2]!.indexOf(ids[0]!)], [0, 0]);
+  // One ask a session, each under its own id: 14 requests, no `<id>#retry` among them.
+  const asked = await h.sql.query<{ unit: string }>(
+    `SELECT "unit" FROM "wiki_model_request" WHERE "job_id" = $1::uuid AND "step" = 'extract' ORDER BY "unit"`, [fx.jobId],
+  ).then((result) => result.rows.map((row) => row.unit));
+  assert.deepEqual([asked.length, asked.filter((unit) => unit.endsWith('#retry')).length], [14, 0]);
+  assert.deepEqual([...asked].sort(), [...ids].sort(), 'every session of the window, each once');
+});
+
+test('a record that arrives between two page reads is extracted with its session, and the run neither fails nor reads it twice', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const fx = await fixture(h);
+  const ids = await crossingSessions(h, fx, 14);
+  h.model.answer = onePrinciple;
+  // Between the first page and the second: the owner writes to the first session — the one the pages hand
+  // out twice — and its work lands. Its dossier changes under the run, and its merge is a fact of its own
+  // past the window, which the next run reads.
+  const { reader } = recordingReader(h, async (page) => {
+    if (page !== 1) return;
+    await h.prisma.conversationTurn.create({
+      data: {
+        sessionId: ids[0]!, seq: 1, clientTurnId: `spec-${randomUUID()}`, sendIntent: 'NEXT_TURN', kind: 'message',
+        content: 'the fixture takes its port from the runner now', createdAt: restedAt(15),
+      },
+    });
+    await h.prisma.sessionMergeReceipt.create({ data: { ...mergedReceipt(h, ids[0]!, new Date()), sourceSha: '9'.repeat(40) } });
+  });
+  h.maintenance.dossierPage = reader;
+
+  const which = worker(h);
+  await pass(h, which, async () => ['succeeded', 'failed'].includes((await jobOf(h, fx.jobId)).state));
+
+  assert.deepEqual(
+    { ...(await crossingReport(h, fx)), refused: runLog.filter((line) => line.includes('already exists with a different call')).length },
+    { state: 'succeeded', sessions: 14, dossiers: 14, extracted: 14, principles: 14, calls: 14, refused: 0 },
+  );
+  // The one ask for that session carries the newest read of it: the owner's words are in the case file.
+  const asked = h.model.hits.filter((hit) => hit.prompt.includes('SESSION: spec page session 01\n'));
+  assert.equal(asked.length, 1, 'the session was asked about once');
+  const body = asked[0]!.prompt.slice(asked[0]!.prompt.indexOf('SESSION:'));
+  assert.ok(body.includes('the fixture takes its port from the runner now'), body.slice(0, 900));
+  // The fact it recorded mid-run is past the window: the cursor stops at the window's end, not at it.
+  const cursor = await h.prisma.wikiCursor.findFirstOrThrow({ where: { spaceId: fx.spaceId, source: 'facts' } });
+  assert.equal(cursor.positionAt?.toISOString(), restedAt(14, 30).toISOString());
+  assert.equal(await h.prisma.sessionMergeReceipt.count({ where: { sessionId: ids[0]!, createdAt: { gt: cursor.positionAt! } } }), 1,
+    'what the session recorded mid-run is still ahead of the cursor, for the next run');
 });
