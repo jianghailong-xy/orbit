@@ -7,11 +7,13 @@ import OrbitKit
 /// a grey card in flight, an amber one when the server judged the runner silent, and one press —
 /// Retry — and only where the server offers it.
 ///
-/// Head: the ring (spinning while the job runs, still while it waits its turn, a triangle when the
-/// runner went silent — Reduce Motion stops the spin and nothing else), the word, the phase, and
-/// the chevron. Body: what is landing — the task's title, or one row per job with each one's own
-/// state — the branch it lands on, and the three clocks the landing row already counted. A
-/// timed-out card says where the runner stopped.
+/// Head: the merged line's own anatomy (owner decision 2026-10-11, board
+/// docs/mocks/project-merge-check-row) — the 30pt mark (ring spinning while the job runs, still
+/// while it waits its turn, a triangle when the runner went silent; Reduce Motion stops the spin
+/// and nothing else), the word, the live clock at the right, and one line under it with the state,
+/// the wait and the freshness. Body: what is landing — the task's title, or one row per job with
+/// each one's own state — and the branch it lands on. A timed-out card says where the runner
+/// stopped.
 ///
 /// Read-only apart from that Retry: a press opens the jobs in flight, which is what the row it
 /// replaced did — or, from a server that lists none, the project page, exactly as before.
@@ -27,13 +29,6 @@ struct ProjectLandingCardView: View {
     @State private var retrying = false
     /// Why the last Retry did not go through, in the server's words.
     @State private var actionError: String?
-
-    /// The card's ink, the landing row's own rule: the accent while the job runs, grey while it
-    /// waits its turn, and the amber the merge card's blocked state wears for a runner the server
-    /// has stopped hearing from.
-    private var ink: Color {
-        card.timedOut ? ProjectPalette.warningInk : card.running ? Color.accentColor : Color.secondary
-    }
 
     /// One job row's ink: the same rule one job at a time, so a queued job behind a running one
     /// does not wear the running one's colour.
@@ -61,7 +56,6 @@ struct ProjectLandingCardView: View {
                             .font(.orbitMeta).foregroundStyle(.secondary)
                             .lineLimit(1).truncationMode(.middle)
                     }
-                    clocks
                     if card.timedOut, let detail = card.detail {
                         Text(detail).font(.orbitMeta).foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -116,25 +110,11 @@ struct ProjectLandingCardView: View {
         .padding(.vertical, 4)
     }
 
+    /// The card's head is the landing row's own, in the merged line's anatomy: the word, the live
+    /// clock, and the state, the wait and the freshness in one line under both.
     private var head: some View {
-        HStack(spacing: 8) {
-            if card.timedOut {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 13, height: 13)
-                    .foregroundStyle(ink)
-                    .accessibilityHidden(true)
-            } else {
-                LandingRing(running: card.running)
-            }
-            Text(card.title).font(.orbitLabel.weight(.semibold)).foregroundStyle(ink)
-            Spacer(minLength: 8)
-            Text(card.state).font(.orbitMeta).foregroundStyle(card.timedOut ? ink : Color.secondary)
-            Image(systemName: "chevron.right")
-                .font(.orbitMeta.weight(.semibold))
-                .foregroundStyle(.tertiary)
-        }
+        ProjectLandingHead(title: card.title, head: card.head, running: card.running,
+                           timedOut: card.timedOut)
     }
 
     /// What the several jobs are, one row each — the title the head counts instead of naming, and
@@ -151,27 +131,6 @@ struct ProjectLandingCardView: View {
                 }
             }
         }
-    }
-
-    /// The landing row's own clock row, top to bottom: what it has been doing it, what it waited
-    /// for a runner before that, and where the reports stand — or the limit a timed-out job ran
-    /// over, which is what its `updated` carries.
-    private var clocks: some View {
-        HStack(spacing: 12) {
-            HStack(spacing: 4) {
-                Text(card.clockLabel).foregroundStyle(.secondary)
-                Text(card.clock).fontWeight(.semibold).monospacedDigit().foregroundStyle(ink)
-            }
-            if let wait = card.wait {
-                HStack(spacing: 4) {
-                    Text(ProjectPage.landingWaitLabel).foregroundStyle(.secondary)
-                    Text(wait).fontWeight(.semibold).monospacedDigit().foregroundStyle(.secondary)
-                }
-            }
-            Spacer(minLength: 8)
-            if let updated = card.updated { Text(updated).foregroundStyle(.secondary) }
-        }
-        .font(.orbitMeta)
     }
 
     /// One press of Retry: no second press while it is on its way, and a refusal said under the

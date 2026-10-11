@@ -757,21 +757,17 @@ private struct ProjectMergeCardView: View {
         .padding(.vertical, 4)
     }
 
-    /// The merge job's live row: a press opens the jobs in flight, where the server lists them.
+    /// The merge job's live row — the merged line's own anatomy, so the check and the merge it
+    /// becomes are one shape (owner decision 2026-10-11, board docs/mocks/project-merge-check-row).
+    /// A press opens the jobs in flight, where the server lists them.
     @ViewBuilder private func landingRow(_ line: ProjectPage.LandingLine) -> some View {
+        let head = ProjectLandingHead(title: line.word, head: line.head, running: line.running,
+                                      timedOut: line.timedOut)
         if let onLanding {
-            Button(action: onLanding) {
-                HStack(spacing: 8) {
-                    ProjectLandingRow(line: line)
-                    Image(systemName: "chevron.right")
-                        .font(.orbitMeta.weight(.semibold))
-                        .foregroundStyle(.tertiary)
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
+            Button(action: onLanding) { head.contentShape(Rectangle()) }
+                .buttonStyle(.plain)
         } else {
-            ProjectLandingRow(line: line)
+            head
         }
     }
 

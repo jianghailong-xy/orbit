@@ -18,6 +18,7 @@ import {
   landingClock,
   landingClockTime,
   landingJobLines,
+  landingHead,
   landingJobsCount,
   landingJobsTitle,
   landingLimit,
@@ -331,6 +332,46 @@ const cardJob = (over: Partial<ProjectIntegrationJob> = {}): ProjectIntegrationJ
   ...over,
 });
 
+describe('landingHead', () => {
+  // The two slots the merge check card and the landing card draw their head with (owner decision
+  // 2026-10-11, board docs/mocks/project-merge-check-row, iOS `ProjectPage.landingHead`): the live
+  // clock at the right of the title, and the state, the wait and the freshness in one line under it.
+
+  it('leads with the clock and folds the wait and the freshness into one sentence', () => {
+    expect(landingHead({ state: 'checking', timedOut: false, clockLabel: 'Elapsed', clock: '2m 40s',
+      wait: null, updated: 'Updated 2m ago' }))
+      .toEqual({ right: '2m 40s', isClock: true, detail: 'checking · updated 2m ago' });
+    expect(landingHead({ state: 'checking', timedOut: false, clockLabel: 'Elapsed', clock: '3m 50s',
+      wait: '1m 20s', updated: 'Updated just now' }))
+      .toEqual({ right: '3m 50s', isClock: true, detail: 'checking · waited 1m 20s · updated just now' });
+    // A job with nothing to say but its state says only that.
+    expect(landingHead({ state: 'queued', timedOut: false, clockLabel: 'Queued for', clock: '1m 5s',
+      wait: null, updated: null }).detail).toBe('queued');
+  });
+
+  it('gives a timed-out job the state at the right and its silence in the line', () => {
+    expect(landingHead({ state: 'Timed out', timedOut: true, clockLabel: 'No report for', clock: '110m',
+      wait: null, updated: 'limit 10m' }))
+      .toEqual({ right: 'Timed out', isClock: false, detail: 'No report for 110m · limit 10m' });
+  });
+
+  it('says an older server’s silence once, never twice', () => {
+    expect(landingHead({ state: 'No report', timedOut: false, clockLabel: 'No report for', clock: '5m',
+      wait: null, updated: 'No report for 5m' }))
+      .toEqual({ right: '5m', isClock: true, detail: 'No report for 5m' });
+    expect(landingHead({ state: 'No report', timedOut: false, clockLabel: 'No report for', clock: '0m 5s',
+      wait: null, updated: 'No report yet' }).detail).toBe('No report yet');
+  });
+
+  it('reads a real line the way the card words it, so one function words both', () => {
+    // An unreadable server: the clock freezes at the last read and the line leads with that fact.
+    const readAt = Date.parse('2026-09-25T13:59:20Z');
+    const line = landingLine(integration(), readAt + 60_000, { updatedAt: readAt, failed: true })!;
+    expect(landingHead(line)).toEqual({ right: line.clock, isClock: true,
+      detail: `Update unavailable · ${line.updated!.toLowerCase()}` });
+  });
+});
+
 describe('the landing card', () => {
   // The clock is read off `now`, so the render has to be told what time it is: the whole point of
   // the card is the number, and "about a minute" is not what the mock says.
@@ -358,16 +399,19 @@ describe('the landing card', () => {
     // The card of its own, in the merge card's shape: a border, a radius and the subtle wash, and
     // the brand only while the job runs.
     expect(html).toContain('class="session-project-landing is-running"');
-    expect(html).toContain('class="spl-head"');
-    expect(html).toContain('class="spl-title">Landing<');
-    expect(html).toContain('class="spl-state">checking<');
-    expect(html).toContain('class="spl-chev"');
-    expect(html).toContain(`class="spl-what">${TITLE}<`);
-    expect(html).toContain(`class="spl-ref">onto project/${PROJECT}<`);
-    expect(html).toContain('Elapsed <span class="spl-clock">1m 20s</span>');
+    // The head is the merged line's (owner decision 2026-10-11, docs/mocks/project-merge-check-row):
+    // the mark in its circle, the word, the live clock at the right of it, and the state, the wait
+    // and the freshness in one line under both.
+    expect(html).toContain('class="landing-head is-running"');
+    expect(html).toContain('class="landing-head-title">Landing<');
+    expect(html).toContain('class="landing-head-right">1m 20s<');
     // The heartbeat is the claim, 80 seconds back: the clock counts them, the freshness rounds
     // them to the minute the landing row rounds them to.
-    expect(html).toContain('class="u">Updated 1m ago<');
+    expect(html).toContain('class="landing-head-detail">checking · updated 1m ago<');
+    expect(html).toContain(`class="spl-what">${TITLE}<`);
+    expect(html).toContain(`class="spl-ref">onto project/${PROJECT}<`);
+    // The whole row is the press, so the chevron the head used to carry is gone.
+    expect(html).not.toContain('spl-chev');
     expect(html).toContain('class="spl-note">Nothing to do — it lands on its own.<');
     // The ring is the Integrating cell's own mark, inherited rather than redrawn, and the card
     // carries no Retry: nothing about this job wants the reader.
@@ -388,8 +432,8 @@ describe('the landing card', () => {
 
     expect(html).toContain('class="session-project-landing"');
     expect(html).not.toContain('is-running');
-    expect(html).toContain('>queued<');
-    expect(html).toContain('>0m 40s<');
+    expect(html).toContain('class="landing-head-detail">queued · updated just now<');
+    expect(html).toContain('class="landing-head-right">0m 40s<');
     // Nothing spins, and the spin is not the only thing that says so: "queued" is the word.
     expect(html).not.toContain('data-glyph="exclamation"');
   });
@@ -413,7 +457,7 @@ describe('the landing card', () => {
       '2026-09-25T13:59:20Z',
     );
 
-    expect(html).toContain('class="spl-title">Landing 3 jobs<');
+    expect(html).toContain('class="landing-head-title">Landing 3 jobs<');
     expect(html).toContain('class="spl-jobs"');
     expect(html).toContain(`<span>${TITLE}</span><span class="st run">checking</span>`);
     expect(html).toContain('<span>维护：dossier 重复发出</span><span class="st">queued</span>');
@@ -454,10 +498,11 @@ describe('the landing card', () => {
     // the colour.
     expect(html).toContain('data-glyph="exclamation"');
     expect(html).not.toContain('data-glyph="spinner"');
-    expect(html).toContain('class="spl-title">Landing<');
-    expect(html).toContain('class="spl-state">Timed out<');
-    expect(html).toContain('No report for <span class="spl-clock">');
-    expect(html).toContain('class="u">limit 10m<');
+    expect(html).toContain('class="landing-head-title">Landing<');
+    // A timed-out job has no clock left that moves: the state takes the right slot, and the line
+    // measures the silence against the limit it went past.
+    expect(html).toContain('class="landing-head-right is-word">Timed out<');
+    expect(html).toMatch(/class="landing-head-detail">No report for \d+m · limit 10m</);
     // Where the runner stopped, and the press — the jobs list's own door.
     expect(html).toContain('class="spl-det">The runner took it at --:-- · stopped at fetching · no push recorded<');
     expect(html).toContain('class="spl-primary"');
@@ -483,11 +528,11 @@ describe('the landing card', () => {
         heartbeatAt: '2026-09-25T13:59:00Z' } })),
       '2026-09-25T13:59:20Z',
     );
-    expect(html).toContain('>0m 0s<');
+    expect(html).toContain('class="landing-head-right">0m 0s<');
     expect(html).not.toContain('NaN');
     // A job that names no task — a promotion, a merge check — keeps the row's word and state.
-    expect(html).toContain('>Integration<');
-    expect(html).toContain('>running<');
+    expect(html).toContain('class="landing-head-title">Integration<');
+    expect(html).toMatch(/class="landing-head-detail">running · /);
   });
 
   it('presses through to the jobs list, and draws no press to a page with nothing to open', () => {
@@ -956,10 +1001,9 @@ describe('the landing card, from a server that lists its jobs', () => {
     expect(html).not.toContain('is-running');
     expect(html).toContain('data-glyph="exclamation"');
     expect(html).not.toContain('data-glyph="spinner"');
-    for (const text of ['>Timed out<', '>Landing 2 jobs · 1 timed out<', '>110m<', '>limit 10m<']) {
-      expect(html).toContain(text);
-    }
-    expect(html).toContain('No report for');
+    expect(html).toContain('>Timed out<');
+    expect(html).toContain('>Landing 2 jobs · 1 timed out<');
+    expect(html).toMatch(/class="landing-head-detail">No report for \d+m · limit 10m</);
     // Both jobs, one row each, with the lead's own state in the head: nothing on a stopped row
     // spins, and the row says it in the same word the head does.
     expect(html).toContain('class="spl-jobs"');
@@ -1035,13 +1079,13 @@ describe('the landing card’s styles', () => {
     const blocks = [...css.matchAll(/@media \(prefers-reduced-motion: reduce\) \{[\s\S]*?\n\}/g)]
       .map((block) => block[0]);
     for (const selector of ['.project-landing-running .project-landing-ring',
-      '.session-project-landing.is-running .spl-mark']) {
+      '.landing-head.is-running .landing-head-mark']) {
       expect(blocks.some((block) => block.includes(selector) && block.includes('animation: none'))).toBe(true);
     }
     expect(css).toContain('@keyframes project-landing-spin');
     // The clock's digits must not shuffle the words beside them as they change.
     expect(css).toMatch(/\.project-landing-clock \{[\s\S]*?font-variant-numeric: tabular-nums;/);
-    expect(css).toMatch(/\.session-project-landing \.spl-clock \{[\s\S]*?font-variant-numeric: tabular-nums;/);
+    expect(css).toMatch(/\.landing-head-right \{[\s\S]*?font-variant-numeric: tabular-nums;/);
     // The task gets two lines without squeezing the phase or elapsed time off a phone.
     expect(css).toMatch(/\.project-landing-what \{[\s\S]*?-webkit-line-clamp: 2;/);
     expect(css).toMatch(/\.session-project-landing \.spl-what \{[\s\S]*?-webkit-line-clamp: 2;/);
@@ -1052,18 +1096,19 @@ describe('the landing card’s styles', () => {
     expect(css).toMatch(/\.project-landing-timed-out \.project-landing-clock \{\s*color: var\(--warning\);/);
     // The spin is a running row's only, and a timed-out row is never drawn as one.
     expect(css).not.toMatch(/\.project-landing-timed-out[^{]*\{[^}]*animation/);
-    expect(css).not.toMatch(/\.session-project-landing\.is-timed-out[^{]*\{[^}]*animation/);
+    expect(css).not.toMatch(/\.landing-head\.is-timed-out[^{]*\{[^}]*animation/);
   });
 
   it('draws the card in the merge card’s shape, and only a running one in brand', () => {
     expect(css).toMatch(/\.session-project-landing \{[\s\S]*?border: 1px solid var\(--border\);[\s\S]*?border-radius: 10px;[\s\S]*?background: var\(--bg-subtle\);/);
     // The brand is a RUNNING job's, as the landing row's own rule has it; a queued card wears the
     // grey the state word does.
-    expect(css).toMatch(/\.session-project-landing\.is-running \.spl-title \{\s*color: var\(--brand\);/);
-    expect(css).toMatch(/\.session-project-landing\.is-running \.spl-clock \{\s*color: var\(--brand\);/);
+    expect(css).toMatch(/\.landing-head\.is-running \.landing-head-mark \{[\s\S]*?background: var\(--brand-tint\);[\s\S]*?color: var\(--brand\);/);
+    expect(css).toMatch(/\.landing-head\.is-running \.landing-head-right \{\s*color: var\(--brand\);/);
     // A runner the server judged silent is the merge card's blocked amber, whole.
     expect(css).toMatch(/\.session-project-landing\.is-timed-out \{\s*border-color: var\(--warning-border\);[\s\S]*?background: var\(--warning-bg\);/);
-    expect(css).toMatch(/\.session-project-landing\.is-timed-out \.spl-title,[\s\S]*?color: var\(--warning\);/);
+    expect(css).toMatch(/\.landing-head\.is-timed-out \.landing-head-title \{\s*color: var\(--warning\);/);
+    expect(css).toMatch(/\.landing-head\.is-timed-out \.landing-head-right \{\s*color: var\(--warning\);/);
     // Retry is the merge card's primary, and the only press the card itself carries.
     expect(css).toMatch(/\.session-project-landing \.spl-primary \{[\s\S]*?background: var\(--brand\);/);
   });

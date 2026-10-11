@@ -1223,7 +1223,12 @@ describe('the merge into main on the project sessions page', { timeout: 60_000 }
     await until(() => expect(card()?.getAttribute('data-shape')).toBe('checking'));
     // The job is the merge card's, so no landing card of its own is drawn.
     expect(page()!.querySelector('.session-project-landing')).toBeNull();
-    const press = card()!.querySelector<HTMLButtonElement>('button.project-landing-press');
+    // The row is the merged line's anatomy (owner decision 2026-10-11): the head, the whole row
+    // the press that opens the jobs, and no chevron — the merged line is pressed the same way.
+    expect(card()!.querySelector('.landing-head.is-running')).not.toBeNull();
+    expect(card()!.textContent ?? '').toContain('checking');
+    expect(card()!.querySelector('.landing-head-right')?.textContent).toMatch(/^\d+m \d+s$/);
+    const press = card()!.querySelector<HTMLButtonElement>('button.landing-head-press');
     expect(press?.textContent).toContain('Merge check');
     await click(press, 'the merge check’s landing row');
     await until(() => expect(document.querySelector('.landing-jobs-dialog .orbit-overlay-title')?.textContent)

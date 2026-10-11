@@ -157,10 +157,30 @@ public enum ProjectPage {
             self.wait = wait
             self.timedOut = timedOut
         }
+
+        /// The head's two slots (`landingHead`), from this line's own facts.
+        public var head: LandingHead {
+            ProjectPage.landingHead(state: state, timedOut: timedOut, clockLabel: clockLabel,
+                                    clock: clock, wait: wait, updated: updated)
+        }
     }
 
-    /// One job of the list the landing row opens (docs/mocks/landing-jobs-sheet), drawn as the row
-    /// itself.
+    /// The two slots under a card's head title, as the merge check card and the landing card draw
+    /// them (owner decision 2026-10-11, board docs/mocks/project-merge-check-row): the row that
+    /// becomes the timeline's "Merged into main" line, so the same object keeps its shape from the
+    /// check to the merge. `right` is the live number the row is watched by — the elapsed clock —
+    /// and `detail` is the one line under the title, which is where the state word went: it used to
+    /// sit in the head's far corner, where the clock now is.
+    public struct LandingHead: Equatable, Sendable {
+        /// The title row's right slot: the job's clock, or the state word for a job that has no
+        /// clock left that moves (the server judged its runner silent).
+        public let right: String
+        /// Whether that slot is a clock — drawn in tabular digits, in the live ink.
+        public let isClock: Bool
+        /// The line under the title: the state, what the job waited for a runner before its clock
+        /// began, and where the reports stand — "checking · waited 1m 20s · updated just now".
+        public let detail: String
+    }
     public struct LandingJobLine: Equatable, Sendable, Identifiable {
         public let jobId: String
         /// The task a press on the row opens; nil for a promotion or a merge check, whose row opens
@@ -190,6 +210,9 @@ public enum ProjectPage {
     public static let landingOnto = "onto"
     public static let landingNothingToDo = "Nothing to do — it lands on its own."
     public static let landingAllJobs = "All jobs"
+    /// "waited 1m 20s" — the wait as a clause of the head's one line rather than a field label: the
+    /// label the row used (`landingWaitLabel`) is a column heading, and this is a sentence.
+    public static let landingWaited = "waited"
 
     public static let integrationJobWords = [
         "LAND_TASK": "Landing", "CHECK_PROMOTION": "Merge check", "LAND_PROMOTION": "Merge to main",
@@ -303,6 +326,37 @@ public enum ProjectPage {
                         startedAt: inFlight.startedAt, heartbeatAt: inFlight.heartbeatAt, now: now,
                         updatedAt: updatedAt, unavailable: unavailable, main: main, silent: silent,
                         wait: wait)
+    }
+
+    /// The head's two slots, composed from the facts the landing line already counted — the same
+    /// words in the same order on both clients (`landingWaited` is the only new word).
+    ///
+    /// A timed-out job has no clock that moves, so its right slot says so instead, and its line is
+    /// the silence measured against the limit it went past: "No report for 110m · limit 10m". An
+    /// older server's "No report" is that same fact said once, so the line is its own "No report for
+    /// 5m" and never "No report · No report for 5m". Everything else is the state word, the wait
+    /// when there was one, and the freshness — "checking · waited 1m 20s · updated just now" — with
+    /// the freshness's own capital folded away, because the line reads as one sentence.
+    public static func landingHead(state: String, timedOut: Bool, clockLabel: String, clock: String,
+                                   wait: String?, updated: String?) -> LandingHead {
+        if timedOut {
+            let silence = "\(clockLabel) \(clock)"  // "No report for 110m"
+            return LandingHead(right: state, isClock: false,
+                               detail: [silence, updated].compactMap { $0 }.joined(separator: " · "))
+        }
+        if state == landingNoReport {
+            return LandingHead(right: clock, isClock: true, detail: updated ?? state)
+        }
+        var parts = [state]
+        if let wait { parts.append("\(landingWaited) \(wait)") }
+        if let updated { parts.append(lowercasingFirst(updated)) }
+        return LandingHead(right: clock, isClock: true, detail: parts.joined(separator: " · "))
+    }
+
+    /// "Updated 2m ago" as the clause it is mid-line: "updated 2m ago".
+    private static func lowercasingFirst(_ text: String) -> String {
+        guard let first = text.first else { return text }
+        return first.lowercased() + text.dropFirst()
     }
 
     /// What a job waited for a runner before its clock began, from the server's own measurement:
@@ -460,6 +514,13 @@ public enum ProjectPage {
         public let detail: String?
         /// The job Retry takes, when the server says a retry takes one.
         public let retryJobId: String?
+
+        /// The head's two slots (`landingHead`) — the card's head is the landing row's: the same
+        /// word, the same clock, the same state and freshness, in the merged row's anatomy.
+        public var head: LandingHead {
+            ProjectPage.landingHead(state: state, timedOut: timedOut, clockLabel: clockLabel,
+                                    clock: clock, wait: wait, updated: updated)
+        }
     }
 
     /// The card, or nil when nothing is landing — which is what removes it from the page.

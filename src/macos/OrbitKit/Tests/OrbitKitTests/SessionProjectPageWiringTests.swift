@@ -469,13 +469,46 @@ final class SessionProjectPageWiringTests: XCTestCase {
         XCTAssertTrue(merge.contains("let onLanding: (() -> Void)?"))
         let row = try slice(merge, from: "@ViewBuilder private func landingRow(_ line: ProjectPage.LandingLine) -> some View {",
                             to: "\n    }\n")
-        for part in ["if let onLanding {", "Button(action: onLanding) {", "ProjectLandingRow(line: line)",
-                     "Image(systemName: \"chevron.right\")", ".buttonStyle(.plain)"] {
+        for part in ["if let onLanding {", "Button(action: onLanding) {",
+                     "ProjectLandingHead(title: line.word, head: line.head, running: line.running,",
+                     ".buttonStyle(.plain)"] {
             XCTAssertTrue(row.contains(part), "the merge card's landing row keeps `\(part)`")
         }
+        // The merged line's anatomy (owner decision 2026-10-11): the whole row is the press, so the
+        // chevron the head used to carry is gone — as the merged line itself has none.
+        XCTAssertFalse(row.contains("chevron.right"),
+                       "the merge card's landing row draws no disclosure chevron")
         XCTAssertEqual(merge.components(separatedBy: "if let landing { landingRow(landing) }").count - 1, 2,
                        "the checking and the merging card both draw the row a press opens the jobs from")
         XCTAssertFalse(merge.contains("if let landing { ProjectLandingRow(line: landing) }"))
+    }
+
+    /// The head the merge check card and the landing card wear (owner decision 2026-10-11, board
+    /// docs/mocks/project-merge-check-row): the timeline's "Merged into main" row one moment earlier
+    /// — the mark in its circle, the word with the live clock at its right, and the state, the wait
+    /// and the freshness in one line under both. No chevron: the whole row is the press, as the
+    /// merged line's whole row opens its receipt.
+    func testTheHeadsWearTheMergedLinesRowAndCarryNoChevron() throws {
+        let row = code(try appSource("Views/ProjectLandingRow.swift"))
+        let head = try slice(row, from: "struct ProjectLandingHead: View {", to: "\n}\n")
+        for part in ["let head: ProjectPage.LandingHead",
+                     "LandingRing(size: 15, running: running)",
+                     "frame(width: 30, height: 30)",
+                     "in: Circle()",
+                     "Text(head.detail).font(.orbitListSubtitle)",
+                     "Image(systemName: \"exclamationmark.triangle.fill\")"] {
+            XCTAssertTrue(head.contains(part), "the head keeps `\(part)`")
+        }
+        XCTAssertFalse(head.contains("chevron"), "the whole row is the press, as the merged line is")
+        // Both cards read that one view, and their words come from the one composition each end runs.
+        let session = code(try appSource("Views/SessionProjectPage.swift"))
+        XCTAssertTrue(session.contains("ProjectLandingHead(title: line.word, head: line.head, running: line.running,"))
+        let card = code(try appSource("Views/ProjectLandingCard.swift"))
+        let cardHead = try slice(card, from: "private var head: some View {", to: "\n    }\n")
+        XCTAssertTrue(cardHead.contains("ProjectLandingHead(title: card.title, head: card.head, running: card.running,"))
+        XCTAssertFalse(cardHead.contains("chevron"),
+                       // The card's Retry row keeps its own › into the jobs list; the HEAD has none.
+                       "the landing card's head carries no chevron either")
     }
 
     /// The merge into main lives on this page (owner decision 2026-10-06): its card under the
