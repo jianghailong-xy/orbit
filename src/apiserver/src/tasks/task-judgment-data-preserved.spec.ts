@@ -2241,7 +2241,16 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // is not null. Catalog-only like 0420 — nothing is altered, dropped or written, no preserved
       // trigger or function is named, and neither half of the 0177 pair nor any `project_acceptance_*`
       // object is touched.
-      '0421_project_integration_job_promotion_idx'],
+      '0421_project_integration_job_promotion_idx',
+      // When the account owner chose a project's main branch (0422, contract L6): one nullable
+      // TIMESTAMPTZ(3) with no default on `project_codebase` (`upstream_ref_chosen_at`) —
+      // catalog-only — and one CREATE INDEX on (`owner_id`, `canonical_repo_url`,
+      // `upstream_ref_chosen_at` DESC) WHERE it is not null. Only that table is altered; 0270's lock
+      // and 0231's config guard are left as they are and name neither. No row is written, no
+      // function, trigger, type or constraint is created, replaced or dropped, and `task`,
+      // `session`, `project`, every `project_acceptance_*` object and the six preserved
+      // triggers/functions are named nowhere, so it is not another writer of the DONE fence.
+      '0422_project_codebase_upstream_ref_chosen_at'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

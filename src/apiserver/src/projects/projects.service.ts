@@ -159,11 +159,13 @@ import {
 import {
   configureProjectIntegration,
   type IntegrationSettings,
+  lastMainBranchView,
   projectIntegrationView,
+  readMainBranchMemory,
   readProjectIntegrationView,
   type ProjectIntegrationView,
   readProjectCodebase,
-  readProjectIntegrationLines,
+  readProjectListBindings,
 } from './project-integration-line';
 import {
   findMergeCheckApproval,
@@ -2533,10 +2535,10 @@ export class ProjectsService {
     // Bounded by the page, not by the project: at most one coordinator row and one runtime row
     // apiece, both joined by their own primary/unique key; the integration bindings by
     // `(project_id, slot)`; the exception items grouped in the database.
-    const [rollups, attention, integration] = await Promise.all([
+    const [rollups, attention, bindings] = await Promise.all([
       readProjectListRollups(this.prisma, ownerId, status),
       readProjectListAttention(this.prisma, ownerId, status),
-      readProjectIntegrationLines(this.prisma, projects.map((project) => project.id)),
+      readProjectListBindings(this.prisma, projects.map((project) => project.id)),
     ]);
     return projects.map(({ coordinatorSession, ...project }) => {
       // A project with no tasks has no group in the aggregate. It reports a zero total, seven zero
@@ -2555,7 +2557,9 @@ export class ProjectsService {
         // Where this project's finished work lands (§7.1 V1). Null rather than absent for the
         // common case — a project nobody has decided a line for — so a client draws its row from
         // one shape, and never has to tell "no line yet" from "this server does not report lines".
-        integration: integration.get(project.id) ?? null,
+        integration: bindings.get(project.id)?.integration ?? null,
+        // The main branch the row's merge approval names; null with no repository bound.
+        mainBranch: bindings.get(project.id)?.mainBranch ?? null,
         // What moves a project that its task rollup cannot see: the coordinator working. Null on a
         // project with no coordinator bound.
         coordinatorActivity: coordinatorActivityOf(coordinatorSession),
@@ -2617,6 +2621,7 @@ export class ProjectsService {
       independence,
       blockers,
       standardSetConfirmation,
+      mainBranchMemory,
     ] = await Promise.all([
       // One lookup by primary key, not a tally of this project's tasks.
       //
@@ -2671,6 +2676,10 @@ export class ProjectsService {
       // that none of the lanes beside it reads. Served on this document so a client renders WHY
       // the column says what it says instead of re-deriving the rule for itself.
       readStandardSetConfirmationState(this.prisma, project.acceptanceCriterionDefinitions, id),
+      // And the main branch this account chose last for the project's repository (contract L6),
+      // one statement keyed by the project: what a coordinator reads before it asks to start, to
+      // know whether it has to suggest one.
+      readMainBranchMemory(this.prisma, id),
     ]);
     const landingAnswers = criterionLandingWithReasons(
       landingFacts,
@@ -2720,7 +2729,10 @@ export class ProjectsService {
         ...criterionIndependenceAnswer(independent.get(item.id)),
       })),
       blockers,
-      integration: projectIntegrationView(codebase, project.exceptionEscalationSeconds),
+      integration: {
+        ...projectIntegrationView(codebase, project.exceptionEscalationSeconds),
+        lastMainBranch: lastMainBranchView(mainBranchMemory),
+      },
       // The projection itself, whole: `withheld` is every clause that does not hold — ALL of them,
       // not the first — and `criteria` carries each one's three lane answers. One fold
       // (`derivedDoneFromLanes`) is shared with the write at the bottom of this file, so what a
@@ -2769,12 +2781,12 @@ export class ProjectsService {
       select: SIDEBAR_PROJECT_SELECT,
     });
     if (projects.length === 0) return [];
-    const [rollups, attention, integration] = await Promise.all([
+    const [rollups, attention, bindings] = await Promise.all([
       readProjectSidebarRollups(this.prisma, ownerId),
       // The same reader the index folds, narrowed to the projects this read returns, so the rail
       // and the page cannot disagree about what waits on the reader.
       readProjectListAttention(this.prisma, ownerId, ProjectStatus.OPEN),
-      readProjectIntegrationLines(this.prisma, projects.map((project) => project.id)),
+      readProjectListBindings(this.prisma, projects.map((project) => project.id)),
     ]);
     return projects.map(({ coordinatorSession, ...project }) => ({
       ...project,
@@ -2787,7 +2799,9 @@ export class ProjectsService {
       }),
       attention: attention.get(project.id) ?? emptyProjectListAttention(),
       coordinatorActivity: coordinatorActivityOf(coordinatorSession),
-      integration: integration.get(project.id) ?? null,
+      integration: bindings.get(project.id)?.integration ?? null,
+      // The main branch the session list's landing line names; null with no repository bound.
+      mainBranch: bindings.get(project.id)?.mainBranch ?? null,
     }));
   }
 

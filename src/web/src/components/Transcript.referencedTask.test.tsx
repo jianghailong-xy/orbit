@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { type RunEvent, Transcript } from './Transcript';
 import {
   EIGHT_TASKS,
+  IN_ENGLISH,
   NEVER_RAN,
   ONE_TASK,
   TWO_TASKS,
@@ -17,7 +18,8 @@ import {
  *
  * What a reader met before was the block's plain-text table — five labelled lines per task, eight of
  * them in one note — and on it, in the opening tag, the id: the one thing worth clicking, and dead
- * text. Every note here is one this deployment actually sent (lib/referencedTask.fixtures).
+ * text. Every note here is one this deployment actually sent (lib/referencedTask.fixtures), in the
+ * Chinese the block was written in until 2026-10 — but `IN_ENGLISH`, which is what it writes now.
  *
  * The reading itself is proved in lib/referencedTask.test.ts; this is about what reaches the page.
  */
@@ -158,8 +160,39 @@ describe('a `#`-referenced task in a bubble', () => {
     expect(container.querySelector('.chat-injected-body')).toBeNull();
   });
 
+  it('draws the English block as the same cards, the suffix and the task nothing has run included', async () => {
+    const toggle = await open(IN_ENGLISH, 'What state are these two in?');
+
+    expect(toggle.textContent).toBe(`${LABEL} referenced task ×2 · 1 DONE, 1 OPEN`);
+    expect(cards()).toHaveLength(2);
+    const [verification, never] = cards();
+    expect(text(verification.querySelector('.status-pill'))).toBe('Done');
+    expect(text(verification.querySelector('.reftask-suffix'))).toBe('verification task');
+    expect(text(verification.querySelector('.reftask-outcome'))).toBe('SUCCEEDED, 144 turns');
+    expect(text(verification.querySelector('.reftask-meta'))).toBe(
+      '34DH29mTc7OQ6AwxAFIJu · (no list) · orbit · 1 run',
+    );
+    expect(verification.querySelector('a.reftask-title')?.getAttribute('href')).toBe('/tasks/34DH29mTc7OQ6AwxAFIJu');
+    expect(text(never.querySelector('.reftask-meta'))).toBe(
+      '349vy0HknpSjHwdwJ31O1 · (no list) · (unassigned) · never run',
+    );
+    expect(never.querySelector('.reftask-outcome')).toBeNull();
+    // The table it replaced is gone, the sentence addressed to the agent with it.
+    expect(container.textContent).not.toContain('fetch them yourself with task_get');
+    expect(container.querySelector('.chat-injected-body')).toBeNull();
+  });
+
   it('leaves a block it cannot read as the text it always was, rather than half a card', async () => {
     const reworded = ONE_TASK.replace('  状态   FAILED', '  当前状态   FAILED');
+
+    await open(reworded);
+
+    expect(cards()).toHaveLength(0);
+    expect(text(container.querySelector('.chat-injected-body'))).toBe(reworded);
+  });
+
+  it('reads an English block reworded beyond its labels as no block either', async () => {
+    const reworded = IN_ENGLISH.replaceAll('  Status   ', '  State    ');
 
     await open(reworded);
 

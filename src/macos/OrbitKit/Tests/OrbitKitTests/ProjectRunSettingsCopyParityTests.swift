@@ -26,6 +26,13 @@ final class ProjectRunSettingsCopyParityTests: XCTestCase {
     /// A sentinel no sentence uses, put back as the web template's own interpolation.
     private static let since = "qqzzqq"
 
+    /// One of this end's sentences about main, as the browser writes it for whichever branch is the
+    /// project's main branch: each `main` put back as the template's `${main}`. A project on main then
+    /// reads the same sentence at both ends.
+    private static func onMainBranch(_ sentence: String) -> String {
+        sentence.replacingOccurrences(of: "main", with: "${main}")
+    }
+
     private struct Missing: Error, CustomStringConvertible {
         let file: String
         var description: String {
@@ -80,18 +87,22 @@ final class ProjectRunSettingsCopyParityTests: XCTestCase {
         XCTAssertEqual(StartProject.requestSummary(ProjectStartSettings(line: .main, automatic: false,
                                                                         maxConcurrentTasks: 1)),
                        "The coordinator asked · directly into main · Automatic off · at most 1 at a time")
-        for part in ["START_ROW_ASKED,", "runLineInSentence(settings.line),",
+        for part in ["START_ROW_ASKED,", "runLineInSentence(settings.line, main),",
+                     "main: string = mainBranchName(settings.upstreamRef),",
                      "`${RUN_AUTOMATIC} ${settings.automatic ? 'on' : 'off'}`,",
                      "`at most ${settings.maxConcurrentTasks} at a time`,", "].join(' · ');"] {
             assertSays(web, part, in: Self.words)
         }
-        assertSays(web, "return line === 'MAIN' ? '\(RunSettings.lineInSentence(.main))' : '\(RunSettings.lineInSentence(.projectBranch))';",
+        // Directly into the project's main branch: main, on a project on main.
+        assertSays(web, "return line === 'MAIN' ? `\(Self.onMainBranch(RunSettings.lineInSentence(.main)))` : '\(RunSettings.lineInSentence(.projectBranch))';",
                    in: Self.words)
 
         // Where the page draws them: the request's row under the card's own question, and the owner's
         // own Start… beside the words that say nobody asked.
         let items = try flat(Self.openItems)
-        assertSays(items, "const line = settings ? startRequestSummary(settings) : row.detailLine;", in: Self.openItems)
+        // …directly into the main branch the start card opens with, off the integration read the page holds.
+        assertSays(items, "const line = settings ? startRequestSummary(settings, startMainBranch(settings.upstreamRef, standing)) : row.detailLine;",
+                   in: Self.openItems)
         assertSays(items, "{START_PROJECT_TITLE}", in: Self.openItems)
         assertSays(items, "{ACTION_LABEL.REVIEW}", in: Self.openItems)
         assertSays(items, "{START_ROW_OWN}", in: Self.openItems)
@@ -111,7 +122,8 @@ final class ProjectRunSettingsCopyParityTests: XCTestCase {
         assertSays(row, "{`${RUN_TASKS_LAND_ON}: `}", in: Self.line)
         assertSays(row, "<b>{RUN_LINE_DECIDED_AT_START}</b>", in: Self.line)
         assertSays(row, "{` — ${RUN_LINE_SUGGESTED} `}", in: Self.line)
-        assertSays(row, "<b>{runLineInSentence(suggested)}</b>", in: Self.line)
+        // …directly into the main branch the start opens with: main, until the owner chooses another.
+        assertSays(row, "<b>{runLineInSentence(suggested, startMainBranch(suggestion?.upstreamRef, view))}</b>", in: Self.line)
     }
 
     /// Start… opens the start card set by the default rule, the browser's `defaultStartSettings`,
@@ -159,8 +171,10 @@ final class ProjectRunSettingsCopyParityTests: XCTestCase {
         assertSays(block, "{paused ? RUN_RESUME : RUN_PAUSE}", in: Self.block)
         assertSays(block, "title={move.variables === 'resume' ? RUN_NOT_RESUMED : RUN_NOT_PAUSED}", in: Self.block)
         assertSays(block, "title={RUN_NOT_SAVED}", in: Self.block)
-        // The Automatic sentence follows the line — the one chosen, or a project branch while none is.
-        assertSays(block, "{runAutomaticHint(draft.line ?? 'PROJECT_BRANCH')}", in: Self.block)
+        // The Automatic sentence follows the line — the one chosen, or a project branch while none is —
+        // and names the project's main branch, which is main on a project on main.
+        assertSays(block, "{runAutomaticHint(draft.line ?? 'PROJECT_BRANCH', main)}", in: Self.block)
+        assertSays(block, "const main = draft.upstream ?? DEFAULT_MAIN_BRANCH;", in: Self.block)
     }
 
     /// The two sentences with a time in them, rendered here with a sentinel and put back as the
@@ -178,8 +192,11 @@ final class ProjectRunSettingsCopyParityTests: XCTestCase {
 
         let block = try flat(Self.block)
         assertSays(block, "{runLineLocked(view.startedAt ? ago(view.startedAt, now) : null)}", in: Self.block)
-        assertSays(block, "? `${runPausedSince(ago(project.pausedAt, now))} ${RUN_PAUSE_HINT}`", in: Self.block)
-        assertSays(block, ": RUN_PAUSE_HINT}", in: Self.block)
+        // What Pause stops, said of the main branch the project stands on: this end's sentence, on a
+        // project on main.
+        assertSays(web, "return `\(Self.onMainBranch(RunSettings.pauseHint))`;", in: Self.words)
+        assertSays(block, "? `${runPausedSince(ago(project.pausedAt, now))} ${runPauseHint(stored.upstream ?? DEFAULT_MAIN_BRANCH)}`", in: Self.block)
+        assertSays(block, ": runPauseHint(stored.upstream ?? DEFAULT_MAIN_BRANCH)}", in: Self.block)
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         let twentyMinutes = ISO8601DateFormatter().string(from: now.addingTimeInterval(-20 * 60))
         XCTAssertEqual(RunSettings.pauseFootnote(pausedAt: twentyMinutes, now: now),

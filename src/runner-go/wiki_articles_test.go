@@ -200,8 +200,8 @@ func longArticle(title string, notes int) string {
 // articleAnswers answers as a model would: a group's name, an overview, or an article.
 func articleAnswers(prompt string) (int, string) {
 	switch {
-	case strings.Contains(prompt, "起一个简短的中文小标题"):
-		return http.StatusOK, "「迁移与界面」"
+	case strings.Contains(prompt, "Give this group a short English subheading"):
+		return http.StatusOK, "\"Migrations and the UI\""
 	case strings.Contains(prompt, "Write the overview"):
 		return http.StatusOK, longArticle("总览", 2)
 	}
@@ -346,11 +346,12 @@ func TestWikiArticleRunWritesTheChangedTopicsThroughACleanClaudeCode(t *testing.
 	// The groups are named one after another, each told the names already taken.
 	var naming []string
 	for _, request := range vllm.Requests() {
-		if strings.Contains(request.Prompt, "起一个简短的中文小标题") {
+		if strings.Contains(request.Prompt, "Give this group a short English subheading") {
 			naming = append(naming, request.Prompt)
 		}
 	}
-	if len(naming) != 2 || strings.Contains(naming[0], "已经叫") || !strings.Contains(naming[1], "同一主题的其他组已经叫：迁移与界面") {
+	if len(naming) != 2 || strings.Contains(naming[0], "are already called") ||
+		!strings.Contains(naming[1], "The topic's other groups are already called: Migrations and the UI.") {
 		t.Errorf("the naming prompts do not carry the names already taken: %q", naming)
 	}
 
@@ -735,6 +736,10 @@ func TestWikiArticleDraftCharsCountsWhatTheServerWouldKeep(t *testing.T) {
 	if got := wikiArticleTitle("没有标题", "fallback"); got != "fallback" {
 		t.Errorf("title = %q", got)
 	}
+	if got := wikiArticleGroupName("OK, the subheading for this group is:\n\"Migrations and writes\""); got != "Migrations and writes" {
+		t.Errorf("group name = %q", got)
+	}
+	// A name wrapped the way a model answering in Chinese wraps it reads the same.
 	if got := wikiArticleGroupName("好的，这组的小标题是：\n「迁移与写入清单」"); got != "迁移与写入清单" {
 		t.Errorf("group name = %q", got)
 	}
@@ -932,7 +937,7 @@ func wikiArticleWriterUnit(topics []wikiArticleWriterFixtureTopic, names map[str
 	}
 	for _, topic := range topics {
 		switch {
-		case strings.HasPrefix(prompt, "下面是 wiki 里「"+topic.Title+"」主题下"):
+		case strings.HasPrefix(prompt, "Below are the titles of the entries filed in one group under the wiki topic \""+topic.Title+"\":"):
 			return topic.Slug, fmt.Sprintf("name-%d", len(names[topic.Slug])+1)
 		case strings.HasPrefix(prompt, `Write the overview of the wiki topic "`+topic.Title+`".`),
 			strings.HasPrefix(prompt, `Write a wiki article titled "`+topic.Title+`",`):
@@ -981,10 +986,10 @@ func TestWikiArticleAsksWhatTheServerAsks(t *testing.T) {
 		mu.Lock()
 		defer mu.Unlock()
 		switch {
-		case strings.Contains(prompt, "起一个简短的中文小标题"):
+		case strings.Contains(prompt, "Give this group a short English subheading"):
 			name := fixture.Model.Names[named]
 			named++
-			return http.StatusOK, "好的，这组的小标题是：\n「" + name + "」"
+			return http.StatusOK, "OK, the subheading for this group is:\n\"" + name + "\""
 		case strings.Contains(prompt, "A previous draft kept only"):
 			return http.StatusOK, fixture.Model.Article
 		case strings.HasPrefix(prompt, `Write a wiki article titled "`+fixture.Model.ShortFor+`",`):

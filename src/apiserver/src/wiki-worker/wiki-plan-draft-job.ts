@@ -181,7 +181,7 @@ export function wikiPlanServerDraftKey(planJobId: string, wikiJobId: string, req
   return `wiki-plan-${sum.slice(0, 40)}`;
 }
 
-const NEEDS_FORMAT = '\n\n（注意：严格按上面的输出格式输出，不要别的内容。）';
+const NEEDS_FORMAT = '\n\n(Note: output exactly in the output format above, and nothing else.)';
 
 /** The plan job a run is for, as it reads it. */
 interface PlanJobRow {
@@ -650,7 +650,7 @@ class WikiPlanDraftRun implements WikiPlanRunState {
     for (const unit of units) byCat.set(unit.cat, [...(byCat.get(unit.cat) ?? []), unit]);
     const cats = [...byCat.keys()];
     const catalogue = wikiPlanCatalogueText(this);
-    const prefix = `${wikiPlanDetailMaterials(this)}\n# 文档目录\n${catalogue}\n`;
+    const prefix = `${wikiPlanDetailMaterials(this)}\n# Document catalogue\n${catalogue}\n`;
     await this.parallel(cats.length, async (i) => {
       const c = cats[i];
       const ids = byCat.get(c)!.map((unit) => unit.id);
@@ -672,7 +672,7 @@ class WikiPlanDraftRun implements WikiPlanRunState {
       const unit = units[i];
       try {
         const answer = await this.ask(attempt, 'outline', unit.slug,
-          `${wikiPlanDocMaterials(this, unit)}\n# 文档目录\n${catalogue}\n${wikiPlanOutlinePrompt(unit)}`,
+          `${wikiPlanDocMaterials(this, unit)}\n# Document catalogue\n${catalogue}\n${wikiPlanOutlinePrompt(unit)}`,
           (text) => parseWikiPlanDocBody(text).sections.length > 0);
         const { sections, stray } = parseWikiPlanDocBody(answer);
         unit.sections = sections;
@@ -944,9 +944,9 @@ function headerOf(a: WikiPlanAssembled, unit: WikiPlanUnit): WikiPlanHeader {
   };
   for (const out of doc.scopeOut) {
     const ids = out.docs.flatMap((slug) => (a.slugIds.has(slug) ? [a.slugIds.get(slug)!] : []));
-    h.scopeOut.push(ids.length > 0 ? `${out.text}（见 ${ids.join('、')}）` : out.text);
+    h.scopeOut.push(ids.length > 0 ? `${out.text} (see ${ids.join(', ')})` : out.text);
   }
-  if (doc.length.min > 0) h.length = `${doc.length.min}–${doc.length.max} 字`;
+  if (doc.length.min > 0) h.length = `${doc.length.min}–${doc.length.max} characters`;
   return h;
 }
 

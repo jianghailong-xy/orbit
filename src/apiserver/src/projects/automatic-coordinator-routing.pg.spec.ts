@@ -471,16 +471,16 @@ test('an Automatic project hands a path warning to its coordinator as a delivery
           'the message is not the item’s own delivery');
         const text = turns[0]!.content;
         for (const want of [
-          'Changed files it didn’t declare', STRAY, DECLARED_DIR, '机械的范围告警', 'open_item_resolve',
-          'task_reopen', 'supersedesTaskId', 'integration_retry', '不要为它 ask_owner',
-          '你接手之后它一直归你',
+          'Changed files it didn’t declare', STRAY, DECLARED_DIR, 'mechanical scope warning', 'open_item_resolve',
+          'task_reopen', 'supersedesTaskId', 'integration_retry', 'do not ask_owner about it',
+          'once you take it up it stays yours',
         ]) {
           assert.ok(text.includes(want), `the review message does not say ${JSON.stringify(want)}`);
         }
         // Revision 13 (§4.6): a review the coordinator took up is not handed to the owner on a clock.
         assert.ok(!text.includes('exceptionEscalationSeconds'), 'the review still threatens the escalation clock');
-        assert.ok(!text.includes('合并到 main'), 'the review was sent as an order to merge');
-        assert.ok(!text.includes('需要账号所有者裁决'), 'the review was worded as the owner’s decision');
+        assert.ok(!text.includes('merge into main'), 'the review was sent as an order to merge');
+        assert.ok(!text.includes('needs the account owner’s ruling'), 'the review was worded as the owner’s decision');
         assert.equal(await stack.db.projectOpenItemDelivery.count({
           where: { itemId: item!.id, sessionId: f.coordinatorSessionId, purpose: 'ITEM' },
         }), 1, 'the hand-over was not recorded against the item');
@@ -600,7 +600,7 @@ test('an argued exemption and a moved standard are the owner’s blockers even i
       for (const turn of turns) {
         assert.ok(!turn.clientTurnId?.startsWith(OPEN_ITEM_TURN_PREFIX),
           'the coordinator was handed an exception item about the ruler');
-        assert.ok(turn.content.includes('需要账号所有者裁决'),
+        assert.ok(turn.content.includes('needs the account owner’s ruling'),
           'the coordinator was told about the ruler as something other than the owner’s decision');
       }
     } finally {
@@ -732,8 +732,8 @@ test('a branch git refused is the coordinator’s review too, and it ends when t
       assert.equal(item?.dedupeKey, `DR:MERGE_REFUSED_BY_GIT:${taskId}`);
       assert.deepEqual((item?.payload as { paths?: string[] }).paths, [IN_SCOPE]);
       const [turn] = await turnsTo(stack, f.coordinatorSessionId);
-      for (const want of ['Git refused to merge it', 'git 拒绝了合并', IN_SCOPE, 'task_reopen',
-        'merge_receipt', '不要原样重跑']) {
+      for (const want of ['Git refused to merge it', 'git refused the merge', IN_SCOPE, 'task_reopen',
+        'merge_receipt', 'Do not rerun it as it stands']) {
         assert.ok(turn?.content.includes(want), `the refused-merge message does not say ${want}`);
       }
 

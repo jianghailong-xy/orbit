@@ -13,35 +13,39 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
+import io.orbitd.android.composer.ProviderEngines
 import io.orbitd.android.navigation.ObjectId
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.*
 
-/** AgentDefaults.efforts(for:model:catalog:) and Effort.label, for the workspace form's picker. */
+/** AgentDefaults.efforts(for:model:catalog:) and Effort.label, for the workspace form's picker. Asked of the engine the workspace's
+ * next session runs on, never of the provider's slug: a key on Codex's protocol offers Codex's levels (contract §2.3). */
 internal object WorkspaceEffort {
-    private fun static(provider: String) = when (provider) {
+    private fun static(engine: String) = when (engine) {
         "codex" -> listOf("", "minimal", "low", "medium", "high", "xhigh", "max", "ultra")
         "kimi" -> listOf("", "low", "high", "max")
         "opencode" -> listOf("", "minimal", "low", "medium", "high", "xhigh", "max")
         "antigravity" -> listOf("", "low", "medium", "high")
+        // DeepSeek Harness's levels are its ACP catalogue's alone: a model the runner hasn't reported offers Default only.
+        "dsh" -> listOf("")
         else -> listOf("", "low", "medium", "high", "xhigh", "max", "ultra")
     }
     private val antigravityAliases = mapOf("none" to "low", "minimal" to "low", "xhigh" to "high", "max" to "high", "ultra" to "high")
 
     fun label(effort: String) = when (effort) { "" -> "Default"; "xhigh" -> "xHigh"; else -> effort.replaceFirstChar { it.uppercase() } }
 
-    /** The provider's runner-reported levels for its default model; the static list when the catalog has no row. */
-    fun options(provider: String, runner: JsonObject?): List<String> {
-        if (provider !in setOf("codex", "opencode", "kimi", "antigravity")) return static(provider)
-        val model = runner?.obj("runtimeDefaultModels")?.str(provider)
-        val row = runner?.obj("modelCatalog")?.list(provider)?.firstOrNull { it.str("value") == model } ?: return static(provider)
+    /** The engine's runner-reported levels for its default model; the static list when the catalog has no row. */
+    fun options(engine: String, runner: JsonObject?): List<String> {
+        if (engine !in setOf("codex", "opencode", "kimi", "antigravity", "dsh")) return static(engine)
+        val model = runner?.obj("runtimeDefaultModels")?.str(engine)
+        val row = runner?.obj("modelCatalog")?.list(engine)?.firstOrNull { it.str("value") == model } ?: return static(engine)
         return listOf("") + (row["reasoningLevels"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
             .filter { it.isNotEmpty() }.distinct()
     }
 
-    /** normalizeEffort: a level carried across runtimes maps onto the smaller vocabulary. */
-    fun normalize(effort: String, provider: String) = when (provider) {
+    /** normalizeEffort: a level carried across engines maps onto the smaller vocabulary. */
+    fun normalize(effort: String, engine: String) = when (engine) {
         "kimi" -> when (effort) { "minimal" -> "low"; "medium" -> "high"; "xhigh" -> "max"; else -> effort }
         "antigravity" -> antigravityAliases[effort] ?: effort
         else -> effort
@@ -82,8 +86,9 @@ fun WorkspaceSettings(api: ManagementApi, workspaceId: String?, revision: Long, 
         }
         return
     }
-    val provider = saved.str("lastProvider") ?: saved.str("provider") ?: "claude"
-    val prefilledEffort = WorkspaceEffort.normalize(saved.str("effort").orEmpty(), provider)
+    // The engine the workspace's next session runs on: its last session's, else its provider's default (contract §3.4).
+    val engine = ProviderEngines.sessionEngine(saved.str("lastEngine"), saved.str("lastProvider") ?: saved.str("provider"), emptyList())
+    val prefilledEffort = WorkspaceEffort.normalize(saved.str("effort").orEmpty(), engine)
     var name by rememberSaveable(id) { mutableStateOf(saved.text("name")) }
     var effort by rememberSaveable(id) { mutableStateOf(prefilledEffort) }
     var instructions by rememberSaveable(id) { mutableStateOf(saved.text("appendSystemPrompt")) }
@@ -92,7 +97,7 @@ fun WorkspaceSettings(api: ManagementApi, workspaceId: String?, revision: Long, 
     var modelRouting by rememberSaveable(id) { mutableStateOf(saved.bool("modelRouting") ?: false) }
     val dirty = name != saved.text("name") || effort != prefilledEffort || instructions != saved.text("appendSystemPrompt") ||
         workDir != saved.text("workDir") || enabled != (saved.bool("enabled") ?: true) || modelRouting != (saved.bool("modelRouting") ?: false)
-    val options = WorkspaceEffort.options(provider, runner).let { if (effort in it) it else listOf(effort) + it }
+    val options = WorkspaceEffort.options(engine, runner).let { if (effort in it) it else listOf(effort) + it }
     fun commit() {
         if (!dirty || name.isBlank()) { done(); return }
         saving = true; failure = null

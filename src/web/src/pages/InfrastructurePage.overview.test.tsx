@@ -2,7 +2,6 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { App as AntdApp } from 'antd';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Runner } from '../components/TasksSidePanel';
@@ -227,17 +226,15 @@ async function mount() {
   root = createRoot(host);
   act(() =>
     root!.render(
-      <AntdApp>
-        <QueryClientProvider client={qc}>
-          <MemoryRouter initialEntries={['/infrastructure']}>
-            <Probe />
-            <Routes>
-              <Route path="/infrastructure" element={<InfrastructurePage />} />
-              <Route path="*" element={<div>elsewhere</div>} />
-            </Routes>
-          </MemoryRouter>
-        </QueryClientProvider>
-      </AntdApp>,
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={['/infrastructure']}>
+          <Probe />
+          <Routes>
+            <Route path="/infrastructure" element={<InfrastructurePage />} />
+            <Route path="*" element={<div>elsewhere</div>} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
     ),
   );
   await settle();

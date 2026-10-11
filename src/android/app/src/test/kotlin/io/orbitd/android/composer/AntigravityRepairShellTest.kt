@@ -7,7 +7,7 @@ import org.junit.Test
 
 /** A07-4 with A13-3's composer part (iOS d2737d665, b173e3a28, cd8e8a41a): an Antigravity session's failure is a repair card —
  * the CLI's install, a Google sign-in or a Gemini key, a runner update — in the transcript, and above the composer while the session
- * is queued behind the runner; the Provider list says why Antigravity can't run here and opens its engine page. */
+ * is queued behind the runner; a new session's Engine list says why Antigravity CLI can't run here and opens its engine page. */
 class AntigravityRepairShellTest : ComposerShellTest() {
     private fun runner(state: String, health: String) {
         ComposerShell.runner = ComposerShell.obj("""{"id":"${ComposerShell.RUNNER}","name":"Fixture runner","online":true,"status":"ONLINE",
@@ -55,8 +55,9 @@ class AntigravityRepairShellTest : ComposerShellTest() {
         await { has(switch) }
         compose.onNode(switch).performScrollTo().performClick()
         await { ComposerShell.body("PATCH sessions/${ComposerShell.SESSION}/config") != null }
-        assertEquals(buildJsonObject { put("provider", "gemini"); put("model", "gemini-3-pro"); put("effort", "") },
-            ComposerShell.body("PATCH sessions/${ComposerShell.SESSION}/config"))
+        assertEquals("onto the key, on the engine the session runs", buildJsonObject {
+            put("provider", "gemini"); put("engine", "antigravity"); put("model", "gemini-3-pro"); put("effort", "")
+        }, ComposerShell.body("PATCH sessions/${ComposerShell.SESSION}/config"))
     }
 
     @Test fun aSessionQueuedBehindTheRunnersGateSaysWhatItWaitsForAboveTheComposer() {
@@ -73,13 +74,15 @@ class AntigravityRepairShellTest : ComposerShellTest() {
         assertTrue(has(hasText("Open in Providers") and hasClickAction()))
     }
 
-    @Test fun theProviderListSaysWhyAntigravityCannotRunAndOpensItsEnginePage() {
+    @Test fun theEngineListSaysWhyAntigravityCannotRunAndOpensItsEnginePage() {
         runner("""{"supported":false,"installed":null,"version":null,"envKeyAvailable":false,"authSource":"google","googleLogin":"needs_update"}""",
             """{"engine":"antigravity","installed":true,"auth":"yes","authSource":"google"}""")
-        signIn(); openDraft(); openModelMenu()
-        val row = hasText("Antigravity — Update runner →") and hasClickAction() and isEnabled() and hasAnyAncestor(isDialog())
+        signIn(); openDraft()
+        compose.onNodeWithTag("new-session-engine").performClick()
+        await { has(hasTestTag("engine-choices")) }
+        val row = hasTestTag("engine:antigravity") and hasText("Antigravity CLI") and hasText("Update runner →") and hasClickAction() and isEnabled()
         assertTrue(has(row))
         compose.onNode(row).performScrollTo().performClick()
-        await { !has(isDialog()) && has(hasText("Antigravity")) }
+        await { !has(isDialog()) && has(hasText("Antigravity CLI")) }
     }
 }

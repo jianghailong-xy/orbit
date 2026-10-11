@@ -10,7 +10,11 @@
  *      a provider no run could start on ('claude', the machine's own sign-in) is turned on by `server` and
  *      `canary`, and refused by `runner` as it always was;
  *   3. the runner door hands a server-executed account neither its run context nor its dossiers: both routes
- *      answer 409 WIKI_SERVER_EXECUTES.
+ *      answer 409 WIKI_SERVER_EXECUTES;
+ *   4. the end of a server run that queued its space's articles job asks for the next round (the owner's decision of
+ *      2026-10-10): in the canary's own order — the articles job queued at T, the worker's pass at T+5 s, the owner's
+ *      next event at T+15 s or T+100 s — the round is made at the end, right behind the articles job, and runs first;
+ *      and a run whose end leaves the space no longer due makes none, its articles job running at the next pass.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/wiki/wiki-maintain-trigger.pg.spec.ts
  *
@@ -31,10 +35,11 @@ import { PrismaService } from '../prisma/prisma.service';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
 import { RunnerWikiMaintainController } from '../runner-api/runner-wiki-maintain.controller';
 import { RunnerWikiMaintenanceController } from '../runner-api/runner-wiki-maintenance.controller';
+import { claimWikiJobs, succeedWikiJob, type ClaimedWikiJob } from '../wiki-worker/wiki-jobs';
 import { WikiRefusalError, WikiService } from './wiki.service';
 import { WikiMaintenance } from './wiki-maintenance';
 import { setWikiMaintenance } from './wiki-maintenance-settings';
-import { considerWikiMaintenance } from './wiki-maintenance-run';
+import { considerWikiMaintenance, finishWikiMaintenanceJob } from './wiki-maintenance-run';
 
 const URL_ = process.env.COORDINATOR_PG_URL;
 const skip = !URL_;
@@ -281,5 +286,104 @@ test('a server run counts against the day the way a task\'s run does, and a loca
   });
   const third = await considerWikiMaintenance(prisma, h.ownerId, fx.spaceId, hints);
   assert.equal(third.made, true, `an uncounted run is no run for the day: ${JSON.stringify(third)}`);
+  delete process.env.ORBIT_WIKI_EXECUTOR;
+});
+
+// ── 4. the end of a server run that queued the articles asks for the next round (the owner's decision of 2026-10-10) ──
+
+/**
+ * A server-executed space whose `sessions` sessions came to rest in the last hour, a minute apart: past the settle grace
+ * and under a day old, so the space is due by its backlog and not behind.
+ */
+async function busySpace(h: Harness, sessions: number): Promise<{ spaceId: string; sessionIds: string[] }> {
+  const fx = await fixture(h);
+  await h.prisma.session.update({ where: { id: fx.sessionId }, data: { lastTurnAt: new Date(Date.now() - 60 * 60_000) } });
+  const sessionIds = [fx.sessionId];
+  for (let i = 1; i < sessions; i += 1) {
+    const id = randomUUID();
+    await h.prisma.session.create({
+      data: {
+        id, title: `a settled session ${i}`, prompt: 'p', ownerId: h.ownerId, creatorId: h.ownerId, dispatchOrigin: 'USER',
+        status: 'SUCCEEDED', workspaceId: fx.workspaceId, assignedRunnerId: fx.runnerId, lastTurnAt: new Date(Date.now() - (60 - i) * 60_000),
+      },
+    });
+    sessionIds.push(id);
+  }
+  return { spaceId: fx.spaceId, sessionIds };
+}
+
+/**
+ * The canary's order, end to end, in a space of 22 sessions: a fact makes the space's run and the worker claims it; the
+ * run reads `read` sessions and ends having recorded ops (finishWikiMaintenanceJob, as the maintain job ends), which
+ * queues the articles job its ops owe (T); the worker settles the run's job. Then the worker's next pass (T+5 s), the
+ * owner's next event about the space `nextEventAfter` seconds after the end — what made the next round on the canary —
+ * and the passes after it, each job run to its end, until the space has nothing left. Answers what the end left queued
+ * (oldest first), the order the space's jobs ran in, and what the late event made.
+ */
+async function canaryOrder(h: Harness, read: number, nextEventAfter: number): Promise<{ atRunEnd: string[]; order: string[]; lateEvent: string }> {
+  const prisma = h.prisma as unknown as PrismaService;
+  const maintenance = new WikiMaintenance(prisma);
+  // The cases before this one leave their spaces' jobs queued: a claim of this account must find this space's alone.
+  await h.sql.query('DELETE FROM "wiki_job" WHERE "owner_id" = $1', [h.ownerId]);
+  const space = await busySpace(h, 22);
+  const newest = space.sessionIds[space.sessionIds.length - 1];
+  const made = await considerWikiMaintenance(prisma, h.ownerId, space.spaceId, { sessionIds: [newest], taskIds: [] });
+  assert.equal(made.made, true, JSON.stringify(made));
+  if (!made.made) throw new Error('the space made no run');
+  const claim = async (): Promise<ClaimedWikiJob | undefined> => (await claimWikiJobs(prisma, {
+    workerId: randomUUID(), kinds: ['maintain', 'articles'], owners: [h.ownerId], limit: 1, leaseMs: 60_000,
+  }))[0];
+  const queued = () => h.prisma.wikiJob.findMany({
+    where: { spaceId: space.spaceId, state: 'queued' }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }], select: { id: true, kind: true },
+  });
+  const run = await claim();
+  assert.equal(run?.id, made.jobId, 'the worker claims the run');
+  // T: the run read its page and ends having recorded ops.
+  const page = await maintenance.dossierPage(h.ownerId, space.spaceId, { limit: read });
+  const end = new Date();
+  await finishWikiMaintenanceJob(prisma, maintenance, h.ownerId, space.spaceId, run!.id,
+    { outcome: 'succeeded', to: page.cursor, report: { ops: { recorded: 3 } } }, end);
+  const left = await queued();
+  await succeedWikiJob(prisma, { id: run!.id, generation: run!.leaseGeneration });
+  const names = new Map(left.map((job) => [job.id, job.kind === 'maintain' ? 'round' : job.kind]));
+  const order: string[] = [];
+  // T+5 s: the worker's next pass.
+  let taken = await claim();
+  if (taken) order.push(names.get(taken.id) ?? taken.kind);
+  // T+15 s or T+100 s: the owner's next event about the space, as the trigger hears it.
+  const late = await considerWikiMaintenance(prisma, h.ownerId, space.spaceId, { sessionIds: [newest], taskIds: [] },
+    new Date(end.getTime() + nextEventAfter * 1000));
+  const lateEvent = late.made ? 'made a round' : late.why;
+  for (const job of await queued()) if (!names.has(job.id)) names.set(job.id, job.kind === 'maintain' ? 'a round the late event made' : job.kind);
+  // The passes after it, each job run to its end, until nothing of the space is left.
+  while (taken) {
+    await succeedWikiJob(prisma, { id: taken.id, generation: taken.leaseGeneration });
+    taken = await claim();
+    if (taken) order.push(names.get(taken.id) ?? taken.kind);
+  }
+  return { atRunEnd: left.map((job) => job.kind), order, lateEvent };
+}
+
+test('the canary\'s order: the run\'s end queues the articles job at T, the worker passes at T+5 s, the owner\'s next event comes at T+15 s or T+100 s — the next round runs first, the articles job after it', { skip, timeout: 60_000 }, async () => {
+  const h = await boot();
+  process.env.ORBIT_WIKI_EXECUTOR = 'server';
+  delete process.env.ORBIT_WIKI_EXECUTOR_CANARY_OWNERS;
+  // 1d4b9a86 queued at 04:27:06 and its round 61e91611 made at 04:27:21; 3f3a8f90 queued at 07:19:40, claimed at 07:19:42,
+  // and its round 96cd83f0 made at 07:21:20. One session read of 22: the space is still due when the run ends.
+  const seen = { atFifteen: await canaryOrder(h, 1, 15), atHundred: await canaryOrder(h, 1, 100) };
+  assert.deepEqual(seen, {
+    atFifteen: { atRunEnd: ['articles', 'maintain'], order: ['round', 'articles'], lateEvent: 'unfinished' },
+    atHundred: { atRunEnd: ['articles', 'maintain'], order: ['round', 'articles'], lateEvent: 'unfinished' },
+  }, 'the end made the round right behind the articles job, the pass at T+5 s took the round, and the late event found it under way');
+  delete process.env.ORBIT_WIKI_EXECUTOR;
+});
+
+test('a run whose end leaves the space no longer due makes no round, and its articles job runs at the next pass', { skip, timeout: 60_000 }, async () => {
+  const h = await boot();
+  process.env.ORBIT_WIKI_EXECUTOR = 'server';
+  delete process.env.ORBIT_WIKI_EXECUTOR_CANARY_OWNERS;
+  // Five sessions read of 22: seventeen are left, under the backlog threshold and under a day old.
+  assert.deepEqual(await canaryOrder(h, 5, 15), { atRunEnd: ['articles'], order: ['articles'], lateEvent: 'not_due' },
+    'nothing waits for a round that is not coming: the articles job is the next pass\'s, and the late event makes none');
   delete process.env.ORBIT_WIKI_EXECUTOR;
 });

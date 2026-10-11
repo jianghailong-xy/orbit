@@ -2,7 +2,6 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { App as AntApp } from 'antd';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Runner } from './TasksSidePanel';
@@ -72,12 +71,15 @@ function row(id: string): HTMLElement {
   return found;
 }
 const menu = (): HTMLElement | null =>
-  document.querySelector('.session-row-menu:not(.ant-dropdown-hidden) .ant-dropdown-menu');
+  document.querySelector('.session-row-menu[role="menu"]:not([data-closed])');
 function item(label: string): HTMLElement | undefined {
-  return [...(menu()?.querySelectorAll<HTMLElement>('.ant-dropdown-menu-item') ?? [])].find(
+  return [...(menu()?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [])].find(
     (el) => el.textContent?.trim().startsWith(label),
   );
 }
+/** The menu that is open, whichever trigger opened it. */
+const openMenuItems = (): HTMLElement[] =>
+  [...document.querySelectorAll<HTMLElement>('[role="menu"]:not([data-closed]) [role="menuitem"]')];
 async function openMenu(id = TARGET_ID): Promise<void> {
   await click(row(id).querySelector('button[aria-label="More actions"]'));
   await until(() => expect(menu()).not.toBeNull());
@@ -97,7 +99,8 @@ async function mount(scope: Scope = 'open'): Promise<void> {
     root!.render(
       <QueryClientProvider client={client!}>
         <MemoryRouter initialEntries={[`/sessions/${OPEN_ID}`]}>
-          <AntApp><WorkspaceView runner={RUNNER} /><LocationProbe /></AntApp>
+          <WorkspaceView runner={RUNNER} />
+          <LocationProbe />
         </MemoryRouter>
       </QueryClientProvider>,
     );
@@ -106,8 +109,7 @@ async function mount(scope: Scope = 'open'): Promise<void> {
   if (scope !== 'open') {
     await click(container.querySelector('.session-scope-menu'));
     const label = scope === 'trash' ? 'Trash' : 'Completed';
-    const scopeItem = () => [...document.querySelectorAll<HTMLElement>('.ant-dropdown:not(.ant-dropdown-hidden) .ant-dropdown-menu-item')]
-      .find((el) => el.textContent?.trim() === label);
+    const scopeItem = () => openMenuItems().find((el) => el.textContent?.trim() === label);
     await until(() => expect(scopeItem()).toBeTruthy());
     await click(scopeItem());
   }
@@ -189,7 +191,7 @@ describe('the session row More actions menu', () => {
     await mount(scope);
     expect(row(TARGET_ID).querySelectorAll('.session-actions button')).toHaveLength(1);
     await openMenu();
-    const labels = [...menu()!.querySelectorAll('.ant-dropdown-menu-item')].map((el) => {
+    const labels = [...menu()!.querySelectorAll('[role="menuitem"]')].map((el) => {
       const copy = el.cloneNode(true) as HTMLElement;
       copy.querySelector('kbd')?.remove();
       return copy.textContent!.trim();
@@ -244,10 +246,6 @@ describe('the session row More actions menu', () => {
   it('arrow keys move within the menu without switching the open conversation', async () => {
     await mount();
     await openMenu();
-    // rc-menu excludes zero-size nodes from arrow navigation; jsdom has no layout engine.
-    for (const el of menu()!.querySelectorAll<HTMLElement>('.ant-dropdown-menu-item')) {
-      Object.defineProperty(el, 'getBoundingClientRect', { value: () => new DOMRect(0, 0, 200, 32) });
-    }
     await until(() => expect(document.activeElement).toBe(item('Complete')));
     for (const [key, keyCode, label] of [['ArrowDown', 40, 'Pin'], ['ArrowUp', 38, 'Complete']] as const) {
       await act(async () => {
@@ -315,9 +313,10 @@ describe('the session row More actions menu', () => {
     await mount('trash');
     await openMenu();
     await click(item('Delete Permanently'));
-    await until(() => expect(document.querySelector('.ant-modal-confirm')).not.toBeNull());
+    const confirmation = () => document.querySelector<HTMLElement>('[role="alertdialog"]');
+    await until(() => expect(confirmation()).not.toBeNull());
     expect(apiModule.purgeSession).not.toHaveBeenCalled();
-    await click(document.querySelector('.ant-modal-confirm .ant-btn-primary'));
+    await click([...confirmation()!.querySelectorAll('button')].find((b) => b.textContent === 'Delete permanently'));
     await until(() => expect(apiModule.purgeSession).toHaveBeenCalledExactlyOnceWith(TARGET_ID));
   });
 });
@@ -340,8 +339,8 @@ describe('Rename… on a session row', () => {
   }
   async function startRename(): Promise<HTMLInputElement> {
     await openMenu();
-    // As a person picks it: once the menu has taken focus (its autoFocus lands a few frames after it
-    // opens). Picked sooner, that late focus would land on the menu after the field opened, and close it.
+    // As a person picks it: once the menu has taken focus (it moves in a frame after the menu opens).
+    // Picked sooner, that late focus would land on the menu after the field opened, and close it.
     await until(() => expect(menu()!.contains(document.activeElement)).toBe(true));
     await click(item('Rename…'));
     await until(() => expect(field()).not.toBeNull());
@@ -401,8 +400,7 @@ describe('Rename… on a session row', () => {
   it("the open conversation's More actions offers Rename…, which opens the title editor", async () => {
     await mount();
     await click(container!.querySelector('.workspace-header button[title="More actions"]'));
-    const rename = () => [...document.querySelectorAll<HTMLElement>('.ant-dropdown:not(.ant-dropdown-hidden) .ant-dropdown-menu-item')]
-      .find((el) => el.textContent?.trim() === 'Rename…');
+    const rename = () => openMenuItems().find((el) => el.textContent?.trim() === 'Rename…');
     await until(() => expect(rename()).toBeTruthy());
     await click(rename());
     await until(() => expect(container!.querySelector('.workspace-name-input')).not.toBeNull());

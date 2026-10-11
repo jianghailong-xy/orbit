@@ -52,7 +52,7 @@ type wikiPlanUnit struct {
 	Sections []wikiPlanSectionDraft
 	Stray    []string
 	HasBody  bool
-	// The catalogue its body was written against, id → slug: what "见 3.3" in it meant then.
+	// The catalogue its body was written against, id → slug: what "see 3.3" in it meant then.
 	Refs map[string]string
 	// Carried from the version revised: a protected document, as it is; or one a revision keeps whole,
 	// less the sections it moved out.
@@ -79,7 +79,9 @@ var (
 	wikiPlanBacktick = regexp.MustCompile("`([^`]*)`")
 	wikiPlanAgents   = regexp.MustCompile(`\[agents\]|［agents］|（给 ?agent）|\(给 ?agent\)`)
 	wikiPlanMoveLine = regexp.MustCompile(`^[-*]\s*(\d+\.\d+)\s*§\s*(\d+)\s*(?:→|->|=>)\s*(\d+\.\d+)`)
-	wikiPlanIDs      = regexp.MustCompile(`\d+\.\d+`)
+	// The heading a revision's list of moved sections starts under: `### Sections moved into the agents' category`.
+	wikiPlanMovesHeading = regexp.MustCompile(`(?i)\bmoved\b`)
+	wikiPlanIDs          = regexp.MustCompile(`\d+\.\d+`)
 )
 
 // wikiPlanMove is a section a revision moves out of a document of the version revised.
@@ -100,8 +102,8 @@ type wikiPlanCatalogue struct {
 	Stray []string
 }
 
-// parseWikiPlanCatalogue reads a catalogue: `## n. title `key` —— question [agents]` and
-// `- n.m title `slug`｜question｜含：…` (a revision's also carries `来源：…` and a list of moved sections).
+// parseWikiPlanCatalogue reads a catalogue: `## n. title `key` — question [agents]` and
+// `- n.m title `slug` | question | Includes: …` (a revision's also carries `Sources: …` and a list of moved sections).
 // Documents are numbered again in order, whatever the model numbered them; its own numbers name them only
 // in its list of moves. Answers nil for an answer with no category and no document.
 func parseWikiPlanCatalogue(text string) *wikiPlanCatalogue {
@@ -113,7 +115,7 @@ func parseWikiPlanCatalogue(text string) *wikiPlanCatalogue {
 		if line == "" || line == "---" {
 			continue
 		}
-		if strings.HasPrefix(line, "#") && strings.Contains(line, "移到") {
+		if strings.HasPrefix(line, "#") && wikiPlanMovesHeading.MatchString(line) {
 			inMoves = true
 			continue
 		}
@@ -121,7 +123,7 @@ func parseWikiPlanCatalogue(text string) *wikiPlanCatalogue {
 			if m := wikiPlanMoveLine.FindStringSubmatch(line); m != nil {
 				n, _ := strconv.Atoi(m[2])
 				out.Moves = append(out.Moves, wikiPlanMove{From: m[1], Section: n, To: m[3]})
-			} else if none := strings.TrimSpace(strings.TrimLeft(line, "-*")); none != "无" && none != "（无）" && !strings.HasPrefix(line, "（") {
+			} else if none := strings.ToLower(strings.TrimSpace(strings.TrimLeft(line, "-*"))); none != "none" && none != "(none)" && !strings.HasPrefix(line, "(") {
 				out.Stray = append(out.Stray, line)
 			}
 			continue
@@ -144,10 +146,10 @@ func parseWikiPlanCatalogue(text string) *wikiPlanCatalogue {
 			unit := &wikiPlanUnit{Cat: len(out.Cats) - 1, Title: strings.Trim(m[2], "* "), Slug: strings.TrimSpace(m[3]), Question: strings.TrimSpace(m[4])}
 			for _, part := range wikiPlanSplitBar(m[5]) {
 				label, value := wikiPlanLabel(part)
-				switch label {
-				case "含":
+				switch strings.ToLower(label) {
+				case "includes":
 					unit.CardScope = wikiPlanSplitList(value)
-				case "来源":
+				case "sources":
 					unit.Sources = wikiPlanIDs.FindAllString(value, -1)
 				default:
 					unit.Stray = append(unit.Stray, part)
@@ -179,7 +181,7 @@ func wikiPlanSplitBar(text string) []string {
 	return out
 }
 
-// wikiPlanLabel splits `标签：值`; a line with no label answers "" and itself.
+// wikiPlanLabel splits `Label: value`; a line with no label answers "" and itself.
 func wikiPlanLabel(text string) (string, string) {
 	text = strings.TrimSpace(text)
 	for i, r := range text {
@@ -201,17 +203,23 @@ func wikiPlanLabel(text string) (string, string) {
 func wikiPlanSplitList(text string) []string {
 	var out []string
 	for _, part := range strings.FieldsFunc(text, func(r rune) bool { return r == '；' || r == ';' }) {
-		if p := strings.TrimSpace(part); p != "" && p != "无" && p != "—" && p != "-" {
+		if p := strings.TrimSpace(part); p != "" && !wikiPlanNone(p) && p != "—" && p != "-" {
 			out = append(out, p)
 		}
 	}
 	return out
 }
 
+// wikiPlanNone is `none` (in any case), or `(none)`: what the model writes for a field it has nothing for.
+func wikiPlanNone(text string) bool {
+	lower := strings.ToLower(text)
+	return lower == "none" || lower == "(none)"
+}
+
 // wikiPlanSplitNames splits names the model wrote with 、,， between them.
 func wikiPlanSplitNames(text string) []string {
 	text = strings.TrimSpace(text)
-	if text == "" || text == "无" || text == "—" || text == "-" || text == "（无）" {
+	if text == "" || wikiPlanNone(text) || text == "—" || text == "-" {
 		return nil
 	}
 	var out []string
@@ -233,8 +241,8 @@ var (
 
 // wikiPlanHeaderLabels are the labels a document's header has, and the key materials a details answer
 // adds, which are read for the next step and not stored.
-var wikiPlanHeaderLabels = map[string]bool{"标题": true, "问题": true, "读者": true, "含": true, "不含": true, "篇幅": true,
-	"文档": true, "代码": true, "契约": true, "主题": true, "项目": true}
+var wikiPlanHeaderLabels = map[string]bool{"title": true, "question": true, "audience": true, "includes": true, "excludes": true, "length": true,
+	"docs": true, "code": true, "contracts": true, "topics": true, "projects": true}
 
 // parseWikiPlanDocBody reads one document's header lines and its outline: what a revision's rewrite and
 // a redo answer, and what the details and outline steps answer between them.
@@ -260,47 +268,49 @@ func parseWikiPlanDocBody(text string) (wikiPlanHeader, []wikiPlanSectionDraft, 
 		}
 		body := strings.TrimSpace(strings.TrimLeft(line, "-*•"))
 		label, value := wikiPlanLabel(body)
+		// A label is read in any case: `Title:`, `title:` and `TITLE:` are one label.
+		key := strings.ToLower(label)
 		if current == nil {
-			switch label {
-			case "标题":
+			switch key {
+			case "title":
 				header.Title = value
-			case "问题":
+			case "question":
 				header.Question = value
-			case "读者":
+			case "audience":
 				header.Audience = wikiPlanSplitList(value)
-			case "含":
+			case "includes":
 				header.ScopeIn = wikiPlanSplitList(value)
-			case "不含":
+			case "excludes":
 				header.ScopeOut = wikiPlanSplitList(value)
-			case "篇幅":
+			case "length":
 				header.Length = value
-			case "文档":
+			case "docs":
 				header.KeyDocs = wikiPlanPaths(value)
-			case "代码":
+			case "code":
 				header.KeyCode = wikiPlanPaths(value)
-			case "契约":
+			case "contracts":
 				header.KeyContracts = wikiPlanPaths(value)
-			case "主题":
+			case "topics":
 				header.Topics = wikiPlanSplitNames(value)
-			case "项目":
+			case "projects":
 				header.Projects = wikiPlanProjectsOf(value)
 			default:
 				stray = append(stray, body)
 			}
 			continue
 		}
-		switch label {
-		case "讲什么", "covers":
+		switch key {
+		case "covers":
 			current.Covers = value
 			lastCovers = true
 			continue
-		case "文档":
+		case "docs":
 			current.Docs = append(current.Docs, wikiPlanDocSourcesOf(value)...)
-		case "代码":
+		case "code":
 			current.Code = append(current.Code, wikiPlanCodeSourcesOf(value)...)
-		case "契约":
+		case "contracts":
 			current.Contracts = append(current.Contracts, wikiPlanPaths(value)...)
-		case "会话", "会话与条目":
+		case "sessions":
 			current.Sessions = wikiPlanSessionsOf(value)
 		case "":
 			if lastCovers && !strings.HasPrefix(line, "-") {
@@ -343,7 +353,7 @@ func parseWikiPlanDetails(text string) map[string]wikiPlanHeader {
 // `path（note）` (a note, not part of the path).
 func wikiPlanPaths(text string) []string {
 	text = strings.TrimSpace(text)
-	if text == "" || text == "无" || text == "（无）" || text == "—" {
+	if text == "" || wikiPlanNone(text) || text == "—" {
 		return nil
 	}
 	expand := regexp.MustCompile(`([\w./\-]+/)\s*[（(]([^）)]*)[）)]`)
@@ -403,7 +413,7 @@ func wikiPlanDocSourcesOf(text string) []wikiPlanDocSource {
 	var out []wikiPlanDocSource
 	for _, section := range wikiPlanSectionNames(sections) {
 		s := wikiPlanUnwrap(section)
-		if wikiPlanWholeDoc[s] {
+		if wikiPlanWholeDoc[strings.ToLower(s)] {
 			out = append(out, wikiPlanDocSource{Path: paths[0]})
 			continue
 		}
@@ -442,8 +452,8 @@ func wikiPlanSectionNames(text string) []string {
 	return append(out, name.String())
 }
 
-// wikiPlanWholeDoc are the names a model gives the whole of a document after `§`: no section.
-var wikiPlanWholeDoc = map[string]bool{"正文": true, "全文": true, "全篇": true, "整篇": true}
+// wikiPlanWholeDoc are the names a model gives the whole of a document after `§`, in any case: no section.
+var wikiPlanWholeDoc = map[string]bool{"whole": true, "whole document": true, "entire document": true, "full text": true}
 
 // wikiPlanUnwrap takes off parentheses a model put around a whole name, and one left unmatched at either
 // end — never the closing one of a name that ends in its own, as «4. 数据模型（新表 `share_link`）» does.
@@ -559,25 +569,30 @@ func wikiPlanProjectsOf(text string) []string {
 	return wikiPlanSplitNames(text)
 }
 
-// wikiPlanSessionsOf reads `项目「…」；时间 A 至 B；关键词 …；锚点 …；kind …；主题 …；要找：…`.
+// wikiPlanLookFor is where a session condition's `look for:` starts: what to look for, in any case.
+var wikiPlanLookFor = regexp.MustCompile(`(?i)look for[:：]`)
+
+// wikiPlanSessionsOf reads `projects 「…」; dates A to B; keywords …; anchors …; kind …; topics …; look for: …`,
+// each word in any case.
 func wikiPlanSessionsOf(text string) *wikiPlanSessionsDraft {
 	out := &wikiPlanSessionsDraft{}
 	body := text
-	for _, mark := range []string{"要找：", "要找:"} {
-		if before, after, ok := strings.Cut(body, mark); ok {
-			body, out.Evidence = before, strings.TrimSpace(after)
-			break
-		}
+	if mark := wikiPlanLookFor.FindStringIndex(body); mark != nil {
+		body, out.Evidence = body[:mark[0]], strings.TrimSpace(body[mark[1]:])
+	}
+	kinds := func(rest string) []string {
+		return strings.FieldsFunc(rest, func(r rune) bool { return r == '/' || r == '、' || r == ',' || r == '，' || r == ' ' })
 	}
 	for _, part := range strings.FieldsFunc(body, func(r rune) bool { return r == '；' || r == ';' }) {
 		part = strings.TrimSpace(part)
 		if part == "" {
 			continue
 		}
+		lower := strings.ToLower(part)
 		switch {
-		case strings.HasPrefix(part, "项目"):
-			out.Projects = wikiPlanProjectsOf(strings.TrimSpace(strings.TrimPrefix(part, "项目")))
-		case strings.HasPrefix(part, "时间"):
+		case strings.HasPrefix(lower, "projects"):
+			out.Projects = wikiPlanProjectsOf(strings.TrimSpace(part[len("projects"):]))
+		case strings.HasPrefix(lower, "dates"):
 			dates := wikiPlanDate.FindAllString(part, -1)
 			if len(dates) > 0 {
 				out.Since = dates[0]
@@ -588,26 +603,24 @@ func wikiPlanSessionsOf(text string) *wikiPlanSessionsDraft {
 			if len(dates) == 0 {
 				out.Stray = append(out.Stray, part)
 			}
-		case strings.HasPrefix(part, "关键词"):
-			out.Keywords = wikiPlanSplitNames(strings.TrimPrefix(part, "关键词"))
-		case strings.HasPrefix(part, "锚点路径"):
-			out.AnchorPaths = wikiPlanSplitNames(strings.TrimPrefix(part, "锚点路径"))
-		case strings.HasPrefix(part, "锚点"):
-			out.AnchorPaths = wikiPlanSplitNames(strings.TrimPrefix(part, "锚点"))
-		case strings.HasPrefix(strings.ToLower(part), "kind"):
-			for _, k := range strings.FieldsFunc(part[4:], func(r rune) bool { return r == '/' || r == '、' || r == ',' || r == '，' || r == ' ' }) {
+		case strings.HasPrefix(lower, "keywords"):
+			out.Keywords = wikiPlanSplitNames(part[len("keywords"):])
+		case strings.HasPrefix(lower, "anchor paths"):
+			out.AnchorPaths = wikiPlanSplitNames(part[len("anchor paths"):])
+		case strings.HasPrefix(lower, "anchors"):
+			out.AnchorPaths = wikiPlanSplitNames(part[len("anchors"):])
+		case strings.HasPrefix(lower, "kind"):
+			for _, k := range kinds(part[4:]) {
 				if k = strings.TrimSpace(k); k != "" {
 					out.EntryKinds = append(out.EntryKinds, k)
 				}
 			}
-		case strings.HasPrefix(part, "条目 kind"):
-			for _, k := range strings.FieldsFunc(strings.TrimPrefix(part, "条目 kind"), func(r rune) bool { return r == '/' || r == '、' || r == ',' || r == '，' || r == ' ' }) {
-				out.EntryKinds = append(out.EntryKinds, k)
-			}
-		case strings.HasPrefix(part, "现有主题"):
-			out.Topics = wikiPlanSplitNames(strings.TrimPrefix(part, "现有主题"))
-		case strings.HasPrefix(part, "主题"):
-			out.Topics = wikiPlanSplitNames(strings.TrimPrefix(part, "主题"))
+		case strings.HasPrefix(lower, "entry kind"):
+			out.EntryKinds = append(out.EntryKinds, kinds(part[len("entry kind"):])...)
+		case strings.HasPrefix(lower, "existing topics"):
+			out.Topics = wikiPlanSplitNames(part[len("existing topics"):])
+		case strings.HasPrefix(lower, "topics"):
+			out.Topics = wikiPlanSplitNames(part[len("topics"):])
 		default:
 			out.Stray = append(out.Stray, part)
 		}
@@ -617,11 +630,12 @@ func wikiPlanSessionsOf(text string) *wikiPlanSessionsDraft {
 
 // ── Numbers of documents in the text ────────────────────────────────────────────────────────────
 
-// wikiPlanCrossRef is a pointer to another document written in words: `→ 3.2`, `见 3.2、3.3`, `see 3.2`.
-var wikiPlanCrossRef = regexp.MustCompile(`(→|->|参见|见|[Ss]ee)\s*((?:\d+\.\d+)(?:\s*(?:[、,，]|和|及|与|and)\s*\d+\.\d+)*)`)
+// wikiPlanCrossRef is a pointer to another document written in words: `→ 3.2`, `see 3.2, 3.3`, `see also 3.2`, and
+// the `见 3.2、3.3` of the plan versions written in Chinese, which a revision still renumbers.
+var wikiPlanCrossRef = regexp.MustCompile(`(→|->|参见|见|[Ss]ee(?:\s+also)?)\s*((?:\d+\.\d+)(?:\s*(?:[、,，]|和|及|与|and)\s*\d+\.\d+)*)`)
 
-// wikiPlanScopeOutRef is the `（见 3.2）` a scope-out item ends with.
-var wikiPlanScopeOutRef = regexp.MustCompile(`\s*[（(]\s*(?:见|参见|→|see)\s*((?:\d+\.\d+)(?:\s*(?:[、,，]|和|及|与)\s*\d+\.\d+)*)\s*[）)]\s*$`)
+// wikiPlanScopeOutRef is the ` (see 3.2)` a scope-out item ends with — or the `（见 3.2）` of one written in Chinese.
+var wikiPlanScopeOutRef = regexp.MustCompile(`\s*[（(]\s*(?:见|参见|→|[Ss]ee(?:\s+also)?)\s*((?:\d+\.\d+)(?:\s*(?:[、,，]|和|及|与|and)\s*\d+\.\d+)*)\s*[）)]\s*$`)
 
 // wikiPlanRenumber rewrites every document number in text through rename (its number in the catalogue
 // the text was written against → its number now), and names each one rename does not know.
@@ -646,7 +660,7 @@ func wikiPlanRenumber(text string, rename func(id string) (string, bool)) (strin
 
 var wikiPlanNumber = regexp.MustCompile(`\d[\d,]*`)
 
-// wikiPlanRange reads `1200–2000 字`, `约 1500 字` or `2,000`: the range a document is written to.
+// wikiPlanRange reads `1200–2000 characters`, `about 1500 characters` or `2,000`: the range a document is written to.
 func wikiPlanRange(text string) (int, int, bool) {
 	var nums []int
 	for _, m := range wikiPlanNumber.FindAllString(text, 2) {
@@ -671,15 +685,15 @@ func wikiPlanRange(text string) (int, int, bool) {
 func wikiPlanDocLines(doc wikiPlanDoc, withHeader bool, drop map[int]bool) string {
 	var b strings.Builder
 	if withHeader {
-		fmt.Fprintf(&b, "标题：%s\n问题：%s\n读者：%s\n含：%s\n", doc.Title, doc.Question, strings.Join(doc.Audience, "；"), strings.Join(doc.ScopeIn, "；"))
+		fmt.Fprintf(&b, "Title: %s\nQuestion: %s\nAudience: %s\nIncludes: %s\n", doc.Title, doc.Question, strings.Join(doc.Audience, "; "), strings.Join(doc.ScopeIn, "; "))
 		var outs []string
 		for _, out := range doc.ScopeOut {
 			outs = append(outs, out.Text)
 		}
 		if len(outs) > 0 {
-			fmt.Fprintf(&b, "不含：%s\n", strings.Join(outs, "；"))
+			fmt.Fprintf(&b, "Excludes: %s\n", strings.Join(outs, "; "))
 		}
-		fmt.Fprintf(&b, "篇幅：%d–%d 字\n", doc.Length.Min, doc.Length.Max)
+		fmt.Fprintf(&b, "Length: %d–%d characters\n", doc.Length.Min, doc.Length.Max)
 	}
 	n := 0
 	for i, section := range doc.Sections {
@@ -695,26 +709,26 @@ func wikiPlanDocLines(doc wikiPlanDoc, withHeader bool, drop map[int]bool) strin
 // wikiPlanSectionLines is one section in the line format.
 func wikiPlanSectionLines(n int, s wikiPlanSection) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "\n### %d. %s | %s | %d\n讲什么：%s\n", n, s.Title, s.Kind, s.Length, s.Covers)
+	fmt.Fprintf(&b, "\n### %d. %s | %s | %d\nCovers: %s\n", n, s.Title, s.Kind, s.Length, s.Covers)
 	for _, d := range s.Sources.Docs {
 		if d.Section != nil && *d.Section != "" {
-			fmt.Fprintf(&b, "- 文档：%s § %s\n", d.Path, *d.Section)
+			fmt.Fprintf(&b, "- Docs: %s § %s\n", d.Path, *d.Section)
 		} else {
-			fmt.Fprintf(&b, "- 文档：%s\n", d.Path)
+			fmt.Fprintf(&b, "- Docs: %s\n", d.Path)
 		}
 	}
 	for _, c := range s.Sources.Code {
 		if len(c.Symbols) > 0 {
-			fmt.Fprintf(&b, "- 代码：%s: %s\n", c.Path, strings.Join(c.Symbols, ", "))
+			fmt.Fprintf(&b, "- Code: %s: %s\n", c.Path, strings.Join(c.Symbols, ", "))
 		} else {
-			fmt.Fprintf(&b, "- 代码：%s\n", c.Path)
+			fmt.Fprintf(&b, "- Code: %s\n", c.Path)
 		}
 	}
 	for _, c := range s.Sources.Contracts {
-		fmt.Fprintf(&b, "- 契约：%s\n", c.Path)
+		fmt.Fprintf(&b, "- Contracts: %s\n", c.Path)
 	}
 	if s.Sources.Sessions != nil {
-		b.WriteString("- 会话：" + wikiPlanSessionsLine(*s.Sources.Sessions) + "\n")
+		b.WriteString("- Sessions: " + wikiPlanSessionsLine(*s.Sources.Sessions) + "\n")
 	}
 	return b.String()
 }
@@ -726,33 +740,33 @@ func wikiPlanSessionsLine(s wikiPlanSessions) string {
 		for _, p := range s.Projects {
 			quoted = append(quoted, "「"+p+"」")
 		}
-		parts = append(parts, "项目"+strings.Join(quoted, ""))
+		parts = append(parts, "projects "+strings.Join(quoted, ""))
 	}
 	if s.Since != nil || s.Until != nil {
-		since, until := "", "今"
+		since, until := "", "now"
 		if s.Since != nil {
 			since = *s.Since
 		}
 		if s.Until != nil {
 			until = *s.Until
 		}
-		parts = append(parts, "时间 "+since+" 至 "+until)
+		parts = append(parts, "dates "+since+" to "+until)
 	}
 	if len(s.Keywords) > 0 {
-		parts = append(parts, "关键词 "+strings.Join(s.Keywords, "、"))
+		parts = append(parts, "keywords "+strings.Join(s.Keywords, ", "))
 	}
 	if len(s.AnchorPaths) > 0 {
-		parts = append(parts, "锚点 "+strings.Join(s.AnchorPaths, "、"))
+		parts = append(parts, "anchors "+strings.Join(s.AnchorPaths, ", "))
 	}
 	if len(s.EntryKinds) > 0 {
 		parts = append(parts, "kind "+strings.Join(s.EntryKinds, "/"))
 	}
 	if len(s.Topics) > 0 {
-		parts = append(parts, "主题 "+strings.Join(s.Topics, "、"))
+		parts = append(parts, "topics "+strings.Join(s.Topics, ", "))
 	}
-	line := strings.Join(parts, "；")
+	line := strings.Join(parts, "; ")
 	if s.Evidence != "" {
-		line += "；要找：" + s.Evidence
+		line += "; look for: " + s.Evidence
 	}
 	return line
 }

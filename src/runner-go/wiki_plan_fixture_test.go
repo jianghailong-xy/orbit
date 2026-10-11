@@ -50,19 +50,61 @@ type wikiPlanFixtureRead struct {
 }
 
 type wikiPlanFixtureRound struct {
-	Name         string              `json:"name"`
-	Kind         string              `json:"kind"`
-	Target       wikiPlanLength      `json:"target"`
-	Base         json.RawMessage     `json:"base"`
-	Instructions string              `json:"instructions"`
-	Catalogue    string              `json:"catalogue"`
-	Details      map[string]string   `json:"details"`
-	Outlines     map[string]string   `json:"outlines"`
-	Rewrites     map[string]string   `json:"rewrites"`
-	Prompts      map[string]string   `json:"prompts"`
-	Draft        json.RawMessage     `json:"draft"`
-	Errors       []wikiPlanGateError `json:"errors"`
-	RepoCheck    wikiPlanRepoCheck   `json:"repoCheck"`
+	Name         string                 `json:"name"`
+	Kind         string                 `json:"kind"`
+	Target       wikiPlanLength         `json:"target"`
+	Base         json.RawMessage        `json:"base"`
+	Instructions string                 `json:"instructions"`
+	Catalogue    string                 `json:"catalogue"`
+	Details      wikiPlanFixtureAnswers `json:"details"`
+	Outlines     wikiPlanFixtureAnswers `json:"outlines"`
+	Rewrites     wikiPlanFixtureAnswers `json:"rewrites"`
+	Prompts      map[string]string      `json:"prompts"`
+	Draft        json.RawMessage        `json:"draft"`
+	Errors       []wikiPlanGateError    `json:"errors"`
+	RepoCheck    wikiPlanRepoCheck      `json:"repoCheck"`
+}
+
+// wikiPlanFixtureAnswers are a round's answers to one step, unit by unit, in the order the fixture lists them:
+// the fixture is held byte for byte, and a map would write them sorted.
+type wikiPlanFixtureAnswers []wikiPlanFixtureAnswer
+
+type wikiPlanFixtureAnswer struct{ unit, text string }
+
+func (a wikiPlanFixtureAnswers) answer(unit string) (string, bool) {
+	for _, x := range a {
+		if x.unit == unit {
+			return x.text, true
+		}
+	}
+	return "", false
+}
+
+// MarshalJSON writes the answers as one object, each unit's in its place.
+func (a wikiPlanFixtureAnswers) MarshalJSON() ([]byte, error) {
+	if a == nil {
+		return []byte("null"), nil
+	}
+	var b bytes.Buffer
+	encoder := json.NewEncoder(&b)
+	encoder.SetEscapeHTML(false)
+	b.WriteByte('{')
+	for i, x := range a {
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		if err := encoder.Encode(x.unit); err != nil {
+			return nil, err
+		}
+		b.Truncate(b.Len() - 1)
+		b.WriteByte(':')
+		if err := encoder.Encode(x.text); err != nil {
+			return nil, err
+		}
+		b.Truncate(b.Len() - 1)
+	}
+	b.WriteByte('}')
+	return b.Bytes(), nil
 }
 
 type wikiPlanFixture struct {
@@ -122,8 +164,11 @@ func wikiPlanFixtureMaterials() map[string]interface{} {
 	for i := 0; i < 30; i++ {
 		theme := themes[i%len(themes)]
 		title := fmt.Sprintf("%s 第%d轮", theme, i/len(themes)+1)
-		if i%4 == 0 {
+		switch i % 8 {
+		case 0:
 			title = "执行任务：" + title
+		case 4:
+			title = "Task: " + title
 		}
 		var project interface{}
 		if i%3 == 0 {
@@ -132,6 +177,9 @@ func wikiPlanFixtureMaterials() map[string]interface{} {
 		sessions = append(sessions, map[string]interface{}{"title": title, "month": fmt.Sprintf("2026-%02d", 8+i%2), "task": i%4 == 0,
 			"project": project, "provider": []string{"claude", "codex", "kimi"}[i%3]})
 	}
+	sessions = append(sessions,
+		map[string]interface{}{"title": "Judgment: App 项目", "month": "2026-09", "task": false, "project": "App 项目", "provider": "claude"},
+		map[string]interface{}{"title": "判断：App 项目", "month": "2026-08", "task": false, "project": "App 项目", "provider": "codex"})
 	return map[string]interface{}{
 		"spaceId": "space-1", "title": "App", "asOf": "2026-10-08T00:00:00.000Z",
 		"repo":      map[string]interface{}{"urlNorm": "github.com/acme/app", "rootCommitSha": nil},
@@ -142,7 +190,7 @@ func wikiPlanFixtureMaterials() map[string]interface{} {
 			map[string]interface{}{"id": "p3", "title": "同名项目", "status": "DONE", "createdAt": "2026-09-03T00:00:00.000Z", "tasks": 1, "sessions": 0},
 			map[string]interface{}{"id": "p4", "title": "把「什么算完成」从项目末尾搬到开工前", "status": "OPEN", "createdAt": "2026-09-04T00:00:00.000Z", "tasks": 3, "sessions": 2},
 		},
-		"sessions": map[string]interface{}{"days": 90, "total": 31, "items": sessions},
+		"sessions": map[string]interface{}{"days": 90, "total": 33, "items": sessions},
 		"entries": []interface{}{
 			map[string]interface{}{"kind": "convention", "status": "active", "count": 2},
 			map[string]interface{}{"kind": "pitfall", "status": "active", "count": 3},
@@ -156,70 +204,69 @@ func wikiPlanFixtureMaterials() map[string]interface{} {
 }
 
 // What a model writes, right and wrong: the catalogue, a category's details and a document's outline.
-const wikiPlanFixtureCatalogue = "前言不算\n## 1. 产品 `product` —— 这个服务是什么、怎么运转\n" +
-	"- 1.1 服务概览 `service-overview`｜这个服务是什么、由哪些部分组成｜含：定位；组件；入口\n" +
-	"- 1.2 存储 `storage`｜数据怎么存、怎么取｜含：Store；保存\n" +
-	"- 1.3 接口 `api`｜有哪些接口｜含：路由；客户端｜备注：多余\n" +
-	"## 2. 开发约定 `dev` —— 给写代码的 agent 看的约定 [agents]\n" +
-	"- 2.1 测试约定 `testing`｜怎么跑测试｜含：go test；夹具\n"
+const wikiPlanFixtureCatalogue = "A preamble that does not count\n## 1. Product `product` — What this service is and how it works\n" +
+	"- 1.1 Service overview `service-overview` | What this service is and what it is made of | Includes: purpose; components; entry points\n" +
+	"- 1.2 Storage `storage` | How data is stored and read | Includes: Store; saving\n" +
+	"- 1.3 Interfaces `api` | What interfaces there are | Includes: routes; the client | Note: extra\n" +
+	"## 2. Development conventions `dev` — The conventions for the agents that write code [agents]\n" +
+	"- 2.1 Testing conventions `testing` | How to run the tests | Includes: go test; fixtures\n"
 
-const wikiPlanFixtureDetailsProduct = "### 1.1 服务概览\n读者：新加入的开发者：读完能说出服务由哪些部分组成\n含：定位；组件；入口\n不含：存储细节（见 1.2）；接口（见 1.3）\n篇幅：800–1200 字\n" +
-	"文档：docs/architecture.md、docs/README.md\n代码：src/app/\n契约：contracts/app.contract.json\n主题：storage-topic\n项目：「App 项目」\n\n" +
-	"### 1.2 存储\n读者：写存储代码的人：读完能改 Store\n含：Store 的结构；保存流程\n不含：测试怎么跑（见 2.1）\n篇幅：600–900 字\n" +
-	"文档：docs/wiki-design.md\n代码：src/app/store.go\n契约：无\n主题：无\n项目：无\n\n" +
-	"### 1.3 接口\n读者：调用接口的人：读完能调用 ItemsController\n含：路由；客户端\n不含：存储（见 9.9）\n篇幅：约 700 字\n" +
-	"文档：docs/missing.md\n代码：src/web/（client.ts、api.controller.ts）\n契约：contracts/app.contract.json\n主题：无\n项目：「同名项目」\n"
+const wikiPlanFixtureDetailsProduct = "### 1.1 Service overview\nAudience: developers new to the project: can name the parts of the service once they have read it\n" +
+	"Includes: purpose; components; entry points\nExcludes: storage details (see 1.2); interfaces and testing (see 1.3 and 2.1)\n" +
+	"Length: 800–1200 characters\nDocs: docs/architecture.md, docs/README.md\nCode: src/app/\nContracts: contracts/app.contract.json\n" +
+	"Topics: storage-topic\nProjects: 「App 项目」\n\n### 1.2 Storage\nAudience: people who write storage code: can change Store once they have read it\n" +
+	"Includes: the structure of Store; the saving flow\nExcludes: how to run the tests (see 2.1)\nLength: 600–900 characters\nDocs: docs/wiki-design.md\n" +
+	"Code: src/app/store.go\nContracts: none\nTopics: none\nProjects: none\n\n### 1.3 Interfaces\n" +
+	"Audience: people who call the interfaces: can call ItemsController once they have read it\nIncludes: routes; the client\n" +
+	"Excludes: storage (see 9.9)\nLength: about 700 characters\nDocs: docs/missing.md\nCode: src/web/ (client.ts, api.controller.ts)\n" +
+	"Contracts: contracts/app.contract.json\nTopics: none\nProjects: 「同名项目」\n"
 
-const wikiPlanFixtureDetailsDev = "### 2.1 测试约定\n读者：写代码的 agent：读完知道怎么跑测试\n含：go test；夹具\n不含：存储（见 1.2）\n篇幅：400–600 字\n" +
-	"文档：无\n代码：src/web/\n契约：无\n主题：无\n项目：无\n"
+const wikiPlanFixtureDetailsDev = "### 2.1 Testing conventions\nAudience: agents that write code: know how to run the tests once they have read it\nIncludes: go test; fixtures\n" +
+	"Excludes: storage (see 1.2)\nLength: 400–600 characters\nDocs: none\nCode: src/web/\nContracts: none\nTopics: none\nProjects: none\n"
 
-const wikiPlanFixtureOutlineOverview = "### 1. 总览 | overview | 200\n讲什么：概括第 2、3 节。\n" +
-	"### 2. 组件 | concepts | 400\n讲什么：Server 与 Store 两个组件，存储细节见 1.2。\n" +
-	"- 文档：docs/architecture.md § Execution model\n- 文档：docs/architecture.md § Realtime and recovery - 2. 加固后的恢复策略（契约 §6.4、§6.5）\n" +
-	"- 代码：src/app/main.go: Server, Serve(), Server.Handle\n- 契约：contracts/app.contract.json\n" +
-	"### 3. 已知的坑 | pitfalls | 300\n讲什么：启动时的坑。\n" +
-	"- 会话：项目「App 项目」「同名项目」「`App 项目`」；时间 2026-09-01 至 今；关键词 启动、端口；锚点 src/app/；kind `pitfall`/\"decision\"/dicision；主题 storage-topic、\"ops-topic\"、nope-topic；要找：owner 说端口不能写死的原话\n" +
-	"### 4. 运维 | ops | 200\n讲什么：部署见 4.4，另见 1.3、1.1。\n- 文档：docs/wiki-design.md § 5. 运维 — 部署\n- 文档：notes/ops.md § 正文\n"
+const wikiPlanFixtureOutlineOverview = "### 1. Overview | overview | 200\nCovers: sums up sections 2 and 3.\n### 2. Components | concepts | 400\n" +
+	"Covers: the two components, Server and Store; storage details: see 1.2.\n- Docs: docs/architecture.md § Execution model\n" +
+	"- Docs: docs/architecture.md § Realtime and recovery - 2. 加固后的恢复策略（契约 §6.4、§6.5）\n- Code: src/app/main.go: Server, Serve(), Server.Handle\n" +
+	"- Contracts: contracts/app.contract.json\n### 3. Known pitfalls | pitfalls | 300\nCovers: the pitfalls at startup.\n" +
+	"- Sessions: projects 「App 项目」「同名项目」「`App 项目`」; dates 2026-09-01 to now; keywords startup, port; anchors src/app/; kind `pitfall`/\"decision\"/dicision; topics storage-topic, \"ops-topic\", nope-topic; look for: the owner's words saying the port must not be hard-coded\n" +
+	"### 4. Operations | ops | 200\nCovers: deployment, see 4.4; see also 1.3, 1.1.\n- Docs: docs/wiki-design.md § 5. 运维 — 部署\n" +
+	"- Docs: notes/ops.md § whole document\n"
 
-const wikiPlanFixtureOutlineStorage = "### 1. 保存流程 | flow | 500\n讲什么：Store.Load 怎么读，见 9.9。\n" +
-	"- 文档：docs/wiki-design.md § 5. 不存在的章节\n- 文档：docs/wiki-design.md § 4. 写路径 - 4.4 锚点、§ （4.5 数据模型（新表 `share_link`））\n" +
-	"- 代码：src/app/store.go: Store.Save, Store.Load, storeVersion\n- 代码：src/app/missing.go: Foo\n- 备注：这一行不在格式里\n" +
-	"### 2. 约定 | conventions | 二百\n讲什么：保存前先校验，\n校验写在 Save 里。\n" +
-	"- 会话：项目「把「什么算完成」从项目末尾搬到开工前」；时间 2026-09-30 至 2026-09-01；未知部分\n" +
-	"### 3. 杂项 | misc | 100\n讲什么：其他。\n"
+const wikiPlanFixtureOutlineStorage = "### 1. The saving flow | flow | 500\nCovers: how Store.Load reads, see 9.9.\n- Docs: docs/wiki-design.md § 5. A section that is not there\n" +
+	"- Docs: docs/wiki-design.md § 4. 写路径 - 4.4 锚点, § (4.5 数据模型（新表 `share_link`）)\n- Code: src/app/store.go: Store.Save, Store.Load, storeVersion\n" +
+	"- Code: src/app/missing.go: Foo\n- Note: this line is not in the format\n### 2. Conventions | conventions | two hundred\n" +
+	"Covers: validate before saving,\nthe validation lives in Save.\n" +
+	"- Sessions: projects 「把「什么算完成」从项目末尾搬到开工前」; dates 2026-09-30 to 2026-09-01; an unknown part\n### 3. Miscellany | misc | 100\nCovers: the rest.\n"
 
-const wikiPlanFixtureOutlineAPI = "### 1. 路由 | interface | 400\n讲什么：ItemsController 的路由。\n" +
-	"- 代码：src/web/api.controller.ts: ItemsController.find [GET /api/items/:id], ItemsController.create, ItemsController.destroy\n" +
-	"- 代码：src/web/client.ts: Client.fetchPlan, localHelper, render(); src/web/*.tsx: App()\n" +
-	"- 代码：src/ios/ContentView.swift: ContentView, refresh(), ext ContentView, hidden()\n" +
-	"- 代码：src/**/schema.prisma: User\n"
+const wikiPlanFixtureOutlineAPI = "### 1. Routes | interface | 400\nCovers: the routes of ItemsController.\n" +
+	"- Code: src/web/api.controller.ts: ItemsController.find [GET /api/items/:id], ItemsController.create, ItemsController.destroy\n" +
+	"- Code: src/web/client.ts: Client.fetchPlan, localHelper, render(); src/web/*.tsx: App()\n" +
+	"- Code: src/ios/ContentView.swift: ContentView, refresh(), ext ContentView, hidden()\n- Code: src/**/schema.prisma: User\n"
 
-const wikiPlanFixtureOutlineTesting = "### 1. 怎么跑测试 | conventions | 300\n讲什么：用 go test 跑，组件见 1.1。\n" +
-	"- 代码：src/web/client.ts: Client.fetchPlan, render()\n- 代码：src/app/store_test.go: TestStoreSaves\n"
+const wikiPlanFixtureOutlineTesting = "### 1. How to run the tests | conventions | 300\nCovers: run them with go test; for the components, see 1.1.\n" +
+	"- Code: src/web/client.ts: Client.fetchPlan, render()\n- Code: src/app/store_test.go: TestStoreSaves\n"
 
-const wikiPlanFixtureRewriteTesting = "标题：测试约定\n问题：怎么跑测试？\n读者：写代码的 agent：读完知道怎么跑测试\n含：go test；保存前校验\n篇幅：400–600 字\n" +
-	"### 1. 怎么跑测试 | conventions | 300\n讲什么：用 go test 跑。\n- 代码：src/web/client.ts: render()\n" +
-	"### 2. 保存约定 | conventions | 200\n讲什么：保存前先校验，见 1.2。\n" +
-	"- 会话：项目「App 项目」「p2」；关键词 保存；kind convention；要找：owner 说保存前要校验的原话\n"
+const wikiPlanFixtureRewriteTesting = "Title: Testing conventions\nQuestion: How do I run the tests?\nAudience: agents that write code: know how to run the tests once they have read it\n" +
+	"Includes: go test; validate before saving\nLength: 400–600 characters\n### 1. How to run the tests | conventions | 300\n" +
+	"Covers: run them with go test.\n- Code: src/web/client.ts: render()\n### 2. Saving conventions | conventions | 200\n" +
+	"Covers: validate before saving, see 1.2.\n- Sessions: projects 「App 项目」「p2」; keywords 保存; kind convention; look for: owner 说保存前要校验的原话\n"
 
-const wikiPlanFixtureRevisionMoves = "## 1. 产品 `product` —— 这个服务是什么\n" +
-	"- 1.1 服务概览 `service-overview`｜是什么｜来源：1.1｜含：定位\n" +
-	"- 1.2 存储 `storage`｜怎么存｜来源：1.2｜含：保存\n" +
-	"- 1.3 存储决策 `storage-decisions`｜为什么这么存｜来源：无｜含：决策\n" +
-	"- 1.4 合并 `merged`｜合起来｜来源：1.1、1.2｜含：合并\n" +
-	"## 2. 开发约定 `dev` —— 给 agent 的约定 [agents]\n" +
-	"- 2.1 测试约定 `testing`｜怎么跑测试｜来源：2.1｜含：go test\n" +
-	"### 移到给 agent 的大类的节\n- 1.1 §3 → 2.1\n- 1.2 §3 → 2.1\n- 1.2 §9 → 2.1\n- 7.7 §1 → 2.1\n- 1.2 §2 → 1.2\n- 2.1 §1 → 9.9\n"
+const wikiPlanFixtureRevisionMoves = "## 1. Product `product` — What this service is\n- 1.1 Service overview `service-overview` | What it is | Sources: 1.1 | Includes: purpose\n" +
+	"- 1.2 Storage `storage` | How it is stored | Sources: 1.2 | Includes: saving\n" +
+	"- 1.3 Storage decisions `storage-decisions` | Why it is stored this way | Sources: none | Includes: decisions\n" +
+	"- 1.4 Merged `merged` | Put together | Sources: 1.1, 1.2 | Includes: merging\n" +
+	"## 2. Development conventions `dev` — Conventions for the agents [agents]\n" +
+	"- 2.1 Testing conventions `testing` | How to run the tests | Sources: 2.1 | Includes: go test\n### Sections moved into the agents' category\n" +
+	"- 1.1 §3 → 2.1\n- 1.2 §3 → 2.1\n- 1.2 §9 → 2.1\n- 7.7 §1 → 2.1\n- 1.2 §2 → 1.2\n- 2.1 §1 → 9.9\n"
 
-const wikiPlanFixtureRevisionGood = "## 1. 产品 `product` —— 这个服务是什么\n" +
-	"- 1.1 服务概览 `service-overview`｜是什么｜来源：1.1｜含：定位\n" +
-	"- 1.2 存储 `storage`｜怎么存｜来源：1.2｜含：保存\n" +
-	"## 2. 开发约定 `dev` —— 给 agent 的约定 [agents]\n" +
-	"- 2.1 测试约定 `testing`｜怎么跑测试与保存前的校验｜来源：2.1｜含：go test；保存前校验\n" +
-	"### 移到给 agent 的大类的节\n- 1.2 §2 → 2.1\n"
+const wikiPlanFixtureRevisionGood = "## 1. Product `product` — What this service is\n- 1.1 Service overview `service-overview` | What it is | Sources: 1.1 | Includes: purpose\n" +
+	"- 1.2 Storage `storage` | How it is stored | Sources: 1.2 | Includes: saving\n" +
+	"## 2. Development conventions `dev` — Conventions for the agents [agents]\n" +
+	"- 2.1 Testing conventions `testing` | How to run the tests, and the validation before saving | Sources: 2.1 | Includes: go test; validate before saving\n" +
+	"### Sections moved into the agents' category\n- 1.2 §2 → 2.1\n"
 
-const wikiPlanFixtureLeavesProtectedOut = "## 1. 产品 `product` —— 是什么\n- 1.1 存储 `storage`｜怎么存｜含：保存\n" +
-	"## 2. 开发约定 `development` —— 约定 [agents]\n- 2.1 测试约定 `testing`｜怎么测｜含：go test\n"
+const wikiPlanFixtureLeavesProtectedOut = "## 1. Product `product` — What it is\n- 1.1 Storage `storage` | How it is stored | Includes: saving\n" +
+	"## 2. Development conventions `development` — Conventions [agents]\n- 2.1 Testing conventions `testing` | How to test | Includes: go test\n"
 
 // wikiPlanFixtureBase is a confirmed version of three documents, the first protected, whose sections name
 // a project by title and by an id, and a protected document that leaves a scope to another.
@@ -242,35 +289,37 @@ func wikiPlanFixtureBase() json.RawMessage {
 // wikiPlanFixtureRounds are the rounds: what a run is asked to draft, and the answers its model gives.
 func wikiPlanFixtureRounds() []wikiPlanFixtureRound {
 	draftAnswers := func(r wikiPlanFixtureRound) wikiPlanFixtureRound {
-		r.Details = map[string]string{"1": wikiPlanFixtureDetailsProduct, "2": wikiPlanFixtureDetailsDev}
-		r.Outlines = map[string]string{"service-overview": wikiPlanFixtureOutlineOverview, "storage": wikiPlanFixtureOutlineStorage,
-			"api": wikiPlanFixtureOutlineAPI, "testing": wikiPlanFixtureOutlineTesting}
+		r.Details = wikiPlanFixtureAnswers{{"1", wikiPlanFixtureDetailsProduct}, {"2", wikiPlanFixtureDetailsDev}}
+		r.Outlines = wikiPlanFixtureAnswers{{"service-overview", wikiPlanFixtureOutlineOverview}, {"storage", wikiPlanFixtureOutlineStorage},
+			{"api", wikiPlanFixtureOutlineAPI}, {"testing", wikiPlanFixtureOutlineTesting}}
 		return r
 	}
 	return []wikiPlanFixtureRound{
 		// The Go test's own draft, every reference there: nothing for the gate to find.
 		{Name: "draft-clean", Kind: "draft", Target: wikiPlanLength{Min: 3, Max: 3}, Catalogue: planSkeleton,
-			Details:  map[string]string{"1": planDetailsProduct, "2": planDetailsDev},
-			Outlines: map[string]string{"service-overview": planOutlineOverview, "storage": planOutlineStorage, "testing": planOutlineTesting}},
+			Details:  wikiPlanFixtureAnswers{{"1", planDetailsProduct}, {"2", planDetailsDev}},
+			Outlines: wikiPlanFixtureAnswers{{"service-overview", planOutlineOverview}, {"storage", planOutlineStorage}, {"testing", planOutlineTesting}}},
 		// Every kind of thing a model gets wrong, in one round.
 		draftAnswers(wikiPlanFixtureRound{Name: "draft-wrong", Kind: "draft", Target: wikiPlanLength{Min: 3, Max: 3}, Catalogue: wikiPlanFixtureCatalogue}),
 		// A document left with no body, a count below the target, and a catalogue with no agents' category.
 		{Name: "draft-short", Kind: "draft", Target: wikiPlanLength{Min: 5, Max: 8},
-			Catalogue: "## 1. 产品 —— 是什么\n- 1.1 概览 `overview`｜是什么｜含：定位\n- 1.2 Bad Slug `Bad_Slug`｜怎么存｜含：保存\n",
-			Details:   map[string]string{"1": "### 1.1 概览\n读者：甲：读完能改\n含：定位\n篇幅：300–500 字\n"},
-			Outlines:  map[string]string{"overview": "### 1. 总览 | overview | 200\n讲什么：概括。\n"}},
+			Catalogue: "## 1. Product — What it is\n- 1.1 Overview `overview` | What it is | Includes: purpose\n" +
+				"- 1.2 Bad Slug `Bad_Slug` | How it is stored | Includes: saving\n",
+			Details:  wikiPlanFixtureAnswers{{"1", "### 1.1 Overview\nAudience: A: can change it once they have read it\nIncludes: purpose\nLength: 300–500 characters\n"}},
+			Outlines: wikiPlanFixtureAnswers{{"overview", "### 1. Overview | overview | 200\nCovers: a summary.\n"}}},
 		// A draft against a version whose protected document the catalogue leaves out.
 		{Name: "draft-protected", Kind: "draft", Target: wikiPlanLength{Min: 1, Max: 5}, Base: wikiPlanFixtureBase(), Catalogue: wikiPlanFixtureLeavesProtectedOut,
-			Details:  map[string]string{"1": planDetailsProduct, "2": planDetailsDev},
-			Outlines: map[string]string{"storage": planOutlineStorage, "testing": planOutlineTesting}},
+			Details:  wikiPlanFixtureAnswers{{"1", planDetailsProduct}, {"2", planDetailsDev}},
+			Outlines: wikiPlanFixtureAnswers{{"storage", planOutlineStorage}, {"testing", planOutlineTesting}}},
 		// A revision that moves sections it may not, and merges a protected document.
 		{Name: "revise-moves", Kind: "revise", Target: wikiPlanLength{Min: 3, Max: 3}, Base: wikiPlanFixtureBase(),
 			Instructions: "把存储的约定移到开发约定里，篇数不变。", Catalogue: wikiPlanFixtureRevisionMoves,
-			Rewrites: map[string]string{"testing": wikiPlanFixtureRewriteTesting, "merged": "标题：合并\n问题：？\n读者：甲：乙\n含：合并\n篇幅：100–200 字\n### 1. 合 | other | 100\n讲什么：合。\n"}},
+			Rewrites: wikiPlanFixtureAnswers{{"testing", wikiPlanFixtureRewriteTesting},
+				{"merged", "Title: Merged\nQuestion: ?\nAudience: A: B\nIncludes: merging\nLength: 100–200 characters\n### 1. Merge | other | 100\nCovers: merging.\n"}}},
 		// The revision the owner asked for: one convention moved into the agents' category.
 		{Name: "revise-good", Kind: "revise", Target: wikiPlanLength{Min: 3, Max: 3}, Base: wikiPlanFixtureBase(),
 			Instructions: "把存储的约定移到开发约定里。", Catalogue: wikiPlanFixtureRevisionGood,
-			Rewrites: map[string]string{"testing": wikiPlanFixtureRewriteTesting}},
+			Rewrites: wikiPlanFixtureAnswers{{"testing", wikiPlanFixtureRewriteTesting}}},
 	}
 }
 
@@ -306,25 +355,38 @@ func wikiPlanFixtureCheckInputs() []wikiPlanFixtureCheck {
 // wikiPlanFixtureReadInputs are the line format's harder cases, each read the way a run reads it.
 func wikiPlanFixtureReadInputs() []wikiPlanFixtureRead {
 	return []wikiPlanFixtureRead{
-		{Kind: "catalogue", Text: "前言不算\n## 1. 产品 `product` —— 是什么\n- 1.1 概览 `overview`｜是什么｜来源：1.1、1.3｜含：定位；组件\n" +
-			"## 3. 开发约定 `dev` —— 约定 [agents]\n- 3.4 测试 `testing`｜怎么测｜来源：无｜含：go test\n### 移到给 agent 的大类的节\n- 1.2 §4 → 3.4\n- 无\n- 1.9 §1 -> 8.8\n"},
-		{Kind: "catalogue", Text: "### 2、 运维 `ops` — 怎么部署（给 agent）\n* 2.1 **部署** `deploy`｜怎么发｜含：步骤\n"},
-		{Kind: "catalogue", Text: "没有目录\n"},
-		{Kind: "body", Text: "### 1.2 存储\n读者：甲：读完能改；乙：读完能查\n含：一；二\n不含：三（见 2.1）\n篇幅：1,200–2,000 字\n备注：多余\n" +
-			"### 1. 保存 | Flow | 约 500 字\n讲什么：先存，\n再返回。\n- 文档：docs/a.md § 3. 章节、§ 4. 另一章\n- 代码：src/dir/（a.go、b.go）: A, B.c\n" +
-			"- 会话：项目「甲」「乙」；时间 2026-09-01 至 今；关键词 x、y；锚点 src/；kind pitfall/decision；主题 t1；要找：原话；其余\n- 附注：不在格式里\n"},
-		{Kind: "body", Text: "### 1.1 概览\n读者：甲：读完能改\n" +
-			"### 1. 模型 | concepts | 300\n讲什么：数据模型。\n- 文档：docs/a.md § 4. 数据模型（新表 `share_link`）、§ （5. 接口）\n- 文档：docs/b.md § 正文\n" +
-			"- 文档：docs/c.md § 2. 恢复策略（契约 §6.4、§6.5）、§ 3. 下一节\n" +
-			"- 代码：src/a.ts: x; src/b.ts: y, z；w\n- 会话：项目「把「什么算完成」从项目末尾搬到开工前」「甲」；要找：原话\n" +
-			"### 2、 接口 ｜ interface ｜ 1200\ncovers: an English label\n- 会话与条目：条目 kind recipe concept；现有主题 a、b；锚点路径 src/x/\n- 契约：contracts/a.json（主契约）、contracts/b.json\n"},
-		{Kind: "details", Text: "### 1.1 概览\n读者：甲：读完能改\n含：一\n篇幅：300 字\n文档：docs/a.md（设计）\n代码：src/（x.go、y.go）\n主题：`t1`、「t2」\n项目：「甲」、乙\n\n### 1.2 第二\n标题：另一个\n"},
-		{Kind: "paths", Text: "src/dir/（x.ts、y.ts）、`src/z.go`（入口）、docs/（总览）；「src/q/」"},
-		{Kind: "paths", Text: "无"},
-		{Kind: "unwrap", Text: "（4. 写路径）"}, {Kind: "unwrap", Text: "写路径）"}, {Kind: "unwrap", Text: "（写路径"},
-		{Kind: "unwrap", Text: "（a）（b）"}, {Kind: "unwrap", Text: "Data model (Prisma)"}, {Kind: "unwrap", Text: "  ((深))  "},
-		{Kind: "range", Text: "1,200–2,000 字"}, {Kind: "range", Text: "约 1500 字"}, {Kind: "range", Text: "2000-1000"}, {Kind: "range", Text: "没有数"},
-		{Kind: "renumber", Text: "细节见 1.3，另见 1.1、1.2；→ 2.9；see 1.1 and 1.3；参见1.2"},
+		{Kind: "catalogue", Text: "A preamble that does not count\n## 1. Product `product` — What it is\n" +
+			"- 1.1 Overview `overview` | What it is | Sources: 1.1, 1.3 | Includes: purpose; components\n" +
+			"## 3. Development conventions `dev` — Conventions [agents]\n- 3.4 Testing `testing` | How to test | Sources: none | Includes: go test\n" +
+			"### Sections moved into the agents' category\n- 1.2 §4 → 3.4\n- none\n- 1.9 §1 -> 8.8\n"},
+		{Kind: "catalogue", Text: "### 2、 Operations `ops` — How to deploy（给 agent）\n* 2.1 **Deploy** `deploy`｜How to ship it｜Includes：steps\n"},
+		{Kind: "catalogue", Text: "No catalogue here\n"},
+		{Kind: "body", Text: "### 1.2 Storage\nAudience: A: can change it once they have read it; B: can look it up once they have read it\nIncludes: one; two\n" +
+			"Excludes: three (see 2.1)\nLength: 1,200–2,000 characters\nNote: extra\n### 1. Saving | Flow | about 500 characters\nCovers: store first,\n" +
+			"then return.\n- Docs: docs/a.md § 3. A section, § 4. Another section\n- Code: src/dir/ (a.go, b.go): A, B.c\n" +
+			"- Sessions: projects 「A」「B」; dates 2026-09-01 to now; keywords x, y; anchors src/; kind pitfall/decision; topics t1; look for: the words said; the rest\n" +
+			"- Aside: not in the format\n"},
+		{Kind: "body", Text: "### 1.1 Overview\nAudience: A: can change it once they have read it\n### 1. Model | concepts | 300\nCovers: the data model.\n" +
+			"- Docs: docs/a.md § 4. Data model (new table `share_link`), § (5. Interface)\n- Docs: docs/b.md § whole document\n" +
+			"- Docs: docs/c.md § 2. Recovery (contract §6.4, §6.5), § 3. The next section\n- Code: src/a.ts: x; src/b.ts: y, z；w\n" +
+			"- Sessions: projects 「把「什么算完成」从项目末尾搬到开工前」「A」; look for: the words said\n### 2、 Interface ｜ interface ｜ 1200\nCOVERS: a label in capitals\n" +
+			"- Sessions: entry kind recipe concept; existing topics a, b; anchor paths src/x/\n" +
+			"- Contracts: contracts/a.json (the main contract), contracts/b.json\n"},
+		{Kind: "details", Text: "### 1.1 Overview\nAudience: A: can change it once they have read it\nIncludes: one\nLength: 300 characters\nDocs: docs/a.md (design)\n" +
+			"Code: src/ (x.go, y.go)\nTopics: `t1`, 「t2」\nProjects: 「A」, B\n\n### 1.2 The second\nTitle: Another one\n"},
+		{Kind: "paths", Text: "src/dir/（x.ts、y.ts）、`src/z.go`（entry）、docs/（overview）；「src/q/」"},
+		{Kind: "paths", Text: "none"},
+		{Kind: "unwrap", Text: "（4. Write path）"},
+		{Kind: "unwrap", Text: "Write path）"},
+		{Kind: "unwrap", Text: "（Write path"},
+		{Kind: "unwrap", Text: "（a）（b）"},
+		{Kind: "unwrap", Text: "Data model (Prisma)"},
+		{Kind: "unwrap", Text: "  ((deep))  "},
+		{Kind: "range", Text: "1,200–2,000 characters"},
+		{Kind: "range", Text: "about 1500 characters"},
+		{Kind: "range", Text: "2000-1000"},
+		{Kind: "range", Text: "no number"},
+		{Kind: "renumber", Text: "Details: see 1.3, and see also 1.1, 1.2; → 2.9; see 1.1 and 1.3; 细节见 1.3，另见 1.1、1.2；参见1.2"},
 	}
 }
 
@@ -369,66 +431,137 @@ func nonNil(list []string) []string {
 	return list
 }
 
-func wikiPlanFixtureHeader(h wikiPlanHeader) map[string]interface{} {
-	return map[string]interface{}{"title": h.Title, "question": h.Question, "audience": nonNil(h.Audience), "scopeIn": nonNil(h.ScopeIn),
-		"scopeOut": nonNil(h.ScopeOut), "length": h.Length, "keyDocs": nonNil(h.KeyDocs), "keyCode": nonNil(h.KeyCode),
-		"keyContracts": nonNil(h.KeyContracts), "topics": nonNil(h.Topics), "projects": nonNil(h.Projects)}
+// What the line format reads, as the fixture holds it: field by field, in the order of the fields read.
+
+type wikiPlanFixtureHeaderRead struct {
+	Title        string   `json:"title"`
+	Question     string   `json:"question"`
+	Audience     []string `json:"audience"`
+	ScopeIn      []string `json:"scopeIn"`
+	ScopeOut     []string `json:"scopeOut"`
+	Length       string   `json:"length"`
+	KeyDocs      []string `json:"keyDocs"`
+	KeyCode      []string `json:"keyCode"`
+	KeyContracts []string `json:"keyContracts"`
+	Topics       []string `json:"topics"`
+	Projects     []string `json:"projects"`
 }
 
-func wikiPlanFixtureSections(sections []wikiPlanSectionDraft) []interface{} {
-	out := []interface{}{}
+type wikiPlanFixtureSectionRead struct {
+	Title     string                       `json:"title"`
+	Kind      string                       `json:"kind"`
+	Length    string                       `json:"length"`
+	Covers    string                       `json:"covers"`
+	Docs      []wikiPlanDocSource          `json:"docs"`
+	Code      []wikiPlanFixtureCodeRead    `json:"code"`
+	Contracts []string                     `json:"contracts"`
+	Sessions  *wikiPlanFixtureSessionsRead `json:"sessions"`
+	Stray     []string                     `json:"stray"`
+}
+
+type wikiPlanFixtureCodeRead struct {
+	Path    string   `json:"path"`
+	Symbols []string `json:"symbols"`
+}
+
+type wikiPlanFixtureSessionsRead struct {
+	Projects    []string `json:"projects"`
+	Keywords    []string `json:"keywords"`
+	AnchorPaths []string `json:"anchorPaths"`
+	EntryKinds  []string `json:"entryKinds"`
+	Topics      []string `json:"topics"`
+	Since       string   `json:"since"`
+	Until       string   `json:"until"`
+	Evidence    string   `json:"evidence"`
+	Stray       []string `json:"stray"`
+}
+
+type wikiPlanFixtureCatalogueRead struct {
+	Cats  []wikiPlanFixtureCatRead  `json:"cats"`
+	Units []wikiPlanFixtureUnitRead `json:"units"`
+	Moves []wikiPlanFixtureMoveRead `json:"moves"`
+	Stray []string                  `json:"stray"`
+}
+
+type wikiPlanFixtureCatRead struct {
+	Key       string `json:"key"`
+	Title     string `json:"title"`
+	Question  string `json:"question"`
+	ForAgents bool   `json:"forAgents"`
+}
+
+type wikiPlanFixtureUnitRead struct {
+	Cat       int      `json:"cat"`
+	Slug      string   `json:"slug"`
+	Title     string   `json:"title"`
+	Question  string   `json:"question"`
+	CardScope []string `json:"cardScope"`
+	Sources   []string `json:"sources"`
+	Stray     []string `json:"stray"`
+}
+
+type wikiPlanFixtureMoveRead struct {
+	From    string  `json:"from"`
+	Section int     `json:"section"`
+	To      string  `json:"to"`
+	Target  *string `json:"target"`
+}
+
+func wikiPlanFixtureHeader(h wikiPlanHeader) wikiPlanFixtureHeaderRead {
+	return wikiPlanFixtureHeaderRead{Title: h.Title, Question: h.Question, Audience: nonNil(h.Audience), ScopeIn: nonNil(h.ScopeIn),
+		ScopeOut: nonNil(h.ScopeOut), Length: h.Length, KeyDocs: nonNil(h.KeyDocs), KeyCode: nonNil(h.KeyCode),
+		KeyContracts: nonNil(h.KeyContracts), Topics: nonNil(h.Topics), Projects: nonNil(h.Projects)}
+}
+
+func wikiPlanFixtureSections(sections []wikiPlanSectionDraft) []wikiPlanFixtureSectionRead {
+	out := []wikiPlanFixtureSectionRead{}
 	for _, s := range sections {
-		docs := []interface{}{}
-		for _, d := range s.Docs {
-			var section interface{}
-			if d.Section != nil {
-				section = *d.Section
-			}
-			docs = append(docs, map[string]interface{}{"path": d.Path, "section": section})
-		}
-		code := []interface{}{}
+		docs := append([]wikiPlanDocSource{}, s.Docs...)
+		code := []wikiPlanFixtureCodeRead{}
 		for _, c := range s.Code {
-			code = append(code, map[string]interface{}{"path": c.Path, "symbols": nonNil(c.Symbols)})
+			code = append(code, wikiPlanFixtureCodeRead{Path: c.Path, Symbols: nonNil(c.Symbols)})
 		}
-		var sessions interface{}
+		var sessions *wikiPlanFixtureSessionsRead
 		if c := s.Sessions; c != nil {
-			sessions = map[string]interface{}{"projects": nonNil(c.Projects), "keywords": nonNil(c.Keywords), "anchorPaths": nonNil(c.AnchorPaths),
-				"entryKinds": nonNil(c.EntryKinds), "topics": nonNil(c.Topics), "since": c.Since, "until": c.Until, "evidence": c.Evidence, "stray": nonNil(c.Stray)}
+			sessions = &wikiPlanFixtureSessionsRead{Projects: nonNil(c.Projects), Keywords: nonNil(c.Keywords), AnchorPaths: nonNil(c.AnchorPaths),
+				EntryKinds: nonNil(c.EntryKinds), Topics: nonNil(c.Topics), Since: c.Since, Until: c.Until, Evidence: c.Evidence, Stray: nonNil(c.Stray)}
 		}
-		out = append(out, map[string]interface{}{"title": s.Title, "kind": s.Kind, "length": s.Length, "covers": s.Covers, "docs": docs, "code": code,
-			"contracts": nonNil(s.Contracts), "sessions": sessions, "stray": nonNil(s.Stray)})
+		out = append(out, wikiPlanFixtureSectionRead{Title: s.Title, Kind: s.Kind, Length: s.Length, Covers: s.Covers, Docs: docs, Code: code,
+			Contracts: nonNil(s.Contracts), Sessions: sessions, Stray: nonNil(s.Stray)})
 	}
 	return out
 }
 
-func wikiPlanFixtureCatalogueRead(c *wikiPlanCatalogue) interface{} {
+func wikiPlanFixtureCatalogueOf(c *wikiPlanCatalogue) *wikiPlanFixtureCatalogueRead {
 	if c == nil {
 		return nil
 	}
-	cats := []interface{}{}
+	out := &wikiPlanFixtureCatalogueRead{Cats: []wikiPlanFixtureCatRead{}, Units: []wikiPlanFixtureUnitRead{}, Moves: []wikiPlanFixtureMoveRead{},
+		Stray: nonNil(c.Stray)}
 	for _, cat := range c.Cats {
-		cats = append(cats, map[string]interface{}{"key": cat.Key, "title": cat.Title, "question": cat.Question, "forAgents": cat.ForAgents})
+		out.Cats = append(out.Cats, wikiPlanFixtureCatRead{Key: cat.Key, Title: cat.Title, Question: cat.Question, ForAgents: cat.ForAgents})
 	}
-	units := []interface{}{}
 	for _, u := range c.Units {
-		units = append(units, map[string]interface{}{"cat": u.Cat, "slug": u.Slug, "title": u.Title, "question": u.Question,
-			"cardScope": nonNil(u.CardScope), "sources": nonNil(u.Sources), "stray": nonNil(u.Stray)})
+		out.Units = append(out.Units, wikiPlanFixtureUnitRead{Cat: u.Cat, Slug: u.Slug, Title: u.Title, Question: u.Question,
+			CardScope: nonNil(u.CardScope), Sources: nonNil(u.Sources), Stray: nonNil(u.Stray)})
 	}
-	moves := []interface{}{}
 	for _, m := range c.Moves {
-		var target interface{}
+		var target *string
 		if m.Target != nil {
-			target = m.Target.Slug
+			target = &m.Target.Slug
 		}
-		moves = append(moves, map[string]interface{}{"from": m.From, "section": m.Section, "to": m.To, "target": target})
+		out.Moves = append(out.Moves, wikiPlanFixtureMoveRead{From: m.From, Section: m.Section, To: m.To, Target: target})
 	}
-	return map[string]interface{}{"cats": cats, "units": units, "moves": moves, "stray": nonNil(c.Stray)}
+	return out
 }
 
 func wikiPlanFixtureReadOf(read wikiPlanFixtureRead) interface{} {
 	switch read.Kind {
 	case "catalogue":
-		return wikiPlanFixtureCatalogueRead(parseWikiPlanCatalogue(read.Text))
+		if c := wikiPlanFixtureCatalogueOf(parseWikiPlanCatalogue(read.Text)); c != nil {
+			return c
+		}
+		return nil
 	case "body":
 		header, sections, stray := parseWikiPlanDocBody(read.Text)
 		return map[string]interface{}{"header": wikiPlanFixtureHeader(header), "sections": wikiPlanFixtureSections(sections), "stray": nonNil(stray)}
@@ -444,7 +577,11 @@ func wikiPlanFixtureReadOf(read wikiPlanFixtureRead) interface{} {
 		return wikiPlanUnwrap(read.Text)
 	case "range":
 		min, max, ok := wikiPlanRange(read.Text)
-		return map[string]interface{}{"min": min, "max": max, "ok": ok}
+		return struct {
+			Min int  `json:"min"`
+			Max int  `json:"max"`
+			OK  bool `json:"ok"`
+		}{min, max, ok}
 	case "renumber":
 		then := map[string]string{"1.1": "a", "1.2": "b", "1.3": "c"}
 		now := map[string]string{"a": "1.1", "c": "1.2"}
@@ -474,7 +611,7 @@ func wikiPlanFixtureCheckOf(repo *wikiPlanRepo, c wikiPlanFixtureCheck) bool {
 // wikiPlanFixtureDated is a prompt with the day its head names set to the fixture's.
 func wikiPlanFixtureDated(prompt string) string {
 	today := time.Now().UTC().Format("2006-01-02")
-	return strings.ReplaceAll(prompt, "只读取出，"+today+"；", "只读取出，"+wikiPlanFixtureDate+"；")
+	return strings.ReplaceAll(prompt, "and Orbit, "+today+"; ", "and Orbit, "+wikiPlanFixtureDate+"; ")
 }
 
 // wikiPlanFixtureRun runs one round as a run of the drafting job runs it — the version revised read, the
@@ -523,7 +660,7 @@ func wikiPlanFixtureRun(t *testing.T, repo *wikiPlanRepo, materials wikiPlanMate
 				continue
 			}
 			prompts["revise-doc/"+unit.Slug] = r.rewritePrompt(unit, text)
-			if answer, ok := round.Rewrites[unit.Slug]; ok {
+			if answer, ok := round.Rewrites.answer(unit.Slug); ok {
 				header, sections, stray := parseWikiPlanDocBody(answer)
 				unit.Header, unit.Sections, unit.Stray, unit.HasBody, unit.Refs, unit.Kept = header, sections, stray, true, refs, nil
 			}
@@ -544,8 +681,8 @@ func wikiPlanFixtureRun(t *testing.T, repo *wikiPlanRepo, materials wikiPlanMate
 			for _, unit := range byCat[c] {
 				ids = append(ids, unit.ID)
 			}
-			prompts["details/"+strconv.Itoa(c+1)] = r.detailMaterials() + "\n# 文档目录\n" + text + "\n" + r.detailPrompt(c, ids)
-			if answer, ok := round.Details[strconv.Itoa(c+1)]; ok {
+			prompts["details/"+strconv.Itoa(c+1)] = r.detailMaterials() + "\n# Document catalogue\n" + text + "\n" + r.detailPrompt(c, ids)
+			if answer, ok := round.Details.answer(strconv.Itoa(c + 1)); ok {
 				details := parseWikiPlanDetails(answer)
 				for _, unit := range byCat[c] {
 					if header, ok := details[unit.ID]; ok {
@@ -557,8 +694,8 @@ func wikiPlanFixtureRun(t *testing.T, repo *wikiPlanRepo, materials wikiPlanMate
 		refs := r.currentRefs()
 		// As writeBodies does: every document of the catalogue, a protected one too (its body is then not used).
 		for _, unit := range r.units {
-			prompts["outline/"+unit.Slug] = r.docMaterials(unit) + "\n# 文档目录\n" + text + "\n" + r.outlinePrompt(unit)
-			if answer, ok := round.Outlines[unit.Slug]; ok {
+			prompts["outline/"+unit.Slug] = r.docMaterials(unit) + "\n# Document catalogue\n" + text + "\n" + r.outlinePrompt(unit)
+			if answer, ok := round.Outlines.answer(unit.Slug); ok {
 				_, sections, stray := parseWikiPlanDocBody(answer)
 				unit.Sections, unit.Stray, unit.HasBody, unit.Refs = sections, stray, true, refs
 			}

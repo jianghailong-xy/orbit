@@ -2,7 +2,6 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { App as AntApp } from 'antd';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ActiveSessionTurn } from '../api';
@@ -234,9 +233,7 @@ async function mountQueue(): Promise<void> {
     nextRoot.render(
       <QueryClientProvider client={nextClient}>
         <MemoryRouter initialEntries={[`/sessions/${SESSION_PUBLIC}`]}>
-          <AntApp>
-            <WorkspaceView runner={RUNNER} />
-          </AntApp>
+          <WorkspaceView runner={RUNNER} />
         </MemoryRouter>
       </QueryClientProvider>,
     );
@@ -302,10 +299,11 @@ describe('a wake a watch queued, in the queued tail', { timeout: 60_000 }, () =>
 
     let dialog: HTMLElement | null = null;
     await waitForUi(() => {
-      dialog = document.querySelector<HTMLElement>('.ant-modal-confirm');
+      dialog = document.querySelector<HTMLElement>('[role="alertdialog"]');
       expect(dialog, 'withdrawing asks first').not.toBeNull();
     });
-    expect(dialog!.querySelector('.ant-modal-confirm-title')?.textContent).toBe('Withdraw this wake?');
+    // Named by its title.
+    expect(document.getElementById(dialog!.getAttribute('aria-labelledby') ?? '')?.textContent).toBe('Withdraw this wake?');
     expect(dialog!.textContent).toContain(CONSEQUENCE);
     expect(cancelMock, 'nothing is withdrawn until the owner confirms').not.toHaveBeenCalled();
 

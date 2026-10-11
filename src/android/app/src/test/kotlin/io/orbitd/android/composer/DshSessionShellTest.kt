@@ -73,7 +73,7 @@ class DshSessionShellTest : ComposerShellTest() {
             "(request_id: 64d2f58d-15e2-4744-aafd-d463abb21741) ")
         signIn(); openSession()
         awaitText("DeepSeek rejected this API key")
-        assertTrue(shows("Update the key in Infrastructure, then send your message again. Connecting a key does not check it — the first request does."))
+        assertTrue(shows("Update the DeepSeek key in Infrastructure, then send your message again."))
         assertFalse("the card stands in for the runner's line", has(hasText("Authentication Fails", substring = true)))
         compose.onNode(hasText("Update the API key") and hasClickAction()).performScrollTo().performClick()
         await { shadowOf(compose.activity).peekNextStartedActivity() != null }
@@ -84,15 +84,19 @@ class DshSessionShellTest : ComposerShellTest() {
         await { ComposerShell.calls.contains("POST sessions/${ComposerShell.SESSION}/retry-message") }
     }
 
+    /** Every DeepSeek key runs Harness (contract §2.1), so another one is not this session's: the way to a key is Infrastructure's API
+     * keys, where one is connected or turned back on (web `onEditDshKey`) — no longer the retired `deepseek-harness` form. */
     @Test fun aSessionWithNoKeyIsSentToConnectOne() {
         onHarness()
+        ComposerShell.answers["GET providers/mine"] = { ApiResponse(200, """[{"id":"key-ds-2","slug":"deepseek-2","label":"DeepSeek 2","runtime":"claude",
+            "presetSlug":"deepseek","engines":["claude","opencode","dsh"]}]""".encodeToByteArray()) }
         failure("DSH_CREDENTIAL_MISSING: configure a DeepSeek Harness API key")
         signIn(); openSession()
-        awaitText("DeepSeek Harness needs an API key")
-        assertTrue(shows("This session has no DeepSeek Harness key to run on. Add or re-enable the key in Infrastructure, then send your message again."))
+        awaitText("DeepSeek Harness needs a DeepSeek key")
+        assertTrue(shows("This session has no DeepSeek key to run on. Add or re-enable a DeepSeek key in Infrastructure, then send your message again."))
         compose.onNode(hasText("Update the API key") and hasClickAction()).performScrollTo().performClick()
         await { shadowOf(compose.activity).peekNextStartedActivity() != null }
-        assertEquals("https://a07c.test/providers/new/deepseek-harness", shadowOf(compose.activity).nextStartedActivity.dataString)
+        assertEquals("https://a07c.test/infrastructure#keys", shadowOf(compose.activity).nextStartedActivity.dataString)
     }
 
     @Test fun aMissingHarnessIsACardThatInstallsItAndSaysSoWhileItRuns() {
@@ -128,7 +132,7 @@ class DshSessionShellTest : ComposerShellTest() {
         failure("DSH_CREDENTIAL_MISSING: configure a DeepSeek Harness API key")
         signIn(); openSession()
         awaitText("DSH_CREDENTIAL_MISSING: configure a DeepSeek Harness API key")
-        assertFalse(shows("DeepSeek Harness needs an API key"))
+        assertFalse(shows("DeepSeek Harness needs a DeepSeek key"))
     }
 
     @Test fun aShellCommandOnHarnessStaysInTheComposerWithWhy() {
@@ -146,6 +150,21 @@ class DshSessionShellTest : ComposerShellTest() {
         compose.onNode(hasText("Shell command") and hasClickAction()).performClick()
         awaitText("DeepSeek Harness sessions don't run ! shell commands — ask the agent to run it instead.")
         assertFalse(has(hasTestTag("composer-input") and hasText("!")))
+    }
+
+    /** A new session whose workspace last ran Harness is a Harness draft until a pick says otherwise (contract §3.4): its `!` command
+     * stays in the composer too, no session is created for it, and its chip says the runtime picks. */
+    @Test fun aDraftOnHarnessKeepsItsShellCommandToo() {
+        ComposerShell.providers = """[{"slug":"deepseek","label":"DeepSeek","runtime":"claude","presetSlug":"deepseek","engines":["claude","opencode","dsh"],"models":[]}]"""
+        ComposerShell.workspace = mapOf("provider" to JsonPrimitive("deepseek"), "lastProvider" to JsonPrimitive("deepseek"),
+            "lastEngine" to JsonPrimitive("dsh"), "model" to JsonPrimitive(""))
+        signIn(); openDraft()
+        await { has(hasContentDescription("Model Picked by DeepSeek Harness, effort Default")) }
+        compose.onNodeWithTag("composer-input").performTextInput("!ls -la")
+        compose.onNodeWithTag("composer-send").performClick()
+        awaitText("DeepSeek Harness sessions don't run ! shell commands — ask the agent to run it instead.")
+        assertTrue("the command stays where it was typed", has(hasTestTag("composer-input") and hasText("!ls -la")))
+        assertFalse(ComposerShell.calls.contains("POST sessions"))
     }
 
     @Test fun aShellCommandOnAnotherEngineGoesOut() {

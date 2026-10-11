@@ -4,6 +4,7 @@ import io.orbitd.android.core.auth.*
 import io.orbitd.android.core.net.*
 import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.navigation.ObjectId
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.*
@@ -25,14 +26,20 @@ class ComposerApi(private val auth: OrbitApi, private val handle: SessionHandle,
             ?: (detail["agent"] as? JsonObject)?.text("runnerId") ?: error("Runner is not assigned.")
         val runner = read(listOf("runners")).jsonArray.filterIsInstance<JsonObject>()
             .firstOrNull { ObjectId.same(it.text("id"), runnerId) } ?: error("Runner is unavailable.")
+        // Each key with the engines it runs on (`engines`, the server's answer: only it can tell a Claude subscription token).
         val providers = read(listOf("providers")).jsonArray.filterIsInstance<JsonObject>()
         val pools = read(listOf("providers", "pools")).jsonArray.filterIsInstance<JsonObject>()
         val shared = read(listOf("providers", "shared-pools")).jsonArray.filterIsInstance<JsonObject>()
-        // Marked, so the Provider list keeps the pools together after the engines (SessionProviderChoices.choices).
-        fun pool(row: JsonObject, fallback: String, isShared: Boolean = false) = JsonObject(row + mapOf("runtime" to JsonPrimitive(row.text("engine") ?: fallback),
-            "modelsFromRuntime" to JsonPrimitive(true), "pool" to JsonPrimitive(true), "sharedPool" to JsonPrimitive(isShared)))
-        return ComposerCatalog(runner, (providers + pools.map { pool(it, "claude") } + shared.map { pool(it, "codex", isShared = true) })
-            .distinctBy { it.text("slug") })
+        val rows = (providers + pools.map { ProviderEngines.poolRow(it, ProviderEngines.CLAUDE) } +
+            shared.map { ProviderEngines.poolRow(it, ProviderEngines.CODEX, shared = true) }).distinctBy { it.text("slug") }
+        // A session whose key the list no longer has: the account's own keys, turned-off ones included, say whether it was turned
+        // off or deleted.
+        val provider = detail.text("provider")
+        val own = if (provider == null || provider in ProviderEngines.LOGIN_ENGINES || provider == ProviderEngines.OPENCODE ||
+            rows.any { it.text("slug") == provider }) null
+            else try { read(listOf("providers", "mine")).jsonArray.filterIsInstance<JsonObject>() }
+                catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { null }
+        return ComposerCatalog(runner, rows, own)
     }
     suspend fun upload(attachment: StagedAttachment, bytes: ByteArray, progress: (Float) -> Unit): String = withContext(Dispatchers.IO) {
         val multipart = MultipartBody.Builder().setType(MultipartBody.FORM)

@@ -689,7 +689,7 @@ test('task landing, rerun fails again: the item ends SUPERSEDED / RETRIED pointi
       assert.equal(payload.retry?.reason, REASON);
       const told = await toldAbout(stack.db, w.coordinatorSessionId, second.id);
       assert.equal(told.length, 1, 'the coordinator is told about the new failure');
-      assert.match(told[0]!, /这是这项任务的第 2 代落地，由协调会话要求重跑/);
+      assert.match(told[0]!, /This is generation 2 of this task’s landing, rerun at the coordinator session’s request/);
 
       const read = await stack.openItems.list(w.ownerId, w.projectId);
       assert.deepEqual(read.withCoordinator.map((r) => r.itemId), [second.id]);
@@ -835,8 +835,8 @@ test('merge into main, re-check fails again: the candidate is blocked again and 
       assert.equal(payload.retry?.retryOfJobId, blocked.checkJobId);
       const told = await toldAbout(stack.db, w.coordinatorSessionId, second.id);
       assert.equal(told.length, 1);
-      assert.match(told[0]!, /这是这个合入 main 的候选的第 2 次检查，由协调会话要求重跑/);
-      assert.match(told[0]!, /promotionId 传 /);
+      assert.match(told[0]!, /This is check 2 of this candidate for merging into main, rerun at the coordinator session’s request/);
+      assert.match(told[0]!, /promotionId: /);
 
       // And it can decide again: a third check, rerunning the second.
       const third = await retryCandidate(stack, w, blocked.promotionId, 'the CI machine was swapped out mid-run');
@@ -1140,7 +1140,7 @@ test('escalated merge into main: the owner\'s card offers "Ask the coordinator a
       });
       assert.equal(fresh.length, 1, 'the hand-back is a fresh turn on the coordinator');
       assert.match(fresh[0]!.content ?? '', /integration_retry/);
-      assert.match(fresh[0]!.content ?? '', new RegExp(`promotionId 传 ${uuidToBase62(blocked.promotionId)}`));
+      assert.match(fresh[0]!.content ?? '', new RegExp(`promotionId: ${uuidToBase62(blocked.promotionId)}`));
       read = await stack.openItems.list(w.ownerId, w.projectId);
       assert.equal(read.needsYou.some((row) => row.itemId === blocked.itemId), false);
       assert.deepEqual(read.withCoordinator.find((row) => row.itemId === blocked.itemId)?.actions, ['RETRY', 'REVIEW'],
@@ -1296,18 +1296,18 @@ test('a fix task landing puts the item it fixes back in front of the coordinator
       assert.equal(told.length, 2, `the coordinator was told about the item again — ${JSON.stringify(told)}`);
       const again = told[1]!;
       for (const want of [
-        '【修复已落地】',
-        `修复任务 ${uuidToBase62(fix.taskId)}：结果是 LANDED`,
+        'From Orbit · fix landed',
+        `Fix task ${uuidToBase62(fix.taskId)}: result LANDED`,
         landedSha.slice(0, 12),
         `git merge-base --is-ancestor ${TASK_BRANCH_TIP} ${landedSha}`,
-        `open_item_resolve（projectId 传 ${uuidToBase62(w.projectId)}，itemId 传 ${uuidToBase62(red.itemId)}）`,
-        `taskId 传 ${uuidToBase62(red.taskId)}`,
+        `open_item_resolve (projectId: ${uuidToBase62(w.projectId)}, itemId: ${uuidToBase62(red.itemId)})`,
+        `taskId: ${uuidToBase62(red.taskId)}`,
         'ask_owner',
         'Checks failed on the combined tree',
       ]) {
         assert.ok(again.includes(want), `the re-sent item does not say ${JSON.stringify(want)}:\n${again}`);
       }
-      assert.ok(told[0]!.startsWith('【例外待办】'), 'the first delivery said nothing about a fix');
+      assert.ok(told[0]!.startsWith('From Orbit · exception item'), 'the first delivery said nothing about a fix');
 
       // The other item was neither re-keyed nor re-sent.
       assert.equal((await assignedAt(other.itemId)).assignedAt.getTime(), otherBefore.assignedAt.getTime());

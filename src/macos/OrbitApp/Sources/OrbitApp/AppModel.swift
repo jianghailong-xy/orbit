@@ -621,9 +621,16 @@ final class AppModel {
         catch { errorText = "Couldn't save preferences." }
     }
 
-    /// Keep a model pick available to the next draft immediately, then sync it. Serialize writes
-    /// so quickly choosing two models cannot leave the account remembering the older choice.
-    func rememberDefaultModel(_ model: String, for provider: String) {
+    /// Keep a model pick available to the next draft immediately, then sync it. Remembered per engine
+    /// and provider — `<engine>:<provider>` (docs/provider-engine-contract.md §6.5): one key's model on
+    /// Claude Code is not its model on DeepSeek Harness. Serialize writes so quickly choosing two models
+    /// cannot leave the account remembering the older choice.
+    func rememberDefaultModel(_ model: String, engine: String, provider: String) {
+        let key = AgentDefaults.defaultModelKey(engine: engine, provider: provider)
+        rememberDefaultModel(model, key: key)
+    }
+
+    private func rememberDefaultModel(_ model: String, key provider: String) {
         guard let api, defaultModels[provider] != model else { return }
         pendingDefaultModels[provider] = model
         let previous = defaultModelWrite

@@ -200,6 +200,8 @@ test('a title and a group\'s name are read out of what the model wrote', () => {
   assert.equal(wikiArticleTitle('没有标题', 'fallback'), 'fallback');
   assert.equal(wikiArticleTitle('# **[1]**\n# 第二个', 'fallback'), 'fallback', 'only the first title line is read');
   assert.equal(wikiArticleTitle(`# ${'长'.repeat(200)}`, 'x').length, WIKI_ARTICLE_RULES.titleMaxChars);
+  assert.equal(wikiArticleGroupName('OK, the subheading for this group is:\n"Migrations and writes"'), 'Migrations and writes');
+  // A name an earlier model wrapped in corner brackets reads the same.
   assert.equal(wikiArticleGroupName('好的，这组的小标题是：\n「迁移与写入清单」'), '迁移与写入清单');
   assert.equal(wikiArticleGroupName('  **— 迁移编号。**  '), '— 迁移编号');
   assert.equal(wikiArticleGroupName(''), '');
@@ -211,7 +213,7 @@ test('a title and a group\'s name are read out of what the model wrote', () => {
   // Equal counts: the smaller path, so the name is the same whatever order the counts were taken in.
   assert.equal(wikiArticleFallbackName([{ title: 'a', paths: ['b/x', 'a/y'] }]), 'a/y');
   assert.equal(wikiArticleFallbackName([{ title: '一个没有路径的条目的标题很长很长', paths: [] }]), '一个没有路径的条目的标题很长');
-  assert.equal(wikiArticleFallbackName([]), '其他');
+  assert.equal(wikiArticleFallbackName([]), 'Other');
 });
 
 test('an entry line carries its kind\'s fields: text as it is, a decision\'s alternatives, anything else as JSON', () => {
@@ -242,12 +244,14 @@ test('the prompts carry the contract\'s numbers and the entries they were writte
   assert.ok(article.endsWith(`ENTRIES:\n${entries.map((e, i) => wikiArticleEntryLine(i + 1, e)).join('\n')}`));
   const sub = wikiArticlePrompt('subtopic', '数据库', '迁移', entries, '');
   assert.match(sub, /^Write a wiki article titled "迁移" \(a part of the topic "数据库"\), using ONLY/u);
-  const overview = wikiArticlePrompt('overview', '数据库', '数据库', entries, '- 迁移（30 条）\n- 界面（30 条）');
-  assert.match(overview, /^Write the overview of the wiki topic "数据库"\. The topic is split into these sub-articles:\n- 迁移（30 条）\n- 界面（30 条）\n\n/u);
+  const overview = wikiArticlePrompt('overview', '数据库', '数据库', entries, '- Migrations (30 entries)\n- Screens (30 entries)');
+  assert.match(overview, /^Write the overview of the wiki topic "数据库"\. The topic is split into these sub-articles:\n- Migrations \(30 entries\)\n- Screens \(30 entries\)\n\n/u);
+  assert.match(overview, /write in English:\n/u);
+  assert.match(article, /Format \(Markdown, in English; /u);
   assert.equal(wikiArticleRetrySuffix(37),
     '\n\nA previous draft kept only 37 characters with footnotes: write the whole length asked for, every sentence with its markers.');
   const first = wikiArticleNamePrompt('测试', entries, []);
-  assert.ok(!first.includes('已经叫') && first.endsWith('只输出这个小标题。'));
-  assert.match(wikiArticleNamePrompt('测试', entries, ['迁移与界面', '工作树']), /同一主题的其他组已经叫：迁移与界面、工作树。/u);
+  assert.ok(!first.includes('already called') && first.endsWith(' Output only the subheading.'));
+  assert.match(wikiArticleNamePrompt('测试', entries, ['Migrations and UI', 'Worktrees']), /The topic's other groups are already called: Migrations and UI, Worktrees\./u);
   assert.match(WIKI_ARTICLE_SYSTEM_PROMPT, /encyclopedia-style wiki articles/u);
 });

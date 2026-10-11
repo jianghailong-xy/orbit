@@ -60,7 +60,7 @@ export function MultiSelect({ options, value, onValueChange, mode = 'multiple', 
     }} filter={(option: SelectOption, search) => option.label.toLocaleLowerCase().includes(search.toLocaleLowerCase())}
     // As the replaced multiple select: opening highlights the first option (Enter picks it); free tags don't.
     autoHighlight={(mode === 'tags' ? true : 'always') as boolean} name={name} disabled={disabled} open={layer.open} onOpenChange={(next, details) => {
-      // AntD keeps a multiple picker open after selecting a search result.
+      // As the replaced multiple picker: it stays open after selecting a search result.
       if (!next && details.reason === 'item-press') { details.cancel(); return; }
       layer.setOpen(next);
     }} modal={false}>

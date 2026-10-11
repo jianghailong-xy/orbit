@@ -39,10 +39,13 @@ public enum DeepSeekBalance {
     public static let noAmountYet = "No amount is shown until DeepSeek answers."
     /// What to do about a rejected key from a phone, which can't change one.
     public static let changeKeyOnWeb = "Change the key on the web, then retry."
-    public static let providerHeader = "Provider"
-    public static let runsOn = "Runs on"
     /// The web key page's list of the engines a key works with, a row each.
     public static let worksWith = "Works with"
+    /// Under Works with on a phone (board iOS 2 ①): where the key is picked for a session.
+    public static let worksWithFooter = "Pick it for a session on any of these in the composer's model menu → Provider."
+    /// The key itself, under its engines (board iOS 2 ②): its protocol, default model and endpoint.
+    public static let keyHeader = "Key"
+    public static let protocolLabel = "Protocol"
     public static let defaultModel = "Default model"
     public static let endpoint = "Endpoint"
 
@@ -208,6 +211,21 @@ public enum DeepSeekBalance {
     /// for one.
     public static func engine(of provider: ConfiguredProvider) -> String {
         engines(of: provider).joined(separator: " · ")
+    }
+
+    /// What the page's footer says after the web edits keys (board iOS 2 ③): turning a key off there stops
+    /// it on every engine it runs on — "Claude Code, OpenCode and DeepSeek Harness" — not on one of them
+    /// (contract §3.6).
+    public static func turnOffNote(_ provider: ConfiguredProvider) -> String {
+        let names = engines(of: provider)
+        guard let last = names.last else { return ProvidersOverview.editOnWeb }
+        let list = names.count > 1 ? names.dropLast().joined(separator: ", ") + " and " + last : last
+        return "\(ProvidersOverview.editOnWeb) Turning it off there stops it on \(list)."
+    }
+
+    /// A key's default model by the name its own list gives it (`DeepSeek V4 Pro`), else its id.
+    public static func defaultModelName(_ provider: ConfiguredProvider) -> String? {
+        Infrastructure.defaultModel(provider)
     }
 
     /// The host a key's endpoint is on — `api.deepseek.com` — which is all of it a phone's row has room for.

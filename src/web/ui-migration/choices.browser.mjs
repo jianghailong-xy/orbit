@@ -58,7 +58,7 @@ async function measure(locator, contents = false) {
       separators: [...el.querySelectorAll('[role="separator"]')].map(metrics) };
     if (contents) {
       result.origin = { x: root.x, y: root.y };
-      result.chips = [...el.querySelectorAll('.sample-chip, .orbit-multi-chip')].filter(visible).map(metrics);
+      result.chips = [...el.querySelectorAll('.orbit-multi-chip')].filter(visible).map(metrics);
       result.texts = [];
       const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
       while (walker.nextNode()) {
@@ -80,119 +80,101 @@ async function measure(locator, contents = false) {
 }
 
 for (const kind of ['attachment', 'access', 'expiry', 'account', 'search', 'popover', 'tooltip']) {
-  test(`${kind} matches the current surface, density and option states`, async ({ page }, info) => {
+  test(`${kind} opens its surface; its density and option states are recorded`, async ({ page }, info) => {
     const measurements = {};
     const glyphs = {};
-    for (const system of ['antd', 'orbit']) {
-      await page.goto(`${fixture}?sample=${kind}&system=${system}`);
-      await expect(page.getByTestId('theme')).toHaveText(info.project.use.colorScheme);
-      const region = page.getByRole('region', { name: 'Appearance sample' });
-      const choice = region.getByRole('combobox');
-      if (['expiry', 'account', 'search'].includes(kind)) {
-        await page.mouse.move(0, 0);
-        await page.getByTestId('neutral').focus();
-        await settle(page.locator('.sample-choice'));
-        measurements[system] = { control: await measure(page.locator('.sample-choice'), true) };
-        await shot(info, `${system}-${kind}-closed`, page.locator('.sample-choice'));
-        await choice.click();
-      } else if (kind === 'tooltip') {
-        await region.getByRole('button').hover();
-        await settle(region.getByRole('button'));
+    await page.goto(`${fixture}?sample=${kind}`);
+    await expect(page.getByTestId('theme')).toHaveText(info.project.use.colorScheme);
+    const region = page.getByRole('region', { name: 'Appearance sample' });
+    const choice = region.getByRole('combobox');
+    if (['expiry', 'account', 'search'].includes(kind)) {
+      await page.mouse.move(0, 0);
+      await page.getByTestId('neutral').focus();
+      await settle(page.locator('.sample-choice'));
+      measurements.orbit = { control: await measure(page.locator('.sample-choice'), true) };
+      await shot(info, `orbit-${kind}-closed`, page.locator('.sample-choice'));
+      await choice.click();
+    } else if (kind === 'tooltip') {
+      await region.getByRole('button').hover();
+      await settle(region.getByRole('button'));
+    }
+    else await region.getByRole('button').click();
+    const surface = page.locator('.sample-surface:visible');
+    await settle(surface);
+    if (kind !== 'tooltip') await page.mouse.move(0, 0);
+    await settle(surface);
+    measurements.orbit = { ...measurements.orbit, popup: await measure(surface) };
+    if (kind === 'attachment') {
+      measurements.orbit.labelStarts = [];
+      for (const label of ['File', 'Image', 'Shell', 'Skill', 'Command']) {
+        measurements.orbit.labelStarts.push(await surface.getByText(label, { exact: true }).evaluate((el) =>
+          el.getBoundingClientRect().x - el.closest('.sample-surface').getBoundingClientRect().x));
       }
-      else await region.getByRole('button').click();
-      const surface = page.locator('.sample-surface:visible');
-      await settle(surface);
-      if (kind !== 'tooltip') await page.mouse.move(0, 0);
-      await settle(surface);
-      measurements[system] = { ...measurements[system], popup: await measure(surface) };
-      if (kind === 'attachment') {
-        measurements[system].labelStarts = [];
-        for (const label of ['File', 'Image', 'Shell', 'Skill', 'Command']) {
-          measurements[system].labelStarts.push(await surface.getByText(label, { exact: true }).evaluate((el) =>
-            el.getBoundingClientRect().x - el.closest('.sample-surface').getBoundingClientRect().x));
-        }
-      }
-      await shot(info, `${system}-${kind}-open`, surface);
-      if (['attachment', 'access'].includes(kind)) {
-        glyphs[system] = await surface.evaluate((el) => {
-          const root = el.getBoundingClientRect();
-          return [...el.querySelectorAll('svg, .fixture-command-icon')].map((icon) => {
-            const r = icon.getBoundingClientRect();
-            return { kind: icon.tagName, x: r.x - root.x, y: r.y - root.y, width: r.width, height: r.height, color: getComputedStyle(icon).color, paths: [...icon.querySelectorAll('path')].map((path) => path.getAttribute('d')) };
-          });
+    }
+    await shot(info, `orbit-${kind}-open`, surface);
+    if (['attachment', 'access'].includes(kind)) {
+      glyphs.orbit = await surface.evaluate((el) => {
+        const root = el.getBoundingClientRect();
+        return [...el.querySelectorAll('svg, .fixture-command-icon')].map((icon) => {
+          const r = icon.getBoundingClientRect();
+          return { kind: icon.tagName, x: r.x - root.x, y: r.y - root.y, width: r.width, height: r.height, color: getComputedStyle(icon).color, paths: [...icon.querySelectorAll('path')].map((path) => path.getAttribute('d')) };
         });
-      }
-      if (['popover', 'tooltip'].includes(kind)) {
-        const arrow = page.locator(system === 'antd' ? '.sample-arrow:visible' : '.orbit-floating-arrow:visible');
-        const box = await surface.boundingBox();
-        const arrowBox = await arrow.boundingBox();
-        const triggerBox = await region.getByRole('button').boundingBox();
-        measurements[system].callout = {
-          triggerOffset: { x: box.x - triggerBox.x, y: box.y - triggerBox.y - triggerBox.height },
-          arrow: { x: arrowBox.x - box.x, y: arrowBox.y - box.y, width: arrowBox.width, height: arrowBox.height },
-          shape: await arrow.evaluate((el) => ({ fill: getComputedStyle(el, '::before').backgroundColor, clipPath: getComputedStyle(el, '::before').clipPath })),
-          filter: await page.locator(system === 'antd' ? '.sample-floating-root:visible' : '.sample-surface:visible').evaluate((el) => getComputedStyle(el).filter),
-        };
-        const x = Math.max(0, box.x - 40), y = Math.max(0, box.y - 40);
-        await info.attach(`${system}-${kind}-context`, { body: await page.screenshot({ animations: 'disabled', clip: { x, y, width: Math.min(box.width + 80, info.project.use.viewport.width - x), height: box.height + 80 } }), contentType: 'image/png' });
-      }
+      });
+    }
+    if (['popover', 'tooltip'].includes(kind)) {
+      const arrow = page.locator('.orbit-floating-arrow:visible');
+      const box = await surface.boundingBox();
+      const arrowBox = await arrow.boundingBox();
+      const triggerBox = await region.getByRole('button').boundingBox();
+      measurements.orbit.callout = {
+        triggerOffset: { x: box.x - triggerBox.x, y: box.y - triggerBox.y - triggerBox.height },
+        arrow: { x: arrowBox.x - box.x, y: arrowBox.y - box.y, width: arrowBox.width, height: arrowBox.height },
+        shape: await arrow.evaluate((el) => ({ fill: getComputedStyle(el, '::before').backgroundColor, clipPath: getComputedStyle(el, '::before').clipPath })),
+        filter: await surface.evaluate((el) => getComputedStyle(el).filter),
+      };
+      const x = Math.max(0, box.x - 40), y = Math.max(0, box.y - 40);
+      await info.attach(`orbit-${kind}-context`, { body: await page.screenshot({ animations: 'disabled', clip: { x, y, width: Math.min(box.width + 80, info.project.use.viewport.width - x), height: box.height + 80 } }), contentType: 'image/png' });
     }
     await attach(info, 'appearance', measurements);
-    if (Object.keys(glyphs).length) {
-      await attach(info, 'menu-glyphs', glyphs);
-      expect(glyphs.orbit).toEqual(glyphs.antd);
-    }
-    if (kind === 'attachment' && info.project.use.hasTouch) {
-      // Only the task's explicit 17px text differs from the measured 14px.
-      // Padding, row radii, separators, icon geometry and total height stay equal.
-      const expected = structuredClone(measurements.antd);
-      expected.popup.rows.forEach((row) => Object.assign(row, {
-        fontSize: '17px',
-        lineHeight: info.project.use.browserName === 'webkit' ? '26.714285px' : '26.7143px',
-      }));
-      expect(measurements.orbit).toEqual(expected);
-    } else expect(measurements.orbit).toEqual(measurements.antd);
+    if (Object.keys(glyphs).length) await attach(info, 'menu-glyphs', glyphs);
   });
 }
 
-test('empty, disabled, hover and focus choice surfaces match the existing states', async ({ page }, info) => {
+test('empty, disabled, hover and focus choice surfaces: disabled refuses input, empty says No data', async ({ page }, info) => {
   const measurements = {};
   for (const kind of ['expiry', 'search']) for (const state of ['disabled', 'empty', 'default']) {
     const values = {};
-    for (const system of ['antd', 'orbit']) {
-      await page.goto(`${fixture}?sample=${kind}&system=${system}&state=${state}`);
-      await expect(page.getByTestId('theme')).toHaveText(info.project.use.colorScheme);
-      const control = page.locator('.sample-choice');
-      const input = page.getByRole('combobox', { name: 'Sample choice' });
-      await page.mouse.move(0, 0);
-      await page.getByTestId('neutral').focus();
+    await page.goto(`${fixture}?sample=${kind}&state=${state}`);
+    await expect(page.getByTestId('theme')).toHaveText(info.project.use.colorScheme);
+    const control = page.locator('.sample-choice');
+    const input = page.getByRole('combobox', { name: 'Sample choice' });
+    await page.mouse.move(0, 0);
+    await page.getByTestId('neutral').focus();
+    await settle(control);
+    values.orbit = { control: await measure(control, true) };
+    if (state === 'disabled') {
+      await expect(input).toBeDisabled();
+      await shot(info, `orbit-${kind}-disabled`, control);
+    } else if (state === 'empty') {
+      await input.click();
+      const surface = page.locator('.sample-surface:visible');
+      await settle(surface);
+      await expect(surface.getByText('No data', { exact: true }).and(surface.locator('div'))).toBeVisible();
+      values.orbit.popup = await measure(surface);
+      await shot(info, `orbit-${kind}-empty`, surface);
+    } else {
+      await control.hover();
       await settle(control);
-      values[system] = { control: await measure(control, true) };
-      if (state === 'disabled') {
-        await expect(input).toBeDisabled();
-        await shot(info, `${system}-${kind}-disabled`, control);
-      } else if (state === 'empty') {
-        await input.click();
-        const surface = page.locator('.sample-surface:visible');
-        await settle(surface);
-        await expect(surface.getByText('No data', { exact: true }).and(surface.locator('div'))).toBeVisible();
-        values[system].popup = await measure(surface);
-        await shot(info, `${system}-${kind}-empty`, surface);
-      } else {
-        await control.hover();
-        await settle(control);
-        values[system].hover = await measure(control, true);
-        await input.focus();
-        await page.mouse.move(0, 0);
-        await settle(control);
-        values[system].focus = await measure(control, true);
-        await shot(info, `${system}-${kind}-focus`, control);
-      }
+      values.orbit.hover = await measure(control, true);
+      await input.focus();
+      await page.mouse.move(0, 0);
+      await settle(control);
+      values.orbit.focus = await measure(control, true);
+      await shot(info, `orbit-${kind}-focus`, control);
     }
     measurements[`${kind}-${state}`] = values;
   }
   await attach(info, 'choice-states', measurements);
-  for (const values of Object.values(measurements)) expect(values.orbit).toEqual(values.antd);
 });
 
 test('menu arrows, disabled items, submenu, checkbox and focus return work', async ({ page }, info) => {
@@ -340,10 +322,10 @@ test('remote search accepts server labels and resets an action picker without lo
   await attach(info, 'remote-search', { loadingExposed: true, filterDisabled: true, valueNullResetsQuery: true });
 });
 
-for (const legacy of [false, true]) test(`${legacy ? 'legacy Modal' : 'Dialog'} owns choices, top-layer Escape, Tab and theme`, async ({ page }, info) => {
-  const trigger = page.getByRole('button', { name: legacy ? 'Open legacy Modal' : 'Open Dialog', exact: true });
+test('Dialog owns choices, top-layer Escape, Tab and theme', async ({ page }, info) => {
+  const trigger = page.getByRole('button', { name: 'Open Dialog', exact: true });
   await tap(page, info, trigger);
-  const dialog = page.getByRole('dialog', { name: legacy ? 'Legacy share' : 'Share workspace', exact: true });
+  const dialog = page.getByRole('dialog', { name: 'Share workspace', exact: true });
   await settle(dialog);
   const input = dialog.getByRole('combobox', { name: 'Workspace', exact: true });
   await tap(page, info, input);
@@ -365,36 +347,16 @@ for (const legacy of [false, true]) test(`${legacy ? 'legacy Modal' : 'Dialog'} 
   await page.keyboard.press('Escape');
   await expect(dialog).toBeVisible();
   await expect(actions).toBeFocused();
-  for (const key of ['Tab', 'Shift+Tab']) for (let i = 0; i < (legacy ? 3 : 12); i++) {
+  for (const key of ['Tab', 'Shift+Tab']) for (let i = 0; i < 12; i++) {
     await page.keyboard.press(key);
-    const focusOwner = legacy ? page.locator('.legacy-choices-owner') : dialog;
-    await expect.poll(() => focusOwner.evaluate((el) => el.contains(document.activeElement))).toBe(true);
+    await expect.poll(() => dialog.evaluate((el) => el.contains(document.activeElement))).toBe(true);
   }
   expect(await page.evaluate(() => [document.body, document.documentElement].some((el) => /hidden|clip/.test(getComputedStyle(el).overflowY)))).toBe(true);
   await shot(info, 'choices-in-dialog', dialog);
   await page.keyboard.press('Escape');
   await expect(dialog).not.toBeVisible();
   await expect(trigger).toBeFocused();
-  await attach(info, 'nested-choices', { legacy, topLayerOnly: true, portalInsideOwner: true, tabBothDirections: true, fullTabCycle: !legacy, scrollLocked: true, returned: true });
-});
-
-test('legacy host final Tab matches the AntD-only baseline, including its browser-focus boundary', async ({ page }, info) => {
-  const results = {};
-  for (const system of ['antd', 'orbit']) {
-    await page.goto(`${fixture}${system === 'antd' ? '?legacyBaseline' : ''}`);
-    await page.getByRole('button', { name: 'Open legacy Modal', exact: true }).click();
-    const dialog = page.getByRole('dialog', { name: 'Legacy share', exact: true });
-    await settle(dialog);
-    await dialog.getByRole('button', { name: 'After choices', exact: true }).focus();
-    await page.keyboard.press('Tab');
-    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-    results[system] = await page.evaluate(() => ({ body: document.activeElement === document.body,
-      insideOwner: !!document.activeElement?.closest('.legacy-choices-owner') }));
-    await page.keyboard.press('Tab');
-    await expect(dialog.getByRole('button', { name: 'Close', exact: true })).toBeFocused();
-  }
-  await attach(info, 'legacy-tab-baseline', results);
-  expect(results.orbit).toEqual(results.antd);
+  await attach(info, 'nested-choices', { topLayerOnly: true, portalInsideOwner: true, tabBothDirections: true, fullTabCycle: true, scrollLocked: true, returned: true });
 });
 
 test('popover owns a select and restores focus one layer at a time; tooltip responds to focus and hover', async ({ page }, info) => {
@@ -483,33 +445,30 @@ test('Dialog keeps composition, outside dismissal, submenu Escape and keyboard c
   await attach(info, 'dialog-boundaries', { compositionIgnored: true, outsideClosesChild: true, submenuEscapesOneLayer: true, keyboardClear: true });
 });
 
-for (const kind of ['multiple', 'tags']) test(`${kind} chip appearance matches current labels and email fields`, async ({ page }, info) => {
+for (const kind of ['multiple', 'tags']) test(`${kind} chips: appearance recorded, disabled refuses input`, async ({ page }, info) => {
   const all = {};
   for (const state of ['default', 'disabled']) {
     const values = {};
-    for (const system of ['antd', 'orbit']) {
-      await page.goto(`${fixture}?sample=${kind}&system=${system}&state=${state}`);
-      await expect(page.getByTestId('theme')).toHaveText(info.project.use.colorScheme);
-      const control = page.locator('.sample-choice');
+    await page.goto(`${fixture}?sample=${kind}&state=${state}`);
+    await expect(page.getByTestId('theme')).toHaveText(info.project.use.colorScheme);
+    const control = page.locator('.sample-choice');
+    await page.mouse.move(0, 0);
+    await page.getByTestId('neutral').focus();
+    await settle(control);
+    values.orbit = { control: await measure(control, true) };
+    await shot(info, `orbit-${kind}-${state}`, control);
+    if (state === 'disabled') await expect(control.getByRole('combobox')).toBeDisabled();
+    if (state === 'default' && kind === 'multiple') {
+      await control.getByRole('combobox').click();
+      const surface = page.locator('.sample-surface:visible');
+      await settle(surface);
       await page.mouse.move(0, 0);
-      await page.getByTestId('neutral').focus();
-      await settle(control);
-      values[system] = { control: await measure(control, true) };
-      await shot(info, `${system}-${kind}-${state}`, control);
-      if (state === 'disabled') await expect(control.getByRole('combobox')).toBeDisabled();
-      if (state === 'default' && kind === 'multiple') {
-        await control.getByRole('combobox').click();
-        const surface = page.locator('.sample-surface:visible');
-        await settle(surface);
-        await page.mouse.move(0, 0);
-        values[system].popup = await measure(surface);
-        await shot(info, `${system}-multiple-options`, surface);
-      }
+      values.orbit.popup = await measure(surface);
+      await shot(info, 'orbit-multiple-options', surface);
     }
     all[state] = values;
   }
   await attach(info, 'multi-appearance', all);
-  for (const values of Object.values(all)) expect(values.orbit).toEqual(values.antd);
 });
 
 test('multiple labels search, toggle, collapse, remove and clear without losing the remaining values', async ({ page }, info) => {

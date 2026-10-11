@@ -293,37 +293,38 @@ func (m *docsModel) answer(prompt string) (int, string) {
 		return m.status, ""
 	}
 	title := ""
-	if match := regexp.MustCompile(`「([^」]+)」（`).FindStringSubmatch(prompt); match != nil {
+	if match := regexp.MustCompile(`«([^»]+)» \(`).FindStringSubmatch(prompt); match != nil {
 		title = match[1]
 	}
 	switch {
-	case strings.Contains(prompt, "做「归并」"):
+	case strings.Contains(prompt, `the "merge" for the document`):
 		var lines []string
 		for _, id := range regexp.MustCompile(`(?m)^\[([A-Z]\d+)\] `).FindAllStringSubmatch(prompt, -1) {
 			switch {
 			case id[1] == docsIDOf(prompt, docsOffTopic):
-				lines = append(lines, id[1]+" | 舍弃 | 与本节无关")
+				lines = append(lines, id[1]+" | drop | unrelated to this section")
 			case id[1] == docsIDOf(prompt, docsOutput):
-				lines = append(lines, id[1]+" | 合并到 "+docsIDOf(prompt, docsOwnerWords)+" | 说的是同一件事，owner 原话分量更重")
+				lines = append(lines, id[1]+" | merge into "+docsIDOf(prompt, docsOwnerWords)+" | the same thing, and the owner's words weigh more")
 			default:
-				lines = append(lines, id[1]+" | 采用 | 讲的正是本节")
+				lines = append(lines, id[1]+" | adopt | it is what this section is about")
 			}
 		}
-		return http.StatusOK, strings.Join(lines, "\n") + "\n现状：\n- 本节的现状要点 [S1]\n"
-	case strings.Contains(prompt, "补逐字引文"):
+		return http.StatusOK, strings.Join(lines, "\n") + "\nCurrent state:\n- this section's point of the current state [S1]\n"
+	case strings.Contains(prompt, "give the footnotes below their verbatim quotes"):
 		var answers []string
-		for _, id := range regexp.MustCompile(`(?m)^## \[([A-Z]\d+)\] 标在`).FindAllStringSubmatch(prompt, -1) {
+		for _, id := range regexp.MustCompile(`(?m)^## \[([A-Z]\d+)\] marks`).FindAllStringSubmatch(prompt, -1) {
 			answers = append(answers, m.repair[id[1]])
 		}
 		return http.StatusOK, strings.Join(answers, "")
-	case strings.Contains(prompt, "（概述，"):
-		return http.StatusOK, "### 总览\n一轮先存后投，至少投递一次[F1]。运行约定是全量测试在 runner 宿主上跑[F4]。\n"
-	case strings.Contains(prompt, "# 任务：写文档"):
+	case strings.Contains(prompt, "(the overview, about"):
+		return http.StatusOK, "### Overview\nA turn is stored first and delivered after, at least once[F1]. " +
+			"The convention for running is that the full suite runs on the runner host[F4].\n"
+	case strings.Contains(prompt, "# Task: write the document"):
 		answers := m.write[title]
 		if len(answers) == 0 {
 			return http.StatusOK, ""
 		}
-		if strings.Contains(prompt, "上一稿的问题") && len(answers) > 1 {
+		if strings.Contains(prompt, "What was wrong with the last draft") && len(answers) > 1 {
 			return http.StatusOK, answers[1]
 		}
 		return http.StatusOK, answers[0]
@@ -356,21 +357,17 @@ func (m *docsModel) Prompts() []string {
 // made up; s3 cites the owner's words and the delivery comment — first with a paragraph that marks only its
 // last sentence and with no quote for the comment, then marked sentence by sentence.
 var (
-	docsWriteS2 = "### turn 怎么投递\n" +
-		"一轮 turn 先落库再投递，至少投递一次[D1]。runner 通过出站轮询领取工作，不开入站端口[C1]。" +
-		"契约把投递写成至少一次、按 turn id 幂等[K1]。序号在重生后保持单调[D1][S9]，优先级仍是 [P0]。\n\n" +
-		"引文：\n" +
-		"[D1] 「A turn is stored before it is delivered」\n" +
-		"[D1] 「Seq stays monotonic across respawn」\n" +
-		"[C1] 「keeps the heartbeat going. It never opens an inbound port.」\n" +
-		"[K1] 「The contract says delivery is exactly once」\n"
-	docsWriteS3First = "### 约定\n" +
-		"运行约定有两条。全量测试必须在 `runner 宿主` 上跑，不能在引擎 Bash 里跑。整包跑完要看 0 FAIL[S1][S3]。\n\n" +
-		"引文：\n[S1] 「全量测试在 runner 宿主上跑」\n"
-	docsWriteS3Second = "### 约定\n" +
-		"全量测试必须在 `runner 宿主` 上跑，不能在引擎 Bash 里跑[S1]。整包跑完要看 0 FAIL[S3]。\n\n" +
-		"引文：\n[S1] 「全量测试在 runner 宿主上跑」\n"
-	docsRepairS3 = "[S3] 「在 runner 宿主上跑完整包」\n"
+	docsWriteS2 = "### How a turn is delivered\n" +
+		"A turn is stored before it is delivered, and delivered at least once[D1]. The runner takes its work by polling outbound, and opens no inbound port[C1]. The contract writes delivery as at least once, idempotent on the turn id[K1]. The sequence stays monotonic across a respawn[D1][S9], and the priority is still [P0].\n" +
+		"\nQuotes:\n[D1] \"A turn is stored before it is delivered\"\n[D1] \"Seq stays monotonic across respawn\"\n" +
+		"[C1] \"keeps the heartbeat going. It never opens an inbound port.\"\n[K1] \"The contract says delivery is exactly once\"\n"
+	docsWriteS3First = "### Conventions\n" +
+		"There are two conventions for running. The full suite must run on the `runner host`, never in the engine's Bash. After the whole package has run, look for 0 FAIL[S1][S3].\n" +
+		"\nQuotes:\n[S1] \"全量测试在 runner 宿主上跑\"\n"
+	docsWriteS3Second = "### Conventions\n" +
+		"The full suite must run on the `runner host`, never in the engine's Bash[S1]. After the whole package has run, look for 0 FAIL[S3].\n\nQuotes:\n" +
+		"[S1] \"全量测试在 runner 宿主上跑\"\n"
+	docsRepairS3 = "[S3] \"在 runner 宿主上跑完整包\"\n"
 )
 
 func newDocsModel() *docsModel {
@@ -513,10 +510,10 @@ func TestWikiArticleBuildCapsTheMaterialAndFiltersTheTemplateMessages(t *testing
 	for _, disposition := range door.written(t, "s3").Dispositions {
 		ledger[disposition.Ref] = disposition
 	}
-	if got := ledger["turn-template"]; got.Action != "filtered" || !strings.Contains(got.Reason, "复查模板") {
+	if got := ledger["turn-template"]; got.Action != "filtered" || !strings.Contains(got.Reason, "review template") {
 		t.Errorf("the template's disposition = %+v", got)
 	}
-	if got := ledger["comment-2"]; got.Action != "filtered" || !strings.Contains(got.Reason, "原文相同") {
+	if got := ledger["comment-2"]; got.Action != "filtered" || !strings.Contains(got.Reason, "the same original") {
 		t.Errorf("the repeated comment's disposition = %+v", got)
 	}
 
@@ -626,12 +623,13 @@ func TestWikiArticleBuildSendsWhatBecameOfEveryPieceWithItsSection(t *testing.T)
 	// The merge's answer read strictly: a merge into a piece that is not the section's is an adoption, and a
 	// piece it said nothing of is adopted — each saying so.
 	pieces := []*wikiDocPiece{{id: "S1", handed: true}, {id: "S2", handed: true}, {id: "S3", handed: true}, {id: "S4"}}
-	state := wikiDocApplyMerge("S1 | 采用 | 原话\nS2 | 合并到 S9 | 同一件事\n[S4] | 舍弃 | 没交给它\n现状：\n- 第一条 [S1]\n- 第二条\n", pieces)
+	state := wikiDocApplyMerge("S1 | adopt | the words said\nS2 | merge into S9 | the same thing\n[S4] | drop | not handed to it\nCurrent state:\n"+
+		"- the first point [S1]\n- the second\n", pieces)
 	if pieces[0].action != "adopt" || pieces[1].action != "adopt" || !strings.Contains(pieces[1].reason, "S9") ||
-		pieces[2].action != "adopt" || !strings.Contains(pieces[2].reason, "按采用") || pieces[3].action != "" {
+		pieces[2].action != "adopt" || !strings.Contains(pieces[2].reason, "adopted") || pieces[3].action != "" {
 		t.Errorf("the merge read as %+v %+v %+v %+v", *pieces[0], *pieces[1], *pieces[2], *pieces[3])
 	}
-	if !reflect.DeepEqual(state, []string{"第一条 [S1]", "第二条"}) {
+	if !reflect.DeepEqual(state, []string{"the first point [S1]", "the second"}) {
 		t.Errorf("the state = %q", state)
 	}
 }
@@ -647,7 +645,9 @@ func TestWikiArticleBuildGivesEveryFootnoteItsVerbatimQuote(t *testing.T) {
 	s2 := door.written(t, "s2")
 	// The body: markers numbered by first appearance, no material id and no quote block left, a marker naming
 	// no piece of the section (S9) dropped, and brackets that are the text's own ([P0]) left alone.
-	if s2.Markdown != "一轮 turn 先落库再投递，至少投递一次[1]。runner 通过出站轮询领取工作，不开入站端口[2]。契约把投递写成至少一次、按 turn id 幂等[3]。序号在重生后保持单调[1]，优先级仍是 [P0]。" {
+	if s2.Markdown != "A turn is stored before it is delivered, and delivered at least once[1]. The runner takes its work by polling outbound, and opens "+
+		"no inbound port[2]. The contract writes delivery as at least once, idempotent on the turn id[3]. The sequence stays monotonic across a respawn[1], "+
+		"and the priority is still [P0]." {
 		t.Errorf("s2's markdown = %q", s2.Markdown)
 	}
 	if len(s2.Footnotes) != 3 {
@@ -673,7 +673,7 @@ func TestWikiArticleBuildGivesEveryFootnoteItsVerbatimQuote(t *testing.T) {
 	// the quote the model left out was asked for once more, and the paragraph marked only at its end was
 	// written again sentence by sentence.
 	s3 := door.written(t, "s3")
-	if s3.Markdown != "全量测试必须在 `runner 宿主` 上跑，不能在引擎 Bash 里跑[1]。整包跑完要看 0 FAIL[2]。" {
+	if s3.Markdown != "The full suite must run on the `runner host`, never in the engine's Bash[1]. After the whole package has run, look for 0 FAIL[2]." {
 		t.Errorf("s3's markdown = %q", s3.Markdown)
 	}
 	if len(s3.Footnotes) != 2 {
@@ -690,17 +690,17 @@ func TestWikiArticleBuildGivesEveryFootnoteItsVerbatimQuote(t *testing.T) {
 	// s2 and s3 are written side by side, so the repair asked about s3 is found by what it asks about.
 	var repair, again string
 	for _, prompt := range model.Prompts() {
-		if strings.Contains(prompt, "补逐字引文") && strings.Contains(prompt, "## [S3] 标在") {
+		if strings.Contains(prompt, "give the footnotes below their verbatim quotes") && strings.Contains(prompt, "## [S3] marks") {
 			repair = prompt
 		}
-		if strings.Contains(prompt, "上一稿的问题") {
+		if strings.Contains(prompt, "What was wrong with the last draft") {
 			again = prompt
 		}
 	}
-	if !strings.Contains(repair, "[S3]") || !strings.Contains(repair, docsDelivery) || strings.Contains(repair, "[S1] 标在") {
+	if !strings.Contains(repair, "[S3]") || !strings.Contains(repair, docsDelivery) || strings.Contains(repair, "[S1] marks") {
 		t.Errorf("the quote was asked for as %q", repair)
 	}
-	if !strings.Contains(again, "运行约定有两条") {
+	if !strings.Contains(again, "There are two conventions for running.") {
 		t.Errorf("the paragraph marked only at its end was not asked about: %q", again)
 	}
 	// Every footnote of every section has its quote.
@@ -715,8 +715,9 @@ func TestWikiArticleBuildGivesEveryFootnoteItsVerbatimQuote(t *testing.T) {
 	}
 	// The write prompt asks for the quotes, sentence by sentence, and for an abbreviation explained first.
 	for _, prompt := range model.Prompts() {
-		if strings.Contains(prompt, "# 任务：写文档") && !strings.Contains(prompt, "（概述，") {
-			for _, rule := range []string{"每一个编号都必须有一行引文", "不能只在段末标一次", "SR50", "先用半句话说明它指什么"} {
+		if strings.Contains(prompt, "# Task: write the document") && !strings.Contains(prompt, "(the overview, about") {
+			for _, rule := range []string{"Every id that appears in the body must have a line of quote", "never only once at the end of the paragraph", "SR50",
+				"is explained in half a sentence where it first appears"} {
 				if !strings.Contains(prompt, rule) {
 					t.Errorf("the write prompt does not say %q", rule)
 				}
@@ -803,17 +804,18 @@ func TestWikiArticleBuildLeavesASectionWhoseMaterialDidNotChangeAndWritesTheOver
 	// its own footnotes are theirs — the same originals and the same quotes.
 	var overviewPrompt string
 	for _, prompt := range model.Prompts() {
-		if strings.Contains(prompt, "（概述，") {
+		if strings.Contains(prompt, "(the overview, about") {
 			overviewPrompt = prompt
 		}
 	}
-	for _, want := range []string{"【第 2 节 turn 怎么投递】", "至少投递一次[F1]", "【第 3 节 约定】", "[F1] 「A turn is stored before it is delivered」"} {
+	for _, want := range []string{"[Section 2: turn 怎么投递]", "delivered at least once[F1]", "[Section 3: 约定]", "[F1] \"A turn is stored before it is delivered\""} {
 		if !strings.Contains(overviewPrompt, want) {
 			t.Errorf("the overview prompt does not carry %q:\n%s", want, overviewPrompt)
 		}
 	}
 	s1 := first["s1"]
-	if s1.Markdown != "一轮先存后投，至少投递一次[1]。运行约定是全量测试在 runner 宿主上跑[2]。" || len(s1.Footnotes) != 2 {
+	if s1.Markdown != "A turn is stored first and delivered after, at least once[1]. The convention for running is that the full suite runs on the runner host[2]." ||
+		len(s1.Footnotes) != 2 {
 		t.Fatalf("the overview = %q %+v", s1.Markdown, s1.Footnotes)
 	}
 	if s1.Footnotes[0].Path != "docs/design.md" || *s1.Footnotes[0].Quote != *first["s2"].Footnotes[0].Quote || !*s1.Footnotes[0].Verified {
@@ -928,7 +930,7 @@ func docsBuildView() map[string]interface{} {
 			map[string]interface{}{"key": "s2", "title": "turn 怎么投递", "written": true, "blocks": []interface{}{}},
 			map[string]interface{}{"key": "s3", "title": "约定", "written": true, "blocks": []interface{}{
 				map[string]interface{}{"kind": "paragraph", "text": nil, "sentences": []interface{}{
-					map[string]interface{}{"text": "全量测试必须在 `runner 宿主` 上跑，不能在引擎 Bash 里跑。", "notes": []int{4}},
+					map[string]interface{}{"text": "The full suite must run on the `runner host`, never in the engine's Bash.", "notes": []int{4}},
 				}},
 			}},
 		},
@@ -1122,7 +1124,7 @@ func TestWikiArticleBuildWritesASectionWithNoMaterialAsEmptyLists(t *testing.T) 
 		"extra": map[string]interface{}{},
 	})
 	door.mu.Unlock()
-	model.write["边界"] = []string{"### 边界\n本篇只讲会话怎么运转，任务怎么派发另有专篇。\n"}
+	model.write["边界"] = []string{"### 边界\nThis document covers only how a session runs; how tasks are dispatched has a document of its own.\n"}
 	summary, out, err := docsBuildRun(t, repo.checkout, "--doc", "session-runtime", "--section", "s4")
 	if err != nil {
 		t.Fatalf("orbit wiki docs build --section s4: %v\n%s", err, out)
@@ -1131,7 +1133,7 @@ func TestWikiArticleBuildWritesASectionWithNoMaterialAsEmptyLists(t *testing.T) 
 		t.Errorf("a section with no material: %+v (want it written from one call, with no merge)", summary)
 	}
 	prompts := model.Prompts()
-	if len(prompts) != 1 || !strings.Contains(prompts[0], "归并后没有可用材料") || strings.Contains(prompts[0], "做「归并」") {
+	if len(prompts) != 1 || !strings.Contains(prompts[0], "No material is left after the merge") || strings.Contains(prompts[0], `the "merge" for the document`) {
 		t.Errorf("the one call was %q", prompts)
 	}
 	door.mu.Lock()
@@ -1140,7 +1142,7 @@ func TestWikiArticleBuildWritesASectionWithNoMaterialAsEmptyLists(t *testing.T) 
 	if len(raw) != 1 || !strings.Contains(raw[0], `"footnotes":[]`) || !strings.Contains(raw[0], `"dispositions":[]`) {
 		t.Errorf("the write sent %v: want its footnotes and its ledger as empty lists", raw)
 	}
-	if got := door.written(t, "s4"); got.Markdown != "本篇只讲会话怎么运转，任务怎么派发另有专篇。" {
+	if got := door.written(t, "s4"); got.Markdown != "This document covers only how a session runs; how tasks are dispatched has a document of its own." {
 		t.Errorf("the section = %q", got.Markdown)
 	}
 }
@@ -1312,7 +1314,7 @@ func TestWikiArticleBuildStopsWhenTheServerTakesTheAccountOver(t *testing.T) {
 		t.Fatalf("a refusal mid-run: %v, %+v\n%s", err, summary, out)
 	}
 	for _, prompt := range model.Prompts() {
-		if strings.Contains(prompt, "（概述，") || strings.Contains(prompt, "「约定」") {
+		if strings.Contains(prompt, "(the overview, about") || strings.Contains(prompt, "«约定»") {
 			t.Errorf("a section after the refusal asked the model: %.120s", prompt)
 		}
 	}

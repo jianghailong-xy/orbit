@@ -2,7 +2,6 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { App as AntApp } from 'antd';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Runner } from './TasksSidePanel';
@@ -104,11 +103,9 @@ describe('the composer model control', { timeout: 60_000 }, () => {
       nextRoot.render(
         <QueryClientProvider client={nextClient}>
           <MemoryRouter initialEntries={[route]}>
-            <AntApp>
-              <Routes>
-                <Route path="*" element={<WorkspaceView runner={runner} />} />
-              </Routes>
-            </AntApp>
+            <Routes>
+              <Route path="*" element={<WorkspaceView runner={runner} />} />
+            </Routes>
           </MemoryRouter>
         </QueryClientProvider>,
       );
@@ -125,13 +122,18 @@ describe('the composer model control', { timeout: 60_000 }, () => {
   const chip = () => mounted().querySelector<HTMLButtonElement>('.composer-model-chip');
   /** What the view asked the server to change, pick by pick (PATCH /sessions/:id/config). */
   const configCalls = () => vi.mocked(updateSessionConfig).mock.calls.map(([, cfg]) => cfg);
-  /** Menu rows by the key rc-menu stamps into `data-menu-id`. */
-  const row = (key: string) =>
-    Array.from(document.querySelectorAll<HTMLElement>('.ant-dropdown-menu-item')).find((el) =>
-      el.getAttribute('data-menu-id')?.endsWith(`-${key}`),
-    );
+  /** A menu row's own words: its label, without the value it says on its right or its tick. */
+  const rowLabel = (el: HTMLElement): string => {
+    const copy = el.cloneNode(true) as HTMLElement;
+    copy.querySelectorAll('.scope-menu-value, .scope-menu-check').forEach((node) => node.remove());
+    return (copy.textContent ?? '').trim();
+  };
+  /** A row of the open menus, by what it says. */
+  const row = (label: string) =>
+    Array.from(document.querySelectorAll<HTMLElement>('[role="menu"] [role="menuitem"]')).find((el) => rowLabel(el) === label);
+  /** A row that opens a level down. */
   const submenu = (label: string) =>
-    Array.from(document.querySelectorAll<HTMLElement>('.composer-model-menu .ant-dropdown-menu-submenu-title')).find(
+    Array.from(document.querySelectorAll<HTMLElement>('.composer-model-menu [role="menuitem"][aria-haspopup="menu"]')).find(
       (el) => el.textContent?.startsWith(label),
     );
   const click = async (el: HTMLElement | undefined | null, what: string) => {
@@ -143,13 +145,13 @@ describe('the composer model control', { timeout: 60_000 }, () => {
   const open = async () => {
     await click(chip(), 'the model control');
     await act(async () => {
-      await vi.waitFor(() => expect(row('model:claude-opus-5-5')).toBeDefined(), { timeout: 20_000, interval: 20 });
+      await vi.waitFor(() => expect(row('Opus 5.5')).toBeDefined(), { timeout: 20_000, interval: 20 });
     });
   };
-  const openSub = async (label: string, key: string) => {
+  const openSub = async (label: string, rowInIt: string) => {
     await click(submenu(label), `the ${label} row`);
     await act(async () => {
-      await vi.waitFor(() => expect(row(key)).toBeDefined(), { timeout: 20_000, interval: 20 });
+      await vi.waitFor(() => expect(row(rowInIt)).toBeDefined(), { timeout: 20_000, interval: 20 });
     });
   };
   /**
@@ -157,7 +159,9 @@ describe('the composer model control', { timeout: 60_000 }, () => {
    * mount: the composer decides a level-down row's gesture from this at render, and re-decides
    * when the media query changes.
    */
+  let pointer: 'mouse' | 'touch' = 'touch';
   const stubPointer = (canHover: boolean) => {
+    pointer = canHover ? 'mouse' : 'touch';
     vi.stubGlobal('matchMedia', (query: string) => ({
       matches: canHover && query === '(hover: hover)',
       media: query,
@@ -169,11 +173,16 @@ describe('the composer model control', { timeout: 60_000 }, () => {
       dispatchEvent: () => false,
     }));
   };
-  /** React's onMouseEnter, which it synthesizes from a bubbling mouseover with a relatedTarget. */
+  /** The pointer coming to rest on `el`, as the browser reports it: the pointer events of the device's pointer (a
+   *  mouse where it can hover, a finger where it cannot), then the mouse events that follow them. */
   const hover = async (el: HTMLElement | undefined, what: string) => {
     if (!el) throw new Error(`nothing to hover: ${what}`);
     await act(async () => {
+      el.dispatchEvent(new PointerEvent('pointerover', { bubbles: true, pointerType: pointer, relatedTarget: document.body }));
+      el.dispatchEvent(new PointerEvent('pointerenter', { pointerType: pointer, relatedTarget: document.body }));
       el.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, relatedTarget: document.body }));
+      el.dispatchEvent(new MouseEvent('mouseenter', { relatedTarget: document.body }));
+      el.dispatchEvent(new MouseEvent('mousemove', { bubbles: true }));
     });
   };
   /** Let a mutation that was going to fire, fire. */
@@ -300,7 +309,7 @@ describe('the composer model control', { timeout: 60_000 }, () => {
     await open();
     const title = document.querySelector<HTMLElement>('.composer-engine-title .composer-engine-title-name');
     expect(title?.textContent).toBe('Claude Code');
-    await click(row('engine-title'), 'the engine title');
+    await click(row('Claude Code'), 'the engine title');
     expect(configCalls()).toHaveLength(0);
   });
 
@@ -324,9 +333,9 @@ describe('the composer model control', { timeout: 60_000 }, () => {
     await mount('GPT-5.6-SolDefault', `/workspaces/${WORKSPACE}/new`, codexRunner);
     await click(chip(), 'the model control');
     await act(async () => {
-      await vi.waitFor(() => expect(row('model:gpt-6.1-sol')).toBeDefined());
+      await vi.waitFor(() => expect(row('GPT-6.1-Sol')).toBeDefined());
     });
-    await click(row('model:gpt-6.1-sol'), 'GPT-6.1-Sol');
+    await click(row('GPT-6.1-Sol'), 'GPT-6.1-Sol');
     await settle();
     expect(chip()?.textContent).toBe('GPT-6.1-SolDefault');
     // Remembered for the pair it was picked on — Codex on its own sign-in (contract §6.5).
@@ -339,9 +348,9 @@ describe('the composer model control', { timeout: 60_000 }, () => {
       root!.render(
         <QueryClientProvider client={client!}>
           <MemoryRouter initialEntries={[`/workspaces/${WORKSPACE}/new`]}>
-            <AntApp><Routes>
+            <Routes>
               <Route path="*" element={<WorkspaceView key="next-draft" runner={codexRunner} />} />
-            </Routes></AntApp>
+            </Routes>
           </MemoryRouter>
         </QueryClientProvider>,
       );
@@ -376,9 +385,9 @@ describe('the composer model control', { timeout: 60_000 }, () => {
     });
     await click(chip(), 'the model control');
     await act(async () => {
-      await vi.waitFor(() => expect(row('model:gpt-5.6-sol')).toBeDefined());
+      await vi.waitFor(() => expect(row('GPT-5.6-Sol')).toBeDefined());
     });
-    await click(row('model:gpt-5.6-sol'), 'a manual model choice');
+    await click(row('GPT-5.6-Sol'), 'a manual model choice');
     await act(async () => {
       client!.setQueryData(['user', 'me'], {
         id: 'user-1', preferences: { defaultModels: { codex: 'gpt-6.1-sol' } },
@@ -390,7 +399,7 @@ describe('the composer model control', { timeout: 60_000 }, () => {
   it('remembers a model picked in an existing session without changing the model of other sessions', async () => {
     await mount();
     await open();
-    await click(row('model:claude-sonnet-5'), 'another model');
+    await click(row('Sonnet 5'), 'another model');
     await settle();
     // Under the session's own pair — its engine and the key it spends — not the key alone, which
     // runs on several engines.
@@ -405,7 +414,7 @@ describe('the composer model control', { timeout: 60_000 }, () => {
     expect(chip()?.querySelector('.composer-model-effort')?.textContent).toBe('Max');
     // The toolbar carries no provider, model or effort Select of its own: Mode is its one Select
     // on a session that already has its workspace.
-    expect(mounted().querySelectorAll('.composer-toolbar .ant-select')).toHaveLength(1);
+    expect(mounted().querySelectorAll('.composer-toolbar .orbit-select')).toHaveLength(1);
     // …and the toolbar is inside the card, with the text above it.
     const box = mounted().querySelector('.composer-box')!;
     expect(box.lastElementChild?.classList.contains('composer-toolbar')).toBe(true);
@@ -414,14 +423,16 @@ describe('the composer model control', { timeout: 60_000 }, () => {
     await open();
     expect(submenu('Provider')?.textContent).toBe('Providerorbitd@Claude');
     expect(submenu('Effort')?.textContent).toBe('EffortMax');
-    const models = ['claude-opus-5-5', 'claude-opus-5', 'claude-sonnet-5'].map((m) => row(`model:${m}`));
-    expect(models.map((el) => el?.textContent)).toEqual(['Opus 5.5', 'Opus 5', 'Sonnet 5']);
+    // The rows under the Provider row, before the effort: the provider's models.
+    const models = Array.from(document.querySelectorAll<HTMLElement>('.composer-model-menu > [role="menuitem"]:not([aria-haspopup])'))
+      .slice(1);
+    expect(models.map((el) => el.textContent)).toEqual(['Opus 5.5', 'Opus 5', 'Sonnet 5']);
     // The check marks the model that is running, and only that one.
     expect(models.map((el) => !!el?.querySelector('.scope-menu-check .anticon'))).toEqual([true, false, false]);
 
-    await openSub('Provider', 'provider:deepseek');
-    expect(row('provider:anthropic-2')?.querySelector('.scope-menu-check .anticon')).not.toBeNull();
-    expect(row('provider:deepseek')?.textContent).toContain('DeepSeek');
+    await openSub('Provider', 'DeepSeek');
+    expect(row('orbitd@Claude')?.querySelector('.scope-menu-check .anticon')).not.toBeNull();
+    expect(row('DeepSeek')?.textContent).toContain('DeepSeek');
   });
 
   it('leaves the session config alone when the pick is already running, and PATCHes a change once', async () => {
@@ -431,28 +442,28 @@ describe('the composer model control', { timeout: 60_000 }, () => {
     // model, effort or provider is not a change, and must not reach the server as one — a
     // provider PATCH re-spawns the engine.
     await open();
-    await click(row('model:claude-opus-5-5'), 'the running model');
+    await click(row('Opus 5.5'), 'the running model');
     await settle();
     await open();
-    await openSub('Effort', 'effort:max');
-    await click(row('effort:max'), 'the running effort');
+    await openSub('Effort', 'Max');
+    await click(row('Max'), 'the running effort');
     await settle();
     await open();
-    await openSub('Provider', 'provider:anthropic-2');
-    await click(row('provider:anthropic-2'), 'the running provider');
+    await openSub('Provider', 'orbitd@Claude');
+    await click(row('orbitd@Claude'), 'the running provider');
     await settle();
     expect(configCalls()).toHaveLength(0);
 
     await open();
-    await click(row('model:claude-sonnet-5'), 'another model');
+    await click(row('Sonnet 5'), 'another model');
     await act(async () => {
       await vi.waitFor(() => expect(configCalls()).toHaveLength(1), { timeout: 20_000, interval: 20 });
     });
     expect(configCalls()[0]).toMatchObject({ model: 'claude-sonnet-5' });
 
     await open();
-    await openSub('Effort', 'effort:high');
-    await click(row('effort:high'), 'another effort');
+    await openSub('Effort', 'High');
+    await click(row('High'), 'another effort');
     await act(async () => {
       await vi.waitFor(() => expect(configCalls()).toHaveLength(2), { timeout: 20_000, interval: 20 });
     });
@@ -467,10 +478,10 @@ describe('the composer model control', { timeout: 60_000 }, () => {
     await open();
     await hover(submenu('Provider'), 'the Provider row');
     await act(async () => {
-      await vi.waitFor(() => expect(row('provider:deepseek')).toBeDefined(), { timeout: 20_000, interval: 20 });
+      await vi.waitFor(() => expect(row('DeepSeek')).toBeDefined(), { timeout: 20_000, interval: 20 });
     });
     // The level the hover opened is the same one a click opens, and it picks as before.
-    await click(row('provider:deepseek'), 'DeepSeek');
+    await click(row('DeepSeek'), 'DeepSeek');
     await act(async () => {
       await vi.waitFor(() => expect(configCalls()).toHaveLength(1), { timeout: 20_000, interval: 20 });
     });
@@ -479,17 +490,17 @@ describe('the composer model control', { timeout: 60_000 }, () => {
 
   it('leaves the tap as the gesture where there is no hover', async () => {
     // A touch device (the default `stubPointer(false)`, and the reading a phone really gets): the
-    // pointer resting on a level-down row opens nothing — the delay is the one rc-menu would use
-    // to open it — and the tap is still what opens it.
+    // pointer resting on a level-down row opens nothing — however long it rests, past the delay a
+    // hover would open it after — and the tap is still what opens it.
     await mount();
     await open();
     await hover(submenu('Effort'), 'the Effort row');
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 200));
     });
-    expect(row('effort:high')).toBeUndefined();
-    await openSub('Effort', 'effort:high');
-    expect(row('effort:high')).toBeDefined();
+    expect(row('High')).toBeUndefined();
+    await openSub('Effort', 'High');
+    expect(row('High')).toBeDefined();
   });
 
   it('offers a self-hosted model only the efforts it declares, and names the one it runs at', async () => {
@@ -515,25 +526,24 @@ describe('the composer model control', { timeout: 60_000 }, () => {
     const openVllm = async () => {
       await click(chip(), 'the model control');
       await act(async () => {
-        await vi.waitFor(() => expect(row('model:qwen3.8-27b-fp8')).toBeDefined(), { timeout: 20_000, interval: 20 });
+        await vi.waitFor(() => expect(row('Qwen3.8 27B FP8')).toBeDefined(), { timeout: 20_000, interval: 20 });
       });
     };
     await mount('Qwen3.8 27B FP8xHigh');
     await openVllm();
     expect(submenu('Effort')?.textContent).toBe('EffortxHigh');
-    await openSub('Effort', 'effort:xhigh');
-    const offered = Array.from(document.querySelectorAll<HTMLElement>('.ant-dropdown-menu-item'))
-      .map((el) => el.getAttribute('data-menu-id')?.match(/-effort:(.*)$/)?.[1])
-      .filter((level): level is string => level !== undefined);
-    expect(offered).toEqual(['', 'low', 'medium', 'xhigh', 'ultra']);
+    await openSub('Effort', 'xHigh');
+    // The level-down rows: '' (the session's own default), then each level the model declares.
+    const offered = Array.from(document.querySelectorAll<HTMLElement>('[role="menu"][data-nested] [role="menuitem"]')).map(rowLabel);
+    expect(offered).toEqual(['Default', 'Low', 'Medium', 'xHigh', 'Ultra']);
 
     // xHigh is what runs already, so picking it is no change; a level the model has is one PATCH.
-    await click(row('effort:xhigh'), 'the level it runs at');
+    await click(row('xHigh'), 'the level it runs at');
     await settle();
     expect(configCalls()).toHaveLength(0);
     await openVllm();
-    await openSub('Effort', 'effort:medium');
-    await click(row('effort:medium'), 'a declared level');
+    await openSub('Effort', 'Medium');
+    await click(row('Medium'), 'a declared level');
     await act(async () => {
       await vi.waitFor(() => expect(configCalls()).toHaveLength(1), { timeout: 20_000, interval: 20 });
     });

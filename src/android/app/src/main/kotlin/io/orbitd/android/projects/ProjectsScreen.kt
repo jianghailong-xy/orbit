@@ -613,9 +613,11 @@ private fun Header(state: ProjectPageState, doc: JsonObject, now: Instant, conne
         when {
             facts != null -> Text("${if (view.text("line") == "PROJECT_BRANCH") "⎇" else "↓"} ${facts.joinToString(" · ")}", Modifier.testTag("project-integration-facts"),
                 style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            view != null && view["line"].let { it == null || it is JsonNull } && ProjectDoc.started(doc) == false ->
-                Text("⎇ ${RunSettings.undecidedLine(state.openItems?.obj("startRequest")?.obj("startRequest")?.obj("settings")?.text("line"))}",
+            view != null && view["line"].let { it == null || it is JsonNull } && ProjectDoc.started(doc) == false -> {
+                val suggestion = state.openItems?.obj("startRequest")?.obj("startRequest")?.obj("settings")
+                Text("⎇ ${RunSettings.undecidedLine(suggestion?.text("line"), StartProjectCopy.startMainBranch(suggestion?.text("upstreamRef"), view))}",
                     style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
         if (!connected) OfflineNote()
         state.copied?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = LocalOrbitColors.current.success) }
@@ -690,7 +692,10 @@ private fun OpenItemsSheet(state: ProjectPageState, doc: JsonObject, now: Instan
                             GroupLabel(ProjectPage.needsYouGroup)
                             when (start) {
                                 is StartProjectCopy.PageRow.Asked -> AskedRow(StartProjectCopy.title, null,
-                                    start.row.obj("startRequest")?.obj("settings")?.let(StartProjectCopy::requestSummary) ?: start.row.text("detailLine").orEmpty(),
+                                    // Directly into the main branch the start card opens with.
+                                    start.row.obj("startRequest")?.obj("settings")?.let {
+                                        StartProjectCopy.requestSummary(it, StartProjectCopy.startMainBranch(it.text("upstreamRef"), state.integration))
+                                    } ?: start.row.text("detailLine").orEmpty(),
                                     "${ProjectPage.who(start.row)} · ${ProjectPage.waitingLabel(start.row, now)}", enabled, "start-request") { reviewStart(start.row) }
                                 StartProjectCopy.PageRow.Own -> OwnRow(StartProjectCopy.rowOwn, StartProjectCopy.rowNotAsked, MaterialTheme.colorScheme.primary, enabled,
                                     "project-start-own", startOwn)
@@ -798,7 +803,7 @@ private fun LazyListScope.overviewSection(state: ProjectPageState, doc: JsonObje
     val paused = doc.text("pausedAt") != null
     val manual = if ((buckets.number("ready") ?: 0) > 0) ProjectPage.manualReady(if (state.queueUnread) null else state.queue, status, started, paused) else null
     val cells = ProjectPage.overviewCells(buckets, panorama.obj("shape")?.number("taskCount") ?: ProjectDoc.taskCount(doc), doc.obj("integration")?.text("line"),
-        started, paused, manual?.number("count") ?: 0)
+        started, paused, manual?.number("count") ?: 0, RunSettings.mainBranchName(doc.obj("integration")?.text("upstreamRef")))
     item(key = "overview") {
         SectionHead("Work overview", panorama.obj("shape")?.let(ProjectPage::overviewSubtitle))
         Column(Modifier.testTag("project-overview"), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1087,7 +1092,8 @@ private fun LazyListScope.criteriaSection(doc: JsonObject, openTask: (String) ->
         val limit = ProjectPage.criteriaPreviewCompact
         Column(Modifier.testTag("project-criteria"), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(ProjectPage.criteriaStanding(criteria.size), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            (if (expanded) criteria else criteria.take(limit)).forEach { criterion -> CriterionRow(criterion, doc.obj("integration")?.text("ref"), openTask) }
+            val main = RunSettings.mainBranchName(doc.obj("integration")?.text("upstreamRef"))
+            (if (expanded) criteria else criteria.take(limit)).forEach { criterion -> CriterionRow(criterion, doc.obj("integration")?.text("ref"), main, openTask) }
             ProjectPage.criteriaDisclosure(criteria.size, limit, expanded)?.let { (press, meta) ->
                 OutlinedButton(onClick = { expanded = !expanded }, Modifier.fillMaxWidth()) { Text(press) }
                 Text(meta, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.align(Alignment.CenterHorizontally))
@@ -1098,7 +1104,7 @@ private fun LazyListScope.criteriaSection(doc: JsonObject, openTask: (String) ->
 }
 
 @Composable
-private fun CriterionRow(criterion: JsonObject, ref: String?, openTask: (String) -> Unit) {
+private fun CriterionRow(criterion: JsonObject, ref: String?, main: String, openTask: (String) -> Unit) {
     var method by rememberSaveable(criterion.text("id")) { mutableStateOf(false) }
     val satisfied = ProjectDoc.satisfied(criterion)
     Row(Modifier.fillMaxWidth().testTag("criterion:${criterion.number("ordinal")}"), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1113,7 +1119,7 @@ private fun CriterionRow(criterion: JsonObject, ref: String?, openTask: (String)
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(criterion.text("text").orEmpty())
-            ProjectPage.criterionWork(criterion, ref)?.let { work ->
+            ProjectPage.criterionWork(criterion, ref, main)?.let { work ->
                 Text(buildString {
                     append(work.state); work.landing?.let { append(" · $it") }; work.landingWarning?.let { append(" · $it") }
                 }, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold,

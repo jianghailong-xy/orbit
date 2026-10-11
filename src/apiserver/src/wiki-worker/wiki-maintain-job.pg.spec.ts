@@ -38,19 +38,64 @@
  *  12. a second run on the commit an earlier run checked (2026-10-10, `anchorRules.verify.skip`): the same space
  *      run again on the same snapshot sends the runner no anchor at all, writes nothing, and reports the entries
  *      it left alone under `skipped` — the replay after a REPO_OP_WAIT, which used to re-check all ~7,700 anchors;
- *  13. a snapshot that moved re-checks every entry, and its checks carry the commit that just moved;
+ *  13. a snapshot that moved, and does not reach the commit the checks were made on, re-checks every entry, and its
+ *      checks carry the commit that just moved;
  *  14. a mixed page: only the entries that still owe a check at this commit go out — one checked here, one
  *      unchecked, one that names its own baseline (a Re-confirm's shape, which no rule can prove holds), one whose
  *      check adopted its region;
- *  15. a symbol whose baseline the owner's Re-confirm moved is re-checked, though its check stands on this commit.
+ *  15. a symbol whose baseline the owner's Re-confirm moved is re-checked, though its check stands on this commit;
+ *  15a. a check nothing has moved since owes nothing either (2026-10-10, `anchorRules.verify.skip`, P10's rounds re-checked
+ *      all ~11,600 anchors once main moved, every one of them unchanged): a path checked on an earlier commit the
+ *      snapshot reaches is checked again when the diff since names it, or a file under it, as anything but a
+ *      modification — an A, a D, a T, either side of an R, a C's new side — and left alone, unwritten, when it only
+ *      modifies it; a path found missing is checked again; a symbol on any change to its file, and always when it
+ *      names its own baseline or was re-confirmed; a commit found verified is left alone while the snapshot reaches it,
+ *      and one found missing or no longer reached is checked again; the diffs go to the `anchorDiffsMax` commits most
+ *      anchors were checked at, one at a time, and what is checked at any other is checked again; the entries that
+ *      still owe a check go out together whichever page they were read on; and a diff the runner could not make
+ *      vouches for nothing.
  *  16. the documents step's comparison by commit (2026-10-10, P10's rounds f098cd24 and 54755b7b: ~107 single-file
  *      reads a round, one at a time): eleven written sections on three commits whose files the diffs name, around
  *      them a commit the snapshot does not reach, an empty diff, the head and a section with no file, a file deleted
  *      and one renamed — the same sections are written again and the same paths withdrawn as the reads section by
- *      section gave, one `diff` a commit, and the files are read with one `read` a commit and one at the head
- *      instead of one a section at each end, each operation asked once the one before it has settled;
+ *      section gave (the rename by its old path since 18), one `diff` a commit, and the files are read with one
+ *      `read` a commit and one at the head instead of one a section at each end, each operation asked once the one
+ *      before it has settled;
  *  17. a commit whose files are more than `RepoOps.operationBytes` is read in the fewest operations that limit
- *      allows, at the commit and at the head alike.
+ *      allows, at the commit and at the head alike;
+ *  18. a rename and a deletion as the runner's comparison takes them (2026-10-10, `wikiGitChanges`), on the repository
+ *      of wiki_maintain_docs_test.go's TestWikiMaintainWritesOnlyTheSectionsItsEntriesAndOriginMainTouched: a section
+ *      citing only a renamed file's old path, and one citing only a deleted file, are the repository's — each file read
+ *      at the section's commit, where it still is — and the rename is withdrawn by its old path, `to` where it went;
+ *  19. a rename that changed the file as well, and a deleted file no sentence cites: the sections citing either end of
+ *      the rename and the one citing the deleted file are written again, and the old path is withdrawn, the new not;
+ *  20. a run's tokens are its own requests, each once (P10 round 93: the documents step's calls were counted twice,
+ *      once as each was asked and again from the build's summary): the run's and the documents step's;
+ *  21. a worker stopped mid-run hands the run back, and the report the replay ends with is the whole run's (contract
+ *      `jobs.carry`): stopped in the documents step, the dossiers the run read, the ops it recorded, the verdicts and
+ *      the anchor checks before the stop are counted with the sections written after it — exactly what the same run
+ *      reports when nothing stops it; stopped between the run's own verdicts, the replay verifies the run's own ops the
+ *      stop left waiting — its job's, though it recorded none of them itself (`maintenance.job.server.verify`) — and
+ *      the report is the straight run's, every verdict once; stopped on the call of an op whose neighbours the run's
+ *      verdicts then made live, the replay's question is another, and the second pass asks it under the op's retry
+ *      unit; stopped between two anchors operations, every entry is counted checked once, none of the first
+ *      operation's as skipped;
+ *  22. the second verification pass (2026-10-10): an op whose first answer is no verdict is asked again under a unit of
+ *      its own, `<opId>#retry`, its prompt the first one with why that answer was not taken, as the runner's second
+ *      pass words it — where the second pass used to ask under the first pass's unit, which the queue refused as asked
+ *      before with another call, so it never reached the model;
+ *  23. what an ended run left waiting (2026-10-11, `maintenance.job.server.verify`, `reviewModes.verification.adoption`): the
+ *      ops a run's two passes left without a verdict are adopted by the space's next run, which records their verdicts and
+ *      counts them adopted — where the adoption took ended sessions' ops alone, and no later run took them up;
+ *  24. an ended session's op the server's run adopts gets its verdict, reported as adopted — where the writer looked for it
+ *      among the job's own ops and refused it 404;
+ *  25. one adoption list, oldest first, whoever proposed each op — ended sessions and runs that succeeded, failed or were
+ *      cancelled — and at most `adoptOpsMax` a run, the newest left for the next;
+ *  26. another space's ended run's ops, and those of a run of the space that has not ended (put back for a retry, parked on
+ *      a repository operation), are never asked about; and
+ *  27. the writer records an adopted verdict for an ended run's op from the space's maintenance run alone: a session, the run
+ *      that proposed it, another space's run, a job of another kind, the space's run reporting it as its own, and the space's
+ *      run while the proposer has not ended (queued, running, waiting) are each answered 404.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/wiki-worker/wiki-maintain-job.pg.spec.ts
  *
@@ -82,7 +127,7 @@ import { WikiHealth } from '../wiki/wiki-health';
 import { WikiPlans } from '../wiki/wiki-plan';
 import { WikiRefusalError, WikiService, type WikiPrincipal } from '../wiki/wiki.service';
 import { WikiRepoOps, type WikiRepoOpWake } from './wiki-repo-ops';
-import { WIKI_ANCHOR_RULES, WIKI_JOB, WIKI_LIMITS, WIKI_REPO_OP_CAPABILITY, WIKI_REPO_OP_READ_CAPABILITY, WIKI_REPO_OPS } from '@orbit/shared';
+import { toUuid, WIKI_ANCHOR_RULES, WIKI_DOCS_BUILD_JOB, WIKI_JOB, WIKI_LIMITS, WIKI_MAINTAIN_JOB, WIKI_MAINTENANCE_JOB, WIKI_REPO_OP_CAPABILITY, WIKI_REPO_OP_READ_CAPABILITY, WIKI_REPO_OPS } from '@orbit/shared';
 import { WikiJobExecutor, WIKI_JOB_RUNNERS, type WikiJobRunner } from './wiki-job-executor';
 import { claimWikiJobs, reclaimExpiredWikiJobs, WIKI_JOB_HANDED_BACK } from './wiki-jobs';
 import { WikiModelRequestQueue } from './wiki-model-queue.service';
@@ -90,6 +135,8 @@ import { WikiModelStatusProbe } from './wiki-model-status';
 import { readWikiSystemModel, type WikiSystemModelConfig } from './wiki-system-model';
 import { wikiMaintainJobPrincipal, wikiMaintainJobRunner, type WikiMaintainJobDeps } from './wiki-maintain-job';
 import { wikiStoredText } from './wiki-stored-text';
+import { wikiVerifyRetrySuffix } from './wiki-verify';
+import { wikiVerifyPrincipal } from './wiki-verify-job';
 
 const URL_ = process.env.COORDINATOR_PG_URL;
 const skip = !URL_;
@@ -105,6 +152,8 @@ interface FakeModel {
   base: string;
   answer: (hit: Hit) => string;
   hits: Hit[];
+  /** Waited for before a call is answered: a case holds a call here while it stops the worker. */
+  hold: (hit: Hit) => Promise<void>;
   close: () => Promise<void>;
 }
 
@@ -115,6 +164,7 @@ async function fakeModel(): Promise<FakeModel> {
     base: '',
     answer: (): string => '[]',
     hits,
+    hold: async () => undefined,
     close: async () => undefined,
   } as FakeModel;
   const server = createServer((request: IncomingMessage, response: ServerResponse) => {
@@ -122,7 +172,7 @@ async function fakeModel(): Promise<FakeModel> {
     request.on('data', (chunk: Buffer) => {
       body += chunk.toString();
     });
-    request.on('end', () => {
+    request.on('end', () => void (async () => {
       if (request.url === '/health') {
         response.writeHead(200, { 'content-type': 'application/json' });
         response.end('{}');
@@ -136,6 +186,7 @@ async function fakeModel(): Promise<FakeModel> {
         prompt = '';
       }
       hits.push({ prompt });
+      await state.hold({ prompt });
       const event = (name: string, data: unknown) => `event: ${name}\ndata: ${JSON.stringify(data)}\n\n`;
       const write = (what: string) => {
         try {
@@ -154,7 +205,7 @@ async function fakeModel(): Promise<FakeModel> {
       } catch {
         /* the call was abandoned */
       }
-    });
+    })());
   });
   server.on('connection', (socket: Socket) => {
     sockets.add(socket);
@@ -416,6 +467,9 @@ const REPO_WAKE: WikiRepoOpWake = {
   },
 };
 
+/** What the runs of a case said as they went (`WikiJobContext.log`), every worker's; cleared by `clearWork`. */
+const runLog: string[] = [];
+
 /** The worker under test, its kind map the one the worker module builds — with this spec's services. */
 function worker(h: Harness, over: { repoWaitMs?: number; wake?: boolean } = {}): { queue: WikiModelRequestQueue; executor: WikiJobExecutor } {
   const options = { leaseMs: HARNESS_LEASE_MS, renewMs: HARNESS_RENEW_MS, partialMs: 40, pollMs: 30 };
@@ -436,7 +490,17 @@ function worker(h: Harness, over: { repoWaitMs?: number; wake?: boolean } = {}):
     repoWaitMs: over.repoWaitMs ?? 5_000,
     ...(over.wake === true ? { repoWake: REPO_WAKE } : {}),
   };
-  const runners: Record<string, WikiJobRunner> = { ...WIKI_JOB_RUNNERS, maintain: wikiMaintainJobRunner(deps) };
+  const maintain = wikiMaintainJobRunner(deps);
+  const runners: Record<string, WikiJobRunner> = {
+    ...WIKI_JOB_RUNNERS,
+    maintain: (context) => maintain({
+      ...context,
+      log: (message) => {
+        runLog.push(message);
+        context.log(message);
+      },
+    }),
+  };
   const executor = new WikiJobExecutor(h.prisma as unknown as PrismaService, queue, options, runners);
   live.push({ queue, executor });
   return { queue, executor };
@@ -454,8 +518,10 @@ async function clearWork(h: Harness): Promise<void> {
   await h.sql.query('DELETE FROM "wiki_job" WHERE "owner_id" = $1', [h.ownerId]);
   await h.sql.query('DELETE FROM "wiki_model_request" WHERE "owner_id" = $1', [h.ownerId]);
   await h.sql.query('DELETE FROM "wiki_model_status"');
+  runLog.length = 0;
   h.model.hits.length = 0;
   h.model.answer = () => '[]';
+  h.model.hold = async () => undefined;
   await modelUp(h);
 }
 
@@ -463,6 +529,8 @@ async function clearWork(h: Harness): Promise<void> {
 interface RunnerPlay {
   failSnapshot?: boolean;
   holdReads?: boolean;
+  /** An anchors operation stays queued, as on a runner whose fetch hangs. */
+  holdAnchors?: boolean;
   /** The commit the runner says origin/main is at: the spec's own, unless a case has moved it. */
   snapshotSha?: string;
   checkAnchor?: (anchor: Record<string, unknown>) => Record<string, unknown>;
@@ -477,6 +545,8 @@ interface RunnerPlay {
   filesAt?: Record<string, Record<string, string>>;
   /** What the diff from each commit names, by its `from`: a rename names where it came from and where it went. */
   diffs?: Record<string, { files: Array<{ status: string; path: string; from?: string }>; docs: string[] }>;
+  /** Every diff fails, as on a checkout git cannot diff in. */
+  failDiffs?: boolean;
 }
 
 /**
@@ -490,8 +560,14 @@ async function runRepoOps(h: Harness, over: RunnerPlay = {}): Promise<number> {
   ).then((result) => result.rows);
   for (const row of rows) {
     if (over.holdReads === true && row.kind === 'read') continue;
+    if (over.holdAnchors === true && row.kind === 'anchors') continue;
     if (over.failSnapshot === true && row.kind === 'snapshot') {
       await h.sql.query(`UPDATE "wiki_repo_op" SET "state"='failed', "error"='the machine went away', "ended_at"=now() WHERE "id"=$1`, [row.id]);
+      continue;
+    }
+    if (over.failDiffs === true && row.kind === 'diff') {
+      await h.sql.query(`UPDATE "wiki_repo_op" SET "state"='failed', "error"='git diff failed', "ended_at"=now() WHERE "id"=$1`, [row.id]);
+      for (const listener of [...settledListeners]) listener(row.id);
       continue;
     }
     const input = row.input ?? {};
@@ -804,6 +880,55 @@ test('a server run reads, checks, proposes, advances, verifies and re-checks the
   assert.equal(articles[0]!.state, 'queued');
 });
 
+test('an op whose first answer is no verdict is asked again under a unit of its own, `<opId>#retry`, told why as the runner tells it, and gets its verdict there', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const fx = await fixture(h);
+  const page = pageOf(fx);
+  h.maintenance.dossierPage = (async () => page) as unknown as WikiMaintenance['dossierPage'];
+  // The first asking about each op is answered in prose, which is no verdict; the second — the one that says why the last
+  // answer was not taken — with a verdict.
+  const extract = extractor(fx, 2);
+  h.model.answer = (hit) => (!hit.prompt.includes('==== CASE FILE ====') && hit.prompt.includes('## Your answer')
+    && !hit.prompt.includes('## Your last answer was not taken')
+    ? 'The records bear every part of it out.'
+    : extract(hit));
+  await pass(h, worker(h), async () => ['succeeded', 'failed'].includes((await jobOf(h, fx.jobId)).state));
+  const job = await jobOf(h, fx.jobId);
+  assert.equal(job.state, 'succeeded', job.error ?? '');
+
+  // No asking was refused as one made before with another call: the second pass reached the model, op by op.
+  assert.deepEqual(runLog.filter((line) => line.includes('already exists with a different call')), []);
+  assert.equal(runLog.filter((line) => line.includes('no verdict — the model\'s answer is not a verdict (no JSON object in it)')).length, 3);
+  assert.equal(h.model.hits.filter((hit) => hit.prompt.includes('## Your last answer was not taken')).length, 3);
+
+  // Every op of the run's own got its verdict on the second asking: none is left waiting.
+  const ops = await h.prisma.wikiChangesetOp.findMany({
+    where: { ownerId: h.ownerId, changeset: { jobId: fx.jobId } }, orderBy: { id: 'asc' }, select: { id: true, decision: true, verificationVerdict: true },
+  });
+  assert.equal(ops.length, 3);
+  assert.deepEqual(ops.map((op) => [op.decision === 'verifying', op.verificationVerdict]), ops.map(() => [false, 'supported']));
+
+  // Each op was asked twice, each time under a unit of its own: the first pass's is the op's id, the second's `<opId>#retry`.
+  const requests = (await h.sql.query<{ unit: string; state: string; request: { prompt: string } }>(
+    `SELECT "unit", "state", "request" FROM "wiki_model_request" WHERE "job_id" = $1 AND "step" = 'verify'`, [fx.jobId])).rows;
+  assert.deepEqual(requests.map((row) => [row.unit, row.state]).sort(), ops.flatMap((op) => [[op.id, 'succeeded'], [`${op.id}#retry`, 'succeeded']]).sort());
+  // The second asking is the first one's prompt and why its answer was not taken, in the words of the runner's second pass
+  // (Go's wikiVerifyRetrySuffix, ported byte for byte): no entry is listed, so the op is no duplicate.
+  for (const op of ops) {
+    const first = requests.find((row) => row.unit === op.id)!.request.prompt;
+    const again = requests.find((row) => row.unit === `${op.id}#retry`)!.request.prompt;
+    assert.equal(again, first + wikiVerifyRetrySuffix('no JSON object in it', []));
+  }
+
+  // The report: the three verdicts and none left over, and every request a call, the second pass's included, each once.
+  const report = (await runRow(h, fx.runId)).report as Record<string, unknown>;
+  assert.deepEqual(report.verification, { verified: 3, failed: 0, waitingForNextRun: 0, adopted: { ops: 0, verified: 0, failed: 0 } });
+  assert.equal((await callsOf(h, fx.jobId, ['verify'])).calls, 6);
+  const calls = await callsOf(h, fx.jobId);
+  assert.deepEqual(report.tokens, { input: calls.input, output: calls.output, calls: calls.calls });
+});
+
 // ── The documents step, with a plan the owner confirmed ────────────────────────────────────────
 
 /**
@@ -812,25 +937,25 @@ test('a server run reads, checks, proposes, advances, verifies and re-checks the
  * overview citing the first footnote it was given.
  */
 function writerAnswer(prompt: string): string {
-  if (prompt.includes('做「归并」')) {
+  if (prompt.includes('the "merge"')) {
     const ids = [...prompt.matchAll(/^\[([A-Z]\d+)\] /gmu)].map(([, id]) => id);
-    return `${ids.map((id) => `${id} | 采用 | 讲的正是本节`).join('\n')}\n现状：\n- 本节要点 [${ids[0] ?? 'S1'}]\n`;
+    return `${ids.map((id) => `${id} | adopt | it is just what this section covers`).join('\n')}\nCurrent state:\n- the point of this section [${ids[0] ?? 'S1'}]\n`;
   }
-  if (prompt.includes('（概述，')) return '### 总览\n这篇讲 fixture 的端口怎么取[F1]。\n';
-  if (prompt.includes('补逐字引文')) return '';
-  if (!prompt.includes('# 任务：写文档')) return '?';
-  const materials = prompt.split('## 可用材料（只可引用这些，编号不变）\n')[1]?.split('\n\n## 写法')[0] ?? '';
+  if (prompt.includes('(the overview, about')) return '### Overview\nThis document covers where a fixture takes its port from[F1].\n';
+  if (prompt.includes('give the footnotes below their verbatim quotes')) return '';
+  if (!prompt.includes('# Task: write the document')) return '?';
+  const materials = prompt.split('## The materials you may use (cite only these, by the ids they have)\n')[1]?.split('\n\n## How to write')[0] ?? '';
   const sentences: string[] = [];
   const quotes: string[] = [];
   for (const block of materials.split(/\n(?=\[[A-Z]\d+\] )/u)) {
     const id = /^\[([A-Z]\d+)\] /u.exec(block)?.[1];
     if (!id) continue;
     const line = block.split('\n').slice(1).map((one) => one.trim()).find((one) => one.length >= 10 && !one.startsWith('```'));
-    sentences.push(`本节依据 ${id} 写成一句话[${id}]。`);
-    if (line) quotes.push(`[${id}] 「${Array.from(line).slice(0, 60).join('')}」`);
+    sentences.push(`This section rests on ${id} in one sentence[${id}]. `);
+    if (line) quotes.push(`[${id}] "${Array.from(line).slice(0, 60).join('')}"`);
   }
-  if (sentences.length === 0) return '### 约定\n本节只讲端口怎么取。\n';
-  return `### 本节\n${sentences.join('')}\n\n引文：\n${quotes.join('\n')}\n`;
+  if (sentences.length === 0) return '### Conventions\nThis section covers only where the port comes from.\n';
+  return `### This section\n${sentences.join('').trim()}\n\nQuotes:\n${quotes.join('\n')}\n`;
 }
 
 test('the documents step reads the confirmed plan through its read, and a section whose projects are { id, title } gets its material', { skip }, async () => {
@@ -921,7 +1046,13 @@ const FAR = commitNamed('far');
 /** A commit origin/main changed nothing since: its diff is empty. */
 const STILL = commitNamed('still');
 const BIG = commitNamed('big');
-const COMMIT_NAMES = new Map([[C1, 'c1'], [C2, 'c2'], [C3, 'c3'], [FAR, 'far'], [STILL, 'still'], [BIG, 'big'], [REPO.sha, 'head']]);
+/** The commit wiki_maintain_docs_test.go's documents were written at (`f.first`). */
+const FIRST = commitNamed('first');
+/** A commit origin/main has since renamed a file at, changing it too, and deleted another. */
+const RENAMED = commitNamed('renamed');
+const COMMIT_NAMES = new Map([
+  [C1, 'c1'], [C2, 'c2'], [C3, 'c3'], [FAR, 'far'], [STILL, 'still'], [BIG, 'big'], [FIRST, 'first'], [RENAMED, 'renamed'], [REPO.sha, 'head'],
+]);
 
 function commitName(sha: string): string {
   return COMMIT_NAMES.get(sha) ?? sha;
@@ -941,6 +1072,8 @@ interface ComparedSection {
   key: string;
   sha: string;
   docs?: string[];
+  /** The section of its design documents it takes: `Part` unless named; null for the whole document. */
+  heading?: string | null;
   code?: string[];
   /** A file its written sentence cites in a footnote: a withdrawal of that path takes the sentence back. */
   cites?: string;
@@ -990,7 +1123,7 @@ async function runComparison(h: Harness, which: ComparisonCase): Promise<Compari
             create: doc.sections.map((section, at) => ({
               position: at, key: section.key, title: section.key, kind: 'flow', covers: `${section.key} 讲什么。`, length: 400,
               sources: {
-                docs: (section.docs ?? []).map((path) => ({ path, section: 'Part' })),
+                docs: (section.docs ?? []).map((path) => ({ path, section: section.heading === undefined ? 'Part' : section.heading })),
                 code: (section.code ?? []).map((path) => ({ path, symbols: [] })),
                 contracts: [],
                 sessions: null,
@@ -1235,9 +1368,9 @@ test('the documents step writes again the same sections and withdraws the same p
     repoSha: REPO.sha,
     paths: [
       { path: 'docs/c1/gone.md', change: 'deleted' },
-      // A rename as the server's comparison has always read it: the diff's `path` — where the file went — as the path
-      // gone. Pinned as it stands: reading by commit does not move it.
-      { path: 'src/c2/new.go', change: 'renamed', to: 'src/c2/old.go' },
+      // A rename by its old path, where the file went as `to` — the runner's `wikiGitChanges` (2026-10-10). Until then the
+      // server withdrew the diff's `path`, where the file went, `to` where it came from.
+      { path: 'src/c2/old.go', change: 'renamed', to: 'src/c2/new.go' },
     ],
   }]);
   // One diff a commit the snapshot reaches, in the order of their shas; none at the head and none for the commit the
@@ -1257,9 +1390,10 @@ test('the documents step reads the files it compares with one read a commit and 
     + Object.entries(reads).map(([commit, packs]) => `${commit} ${packs.length} (${packs.map((pack) => pack.length).join('+')} files)`).join(', '));
   t.diagnostic(`every operation, in order: ${seen.ops.map((op) => (op.kind === 'diff' ? `diff ${commitName(op.from)}` : op.kind === 'read' ? `read ${commitName(op.sha)}×${op.paths.length}` : op.kind)).join(', ')}`);
   // Eleven sections on three commits: each commit's files in one read there, every file at the head in one read
-  // there. s12's file is not in its commit's diff, and the deleted file and the directory have nothing to read.
+  // there. s12's file is not in its commit's diff, and the directory has nothing to read. The deleted file is read at
+  // c1, where it still is, as the runner reads it there; the head does not have it.
   assert.deepEqual(reads, {
-    c1: [['docs/c1/s1.md', 'docs/c1/s2.md', 'docs/c1/s3.md', 'docs/c1/s4.md']],
+    c1: [['docs/c1/gone.md', 'docs/c1/s1.md', 'docs/c1/s2.md', 'docs/c1/s3.md', 'docs/c1/s4.md']],
     c2: [['docs/c2/s5.md', 'docs/c2/s6.md', 'docs/c2/s7.md', 'docs/c2/s8.md']],
     c3: [['docs/c3/s10.md', 'docs/c3/s11.md', 'docs/c3/s9.md']],
     head: [[
@@ -1293,6 +1427,143 @@ test('a commit whose files pass operationBytes is read in the fewest operations 
   assert.deepEqual(reads, {
     big: [[path('p1'), path('p2')], [path('p3'), path('p4')], [path('p5')]],
     head: [[path('p1'), path('p2')], [path('p3'), path('p4')], [path('p5')]],
+  });
+  assertOneAtATime(seen);
+});
+
+// ── A rename and a deletion, as the runner's comparison takes them (2026-10-10) ───────────────
+
+/** What a comparison case's run left, as its diagnostics say it: what it wrote again, withdrew and read. */
+function diagnoseComparison(t: { diagnostic: (message: string) => void }, seen: ComparisonSeen): void {
+  t.diagnostic(`written again: ${seen.rewritten.join(', ')}`);
+  t.diagnostic(`withdrawn: ${JSON.stringify(seen.withdrawals)}`);
+  t.diagnostic(`docs report: ${JSON.stringify({ affected: seen.docs.affected, withdrawn: seen.docs.withdrawn, sections: seen.docs.sections, error: seen.docs.error ?? null })}`);
+  t.diagnostic(`reads: ${JSON.stringify(readsByCommit(seen))}`);
+}
+
+const RUNNER_DESIGN_BEFORE = '# Runner 设计\n\n## 1. 传输\n\nrunner 通过出站 HTTP 轮询服务器，不需要入站端口。\n\n## 2. 投递\n\n一轮 turn 先落库再投递，至少投递一次。\n';
+const RUNNER_DESIGN_AFTER = '# Runner 设计\n\n## 1. 传输\n\nrunner 通过出站 HTTP 轮询服务器，不需要入站端口。\n\n## 2. 投递\n\n一轮 turn 先落库再投递，至少投递一次，按 turn id 幂等。\n';
+const RUNNER_DISPATCH = '# 派发\n\n## 概要\n\n讲派发怎么把会话交给 runner。\n';
+
+/**
+ * The repository's half of wiki_maintain_docs_test.go's TestWikiMaintainWritesOnlyTheSectionsItsEntriesAndOriginMainTouched,
+ * its files and sections as they are there: the documents were written at the first commit, and origin/main has since
+ * changed the design document's section 2 (section 1 is as it was), deleted docs/old.md and renamed docs/moved.md to
+ * docs/dispatch.md, unchanged — the names its diff gives, in git's order. s3 cites only the deleted file and s4 only the
+ * renamed one's old path, each with a sentence that cites it in a footnote. The Go test's s5 is its entries' to write,
+ * not the repository's, and has no place here.
+ */
+test('a section citing only a renamed file\'s old path, and one citing a deleted file, are the repository\'s, and the rename is withdrawn by its old path, as the runner has them', { skip }, async (t) => {
+  const h = await boot();
+  const seen = await runComparison(h, {
+    docs: [{
+      slug: 'runner',
+      sections: [
+        { key: 's1', sha: FIRST, docs: ['docs/design.md'], heading: '1. 传输' },
+        { key: 's2', sha: FIRST, docs: ['docs/design.md'], heading: '2. 投递' },
+        { key: 's3', sha: FIRST, docs: ['docs/old.md'], heading: null, cites: 'docs/old.md' },
+        { key: 's4', sha: FIRST, docs: ['docs/moved.md'], heading: null, cites: 'docs/moved.md' },
+      ],
+    }],
+    head: { 'docs/design.md': RUNNER_DESIGN_AFTER, 'docs/dispatch.md': RUNNER_DISPATCH },
+    at: {
+      [FIRST]: {
+        'docs/design.md': RUNNER_DESIGN_BEFORE,
+        'docs/old.md': '# 旧设计\n\n## 概要\n\n这份文档讲旧的领取方式。\n',
+        'docs/moved.md': RUNNER_DISPATCH,
+      },
+    },
+    commits: [FIRST, REPO.sha],
+    diffs: {
+      [FIRST]: {
+        files: [
+          { status: 'M', path: 'docs/design.md' },
+          { status: 'R100', from: 'docs/moved.md', path: 'docs/dispatch.md' },
+          { status: 'D', path: 'docs/old.md' },
+        ],
+        docs: ['docs/dispatch.md'],
+      },
+    },
+  });
+  diagnoseComparison(t, seen);
+  assert.equal(seen.outcome, 'succeeded');
+  assert.equal(seen.docs.error, undefined, `the documents step: ${String(seen.docs.error)}`);
+  // The Go test's: s2, s3 and s4 by the repository (it writes s5 too, by its entries) — not s1, whose section did not
+  // change. s3 and s4 are the repository's, not stale: their file was at their commit and is not at the head.
+  assert.deepEqual(seen.rewritten, ['runner#s2', 'runner#s3', 'runner#s4']);
+  assert.deepEqual(seen.docs.affected, { byEntries: 0, byRepo: 3, stale: 0, unwritten: 0, total: 3 });
+  // Withdrawn once, at the head, deleted and renamed as git says: the Go test's
+  // [{"change":"renamed","path":"docs/moved.md","to":"docs/dispatch.md"},{"change":"deleted","path":"docs/old.md"}].
+  assert.deepEqual(seen.withdrawals, [{
+    repoSha: REPO.sha,
+    paths: [
+      { path: 'docs/moved.md', change: 'renamed', to: 'docs/dispatch.md' },
+      { path: 'docs/old.md', change: 'deleted' },
+    ],
+  }]);
+  assert.deepEqual(seen.docs.withdrawn, { paths: 2, sentences: 2 });
+  // The deleted file and the renamed one's old path are read at the first commit, where they still are, in its one
+  // read; the head has neither, and its one read is the design document.
+  assert.deepEqual(readsByCommit(seen), {
+    first: [['docs/design.md', 'docs/moved.md', 'docs/old.md']],
+    head: [['docs/design.md']],
+  });
+  assertOneAtATime(seen);
+});
+
+test('a rename that changed the file as well, and a deleted file no sentence cites: either end\'s section and the deleted file\'s are the repository\'s, and only the old path is withdrawn', { skip }, async (t) => {
+  const h = await boot();
+  const seen = await runComparison(h, {
+    docs: [{
+      slug: 'epsilon',
+      sections: [
+        { key: 'm1', sha: RENAMED, code: ['src/m/old.go'] },
+        { key: 'm2', sha: RENAMED, code: ['src/m/new.go'] },
+        { key: 'd1', sha: RENAMED, docs: ['docs/d/gone.md'] },
+      ],
+    }],
+    head: {
+      'src/m/new.go': 'package m\n\n// Serve answers the port the runner polls, and its health check.\nfunc Serve() {}\n\n'
+        + '// Port is the port Serve answers.\nfunc Port() int { return 9000 }\n\n// Close stops answering.\nfunc Close() {}\n',
+    },
+    at: {
+      [RENAMED]: {
+        'src/m/old.go': 'package m\n\n// Serve answers the port the runner polls.\nfunc Serve() {}\n\n'
+          + '// Port is the port Serve answers.\nfunc Port() int { return 9000 }\n\n// Close stops answering.\nfunc Close() {}\n',
+        'docs/d/gone.md': partDoc('d1', 'written', 'written'),
+      },
+    },
+    commits: [RENAMED, REPO.sha],
+    diffs: {
+      [RENAMED]: {
+        files: [
+          { status: 'D', path: 'docs/d/gone.md' },
+          // Changed as it moved: git still pairs the two ends, 67% alike (`git diff --name-status -M` on these two texts).
+          { status: 'R067', from: 'src/m/old.go', path: 'src/m/new.go' },
+        ],
+        docs: [],
+      },
+    },
+  });
+  diagnoseComparison(t, seen);
+  assert.equal(seen.outcome, 'succeeded');
+  assert.equal(seen.docs.error, undefined, `the documents step: ${String(seen.docs.error)}`);
+  // m1's file was at its commit, under its old path, and is not at the head under it; m2's was not at its commit and is
+  // at the head; d1's was at its commit and is gone. No sentence cites any of them, so none is stale.
+  assert.deepEqual(seen.rewritten, ['epsilon#d1', 'epsilon#m1', 'epsilon#m2']);
+  assert.deepEqual(seen.docs.affected, { byEntries: 0, byRepo: 3, stale: 0, unwritten: 0, total: 3 });
+  assert.deepEqual(seen.withdrawals, [{
+    repoSha: REPO.sha,
+    paths: [
+      { path: 'docs/d/gone.md', change: 'deleted' },
+      { path: 'src/m/old.go', change: 'renamed', to: 'src/m/new.go' },
+    ],
+  }]);
+  assert.deepEqual(seen.docs.withdrawn, { paths: 2, sentences: 0 });
+  // At the commit, the deleted file and the old path, as they were there; at the head, the new path.
+  assert.deepEqual(readsByCommit(seen), {
+    renamed: [['docs/d/gone.md', 'src/m/old.go']],
+    head: [['src/m/new.go']],
   });
   assertOneAtATime(seen);
 });
@@ -1344,7 +1615,7 @@ test('a proposal naming a new design document\'s sections as its prompt lists th
   });
   const prompts: string[] = [];
   h.model.answer = (hit) => {
-    if (!hit.prompt.includes('# 任务：维护作业的 plan 修改建议')) return writerAnswer(hit.prompt);
+    if (!hit.prompt.includes("# Task: the maintenance run's proposed change to the plan")) return writerAnswer(hit.prompt);
     prompts.push(hit.prompt);
     return production.answer;
   };
@@ -1359,7 +1630,7 @@ test('a proposal naming a new design document\'s sections as its prompt lists th
   const docs = (run.report as { docs: { unplaced: unknown; proposal: Record<string, unknown> | null } }).docs;
   assert.deepEqual(docs.unplaced, { designDocs: 1, entries: 0 }, 'the document is new on origin/main, and no section cites it');
   // The model was shown the document's sections with their `##`, and named two of them that way.
-  assert.match(prompts[0] ?? '', /章节：[^\n]*## 4\. wiki 怎么跟上；[^\n]*## 12\. 现在的缺口一起补（owner 10-09）；/u);
+  assert.match(prompts[0] ?? '', /Sections: [^\n]*## 4\. wiki 怎么跟上; [^\n]*## 12\. 现在的缺口一起补（owner 10-09）; /u);
   assert.deepEqual(
     { outcome: docs.proposal?.outcome, rounds: docs.proposal?.rounds, error: docs.proposal?.error ?? null },
     { outcome: 'proposed', rounds: 1, error: null },
@@ -1373,6 +1644,76 @@ test('a proposal naming a new design document\'s sections as its prompt lists th
     [{ path: DOC, section: '## 4. wiki 怎么跟上' }],
     [{ path: DOC, section: '## 12. 现在的缺口一起补（owner 10-09）' }],
   ], 'the two new sections cite the document\'s sections as the model named them');
+});
+
+test('a proposal naming a document\'s slug as its topic is refused by the run\'s own check with the space\'s topics listed, and the next round names one of them', { skip }, async () => {
+  // Canary, 2026-10-10 (3b2bd5f2): the run's check let «wiki-maintenance», a document's slug, through as a section's
+  // topic, and the gate refused it in the last round with no topic to name instead; on 10-09 (54755b7b) two rounds
+  // running named the same made-up topics. The model here names a topic only from a list it was given, as a retry can.
+  const h = await boot();
+  await clearWork(h);
+  const DOC = 'docs/wiki-comment-to-session-design.md';
+  const text = PROPOSAL_FIXTURE.files[DOC];
+  const base = createHash('sha1').update('the commit the plan was checked at').digest('hex');
+  const fx = await fixture(h, { snapshot: { files: { [DOC]: text }, commits: [base, REPO.sha] } });
+  h.maintenance.dossierPage = (async () => ({ ...(pageOf(fx) as Record<string, unknown>), facts: 0, dossiers: [] })) as unknown as WikiMaintenance['dossierPage'];
+  await h.prisma.wikiTopic.createMany({
+    data: [
+      { ownerId: h.ownerId, spaceId: fx.spaceId, slug: 'wiki', title: 'Wiki', createdAt: new Date('2026-09-01T00:00:00Z') },
+      { ownerId: h.ownerId, spaceId: fx.spaceId, slug: 'sessions', title: '会话', createdAt: new Date('2026-09-02T00:00:00Z') },
+    ],
+  });
+  const empty = { docs: [], code: [], contracts: [], sessions: null };
+  await h.prisma.wikiPlan.create({
+    data: {
+      spaceId: fx.spaceId, ownerId: h.ownerId, version: 1, status: 'confirmed', origin: 'owner', authorUserId: h.ownerId,
+      confirmedByUserId: h.ownerId, confirmedAt: new Date(), docsMin: 1, docsMax: 10, gate: {},
+      repoSha: base, repoCheck: { sha: base, checked: 0, missing: [] },
+      categories: [{ key: 'dev', title: 'Development', question: 'How it works', forAgents: true }],
+      docs: {
+        create: [{
+          position: 0, category: 'dev', slug: 'wiki-pipeline', title: 'Wiki 流水线', question: 'wiki 怎么维护？',
+          audience: ['新加入的开发者'], scopeIn: ['维护'], lengthMin: 400, lengthMax: 4000,
+          sections: { create: [{ position: 0, key: 'overview', title: '总览', kind: 'overview', covers: '这篇讲 wiki 怎么维护。', length: 300, sources: empty }] },
+        }],
+      },
+    },
+  });
+  const answerNaming = (topic: string): string => 'Into: wiki-pipeline\nReason: the pitfalls hit when a comment starts a change have no section in the plan.\nUses: K1\n'
+    + '### 1. Pitfalls of a change a comment starts | pitfalls | 300\nCovers: the pitfalls hit when a comment starts a change.\n'
+    + `- Sessions: keywords comment, change; kind pitfall; topics ${topic}; look for: the owner's words saying what went wrong when a comment started a change\n`;
+  const prompts: string[] = [];
+  h.model.answer = (hit) => {
+    if (!hit.prompt.includes("# Task: the maintenance run's proposed change to the plan")) return writerAnswer(hit.prompt);
+    prompts.push(hit.prompt);
+    const listed = /Existing topics \(slug «name» · active entries\): ([a-z0-9-]+) «/u.exec(hit.prompt);
+    return answerNaming(listed?.[1] ?? 'wiki-pipeline');
+  };
+  const which = worker(h);
+  await pass(h, which, async () => ['succeeded', 'failed'].includes((await jobOf(h, fx.jobId)).state), {
+    files: { [DOC]: text },
+    diff: { files: [{ status: 'A', path: DOC }], docs: [DOC] },
+  });
+
+  const run = await runRow(h, fx.runId);
+  assert.equal(run.outcome, 'succeeded', run.error ?? '');
+  const docs = (run.report as { docs: { proposal: Record<string, unknown> | null } }).docs;
+  assert.deepEqual(
+    { outcome: docs.proposal?.outcome, rounds: docs.proposal?.rounds, error: docs.proposal?.error ?? null },
+    { outcome: 'proposed', rounds: 2, error: null },
+    'the second round names a topic of the space, and the proposal is stored',
+  );
+  assert.equal(prompts.length, 2);
+  // Round 1 was refused here, before the gate saw it: by its section, with the space's topics as the gate lists them.
+  assert.ok(
+    prompts[1].includes('\n- section 1: "wiki-pipeline" is not a topic of this space: Existing topics (slug «name» · active entries): wiki «Wiki» · 0; sessions «会话» · 0\n'),
+    `round 2 was told: ${prompts[1].slice(prompts[1].indexOf('## The last answer had these problems'))}`,
+  );
+  assert.ok(!prompts[1].includes('change.doc.'), 'the gate refused nothing: the run\'s own check found it first');
+  const stored = await h.prisma.wikiPlanProposal.findMany({ where: { ownerId: h.ownerId, spaceId: fx.spaceId } });
+  assert.equal(stored.length, 1);
+  const sections = (stored[0].change as { doc: { sections: Array<{ sources: { sessions: { topics: string[] } | null } }> } }).doc.sections;
+  assert.deepEqual(sections[sections.length - 1].sources.sessions?.topics, ['wiki']);
 });
 
 // ── The anchors of a page: every entry keeps its own checks ─────────────────────────────────────
@@ -1680,7 +2021,7 @@ test('a second run on the commit an earlier run checked re-checks nothing: no an
     'entries counts what the run wrote; what it left alone is skipped and nothing else');
 });
 
-test('a snapshot that moved re-checks every entry, and the checks carry the commit they were made on', { skip }, async () => {
+test('a snapshot that moved, and does not reach the commit the checks were made on, re-checks every entry, and the checks carry the commit they were made on', { skip }, async () => {
   const h = await boot();
   await clearWork(h);
   const fx = await fixture(h);
@@ -1702,7 +2043,7 @@ test('a snapshot that moved re-checks every entry, and the checks carry the comm
   const job = await jobOf(h, again.jobId);
   assert.equal(job.state, 'succeeded', job.error ?? '');
   assert.deepEqual((await repoOpsOf(h, again.jobId)).map((op) => op.kind), ['snapshot', 'anchors'],
-    'a check made on another commit is not this commit\'s answer: the whole page goes out again');
+    'a check made on a commit the snapshot does not reach has no diff to vouch for it: the whole page goes out again');
   assert.equal(await anchorsSent(h, again.jobId), 4, 'every anchor of it');
   assert.deepEqual(await anchorsReport(h, again.runId), { entries: 3, changed: 0, missing: 0, skipped: 0 }, 'nothing was already checked at the moved commit');
   const after = await Promise.all(once.map((id) => entryAnchors(h, id)));
@@ -1789,6 +2130,303 @@ test('a baseline the owner\'s Re-confirm moved is re-checked, though its check s
   assert.equal(anchors[0]!.check?.state, 'verified');
   assert.equal(anchors[0]!.check?.ref, REPO.sha);
   assert.notEqual(anchors[0]!.check?.at, '2026-10-01T00:00:00.000Z', 'the check is this run\'s, not the one the re-confirm kept');
+});
+
+// ── A check nothing has moved since owes nothing either (2026-10-10, `anchorRules.verify.skip`) ──────────────────
+
+/**
+ * The commit the cases below last checked their entries at: one the snapshot (REPO.sha) reaches — each case's
+ * fixture lists it among the snapshot's commits — so the run can ask the runner for a diff from it.
+ */
+const CHECKED = createHash('sha1').update('the commit the entries were last checked at').digest('hex');
+const CHECKED_AT = '2026-10-09T00:00:00.000Z';
+
+/** A last check as an earlier run left it, on CHECKED unless `ref` says otherwise. */
+function checkedOn(state: 'verified' | 'missing' | 'changed', extra: Record<string, unknown> = {}, ref: string = CHECKED): Record<string, unknown> {
+  return { state, ref, at: CHECKED_AT, ...extra };
+}
+
+/** Entries with the anchors given, under ids of one case's own (`prefix`, numbered from 1): the list orders by id, so do these. */
+async function anchoredEntries(h: Harness, spaceId: string, prefix: string, anchors: Array<Array<Record<string, unknown>>>): Promise<string[]> {
+  const ids = anchors.map((_, i) => `${prefix}-0000-4000-8000-${String(i + 1).padStart(12, '0')}`);
+  await h.prisma.wikiEntry.createMany({
+    data: anchors.map((list, i) => ({
+      id: ids[i]!, ownerId: h.ownerId, spaceId, kind: 'concept', title: `anchored ${prefix} ${i}`, summary: 'a live entry',
+      status: 'active', trust: 'auto', currentRevision: 1, fields: { definition: 'x', boundaries: 'y' }, topics: [],
+      anchors: list as unknown as Prisma.InputJsonValue,
+    })),
+  });
+  return ids;
+}
+
+/** What the run's `anchors` operations handed the runner, anchor by anchor and in order: its type and what it names. */
+async function anchorsAsked(h: Harness, jobId: string): Promise<string[]> {
+  const rows = await h.sql.query<{ input: { anchors?: Array<Record<string, unknown>> } }>(
+    `SELECT "input" FROM "wiki_repo_op" WHERE "job_id" = $1 AND "kind" = 'anchors' ORDER BY "created_at", "id"`, [jobId],
+  );
+  return rows.rows.flatMap((row) => (row.input.anchors ?? []).map((anchor) =>
+    `${String(anchor.type)} ${String(anchor.path ?? anchor.sha ?? '')}${anchor.symbol === undefined ? '' : `#${String(anchor.symbol)}`}`));
+}
+
+/** The diffs the run asked for, in order: from which commit to which, and when each was asked and settled. */
+async function diffsAsked(h: Harness, jobId: string): Promise<Array<{ from: string; to: string; createdAt: string; endedAt: string }>> {
+  return h.sql.query<{ from: string; to: string; createdAt: string; endedAt: string }>(
+    `SELECT "input"->>'from' AS "from", "input"->>'to' AS "to", "created_at" AS "createdAt", "ended_at" AS "endedAt"
+       FROM "wiki_repo_op" WHERE "job_id" = $1 AND "kind" = 'diff' ORDER BY "created_at", "id"`, [jobId],
+  ).then((result) => result.rows);
+}
+
+/** The runner at REPO.sha: a path is there unless `gone` names it, a commit an ancestor when `reached` holds it, and a symbol's region hashes from its name. */
+function runnerAt(gone: readonly string[], reached: readonly string[] = []): (anchor: Record<string, unknown>) => Record<string, unknown> {
+  return (anchor) => {
+    if (anchor.type === 'path') return { ...anchor, state: gone.includes(String(anchor.path)) ? 'missing' : 'verified' };
+    if (anchor.type === 'commit') return { ...anchor, state: reached.includes(String(anchor.sha)) ? 'verified' : 'missing' };
+    return { ...anchor, state: 'verified', regionSha256: ANCHOR_REPO.regionOf(String(anchor.symbol ?? '')) };
+  };
+}
+
+/** No dossiers: the run proposes nothing, and the anchors step is what these cases are about. */
+function noDossiers(h: Harness, fx: Fixture): void {
+  h.maintenance.dossierPage = (async () => ({ ...(pageOf(fx) as Record<string, unknown>), facts: 0, dossiers: [] })) as unknown as WikiMaintenance['dossierPage'];
+}
+
+test('a path checked since is checked again when the diff moves it — an A, a D, a T, either side of an R, a C\'s new side — and not when it only modifies it', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const fx = await fixture(h, { snapshot: { files: {}, commits: [CHECKED] } });
+  noDossiers(h, fx);
+  // One path an entry, found there on CHECKED but the one found missing there; what the diff since does to each:
+  const paths: Array<[string, boolean]> = [
+    ['src/kept.go', false], //            nothing (a sibling's A, src/kept.go.orig, names another file)
+    ['src/edited.go', false], //          M: it is still there
+    ['src/added.go', true], //            A
+    ['src/deleted.go', true], //          D
+    ['src/moved-away.go', true], //       R, its old side
+    ['src/moved-here.go', true], //       R, its new side
+    ['src/copied-here.go', true], //      C, its new side
+    ['src/copied-from.go', false], //     C, its old side: a copy leaves its source where it was
+    ['src/retyped', true], //             T
+    ['src/tree-edited', false], //        a directory, a file under which is M
+    ['src/tree-grown', true], //          a directory, a file under which is A
+    ['src/tree-shrunk', true], //         a directory, a file under which is D
+    ['src/tree', false], //               a directory that is a prefix of the ones above but holds nothing they name
+    ['./src//deleted-too.go/', true], //  D of src/deleted-too.go: the path as the runner spells it
+    ['src/back.go', true], //             found missing on CHECKED, A since: it came back
+  ];
+  const ids = await anchoredEntries(h, fx.spaceId, 'beef0001', paths.map(([path]) => [
+    { type: 'path', path, check: checkedOn(path === 'src/back.go' ? 'missing' : 'verified') },
+  ]));
+  const diff = [
+    { status: 'A', path: 'src/kept.go.orig' },
+    { status: 'M', path: 'src/edited.go' },
+    { status: 'A', path: 'src/added.go' },
+    { status: 'D', path: 'src/deleted.go' },
+    { status: 'R100', path: 'lib/moved-away.go', from: 'src/moved-away.go' },
+    { status: 'R087', path: 'src/moved-here.go', from: 'lib/moved-here.go' },
+    { status: 'C075', path: 'src/copied-here.go', from: 'src/copied-from.go' },
+    { status: 'T', path: 'src/retyped' },
+    { status: 'M', path: 'src/tree-edited/a.go' },
+    { status: 'A', path: 'src/tree-grown/new.go' },
+    { status: 'D', path: 'src/tree-shrunk/old.go' },
+    { status: 'D', path: 'src/deleted-too.go' },
+    { status: 'A', path: 'src/back.go' },
+  ];
+  const before = await Promise.all(ids.map((id) => entryAnchors(h, id)));
+
+  const which = worker(h, { wake: true });
+  await pass(h, which, async () => (await jobOf(h, fx.jobId)).state === 'succeeded', {
+    checkAnchor: runnerAt(['src/deleted.go', 'src/moved-away.go', './src//deleted-too.go/']),
+    diffs: { [CHECKED]: { files: diff, docs: [] } },
+  });
+
+  const job = await jobOf(h, fx.jobId);
+  assert.equal(job.state, 'succeeded', job.error ?? '');
+  assert.deepEqual((await repoOpsOf(h, fx.jobId)).map((op) => op.kind), ['snapshot', 'diff', 'anchors'], 'one diff, then one operation for what it did not vouch for');
+  assert.deepEqual((await diffsAsked(h, fx.jobId)).map((op) => [op.from, op.to]), [[CHECKED, REPO.sha]], 'from the commit the checks were made on to the snapshot\'s');
+  const due = paths.filter(([, again]) => again).map(([path]) => `path ${path}`);
+  assert.deepEqual(await anchorsAsked(h, fx.jobId), due, 'exactly the paths the diff may have moved go out');
+  const after = await Promise.all(ids.map((id) => entryAnchors(h, id)));
+  for (const [i, [path, again]] of paths.entries()) {
+    const check = (after[i] as Array<{ check?: { ref?: string } }>)[0]!.check;
+    if (again) assert.equal(check?.ref, REPO.sha, `${path} is checked at the snapshot's commit`);
+    else assert.deepEqual(after[i], before[i], `${path}: nothing of it is written`);
+  }
+  const back = await h.prisma.wikiEntry.findFirstOrThrow({ where: { id: ids[14]! } });
+  assert.equal(back.anchorState, 'verified', 'the path that came back reads verified again');
+  assert.deepEqual(await anchorsReport(h, fx.runId), { entries: due.length, changed: 0, missing: 3, skipped: paths.length - due.length },
+    'what was checked is counted as written, the rest as skipped');
+});
+
+test('a symbol checked since is checked again on any change to its file, a modification too; one that names its own baseline, or was re-confirmed, always', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const fx = await fixture(h, { snapshot: { files: {}, commits: [CHECKED] } });
+  noDossiers(h, fx);
+  const region = (symbol: string): string => ANCHOR_REPO.regionOf(symbol);
+  // The re-confirm of a symbol found changed on CHECKED: it names the region that check found as its own baseline.
+  const reconfirmed = rebaselinedAnchors([{
+    type: 'symbol', path: 'src/app.go', symbol: 'again', regionSha256: 'c'.repeat(64),
+    check: { state: 'changed', ref: CHECKED, at: CHECKED_AT, regionSha256: region('again') },
+  }]).anchors;
+  const ids = await anchoredEntries(h, fx.spaceId, 'beef0002', [
+    // 0: its check adopted its region, and nothing in the diff is its file: left alone.
+    [{ type: 'symbol', path: 'src/app.go', symbol: 'main', check: checkedOn('verified', { regionSha256: region('main'), baselineSha256: region('main') }) }],
+    // 1: adopted, and its file is modified: its region may have moved.
+    [{ type: 'symbol', path: 'src/server.go', symbol: 'serve', check: checkedOn('verified', { regionSha256: region('serve'), baselineSha256: region('serve') }) }],
+    // 2: adopted, in a directory a file under which is modified.
+    [{ type: 'symbol', path: 'src/tree', symbol: 'walk', check: checkedOn('verified', { regionSha256: region('walk'), baselineSha256: region('walk') }) }],
+    // 3: it names its own baseline, a proposer's, and its file did not change: no rule proves it.
+    [{ type: 'symbol', path: 'src/app.go', symbol: 'own', regionSha256: region('own'), check: checkedOn('verified', { regionSha256: region('own') }) }],
+    // 4: re-confirmed, and its file did not change.
+    reconfirmed as unknown as Array<Record<string, unknown>>,
+    // 5: a path whose file is modified: a modification does not move a path.
+    [{ type: 'path', path: 'src/server.go', check: checkedOn('verified') }],
+  ]);
+  const before = await Promise.all(ids.map((id) => entryAnchors(h, id)));
+
+  const which = worker(h, { wake: true });
+  await pass(h, which, async () => (await jobOf(h, fx.jobId)).state === 'succeeded', {
+    checkAnchor: runnerAt([]),
+    diffs: { [CHECKED]: { files: [{ status: 'M', path: 'src/server.go' }, { status: 'M', path: 'src/tree/leaf.go' }], docs: [] } },
+  });
+
+  const job = await jobOf(h, fx.jobId);
+  assert.equal(job.state, 'succeeded', job.error ?? '');
+  assert.deepEqual(await anchorsAsked(h, fx.jobId),
+    ['symbol src/server.go#serve', 'symbol src/tree#walk', 'symbol src/app.go#own', 'symbol src/app.go#again'],
+    'the modified file\'s symbol, the one under the modified directory, and the two baselines no check can vouch for');
+  const after = await Promise.all(ids.map((id) => entryAnchors(h, id)));
+  assert.deepEqual(after[0], before[0], 'the symbol whose file did not change is not written');
+  assert.deepEqual(after[5], before[5], 'nor is the path whose file was only modified');
+  for (const i of [1, 2, 3, 4]) {
+    assert.equal((after[i] as Array<{ check?: { ref?: string; state?: string } }>)[0]!.check?.ref, REPO.sha, `symbol ${i} is checked at the snapshot's commit`);
+  }
+  assert.deepEqual(await anchorsReport(h, fx.runId), { entries: 4, changed: 0, missing: 0, skipped: 2 });
+});
+
+test('a commit found verified is left alone while the snapshot reaches it; one found missing, or one the snapshot no longer reaches, is checked again', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const sha = (what: string): string => createHash('sha1').update(what).digest('hex');
+  const reached = sha('a commit main has had all along');
+  const merged = sha('a commit main has merged since it was found missing');
+  const absent = sha('a commit main never had');
+  const dropped = sha('a commit a rewrite of main dropped');
+  const fx = await fixture(h, { snapshot: { files: {}, commits: [CHECKED, reached, merged] } });
+  noDossiers(h, fx);
+  const ids = await anchoredEntries(h, fx.spaceId, 'beef0003', [
+    [{ type: 'commit', sha: reached, check: checkedOn('verified') }], //  0: left alone
+    [{ type: 'commit', sha: merged, check: checkedOn('missing') }], //    1: checked again, and found now
+    [{ type: 'commit', sha: absent, check: checkedOn('missing') }], //    2: checked again, still missing
+    [{ type: 'commit', sha: dropped, check: checkedOn('verified') }], //  3: checked again: the snapshot no longer reaches it
+    // 4: every anchor holds — a path nothing moved and a commit reached: left alone.
+    [{ type: 'path', path: 'src/kept.go', check: checkedOn('verified') }, { type: 'commit', sha: reached, check: checkedOn('verified') }],
+    // 5: one anchor that does not hold re-checks the entry whole, its reached commit too.
+    [{ type: 'commit', sha: reached, check: checkedOn('verified') }, { type: 'path', path: 'src/deleted.go', check: checkedOn('verified') }],
+  ]);
+  const before = await Promise.all(ids.map((id) => entryAnchors(h, id)));
+
+  const which = worker(h, { wake: true });
+  await pass(h, which, async () => (await jobOf(h, fx.jobId)).state === 'succeeded', {
+    checkAnchor: runnerAt(['src/deleted.go'], [reached, merged]),
+    diffs: { [CHECKED]: { files: [{ status: 'D', path: 'src/deleted.go' }], docs: [] } },
+  });
+
+  const job = await jobOf(h, fx.jobId);
+  assert.equal(job.state, 'succeeded', job.error ?? '');
+  assert.deepEqual(await anchorsAsked(h, fx.jobId), [`commit ${merged}`, `commit ${absent}`, `commit ${dropped}`, `commit ${reached}`, 'path src/deleted.go']);
+  const after = await Promise.all(ids.map((id) => entryAnchors(h, id)));
+  assert.deepEqual(after[0], before[0], 'the reached commit is not written');
+  assert.deepEqual(after[4], before[4], 'nor the entry whose every anchor holds');
+  const states = await Promise.all(ids.map((id) => h.prisma.wikiEntry.findFirstOrThrow({ where: { id }, select: { anchorState: true } })));
+  assert.deepEqual(states.map((row) => row.anchorState), ['unchecked', 'verified', 'missing', 'missing', 'unchecked', 'missing'],
+    'the merged commit reads verified now, the absent one and the dropped one missing, and the entry whose path went with it missing');
+  assert.deepEqual(await anchorsReport(h, fx.runId), { entries: 4, changed: 0, missing: 3, skipped: 2 });
+});
+
+test('the diffs go to the commits most anchors were checked at, anchorDiffsMax of them, one at a time; the entries checked at any other are checked again', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const cap = WIKI_MAINTAIN_JOB.anchorDiffsMax;
+  // cap + 2 commits the snapshot reaches, the first with the most entries checked at it and the last with one, and
+  // a commit it does not reach with more entries than any: none of their files moved.
+  const refs = Array.from({ length: cap + 2 }, (_, i) => createHash('sha1').update(`a commit the space's checks were made on, ${i}`).digest('hex'));
+  const far = createHash('sha1').update('a commit the snapshot does not reach').digest('hex');
+  const fx = await fixture(h, { snapshot: { files: {}, commits: [...refs].reverse() } });
+  noDossiers(h, fx);
+  const groups = [...refs.map((ref, i) => ({ ref, count: cap + 2 - i })), { ref: far, count: cap + 3 }];
+  const anchors = groups.flatMap((group, g) => Array.from({ length: group.count }, (_, n) => [
+    { type: 'path', path: `src/group-${g}/file-${n}.go`, check: checkedOn('verified', {}, group.ref) },
+  ]));
+  await anchoredEntries(h, fx.spaceId, 'beef0004', anchors);
+
+  const which = worker(h, { wake: true });
+  await pass(h, which, async () => (await jobOf(h, fx.jobId)).state === 'succeeded', { checkAnchor: runnerAt([]) });
+
+  const job = await jobOf(h, fx.jobId);
+  assert.equal(job.state, 'succeeded', job.error ?? '');
+  const diffs = await diffsAsked(h, fx.jobId);
+  assert.deepEqual(diffs.map((op) => op.from), refs.slice(0, cap), `the ${cap} commits most anchors were checked at, the most first`);
+  for (const [i, op] of diffs.entries()) {
+    assert.equal(op.to, REPO.sha);
+    if (i > 0) assert.ok(Date.parse(op.createdAt) >= Date.parse(diffs[i - 1]!.endedAt), 'no diff is asked while another is in flight');
+  }
+  const again = groups.flatMap((group, g) => (g < cap ? [] : Array.from({ length: group.count }, (_, n) => `path src/group-${g}/file-${n}.go`)));
+  assert.deepEqual(await anchorsAsked(h, fx.jobId), again, 'what the cap left without a diff, and what the snapshot does not reach, is checked again');
+  const left = groups.slice(0, cap).reduce((total, group) => total + group.count, 0);
+  assert.deepEqual(await anchorsReport(h, fx.runId), { entries: again.length, changed: 0, missing: 0, skipped: left });
+});
+
+test('the entries that still owe a check go out together whichever page they were read on: 450 entries, 12 of them due, are one operation', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const fx = await fixture(h, { snapshot: { files: {}, commits: [CHECKED] } });
+  noDossiers(h, fx);
+  const count = 450;
+  const pathOf = (i: number): string => `src/e-${String(i).padStart(3, '0')}.go`;
+  // Due: every 50th entry from the 7th, whose file the diff deletes; one never checked; one whose check names no commit;
+  // one found missing on CHECKED, which is checked again though nothing moved it. Left alone: the rest, checked on
+  // CHECKED and not moved since, and one checked on this very commit.
+  const deleted = new Set(Array.from({ length: count }, (_, i) => i).filter((i) => i % 50 === 7));
+  const due = new Set([...deleted, 100, 200, 300]);
+  await anchoredEntries(h, fx.spaceId, 'beef0005', Array.from({ length: count }, (_, i) => [{
+    type: 'path',
+    path: pathOf(i),
+    ...(i === 100 ? {} : { check: i === 200 ? checkedOn('verified', {}, 'main') : i === 300 ? checkedOn('missing') : i === 400 ? checkedOn('verified', {}, REPO.sha) : checkedOn('verified') }),
+  }]));
+
+  const which = worker(h, { wake: true });
+  await pass(h, which, async () => (await jobOf(h, fx.jobId)).state === 'succeeded', {
+    checkAnchor: runnerAt([...deleted].map(pathOf)),
+    diffs: { [CHECKED]: { files: [...deleted].map((i) => ({ status: 'D', path: pathOf(i) })), docs: [] } },
+  });
+
+  const job = await jobOf(h, fx.jobId);
+  assert.equal(job.state, 'succeeded', job.error ?? '');
+  const ops = await anchorsOps(h);
+  assert.deepEqual(ops.map((op) => op.anchors), [due.size], 'the due entries of three pages are one operation');
+  assert.deepEqual(await anchorsAsked(h, fx.jobId), [...due].sort((a, b) => a - b).map((i) => `path ${pathOf(i)}`), 'in the list\'s order');
+  assert.deepEqual(await anchorsReport(h, fx.runId), { entries: due.size, changed: 0, missing: deleted.size, skipped: count - due.size });
+});
+
+test('a diff the runner could not make vouches for nothing: the entries checked at its commit are checked again, and the run goes on', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const fx = await fixture(h, { snapshot: { files: {}, commits: [CHECKED] } });
+  noDossiers(h, fx);
+  await anchoredEntries(h, fx.spaceId, 'beef0006', [
+    [{ type: 'path', path: 'src/kept.go', check: checkedOn('verified') }],
+    [{ type: 'path', path: 'src/also-kept.go', check: checkedOn('verified') }],
+  ]);
+
+  const which = worker(h, { wake: true });
+  await pass(h, which, async () => (await jobOf(h, fx.jobId)).state === 'succeeded', { checkAnchor: runnerAt([]), failDiffs: true });
+
+  const job = await jobOf(h, fx.jobId);
+  assert.equal(job.state, 'succeeded', job.error ?? '');
+  assert.deepEqual((await repoOpsOf(h, fx.jobId)).map((op) => op.kind), ['snapshot', 'diff', 'anchors']);
+  assert.deepEqual(await anchorsAsked(h, fx.jobId), ['path src/kept.go', 'path src/also-kept.go']);
+  assert.deepEqual(await anchorsReport(h, fx.runId), { entries: 2, changed: 0, missing: 0, skipped: 0 });
 });
 
 test('anchor verdicts that name anchors no entry asked for fail the run: nothing is laid on a guess', { skip }, async () => {
@@ -2081,4 +2719,627 @@ test('a run whose event loop is blocked for two seconds keeps its lease: nothing
   const cursor = await h.prisma.wikiCursor.findFirstOrThrow({ where: { spaceId: fx.spaceId, source: 'facts' } });
   assert.equal(cursor.positionRef, fx.position.ref);
   assert.equal(cursor.consecutiveFailures, 0);
+});
+
+// ── A worker stopped mid-run: the report is the whole run's (contract `jobs.carry`) ─────────────
+
+/**
+ * The dossiers' reader as the server's own answers a run that is taken over: the fixture's page while the space's cursor
+ * stands before it, and an empty page at the cursor once a run has moved it past — `dossierPage` starts at the
+ * watermark, so a replay reads no dossier the attempt before it recorded.
+ */
+function readerAt(h: Harness, fixtures: readonly Fixture[]): WikiMaintenance['dossierPage'] {
+  return (async (_ownerId: string, spaceId: string) => {
+    const fx = fixtures.find((one) => one.spaceId === spaceId);
+    assert.ok(fx, `no fixture holds space ${spaceId}`);
+    const cursor = await h.prisma.wikiCursor.findFirstOrThrow({ where: { spaceId, source: 'facts' } });
+    if (cursor.positionRef !== fx.position.ref) return pageOf(fx);
+    return { ...(pageOf(fx) as Record<string, unknown>), from: fx.token, cursor: fx.token, more: false, facts: 0, dossiers: [] };
+  }) as unknown as WikiMaintenance['dossierPage'];
+}
+
+/** The entry point's file at the snapshot's commit, as the runner reads it. */
+const APP_GO = 'package app\n\n// main starts the service on the port its fixture hands it.\nfunc main() {\n\tserve(portFromFixture())\n}\n';
+
+/**
+ * The plan its owner confirmed for a hand-back case: an overview; the conventions, read from a project's records — the
+ * owner's words about the fixture's port, which its coordinator heard; and the entry point, read from the repository.
+ */
+async function handBackPlan(h: Harness, fx: Fixture): Promise<void> {
+  const coordinator = randomUUID();
+  await h.sql.query(
+    `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","workspace_id","status","dispatch_origin","updated_at")
+     VALUES ($1,'the coordinator','p',$2,$2,$3,'RUNNING'::run_status,'USER',now())`,
+    [coordinator, h.ownerId, fx.workspaceId],
+  );
+  const projectId = randomUUID();
+  await h.sql.query(`INSERT INTO "project"("id","title","owner_id","coordinator_session_id","updated_at") VALUES ($1,'Fixture 端口',$2,$3,now())`, [projectId, h.ownerId, coordinator]);
+  await h.sql.query(
+    `INSERT INTO "conversation_turn"("id","session_id","seq","client_turn_id","content","status","kind","send_intent","created_at")
+     VALUES ($1,$2,1,$3,$4,'ANSWERED','message','NEXT_TURN',now())`,
+    [randomUUID(), coordinator, randomUUID(), '以后 fixture 里不要写死端口，一律从 fixture 的返回值里取，别的测试也照这样做。'],
+  );
+  const empty = { docs: [], code: [], contracts: [], sessions: null };
+  await h.prisma.wikiPlan.create({
+    data: {
+      spaceId: fx.spaceId, ownerId: h.ownerId, version: 1, status: 'confirmed', origin: 'owner', authorUserId: h.ownerId,
+      confirmedByUserId: h.ownerId, confirmedAt: new Date(), docsMin: 1, docsMax: 10, gate: {},
+      categories: [{ key: 'dev', title: 'Development', question: 'How it works', forAgents: true }],
+      docs: {
+        create: [{
+          position: 0, category: 'dev', slug: 'testing', title: '测试约定', question: '测试的端口怎么取？',
+          audience: ['新加入的开发者'], scopeIn: ['fixture 的端口'], lengthMin: 400, lengthMax: 4000,
+          sections: {
+            create: [
+              { position: 0, key: 'overview', title: '总览', kind: 'overview', covers: '这篇讲测试的端口。', length: 300, sources: empty },
+              {
+                position: 1, key: 'ports', title: '端口', kind: 'conventions', covers: 'fixture 的端口从哪里来。', length: 400,
+                sources: {
+                  ...empty,
+                  sessions: {
+                    projects: [projectId], since: null, until: null, keywords: ['fixture'], anchorPaths: [],
+                    entryKinds: [], topics: [], evidence: 'the owner on where a test takes its port',
+                  },
+                },
+              },
+              { position: 2, key: 'main', title: '入口', kind: 'flow', covers: 'main 做什么。', length: 400, sources: { ...empty, code: [{ path: 'src/app.go', symbols: ['main'] }] } },
+            ],
+          },
+        }],
+      },
+    },
+  });
+}
+
+/** A run's report with its clock readings left out: what two runs of the same work on two spaces must agree on. */
+function runTotals(report: unknown): Record<string, unknown> {
+  const { seconds: _seconds, docs, ...rest } = (report ?? {}) as Record<string, unknown> & { docs?: Record<string, unknown> };
+  if (!docs) return rest;
+  const { seconds: _docSeconds, ...docRest } = docs;
+  return { ...rest, docs: docRest };
+}
+
+/** The sections written in a space. */
+async function writtenSections(h: Harness, spaceId: string): Promise<number> {
+  return (await h.sql.query<{ n: number }>(
+    `SELECT count(*)::int AS n FROM "wiki_doc_section" x JOIN "wiki_doc" d ON d."id" = x."doc_id" WHERE d."space_id" = $1`, [spaceId])).rows[0].n;
+}
+
+/**
+ * The calls a job made: its requests — of the steps named, or every one — each once, with the tokens they reported. Every
+ * request of these cases answers, so each is a call.
+ */
+async function callsOf(h: Harness, jobId: string, steps?: readonly string[]): Promise<{ calls: number; input: number; output: number }> {
+  const { rows: [row] } = await h.sql.query<{ calls: number; input: number; output: number }>(
+    `SELECT count(*)::int AS "calls", COALESCE(sum("input_tokens"), 0)::int AS "input", COALESCE(sum("output_tokens"), 0)::int AS "output"
+       FROM "wiki_model_request" WHERE "job_id" = $1 AND "state" = 'succeeded' AND ($2::text[] IS NULL OR "step" = ANY($2::text[]))`,
+    [jobId, steps ? [...steps] : null]);
+  return row;
+}
+
+test('a run\'s tokens are its own requests, each once: the documents\' calls are counted once, in the run\'s tokens and the step\'s (P10 round 93)', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const fx = await fixture(h);
+  h.maintenance.dossierPage = readerAt(h, [fx]);
+  await handBackPlan(h, fx);
+  const extract = extractor(fx, 2);
+  h.model.answer = (hit) => (hit.prompt.includes('==== CASE FILE ====') || hit.prompt.includes('## Your answer') ? extract(hit) : writerAnswer(hit.prompt));
+  await pass(h, worker(h), async () => ['succeeded', 'failed'].includes((await jobOf(h, fx.jobId)).state), { files: { 'src/app.go': APP_GO } });
+  assert.equal((await jobOf(h, fx.jobId)).state, 'succeeded');
+  const report = (await runRow(h, fx.runId)).report as { tokens: Record<string, number>; docs: { tokens: Record<string, number>; sections: Record<string, number> } };
+  assert.deepEqual(report.docs.sections, { written: 3, unchanged: 0, failed: 0 }, 'the documents step made calls of its own');
+  // The run's tokens: every request of the job, once — extraction, verification, the documents' sections.
+  const all = await callsOf(h, fx.jobId);
+  assert.deepEqual(report.tokens, { input: all.input, output: all.output, calls: all.calls }, 'the run\'s tokens are its requests\', each once');
+  // The documents step's: its sections' requests and the plan proposal's, once — not again on top of the run's.
+  const docs = await callsOf(h, fx.jobId, [...Object.values(WIKI_DOCS_BUILD_JOB.steps), WIKI_MAINTAIN_JOB.steps.planProposal]);
+  assert.ok(docs.calls > 0);
+  assert.deepEqual(report.docs.tokens, { input: docs.input, output: docs.output, calls: docs.calls }, 'the step\'s tokens are its requests\', each once');
+});
+
+test('a worker stopped in the documents step hands the run back, and the report the replay ends with is the whole run\'s', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const fixtures: Fixture[] = [];
+  h.maintenance.dossierPage = readerAt(h, fixtures);
+  const play: RunnerPlay = { files: { 'src/app.go': APP_GO } };
+
+  // What the run reports when nothing stops it.
+  const straight = await fixture(h);
+  fixtures.push(straight);
+  await handBackPlan(h, straight);
+  // The extraction and the verdicts the extractor's, every documents' prompt the writer's.
+  const extract = extractor(straight, 2);
+  h.model.answer = (hit) => (hit.prompt.includes('==== CASE FILE ====') || hit.prompt.includes('## Your answer') ? extract(hit) : writerAnswer(hit.prompt));
+  await pass(h, worker(h), async () => ['succeeded', 'failed'].includes((await jobOf(h, straight.jobId)).state), play);
+  const whole = await jobOf(h, straight.jobId);
+  assert.equal(whole.state, 'succeeded', whole.error ?? '');
+
+  // The same run in a space of the same shape: every step up to the documents, the conventions written, and the entry
+  // point's read of the repository held while the worker stops.
+  const stopped = await fixture(h);
+  fixtures.push(stopped);
+  await handBackPlan(h, stopped);
+  const first = worker(h);
+  await pass(h, first, async () => (await writtenSections(h, stopped.spaceId)) === 1
+    && (await repoOpsOf(h, stopped.jobId)).some((op) => op.kind === 'read'), { ...play, holdReads: true });
+  // SIGTERM: the read's wait is cancelled with the worker, and the job is handed back.
+  await first.executor.onModuleDestroy();
+  await first.queue.onModuleDestroy();
+  assert.deepEqual(await jobAfterStop(h, stopped.jobId), { state: 'queued', next_attempt_at: null, attempts: 0, failure_kind: null, error: WIKI_JOB_HANDED_BACK });
+
+  // The next worker takes it over: it reads no dossier — the cursor stands past them — re-checks no anchor — each was
+  // checked at this commit — and writes the entry point and the overview.
+  await pass(h, worker(h), async () => ['succeeded', 'failed'].includes((await jobOf(h, stopped.jobId)).state), play);
+  const done = await jobOf(h, stopped.jobId);
+  assert.equal(done.state, 'succeeded', done.error ?? '');
+  assert.equal(await writtenSections(h, stopped.spaceId), 3);
+  const report = (await runRow(h, stopped.runId)).report as Record<string, unknown>;
+  // What the same run reports when nothing stops it, to the dossier, the op, the verdict, the anchor, the section and the call.
+  assert.deepEqual(runTotals(report), runTotals((await runRow(h, straight.runId)).report), 'the stopped run reports what the straight one does');
+  const job = (row: JobRow) => row.report as { advanced?: boolean; refused?: unknown[]; report?: unknown };
+  assert.deepEqual([job(done).advanced, job(done).refused], [job(whole).advanced, job(whole).refused], 'the cursor the run moved, and what it had refused');
+  assert.deepEqual(runTotals(job(done).report), runTotals(report), 'the job\'s report holds the run\'s');
+
+  // The parts the attempt before the stop did, counted once each.
+  assert.deepEqual([report.sessions, report.dossiers, report.offTopic, (report.ops as Record<string, number>).recorded, report.cursorAdvanced], [2, 2, 1, 3, true]);
+  assert.equal((report.verification as Record<string, number>).verified, 3, 'the run\'s own verdicts, recorded before the stop');
+  assert.deepEqual(report.anchors, { entries: 3, changed: 0, missing: 0, skipped: 0 }, 'the anchors checked before the stop are checked, not skipped');
+  const docs = report.docs as { sections: Record<string, number>; affected: Record<string, number>; tokens: Record<string, number> };
+  assert.deepEqual(docs.sections, { written: 3, unchanged: 0, failed: 0 }, 'the conventions written before the stop are written, once');
+  assert.deepEqual([docs.affected.unwritten, docs.affected.total], [3, 3], 'every section the step took up, once');
+  // Every call the run made, once: the requests of the job's attempts, the read the stop cut off asked again.
+  const calls = await callsOf(h, stopped.jobId);
+  assert.deepEqual(report.tokens, { input: calls.input, output: calls.output, calls: calls.calls });
+  assert.equal(report.tokens && (report.tokens as Record<string, number>).calls, (await callsOf(h, straight.jobId)).calls);
+  // The articles a run that recorded ops owes are asked by the whole run's report: the stopped run, whose ops were all
+  // recorded before the stop, owes its space the articles job the straight run's end queued for its own.
+  const articles = async (spaceId: string): Promise<number> => (await h.sql.query<{ n: number }>(
+    `SELECT count(*)::int AS n FROM "wiki_job" WHERE "space_id" = $1 AND "kind" = 'articles'`, [spaceId])).rows[0].n;
+  assert.deepEqual([await articles(straight.spaceId), await articles(stopped.spaceId)], [1, 1]);
+});
+
+/** The run's own ops, by whether they have their verdict: the ops of its job's changesets. */
+async function ownVerdicts(h: Harness, jobId: string): Promise<{ verdicts: number; waiting: number }> {
+  return (await h.sql.query<{ verdicts: number; waiting: number }>(
+    `SELECT count(*) FILTER (WHERE o."verification_verdict" IS NOT NULL)::int AS "verdicts",
+            count(*) FILTER (WHERE o."decision" = 'verifying')::int AS "waiting"
+       FROM "wiki_changeset_op" o JOIN "wiki_changeset" c ON c."id" = o."changeset_id" WHERE c."job_id" = $1`, [jobId])).rows[0];
+}
+
+/**
+ * A run stopped while the call of its `held`-th verdict is in flight — the verdicts before it recorded — and taken over by
+ * the next worker, beside what the same run reports on a space of the same shape when nothing stops it.
+ */
+async function stoppedInVerify(h: Harness, held: number): Promise<{ stopped: Fixture; whole: Record<string, unknown>; report: Record<string, unknown> }> {
+  const fixtures: Fixture[] = [];
+  h.maintenance.dossierPage = readerAt(h, fixtures);
+
+  // What the run reports when nothing stops it.
+  const straight = await fixture(h);
+  fixtures.push(straight);
+  h.model.answer = extractor(straight, 2);
+  await pass(h, worker(h), async () => ['succeeded', 'failed'].includes((await jobOf(h, straight.jobId)).state));
+  assert.equal((await jobOf(h, straight.jobId)).state, 'succeeded');
+  assert.deepEqual(await ownVerdicts(h, straight.jobId), { verdicts: 3, waiting: 0 });
+
+  // The same run in a space of the same shape: its ops recorded and the cursor moved, the verdicts before the held one
+  // recorded, and the held one's call in flight while the worker stops.
+  const stopped = await fixture(h);
+  fixtures.push(stopped);
+  let asked = 0;
+  let holding = false;
+  let release: () => void = () => undefined;
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  h.model.hold = async (hit) => {
+    if (!hit.prompt.includes('## Your answer')) return;
+    asked += 1;
+    if (asked < held) return;
+    holding = true;
+    await released;
+  };
+  const first = worker(h);
+  await pass(h, first, async () => holding && (await ownVerdicts(h, stopped.jobId)).verdicts === held - 1);
+  await first.executor.onModuleDestroy();
+  await first.queue.onModuleDestroy();
+  release();
+  h.model.hold = async () => undefined;
+  assert.deepEqual(await jobAfterStop(h, stopped.jobId), { state: 'queued', next_attempt_at: null, attempts: 0, failure_kind: null, error: WIKI_JOB_HANDED_BACK });
+  assert.deepEqual(await ownVerdicts(h, stopped.jobId), { verdicts: held - 1, waiting: 4 - held }, 'what the stop left waiting');
+
+  // The next worker takes it over. It reads no dossier and records no op — the cursor stands past them — and verifies
+  // the run's own ops all the same: they are its job's.
+  await pass(h, worker(h), async () => ['succeeded', 'failed'].includes((await jobOf(h, stopped.jobId)).state));
+  assert.equal((await jobOf(h, stopped.jobId)).state, 'succeeded');
+  return {
+    stopped,
+    whole: (await runRow(h, straight.runId)).report as Record<string, unknown>,
+    report: (await runRow(h, stopped.runId)).report as Record<string, unknown>,
+  };
+}
+
+test('a worker stopped between the run\'s own verdicts hands the run back, and the replay verifies the run\'s ops the stop left waiting: each gets its verdict, and the report counts each once', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const { stopped, whole, report } = await stoppedInVerify(h, 2);
+  assert.deepEqual(await ownVerdicts(h, stopped.jobId), { verdicts: 3, waiting: 0 }, 'every op of the run\'s own has its verdict');
+  assert.deepEqual([(report.ops as Record<string, number>).recorded, report.cursorAdvanced], [3, true], 'the ops the attempt before the stop recorded');
+  // The verdicts are the run's, each once: the one recorded before the stop, carried, and the replay's two.
+  assert.equal((report.verification as Record<string, number>).verified, 3);
+  // And the whole report is the straight run's: the dossiers, the ops, the cursor, the verdicts, the anchors of the three
+  // entries they made live, the documents and the calls. The op whose call the stop cut off is asked the same question
+  // again, so the replay meets that call's request instead of making another.
+  assert.deepEqual(runTotals(report), runTotals(whole), 'the stopped run reports what the straight one does');
+  const calls = await callsOf(h, stopped.jobId);
+  assert.deepEqual(report.tokens, { input: calls.input, output: calls.output, calls: calls.calls });
+  assert.deepEqual(runLog.filter((line) => line.includes('already exists with a different call')), []);
+});
+
+test('a worker stopped on the call of an op whose neighbours the run\'s verdicts then made live: the replay\'s question is another, asked under the op\'s retry unit, and the op gets its verdict there', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const { stopped, whole, report } = await stoppedInVerify(h, 3);
+  assert.deepEqual(await ownVerdicts(h, stopped.jobId), { verdicts: 3, waiting: 0 }, 'every op of the run\'s own has its verdict');
+  assert.equal((report.verification as Record<string, number>).verified, 3, 'the two verdicts carried and the replay\'s, each once');
+  // The third op's neighbours are the first two's entries: proposed when the page was read before the stop, and live once
+  // their verdicts were in. The question the replay reads lists them, so it is not the one whose call the stop cut off: the
+  // queue holds that call's answer under the op's id and hands it back to no other question, and the second pass asks the
+  // op again under its retry unit — the question as the list reads it now.
+  const ops = await h.prisma.wikiChangesetOp.findMany({ where: { ownerId: h.ownerId, changeset: { jobId: stopped.jobId } }, orderBy: { id: 'asc' }, select: { id: true } });
+  const held = ops[2]!.id;
+  const requests = (await h.sql.query<{ unit: string; state: string; request: { prompt: string } }>(
+    `SELECT "unit", "state", "request" FROM "wiki_model_request" WHERE "job_id" = $1 AND "step" = 'verify'`, [stopped.jobId])).rows;
+  assert.deepEqual(requests.map((row) => [row.unit, row.state]).sort(), [...ops.map((op) => [op.id, 'succeeded']), [`${held}#retry`, 'succeeded']].sort());
+  const before = requests.find((row) => row.unit === held)!.request.prompt;
+  const again = requests.find((row) => row.unit === `${held}#retry`)!.request.prompt;
+  assert.ok(!before.includes('- E1: ') && again.includes('- E1: ') && again.includes('- E2: '), 'the replay\'s question lists the two entries the verdicts made live');
+  assert.ok(!again.includes('## Your last answer was not taken'), 'nothing the model said was refused: the question changed');
+  const refusedAsAsked = runLog.filter((line) => line.includes('already exists with a different call'));
+  assert.equal(refusedAsAsked.length, 1, refusedAsAsked.join('\n'));
+  assert.ok(refusedAsAsked[0]!.startsWith(`op ${held} (`) && refusedAsAsked[0]!.includes(`'verify/${held}'`), refusedAsAsked[0]);
+  // Every call the run made, once: the question the stop cut off, answered after it, among them. The rest of the report is
+  // the straight run's.
+  const calls = await callsOf(h, stopped.jobId);
+  assert.deepEqual(report.tokens, { input: calls.input, output: calls.output, calls: calls.calls });
+  assert.equal(calls.calls, (whole.tokens as Record<string, number>).calls + 1);
+  const { tokens: _tokens, ...rest } = runTotals(report);
+  const { tokens: _wholeTokens, ...wholeRest } = runTotals(whole);
+  assert.deepEqual(rest, wholeRest, 'the stopped run reports what the straight one does, but the one call more');
+});
+
+test('a worker stopped between two anchors operations hands the run back, and the report the replay ends with counts every entry checked once', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const fixtures: Fixture[] = [];
+  h.maintenance.dossierPage = readerAt(h, fixtures);
+  // Two operations' worth of entries: listEntriesMax in the first, the rest in the second.
+  const count = WIKI_ANCHOR_RULES.listEntriesMax + 50;
+  const anchored = async (fx: Fixture): Promise<void> => {
+    await h.prisma.wikiEntry.createMany({
+      data: Array.from({ length: count }, (_, i) => ({
+        ownerId: h.ownerId, spaceId: fx.spaceId, kind: 'concept', title: `anchored ${i}`, summary: 'a live entry',
+        status: 'active', trust: 'auto', currentRevision: 1, fields: { definition: 'x', boundaries: 'y' }, topics: [],
+        anchors: [{ type: 'path', path: ANCHOR_REPO.file }],
+      })),
+    });
+  };
+  const anchorsOpsOf = async (jobId: string): Promise<string[]> => (await h.sql.query<{ state: string }>(
+    `SELECT "state" FROM "wiki_repo_op" WHERE "job_id" = $1 AND "kind" = 'anchors' ORDER BY "created_at", "id"`, [jobId])).rows.map((row) => row.state);
+
+  // What the run reports when nothing stops it.
+  const straight = await fixture(h);
+  fixtures.push(straight);
+  await anchored(straight);
+  await pass(h, worker(h), async () => ['succeeded', 'failed'].includes((await jobOf(h, straight.jobId)).state), { checkAnchor: checkAnchorAgainstRepo });
+  assert.equal((await jobOf(h, straight.jobId)).state, 'succeeded');
+  const whole = (await runRow(h, straight.runId)).report as Record<string, unknown>;
+  assert.deepEqual(whole.anchors, { entries: count, changed: 0, missing: 0, skipped: 0 });
+
+  // The same run in a space of the same shape: the first operation answered and recorded, the second held while the
+  // worker stops.
+  const stopped = await fixture(h);
+  fixtures.push(stopped);
+  await anchored(stopped);
+  const play: RunnerPlay = { checkAnchor: checkAnchorAgainstRepo };
+  const first = worker(h);
+  await pass(h, first, async () => {
+    const ops = await anchorsOpsOf(stopped.jobId);
+    if (ops[0] === 'succeeded') play.holdAnchors = true;
+    return ops.length === 2 && ops[1] === 'queued';
+  }, play);
+  await first.executor.onModuleDestroy();
+  await first.queue.onModuleDestroy();
+  assert.deepEqual(await jobAfterStop(h, stopped.jobId), { state: 'queued', next_attempt_at: null, attempts: 0, failure_kind: null, error: WIKI_JOB_HANDED_BACK });
+  const checkedBefore = await h.prisma.wikiEntry.count({ where: { ownerId: h.ownerId, spaceId: stopped.spaceId, anchorState: 'verified' } });
+  assert.equal(checkedBefore, WIKI_ANCHOR_RULES.listEntriesMax, 'the first operation\'s entries were checked before the stop');
+
+  // The next worker takes it over: the first operation's entries stand checked at this commit and are left alone; the
+  // rest are checked.
+  await pass(h, worker(h), async () => ['succeeded', 'failed'].includes((await jobOf(h, stopped.jobId)).state), { checkAnchor: checkAnchorAgainstRepo });
+  assert.equal((await jobOf(h, stopped.jobId)).state, 'succeeded');
+  assert.equal(await h.prisma.wikiEntry.count({ where: { ownerId: h.ownerId, spaceId: stopped.spaceId, anchorState: 'verified' } }), count);
+  const report = (await runRow(h, stopped.runId)).report as Record<string, unknown>;
+  assert.deepEqual(runTotals(report), runTotals(whole), 'the stopped run reports what the straight one does');
+  assert.deepEqual(report.anchors, { entries: count, changed: 0, missing: 0, skipped: 0 }, 'every entry checked once, none of the first operation\'s skipped');
+});
+
+// ── What ended runs left waiting (2026-10-11, `maintenance.job.server.verify`, `reviewModes.verification.adoption`) ──
+
+/** Every verdict asked answered in prose — no verdict, on either pass — and the case files as `extract` reads them. */
+function noVerdicts(extract: (hit: Hit) => string): (hit: Hit) => string {
+  return (hit) => (hit.prompt.includes('==== CASE FILE ====') ? extract(hit) : 'The records bear every part of it out.');
+}
+
+/** A job's ops, in the order they were recorded: the ops of its changesets, by id. */
+async function opsOfJob(h: Harness, jobId: string): Promise<string[]> {
+  return (await h.sql.query<{ id: string }>(
+    `SELECT o."id" FROM "wiki_changeset_op" o JOIN "wiki_changeset" c ON c."id" = o."changeset_id" WHERE c."job_id" = $1 ORDER BY o."id"`, [jobId],
+  )).rows.map((row) => row.id);
+}
+
+/** The ops still waiting for their verdict in a space, in the order they were recorded. */
+async function waitingIn(h: Harness, spaceId: string): Promise<string[]> {
+  return (await h.sql.query<{ id: string }>(
+    `SELECT o."id" FROM "wiki_changeset_op" o JOIN "wiki_changeset" c ON c."id" = o."changeset_id"
+      WHERE c."space_id" = $1 AND o."decision" = 'verifying' ORDER BY o."id"`, [spaceId],
+  )).rows.map((row) => row.id);
+}
+
+/** The ops a job asked the model about in its verification: its `verify` requests' units. */
+async function verifyUnits(h: Harness, jobId: string): Promise<string[]> {
+  return (await h.sql.query<{ unit: string }>(
+    `SELECT "unit" FROM "wiki_model_request" WHERE "job_id" = $1 AND "step" = 'verify'`, [jobId],
+  )).rows.map((row) => row.unit).sort();
+}
+
+/** One op's decision and verdict. */
+async function verdictOf(h: Harness, opId: string): Promise<[string, string | null]> {
+  const op = await h.prisma.wikiChangesetOp.findUniqueOrThrow({ where: { id: opId }, select: { decision: true, verificationVerdict: true } });
+  return [op.decision, op.verificationVerdict];
+}
+
+/** The run of a maintain job of the fixture's space, ended as `state` says, under which its ops are proposed. */
+async function endedRun(h: Harness, fx: Fixture, state: 'succeeded' | 'failed' | 'cancelled'): Promise<string> {
+  const id = randomUUID();
+  await h.prisma.wikiJob.create({
+    data: {
+      id, ownerId: h.ownerId, spaceId: fx.spaceId, kind: 'maintain', input: {}, state, endedAt: new Date(),
+      ...(state === 'failed' ? { error: 'the run failed', failureKind: 'content' } : {}),
+    },
+  });
+  return id;
+}
+
+/** A maintain job of the fixture's space that has not ended, and is not claimed while a case runs. */
+async function unfinishedRun(h: Harness, fx: Fixture, state: 'queued' | 'waiting'): Promise<string> {
+  const id = randomUUID();
+  await h.prisma.wikiJob.create({
+    data: {
+      id, ownerId: h.ownerId, spaceId: fx.spaceId, kind: 'maintain', input: {}, state,
+      // Put back for a retry an hour away, or parked on a repository operation.
+      ...(state === 'queued' ? { attempts: 1, nextAttemptAt: new Date(Date.now() + 3_600_000) } : { waitingFor: 'repo' }),
+    },
+  });
+  return id;
+}
+
+/** Set a job's state, with what the table's CHECKs ask of it: a lease while running, what it waits for while waiting. */
+async function jobInState(h: Harness, jobId: string, state: 'queued' | 'running' | 'waiting' | 'succeeded'): Promise<void> {
+  await h.sql.query(
+    `UPDATE "wiki_job"
+        SET "state" = $2::text,
+            "lease_owner" = CASE WHEN $2::text = 'running' THEN gen_random_uuid() END,
+            "lease_generation" = CASE WHEN $2::text = 'running' THEN gen_random_uuid() END,
+            "lease_deadline_at" = CASE WHEN $2::text = 'running' THEN now() + interval '1 minute' END,
+            "waiting_for" = CASE WHEN $2::text = 'waiting' THEN 'repo' END,
+            "ended_at" = CASE WHEN $2::text = 'succeeded' THEN now() END
+      WHERE "id" = $1::uuid`,
+    [jobId, state],
+  );
+}
+
+/** The fixture's session, which has ended (SUCCEEDED), as the principal of an agent's proposal in its space. */
+function sessionOf(h: Harness, fx: Fixture): WikiPrincipal {
+  return { origin: 'agent', ownerId: h.ownerId, userId: null, sessionId: fx.sessionId, toolCallId: null };
+}
+
+/** Concepts of these titles proposed into the fixture's space by `principal`, each citing the fixture's tool call: their op ids. */
+async function proposedAs(h: Harness, principal: WikiPrincipal, fx: Fixture, titles: readonly string[]): Promise<string[]> {
+  const answer = await h.service.submitChangeset(principal, fx.spaceId, {
+    ops: titles.map((title) => ({
+      op: 'add',
+      entry: { kind: 'concept', title, summary: `${title}.`, fields: { definition: title, boundaries: title } },
+      sources: [{ kind: 'tool_call', ref: fx.callId }],
+    })),
+    rationale: 'what the spec proposes',
+    idempotencyKey: randomUUID(),
+  });
+  const ops = (answer.ops ?? []) as Array<{ status: string; opId: string }>;
+  assert.deepEqual(ops.map((op) => op.status), titles.map(() => 'pending'), `each waits for its verdict: ${JSON.stringify(answer)}`);
+  return ops.map((op) => toUuid(op.opId));
+}
+
+/** `count` titles of one proposer's own. */
+function titlesOf(who: string, count: number): string[] {
+  return Array.from({ length: count }, (_, i) => `${who} found fact ${i + 1}`);
+}
+
+test('the ops an ended run\'s two passes left without a verdict are the next run\'s to adopt: the space\'s next run verifies them, and its report counts them adopted', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const fx = await fixture(h);
+  h.maintenance.dossierPage = readerAt(h, [fx]);
+  // The first run gets no verdict for any of its three ops on either pass — production's runs 3b2bd5f2 and 61e91611 of
+  // 2026-10-10 — and ends succeeded, its ops waiting, its log naming the next run as the one that adopts them.
+  h.model.answer = noVerdicts(extractor(fx, 2));
+  await pass(h, worker(h), async () => ['succeeded', 'failed'].includes((await jobOf(h, fx.jobId)).state));
+  assert.equal((await jobOf(h, fx.jobId)).state, 'succeeded', (await jobOf(h, fx.jobId)).error ?? '');
+  const waiting = await opsOfJob(h, fx.jobId);
+  assert.equal(waiting.length, 3);
+  assert.deepEqual(await ownVerdicts(h, fx.jobId), { verdicts: 0, waiting: 3 });
+  assert.ok(runLog.includes('3 op(s) of the run\'s own got no verdict: not live, and the next run adopts them'), runLog.join('\n'));
+  assert.deepEqual(((await runRow(h, fx.runId)).report as Record<string, unknown>).verification,
+    { verified: 0, failed: 3, waitingForNextRun: 3, adopted: { ops: 0, verified: 0, failed: 0 } });
+
+  // The space's next run, with nothing new to read and a model that gives its verdicts: it adopts them.
+  runLog.length = 0;
+  h.model.answer = extractor(fx, 2);
+  const next = await runAgain(h, fx);
+  await pass(h, worker(h), async () => ['succeeded', 'failed'].includes((await jobOf(h, next.jobId)).state));
+  assert.equal((await jobOf(h, next.jobId)).state, 'succeeded', (await jobOf(h, next.jobId)).error ?? '');
+  assert.deepEqual(await ownVerdicts(h, fx.jobId), { verdicts: 3, waiting: 0 }, 'every op the ended run left waiting has its verdict');
+  const report = (await runRow(h, next.runId)).report as Record<string, unknown>;
+  assert.deepEqual(report.verification, { verified: 0, failed: 0, waitingForNextRun: 0, adopted: { ops: 3, verified: 3, failed: 0 } },
+    'the report counts them adopted, as an ended session\'s would be');
+  // Asked by the run that adopted them, each once under its own id, and applied as the run's own verdicts apply: live, as Auto.
+  assert.deepEqual(await verifyUnits(h, next.jobId), [...waiting].sort());
+  for (const op of waiting) assert.deepEqual(await verdictOf(h, op), ['auto_applied', 'supported']);
+  const lineages = await h.prisma.wikiChangesetOp.findMany({ where: { id: { in: waiting } }, select: { resultEntryId: true } });
+  const entries = await h.prisma.wikiEntry.findMany({ where: { id: { in: lineages.map((op) => op.resultEntryId!) } }, select: { status: true, trust: true } });
+  assert.deepEqual(entries.map((entry) => [entry.status, entry.trust]), [['active', 'auto'], ['active', 'auto'], ['active', 'auto']]);
+  assert.ok(runLog.includes('adopted 3 op(s) ended sessions and runs left waiting for their verification: 3 verified, 0 without a verdict, '
+    + 'which wait for the next run'), runLog.join('\n'));
+});
+
+test('an ended session\'s op the server\'s run adopts gets its verdict: reported as adopted, it is not refused as none of the job\'s own', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const fx = await fixture(h);
+  noDossiers(h, fx);
+  // The fixture's session proposed into the space and ended (SUCCEEDED) without verifying its op.
+  const [op] = await proposedAs(h, sessionOf(h, fx), fx, ['what the ended session found']);
+  h.model.answer = extractor(fx, 0);
+  await pass(h, worker(h), async () => ['succeeded', 'failed'].includes((await jobOf(h, fx.jobId)).state));
+  assert.equal((await jobOf(h, fx.jobId)).state, 'succeeded', (await jobOf(h, fx.jobId)).error ?? '');
+  // The verdict the run asked for was recorded: the writer found the op among what the run adopts, where it once
+  // answered 404 — no such op of the job's own — and the op kept waiting.
+  assert.deepEqual(runLog.filter((line) => line.includes('the server refused the verdict')), []);
+  assert.deepEqual(await verdictOf(h, op), ['auto_applied', 'supported']);
+  assert.deepEqual(((await runRow(h, fx.runId)).report as { verification: Record<string, unknown> }).verification.adopted, { ops: 1, verified: 1, failed: 0 });
+  assert.deepEqual(await verifyUnits(h, fx.jobId), [op]);
+});
+
+test('the run adopts from one list, oldest first, whoever proposed each op — ended sessions and ended runs, succeeded, failed or cancelled — and no more than adoptOpsMax a run', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const fx = await fixture(h);
+  noDossiers(h, fx);
+  // In the order they were recorded: a succeeded run's ops, an ended session's op, a failed run's, a cancelled run's —
+  // two more than a run adopts, so the newest two are left over: the failed run's last and the cancelled run's.
+  const max = WIKI_MAINTENANCE_JOB.adoptOpsMax;
+  const succeeded = await proposedAs(h, wikiMaintainJobPrincipal(h.ownerId, await endedRun(h, fx, 'succeeded')), fx, titlesOf('the succeeded run', 25));
+  await delay(5);
+  const session = await proposedAs(h, sessionOf(h, fx), fx, ['what the ended session found']);
+  await delay(5);
+  const failed = await proposedAs(h, wikiMaintainJobPrincipal(h.ownerId, await endedRun(h, fx, 'failed')), fx, titlesOf('the failed run', max - 25));
+  await delay(5);
+  const cancelled = await proposedAs(h, wikiMaintainJobPrincipal(h.ownerId, await endedRun(h, fx, 'cancelled')), fx, titlesOf('the cancelled run', 1));
+  const all = await waitingIn(h, fx.spaceId);
+  const sorted = (ids: readonly string[]): string[] => [...ids].sort();
+  assert.deepEqual(all, [...sorted(succeeded), ...session, ...sorted(failed), ...cancelled], 'recorded proposer by proposer');
+  assert.equal(all.length, max + 2);
+
+  // What the run reads is one list of them all, oldest first.
+  const read: string[] = [];
+  let after: string | null = null;
+  do {
+    const page = await h.service.listVerifications(wikiVerifyPrincipal(h.ownerId, null, fx.jobId), fx.spaceId, { adopt: true, after, limit: 20 });
+    read.push(...page.items.map((item) => toUuid(item.opId)));
+    after = page.next;
+  } while (after !== null);
+  assert.deepEqual(read, all, 'one list, in the order the ops were recorded');
+
+  // The run adopts the oldest adoptOpsMax of them: the ended session's among them, the newest left for the next run.
+  h.model.answer = extractor(fx, 0);
+  await pass(h, worker(h), async () => ['succeeded', 'failed'].includes((await jobOf(h, fx.jobId)).state));
+  assert.equal((await jobOf(h, fx.jobId)).state, 'succeeded', (await jobOf(h, fx.jobId)).error ?? '');
+  assert.deepEqual(((await runRow(h, fx.runId)).report as { verification: Record<string, unknown> }).verification.adopted, { ops: max, verified: max, failed: 0 });
+  assert.deepEqual(await verifyUnits(h, fx.jobId), sorted(all.slice(0, max)), 'the oldest adoptOpsMax, each asked once');
+  assert.deepEqual(await waitingIn(h, fx.spaceId), all.slice(max), 'the newest wait for the next run');
+  assert.deepEqual(all.slice(max), [sorted(failed)[failed.length - 1]!, cancelled[0]!]);
+  assert.deepEqual(await verdictOf(h, session[0]!), ['auto_applied', 'supported']);
+
+  // The next run takes up what is left.
+  const next = await runAgain(h, fx);
+  await pass(h, worker(h), async () => ['succeeded', 'failed'].includes((await jobOf(h, next.jobId)).state));
+  assert.equal((await jobOf(h, next.jobId)).state, 'succeeded', (await jobOf(h, next.jobId)).error ?? '');
+  assert.deepEqual(((await runRow(h, next.runId)).report as { verification: Record<string, unknown> }).verification.adopted, { ops: 2, verified: 2, failed: 0 });
+  assert.deepEqual(await verifyUnits(h, next.jobId), sorted(all.slice(max)));
+  assert.deepEqual(await waitingIn(h, fx.spaceId), []);
+});
+
+test('the ops of another space\'s ended run, and of a run of the space that has not ended, are not adopted: the run never asks about them', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const fx = await fixture(h);
+  noDossiers(h, fx);
+  // Another space of the owner's, whose own run has ended without anything to verify.
+  const other = await fixture(h);
+  await jobInState(h, other.jobId, 'succeeded');
+  // The space: an ended run's op, which the run adopts; and the ops of runs that have not ended — one put back for a
+  // retry an hour away, one parked on a repository operation — which are still theirs to verify.
+  const [adoptable] = await proposedAs(h, wikiMaintainJobPrincipal(h.ownerId, await endedRun(h, fx, 'succeeded')), fx, ['what an ended run found']);
+  const [retrying] = await proposedAs(h, wikiMaintainJobPrincipal(h.ownerId, await unfinishedRun(h, fx, 'queued')), fx, ['what a run put back found']);
+  const [parked] = await proposedAs(h, wikiMaintainJobPrincipal(h.ownerId, await unfinishedRun(h, fx, 'waiting')), fx, ['what a parked run found']);
+  // The other space: its ended run's op.
+  const [elsewhere] = await proposedAs(h, wikiMaintainJobPrincipal(h.ownerId, await endedRun(h, other, 'succeeded')), other, ['what another space\'s run found']);
+
+  h.model.answer = extractor(fx, 0);
+  await pass(h, worker(h), async () => ['succeeded', 'failed'].includes((await jobOf(h, fx.jobId)).state));
+  assert.equal((await jobOf(h, fx.jobId)).state, 'succeeded', (await jobOf(h, fx.jobId)).error ?? '');
+  assert.deepEqual(((await runRow(h, fx.runId)).report as { verification: Record<string, unknown> }).verification.adopted, { ops: 1, verified: 1, failed: 0 });
+  assert.deepEqual(await verifyUnits(h, fx.jobId), [adoptable]);
+  assert.deepEqual(await verdictOf(h, adoptable), ['auto_applied', 'supported']);
+  for (const op of [retrying, parked, elsewhere]) {
+    assert.deepEqual(await verdictOf(h, op), ['verifying', null]);
+    const asked = await h.sql.query(`SELECT 1 FROM "wiki_model_request" WHERE "owner_id" = $1 AND "unit" LIKE $2`, [h.ownerId, `${op}%`]);
+    assert.equal(asked.rowCount, 0, `nobody asked about ${op}`);
+  }
+});
+
+test('an adopted verdict for an ended run\'s op is recorded for the space\'s maintenance run alone: a session, the run that proposed it, another space\'s run, a job of another kind, and the space\'s run while the proposer has not ended are each refused 404', { skip }, async () => {
+  const h = await boot();
+  await clearWork(h);
+  const fx = await fixture(h);
+  const other = await fixture(h);
+  const proposer = await endedRun(h, fx, 'succeeded');
+  const [op] = await proposedAs(h, wikiMaintainJobPrincipal(h.ownerId, proposer), fx, ['what the ended run found']);
+  const articles = randomUUID();
+  await h.prisma.wikiJob.create({ data: { id: articles, ownerId: h.ownerId, spaceId: fx.spaceId, kind: 'articles', input: {}, state: 'queued' } });
+  const verdict = { opId: op, verdict: 'supported', reason: 'the record says this', model: MODEL };
+  const refused = async (principal: WikiPrincipal, who: string, options: { adopt?: boolean } = { adopt: true }): Promise<void> => {
+    const answer = await h.service.recordVerifications(principal, fx.spaceId, [verdict], options);
+    assert.deepEqual(answer.outcomes.map((outcome) => [outcome.status, (outcome as { httpStatus?: number }).httpStatus]), [['refused', 404]],
+      `${who}: ${JSON.stringify(answer.outcomes)}`);
+    const listed = await h.service.listVerifications(principal, fx.spaceId, { ...options, limit: 50 });
+    assert.ok(!listed.items.some((item) => toUuid(item.opId) === op), `${who} is not handed it`);
+  };
+  const runOf = (jobId: string): WikiPrincipal => wikiVerifyPrincipal(h.ownerId, null, jobId);
+
+  // A session — what the runner door's maintenance run reports as — finds no job's op at all.
+  await refused({ origin: 'maintenance', ownerId: h.ownerId, userId: null, sessionId: fx.sessionId, toolCallId: null }, 'a session');
+  // The run that proposed it: its ops are its own to verify, never its to adopt.
+  await refused(runOf(proposer), 'the run that proposed it');
+  // Another space's maintenance run, and a job of the space that is not its maintenance run.
+  await refused(runOf(other.jobId), 'another space\'s run');
+  await refused(runOf(articles), 'a job of another kind');
+  // The space's maintenance run reporting it as its own, not as adopted.
+  await refused(runOf(fx.jobId), 'the space\'s run, as its own op', {});
+  // The space's maintenance run while the run that proposed it has not ended.
+  for (const state of ['queued', 'running', 'waiting'] as const) {
+    await jobInState(h, proposer, state);
+    await refused(runOf(fx.jobId), `the space's run while the proposer is ${state}`);
+  }
+  await jobInState(h, proposer, 'succeeded');
+  assert.deepEqual(await verdictOf(h, op), ['verifying', null], 'nothing of that recorded anything');
+
+  // The space's maintenance run, once the run that proposed it has ended: handed it, and its verdict recorded and applied.
+  const listed = await h.service.listVerifications(runOf(fx.jobId), fx.spaceId, { adopt: true, limit: 50 });
+  assert.deepEqual(listed.items.map((item) => toUuid(item.opId)), [op]);
+  const answer = await h.service.recordVerifications(runOf(fx.jobId), fx.spaceId, [verdict], { adopt: true });
+  assert.deepEqual(answer.outcomes.map((outcome) => outcome.status), ['applied'], JSON.stringify(answer.outcomes));
+  assert.deepEqual(await verdictOf(h, op), ['auto_applied', 'supported']);
 });

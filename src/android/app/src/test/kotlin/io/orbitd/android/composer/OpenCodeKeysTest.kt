@@ -6,9 +6,10 @@ import kotlinx.serialization.json.*
 import org.junit.Assert.*
 import org.junit.Test
 
-/** A07-6 (iOS 09dc74803): an OpenCode session can run on a configured provider key — each key the server marks `runsOnOpenCode`
- * is listed again under OpenCode, its models as `orbit-<slug>/<model>`, and a new session on it starts on `opencode` with that
- * model. */
+/** A07-6 on the provider/engine split (contract §1.3, §3.3): an OpenCode session can run on a key OpenCode runs — listed under
+ * OpenCode after its own sign-in, by the key's own slug and with the key's own models — and a session on it is (opencode, the key,
+ * a bare model): no `opencode/<slug>` choice, no `orbit-<slug>/<model>` id. Moving between the key and OpenCode's own config is a
+ * provider change on the same engine. */
 class OpenCodeKeysTest : ComposerShellTest() {
     private fun openCodeRunner() {
         ComposerShell.runner = ComposerShell.obj("""{"id":"${ComposerShell.RUNNER}","name":"Fixture runner","online":true,"status":"ONLINE",
@@ -21,34 +22,42 @@ class OpenCodeKeysTest : ComposerShellTest() {
             "models":[{"value":"kimi-k3","label":"Kimi K3"}]}]"""
     }
 
-    /** The Provider rows, Antigravity's aside (its row depends on the runner's Gemini credential, not on these keys). */
-    private fun providerRows() = section("Provider", until = setOf("Account", "Close")).filterNot { "Antigravity" in it }
+    /** The Provider list's rows after its heading's current credential. */
+    private fun providerRows() = section("Provider", until = setOf("Close")).drop(1)
 
     @Test fun aKeyIsListedUnderOpenCodeAndANewSessionStartsOnItsModel() {
         openCodeRunner()
-        signIn(); openDraft(); openModelMenu()
-        assertEquals("the key under its own engine, and again under OpenCode; a key OpenCode can't spend is not",
-            listOf("✓ Claude", "Codex", "Kimi", "DeepSeek", "Moonshot", "OpenCode", "DeepSeek"), providerRows())
-        compose.onAllNodes(hasText("DeepSeek") and hasClickAction() and hasAnyAncestor(isDialog()))[1].performScrollTo().performClick()
+        signIn(); openDraft()
+        compose.onNodeWithTag("new-session-engine").performClick()
+        await { has(hasTestTag("engine:opencode") and hasClickAction()) }
+        compose.onNodeWithTag("engine:opencode").performClick()
+        await { ComposerShell.calls.none { it.startsWith("PATCH") } && has(hasText("OpenCode ⌄")) }
+        openModelMenu()
+        assertEquals("OpenCode's own sign-in, then the keys it runs; a key OpenCode can't spend is not there",
+            listOf("On Fixture runner", "✓ OpenCode's own sign-in\nopencode auth", "API keys", "DeepSeek"), providerRows())
+        compose.onNode(hasText("DeepSeek") and hasClickAction() and hasAnyAncestor(isDialog())).performScrollTo().performClick()
         await { providerRows().lastOrNull() == "✓ DeepSeek" }
         assertTrue("the menu lists the key's models, the new session on its first", shows("✓ DeepSeek Chat"))
+        compose.onNodeWithTag("composer-engine-title").assertTextEquals("OpenCode")
         compose.onNode(hasText("Close") and hasAnyAncestor(isDialog())).performClick()
         compose.onNodeWithTag("composer-input").performTextInput("Review the diff")
         compose.onNodeWithTag("composer-send").performClick()
         await { ComposerShell.body("POST sessions") != null }
         val created = ComposerShell.body("POST sessions")!!
-        assertEquals("opencode", created["provider"]?.jsonPrimitive?.content)
-        assertEquals("orbit-deepseek/deepseek-chat", created["model"]?.jsonPrimitive?.content)
+        assertEquals("opencode", created["engine"]?.jsonPrimitive?.content)
+        assertEquals("deepseek", created["provider"]?.jsonPrimitive?.content)
+        assertEquals("deepseek-chat", created["model"]?.jsonPrimitive?.content)
     }
 
-    @Test fun anOpenCodeSessionOnAKeyMovesBetweenItsConfigAndItsKeysByModel() {
+    @Test fun anOpenCodeSessionOnAKeyMovesToItsOwnConfigOnTheSameEngine() {
         openCodeRunner()
-        ComposerShell.session = mapOf("provider" to JsonPrimitive("opencode"), "model" to JsonPrimitive("orbit-deepseek/deepseek-chat"))
+        ComposerShell.session = mapOf("engine" to JsonPrimitive("opencode"), "provider" to JsonPrimitive("deepseek"), "model" to JsonPrimitive("deepseek-chat"))
         signIn(); openSession(); openModelMenu()
-        assertEquals(listOf("OpenCode", "✓ DeepSeek"), providerRows())
-        compose.onNode(hasText("OpenCode") and hasClickAction() and hasAnyAncestor(isDialog())).performScrollTo().performClick()
+        assertEquals(listOf("On Fixture runner", "OpenCode's own sign-in\nopencode auth", "API keys", "✓ DeepSeek"), providerRows())
+        compose.onNode(hasText("OpenCode's own sign-in", substring = true) and hasClickAction() and hasAnyAncestor(isDialog())).performScrollTo().performClick()
         await { ComposerShell.body("PATCH sessions/${ComposerShell.SESSION}/config") != null }
-        assertEquals("a model change, the provider untouched", buildJsonObject { put("model", "opencode/big-pickle") },
-            ComposerShell.body("PATCH sessions/${ComposerShell.SESSION}/config"))
+        assertEquals("a provider change on the session's own engine", buildJsonObject {
+            put("provider", "opencode"); put("engine", "opencode"); put("model", ""); put("effort", "")
+        }, ComposerShell.body("PATCH sessions/${ComposerShell.SESSION}/config"))
     }
 }

@@ -803,12 +803,12 @@ test('failing again: the next red opens a classified item for the coordinator, n
         select: { content: true },
       });
       const told = turns.at(-1)?.content ?? '';
-      assert.match(told, /失败分类：CHECK_TIMED_OUT/);
-      assert.match(told, /这是这项任务的第 2 代落地，由协调会话要求重跑/);
+      assert.match(told, /Failure class: CHECK_TIMED_OUT/);
+      assert.match(told, /This is generation 2 of this task’s landing, rerun at the coordinator session’s request/);
       assert.ok(told.includes(REASON), `the message does not carry the rerun's reason — ${told}`);
-      assert.match(told, /不要再原样重跑/);
+      assert.match(told, /do not rerun it as it stands/);
       assert.match(told, /integration_retry/);
-      assert.match(told, /task_start 只会再跑一遍任务、开一条新分支，不会重新排这次落地/);
+      assert.match(told, /task_start only runs the task again on a new branch; it does not queue this landing again/);
 
       // And it can decide again: a third generation, rerunning the second.
       const third = await retry(stack, w, task.taskId, 'the runner was overloaded; the check now has the machine to itself');

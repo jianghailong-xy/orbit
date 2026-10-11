@@ -4,7 +4,6 @@ import { resolve } from 'node:path';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { App as AntApp } from 'antd';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Runner } from './TasksSidePanel';
@@ -157,10 +156,8 @@ async function mount(entry: string, expectedTitle: string): Promise<void> {
     nextRoot.render(
       <QueryClientProvider client={nextClient}>
         <MemoryRouter initialEntries={[entry]}>
-          <AntApp>
-            <WorkspaceView runner={RUNNER} />
-            <LocationProbe />
-          </AntApp>
+          <WorkspaceView runner={RUNNER} />
+          <LocationProbe />
         </MemoryRouter>
       </QueryClientProvider>,
     );
@@ -243,24 +240,24 @@ describe('the existing composer control inventory', () => {
     expect(start).toBeGreaterThan(-1);
     expect(end).toBeGreaterThan(start);
     const toolbar = source.slice(start, end);
-    const menuStart = source.indexOf("const modelMenuItems: MenuProps['items'] = [");
+    const menuStart = source.indexOf('const modelMenuItems: MenuItem[] = [');
     const menuEnd = source.indexOf('\n  ];\n', menuStart);
     expect(menuStart).toBeGreaterThan(-1);
     expect(menuEnd).toBeGreaterThan(menuStart);
     const menu = source.slice(menuStart, menuEnd);
 
     expect({
-      workspace: toolbar.includes('onChange={setWorkspaceId}'),
+      workspace: toolbar.includes('onValueChange={(v) => setWorkspaceId(v ?? undefined)}'),
       permission: toolbar.includes('configMut.mutate({ permissionMode: MODE_TO_PERMISSION[v] })'),
-      model: toolbar.includes('items: modelMenuItems'),
+      model: toolbar.includes('items={modelMenuItems}'),
     }).toEqual({ workspace: true, permission: true, model: true });
     expect(toolbar.match(/<span className="composer-pill(?: [^"]*)?">/g) ?? []).toHaveLength(3);
     expect({
       // The Provider row's credentials are grouped (board 4 ④): its submenu is built beside the menu.
-      provider: menu.includes('children: providerMenuGroups') && source.includes('onClick: () => pickProvider(choice.slug)'),
+      provider: menu.includes('children: providerMenuGroups') && source.includes('onSelect: () => pickProvider(choice.slug)'),
       model: menu.includes('key: `model:${option.value}`'),
-      effort: menu.includes('onClick: () => pickEffort(option.value)'),
-      fastMode: menu.includes('onClick: () => pickFastMode(option.value)'),
+      effort: menu.includes('onSelect: () => pickEffort(option.value)'),
+      fastMode: menu.includes('onSelect: () => pickFastMode(option.value)'),
     }).toEqual({ provider: true, model: true, effort: true, fastMode: true });
     expect(menu.match(/key: '(provider|effort|speed)',/g) ?? []).toHaveLength(3);
   });

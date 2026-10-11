@@ -57,6 +57,11 @@ struct QuestionFoldedLines: View {
 /// The unfolded card: every question as it was asked and every option as it was offered, with its
 /// description — the pick ticked on a light blue, the rest grey but readable — then the words typed
 /// instead of an option, or the reply given in the conversation instead of any.
+///
+/// Every text here takes its whole height (`fixedSize` vertically): the transcript's List cell
+/// measured the baseline-aligned option rows short and cut each description at two lines with an
+/// ellipsis (the iPhone probe's pictures, run 38018707522) — a replay that drops the end of a sentence
+/// is not one.
 struct QuestionReplayView: View {
     let questions: [AskQuestion]
     let outcome: QuestionOutcome?
@@ -96,6 +101,7 @@ struct QuestionReplayView: View {
         Text(question.question)
             .font(.orbitProseAside)
             .textSelection(.enabled)
+            .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
         VStack(alignment: .leading, spacing: 4) {
             ForEach(Array(question.options.enumerated()), id: \.offset) { index, option in
@@ -124,9 +130,11 @@ struct QuestionReplayView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(option.label).font(.orbitProseAside)
                     .foregroundStyle(picked ? Color.primary : Color.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
                 if let why = option.description, !why.isEmpty {
                     Text(why).font(.orbitLabel)
                         .foregroundStyle(picked ? HierarchicalShapeStyle.secondary : HierarchicalShapeStyle.tertiary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
             Spacer(minLength: 0)
@@ -144,6 +152,7 @@ struct QuestionReplayView: View {
         VStack(alignment: .leading, spacing: 2) {
             Text(label).font(.orbitLabel).foregroundStyle(.secondary)
             Text(words).font(.orbitProseAside).textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.horizontal, 10).padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)

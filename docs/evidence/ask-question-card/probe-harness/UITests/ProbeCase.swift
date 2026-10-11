@@ -159,7 +159,7 @@ class ProbeCase: XCTestCase {
             #endif
             settle(1)
         }
-        note("\(name): never in the band \(top)–\(bottom); last frame \(element.frame)")
+        note("\(name): never in the band \(top)–\(bottom); last frame \(element.exists ? "\(element.frame)" : "(missing)")")
         write(app.debugDescription, "missing-band-\(name).txt")
     }
 

@@ -475,10 +475,10 @@ export class ProjectAcceptanceService {
    *
    * The same authority as `confirmStandardSet`, because a start IS a confirmation — of the criteria
    * the card showed, named by their seal — and of how the project is to run besides: its integration
-   * line, Automatic, its concurrency limit and its merge check. Refused whole for a request carrying
-   * an acting session, before anything is read; a seal that is not the current one is a 409 and
-   * nothing is written; so is a project that has been started already, which is what makes a second
-   * press, or a re-sent request, a refusal instead of a second start.
+   * line and main branch, Automatic, its concurrency limit and its merge check. Refused whole for a
+   * request carrying an acting session, before anything is read; a seal that is not the current one
+   * is a 409 and nothing is written; so is a project that has been started already, which is what
+   * makes a second press, or a re-sent request, a refusal instead of a second start.
    *
    * `requestId` names the coordinator's start request the card was drawn from, when there was one
    * (`project-start-request.ts`): the settings it suggested are then what the start records as asked
@@ -504,6 +504,7 @@ export class ProjectAcceptanceService {
     const asked: ProjectStartSettings = {
       line: input.line,
       ...(input.projectBranchName !== undefined ? { projectBranchName: input.projectBranchName } : {}),
+      ...(input.upstreamRef !== undefined ? { upstreamRef: input.upstreamRef } : {}),
       automatic: input.automatic,
       maxConcurrentTasks: input.maxConcurrentTasks,
       mergeCheckCommand: input.mergeCheckCommand ?? null,
@@ -534,9 +535,10 @@ export class ProjectAcceptanceService {
    *      before it writes the same columns. A project that has a `started_at` is refused here,
    *      409 `PROJECT_ALREADY_STARTED`, and so is a seal that is not the one standing now, read
    *      under that lock so no criteria edit can land between the comparison and the writes.
-   *   2. The line and the merge check, under the binding's lock (rank 55): written as the owner's
-   *      choice, unless the line has started integrating — then it is left where it is, and the
-   *      answer says so (`startProjectLine`).
+   *   2. The line, its main branch when the start names one, and the merge check, under the
+   *      binding's lock (rank 55): written as the owner's choice, a named main branch recorded as
+   *      chosen (L6), unless the line has started integrating — then it is left where it is, and
+   *      the answer says so (`startProjectLine`).
    *   3. Automatic and the concurrency limit — `coordinator_enabled` and `max_concurrent_tasks`,
    *      written only where they change, with the one `configRevision` bump every write of
    *      `ProjectsService.AUTHORIZATION_FIELDS` owes — and `started_at`, in the same statement, as a
@@ -586,11 +588,18 @@ export class ProjectAcceptanceService {
       });
       if (requestId !== null && !request) throw new NotFoundException('start request not found');
 
+      const suggested = (request?.payload as unknown as ProjectStartRequest | undefined)?.settings;
       const asked = await settingsFor(tx, project);
       const line = await startProjectLine(tx, { ownerId, projectId, settings: asked });
+      // The main branch is recorded when the start or the request it answers named one — the
+      // branch the project stands on now, so a choice a locked line kept out reads as a difference.
+      const upstreamNamed = asked.upstreamRef !== undefined || suggested?.upstreamRef !== undefined;
       const settings: ProjectStartSettings = {
         line: line.line,
         ...(line.projectBranchName !== undefined ? { projectBranchName: line.projectBranchName } : {}),
+        ...(upstreamNamed && line.upstreamRef !== undefined
+          ? { upstreamRef: line.upstreamRef }
+          : {}),
         automatic: asked.automatic,
         maxConcurrentTasks: asked.maxConcurrentTasks,
         mergeCheckCommand: line.mergeCheckCommand,
@@ -615,7 +624,6 @@ export class ProjectAcceptanceService {
       });
       if (written.count !== 1) throw projectAlreadyStarted(null);
 
-      const suggested = (request?.payload as unknown as ProjectStartRequest | undefined)?.settings;
       const record: ProjectStartRecord = {
         settings,
         differsFromRequest: differingStartSettings(suggested ?? asked, settings),

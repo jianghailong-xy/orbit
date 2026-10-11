@@ -1,0 +1,73 @@
+== /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p0-standard-base-out/report.json: 28 failed
+chromium-dark-desktop :: both sides of existing 600, 640 and 960px rules :: Error: expect(page).toHaveScreenshot(expected) failed
+chromium-dark-desktop :: session :: Error: expect(page).toHaveScreenshot(expected) failed
+chromium-dark-desktop :: settings :: Error: expect(page).toHaveScreenshot(expected) failed
+chromium-dark-desktop :: task :: Error: expect(page).toHaveScreenshot(expected) failed
+chromium-dark-phone :: session :: Error: expect(page).toHaveScreenshot(expected) failed
+chromium-dark-phone :: settings :: Error: expect(page).toHaveScreenshot(expected) failed
+chromium-dark-phone :: task :: Error: expect(page).toHaveScreenshot(expected) failed
+chromium-light-desktop :: both sides of existing 600, 640 and 960px rules :: Error: expect(page).toHaveScreenshot(expected) failed
+chromium-light-desktop :: session :: Error: expect(page).toHaveScreenshot(expected) failed
+chromium-light-desktop :: settings :: Error: expect(page).toHaveScreenshot(expected) failed
+chromium-light-desktop :: task :: Error: expect(page).toHaveScreenshot(expected) failed
+chromium-light-phone :: session :: Error: expect(page).toHaveScreenshot(expected) failed
+chromium-light-phone :: settings :: Error: expect(page).toHaveScreenshot(expected) failed
+chromium-light-phone :: task :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-dark-desktop :: both sides of existing 600, 640 and 960px rules :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-dark-desktop :: session :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-dark-desktop :: settings :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-dark-desktop :: task :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-dark-phone :: session :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-dark-phone :: settings :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-dark-phone :: task :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-light-desktop :: both sides of existing 600, 640 and 960px rules :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-light-desktop :: session :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-light-desktop :: settings :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-light-desktop :: task :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-light-phone :: session :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-light-phone :: settings :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-light-phone :: task :: Error: expect(page).toHaveScreenshot(expected) failed
+   28 × Error: expect(page).toHaveScreenshot(expected) failed
+== /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p0-standard-out/report.json: 28 failed
+chromium-dark-desktop :: both sides of existing 600, 640 and 960px rules :: Error: expect(page).toHaveScreenshot(expected) failed
+chromium-dark-desktop :: session :: Error: expect(page).toHaveScreenshot(expected) failed
+chromium-dark-desktop :: settings :: Error: expect(page).toHaveScreenshot(expected) failed
+chromium-dark-desktop :: task :: Error: expect(page).toHaveScreenshot(expected) failed
+chromium-dark-phone :: session :: Error: expect(page).toHaveScreenshot(expected) failed
+chromium-dark-phone :: settings :: Error: expect(page).toHaveScreenshot(expected) failed
+chromium-dark-phone :: task :: Error: expect(page).toHaveScreenshot(expected) failed
+chromium-light-desktop :: both sides of existing 600, 640 and 960px rules :: Error: expect(page).toHaveScreenshot(expected) failed
+chromium-light-desktop :: session :: Error: expect(page).toHaveScreenshot(expected) failed
+chromium-light-desktop :: settings :: Error: expect(page).toHaveScreenshot(expected) failed
+chromium-light-desktop :: task :: Error: expect(page).toHaveScreenshot(expected) failed
+chromium-light-phone :: session :: Error: expect(page).toHaveScreenshot(expected) failed
+chromium-light-phone :: settings :: Error: expect(page).toHaveScreenshot(expected) failed
+chromium-light-phone :: task :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-dark-desktop :: both sides of existing 600, 640 and 960px rules :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-dark-desktop :: session :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-dark-desktop :: settings :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-dark-desktop :: task :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-dark-phone :: session :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-dark-phone :: settings :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-dark-phone :: task :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-light-desktop :: both sides of existing 600, 640 and 960px rules :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-light-desktop :: session :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-light-desktop :: settings :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-light-desktop :: task :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-light-phone :: session :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-light-phone :: settings :: Error: expect(page).toHaveScreenshot(expected) failed
+webkit-light-phone :: task :: Error: expect(page).toHaveScreenshot(expected) failed
+   28 × Error: expect(page).toHaveScreenshot(expected) failed
+
+== diff of the two lists (base < > delivery)
+no difference
+
+== the P0 matrix's failures (reference, strict, delivery)
+== /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p0-ref-out/report.json: 0 failed
+== /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p0-strict-out/report.json: 0 failed
+== /mnt/data/tmp/34Za39L1H6V82d2sobzPY/v1/r2/p0-del-out/report.json: 0 failed
+
+== actual shots of the standard P0's failing cases, base vs delivery
+differs: pages.browser.mjs-task-chromium-dark-desktop/task-detail-actual.png: 3 pixels, max 1 levels, 0 over 2
+differs: pages.browser.mjs-task-chromium-light-desktop/task-detail-actual.png: 5 pixels, max 1 levels, 0 over 2
+26 of 28 byte-identical

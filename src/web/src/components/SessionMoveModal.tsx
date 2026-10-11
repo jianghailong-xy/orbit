@@ -1,5 +1,4 @@
 import { useEffect, useState, type KeyboardEvent, type ReactNode } from 'react';
-import { App as AntApp, Modal, Spin } from 'antd';
 import {
   CheckOutlined,
   FolderAddOutlined,
@@ -40,6 +39,9 @@ import { ENGINE_PRESET } from '../lib/sessionProviderChoices';
 import { isSessionTerminal } from '../lib/sessionState';
 import { useToast } from '../lib/toast';
 import { ProviderTile } from './ProviderGallery';
+import { useConfirm } from './ui/ConfirmDialog';
+import { Dialog } from './ui/Dialog';
+import { Spinner } from './ui/Spinner';
 
 /** The session the dialog moves, as the list or the open conversation has it. */
 export interface MoveDialogSession {
@@ -79,7 +81,8 @@ export function SessionMoveModal({
   folders: SessionFolder[];
   onClose: () => void;
 }) {
-  const { modal } = AntApp.useApp();
+  // The confirmation stacks on this dialog (its holder renders inside it), as the replaced modal's did on top.
+  const [confirm, confirmation] = useConfirm();
   const message = useToast();
   const qc = useQueryClient();
   // The workspace step on screen; null for the first one.
@@ -175,18 +178,19 @@ export function SessionMoveModal({
   };
 
   const confirmMove = (target: SessionMoveTarget, folder: { id: string } | null, current: SessionMoveTargets): void => {
-    modal.confirm({
+    void confirm({
       title: moveConfirmTitle(target),
-      content: (
+      description: (
         <div className="move-confirm-body">
           {moveConfirmParagraphs(current, target, workspace.name).map((p) => (
             <p key={p}>{p}</p>
           ))}
         </div>
       ),
-      okText: moveConfirmAction(current),
+      confirmText: moveConfirmAction(current),
       cancelText: 'Cancel',
-      onOk: () => {
+      // Closes at once: the move's progress and outcome are this dialog's to show, not the question's.
+      onConfirm: () => {
         void runMove(target, folder, current.needsEnd);
       },
     });
@@ -365,13 +369,12 @@ export function SessionMoveModal({
   );
 
   return (
-    <Modal
+    <Dialog
       open={open}
-      onCancel={busy ? undefined : onClose}
+      onClose={onClose}
+      // While a move runs nothing closes the panel, and its close button is not drawn.
+      busy={busy}
       closable={!busy}
-      maskClosable={!busy}
-      keyboard={!busy}
-      footer={null}
       width={460}
       className="move-dialog"
       title={
@@ -395,17 +398,17 @@ export function SessionMoveModal({
           MOVE_COPY.title
         )
       }
-      destroyOnHidden
     >
       <div className="move-dialog-sub">{session.title || 'Untitled session'}</div>
       {step ? targetStep : firstStep}
       {phase && phase !== 'filing' && (
         <div className="move-dialog-progress" role="status">
-          <Spin size="small" />
+          <Spinner size="small" aria-hidden />
           {phase === 'ending' ? MOVE_COPY.ending : MOVE_COPY.moving}
         </div>
       )}
-    </Modal>
+      {confirmation}
+    </Dialog>
   );
 }
 

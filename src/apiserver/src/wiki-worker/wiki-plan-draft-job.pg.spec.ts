@@ -92,19 +92,20 @@ const SHA = FIXTURE.index.sha;
 
 // The answers of wiki_plan_job_test.go: the four steps right, and a document's outline wrong.
 const SKELETON = CLEAN.catalogue;
-const SKELETON_FOUR = '## 1. 产品 `product` —— 这个服务是什么、怎么运转\n'
-  + '- 1.1 服务概览 `service-overview`｜这个服务是什么、由哪些部分组成｜含：定位；组件；入口\n'
-  + '- 1.2 存储 `storage`｜数据怎么存、怎么取｜含：Store；保存\n'
-  + '- 1.3 发布渠道 `release-channels`｜版本从哪里发出去｜含：渠道；节奏\n'
-  + '## 2. 开发约定 `dev` —— 给写代码的 agent 看的约定 [agents]\n'
-  + '- 2.1 测试约定 `testing`｜怎么跑测试｜含：go test；夹具\n';
+const SKELETON_FOUR = '## 1. Product `product` — What this service is and how it works\n'
+  + '- 1.1 Service overview `service-overview` | What this service is and what it is made of | Includes: purpose; components; entry points\n'
+  + '- 1.2 Storage `storage` | How data is stored and read | Includes: Store; saving\n'
+  + '- 1.3 Release channels `release-channels` | Where a version is shipped from | Includes: channels; cadence\n'
+  + '## 2. Development conventions `dev` — The conventions for the agents that write code [agents]\n'
+  + '- 2.1 Testing conventions `testing` | How to run the tests | Includes: go test; fixtures\n';
 const OUTLINE_STORAGE = CLEAN.outlines.storage;
 const OUTLINE_OVERVIEW = CLEAN.outlines['service-overview'];
-const OUTLINE_STORAGE_WRONG = '### 1. 保存流程 | flow | 500\n讲什么：Store.Load 怎么读，见 9.9。\n'
-  + '- 文档：docs/wiki-design.md § 5. 不存在的章节\n- 代码：src/app/store.go: Store.Save, Store.Load, localHelper\n- 代码：src/app/missing.go: Foo\n'
-  + '- 代码：src/web/client.ts: localHelper\n- 备注：这一行不在格式里\n'
-  + '### 2. 约定 | conventions | 200\n讲什么：保存前先校验。\n';
-const RULES = '## 引用规则\n1. 脚注引一手原文。\n## 归并规则\n1. 新决定覆盖旧的。\n## 维护规则\n1. 只重写受影响的节。\n';
+const OUTLINE_STORAGE_WRONG = '### 1. The saving flow | flow | 500\nCovers: how Store.Load reads, see 9.9.\n'
+  + '- Docs: docs/wiki-design.md § 5. A section that is not there\n- Code: src/app/store.go: Store.Save, Store.Load, localHelper\n- Code: src/app/missing.go: Foo\n'
+  + '- Code: src/web/client.ts: localHelper\n- Note: this line is not in the format\n'
+  + '### 2. Conventions | conventions | 200\nCovers: validate before saving.\n';
+const RULES = '## Citation rules\n1. A footnote cites a first-hand original.\n## Merge rules\n1. A newer decision overrides an older one.\n'
+  + '## Maintenance rules\n1. Only the sections affected are written again.\n';
 
 // ── the System model ─────────────────────────────────────────────────────────────────────────────────
 
@@ -137,26 +138,29 @@ interface FakeModel {
   close: () => Promise<void>;
 }
 
-const TITLE_IN = /《([^》]+)》/u;
+const TITLE_IN = /«([^»]+)»/u;
 
 function answerOf(model: FakeModel, prompt: string): string {
   const s = model.script;
-  const title = TITLE_IN.exec(prompt.slice(prompt.lastIndexOf('# 任务')))?.[1] ?? '';
-  if (prompt.includes('第一步：文档目录的骨架') || prompt.includes('# 任务：改正 wiki「')) {
+  const title = TITLE_IN.exec(prompt.slice(prompt.lastIndexOf('# Task')))?.[1] ?? '';
+  if (prompt.includes('step 1: the skeleton of the document catalogue') || prompt.includes('# Task: correct the catalogue of the plan of the wiki «')) {
     model.skeletons += 1;
     return s.skeleton ? s.skeleton(model.skeletons) : SKELETON;
   }
-  if (prompt.includes('第二步：给大类「产品」')) return CLEAN.details['1'];
-  if (prompt.includes('第二步：给大类「开发约定」')) return CLEAN.details['2'];
-  if (prompt.includes('第三步 —— 给《')) return s.outline?.(title) ?? ({ 服务概览: OUTLINE_OVERVIEW, 存储: OUTLINE_STORAGE, 测试约定: CLEAN.outlines.testing } as Record<string, string>)[title] ?? '';
-  if (prompt.includes('第四步 —— 三条规则的草案')) return RULES;
-  if (prompt.includes('按 owner 的要求修订 plan 的目录')) {
+  if (prompt.includes('step 2: complete each document of the category «Product»')) return CLEAN.details['1'];
+  if (prompt.includes('step 2: complete each document of the category «Development conventions»')) return CLEAN.details['2'];
+  if (prompt.includes('write the outline of «')) {
+    const outlines: Record<string, string> = { 'Service overview': OUTLINE_OVERVIEW, Storage: OUTLINE_STORAGE, 'Testing conventions': CLEAN.outlines.testing };
+    return s.outline?.(title) ?? outlines[title] ?? '';
+  }
+  if (prompt.includes('step 4 of drafting the plan — a draft of the three rules')) return RULES;
+  if (prompt.includes('revise the catalogue of the plan as the owner asks')) {
     model.rounds += 1;
     return s.revise!(model.rounds, prompt);
   }
-  if (prompt.includes('# 任务：写新草稿里《')) return s.rewrite!(title);
-  if (prompt.includes('# 任务：改正 plan 里《')) return s.redo!(title, prompt);
-  return '（不认得的提示）';
+  if (prompt.includes('# Task: write the audience, scope and outline of «')) return s.rewrite!(title);
+  if (prompt.includes('# Task: correct the document «')) return s.redo!(title, prompt);
+  return '(a prompt it does not know)';
 }
 
 async function fakeModel(): Promise<FakeModel> {
@@ -617,7 +621,7 @@ test('a draft is written in four steps through the queue, gated on the snapshot,
   // While the run is on its outlines, the plan page shows it drafting, its round, and when it started.
   let page = null as Answer | null;
   h.model.script.onPrompt = async (prompt) => {
-    if (page === null && prompt.includes('第三步 —— 给《')) page = await call(h, { bearer: o.bearer }, 'GET', `/wiki/spaces/${o.spaceId}/plan`);
+    if (page === null && prompt.includes('write the outline of «')) page = await call(h, { bearer: o.bearer }, 'GET', `/wiki/spaces/${o.spaceId}/plan`);
   };
   const end = await drive(h, w, planJobId);
 
@@ -660,9 +664,9 @@ test('a draft is written in four steps through the queue, gated on the snapshot,
     assert.equal('thinking' in hit.body, false);
   }
   // Each outline was asked with its own document's materials: its docs' whole heading tree and its code's symbols.
-  const storage = asked(h, '第三步 —— 给《存储》');
+  const storage = asked(h, 'write the outline of «Storage»');
   assert.equal(storage.length, 1);
-  for (const want of ['### docs/wiki-design.md', '- 4. 写路径', 'src/app/store.go: Store, Store.Save']) assert.ok(storage[0].includes(want), `the outline of 存储 lacks ${want}`);
+  for (const want of ['### docs/wiki-design.md', '- 4. 写路径', 'src/app/store.go: Store, Store.Save']) assert.ok(storage[0].includes(want), `the outline of Storage lacks ${want}`);
   assert.ok(!storage[0].includes('这不是一个章节') && !storage[0].includes('Mock heading'), 'a heading inside a code fence, or a mockup\'s, reached the materials');
   // The repository was read once a snapshot at the job's start, and what the snapshot does not carry read at its sha.
   assert.equal(runner.ops[0].kind, 'snapshot');
@@ -689,10 +693,10 @@ test('a draft is written in four steps through the queue, gated on the snapshot,
   assert.deepEqual(draft.docs.map((d: { slug: string }) => d.slug), ['service-overview', 'storage', 'testing']);
   const overview = draft.docs[0];
   assert.deepEqual(overview.length, { min: 800, max: 1200 });
-  assert.deepEqual(overview.scopeOut, [{ text: '存储细节', docs: ['storage'] }]);
+  assert.deepEqual(overview.scopeOut, [{ text: 'storage details', docs: ['storage'] }]);
   const components = overview.sections[1];
   assert.equal(components.kind, 'concepts');
-  assert.ok(components.covers.includes('见 1.2'));
+  assert.ok(components.covers.includes('see 1.2'));
   assert.deepEqual(components.sources.code, [{ path: 'src/app/main.go', symbols: ['Server', 'Serve()'] }]);
   const sessions = overview.sections[2].sources.sessions;
   assert.equal(sessions.since, '2026-09-01');
@@ -700,14 +704,14 @@ test('a draft is written in four steps through the queue, gated on the snapshot,
   assert.deepEqual(sessions.entryKinds, ['pitfall']);
   assert.deepEqual(sessions.topics, ['storage-topic']);
   assert.equal(sessions.projects.length, 1, 'the project named by its title is the one of that title');
-  assert.equal(sessions.evidence, 'owner 说端口不能写死的原话');
+  assert.equal(sessions.evidence, "the owner's words saying the port must not be hard-coded");
   // The report, on the plan job and on its wiki_job.
   assert.equal(end.report.docs, 3);
   assert.equal(end.report.sections, 6);
   assert.equal(end.report.tokens.calls, 7);
   assert.equal(end.report.tokens.input, 700);
   assert.equal(end.report.model, MODEL);
-  assert.ok(String(end.report.rulesDraft).includes('## 引用规则'));
+  assert.ok(String(end.report.rulesDraft).includes('## Citation rules'));
   assert.deepEqual(end.report.attempts, [{ attempt: 1, local: 0, server: 0, checks: {} }]);
   assert.equal(job.report.planJobId, planJobId);
   assert.equal(job.report.version, 2);
@@ -743,16 +747,16 @@ test('a catalogue outside the target is written again with the gate\'s count bef
   playRunner(h, o);
   const end = await drive(h, worker(h), planJobId);
   assert.equal(end.outcome, 'succeeded', end.error);
-  const order = h.model.hits.map((hit) => (hit.prompt.includes('第一步') || hit.prompt.includes('# 任务：改正 wiki「') ? 'catalogue' : 'body'));
+  const order = h.model.hits.map((hit) => (hit.prompt.includes('step 1') || hit.prompt.includes('# Task: correct the catalogue') ? 'catalogue' : 'body'));
   assert.deepEqual(order.slice(0, 2), ['catalogue', 'catalogue']);
   assert.equal(order.filter((x) => x === 'catalogue').length, 2);
   assert.equal(order.length, 8, 'the catalogue twice and the six calls a draft of three documents asks');
-  const again = asked(h, '# 任务：改正 wiki「');
+  const again = asked(h, '# Task: correct the catalogue');
   assert.equal(again.length, 1);
-  assert.ok(again[0].includes("[docCount] plan.docs：the plan has 4 documents; it must have 3 to 3: merge documents that answer the same reader's question — 1 too many"));
+  assert.ok(again[0].includes("[docCount] plan.docs: the plan has 4 documents; it must have 3 to 3: merge documents that answer the same reader's question — 1 too many"));
   assert.ok(again[0].includes('release-channels'));
   for (const hit of h.model.hits) {
-    if (!hit.prompt.includes('第一步') && !hit.prompt.includes('# 任务：改正 wiki「')) assert.ok(!hit.prompt.includes('release-channels'), 'a document of the catalogue sent back was written');
+    if (!hit.prompt.includes('step 1') && !hit.prompt.includes('# Task: correct the catalogue')) assert.ok(!hit.prompt.includes('release-channels'), 'a document of the catalogue sent back was written');
   }
   assert.deepEqual(end.report.attempts.map((a: { attempt: number }) => a.attempt), [1]);
   assert.equal(end.report.tokens.calls, 8);
@@ -773,13 +777,13 @@ test('a count still outside the target after two tries is the gate\'s, and three
   assert.ok(String(end.error).includes("did not pass the plan's gate in 3 rounds"), end.error);
   // Each round: the catalogue (round 1's skeleton, a later round's sent back with the gate's errors), then twice
   // more with the count before any document — wiki_plan_job_test.go's 9 and 8.
-  assert.equal(asked(h, '第一步').length, 9, 'the catalogue asked three times in each of three rounds');
-  const again = asked(h, '# 任务：改正 wiki「');
+  assert.equal(asked(h, 'step 1').length, 9, 'the catalogue asked three times in each of three rounds');
+  const again = asked(h, '# Task: correct the catalogue');
   assert.equal(again.length, 8, 'and sent back eight times');
   for (const prompt of again) {
-    assert.ok(prompt.includes('[docCount] plan.docs：the plan has 3 documents; it must have 4 to 5: split the broadest documents, or add the ones the categories are missing — 1 too few'));
+    assert.ok(prompt.includes('[docCount] plan.docs: the plan has 3 documents; it must have 4 to 5: split the broadest documents, or add the ones the categories are missing — 1 too few'));
   }
-  assert.equal(asked(h, '第二步').length + asked(h, '第三步 —— 给《').length, 5, 'the documents were written once: the catalogues sent back kept every one of them');
+  assert.equal(asked(h, 'step 2:').length + asked(h, 'write the outline of «').length, 5, 'the documents were written once: the catalogues sent back kept every one of them');
   assert.equal((await versions(h, o.spaceId)).length, 1, 'nothing this job\'s gate refused reached the server\'s');
   assert.equal(end.attempt, 3);
   assert.deepEqual(end.errors.map((e: { check: string }) => e.check), ['docCount']);
@@ -802,8 +806,8 @@ test('every reference is checked on the snapshot — a symbol the index lacks by
   const o = await owner(h);
   await clearJobs(h, o.spaceId);
   await baseVersion(h, o, { min: 3, max: 3 });
-  h.model.script.outline = (title) => (title === '存储' ? OUTLINE_STORAGE_WRONG : undefined);
-  h.model.script.redo = () => `标题：存储\n${OUTLINE_STORAGE}`;
+  h.model.script.outline = (title) => (title === 'Storage' ? OUTLINE_STORAGE_WRONG : undefined);
+  h.model.script.redo = () => `Title: Storage\n${OUTLINE_STORAGE}`;
   const planJobId = await redraft(h, o);
   const runner = playRunner(h, o);
   const end = await drive(h, worker(h), planJobId);
@@ -823,17 +827,17 @@ test('every reference is checked on the snapshot — a symbol the index lacks by
       assert.equal(item.maxChars ?? null, null, `${item.path} was asked with a window, not as a whole file`);
     }
   }
-  const redos = asked(h, '# 任务：改正 plan 里《');
+  const redos = asked(h, '# Task: correct the document «');
   assert.equal(redos.length, 1);
-  assert.ok(redos[0].includes('改正 plan 里《存储》'));
+  assert.ok(redos[0].includes('correct the document «Storage»'));
   for (const want of [
     '"Store.Load" is no symbol of src/app/store.go', 'it declares: Store; Store.Save; storeVersion',
     '"localHelper" is no symbol of src/app/store.go',
-    'has no section "5. 不存在的章节"', 'its sections are: 4. 写路径; 4.4 锚点',
+    'has no section "5. A section that is not there"', 'its sections are: 4. 写路径; 4.4 锚点',
     '"src/app/missing.go" is no file or directory',
     'points at "9.9", which is no document of this plan',
-    '"备注：这一行不在格式里" is not a line of a section',
-    '1.2《存储》 第 1 节「保存流程」',
+    '"Note: this line is not in the format" is not a line of a section',
+    '1.2 «Storage», section 1 «The saving flow»',
   ]) assert.ok(redos[0].includes(want), `the redo does not say ${want}`);
   assert.ok(!redos[0].includes('"localHelper" is no symbol of src/web/client.ts'), 'a symbol the file spells is found by its text');
   const draft = await storedDraft(h, o, 2);
@@ -856,7 +860,7 @@ test('what the server\'s gate finds goes back to the model, and three rounds of 
   // The project the outline names is renamed once the job has read its materials: this job's gate still knows
   // its title, and the server's, which reads the account's projects as they are, does not.
   h.model.script.onPrompt = async (prompt) => {
-    if (prompt.includes('第一步')) await h.sql.query(`UPDATE "project" SET "title" = 'App 项目（改名）' WHERE "owner_id" = $1 AND "title" = 'App 项目'`, [o.id]);
+    if (prompt.includes('step 1')) await h.sql.query(`UPDATE "project" SET "title" = 'App 项目（改名）' WHERE "owner_id" = $1 AND "title" = 'App 项目'`, [o.id]);
   };
   h.model.script.redo = () => OUTLINE_OVERVIEW;
   const planJobId = await redraft(h, o);
@@ -865,10 +869,10 @@ test('what the server\'s gate finds goes back to the model, and three rounds of 
   assert.equal(end.outcome, 'failed');
   assert.equal(end.attempt, 3);
   assert.equal((await versions(h, o.spaceId)).length, 1, 'nothing was stored');
-  const redos = asked(h, '# 任务：改正 plan 里《服务概览》');
+  const redos = asked(h, '# Task: correct the document «Service overview»');
   assert.equal(redos.length, 2);
   for (const prompt of redos) {
-    assert.ok(prompt.includes('[references] 1.1《服务概览》 第 3 节「已知的坑」 · sources.sessions.projects[0]：no project of this account is titled "App 项目"'),
+    assert.ok(prompt.includes('[references] 1.1 «Service overview», section 3 «Known pitfalls» · sources.sessions.projects[0]: no project of this account is titled "App 项目"'),
       'the redo hands the server\'s error back');
   }
   assert.equal(end.errors.length, 1);
@@ -890,17 +894,22 @@ test('a revision keeps the protected document as it is, moves only a convention,
     entryKinds: ['convention'], topics: [], evidence: 'owner 说保存前要校验的原话' } };
   await baseVersion(h, o, { min: 3, max: 3 }, base);
   h.model.script.revise = (round) => (round === 1
-    ? '## 1. 产品 `product` —— 这个服务是什么\n- 1.1 服务概览 `service-overview`｜是什么｜来源：1.1｜含：定位\n'
-      + '- 1.2 存储 `storage`｜怎么存｜来源：1.2｜含：保存\n- 1.3 存储决策 `storage-decisions`｜为什么这么存｜来源：无｜含：决策\n'
-      + '## 2. 开发约定 `dev` —— 给 agent 的约定 [agents]\n- 2.1 测试约定 `testing`｜怎么跑测试｜来源：2.1｜含：go test\n'
-      + '### 移到给 agent 的大类的节\n- 1.1 §3 → 2.1\n- 1.2 §3 → 2.1\n'
-    : '## 1. 产品 `product` —— 这个服务是什么\n- 1.1 服务概览 `service-overview`｜是什么｜来源：1.1｜含：定位\n'
-      + '- 1.2 存储 `storage`｜怎么存｜来源：1.2｜含：保存\n'
-      + '## 2. 开发约定 `dev` —— 给 agent 的约定 [agents]\n- 2.1 测试约定 `testing`｜怎么跑测试与保存前的校验｜来源：2.1｜含：go test；保存前校验\n'
-      + '### 移到给 agent 的大类的节\n- 1.2 §2 → 2.1\n');
-  h.model.script.rewrite = (title) => `标题：${title}\n问题：怎么跑测试？\n读者：写代码的 agent：读完知道怎么跑测试\n含：go test；保存前校验\n篇幅：400–600 字\n`
-    + '### 1. 怎么跑测试 | conventions | 300\n讲什么：用 go test 跑。\n- 代码：src/web/client.ts: render()\n'
-    + '### 2. 保存约定 | conventions | 200\n讲什么：保存前先校验，见 1.2。\n- 会话：项目「App 项目」；关键词 保存；kind convention；要找：owner 说保存前要校验的原话\n';
+    ? '## 1. Product `product` — What this service is\n- 1.1 Service overview `service-overview` | What it is | Sources: 1.1 | Includes: purpose\n'
+      + '- 1.2 Storage `storage` | How it is stored | Sources: 1.2 | Includes: saving\n'
+      + '- 1.3 Storage decisions `storage-decisions` | Why it is stored this way | Sources: none | Includes: decisions\n'
+      + '## 2. Development conventions `dev` — Conventions for the agents [agents]\n- 2.1 Testing conventions `testing` | How to run the tests | Sources: 2.1 | Includes: go test\n'
+      + "### Sections moved into the agents' category\n- 1.1 §3 → 2.1\n- 1.2 §3 → 2.1\n"
+    : '## 1. Product `product` — What this service is\n- 1.1 Service overview `service-overview` | What it is | Sources: 1.1 | Includes: purpose\n'
+      + '- 1.2 Storage `storage` | How it is stored | Sources: 1.2 | Includes: saving\n'
+      + '## 2. Development conventions `dev` — Conventions for the agents [agents]\n'
+      + '- 2.1 Testing conventions `testing` | How to run the tests, and the validation before saving | Sources: 2.1 | Includes: go test; validate before saving\n'
+      + "### Sections moved into the agents' category\n- 1.2 §2 → 2.1\n");
+  // The moved section's session condition is the version's, kept as it is: its keyword and what to look for, as the owner's plan wrote them.
+  h.model.script.rewrite = (title) => `Title: ${title}\nQuestion: How do I run the tests?\nAudience: agents that write code: know how to run the tests once they have read it\n`
+    + 'Includes: go test; validate before saving\nLength: 400–600 characters\n'
+    + '### 1. How to run the tests | conventions | 300\nCovers: run them with go test.\n- Code: src/web/client.ts: render()\n'
+    + '### 2. Saving conventions | conventions | 200\nCovers: validate before saving, see 1.2.\n'
+    + '- Sessions: projects 「App 项目」; keywords 保存; kind convention; look for: owner 说保存前要校验的原话\n';
   const planJobId = await redraft(h, o, '把存储的约定移到开发约定里，篇数不变。');
   const job = await wikiJobOf(h, planJobId);
   assert.equal(job.kind, 'plan_revise');
@@ -911,16 +920,16 @@ test('a revision keeps the protected document as it is, moves only a convention,
   assert.equal(first.server, 0);
   assert.equal(first.checks.docCount, 1);
   assert.equal(first.checks.protected, 2);
-  const catalogues = asked(h, '按 owner 的要求修订 plan 的目录');
+  const catalogues = asked(h, 'revise the catalogue of the plan as the owner asks');
   assert.equal(catalogues.length, 2);
-  assert.ok(catalogues[0].includes('把存储的约定移到开发约定里') && catalogues[0].includes('服务概览 `service-overview`［受保护］') && catalogues[0].includes('§2 保存约定（conventions）'));
+  assert.ok(catalogues[0].includes('把存储的约定移到开发约定里') && catalogues[0].includes('服务概览 `service-overview` [protected]') && catalogues[0].includes('§2 保存约定 (conventions)'));
   for (const want of ['the plan has 4 documents; it must have 3 to 3', 'moves §3 out of 1.1 «服务概览», which is protected',
     'moves §3 «决策与理由» of 1.2, a decisions section: only a conventions section moves']) assert.ok(catalogues[1].includes(want), `the second catalogue does not say ${want}`);
-  const rewrites = asked(h, '# 任务：写新草稿里《测试约定》');
+  const rewrites = asked(h, '# Task: write the audience, scope and outline of «Testing conventions»');
   assert.ok(rewrites.length >= 1);
   const last = rewrites[rewrites.length - 1];
-  assert.ok(last.includes('【现在的 1.2 第 2 节（移入本篇）】'), 'the rewrite was handed the moved section');
-  assert.ok(last.includes('- 会话：项目「App 项目」；关键词 保存；kind convention') && !last.includes(app.id), 'the moved section\'s project is named by its title');
+  assert.ok(last.includes('[Now 1.2, section 2 (moved into this document)]'), 'the rewrite was handed the moved section');
+  assert.ok(last.includes('- Sessions: projects 「App 项目」; keywords 保存; kind convention') && !last.includes(app.id), 'the moved section\'s project is named by its title');
   const stored = await versions(h, o.spaceId);
   assert.equal(stored.length, 2);
   assert.equal(stored[1].base_version, 1);
@@ -930,8 +939,8 @@ test('a revision keeps the protected document as it is, moves only a convention,
   assert.deepEqual(draft.docs[0].sections.map((s: { title: string; key: string }) => [s.key, s.title]), [['s1', '总览'], ['s2', '组件'], ['s3', '已知的坑']]);
   assert.deepEqual(draft.docs[1].sections.map((s: { title: string }) => s.title), ['保存流程', '决策与理由']);
   assert.equal(draft.docs[1].sections[0].key, 's1');
-  assert.deepEqual(draft.docs[2].sections.map((s: { title: string }) => s.title), ['怎么跑测试', '保存约定']);
-  assert.ok(draft.docs[2].sections[1].covers.includes('见 1.2'));
+  assert.deepEqual(draft.docs[2].sections.map((s: { title: string }) => s.title), ['How to run the tests', 'Saving conventions']);
+  assert.ok(draft.docs[2].sections[1].covers.includes('see 1.2'));
   assert.equal(draft.docs[2].sections[1].sources.sessions.projects[0].id, uuidPublic(app.id), 'the title the model wrote is the project\'s id once stored');
 });
 
@@ -947,7 +956,7 @@ test('a job replayed — taken over, or after its draft was stored — asks noth
   let first: Worker | null = worker(h);
   let killed = false;
   h.model.script.onPrompt = async (prompt) => {
-    if (!killed && prompt.includes('第三步 —— 给《')) {
+    if (!killed && prompt.includes('write the outline of «')) {
       killed = true;
       const dying = first!;
       first = null;

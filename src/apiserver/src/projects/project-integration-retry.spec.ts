@@ -217,13 +217,13 @@ test('a failed landing\'s item tells the coordinator its class, and that task_st
     taskId: TASK,
     payload: { jobKind: 'LAND_TASK', check: RED, branchUnchanged: true, failureClass: 'CHECK_FAILED', generation: 1 },
   });
-  assert.match(told, /检查 MERGE_CHECK 的退出码是 1/);
-  assert.match(told, /失败分类：CHECK_FAILED（检查跑完了，退出码与声明不一致）/);
-  assert.match(told, /task_start 只会再跑一遍任务、开一条新分支，不会重新排这次落地/);
-  assert.match(told, /integration_retry（projectId 传 34Y7My8sqhKLWtmCQYv1l，taskId 传 34Y7Utvsd47A14DjMzIzD/);
-  assert.match(told, /这类落地去留由你判，不拿去问账号所有者/);
-  assert.doesNotMatch(told, /再决定是重新跑（task_start）/, 'the old advice sent DONE tasks to task_start');
-  assert.doesNotMatch(told, /这是这项任务的第/, 'a first generation is not a rerun');
+  assert.match(told, /Check MERGE_CHECK exited with code 1/);
+  assert.match(told, /Failure class: CHECK_FAILED \(the check ran to the end, and its exit code disagrees with its declaration\)/);
+  assert.match(told, /task_start only runs the task again on a new branch; it does not queue this landing again/);
+  assert.match(told, /integration_retry \(projectId: 34Y7My8sqhKLWtmCQYv1l, taskId: 34Y7Utvsd47A14DjMzIzD/);
+  assert.match(told, /Whether such a landing goes ahead is yours to judge, not a question for the account owner/);
+  assert.doesNotMatch(told, /then decide whether to run it again \(task_start\)/, 'the old advice sent DONE tasks to task_start');
+  assert.doesNotMatch(told, /This is generation/, 'a first generation is not a rerun');
 });
 
 test('a rerun that failed again says what it reran and why, and not to rerun it as it stands', () => {
@@ -247,10 +247,10 @@ test('a rerun that failed again says what it reran and why, and not to rerun it 
       },
     },
   });
-  assert.match(told, /失败分类：CHECK_TIMED_OUT/);
-  assert.match(told, /这是这项任务的第 2 代落地，由协调会话要求重跑/);
-  assert.match(told, /失败分类是 CHECK_FAILED，重跑的理由是「the runner-go baseline was repaired」/);
-  assert.match(told, /不要再原样重跑/);
+  assert.match(told, /Failure class: CHECK_TIMED_OUT/);
+  assert.match(told, /This is generation 2 of this task’s landing, rerun at the coordinator session’s request/);
+  assert.match(told, /failed with class CHECK_FAILED, and the reason given for the rerun was “the runner-go baseline was repaired”/);
+  assert.match(told, /do not rerun it as it stands/);
 });
 
 test('a conflict\'s item sends the task back rather than to integration_retry', () => {
@@ -270,9 +270,9 @@ test('a conflict\'s item sends the task back rather than to integration_retry', 
       generation: 1,
     },
   });
-  assert.match(told, /integration_retry 也不接受冲突/);
-  assert.match(told, /task_reopen 把任务退回返工/);
-  assert.doesNotMatch(told, /reason 写明这次为什么会不同/);
+  assert.match(told, /integration_retry does not accept a conflict either/);
+  assert.match(told, /send the task back for rework with task_reopen/);
+  assert.doesNotMatch(told, /reason: why this time will be different/);
 });
 
 test('a MAIN_SYNC conflict\'s item says to absorb the upstream on the project line first, then land by MERGE', () => {
@@ -295,20 +295,20 @@ test('a MAIN_SYNC conflict\'s item says to absorb the upstream on the project li
       generation: 1,
     },
   });
-  assert.match(told, /合并冲突（MAIN_SYNC）/);
-  assert.match(told, /冲突在项目线和 upstream 之间，不在这项任务的工作里/);
-  assert.match(told, /只让任务重做自己的工作也解不开/);
-  assert.match(told, /integration_retry 也不接受冲突/);
-  assert.match(told, /先在项目线上吸收 upstream、解决冲突，再落地/);
+  assert.match(told, /Merge conflict \(MAIN_SYNC\)/);
+  assert.match(told, /The conflict is between the project line and the upstream, not in this task’s work/);
+  assert.match(told, /merely having the task redo its own work does not resolve it/);
+  assert.match(told, /integration_retry does not accept a conflict either/);
+  assert.match(told, /Absorb the upstream on the project line and resolve the conflict first, then land/);
   assert.match(told,
-    /在这项任务的源分支上，把项目分支 refs\/heads\/project\/34Y7My8sqhKLWtmCQYv1l 的 tip 和 upstream 的 tip 合进来/);
-  assert.match(told, /提交这个合并提交。任务原来的工作留着，不用重做/);
-  assert.match(told, /按 J-S4 的 MERGE 模式落地，进项目分支的树就是源分支的树/);
-  assert.match(told, /照旧停在 MAIN_SYNC，那就再合一次/);
-  assert.match(told, /先用 task_comment 在任务上写明这一轮只做第 1 步，再用 task_reopen 把它退回/);
-  assert.match(told, /只有这项任务自己的下一次落地不用等/);
-  assert.doesNotMatch(told, /task_reopen 把任务退回返工/, 'a MAIN_SYNC conflict is not the task\'s work to redo');
-  assert.doesNotMatch(told, /reason 写明这次为什么会不同/);
+    /On this task’s source branch, merge in the tip of the project branch refs\/heads\/project\/34Y7My8sqhKLWtmCQYv1l and the tip of the upstream/);
+  assert.match(told, /commit that merge commit\. The task’s original work stays; it does not need redoing/);
+  assert.match(told, /lands in J-S4’s MERGE mode, and the tree that goes into the project branch is the source branch’s tree/);
+  assert.match(told, /the landing stops at MAIN_SYNC as before: then merge once more/);
+  assert.match(told, /first write on the task with task_comment that this round does step 1 only, then send it back with task_reopen/);
+  assert.match(told, /only this task’s own next landing does not wait/);
+  assert.doesNotMatch(told, /send the task back for rework with task_reopen/, 'a MAIN_SYNC conflict is not the task\'s work to redo');
+  assert.doesNotMatch(told, /reason: why this time will be different/);
 });
 
 test('integration_retry still refuses a MAIN_SYNC conflict, and says to absorb the upstream on the project line', () => {
@@ -525,13 +525,13 @@ test('a blocked candidate\'s item names the door that checks it again, and that 
     promotionId: CANDIDATE,
     payload: { jobKind: 'CHECK_PROMOTION', check: RED, branchUnchanged: true, failureClass: 'CHECK_FAILED', generation: 1 },
   });
-  assert.match(told, /这条待办身后没有任务/);
-  assert.match(told, /integration_retry（projectId 传 34Y7My8sqhKLWtmCQYv1l，promotionId 传 /);
-  assert.match(told, /合并照旧由账号所有者在卡上确认，或由 Automatic 设置按原来的规则自动合并/);
-  assert.match(told, /这条待办显示为处理中、仍然开着/);
-  assert.match(told, /检查通过了，它自动标为已处理（HANDLED）/);
-  assert.match(told, /它标为已取代（RETRIED），新的失败另开一条待办/);
-  assert.doesNotMatch(told, /今天也没有一条属于协调会话的重试门/, 'the old text sent the coordinator to the owner');
+  assert.match(told, /No task stands behind this item/);
+  assert.match(told, /integration_retry \(projectId: 34Y7My8sqhKLWtmCQYv1l, promotionId: /);
+  assert.match(told, /the merge is still confirmed by the account owner on the card, or done automatically by the Automatic setting under its usual rule/);
+  assert.match(told, /this item shows as being handled and stays open/);
+  assert.match(told, /if the check passes, it is marked handled \(HANDLED\) automatically/);
+  assert.match(told, /it is marked superseded \(RETRIED\), and the new failure opens an item of its own/);
+  assert.doesNotMatch(told, /there is no retry door that belongs to the coordinator/, 'the old text sent the coordinator to the owner');
 
   const again = openItemMessage({
     id: '01a0f5c9-0000-7000-8000-000000000006',
@@ -548,8 +548,8 @@ test('a blocked candidate\'s item names the door that checks it again, and that 
       retry: { retryOfJobId: '01a0f5c8-0000-7000-8000-000000000007', failureClass: 'CHECK_FAILED', reason: 'main\'s baseline was repaired' },
     },
   });
-  assert.match(again, /这是这个合入 main 的候选的第 2 次检查，由协调会话要求重跑/);
-  assert.match(again, /重跑的理由是「main's baseline was repaired」/);
+  assert.match(again, /This is check 2 of this candidate for merging into main, rerun at the coordinator session’s request/);
+  assert.match(again, /the reason given for the rerun was “main's baseline was repaired”/);
 
   const conflicted = openItemMessage({
     id: '01a0f5c9-0000-7000-8000-000000000008',
@@ -560,10 +560,10 @@ test('a blocked candidate\'s item names the door that checks it again, and that 
     promotionId: CANDIDATE,
     payload: { jobKind: 'CHECK_PROMOTION', phase: 'MERGE', files: ['src/web/src/pages/ProjectsPage.tsx'], failureClass: 'CONFLICT', generation: 1 },
   });
-  assert.match(conflicted, /integration_retry 也不接受冲突/);
-  assert.match(conflicted, /用 task_create 新建一条同步任务，从项目分支 tip 出发把 upstream tip 合进它的源分支/);
-  assert.match(conflicted, /解掉冲突并提交/);
-  assert.doesNotMatch(conflicted, /promotionId 传/);
+  assert.match(conflicted, /integration_retry does not accept a conflict either/);
+  assert.match(conflicted, /File a sync task with task_create that starts from the project branch tip and merges the upstream tip into its source branch/);
+  assert.match(conflicted, /resolving the conflict and committing it/);
+  assert.doesNotMatch(conflicted, /promotionId: /);
 });
 
 test('a task landing\'s item says the rerun leaves it open and handled, and how it ends either way', () => {
@@ -575,9 +575,9 @@ test('a task landing\'s item says the rerun leaves it open and handled, and how 
     taskId: TASK,
     payload: { jobKind: 'LAND_TASK', check: RED, branchUnchanged: true, failureClass: 'CHECK_FAILED', generation: 1 },
   });
-  assert.match(told, /用 integration_retry 重排后，这条待办显示为处理中、仍然开着/);
-  assert.match(told, /落地了，它自动标为已处理（HANDLED），记下你的会话和理由/);
-  assert.doesNotMatch(told, /它会带着你的理由被标成已取代/, 'the old text closed the item at the moment of the rerun');
+  assert.match(told, /After you requeue its landing with integration_retry, this item shows as being handled and stays open/);
+  assert.match(told, /if it lands, it is marked handled \(HANDLED\) automatically, with your session and reason recorded/);
+  assert.doesNotMatch(told, /marked superseded with your reason/, 'the old text closed the item at the moment of the rerun');
 });
 
 /**

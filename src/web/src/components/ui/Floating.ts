@@ -112,8 +112,12 @@ export function useDropdownPlacement(open: boolean, anchor: RefObject<Element | 
     const x = atStart ? startX : endX;
     // Held by its right inset, an end-aligned list keeps the fractional left edge of its width there;
     // Base UI rounds the position, so the remainder is handed back as a relative offset, which moves
-    // the list in layout without resizing the positioner it is measured by.
-    positioner.current?.style.setProperty('--orbit-dropdown-subpixel', `${x - Math.round(x)}px`);
+    // the list in layout without resizing the positioner it is measured by. The fraction is read off the
+    // list's own box: Floating UI takes the width from the computed style, a few decimals short of the
+    // layout's 1/64px, which put the list's right edge 1/64px short and a level down that starts there,
+    // rounded down, a pixel left of the replaced one (P5.3).
+    const exactX = atStart ? x : Math.ceil(rect.right) - (positioner.current?.getBoundingClientRect().width || width);
+    positioner.current?.style.setProperty('--orbit-dropdown-subpixel', `${exactX - Math.round(x)}px`);
     // Whichever alignment is being placed, the offset lands its edge on x.
     return data.align === 'end' ? rect.right - width - x : x - rect.left;
   };
@@ -129,9 +133,10 @@ export function useDropdownPlacement(open: boolean, anchor: RefObject<Element | 
  *
  * Base UI's flip decides by the visual viewport less its collision padding, then tries the other axis, so the
  * side rc-trigger did not take is offered to it out of reach and the flip lands on the one rc-trigger took.
- * The vertical alignment is still Base UI's flip and shift.
+ * The vertical alignment is still Base UI's flip and shift. With `slide`, a submenu that hangs off the layout
+ * viewport after the flip is moved back into it, over its own menu, as rc-trigger's shiftX moved it.
  */
-export function useSubmenuPlacement(anchor: RefObject<Element | null>) {
+export function useSubmenuPlacement(anchor: RefObject<Element | null>, slide = false) {
   const positioner = useRef<HTMLDivElement>(null);
   const sideOffset = ({ side, positioner: { width } }: OffsetData) => {
     const rect = anchor.current?.getBoundingClientRect();
@@ -140,7 +145,10 @@ export function useSubmenuPlacement(anchor: RefObject<Element | null>) {
     const shown = (x: number) => Math.max(0, Math.min(right, x + width) - Math.max(0, x));
     const flipped = rect.right + width > right && shown(rect.left - width) >= shown(rect.right);
     if (flipped !== (side === 'left')) return 1e6; // out of reach
-    const x = flipped ? Math.floor(rect.left - width) : Math.floor(rect.right);
+    let x = flipped ? Math.floor(rect.left - width) : Math.floor(rect.right);
+    // `slide`: what still hangs off the layout viewport after the flip comes back into it, over the submenu's own menu,
+    // as a placement with rc-trigger's shiftX did (the composer's model menu on a phone).
+    if (slide) x = Math.max(0, Math.min(x, right - width));
     positioner.current?.style.setProperty('--orbit-submenu-room', `${right - x}px`);
     return flipped ? rect.left - width - x : x - rect.right;
   };

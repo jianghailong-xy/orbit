@@ -46,6 +46,8 @@ data class PromotionReceipt(val promotion: JsonObject, val moment: String) {
  */
 object PromotionCards {
     const val mergeToMain = "Merge to main"
+    /** The press, said of the branch the merge goes into — [mergeToMain] for a project on main (web's `mergeTo`). */
+    fun mergeTo(main: String) = "Merge to $main"
     const val notNow = "Not now"
     const val merging = "Merging…"
     const val cancel = "Cancel"
@@ -53,8 +55,12 @@ object PromotionCards {
     /** §7.5's provenance mark. */
     const val provenance = "FROM ORBIT"
     const val mergedHeading = "✓ Merged into main"
+    fun mergedHeading(main: String) = "✓ Merged into $main"
     /** C's heading when nobody pressed Merge: the receipt is the only place the owner learns the Automatic setting merged it. */
     const val mergedAutomaticallyHeading = "✓ Merged into main automatically"
+    fun mergedAutomaticallyHeading(main: String) = "✓ Merged into $main automatically"
+    /** The receipt's row of what the merge put on the branch it went into: "Now on main". */
+    fun nowOn(main: String) = "Now on $main"
     /** Who merged it, where a pressed merge says "by you". */
     const val underAutomatic = "under your Automatic setting"
     /** What a merge the read no longer publishes says about itself, rather than vanishing. */
@@ -81,6 +87,8 @@ object PromotionCards {
     fun isMerging(view: JsonObject) = view.text("state") in setOf("CONFIRMED", "RECHECKING")
     private fun job(view: JsonObject) = view.obj("execution")
     private fun into(view: JsonObject) = shortRef(view.text("upstreamRef") ?: "main")
+    /** The branch a candidate merges into, as every sentence about it names it: its `upstreamRef`, short; main when it says none. */
+    fun mainBranch(view: JsonObject) = into(view)
     private fun branch(view: JsonObject) = shortRef(view.text("sourceRef").orEmpty())
     private fun merged(view: JsonObject) = view.obj("merged")
     private fun automatic(view: JsonObject) = (merged(view)?.get("automatic") as? JsonPrimitive)?.booleanOrNull == true
@@ -112,7 +120,7 @@ object PromotionCards {
     /** The card's heading, per state — the receipt's title once it has merged. */
     fun title(view: JsonObject): String = when (stage(view)) {
         PromotionStage.MERGING -> mergingTitle(view)
-        PromotionStage.MERGED -> if (automatic(view)) mergedAutomaticallyHeading else mergedHeading
+        PromotionStage.MERGED -> if (automatic(view)) mergedAutomaticallyHeading(into(view)) else mergedHeading(into(view))
         PromotionStage.BLOCKED -> "${branch(view)} can’t merge into ${into(view)} yet"
         else -> "Merge ${branch(view)} into ${into(view)}?"
     }

@@ -64,7 +64,7 @@
 
 ```
 <orbit-session-message from-session="<publicId>" from-title="…" from-agent="…" task="<publicId>">
-这条消息来自另一个 Orbit 会话，不是账号 owner 本人。
+This message comes from another Orbit session, not from the account owner.
 </orbit-session-message>
 ```
 
@@ -164,9 +164,9 @@ session_reply({ requestId, message?, option? })
 
 ```
 <orbit-session-message from-session="…" from-title="…" from-agent="…" request-id="…" reply-by="2026-10-02T09:30:00Z">
-这条消息来自另一个 Orbit 会话，不是账号 owner 本人。
-对方在等你回复：处理完后调用 session_reply(requestId="…") 回答；做不到也用它说明原因。
-如果你空闲下来时还没回复，平台会以 NO_REPLY 结案，并把你最后一段输出转给对方。
+This message comes from another Orbit session, not from the account owner.
+The sender is waiting for your reply: when you have dealt with it, answer with session_reply(requestId="…"); if you cannot do it, use it to say why.
+If you go idle without having replied, Orbit closes the request as NO_REPLY and passes your last output on to the sender.
 </orbit-session-message>
 ```
 
@@ -224,13 +224,13 @@ run 结束时顺带清掉了队列，`UNDELIVERED` 和 `RECIPIENT_ENDED` 同时�
 
   ```
   <orbit-session-reply request-id="…" from-session="…" from-title="…" outcome="REPLIED">
-  你问的是：……
-  回复：……
+  You asked: …
+  Reply: …
   </orbit-session-reply>
   ```
 
   以 steer 投递时，每个块在开头多一行，说明它是加进当前这一轮的（同 bg-wake 的 `WAKE_HEADS`）：
-  「你正在工作，所以这条回信加进了你当前这一轮，没有为它另开一轮。」排队列表按 turn 自身的 kind 生成同样的字节。
+  「You are working, so this reply was added to the turn you are in; no turn was opened for it.」排队列表按 turn 自身的 kind 生成同样的字节。
 - **合并**只在同一路线内：要写进运行中这一轮的结局，只并入仍在等同一个 target turn、runner 还没领走的 reply steer；
   要等下一轮的结局，只并入排队中的下一轮回信 turn。两条路线互不合并；runner 已领走或引擎已确认的 steer 不再被并入，
   之后到的结局另起一个 steer。5 个 worker 几乎同时回复，发送方只收到一次，而不是 5 次。

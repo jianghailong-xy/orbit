@@ -19,6 +19,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -33,6 +34,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import io.orbitd.android.composer.ProviderEngines
 import io.orbitd.android.navigation.Destination
 import io.orbitd.android.navigation.ObjectId
 import io.orbitd.android.navigation.OrbitRoute
@@ -155,7 +157,7 @@ private fun ProvidersOverview(api: ManagementApi, revision: Long, open: (OrbitRo
         }
         FormSection("Your API keys", footer = "On your account and usable from every runner — billed per token. Adding or changing a key happens on the web.") {
             if (model.keys.isEmpty()) Text("No keys yet", Modifier.padding(vertical = 8.dp), color = Ink.muted)
-            model.keys.forEachIndexed { index, key ->
+            KeyEngines.byVendor(model.keys).forEachIndexed { index, key ->
                 if (index > 0) HorizontalDivider()
                 // A DeepSeek key's row ends with its account's balance and opens the key's page (iOS 936ebbd3c).
                 val deepSeek = DeepSeekBalance.key(key, model.mine)?.str("id")
@@ -164,6 +166,8 @@ private fun ProvidersOverview(api: ManagementApi, revision: Long, open: (OrbitRo
                     Column(Modifier.weight(1f)) {
                         Text(key.str("label") ?: key.text("slug"))
                         providerKeyLine(key)?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Ink.muted) }
+                        // Every engine it runs on (board 1 ③④): one key, under each engine that can spend it.
+                        KeyEngines.line(key)?.let { Text(it, Modifier.testTag("key-engines"), style = MaterialTheme.typography.bodySmall, color = Ink.muted) }
                     }
                     if (deepSeek != null) {
                         DeepSeekBalance.rowValue(DeepSeekBalance.state(model.balances[deepSeek]))?.let {
@@ -176,6 +180,49 @@ private fun ProvidersOverview(api: ManagementApi, revision: Long, open: (OrbitRo
         }
         Spacer(Modifier.height(48.dp))
     }
+}
+
+/**
+ * What the API keys list and a key's page say about the engines a key runs on (boards 1 ③④ and 2): the server's answer, each key's
+ * `engines` with its default first (docs/provider-engine-contract.md §6.3) — only the server, holding the key, can tell a Claude
+ * subscription token, which runs on Claude Code alone. A key is never named after one of its engines.
+ */
+internal object KeyEngines {
+    const val WORKS_WITH_FOOTER = "Pick it for a session on any of these in the composer's model menu → Provider."
+    const val KEY = "Key"
+    const val PROTOCOL = "Protocol"
+
+    /** The engines [key] runs on, its default first. */
+    fun engines(key: JsonObject): List<String> = ProviderEngines.providerEngines(key.str("slug"), listOf(key))
+
+    /** A Claude subscription token: the one key on Anthropic's protocol that only Claude Code runs — as the server says; a payload
+     * from before `engines` says nothing of it. */
+    fun subscriptionToken(key: JsonObject) = key["engines"] is JsonArray &&
+        ProviderEngines.keyDialect(key.str("runtime")) == "anthropic" && engines(key) == listOf(ProviderEngines.CLAUDE)
+
+    /** The line under a key's default model: `Claude Code · OpenCode · DeepSeek Harness`, `Claude Code · subscription token`. */
+    fun line(key: JsonObject): String? = engines(key).takeIf { it.isNotEmpty() }
+        ?.let { engines -> engines.map(ProviderEngines::cliName) + listOfNotNull(DeepSeekBalance.SUBSCRIPTION_TOKEN.takeIf { subscriptionToken(key) }) }
+        ?.joinToString(RunnerCopy.SEP)
+
+    /** The protocol a key's endpoint speaks, its row's `runtime` (web `runtimeSummary`) — not an engine: a key runs on several. */
+    fun protocol(runtime: String?) = when (runtime) {
+        ProviderEngines.CODEX -> "OpenAI-compatible"; ProviderEngines.KIMI -> "Moonshot API"; ProviderEngines.ANTIGRAVITY -> "Gemini API"
+        else -> "Anthropic-compatible"
+    }
+
+    /** A key's page footer: where it changes, and that turning it off there stops it on every engine it runs on. */
+    fun footer(engines: List<String>) = if (engines.isEmpty()) DeepSeekBalance.EDIT_ON_WEB
+        else "${DeepSeekBalance.EDIT_ON_WEB} Turning it off there stops it on ${andList(engines)}."
+
+    private fun andList(names: List<String>) = if (names.size == 1) names.single() else names.dropLast(1).joinToString(", ") + " and " + names.last()
+
+    /** The vendor a key belongs to, by its preset: a Harness key is DeepSeek's, a key with none is Custom. */
+    fun vendorOf(presetSlug: String?) = when { presetSlug.isNullOrEmpty() -> "custom"; presetSlug == "deepseek-harness" -> "deepseek"; else -> presetSlug }
+
+    /** The keys with each vendor's together (board 1 ③), the vendors in the order of each one's first key, and each vendor's keys in
+     * the list's own order. */
+    fun byVendor(keys: List<JsonObject>): List<JsonObject> = keys.groupBy { vendorOf(it.str("presetSlug")) }.values.flatten()
 }
 
 @Composable
