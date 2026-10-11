@@ -404,6 +404,11 @@ final class AgentsModel {
         // revalidates in place. Compare before overwriting `lastSessionQuery` with the new query.
         let sameList = lastSessionQuery.map { $0.agentID == agentID && $0.view == view } ?? false
         lastSessionQuery = (agentID, view)
+        // Switching workspace or view doesn't stop a fetch already on the wire (the transport is
+        // callback-based; task cancellation doesn't reach URLSession), so its late reply lands here
+        // after the switch. Only the load still named by `lastSessionQuery` may write — an older
+        // one returns without touching the list, the spinner, or the error of its replacement.
+        let isCurrent = { lastSessionQuery.map { $0.agentID == agentID && $0.view == view } ?? false }
         if reset && !sameList {
             // With the app's Open snapshot in hand an Open list has its rows already: show them and
             // let the fetch below refresh them in place.
@@ -414,22 +419,23 @@ final class AgentsModel {
                 sessionsLoading = true
             }
         }
-        defer { sessionsLoading = false }
+        defer { if isCurrent() { sessionsLoading = false } }
         // The app already keeps the Open list: refresh it through the app's one fetch rather than
         // a second of the same list beside it. A failed one falls through to this list's own, which
         // says what went wrong.
         if view == .open, let refreshOpen, let all = await refreshOpen() {
-            adoptOpen(all, agentID: agentID)
+            if isCurrent() { adoptOpen(all, agentID: agentID) }
             return
         }
         do {
             let read = try await api.listSessions(view: view)
+            guard isCurrent() else { return }
             let all = SessionFilter.removing(trashing, from: read)
             #if os(iOS)
             allSessions = all
             #endif
             agentSessions = SessionFilter.forAgent(all, agentID: agentID, view: view)
-        } catch { errorText = friendly(error) }
+        } catch { if isCurrent() { errorText = friendly(error) } }
     }
 
     /// Silently refresh the currently-shown session list (after a pin/complete/delete row action).
