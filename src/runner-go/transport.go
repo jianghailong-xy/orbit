@@ -19,6 +19,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 )
 
 const (
@@ -605,6 +606,25 @@ func (t *Transport) turnComplete(ctx context.Context, sessionID string, b TurnCo
 		status = stAwaitingInput
 	}
 	return status, nil
+}
+
+// turnSuggestion asks the control plane for its guess at the person's next message after a
+// turn an engine without native suggestions finished (docs/prompt-suggestions-design.md §8
+// P2). One shot, deliberately not retried: the guess is worth something only while the person
+// is still looking at the answer it was predicted from, and the next turn asks again.
+func (t *Transport) turnSuggestion(ctx context.Context, sessionID, turnID string) (string, bool) {
+	var r struct {
+		Suggestion string `json:"suggestion"`
+	}
+	err := t.do(ctx, "POST", "/runner/sessions/"+sessionID+"/turns/"+turnID+"/suggestion", map[string]string{}, &r, 40*time.Second)
+	if err != nil {
+		return "", false
+	}
+	text := strings.TrimSpace(r.Suggestion)
+	if text == "" || utf8.RuneCountInString(text) > maxPromptSuggestionRunes {
+		return "", false
+	}
+	return text, true
 }
 
 // releaseTurnLeases expires any inbox leases held by an engine that was

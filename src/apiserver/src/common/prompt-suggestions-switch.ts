@@ -20,11 +20,14 @@ export function promptSuggestionsEnabled(owner: { preferences: unknown }): boole
 const CONVERSED_RUN_SOURCES: ReadonlySet<string> = new Set(['MANUAL', 'PROJECT_COORDINATOR']);
 
 /**
- * Whether a claim (or reclaim) spawns Claude Code with `--prompt-suggestions` (design §3.1): the
- * owner wants them, the engine is Claude talking to an endpoint the suggestion was measured on, a
- * person converses in the session, and it is not a Wiki maintenance run. The suggestion is one
- * more request on the session's own account or key, so any other configured provider's endpoint
- * (the ANTHROPIC_BASE_URL its env injects) leaves it off.
+ * Whether a claim (or reclaim) asks for a next-message guess after each turn (design §3.1): the
+ * owner wants them, a person converses in the session, and it is not a Wiki maintenance run. What
+ * the flag means depends on the engine. Claude Code is spawned with `--prompt-suggestions`, and
+ * the suggestion is one more request on the session's own account or key, so only an endpoint the
+ * suggestion was measured on qualifies — any other configured provider's endpoint (the
+ * ANTHROPIC_BASE_URL its env injects) leaves it off. Every other engine has no such flag
+ * (design §1.2): the runner asks the server to generate the guess with DeepSeek instead
+ * (design §8 P2), which only a server holding a DeepSeek key can answer.
  */
 export function claimPromptSuggestions(claim: {
   /** Optional like resolvePermissionMode's: the claim reads it beside that, from the same row. */
@@ -37,14 +40,18 @@ export function claimPromptSuggestions(claim: {
   maintenance: unknown;
   env: Record<string, string> | null | undefined;
 }): boolean {
-  return (
-    claim.provider === AgentProvider.CLAUDE &&
-    CONVERSED_RUN_SOURCES.has(claim.runSource) &&
-    !(claim.spawnDepth > 0) &&
-    claim.maintenance == null &&
-    talksToMeasuredEndpoint(claim.env) &&
-    promptSuggestionsEnabled({ preferences: claim.owner?.preferences })
-  );
+  if (
+    !CONVERSED_RUN_SOURCES.has(claim.runSource) ||
+    claim.spawnDepth > 0 ||
+    claim.maintenance != null ||
+    !promptSuggestionsEnabled({ preferences: claim.owner?.preferences })
+  ) {
+    return false;
+  }
+  if (claim.provider === AgentProvider.CLAUDE) {
+    return talksToMeasuredEndpoint(claim.env);
+  }
+  return !!process.env.DEEPSEEK_API_KEY?.trim();
 }
 
 /** The endpoints the suggestion request has been measured on (design §1.3): Anthropic's own, which
