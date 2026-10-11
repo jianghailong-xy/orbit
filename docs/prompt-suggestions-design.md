@@ -232,9 +232,9 @@ transcript reducer 里加三行，按 seq 顺序回放，结果天然正确：
 
 - **位置**：输入卡片里文字那一行，也就是 placeholder「Message…」的位置。有建议时 placeholder 换成建议原文，
   行尾没有按钮。卡片高度不变（空闲 91pt），对话区一点不动。
-- **样式**：建议文字用系统 placeholder 色（`.placeholderText`），单行，尾部截断。在这台设备上第一次拍两下之前，
-  灰字后面紧跟一行小字 **Double-tap to use**（`.footnote`，同一个灰），拍中过一次就不再出现（记在本机
-  `UserDefaults` 的 `composer.suggestionDoubleTapLearned`）。发送键保持灰色：空输入框不会因为有建议就能发。
+- **样式**：建议文字用系统 placeholder 色（`.placeholderText`），单行，尾部截断。灰字后面紧跟一行小字
+  **Double-tap to use**（`.footnote`，同一个灰），一直在（2026-10-11 前是拍中一次后不再出现，§9 补充三）。
+  发送键保持灰色：空输入框不会因为有建议就能发。
 - **拍两下**：在输入框那一行拍两下，把文字填进输入框，光标放在末尾，键盘起来，轻震一下；**不发送**。
   可以接着改，也可以直接点发送。有建议时，输入框自己的点按要等双击判定落空（约 0.3 秒）才生效：键盘若在第一下
   就起来，会把输入卡片一起顶上去，第二下就落到键盘上了（拼音键盘上是一个候选字）。所以只点一下时键盘晚约 0.3 秒
@@ -269,7 +269,7 @@ transcript reducer 里加三行，按 seq 顺序回放，结果天然正确：
   placeholder 让空，`.composer-suggestion` 叠在 `.composer-field` 第一行上：灰字单行截断，后面紧跟一个 `Tab`
   键帽（左栏 Search 的 `⌘K` 那种），没有按钮。键帽只在有鼠标的设备上（`hover: hover`）、光标在输入框里时出现：
   光标在别处时按 Tab 是切焦点，不会填入。触屏（`hover: none`）没有 Tab 键，和 iPhone 一样拍两下填入：灰字后面
-  跟 Double-tap to use（拍中过一次就不再出现，记在 localStorage 的 `orbit.suggestionDoubleTapLearned`），
+  跟 Double-tap to use（一直在，§9 补充三），
   textarea 上两次点按相隔 ≤ 300 ms、相距 ≤ 24 px 算拍两下，第二下 `preventDefault`。输入框还没聚焦时第一下也先
   扣住（`preventDefault`，理由同 §4.1），300 ms 内没有第二下再交还给输入框（`focus()`：这么短的定时器还带着这次
   点按的用户手势，键盘照样起来）；已聚焦时第一下照常。`.composer-field` 加
@@ -281,7 +281,7 @@ transcript reducer 里加三行，按 seq 顺序回放，结果天然正确：
 - **macOS / iPad**：和 iPhone 是同一个 SwiftUI `ComposerView`。iPad 同 iPhone（拍两下）；macOS 不变：`TextField`
   另接 `.onKeyPress(keys: [.tab])`，行尾是 `Use ⇥` 胶囊。
 - **Android**：`SessionComposer.kt` 的 `OutlinedTextField` 用 placeholder 写灰字（单行截断，后跟提示小字，
-  SharedPreferences `orbit.composer` 记用过），没有 trailingIcon。输入框没聚焦时，上面盖一层只收点按的透明层
+  一直在），没有 trailingIcon。输入框没聚焦时，上面盖一层只收点按的透明层
   （`SuggestionTaps`，Compose 自己的 `detectTapGestures`）：拍两下填入，单点（或长按）等双击超时才交还为聚焦、
   起键盘，理由同 §4.1。没用 Initial 阶段扣住第一下的办法，是因为输入框自己的选字手势不看 consume，第二下的按下
   就会让它聚焦。已聚焦时去掉这层，第一下照常交给输入框，第二下的抬起不交给它（`Modifier.doubleTapToUse`：
@@ -395,10 +395,13 @@ transcript reducer 里加三行，按 seq 顺序回放，结果天然正确：
 
 | # | 问题 | 定了 | 没选的 |
 | --- | --- | --- | --- |
-| 1 | 拍两下的提示 | **灰字后面紧跟小字 Double-tap to use，在这台设备上拍中一次后不再出现** | 一直显示；不显示 |
+| 1 | 拍两下的提示 | **灰字后面紧跟小字 Double-tap to use，在这台设备上拍中一次后不再出现**（2026-10-11 改为一直显示，补充三） | 一直显示；不显示 |
 | 2 | 范围 | **触屏一起改：iPhone、iPad、手机网页、Android** | 先只改 iPhone、iPad，手机网页和 Android 留 Use |
 
 拍两下和 Use 一样只填不发（§9-②不变）。Mac App 和桌面网页有键盘，不动（Tab）。
+
+**补充三（owner，2026-10-11）**：拍两下的提示改为**一直显示**（iPhone、iPad、手机网页、Android 一起），不再
+拍中一次就退休；本机不再记 `composer.suggestionDoubleTapLearned` 这类标记。
 
 实现时偏离效果图两处：④ 画的是第一下就起键盘。键盘一起，输入卡片跟着上移，快速的第二下会落到键盘上，
 所以有建议时第一下先等双击判定（约 0.3 秒）再起键盘（§4.1）。⑥ 画的是点两次出 Paste；iPhone 上输入框的点按

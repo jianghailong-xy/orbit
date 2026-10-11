@@ -874,9 +874,6 @@ const SESSION_COL_DEFAULT = 320;
 // Whether the session list's Pinned section is folded to its heading, persisted across reloads.
 const PINNED_COLLAPSED_KEY = 'orbit.sessionPinnedCollapsed';
 
-// Set by the first double-tap that takes a suggestion on this device: from then on a touch screen's
-// grey line is the guess alone, without "Double-tap to use" after it (prompt-suggestions-design §4.3).
-const SUGGESTION_TAP_LEARNED_KEY = 'orbit.suggestionDoubleTapLearned';
 // Two taps on the composer this close in time and place are one double-tap (the platforms' own
 // double-tap window).
 const DOUBLE_TAP_MS = 300;
@@ -7363,9 +7360,6 @@ export function WorkspaceView({
   // regex match, so the menu auto-hides).
   const taRef = useRef<HTMLTextAreaElement>(null);
   const suggestionHintId = useId();
-  const [suggestionTapLearned, setSuggestionTapLearned] = useState(
-    () => localStorage.getItem(SUGGESTION_TAP_LEARNED_KEY) === '1',
-  );
   // The composer's last tap on a touch screen, to tell a double-tap from two taps; `held` is the
   // timer that hands a held first tap on as the box's focus.
   const lastComposerTap = useRef<{ at: number; x: number; y: number; held?: number } | null>(null);
@@ -9351,10 +9345,6 @@ export function WorkspaceView({
       lastComposerTap.current = null;
       e.preventDefault();
       acceptSuggestion();
-      if (!suggestionTapLearned) {
-        setSuggestionTapLearned(true);
-        localStorage.setItem(SUGGESTION_TAP_LEARNED_KEY, '1');
-      }
       return;
     }
     const box = e.currentTarget;
@@ -11281,17 +11271,14 @@ export function WorkspaceView({
                 {offeredSuggestion}
               </span>
               {/* The grey line itself says how to take it, and there is no button to see: Tab with a
-                  keyboard, a double-tap on the box on a touch screen (the hint goes once one has
-                  worked on this device). Which shows is CSS's call. Drawn in
+                  keyboard, a double-tap on the box on a touch screen. Which shows is CSS's call. Drawn in
                   docs/mocks/prompt-suggestions-web-tab and docs/mocks/prompt-suggestion-double-tap. */}
               <kbd className="composer-suggestion-key" aria-hidden="true">
                 Tab
               </kbd>
-              {!suggestionTapLearned && (
-                <span className="composer-suggestion-tap" aria-hidden="true">
-                  Double-tap to use
-                </span>
-              )}
+              <span className="composer-suggestion-tap" aria-hidden="true">
+                Double-tap to use
+              </span>
               {/* For a screen reader on a touch screen, whose own double-tap is "activate": hidden
                   from the eye there, and gone with a keyboard, which has Tab. */}
               <button
