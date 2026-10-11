@@ -46,7 +46,7 @@ import type { DerivedProjectDoneReading } from './project-done-derived';
 
 /** The title a judgment session is filed under, next to `coordinatorSessionTitle`'s `协调：`. */
 export function judgmentSessionTitle(projectTitle: string): string {
-  return `判断：${projectTitle}`.slice(0, 80);
+  return `Judgment: ${projectTitle}`.slice(0, 80);
 }
 
 /**
@@ -65,41 +65,45 @@ export function describeWakeFact(fact: WakeFact): string {
   switch (fact.event) {
     case 'ATTEMPT_ENDED_UNSETTLED':
       return (
-        `任务 ${uuidToBase62(fact.subjectId)} 的一次会话结束了，而这个任务当时的状态是 ` +
-        `${String(detail.taskStatus ?? '未知')}——不是终态。`
+        `A session of task ${uuidToBase62(fact.subjectId)} ended, and the task’s status at that moment was ` +
+        `${String(detail.taskStatus ?? 'unknown')} — not a terminal state.`
       );
     case 'ATTEMPT_BUDGET_SPENT':
       return (
-        `任务 ${uuidToBase62(fact.subjectId)} 的一次尝试用完了 ${String(detail.dimension ?? '某一条')} ` +
-        '这条 attempt 预算。'
+        `An attempt at task ${uuidToBase62(fact.subjectId)} used up the attempt budget for ` +
+        `${String(detail.dimension ?? 'one of its dimensions')}.`
       );
     case 'PROJECT_TASKS_SETTLED':
-      return `这个项目下的 ${String(detail.taskCount ?? '全部')} 个任务都到了终态（DONE 或 CANCELLED）。`;
+      return (
+        `All ${String(detail.taskCount ?? 'the')} tasks in this project have reached a terminal state `
+        + '(DONE or CANCELLED).'
+      );
     case 'PROJECT_ACCEPTANCE_LANDED':
       return (
-        `这个项目下的 ${String(detail.taskCount ?? '全部')} 个任务都到了终态，`
-        + `而且它声明的 ${settledCriteriaOf(fact).length} 条验收标准每一条都已满足、`
-        + '并且有合并回执证明成果在默认分支上。'
+        `All ${String(detail.taskCount ?? 'the')} tasks in this project have reached a terminal state, `
+        + `and every one of the ${settledCriteriaOf(fact).length} acceptance criteria it states is satisfied `
+        + 'and has a merge receipt proving its work is on the default branch.'
       );
     case 'CRITERION_READY':
       return (
-        `服务验收标准 ${String(detail.criterionKey ?? fact.subjectId)} 的 ` +
-        `${String(detail.taskCount ?? '全部')} 个任务都 DONE 了。`
+        `All ${String(detail.taskCount ?? 'the')} tasks serving acceptance criterion ` +
+        `${String(detail.criterionKey ?? fact.subjectId)} are DONE.`
       );
     case 'CRITERION_UNLANDED':
       return (
-        `服务验收标准 ${String(detail.criterionKey ?? fact.subjectId)} 的 ` +
-        `${String(detail.taskCount ?? '全部')} 个任务都 DONE 了，但没有任何合并回执能证明这些成果` +
-        `已经在默认分支上（落地判定：${String(detail.landing ?? '未知')}）。`
+        `All ${String(detail.taskCount ?? 'the')} tasks serving acceptance criterion ` +
+        `${String(detail.criterionKey ?? fact.subjectId)} are DONE, but no merge receipt proves that their ` +
+        `work is already on the default branch (landing: ${String(detail.landing ?? 'unknown')}).`
       );
     case 'PROJECT_BLOCKER_RAISED': {
       const paths = Array.isArray(detail.paths)
         ? detail.paths.filter((path): path is string => typeof path === 'string')
         : [];
-      const pathText = paths.length > 0 ? `，涉及 ${paths.join('、')}` : '';
+      const pathText = paths.length > 0 ? `, involving ${paths.join(', ')}` : '';
       return (
-        `任务「${String(detail.taskTitle ?? uuidToBase62(fact.subjectId))}」触发了 `
-        + `project blocker ${String(detail.blockerKind ?? 'UNKNOWN')}${pathText}，需要账号所有者裁决。`
+        `Task “${String(detail.taskTitle ?? uuidToBase62(fact.subjectId))}” raised `
+        + `project blocker ${String(detail.blockerKind ?? 'UNKNOWN')}${pathText}; `
+        + 'it needs the account owner’s ruling.'
       );
     }
     case 'COMPLETION_EVIDENCE_REVISED':
@@ -108,13 +112,14 @@ export function describeWakeFact(fact: WakeFact): string {
       // names the project it came from (`completionEvidenceRevisedFact`'s `movedFromProjectId`).
       return (
         (typeof detail.title === 'string'
-          ? `任务「${detail.title}」（${uuidToBase62(fact.subjectId)}）`
-          : `任务 ${uuidToBase62(fact.subjectId)} `)
+          ? `Task “${detail.title}” (${uuidToBase62(fact.subjectId)})`
+          : `Task ${uuidToBase62(fact.subjectId)}`)
         + (typeof detail.movedFromProjectId === 'string'
-          ? `带着还没判定的第 ${String(detail.evidenceRevision ?? '未知')} 版完成证据，经账号所有者确认`
-            + `从项目 ${uuidToBase62(detail.movedFromProjectId)} 移进了这个项目：这一版现在由这个项目判，`
-            + '原项目不能再判它。'
-          : `提交了第 ${String(detail.evidenceRevision ?? '未知')} 版完成证据。`)
+          ? ` moved from project ${uuidToBase62(detail.movedFromProjectId)} into this project, confirmed by the `
+            + `account owner, carrying revision ${String(detail.evidenceRevision ?? 'unknown')} of its completion `
+            + 'evidence, not yet decided: this revision is now this project’s to decide, and the original project '
+            + 'can no longer decide it.'
+          : ` submitted revision ${String(detail.evidenceRevision ?? 'unknown')} of its completion evidence.`)
       );
     case 'COMPLETION_ACK_STALE':
       {
@@ -130,18 +135,20 @@ export function describeWakeFact(fact: WakeFact): string {
           ? detail.reason
           : String(structuredReason?.message ?? 'completion ACK stale');
       return (
-        `任务 ${uuidToBase62(fact.subjectId)} 的完成结果已经持久化，但控制面仍未确认 turn `
-        + `${String(binding.turnId ?? detail.turnId ?? '未知')}；canonical obligation `
-        + `${String(detail.obligationId ?? '未知')} / revision `
-        + `${String(detail.obligationRevision ?? detail.bindingDigest ?? '未知')} `
-        + `由项目 coordinator 负责，原因是 ${reason}。`
+        `The completion result of task ${uuidToBase62(fact.subjectId)} is persisted, but the control plane `
+        + `still has not acknowledged turn ${String(binding.turnId ?? detail.turnId ?? 'unknown')}; canonical `
+        + `obligation ${String(detail.obligationId ?? 'unknown')} / revision `
+        + `${String(detail.obligationRevision ?? detail.bindingDigest ?? 'unknown')} `
+        + `is the project coordinator’s responsibility, and the reason is ${reason}.`
       );
       }
     case 'CRITERIA_DECISION_PENDING':
       return (
-        '这个项目收到了一次会放松验收标准的编辑。它没有生效——在册的标准一个字都没动——'
-        + `而是被扣成了一条待决提案（提案 ${String(detail.intentId ?? fact.subjectId)}，`
-        + `内容摘要 ${String(detail.actionDigest ?? '未知').slice(0, 16)}…），等账号所有者决定。`
+        'This project received an edit that would loosen its acceptance criteria. It did not take effect — '
+        + 'not one word of the criteria on record changed — but was held as a pending proposal '
+        + `(proposal ${String(detail.intentId ?? fact.subjectId)}, `
+        + `content digest ${String(detail.actionDigest ?? 'unknown').slice(0, 16)}…) for the account owner `
+        + 'to decide.'
       );
     case 'TASK_DISPATCH_REFUSED': {
       const base = typeof detail.baseSha === 'string' ? detail.baseSha : null;
@@ -150,36 +157,39 @@ export function describeWakeFact(fact: WakeFact): string {
         : [];
       const named = missing.map((commit) => (
         typeof commit.taskId === 'string'
-          ? `前置 ${uuidToBase62(commit.taskId)} 落地的 ${String(commit.sha).slice(0, 10)}`
-          : `提交 ${String(commit.sha).slice(0, 10)}`
+          ? `${String(commit.sha).slice(0, 10)}, which prerequisite ${uuidToBase62(commit.taskId)} landed`
+          : `commit ${String(commit.sha).slice(0, 10)}`
       ));
       return (
-        `任务 ${uuidToBase62(fact.subjectId)}「${String(detail.taskTitle ?? '')}」的一次开工在起跑前被 `
-        + `runner 拒绝了：${String(detail.code ?? '未知')}。`
-        + (base ? `它钉在 ${base.slice(0, 10)}` : '')
-        + (base && named.length > 0 ? `，这个提交不包含${named.join('、')}` : '')
-        + (base ? '。' : '')
-        + '这次开工没有变成一次运行：没有启动引擎，任务状态没有被改动。'
+        `A start of task ${uuidToBase62(fact.subjectId)} “${String(detail.taskTitle ?? '')}” was refused by `
+        + `the runner before it got going: ${String(detail.code ?? 'unknown')}.`
+        + (base ? ` It was pinned to ${base.slice(0, 10)}` : '')
+        + (base && named.length > 0 ? `, a commit that does not contain ${named.join('; ')}` : '')
+        + (base ? '.' : '')
+        + ' The start did not become a run: no engine was started, and the task’s status was not changed.'
       );
     }
     case 'DEPENDENT_READY':
       return (
-        `任务「${String(detail.title ?? '')}」（${uuidToBase62(fact.subjectId)}）现在可以开工了：`
-        + '它的前置都已完成并落地到这个项目的集成线（或本来就没有要落地的代码）。'
-        + '但它设了 autoRunWhenReady=false，平台不会自己开它——没人开工，它就一直停在这里。'
+        `Task “${String(detail.title ?? '')}” (${uuidToBase62(fact.subjectId)}) can start now: `
+        + 'its prerequisites are all done and landed on this project’s integration line (or never had code '
+        + 'to land). But it has autoRunWhenReady=false, so the platform will not start it by itself — until '
+        + 'somebody starts it, it stays where it is.'
       );
     case 'PROJECT_SETTLED_UNMERGED': {
       const commits = unmergedCommitsOf(fact);
       const short = commits.map((sha) => sha.slice(0, 10));
       return (
-        `这个项目已经结算（DONE），但它的集成线上还有 ${String(detail.taskCount ?? '一些')} 件`
-        + `成果没有合并回默认分支：${short.length > 0 ? short.join('、') : '（提交列表见下）'}。`
-        + '这些提交所在的落地作业在会话写下最后一个提交之前就已经终态，所以没有任何晋升候选'
-        + '点名过它们——结算之后也不会再有写入来重新发现。'
+        `This project has settled (DONE), but ${String(detail.taskCount ?? 'some')} pieces of work on its `
+        + 'integration line have not been merged back into the default branch: '
+        + `${short.length > 0 ? short.join(', ') : '(the commit list is below)'}. `
+        + 'The landing jobs these commits belong to had reached a terminal state before the session wrote its '
+        + 'last commit, so no promotion candidate ever named them — and after settlement no write will come '
+        + 'along to rediscover them.'
       );
     }
     default:
-      return `发生了 ${fact.event}，主体是 ${fact.subjectType} ${fact.subjectId}。`;
+      return `${fact.event} happened; its subject is ${fact.subjectType} ${fact.subjectId}.`;
   }
 }
 
@@ -212,27 +222,37 @@ function unmergedCommitsOf(fact: WakeFact): string[] {
  */
 export function settledAcceptanceProtocol(projectId: string): string {
   return (
-    '\n\n这条 PROJECT_TASKS_SETTLED 事实要核对主干证据；按下面的顺序行动，顺序是硬约束，不是建议：\n'
-    + `1. 先用 project_get（projectId 传 ${projectId}）读取这个项目声明的验收标准，`
-    + '以及 derivedDone 里每条标准的 landingReason。\n'
-    + '2. 确认实现已经真正落到 main，并且 main 上的行为满足验收对象。任务标成 DONE 只说明某个工作分支做完了，'
-    + '不证明 main 已包含它。成果还不在 main 上时，先看是不是平台正在落地：landingReason 是 IN_FLIGHT，'
-    + '或者项目有 LAND_TASK、CHECK_PROMOTION、LAND_PROMOTION 排队或在跑——那就什么都不开，结束本轮，'
-    + '作业结束后平台会重新推算（这时服务端也会拒掉你的 task_create：TASK_LANDING_IN_FLIGHT）。\n'
-    + '3. 不开“合进 main”的任务：把成果送进 main 是平台的落地作业和项目协调会话的事，这类任务不服务任何验收标准，'
-    + '不得带 criterionKey，而判断会话开的任务必须带 criterionKey——所以这类任务一个都不开。'
-    + '没在途、又确实不在 main 上的成果（landingReason 是 ON_PROJECT_BRANCH、NO_RECEIPT、NOTHING_TO_LAND 或 CODELESS），'
-    + '把逐条核对的结论写进相关任务的 task_comment 中升级给人，然后结束本轮。'
-    + '只有某条验收标准真的还缺活——不是缺合并——才用 task_create 开普通任务，带上它服务的那条 criterionKey。\n'
-    + '4. 你核实成果已经合到 main 时，证据的顺序必须是：合并到 main → 用 project_merge_evidence 记录 main 的当前内容证据。\n'
-    + '5. 到此为止。**Orbit 里没有任何东西会判定这些验收标准**：0229 移除了项目验收判定，'
-    + 'run、逐条裁决、结论事件和 DONE 闸全部不存在了。把逐条核对的结论和证据写进 task_comment 交给账号所有者，'
-    + '不要去找一个能提交裁决的工具——没有。\n'
-    + '6. 你改不了验收标准：尺子归账号所有者通道。project_update 的 status 你也写不了，'
-    + '服务端会按 PROJECT_STATUS_NOT_SESSION_WRITABLE 拒掉整个请求——写不写由账号所有者决定，'
-    + '你把证据交上去。\n\n'
-    + '顺序再确认一次：落地在途就结束本轮 → 不开“合进 main”的任务 → 合并到 main → project_merge_evidence '
-    + '→ 在 task_comment 里逐条交证据。'
+    '\n\nThis PROJECT_TASKS_SETTLED fact calls for checking the evidence on main. Act in the order below; '
+    + 'the order is a hard constraint, not advice:\n'
+    + `1. First read this project’s stated acceptance criteria with project_get (projectId: ${projectId}), `
+    + 'and the landingReason of each criterion in derivedDone.\n'
+    + '2. Confirm that the implementation has really landed on main, and that the behaviour on main satisfies '
+    + 'what is being accepted. A task marked DONE only says that some work branch is finished; it does not '
+    + 'prove that main contains it. While the work is not on main yet, first see whether the platform is '
+    + 'landing it: landingReason is IN_FLIGHT, or the project has a '
+    + 'LAND_TASK, CHECK_PROMOTION or LAND_PROMOTION queued or running — then open nothing and end this turn; '
+    + 'the platform derives the landing again once the job ends (until then the server also refuses your task_create: '
+    + 'TASK_LANDING_IN_FLIGHT).\n'
+    + '3. Open no “merge into main” task: getting work into main is for the platform’s landing jobs and the '
+    + 'project’s coordinator session. Such a task serves no acceptance criterion and may not carry a '
+    + 'criterionKey, while every task a judgment session opens must carry one — so open none of them. '
+    + 'For work that is not in flight and really is not on main (landingReason ON_PROJECT_BRANCH, NO_RECEIPT, '
+    + 'NOTHING_TO_LAND or CODELESS), write what you checked, criterion by criterion, in a task_comment on the '
+    + 'tasks concerned to escalate it to a person, then end this turn. '
+    + 'Only when an acceptance criterion really still lacks work — not a merge — open an ordinary task with '
+    + 'task_create, carrying the criterionKey it serves.\n'
+    + '4. When you have verified that the work is merged into main, the evidence must come in this order: '
+    + 'merge into main → record main’s current content as evidence with project_merge_evidence.\n'
+    + '5. Stop there. **Nothing in Orbit judges these acceptance criteria**: 0229 removed the project acceptance '
+    + 'judgment, and its runs, per-criterion verdicts, conclusion events and DONE gate no longer exist. Write '
+    + 'what you checked, criterion by criterion, and the evidence in a task_comment for the account owner, and '
+    + 'do not look for a tool that submits a verdict — there is none.\n'
+    + '6. You cannot change the acceptance criteria: the ruler belongs to the account owner’s channel. You '
+    + 'cannot write status with project_update either; the server refuses the whole request with '
+    + 'PROJECT_STATUS_NOT_SESSION_WRITABLE — whether it is written is the account owner’s decision, and you '
+    + 'hand in the evidence.\n\n'
+    + 'The order once more: a landing in flight ends this turn → open no “merge into main” task → '
+    + 'merge into main → project_merge_evidence → hand in the evidence, criterion by criterion, in a task_comment.'
   );
 }
 
@@ -247,30 +267,39 @@ export function settledAcceptanceProtocol(projectId: string): string {
 export function buildJudgmentOpening(fact: WakeFact, projectTitle: string): string {
   const projectId = uuidToBase62(fact.projectId);
   return (
-    `你是项目「${projectTitle}」（id: ${projectId}）的一次判断会话。\n\n`
-    + `发生了什么：${describeWakeFact(fact)}\n\n`
-    + '这次会话是为上面这一个事实开出的，只有这一轮：它不接着上一次判断的上下文，也不会有人接着往里发消息。'
-    + '项目的状态在库里，不在这段对话里——这段开场白里除了上面那条事实，没有这个项目的任何其他状态。\n\n'
-    + `去哪读全量状态：project_get（projectId 传 ${projectId}）给出这个项目的目标、验收标准、作业指导和状态；`
-    + `task_list（projectId 传 ${projectId}）给出它下面每个任务的状态、验收标准和依赖；`
-    + 'task_get 给出某个任务的完整描述和历史评论。\n\n'
-    + '手上有哪些工具：读——project_get、task_list、task_get、session_list、session_get；'
-    + '写——task_create、task_update、task_comment、task_start、project_update、project_merge_evidence。\n\n'
-    + '写的时候有三条边界，服务端会照着拒（不是建议）：'
-    + '① 普通新任务必须用 criterionKey 说明它服务于哪一条验收标准（project_get 里每条标准的 key），'
-    + '并受这个项目每天能开多少个任务的预算限制；只有服务端已将本会话绑定到 ACTIVE canonical remediation '
-    + 'obligation 时，该 revision 才能作为不伪造 criterionKey 的正交范围理由，并走独立容量上限；'
-    + '② 验收标准你改不了——尺子归账号所有者通道；'
-    + '③ 0229 移除了项目验收判定：没有任何东西会判定这些标准，也没有工具能提交裁决。'
-    + 'project_update 的 status 你也写不了：带会话的请求写这个字段会被整条拒掉'
-    + '（PROJECT_STATUS_NOT_SESSION_WRITABLE），DONE 由账号所有者决定，你把证据交上去。'
-    + '这三条是判断会话的角色隔离和按动作留痕，不是对“真人在场”的密码学证明；'
-    + '把发现和还差什么写进 task_comment，账号所有者会读到。\n\n'
-    + '没给你的工具就别去找：列出或删除项目、直接指挥 runner，都不在你手上。'
+    `You are a one-off judgment session for project “${projectTitle}” (id: ${projectId}).\n\n`
+    + `What happened: ${describeWakeFact(fact)}\n\n`
+    + 'This session was opened for that one fact above, and it has only this one turn: it does not carry on '
+    + 'from the context of an earlier judgment, and nobody will send it further messages. '
+    + 'The project’s state is in the database, not in this conversation — apart from the fact above, this '
+    + 'opening message carries none of the project’s state.\n\n'
+    + `Where to read the full state: project_get (projectId: ${projectId}) gives this project’s goal, `
+    + 'acceptance criteria, instructions and status; '
+    + `task_list (projectId: ${projectId}) gives each of its tasks’ status, acceptance criteria and `
+    + 'dependencies; task_get gives one task’s full description and comment history.\n\n'
+    + 'The tools in reach: to read — project_get, task_list, task_get, session_list, session_get; '
+    + 'to write — task_create, task_update, task_comment, task_start, project_update, project_merge_evidence.\n\n'
+    + 'Writing has three boundaries, and the server refuses what crosses them (they are not advice): '
+    + '① an ordinary new task must say with criterionKey which acceptance criterion it serves (the key of each '
+    + 'criterion in project_get), and is held to this project’s budget of how many tasks may be opened a day; '
+    + 'only when the server has bound this session to an ACTIVE canonical remediation obligation can that '
+    + 'revision stand as an orthogonal scope reason that does not fake a criterionKey, and it then runs under '
+    + 'a capacity limit of its own; '
+    + '② you cannot change the acceptance criteria — the ruler belongs to the account owner’s channel; '
+    + '③ 0229 removed the project acceptance judgment: nothing judges these criteria, and no tool can submit '
+    + 'a verdict. You cannot write status with project_update either: a request that carries a session and '
+    + 'writes that field is refused whole (PROJECT_STATUS_NOT_SESSION_WRITABLE); DONE is the account owner’s '
+    + 'decision, and you hand in the evidence. '
+    + 'These three are judgment-role separation and action-specific traceability, not a cryptographic proof '
+    + 'of human presence; write what you found and what is still missing in a task_comment, and the account '
+    + 'owner will read it.\n\n'
+    + 'Do not go looking for tools you were not given: listing or deleting projects and directing a runner '
+    + 'directly are not in your hands.'
     + (fact.event === 'PROJECT_TASKS_SETTLED' ? settledAcceptanceProtocol(projectId) : '')
     + '\n\n'
-    + '同一个项目还有一条人点开的协调会话，长期开着、由人驱动。它和这次判断读库里同一份事实，不共享上下文；'
-    + '这次判断不会动它，它也不会动这次判断。'
+    + 'The same project also has a coordinator session that a person opened, which stays open and is driven '
+    + 'by a person. It reads the same facts in the database as this judgment does, but shares no context with '
+    + 'it; this judgment does not touch it, and it does not touch this judgment.'
   );
 }
 
@@ -296,8 +325,8 @@ function renderWithheldCriteria(fact: WakeFact, reading: DerivedProjectDoneReadi
       const text = texts.get(key);
       const codes = unmet.get(criterion.definitionId) ?? [];
       return (
-        `- ${text ? `「${text}」（key ${key}）` : `key ${key}`}：${criterion.withheld.join('、')}`
-        + `；unmet：${codes.length > 0 ? codes.join('、') : '无'}`
+        `- ${text ? `“${text}” (key ${key})` : `key ${key}`}: ${criterion.withheld.join(', ')}`
+        + `; unmet: ${codes.length > 0 ? codes.join(', ') : 'none'}`
       );
     })
     .join('\n');
@@ -308,12 +337,12 @@ function renderSettledCriteria(criteria: readonly SettledCriterionReport[]): str
   return criteria
     .map((criterion, index) => {
       const serving = criterion.serving
-        .map((task) => `${task.title}（${uuidToBase62(task.taskId)}，${task.status}）`)
-        .join('、');
+        .map((task) => `${task.title} (${uuidToBase62(task.taskId)}, ${task.status})`)
+        .join(', ');
       return (
         `${index + 1}. ${criterion.text}\n`
-        + `   满足：${criterion.satisfied ? '是' : '否'}；落地：${criterion.landing}；`
-        + `服务它的任务：${serving || '无'}`
+        + `   Satisfied: ${criterion.satisfied ? 'yes' : 'no'}; landing: ${criterion.landing}; `
+        + `tasks serving it: ${serving || 'none'}`
       );
     })
     .join('\n');
@@ -456,80 +485,109 @@ export function buildCoordinatorDeliveryMessage(
     if (reading && confirmedAt && !reading.derived.done) {
       const held = renderWithheldCriteria(fact, reading);
       return (
-        `【项目「${projectTitle}」的验收标准都已落地，这一版也已确认，但项目还没有投影成 DONE】\n\n`
+        `From Orbit · project “${projectTitle}”: its acceptance criteria have all landed and this version is `
+        + 'confirmed, but the project has not been projected DONE\n\n'
         + `${describeWakeFact(fact)}\n\n`
-        + `现在这一版标准集，就是账号所有者 ${confirmedAt.toISOString()} 确认过的那一版`
-        + '（CONFIRM_ACCEPTANCE_CRITERIA）：确认不缺，这里没有要确认的东西，这个会话里也不会出现确认卡。\n\n'
-        + `但项目还没有投影成 DONE，扣住它的是 ${reading.derived.withheld.join('、')}。`
-        + '上面那句「每一条都已满足」只看服务任务的状态；投影还要看每个任务按它自己声明的完成条件是否算完成、'
-        + '声明的是不是这条标准现在的版本，以及写这条标准的会话是否也在产出它的证据。'
-        + (held ? `被扣住的标准：\n${held}` : '')
+        + 'The standard set that stands now is the very version the account owner confirmed at '
+        + `${confirmedAt.toISOString()} `
+        + '(CONFIRM_ACCEPTANCE_CRITERIA): no confirmation is missing, there is nothing here to confirm, and no '
+        + 'confirmation card will appear in this conversation.\n\n'
+        + 'But the project has not been projected DONE; what holds it back is '
+        + `${reading.derived.withheld.join(', ')}. `
+        + 'The “every one … is satisfied” above looks only at the serving tasks’ statuses; the projection also '
+        + 'asks whether each task counts as finished by the completion criterion it declared itself, whether '
+        + 'what it declared is the current revision of this criterion, and whether the session that wrote this '
+        + 'criterion is also producing its evidence.'
+        + (held ? ` Criteria held back:\n${held}` : '')
         + '\n\n'
-        + `还缺什么、卡在哪个任务上，自己读：project_get（projectId 传 ${projectId}）返回的 derivedDone `
-        + '给出 withheld 和每条标准的答案，每条验收标准上的 unmet 给出每个 unmet 码和卡住它的任务；'
-        + `task_list（projectId 传 ${projectId}）读每个任务的状态与依赖。\n\n`
-        + 'DONE 不是谁写的一列：缺的补上之后，服务端自己把它投影出来。project_update 的 status 你也写不了：'
-        + '带会话的请求写这个字段会被整条拒掉（PROJECT_STATUS_NOT_SESSION_WRITABLE）。\n\n'
-        + '这是一条通知，不是打断：你正在跑的那一轮不会被它中断，你是在那一轮结束之后才读到它的，'
-        + '所以以你自己刚读到的库里状态为准。'
+        + 'What is still missing, and which task it is stuck on, read for yourself: '
+        + `project_get (projectId: ${projectId}) returns derivedDone, which gives withheld and each `
+        + 'criterion’s answer, and unmet on each acceptance criterion gives each unmet code and the task '
+        + 'holding it up; '
+        + `task_list (projectId: ${projectId}) reads each task’s status and dependencies.\n\n`
+        + 'DONE is not a column anybody writes: once what is missing is supplied, the server projects it by '
+        + 'itself. You cannot write status with project_update either: a request that carries a session and '
+        + 'writes that field is refused whole (PROJECT_STATUS_NOT_SESSION_WRITABLE).\n\n'
+        + 'This is a notification, not an interruption: the turn you were running is not interrupted by it, and '
+        + 'you are reading it only after that turn ended, so go by the state you have just read from the '
+        + 'database yourself.'
       );
     }
     // Confirmed, and the projection agrees: DONE.
     if (confirmedAt) {
       return (
-        `【项目「${projectTitle}」的验收标准已全部满足并落地，已按账号所有者的确认记为 DONE】\n\n`
+        `From Orbit · project “${projectTitle}”: its acceptance criteria are all satisfied and landed, and it `
+        + 'is recorded as DONE on the account owner’s confirmation\n\n'
         + `${describeWakeFact(fact)}\n\n`
-        + `现在这一版标准集，就是账号所有者 ${confirmedAt.toISOString()} 确认过的那一版`
-        + '（CONFIRM_ACCEPTANCE_CRITERIA）。项目已按那次确认记为 DONE，无需任何动作：这里没有要确认的东西，'
-        + '这个会话里也不会出现确认卡——确认卡只为还没被确认的那一版画出来。\n\n'
-        + 'DONE 不是谁写的一列：每条标准都满足、都 LANDED，再加上账号所有者对这一版标准集的确认，'
-        + '服务端自己把它投影出来。project_update 的 status 你也写不了：带会话的请求写这个字段会被整条拒掉'
-        + '（PROJECT_STATUS_NOT_SESSION_WRITABLE）。\n\n'
-        + '全量状态自己读，这条消息里除了上面那个事实和那次确认的时间，没有这个项目的任何其他状态：'
-        + `project_get（projectId 传 ${projectId}）读目标、验收标准与 status，`
-        + `task_list（projectId 传 ${projectId}）读每个任务的状态与依赖。\n\n`
-        + '这是一条通知，不是打断：你正在跑的那一轮不会被它中断，你是在那一轮结束之后才读到它的，'
-        + '所以以你自己刚读到的库里状态为准。'
+        + 'The standard set that stands now is the very version the account owner confirmed at '
+        + `${confirmedAt.toISOString()} `
+        + '(CONFIRM_ACCEPTANCE_CRITERIA). The project is recorded as DONE on that confirmation, and no action is '
+        + 'needed: there is nothing here to confirm, and no confirmation card will appear in this conversation — '
+        + 'a confirmation card is drawn only for a version that has not been confirmed yet.\n\n'
+        + 'DONE is not a column anybody writes: every criterion satisfied and LANDED, plus the account owner’s '
+        + 'confirmation of this version of the standard set, and the server projects it by itself. '
+        + 'You cannot write status with project_update either: a request that carries a session and writes that '
+        + 'field is refused whole (PROJECT_STATUS_NOT_SESSION_WRITABLE).\n\n'
+        + 'Read the full state yourself; apart from the fact above and the time of that confirmation, this '
+        + 'message carries none of the project’s state: '
+        + `project_get (projectId: ${projectId}) reads the goal, the acceptance criteria and status, and `
+        + `task_list (projectId: ${projectId}) reads each task’s status and dependencies.\n\n`
+        + 'This is a notification, not an interruption: the turn you were running is not interrupted by it, and '
+        + 'you are reading it only after that turn ended, so go by the state you have just read from the '
+        + 'database yourself.'
       );
     }
     const criteria = settledCriteriaOf(fact);
     return (
-      `【项目「${projectTitle}」的验收标准已全部满足并落地，请确认它们表达的是你要的目标】\n\n`
+      `From Orbit · project “${projectTitle}”: its acceptance criteria are all satisfied and landed — please `
+      + 'confirm they express the goal you want\n\n'
       + `${describeWakeFact(fact)}\n\n`
-      + `这 ${criteria.length} 条标准，每一条都已满足、且有合并回执证明成果在默认分支上：\n`
+      + `These ${criteria.length} criteria are each satisfied, with a merge receipt proving the work is on the `
+      + 'default branch:\n'
       + `${renderSettledCriteria(criteria)}\n\n`
-      + `要回答的不是「这些标准满足了吗」——上面那份清单已经是这个问题的答案。要回答的是 `
-      + `CONFIRM_ACCEPTANCE_CRITERIA 那一句：这 ${criteria.length} 条合起来，表达的是当初要的那个目标吗？\n\n`
-      + '这一句你答不了，它是 HUMAN_ONLY：确认只走账号所有者认证的通道，任何带 acting session 的调用'
-      + '都会被服务端拒掉。确认卡由 Orbit 直接画在这个会话里——网页、iOS、macOS 上都是同一张卡，'
-      + '卡上能展开读到这份清单，按钮带着账号所有者自己的凭据直达确认的门，不经过你。'
-      + '你要做的是把上面这份清单交给账号所有者，请账号所有者在这个会话里的那张确认卡上确认；'
-      + '确认会绑定当前这一版标准，之后任何一条标准被改动，那次确认就自动不算数了。\n\n'
-      + 'project_update 的 status 你也写不了：带会话的请求写这个字段会被整条拒掉'
-      + '（PROJECT_STATUS_NOT_SESSION_WRITABLE）。DONE 也不是谁写的一列——上面每条都满足、都 LANDED，'
-      + '再加上账号所有者对这一版标准集的确认，服务端自己把它投影出来。\n\n'
-      + `全量状态自己读，上面那份清单是事实成立那一刻的快照：project_get（projectId 传 ${projectId}）`
-      + `读目标与验收标准，task_list（projectId 传 ${projectId}）读每个任务的状态与依赖。\n\n`
-      + '这是一条通知，不是打断：你正在跑的那一轮不会被它中断，你是在那一轮结束之后才读到它的，'
-      + '所以以你自己刚读到的库里状态为准。'
+      + 'The question to answer is not “are these criteria met” — the list above already answers that. It is '
+      + `the one CONFIRM_ACCEPTANCE_CRITERIA asks: taken together, do these ${criteria.length} express the goal `
+      + 'that was wanted in the first place?\n\n'
+      + 'That one you cannot answer; it is HUMAN_ONLY: confirmation goes only through the account owner’s '
+      + 'authenticated channel, and the server refuses any call that carries an acting session. Orbit draws the '
+      + 'confirmation card straight into this conversation — the same card on the web, iOS and macOS — where '
+      + 'this list can be expanded and read, and its button carries the account owner’s own credential straight '
+      + 'to the confirmation door, not through you. '
+      + 'What you do is hand the list above to the account owner and ask the account owner to confirm on the '
+      + 'confirmation card in this conversation; the confirmation binds the current version of the criteria, '
+      + 'and once any criterion is changed after that, the confirmation stops counting by itself.\n\n'
+      + 'You cannot write status with project_update either: a request that carries a session and writes that '
+      + 'field is refused whole (PROJECT_STATUS_NOT_SESSION_WRITABLE). DONE is not a column anybody writes '
+      + 'either — every criterion above satisfied and LANDED, plus the account owner’s confirmation of this '
+      + 'version of the standard set, and the server projects it by itself.\n\n'
+      + 'Read the full state yourself; the list above is a snapshot from the moment the fact became true: '
+      + `project_get (projectId: ${projectId}) reads the goal and acceptance criteria, and `
+      + `task_list (projectId: ${projectId}) reads each task’s status and dependencies.\n\n`
+      + 'This is a notification, not an interruption: the turn you were running is not interrupted by it, and '
+      + 'you are reading it only after that turn ended, so go by the state you have just read from the '
+      + 'database yourself.'
     );
   }
   if (fact.event === 'TASK_DISPATCH_REFUSED') {
     const detail = (fact.detail ?? {}) as { fixAction?: string; ref?: string | null };
     const taskId = uuidToBase62(fact.subjectId);
     return (
-      `【项目「${projectTitle}」有一个任务开不了工】\n\n`
+      `From Orbit · project “${projectTitle}” has a task that cannot start\n\n`
       + `${describeWakeFact(fact)}\n\n`
-      + `下一步：${dispatchRefusalNextStep({
-        fixAction: detail.fixAction ?? '未记录', ref: detail.ref ?? null,
+      + `Next step: ${dispatchRefusalNextStep({
+        fixAction: detail.fixAction ?? 'not recorded', ref: detail.ref ?? null,
       })}\n\n`
-      + `这次拒绝记在任务上：task_get（taskId 传 ${taskId}）的 dispatchRefusal 是码、fixAction、时间、哪次`
-      + '运行、起跑用的 ref、它钉住的提交（解析期就被拒的没有）和缺的提交，任务评论里有 runner 的原话。'
-      + '任务再开工之后这一栏会清空；再被拒会重新记一次、再通知你一次。\n\n'
-      + `全量状态自己读，这条消息里除了上面那个事实没有这个项目的任何其他状态：project_get（projectId 传 `
-      + `${projectId}）读目标与验收标准，task_list（projectId 传 ${projectId}）读每个任务的状态与依赖。\n\n`
-      + '这是一条通知，不是打断：你正在跑的那一轮不会被它中断，你是在那一轮结束之后才读到它的，'
-      + '所以以你自己刚读到的库里状态为准。'
+      + `The refusal is recorded on the task: dispatchRefusal in task_get (taskId: ${taskId}) holds the code, `
+      + 'the fixAction, the time, which run, the ref the start used, the commit it was pinned to (none for a '
+      + 'start refused while resolving) and the missing commits; the task’s comments hold the runner’s own '
+      + 'words. The field is cleared once the task starts again; another refusal records it again and tells you '
+      + 'again.\n\n'
+      + 'Read the full state yourself; apart from the fact above, this message carries none of the project’s '
+      + `state: project_get (projectId: ${projectId}) reads the goal and acceptance criteria, and `
+      + `task_list (projectId: ${projectId}) reads each task’s status and dependencies.\n\n`
+      + 'This is a notification, not an interruption: the turn you were running is not interrupted by it, and '
+      + 'you are reading it only after that turn ended, so go by the state you have just read from the '
+      + 'database yourself.'
     );
   }
   if (fact.event === 'PROJECT_BLOCKER_RAISED') {
@@ -550,23 +608,26 @@ export function buildCoordinatorDeliveryMessage(
       ? detail.paths.filter((path): path is string => typeof path === 'string')
       : [];
     const evidence = typeof detail.agentArgument === 'string' && detail.agentArgument.trim()
-      ? `agent 的原话：\n「${detail.agentArgument.trim()}」\n\n`
+      ? `The agent’s own words:\n“${detail.agentArgument.trim()}”\n\n`
       : '';
     const criterion = typeof detail.criterionText === 'string' && detail.criterionText.trim()
-      ? `当前判据：\n「${detail.criterionText.trim()}」\n\n`
+      ? `The current criterion:\n“${detail.criterionText.trim()}”\n\n`
       : '';
-    const files = paths.length > 0 ? `涉及文件：\n${paths.map((path) => `- ${path}`).join('\n')}\n\n` : '';
+    const files = paths.length > 0 ? `Files involved:\n${paths.map((path) => `- ${path}`).join('\n')}\n\n` : '';
     return (
-      `【项目「${projectTitle}」有一条交付需要账号所有者裁决】\n\n`
+      `From Orbit · project “${projectTitle}” has a delivery that needs the account owner’s ruling\n\n`
       + `${describeWakeFact(fact)}\n\n`
       + `${evidence}${criterion}${files}`
-      + `这不是普通失败，也不是你可以自行放行的合并。先用 project_get（projectId 传 ${projectId}）和 `
-      + `task_get（taskId 传 ${taskId}）核对上下文；在裁决前不要合并，也不要放行下一条任务。\n\n`
-      + `如果你能把建议和依据写清楚，用 project_blocker_resolve（projectId 传 ${projectId}，`
-      + `blockerId 传 ${blockerId}，reason 说明你建议如何处理）提交建议。这个动作会先进入账号所有者的确认卡，`
-      + '只有账号所有者同意后 blocker 才会关闭；对方拒绝或卡片无人回答时，保持 blocker 打开并继续报告它。\n\n'
-      + `平台要求的原动作：${String(detail.requiredAction ?? '先得到账号所有者的决定。')}\n\n`
-      + '这是一条通知，不会中断当前回合；以你重新读取到的项目状态为准。'
+      + 'This is not an ordinary failure, and not a merge you may let through on your own. First check the '
+      + `context with project_get (projectId: ${projectId}) and task_get (taskId: ${taskId}); until it is `
+      + 'ruled on, do not merge, and do not release the next task either.\n\n'
+      + 'If you can set out a recommendation and its grounds, submit it with project_blocker_resolve '
+      + `(projectId: ${projectId}, blockerId: ${blockerId}, reason saying how you recommend handling it). `
+      + 'It goes to the account owner’s confirmation card first, and the blocker closes only once the account '
+      + 'owner agrees; if they refuse or nobody answers the card, keep the blocker open and keep reporting it.\n\n'
+      + 'The action the platform originally asked for: '
+      + `${String(detail.requiredAction ?? 'Get the account owner’s decision first.')}\n\n`
+      + 'This is a notification and does not interrupt the current turn; go by the project state you read afresh.'
     );
   }
   if (fact.event === 'COMPLETION_EVIDENCE_REVISED') {
@@ -582,7 +643,7 @@ export function buildCoordinatorDeliveryMessage(
       ? detail.criterion
       : null;
     const escalation = typeof detail.escalationSeconds === 'number'
-      ? `（现在是 ${detail.escalationSeconds} 秒）`
+      ? ` (currently ${detail.escalationSeconds} seconds)`
       : '';
     // A revision that waited while this conversation was paused, handed over now that it is back
     // (`CompletionEvidenceProducer.deliverWaiting`): said in so many words, because nothing else in
@@ -592,74 +653,93 @@ export function buildCoordinatorDeliveryMessage(
         + 'It waited for you; nobody has decided it yet.\n\n'
       : '';
     return (
-      `【项目「${projectTitle}」有一版完成证据等你判】\n\n`
+      `From Orbit · project “${projectTitle}” has a revision of completion evidence for you to decide\n\n`
       + `${describeWakeFact(fact)}\n\n`
       + waited
       + (criterion
-        ? `这版证据引用的判据（key ${String(criterion.key)}），原文：\n「${String(criterion.text)}」\n\n`
+        ? `The criterion this evidence quotes (key ${String(criterion.key)}), word for word:\n`
+          + `“${String(criterion.text)}”\n\n`
         : '')
-      + '这个项目开着 Automatic：任务做没做完由你按证据判，不先交给账号所有者。'
-      + `先用 task_evidence_list（taskId 传 ${taskId}）读第 ${revision} 版证据——它声称做成了什么`
-      + '（claim）、引用了哪些检查（checks）、自己承认没证明什么（gaps）；需要时用 task_get '
-      + `（taskId 传 ${taskId}）看任务描述和评论。然后用 task_evidence_decide（taskId 传 ${taskId}，`
-      + `evidenceRevision 传 "${revision}"）判：证据足以证明上面那条判据，判 CONFIRM，任务随之 DONE；`
-      + '不足，判 SEND_BACK，note 里写清下一版证据要证明什么——note 会作为平台消息直接投给提交这版的执行会话，'
-      + '它改完交下一版；任务保持 OPEN。\n\n'
-      + `你不判的话，投递之后过了这个项目的 exceptionEscalationSeconds${escalation}，这一版会交给`
-      + '账号所有者在 app 里判；账号所有者任何时候也都可以直接判。真正要账号所有者拍板的题另用 '
-      + 'ask_owner 问（每题带推荐默认）；「想让账号所有者看一眼」不是不判的理由。\n\n'
-      + `全量状态自己读，这条消息里除了上面那个事实和它引用的判据原文，没有这个项目的任何其他状态：`
-      + `project_get（projectId 传 ${projectId}）读目标与验收标准，task_list（projectId 传 `
-      + `${projectId}）读每个任务的状态与依赖。\n\n`
-      + '这是一条通知，不是打断：你正在跑的那一轮不会被它中断，你是在那一轮结束之后才读到它的，'
-      + '所以以你自己刚读到的库里状态为准——这一版可能已经被判过，或者已经有了更新的一版。'
+      + 'This project has Automatic on: whether a task is done is yours to decide from its evidence, and it is '
+      + 'not handed to the account owner first. '
+      + `First read revision ${revision} of the evidence with task_evidence_list (taskId: ${taskId}) — what it `
+      + 'claims it achieved (claim), which checks it cites (checks), and what it admits it did not prove (gaps); '
+      + `when you need to, read the task’s description and comments with task_get (taskId: ${taskId}). `
+      + `Then decide with task_evidence_decide (taskId: ${taskId}, evidenceRevision: "${revision}"): if the `
+      + 'evidence is enough to prove the criterion above, decide CONFIRM, and the task becomes DONE with it; if '
+      + 'it is not, decide SEND_BACK, and say in the note what the next revision of the evidence has to prove — '
+      + 'the note is delivered as a platform message straight to the run session that submitted this revision, '
+      + 'which fixes it and submits the next one; the task stays OPEN.\n\n'
+      + `If you do not decide it, then once this project’s exceptionEscalationSeconds${escalation} have passed `
+      + 'since delivery, this revision goes to the account owner to decide in the app; the account owner can '
+      + 'also decide it directly at any time. A question that really needs the account owner’s call is asked '
+      + 'separately with ask_owner (each one with a recommended default); “I’d like the account owner to take a '
+      + 'look” is not a reason to leave it undecided.\n\n'
+      + 'Read the full state yourself; apart from the fact above and the words of the criterion it quotes, this '
+      + `message carries none of the project’s state: project_get (projectId: ${projectId}) reads the goal and `
+      + `acceptance criteria, and task_list (projectId: ${projectId}) reads each task’s status and dependencies.\n\n`
+      + 'This is a notification, not an interruption: the turn you were running is not interrupted by it, and '
+      + 'you are reading it only after that turn ended, so go by the state you have just read from the '
+      + 'database yourself — this revision may already have been decided, or a newer one may exist.'
     );
   }
   if (fact.event === 'DEPENDENT_READY') {
     const taskId = uuidToBase62(fact.subjectId);
     return (
-      `【项目「${projectTitle}」有一条下游任务可以开工了】\n\n`
+      `From Orbit · project “${projectTitle}” has a downstream task that can start now\n\n`
       + `${describeWakeFact(fact)}\n\n`
-      + '开不开工是你的判断，平台不会替你开：先用 task_get（taskId 传 '
-      + `${taskId}）看它的描述、依赖和评论，确认前置落地的成果就是它要的基线；决定开工就 task_start`
-      + `（taskId 传 ${taskId}）。决定先不开也可以，但这条消息同一代只会来一次，`
-      + '不开工它就一直停在这里。\n\n'
-      + `全量状态自己读，这条消息里除了上面那个事实没有这个项目的任何其他状态：project_get（projectId 传 `
-      + `${projectId}）读目标与作业指导，task_list（projectId 传 ${projectId}）读每个任务的状态与依赖。\n\n`
-      + '这是一条通知，不是打断：你正在跑的那一轮不会被它中断，你是在那一轮结束之后才读到它的，'
-      + '所以以你自己刚读到的库里状态为准——它可能已经被开工了。'
+      + 'Whether to start it is your judgment, and the platform will not start it for you: first look at its '
+      + `description, dependencies and comments with task_get (taskId: ${taskId}), and confirm that what its `
+      + 'prerequisites landed is the baseline it needs; if you decide to start it, call task_start '
+      + `(taskId: ${taskId}). You may also decide not to start it yet, but this message comes only once per `
+      + 'generation, and until it is started it stays where it is.\n\n'
+      + 'Read the full state yourself; apart from the fact above, this message carries none of the project’s '
+      + `state: project_get (projectId: ${projectId}) reads the goal and instructions, and `
+      + `task_list (projectId: ${projectId}) reads each task’s status and dependencies.\n\n`
+      + 'This is a notification, not an interruption: the turn you were running is not interrupted by it, and '
+      + 'you are reading it only after that turn ended, so go by the state you have just read from the '
+      + 'database yourself — it may already have been started.'
     );
   }
   if (fact.event === 'PROJECT_SETTLED_UNMERGED') {
     const commits = unmergedCommitsOf(fact);
     return (
-      `【项目「${projectTitle}」结算了，还有成果停在集成线上没进 main】\n\n`
+      `From Orbit · project “${projectTitle}” has settled, and work is still sitting on its integration `
+      + 'line, not in main\n\n'
       + `${describeWakeFact(fact)}\n\n`
       + (commits.length > 0
-        ? `要落地的提交：${commits.map((sha) => `\`${sha}\``).join('、')}\n\n`
+        ? `Commits to land: ${commits.map((sha) => `\`${sha}\``).join(', ')}\n\n`
         : '')
-      + '平台没有替它们排晋升候选，也不会再排：候选是在一次次落地之后排的，而承载这些提交的落地作业'
-      + '在提交写出来之前就已经终态。所以没有人在等它们，也没有别的东西会重新发现它们。\n\n'
-      + '要做的只有一件事：把这些提交送进 main。走哪条路是你的判断——整条项目分支都该合的话，'
-      + '合并卡是账号所有者的（本项目页面上的 Merge 卡，你替不了他点）；只该合这一部分、'
-      + '或者要按任务分别落地的话，把成果合进 main 之后用合并回执记下来（merge_receipt），'
-      + '回执才是「已经在 main 上」的证据。无论走哪条，先 project_get 读目标、'
-      + 'task_list 读每个任务的状态，再自己看一眼那些提交，别只照着这条消息里的 sha 动手。\n\n'
-      + `全量状态自己读，这条消息里除了上面那个事实没有这个项目的任何其他状态：project_get（projectId 传 `
-      + `${projectId}）读目标与验收标准，task_list（projectId 传 ${projectId}）读每个任务的状态与依赖。\n\n`
-      + '这是一条通知，不是打断：你正在跑的那一轮不会被它中断，你是在那一轮结束之后才读到它的，'
-      + '所以以你自己刚读到的库里状态为准。'
+      + 'The platform has not queued a promotion candidate for them, and will not: candidates are queued after '
+      + 'each landing, and the landing jobs that carried these commits had reached a terminal state before the '
+      + 'commits were written. So nobody is waiting for them, and nothing else will rediscover them.\n\n'
+      + 'There is only one thing to do: get these commits into main. Which way is your judgment — if the whole '
+      + 'project branch should be merged, the merge card is the account owner’s (the Merge card on this '
+      + 'project’s page; you cannot press it for them); if only this part should be merged, or the work should '
+      + 'land task by task, merge it into main and then record it with a merge receipt (merge_receipt) — the '
+      + 'receipt is what proves it is “already on main”. Whichever way you go, first read the goal with '
+      + 'project_get and each task’s status with task_list, then look at those commits yourself; do not act on '
+      + 'the shas in this message alone.\n\n'
+      + 'Read the full state yourself; apart from the fact above, this message carries none of the project’s '
+      + `state: project_get (projectId: ${projectId}) reads the goal and acceptance criteria, and `
+      + `task_list (projectId: ${projectId}) reads each task’s status and dependencies.\n\n`
+      + 'This is a notification, not an interruption: the turn you were running is not interrupted by it, and '
+      + 'you are reading it only after that turn ended, so go by the state you have just read from the '
+      + 'database yourself.'
     );
   }
   return (
-    `【项目「${projectTitle}」有干完但还没落 main 的成果】\n\n`
+    `From Orbit · project “${projectTitle}” has finished work that has not landed on main\n\n`
     + `${describeWakeFact(fact)}\n\n`
-    + '合并的顺序是硬约束，不是建议：合并到 main → 用 project_merge_evidence 记录 main 的当前内容证据 '
-    + '→ 再把对应任务置终态。合并失败就停下来把原因写进 task_comment，不要反复重试。\n\n'
-    + `全量状态自己读，这条消息里除了上面那个事实没有这个项目的任何其他状态：project_get（projectId 传 `
-    + `${projectId}）读目标与验收标准，task_list（projectId 传 ${projectId}）读每个任务的状态与依赖。\n\n`
-    + '这是一条通知，不是打断：你正在跑的那一轮不会被它中断，你是在那一轮结束之后才读到它的，'
-    + '所以以你自己刚读到的库里状态为准。'
+    + 'The merge order is a hard constraint, not advice: merge into main → record main’s current content as '
+    + 'evidence with project_merge_evidence → then put the matching tasks in a terminal state. If the merge '
+    + 'fails, stop and write the reason in a task_comment; do not retry over and over.\n\n'
+    + 'Read the full state yourself; apart from the fact above, this message carries none of the project’s '
+    + `state: project_get (projectId: ${projectId}) reads the goal and acceptance criteria, and `
+    + `task_list (projectId: ${projectId}) reads each task’s status and dependencies.\n\n`
+    + 'This is a notification, not an interruption: the turn you were running is not interrupted by it, and '
+    + 'you are reading it only after that turn ended, so go by the state you have just read from the '
+    + 'database yourself.'
   );
 }
 
@@ -669,25 +749,27 @@ export function buildCoordinatorDeliveryMessage(
  * Orbit can and cannot see — never what to conclude.
  */
 const LANDING_REASON_SENTENCES: Readonly<Record<CriterionLandingReason, string>> = {
-  IN_FLIGHT: '平台正在落地它的成果，或正在把它合进 main',
-  ON_PROJECT_BRANCH: '成果在项目分支上、有它自己的提交，但没有作业在把它合进 main',
+  IN_FLIGHT: 'the platform is landing its work, or merging it into main, right now',
+  ON_PROJECT_BRANCH: 'the work is on the project branch with commits of its own, but no job is merging it into main',
   NOTHING_TO_LAND:
-    '它的任务跑过分支，但落地作业判定分支上没有它自己的提交，Orbit 也证明不了分支尖端已经在 main 上'
-    + '——没有可合的东西，就不会有回执',
-  NO_RECEIPT: '没有任何回执证明它的成果在项目分支或 main 上：可能是在 Orbit 之外合进去的，也可能还没合',
-  CODELESS: '它的任务没在 worktree 分支上干活，看起来不产出代码，又没声明 codeless——没有能落地的分支，就永远不会有回执',
+    'its tasks ran on a branch, but the landing job found no commits of their own on it, and Orbit cannot '
+    + 'prove the branch tip is already on main either — with nothing to merge, there will be no receipt',
+  NO_RECEIPT: 'no receipt proves its work is on the project branch or on main: it may have been merged outside '
+    + 'Orbit, or not merged yet',
+  CODELESS: 'its tasks did no work on a worktree branch, so they look like they produce no code, yet they did not '
+    + 'declare codeless — with no branch to land, there will never be a receipt',
 };
 
 /** The counts line, from the projection's own counts: the one place they are added up. */
 function renderLandingCounts(reading: DerivedProjectDoneReading): string {
   const { counts } = reading.derived;
   const parts = [
-    `${counts.criteria} 条验收标准`,
-    `${counts.met} 条已满足`,
-    `${counts.onMain} 条在 main 上`,
+    `${counts.criteria} acceptance ${counts.criteria === 1 ? 'criterion' : 'criteria'}`,
+    `${counts.met} satisfied`,
+    `${counts.onMain} on main`,
     ...(Object.entries(counts.byReason) as Array<[CriterionLandingReason, number]>)
       .filter(([, count]) => count > 0)
-      .map(([reason, count]) => `${count} 条 ${reason}`),
+      .map(([reason, count]) => `${count} ${reason}`),
   ];
   return parts.join(' · ');
 }
@@ -722,34 +804,43 @@ function buildLooksFinishedMessage(
       const text = texts.get(key);
       const reason = criterion.landingReason ?? 'NO_RECEIPT';
       return (
-        `- ${text ? `「${text}」（key ${key}）` : `key ${key}`}：${reason}——${LANDING_REASON_SENTENCES[reason]}`
+        `- ${text ? `“${text}” (key ${key})` : `key ${key}`}: ${reason} — ${LANDING_REASON_SENTENCES[reason]}`
       );
     })
     .join('\n');
-  const window = escalationSeconds !== undefined ? `（现在是 ${escalationSeconds} 秒）` : '';
+  const window = escalationSeconds !== undefined ? ` (currently ${escalationSeconds} seconds)` : '';
   return (
-    `【项目「${projectTitle}」看起来做完了，但 Orbit 自己记不了 Done】\n\n`
+    `From Orbit · project “${projectTitle}” looks finished, but Orbit cannot record it Done by itself\n\n`
     + `${describeWakeFact(fact)}\n\n`
-    + 'Orbit 核对过的：每条验收标准都已被服务它的任务满足；没有在跑或排队的任务；没有未处理的待办；'
-    + '没有在途的落地或合入 main 的作业（LAND_TASK、CHECK_PROMOTION、LAND_PROMOTION）。'
-    + `但推算仍扣着 Done（${reading.derived.withheld.join('、')}）。`
-    + '下面这些验收标准还没算落地，Orbit 证明不了它们的成果在 main 上，逐条原因：\n'
+    + 'What Orbit has checked: every acceptance criterion is satisfied by the tasks serving it; no task is '
+    + 'running or queued; no open item is left unhandled; no landing or merge-into-main job is in flight '
+    + '(LAND_TASK, CHECK_PROMOTION, LAND_PROMOTION). '
+    + `But the derivation still holds Done back (${reading.derived.withheld.join(', ')}). `
+    + 'The acceptance criteria below do not count as landed yet — Orbit cannot prove their work is on main — '
+    + 'with the reason for each:\n'
     + `${reasons}\n`
-    + `（${renderLandingCounts(reading)}）\n\n`
-    + '二选一，在这一轮里做：\n'
-    + `1. 请求收尾：你核对过 main 和上线情况、认为目标已经达成，就调用 project_request_done（projectId 传 ${projectId}），`
-    + '写一两句判断，并为上面每一条写一个缺口：criterionKey、Orbit 为什么证明不了、你核对过什么、证据在哪。'
-    + 'Orbit 先做收尾检查，通过了才在这个会话里给账号所有者出「Is this project done?」卡；记 Done 是账号所有者的事。\n'
-    + '2. 去干活：确实还有东西没做完、或没进 main，就去做。只为把成果送进 main 的任务不服务任何验收标准，'
-    + '不要给它 criterionKey——挂到一条已满足的标准上，会让它重新变成未满足。'
-    + '零提交的任务不要靠 merge_receipt 补回执：回执只记录真实发生过的合并。\n\n'
-    + `两样都不做的话，从这条消息起过了这个项目的 exceptionEscalationSeconds${window}还没有收尾请求，`
-    + '账号所有者的 Needs you 里会出现 Record as done…，由账号所有者自己决定。\n\n'
-    + 'project_update 的 status 你写不了（PROJECT_STATUS_NOT_SESSION_WRITABLE）：Done 只由 Orbit 推算出来，'
-    + '或由账号所有者自己记下。\n\n'
-    + `全量状态自己读：project_get（projectId 传 ${projectId}）的 derivedDone 给出每条验收标准的 landingReason 和这些计数，`
-    + `task_list（projectId 传 ${projectId}）读每个任务的状态与依赖。\n\n`
-    + '这是一条通知，不是打断：你正在跑的那一轮不会被它中断，你是在那一轮结束之后才读到它的，'
-    + '所以以你自己刚读到的库里状态为准。'
+    + `(${renderLandingCounts(reading)})\n\n`
+    + 'Choose one of two, and do it in this turn:\n'
+    + '1. Request done: if you have checked main and what is live and judge that the goal is reached, call '
+    + `project_request_done (projectId: ${projectId}) with a sentence or two of judgment, and a gap for each `
+    + 'criterion above: the criterionKey, why Orbit cannot prove it, what you checked, and where the evidence '
+    + 'is. Orbit runs its closing check first, and only if that passes does it put an “Is this project done?” '
+    + 'card in front of the account owner in this conversation; recording Done is the account owner’s to do.\n'
+    + '2. Go and do the work: if something really is not finished, or not in main, go and do it. A task whose '
+    + 'only purpose is getting work into main serves no acceptance criterion; do not give it a criterionKey — '
+    + 'hanging it on a satisfied criterion makes that criterion unsatisfied again. '
+    + 'Do not patch a receipt onto a zero-commit task with merge_receipt: a receipt records only a merge that '
+    + 'really happened.\n\n'
+    + `If you do neither, and this project’s exceptionEscalationSeconds${window} pass after this message with `
+    + 'no request to close, Record as done… appears in the account owner’s Needs you, and the account owner '
+    + 'decides for themselves.\n\n'
+    + 'You cannot write status with project_update (PROJECT_STATUS_NOT_SESSION_WRITABLE): Done is only derived '
+    + 'by Orbit, or recorded by the account owner themselves.\n\n'
+    + `Read the full state yourself: project_get (projectId: ${projectId}) returns derivedDone, which gives `
+    + 'each acceptance criterion’s landingReason and these counts, and '
+    + `task_list (projectId: ${projectId}) reads each task’s status and dependencies.\n\n`
+    + 'This is a notification, not an interruption: the turn you were running is not interrupted by it, and '
+    + 'you are reading it only after that turn ended, so go by the state you have just read from the '
+    + 'database yourself.'
   );
 }

@@ -51,8 +51,8 @@ class SessionProjectsTest {
         coordinators: List<DirectorySession> = emptyList(), content: List<DirectorySession>? = null,
         watching: Map<String, WatchSessionSummary> = emptyMap(), line: ((DirectorySession) -> SessionLine)? = null) =
         SessionProjectGrouping.listing(sessions, folders, projects ?: listOf(project()), view, byTag, searching, folderId, offline, now,
-            coordinators, content, watching, line)
-    private fun make(s: DirectorySession, watching: WatchSessionSummary? = null) = SessionLine.make(s, true, watching, now)
+            coordinators, content, watching, line = line)
+    private fun make(s: DirectorySession, watching: WatchSessionSummary? = null) = SessionLine.make(s, true, watching, now = now)
     private fun counted(listing: SessionProjectListing, folder: String) = listing.assigned.filter { it.folderId == folder }
 
     @Test fun allMembershipRolesMergeInOpenAndCompleted() {

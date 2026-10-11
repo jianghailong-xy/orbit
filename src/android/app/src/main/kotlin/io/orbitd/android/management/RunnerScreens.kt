@@ -60,8 +60,10 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.currentStateAsState
 import io.orbitd.android.R
+import io.orbitd.android.core.cards.DshRuntime
 import io.orbitd.android.core.net.ApiError
 import io.orbitd.android.core.protocol.Wire
+import io.orbitd.android.composer.ProviderEngines
 import io.orbitd.android.navigation.Destination
 import io.orbitd.android.navigation.ObjectId
 import io.orbitd.android.navigation.OrbitRoute
@@ -727,6 +729,14 @@ private fun RunnerEnginePage(api: ManagementApi, id: String, engine: String, rev
                     }
                 }, style = MaterialTheme.typography.bodySmall, color = Ink.muted)
                 health?.let { RunnerPage.updateFailedLine(it, now) }?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Ink.amber) }
+                // DeepSeek Harness signs nothing in here: each session runs on the DeepSeek key it was started with (board 1 ⑥).
+                if (engine == ProviderEngines.DSH && health != null) RunnerPage.dshStatus(health, runner).let { (text, _) ->
+                    Text(if (text == RunnerCopy.USES_API_KEYS) RunnerCopy.DSH_READY else text, Modifier.testTag("dsh-engine-status"),
+                        style = MaterialTheme.typography.bodySmall, color = Ink.muted)
+                }
+            }
+            if (engine == DshRuntime.ENGINE) DshInstallSection(runner, offline) {
+                scope.launch { show(model.press { api.post("runners/$id/install", buildJsonObject { put("engine", DshRuntime.ENGINE) }) }) }
             }
             if (health != null && health.bool("installed") == true && RunnerPage.isLoginEngine(engine)) {
                 // Every Google sign-in on the page starts above this footer, so Google's terms are said here, once.
@@ -753,7 +763,8 @@ private fun RunnerEnginePage(api: ManagementApi, id: String, engine: String, rev
                     }
                 }
             }
-            FormSection(footer = if (offline) RunnerCopy.ENGINES_OFFLINE_FOOTER else RunnerCopy.ENGINES_FOOTER) {
+            FormSection(footer = if (offline) RunnerCopy.ENGINES_OFFLINE_FOOTER else if (engine == ProviderEngines.DSH) RunnerCopy.DSH_FOOTER
+                else RunnerCopy.ENGINES_FOOTER) {
                 TextButton(enabled = !offline && !RunnerPage.engineUpdateInFlight(runner.obj("install")), onClick = {
                     scope.launch { show(model.press { api.post("runners/$id/engine-update") }) }
                 }) { Text(RunnerCopy.UPDATE_ENGINES_NOW) }
@@ -1018,7 +1029,7 @@ private class SignInRelay(private val api: ManagementApi, val runnerId: String, 
  * Cancel while a sign-in is under way (cancelling it first), Close otherwise — never both. [onSignedIn]: the sign-in landed.
  */
 @Composable
-private fun RunnerSignInCard(api: ManagementApi, runner: JsonObject, engine: String, account: String? = null, accountName: String? = null,
+internal fun RunnerSignInCard(api: ManagementApi, runner: JsonObject, engine: String, account: String? = null, accountName: String? = null,
                              autoStart: Boolean = false, onClose: (() -> Unit)? = null, onSignedIn: (() -> Unit)? = null) {
     val runnerId = runner.text("id")
     val scope = rememberCoroutineScope()

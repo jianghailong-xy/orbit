@@ -118,19 +118,22 @@ final class AgentsModel {
         return runnerModelCatalog[id]
     }
 
-    /// The default used to seed a new-session draft. Configured providers keep their own model
-    /// space/default; built-in providers use the owning runner's Runtime heartbeat snapshot.
+    /// The default used to seed a new-session draft: what the workspace last ran on, engine and
+    /// provider. A key keeps its own model space/default on every engine that runs it; an engine's own
+    /// sign-in uses the owning runner's Runtime heartbeat snapshot.
     func effectiveDefaultModel(for agent: Agent) -> String {
-        return effectiveDefaultModel(for: agent.defaultProvider, runnerId: agent.runnerId)
+        let configured = configuredProviders + ProviderPools.asProviders(allPools)
+        return effectiveDefaultModel(engine: agent.defaultEngine(configured: configured),
+                                     provider: agent.defaultProvider, runnerId: agent.runnerId)
     }
 
-    /// The same resolver for an in-progress Agent edit, whose Runtime may differ from the saved
-    /// Agent. This keeps model-dependent controls (notably Auto permission mode) aligned with the
+    /// The same resolver for an in-progress Agent edit, whose engine may differ from the saved
+    /// Agent's. This keeps model-dependent controls (notably Auto permission mode) aligned with the
     /// model that new Sessions will actually inherit.
-    func effectiveDefaultModel(for provider: String, runnerId: String?) -> String {
+    func effectiveDefaultModel(engine: String, provider: String, runnerId: String?) -> String {
         let catalog = modelCatalog(for: runnerId)
-        return AgentDefaults.effectiveDefaultModel(
-            for: provider, catalog: catalog,
+        return AgentDefaults.defaultModel(
+            engine: engine, provider: provider, catalog: catalog,
             configured: configuredProviders + ProviderPools.asProviders(allPools),
             runtimeDefaults: runnerId.flatMap { runnerRuntimeDefaultModels[$0] })
     }

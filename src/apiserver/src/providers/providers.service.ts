@@ -29,6 +29,7 @@ import {
   type PoolAdmissionRow,
   type PoolMemberRefusal,
 } from './pool-admission';
+import { readLastUsed } from './provider-last-used';
 import { selectPoolMember, spentUntil } from './pool-select';
 import { withPreset } from './preset-overlay';
 import { keyCredential, keyRowEngine, usableProviderScope } from './custom-provider';
@@ -472,17 +473,21 @@ export class ProvidersService {
 
   /** The caller's personal (BYOK) providers, disabled ones included — each with why it may not join an
    *  account pool (`poolRefusal`, null when it may). The browser never sees a key, so this verdict is
-   *  the only way the pool form can say which rows it will turn away, and why, before anyone asks. */
+   *  the only way the pool form can say which rows it will turn away, and why, before anyone asks.
+   *  Each row also carries `lastUsedAt`: when a session last ran on that key, or null for never
+   *  (provider-last-used.ts states exactly what counts). */
   async listMine(ownerId: string) {
     const rows = await this.prisma.modelProvider.findMany({
       where: { ownerId, slug: { notIn: COMPATIBILITY_GUARD_SLUGS } },
       orderBy: [{ position: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }, { id: 'asc' }],
     });
+    const lastUsed = await readLastUsed(this.prisma, ownerId, rows.map((row) => ({ id: row.id, slug: row.slug })));
     return rows.map((r) => {
       const reason = poolMemberRefusal(r);
       return {
         ...this.desensitize(r),
         poolRefusal: reason && { reason, message: POOL_MEMBER_REFUSALS[reason] },
+        lastUsedAt: lastUsed.get(r.id) ?? null,
       };
     });
   }

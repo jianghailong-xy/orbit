@@ -57,7 +57,10 @@ public struct RunnerAttentionRunner: Decodable, Equatable, Sendable {
 public struct RunnerAttentionWorkspace: Decodable, Equatable, Sendable {
     public let id: String
     public let name: String
-    /// The provider its last interactive session ran on: a built-in engine or a configured provider.
+    /// The engine its last interactive session ran on (nil when nobody can tell, absent from an older
+    /// server) and the credential it spent: an engine's own sign-in on the runner — the engine's name —
+    /// or a key or pool, which the runner's sign-in and quota have nothing to do with.
+    public let lastEngine: String?
     public let lastProvider: String?
     public let workDir: String?
     /// BIGINT columns, which the API sends as strings; numbers are read too.
@@ -68,6 +71,7 @@ public struct RunnerAttentionWorkspace: Decodable, Equatable, Sendable {
     public init(_ workspace: Agent) {
         id = workspace.id
         name = workspace.name
+        lastEngine = workspace.lastEngine
         lastProvider = workspace.lastProvider
         workDir = workspace.workDir
         workDirFreeBytes = workspace.workDirFreeBytes
@@ -76,13 +80,14 @@ public struct RunnerAttentionWorkspace: Decodable, Equatable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, lastProvider, workDir, workDirFreeBytes, workDirTotalBytes, repoHealth
+        case id, name, lastEngine, lastProvider, workDir, workDirFreeBytes, workDirTotalBytes, repoHealth
     }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(String.self, forKey: .id)
         name = try c.decode(String.self, forKey: .name)
+        lastEngine = try c.decodeIfPresent(String.self, forKey: .lastEngine)
         lastProvider = try c.decodeIfPresent(String.self, forKey: .lastProvider)
         workDir = try c.decodeIfPresent(String.self, forKey: .workDir)
         workDirFreeBytes = c.flexibleInt64(forKey: .workDirFreeBytes)
@@ -442,9 +447,13 @@ public enum RunnerAttention {
         return names.first ?? ""
     }
 
-    /// The workspaces whose sessions run on this built-in engine's login on this machine.
+    /// The workspaces whose sessions run on this engine's own sign-in on this machine: the engine is
+    /// theirs and so is its credential. One that runs the engine on a key (Claude Code on a DeepSeek key)
+    /// does not depend on the sign-in at all (web's `workspacesOn`).
     private static func workspacesOn(_ workspaces: [RunnerAttentionWorkspace], _ engine: LoginEngine) -> [String] {
-        workspaces.filter { $0.lastProvider == engine.rawValue }.map(\.name)
+        workspaces
+            .filter { $0.lastProvider == engine.rawValue && ($0.lastEngine ?? engine.rawValue) == engine.rawValue }
+            .map(\.name)
     }
 
     private static func signedOutItems(_ runner: RunnerAttentionRunner,

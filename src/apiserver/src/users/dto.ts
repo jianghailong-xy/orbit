@@ -131,6 +131,17 @@ export class UpdatePreferencesDto {
   @IsOptional()
   @IsBoolean()
   promptSuggestions?: boolean;
+
+  /**
+   * Whether this account's clients show the server's rolling recap of a session
+   * (Session.recapText, 0418) in place of the raw last reply. Default on (absent = on), so the
+   * switch is only ever written to turn it off. A display preference, read by every client's
+   * session list; what the server SPENDS on recaps is the deployment's own switch
+   * (ORBIT_RECAP_ENABLED), and the recap itself is not withdrawn from the payload.
+   */
+  @IsOptional()
+  @IsBoolean()
+  recaps?: boolean;
 }
 
 /** Set a user's access role (admin area). */

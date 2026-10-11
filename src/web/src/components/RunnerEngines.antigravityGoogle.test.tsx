@@ -6,8 +6,9 @@ import { createRoot } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { AgentProvider } from '@orbit/shared';
 import { api } from '../api';
-import { currentProviderChoice, providerChoices } from '../lib/sessionProviderChoices';
+import { currentProviderChoice, engineProviders } from '../lib/sessionProviderChoices';
 import { MachineEngines, RunnerEngines } from './RunnerEngines';
 import { clickRunnerMenuItem } from './RunnerEngines.test-helpers';
 import { probeReportsSignedIn } from './RunnerSignIn';
@@ -150,15 +151,20 @@ describe('Antigravity Google login across client surfaces', () => {
   });
 
   it('offers the Google account in the selector and blocks a lapsed login while Gemini keys still work', () => {
-    const choices = (r: Runner) => providerChoices([{ slug: 'gemini-key', label: 'Gemini', runtime: 'antigravity', presetSlug: 'gemini', models: [] }], undefined, undefined, r.engines, [], undefined, r.antigravity);
-    expect(choices(fixtures.google).find(c => c.slug === 'antigravity')).toMatchObject({ kind: 'engine', labelDetail: 'Google account' });
+    const choices = (r: Runner) =>
+      engineProviders(AgentProvider.ANTIGRAVITY, {
+        configured: [{ slug: 'gemini-key', label: 'Gemini', runtime: 'antigravity', presetSlug: 'gemini', models: [], engines: ['antigravity', 'opencode'] }],
+        engineHealth: r.engines,
+        antigravity: r.antigravity,
+      });
+    expect(choices(fixtures.google).find(c => c.slug === 'antigravity')).toMatchObject({ kind: 'login', labelDetail: 'Google account' });
     expect(choices(fixtures.expired).find(c => c.slug === 'antigravity')).toMatchObject({ unavailable: 'Not signed in', fixEngine: 'antigravity' });
     expect(choices(fixtures.expired).find(c => c.slug === 'gemini-key')?.unavailable).toBeUndefined();
     const signedOut = structuredClone(fixtures.google);
     signedOut.engines![0].auth = 'no';
     expect(choices(signedOut).find(c => c.slug === 'antigravity')?.unavailable).toBe('Not signed in');
     expect(choices(fixtures['env-key']).find(c => c.slug === 'antigravity')?.labelDetail).toBe('env key');
-    expect(currentProviderChoice('antigravity', [], undefined, [], undefined, fixtures.expired.antigravity).unavailable).toBe('Not signed in');
+    expect(currentProviderChoice(AgentProvider.ANTIGRAVITY, 'antigravity', [], { configured: [], antigravity: fixtures.expired.antigravity }).unavailable).toBe('Not signed in');
   });
 
   it('puts the Google sign-in button and warning on an unauthenticated transcript card', () => {

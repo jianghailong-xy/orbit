@@ -208,7 +208,7 @@ struct WikiMaintenanceChoice: Equatable {
 struct WikiMaintenanceForm: View {
     /// The workspaces it can run in, with the label each is listed by.
     let workspaces: [WikiPickerOption]
-    /// The providers the server takes: configured ones on the Claude Code runtime, with their models.
+    /// The providers the server takes: the keys Claude Code runs, with their models.
     let providers: [WikiPickerOption]
     let initial: WikiMaintenanceChoice
     let enabled: Bool
@@ -410,9 +410,12 @@ struct WikiSettingsView: View {
         workspaces.first { PublicID.storageKey($0.id) == PublicID.storageKey(id) }?.label
     }
 
-    /// The providers the server takes for maintenance: configured ones on the Claude Code runtime.
+    /// The providers the server takes for maintenance: the keys Claude Code runs, by the compatibility
+    /// table (each key's `engines`, docs/provider-engine-contract.md §3.5), since a maintenance run starts
+    /// a clean Claude Code — a DeepSeek key included, which Claude Code runs as well as DeepSeek Harness
+    /// does (web's `MaintenanceSetUp`).
     private var providers: [WikiPickerOption] {
-        (model.agents?.configuredProviders ?? []).filter { $0.runtime == "claude" }.map { provider in
+        (model.agents?.configuredProviders ?? []).filter { ProviderEngines.of($0).contains("claude") }.map { provider in
             WikiPickerOption(id: provider.slug,
                              label: WikiModeLogic.providerLabel(provider.slug,
                                                                 model: provider.defaultModel ?? provider.models.first?.value))

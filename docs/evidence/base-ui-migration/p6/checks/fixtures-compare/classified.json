@@ -1,0 +1,8314 @@
+{
+ "configs": {
+  "foundation": {
+   "totals": {
+    "tests": 48,
+    "bothPassed": 48,
+    "statusDiffers": 0,
+    "onlyBefore": 0,
+    "onlyAfter": 0,
+    "jsonAttachments": 48,
+    "jsonDiffering": 0,
+    "pngAttachments": 40,
+    "pngEqual": 32,
+    "pngDiffering": 8
+   },
+   "noiseTotals": {
+    "tests": 48,
+    "bothPassed": 48,
+    "statusDiffers": 0,
+    "onlyBefore": 0,
+    "onlyAfter": 0,
+    "jsonAttachments": 48,
+    "jsonDiffering": 0,
+    "pngAttachments": 40,
+    "pngEqual": 40,
+    "pngDiffering": 0
+   },
+   "groups": {
+    "foundation-states": {
+     "png:stable": 8
+    }
+   },
+   "stablePngs": [
+    {
+     "test": "foundation.browser.mjs › foundation states match the frozen P0 palette › chromium-dark-desktop",
+     "attachment": "foundation-states",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      652,
+      166,
+      1256,
+      332
+     ],
+     "pixels": 100218,
+     "maxChannelDiff": 223
+    },
+    {
+     "test": "foundation.browser.mjs › foundation states match the frozen P0 palette › chromium-dark-phone",
+     "attachment": "foundation-states",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      16,
+      380,
+      374,
+      577
+     ],
+     "pixels": 70480,
+     "maxChannelDiff": 223
+    },
+    {
+     "test": "foundation.browser.mjs › foundation states match the frozen P0 palette › chromium-light-desktop",
+     "attachment": "foundation-states",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      652,
+      166,
+      1256,
+      332
+     ],
+     "pixels": 10236,
+     "maxChannelDiff": 224
+    },
+    {
+     "test": "foundation.browser.mjs › foundation states match the frozen P0 palette › chromium-light-phone",
+     "attachment": "foundation-states",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      16,
+      380,
+      374,
+      577
+     ],
+     "pixels": 9796,
+     "maxChannelDiff": 224
+    },
+    {
+     "test": "foundation.browser.mjs › foundation states match the frozen P0 palette › webkit-dark-desktop",
+     "attachment": "foundation-states",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      652,
+      166,
+      1256,
+      332
+     ],
+     "pixels": 100224,
+     "maxChannelDiff": 223
+    },
+    {
+     "test": "foundation.browser.mjs › foundation states match the frozen P0 palette › webkit-dark-phone",
+     "attachment": "foundation-states",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      16,
+      380,
+      374,
+      577
+     ],
+     "pixels": 70486,
+     "maxChannelDiff": 223
+    },
+    {
+     "test": "foundation.browser.mjs › foundation states match the frozen P0 palette › webkit-light-desktop",
+     "attachment": "foundation-states",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      652,
+      166,
+      1256,
+      332
+     ],
+     "pixels": 10307,
+     "maxChannelDiff": 224
+    },
+    {
+     "test": "foundation.browser.mjs › foundation states match the frozen P0 palette › webkit-light-phone",
+     "attachment": "foundation-states",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      16,
+      380,
+      374,
+      577
+     ],
+     "pixels": 9867,
+     "maxChannelDiff": 224
+    }
+   ]
+  },
+  "controls": {
+   "totals": {
+    "tests": 32,
+    "bothPassed": 32,
+    "statusDiffers": 0,
+    "onlyBefore": 0,
+    "onlyAfter": 0,
+    "jsonAttachments": 32,
+    "jsonDiffering": 0,
+    "pngAttachments": 16,
+    "pngEqual": 4,
+    "pngDiffering": 12
+   },
+   "noiseTotals": {
+    "tests": 32,
+    "bothPassed": 32,
+    "statusDiffers": 0,
+    "onlyBefore": 0,
+    "onlyAfter": 0,
+    "jsonAttachments": 32,
+    "jsonDiffering": 0,
+    "pngAttachments": 16,
+    "pngEqual": 13,
+    "pngDiffering": 3
+   },
+   "groups": {
+    "controls-states": {
+     "png:stable": 8
+    },
+    "interactive-controls": {
+     "png:stable": 1,
+     "png:noise": 3
+    }
+   },
+   "stablePngs": [
+    {
+     "test": "controls.browser.mjs › fixed control states keep the frozen P0 palette › chromium-dark-desktop",
+     "attachment": "controls-states",
+     "sizes": [
+      [
+       1280,
+       6271
+      ],
+      [
+       1280,
+       6271
+      ]
+     ],
+     "box": [
+      261,
+      123,
+      1139,
+      5487
+     ],
+     "pixels": 231114,
+     "maxChannelDiff": 212
+    },
+    {
+     "test": "controls.browser.mjs › fixed control states keep the frozen P0 palette › chromium-dark-phone",
+     "attachment": "controls-states",
+     "sizes": [
+      [
+       390,
+       13042
+      ],
+      [
+       390,
+       8916
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "controls.browser.mjs › fixed control states keep the frozen P0 palette › chromium-light-desktop",
+     "attachment": "controls-states",
+     "sizes": [
+      [
+       1280,
+       6271
+      ],
+      [
+       1280,
+       6271
+      ]
+     ],
+     "box": [
+      261,
+      123,
+      1139,
+      5487
+     ],
+     "pixels": 230406,
+     "maxChannelDiff": 255
+    },
+    {
+     "test": "controls.browser.mjs › fixed control states keep the frozen P0 palette › chromium-light-phone",
+     "attachment": "controls-states",
+     "sizes": [
+      [
+       390,
+       13042
+      ],
+      [
+       390,
+       8916
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "controls.browser.mjs › fixed control states keep the frozen P0 palette › webkit-dark-desktop",
+     "attachment": "controls-states",
+     "sizes": [
+      [
+       1272,
+       6271
+      ],
+      [
+       1272,
+       6271
+      ]
+     ],
+     "box": [
+      257,
+      123,
+      1135,
+      5486
+     ],
+     "pixels": 231520,
+     "maxChannelDiff": 212
+    },
+    {
+     "test": "controls.browser.mjs › fixed control states keep the frozen P0 palette › webkit-dark-phone",
+     "attachment": "controls-states",
+     "sizes": [
+      [
+       390,
+       13040
+      ],
+      [
+       390,
+       8915
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "controls.browser.mjs › fixed control states keep the frozen P0 palette › webkit-light-desktop",
+     "attachment": "controls-states",
+     "sizes": [
+      [
+       1272,
+       6271
+      ],
+      [
+       1272,
+       6271
+      ]
+     ],
+     "box": [
+      257,
+      123,
+      1135,
+      5486
+     ],
+     "pixels": 231096,
+     "maxChannelDiff": 255
+    },
+    {
+     "test": "controls.browser.mjs › fixed control states keep the frozen P0 palette › webkit-light-phone",
+     "attachment": "controls-states",
+     "sizes": [
+      [
+       390,
+       13040
+      ],
+      [
+       390,
+       8915
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "controls.browser.mjs › keyboard, labels, loading, disabled and native form values work › chromium-dark-phone",
+     "attachment": "interactive-controls",
+     "sizes": [
+      [
+       358,
+       880
+      ],
+      [
+       358,
+       880
+      ]
+     ],
+     "box": [
+      17,
+      212,
+      144,
+      285
+     ],
+     "pixels": 44,
+     "maxChannelDiff": 33
+    }
+   ]
+  },
+  "overlays": {
+   "totals": {
+    "tests": 120,
+    "bothPassed": 120,
+    "statusDiffers": 0,
+    "onlyBefore": 0,
+    "onlyAfter": 0,
+    "jsonAttachments": 120,
+    "jsonDiffering": 12,
+    "pngAttachments": 88,
+    "pngEqual": 49,
+    "pngDiffering": 39
+   },
+   "noiseTotals": {
+    "tests": 120,
+    "bothPassed": 120,
+    "statusDiffers": 0,
+    "onlyBefore": 0,
+    "onlyAfter": 0,
+    "jsonAttachments": 120,
+    "jsonDiffering": 0,
+    "pngAttachments": 88,
+    "pngEqual": 87,
+    "pngDiffering": 1
+   },
+   "groups": {
+    "Orbit-bottom drawer": {
+     "png:stable": 2
+    },
+    "Orbit-close-hover": {
+     "png:stable": 4
+    },
+    "Orbit-dialog": {
+     "png:stable": 4
+    },
+    "bottom-sheet": {
+     "png:stable": 8
+    },
+    "confirm-error": {
+     "png:stable": 8
+    },
+    "confirm-pending": {
+     "png:stable": 8
+    },
+    "drawer-with-dialog": {
+     "png:noise": 1,
+     "png:stable": 4
+    },
+    "scroll-positions": {
+     "json:layout-offset": 12
+    }
+   },
+   "stablePngs": [
+    {
+     "test": "overlays-close-hover.browser.mjs › the dialog Close takes the replaced modal Close hover background › chromium-dark-desktop",
+     "attachment": "Orbit-close-hover",
+     "sizes": [
+      [
+       64,
+       64
+      ],
+      [
+       64,
+       64
+      ]
+     ],
+     "box": [
+      60,
+      40,
+      64,
+      64
+     ],
+     "pixels": 68,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "overlays-close-hover.browser.mjs › the dialog Close takes the replaced modal Close hover background › chromium-light-desktop",
+     "attachment": "Orbit-close-hover",
+     "sizes": [
+      [
+       64,
+       64
+      ],
+      [
+       64,
+       64
+      ]
+     ],
+     "box": [
+      60,
+      40,
+      64,
+      64
+     ],
+     "pixels": 50,
+     "maxChannelDiff": 116
+    },
+    {
+     "test": "overlays-close-hover.browser.mjs › the dialog Close takes the replaced modal Close hover background › webkit-dark-desktop",
+     "attachment": "Orbit-close-hover",
+     "sizes": [
+      [
+       64,
+       64
+      ],
+      [
+       64,
+       64
+      ]
+     ],
+     "box": [
+      60,
+      46,
+      64,
+      64
+     ],
+     "pixels": 52,
+     "maxChannelDiff": 96
+    },
+    {
+     "test": "overlays-close-hover.browser.mjs › the dialog Close takes the replaced modal Close hover background › webkit-light-desktop",
+     "attachment": "Orbit-close-hover",
+     "sizes": [
+      [
+       64,
+       64
+      ],
+      [
+       64,
+       64
+      ]
+     ],
+     "box": [
+      60,
+      46,
+      64,
+      64
+     ],
+     "pixels": 37,
+     "maxChannelDiff": 116
+    },
+    {
+     "test": "overlays.browser.mjs › async confirmation prevents duplicate submits, retains failures and permits retry or cancellation › chromium-dark-desktop",
+     "attachment": "confirm-error",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      24,
+      136,
+      1177,
+      483
+     ],
+     "pixels": 73528,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "overlays.browser.mjs › async confirmation prevents duplicate submits, retains failures and permits retry or cancellation › chromium-dark-desktop",
+     "attachment": "confirm-pending",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      24,
+      136,
+      1177,
+      483
+     ],
+     "pixels": 73528,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "overlays.browser.mjs › async confirmation prevents duplicate submits, retains failures and permits retry or cancellation › chromium-dark-phone",
+     "attachment": "confirm-error",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      276,
+      344,
+      761
+     ],
+     "pixels": 67674,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "overlays.browser.mjs › async confirmation prevents duplicate submits, retains failures and permits retry or cancellation › chromium-dark-phone",
+     "attachment": "confirm-pending",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      246,
+      344,
+      761
+     ],
+     "pixels": 69955,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "overlays.browser.mjs › async confirmation prevents duplicate submits, retains failures and permits retry or cancellation › chromium-light-desktop",
+     "attachment": "confirm-error",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      24,
+      136,
+      1177,
+      483
+     ],
+     "pixels": 20914,
+     "maxChannelDiff": 123
+    },
+    {
+     "test": "overlays.browser.mjs › async confirmation prevents duplicate submits, retains failures and permits retry or cancellation › chromium-light-desktop",
+     "attachment": "confirm-pending",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      24,
+      136,
+      1177,
+      483
+     ],
+     "pixels": 20914,
+     "maxChannelDiff": 123
+    },
+    {
+     "test": "overlays.browser.mjs › async confirmation prevents duplicate submits, retains failures and permits retry or cancellation › chromium-light-phone",
+     "attachment": "confirm-error",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      276,
+      344,
+      761
+     ],
+     "pixels": 17525,
+     "maxChannelDiff": 123
+    },
+    {
+     "test": "overlays.browser.mjs › async confirmation prevents duplicate submits, retains failures and permits retry or cancellation › chromium-light-phone",
+     "attachment": "confirm-pending",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      246,
+      344,
+      761
+     ],
+     "pixels": 19351,
+     "maxChannelDiff": 123
+    },
+    {
+     "test": "overlays.browser.mjs › async confirmation prevents duplicate submits, retains failures and permits retry or cancellation › webkit-dark-desktop",
+     "attachment": "confirm-error",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      24,
+      142,
+      1177,
+      506
+     ],
+     "pixels": 72456,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "overlays.browser.mjs › async confirmation prevents duplicate submits, retains failures and permits retry or cancellation › webkit-dark-desktop",
+     "attachment": "confirm-pending",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      24,
+      142,
+      1177,
+      506
+     ],
+     "pixels": 72456,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "overlays.browser.mjs › async confirmation prevents duplicate submits, retains failures and permits retry or cancellation › webkit-dark-phone",
+     "attachment": "confirm-error",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      276,
+      344,
+      790
+     ],
+     "pixels": 69295,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "overlays.browser.mjs › async confirmation prevents duplicate submits, retains failures and permits retry or cancellation › webkit-dark-phone",
+     "attachment": "confirm-pending",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      246,
+      344,
+      790
+     ],
+     "pixels": 70584,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "overlays.browser.mjs › async confirmation prevents duplicate submits, retains failures and permits retry or cancellation › webkit-light-desktop",
+     "attachment": "confirm-error",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      24,
+      142,
+      1177,
+      506
+     ],
+     "pixels": 21343,
+     "maxChannelDiff": 123
+    },
+    {
+     "test": "overlays.browser.mjs › async confirmation prevents duplicate submits, retains failures and permits retry or cancellation › webkit-light-desktop",
+     "attachment": "confirm-pending",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      24,
+      142,
+      1177,
+      506
+     ],
+     "pixels": 21343,
+     "maxChannelDiff": 123
+    },
+    {
+     "test": "overlays.browser.mjs › async confirmation prevents duplicate submits, retains failures and permits retry or cancellation › webkit-light-phone",
+     "attachment": "confirm-error",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      276,
+      344,
+      790
+     ],
+     "pixels": 19041,
+     "maxChannelDiff": 123
+    },
+    {
+     "test": "overlays.browser.mjs › async confirmation prevents duplicate submits, retains failures and permits retry or cancellation › webkit-light-phone",
+     "attachment": "confirm-pending",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      246,
+      344,
+      790
+     ],
+     "pixels": 19770,
+     "maxChannelDiff": 123
+    },
+    {
+     "test": "overlays.browser.mjs › dialog and drawers open with no control hovered or focused; the sheet field takes hover and focus › chromium-dark-phone",
+     "attachment": "Orbit-bottom drawer",
+     "sizes": [
+      [
+       390,
+       378
+      ],
+      [
+       390,
+       378
+      ]
+     ],
+     "box": [
+      24,
+      97,
+      366,
+      130
+     ],
+     "pixels": 35,
+     "maxChannelDiff": 2
+    },
+    {
+     "test": "overlays.browser.mjs › dialog and drawers open with no control hovered or focused; the sheet field takes hover and focus › chromium-dark-phone",
+     "attachment": "Orbit-dialog",
+     "sizes": [
+      [
+       374,
+       174
+      ],
+      [
+       374,
+       174
+      ]
+     ],
+     "box": [
+      141,
+      173,
+      303,
+      174
+     ],
+     "pixels": 31,
+     "maxChannelDiff": 19
+    },
+    {
+     "test": "overlays.browser.mjs › dialog and drawers open with no control hovered or focused; the sheet field takes hover and focus › chromium-light-phone",
+     "attachment": "Orbit-bottom drawer",
+     "sizes": [
+      [
+       390,
+       378
+      ],
+      [
+       390,
+       378
+      ]
+     ],
+     "box": [
+      24,
+      97,
+      366,
+      130
+     ],
+     "pixels": 38,
+     "maxChannelDiff": 2
+    },
+    {
+     "test": "overlays.browser.mjs › dialog and drawers open with no control hovered or focused; the sheet field takes hover and focus › chromium-light-phone",
+     "attachment": "Orbit-dialog",
+     "sizes": [
+      [
+       374,
+       174
+      ],
+      [
+       374,
+       174
+      ]
+     ],
+     "box": [
+      141,
+      173,
+      303,
+      174
+     ],
+     "pixels": 6,
+     "maxChannelDiff": 15
+    },
+    {
+     "test": "overlays.browser.mjs › dialog and drawers open with no control hovered or focused; the sheet field takes hover and focus › webkit-dark-phone",
+     "attachment": "Orbit-dialog",
+     "sizes": [
+      [
+       374,
+       174
+      ],
+      [
+       374,
+       174
+      ]
+     ],
+     "box": [
+      33,
+      173,
+      303,
+      174
+     ],
+     "pixels": 235,
+     "maxChannelDiff": 89
+    },
+    {
+     "test": "overlays.browser.mjs › dialog and drawers open with no control hovered or focused; the sheet field takes hover and focus › webkit-light-phone",
+     "attachment": "Orbit-dialog",
+     "sizes": [
+      [
+       374,
+       174
+      ],
+      [
+       374,
+       174
+      ]
+     ],
+     "box": [
+      33,
+      173,
+      303,
+      174
+     ],
+     "pixels": 215,
+     "maxChannelDiff": 106
+    },
+    {
+     "test": "overlays.browser.mjs › dismissal controls, retained form values, long content and bottom sheet remain usable › chromium-dark-desktop",
+     "attachment": "bottom-sheet",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      24,
+      136,
+      1177,
+      483
+     ],
+     "pixels": 77516,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "overlays.browser.mjs › dismissal controls, retained form values, long content and bottom sheet remain usable › chromium-dark-phone",
+     "attachment": "bottom-sheet",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      176,
+      344,
+      641
+     ],
+     "pixels": 73642,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "overlays.browser.mjs › dismissal controls, retained form values, long content and bottom sheet remain usable › chromium-light-desktop",
+     "attachment": "bottom-sheet",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      24,
+      136,
+      1177,
+      483
+     ],
+     "pixels": 23906,
+     "maxChannelDiff": 123
+    },
+    {
+     "test": "overlays.browser.mjs › dismissal controls, retained form values, long content and bottom sheet remain usable › chromium-light-phone",
+     "attachment": "bottom-sheet",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      176,
+      344,
+      641
+     ],
+     "pixels": 21334,
+     "maxChannelDiff": 123
+    },
+    {
+     "test": "overlays.browser.mjs › dismissal controls, retained form values, long content and bottom sheet remain usable › webkit-dark-desktop",
+     "attachment": "bottom-sheet",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      24,
+      142,
+      1177,
+      506
+     ],
+     "pixels": 76581,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "overlays.browser.mjs › dismissal controls, retained form values, long content and bottom sheet remain usable › webkit-dark-phone",
+     "attachment": "bottom-sheet",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      182,
+      344,
+      670
+     ],
+     "pixels": 74033,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "overlays.browser.mjs › dismissal controls, retained form values, long content and bottom sheet remain usable › webkit-light-desktop",
+     "attachment": "bottom-sheet",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      24,
+      142,
+      1177,
+      506
+     ],
+     "pixels": 24479,
+     "maxChannelDiff": 123
+    },
+    {
+     "test": "overlays.browser.mjs › dismissal controls, retained form values, long content and bottom sheet remain usable › webkit-light-phone",
+     "attachment": "bottom-sheet",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      182,
+      344,
+      670
+     ],
+     "pixels": 21746,
+     "maxChannelDiff": 123
+    },
+    {
+     "test": "overlays.browser.mjs › nested dialog and imperative confirmation close only the top layer › chromium-dark-phone",
+     "attachment": "drawer-with-dialog",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      34,
+      182,
+      38,
+      185
+     ],
+     "pixels": 6,
+     "maxChannelDiff": 1
+    },
+    {
+     "test": "overlays.browser.mjs › nested dialog and imperative confirmation close only the top layer › chromium-light-desktop",
+     "attachment": "drawer-with-dialog",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      24,
+      136,
+      1199,
+      483
+     ],
+     "pixels": 20197,
+     "maxChannelDiff": 123
+    },
+    {
+     "test": "overlays.browser.mjs › nested dialog and imperative confirmation close only the top layer › webkit-dark-desktop",
+     "attachment": "drawer-with-dialog",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      24,
+      142,
+      1199,
+      506
+     ],
+     "pixels": 74867,
+     "maxChannelDiff": 92
+    },
+    {
+     "test": "overlays.browser.mjs › nested dialog and imperative confirmation close only the top layer › webkit-light-desktop",
+     "attachment": "drawer-with-dialog",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      24,
+      142,
+      1199,
+      506
+     ],
+     "pixels": 20596,
+     "maxChannelDiff": 123
+    }
+   ]
+  },
+  "choices": {
+   "totals": {
+    "tests": 760,
+    "bothPassed": 758,
+    "statusDiffers": 2,
+    "onlyBefore": 0,
+    "onlyAfter": 0,
+    "jsonAttachments": 808,
+    "jsonDiffering": 369,
+    "pngAttachments": 440,
+    "pngEqual": 338,
+    "pngDiffering": 102
+   },
+   "noiseTotals": {
+    "tests": 760,
+    "bothPassed": 758,
+    "statusDiffers": 0,
+    "onlyBefore": 0,
+    "onlyAfter": 0,
+    "jsonAttachments": 808,
+    "jsonDiffering": 362,
+    "pngAttachments": 440,
+    "pngEqual": 359,
+    "pngDiffering": 81,
+    "sameStatusNotPassed": 2
+   },
+   "groups": {
+    "choices-in-dialog": {
+     "png:noise": 3,
+     "png:stable": 1
+    },
+    "first-frames": {
+     "json:noise": 61,
+     "json:noise-kind": 2
+    },
+    "motion": {
+     "json:noise": 189,
+     "json:noise-kind": 3
+    },
+    "motion-frames": {
+     "json:noise": 64
+    },
+    "nested-lifecycle": {
+     "json:noise": 14
+    },
+    "nested-open": {
+     "png:stable": 10,
+     "png:noise": 6
+    },
+    "orbit-enter-midpoint": {
+     "png:noise": 34,
+     "png:stable": 5
+    },
+    "orbit-exit-midpoint": {
+     "png:noise": 36,
+     "png:stable": 7
+    },
+    "page-scroll": {
+     "json:noise": 15,
+     "json:noise-kind": 1
+    },
+    "pointer-menu": {
+     "json:layout-offset": 4
+    },
+    "scroll-unlock": {
+     "json:noise": 16
+    }
+   },
+   "stablePngs": [
+    {
+     "test": "choices-lifecycle.browser.mjs › no-preference Dialog Popover Select exits restore one layer at a time › chromium-dark-desktop",
+     "attachment": "nested-open",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      313,
+      24,
+      466,
+      56
+     ],
+     "pixels": 4872,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "choices-lifecycle.browser.mjs › no-preference Dialog Popover Select exits restore one layer at a time › chromium-dark-phone",
+     "attachment": "nested-open",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      68,
+      328,
+      835
+     ],
+     "pixels": 24320,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "choices-lifecycle.browser.mjs › no-preference Dialog Popover Select exits restore one layer at a time › chromium-light-desktop",
+     "attachment": "nested-open",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      312,
+      24,
+      464,
+      56
+     ],
+     "pixels": 1087,
+     "maxChannelDiff": 123
+    },
+    {
+     "test": "choices-lifecycle.browser.mjs › no-preference Dialog Popover Select exits restore one layer at a time › chromium-light-phone",
+     "attachment": "nested-open",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      68,
+      328,
+      835
+     ],
+     "pixels": 14260,
+     "maxChannelDiff": 123
+    },
+    {
+     "test": "choices-lifecycle.browser.mjs › no-preference Dialog Popover Select exits restore one layer at a time › webkit-dark-desktop",
+     "attachment": "nested-open",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      313,
+      37,
+      466,
+      69
+     ],
+     "pixels": 4876,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "choices-lifecycle.browser.mjs › no-preference Dialog Popover Select exits restore one layer at a time › webkit-dark-phone",
+     "attachment": "nested-open",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      81,
+      328,
+      844
+     ],
+     "pixels": 25802,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "choices-lifecycle.browser.mjs › no-preference Dialog Popover Select exits restore one layer at a time › webkit-light-desktop",
+     "attachment": "nested-open",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      312,
+      37,
+      464,
+      69
+     ],
+     "pixels": 1097,
+     "maxChannelDiff": 123
+    },
+    {
+     "test": "choices-lifecycle.browser.mjs › no-preference Dialog Popover Select exits restore one layer at a time › webkit-light-phone",
+     "attachment": "nested-open",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      81,
+      328,
+      844
+     ],
+     "pixels": 16553,
+     "maxChannelDiff": 123
+    },
+    {
+     "test": "choices-lifecycle.browser.mjs › reduce Dialog Popover Select exits restore one layer at a time › chromium-dark-desktop",
+     "attachment": "nested-open",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      313,
+      24,
+      606,
+      243
+     ],
+     "pixels": 4876,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "choices-lifecycle.browser.mjs › reduce Dialog Popover Select exits restore one layer at a time › webkit-light-desktop",
+     "attachment": "nested-open",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      312,
+      37,
+      464,
+      69
+     ],
+     "pixels": 1097,
+     "maxChannelDiff": 123
+    },
+    {
+     "test": "choices-motion.browser.mjs › normal bottom entrance and exit motion of attachment stays in view › webkit-dark-phone",
+     "attachment": "orbit-exit-midpoint",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      161,
+      154,
+      193
+     ],
+     "pixels": 876,
+     "maxChannelDiff": 8
+    },
+    {
+     "test": "choices-motion.browser.mjs › normal bottom entrance and exit motion of expiry stays in view › chromium-dark-desktop",
+     "attachment": "orbit-exit-midpoint",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      65,
+      24,
+      177,
+      27
+     ],
+     "pixels": 11,
+     "maxChannelDiff": 1
+    },
+    {
+     "test": "choices-motion.browser.mjs › normal bottom entrance and exit motion of multiple stays in view › chromium-dark-phone",
+     "attachment": "orbit-exit-midpoint",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      22,
+      146,
+      276,
+      174
+     ],
+     "pixels": 1656,
+     "maxChannelDiff": 39
+    },
+    {
+     "test": "choices-motion.browser.mjs › normal bottom entrance and exit motion of multiple stays in view › chromium-light-desktop",
+     "attachment": "orbit-exit-midpoint",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      22,
+      146,
+      276,
+      174
+     ],
+     "pixels": 1653,
+     "maxChannelDiff": 26
+    },
+    {
+     "test": "choices-motion.browser.mjs › normal bottom entrance and exit motion of multiple stays in view › webkit-light-phone",
+     "attachment": "orbit-enter-midpoint",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      23,
+      160,
+      275,
+      186
+     ],
+     "pixels": 1104,
+     "maxChannelDiff": 70
+    },
+    {
+     "test": "choices-motion.browser.mjs › normal bottom entrance and exit motion of search stays in view › chromium-light-desktop",
+     "attachment": "orbit-enter-midpoint",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      23,
+      147,
+      275,
+      181
+     ],
+     "pixels": 1128,
+     "maxChannelDiff": 32
+    },
+    {
+     "test": "choices-motion.browser.mjs › normal bottom entrance and exit motion of search stays in view › chromium-light-desktop",
+     "attachment": "orbit-exit-midpoint",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      22,
+      148,
+      276,
+      180
+     ],
+     "pixels": 599,
+     "maxChannelDiff": 3
+    },
+    {
+     "test": "choices-motion.browser.mjs › normal bottom entrance and exit motion of search stays in view › chromium-light-phone",
+     "attachment": "orbit-exit-midpoint",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      22,
+      148,
+      276,
+      180
+     ],
+     "pixels": 599,
+     "maxChannelDiff": 3
+    },
+    {
+     "test": "choices-motion.browser.mjs › normal bottom entrance and exit motion of tooltip stays in view › chromium-dark-desktop",
+     "attachment": "orbit-enter-midpoint",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      26,
+      24,
+      177,
+      151
+     ],
+     "pixels": 21,
+     "maxChannelDiff": 2
+    },
+    {
+     "test": "choices-motion.browser.mjs › normal bottom entrance and exit motion of tooltip stays in view › chromium-dark-desktop",
+     "attachment": "orbit-exit-midpoint",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      65,
+      24,
+      177,
+      27
+     ],
+     "pixels": 11,
+     "maxChannelDiff": 1
+    },
+    {
+     "test": "choices-motion.browser.mjs › normal bottom entrance and exit motion of tooltip stays in view › webkit-light-desktop",
+     "attachment": "orbit-enter-midpoint",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      24,
+      161,
+      96,
+      193
+     ],
+     "pixels": 442,
+     "maxChannelDiff": 7
+    },
+    {
+     "test": "choices-motion.browser.mjs › normal bottom entrance and exit motion of tooltip stays in view › webkit-light-phone",
+     "attachment": "orbit-enter-midpoint",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      161,
+      96,
+      193
+     ],
+     "pixels": 405,
+     "maxChannelDiff": 3
+    },
+    {
+     "test": "choices.browser.mjs › Dialog owns choices, top-layer Escape, Tab and theme › chromium-light-desktop",
+     "attachment": "choices-in-dialog",
+     "sizes": [
+      [
+       520,
+       440
+      ],
+      [
+       520,
+       440
+      ]
+     ],
+     "box": [
+      24,
+      64,
+      436,
+      184
+     ],
+     "pixels": 83,
+     "maxChannelDiff": 2
+    }
+   ]
+  },
+  "toasts": {
+   "totals": {
+    "tests": 264,
+    "bothPassed": 263,
+    "statusDiffers": 1,
+    "onlyBefore": 0,
+    "onlyAfter": 0,
+    "jsonAttachments": 328,
+    "jsonDiffering": 105,
+    "pngAttachments": 312,
+    "pngEqual": 167,
+    "pngDiffering": 145
+   },
+   "noiseTotals": {
+    "tests": 264,
+    "bothPassed": 263,
+    "statusDiffers": 1,
+    "onlyBefore": 0,
+    "onlyAfter": 0,
+    "jsonAttachments": 328,
+    "jsonDiffering": 105,
+    "pngAttachments": 312,
+    "pngEqual": 305,
+    "pngDiffering": 7
+   },
+   "groups": {
+    "before-exit": {
+     "png:stable": 7,
+     "png:noise": 1
+    },
+    "closing-page": {
+     "png:stable": 32
+    },
+    "confirm-failure-notification": {
+     "png:stable": 6,
+     "png:noise": 2
+    },
+    "confirm-pending": {
+     "png:stable": 8
+    },
+    "continuous-card-motion": {
+     "json:noise": 24
+    },
+    "entry-geometry": {
+     "json:noise": 24
+    },
+    "expanded-pinned-stack": {
+     "png:stable": 3,
+     "png:noise": 1
+    },
+    "folded-warning": {
+     "png:stable": 4
+    },
+    "fresh-notification-animation": {
+     "json:noise": 8
+    },
+    "keyed-attention": {
+     "png:stable": 4
+    },
+    "mixed-stack": {
+     "png:stable": 7,
+     "png:noise": 1
+    },
+    "native-entrance-transfer": {
+     "json:noise": 8
+    },
+    "native-exit": {
+     "json:noise": 16
+    },
+    "native-stationary-arrival": {
+     "json:noise": 8
+    },
+    "native-stationary-release": {
+     "json:noise": 8
+    },
+    "native-timer": {
+     "json:noise": 8
+    },
+    "nested-toast-opposite-theme": {
+     "png:stable": 3,
+     "png:noise": 2
+    },
+    "notification-and-overlay": {
+     "png:stable": 16
+    },
+    "opening-page": {
+     "png:stable": 32
+    },
+    "retained-reopened-with-motion": {
+     "png:stable": 8
+    },
+    "stationary-arrival": {
+     "png:stable": 8
+    },
+    "stationary-layout": {
+     "json:noise": 1
+    }
+   },
+   "stablePngs": [
+    {
+     "test": "toasts-hover.browser.mjs › native stationary arrival pauses beyond six seconds and moving away resumes dismissal › chromium-dark-desktop",
+     "attachment": "stationary-arrival",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      392,
+      712,
+      424
+     ],
+     "pixels": 4008,
+     "maxChannelDiff": 178
+    },
+    {
+     "test": "toasts-hover.browser.mjs › native stationary arrival pauses beyond six seconds and moving away resumes dismissal › chromium-dark-phone",
+     "attachment": "stationary-arrival",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      576,
+      151,
+      608
+     ],
+     "pixels": 4040,
+     "maxChannelDiff": 178
+    },
+    {
+     "test": "toasts-hover.browser.mjs › native stationary arrival pauses beyond six seconds and moving away resumes dismissal › chromium-light-desktop",
+     "attachment": "stationary-arrival",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      392,
+      712,
+      424
+     ],
+     "pixels": 851,
+     "maxChannelDiff": 224
+    },
+    {
+     "test": "toasts-hover.browser.mjs › native stationary arrival pauses beyond six seconds and moving away resumes dismissal › chromium-light-phone",
+     "attachment": "stationary-arrival",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      576,
+      151,
+      608
+     ],
+     "pixels": 838,
+     "maxChannelDiff": 224
+    },
+    {
+     "test": "toasts-hover.browser.mjs › native stationary arrival pauses beyond six seconds and moving away resumes dismissal › webkit-dark-desktop",
+     "attachment": "stationary-arrival",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      399,
+      712,
+      431
+     ],
+     "pixels": 4012,
+     "maxChannelDiff": 178
+    },
+    {
+     "test": "toasts-hover.browser.mjs › native stationary arrival pauses beyond six seconds and moving away resumes dismissal › webkit-dark-phone",
+     "attachment": "stationary-arrival",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      583,
+      151,
+      615
+     ],
+     "pixels": 4044,
+     "maxChannelDiff": 178
+    },
+    {
+     "test": "toasts-hover.browser.mjs › native stationary arrival pauses beyond six seconds and moving away resumes dismissal › webkit-light-desktop",
+     "attachment": "stationary-arrival",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      399,
+      712,
+      431
+     ],
+     "pixels": 860,
+     "maxChannelDiff": 224
+    },
+    {
+     "test": "toasts-hover.browser.mjs › native stationary arrival pauses beyond six seconds and moving away resumes dismissal › webkit-light-phone",
+     "attachment": "stationary-arrival",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      583,
+      151,
+      615
+     ],
+     "pixels": 858,
+     "maxChannelDiff": 224
+    },
+    {
+     "test": "toasts-lifecycle.browser.mjs › notification pixels stay intact through Bottom drawer opening and closing › chromium-dark-desktop",
+     "attachment": "closing-page",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      392,
+      712,
+      424
+     ],
+     "pixels": 4008,
+     "maxChannelDiff": 162
+    },
+    {
+     "test": "toasts-lifecycle.browser.mjs › notification pixels stay intact through Bottom drawer opening and closing › chromium-dark-desktop",
+     "attachment": "opening-page",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      392,
+      712,
+      424
+     ],
+     "pixels": 4008,
+     "maxChannelDiff": 114
+    },
+    {
+     "test": "toasts-lifecycle.browser.mjs › notification pixels stay intact through Bottom drawer opening and closing › chromium-dark-phone",
+     "attachment": "closing-page",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      576,
+      151,
+      608
+     ],
+     "pixels": 4040,
+     "maxChannelDiff": 162
+    },
+    {
+     "test": "toasts-lifecycle.browser.mjs › notification pixels stay intact through Bottom drawer opening and closing › chromium-dark-phone",
+     "attachment": "opening-page",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      576,
+      151,
+      593
+     ],
+     "pixels": 2147,
+     "maxChannelDiff": 113
+    },
+    {
+     "test": "toasts-lifecycle.browser.mjs › notification pixels stay intact through Bottom drawer opening and closing › chromium-light-desktop",
+     "attachment": "closing-page",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      392,
+      712,
+      424
+     ],
+     "pixels": 851,
+     "maxChannelDiff": 204
+    },
+    {
+     "test": "toasts-lifecycle.browser.mjs › notification pixels stay intact through Bottom drawer opening and closing › chromium-light-desktop",
+     "attachment": "opening-page",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      392,
+      712,
+      424
+     ],
+     "pixels": 851,
+     "maxChannelDiff": 144
+    },
+    {
+     "test": "toasts-lifecycle.browser.mjs › notification pixels stay intact through Bottom drawer opening and closing › chromium-light-phone",
+     "attachment": "closing-page",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      576,
+      151,
+      608
+     ],
+     "pixels": 838,
+     "maxChannelDiff": 204
+    },
+    {
+     "test": "toasts-lifecycle.browser.mjs › notification pixels stay intact through Bottom drawer opening and closing › chromium-light-phone",
+     "attachment": "opening-page",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      576,
+      151,
+      593
+     ],
+     "pixels": 425,
+     "maxChannelDiff": 133
+    },
+    {
+     "test": "toasts-lifecycle.browser.mjs › notification pixels stay intact through Bottom drawer opening and closing › webkit-dark-desktop",
+     "attachment": "closing-page",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      399,
+      712,
+      431
+     ],
+     "pixels": 4012,
+     "maxChannelDiff": 162
+    },
+    {
+     "test": "toasts-lifecycle.browser.mjs › notification pixels stay intact through Bottom drawer opening and closing › webkit-dark-desktop",
+     "attachment": "opening-page",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      399,
+      712,
+      431
+     ],
+     "pixels": 4012,
+     "maxChannelDiff": 114
+    },
+    {
+     "test": "toasts-lifecycle.browser.mjs › notification pixels stay intact through Bottom drawer opening and closing › webkit-dark-phone",
+     "attachment": "closing-page",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      583,
+      151,
+      615
+     ],
+     "pixels": 4044,
+     "maxChannelDiff": 178
+    },
+    {
+     "test": "toasts-lifecycle.browser.mjs › notification pixels stay intact through Bottom drawer opening and closing › webkit-dark-phone",
+     "attachment": "opening-page",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      583,
+      151,
+      591
+     ],
+     "pixels": 1006,
+     "maxChannelDiff": 22
+    },
+    {
+     "test": "toasts-lifecycle.browser.mjs › notification pixels stay intact through Bottom drawer opening and closing › webkit-light-desktop",
+     "attachment": "closing-page",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      399,
+      712,
+      431
+     ],
+     "pixels": 860,
+     "maxChannelDiff": 204
+    },
+    {
+     "test": "toasts-lifecycle.browser.mjs › notification pixels stay intact through Bottom drawer opening and closing › webkit-light-desktop",
+     "attachment": "opening-page",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      399,
+      712,
+      431
+     ],
+     "pixels": 860,
+     "maxChannelDiff": 144
+    },
+    {
+     "test": "toasts-lifecycle.browser.mjs › notification pixels stay intact through Bottom drawer opening and closing › webkit-light-phone",
+     "attachment": "closing-page",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      583,
+      151,
+      615
+     ],
+     "pixels": 858,
+     "maxChannelDiff": 224
+    },
+    {
+     "test": "toasts-lifecycle.browser.mjs › notification pixels stay intact through Bottom drawer opening and closing › webkit-light-phone",
+     "attachment": "opening-page",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      583,
+      151,
+      591
+     ],
+     "pixels": 153,
+     "maxChannelDiff": 20
+    },
+    {
+     "test": "toasts-lifecycle.browser.mjs › notification pixels stay intact through Confirmation opening and closing › chromium-dark-desktop",
+     "attachment": "closing-page",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      392,
+      712,
+      424
+     ],
+     "pixels": 4008,
+     "maxChannelDiff": 178
+    },
+    {
+     "test": "toasts-lifecycle.browser.mjs › notification pixels stay intact through Confirmation opening and closing › chromium-dark-desktop",
+     "attachment": "opening-page",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      392,
+      712,
+      424
+     ],
+     "pixels": 4008,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "toasts-lifecycle.browser.mjs › notification pixels stay intact through Confirmation opening and closing › chromium-dark-phone",
+     "attachment": "closing-page",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      576,
+      151,
+      608
+     ],
+     "pixels": 4040,
+     "maxChannelDiff": 178
+    },
+    {
+     "test": "toasts-lifecycle.browser.mjs › notification pixels stay intact through Confirmation opening and closing › chromium-dark-phone",
+     "attachment": "opening-page",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      576,
+      151,
+      608
+     ],
+     "pixels": 4040,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "toasts-lifecycle.browser.mjs › notification pixels stay intact through Confirmation opening and closing › chromium-light-desktop",
+     "attachment": "closing-page",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      392,
+      712,
+      424
+     ],
+     "pixels": 851,
+     "maxChannelDiff": 224
+    },
+    {
+     "test": "toasts-lifecycle.browser.mjs › notification pixels stay intact through Confirmation opening and closing › chromium-light-desktop",
+     "attachment": "opening-page",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      392,
+      712,
+      424
+     ],
+     "pixels": 851,
+     "maxChannelDiff": 123
+    },
+    {
+     "test": "toasts-lifecycle.browser.mjs › notification pixels stay intact through Confirmation opening and closing › chromium-light-phone",
+     "attachment": "closing-page",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      576,
+      151,
+      608
+     ],
+     "pixels": 838,
+     "maxChannelDiff": 224
+    },
+    {
+     "test": "toasts-lifecycle.browser.mjs › notification pixels stay intact through Confirmation opening and closing › chromium-light-phone",
+     "attachment": "opening-page",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      576,
+      151,
+      608
+     ],
+     "pixels": 838,
+     "maxChannelDiff": 123
+    },
+    {
+     "test": "toasts-lifecycle.browser.mjs › notification pixels stay intact through Confirmation opening and closing › webkit-dark-desktop",
+     "attachment": "closing-page",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      399,
+      712,
+      431
+     ],
+     "pixels": 4012,
+     "maxChannelDiff": 178
+    },
+    {
+     "test": "toasts-lifecycle.browser.mjs › notification pixels stay intact through Confirmation opening and closing › webkit-dark-desktop",
+     "attachment": "opening-page",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      399,
+      712,
+      431
+     ],
+     "pixels": 4012,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "toasts-lifecycle.browser.mjs › notification pixels stay intact through Confirmation opening and closing › webkit-dark-phone",
+     "attachment": "closing-page",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      583,
+      151,
+      615
+     ],
+     "pixels": 4044,
+     "maxChannelDiff": 178
+    },
+    {
+     "test": "toasts-lifecycle.browser.mjs › notification pixels stay intact through Confirmation opening and closing › webkit-dark-phone",
+     "attachment": "opening-page",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      583,
+      151,
+      615
+     ],
+     "pixels": 4044,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "toasts-lifecycle.browser.mjs › notification pixels stay intact through Confirmation opening and closing › webkit-light-desktop",
+     "attachment": "closing-page",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      399,
+      712,
+      431
+     ],
+     "pixels": 860,
+     "maxChannelDiff": 224
+    },
+    {
+     "test": "toasts-lifecycle.browser.mjs › notification pixels stay intact through Confirmation opening and closing › webkit-light-desktop",
+     "attachment": "opening-page",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      399,
+      712,
+      431
+     ],
+     "pixels": 860,
+     "maxChannelDiff": 123
+    },
+    {
+     "test": "toasts-lifecycle.browser.mjs › notification pixels stay intact through Confirmation opening and closing › webkit-light-phone",
+     "attachment": "closing-page",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      583,
+      151,
+      615
+     ],
+     "pixels": 858,
+     "maxChannelDiff": 224
+    },
+    {
+     "test": "toasts-lifecycle.browser.mjs › notification pixels stay intact through Confirmation opening and closing › webkit-light-phone",
+     "attachment": "opening-page",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      583,
+      151,
+      615
+     ],
+     "pixels": 858,
+     "maxChannelDiff": 123
+    },
+    {
+     "test": "toasts-lifecycle.browser.mjs › notification pixels stay intact through Dialog opening and closing › chromium-dark-desktop",
+     "attachment": "closing-page",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      392,
+      712,
+      424
+     ],
+     "pixels": 4008,
+     "maxChannelDiff": 162
+    },
+    {
+     "test": "toasts-lifecycle.browser.mjs › notification pixels stay intact through Dialog opening and closing › chromium-dark-desktop",
+     "attachment": "opening-page",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      392,
+      712,
+      424
+     ],
+     "pixels": 4008,
+     "maxChannelDiff": 114
+    },
+    {
+     "test": "toasts-lifecycle.browser.mjs › notification pixels stay intact through Dialog opening and closing › chromium-dark-phone",
+     "attachment": "closing-page",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      576,
+      151,
+      608
+     ],
+     "pixels": 4040,
+     "maxChannelDiff": 162
+    },
+    {
+     "test": "toasts-lifecycle.browser.mjs › notification pixels stay intact through Dialog opening and closing › chromium-dark-phone",
+     "attachment": "opening-page",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      576,
+      151,
+      608
+     ],
+     "pixels": 4040,
+     "maxChannelDiff": 114
+    },
+    {
+     "test": "toasts-lifecycle.browser.mjs › notification pixels stay intact through Dialog opening and closing › chromium-light-desktop",
+     "attachment": "closing-page",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      392,
+      712,
+      424
+     ],
+     "pixels": 851,
+     "maxChannelDiff": 204
+    },
+    {
+     "test": "toasts-lifecycle.browser.mjs › notification pixels stay intact through Dialog opening and closing › chromium-light-desktop",
+     "attachment": "opening-page",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      392,
+      712,
+      424
+     ],
+     "pixels": 851,
+     "maxChannelDiff": 144
+    },
+    {
+     "test": "toasts-lifecycle.browser.mjs › notification pixels stay intact through Dialog opening and closing › chromium-light-phone",
+     "attachment": "closing-page",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      576,
+      151,
+      608
+     ],
+     "pixels": 838,
+     "maxChannelDiff": 204
+    },
+    {
+     "test": "toasts-lifecycle.browser.mjs › notification pixels stay intact through Dialog opening and closing › chromium-light-phone",
+     "attachment": "opening-page",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      576,
+      151,
+      608
+     ],
+     "pixels": 838,
+     "maxChannelDiff": 144
+    },
+    {
+     "test": "toasts-lifecycle.browser.mjs › notification pixels stay intact through Dialog opening and closing › webkit-dark-desktop",
+     "attachment": "closing-page",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      399,
+      712,
+      431
+     ],
+     "pixels": 4012,
+     "maxChannelDiff": 162
+    },
+    {
+     "test": "toasts-lifecycle.browser.mjs › notification pixels stay intact through Dialog opening and closing › webkit-dark-desktop",
+     "attachment": "opening-page",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      399,
+      712,
+      431
+     ],
+     "pixels": 4012,
+     "maxChannelDiff": 114
+    },
+    {
+     "test": "toasts-lifecycle.browser.mjs › notification pixels stay intact through Dialog opening and closing › webkit-dark-phone",
+     "attachment": "closing-page",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      583,
+      151,
+      615
+     ],
+     "pixels": 4044,
+     "maxChannelDiff": 178
+    },
+    {
+     "test": "toasts-lifecycle.browser.mjs › notification pixels stay intact through Dialog opening and closing › webkit-dark-phone",
+     "attachment": "opening-page",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      583,
+      151,
+      615
+     ],
+     "pixels": 4044,
+     "maxChannelDiff": 114
+    },
+    {
+     "test": "toasts-lifecycle.browser.mjs › notification pixels stay intact through Dialog opening and closing › webkit-light-desktop",
+     "attachment": "closing-page",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      399,
+      712,
+      431
+     ],
+     "pixels": 860,
+     "maxChannelDiff": 204
+    },
+    {
+     "test": "toasts-lifecycle.browser.mjs › notification pixels stay intact through Dialog opening and closing › webkit-light-desktop",
+     "attachment": "opening-page",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      399,
+      712,
+      431
+     ],
+     "pixels": 860,
+     "maxChannelDiff": 144
+    },
+    {
+     "test": "toasts-lifecycle.browser.mjs › notification pixels stay intact through Dialog opening and closing › webkit-light-phone",
+     "attachment": "closing-page",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      583,
+      151,
+      615
+     ],
+     "pixels": 858,
+     "maxChannelDiff": 224
+    },
+    {
+     "test": "toasts-lifecycle.browser.mjs › notification pixels stay intact through Dialog opening and closing › webkit-light-phone",
+     "attachment": "opening-page",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      583,
+      151,
+      615
+     ],
+     "pixels": 858,
+     "maxChannelDiff": 144
+    },
+    {
+     "test": "toasts-lifecycle.browser.mjs › notification pixels stay intact through Drawer opening and closing › chromium-dark-desktop",
+     "attachment": "closing-page",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      392,
+      712,
+      424
+     ],
+     "pixels": 4008,
+     "maxChannelDiff": 162
+    },
+    {
+     "test": "toasts-lifecycle.browser.mjs › notification pixels stay intact through Drawer opening and closing › chromium-dark-desktop",
+     "attachment": "opening-page",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      392,
+      712,
+      424
+     ],
+     "pixels": 4008,
+     "maxChannelDiff": 114
+    },
+    {
+     "test": "toasts-lifecycle.browser.mjs › notification pixels stay intact through Drawer opening and closing › chromium-dark-phone",
+     "attachment": "closing-page",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      576,
+      151,
+      608
+     ],
+     "pixels": 4040,
+     "maxChannelDiff": 162
+    },
+    {
+     "test": "toasts-lifecycle.browser.mjs › notification pixels stay intact through Drawer opening and closing › chromium-dark-phone",
+     "attachment": "opening-page",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      576,
+      87,
+      608
+     ],
+     "pixels": 2004,
+     "maxChannelDiff": 114
+    },
+    {
+     "test": "toasts-lifecycle.browser.mjs › notification pixels stay intact through Drawer opening and closing › chromium-light-desktop",
+     "attachment": "closing-page",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      392,
+      712,
+      424
+     ],
+     "pixels": 851,
+     "maxChannelDiff": 204
+    },
+    {
+     "test": "toasts-lifecycle.browser.mjs › notification pixels stay intact through Drawer opening and closing › chromium-light-desktop",
+     "attachment": "opening-page",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      392,
+      712,
+      424
+     ],
+     "pixels": 851,
+     "maxChannelDiff": 144
+    },
+    {
+     "test": "toasts-lifecycle.browser.mjs › notification pixels stay intact through Drawer opening and closing › chromium-light-phone",
+     "attachment": "closing-page",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      576,
+      151,
+      608
+     ],
+     "pixels": 838,
+     "maxChannelDiff": 204
+    },
+    {
+     "test": "toasts-lifecycle.browser.mjs › notification pixels stay intact through Drawer opening and closing › chromium-light-phone",
+     "attachment": "opening-page",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      576,
+      87,
+      608
+     ],
+     "pixels": 425,
+     "maxChannelDiff": 144
+    },
+    {
+     "test": "toasts-lifecycle.browser.mjs › notification pixels stay intact through Drawer opening and closing › webkit-dark-desktop",
+     "attachment": "closing-page",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      399,
+      712,
+      431
+     ],
+     "pixels": 4012,
+     "maxChannelDiff": 162
+    },
+    {
+     "test": "toasts-lifecycle.browser.mjs › notification pixels stay intact through Drawer opening and closing › webkit-dark-desktop",
+     "attachment": "opening-page",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      399,
+      712,
+      431
+     ],
+     "pixels": 4012,
+     "maxChannelDiff": 114
+    },
+    {
+     "test": "toasts-lifecycle.browser.mjs › notification pixels stay intact through Drawer opening and closing › webkit-dark-phone",
+     "attachment": "closing-page",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      583,
+      151,
+      615
+     ],
+     "pixels": 4044,
+     "maxChannelDiff": 178
+    },
+    {
+     "test": "toasts-lifecycle.browser.mjs › notification pixels stay intact through Drawer opening and closing › webkit-dark-phone",
+     "attachment": "opening-page",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      583,
+      87,
+      615
+     ],
+     "pixels": 2006,
+     "maxChannelDiff": 114
+    },
+    {
+     "test": "toasts-lifecycle.browser.mjs › notification pixels stay intact through Drawer opening and closing › webkit-light-desktop",
+     "attachment": "closing-page",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      399,
+      712,
+      431
+     ],
+     "pixels": 860,
+     "maxChannelDiff": 204
+    },
+    {
+     "test": "toasts-lifecycle.browser.mjs › notification pixels stay intact through Drawer opening and closing › webkit-light-desktop",
+     "attachment": "opening-page",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      399,
+      712,
+      431
+     ],
+     "pixels": 860,
+     "maxChannelDiff": 144
+    },
+    {
+     "test": "toasts-lifecycle.browser.mjs › notification pixels stay intact through Drawer opening and closing › webkit-light-phone",
+     "attachment": "closing-page",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      583,
+      151,
+      615
+     ],
+     "pixels": 858,
+     "maxChannelDiff": 224
+    },
+    {
+     "test": "toasts-lifecycle.browser.mjs › notification pixels stay intact through Drawer opening and closing › webkit-light-phone",
+     "attachment": "opening-page",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      583,
+      87,
+      615
+     ],
+     "pixels": 439,
+     "maxChannelDiff": 144
+    },
+    {
+     "test": "toasts-promotion.browser.mjs › exit keeps its own native progress through modal transfers with no-preference motion › chromium-dark-desktop",
+     "attachment": "before-exit",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      392,
+      712,
+      424
+     ],
+     "pixels": 4008,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "toasts-promotion.browser.mjs › exit keeps its own native progress through modal transfers with no-preference motion › chromium-light-desktop",
+     "attachment": "before-exit",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      392,
+      712,
+      424
+     ],
+     "pixels": 851,
+     "maxChannelDiff": 123
+    },
+    {
+     "test": "toasts-promotion.browser.mjs › exit keeps its own native progress through modal transfers with no-preference motion › webkit-dark-desktop",
+     "attachment": "before-exit",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      142,
+      399,
+      712,
+      431
+     ],
+     "pixels": 4773,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "toasts-promotion.browser.mjs › exit keeps its own native progress through modal transfers with no-preference motion › webkit-light-desktop",
+     "attachment": "before-exit",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      399,
+      712,
+      431
+     ],
+     "pixels": 860,
+     "maxChannelDiff": 123
+    },
+    {
+     "test": "toasts-promotion.browser.mjs › exit keeps its own native progress through modal transfers with reduce motion › chromium-dark-desktop",
+     "attachment": "before-exit",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      392,
+      712,
+      424
+     ],
+     "pixels": 4008,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "toasts-promotion.browser.mjs › exit keeps its own native progress through modal transfers with reduce motion › chromium-light-desktop",
+     "attachment": "before-exit",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      392,
+      712,
+      424
+     ],
+     "pixels": 851,
+     "maxChannelDiff": 123
+    },
+    {
+     "test": "toasts-promotion.browser.mjs › exit keeps its own native progress through modal transfers with reduce motion › webkit-light-desktop",
+     "attachment": "before-exit",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      399,
+      712,
+      431
+     ],
+     "pixels": 860,
+     "maxChannelDiff": 123
+    },
+    {
+     "test": "toasts-promotion.browser.mjs › keyed transient and pinned transitions retain one slot without replaying entrance inside nested modals › chromium-dark-desktop",
+     "attachment": "keyed-attention",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      392,
+      712,
+      424
+     ],
+     "pixels": 4008,
+     "maxChannelDiff": 54
+    },
+    {
+     "test": "toasts-promotion.browser.mjs › keyed transient and pinned transitions retain one slot without replaying entrance inside nested modals › chromium-light-desktop",
+     "attachment": "keyed-attention",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      392,
+      712,
+      424
+     ],
+     "pixels": 851,
+     "maxChannelDiff": 68
+    },
+    {
+     "test": "toasts-promotion.browser.mjs › keyed transient and pinned transitions retain one slot without replaying entrance inside nested modals › webkit-dark-desktop",
+     "attachment": "keyed-attention",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      399,
+      712,
+      431
+     ],
+     "pixels": 4012,
+     "maxChannelDiff": 54
+    },
+    {
+     "test": "toasts-promotion.browser.mjs › keyed transient and pinned transitions retain one slot without replaying entrance inside nested modals › webkit-light-desktop",
+     "attachment": "keyed-attention",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      399,
+      712,
+      431
+     ],
+     "pixels": 860,
+     "maxChannelDiff": 68
+    },
+    {
+     "test": "toasts.browser.mjs › async confirmation keeps pending locks, accessible failure feedback and successful retry › chromium-dark-desktop",
+     "attachment": "confirm-failure-notification",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      392,
+      712,
+      424
+     ],
+     "pixels": 4008,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "toasts.browser.mjs › async confirmation keeps pending locks, accessible failure feedback and successful retry › chromium-dark-desktop",
+     "attachment": "confirm-pending",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      392,
+      712,
+      424
+     ],
+     "pixels": 4008,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "toasts.browser.mjs › async confirmation keeps pending locks, accessible failure feedback and successful retry › chromium-dark-phone",
+     "attachment": "confirm-failure-notification",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      576,
+      151,
+      608
+     ],
+     "pixels": 4040,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "toasts.browser.mjs › async confirmation keeps pending locks, accessible failure feedback and successful retry › chromium-dark-phone",
+     "attachment": "confirm-pending",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      576,
+      151,
+      608
+     ],
+     "pixels": 4040,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "toasts.browser.mjs › async confirmation keeps pending locks, accessible failure feedback and successful retry › chromium-light-desktop",
+     "attachment": "confirm-failure-notification",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      392,
+      712,
+      424
+     ],
+     "pixels": 851,
+     "maxChannelDiff": 123
+    },
+    {
+     "test": "toasts.browser.mjs › async confirmation keeps pending locks, accessible failure feedback and successful retry › chromium-light-desktop",
+     "attachment": "confirm-pending",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      392,
+      712,
+      424
+     ],
+     "pixels": 851,
+     "maxChannelDiff": 123
+    },
+    {
+     "test": "toasts.browser.mjs › async confirmation keeps pending locks, accessible failure feedback and successful retry › chromium-light-phone",
+     "attachment": "confirm-failure-notification",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      576,
+      151,
+      608
+     ],
+     "pixels": 838,
+     "maxChannelDiff": 123
+    },
+    {
+     "test": "toasts.browser.mjs › async confirmation keeps pending locks, accessible failure feedback and successful retry › chromium-light-phone",
+     "attachment": "confirm-pending",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      576,
+      151,
+      608
+     ],
+     "pixels": 838,
+     "maxChannelDiff": 123
+    },
+    {
+     "test": "toasts.browser.mjs › async confirmation keeps pending locks, accessible failure feedback and successful retry › webkit-dark-desktop",
+     "attachment": "confirm-pending",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      399,
+      712,
+      431
+     ],
+     "pixels": 4012,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "toasts.browser.mjs › async confirmation keeps pending locks, accessible failure feedback and successful retry › webkit-dark-phone",
+     "attachment": "confirm-failure-notification",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      583,
+      151,
+      615
+     ],
+     "pixels": 4044,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "toasts.browser.mjs › async confirmation keeps pending locks, accessible failure feedback and successful retry › webkit-dark-phone",
+     "attachment": "confirm-pending",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      583,
+      151,
+      615
+     ],
+     "pixels": 4044,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "toasts.browser.mjs › async confirmation keeps pending locks, accessible failure feedback and successful retry › webkit-light-desktop",
+     "attachment": "confirm-pending",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      399,
+      712,
+      431
+     ],
+     "pixels": 860,
+     "maxChannelDiff": 123
+    },
+    {
+     "test": "toasts.browser.mjs › async confirmation keeps pending locks, accessible failure feedback and successful retry › webkit-light-phone",
+     "attachment": "confirm-failure-notification",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      583,
+      151,
+      615
+     ],
+     "pixels": 858,
+     "maxChannelDiff": 123
+    },
+    {
+     "test": "toasts.browser.mjs › async confirmation keeps pending locks, accessible failure feedback and successful retry › webkit-light-phone",
+     "attachment": "confirm-pending",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      583,
+      151,
+      615
+     ],
+     "pixels": 858,
+     "maxChannelDiff": 123
+    },
+    {
+     "test": "toasts.browser.mjs › copyable diagnostics and live announcements survive nested overlays and theme changes › chromium-dark-desktop",
+     "attachment": "nested-toast-opposite-theme",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      392,
+      712,
+      424
+     ],
+     "pixels": 851,
+     "maxChannelDiff": 68
+    },
+    {
+     "test": "toasts.browser.mjs › copyable diagnostics and live announcements survive nested overlays and theme changes › chromium-light-desktop",
+     "attachment": "nested-toast-opposite-theme",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      392,
+      712,
+      424
+     ],
+     "pixels": 4008,
+     "maxChannelDiff": 54
+    },
+    {
+     "test": "toasts.browser.mjs › copyable diagnostics and live announcements survive nested overlays and theme changes › webkit-dark-desktop",
+     "attachment": "nested-toast-opposite-theme",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      399,
+      712,
+      431
+     ],
+     "pixels": 860,
+     "maxChannelDiff": 68
+    },
+    {
+     "test": "toasts.browser.mjs › existing notifications remain accessible in Bottom drawer with unchanged appearance › chromium-dark-desktop",
+     "attachment": "notification-and-overlay",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      392,
+      712,
+      424
+     ],
+     "pixels": 4008,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "toasts.browser.mjs › existing notifications remain accessible in Bottom drawer with unchanged appearance › chromium-light-desktop",
+     "attachment": "notification-and-overlay",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      392,
+      712,
+      424
+     ],
+     "pixels": 851,
+     "maxChannelDiff": 123
+    },
+    {
+     "test": "toasts.browser.mjs › existing notifications remain accessible in Bottom drawer with unchanged appearance › webkit-dark-desktop",
+     "attachment": "notification-and-overlay",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      399,
+      712,
+      431
+     ],
+     "pixels": 4012,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "toasts.browser.mjs › existing notifications remain accessible in Bottom drawer with unchanged appearance › webkit-light-desktop",
+     "attachment": "notification-and-overlay",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      399,
+      712,
+      431
+     ],
+     "pixels": 860,
+     "maxChannelDiff": 123
+    },
+    {
+     "test": "toasts.browser.mjs › existing notifications remain accessible in Dialog with unchanged appearance › chromium-dark-desktop",
+     "attachment": "notification-and-overlay",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      392,
+      712,
+      424
+     ],
+     "pixels": 4008,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "toasts.browser.mjs › existing notifications remain accessible in Dialog with unchanged appearance › chromium-dark-phone",
+     "attachment": "notification-and-overlay",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      576,
+      151,
+      608
+     ],
+     "pixels": 4040,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "toasts.browser.mjs › existing notifications remain accessible in Dialog with unchanged appearance › chromium-light-desktop",
+     "attachment": "notification-and-overlay",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      392,
+      712,
+      424
+     ],
+     "pixels": 851,
+     "maxChannelDiff": 123
+    },
+    {
+     "test": "toasts.browser.mjs › existing notifications remain accessible in Dialog with unchanged appearance › chromium-light-phone",
+     "attachment": "notification-and-overlay",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      576,
+      151,
+      608
+     ],
+     "pixels": 838,
+     "maxChannelDiff": 123
+    },
+    {
+     "test": "toasts.browser.mjs › existing notifications remain accessible in Dialog with unchanged appearance › webkit-dark-desktop",
+     "attachment": "notification-and-overlay",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      399,
+      712,
+      431
+     ],
+     "pixels": 4012,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "toasts.browser.mjs › existing notifications remain accessible in Dialog with unchanged appearance › webkit-dark-phone",
+     "attachment": "notification-and-overlay",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      583,
+      151,
+      615
+     ],
+     "pixels": 4044,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "toasts.browser.mjs › existing notifications remain accessible in Dialog with unchanged appearance › webkit-light-desktop",
+     "attachment": "notification-and-overlay",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      399,
+      712,
+      431
+     ],
+     "pixels": 860,
+     "maxChannelDiff": 123
+    },
+    {
+     "test": "toasts.browser.mjs › existing notifications remain accessible in Dialog with unchanged appearance › webkit-light-phone",
+     "attachment": "notification-and-overlay",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      583,
+      151,
+      615
+     ],
+     "pixels": 858,
+     "maxChannelDiff": 123
+    },
+    {
+     "test": "toasts.browser.mjs › existing notifications remain accessible in Drawer with unchanged appearance › chromium-dark-desktop",
+     "attachment": "notification-and-overlay",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      392,
+      712,
+      424
+     ],
+     "pixels": 4008,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "toasts.browser.mjs › existing notifications remain accessible in Drawer with unchanged appearance › chromium-light-desktop",
+     "attachment": "notification-and-overlay",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      392,
+      712,
+      424
+     ],
+     "pixels": 851,
+     "maxChannelDiff": 123
+    },
+    {
+     "test": "toasts.browser.mjs › existing notifications remain accessible in Drawer with unchanged appearance › webkit-dark-desktop",
+     "attachment": "notification-and-overlay",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      399,
+      712,
+      431
+     ],
+     "pixels": 4012,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "toasts.browser.mjs › existing notifications remain accessible in Drawer with unchanged appearance › webkit-light-desktop",
+     "attachment": "notification-and-overlay",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      399,
+      712,
+      431
+     ],
+     "pixels": 860,
+     "maxChannelDiff": 123
+    },
+    {
+     "test": "toasts.browser.mjs › mixed pinned and passing notifications stack without overlap and retain all pinned errors › chromium-dark-desktop",
+     "attachment": "expanded-pinned-stack",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      392,
+      712,
+      424
+     ],
+     "pixels": 4008,
+     "maxChannelDiff": 178
+    },
+    {
+     "test": "toasts.browser.mjs › mixed pinned and passing notifications stack without overlap and retain all pinned errors › chromium-dark-desktop",
+     "attachment": "mixed-stack",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      392,
+      712,
+      424
+     ],
+     "pixels": 4008,
+     "maxChannelDiff": 178
+    },
+    {
+     "test": "toasts.browser.mjs › mixed pinned and passing notifications stack without overlap and retain all pinned errors › chromium-dark-phone",
+     "attachment": "mixed-stack",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      576,
+      151,
+      608
+     ],
+     "pixels": 4040,
+     "maxChannelDiff": 178
+    },
+    {
+     "test": "toasts.browser.mjs › mixed pinned and passing notifications stack without overlap and retain all pinned errors › chromium-light-phone",
+     "attachment": "mixed-stack",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      576,
+      151,
+      608
+     ],
+     "pixels": 838,
+     "maxChannelDiff": 224
+    },
+    {
+     "test": "toasts.browser.mjs › mixed pinned and passing notifications stack without overlap and retain all pinned errors › webkit-dark-desktop",
+     "attachment": "expanded-pinned-stack",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      399,
+      712,
+      431
+     ],
+     "pixels": 4012,
+     "maxChannelDiff": 178
+    },
+    {
+     "test": "toasts.browser.mjs › mixed pinned and passing notifications stack without overlap and retain all pinned errors › webkit-dark-desktop",
+     "attachment": "mixed-stack",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      399,
+      712,
+      431
+     ],
+     "pixels": 4012,
+     "maxChannelDiff": 178
+    },
+    {
+     "test": "toasts.browser.mjs › mixed pinned and passing notifications stack without overlap and retain all pinned errors › webkit-dark-phone",
+     "attachment": "mixed-stack",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      583,
+      151,
+      615
+     ],
+     "pixels": 4044,
+     "maxChannelDiff": 178
+    },
+    {
+     "test": "toasts.browser.mjs › mixed pinned and passing notifications stack without overlap and retain all pinned errors › webkit-light-desktop",
+     "attachment": "expanded-pinned-stack",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      399,
+      712,
+      431
+     ],
+     "pixels": 860,
+     "maxChannelDiff": 224
+    },
+    {
+     "test": "toasts.browser.mjs › mixed pinned and passing notifications stack without overlap and retain all pinned errors › webkit-light-desktop",
+     "attachment": "mixed-stack",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      399,
+      712,
+      431
+     ],
+     "pixels": 860,
+     "maxChannelDiff": 224
+    },
+    {
+     "test": "toasts.browser.mjs › mixed pinned and passing notifications stack without overlap and retain all pinned errors › webkit-light-phone",
+     "attachment": "mixed-stack",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      583,
+      151,
+      615
+     ],
+     "pixels": 858,
+     "maxChannelDiff": 224
+    },
+    {
+     "test": "toasts.browser.mjs › retained closed overlays release notifications and normal motion settles at the original origin › chromium-dark-desktop",
+     "attachment": "retained-reopened-with-motion",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      392,
+      712,
+      424
+     ],
+     "pixels": 4008,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "toasts.browser.mjs › retained closed overlays release notifications and normal motion settles at the original origin › chromium-dark-phone",
+     "attachment": "retained-reopened-with-motion",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      576,
+      151,
+      608
+     ],
+     "pixels": 4040,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "toasts.browser.mjs › retained closed overlays release notifications and normal motion settles at the original origin › chromium-light-desktop",
+     "attachment": "retained-reopened-with-motion",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      392,
+      712,
+      424
+     ],
+     "pixels": 851,
+     "maxChannelDiff": 123
+    },
+    {
+     "test": "toasts.browser.mjs › retained closed overlays release notifications and normal motion settles at the original origin › chromium-light-phone",
+     "attachment": "retained-reopened-with-motion",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      576,
+      151,
+      608
+     ],
+     "pixels": 838,
+     "maxChannelDiff": 123
+    },
+    {
+     "test": "toasts.browser.mjs › retained closed overlays release notifications and normal motion settles at the original origin › webkit-dark-desktop",
+     "attachment": "retained-reopened-with-motion",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      399,
+      712,
+      431
+     ],
+     "pixels": 4012,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "toasts.browser.mjs › retained closed overlays release notifications and normal motion settles at the original origin › webkit-dark-phone",
+     "attachment": "retained-reopened-with-motion",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      583,
+      151,
+      615
+     ],
+     "pixels": 4044,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "toasts.browser.mjs › retained closed overlays release notifications and normal motion settles at the original origin › webkit-light-desktop",
+     "attachment": "retained-reopened-with-motion",
+     "sizes": [
+      [
+       1280,
+       900
+      ],
+      [
+       1280,
+       900
+      ]
+     ],
+     "box": [
+      586,
+      399,
+      712,
+      431
+     ],
+     "pixels": 860,
+     "maxChannelDiff": 123
+    },
+    {
+     "test": "toasts.browser.mjs › retained closed overlays release notifications and normal motion settles at the original origin › webkit-light-phone",
+     "attachment": "retained-reopened-with-motion",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      583,
+      151,
+      615
+     ],
+     "pixels": 858,
+     "maxChannelDiff": 123
+    },
+    {
+     "test": "toasts.browser.mjs › short and lifecycle dwell, hover restart, phone folding and permanent warnings keep their rules › chromium-dark-phone",
+     "attachment": "folded-warning",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      576,
+      151,
+      608
+     ],
+     "pixels": 4040,
+     "maxChannelDiff": 178
+    },
+    {
+     "test": "toasts.browser.mjs › short and lifecycle dwell, hover restart, phone folding and permanent warnings keep their rules › chromium-light-phone",
+     "attachment": "folded-warning",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      576,
+      151,
+      608
+     ],
+     "pixels": 838,
+     "maxChannelDiff": 224
+    },
+    {
+     "test": "toasts.browser.mjs › short and lifecycle dwell, hover restart, phone folding and permanent warnings keep their rules › webkit-dark-phone",
+     "attachment": "folded-warning",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      583,
+      151,
+      615
+     ],
+     "pixels": 4044,
+     "maxChannelDiff": 178
+    },
+    {
+     "test": "toasts.browser.mjs › short and lifecycle dwell, hover restart, phone folding and permanent warnings keep their rules › webkit-light-phone",
+     "attachment": "folded-warning",
+     "sizes": [
+      [
+       390,
+       844
+      ],
+      [
+       390,
+       844
+      ]
+     ],
+     "box": [
+      24,
+      583,
+      151,
+      615
+     ],
+     "pixels": 858,
+     "maxChannelDiff": 224
+    }
+   ]
+  },
+  "composer": {
+   "totals": {
+    "tests": 144,
+    "bothPassed": 121,
+    "statusDiffers": 0,
+    "onlyBefore": 0,
+    "onlyAfter": 0,
+    "jsonAttachments": 161,
+    "jsonDiffering": 21,
+    "pngAttachments": 324,
+    "pngEqual": 163,
+    "pngDiffering": 161,
+    "sameStatusNotPassed": 23
+   },
+   "noiseTotals": {
+    "tests": 144,
+    "bothPassed": 121,
+    "statusDiffers": 0,
+    "onlyBefore": 0,
+    "onlyAfter": 0,
+    "jsonAttachments": 161,
+    "jsonDiffering": 1,
+    "pngAttachments": 324,
+    "pngEqual": 324,
+    "pngDiffering": 0,
+    "sameStatusNotPassed": 23
+   },
+   "groups": {
+    "keystroke-cost": {
+     "json:noise": 1
+    },
+    "plain-focus-and-hover-orbit": {
+     "png:stable": 1
+    },
+    "session-attachments-idle-orbit": {
+     "png:stable": 8
+    },
+    "session-attachments-states": {
+     "json:composer-toolbar": 4
+    },
+    "session-attachments-two-lines-orbit": {
+     "png:stable": 8
+    },
+    "session-capped-handle-shown-orbit": {
+     "png:stable": 8
+    },
+    "session-capped-scrolled-to-end-orbit": {
+     "png:stable": 8
+    },
+    "session-clamped-minimum-orbit": {
+     "png:stable": 8
+    },
+    "session-cleared-orbit": {
+     "png:stable": 8
+    },
+    "session-disabled-orbit": {
+     "png:stable": 8
+    },
+    "session-disabled-text-Read-#only-#draft-states": {
+     "json:composer-toolbar": 4
+    },
+    "session-dragged-taller-orbit": {
+     "png:stable": 8
+    },
+    "session-idle-orbit": {
+     "png:stable": 24
+    },
+    "session-long-placeholder-after-edit-orbit": {
+     "png:stable": 8
+    },
+    "session-long-placeholder-before-edit-orbit": {
+     "png:stable": 8
+    },
+    "session-manual-height-kept-for-short-text-orbit": {
+     "png:stable": 8
+    },
+    "session-one-line-orbit": {
+     "png:stable": 8
+    },
+    "session-reset-to-auto-orbit": {
+     "png:stable": 8
+    },
+    "session-shell-mode-orbit": {
+     "png:stable": 8
+    },
+    "session-states": {
+     "json:composer-toolbar": 8
+    },
+    "session-two-lines-orbit": {
+     "png:stable": 24
+    },
+    "session-width-#-states": {
+     "json:composer-toolbar": 4
+    }
+   },
+   "stablePngs": [
+    {
+     "test": "composer.browser.mjs › fields at 599px › chromium-dark-desktop",
+     "attachment": "session-idle-orbit",
+     "sizes": [
+      [
+       369,
+       87
+      ],
+      [
+       369,
+       91
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › fields at 599px › chromium-dark-desktop",
+     "attachment": "session-two-lines-orbit",
+     "sizes": [
+      [
+       369,
+       111
+      ],
+      [
+       369,
+       115
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › fields at 599px › chromium-light-desktop",
+     "attachment": "session-idle-orbit",
+     "sizes": [
+      [
+       369,
+       87
+      ],
+      [
+       369,
+       91
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › fields at 599px › chromium-light-desktop",
+     "attachment": "session-two-lines-orbit",
+     "sizes": [
+      [
+       369,
+       111
+      ],
+      [
+       369,
+       115
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › fields at 599px › webkit-dark-desktop",
+     "attachment": "session-idle-orbit",
+     "sizes": [
+      [
+       369,
+       87
+      ],
+      [
+       369,
+       91
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › fields at 599px › webkit-dark-desktop",
+     "attachment": "session-two-lines-orbit",
+     "sizes": [
+      [
+       369,
+       111
+      ],
+      [
+       369,
+       115
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › fields at 599px › webkit-light-desktop",
+     "attachment": "session-idle-orbit",
+     "sizes": [
+      [
+       369,
+       87
+      ],
+      [
+       369,
+       91
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › fields at 599px › webkit-light-desktop",
+     "attachment": "session-two-lines-orbit",
+     "sizes": [
+      [
+       369,
+       111
+      ],
+      [
+       369,
+       115
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › fields at 601px › chromium-dark-desktop",
+     "attachment": "session-idle-orbit",
+     "sizes": [
+      [
+       369,
+       91
+      ],
+      [
+       369,
+       91
+      ]
+     ],
+     "box": [
+      28,
+      47,
+      350,
+      79
+     ],
+     "pixels": 899,
+     "maxChannelDiff": 73
+    },
+    {
+     "test": "composer.browser.mjs › fields at 601px › chromium-dark-desktop",
+     "attachment": "session-two-lines-orbit",
+     "sizes": [
+      [
+       369,
+       115
+      ],
+      [
+       369,
+       115
+      ]
+     ],
+     "box": [
+      28,
+      80,
+      42,
+      94
+     ],
+     "pixels": 52,
+     "maxChannelDiff": 73
+    },
+    {
+     "test": "composer.browser.mjs › fields at 601px › chromium-light-desktop",
+     "attachment": "session-idle-orbit",
+     "sizes": [
+      [
+       369,
+       91
+      ],
+      [
+       369,
+       91
+      ]
+     ],
+     "box": [
+      28,
+      47,
+      350,
+      79
+     ],
+     "pixels": 902,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "composer.browser.mjs › fields at 601px › chromium-light-desktop",
+     "attachment": "session-two-lines-orbit",
+     "sizes": [
+      [
+       369,
+       115
+      ],
+      [
+       369,
+       115
+      ]
+     ],
+     "box": [
+      28,
+      80,
+      42,
+      94
+     ],
+     "pixels": 52,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "composer.browser.mjs › fields at 601px › webkit-dark-desktop",
+     "attachment": "session-idle-orbit",
+     "sizes": [
+      [
+       369,
+       91
+      ],
+      [
+       369,
+       91
+      ]
+     ],
+     "box": [
+      28,
+      47,
+      350,
+      79
+     ],
+     "pixels": 890,
+     "maxChannelDiff": 73
+    },
+    {
+     "test": "composer.browser.mjs › fields at 601px › webkit-dark-desktop",
+     "attachment": "session-two-lines-orbit",
+     "sizes": [
+      [
+       369,
+       115
+      ],
+      [
+       369,
+       115
+      ]
+     ],
+     "box": [
+      28,
+      80,
+      42,
+      94
+     ],
+     "pixels": 52,
+     "maxChannelDiff": 73
+    },
+    {
+     "test": "composer.browser.mjs › fields at 601px › webkit-light-desktop",
+     "attachment": "session-idle-orbit",
+     "sizes": [
+      [
+       369,
+       91
+      ],
+      [
+       369,
+       91
+      ]
+     ],
+     "box": [
+      28,
+      47,
+      350,
+      79
+     ],
+     "pixels": 890,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "composer.browser.mjs › fields at 601px › webkit-light-desktop",
+     "attachment": "session-two-lines-orbit",
+     "sizes": [
+      [
+       369,
+       115
+      ],
+      [
+       369,
+       115
+      ]
+     ],
+     "box": [
+      28,
+      80,
+      42,
+      94
+     ],
+     "pixels": 52,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "composer.browser.mjs › fields at 959px › chromium-dark-desktop",
+     "attachment": "session-idle-orbit",
+     "sizes": [
+      [
+       369,
+       91
+      ],
+      [
+       369,
+       91
+      ]
+     ],
+     "box": [
+      28,
+      47,
+      350,
+      79
+     ],
+     "pixels": 899,
+     "maxChannelDiff": 73
+    },
+    {
+     "test": "composer.browser.mjs › fields at 959px › chromium-dark-desktop",
+     "attachment": "session-two-lines-orbit",
+     "sizes": [
+      [
+       369,
+       115
+      ],
+      [
+       369,
+       115
+      ]
+     ],
+     "box": [
+      28,
+      80,
+      42,
+      94
+     ],
+     "pixels": 52,
+     "maxChannelDiff": 73
+    },
+    {
+     "test": "composer.browser.mjs › fields at 959px › chromium-light-desktop",
+     "attachment": "session-idle-orbit",
+     "sizes": [
+      [
+       369,
+       91
+      ],
+      [
+       369,
+       91
+      ]
+     ],
+     "box": [
+      28,
+      47,
+      350,
+      79
+     ],
+     "pixels": 902,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "composer.browser.mjs › fields at 959px › chromium-light-desktop",
+     "attachment": "session-two-lines-orbit",
+     "sizes": [
+      [
+       369,
+       115
+      ],
+      [
+       369,
+       115
+      ]
+     ],
+     "box": [
+      28,
+      80,
+      42,
+      94
+     ],
+     "pixels": 52,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "composer.browser.mjs › fields at 959px › webkit-dark-desktop",
+     "attachment": "session-idle-orbit",
+     "sizes": [
+      [
+       369,
+       91
+      ],
+      [
+       369,
+       91
+      ]
+     ],
+     "box": [
+      28,
+      47,
+      350,
+      79
+     ],
+     "pixels": 890,
+     "maxChannelDiff": 73
+    },
+    {
+     "test": "composer.browser.mjs › fields at 959px › webkit-dark-desktop",
+     "attachment": "session-two-lines-orbit",
+     "sizes": [
+      [
+       369,
+       115
+      ],
+      [
+       369,
+       115
+      ]
+     ],
+     "box": [
+      28,
+      80,
+      42,
+      94
+     ],
+     "pixels": 52,
+     "maxChannelDiff": 73
+    },
+    {
+     "test": "composer.browser.mjs › fields at 959px › webkit-light-desktop",
+     "attachment": "session-idle-orbit",
+     "sizes": [
+      [
+       369,
+       91
+      ],
+      [
+       369,
+       91
+      ]
+     ],
+     "box": [
+      28,
+      47,
+      350,
+      79
+     ],
+     "pixels": 890,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "composer.browser.mjs › fields at 959px › webkit-light-desktop",
+     "attachment": "session-two-lines-orbit",
+     "sizes": [
+      [
+       369,
+       115
+      ],
+      [
+       369,
+       115
+      ]
+     ],
+     "box": [
+      28,
+      80,
+      42,
+      94
+     ],
+     "pixels": 52,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "composer.browser.mjs › fields at 961px › chromium-dark-desktop",
+     "attachment": "session-idle-orbit",
+     "sizes": [
+      [
+       369,
+       91
+      ],
+      [
+       369,
+       91
+      ]
+     ],
+     "box": [
+      28,
+      47,
+      350,
+      79
+     ],
+     "pixels": 899,
+     "maxChannelDiff": 73
+    },
+    {
+     "test": "composer.browser.mjs › fields at 961px › chromium-dark-desktop",
+     "attachment": "session-two-lines-orbit",
+     "sizes": [
+      [
+       369,
+       115
+      ],
+      [
+       369,
+       115
+      ]
+     ],
+     "box": [
+      28,
+      80,
+      42,
+      94
+     ],
+     "pixels": 52,
+     "maxChannelDiff": 73
+    },
+    {
+     "test": "composer.browser.mjs › fields at 961px › chromium-light-desktop",
+     "attachment": "session-idle-orbit",
+     "sizes": [
+      [
+       369,
+       91
+      ],
+      [
+       369,
+       91
+      ]
+     ],
+     "box": [
+      28,
+      47,
+      350,
+      79
+     ],
+     "pixels": 902,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "composer.browser.mjs › fields at 961px › chromium-light-desktop",
+     "attachment": "session-two-lines-orbit",
+     "sizes": [
+      [
+       369,
+       115
+      ],
+      [
+       369,
+       115
+      ]
+     ],
+     "box": [
+      28,
+      80,
+      42,
+      94
+     ],
+     "pixels": 52,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "composer.browser.mjs › fields at 961px › webkit-dark-desktop",
+     "attachment": "session-idle-orbit",
+     "sizes": [
+      [
+       369,
+       91
+      ],
+      [
+       369,
+       91
+      ]
+     ],
+     "box": [
+      28,
+      47,
+      350,
+      79
+     ],
+     "pixels": 890,
+     "maxChannelDiff": 73
+    },
+    {
+     "test": "composer.browser.mjs › fields at 961px › webkit-dark-desktop",
+     "attachment": "session-two-lines-orbit",
+     "sizes": [
+      [
+       369,
+       115
+      ],
+      [
+       369,
+       115
+      ]
+     ],
+     "box": [
+      28,
+      80,
+      42,
+      94
+     ],
+     "pixels": 52,
+     "maxChannelDiff": 73
+    },
+    {
+     "test": "composer.browser.mjs › fields at 961px › webkit-light-desktop",
+     "attachment": "session-idle-orbit",
+     "sizes": [
+      [
+       369,
+       91
+      ],
+      [
+       369,
+       91
+      ]
+     ],
+     "box": [
+      28,
+      47,
+      350,
+      79
+     ],
+     "pixels": 890,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "composer.browser.mjs › fields at 961px › webkit-light-desktop",
+     "attachment": "session-two-lines-orbit",
+     "sizes": [
+      [
+       369,
+       115
+      ],
+      [
+       369,
+       115
+      ]
+     ],
+     "box": [
+      28,
+      80,
+      42,
+      94
+     ],
+     "pixels": 52,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "composer.browser.mjs › manual height: drag the handle, clamp it, and double-click back to auto-size › chromium-dark-desktop",
+     "attachment": "session-capped-handle-shown-orbit",
+     "sizes": [
+      [
+       648,
+       355
+      ],
+      [
+       648,
+       355
+      ]
+     ],
+     "box": [
+      28,
+      320,
+      42,
+      334
+     ],
+     "pixels": 52,
+     "maxChannelDiff": 73
+    },
+    {
+     "test": "composer.browser.mjs › manual height: drag the handle, clamp it, and double-click back to auto-size › chromium-dark-desktop",
+     "attachment": "session-clamped-minimum-orbit",
+     "sizes": [
+      [
+       648,
+       97
+      ],
+      [
+       648,
+       97
+      ]
+     ],
+     "box": [
+      28,
+      62,
+      42,
+      76
+     ],
+     "pixels": 52,
+     "maxChannelDiff": 73
+    },
+    {
+     "test": "composer.browser.mjs › manual height: drag the handle, clamp it, and double-click back to auto-size › chromium-dark-desktop",
+     "attachment": "session-dragged-taller-orbit",
+     "sizes": [
+      [
+       648,
+       455
+      ],
+      [
+       648,
+       455
+      ]
+     ],
+     "box": [
+      28,
+      420,
+      42,
+      434
+     ],
+     "pixels": 52,
+     "maxChannelDiff": 73
+    },
+    {
+     "test": "composer.browser.mjs › manual height: drag the handle, clamp it, and double-click back to auto-size › chromium-dark-desktop",
+     "attachment": "session-manual-height-kept-for-short-text-orbit",
+     "sizes": [
+      [
+       648,
+       693
+      ],
+      [
+       648,
+       693
+      ]
+     ],
+     "box": [
+      28,
+      658,
+      42,
+      672
+     ],
+     "pixels": 52,
+     "maxChannelDiff": 73
+    },
+    {
+     "test": "composer.browser.mjs › manual height: drag the handle, clamp it, and double-click back to auto-size › chromium-dark-desktop",
+     "attachment": "session-reset-to-auto-orbit",
+     "sizes": [
+      [
+       648,
+       91
+      ],
+      [
+       648,
+       91
+      ]
+     ],
+     "box": [
+      28,
+      56,
+      42,
+      70
+     ],
+     "pixels": 52,
+     "maxChannelDiff": 73
+    },
+    {
+     "test": "composer.browser.mjs › manual height: drag the handle, clamp it, and double-click back to auto-size › chromium-dark-phone",
+     "attachment": "session-capped-handle-shown-orbit",
+     "sizes": [
+      [
+       370,
+       351
+      ],
+      [
+       370,
+       355
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › manual height: drag the handle, clamp it, and double-click back to auto-size › chromium-dark-phone",
+     "attachment": "session-clamped-minimum-orbit",
+     "sizes": [
+      [
+       370,
+       93
+      ],
+      [
+       370,
+       97
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › manual height: drag the handle, clamp it, and double-click back to auto-size › chromium-dark-phone",
+     "attachment": "session-dragged-taller-orbit",
+     "sizes": [
+      [
+       370,
+       451
+      ],
+      [
+       370,
+       455
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › manual height: drag the handle, clamp it, and double-click back to auto-size › chromium-dark-phone",
+     "attachment": "session-manual-height-kept-for-short-text-orbit",
+     "sizes": [
+      [
+       370,
+       689
+      ],
+      [
+       370,
+       693
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › manual height: drag the handle, clamp it, and double-click back to auto-size › chromium-dark-phone",
+     "attachment": "session-reset-to-auto-orbit",
+     "sizes": [
+      [
+       370,
+       87
+      ],
+      [
+       370,
+       91
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › manual height: drag the handle, clamp it, and double-click back to auto-size › chromium-light-desktop",
+     "attachment": "session-capped-handle-shown-orbit",
+     "sizes": [
+      [
+       648,
+       355
+      ],
+      [
+       648,
+       355
+      ]
+     ],
+     "box": [
+      28,
+      320,
+      42,
+      334
+     ],
+     "pixels": 52,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "composer.browser.mjs › manual height: drag the handle, clamp it, and double-click back to auto-size › chromium-light-desktop",
+     "attachment": "session-clamped-minimum-orbit",
+     "sizes": [
+      [
+       648,
+       97
+      ],
+      [
+       648,
+       97
+      ]
+     ],
+     "box": [
+      28,
+      62,
+      42,
+      76
+     ],
+     "pixels": 52,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "composer.browser.mjs › manual height: drag the handle, clamp it, and double-click back to auto-size › chromium-light-desktop",
+     "attachment": "session-dragged-taller-orbit",
+     "sizes": [
+      [
+       648,
+       455
+      ],
+      [
+       648,
+       455
+      ]
+     ],
+     "box": [
+      28,
+      420,
+      42,
+      434
+     ],
+     "pixels": 52,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "composer.browser.mjs › manual height: drag the handle, clamp it, and double-click back to auto-size › chromium-light-desktop",
+     "attachment": "session-manual-height-kept-for-short-text-orbit",
+     "sizes": [
+      [
+       648,
+       693
+      ],
+      [
+       648,
+       693
+      ]
+     ],
+     "box": [
+      28,
+      658,
+      42,
+      672
+     ],
+     "pixels": 52,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "composer.browser.mjs › manual height: drag the handle, clamp it, and double-click back to auto-size › chromium-light-desktop",
+     "attachment": "session-reset-to-auto-orbit",
+     "sizes": [
+      [
+       648,
+       91
+      ],
+      [
+       648,
+       91
+      ]
+     ],
+     "box": [
+      28,
+      56,
+      42,
+      70
+     ],
+     "pixels": 52,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "composer.browser.mjs › manual height: drag the handle, clamp it, and double-click back to auto-size › chromium-light-phone",
+     "attachment": "session-capped-handle-shown-orbit",
+     "sizes": [
+      [
+       370,
+       351
+      ],
+      [
+       370,
+       355
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › manual height: drag the handle, clamp it, and double-click back to auto-size › chromium-light-phone",
+     "attachment": "session-clamped-minimum-orbit",
+     "sizes": [
+      [
+       370,
+       93
+      ],
+      [
+       370,
+       97
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › manual height: drag the handle, clamp it, and double-click back to auto-size › chromium-light-phone",
+     "attachment": "session-dragged-taller-orbit",
+     "sizes": [
+      [
+       370,
+       451
+      ],
+      [
+       370,
+       455
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › manual height: drag the handle, clamp it, and double-click back to auto-size › chromium-light-phone",
+     "attachment": "session-manual-height-kept-for-short-text-orbit",
+     "sizes": [
+      [
+       370,
+       689
+      ],
+      [
+       370,
+       693
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › manual height: drag the handle, clamp it, and double-click back to auto-size › chromium-light-phone",
+     "attachment": "session-reset-to-auto-orbit",
+     "sizes": [
+      [
+       370,
+       87
+      ],
+      [
+       370,
+       91
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › manual height: drag the handle, clamp it, and double-click back to auto-size › webkit-dark-desktop",
+     "attachment": "session-capped-handle-shown-orbit",
+     "sizes": [
+      [
+       648,
+       355
+      ],
+      [
+       648,
+       355
+      ]
+     ],
+     "box": [
+      28,
+      320,
+      42,
+      334
+     ],
+     "pixels": 52,
+     "maxChannelDiff": 73
+    },
+    {
+     "test": "composer.browser.mjs › manual height: drag the handle, clamp it, and double-click back to auto-size › webkit-dark-desktop",
+     "attachment": "session-clamped-minimum-orbit",
+     "sizes": [
+      [
+       648,
+       97
+      ],
+      [
+       648,
+       97
+      ]
+     ],
+     "box": [
+      28,
+      62,
+      42,
+      76
+     ],
+     "pixels": 52,
+     "maxChannelDiff": 73
+    },
+    {
+     "test": "composer.browser.mjs › manual height: drag the handle, clamp it, and double-click back to auto-size › webkit-dark-desktop",
+     "attachment": "session-dragged-taller-orbit",
+     "sizes": [
+      [
+       648,
+       455
+      ],
+      [
+       648,
+       455
+      ]
+     ],
+     "box": [
+      28,
+      420,
+      42,
+      434
+     ],
+     "pixels": 52,
+     "maxChannelDiff": 73
+    },
+    {
+     "test": "composer.browser.mjs › manual height: drag the handle, clamp it, and double-click back to auto-size › webkit-dark-desktop",
+     "attachment": "session-manual-height-kept-for-short-text-orbit",
+     "sizes": [
+      [
+       648,
+       693
+      ],
+      [
+       648,
+       693
+      ]
+     ],
+     "box": [
+      28,
+      658,
+      42,
+      672
+     ],
+     "pixels": 52,
+     "maxChannelDiff": 73
+    },
+    {
+     "test": "composer.browser.mjs › manual height: drag the handle, clamp it, and double-click back to auto-size › webkit-dark-desktop",
+     "attachment": "session-reset-to-auto-orbit",
+     "sizes": [
+      [
+       648,
+       91
+      ],
+      [
+       648,
+       91
+      ]
+     ],
+     "box": [
+      28,
+      56,
+      42,
+      70
+     ],
+     "pixels": 52,
+     "maxChannelDiff": 73
+    },
+    {
+     "test": "composer.browser.mjs › manual height: drag the handle, clamp it, and double-click back to auto-size › webkit-dark-phone",
+     "attachment": "session-capped-handle-shown-orbit",
+     "sizes": [
+      [
+       370,
+       351
+      ],
+      [
+       370,
+       355
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › manual height: drag the handle, clamp it, and double-click back to auto-size › webkit-dark-phone",
+     "attachment": "session-clamped-minimum-orbit",
+     "sizes": [
+      [
+       370,
+       93
+      ],
+      [
+       370,
+       97
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › manual height: drag the handle, clamp it, and double-click back to auto-size › webkit-dark-phone",
+     "attachment": "session-dragged-taller-orbit",
+     "sizes": [
+      [
+       370,
+       451
+      ],
+      [
+       370,
+       455
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › manual height: drag the handle, clamp it, and double-click back to auto-size › webkit-dark-phone",
+     "attachment": "session-manual-height-kept-for-short-text-orbit",
+     "sizes": [
+      [
+       370,
+       689
+      ],
+      [
+       370,
+       693
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › manual height: drag the handle, clamp it, and double-click back to auto-size › webkit-dark-phone",
+     "attachment": "session-reset-to-auto-orbit",
+     "sizes": [
+      [
+       370,
+       87
+      ],
+      [
+       370,
+       91
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › manual height: drag the handle, clamp it, and double-click back to auto-size › webkit-light-desktop",
+     "attachment": "session-capped-handle-shown-orbit",
+     "sizes": [
+      [
+       648,
+       355
+      ],
+      [
+       648,
+       355
+      ]
+     ],
+     "box": [
+      28,
+      320,
+      42,
+      334
+     ],
+     "pixels": 52,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "composer.browser.mjs › manual height: drag the handle, clamp it, and double-click back to auto-size › webkit-light-desktop",
+     "attachment": "session-clamped-minimum-orbit",
+     "sizes": [
+      [
+       648,
+       97
+      ],
+      [
+       648,
+       97
+      ]
+     ],
+     "box": [
+      28,
+      62,
+      42,
+      76
+     ],
+     "pixels": 52,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "composer.browser.mjs › manual height: drag the handle, clamp it, and double-click back to auto-size › webkit-light-desktop",
+     "attachment": "session-dragged-taller-orbit",
+     "sizes": [
+      [
+       648,
+       455
+      ],
+      [
+       648,
+       455
+      ]
+     ],
+     "box": [
+      28,
+      420,
+      42,
+      434
+     ],
+     "pixels": 52,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "composer.browser.mjs › manual height: drag the handle, clamp it, and double-click back to auto-size › webkit-light-desktop",
+     "attachment": "session-manual-height-kept-for-short-text-orbit",
+     "sizes": [
+      [
+       648,
+       693
+      ],
+      [
+       648,
+       693
+      ]
+     ],
+     "box": [
+      28,
+      658,
+      42,
+      672
+     ],
+     "pixels": 52,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "composer.browser.mjs › manual height: drag the handle, clamp it, and double-click back to auto-size › webkit-light-desktop",
+     "attachment": "session-reset-to-auto-orbit",
+     "sizes": [
+      [
+       648,
+       91
+      ],
+      [
+       648,
+       91
+      ]
+     ],
+     "box": [
+      28,
+      56,
+      42,
+      70
+     ],
+     "pixels": 52,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "composer.browser.mjs › manual height: drag the handle, clamp it, and double-click back to auto-size › webkit-light-phone",
+     "attachment": "session-capped-handle-shown-orbit",
+     "sizes": [
+      [
+       370,
+       351
+      ],
+      [
+       370,
+       355
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › manual height: drag the handle, clamp it, and double-click back to auto-size › webkit-light-phone",
+     "attachment": "session-clamped-minimum-orbit",
+     "sizes": [
+      [
+       370,
+       93
+      ],
+      [
+       370,
+       97
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › manual height: drag the handle, clamp it, and double-click back to auto-size › webkit-light-phone",
+     "attachment": "session-dragged-taller-orbit",
+     "sizes": [
+      [
+       370,
+       451
+      ],
+      [
+       370,
+       455
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › manual height: drag the handle, clamp it, and double-click back to auto-size › webkit-light-phone",
+     "attachment": "session-manual-height-kept-for-short-text-orbit",
+     "sizes": [
+      [
+       370,
+       689
+      ],
+      [
+       370,
+       693
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › manual height: drag the handle, clamp it, and double-click back to auto-size › webkit-light-phone",
+     "attachment": "session-reset-to-auto-orbit",
+     "sizes": [
+      [
+       370,
+       87
+      ],
+      [
+       370,
+       91
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › chromium-dark-desktop",
+     "attachment": "session-capped-scrolled-to-end-orbit",
+     "sizes": [
+      [
+       648,
+       355
+      ],
+      [
+       648,
+       355
+      ]
+     ],
+     "box": [
+      28,
+      320,
+      42,
+      334
+     ],
+     "pixels": 52,
+     "maxChannelDiff": 73
+    },
+    {
+     "test": "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › chromium-dark-desktop",
+     "attachment": "session-cleared-orbit",
+     "sizes": [
+      [
+       648,
+       91
+      ],
+      [
+       648,
+       91
+      ]
+     ],
+     "box": [
+      28,
+      47,
+      629,
+      79
+     ],
+     "pixels": 899,
+     "maxChannelDiff": 73
+    },
+    {
+     "test": "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › chromium-dark-desktop",
+     "attachment": "session-idle-orbit",
+     "sizes": [
+      [
+       648,
+       91
+      ],
+      [
+       648,
+       91
+      ]
+     ],
+     "box": [
+      28,
+      47,
+      629,
+      79
+     ],
+     "pixels": 899,
+     "maxChannelDiff": 73
+    },
+    {
+     "test": "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › chromium-dark-desktop",
+     "attachment": "session-long-placeholder-after-edit-orbit",
+     "sizes": [
+      [
+       648,
+       115
+      ],
+      [
+       648,
+       115
+      ]
+     ],
+     "box": [
+      28,
+      71,
+      629,
+      103
+     ],
+     "pixels": 899,
+     "maxChannelDiff": 73
+    },
+    {
+     "test": "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › chromium-dark-desktop",
+     "attachment": "session-long-placeholder-before-edit-orbit",
+     "sizes": [
+      [
+       648,
+       91
+      ],
+      [
+       648,
+       91
+      ]
+     ],
+     "box": [
+      28,
+      47,
+      629,
+      79
+     ],
+     "pixels": 899,
+     "maxChannelDiff": 73
+    },
+    {
+     "test": "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › chromium-dark-desktop",
+     "attachment": "session-one-line-orbit",
+     "sizes": [
+      [
+       648,
+       91
+      ],
+      [
+       648,
+       91
+      ]
+     ],
+     "box": [
+      28,
+      56,
+      42,
+      70
+     ],
+     "pixels": 52,
+     "maxChannelDiff": 73
+    },
+    {
+     "test": "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › chromium-dark-desktop",
+     "attachment": "session-shell-mode-orbit",
+     "sizes": [
+      [
+       648,
+       91
+      ],
+      [
+       648,
+       91
+      ]
+     ],
+     "box": [
+      28,
+      56,
+      42,
+      70
+     ],
+     "pixels": 52,
+     "maxChannelDiff": 73
+    },
+    {
+     "test": "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › chromium-dark-desktop",
+     "attachment": "session-two-lines-orbit",
+     "sizes": [
+      [
+       648,
+       115
+      ],
+      [
+       648,
+       115
+      ]
+     ],
+     "box": [
+      28,
+      80,
+      42,
+      94
+     ],
+     "pixels": 52,
+     "maxChannelDiff": 73
+    },
+    {
+     "test": "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › chromium-dark-phone",
+     "attachment": "session-capped-scrolled-to-end-orbit",
+     "sizes": [
+      [
+       370,
+       351
+      ],
+      [
+       370,
+       355
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › chromium-dark-phone",
+     "attachment": "session-cleared-orbit",
+     "sizes": [
+      [
+       370,
+       87
+      ],
+      [
+       370,
+       91
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › chromium-dark-phone",
+     "attachment": "session-idle-orbit",
+     "sizes": [
+      [
+       370,
+       87
+      ],
+      [
+       370,
+       91
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › chromium-dark-phone",
+     "attachment": "session-long-placeholder-after-edit-orbit",
+     "sizes": [
+      [
+       370,
+       135
+      ],
+      [
+       370,
+       139
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › chromium-dark-phone",
+     "attachment": "session-long-placeholder-before-edit-orbit",
+     "sizes": [
+      [
+       370,
+       87
+      ],
+      [
+       370,
+       91
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › chromium-dark-phone",
+     "attachment": "session-one-line-orbit",
+     "sizes": [
+      [
+       370,
+       87
+      ],
+      [
+       370,
+       91
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › chromium-dark-phone",
+     "attachment": "session-shell-mode-orbit",
+     "sizes": [
+      [
+       370,
+       87
+      ],
+      [
+       370,
+       91
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › chromium-dark-phone",
+     "attachment": "session-two-lines-orbit",
+     "sizes": [
+      [
+       370,
+       111
+      ],
+      [
+       370,
+       115
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › chromium-light-desktop",
+     "attachment": "session-capped-scrolled-to-end-orbit",
+     "sizes": [
+      [
+       648,
+       355
+      ],
+      [
+       648,
+       355
+      ]
+     ],
+     "box": [
+      28,
+      320,
+      42,
+      334
+     ],
+     "pixels": 52,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › chromium-light-desktop",
+     "attachment": "session-cleared-orbit",
+     "sizes": [
+      [
+       648,
+       91
+      ],
+      [
+       648,
+       91
+      ]
+     ],
+     "box": [
+      28,
+      47,
+      629,
+      79
+     ],
+     "pixels": 902,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › chromium-light-desktop",
+     "attachment": "session-idle-orbit",
+     "sizes": [
+      [
+       648,
+       91
+      ],
+      [
+       648,
+       91
+      ]
+     ],
+     "box": [
+      28,
+      47,
+      629,
+      79
+     ],
+     "pixels": 902,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › chromium-light-desktop",
+     "attachment": "session-long-placeholder-after-edit-orbit",
+     "sizes": [
+      [
+       648,
+       115
+      ],
+      [
+       648,
+       115
+      ]
+     ],
+     "box": [
+      28,
+      71,
+      629,
+      103
+     ],
+     "pixels": 902,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › chromium-light-desktop",
+     "attachment": "session-long-placeholder-before-edit-orbit",
+     "sizes": [
+      [
+       648,
+       91
+      ],
+      [
+       648,
+       91
+      ]
+     ],
+     "box": [
+      28,
+      47,
+      629,
+      79
+     ],
+     "pixels": 902,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › chromium-light-desktop",
+     "attachment": "session-one-line-orbit",
+     "sizes": [
+      [
+       648,
+       91
+      ],
+      [
+       648,
+       91
+      ]
+     ],
+     "box": [
+      28,
+      56,
+      42,
+      70
+     ],
+     "pixels": 52,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › chromium-light-desktop",
+     "attachment": "session-shell-mode-orbit",
+     "sizes": [
+      [
+       648,
+       91
+      ],
+      [
+       648,
+       91
+      ]
+     ],
+     "box": [
+      28,
+      56,
+      42,
+      70
+     ],
+     "pixels": 52,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › chromium-light-desktop",
+     "attachment": "session-two-lines-orbit",
+     "sizes": [
+      [
+       648,
+       115
+      ],
+      [
+       648,
+       115
+      ]
+     ],
+     "box": [
+      28,
+      80,
+      42,
+      94
+     ],
+     "pixels": 52,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › chromium-light-phone",
+     "attachment": "session-capped-scrolled-to-end-orbit",
+     "sizes": [
+      [
+       370,
+       351
+      ],
+      [
+       370,
+       355
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › chromium-light-phone",
+     "attachment": "session-cleared-orbit",
+     "sizes": [
+      [
+       370,
+       87
+      ],
+      [
+       370,
+       91
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › chromium-light-phone",
+     "attachment": "session-idle-orbit",
+     "sizes": [
+      [
+       370,
+       87
+      ],
+      [
+       370,
+       91
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › chromium-light-phone",
+     "attachment": "session-long-placeholder-after-edit-orbit",
+     "sizes": [
+      [
+       370,
+       135
+      ],
+      [
+       370,
+       139
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › chromium-light-phone",
+     "attachment": "session-long-placeholder-before-edit-orbit",
+     "sizes": [
+      [
+       370,
+       87
+      ],
+      [
+       370,
+       91
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › chromium-light-phone",
+     "attachment": "session-one-line-orbit",
+     "sizes": [
+      [
+       370,
+       87
+      ],
+      [
+       370,
+       91
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › chromium-light-phone",
+     "attachment": "session-shell-mode-orbit",
+     "sizes": [
+      [
+       370,
+       87
+      ],
+      [
+       370,
+       91
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › chromium-light-phone",
+     "attachment": "session-two-lines-orbit",
+     "sizes": [
+      [
+       370,
+       111
+      ],
+      [
+       370,
+       115
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › webkit-dark-desktop",
+     "attachment": "session-capped-scrolled-to-end-orbit",
+     "sizes": [
+      [
+       648,
+       355
+      ],
+      [
+       648,
+       355
+      ]
+     ],
+     "box": [
+      28,
+      320,
+      42,
+      334
+     ],
+     "pixels": 52,
+     "maxChannelDiff": 73
+    },
+    {
+     "test": "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › webkit-dark-desktop",
+     "attachment": "session-cleared-orbit",
+     "sizes": [
+      [
+       648,
+       91
+      ],
+      [
+       648,
+       91
+      ]
+     ],
+     "box": [
+      28,
+      47,
+      629,
+      79
+     ],
+     "pixels": 890,
+     "maxChannelDiff": 73
+    },
+    {
+     "test": "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › webkit-dark-desktop",
+     "attachment": "session-idle-orbit",
+     "sizes": [
+      [
+       648,
+       91
+      ],
+      [
+       648,
+       91
+      ]
+     ],
+     "box": [
+      28,
+      47,
+      629,
+      79
+     ],
+     "pixels": 890,
+     "maxChannelDiff": 73
+    },
+    {
+     "test": "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › webkit-dark-desktop",
+     "attachment": "session-long-placeholder-after-edit-orbit",
+     "sizes": [
+      [
+       648,
+       115
+      ],
+      [
+       648,
+       115
+      ]
+     ],
+     "box": [
+      28,
+      71,
+      629,
+      103
+     ],
+     "pixels": 890,
+     "maxChannelDiff": 73
+    },
+    {
+     "test": "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › webkit-dark-desktop",
+     "attachment": "session-long-placeholder-before-edit-orbit",
+     "sizes": [
+      [
+       648,
+       91
+      ],
+      [
+       648,
+       91
+      ]
+     ],
+     "box": [
+      28,
+      47,
+      629,
+      79
+     ],
+     "pixels": 890,
+     "maxChannelDiff": 73
+    },
+    {
+     "test": "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › webkit-dark-desktop",
+     "attachment": "session-one-line-orbit",
+     "sizes": [
+      [
+       648,
+       91
+      ],
+      [
+       648,
+       91
+      ]
+     ],
+     "box": [
+      28,
+      56,
+      42,
+      70
+     ],
+     "pixels": 52,
+     "maxChannelDiff": 73
+    },
+    {
+     "test": "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › webkit-dark-desktop",
+     "attachment": "session-shell-mode-orbit",
+     "sizes": [
+      [
+       648,
+       91
+      ],
+      [
+       648,
+       91
+      ]
+     ],
+     "box": [
+      28,
+      56,
+      42,
+      70
+     ],
+     "pixels": 52,
+     "maxChannelDiff": 73
+    },
+    {
+     "test": "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › webkit-dark-desktop",
+     "attachment": "session-two-lines-orbit",
+     "sizes": [
+      [
+       648,
+       115
+      ],
+      [
+       648,
+       115
+      ]
+     ],
+     "box": [
+      28,
+      80,
+      42,
+      94
+     ],
+     "pixels": 52,
+     "maxChannelDiff": 73
+    },
+    {
+     "test": "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › webkit-dark-phone",
+     "attachment": "session-capped-scrolled-to-end-orbit",
+     "sizes": [
+      [
+       370,
+       351
+      ],
+      [
+       370,
+       355
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › webkit-dark-phone",
+     "attachment": "session-cleared-orbit",
+     "sizes": [
+      [
+       370,
+       87
+      ],
+      [
+       370,
+       91
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › webkit-dark-phone",
+     "attachment": "session-idle-orbit",
+     "sizes": [
+      [
+       370,
+       87
+      ],
+      [
+       370,
+       91
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › webkit-dark-phone",
+     "attachment": "session-long-placeholder-after-edit-orbit",
+     "sizes": [
+      [
+       370,
+       135
+      ],
+      [
+       370,
+       139
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › webkit-dark-phone",
+     "attachment": "session-long-placeholder-before-edit-orbit",
+     "sizes": [
+      [
+       370,
+       87
+      ],
+      [
+       370,
+       91
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › webkit-dark-phone",
+     "attachment": "session-one-line-orbit",
+     "sizes": [
+      [
+       370,
+       87
+      ],
+      [
+       370,
+       91
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › webkit-dark-phone",
+     "attachment": "session-shell-mode-orbit",
+     "sizes": [
+      [
+       370,
+       87
+      ],
+      [
+       370,
+       91
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › webkit-dark-phone",
+     "attachment": "session-two-lines-orbit",
+     "sizes": [
+      [
+       370,
+       111
+      ],
+      [
+       370,
+       115
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › webkit-light-desktop",
+     "attachment": "session-capped-scrolled-to-end-orbit",
+     "sizes": [
+      [
+       648,
+       355
+      ],
+      [
+       648,
+       355
+      ]
+     ],
+     "box": [
+      28,
+      320,
+      42,
+      334
+     ],
+     "pixels": 52,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › webkit-light-desktop",
+     "attachment": "session-cleared-orbit",
+     "sizes": [
+      [
+       648,
+       91
+      ],
+      [
+       648,
+       91
+      ]
+     ],
+     "box": [
+      28,
+      47,
+      629,
+      79
+     ],
+     "pixels": 890,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › webkit-light-desktop",
+     "attachment": "session-idle-orbit",
+     "sizes": [
+      [
+       648,
+       91
+      ],
+      [
+       648,
+       91
+      ]
+     ],
+     "box": [
+      28,
+      47,
+      629,
+      79
+     ],
+     "pixels": 890,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › webkit-light-desktop",
+     "attachment": "session-long-placeholder-after-edit-orbit",
+     "sizes": [
+      [
+       648,
+       115
+      ],
+      [
+       648,
+       115
+      ]
+     ],
+     "box": [
+      28,
+      71,
+      629,
+      103
+     ],
+     "pixels": 890,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › webkit-light-desktop",
+     "attachment": "session-long-placeholder-before-edit-orbit",
+     "sizes": [
+      [
+       648,
+       91
+      ],
+      [
+       648,
+       91
+      ]
+     ],
+     "box": [
+      28,
+      47,
+      629,
+      79
+     ],
+     "pixels": 890,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › webkit-light-desktop",
+     "attachment": "session-one-line-orbit",
+     "sizes": [
+      [
+       648,
+       91
+      ],
+      [
+       648,
+       91
+      ]
+     ],
+     "box": [
+      28,
+      56,
+      42,
+      70
+     ],
+     "pixels": 52,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › webkit-light-desktop",
+     "attachment": "session-shell-mode-orbit",
+     "sizes": [
+      [
+       648,
+       91
+      ],
+      [
+       648,
+       91
+      ]
+     ],
+     "box": [
+      28,
+      56,
+      42,
+      70
+     ],
+     "pixels": 52,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › webkit-light-desktop",
+     "attachment": "session-two-lines-orbit",
+     "sizes": [
+      [
+       648,
+       115
+      ],
+      [
+       648,
+       115
+      ]
+     ],
+     "box": [
+      28,
+      80,
+      42,
+      94
+     ],
+     "pixels": 52,
+     "maxChannelDiff": 98
+    },
+    {
+     "test": "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › webkit-light-phone",
+     "attachment": "session-capped-scrolled-to-end-orbit",
+     "sizes": [
+      [
+       370,
+       351
+      ],
+      [
+       370,
+       355
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › webkit-light-phone",
+     "attachment": "session-cleared-orbit",
+     "sizes": [
+      [
+       370,
+       87
+      ],
+      [
+       370,
+       91
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › webkit-light-phone",
+     "attachment": "session-idle-orbit",
+     "sizes": [
+      [
+       370,
+       87
+      ],
+      [
+       370,
+       91
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › webkit-light-phone",
+     "attachment": "session-long-placeholder-after-edit-orbit",
+     "sizes": [
+      [
+       370,
+       135
+      ],
+      [
+       370,
+       139
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › webkit-light-phone",
+     "attachment": "session-long-placeholder-before-edit-orbit",
+     "sizes": [
+      [
+       370,
+       87
+      ],
+      [
+       370,
+       91
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › webkit-light-phone",
+     "attachment": "session-one-line-orbit",
+     "sizes": [
+      [
+       370,
+       87
+      ],
+      [
+       370,
+       91
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › webkit-light-phone",
+     "attachment": "session-shell-mode-orbit",
+     "sizes": [
+      [
+       370,
+       87
+      ],
+      [
+       370,
+       91
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › session composer grows, caps and scrolls, and starts as the P0 page field › webkit-light-phone",
+     "attachment": "session-two-lines-orbit",
+     "sizes": [
+      [
+       370,
+       111
+      ],
+      [
+       370,
+       115
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › session composer with staged attachments keeps its 24px insets; disabled is recorded › chromium-dark-desktop",
+     "attachment": "session-attachments-idle-orbit",
+     "sizes": [
+      [
+       648,
+       151
+      ],
+      [
+       648,
+       151
+      ]
+     ],
+     "box": [
+      28,
+      17,
+      77,
+      130
+     ],
+     "pixels": 2334,
+     "maxChannelDiff": 105
+    },
+    {
+     "test": "composer.browser.mjs › session composer with staged attachments keeps its 24px insets; disabled is recorded › chromium-dark-desktop",
+     "attachment": "session-attachments-two-lines-orbit",
+     "sizes": [
+      [
+       648,
+       175
+      ],
+      [
+       648,
+       175
+      ]
+     ],
+     "box": [
+      28,
+      17,
+      77,
+      154
+     ],
+     "pixels": 2334,
+     "maxChannelDiff": 105
+    },
+    {
+     "test": "composer.browser.mjs › session composer with staged attachments keeps its 24px insets; disabled is recorded › chromium-dark-desktop",
+     "attachment": "session-disabled-orbit",
+     "sizes": [
+      [
+       648,
+       91
+      ],
+      [
+       648,
+       91
+      ]
+     ],
+     "box": [
+      28,
+      47,
+      629,
+      79
+     ],
+     "pixels": 899,
+     "maxChannelDiff": 109
+    },
+    {
+     "test": "composer.browser.mjs › session composer with staged attachments keeps its 24px insets; disabled is recorded › chromium-dark-phone",
+     "attachment": "session-attachments-idle-orbit",
+     "sizes": [
+      [
+       370,
+       147
+      ],
+      [
+       370,
+       151
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › session composer with staged attachments keeps its 24px insets; disabled is recorded › chromium-dark-phone",
+     "attachment": "session-attachments-two-lines-orbit",
+     "sizes": [
+      [
+       370,
+       171
+      ],
+      [
+       370,
+       175
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › session composer with staged attachments keeps its 24px insets; disabled is recorded › chromium-dark-phone",
+     "attachment": "session-disabled-orbit",
+     "sizes": [
+      [
+       370,
+       87
+      ],
+      [
+       370,
+       91
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › session composer with staged attachments keeps its 24px insets; disabled is recorded › chromium-light-desktop",
+     "attachment": "session-attachments-idle-orbit",
+     "sizes": [
+      [
+       648,
+       151
+      ],
+      [
+       648,
+       151
+      ]
+     ],
+     "box": [
+      28,
+      17,
+      77,
+      130
+     ],
+     "pixels": 2334,
+     "maxChannelDiff": 127
+    },
+    {
+     "test": "composer.browser.mjs › session composer with staged attachments keeps its 24px insets; disabled is recorded › chromium-light-desktop",
+     "attachment": "session-attachments-two-lines-orbit",
+     "sizes": [
+      [
+       648,
+       175
+      ],
+      [
+       648,
+       175
+      ]
+     ],
+     "box": [
+      28,
+      17,
+      77,
+      154
+     ],
+     "pixels": 2334,
+     "maxChannelDiff": 127
+    },
+    {
+     "test": "composer.browser.mjs › session composer with staged attachments keeps its 24px insets; disabled is recorded › chromium-light-desktop",
+     "attachment": "session-disabled-orbit",
+     "sizes": [
+      [
+       648,
+       91
+      ],
+      [
+       648,
+       91
+      ]
+     ],
+     "box": [
+      28,
+      47,
+      629,
+      79
+     ],
+     "pixels": 902,
+     "maxChannelDiff": 149
+    },
+    {
+     "test": "composer.browser.mjs › session composer with staged attachments keeps its 24px insets; disabled is recorded › chromium-light-phone",
+     "attachment": "session-attachments-idle-orbit",
+     "sizes": [
+      [
+       370,
+       147
+      ],
+      [
+       370,
+       151
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › session composer with staged attachments keeps its 24px insets; disabled is recorded › chromium-light-phone",
+     "attachment": "session-attachments-two-lines-orbit",
+     "sizes": [
+      [
+       370,
+       171
+      ],
+      [
+       370,
+       175
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › session composer with staged attachments keeps its 24px insets; disabled is recorded › chromium-light-phone",
+     "attachment": "session-disabled-orbit",
+     "sizes": [
+      [
+       370,
+       87
+      ],
+      [
+       370,
+       91
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › session composer with staged attachments keeps its 24px insets; disabled is recorded › webkit-dark-desktop",
+     "attachment": "session-attachments-idle-orbit",
+     "sizes": [
+      [
+       648,
+       151
+      ],
+      [
+       648,
+       151
+      ]
+     ],
+     "box": [
+      28,
+      17,
+      77,
+      130
+     ],
+     "pixels": 2334,
+     "maxChannelDiff": 105
+    },
+    {
+     "test": "composer.browser.mjs › session composer with staged attachments keeps its 24px insets; disabled is recorded › webkit-dark-desktop",
+     "attachment": "session-attachments-two-lines-orbit",
+     "sizes": [
+      [
+       648,
+       175
+      ],
+      [
+       648,
+       175
+      ]
+     ],
+     "box": [
+      28,
+      17,
+      77,
+      154
+     ],
+     "pixels": 2334,
+     "maxChannelDiff": 105
+    },
+    {
+     "test": "composer.browser.mjs › session composer with staged attachments keeps its 24px insets; disabled is recorded › webkit-dark-desktop",
+     "attachment": "session-disabled-orbit",
+     "sizes": [
+      [
+       648,
+       91
+      ],
+      [
+       648,
+       91
+      ]
+     ],
+     "box": [
+      28,
+      47,
+      629,
+      79
+     ],
+     "pixels": 890,
+     "maxChannelDiff": 109
+    },
+    {
+     "test": "composer.browser.mjs › session composer with staged attachments keeps its 24px insets; disabled is recorded › webkit-dark-phone",
+     "attachment": "session-attachments-idle-orbit",
+     "sizes": [
+      [
+       370,
+       147
+      ],
+      [
+       370,
+       151
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › session composer with staged attachments keeps its 24px insets; disabled is recorded › webkit-dark-phone",
+     "attachment": "session-attachments-two-lines-orbit",
+     "sizes": [
+      [
+       370,
+       171
+      ],
+      [
+       370,
+       175
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › session composer with staged attachments keeps its 24px insets; disabled is recorded › webkit-dark-phone",
+     "attachment": "session-disabled-orbit",
+     "sizes": [
+      [
+       370,
+       87
+      ],
+      [
+       370,
+       91
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › session composer with staged attachments keeps its 24px insets; disabled is recorded › webkit-light-desktop",
+     "attachment": "session-attachments-idle-orbit",
+     "sizes": [
+      [
+       648,
+       151
+      ],
+      [
+       648,
+       151
+      ]
+     ],
+     "box": [
+      28,
+      17,
+      77,
+      130
+     ],
+     "pixels": 2334,
+     "maxChannelDiff": 127
+    },
+    {
+     "test": "composer.browser.mjs › session composer with staged attachments keeps its 24px insets; disabled is recorded › webkit-light-desktop",
+     "attachment": "session-attachments-two-lines-orbit",
+     "sizes": [
+      [
+       648,
+       175
+      ],
+      [
+       648,
+       175
+      ]
+     ],
+     "box": [
+      28,
+      17,
+      77,
+      154
+     ],
+     "pixels": 2334,
+     "maxChannelDiff": 127
+    },
+    {
+     "test": "composer.browser.mjs › session composer with staged attachments keeps its 24px insets; disabled is recorded › webkit-light-desktop",
+     "attachment": "session-disabled-orbit",
+     "sizes": [
+      [
+       648,
+       91
+      ],
+      [
+       648,
+       91
+      ]
+     ],
+     "box": [
+      28,
+      47,
+      629,
+      79
+     ],
+     "pixels": 890,
+     "maxChannelDiff": 149
+    },
+    {
+     "test": "composer.browser.mjs › session composer with staged attachments keeps its 24px insets; disabled is recorded › webkit-light-phone",
+     "attachment": "session-attachments-idle-orbit",
+     "sizes": [
+      [
+       370,
+       147
+      ],
+      [
+       370,
+       151
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › session composer with staged attachments keeps its 24px insets; disabled is recorded › webkit-light-phone",
+     "attachment": "session-attachments-two-lines-orbit",
+     "sizes": [
+      [
+       370,
+       171
+      ],
+      [
+       370,
+       175
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › session composer with staged attachments keeps its 24px insets; disabled is recorded › webkit-light-phone",
+     "attachment": "session-disabled-orbit",
+     "sizes": [
+      [
+       370,
+       87
+      ],
+      [
+       370,
+       91
+      ]
+     ],
+     "box": null,
+     "pixels": null,
+     "maxChannelDiff": null
+    },
+    {
+     "test": "composer.browser.mjs › the borderless variant on its own keeps its 1px focus ring; rest, hover and disabled are recorded › chromium-dark-phone",
+     "attachment": "plain-focus-and-hover-orbit",
+     "sizes": [
+      [
+       368,
+       43
+      ],
+      [
+       368,
+       43
+      ]
+     ],
+     "box": [
+      6,
+      6,
+      364,
+      39
+     ],
+     "pixels": 18,
+     "maxChannelDiff": 2
+    }
+   ]
+  }
+ },
+ "unexplained": []
+}

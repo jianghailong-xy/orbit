@@ -4,24 +4,35 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
 import { api } from '../api';
 import { presetModelsQuery, providersQuery, type PresetCatalogEntry } from '../lib/queries';
-import { PROVIDER_PRESETS, providerPreset, type ProviderPreset } from '@orbit/shared';
+import {
+  AgentProvider,
+  ENGINE_CLI_NAMES,
+  PROVIDER_PRESETS,
+  providerPreset,
+  type ProviderKeyUsage,
+  type ProviderPreset,
+} from '@orbit/shared';
 import {
   PROVIDERS_BASE,
   PROVIDERS_LIST_KEY,
   suggestProviderName,
+  type ProviderModelRow,
   type ProviderRow,
 } from '../lib/providerAdmin';
-import { ProviderGallery, ProviderTile } from '../components/ProviderGallery';
+import { EngineTile, newKeyEngines, ProviderGallery, ProviderTile, vendorName, vendorOf } from '../components/ProviderGallery';
 import { DeepSeekBalanceSection } from '../components/DeepSeekBalance';
+import { KeyImpact, keyInUse, KeyUse, keyUsageQuery } from '../components/KeyImpact';
 import { hasDeepSeekBalance } from '../lib/deepseekBalance';
+import { DSH_PRESET_SLUG } from '../lib/dshRuntime';
 import { Button } from '../components/ui/Button';
+import { useConfirm } from '../components/ui/ConfirmDialog';
 import { Input } from '../components/ui/Input';
 import { NumberInput } from '../components/ui/NumberInput';
 import { PasswordInput } from '../components/ui/PasswordInput';
 import { Select } from '../components/ui/Select';
 import { Spinner } from '../components/ui/Spinner';
 import { Switch } from '../components/ui/Switch';
-import { providerDisplayLabel, runtimeSummary } from '../lib/sessionProviderChoices';
+import { runtimeSummary } from '../lib/sessionProviderChoices';
 import { useToast } from '../lib/toast';
 
 // A model row while it's being edited in the form. contextWindow is a free number field (null when
@@ -32,8 +43,95 @@ interface DraftModel {
   contextWindow: number | null;
 }
 
-/** The runtime CLI a provider borrows (ProviderPreset.runtime, and apiserver providers/dto.ts). */
+/** The protocol a key's endpoint speaks, named by the engine that speaks it natively
+ *  (ProviderPreset.runtime, and apiserver providers/dto.ts). */
 type Runtime = NonNullable<ProviderPreset['runtime']>;
+
+/** "Claude Code, OpenCode and DeepSeek Harness": engines named in a sentence. */
+const engineList = (engines: AgentProvider[]): string => {
+  const names = engines.map((engine) => ENGINE_CLI_NAMES[engine]);
+  return names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : (names[0] ?? '');
+};
+
+/** A key's models as one line, its default first: "DeepSeek V4 Pro, V4 Flash" — the rest drop the
+ *  first one's leading word they share, which only repeats the vendor. */
+function modelLine(models: Pick<ProviderModelRow, 'value' | 'label'>[], defaultModel: string | null | undefined, emphasize: boolean): ReactNode {
+  const first = models.find((m) => m.value === defaultModel) ?? models[0];
+  if (!first) return null;
+  const head = first.label || first.value;
+  const lead = `${head.split(' ')[0]} `;
+  const rest = models
+    .filter((m) => m !== first)
+    .map((m) => {
+      const name = m.label || m.value;
+      return name.startsWith(lead) ? name.slice(lead.length) : name;
+    });
+  return (
+    <>
+      {emphasize ? <b>{head}</b> : head}
+      {rest.length > 0 && `, ${rest.join(', ')}`}
+    </>
+  );
+}
+
+/**
+ * The engines a DeepSeek key works with and how each uses it (docs/mocks/provider-engine-decoupling,
+ * boards 2 and 3): its models on Claude Code and OpenCode, Harness's own catalogue on each machine —
+ * and on a saved key's page, what uses it on each right now (`usage`). The engine is picked when a
+ * session starts; nothing is ticked here.
+ */
+function WorksWith({ engines, models, defaultModel, usage }: {
+  engines: AgentProvider[];
+  models: Pick<ProviderModelRow, 'value' | 'label'>[];
+  defaultModel: string | null | undefined;
+  /** A saved key's use, per engine; absent while connecting one. */
+  usage?: { data?: ProviderKeyUsage };
+}) {
+  const connecting = !usage;
+  return (
+    <div className={`provider-works${connecting ? '' : ' with-use'}`}>
+      <div className="provider-works-head">
+        Works with
+        <small>
+          {connecting
+            ? '— pick the engine when you start a session; this key is one of its providers'
+            : '— pick it in the Provider menu of a session on any of these'}
+        </small>
+      </div>
+      {engines.map((engine) => {
+        // How the engine reaches DeepSeek, said while connecting; then the models it offers there.
+        const how = !connecting
+          ? null
+          : engine === AgentProvider.DSH
+            ? "DeepSeek's own agent"
+            : engine === AgentProvider.OPENCODE
+              ? 'as an OpenCode provider'
+              : "DeepSeek's Anthropic-compatible API";
+        const offers = engine === AgentProvider.DSH ? 'models from its catalogue on each machine' : modelLine(models, defaultModel, connecting);
+        return (
+          <div className="provider-works-row" key={engine}>
+            <span className="provider-works-engine">
+              <EngineTile engine={engine} size={18} />
+              {ENGINE_CLI_NAMES[engine]}
+            </span>
+            <span className="provider-works-how">
+              {how}
+              {how && offers && ' · '}
+              {offers}
+            </span>
+            {!connecting && (
+              <span className="provider-works-use">
+                {usage.data && (
+                  <KeyUse use={usage.data.engines.find((e) => e.engine === engine)} separator=" · " idle="Not in use" />
+                )}
+              </span>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 /**
  * Step 1 of adding a provider (/providers/new): pick a vendor. Its own page rather than a modal
@@ -91,10 +189,11 @@ export function ProviderConnectPage() {
   }
 
   const rows = providers.data ?? [];
-  // The other providers this one shares a vendor with. Custom endpoints have no vendor and name
-  // themselves anyway, so they are nobody's sibling.
+  // The other providers this one shares a vendor with (vendorOf): a key from the retired DeepSeek
+  // Harness preset is a DeepSeek key's sibling. Custom endpoints have no vendor and name themselves
+  // anyway, so they are nobody's sibling.
   const siblingsOf = (presetSlug: string | null | undefined, selfId?: string) =>
-    presetSlug ? rows.filter((p) => p.presetSlug === presetSlug && p.id !== selfId) : [];
+    presetSlug ? rows.filter((p) => p.presetSlug && vendorOf(p.presetSlug) === vendorOf(presetSlug) && p.id !== selfId) : [];
 
   if (id) {
     const row = rows.find((p) => p.id === id);
@@ -109,8 +208,9 @@ export function ProviderConnectPage() {
       );
     }
     // The vendor a row was created from is recorded on the row, not guessed from its slug — a
-    // second key for the same vendor lands on "anthropic-2" and is still an Anthropic provider.
-    const rowPreset = providerPreset(row.presetSlug);
+    // second key for the same vendor lands on "anthropic-2" and is still an Anthropic provider. A row
+    // from the retired DeepSeek Harness preset is a DeepSeek key, and is edited as one.
+    const rowPreset = providerPreset(vendorOf(row.presetSlug));
     return (
       <ProviderForm
         key={row.id}
@@ -122,6 +222,9 @@ export function ProviderConnectPage() {
     );
   }
 
+  // DeepSeek Harness is an engine now, and runs on a DeepSeek key: its old connect address (older
+  // apps' "Add API key" links to it) connects one.
+  if (slug === DSH_PRESET_SLUG) return <Navigate to="/providers/new/deepseek" replace />;
   const preset = PROVIDER_PRESETS.find((p) => p.slug === slug);
   if (!preset && slug !== 'custom') return <Navigate to="/providers/new" replace />;
   return (
@@ -154,9 +257,12 @@ function ProviderForm({
   const message = useToast();
   const qc = useQueryClient();
   const navigate = useNavigate();
+  const [confirm, confirmHolder] = useConfirm();
   // A custom provider names itself and declares its own endpoint; a preset ships every field but
   // the key, so those fields live behind Advanced.
   const isCustom = !preset;
+  // The company the key is from, as the gallery names it.
+  const vendor = preset ? vendorName(preset.slug) : null;
   const presetModels = catalog?.models ?? preset?.models ?? [];
   // The vendor's current pick, which a following provider dispatches with — not the one this
   // bundle was built with, or the form would probe the key against a model the session won't use.
@@ -174,7 +280,7 @@ function ProviderForm({
     editing
       ? editing.label
       : preset
-        ? suggestProviderName(providerDisplayLabel(preset.label, preset.slug), siblings.map((s) => providerDisplayLabel(s.label, s.presetSlug)))
+        ? suggestProviderName(vendorName(preset.slug), siblings.map((s) => s.label))
         : '',
   );
   const [baseUrl, setBaseUrl] = useState(editing?.baseUrl ?? preset?.baseUrl ?? '');
@@ -218,12 +324,24 @@ function ProviderForm({
   // The pre-save probe's verdict, when it failed: shown inline, with "Save anyway" beside it.
   const [probeError, setProbeError] = useState<string | null>(null);
   const [probing, setProbing] = useState(false);
+  // Why the server refused the save — a key in use on an engine its new endpoint can't serve among the
+  // reasons (PROVIDER_DIALECT_IN_USE) — shown above the buttons, as the server worded it.
+  const [saveError, setSaveError] = useState<string | null>(null);
+  // Which engines the key runs on: a saved key's are the server's; one being connected, what its
+  // vendor or typed endpoint gets by the shared table (newKeyEngines).
+  const engines = editing ? editing.engines : newKeyEngines({ runtime, presetSlug: preset?.slug ?? null, baseUrl });
+  // A DeepSeek key — the one key DeepSeek Harness runs on — says which engines get it, and how
+  // (docs/mocks/provider-engine-decoupling, boards 2 and 3).
+  const harness = engines.includes(AgentProvider.DSH);
+  // What uses a saved DeepSeek key on each engine, beside each in Works with.
+  const usage = useQuery({ ...keyUsageQuery(editing?.id ?? ''), enabled: !!editing && harness });
 
   // What Save has to carry: a key that came back from Reveal is the one already stored, so only a
   // typed change is a new key — and only a new key is worth probing.
   const newKey = apiKey.trim() && apiKey !== storedKey ? apiKey.trim() : '';
 
   const saveMut = useMutation({
+    onMutate: () => setSaveError(null),
     mutationFn: () => {
       // Keep only complete model rows; carry contextWindow only when set.
       const modelPayload = models
@@ -286,8 +404,7 @@ function ProviderForm({
       message.success(editing ? 'Provider updated' : 'Provider created');
       navigate('/infrastructure#keys');
     },
-    onError: (e: Error) =>
-      message.error(editing ? "Couldn't save the provider" : "Couldn't connect the provider", e.message),
+    onError: (e: Error) => setSaveError(e.message),
   });
 
   // Create needs a key; edit keeps the stored one when left blank. label/baseUrl always required.
@@ -351,17 +468,55 @@ function ProviderForm({
     saveMut.mutate();
   };
 
+  /**
+   * Save, after asking first when the save turns a key off that something uses (board 3 ②, the owner's
+   * choice A): it stops on every engine it works with. Nothing using it, nothing to ask.
+   */
+  const save = async () => {
+    if (editing?.enabled && !enabled) {
+      const used = await qc.fetchQuery(keyUsageQuery(editing.id)).catch(() => null);
+      if (!used || keyInUse(used)) {
+        void confirm({
+          title: `Turn off ${editing.label}?`,
+          description: <KeyImpact row={editing} action="turnOff" />,
+          confirmText: 'Turn off',
+          width: 440,
+          onConfirm: connect,
+        });
+        return;
+      }
+    }
+    await connect();
+  };
+
+  /** Delete the key, once asked what that does to whatever uses it. */
+  const deleteKey = () =>
+    editing &&
+    void confirm({
+      title: `Delete ${editing.label}?`,
+      description: <KeyImpact row={editing} action="delete" />,
+      confirmText: 'Delete key',
+      danger: true,
+      width: 440,
+      onConfirm: async () => {
+        await api(`${PROVIDERS_BASE}/${editing.id}`, { method: 'DELETE' });
+        void qc.invalidateQueries({ queryKey: PROVIDERS_LIST_KEY });
+        void qc.invalidateQueries({ queryKey: providersQuery().queryKey });
+        message.success('Provider deleted');
+        navigate('/infrastructure#keys');
+      },
+    });
+
   const title = editing
-    ? `Edit ${providerDisplayLabel(editing.label, editing.presetSlug)}`
+    ? `Edit ${editing.label}`
     : preset
-      ? `Connect ${providerDisplayLabel(preset.label, preset.slug)}`
+      ? `Connect ${vendor}`
       : 'Add a custom provider';
   // The hero above the form: the row being edited, or the vendor being connected. A blank custom
   // provider has no identity yet, so it gets none.
   const identity = editing
     ? {
         ...editing,
-        label: providerDisplayLabel(editing.label, editing.presetSlug),
         // The logo follows the vendor, not the row's identifier — a second Anthropic key sits on
         // "anthropic-2" and is still Anthropic.
         slug: editing.presetSlug ?? editing.slug,
@@ -369,7 +524,7 @@ function ProviderForm({
         counted: 'configured',
       }
     : preset
-      ? { ...preset, label: providerDisplayLabel(preset.label, preset.slug), runtime: preset.runtime ?? 'claude', count: presetModels.length, counted: 'included' }
+      ? { ...preset, label: vendor!, runtime: preset.runtime ?? 'claude', count: presetModels.length, counted: 'included' }
       : null;
 
   return (
@@ -387,7 +542,7 @@ function ProviderForm({
           <div style={{ minWidth: 0 }}>
             <div style={{ fontWeight: 600 }}>{identity.label}</div>
             <div style={{ color: 'var(--text-3)', fontSize: 12 }}>
-              {runtimeSummary(identity.runtime, identity.slug)} ·{' '}
+              {runtimeSummary(identity.runtime)} ·{' '}
               {/* Counting a shipped list would misstate what this offers — the runner's CLI
                   decides, and that list changes without us. */}
               {preset?.modelsFromRuntime
@@ -415,8 +570,8 @@ function ProviderForm({
           {preset && siblings.length > 0 && (
             <div className="ps-hint">
               {siblings.length === 1
-                ? `You already have one ${preset.label} key`
-                : `You already have ${siblings.length} ${preset.label} keys`}{' '}
+                ? `You already have one ${vendor} key`
+                : `You already have ${siblings.length} ${vendor} keys`}{' '}
               — the name is what tells them apart when picking a model.
             </div>
           )}
@@ -459,7 +614,7 @@ function ProviderForm({
 
       <Step
         num={isCustom ? 3 : 1}
-        title={preset ? `Paste your ${preset.label} API key` : 'API key'}
+        title={preset ? `Paste your ${vendor} API key` : 'API key'}
         link={
           preset?.keyUrl && (
             <a href={preset.keyUrl} target="_blank" rel="noreferrer">
@@ -499,21 +654,12 @@ function ProviderForm({
           {newKey ? ` ${editing ? 'Saving' : 'Connecting'} sends one tiny test request first.` : ''}
         </div>
         {/* What agy does with the key, which the owner should know before handing it over
-            (docs/antigravity-runtime-contract.md §3.2 and §7). */}
+            (docs/antigravity-runtime-contract.md §3.2 and §7; docs/provider-engine-contract.md §4.6). */}
         {runtime === 'antigravity' && (
           <div className="ps-hint">
-            Sessions hand this key to the Antigravity CLI in its environment, where commands the agent
-            runs can read it. agy also sends usage statistics (not your conversations) to Google; it
-            has no setting that turns them off.
-          </div>
-        )}
-        {/* What a Harness key does and doesn't prove at connect time (docs/deepseek-harness-
-            runtime-environment.md): nothing checks it until a session sends its first request. */}
-        {runtime === 'dsh' && (
-          <div className="ps-hint">
-            Sessions on DeepSeek Harness use this key — not the DeepSeek provider, which runs on Claude
-            Code. The key is checked by the first request a session sends; a rejected key shows in
-            that session with a link back here.
+            Sessions on the Antigravity CLI and OpenCode hand this key to the CLI in its environment, where
+            commands the agent runs can read it. agy also sends usage statistics (not your conversations)
+            to Google; it has no setting that turns them off.
           </div>
         )}
       </Step>
@@ -521,6 +667,37 @@ function ProviderForm({
       {/* Right under the key: the balance is the account's that key belongs to. Only a saved key has
           one — the server asks DeepSeek with what is stored, never with what is being typed. */}
       {editing && hasDeepSeekBalance(editing) && <DeepSeekBalanceSection row={editing} />}
+
+      {harness && (
+        <section className="provider-step">
+          <WorksWith
+            engines={engines}
+            models={models.filter((m) => m.value.trim())}
+            defaultModel={editing ? editing.defaultModel : presetDefault}
+            usage={editing ? usage : undefined}
+          />
+          {/* Which processes the key reaches, measured per engine (docs/provider-engine-contract.md
+              §4.6): every CLI but Harness lets the commands its agent runs read it. */}
+          {!editing && (
+            <div className="provider-who">
+              <b>Who gets this key</b>
+              <ul>
+                <li>
+                  Sessions on {engineList(engines.filter((engine) => engine !== AgentProvider.DSH))} hand this key
+                  to the CLI in its environment, where commands the agent runs can read it.
+                </li>
+                <li>
+                  DeepSeek Harness keeps it out of the commands it runs, but any program running as the runner's
+                  user can still read it from the Harness process.
+                </li>
+                <li>
+                  Orbit's server uses it to test it when you connect and to read this DeepSeek account's balance.
+                </li>
+              </ul>
+            </div>
+          )}
+        </section>
+      )}
 
       <div className="provider-adv" style={{ marginTop: 20 }}>
         <div className={`provider-adv-head${advOpen ? ' open' : ''}`} onClick={() => setAdvOpen((v) => !v)}>
@@ -550,14 +727,14 @@ function ProviderForm({
                     <div style={{ color: 'var(--text-3)', fontSize: 12, marginTop: 4 }}>
                       {preset.note ??
                         (preset.runtime === 'codex'
-                          ? `${preset.label}'s OpenAI-compatible endpoint.`
+                          ? `${vendor}'s OpenAI-compatible endpoint.`
                           : preset.runtime === 'kimi'
-                            ? `${preset.label}'s own API, which the Kimi CLI speaks natively.`
+                            ? `${vendor}'s own API, which the Kimi CLI speaks natively.`
                             : preset.runtime === 'antigravity'
-                              ? `${preset.label}'s own API, which the Antigravity CLI speaks natively.`
-                              : preset.runtime === 'dsh'
-                                ? `DeepSeek's Anthropic-compatible API, which DeepSeek Harness's API key adapter speaks.`
-                              : `The endpoint ${preset.label} documents for Claude Code.`)}
+                              ? `${vendor}'s own API, which the Antigravity CLI speaks natively.`
+                              : harness
+                                ? `${vendor}'s Anthropic-compatible API — ${engineList(engines)} all call it.`
+                                : `The endpoint ${vendor} documents for Claude Code.`)}
                     </div>
                   </Field>
                 </>
@@ -571,7 +748,7 @@ function ProviderForm({
                   preset!.modelsFromRuntime ? (
                     <div style={{ color: 'var(--text-3)', fontSize: 12 }}>
                       Provided by the{' '}
-                      {runtime === 'codex' ? 'Codex' : runtime === 'antigravity' ? 'Antigravity' : runtime === 'dsh' ? 'DeepSeek Harness' : 'Claude Code'}{' '}
+                      {runtime === 'codex' ? 'Codex' : runtime === 'antigravity' ? 'Antigravity' : 'Claude Code'}{' '}
                       CLI on each runner, refreshed automatically — new models appear without any
                       change here.
                     </div>
@@ -583,9 +760,18 @@ function ProviderForm({
                           .join(' · ')}
                       </div>
                       <div style={{ color: 'var(--text-3)', fontSize: 12, marginTop: 6 }}>
-                        Maintained by Orbit from the official {preset!.label} catalogue and refreshed
-                        automatically — new models appear on their own, and the newest becomes the
-                        default.
+                        {harness ? (
+                          <>
+                            For {engineList(engines.filter((engine) => engine !== AgentProvider.DSH))} — maintained by
+                            Orbit from the official {vendor} catalogue. DeepSeek Harness lists its own models on each
+                            machine.
+                          </>
+                        ) : (
+                          <>
+                            Maintained by Orbit from the official {vendor} catalogue and refreshed automatically — new
+                            models appear on their own, and the newest becomes the default.
+                          </>
+                        )}
                       </div>
                     </>
                   )
@@ -659,7 +845,7 @@ function ProviderForm({
                   <div style={{ color: 'var(--text-3)', fontSize: 12, marginTop: 6 }}>
                     This list is yours to maintain.{' '}
                     <a onClick={() => setFollows(true)}>
-                      Follow the {preset.label} catalogue again
+                      Follow the {vendor} catalogue again
                     </a>
                   </div>
                 )}
@@ -669,20 +855,36 @@ function ProviderForm({
         )}
       </div>
 
-      {/* Nobody adds a provider they want switched off, so this is an edit-time control. */}
+      {/* Nobody adds a provider they want switched off, so this is an edit-time control. Off is the
+          key's, not an engine's: every engine it works with stops on it. */}
       {editing && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 20 }}>
           <Switch checked={enabled} onCheckedChange={setEnabled} aria-label="Enabled" />
           <span>Enabled</span>
           <span style={{ color: 'var(--text-3)', fontSize: 12 }}>
-            Disabled providers are hidden from the pickers.
+            {editing.engines.length > 0
+              ? `Off stops it on ${engineList(editing.engines)}, and hides it from their Provider menus.`
+              : 'Disabled providers are hidden from the pickers.'}
           </span>
         </div>
       )}
 
+      {saveError && (
+        <div className="provider-save-error" role="alert">
+          <b>{editing ? "Couldn't save the provider." : "Couldn't connect the provider."}</b> {saveError}
+        </div>
+      )}
+
       <div className="provider-actions">
-        <span style={{ color: 'var(--error)', fontSize: 12, lineHeight: 1.4 }}>
-          {probing ? <span style={{ color: 'var(--text-3)' }}>Testing the connection…</span> : probeError}
+        <span className="provider-actions-start">
+          {editing && (
+            <Button danger onClick={deleteKey}>
+              Delete key
+            </Button>
+          )}
+          <span style={{ color: 'var(--error)', fontSize: 12, lineHeight: 1.4 }}>
+            {probing ? <span style={{ color: 'var(--text-3)' }}>Testing the connection…</span> : probeError}
+          </span>
         </span>
         <span className="prov-actions" style={{ gap: 8 }}>
           {probeError && (
@@ -695,12 +897,13 @@ function ProviderForm({
             variant="primary"
             disabled={!canSave}
             loading={probing || saveMut.isPending}
-            onClick={() => canSave && void connect()}
+            onClick={() => canSave && void save()}
           >
             {editing ? 'Save' : 'Connect'}
           </Button>
         </span>
       </div>
+      {confirmHolder}
     </div>
   );
 }

@@ -131,7 +131,8 @@ struct SessionFolderPage: View {
                           allSessions: app.agents?.allSessions ?? [], folders: app.sessionFolders,
                           projects: app.projects?.sidebarProjects ?? [], watches: app.watches?.summaries ?? [:],
                           view: address.view, searching: isSearching,
-                          runnerOffline: app.agents?.runnerIsOffline(agent?.runnerId) ?? false)
+                          runnerOffline: app.agents?.runnerIsOffline(agent?.runnerId) ?? false,
+                          recaps: app.user?.preferences?.showRecaps ?? true)
     }
     /// The whole grouping, from its inputs alone (see the workspace list's).
     private static func grouping(_ inputs: SessionListInputs, _ lines: SessionLineCache) -> SessionListGrouping {

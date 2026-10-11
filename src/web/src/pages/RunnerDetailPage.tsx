@@ -24,7 +24,7 @@ import {
   WarningOutlined,
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { LoginEngine, RunnerRepoHealth } from '@orbit/shared';
+import { AgentProvider, ENGINE_CLI_NAMES, type LoginEngine, type RunnerRepoHealth } from '@orbit/shared';
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
@@ -125,13 +125,17 @@ import {
 } from '../lib/runnerCopy';
 import { ago } from '../lib/runnerEngines';
 import { useToast } from '../lib/toast';
-import { defaultModelForProvider, mergedProviderOptions } from '../lib/workspaceDefaults';
+import { sessionEngineOf } from '../lib/workspaceDefaults';
+import { defaultModelLabel, engineTitleFor, engineVia } from '../lib/sessionProviderChoices';
+import { BrandMark } from '../components/NewSessionProviderHero';
 
 interface Workspace {
   id: string;
   name: string;
   appendSystemPrompt?: string | null;
-  /** What this project last ran on, derived server-side. `provider` is the deprecated alias. */
+  /** What this project last ran on, derived server-side: the engine and the provider of its last
+   *  interactive session. `provider` is the deprecated alias of `lastProvider`. */
+  lastEngine?: string | null;
   lastProvider?: string;
   provider?: string;
   workDir?: string | null;
@@ -659,23 +663,25 @@ export function RunnerDetailPage() {
     });
   };
 
-  // A configured provider shows its own label; fall back to the raw slug if it's since been
-  // removed/disabled (so nothing silently mislabels it as Claude).
-  const providerLabelFor = (slug: string) =>
-    mergedProviderOptions(configuredProviders).find((p) => p.value === slug)?.label ?? slug;
+  // What a workspace's next session runs on — the engine and the provider of the last one there — and
+  // the model that resolves to, by its catalogue name. A key since removed shows its raw slug, so
+  // nothing silently mislabels it.
+  const nextRunOf = (workspace: Workspace | null | undefined) => {
+    const provider = workspace?.lastProvider ?? workspace?.provider ?? 'claude';
+    const engine = sessionEngineOf(workspace?.lastEngine, provider, configuredProviders);
+    return {
+      engine,
+      via: engineVia(engine, provider, configuredProviders),
+      model: defaultModelLabel(engine, provider, runner?.modelCatalog, configuredProviders, runner?.runtimeDefaultModels),
+    };
+  };
 
   // In-place workspace editor — rendered as a card in the list (top for create, in
   // the row itself for edit) instead of a modal, so the runner + workspace list stay
   // in view while you edit.
   const workspaceForm = (mode: 'create' | 'edit') => {
     // The same derivation the row's subtitle uses — what a new session here would start on.
-    const formProvider = editing?.lastProvider ?? editing?.provider ?? 'claude';
-    const formModel = defaultModelForProvider(
-      formProvider,
-      runner?.modelCatalog,
-      configuredProviders,
-      runner?.runtimeDefaultModels,
-    );
+    const formRun = nextRunOf(editing);
     // Folded away, the disclosure still has to say whether anything is hidden behind it.
     const advCount =
       (fEnv.length ? 1 : 0) +
@@ -809,7 +815,7 @@ export function RunnerDetailPage() {
           }}
         >
           <RoutingEngines
-            own={formProvider}
+            own={formRun.engine}
             value={fRoutingEngines}
             onChange={(next) => {
               setFRoutingEngines(next);
@@ -819,21 +825,22 @@ export function RunnerDetailPage() {
         </SettingRow>
       )}
 
-      {/* Model is not a workspace field: it resolves from the runtime/provider this project last
-          ran on. Stated read-only because the row displays it — otherwise it reads as a setting
-          someone forgot to make editable. Mode and effort are deliberately not here: they are
-          per-session choices, made in the session where the context for them is. With smart
-          selection on, that model is only what the sessions opened by hand start on. */}
+      {/* Model is not a workspace field: it resolves from the engine and provider this project last
+          ran on, both said as they are (board 7 ②). Stated read-only because the row displays it —
+          otherwise it reads as a setting someone forgot to make editable. Mode and effort are
+          deliberately not here: they are per-session choices, made in the session where the context
+          for them is. With smart selection on, that model is only what the sessions opened by hand
+          start on. */}
       <div className="rd-form-derived">
         {smartSelection && fModelRouting ? (
           <>
             Task runs: model picked per task by smart selection. Sessions you open yourself:{' '}
-            <b>{formModel || '—'}</b> · resolved by {providerLabelFor(formProvider)} on this runner.
+            <b>{formRun.model || '—'}</b> · {formRun.via} on this runner.
           </>
         ) : (
           <>
-            Model <b>{formModel || '—'}</b> · resolved by {providerLabelFor(formProvider)} on this
-            runner. Pick a different one from the session composer.
+            Model <b>{formRun.model || '—'}</b> · {formRun.via} on this runner. Pick a different one from the
+            session composer.
           </>
         )}
       </div>
@@ -1064,13 +1071,7 @@ export function RunnerDetailPage() {
   // reachable from the row menu.
   const workspaceRow = (a: Workspace) => {
     // What this project last ran on — the same default a new session here would inherit.
-    const lastProvider = a.lastProvider ?? a.provider ?? 'claude';
-    const effectiveModel = defaultModelForProvider(
-      lastProvider,
-      runner?.modelCatalog,
-      configuredProviders,
-      runner?.runtimeDefaultModels,
-    );
+    const run = nextRunOf(a);
     const isOpen = formOpen && editing?.id === a.id;
     const running = sessionCounts.find((count) => count.workspaceId === a.id)?.running ?? 0;
     return (
@@ -1088,7 +1089,7 @@ export function RunnerDetailPage() {
           {a.enabled === false && <Badge style={{ marginLeft: 8 }}>disabled</Badge>}
         </div>
         <div className="rd-workspace-meta">
-          {providerLabelFor(lastProvider)} · {effectiveModel}
+          {run.via} · {run.model}
           {a.workDir ? ` · ${a.workDir}` : ''}
           {a.enableWorktree ? ' · isolated' : ''}
         </div>
@@ -1794,13 +1795,14 @@ function SettingRow({
   );
 }
 
-/** The engines a task run can be routed onto: the built-in ones with a tier table
+/** The engines a task run can be routed onto: the ones with a tier table
  *  (docs/model-routing-design.md §4.3). */
-const ROUTING_ENGINES = ['claude', 'codex'];
+const ROUTING_ENGINES: readonly AgentProvider[] = [AgentProvider.CLAUDE, AgentProvider.CODEX];
 
 /**
  * The engines smart selection may move this Agent's task runs to (docs/model-routing-design.md §6),
- * saved as `modelRoutingProviders`. The Agent's own engine is always one, so it is ticked and cannot
+ * saved as `modelRoutingProviders`. Engines only, by their CLI's name (board 7): the Agent's own —
+ * the engine its last session ran on, whatever credential it spent — comes first, ticked, and cannot
  * be unticked; every other one is a tick the owner makes here, and none is ticked until they do.
  */
 function RoutingEngines({
@@ -1808,11 +1810,11 @@ function RoutingEngines({
   value,
   onChange,
 }: {
-  own: string;
+  own: AgentProvider;
   value: string[];
   onChange: (next: string[]) => void;
 }) {
-  const engines = ROUTING_ENGINES.includes(own) ? ROUTING_ENGINES : [own, ...ROUTING_ENGINES];
+  const engines = [own, ...ROUTING_ENGINES.filter((engine) => engine !== own)];
   return (
     <div className="rd-route-engines">
       <div className="rd-engines-label">Engines it may use</div>
@@ -1829,7 +1831,11 @@ function RoutingEngines({
                 onChange(checked ? [...value, engine] : value.filter((v) => v !== engine))
               }
             >
-              {engine}
+              <span className="rd-engine-option">
+                <BrandMark choice={engineTitleFor(engine)} size={16} />
+                {ENGINE_CLI_NAMES[engine]}
+                {engine === own && <span className="rd-engine-own">this agent's engine</span>}
+              </span>
             </Checkbox>
           );
         })}

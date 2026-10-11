@@ -184,6 +184,42 @@ class ProjectSessionsShellTest {
         await { exists(hasTestTag("project-sessions-empty")) }
     }
 
+    /** A05-7's ending (docs/mocks/project-done-sessions-page, owner decision 2026-10-10): a project that is done draws
+     * "This project is done" where its progress card was — the same settled card the conversation draws — off the document the page
+     * reads for that state alone (the sidebar's rows are the Open projects, so a done one has none). */
+    @Test fun aProjectThatIsDoneDrawsItsEndingInTheProgressCardsPlace() {
+        ProjectShell.done = true
+        signIn(); openAlpha()
+        compose.onNodeWithTag("project-row:${ProjectShell.LAUNCH}").performClick()
+        await { exists(hasTestTag("project-sessions-ending-settled")) }
+        val ending = hasAnyAncestor(hasTestTag("project-sessions-ending-settled"))
+        compose.onNode(hasText("This project is done") and ending, useUnmergedTree = true).assertExists()
+        compose.onNode(hasText("recorded by Orbit") and ending, useUnmergedTree = true).assertExists()
+        compose.onNode(hasTestTag("project-sessions-ending-settled-tally"), useUnmergedTree = true)
+            .assert(hasText("6 criteria · 5 on main · 1 no code to land"))
+        // The card it stands in for — one that would say nothing but "Done" — is gone, and the document was read for it.
+        compose.onAllNodesWithTag("project-sessions-progress").assertCountEquals(0)
+        assertTrue(ProjectShell.calls.any { it == "GET projects/${ProjectShell.LAUNCH}" })
+        // The members are still the page's own list, drawn under the ending.
+        await { exists(hasText("Shipped docs")) }
+    }
+
+    /** The ending's badge follows the recorder, and a read without the projection's counts — a server before the owner's done door —
+     * keeps the progress card, which then says the status the members carry. */
+    @Test fun theEndingNamesItsRecorderAndAnOlderReadKeepsTheProgressCard() {
+        ProjectShell.done = true; ProjectShell.doneBy = "OWNER"; ProjectShell.doneCounts = false
+        signIn(); openAlpha()
+        compose.onNodeWithTag("project-row:${ProjectShell.LAUNCH}").performClick()
+        await { exists(hasTestTag("project-sessions-progress-line") and hasText("Done")) }
+        compose.onAllNodesWithTag("project-sessions-ending-settled").assertCountEquals(0)
+        // The current read, recorded by the owner: the same ending, spelled by its badge.
+        ProjectShell.doneCounts = true
+        await { exists(hasTestTag("project-sessions-ending-settled")) }
+        compose.onNode(hasText("recorded by you") and hasAnyAncestor(hasTestTag("project-sessions-ending-settled")),
+            useUnmergedTree = true).assertExists()
+        compose.onAllNodesWithTag("project-sessions-progress").assertCountEquals(0)
+    }
+
     private fun pageLines(): List<String> = compose.onAllNodes(hasAnyAncestor(hasTestTag("project-sessions"))).fetchSemanticsNodes()
         .mapNotNull { node -> node.config.getOrNull(SemanticsProperties.Text)?.firstOrNull()?.text }
         .filter { it in setOf("Coordinator", "Today", "Yesterday", "2–7 days ago", "8–30 days ago", "Older", "Coordinate launch", "Wire tests", "Quota retry", "Shipped docs") }

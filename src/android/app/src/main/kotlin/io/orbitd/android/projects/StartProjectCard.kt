@@ -4,12 +4,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -29,6 +31,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import io.orbitd.android.core.cards.*
 import io.orbitd.android.ui.LocalOrbitColors
 import kotlinx.serialization.json.JsonElement
@@ -52,9 +55,12 @@ internal fun StartProjectCard(
     draft: StartProjectCopy.Draft, onDraft: (StartProjectCopy.Draft) -> Unit, standing: StartProjectCopy.Standing,
     enabled: Boolean, starting: Boolean, error: String?, tag: String, startTag: String,
     onStart: () -> Unit, onViewTasks: () -> Unit, onChatAbout: (() -> Unit)? = null, chatEnabled: Boolean = true,
+    branches: ProjectMainBranch.Branches? = null, lastChoice: ProjectMainBranch.LastChoice? = null,
     trailing: @Composable () -> Unit = {},
 ) {
     val opensCoordinator = draft.automatic && !hasCoordinator
+    // The branch every sentence about where work goes names: the one on the card, or main for a project with no repository.
+    val main = draft.main
     val editable = enabled && standing == StartProjectCopy.Standing.LIVE && !starting
     var criteriaOpen by remember { mutableStateOf(false) }
     var whyOpen by remember { mutableStateOf(false) }
@@ -105,16 +111,21 @@ internal fun StartProjectCard(
                     Switch(draft.automatic, { onDraft(draft.copy(automatic = it)) }, enabled = editable,
                         modifier = Modifier.testTag("$tag-automatic").semantics { contentDescription = RunSettings.automatic })
                 }
-                Text(RunSettings.automaticSays(draft.automatic, draft.line, draft.hasMergeCheck), Modifier.testTag("$tag-automatic-says"),
+                Text(RunSettings.automaticSays(draft.automatic, draft.line, draft.hasMergeCheck, main), Modifier.testTag("$tag-automatic-says"),
                     style = MaterialTheme.typography.labelMedium, color = muted)
                 if (opensCoordinator) Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("✦", Modifier.clearAndSetSemantics {}, style = MaterialTheme.typography.labelMedium, color = muted)
                     Text(StartProjectCopy.opensCoordinator, Modifier.testTag("$tag-opens"), style = MaterialTheme.typography.labelMedium, color = muted)
                 }
-                ComesToYou(StartProjectCopy.comesToYou(draft.automatic, draft.line, plan.ownerConfirmed, plan.evidenceJudged, escalationSeconds), tag)
+                ComesToYou(StartProjectCopy.comesToYou(draft.automatic, draft.line, plan.ownerConfirmed, plan.evidenceJudged, escalationSeconds, main), tag)
             }
             HorizontalDivider()
             LineRow(draft, request, projectId, editable, tag, onDraft)
+            // A project with no repository has no branch to name, and no row.
+            if (draft.upstream != null) {
+                HorizontalDivider()
+                MainBranchRow(draft, branches, lastChoice, editable, tag, onDraft)
+            }
             HorizontalDivider()
             MergeCheckRow(draft, editable, tag, onDraft)
             HorizontalDivider()
@@ -161,10 +172,14 @@ fun CoordinatorStartCard(card: InteractionCard, reads: Map<String, JsonElement>,
     open: (String) -> Unit, discuss: ((String) -> Unit)?, submit: (CardVerb, CardInput) -> Unit) {
     val doc = card.context
     val request = StartProjectCopy.request(card.source)
-    // The settings as the owner leaves them, kept across recreation like the other cards' drafts; opened with Automatic on.
-    var draft by rememberSaveable(card.key, card.binding, stateSaver = draftSaver) {
-        mutableStateOf(request?.let { StartProjectCopy.Draft.of(it.settings) } ?: StartProjectCopy.Draft("PROJECT_BRANCH", true, 1))
-    }
+    // The project's repository, the branches its main branch can be chosen from and this account's last choice there: the session
+    // read carries them while the project is unstarted, so the card is never drawn on main and then moved. One that failed offers
+    // no main branch, and the start keeps the one the project stands on.
+    val integration = reads["integration"] as? JsonObject
+    // The owner's edits, kept across recreation like the other cards' drafts; until there are any, the request's settings with
+    // Automatic on, as the reads resolve them.
+    var edited by rememberSaveable(card.key, card.binding, stateSaver = draftSaver) { mutableStateOf<StartProjectCopy.Draft?>(null) }
+    val draft = edited ?: request?.let { StartProjectCopy.Draft.of(it.settings, integration) } ?: StartProjectCopy.Draft("PROJECT_BRANCH", true, 1)
     Surface(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceVariant) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (request == null) {
@@ -189,14 +204,15 @@ fun CoordinatorStartCard(card: InteractionCard, reads: Map<String, JsonElement>,
                     askedAgo = ProjectTime.ago(card.source.text("waitingSince"), Instant.now()), request = request, criteria = criteria,
                     plan = StartProjectCopy.planView(graph, ProjectDoc.taskCount(doc)), hasCoordinator = true,
                     escalationSeconds = doc.number("exceptionEscalationSeconds") ?: StartProjectCopy.defaultEscalationSeconds,
-                    draft = draft, onDraft = { draft = it }, standing = standing,
+                    draft = draft, onDraft = { edited = it }, standing = standing,
                     enabled = fresh && CardVerb.START in card.actions && !result.uncertain && !result.settled, starting = result.busy, error = error,
                     tag = card.key, startTag = "${card.key}:${CardVerb.START.name}",
                     onStart = { submit(CardVerb.START, CardInput(settings = ProjectStartSettings(draft.line, draft.automatic, draft.maxConcurrentTasks,
-                        draft.mergeCheckCommand, request.settings.projectBranchName))) },
+                        draft.mergeCheckCommand, request.settings.projectBranchName, draft.upstream?.let(RunSettings::mainBranchRef)))) },
                     // The tasks the plan names, on the project's page (the browser's link when there is no list to open).
                     onViewTasks = { card.projectId?.let { open("orbit-project:$it") } },
-                    onChatAbout = chat, chatEnabled = fresh && !result.busy)
+                    onChatAbout = chat, chatEnabled = fresh && !result.busy,
+                    branches = ProjectMainBranch.branches(integration), lastChoice = ProjectMainBranch.lastChoice(integration))
                 if (pressed) message?.let { Text(it, Modifier.testTag("card-result"), style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 if (result.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
@@ -205,9 +221,10 @@ fun CoordinatorStartCard(card: InteractionCard, reads: Map<String, JsonElement>,
     }
 }
 
-private val draftSaver = listSaver<StartProjectCopy.Draft, Any>(
-    save = { listOf(it.line, it.automatic, it.maxConcurrentTasks, it.mergeCheckCommand) },
-    restore = { StartProjectCopy.Draft(it[0] as String, it[1] as Boolean, it[2] as Int, it[3] as String) })
+/** An edited draft across recreation; none saved while nothing has been edited. */
+private val draftSaver = Saver<StartProjectCopy.Draft?, List<Any?>>(
+    save = { draft -> draft?.let { listOf(it.line, it.automatic, it.maxConcurrentTasks, it.mergeCheckCommand, it.upstream) } },
+    restore = { StartProjectCopy.Draft(it[0] as String, it[1] as Boolean, it[2] as Int, it[3] as String, it[4] as String?) })
 
 /** What still comes to the owner once the project starts with these settings. */
 @Composable
@@ -237,11 +254,11 @@ private fun LineRow(draft: StartProjectCopy.Draft, request: StartProjectCopy.Req
         Text(RunSettings.tasksLandOn, Modifier.weight(1f))
         Box {
             TextButton(onClick = { menu = true }, enabled = editable, modifier = Modifier.testTag("$tag-line")) {
-                Text("${if (draft.line == "MAIN") RunSettings.lineMain else RunSettings.lineProjectBranch} ▾", maxLines = 1) }
+                Text("${if (draft.line == "MAIN") RunSettings.lineMain(draft.main) else RunSettings.lineProjectBranch} ▾", maxLines = 1) }
             DropdownMenu(menu, { menu = false }) {
                 listOf(Triple("PROJECT_BRANCH", RunSettings.lineProjectBranch,
                     "${StartProjectCopy.branch(request.settings.projectBranchName, projectId)} — ${RunSettings.lineProjectBranchHint}"),
-                    Triple("MAIN", RunSettings.lineMain, RunSettings.lineMainHint)).forEach { (value, title, hint) ->
+                    Triple("MAIN", RunSettings.lineMain(draft.main), RunSettings.lineMainHint(draft.main))).forEach { (value, title, hint) ->
                     DropdownMenuItem(text = { Column(Modifier.widthIn(max = 280.dp)) {
                         Text(if (draft.line == value) "✓ $title" else title); Text(hint, style = MaterialTheme.typography.labelSmall) } },
                         onClick = { menu = false; onDraft(draft.copy(line = value)) }, modifier = Modifier.testTag("$tag-line:$value"))
@@ -249,6 +266,83 @@ private fun LineRow(draft: StartProjectCopy.Draft, request: StartProjectCopy.Req
             }
         }
     }
+}
+
+/** Which branch main is for this project: where its tasks start and its work ends up. Under the line, because the two are one
+ * decision and lock together; the value opens [MainBranchPicker], and while it is the owner's last choice for the repository the
+ * row says so (`MainBranchRow`, web's start card row). */
+@Composable
+private fun MainBranchRow(draft: StartProjectCopy.Draft, branches: ProjectMainBranch.Branches?, lastChoice: ProjectMainBranch.LastChoice?,
+    editable: Boolean, tag: String, onDraft: (StartProjectCopy.Draft) -> Unit) {
+    val upstream = draft.upstream ?: return
+    var picking by remember { mutableStateOf(false) }
+    Column(Modifier.padding(start = 12.dp, end = 4.dp, bottom = 4.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(RunSettings.mainBranch, Modifier.weight(1f))
+            MainBranchValue(upstream, editable, "$tag-main-branch") { picking = true }
+        }
+        if (lastChoice != null && upstream == lastChoice.branch) Text(RunSettings.lastChoiceFor(lastChoice.repository), Modifier.padding(bottom = 6.dp)
+            .testTag("$tag-main-branch-last"), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+    if (picking) MainBranchPicker(upstream, branches, lastChoice?.branch, "$tag-main-branch", close = { picking = false }) {
+        picking = false; onDraft(draft.copy(upstream = it))
+    }
+}
+
+/** A main branch as a row shows it: the name, monospaced, and the › that opens the picker. */
+@Composable
+internal fun MainBranchValue(name: String, enabled: Boolean, tag: String, open: () -> Unit) =
+    TextButton(onClick = open, enabled = enabled, modifier = Modifier.testTag(tag)) {
+        Text(name, fontFamily = FontFamily.Monospace, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(" ›", Modifier.clearAndSetSemantics {})
+    }
+
+/** The main branch, picked from the branches the runner reported for the coordination workspace's checkout — the list the session
+ * Merge menu offers — or typed when the one wanted is not there (or no runner reported any): reader/WorktreeBar.kt's
+ * `MergeTargetPicker`, its field taking a name too. The current one is ticked, the owner's last choice for the repository tagged, a
+ * typed name the list does not hold offered as itself, and what the choice decides said under the list (web's `MainBranchSelect`).
+ * One picker for the start card and How it runs, so the two cannot offer different branches. */
+@Composable
+internal fun MainBranchPicker(value: String, branches: ProjectMainBranch.Branches?, remembered: String?, tag: String, close: () -> Unit,
+    pick: (String) -> Unit) {
+    var query by rememberSaveable { mutableStateOf("") }
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    val names = (branches?.names.orEmpty() + listOfNotNull(remembered) + value).distinct()
+    val typed = query.trim()
+    val shown = if (typed.isEmpty()) names else names.filter { it.contains(typed, ignoreCase = true) }
+    val offered = typed.takeIf { it.isNotEmpty() && it !in names && RunSettings.isBranchName(it) }
+    Dialog(close) { Surface(Modifier.testTag("$tag-picker"), shape = RoundedCornerShape(16.dp)) {
+        Column(Modifier.padding(16.dp).heightIn(max = 520.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(RunSettings.mainBranch, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+                TextButton(onClick = close, modifier = Modifier.testTag("$tag-picker-cancel")) { Text("Cancel") }
+            }
+            OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth().testTag("$tag-picker-field"), placeholder = { Text(RunSettings.typeABranch) },
+                singleLine = true, textStyle = LocalTextStyle.current.copy(fontFamily = FontFamily.Monospace),
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, autoCorrectEnabled = false))
+            // Whose branches these are — or, with none reported, that the name is typed.
+            Text(branches?.let { RunSettings.branchesIn(it.workspaceName) } ?: RunSettings.typeABranch, Modifier.padding(top = 12.dp, bottom = 2.dp)
+                .testTag("$tag-picker-head"), style = MaterialTheme.typography.labelMedium, color = muted)
+            LazyColumn(Modifier.weight(1f, fill = false)) {
+                items(shown, key = { it }) { name ->
+                    Row(Modifier.fillMaxWidth().clickable { pick(name) }.testTag("$tag-picker:$name").padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(name, Modifier.weight(1f, fill = false), fontFamily = FontFamily.Monospace, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
+                            if (name == remembered) Text(RunSettings.lastChosen, style = MaterialTheme.typography.labelSmall, color = muted)
+                        }
+                        if (name == value) Text("✓", Modifier.padding(start = 8.dp), color = MaterialTheme.colorScheme.primary)
+                    }
+                }
+                offered?.let { name -> item(key = "use") {
+                    Text(RunSettings.useBranch(name), Modifier.fillMaxWidth().clickable { pick(name) }.testTag("$tag-picker-use").padding(vertical = 12.dp),
+                        color = MaterialTheme.colorScheme.primary, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
+                } }
+            }
+            HorizontalDivider()
+            Text(RunSettings.mainBranchHint, Modifier.padding(top = 8.dp), style = MaterialTheme.typography.labelMedium, color = muted)
+        }
+    } }
 }
 
 /** The check run on the combined tree before anything lands, folded to its value — Set, or None with what that means —
@@ -268,7 +362,7 @@ private fun MergeCheckRow(draft: StartProjectCopy.Draft, editable: Boolean, tag:
                 enabled = editable, placeholder = { Text(RunSettings.mergeCheckPlaceholder) },
                 textStyle = LocalTextStyle.current.copy(fontFamily = FontFamily.Monospace),
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, autoCorrectEnabled = false))
-            Text(RunSettings.mergeCheckHint, style = MaterialTheme.typography.labelMedium, color = muted)
+            Text(RunSettings.mergeCheckHint(draft.main), style = MaterialTheme.typography.labelMedium, color = muted)
         } else if (!draft.hasMergeCheck) Text(RunSettings.mergeCheckNoneSays, style = MaterialTheme.typography.labelMedium, color = muted)
     }
 }

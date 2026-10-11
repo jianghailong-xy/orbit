@@ -23,7 +23,11 @@
  *      the way: the plan's reads, the runner door's material and the build's own;
  *  11. a worker that stops while the build waits for its reads hands the job back (design §5.4): no REPO_OP_FAILED,
  *      no read asked again — the third read, waiting for a slot, is never asked — nothing counted, and the next worker
- *      takes the job over.
+ *      takes the job over;
+ *  12. a worker stopped once the build's first section is written hands the job back, and the next one finishes it: the
+ *      report the replay ends with — the job's and the plan job's — is the whole build's (contract `jobs.carry`): the
+ *      section written before the stop is written, not unchanged, every section once and every call once, exactly what
+ *      the same build reports when nothing stops it.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/wiki-worker/wiki-docs-build-job.pg.spec.ts
  *
@@ -91,6 +95,8 @@ interface FakeModel {
   hits: Hit[];
   /** Every prompt answered as a writer that cites what it was handed would answer it. */
   answer: (prompt: string) => string;
+  /** Waited for before a call is answered: a case holds a call here while it stops the worker. */
+  before: (prompt: string) => Promise<void>;
   close: () => Promise<void>;
 }
 
@@ -100,36 +106,36 @@ interface FakeModel {
  * one; the overview citing the first footnote it was given.
  */
 function writerAnswer(prompt: string): string {
-  if (prompt.includes('做「归并」')) {
+  if (prompt.includes('the "merge"')) {
     const ids = [...prompt.matchAll(/^\[([A-Z]\d+)\] /gmu)].map(([, id]) => id);
-    return `${ids.map((id) => `${id} | 采用 | 讲的正是本节`).join('\n')}\n现状：\n- 本节要点 [${ids[0] ?? 'D1'}]\n`;
+    return `${ids.map((id) => `${id} | adopt | it is just what this section covers`).join('\n')}\nCurrent state:\n- the point of this section [${ids[0] ?? 'D1'}]\n`;
   }
-  if (prompt.includes('（概述，')) return '### 总览\n这篇讲一个会话怎么运转[F1]。\n';
-  if (prompt.includes('补逐字引文')) return '';
-  if (!prompt.includes('# 任务：写文档')) return '?';
-  const materials = prompt.split('## 可用材料（只可引用这些，编号不变）\n')[1]?.split('\n\n## 写法')[0] ?? '';
+  if (prompt.includes('(the overview, about')) return '### Overview\nThis document covers how a session runs[F1].\n';
+  if (prompt.includes('give the footnotes below their verbatim quotes')) return '';
+  if (!prompt.includes('# Task: write the document')) return '?';
+  const materials = prompt.split('## The materials you may use (cite only these, by the ids they have)\n')[1]?.split('\n\n## How to write')[0] ?? '';
   const sentences: string[] = [];
   const quotes: string[] = [];
   for (const block of materials.split(/\n(?=\[[A-Z]\d+\] )/u)) {
     const id = /^\[([A-Z]\d+)\] /u.exec(block)?.[1];
     if (!id) continue;
     const line = block.split('\n').slice(1).map((one) => one.trim()).find((one) => one.length >= 10 && !one.startsWith('```'));
-    sentences.push(`本节依据 ${id} 写成一句话[${id}]。`);
-    if (line) quotes.push(`[${id}] 「${Array.from(line).slice(0, 60).join('')}」`);
+    sentences.push(`This section rests on ${id} in one sentence[${id}]. `);
+    if (line) quotes.push(`[${id}] "${Array.from(line).slice(0, 60).join('')}"`);
   }
-  if (sentences.length === 0) return '### 边界\n本篇只讲会话怎么运转。\n';
-  return `### 本节\n${sentences.join('')}\n\n引文：\n${quotes.join('\n')}\n`;
+  if (sentences.length === 0) return '### Boundaries\nThis document covers only how a session runs.\n';
+  return `### This section\n${sentences.join('').trim()}\n\nQuotes:\n${quotes.join('\n')}\n`;
 }
 
 async function fakeModel(): Promise<FakeModel> {
   const sockets = new Set<Socket>();
-  const model = { base: '', hits: [] as Hit[], answer: writerAnswer } as unknown as FakeModel;
+  const model = { base: '', hits: [] as Hit[], answer: writerAnswer, before: async () => undefined } as unknown as FakeModel;
   const server = createServer((request: IncomingMessage, response: ServerResponse) => {
     let raw = '';
     request.on('data', (chunk: Buffer) => {
       raw += chunk.toString();
     });
-    request.on('end', () => {
+    request.on('end', () => void (async () => {
       if (request.url === '/health') {
         response.writeHead(200, { 'content-type': 'application/json' });
         response.end('{}');
@@ -138,6 +144,7 @@ async function fakeModel(): Promise<FakeModel> {
       const body = JSON.parse(raw) as { system?: string; messages?: Array<{ content?: string }> };
       const prompt = body.messages?.[0]?.content ?? '';
       model.hits.push({ prompt, system: body.system ?? '', body: body as Record<string, unknown>, authorization: String(request.headers.authorization ?? '') });
+      await model.before(prompt);
       const text = model.answer(prompt);
       response.writeHead(200, { 'content-type': 'text/event-stream' });
       const event = (name: string, data: unknown) => `event: ${name}\ndata: ${JSON.stringify(data)}\n\n`;
@@ -146,7 +153,7 @@ async function fakeModel(): Promise<FakeModel> {
       response.write(event('message_delta', { type: 'message_delta', delta: { stop_reason: 'end_turn' }, usage: { output_tokens: 20 } }));
       response.write(event('message_stop', { type: 'message_stop' }));
       response.end();
-    });
+    })());
   });
   server.on('connection', (socket: Socket) => {
     sockets.add(socket);
@@ -708,7 +715,7 @@ test('canary: the confirmation makes a docs_build job and no task; the worker bu
     'the overview written again from one call; the sections whose material did not change left as they are');
   assert.deepEqual([(again.report as Record<string, unknown>).written, (again.report as Record<string, unknown>).unchanged], [1, 2]);
   assert.equal(h.model.hits.length - firstHits, 1, 'one call in all: the overview\'s');
-  assert.ok(h.model.hits.slice(firstHits).every((hit) => hit.prompt.includes('（概述，')));
+  assert.ok(h.model.hits.slice(firstHits).every((hit) => hit.prompt.includes('(the overview, about')));
   const [, secondRow] = await builds(h, s.spaceId);
   assert.deepEqual([secondRow.state, secondRow.outcome, secondRow.version, (secondRow.report as { sections: unknown }).sections],
     ['ended', 'succeeded', v2, { written: 1, unchanged: 2, failed: 0 }]);
@@ -1005,7 +1012,7 @@ test('a section whose code has a raw NUL in it builds: the model is shown the co
   // A writer that quotes the code with words it does not have: the footnote's excerpt is then the piece's own head —
   // the code, NUL and all — which is what a model that paraphrases leaves a footnote with, and the write must store.
   const asWritten = h.model.answer;
-  h.model.answer = (prompt) => asWritten(prompt).replace(/^\[C1\] 「.*」$/mu, '[C1] 「a line the code does not have」');
+  h.model.answer = (prompt) => asWritten(prompt).replace(/^\[C1\] ".*"$/mu, '[C1] "a line the code does not have"');
   h.model.hits.length = 0;
   try {
     const ended = await buildEnd(h, worker(h), row.job_id!);
@@ -1064,9 +1071,9 @@ test('a NUL in the model\'s answer, raw or as \\u0000: the build succeeds, the a
   h.model.answer = (prompt) => {
     const text = asWritten(prompt);
     // Which section a write prompt is for is its header's number: the outline below it names every section.
-    const section = /^# 任务：写文档《[^》]*》的第 (\d+) 节/mu.exec(prompt)?.[1];
-    if (section === '2') return text.replace(/写成一句话/gu, `写成一句${NUL}话`).replace(/「/gu, `「${NUL}`);
-    if (section === '3') return text.replace(/写成一句话/gu, '写成一句\\u0000话');
+    const section = /^# Task: write the document «[^»]*», section (\d+)/mu.exec(prompt)?.[1];
+    if (section === '2') return text.replace(/in one sentence/gu, `in one sen${NUL}tence`).replace(/\] "/gu, `] "${NUL}`);
+    if (section === '3') return text.replace(/in one sentence/gu, 'in one sen\\u0000tence');
     return text;
   };
   try {
@@ -1080,8 +1087,8 @@ test('a NUL in the model\'s answer, raw or as \\u0000: the build succeeds, the a
       [row.job_id]);
     const kept = writes.map((one) => (one.answer_encoding === 'base64' ? Buffer.from(one.answer, 'base64').toString('utf8') : one.answer));
     assert.ok(writes.some((one) => one.answer_encoding === 'base64'), 'the answer with a raw NUL is kept as its bytes');
-    assert.ok(kept.some((text) => text.includes(`写成一句${NUL}话`)), 'and read back with its NUL');
-    assert.ok(kept.some((text) => text.includes('写成一句\\u0000话')), 'the escaped one is kept as the six characters it is');
+    assert.ok(kept.some((text) => text.includes(`in one sen${NUL}tence`)), 'and read back with its NUL');
+    assert.ok(kept.some((text) => text.includes('in one sen\\u0000tence')), 'the escaped one is kept as the six characters it is');
 
     // What was written has no NUL: the raw one left out, the escaped one the text the model wrote.
     const { rows: sentences } = await h.sql.query<{ text: string }>(
@@ -1090,8 +1097,8 @@ test('a NUL in the model\'s answer, raw or as \\u0000: the build succeeds, the a
     assert.ok(sentences.length > 0);
     assert.ok(sentences.every((one) => !one.text.includes(NUL)), JSON.stringify(sentences));
     // The flow section is the one citing the code (C1): its sentence, the NUL the model put in it left out.
-    assert.ok(sentences.some((one) => one.text.includes('依据 C1 写成一句话')), 'the flow section\'s sentence, its NUL left out');
-    assert.ok(sentences.some((one) => one.text.includes('写成一句\\u0000话')), 'the conventions section\'s sentence, as the model wrote it');
+    assert.ok(sentences.some((one) => one.text.includes('on C1 in one sentence')), 'the flow section\'s sentence, its NUL left out');
+    assert.ok(sentences.some((one) => one.text.includes('in one sen\\u0000tence')), 'the conventions section\'s sentence, as the model wrote it');
     const { rows: notes } = await h.sql.query<{ quote: string | null }>(
       `SELECT f."quote" FROM "wiki_doc_footnote" f JOIN "wiki_doc_sentence" t ON t."id" = f."sentence_id"
          JOIN "wiki_doc_section" x ON x."id" = t."section_id" JOIN "wiki_doc" d ON d."id" = x."doc_id" WHERE d."space_id" = $1`, [s.spaceId]);
@@ -1162,4 +1169,123 @@ test('a worker that stops while the build waits for its reads hands the job back
   assert.equal(ended.state, 'succeeded', JSON.stringify(ended));
   assert.equal((await jobAfterStop(h, jobId)).attempts, 0, 'the stop counted nothing');
   assert.deepEqual([ended.report?.written, ended.report?.failed], [4, 0]);
+});
+
+// ── 12. a worker stopped mid-build: the report is the whole build's ──────────────────────────────────
+
+interface BuildSectionRun {
+  key: string;
+  kind: string;
+  outcome: string;
+  pieces: number;
+  actions: Record<string, number>;
+  footnotes: Record<string, number>;
+  calls: number;
+  usage: { inputTokens: number; outputTokens: number };
+}
+
+interface BuildJobReport {
+  written: number;
+  unchanged: number;
+  failed: number;
+  calls: number;
+  usage: { inputTokens: number; outputTokens: number };
+  docs: Array<{ slug: string; status?: string; counts?: Record<string, number>; sections: BuildSectionRun[] }>;
+  build: { planVersion: number; repoSha: string; docs: Record<string, number>; sections: Record<string, number>; tokens: Record<string, number>; model: string | null };
+}
+
+/** A build report's totals and sections: what two builds of the same plan on two spaces of the same shape must agree on. */
+function buildTotals(report: BuildJobReport): Record<string, unknown> {
+  const { seconds: _seconds, ...build } = report.build as BuildJobReport['build'] & { seconds?: number };
+  return {
+    written: report.written, unchanged: report.unchanged, failed: report.failed, calls: report.calls, usage: report.usage, build,
+    docs: report.docs.map((doc) => ({
+      slug: doc.slug, status: doc.status, counts: doc.counts,
+      sections: doc.sections.map((section) => ({
+        key: section.key, kind: section.kind, outcome: section.outcome, pieces: section.pieces, actions: section.actions,
+        footnotes: section.footnotes, calls: section.calls, usage: section.usage,
+      })),
+    })),
+  };
+}
+
+test('a worker stopped once the first section is written hands the build back, and the report the replay ends with is the whole build\'s', { skip, timeout: 240_000 }, async () => {
+  const h = await boot();
+  await modelUp(h);
+  const HEAD = createHash('sha1').update(`head-${randomUUID()}`).digest('hex');
+  try {
+    // What the build reports when nothing stops it.
+    const straight = await scene(h, 'straight');
+    const straightPlan = await draft(h, straight, planFor(straight));
+    executor('canary', [straight.owner.id]);
+    await confirm(h, straight, straightPlan);
+    const [wholeRow] = await builds(h, straight.spaceId);
+    playRunner(h, straight.runner.id, () => tree(HEAD));
+    const through = worker(h);
+    const whole = await runToEnd(h, through, wholeRow.job_id!);
+    assert.equal(whole.state, 'succeeded', JSON.stringify(whole));
+    await through.executor.onModuleDestroy();
+    await through.queue.onModuleDestroy();
+
+    // The same plan in a space of the same shape: the conventions, whose material is the records', are held at their
+    // first call while the section read from the repository is written; then the worker stops.
+    const stopped = await scene(h, 'stopped');
+    const stoppedPlan = await draft(h, stopped, planFor(stopped));
+    executor('canary', [straight.owner.id, stopped.owner.id]);
+    await confirm(h, stopped, stoppedPlan);
+    const [row] = await builds(h, stopped.spaceId);
+    playRunner(h, stopped.runner.id, () => tree(HEAD));
+    let holding = false;
+    let release: () => void = () => undefined;
+    const released = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    h.model.before = async (prompt) => {
+      if (!prompt.includes(KEYWORD)) return;
+      holding = true;
+      await released;
+    };
+    const writtenSections = async () => (await h.sql.query<{ n: number }>(
+      `SELECT count(*)::int AS n FROM "wiki_doc_section" x JOIN "wiki_doc" d ON d."id" = x."doc_id" WHERE d."space_id" = $1`, [stopped.spaceId])).rows[0].n;
+    const first = worker(h);
+    await passes(first, async () => holding && (await writtenSections()) === 1, 'the first section written and the conventions held');
+    // SIGTERM: the build's wait for the held call is cancelled and the job handed back; the call is let go with it.
+    await first.executor.onModuleDestroy();
+    await first.queue.onModuleDestroy();
+    release();
+    h.model.before = async () => undefined;
+    const back = (await h.sql.query<{ state: string; attempts: number; error: string | null }>(
+      'SELECT "state","attempts","error" FROM "wiki_job" WHERE "id" = $1', [row.job_id])).rows[0];
+    assert.deepEqual(back, { state: 'queued', attempts: 0, error: WIKI_JOB_HANDED_BACK }, 'the build is handed back, nothing counted');
+
+    // The next worker takes it over: the section written before the stop is left as it is by its fingerprint, and the
+    // conventions and the overview are written.
+    const ended = await runToEnd(h, worker(h), row.job_id!);
+    assert.equal(ended.state, 'succeeded', JSON.stringify(ended));
+    assert.equal(await writtenSections(), 3);
+    const report = ended.report as unknown as BuildJobReport;
+    // What the same build reports when nothing stops it, to the section and the call.
+    assert.deepEqual(buildTotals(report), buildTotals(whole.report as unknown as BuildJobReport), 'the stopped build reports what the straight one does');
+    // Every section written, once: the one written before the stop too.
+    assert.deepEqual([report.written, report.unchanged, report.failed], [3, 0, 0]);
+    assert.deepEqual(report.docs.flatMap((doc) => doc.sections.map((section) => section.outcome)), ['written', 'written', 'written']);
+    // Its calls are the job's requests, each once: the call the stop cut off was asked again under its own row.
+    const requests = await h.prisma.wikiModelRequest.findMany({ where: { jobId: row.job_id! }, select: { state: true, inputTokens: true, outputTokens: true } });
+    assert.ok(requests.every((request) => request.state === 'succeeded'), JSON.stringify(requests));
+    const usage = {
+      inputTokens: requests.reduce((total, request) => total + (request.inputTokens ?? 0), 0),
+      outputTokens: requests.reduce((total, request) => total + (request.outputTokens ?? 0), 0),
+    };
+    assert.equal(report.calls, requests.length);
+    assert.deepEqual(report.usage, usage);
+    assert.equal(report.docs.flatMap((doc) => doc.sections).reduce((total, section) => total + section.calls, 0), requests.length, 'each call counted on its section once');
+    // The plan job's report, which the plan page reads, is the whole build's as well.
+    const [plan] = await builds(h, stopped.spaceId);
+    assert.deepEqual(
+      [plan.outcome, (plan.report as { sections?: unknown })?.sections, (plan.report as { tokens?: unknown })?.tokens],
+      ['succeeded', { written: 3, unchanged: 0, failed: 0 }, { input: usage.inputTokens, output: usage.outputTokens, calls: requests.length }],
+    );
+  } finally {
+    h.model.before = async () => undefined;
+  }
 });

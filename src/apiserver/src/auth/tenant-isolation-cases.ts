@@ -479,6 +479,7 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'GET /sessions/:id/worktree-file': { request: (of) => ({ params: { id: of.sessionId }, query: { path: 'census.txt' } }) },
   'GET /sessions/:id/diff': { request: (of) => ({ params: { id: of.sessionId } }) },
   'POST /sessions/:id/diff/refresh': { request: (of) => ({ params: { id: of.sessionId } }) },
+  'POST /sessions/:id/recap': { request: (of) => ({ params: { id: of.sessionId } }) },
   'POST /sessions/:id/turns': { request: (of) => ({ params: { id: of.sessionId }, body: turn('turn') }) },
   'POST /sessions/:id/turns/current-work-routing': { request: (of) => ({ params: { id: of.sessionId }, body: turn('routed') }) },
   'GET /sessions/:id/turns': { request: (of) => ({ params: { id: of.sessionId } }) },

@@ -124,27 +124,27 @@ The kind's own fields (all required; be terse: each text field is one short sent
 - concept: "definition", "boundaries"
 RULES:
 - sources: 1 or 2 per entry. The quote is a contiguous span copied character for character from the line with that ref (<= 150 chars, no "…", no paraphrase, no translation). Quote the words the line carries from its record, never the case file's own markers ("$ ", "→ ok:", "ERR:", "(steer)", "…[cut]", "×N"). Never quote a span holding [redacted]. Prefer spans without double-quote characters; if one is unavoidable, escape it as \\".
-- Write titles and text fields in the language the owner uses in the case (usually Chinese); keep code, paths and commands verbatim.
+- Write titles and text fields in English, whatever language the case is in; keep code, paths and commands verbatim.
 - Only put a path in anchors if it appears in the case and is a path of this repository; never invent paths or shas.
 
 TOPIC TABLE:
 ${topics}
 EXAMPLE (a fictional repository, for format only):
-CASE: 修复上传测试偶发失败
+CASE: Fix the flaky upload test
 task · 1 session(s) · 2025-03-02 → 2025-03-02 · task status DONE · completion EXECUTABLE
 
 L1 meta: ── session 1 · 2025-03-02 09:10 · claude ──
-L2 taskprompt: 请开始执行任务「修复上传测试偶发失败」。任务描述：CI 上 upload.spec.ts 偶发超时。
+L2 taskprompt: Start the task "Fix the flaky upload test". Description: upload.spec.ts times out now and then on CI.
    … (3 lines omitted)
 L6 tool: $ npm test -w api -- upload.spec.ts → ERR: Exit code 1 … Error: connect ECONNREFUSED 127.0.0.1:9000
 L7 think: Turns out STORAGE_PORT is read when the module is imported, before the fixture sets it.
 L8 tool: edit src/api/test/storage-fixture.ts → ok
 L9 tool: $ npm test -w api -- upload.spec.ts → ok: 14 passing
-L10 owner: 以后 fixture 里不要写死端口，一律从 fixture 的返回值里取。
-L11 agent: 好的。根因：STORAGE_PORT 在模块导入时就被读取，fixture 之后才设置，所以测试连到了默认的 9000。已改成 fixture 返回 url。
+L10 owner: From now on, never hard-code the port in a fixture; always take it from what the fixture returns.
+L11 agent: OK. Root cause: STORAGE_PORT is read when the module is imported, and the fixture sets it only afterwards, so the test connected to the default 9000. The fixture now returns the url.
 OUTPUT:
-[{"kind":"pitfall","title":"STORAGE_PORT 在导入时读取，fixture 之后再设无效","summary":"测试里改 STORAGE_PORT 必须在 import 之前，否则连到默认 9000 报 ECONNREFUSED。","topic":"testing","trigger":{"paths":["src/api/test/storage-fixture.ts"],"commands":["npm test -w api -- upload.spec.ts"],"errorSignature":"connect ECONNREFUSED 127.0.0.1:9000"},"symptom":"上传测试偶发 ECONNREFUSED 127.0.0.1:9000","cause":"STORAGE_PORT 在模块导入时读取，fixture 设置得太晚","fix":"fixture 返回 url，测试从返回值取地址","anchors":{"paths":["src/api/test/storage-fixture.ts"],"commits":[]},"sources":[{"ref":"L6","quote":"Error: connect ECONNREFUSED 127.0.0.1:9000"},{"ref":"L11","quote":"STORAGE_PORT 在模块导入时就被读取，fixture 之后才设置"}],"verified":true},
- {"kind":"convention","title":"测试 fixture 不写死端口，从返回值取","summary":"写测试 fixture 时端口一律从 fixture 返回值获取。","topic":"testing","rule":"fixture 里不要写死端口，一律从 fixture 的返回值里取","scope":["测试 fixture"],"exceptions":"","anchors":{"paths":[],"commits":[]},"sources":[{"ref":"L10","quote":"以后 fixture 里不要写死端口，一律从 fixture 的返回值里取。"}],"verified":false}]
+[{"kind":"pitfall","title":"STORAGE_PORT is read at import, before the fixture sets it","summary":"A test must set STORAGE_PORT before the import, or it connects to the default 9000 and fails with ECONNREFUSED.","topic":"testing","trigger":{"paths":["src/api/test/storage-fixture.ts"],"commands":["npm test -w api -- upload.spec.ts"],"errorSignature":"connect ECONNREFUSED 127.0.0.1:9000"},"symptom":"The upload test fails now and then with ECONNREFUSED 127.0.0.1:9000","cause":"STORAGE_PORT is read when the module is imported, and the fixture sets it too late","fix":"The fixture returns the url, and the test takes the address from it","anchors":{"paths":["src/api/test/storage-fixture.ts"],"commits":[]},"sources":[{"ref":"L6","quote":"Error: connect ECONNREFUSED 127.0.0.1:9000"},{"ref":"L11","quote":"STORAGE_PORT is read when the module is imported, and the fixture sets it only afterwards"}],"verified":true},
+ {"kind":"convention","title":"Test fixtures never hard-code the port","summary":"A test fixture always takes the port from what the fixture returns.","topic":"testing","rule":"never hard-code the port in a fixture; always take it from what the fixture returns","scope":["test fixtures"],"exceptions":"","anchors":{"paths":[],"commits":[]},"sources":[{"ref":"L10","quote":"From now on, never hard-code the port in a fixture; always take it from what the fixture returns."}],"verified":false}]
 
 A case with only routine progress (edits, a passing test, "done") -> []
 A case about something other than the repository above -> {"offTopic": true}

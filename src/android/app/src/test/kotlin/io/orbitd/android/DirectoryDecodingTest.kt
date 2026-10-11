@@ -31,7 +31,7 @@ class DirectoryDecodingTest {
         lastTurnAt: String = "null", deletedAt: String = "null") = """{"id":"$id","status":"ENDED","title":"$title",
         "createdAt":"2026-10-08T01:05:00.000Z","lastTurnAt":$lastTurnAt,"deletedAt":$deletedAt,"pinnedAt":null,"folderId":$folderId,
         "tags":$tags,"runningBgJobCount":0,"workspace":$workspace,"agent":$workspace,"runState":"ENDED","lifecycleState":"OPEN",
-        "pendingApprovals":0,"confirmationUnderReview":null,"lastAssistantText":null,"lastUserText":null,"capabilities":{"canSend":true,
+        "pendingApprovals":0,"confirmationUnderReview":null,"lastAssistantText":null,"lastUserText":null,"recapText":null,"recapAt":null,"capabilities":{"canSend":true,
         "canResume":false,"resumeBlockedReason":null,"canComplete":true,"canArchive":true,"canRestore":false}}"""
     private val sessions = mapOf(
         "open" to "[${session("s1", "Directory check", tags = "[$bug]")},${session("s2", "No workspace", workspace = "null")}]",
@@ -62,7 +62,8 @@ class DirectoryDecodingTest {
         assertEquals(listOf("w-never", null), open.map { it.workspace })
         assertEquals(listOf(listOf("Bug"), emptyList()), open.map { row -> row.tags.map { it.name } })
         assertTrue(open.all { it.pinnedAt == null && it.folderId == null && it.lastTurnAt == null && it.confirmationUnderReview == null &&
-            it.lastAssistantText == null && it.lastUserText == null && it.capabilities?.resumeBlockedReason == null })
+            it.lastAssistantText == null && it.lastUserText == null && it.recapText == null && it.recapAt == null &&
+            it.capabilities?.resumeBlockedReason == null })
         assertEquals(listOf("f1"), data.sessions.getValue("completed").map { it.folderId })
         assertEquals(listOf("Deleted"), data.sessions.getValue("trash").map { it.name })
     }

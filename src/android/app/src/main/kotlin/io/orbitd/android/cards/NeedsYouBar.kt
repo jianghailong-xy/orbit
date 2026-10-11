@@ -27,6 +27,7 @@ import io.orbitd.android.core.cards.obj
 import io.orbitd.android.core.cards.text
 import io.orbitd.android.navigation.Destination
 import io.orbitd.android.navigation.OrbitRoute
+import io.orbitd.android.navigation.Origin
 import io.orbitd.android.ui.LocalOrbitColors
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
@@ -71,10 +72,15 @@ internal fun SessionNeedsYouBar(app: OrbitApplication, handle: SessionHandle, se
     val waiting = banner ?: return
     NeedsYouBar(waiting.text, NeedsYouChevron.FORWARD, if (waiting.ownerItem == null) NeedsYouLogic.sessionHint else NeedsYouLogic.itemHint, measured) {
         val target = waiting.target.text("id") ?: return@NeedsYouBar
-        // One of the four owner items opens the CARD it names in its coordinator conversation; anything else the session.
+        val workspace = waiting.target.obj("agent")?.text("id") ?: waiting.target.text("agentId") ?: waiting.target.text("workspaceId")
+        // A merge into main waiting on the reader is answered on its project's sessions page, where its card is (iOS 6b4bef713).
+        val project = waiting.target.obj("projectMembership")?.text("projectId")
+        if (waiting.ownerItem?.kind == "PROMOTION_APPROVAL" && project != null) {
+            open(OrbitRoute(Destination.PROJECT_SESSIONS, project, workspace, origin = Origin.LIST)); return@NeedsYouBar
+        }
+        // One of the other owner items opens the CARD it names in its coordinator conversation; anything else the session.
         waiting.ownerItem?.let { CardFocus.request(target, NeedsYouLogic.cardKey(it)) }
-        open(OrbitRoute(Destination.SESSION, target, waiting.target.obj("agent")?.text("id") ?: waiting.target.text("agentId")
-            ?: waiting.target.text("workspaceId")))
+        open(OrbitRoute(Destination.SESSION, target, workspace))
     }
 }
 

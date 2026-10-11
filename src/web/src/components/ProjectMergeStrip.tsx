@@ -4,15 +4,15 @@ import type { ProjectPromotionView } from '@orbit/shared';
 import { api } from '../api';
 import { Dialog } from './ui/Dialog';
 import { LandingJobsSheet } from './LandingJobsSheet';
-import { LandingRow, LandingRowButton, landingLine } from './ProjectPanoramaHeader';
+import { LandingHead, landingHead, landingLine } from './ProjectPanoramaHeader';
 import {
   CANCEL_MERGE,
-  MERGE_TO_MAIN,
   NOT_NOW,
   OPEN_COORDINATOR,
   ProjectPromotion,
   ProjectPromotionReceipt,
   decidePromotion,
+  mergeTo,
   promotionCriteriaLine,
   promotionHeading,
   promotionItem,
@@ -38,6 +38,7 @@ import {
   promotionTimelineTitle,
 } from '../lib/projectMerge';
 import { projectIntegrationQuery, projectOpenItemsQuery, projectPromotionQuery } from '../lib/queries';
+import { mainBranchName } from '../lib/projectStart';
 import { ago } from '../lib/watches';
 
 /** A read the page can draw from: the door answers a candidate or `null`, and anything else is no
@@ -132,8 +133,16 @@ export function ProjectMergeStrip({
   const line = integration.data && isMergeJob(inFlight)
     ? landingLine(integration.data, now, { updatedAt: integration.dataUpdatedAt, failed: integration.isError })
     : null;
+  // The merge job's live row, in the merged line's own anatomy (owner decision 2026-10-11, board
+  // docs/mocks/project-merge-check-row): the head, and — where the server lists the jobs — the whole
+  // row as the press that opens them. No chevron: the merged line is pressed the same way.
+  const head = line
+    ? <LandingHead title={line.word} head={landingHead(line)} running={line.running}
+        timedOut={line.timedOut} />
+    : null;
   const landing = line
-    ? listed ? <LandingRowButton line={line} onPress={() => setJobsOpen(true)} /> : <LandingRow line={line} />
+    ? listed ? <button type="button" className="landing-head-press" aria-haspopup="dialog"
+        onClick={() => setJobsOpen(true)}>{head}</button> : head
     : null;
   const item = current ? promotionItem(items.data, current.promotionId) : undefined;
   // Who has it, or null when the read came back and nobody does — then there is no press to draw.
@@ -163,7 +172,7 @@ export function ProjectMergeStrip({
           {criteriaLine ? <div className="session-project-merge-criteria">{criteriaLine}</div> : null}
           <div className="session-project-merge-actions">
             <button type="button" className="session-project-merge-primary" disabled={decide.isPending}
-              onClick={() => press('confirm')}>{MERGE_TO_MAIN}</button>
+              onClick={() => press('confirm')}>{mergeTo(mainBranchName(current.upstreamRef))}</button>
             <button type="button" disabled={decide.isPending} onClick={() => press('decline')}>{NOT_NOW}</button>
           </div>
           <div className="session-project-merge-foot">

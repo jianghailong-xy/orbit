@@ -178,6 +178,7 @@ import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { PushService } from '../push/push.service';
 import { type CreateTaskBatchItemDto } from '../tasks/dto';
+import { enqueueRecap, recapDue } from '../sessions/recap';
 import { normalizeStoredRememberRules } from '../sessions/remember-rules';
 import {
   APPROVAL_ABANDONED_STATUS,
@@ -5156,14 +5157,20 @@ export class RunnerApiController {
           select: { id: true },
         });
         if (queued == null) {
-          const last = await tx.conversationTurn.aggregate({
-            where: { sessionId },
-            _max: { seq: true },
-          });
+          // Raw SQL, never `conversationTurn.aggregate`: Prisma compiles an aggregate to a MAX
+          // over an OFFSET subquery the planner cannot flatten, so it visits every turn the
+          // session has (measured on a 1500-turn session: 1260 heap blocks, 1263 buffers, 1.2 s
+          // cold) where `max("seq")` reads one index tuple of conversation_turn_session_id_seq_key.
+          // This runs inside the transaction that queues the shell turn, so the scan is held under
+          // the session's own lock — cf. QueueService.buildSession, where the same read was moved
+          // for the same reason.
+          const [last] = await tx.$queryRaw<Array<{ seq: number }>>`
+            SELECT max("seq") AS "seq" FROM "conversation_turn" WHERE "session_id" = ${sessionId}::uuid
+          `;
           await tx.conversationTurn.create({
             data: {
               sessionId,
-              seq: (last._max.seq ?? 0) + 1,
+              seq: Number(last?.seq ?? 0) + 1,
               clientTurnId,
               kind: 'shell',
               content: completedTask.acceptanceCommand,
@@ -5634,6 +5641,12 @@ export class RunnerApiController {
       // T5: this turn's numbers, events and tool calls are committed now, so its spend is a fact.
       // A steer settles only its own row and books no turn, cost or tool call.
       await this.attemptBudgets?.meterQuietly(sessionId, new Date());
+      // And the rolling recap (sessions/recap.ts) may fold the turn that just committed into the
+      // session's one-line summary. Off the response path in both halves — the due check is two
+      // reads and the pass may wait on a model — because a list line is cosmetic and the runner
+      // is blocked on this reply. A settle the two-minute window skips is what `recapDue` is for;
+      // a session's LAST settle does not come through here at all (RealtimeService.publish).
+      void this.recapAfterTurn(sessionId);
     }
     if (
       'taskReclaimed' in finalized
@@ -5694,6 +5707,22 @@ export class RunnerApiController {
       this.queue.notifySessionQueued();
     }
     return { ok: true, status: finalized.status };
+  }
+
+  /**
+   * Ask for a rolling recap after a completed turn, without waiting for one. The due check is read
+   * here rather than left to the pass so a throttled settle never takes a queue slot, and the pass
+   * re-reads both it and the cursor on its own — a race costs one skipped run, never a wrong recap.
+   * NEVER rejects and is never awaited: a recap is cosmetic, and the settle that asked for it has
+   * already answered the runner by the time this runs.
+   */
+  private async recapAfterTurn(sessionId: string): Promise<void> {
+    try {
+      if (!(await recapDue({ db: this.prisma, sessionId }))) return;
+      await enqueueRecap({ db: this.prisma, sessionId });
+    } catch {
+      // The generator already swallows every failure of its own; this covers the reads around it.
+    }
   }
 
   @UseGuards(RunnerAuthGuard)

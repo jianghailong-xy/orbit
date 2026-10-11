@@ -1,0 +1,14 @@
+diff --git a/src/web/src/index.css b/src/web/src/index.css
+index aee970782..43d563461 100755
+--- a/src/web/src/index.css
++++ b/src/web/src/index.css
+@@ -24108,3 +24108,9 @@ button.agent-progress-agent:hover {
+   text-align: center;
+   text-wrap: balance;
+ }
++
++/* Scratch negative control of the P5.3 P0 registration (34dTUdzY6mgNk4CGh7ZHl), never delivered: on a phone the
++   attachment menu's icons move 1px to the right, so only session-attachment-menu changes on the four phones. */
++@media (max-width: 600px) {
++  .orbit-menu[data-variant='attachment'] .orbit-menu-icon { position: relative; left: 1px; }
++}

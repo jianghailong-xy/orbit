@@ -19,7 +19,7 @@ import {
   exceptionCardRows,
   isOwnerExceptionCard,
 } from './ProjectProgressStatus';
-import { projectOpenItemsQuery } from '../lib/queries';
+import { projectIntegrationQuery, projectOpenItemsQuery } from '../lib/queries';
 import {
   START_PROJECT_TITLE,
   START_ROW_NOT_ASKED,
@@ -491,6 +491,34 @@ describe('ProjectOpenItems — the start of a project nobody has started', () =>
     // Somebody is waiting on the owner for it, so it counts with what needs them.
     expect(html).toContain('2 need you · 0 with the coordinator · oldest first');
     expect(html).not.toContain(START_ROW_NOT_ASKED);
+  });
+
+  it('says directly into the main branch the start card opens with: main as before, else the branch by name', () => {
+    const direct = (upstreamRef?: string) => item({
+      ...START,
+      startRequest: {
+        ...START.startRequest!,
+        settings: { line: 'MAIN', automatic: false, maxConcurrentTasks: 1, mergeCheckCommand: null,
+          ...(upstreamRef ? { upstreamRef } : {}) },
+      },
+    });
+    const page = (row: ProjectOpenItemRow, standing?: object): string =>
+      paint({ needsYou: [], withCoordinator: [], startRequest: row }, (qc) => {
+        if (standing) qc.setQueryData(projectIntegrationQuery(PROJECT_ID).queryKey, standing as never);
+        return <ProjectOpenItems projectId={PROJECT_ID} now={NOW} started={false} onReviewStart={() => {}} />;
+      });
+    expect(startRequestSummary(direct().startRequest!.settings))
+      .toBe('The coordinator asked · directly into main · Automatic off · at most 1 at a time');
+    expect(page(direct())).toContain('The coordinator asked · directly into main · Automatic off · at most 1 at a time');
+    // The coordinator's suggestion, then the owner's last choice for the repository over it.
+    expect(page(direct('refs/heads/master')))
+      .toContain('The coordinator asked · directly into master · Automatic off · at most 1 at a time');
+    expect(page(direct('refs/heads/master'), {
+      upstreamRef: 'main', upstreamChosenAt: null,
+      lastMainBranch: { branch: 'develop', repository: 'acme/payments-api', chosenAt: at(MINUTE) },
+    })).toContain('The coordinator asked · directly into develop · Automatic off · at most 1 at a time');
+    expect(startRequestSummary(direct('refs/heads/master').startRequest!.settings, 'trunk'))
+      .toBe('The coordinator asked · directly into trunk · Automatic off · at most 1 at a time');
   });
 
   it('draws the request only while the page knows the project is not started', () => {

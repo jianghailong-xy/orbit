@@ -1,0 +1,41 @@
+== checkout 6879542dc23a10a74417002810331a7e73778842, node_modules present: 0
+== node v26.10.0, npm 11.19.1
+== npm ci
+npm warn install-scripts   prisma@7.10.0 (preinstall: node scripts/preinstall-entry.js)
+npm warn install-scripts
+npm warn install-scripts Run `npm install-scripts ls` to review, or `npm install-scripts approve <pkg>` to allow.
+npm ci exit=0
+== npm ls antd --all (workspace @orbit/web)
+orbit@0.1.229 /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/clean
+└── (empty)
+
+exit=1
+== npm ls antd --all (whole tree)
+orbit@0.1.229 /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/clean
+└── (empty)
+
+exit=1
+== npm explain antd
+npm error No dependencies found matching antd
+npm error A complete log of this run can be found in: /root/.npm/_logs/2026-10-10T13_25_50_259Z-debug-0.log
+exit=1
+== npm ls @ant-design/icons -w @orbit/web --all
+orbit@0.1.229 /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/clean
+└─┬ @orbit/web@0.1.0 -> ./src/web
+  └── @ant-design/icons@6.3.4
+
+exit=0
+== installed @ant-design and @rc-component packages
+node_modules/@ant-design/colors
+node_modules/@ant-design/fast-color
+node_modules/@ant-design/icons
+node_modules/@ant-design/icons-svg
+node_modules/@rc-component/util
+== any directory named antd under node_modules
+(end)
+== npm run build -w @orbit/web
+> tsc -b && vite build
+✓ built in 1.72s
+build exit=0
+== dist scan
+{"totals": {"antClass": 0, "antdWord": 0, "cssinjs": 0, "antPrefixDefault": 0, "rcComponents": 0, "anticon": 75, "iconsStyleId": 1, "rcUtilDynamicCss": 2}, "bytes": 4417889, "gzip": 1215092, "antClassSample": []}

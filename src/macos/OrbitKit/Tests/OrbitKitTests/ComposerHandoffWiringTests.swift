@@ -194,11 +194,17 @@ final class ComposerHandoffWiringTests: XCTestCase {
                        "clearing on `answerable` would disarm the composer on a failed read")
         // The evidence card's armed reply is under the same rule, read off the version's own
         // standing: a version that has left the read was answered elsewhere or displaced by a newer
-        // one, and that is what the row being gone from the queue means.
+        // one, and that is what the row being gone from the queue means. `holdsReply` is `isOpen`
+        // plus the one standing that is not open and still takes a reason from here: a version
+        // waiting for the coordinator, which its owner opened with Decide it myself.
         XCTAssertTrue(reconcile.contains("case .evidenceDecision(let row):"),
                       "a version's armed reply is reconciled like the confirmation's")
-        XCTAssertTrue(reconcile.contains("EvidenceDecisions.isOpen(standing)"),
-                      "and it clears on `isOpen` for the confirmation's reason")
+        XCTAssertTrue(reconcile.contains("EvidenceDecisions.holdsReply(standing)"),
+                      "and it clears on `holdsReply`, which keeps `unread` armed for the confirmation's reason")
+        let unreadVersion = EvidenceDecisions.standing(queue: nil, projectId: "p", taskId: "t",
+                                                       evidenceRevision: "1")
+        XCTAssertTrue(EvidenceDecisions.holdsReply(unreadVersion) && !unreadVersion.answerable,
+                      "a version whose read has not come back keeps its reply, unanswerable as it is")
         XCTAssertTrue(reconcile.contains("state.pendingApprovals.contains(where: { $0.id == id })"),
                       "the approval branch still drops a reply whose approval resolved elsewhere")
 

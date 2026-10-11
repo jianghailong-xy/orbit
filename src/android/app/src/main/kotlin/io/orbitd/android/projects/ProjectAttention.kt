@@ -217,11 +217,11 @@ object ProjectAttention {
         else -> null
     }
 
-    /** What the row says the owner must do, by the item's kind. */
-    fun ownerItemSays(item: JsonObject): String? {
+    /** What the row says the owner must do, by the item's kind; a merge names the project's main branch, [main]. */
+    fun ownerItemSays(item: JsonObject, main: String = RunSettings.defaultMainBranch): String? {
         val count = item.number("count") ?: 0
         return when (item.text("kind")) {
-            "PROMOTION_APPROVAL" -> "Needs you · Approve merge to main"
+            "PROMOTION_APPROVAL" -> "Needs you · Approve merge to $main"
             "COORDINATOR_QUESTION" -> "Needs you · $count question${if (count == 1) "" else "s"} from coordinator"
             "ESCALATED" -> "Needs you · $count escalated to you"
             "FUSE_PAUSED" -> "Paused · coordinator stopped itself"
@@ -241,7 +241,8 @@ object ProjectAttention {
             AttentionReason.DONE_REQUEST -> AttentionChip(true, joined(readyToCloseSays, elapsedLabel(doneRequest(project)?.text("waitingSince"), now)))
             AttentionReason.APPROVE_MERGE_TO_MAIN, AttentionReason.COORDINATOR_QUESTION, AttentionReason.ESCALATED_TO_YOU, AttentionReason.FUSE_PAUSED -> {
                 val item = leadOwnerItem(project) ?: return null
-                val says = ownerItemSays(item) ?: return null
+                // The row's `mainBranch` (`GET /projects`): the project's main branch, null with no repository bound.
+                val says = ownerItemSays(item, RunSettings.mainBranchName(project.text("mainBranch"))) ?: return null
                 AttentionChip(true, joined(says, elapsedLabel(item.text("oldestWaitingSince"), now)))
             }
             AttentionReason.COORDINATOR_HANDLING -> {

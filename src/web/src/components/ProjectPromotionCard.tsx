@@ -40,6 +40,7 @@ import {
   promotionEventLine,
   promotionReceiptLine,
 } from '../lib/projectMerge';
+import { DEFAULT_MAIN_BRANCH, mainBranchName } from '../lib/projectStart';
 
 /**
  * The card that asks the account owner to merge a project branch into main (mock 4,
@@ -77,6 +78,10 @@ import {
 /** The three presses, and the words the mock gives them. Exported because the tests press by name
  *  and both hosts should be able to say "the card with the Merge to main button". */
 export const MERGE_TO_MAIN = 'Merge to main';
+/** The same press, said of the branch the candidate merges into: the project's main branch, by name. */
+export function mergeTo(main: string = DEFAULT_MAIN_BRANCH): string {
+  return `Merge to ${main}`;
+}
 export const NOT_NOW = 'Not now';
 export const MERGING = 'Merging…';
 export const CANCEL_MERGE = 'Cancel';
@@ -100,6 +105,13 @@ export const MERGED_HEADING = '✓ Merged into main';
  *  branch because the check was clean (§3.3 M-T11). The receipt is the only place the owner learns
  *  it happened, so it says so first. */
 export const MERGED_AUTOMATICALLY_HEADING = '✓ Merged into main automatically';
+/** The two headings above, said of the branch the candidate merged into. */
+export function mergedHeading(main: string = DEFAULT_MAIN_BRANCH): string {
+  return `✓ Merged into ${main}`;
+}
+export function mergedAutomaticallyHeading(main: string = DEFAULT_MAIN_BRANCH): string {
+  return `✓ Merged into ${main} automatically`;
+}
 /** Who merged it, where a pressed merge says "by you". */
 export const UNDER_AUTOMATIC = 'under your Automatic setting';
 export const NOTHING_TO_DO =
@@ -166,10 +178,10 @@ function plural(n: number, one: string, many = `${one}s`): string {
 /** The heading, which is the whole of what the card is at a glance (§3.3's four states). */
 export function promotionHeading(promotion: ProjectPromotionView): string {
   const source = shortRef(promotion.sourceRef);
-  const upstream = shortRef(promotion.upstreamRef);
+  const upstream = mainBranchName(promotion.upstreamRef);
   switch (promotion.state) {
     case 'MERGED':
-      return promotion.merged?.automatic ? MERGED_AUTOMATICALLY_HEADING : MERGED_HEADING;
+      return promotion.merged?.automatic ? mergedAutomaticallyHeading(upstream) : mergedHeading(upstream);
     case 'CONFIRMED':
     case 'RECHECKING':
       if (promotion.execution?.state === 'QUEUED') return `Merge queued: ${source} into ${upstream}`;
@@ -269,7 +281,7 @@ function ReadyRows({
   project: PromotionProjectView | null;
   now: number;
 }): JSX.Element {
-  const upstream = shortRef(promotion.upstreamRef);
+  const upstream = mainBranchName(promotion.upstreamRef);
   const tally = criteriaTally(project);
   // The blockers row reads the row's own ids rather than the titles beside them: it asks which of
   // the tasks this merge would carry are still holding somebody up, and that is the recorded set.
@@ -356,7 +368,7 @@ function ReadyRows({
 
 /** State B's body: why it is still going, and that the reader is not the one it is waiting for. */
 function MergingRows({ promotion, now }: { promotion: ProjectPromotionView; now: number }): JSX.Element {
-  const upstream = shortRef(promotion.upstreamRef);
+  const upstream = mainBranchName(promotion.upstreamRef);
   const execution = promotion.execution;
   const running = execution?.state === 'RUNNING';
   const rechecking = running && execution.phase === 'CHECK';
@@ -419,10 +431,10 @@ function MergedRows({
         <span className="promotion-mono">{shortSha(merged.sha)}</span>
         {` · merge of ${source} · ${merged.automatic ? UNDER_AUTOMATIC : 'by you'} · ${ago(merged.at, now)}`}
       </Row>
-      <Row k={`Now on ${shortRef(promotion.upstreamRef)}`}>
+      <Row k={`Now on ${mainBranchName(promotion.upstreamRef)}`}>
         {plural(promotion.taskIds.length, 'task')}
         {ordinals.length > 0
-          ? ` · ${ordinals.length === 1 ? 'criterion' : 'criteria'} ${ordinals.join(', ')} show “on ${shortRef(promotion.upstreamRef)}”`
+          ? ` · ${ordinals.length === 1 ? 'criterion' : 'criteria'} ${ordinals.join(', ')} show “on ${mainBranchName(promotion.upstreamRef)}”`
           : null}
         {/* By name: a count says how much went onto main, not what. */}
         {(promotion.tasks ?? []).length > 0 ? (
@@ -469,7 +481,7 @@ function BlockedRows({
   now: number;
 }): JSX.Element {
   const inFront = promotionBlockedBy(promotion, landings);
-  const upstream = shortRef(promotion.upstreamRef);
+  const upstream = mainBranchName(promotion.upstreamRef);
   const failed = promotion.checks.filter((check) => !passed(check));
   const escalatesIn =
     item?.escalateAt != null ? Date.parse(item.escalateAt) - now : null;
@@ -527,7 +539,7 @@ function BlockedRows({
 /** State D's `Why` row in words, for a chat about the candidate: the same answers, in the same
  *  order, that `BlockedRows` draws. */
 function blockedWhy(promotion: ProjectPromotionView): string {
-  const upstream = shortRef(promotion.upstreamRef);
+  const upstream = mainBranchName(promotion.upstreamRef);
   if (promotion.blockedReason === 'ALREADY_LANDED') {
     return `nothing to merge — ${shortRef(promotion.sourceRef)} is already on ${upstream}`;
   }
@@ -574,7 +586,7 @@ export function promotionChatContext({
   now: number;
 }): string {
   const source = shortRef(promotion.sourceRef);
-  const upstream = shortRef(promotion.upstreamRef);
+  const upstream = mainBranchName(promotion.upstreamRef);
   const ids = [
     `project ${projectId}`,
     `promotion ${promotion.promotionId}`,
@@ -588,7 +600,7 @@ export function promotionChatContext({
     `Why: ${blockedWhy(promotion)}`,
     ...(item ? [`Exception: ${item.title}${item.detailLine ? ` — ${item.detailLine}` : ''}`] : []),
     `Where it stands: ${
-      item ? itemStandingLine(item, now) : 'no exception item has been filed for it yet'
+      item ? itemStandingLine(item, now, upstream) : 'no exception item has been filed for it yet'
     }`,
     '',
     `(${ids.join(' · ')})`,
@@ -826,7 +838,7 @@ export function ProjectPromotionCard({
                 </>
               ) : (
                 <>
-                  {MERGE_TO_MAIN}
+                  {mergeTo(mainBranchName(promotion.upstreamRef))}
                   {keys && <span className="approval-kbd">{SHORTCUT_HINT}</span>}
                 </>
               )}

@@ -341,7 +341,7 @@ test('a landing whose commits the target already had is read as the work being t
   }
 
   /** The empty branch's words (`nothingToLandComment`): false about a branch that carried work. */
-  const EMPTY_BRANCH_WORDS = '它相对该会话的起点没有任何提交';
+  const EMPTY_BRANCH_WORDS = "has no commits since that session's starting point";
 
   // ═══ (A) the line at main ═════════════════════════════════════════════════════════════════════
   await t.test('(A) on a line AT main, the task is read as having nothing main lacks: LANDED, its '
@@ -366,7 +366,7 @@ test('a landing whose commits the target already had is read as the work being t
       'every commit the branch carried was already on main, measured: the task carried nothing main '
         + 'lacks, and the two pieces with commits of their own are on main');
     const told = await toldTo(taskId);
-    assert.ok(told.includes('都已经有了') && told.includes(`本任务的工作已经在 \`${w.line}\` 上`),
+    assert.ok(told.includes('already has every one of these changes') && told.includes(`This task's work is already on \`${w.line}\`.`),
       `the task is told its work is already on the line: ${told}`);
     assert.ok(!told.includes(EMPTY_BRANCH_WORDS), 'and not that its branch was empty');
   });

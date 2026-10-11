@@ -3,7 +3,6 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { App as AntApp } from 'antd';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WikiChangeset, WikiEntry } from '../lib/wiki';
 import { WIKI_NO_ENTRIES } from '../lib/wiki';
@@ -196,12 +195,10 @@ async function open(path = '/wiki/orbit'): Promise<void> {
     root.render(
       <QueryClientProvider client={client}>
         <MemoryRouter initialEntries={[path]}>
-          <AntApp>
-            <Routes>
-              <Route path="/wiki/:space" element={<WikiPage route="home" />} />
-              <Route path="/wiki/:space/activity" element={<WikiPage route="activity" />} />
-            </Routes>
-          </AntApp>
+          <Routes>
+            <Route path="/wiki/:space" element={<WikiPage route="home" />} />
+            <Route path="/wiki/:space/activity" element={<WikiPage route="activity" />} />
+          </Routes>
         </MemoryRouter>
       </QueryClientProvider>,
     );

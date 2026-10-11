@@ -1,0 +1,26 @@
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<link rel="stylesheet" href="kit.css">
+<script src="kit.js"></script>
+<body>
+<h1>① 项目结束卡：画进项目 sessions 页</h1>
+<p class="lede" style="max-width:1780px">项目被记为 DONE 之后，项目 sessions 页顶部只有一张灰卡写一个「Done」：哪几条判据落了地、是谁记的，这一页都看不到。而这张卡三端其实都已经有了——「This project is done · <b>recorded by Orbit</b> · 6 criteria · 5 on main · 1 no code to land」——只是画在协调会话的对话里。要做的只是把它也画到这一页上：<b>卡片本身不动，只挑一个位置</b>。</p>
+<div class="row" id="figs"></div>
+<p class="lede" style="max-width:1780px;margin-top:30px">三端一起改：Web 的同一个页（<code>.session-project-page</code>）、iOS、Android 都画同一张卡、同一个位置（macOS 没有这一页，不动）。卡片上的字和计数都是现成的：判据清单读项目详情里已有的 <code>derivedDone</code>，记录人读 <code>doneBy</code>，不加服务端字段。卡片不带按钮——回执、Reopen 都在项目页（页头 ⊞）。</p>
+<script>
+document.getElementById('figs').innerHTML = [
+  fig('now', '现在', pageNow(), `<b>这一页只在灰卡里写一个 Done</b><ol>
+<li>${n(1)}灰卡只报状态，看不出 6 条判据落成什么样。</li>
+<li>${n(2)}协调者那一行的预览写着「项目已被平台记为 DONE」——这是这一页目前唯一说到项目结束的地方，还是聊天里的半句话。</li></ol>`),
+  fig('after', '方案 A · 推荐', pageA(), `<b>灰卡换成结束卡</b><ol>
+<li>${n(1)}顶部第一张卡就是协调会话里那张（approvalChrome .green，逐字一致）：绿对勾 + <b>This project is done</b> + 记录人 + 判据清单。文字与计数都不新造。</li>
+<li>灰卡本来只有一个「Done」，被它整个换掉——页面在 DONE 状态下不再有第二处说「done」。</li>
+<li>Coordinator / Today 不动；页头 ⊞ 照旧去项目页。</li></ol>`),
+  fig('after', '方案 B', pageB(), `<b>灰卡留着，结束卡放它下面</b><ol>
+<li>${n(1)}信息都在，改动最小（只加一张卡，不删东西）。</li>
+<li>代价是「Done」出现两次：顶部那行灰卡先读到，还是没有任何内容。</li></ol>`),
+  fig('after', '方案 C', pageC(), `<b>并进灰卡里</b><ol>
+<li>${n(1)}和没启动时那条启动行同一种画法（都放进顶部的卡），最省纵向空间。</li>
+<li>代价：卡片要在灰底上重新调色，判据清单更挤；三端各自单独画一遍，不再是「同一张卡挪个位置」。</li></ol>`),
+].join('');
+</script>
+</body>

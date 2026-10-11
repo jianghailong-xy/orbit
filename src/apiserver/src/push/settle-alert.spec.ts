@@ -9,6 +9,7 @@ const base: SettleInput = {
   completedAt: null,
   deletedAt: null,
   error: null,
+  recapText: null,
 };
 
 test('a run that succeeded on its own is announced', () => {
@@ -74,4 +75,69 @@ test('non-terminal statuses are not settlements', () => {
   ]) {
     assert.equal(settleAlert({ ...base, status }), null, status);
   }
+});
+
+// ── the body: recap first, the rules line when there is none ────────────────
+
+test('a recap is what the alert says when there is one', () => {
+  assert.deepEqual(
+    settleAlert({
+      ...base,
+      status: RunStatus.SUCCEEDED,
+      recapText: 'Fixed the redirect; tests pass. Next: ship it.',
+    }),
+    { kind: 'finished', body: 'Fixed the redirect; tests pass. Next: ship it.' },
+  );
+});
+
+test('without a recap the rules line is unchanged', () => {
+  assert.deepEqual(settleAlert({ ...base, status: RunStatus.SUCCEEDED }), {
+    kind: 'finished',
+    body: 'Finished',
+  });
+  assert.deepEqual(settleAlert({ ...base, error: 'API Error: 500' }), {
+    kind: 'failed',
+    body: 'Failed · API Error: 500',
+  });
+});
+
+test('a recap longer than a notification carries is cut, not refused', () => {
+  const long = 'x'.repeat(400);
+  assert.deepEqual(settleAlert({ ...base, status: RunStatus.SUCCEEDED, recapText: long }), {
+    kind: 'finished',
+    body: `${'x'.repeat(199)}…`,
+  });
+});
+
+test('a failure with a recap still says what happened through the recap', () => {
+  // The recap knows the ending it was written for; the error line is what "Finished" cannot say
+  // when a run dies, so the recap takes that slot too.
+  const alert = settleAlert({
+    ...base,
+    error: 'API Error: 529 overloaded_error',
+    recapText: 'Ran out of provider capacity mid-migration; nothing was written.',
+  });
+  assert.equal(alert?.kind, 'failed');
+  assert.equal(alert?.body, 'Ran out of provider capacity mid-migration; nothing was written.');
+});
+
+test('an empty recap is not a recap, so the rules line still speaks', () => {
+  assert.deepEqual(settleAlert({ ...base, status: RunStatus.SUCCEEDED, recapText: '  \n ' }), {
+    kind: 'finished',
+    body: 'Finished',
+  });
+});
+
+test('a recap never announces a settlement that is not worth one', () => {
+  // Whether to interrupt is the rules' decision alone: a recap only changes what an alert that
+  // was already going to be sent says.
+  assert.equal(settleAlert({ ...base, status: RunStatus.CANCELLED, recapText: 'Did things.' }), null);
+  assert.equal(
+    settleAlert({ ...base, retryAt: new Date(), recapText: 'Did things.' }),
+    null,
+  );
+  assert.equal(
+    settleAlert({ ...base, completedAt: new Date(), recapText: 'Did things.' }),
+    null,
+  );
 });

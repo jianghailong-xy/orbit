@@ -1,0 +1,34 @@
+# Standard P0 (ui-migration/playwright.config.mjs, expected screenshots = P0.2 originals + registered layers) on the delivery
+# 211949ed8 and on the base 951882866 (the project tip synced with the same main, without P5.2), round f7.
+failing tests: delivery 28, base 28; the same set: True; the same first error line: 28 of 28
+failing screenshots (actual): delivery 28, base 28; byte-identical 27 of 28
+  not identical: pages.browser.mjs-task-chromium-dark-desktop/task-detail-actual.png
+
+chromium-dark-desktop :: both sides of existing 600, 640 and 960px rules | Error: expect(page).toHaveScreenshot(expected) failed
+chromium-dark-desktop :: session | Error: expect(page).toHaveScreenshot(expected) failed
+chromium-dark-desktop :: settings | Error: expect(page).toHaveScreenshot(expected) failed
+chromium-dark-desktop :: task | Error: expect(page).toHaveScreenshot(expected) failed
+chromium-dark-phone :: session | Error: expect(page).toHaveScreenshot(expected) failed
+chromium-dark-phone :: settings | Error: expect(page).toHaveScreenshot(expected) failed
+chromium-dark-phone :: task | Error: expect(page).toHaveScreenshot(expected) failed
+chromium-light-desktop :: both sides of existing 600, 640 and 960px rules | Error: expect(page).toHaveScreenshot(expected) failed
+chromium-light-desktop :: session | Error: expect(page).toHaveScreenshot(expected) failed
+chromium-light-desktop :: settings | Error: expect(page).toHaveScreenshot(expected) failed
+chromium-light-desktop :: task | Error: expect(page).toHaveScreenshot(expected) failed
+chromium-light-phone :: session | Error: expect(page).toHaveScreenshot(expected) failed
+chromium-light-phone :: settings | Error: expect(page).toHaveScreenshot(expected) failed
+chromium-light-phone :: task | Error: expect(page).toHaveScreenshot(expected) failed
+webkit-dark-desktop :: both sides of existing 600, 640 and 960px rules | Error: expect(page).toHaveScreenshot(expected) failed
+webkit-dark-desktop :: session | Error: expect(page).toHaveScreenshot(expected) failed
+webkit-dark-desktop :: settings | Error: expect(page).toHaveScreenshot(expected) failed
+webkit-dark-desktop :: task | Error: expect(page).toHaveScreenshot(expected) failed
+webkit-dark-phone :: session | Error: expect(page).toHaveScreenshot(expected) failed
+webkit-dark-phone :: settings | Error: expect(page).toHaveScreenshot(expected) failed
+webkit-dark-phone :: task | Error: expect(page).toHaveScreenshot(expected) failed
+webkit-light-desktop :: both sides of existing 600, 640 and 960px rules | Error: expect(page).toHaveScreenshot(expected) failed
+webkit-light-desktop :: session | Error: expect(page).toHaveScreenshot(expected) failed
+webkit-light-desktop :: settings | Error: expect(page).toHaveScreenshot(expected) failed
+webkit-light-desktop :: task | Error: expect(page).toHaveScreenshot(expected) failed
+webkit-light-phone :: session | Error: expect(page).toHaveScreenshot(expected) failed
+webkit-light-phone :: settings | Error: expect(page).toHaveScreenshot(expected) failed
+webkit-light-phone :: task | Error: expect(page).toHaveScreenshot(expected) failed

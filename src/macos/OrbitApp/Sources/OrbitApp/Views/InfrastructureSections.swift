@@ -38,9 +38,11 @@ struct InfrastructureLists {
                                  ownPools: ownPools)
     }
 
-    var engines: [Infrastructure.Engine] {
-        Infrastructure.engines(runners: runners, keys: keys,
-                               pools: memberPools.map(SharedPools.asProviderPool) + ownPools)
+    /// Every engine a session can run on, and what can pay for it now — a key under every engine it
+    /// runs on (board iOS 1 ①).
+    var engines: [Infrastructure.EngineCard] {
+        Infrastructure.engineCards(runners: runners, keys: keys,
+                                   pools: memberPools.map(SharedPools.asProviderPool) + ownPools)
     }
 
     /// The account's own Codex pools, whose people and keys are read one by one.
@@ -136,12 +138,13 @@ func infrastructureBold(_ text: String, _ names: [String]) -> AttributedString {
 
 // MARK: - What your agents can run on
 
-/// A row per engine, Ready with what can pay for it now — its machines, its keys with their models, its
-/// pools — or Not set up, with the way to install it on a machine.
+/// A row per engine — all six, in the pickers' order, each by its CLI's name — Ready with what can pay for
+/// it now: its machines (a subscription; OpenCode's own sign-in), every key that runs on it with the
+/// model a session there starts on, its pools. Or Not set up, with the way to install it on a machine.
 struct InfrastructureEnginesSection: View {
-    let engines: [Infrastructure.Engine]
+    let engines: [Infrastructure.EngineCard]
     /// Install on a machine: that engine's page on the first machine online, or registering one.
-    let install: (LoginEngine) -> Void
+    let install: (String) -> Void
 
     var body: some View {
         Section {
@@ -157,21 +160,22 @@ struct InfrastructureEnginesSection: View {
 }
 
 private struct InfrastructureEngineRow: View {
-    let sources: Infrastructure.Engine
+    let sources: Infrastructure.EngineCard
     let install: () -> Void
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            ProviderMark(provider: sources.engine.rawValue, size: 28, label: sources.engine.displayName)
+            ProviderMark(provider: sources.engine, size: 28,
+                         brandKey: SessionProviderChoices.enginePreset[sources.engine], label: sources.name)
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 8) {
-                    Text(sources.engine.displayName)
+                    Text(sources.name)
                         .font(.headline)
                     InfrastructureStateChip(ready: sources.ready)
                 }
                 if sources.ready {
                     if !sources.machines.isEmpty {
-                        line(Infrastructure.subscription, sources.machines.joined(separator: ", "))
+                        line(sources.machinesLabel, sources.machines.joined(separator: ", "))
                     }
                     if !sources.keys.isEmpty {
                         line(Infrastructure.apiKey, keys)
@@ -193,7 +197,7 @@ private struct InfrastructureEngineRow: View {
         .padding(.vertical, 2)
     }
 
-    /// "Anthropic (Claude) Claude Opus 5, DeepSeek DeepSeek V4 Pro": each key, and its model set apart.
+    /// "DeepSeek DeepSeek V4 Pro, DeepSeek 2 DeepSeek V4 Pro": each key, and its model set apart.
     private var keys: AttributedString {
         typealias Colour = AttributeScopes.SwiftUIAttributes.ForegroundColorAttribute
         var out = AttributedString()
@@ -369,9 +373,10 @@ enum PoolTone {
 
 // MARK: - API keys
 
-/// The account's own keys, each with the model a session on it starts on — and Disabled for one that is
-/// switched off. A DeepSeek key's row ends with its account's balance, and opens the key's page where
-/// there is one to open (`open` set) — not on the Mac. Keys are added and changed on the web.
+/// The account's own keys, each vendor's together, each with the model a session on it starts on and the
+/// engines it runs on (board iOS 1 ③) — and Disabled for one that is switched off. A DeepSeek key's row
+/// ends with its account's balance, and opens the key's page where there is one to open (`open` set) —
+/// not on the Mac. Keys are added and changed on the web.
 struct InfrastructureKeysSection: View {
     let keys: [ConfiguredProvider]
     /// Each DeepSeek key's balance by provider id, as last read.
@@ -383,7 +388,7 @@ struct InfrastructureKeysSection: View {
             if keys.isEmpty {
                 Text(ProvidersOverview.noKeys).foregroundStyle(.secondary)
             }
-            ForEach(keys) { key in
+            ForEach(ProvidersOverview.byVendor(keys)) { key in
                 if let id = DeepSeekBalance.key(for: key, mine: keys)?.providerID {
                     if let open {
                         Button { open(.providerDetail(providerID: id)) } label: {
@@ -409,29 +414,35 @@ struct InfrastructureKeysSection: View {
         }
     }
 
-    /// A key's name over its model, and at its end Disabled — or, for a DeepSeek key that is on, its
-    /// account's balance once one is read, in the tone of what it comes to.
+    /// A key's name over its model and the engines it runs on, and at its end Disabled — or, for a
+    /// DeepSeek key that is on, its account's balance once one is read, in the tone of what it comes to.
+    /// The value keeps the row's end (board iOS 1 ③): the engines line wraps beside it rather than
+    /// pushing it under the row, as a `LabeledContent` does once its label runs wide.
     private func row(_ key: ConfiguredProvider, balance: ProviderBalanceReading?) -> some View {
-        LabeledContent {
+        HStack(spacing: 12) {
+            ProviderMark(provider: key.slug, size: 26, brandKey: key.presetSlug, label: key.label)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(Infrastructure.keyLabel(key.label, presetSlug: key.presetSlug))
+                    .lineLimit(1)
+                if let model = Infrastructure.defaultModel(key) {
+                    Text(model)
+                        .font(.orbitListSubtitle)
+                        .foregroundStyle(.secondary)
+                }
+                // "Claude Code · OpenCode · DeepSeek Harness" — or a Claude subscription token's
+                // "Claude Code · subscription token" (`ProvidersOverview.keyLine`).
+                Text(ProvidersOverview.keyLine(key))
+                    .font(.orbitListSubtitle)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
             if key.enabled == false {
                 Text(Infrastructure.disabled)
+                    .foregroundStyle(.secondary)
             } else if let balance, let value = DeepSeekBalance.rowValue(DeepSeekBalance.state(balance)) {
                 Text(value.label)
                     .foregroundStyle(PoolTone.color(value.tone))
                     .monospacedDigit()
-            }
-        } label: {
-            HStack(spacing: 12) {
-                ProviderMark(provider: key.slug, size: 26, brandKey: key.presetSlug, label: key.label)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(Infrastructure.keyLabel(key.label, presetSlug: key.presetSlug))
-                        .lineLimit(1)
-                    if let model = Infrastructure.defaultModel(key) {
-                        Text(model)
-                            .font(.orbitListSubtitle)
-                            .foregroundStyle(.secondary)
-                    }
-                }
             }
         }
     }

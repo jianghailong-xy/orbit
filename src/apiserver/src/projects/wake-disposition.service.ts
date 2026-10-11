@@ -783,17 +783,18 @@ function dispositionKey(reason: BlockerDisposition['reason'], taskId = ''): stri
 /** One executable sentence per reason, addressed to the person the blocker hands the delivery to. */
 const REQUIRED_ACTION: Readonly<Record<BlockerDisposition['reason'], string>> = {
   CRITERION_EXEMPTION_ARGUED:
-    '这份交付写下了「某条判据不适用」的理由。请读那段理由并裁定它成不成立，再决定合不合入；'
-    + '在你裁定之前不要合并，也不要放行下一条。',
+    'This delivery wrote down why a criterion “does not apply”. Read that reasoning and rule on whether it holds, '
+    + 'then decide whether to merge it; do not merge before you have ruled, and do not let the next one through either.',
   ACCEPTANCE_STANDARD_MOVED:
-    '这份工作声明的那条验收标准在它开工之后被改过。请确认按今天的措辞它算不算通过；'
-    + '改验收标准只有账号所有者能做，协调会话不能替。',
+    'The acceptance criterion this work declared was changed after it started. Confirm whether it passes under '
+    + 'today’s wording; only the account owner can change the acceptance criteria, and the coordinator session cannot '
+    + 'do it for them.',
   OUTSIDE_DECLARED_SCOPE:
-    '这份交付改了它自己的声明里没提过的文件。请看 detail.paths 列出的那些改动，'
-    + '决定接受、退回还是让它拆开；在你决定之前不要合并。',
+    'This delivery changed files its own declaration never mentioned. Look at the changes detail.paths lists, '
+    + 'and decide whether to accept it, send it back or have it split up; do not merge before you have decided.',
   MERGE_REFUSED_BY_GIT:
-    'git 拒绝了这次合并。请按 detail.paths 列出的冲突文件手工解决，再重新合入；'
-    + '重试不会有帮助。',
+    'git refused this merge. Resolve the conflicting files detail.paths lists by hand, then merge it again; '
+    + 'retrying will not help.',
 };
 
 /**

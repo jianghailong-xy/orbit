@@ -415,7 +415,7 @@ test('a session asks another for a reply, and every request comes to exactly one
     assert.match(handed.content, /reply-by="\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ"/);
     assert.match(handed.content, new RegExp(`session_reply\\(requestId="${uuidToBase62(request.id)}"\\)`));
     assert.match(handed.content, /NO_REPLY/);
-    assert.match(handed.content, /\n0\. merge now：the checks are green\n1\. wait for review\n/);
+    assert.match(handed.content, /\n0\. merge now: the checks are green\n1\. wait for review\n/);
     // The echo carries the request on its card, so a client can read the request's state.
     const echoed = await say(recipient, handed.turnId, RunEventType.USER, { text: handed.content });
     assert.equal((echoed.sessionMessage as Record<string, unknown>).requestId, uuidToBase62(request.id));
@@ -465,9 +465,9 @@ test('a session asks another for a reply, and every request comes to exactly one
     assert.equal(blocksFor(back.content, request.id), 1);
     assert.match(back.content, new RegExp(`from-session="${uuidToBase62(recipient)}"`));
     assert.match(back.content, /outcome="REPLIED"/);
-    assert.match(back.content, /你问的是：criterion 3 is ready — merge now or wait for review\?/);
-    assert.match(back.content, /选择：1\. wait for review/);
-    assert.match(back.content, /回复：the reviewer is back at 3/);
+    assert.match(back.content, /You asked: criterion 3 is ready — merge now or wait for review\?/);
+    assert.match(back.content, /Chose: 1\. wait for review/);
+    assert.match(back.content, /Reply: the reviewer is back at 3/);
     // ...and stored as reply cards, not as the owner's words.
     const card = await say(asker, back.turnId, RunEventType.USER, { text: back.content });
     const cards = card.sessionReplies as Array<Record<string, unknown>>;
@@ -498,7 +498,7 @@ test('a session asks another for a reply, and every request comes to exactly one
     const back = await deliver(asker);
     assert.equal(blocksFor(back.content, request.id), 1);
     assert.match(back.content, /outcome="NO_REPLY"/);
-    assert.match(back.content, /不是正式回复/);
+    assert.match(back.content, /not a formal reply/);
     assert.match(back.content, /The gateway listens on 8443/);
   });
 
@@ -759,7 +759,7 @@ test('a session asks another for a reply, and every request comes to exactly one
     const back = await deliver(asker);
     assert.equal(blocksFor(back.content, request.id), 1);
     assert.match(back.content, /outcome="UNDELIVERED"/);
-    assert.match(back.content, /对方的引擎没有确认收到它/);
+    assert.match(back.content, /the recipient's engine never confirmed receiving it/);
 
     // The turn it was joining fails with a retry armed while the steer is still out: the run goes on,
     // and the drain that answers the steer without its engine takes the request with it.
@@ -851,7 +851,7 @@ test('a session asks another for a reply, and every request comes to exactly one
     assert.equal((await replyTurnsOf(asker)).length, 1);
     const back = await deliver(asker);
     assert.equal(blocksFor(back.content, request.id), 1);
-    assert.match(back.content, /回复：yes/);
+    assert.match(back.content, /Reply: yes/);
   });
 
   // ── 5. RECIPIENT_ENDED ────────────────────────────────────────────────────────────────────────
@@ -902,7 +902,7 @@ test('a session asks another for a reply, and every request comes to exactly one
     assert.equal(turns.length, 1, 'three outcomes queued together were not one reply turn');
     const back = await deliver(asker);
     for (const id of [viaComplete.id, viaFailure.id, viaTrash.id]) assert.equal(blocksFor(back.content, id), 1);
-    assert.match(back.content, /对方的会话已经结束（COMPLETED/);
+    assert.match(back.content, /The recipient's session has ended \(COMPLETED/);
   });
 
   await t.test('a run with a retry armed has not ended, and the sweep giving the retry up ends it — whichever way it gives up', async () => {
@@ -1013,7 +1013,7 @@ test('a session asks another for a reply, and every request comes to exactly one
     const back = await deliver(asker);
     assert.equal(blocksFor(back.content, request.id), 1);
     assert.match(back.content, /outcome="EXPIRED"/);
-    assert.match(back.content, /对方当时的状态：RUNNING/);
+    assert.match(back.content, /The recipient's state at the time: RUNNING/);
   });
 
   await t.test('a request that expired in the queue tells its reader there is nothing to answer', async () => {
@@ -1026,8 +1026,8 @@ test('a session asks another for a reply, and every request comes to exactly one
     assert.equal((await requestRow(request.id)).state, 'EXPIRED');
     await finish(recipient, running.turnId);
     const handed = await deliver(recipient);
-    assert.match(handed.content, /已经以 EXPIRED 结案，不必再调用 session_reply/);
-    assert.doesNotMatch(handed.content, /对方在等你回复/);
+    assert.match(handed.content, /already closed as EXPIRED; there is no need to call session_reply/);
+    assert.doesNotMatch(handed.content, /The sender is waiting for your reply/);
   });
 
   // ── 5. UNDELIVERED ────────────────────────────────────────────────────────────────────────────
@@ -1063,8 +1063,8 @@ test('a session asks another for a reply, and every request comes to exactly one
     const back = await deliver(asker);
     assert.equal(blocksFor(back.content, interrupted.id), 1);
     assert.equal(blocksFor(back.content, withdrawn.id), 1);
-    assert.match(back.content, /被账号 owner 撤回了/);
-    assert.match(back.content, /随队列一起被清掉了/);
+    assert.match(back.content, /the account owner withdrew it/);
+    assert.match(back.content, /was cleared along with the queue/);
   });
 
   // ── 7. two outcomes, one reply turn ───────────────────────────────────────────────────────────
@@ -1223,7 +1223,7 @@ test('a session asks another for a reply, and every request comes to exactly one
     const back = await deliver(asker);
     assert.equal(back.turnId, replyTurns[1].id);
     assert.equal(blocksFor(back.content, request.id), 1);
-    assert.match(back.content, /回复：go/);
+    assert.match(back.content, /Reply: go/);
     assert.equal((await requestRow(request.id)).replyClientTurnId, replyTurns[1].clientTurnId);
   });
 
@@ -1254,7 +1254,7 @@ test('a session asks another for a reply, and every request comes to exactly one
     assert.equal(next.clientTurnId, ownerKey);
     assert.ok(next.content.startsWith('so what did the coordinator say?'));
     assert.equal(blocksFor(next.content, request.id), 1);
-    assert.match(next.content, /回复：0350/);
+    assert.match(next.content, /Reply: 0350/);
   });
 
   // ── §8 criteria 14 and 17: an auto-retry, and the requests and outcomes that ride on it ──────────
@@ -1391,7 +1391,7 @@ test('a session asks another for a reply, and every request comes to exactly one
       const again = await deliver(recipient);
       assert.equal(again.turnId, resent.id);
       assert.match(again.content, new RegExp(`request-id="${uuidToBase62(request.id)}"`));
-      assert.match(again.content, /对方在等你回复/);
+      assert.match(again.content, /The sender is waiting for your reply/);
     }
   });
 
@@ -1422,7 +1422,7 @@ test('a session asks another for a reply, and every request comes to exactly one
       const again = await deliver(recipient);
       assert.equal(again.turnId, resent.id);
       assert.match(again.content, new RegExp(`request-id="${uuidToBase62(request.id)}"`));
-      assert.match(again.content, /对方在等你回复/);
+      assert.match(again.content, /The sender is waiting for your reply/);
     }
 
     // A request on a turn of its own, behind the one the retry re-sends: those words are gone with
@@ -1494,7 +1494,7 @@ test('a session asks another for a reply, and every request comes to exactly one
     const back = await deliver(asker);
     assert.equal(back.turnId, replyTurns[1].id);
     assert.equal(blocksFor(back.content, request.id), 1);
-    assert.match(back.content, /回复：go/);
+    assert.match(back.content, /Reply: go/);
   });
 
   await t.test('an asker a transient failure stopped with its retry armed has not ended: the outcome waits for the retry, and its task is told nothing', async () => {
@@ -1517,7 +1517,7 @@ test('a session asks another for a reply, and every request comes to exactly one
       const again = await deliver(asker);
       assert.ok(again.content.startsWith('carry on with the port work'), 'the failed message was not re-sent');
       assert.equal(blocksFor(again.content, request.id), 1);
-      assert.match(again.content, /回复：8443/);
+      assert.match(again.content, /Reply: 8443/);
       await worker.drain();
       assert.equal(await prisma.taskComment.count({ where: { taskId } }), 0, 'the retry going ahead was read as one given up');
     }
@@ -1541,7 +1541,7 @@ test('a session asks another for a reply, and every request comes to exactly one
       const again = await deliver(asker);
       assert.ok(again.content.startsWith('deploy to the region they pick'), 'the message the quota killed was not re-sent');
       assert.equal(blocksFor(again.content, request.id), 1);
-      assert.match(again.content, /回复：eu-west-1/);
+      assert.match(again.content, /Reply: eu-west-1/);
       assert.equal(await prisma.taskComment.count({ where: { taskId } }), 0);
     }
   });
@@ -1573,7 +1573,7 @@ test('a session asks another for a reply, and every request comes to exactly one
       const comments = await prisma.taskComment.findMany({ where: { taskId } });
       assert.equal(comments.length, 1, `${label}`);
       assert.equal(comments[0].id, sessionReplyCommentId(requestId));
-      assert.match(comments[0].body, /自动重试被放弃/);
+      assert.match(comments[0].body, /the auto-retry it was waiting for was abandoned/);
       assert.ok(comments[0].body.includes(`the answer: ${label}`), `${label}: the comment does not carry the outcome`);
       const row = await requestRow(requestId);
       assert.equal(row.replyCommentDueAt, null);
@@ -1678,7 +1678,7 @@ test('a session asks another for a reply, and every request comes to exactly one
     const again = await deliver(asker);
     assert.ok(again.content.startsWith('carry on with the port work'), 'the failed message was not re-sent');
     assert.equal(blocksFor(again.content, request.id), 1);
-    assert.match(again.content, /回复：8443/);
+    assert.match(again.content, /Reply: 8443/);
     await worker.drain();
     assert.equal(await prisma.taskComment.count({ where: { taskId } }), 0, 'the retry going ahead was read as given up');
   });
@@ -1972,7 +1972,7 @@ test('a session asks another for a reply, and every request comes to exactly one
       const back = await deliver(asker);
       assert.equal(back.turnId, turn.id);
       assert.equal(blocksFor(back.content, request.id), 1);
-      assert.match(back.content, /回复：eu-west-1/);
+      assert.match(back.content, /Reply: eu-west-1/);
     }
   });
 
@@ -2177,7 +2177,7 @@ test('a session asks another for a reply, and every request comes to exactly one
       const told = await deliver(asker);
       assert.equal(blocksFor(told.content, request.id), 1, `${label}: the asker was not told once`);
       assert.match(told.content, /outcome="UNDELIVERED"/);
-      assert.match(told.content, /不会再重发/);
+      assert.match(told.content, /the failed turn will not be resent/);
       await ownersTurnSettles(recipient, `the build is green again (${label})`);
       const after = await requestRow(request.id);
       assert.equal(after.state, 'UNDELIVERED', `${label}: judged by the owner’s turn`);
@@ -2400,7 +2400,7 @@ test('a session asks another for a reply, and every request comes to exactly one
       const again = await deliver(recipient, lostRunnerId);
       assert.equal(again.turnId, resent.id);
       assert.match(again.content, new RegExp(`request-id="${uuidToBase62(request.id)}"`));
-      assert.match(again.content, /对方在等你回复/);
+      assert.match(again.content, /The sender is waiting for your reply/);
       await prisma.session.update({ where: { id: recipient }, data: { inboxLeaseOwner: null } });
       await say(recipient, again.turnId, RunEventType.USER, { text: again.content }, lostRunnerId);
       await finish(recipient, again.turnId, `looking into it now (${label})`, lostRunnerId);
@@ -2421,7 +2421,7 @@ test('a session asks another for a reply, and every request comes to exactly one
       const told = await deliver(asker);
       assert.equal(blocksFor(told.content, request.id), 1, `${label}: the asker was not told once`);
       assert.match(told.content, /outcome="UNDELIVERED"/);
-      assert.match(told.content, /找不回这一轮/);
+      assert.match(told.content, /auto-retry cannot recover that turn/);
     }
 
     // Reaped, with a stderr line and the engine refusing the turn filed under it before any echo.

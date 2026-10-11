@@ -182,7 +182,7 @@ function WatchList() {
 
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-  // antd's overlays read breakpoints and sizes that jsdom does not have.
+  // The page reads media queries and the overlays sizes (ResizeObserver), neither of which jsdom has.
   vi.stubGlobal('matchMedia', (query: string) => ({
     matches: false,
     media: query,

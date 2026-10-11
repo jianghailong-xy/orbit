@@ -192,6 +192,10 @@ export interface UserPreferences {
    *  (lib/promptSuggestion). Each one is a request on the session's account, read when its engine
    *  starts. Absent means on; only opting out is ever written. */
   promptSuggestions?: boolean;
+  /** Whether the session list shows the server's rolling recap (Session.recapText) instead of the
+   *  raw last reply. Read by every client's list row; absent means on, so only opting out is ever
+   *  written. */
+  recaps?: boolean;
 }
 
 /** How an account signs in (docs/google-sign-in-design.md §6): a password, and the Google account linked. */

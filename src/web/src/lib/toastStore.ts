@@ -15,7 +15,7 @@ import {
 /**
  * The one feed every toast goes into (`lib/toast.tsx` posts, `components/ToastViewport.tsx` draws),
  * with the timers that take passing toasts down and fold an open pinned card on a phone. A module
- * singleton, like AntD's message holder was: a toast outlives the page that raised it.
+ * singleton, like the replaced message holder was: a toast outlives the page that raised it.
  */
 
 let feed: ToastFeed = EMPTY_FEED;

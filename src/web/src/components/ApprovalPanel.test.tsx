@@ -3,7 +3,6 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { App as AntApp } from 'antd';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApprovalPanel, CREATE_CRITERIA_CONFIRMED_AT_START, decliningPrefix } from './ApprovalPanel';
@@ -26,6 +25,26 @@ vi.mock('../lib/transcriptStore', () => ({
   loadTranscript: async () => null,
   saveTranscript: async () => {},
 }));
+// A batch card's picture is the project page's own canvas (React Flow and all), which jsdom cannot
+// lay out — so the canvas is a stub here. What it records is the two things the card is responsible
+// for: WHICH marks the canvas was handed, and whether anything reached for the canvas at all. The
+// card fetches it through a `lazy()` boundary, so a card nobody has rendered must not import it.
+const canvas = vi.hoisted(() => ({
+  imported: false,
+  marks: [] as Array<{ title: string; workState?: string }>,
+}));
+vi.mock('./ProjectDependencyGraph', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./ProjectDependencyGraph')>();
+  const { createElement } = await import('react');
+  canvas.imported = true;
+  return {
+    ...actual,
+    ProjectDependencyGraph: ({ data }: { data: { marks: Array<{ title: string; workState?: string }> } }) => {
+      canvas.marks = data.marks;
+      return createElement('div', { 'data-testid': 'project-canvas' });
+    },
+  };
+});
 
 const { api, getSessionEventPage, listApprovals } = await import('../api');
 const apiMock = vi.mocked(api);
@@ -269,6 +288,17 @@ describe('merge-check skip approval', () => {
   it('says what is not being skipped when it is declined', () => {
     expect(decliningPrefix('orbit_integration_skip_merge_check')).toBe('Checking it after all: ');
   });
+
+  it('says every merge into the project’s main branch is still checked, main as before', () => {
+    const note = (html: string) => /<p class="create-criteria-note">([\s\S]*?)<\/p>/.exec(html)?.[1];
+    const said = (main: string) => 'Once, and only this landing: the project’s check command is unchanged, '
+      + `and the next landing and every merge into ${main} are checked as before.`;
+    expect(note(render(skip({ input: { mainBranch: 'master' } })))).toBe(said('master'));
+    // Main by name, no repository bound (null) and a runner that predates the field (absent).
+    for (const input of [{ mainBranch: 'main' }, { mainBranch: null }, {}]) {
+      expect(note(render(skip({ input }))), JSON.stringify(input)).toBe(said('main'));
+    }
+  });
 });
 
 describe('blocker resolution approval', () => {
@@ -441,7 +471,7 @@ describe('batch create approval', () => {
     expect(html).toContain('+39 more');
   });
 
-  it('draws the shape when the batch has one, and names it', () => {
+  it('names the shape the batch will have', () => {
     const html = render(
       batchApproval({
         taskCount: 3,
@@ -456,12 +486,13 @@ describe('batch create approval', () => {
       }),
     );
 
-    expect(html).toContain('<svg');
     expect(html).toContain('2 in parallel after 1');
   });
 
-  it('keeps the list when there is no shape to draw', () => {
+  it('draws none of its own picture: the titles stand until the canvas resolves', () => {
     // Unrelated tasks have no structure; a row of disconnected boxes is a worse list than a list.
+    // The picture itself is the project page's canvas, and a server render never resolves the
+    // `lazy()` import that reaches it — so what is on the card here is the list it hands over.
     const html = render(
       batchApproval({ taskCount: 2, startingNow: 0, tasks: [{ title: 'a' }, { title: 'b' }] }),
     );
@@ -469,6 +500,84 @@ describe('batch create approval', () => {
     expect(html).not.toContain('<svg');
     expect(html).toContain('2 independent tasks');
     expect(html).toContain('a</span>');
+  });
+
+  // The picture is fetched behind a `lazy()` boundary and is React Flow, so it only appears in a
+  // real DOM — the rest of this file renders through `react-dom/server`, which never resolves a
+  // `lazy()` import at all.
+  describe('the batch card\'s picture', () => {
+    let mounted: Root | null = null;
+    let host: HTMLDivElement | null = null;
+    let width: ReturnType<typeof vi.spyOn> | null = null;
+
+    beforeEach(() => {
+      (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+      vi.stubGlobal('ResizeObserver', class {
+        observe(): void {}
+        unobserve(): void {}
+        disconnect(): void {}
+      });
+      // jsdom lays nothing out: a card's width in the conversation is the test's to give.
+      width = vi.spyOn(Element.prototype, 'clientWidth', 'get').mockReturnValue(600);
+      host = document.createElement('div');
+      document.body.append(host);
+      mounted = createRoot(host);
+    });
+
+    afterEach(async () => {
+      const root = mounted;
+      mounted = null;
+      if (root) await act(async () => root.unmount());
+      width?.mockRestore();
+      host?.remove();
+      host = null;
+      vi.unstubAllGlobals();
+    });
+
+    const fanOut = (): ApprovalInfo =>
+      batchApproval({
+        taskCount: 3,
+        startingNow: 0,
+        needsManualStart: 1,
+        blocked: 2,
+        tasks: [
+          { title: 'root', ref: 'r' },
+          { title: 'left', ref: 'l', dependsOnRefs: ['r'] },
+          { title: 'right', ref: 'x', dependsOnRefs: ['r'] },
+        ],
+      });
+
+    it('does not reach for the canvas for a card that draws no plan', async () => {
+      // The plan canvas is React Flow and dagre, behind a `lazy()` boundary: a card that is not a
+      // batch — here a restructure — must not be what fetches it.
+      await act(async () => {
+        mounted!.render(<ApprovalPanel approval={dagApproval()} onDecide={() => {}} />);
+      });
+
+      expect(canvas.imported, 'a card with no plan to draw loaded the project canvas').toBe(false);
+    });
+
+    it('draws the plan on the project page\'s own canvas, marked what the batch will be', async () => {
+      await act(async () => {
+        mounted!.render(<ApprovalPanel approval={fanOut()} onDecide={() => {}} />);
+      });
+      // Waited out in act slices, not one act: the picture arrives through a `lazy()` import that
+      // resolves on its own schedule, and React queues every render scheduled inside an in-flight
+      // act callback until that callback settles. In slices the card can draw inside the wait.
+      for (let attempt = 0; attempt < 20 && !host!.querySelector('[data-testid="project-canvas"]'); attempt += 1) {
+        await act(async () => {
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        });
+      }
+      expect(host!.querySelector('[data-testid="project-canvas"]')).not.toBeNull();
+      expect(canvas.marks.map((mark) => `${mark.title}:${mark.workState}`)).toEqual([
+        'root:READY',
+        'left:BLOCKED',
+        'right:BLOCKED',
+      ]);
+      // The picture replaces the list: the titles are what it hands over, not what it draws twice.
+      expect(host!.querySelector('.dag-approval-ops')).toBeNull();
+    });
   });
 
   it('offers no "always allow" — a standing yes to creating tasks is a blank cheque', () => {
@@ -852,9 +961,7 @@ describe('one waiting completion decision on the session page', () => {
       nextRoot.render(
         <QueryClientProvider client={nextClient}>
           <MemoryRouter initialEntries={[`/sessions/${SESSION_ID}`]}>
-            <AntApp>
-              <WorkspaceView runner={RUNNER} />
-            </AntApp>
+            <WorkspaceView runner={RUNNER} />
           </MemoryRouter>
         </QueryClientProvider>,
       );

@@ -1,0 +1,70 @@
+argv: env P43A_SNAPSHOTS=/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-del-shots P43A_OUTPUT=/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-del-out P43A_PORT=4541 npx playwright test --config ui-migration/p43a.config.mjs --update-snapshots=all --grep the coordinator: its menu
+tree: /mnt/data/tmp/34coPBk43ULRuisicUTAy/del HEAD a755f816a1800280719ecabf060bd6b7ad271776
+uncommitted: 
+start: 2026-10-09T22:35:00Z load: 33.17 29.81 33.20
+mem: 4242M available, swap 9514M free
+disk: / 9970M available
+cgroup: 0::/system.slice/run-p106201-i58790685.scope
+
+Running 8 tests using 1 worker
+
+A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-del-shots/chromium-light-desktop/p43a-coordinator.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-del-shots/chromium-light-desktop/p43a-coordinator-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-del-shots/chromium-light-desktop/p43a-coordinator-replace.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-del-shots/chromium-light-desktop/p43a-coordinator-unavailable.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-del-shots/chromium-light-desktop/p43a-coordinator-rebind.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-del-shots/chromium-light-desktop/p43a-coordinator-landing.png, writing actual.
+  ✓  1 [chromium-light-desktop] › ui-migration/p43a.browser.mjs:355:3 › P4.3a a project page › the coordinator: its menu and replace question, rebinding, choosing where it opens (10.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-del-shots/chromium-light-phone/p43a-coordinator.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-del-shots/chromium-light-phone/p43a-coordinator-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-del-shots/chromium-light-phone/p43a-coordinator-replace.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-del-shots/chromium-light-phone/p43a-coordinator-unavailable.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-del-shots/chromium-light-phone/p43a-coordinator-rebind.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-del-shots/chromium-light-phone/p43a-coordinator-landing.png, writing actual.
+  ✓  2 [chromium-light-phone] › ui-migration/p43a.browser.mjs:355:3 › P4.3a a project page › the coordinator: its menu and replace question, rebinding, choosing where it opens (8.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-del-shots/chromium-dark-desktop/p43a-coordinator.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-del-shots/chromium-dark-desktop/p43a-coordinator-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-del-shots/chromium-dark-desktop/p43a-coordinator-replace.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-del-shots/chromium-dark-desktop/p43a-coordinator-unavailable.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-del-shots/chromium-dark-desktop/p43a-coordinator-rebind.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-del-shots/chromium-dark-desktop/p43a-coordinator-landing.png, writing actual.
+  ✓  3 [chromium-dark-desktop] › ui-migration/p43a.browser.mjs:355:3 › P4.3a a project page › the coordinator: its menu and replace question, rebinding, choosing where it opens (10.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-del-shots/chromium-dark-phone/p43a-coordinator.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-del-shots/chromium-dark-phone/p43a-coordinator-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-del-shots/chromium-dark-phone/p43a-coordinator-replace.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-del-shots/chromium-dark-phone/p43a-coordinator-unavailable.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-del-shots/chromium-dark-phone/p43a-coordinator-rebind.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-del-shots/chromium-dark-phone/p43a-coordinator-landing.png, writing actual.
+  ✓  4 [chromium-dark-phone] › ui-migration/p43a.browser.mjs:355:3 › P4.3a a project page › the coordinator: its menu and replace question, rebinding, choosing where it opens (7.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-del-shots/webkit-light-desktop/p43a-coordinator.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-del-shots/webkit-light-desktop/p43a-coordinator-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-del-shots/webkit-light-desktop/p43a-coordinator-replace.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-del-shots/webkit-light-desktop/p43a-coordinator-unavailable.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-del-shots/webkit-light-desktop/p43a-coordinator-rebind.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-del-shots/webkit-light-desktop/p43a-coordinator-landing.png, writing actual.
+  ✓  5 [webkit-light-desktop] › ui-migration/p43a.browser.mjs:355:3 › P4.3a a project page › the coordinator: its menu and replace question, rebinding, choosing where it opens (10.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-del-shots/webkit-light-phone/p43a-coordinator.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-del-shots/webkit-light-phone/p43a-coordinator-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-del-shots/webkit-light-phone/p43a-coordinator-replace.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-del-shots/webkit-light-phone/p43a-coordinator-unavailable.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-del-shots/webkit-light-phone/p43a-coordinator-rebind.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-del-shots/webkit-light-phone/p43a-coordinator-landing.png, writing actual.
+  ✓  6 [webkit-light-phone] › ui-migration/p43a.browser.mjs:355:3 › P4.3a a project page › the coordinator: its menu and replace question, rebinding, choosing where it opens (7.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-del-shots/webkit-dark-desktop/p43a-coordinator.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-del-shots/webkit-dark-desktop/p43a-coordinator-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-del-shots/webkit-dark-desktop/p43a-coordinator-replace.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-del-shots/webkit-dark-desktop/p43a-coordinator-unavailable.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-del-shots/webkit-dark-desktop/p43a-coordinator-rebind.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-del-shots/webkit-dark-desktop/p43a-coordinator-landing.png, writing actual.
+  ✓  7 [webkit-dark-desktop] › ui-migration/p43a.browser.mjs:355:3 › P4.3a a project page › the coordinator: its menu and replace question, rebinding, choosing where it opens (10.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-del-shots/webkit-dark-phone/p43a-coordinator.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-del-shots/webkit-dark-phone/p43a-coordinator-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-del-shots/webkit-dark-phone/p43a-coordinator-replace.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-del-shots/webkit-dark-phone/p43a-coordinator-unavailable.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-del-shots/webkit-dark-phone/p43a-coordinator-rebind.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-p43a-coordinator-del-shots/webkit-dark-phone/p43a-coordinator-landing.png, writing actual.
+  ✓  8 [webkit-dark-phone] › ui-migration/p43a.browser.mjs:355:3 › P4.3a a project page › the coordinator: its menu and replace question, rebinding, choosing where it opens (8.4s)
+
+  8 passed (1.4m)
+end: 2026-10-09T22:36:32Z load: 51.54 37.90 35.83
+exit=0

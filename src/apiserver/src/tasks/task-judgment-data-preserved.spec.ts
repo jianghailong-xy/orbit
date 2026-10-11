@@ -2203,7 +2203,54 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // nor any of the six preserved triggers/functions is named, and no function, trigger, type,
       // index or constraint is created, replaced or dropped, so it is not another writer of the DONE
       // fence. No INSERT, UPDATE or DELETE: every stored comment reads NULL.
-      '0416_task_comment_session_attempt'],
+      '0416_task_comment_session_attempt',
+      // `run_event`'s statistics, kept fresh on an append-only table (0417): one `ALTER TABLE
+      // "run_event" SET (autovacuum_analyze_scale_factor = 0.01, autovacuum_analyze_threshold =
+      // 1000)` — a storage parameter, written as catalog-only. No column, index, constraint,
+      // function, trigger or type is created, replaced or dropped, and no row of any table is read
+      // or written; `task`, `project`, `session`, every `project_acceptance_*` object and the six
+      // preserved triggers/functions are named nowhere.
+      '0417_run_event_autovacuum_analyze',
+      // A session's rolling recap (0418): three nullable columns with no default and no constraint on
+      // `session` (`recap_text` TEXT, `recap_at` TIMESTAMP(3), `recap_event_seq` INTEGER) — catalog-only.
+      // Only that table is altered: no `task`, `project` or `project_acceptance_*` object nor any of the
+      // six preserved triggers/functions is named, and no function, trigger, type, index or constraint is
+      // created, replaced or dropped, so it is not another writer of the DONE fence. No INSERT, UPDATE or
+      // DELETE: every stored session reads NULL.
+      '0418_session_recap',
+      // The provider/engine data migration's bookkeeping (0419, renumbered from 0417 before landing;
+      // docs/provider-engine-contract.md §7.6): two new tables, `provider_engine_migration_run` (one row per
+      // execution of the application-layer migration, with
+      // a partial unique index allowing one completion marker per version) and `provider_engine_migration_report`
+      // (its per-row report, run_id → the run ON DELETE CASCADE, a CHECK on the action, an index on run and
+      // id). No existing table, column, constraint, index, function, trigger or type is created, replaced,
+      // altered or dropped, and no row is written: the API server fills both when it starts. `task`,
+      // `project`, every `project_acceptance_*` object and the six preserved triggers/functions are named
+      // nowhere, so it is not another writer of the DONE fence.
+      '0419_provider_engine_migration',
+      // The two per-session reads that filter `run_event` by type — a share link's counts and a
+      // transcript's receipts — get an index to answer them in (0420): one CREATE INDEX on
+      // (`session_id`, `type`) WHERE the type is one of the four anything reads by type. Catalog-only:
+      // it alters, drops and writes nothing, so no stored row is read or written, and it names no
+      // `task`, `session`, `project` or `project_acceptance_*` object and none of the six preserved
+      // triggers/functions. No function, trigger, type or constraint is created, replaced or dropped,
+      // so it is not another writer of the DONE fence.
+      '0420_run_event_session_type_idx',
+      // A promotion's next generation is a maximum over its own jobs, and nothing indexed
+      // `promotion_id` (0421): one CREATE INDEX on `project_integration_job`(`promotion_id`) WHERE it
+      // is not null. Catalog-only like 0420 — nothing is altered, dropped or written, no preserved
+      // trigger or function is named, and neither half of the 0177 pair nor any `project_acceptance_*`
+      // object is touched.
+      '0421_project_integration_job_promotion_idx',
+      // When the account owner chose a project's main branch (0422, contract L6): one nullable
+      // TIMESTAMPTZ(3) with no default on `project_codebase` (`upstream_ref_chosen_at`) —
+      // catalog-only — and one CREATE INDEX on (`owner_id`, `canonical_repo_url`,
+      // `upstream_ref_chosen_at` DESC) WHERE it is not null. Only that table is altered; 0270's lock
+      // and 0231's config guard are left as they are and name neither. No row is written, no
+      // function, trigger, type or constraint is created, replaced or dropped, and `task`,
+      // `session`, `project`, every `project_acceptance_*` object and the six preserved
+      // triggers/functions are named nowhere, so it is not another writer of the DONE fence.
+      '0422_project_codebase_upstream_ref_chosen_at'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

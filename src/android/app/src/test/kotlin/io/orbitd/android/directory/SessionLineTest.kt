@@ -2,6 +2,9 @@ package io.orbitd.android.directory
 
 import io.orbitd.android.directory.SessionLine.Tone
 import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import kotlinx.serialization.json.*
 import org.junit.Assert.*
 import org.junit.Test
@@ -14,12 +17,23 @@ class SessionLineTest {
     private fun session(status: String, lastAssistantText: String? = null, lastToolUse: String? = null, lastUserText: String? = null,
         runningBgCount: Int? = null, engineTurnActive: Boolean? = null, pendingApprovals: Int = 0, endReason: String? = null,
         runningSubagentCount: Int? = null, waitingKind: String? = null, ownerItems: String? = null, review: String? = null,
-        retryAt: String? = null, error: String? = null) =
+        retryAt: String? = null, error: String? = null, recapText: String? = null, recapAt: String? = null) =
         DirectorySession("s", "t", status = status, lastAssistantText = lastAssistantText, lastToolUse = lastToolUse, lastUserText = lastUserText,
             runningBgCount = runningBgCount, engineTurnActive = engineTurnActive, pendingApprovals = pendingApprovals, endReason = endReason,
             runningSubagentCount = runningSubagentCount, waitingKind = waitingKind, ownerItems = ownerItems?.let { Json.parseToJsonElement(it).jsonArray },
-            confirmationUnderReview = review?.let { Json.parseToJsonElement(it).jsonObject }, retryAt = retryAt, error = error)
+            confirmationUnderReview = review?.let { Json.parseToJsonElement(it).jsonObject }, retryAt = retryAt, error = error,
+            recapText = recapText, recapAt = recapAt)
     private fun line(s: DirectorySession, live: Boolean = true) = SessionLine.make(s, live, now = now)
+
+    // The recap (0418): its label is the clock time the server wrote it, computed here with the same formatter and zone the
+    // row's own `recapLabel` uses, so the expectation holds wherever the test runs.
+    private val recap = "Moved the recap onto the list row; the three states are covered by tests."
+    /** The instant `line` builds every line at — the same one a same-day recap is written at, in every time zone. */
+    private val recapAt = now.toString()
+    private fun clock(iso: String, zone: ZoneId = ZoneId.systemDefault()) =
+        DateTimeFormatter.ofPattern("h:mm a", Locale.US).withZone(zone).format(Instant.parse(iso))
+    private fun day(iso: String, zone: ZoneId = ZoneId.systemDefault()) =
+        DateTimeFormatter.ofPattern("EEE, MMM d", Locale.US).withZone(zone).format(Instant.parse(iso))
 
     /** A turn the runtime started for itself keeps the session parked while it streams: the row says it is working. */
     @Test fun selfDrivenTurnReadsAsWorkingNotParked() {
@@ -45,6 +59,49 @@ class SessionLineTest {
     @Test fun pendingAndBackground() {
         assertEquals(SessionLine("Queued", Tone.QUEUED), line(session("PENDING")))
         assertEquals(SessionLine("2 background processes running…", Tone.BACKGROUND), line(session("AWAITING_INPUT", runningBgCount = 2)))
+    }
+
+    /** The rolling recap (0418) takes the place of the raw last reply, under its own muted label — and only that place. */
+    @Test fun recapTakesThePlaceOfTheReplyPreview() {
+        val recapped = line(session("AWAITING_INPUT", "Committed the row change.", recapText = recap, recapAt = recapAt))
+        assertEquals(Tone.PREVIEW, recapped.tone)
+        assertEquals(recap, recapped.text)
+        assertEquals("Recap · ${clock(recapAt)}", recapped.label)
+
+        // A payload that carried the text without a time keeps the word.
+        assertEquals(SessionLine(recap, Tone.PREVIEW, "Recap"),
+            line(session("AWAITING_INPUT", "Committed the row change.", recapText = recap, recapAt = null)))
+
+        // Another day's recap wears the date too: a bare clock time on yesterday's row misleads.
+        val old = "2026-10-01T10:00:00Z"
+        assertEquals("Recap · ${day(old)}, ${clock(old)}",
+            line(session("AWAITING_INPUT", "Committed the row change.", recapText = recap, recapAt = old)).label)
+
+        // No recap — or a blank one, which the server never stores — is the reply preview it always had.
+        assertEquals(SessionLine("Committed the row change.", Tone.PREVIEW), line(session("AWAITING_INPUT", "Committed the row change.")))
+        assertEquals(SessionLine("Committed the row change.", Tone.PREVIEW), line(session("AWAITING_INPUT", "Committed the row change.", recapText = "   ")))
+        // Trash keeps it too: nothing live is left to outrank it there.
+        assertEquals("Recap · ${clock(recapAt)}",
+            line(session("AWAITING_INPUT", "reply", recapText = recap, recapAt = recapAt), live = false).label)
+    }
+
+    /** The account's Session recaps switch (Settings): off, the same row falls through to the reply. */
+    @Test fun recapsOffFallsBackToTheReply() {
+        val recapped = session("AWAITING_INPUT", "Committed the row change.", recapText = recap, recapAt = recapAt)
+        assertEquals(SessionLine(recap, Tone.PREVIEW, "Recap · ${clock(recapAt)}"),
+            SessionLine.make(recapped, live = true, recaps = true, now = now))
+        assertEquals(SessionLine("Committed the row change.", Tone.PREVIEW),
+            SessionLine.make(recapped, live = true, recaps = false, now = now))
+    }
+
+    /** Every live line still outranks the recap: it is newer work, not older prose. */
+    @Test fun liveLinesOutrankTheRecap() {
+        assertEquals(Tone.APPROVAL, line(session("AWAITING_INPUT", pendingApprovals = 1, recapText = recap, recapAt = recapAt)).tone)
+        assertEquals(SessionLine("Running Bash…", Tone.RUNNING), line(session("RUNNING", lastToolUse = "Bash", recapText = recap, recapAt = recapAt)))
+        assertEquals(SessionLine("You: and now the footer?", Tone.PREVIEW),
+            line(session("AWAITING_INPUT", lastUserText = "and now the footer?", recapText = recap, recapAt = recapAt)))
+        assertEquals(SessionLine("Background process running…", Tone.BACKGROUND),
+            line(session("AWAITING_INPUT", runningBgCount = 1, recapText = recap, recapAt = recapAt)))
     }
 
     @Test fun parkedShowsLastReplyAndStripsMarkdown() {
@@ -106,10 +163,12 @@ class SessionLineTest {
     @Test fun sessionDecodesPreviewFields() {
         val s = io.orbitd.android.core.protocol.Wire.json.decodeFromString(DirectorySession.serializer(),
             """{"id":"s1","status":"RUNNING","lastAssistantText":"hello","lastToolUse":"Read","lastUserText":"hi there","runningBgCount":1,
+               "recapText":"Moved the recap onto the list row.","recapAt":"2026-10-04T09:38:00.000Z",
                "runningSubagentCount":null,"engineTurnActive":null,"waitingKind":null,"ownerItems":[],"retryAt":null,"projectMembership":
                {"projectId":"p1","projectTitle":"Project one","projectStatus":"OPEN","role":"SOMETHING_NEW"}}""")
         assertEquals("hello", s.lastAssistantText); assertEquals("Read", s.lastToolUse); assertEquals("hi there", s.lastUserText)
         assertEquals(1, s.runningBgCount); assertNull(s.runningSubagentCount)
+        assertEquals("Moved the recap onto the list row.", s.recapText); assertEquals("2026-10-04T09:38:00.000Z", s.recapAt)
         assertEquals(SessionProjectMembership("p1", "Project one", "OPEN", "SOMETHING_NEW"), s.projectMembership)
         assertFalse(s.projectMembership!!.isCoordinator)
     }

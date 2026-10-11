@@ -33,6 +33,10 @@ export const P42_PATHS = {
   register: '/runners/register', enroll: `/enroll?code=${ENROLL_CODE}`, admin: '/admin',
   editDeepseek: `/providers/${P42_IDS.deepseek}`, editDeepseekTeam: `/providers/${P42_IDS.deepseekTeam}`,
   editDeepseekCustom: `/providers/${P42_IDS.deepseekCustom}`,
+  // Main 33e0e2e09 (feat(web): Runners and Providers become one Infrastructure page) puts the machines, the
+  // API keys and the account pools on one page: /runners and /providers now land on /infrastructure (the
+  // keys at #keys), and saving a key or leaving a pool goes back to #keys or #pools.
+  infrastructure: '/infrastructure', keys: '/infrastructure#keys', pools: '/infrastructure#pools',
 };
 export const ROTATED_TOKEN = 'orbit_rt_uiMigrationFixtureRunnerToken0123456789';
 export const STORED_KEY = 'sk-proj-uiMigrationFixtureStoredKey0123456789';

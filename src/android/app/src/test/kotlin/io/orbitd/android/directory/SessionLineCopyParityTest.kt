@@ -44,10 +44,11 @@ class SessionLineCopyParityTest {
         val declared = SessionLineCopy::class.java.declaredFields.filter { it.type == String::class.java }
             .map { it.isAccessible = true; it.get(null) as String }
         assertTrue("a SessionLineCopy word is in neither Swift source: $declared", declared.all { both.contains("\"$it\"") })
-        assertEquals(11, declared.size)
+        assertEquals(12, declared.size)
     }
 
     @Test fun everyBuiltLineIsOneSwiftLiteral() {
+        assertSentence(line, "SessionLine.swift", SessionLineCopy.recapWithTime("§"), "§" to "\\(clock)")
         assertSentence(line, "SessionLine.swift", SessionLineCopy.runningTool("\\(fmtTool(t))"))
         assertSentence(line, "SessionLine.swift", SessionLineCopy.sent("\\(plainPreview(text))"))
         assertSentence(line, "SessionLine.swift", SessionLineCopy.ongoing("\\(subagentRunningLabel(n))"))
@@ -79,8 +80,8 @@ class SessionLineCopyParityTest {
         assertDeclares(done, "ProjectDone.swift", "readyToClose", ProjectDone.readyToClose)
         assertDeclares(done, "ProjectDone.swift", "recordAsDoneRow", ProjectDone.recordAsDoneRow)
         val needsYou = swift("NeedsYou.swift")
-        mapOf("promotionApproval" to "PROMOTION_APPROVAL", "coordinatorQuestion" to "COORDINATOR_QUESTION", "escalated" to "ESCALATED",
-            "fusePaused" to "FUSE_PAUSED").forEach { (case, kind) ->
+        // A merge approval names the branch it merges into: MainBranchCopyTest holds its words to the web's WorkspaceView.tsx.
+        mapOf("coordinatorQuestion" to "COORDINATOR_QUESTION", "escalated" to "ESCALATED", "fusePaused" to "FUSE_PAUSED").forEach { (case, kind) ->
             val word = NeedsYouLogic.kindWord(kind) ?: throw AssertionError("Android has no word for $kind")
             assertTrue("NeedsYou.swift no longer says \"$word\" for .$case", needsYou.contains("case .$case: return \"$word\""))
         }

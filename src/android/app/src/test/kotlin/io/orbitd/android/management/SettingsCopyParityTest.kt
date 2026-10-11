@@ -35,6 +35,15 @@ class SettingsCopyParityTest {
         }
     }
 
+    /** The session recaps switch says what iOS says, and iOS is held to the web's own Settings page by `SettingsCopyParityTests`
+     * (OrbitKit), so all three clients put the same words on this row. */
+    @Test fun theSessionRecapsSwitchSaysWhatIosSays() {
+        val source = swift("SettingsHome.swift")
+        listOf(SESSION_RECAPS, SESSION_RECAPS_HINT).forEach {
+            assertTrue("\"$it\" is not in SettingsHome.swift", source.contains("\"$it\""))
+        }
+    }
+
     @Test fun deepSeekBalanceWordsAreIosOwnButTheBrowser() {
         val source = swift("DeepSeekBalance.swift", "ProvidersOverview.swift")
         val words = constants(DeepSeekBalance)

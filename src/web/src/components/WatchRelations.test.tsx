@@ -191,7 +191,8 @@ describe('a task’s Followed by', () => {
       [...section.querySelectorAll('button')].find((b) => b.textContent?.includes('Follow task')),
       'Follow task',
     );
-    expect(document.body.querySelector('.ant-modal-title')?.textContent).toBe('Follow task');
+    const editor = document.body.querySelector('[role="dialog"]');
+    expect(document.getElementById(editor?.getAttribute('aria-labelledby') ?? '')?.textContent).toBe('Follow task');
   });
 
   it('says nothing is watching the task rather than drawing an empty list', async () => {
@@ -218,7 +219,7 @@ describe('a session’s Following and Followed by', () => {
       [...container!.querySelectorAll('button')].find((b) => b.textContent?.includes('Following')),
       'Following',
     );
-    const rows = [...document.body.querySelectorAll<HTMLElement>('.ant-popover .watch-row')];
+    const rows = [...document.body.querySelectorAll<HTMLElement>('.watch-popover .watch-row')];
     expect(rows.map((r) => r.dataset.watchId)).toEqual(['WAITING']);
   });
 

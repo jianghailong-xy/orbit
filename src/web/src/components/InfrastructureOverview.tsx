@@ -1,23 +1,24 @@
 import { Fragment, useState } from 'react';
 import { Link } from 'react-router-dom';
-import type { LoginEngine } from '@orbit/shared';
+import { AgentProvider, ALL_ENGINES, ENGINE_CLI_NAMES, type LoginEngine } from '@orbit/shared';
+import { DSH_CONNECT_HREF, dshRunnerState } from '../lib/dshRuntime';
 import { runsOnEnvKey } from '../lib/engineAccounts';
 import { encodeId } from '../lib/idCodec';
 import type { ProviderRow } from '../lib/providerAdmin';
 import { poolRunsCodex, type ProviderPool } from '../lib/providerPools';
 import { ago } from '../lib/runnerEngines';
-import { ENGINE_PRESET, providerDisplayLabel } from '../lib/sessionProviderChoices';
-import { ProviderTile } from './ProviderGallery';
+import { EngineTile } from './ProviderGallery';
 import { engineHealthOf, rowKindOf } from './RunnerEngines';
 import { ENGINE_NAME, RunnerSignIn } from './RunnerSignIn';
 import type { Runner } from './TasksSidePanel';
 import { Button } from './ui/Button';
 
 /**
- * The top of the Infrastructure page (docs/mocks/infrastructure-page/02-after-infrastructure.png):
- * what needs a person (NeedsAttention), then what each engine can run on (EngineOverview). Both are
- * read from the lists the sections below them show — the machines, the keys and the pools — and ask
- * the server nothing of their own.
+ * The top of the Infrastructure page (docs/mocks/infrastructure-page/02-after-infrastructure.png, and
+ * docs/mocks/provider-engine-decoupling/web-1-infrastructure.html for its engines): what needs a
+ * person (NeedsAttention), then what each engine can run on (EngineOverview). Both are read from the
+ * lists the sections below them show — the machines, the keys and the pools — and ask the server
+ * nothing of their own.
  */
 
 /** The engines a machine signs in, in the order every list on the page names them. */
@@ -42,10 +43,11 @@ function signedOutOn(runner: Runner, engine: LoginEngine): boolean {
 
 /**
  * How many logins of this engine a session on this machine can run on: each account signed in, or
- * the engine's own answer where it reports no accounts. Antigravity's Default on the machine's own
- * Gemini key counts, as it does on the machine's card (runsOnEnvKey).
+ * the engine's own answer where it reports no accounts — for OpenCode, whether its own sign-in
+ * (`opencode auth login`) is set up there. Antigravity's Default on the machine's own Gemini key
+ * counts, as it does on the machine's card (runsOnEnvKey).
  */
-function loginsOn(runner: Runner, engine: LoginEngine): number {
+function loginsOn(runner: Runner, engine: LoginEngine | 'opencode'): number {
   const health = engineHealthOf(runner, engine);
   if (!health?.installed || (engine === 'antigravity' && runner.antigravity?.supported === false)) return 0;
   const accounts = health.accounts ?? [];
@@ -58,6 +60,22 @@ function defaultModelOf(key: ProviderRow): string | null {
   const model = key.defaultModel || key.models[0]?.value;
   if (!model) return null;
   return key.models.find((option) => option.value === model)?.label || model;
+}
+
+/**
+ * The model a DeepSeek Harness session starts on, by the name its catalogue gives it. Not a key's own:
+ * Harness lists its models on each machine (docs/provider-engine-contract.md §2.2), whichever DeepSeek
+ * key it runs on — read off the first machine online that can run it and has reported them, and with
+ * none, no name.
+ */
+function harnessModelOf(online: Runner[]): string | null {
+  for (const runner of online) {
+    const catalog = runner.modelCatalog?.[AgentProvider.DSH];
+    if (dshRunnerState(runner) !== 'ready' || !catalog?.length) continue;
+    const model = runner.runtimeDefaultModels?.[AgentProvider.DSH];
+    return catalog.find((option) => option.value === model)?.label ?? catalog[0].label;
+  }
+  return null;
 }
 
 /**
@@ -85,7 +103,7 @@ export function NeedsAttention({ runners, pools }: { runners: Runner[]; pools: P
           <div className="infra-attn-row" key={`out:${panel}`}>
             <span className="infra-attn-dot" />
             <span className="infra-attn-text">
-              <b>{ENGINE_NAME[engine]}</b> is signed out on <b>{machineName(runner)}</b>
+              <b>{ENGINE_CLI_NAMES[engine as AgentProvider]}</b> is signed out on <b>{machineName(runner)}</b>
               <span className="infra-attn-sub"> · Sessions there can’t use it</span>
             </span>
             <Button size="small" variant="primary" onClick={() => setSignIn(signIn === panel ? null : panel)}>
@@ -132,10 +150,13 @@ export function NeedsAttention({ runners, pools }: { runners: Runner[]; pools: P
 }
 
 /**
- * What each engine can run on now, a card each: the machines online and signed in to it
- * (Subscription), the enabled keys that run on it — a DeepSeek key on Claude Code among them — with
- * the model a session on each starts on (API key), and its account pools that can start a session
- * (Pool). Ready with any of them; with none, Not set up, and the two ways to get one.
+ * What each engine can run on now, a card each, in the order the session pickers list them: the
+ * machines online and signed in to it (Subscription; for OpenCode, its own sign-in on the machine), the
+ * enabled keys that run on it with the model a session on each starts on (API key), and its account
+ * pools that can start a session (Pool). A key is listed under every engine it runs on — the server's
+ * `engines` for it: a DeepSeek key under Claude Code, OpenCode and DeepSeek Harness, a Claude
+ * subscription token under Claude Code alone. Ready with any of them; with none, Not set up, and the
+ * ways to get one.
  */
 export function EngineOverview({
   runners,
@@ -149,8 +170,9 @@ export function EngineOverview({
   const online = runners.filter((runner) => runner.online);
   // An install is made from a machine's own card: the first one online, opened on that engine
   // (RunnerEngines reads ?runner=&engine=). With none online, a machine to register.
-  const installOn = (engine: LoginEngine) =>
+  const installOn = (engine: AgentProvider) =>
     online.length > 0 ? `?runner=${encodeId(online[0].id)}&engine=${engine}` : '/runners/register';
+  const harnessModel = harnessModelOf(online);
 
   return (
     <div className="re-sec">
@@ -159,40 +181,44 @@ export function EngineOverview({
         <span className="re-sec-sub">Every engine, and everything that can pay for it right now.</span>
       </div>
       <div className="infra-engines">
-        {ENGINES.map((engine) => {
-          const machines = online.flatMap((runner) => {
-            const logins = loginsOn(runner, engine);
-            return logins === 0 ? [] : [logins > 1 ? `${machineName(runner)} ×${logins}` : machineName(runner)];
-          });
-          const engineKeys = keys.filter((key) => key.enabled && key.runtime === engine);
+        {ALL_ENGINES.map((engine) => {
+          // DeepSeek Harness has no sign-in on a machine: it runs on DeepSeek keys alone.
+          const machines =
+            engine === AgentProvider.DSH
+              ? []
+              : online.flatMap((runner) => {
+                  const logins = loginsOn(runner, engine);
+                  return logins === 0 ? [] : [logins > 1 ? `${machineName(runner)} ×${logins}` : machineName(runner)];
+                });
+          const engineKeys = keys.filter((key) => key.enabled && key.engines.includes(engine));
           const enginePools = pools.filter(
             (pool) => !pool.unavailable && (poolRunsCodex(pool) ? 'codex' : 'claude') === engine,
           );
           const ready = machines.length > 0 || engineKeys.length > 0 || enginePools.length > 0;
           return (
             <div className={`infra-engine${ready ? '' : ' none'}`} key={engine}>
-              <ProviderTile slug={ENGINE_PRESET[engine] ?? engine} label={ENGINE_NAME[engine]} size={30} />
+              <EngineTile engine={engine} size={30} />
               <div className="infra-engine-main">
                 <div className="infra-engine-name">
-                  {ENGINE_NAME[engine]}
+                  {ENGINE_CLI_NAMES[engine]}
                   <span className={`infra-engine-state${ready ? ' ready' : ''}`}>{ready ? 'Ready' : 'Not set up'}</span>
                 </div>
                 {ready ? (
                   <div className="infra-engine-src">
                     {machines.length > 0 && (
                       <div>
-                        <b>Subscription</b> · {machines.join(', ')}
+                        <b>{engine === AgentProvider.OPENCODE ? 'Own sign-in' : 'Subscription'}</b> · {machines.join(', ')}
                       </div>
                     )}
                     {engineKeys.length > 0 && (
                       <div>
                         <b>API key</b> ·{' '}
                         {engineKeys.map((key, index) => {
-                          const model = defaultModelOf(key);
+                          const model = engine === AgentProvider.DSH ? harnessModel : defaultModelOf(key);
                           return (
                             <Fragment key={key.id}>
                               {index > 0 && ', '}
-                              {providerDisplayLabel(key.label, key.presetSlug)}
+                              {key.label}
                               {model && (
                                 <>
                                   {' '}
@@ -209,6 +235,11 @@ export function EngineOverview({
                         <b>Pool</b> · {enginePools.map((pool) => pool.label).join(', ')}
                       </div>
                     )}
+                  </div>
+                ) : engine === AgentProvider.DSH ? (
+                  <div className="infra-engine-src none">
+                    No DeepSeek key. <Link to={DSH_CONNECT_HREF}>Connect a DeepSeek key</Link> — it runs on Claude Code
+                    and OpenCode too.
                   </div>
                 ) : (
                   <div className="infra-engine-src none">

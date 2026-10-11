@@ -459,12 +459,19 @@ export function integrationJobView(row: IntegrationJobRow): IntegrationJobView {
 
 /**
  * The title an exception item about this job carries (§4.2). Built from the job and the task's own
- * title, both of which are immutable by the time an item is opened, so a replay reads the same.
+ * title, both of which are immutable by the time an item is opened, so a replay reads the same — as
+ * is the project's main branch a promotion merges into (`mainBranch`, null with no repository bound:
+ * main), which cannot change once the line has started (L4).
  */
-export function integrationItemTitle(state: string, kind: string, taskTitle: string): string {
+export function integrationItemTitle(
+  state: string,
+  kind: string,
+  taskTitle: string,
+  mainBranch: string | null = null,
+): string {
   // A promotion's failure is not about one task — it is about the branch the owner was going to be
   // asked to merge — so it is named after that rather than after whichever task landed last.
-  const subject = kind === 'LAND_TASK' ? taskTitle : 'merging the project branch into main';
+  const subject = kind === 'LAND_TASK' ? taskTitle : `merging the project branch into ${mainBranch ?? 'main'}`;
   switch (state) {
     case 'CONFLICT': return `Merge conflict: ${subject}`;
     case 'CHECK_FAILED': return `Checks failed on the combined tree: ${subject}`;
@@ -1452,11 +1459,15 @@ export async function queuePromotionJob(
     retry?: LandingRetryRequest;
   },
 ): Promise<string> {
-  const previous = await tx.projectIntegrationJob.aggregate({
-    where: { promotionId: input.promotion.id, kind: input.kind },
-    _max: { generation: true },
-  });
-  const generation = (previous._max.generation ?? 0) + 1;
+  // Raw SQL, never `projectIntegrationJob.aggregate`: Prisma compiles an aggregate to a MAX over an
+  // OFFSET subquery the planner cannot flatten, and nothing indexed `promotion_id` before 0421, so
+  // the shape read every row of the table (measured on 300,020 jobs: a parallel sequential scan,
+  // 4,919 buffers) where this is one index probe on the candidate's own rows.
+  const [previous] = await tx.$queryRaw<Array<{ generation: number | null }>>`
+    SELECT max("generation") AS "generation" FROM "project_integration_job"
+     WHERE "promotion_id" = ${input.promotion.id}::uuid AND "kind" = ${input.kind}
+  `;
+  const generation = Number(previous?.generation ?? 0) + 1;
   const jobId = randomUUID();
   const [created] = await tx.projectIntegrationJob.createManyAndReturn({
     data: [{

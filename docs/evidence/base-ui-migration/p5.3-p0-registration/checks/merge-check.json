@@ -1,0 +1,16 @@
+{
+ "command": "npm run build -w @orbit/web && npm run test -w @orbit/web",
+ "commit": "0cede69fb208cebb1dbc86a5ee86f46dcc71f21c",
+ "trackedChanges": "0",
+ "started": "2026-10-10T12:26:19Z",
+ "ended": "2026-10-10T12:29:53Z",
+ "exit": "0",
+ "logLines": 2770,
+ "logSha256": "2df49184b6d3d6f356f35a37e42de29783f007459a8fd16abee7ccf8e941c019",
+ "vitestSummary": [
+  "Test Files  399 passed (399)",
+  "Tests  5163 passed (5163)",
+  "Duration  209.60s (tests 44%, import 35%, environment 19%, transform 2%)"
+ ],
+ "builtLine": "\u2713 built in 1.22s"
+}

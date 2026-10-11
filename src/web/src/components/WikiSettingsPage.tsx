@@ -2,8 +2,8 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ExclamationCircleOutlined, RightOutlined } from '@ant-design/icons';
-import { Button, Card, InputNumber, Modal, Radio, Select, Switch } from 'antd';
 import {
+  AgentProvider,
   WIKI_DEFAULT_MAINTENANCE_SETTINGS,
   WIKI_MAINTENANCE_DAILY_RUN_LIMIT,
   WIKI_MAINTENANCE_LOOKBACK_DAYS,
@@ -73,13 +73,20 @@ import {
 } from '../lib/wikiReviewMode';
 import { updateWikiSpace, useWikiWrite, type WikiSpaceUpdate } from '../lib/wikiWrites';
 import { WikiModelLine, WikiPrivacyNote } from './WikiSystemModel';
-import type { ConfiguredProvider } from '../lib/workspaceDefaults';
+import { Button } from './ui/Button';
+import { Card } from './ui/Card';
+import { Dialog } from './ui/Dialog';
+import { NumberInput } from './ui/NumberInput';
+import { Radio, RadioGroup } from './ui/Radio';
+import { Select } from './ui/Select';
+import { Switch } from './ui/Switch';
+import { providerEngines, type ConfiguredProvider } from '../lib/workspaceDefaults';
 
 /**
  * Wiki settings (criterion 8, mocks 19–20): which review mode the space runs in, whether Automatic
  * sends spot checks, and the space's Wiki maintenance run.
  *
- * THE APP'S OWN SETTINGS PAGE, not a new one: one centred column of AntD cards, a sentence on the
+ * THE APP'S OWN SETTINGS PAGE, not a new one: one centred column of the app's cards, a sentence on the
  * left and its control on the right (`SettingsPage.tsx`). What differs is only that these settings
  * belong to one space, which is why the page lives under `/wiki/:space`.
  *
@@ -137,11 +144,11 @@ export function WikiSettingsPage({ space }: { space: WikiSpaceRow }) {
           </div>
         )}
         <div className="wk-settings-lead">{WIKI_REVIEW_MODE_LEAD}</div>
-        <Radio.Group
+        <RadioGroup
           className="wk-modes"
           value={mode}
           disabled={write.isPending}
-          onChange={(event) => void save({ reviewMode: event.target.value as WikiReviewMode })}
+          onValueChange={(value) => void save({ reviewMode: value as WikiReviewMode })}
         >
           {WIKI_MODE_ORDER.map((value) => (
             <div className={`wk-mode${value === mode ? ' on' : ''}`} key={value}>
@@ -160,13 +167,13 @@ export function WikiSettingsPage({ space }: { space: WikiSpaceRow }) {
                     aria-label={WIKI_SPOT_CHECK}
                     checked={settings.automaticSpotChecks}
                     disabled={mode !== 'automatic' || write.isPending}
-                    onChange={(checked) => void save({ automaticSpotChecks: checked })}
+                    onCheckedChange={(checked) => void save({ automaticSpotChecks: checked })}
                   />
                 </div>
               )}
             </div>
           ))}
-        </Radio.Group>
+        </RadioGroup>
         <div className="aa-ask wk-floors">
           <b>{WIKI_FLOORS_LEAD}</b> {WIKI_FLOORS_NOTE}
         </div>
@@ -270,7 +277,7 @@ function MaintenanceOn({
         <Button onClick={onEdit} disabled={busy}>
           {WIKI_MAINTENANCE_EDIT}
         </Button>
-        <Button type="text" danger onClick={onTurnOff} disabled={busy}>
+        <Button variant="text" danger onClick={onTurnOff} disabled={busy}>
           {WIKI_TURN_OFF}
         </Button>
       </div>
@@ -282,10 +289,12 @@ function MaintenanceOn({
  * Set up maintenance: the workspace it runs in, the provider it is pinned to, how many runs a day it
  * may start and how far back it starts reading — then Turn on (or Save, for one already on).
  *
- * THE PROVIDERS ARE THE ONES THE SERVER TAKES: configured providers on the Claude Code runtime, since
- * a maintenance run starts a clean Claude Code (contract `space.settings.maintenance.provider`). The
- * one the space already names stays in the list even when this account has not configured it yet —
- * the server takes a name it does not know, and refuses the run that finds it still missing.
+ * THE PROVIDERS ARE THE ONES THE SERVER TAKES: the keys Claude Code runs, by the compatibility table
+ * (each key's `engines`, docs/provider-engine-contract.md §3.5), since a maintenance run starts a clean
+ * Claude Code (contract `space.settings.maintenance.provider`) — a DeepSeek key included, which Claude
+ * Code runs as well as DeepSeek Harness does. The one the space already names stays in the list even
+ * when this account has not configured it yet — the server takes a name it does not know, and refuses
+ * the run that finds it still missing.
  *
  * WHILE THE SERVER RUNS THE WIKI there is no provider to pin (mock 35 ②): the System model is shown,
  * read-only, nothing writes `provider` — whatever the space names stays as it was, for a return to runner
@@ -321,7 +330,9 @@ function MaintenanceSetUp({
   const chosen = workspaceId ?? rows.find((row) => row.name === spaceSlug)?.id ?? null;
 
   const providerOptions = useMemo(() => {
-    const claude = ((providers.data ?? []) as ConfiguredProvider[]).filter((row) => row.runtime === 'claude');
+    const claude = ((providers.data ?? []) as ConfiguredProvider[]).filter((row) =>
+      providerEngines(row.slug, [row]).includes(AgentProvider.CLAUDE),
+    );
     const options = claude.map((row) => ({
       value: row.slug,
       label: wikiProviderLabel(row.slug, row.defaultModel ?? row.models[0]?.value ?? null),
@@ -350,16 +361,19 @@ function MaintenanceSetUp({
   };
 
   return (
-    <Modal
+    <Dialog
       open
       title={WIKI_SET_UP_TITLE}
-      onCancel={onClose}
-      onOk={submit}
-      okText={maintenance.enabled ? WIKI_SAVE : WIKI_TURN_ON}
-      cancelText={WIKI_CANCEL}
-      okButtonProps={{ disabled: !chosen }}
-      confirmLoading={saving}
-      destroyOnHidden
+      onClose={onClose}
+      className="wk-setup-dialog"
+      footer={
+        <>
+          <Button onClick={onClose}>{WIKI_CANCEL}</Button>
+          <Button variant="primary" disabled={!chosen} loading={saving} onClick={() => void submit()}>
+            {maintenance.enabled ? WIKI_SAVE : WIKI_TURN_ON}
+          </Button>
+        </>
+      }
     >
       <p className="wk-modal-note">{server ? WIKI_MAINTENANCE_NOTE_SERVER : WIKI_MAINTENANCE_NOTE}</p>
       <div className="wk-setup">
@@ -368,9 +382,9 @@ function MaintenanceSetUp({
         </label>
         <Select
           id="wk-setup-workspace"
-          value={chosen ?? undefined}
+          value={chosen}
           placeholder={WIKI_NO_WORKSPACE}
-          onChange={(value: string) => setWorkspaceId(value)}
+          onValueChange={(value) => setWorkspaceId(value)}
           options={rows.map((row) => ({ value: row.id, label: wikiWorkspaceLabel(row) }))}
           loading={workspaces.isLoading}
         />
@@ -392,7 +406,9 @@ function MaintenanceSetUp({
             <Select
               id="wk-setup-provider"
               value={provider}
-              onChange={(value: string) => setProvider(value)}
+              onValueChange={(value) => {
+                if (value !== null) setProvider(value);
+              }}
               options={providerOptions}
               loading={providers.isLoading}
             />
@@ -404,13 +420,13 @@ function MaintenanceSetUp({
           {WIKI_DAILY_LIMIT}
         </label>
         <div className="wk-setup-limit">
-          <InputNumber
+          <NumberInput
             id="wk-setup-limit"
             min={WIKI_MAINTENANCE_DAILY_RUN_LIMIT.min}
             max={WIKI_MAINTENANCE_DAILY_RUN_LIMIT.max}
             precision={0}
             value={limit}
-            onChange={(value) => setLimit(typeof value === 'number' ? value : maintenance.dailyRunLimit)}
+            onValueChange={(value) => setLimit(typeof value === 'number' ? value : maintenance.dailyRunLimit)}
           />
           <span>{WIKI_RUNS_A_DAY}</span>
         </div>
@@ -419,21 +435,23 @@ function MaintenanceSetUp({
         <label className="wk-setup-k" htmlFor="wk-setup-lookback">
           {WIKI_LOOKBACK}
         </label>
-        <Select
+        <Select<WikiLookbackChoice>
           id="wk-setup-lookback"
           value={lookback}
-          onChange={(value: WikiLookbackChoice) => setLookback(value)}
+          onValueChange={(value) => {
+            if (value !== null) setLookback(value);
+          }}
           options={WIKI_LOOKBACK_CHOICES.map((choice) => ({ value: choice, label: wikiLookbackLabel(wikiLookbackDays(choice, days)) }))}
         />
         {lookback === 'days' && (
           <div className="wk-setup-limit wk-setup-days">
-            <InputNumber
+            <NumberInput
               aria-label={WIKI_LOOKBACK_UNIT}
               min={1}
               max={WIKI_MAINTENANCE_LOOKBACK_DAYS.max}
               precision={0}
               value={days}
-              onChange={(value) => setDays(typeof value === 'number' ? value : days)}
+              onValueChange={(value) => setDays(typeof value === 'number' ? value : days)}
             />
             <span>{WIKI_LOOKBACK_UNIT}</span>
           </div>
@@ -447,6 +465,6 @@ function MaintenanceSetUp({
           <span>{refusal}</span>
         </div>
       )}
-    </Modal>
+    </Dialog>
   );
 }

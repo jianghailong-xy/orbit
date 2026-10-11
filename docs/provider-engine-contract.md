@@ -339,6 +339,7 @@ export function isEngineCompatible(engine: string, credential: EngineCredential)
   - 响应就是这一行：旧客户端把它显示成 Claude 方言的 key。在它上面只传 provider 新建，得到的是 `claude`（§8）。
 - **改方言**（PATCH `runtime`）：若有未结束会话（`completed_at IS NULL AND deleted_at IS NULL`）或任务 pin 以新方言不支持的 engine 使用这把 key，返回 `PROVIDER_DIALECT_IN_USE`（409）。
   - 计数时 engine 为 NULL 的会话按推导出的 engine 算。允许修改时，先在同一事务里给引用这把 key、engine 为 NULL 的会话补上 engine（§1.1），再改 key。改 baseUrl、换 key 同样如此。
+  - 检查是先查后写，与 T2 的 `recordSessionEngines` 相同，查和写之间有一个窗口。窗口里新建、以新方言不支持的 engine 使用这把 key 的会话不会被这次检查拦下，后果是：它在领取时不派发，按 §4.1 停在 PENDING，错误写着 `PROVIDER_ENGINE_INCOMPATIBLE` 的 message（凭据不可用），绝不换成另一个 CLI（§10 第 10 条）。
   - 都兼容时允许。例如两种方言都支持 `opencode` 的会话。
   - 现有的 `provider runtime cannot change into or out of dsh; create a separate provider` 退役：改成 `dsh` 被 `PROVIDER_RUNTIME_DSH_RETIRED` 拒绝；从遗留 `dsh` 改走，按本条判定。
   - 已结束的会话不阻止改方言。之后若被恢复，会在写入或领取时按兼容表拒绝或暂留，不会换 engine。
@@ -445,7 +446,11 @@ export function isEngineCompatible(engine: string, credential: EngineCredential)
 
 - 任务扫描的 `quotaGate`、`AutoRetryService` 的扫描、回合失败时的 `quotaRetryAt`，只在凭据是 runner 登录时读 runner 的 plan usage，由会话 engine 加账号决定。
 - 账号池走池自己的规则（`accountPoolResumesAt`）。
-- key 永远不被 runner 的额度拦，也不再记为 blind。今天 key 的 slug 永远对不上 plan usage，于是每次都被当作 blind 退避。
+- key 永远不被 runner 的额度拦。普通 API key 也不再记为 blind：它按 token 计费，没有会用完的窗口。今天 key 的 slug 永远对不上 plan usage，于是每次都被当作 blind 退避。
+- 例外：存着 Claude 订阅 token（`sk-ant-oat…`）的 key，在 `quotaGate` 里记为 blind（§10 第 8 条）。它有订阅的 5 小时和每周窗口，用完时和 runner 登录一样打印「You've hit your … limit」，却没有谁上报它的额度。
+  - 任务运行因此失败后，按 runner 登录没有额度数据时的办法刹车，等到重置再派发，不每分钟重派一次。失败文本读得出重置时间时，`quotaRetryAt` 把会话自己的重试排在那个时间，扫描等这次重试；读不出时，扫描在 `QUOTA_BLIND_RETRY_BACKOFF_MS`（15 分钟）内不再派发这个任务。
+  - 是不是订阅 token，用兼容表的同一个判定：`keyCredential` 给出的 `subscriptionToken`（§2.1）。每次扫描每把 key 只读一次、只解密一次，而且只解密 Anthropic 方言的 key，因为订阅 token 只在这个方言上能跑。
+  - 它同样不读 runner 的 plan usage，也不被它拦。
 
 ### 4.6 agent 跑的命令能不能读到 key
 
@@ -592,6 +597,10 @@ Orbit 把 key 写进 engine 进程的环境（§4.2）。agent 跑的命令是 e
 - 任务的读出增加 `engine: string | null`（pin），保留 `provider`、`model`。
 - `POST /tasks`、`PATCH /tasks/:id`、批量创建、runner 门 `POST /runner/tasks/batch-pin` 增加 `engine`，三态语义见 §3.5。
 - DTO 只用 `@IsOptional() @IsString()`。全局 ValidationPipe 没有 exceptionFactory，`@IsIn` 只会给通用的 400，所以取值由解析函数检查，不在六个值内时给 `ENGINE_UNKNOWN`。
+- 跨项目移交的摘要（`src/apiserver/src/projects/project-handoff.ts` 的 `handoffPayloadDigest`）在 provider pin 旁同时绑定 engine pin（§10 第 12 条）。
+  - 绑定的是任务入口解析后的值（§3.5）：只给 provider 的计划带着它的默认 engine，与点名同一个 engine 的计划是同一个问题；同一把 key 换一个 engine 是另一个问题，所有者对一个 engine 的同意不能用在另一个 engine 上。
+  - 带 engine pin 的计划用摘要 v8；没有 engine pin 的计划（继承工作区的）摘要不变。
+  - 部署前已经问过、带 provider pin 的移交，部署后重发写入时摘要不同，会再问一次，不会被套用到别的 engine 上。
 
 ### 6.3 /providers、/runner/providers 与 meta
 
@@ -611,8 +620,10 @@ Orbit 把 key 写进 engine 进程的环境（§4.2）。agent 跑的命令是 e
 
 ```ts
 interface TaskRunRouteV3 extends Omit<TaskRunRoute, 'provider'> {
-  /** The engine the route chose. `provider` is then the credential it runs on, or null for the
-   *  engine's own runner sign-in (§4.4); in v2 it was an engine name or the baseline's slug. */
+  /** The engine the route chose. `provider` is then the credential it runs on: the baseline's when
+   *  that engine can run it, else that engine's own runner sign-in, written as the sign-in's slug —
+   *  the engine's name, e.g. `codex` — not null (§4.4, §10 #9); in v2 it was an engine name or the
+   *  baseline's slug. */
   engine: string;
   provider: string | null;
 }
@@ -843,3 +854,13 @@ T2 的迁移只写列。回填结果的逐行报告由 T4 的迁移给出：它�
 | 5 | PATCH 把 runtime 改成 dsh | 接受：报 `PROVIDER_RUNTIME_DSH_RETIRED` | §3.6、§3.7 |
 | 6 | `DEEPSEEK_KEY_REQUIRED` 的文案 | 接受：不写页面名；页面改名不在本项目范围 | §3.7 |
 | 7 | 让命令看不到 key 的开关 | 接受：不在本项目范围 | §4.6 |
+
+2026-10-09，协调会话对 T3 交付说明（任务评论 `34cvbthCe6ZL1QJAHzEKS`）中待裁决点的结论（裁决评论 `34cyudiXaHl11u51vxITa`）。2026-10-10 由 T3 补充任务（`34cyw1hj4N6adnYHV6YiP`）实现并写进正文。裁决第 6 条（T3 当时未合入 main）是落地流程上的事，不涉及契约，已由 T3 的合并提交 `77db7f411` 解决。
+
+| # | 事项 | 结论 | 落在 |
+| --- | --- | --- | --- |
+| 8 | 存着 Claude 订阅 token（`sk-ant-oat…`）的 key 与额度闸门 | 采纳 T3 的建议：这类 key 在 `quotaGate` 里记为 blind，碰到订阅额度标记照 runner 登录的刹车办法处理，等到重置再派发，不每分钟重派一次。普通 API key 仍不记为 blind | §4.5 |
+| 9 | v3 回执里 `route.provider` 的写法 | 保留实现：路由改用另一个 engine 的 runner 登录时，写那个 sign-in 的 slug（如 `codex`），不写 null。两种写法解析结果一样，slug 信息更多 | §6.4 |
+| 10 | `PROVIDER_DIALECT_IN_USE` 先查后写 | 接受：两步之间新建的会话在领取时以凭据不可用失败，绝不换 CLI，符合「失败但不跑错 engine」 | §3.6 |
+| 11 | key 用量只读接口不统计按旧别名 slug 引用的会话和 pin | 接受：写入时一律存 key 自己的 slug，别名只用来解析；库里的旧引用由 T4 改写，T4 的迁移报告要给出仍按别名引用的未结束会话和任务 pin 数，应为 0 | §1.5、§7.3 |
+| 12 | 跨项目移交摘要只绑 provider | 改：同时绑定任务的 engine pin 和 provider pin，否则跨项目移交的任务 pin 会丢 engine | §6.2 |

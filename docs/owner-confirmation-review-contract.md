@@ -680,7 +680,7 @@ answers?: Array<{ key: string; option?: number | null; text?: string | null }>;
 - `answers`：`OwnerConfirmationAnswer[]`（§3.4），每条是 `{ key, option, text, source }`；没有答案就不写这一列。
 
 **Q5（送到会用它的地方）**：答案记下来的同时做两件事，回执上再显示一件：
-1. **任务评论，写在决定的同一个事务里**（不是提交之后）：主键由决定 id 派生，加 `skipDuplicates`。署名与写法照 `session-request.service.ts#commentOnAskerTask`：署名按 `postRunFailureComment` 的规矩，正文用中文，说明这是 owner 对审查问题的回答，逐条列出「问题 — 答案」；`source = 'NOT_SHOWN'` 的条目注明「owner 的 app 没有显示这个问题，记下的是审查方推荐的选项」。之后任何读这个任务的 agent（`task_get` 会带上评论）都看得到——2026-09-29 那次缺的正是这一环。评论和决定同生同灭，不需要补偿点。
+1. **任务评论，写在决定的同一个事务里**（不是提交之后）：主键由决定 id 派生，加 `skipDuplicates`。署名与写法照 `session-request.service.ts#commentOnAskerTask`：署名按 `postRunFailureComment` 的规矩，正文用英文，说明这是 owner 对审查问题的回答，逐条列出「问题 — 答案」；`source = 'NOT_SHOWN'` 的条目注明「the owner's app did not show this question; what is recorded is the option the reviewer recommended」。之后任何读这个任务的 agent（`task_get` 会带上评论）都看得到——2026-09-29 那次缺的正是这一环。评论和决定同生同灭，不需要补偿点。
 2. **给审查方的平台轮次，在提交之后**：审查方会话还没结束时投一条，`clientTurnId = 'owner-confirmation-answers:v1:<decisionId>'`，`NEXT_TURN`。正文由记录和决定这两行渲染出来，两者都不可变。内容包括：任务、`The owner confirmed it at <time>`、逐条「问题 → 选中的选项或 owner 的原话」（`NOT_SHOWN` 的条目照实标出）。审查方已结束就不投，也不复活它（ILC G6）。这一轮只是提醒：进程死在提交和投递之间，它就丢了，不补。答案仍在决定行和第 1 条的评论上，审查方读任务时就能看到。
 3. **回执**：显示 `Your answers`，逐条写「问题 — 答案」（§9 L3）。`NOT_SHOWN` 的条目旁边写 `Not shown to you — the recommended answer was recorded.`
 

@@ -223,6 +223,32 @@ describe('the landing of a DONE task, apart from its status (§2.7a)', () => {
     expect(section(html)).toContain('the landing has not been queued yet');
   });
 
+  it('names the main branch the task read carries, where the work is and where a sync stopped', () => {
+    const onUpstream = (mainBranch: string | null | undefined): TaskIntegrationView =>
+      ({ ...integration('QUEUED'), state: 'ON_UPSTREAM', landTask: null, mainBranch });
+    const afterReceipt = (mainBranch: string | null | undefined): TaskIntegrationView =>
+      ({ ...integration('QUEUED'), state: 'ON_UPSTREAM', mainBranch });
+    const stopped = (mainBranch: string | null | undefined): TaskIntegrationView =>
+      ({ ...integration('CONFLICT'), mainBranch });
+
+    expect(meta(renderPanel(task({ status: 'DONE', integration: onUpstream('master') }))))
+      .toContain('data-landing-badge="">On master</span>');
+    expect(section(renderPanel(task({ status: 'DONE', integration: afterReceipt('master') }))))
+      .toContain('Its work is on master by an existing receipt.');
+    expect(section(renderPanel(task({ status: 'DONE', integration: stopped('master') }))))
+      .toContain('stopped while syncing master');
+
+    // Main by name, no repository bound (null) and an older server (absent) read as they always did.
+    for (const mainBranch of ['main', null, undefined]) {
+      expect(meta(renderPanel(task({ status: 'DONE', integration: onUpstream(mainBranch) }))), String(mainBranch))
+        .toContain('data-landing-badge="">On main</span>');
+      expect(section(renderPanel(task({ status: 'DONE', integration: afterReceipt(mainBranch) }))), String(mainBranch))
+        .toContain('Its work is on main by an existing receipt.');
+      expect(section(renderPanel(task({ status: 'DONE', integration: stopped(mainBranch) }))), String(mainBranch))
+        .toContain('stopped while syncing main');
+    }
+  });
+
   it.each([
     ['QUEUED', 15_000],
     ['RUNNING', 4000],
@@ -658,7 +684,7 @@ describe('runNowHint — what the header button says on hover', () => {
   });
 
   it('says nothing at all on an unscheduled task that can just run', () => {
-    // '' is no tooltip — antd renders nothing for an empty title, which is right when there is
+    // '' is no tooltip — an empty title draws nothing, which is right when there is
     // neither an obstacle nor anything to lose.
     for (const none of [undefined, null, '']) {
       expect(runNowHint({ ...runnable, scheduledLocal: none })).toBe('');

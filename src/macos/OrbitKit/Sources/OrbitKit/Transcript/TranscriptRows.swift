@@ -84,7 +84,10 @@ public struct DeliveredDecisionCard: Identifiable, Equatable, Sendable {
         /// is a committed fact that cannot change.
         case acceptanceConfirmationReceipt(confirmed: RecordedStandardSetConfirmation)
         /// One revision of one task's completion evidence. The revision is part of the address
-        /// because the door's compare-and-set is against it: a newer revision is its own card.
+        /// because the door's compare-and-set is against it: a newer revision is its own card. A
+        /// revision waiting for a paused coordinator, or handed to it since, keeps this same card,
+        /// anchored the same way — the card draws it folded, or as one line
+        /// (`EvidenceDecisions.standing`).
         case evidenceDecision(taskID: String, evidenceRevision: String)
         /// One OWNER_CONFIRMED task's run waiting on its owner, by the report the door's
         /// compare-and-set is against: a later report is its own card, and the earlier one becomes a

@@ -109,6 +109,21 @@ class WikiSettingsFixtureTest {
         assertEquals(listOf(WikiPickerOption("w1", "orbit · host-1")), wikiWorkspaceRows(WikiMaintenanceReads(), data).map { it.option })
     }
 
+    /** A maintenance run starts a clean Claude Code, so the form offers every key Claude Code runs by the compatibility table (each
+     * key's `engines`, docs/provider-engine-contract.md §3.5): a DeepSeek key — Harness's or not — and a subscription token alike;
+     * never a key only other engines run. A payload from before `engines` keeps the old reading, by the key's protocol. */
+    @Test fun theFormsProvidersAreTheKeysClaudeCodeRuns() {
+        val providers = Json.parseToJsonElement("""[
+            {"slug":"deepseek","runtime":"claude","presetSlug":"deepseek","engines":["claude","opencode","dsh"],"defaultModel":"deepseek-v4-pro"},
+            {"slug":"deepseek-2","runtime":"dsh","presetSlug":"deepseek-harness","engines":["dsh","claude","opencode"],"defaultModel":""},
+            {"slug":"claude-max","runtime":"claude","presetSlug":"anthropic","engines":["claude"],"models":[{"value":"claude-opus-5-5"}]},
+            {"slug":"gemini","runtime":"antigravity","presetSlug":"gemini","engines":["antigravity","opencode"],"defaultModel":"gemini-3.8-flash"},
+            {"slug":"old-harness","runtime":"dsh"},
+            {"slug":"old-anthropic","runtime":"claude","defaultModel":"claude-sonnet"}]""").jsonArray
+        assertEquals(listOf("deepseek", "deepseek-2", "claude-max", "old-anthropic"), wikiProviderOptions(providers).map { it.id })
+        assertEquals("deepseek · deepseek-v4-pro", wikiProviderOptions(providers).first().label)
+    }
+
     /** What the page writes (`PATCH /api/wiki/spaces/:id`): a key left out is left as it was, and all of history is sent
      * as null — a value — never left out. Changing the look-back later never moves maintenance back: that is the
      * server's rule (contract `cursor.start`), so the form sends what was picked and the server keeps its cursor. */

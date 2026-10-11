@@ -80,9 +80,11 @@ export const WIKI_REPO_OPS = {
   /**
    * How long a running operation's claim may stay silent before the worker's sweep settles it `failed`. A
    * runner renews a claim only by staging fragments; its fetch is bounded at five minutes, every other git
-   * command at two, and it stops reporting a result after five tries; no job waits longer than 300 seconds
-   * for one operation. A claim silent for fifteen minutes belongs to a runner that gave up on it or is gone,
-   * and the answer of one still working would reach nobody: its late result is answered with the row's state.
+   * command at two, and it reports a result inside that window and no further — this many seconds counted
+   * from the claim, less a 30-second guard, with no send started outside it (src/runner-go/wiki_repo_op_retry.go);
+   * no job waits longer than 300 seconds for one operation. A claim silent for fifteen minutes belongs to a
+   * runner that gave up on it or is gone, and the answer of one still working would reach nobody: its late
+   * result is answered with the row's state.
    */
   abandonedSeconds: 900,
 } as const;

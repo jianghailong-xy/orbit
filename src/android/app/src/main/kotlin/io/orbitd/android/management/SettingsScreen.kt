@@ -87,6 +87,15 @@ internal const val SMART_MODEL_SELECTION_HINT = "Coordinators suggest a tier for
 internal fun smartModelSelection(preferences: JsonObject?): Boolean =
     (preferences?.get("modelRouting") as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull == true
 
+/** SettingsCopy's session recaps switch (SettingsHome.sessionRecaps): what a session list shows instead of the raw last reply. */
+internal const val SESSION_RECAPS = "Session recaps"
+internal const val SESSION_RECAPS_HINT = "Session lists show the one-line summary the server writes for each conversation, in place of its raw last reply. Off: the raw last reply."
+
+/** UserPreferences.showRecaps: on unless the account turned it off; absent — or a value this build cannot read — means on, so
+ * only opting out is ever written. */
+internal fun sessionRecapsEnabled(preferences: JsonObject?): Boolean =
+    (preferences?.get("recaps") as? JsonPrimitive)?.booleanOrNull != false
+
 /** The server as the sign-in screen asked for it: the host, and the port when it is not the scheme's own. */
 internal fun settingsInstanceName(server: String): String? = server.toHttpUrlOrNull()?.let {
     if (it.port == HttpUrl.defaultPort(it.scheme)) it.host else "${it.host}:${it.port}"
@@ -101,6 +110,7 @@ private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) 
     deviceAlerts: () -> Boolean?) {
     val appearance = LocalAppearanceChanged.current
     val smartSelectionChanged = LocalSmartSelectionChanged.current
+    val recapsChanged = LocalSessionRecapsChanged.current
     val record = remember(api) { PersonalRecord { api.get("users/me") } }
     PersonalRecordLifecycle(record, revision)
     val scope = rememberCoroutineScope()
@@ -145,6 +155,7 @@ private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) 
             when (key) {
                 "theme" -> appearance(saved?.text("theme")?.ifBlank { null } ?: "system")
                 "modelRouting" -> smartSelectionChanged(smartModelSelection(saved))
+                "recaps" -> recapsChanged(sessionRecapsEnabled(saved))
             }
         }
     }
@@ -182,6 +193,11 @@ private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) 
             // The engine's guess at the next message after a Claude turn (docs/prompt-suggestions-design.md); absent means on.
             SettingsSwitch("Suggested replies", R.drawable.ic_suggestion, (preferences["promptSuggestions"] as? JsonPrimitive)?.booleanOrNull != false,
                 record.ready) { preference("promptSuggestions", JsonPrimitive(it)) }
+            // The server's rolling recap on a session's list row (0418); absent means on. One switch for the whole account, so
+            // turning it off holds on the phone and on the web at once — the moment the server has taken the change, the lists
+            // behind Settings redraw without it.
+            SettingsSwitch(SESSION_RECAPS, R.drawable.ic_contents, sessionRecapsEnabled(preferences), record.ready,
+                hint = SESSION_RECAPS_HINT) { preference("recaps", JsonPrimitive(it)) }
             // Off unless the account turned it on; written alone (iOS 9fb3ae6ee), its glyph beside its name (614a21410).
             SettingsSwitch(SMART_MODEL_SELECTION, R.drawable.ic_sparkles, smartModelSelection(preferences), record.ready,
                 hint = SMART_MODEL_SELECTION_HINT) { preference("modelRouting", JsonPrimitive(it)) }

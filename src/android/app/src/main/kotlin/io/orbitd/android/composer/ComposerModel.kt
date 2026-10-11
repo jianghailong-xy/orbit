@@ -1,6 +1,7 @@
 package io.orbitd.android.composer
 
 import io.orbitd.android.core.auth.*
+import io.orbitd.android.core.cards.DshRuntime
 import io.orbitd.android.core.net.*
 import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.directory.directoryError
@@ -63,6 +64,15 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
         launch { persist() }
     }
     fun clearError() { mutable.update { it.copy(error = null) } }
+    /** Why the box won't do what was asked of it, said as an error: there until dismissed. */
+    fun refuse(message: String) { mutable.update { it.copy(error = message) } }
+    /** Whether [effective] — a session's detail, or a draft's workspace, under the picks held for it — runs on DeepSeek Harness: its
+     * engine ([ProviderChoices.engine]), which for a key or a pool on a server that records none only the account's keys can say. */
+    private suspend fun executesDsh(effective: JsonObject): Boolean {
+        val keys = if (!ProviderChoices.engineFromKeys(effective)) emptyList()
+            else runCatching { api.read(listOf("providers")).jsonArray.filterIsInstance<JsonObject>() }.getOrDefault(emptyList())
+        return ProviderChoices.engine(effective, keys) == DshRuntime.ENGINE
+    }
     suspend fun attachmentBytes(id: String): ByteArray = auth.readData(handle, DataKind.DRAFT, "$key:attachment:$id")
         ?.takeIf { it.isNotEmpty() } ?: error("Select the file again; its saved copy is unavailable.")
 
@@ -138,6 +148,8 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
                 check(draft.attachments.all { it.remoteId != null }) { "Retry or remove failed uploads before sending." }
                 val raw = draft.text.trim()
                 val shell = raw.startsWith("!")
+                // DeepSeek Harness has no shell bridge (the runner settles such a turn as a refusal): the command stays here (A07-5).
+                if (shell && executesDsh(JsonObject(detail + draft.resumeConfig))) { refuse(DshRuntime.SHELL_REFUSAL); return@launch }
                 val content = if (shell) raw.drop(1).trim() else raw
                 if (content.isEmpty() && (shell || draft.attachments.isEmpty())) return@launch
                 val id = UUID.randomUUID().toString()
@@ -167,6 +179,25 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
                 transmit(pending, firstAttempt = true)
             } finally { mutable.update { it.copy(busy = false, waiting = false) } }
         }
+    }
+    /** A message the box never held — the auto-retry card's Continue (A07-12) — sent as anything typed is: written to the outbox
+     * before the POST, replayed under the same clientTurnId, and handed back to the box only if the server refuses it. */
+    suspend fun sendMessage(text: String) {
+        if (!state.value.loaded || state.value.busy || state.value.waiting || state.value.draft.pending != null || target != null) return
+        mutable.update { it.copy(busy = true, error = null, notice = null) }
+        try {
+            val endpoint = sendEndpoint(api.detail())
+            val config = state.value.draft.resumeConfig
+            val id = UUID.randomUUID().toString()
+            val body = buildJsonObject {
+                if (endpoint == "resume") { config.filterKeys { it != "account" }.forEach { (k, v) -> put(k, v) }; config["account"]?.let { put("account", it) } }
+                put("clientTurnId", id); put("content", text); put("kind", "message"); putJsonArray("attachmentIds") {}
+            }
+            val pending = PendingSend(id, endpoint, body, text)
+            mutable.update { it.copy(draft = it.draft.copy(pending = pending)) }
+            try { persist() } catch (e: Exception) { mutable.update { it.copy(draft = it.draft.copy(pending = null)) }; throw e }
+            transmit(pending, firstAttempt = true)
+        } finally { mutable.update { it.copy(busy = false) } }
     }
     fun retrySend() {
         if (state.value.busy || state.value.waiting) return
@@ -221,6 +252,13 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
         pending.attachments.forEach { auth.writeData(handle, DataKind.DRAFT, "$key:attachment:${it.id}", ByteArray(0)) }
         refresh()
     }
+    /** What a Retry re-sends with (RetryIdentityDto, iOS 163e67872): the provider picked here for the next turn, with its engine and
+     * its account — so the re-send runs there, as a send would. Nothing picked, the body is empty and the re-send goes where the
+     * session is. */
+    fun retryIdentity(): JsonObject = retryIdentityOf(state.value.draft.resumeConfig)
+    /** The failed message again, through the retry door: the server re-sends it under a key of its own, so a second press is the
+     * turn already queued. */
+    fun retryFailed() = control("retry-message", body = retryIdentity())
     fun control(endpoint: String, method: HttpMethod = HttpMethod.POST, body: JsonObject? = null) {
         if (state.value.busy || state.value.waiting) return
         mutable.update { it.copy(busy = true, error = null) }
@@ -242,12 +280,21 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
             finally { mutable.update { it.copy(catalogLoading = false) } }
         }
     }
-    fun config(values: JsonObject, accountOnly: Boolean = false) {
+    /** A provider is never written without its engine (docs/provider-engine-contract.md §3.5, §6.1): the session's own, which a
+     * switch never changes, or — for a draft — the engine the provider was picked under, else the provider's default. */
+    private fun withEngine(values: JsonObject, detail: JsonObject): JsonObject {
+        val provider = values.text("provider") ?: return values
+        if (values["engine"] != null) return values
+        val engine = (if (target == null) detail.text("engine") else null) ?: state.value.catalog?.providerEngines(provider)?.firstOrNull() ?: return values
+        return JsonObject(values + ("engine" to JsonPrimitive(engine)))
+    }
+    fun config(requested: JsonObject, accountOnly: Boolean = false) {
         if (state.value.busy || state.value.waiting || state.value.draft.pending != null || state.value.draft.createdSessionId != null) return
         mutable.update { it.copy(busy = true, error = null) }
         launch {
             try {
                 val detail = api.detail()
+                val values = withEngine(requested, detail)
                 if (target != null || terminal(detail) && !accountOnly) {
                     mutable.update {
                         val config = it.draft.resumeConfig

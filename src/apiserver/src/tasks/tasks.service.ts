@@ -24,6 +24,7 @@ import {
   ENGINE_CLI_NAMES,
   isAccountEngine,
   isEngine,
+  keyDialect,
   planUsageBlockedUntil,
   planUsageReported,
   RunEventType,
@@ -287,6 +288,7 @@ import {
   adminOnlyProviderRefusal,
   engineIncompatibleMessage,
   isBuiltinProvider,
+  keyCredential,
   usableProviderScope,
   usableProviderSql,
 } from '../providers/custom-provider';
@@ -5901,6 +5903,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         labels: item.labels ? normalizeTaskLabels(item.labels) : [],
         assigneeId: item.assigneeId ?? null,
         listId: item.listId ?? null,
+        engine: item.engine ?? null,
         provider: item.provider ?? null,
         model: item.model ?? null,
         modelHint: item.modelHint ?? null,
@@ -9109,6 +9112,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         jobId: null,
         checksRunningForMs: null,
         landTask: null,
+        // A task in no project lands on no project's main branch.
+        mainBranch: null,
       },
       ...supersession,
     };
@@ -10402,8 +10407,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       await this.recordListEvent(
         before.listId,
         'completion_reverted',
-        `任务「${before.title}」(${uuidToBase62(id)}) 从 DONE 被退回 ${dto.status}` +
-          (checks > 0 ? `，此前有 ${checks} 次验收记录` : '，此前没有验收记录'),
+        `Task “${before.title}” (${uuidToBase62(id)}) was reverted from DONE to ${dto.status}` +
+          (checks > 0 ? `; ${checks} verification(s) were on record before` : '; no verification was on record before'),
       );
     }
     // Last, after auto-dispatch and aggregate recomputation, so the fetched overlays reflect the
@@ -11352,22 +11357,22 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         await this.recordListEvent(
           listId,
           'quota_hold',
-          `${e.quota} 个就绪任务被配额挡住` +
-            (e.resumesAt ? `，最早 ${e.resumesAt.toISOString()} 恢复` : '，没有拿到恢复时间'),
+          `${e.quota} ready task(s) held back by quota` +
+            (e.resumesAt ? `, resuming at ${e.resumesAt.toISOString()} at the earliest` : ', with no resume time given'),
         );
       }
       if (e.disk > 0) {
         await this.recordListEvent(
           listId,
           'disk_hold',
-          `${e.disk} 个就绪任务被磁盘下限挡住 —— 空间要由人来腾，不会自己恢复`,
+          `${e.disk} ready task(s) held back by the disk floor — a person has to free up space; it does not recover on its own`,
         );
       }
       if (e.cap > 0) {
         await this.recordListEvent(
           listId,
           'cap_hold',
-          `${e.cap} 个就绪任务因为本列表已到并发上限而没被物化 —— auto-run 要等队列消化到上限以下才恢复`,
+          `${e.cap} ready task(s) not materialised because this list is at its concurrency cap — auto-run resumes only once the queue drains below the cap`,
         );
       }
     }
@@ -11650,7 +11655,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       try {
         const task = await this.prisma.task.create({
           data: {
-            title: `[FOREMAN] ${list.title} — 停滞 ${list.minutes} 分钟`.slice(0, 200),
+            title: `[FOREMAN] ${list.title} — stalled ${list.minutes} min`.slice(0, 200),
             description: this.buildForemanBrief(list.title, list.minutes),
             ownerId: list.ownerId,
             listId: list.id,
@@ -11690,7 +11695,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         await this.recordListEvent(
           list.id,
           'foreman_filed',
-          `停滞约 ${list.minutes} 分钟，已自动派出协调任务 ${uuidToBase62(task.id)} 去诊断`,
+          `Stalled for about ${list.minutes} min; coordinating task ${uuidToBase62(task.id)} was dispatched automatically to diagnose it`,
         );
       } catch (e) {
         this.logger.warn(
@@ -11742,19 +11747,19 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    */
   private buildForemanBrief(title: string, minutes: number): string {
     return (
-      `任务列表「${title}」已停滞约 ${minutes} 分钟：仍有未完成的任务，但没有任何任务在运行，也没有新的运行被发起。\n\n` +
-      `请诊断原因并处理，然后结束本次运行。这是一次性的协调任务，不要保持长时间运行或轮询。\n\n` +
-      `建议的排查顺序：\n` +
-      `1. 用 tasklist_get / task_list 查看该列表的任务状态分布，找出卡在哪一层。` +
-      `**先看 failuresByCause**：它把已发生的失败按"真正坏了什么"归了类（quota / infrastructure / ` +
-      `contentFilter / unattributed）。这几类没有一类是靠改作业指导能修的——先看归因，再决定动哪个杠杆，` +
-      `不要一上来就怀疑 prompt 写得不好。\n` +
-      `2. 常见原因：前置任务永远不会完成、负责的 workspace 未绑定 runner、provider 配额耗尽、磁盘低于下限、上一次运行的会话仍占着任务却已无进展。\n` +
-      `3. 能在列表策略层面解决的（并发上限、暂停、作业指导），直接调整；需要改任务或依赖的，用 task_update / 依赖相关工具处理。\n` +
-      `4. 如果原因不在系统内（例如需要人清理磁盘、重新登录、补充配额），用 task_comment 写清结论和所需的人工动作。\n\n` +
-      `完成后请用 task_evidence_submit 提交判断与所做改动的证据信封（claim / criterion / checks / gaps，`
-      + `checks 至少一条要能解析到本任务会话下的行）；不要用评论代替证据，也不要写 ` +
-      `status=DONE，本任务的 status 由它声明的 completionCriterion 求值产生。`
+      `Task list “${title}” has been stalled for about ${minutes} min: it still has unfinished tasks, but none of them is running and no new run has been started.\n\n` +
+      `Diagnose why and deal with it, then end this run. This is a one-off coordinating task: do not keep running or polling.\n\n` +
+      `Suggested order:\n` +
+      `1. Use tasklist_get / task_list to see how the list's tasks are spread across statuses and find the layer where they are stuck. ` +
+      `**Read failuresByCause first**: it sorts the failures that have happened by "what actually broke" (quota / infrastructure / ` +
+      `contentFilter / unattributed). Not one of these is fixed by changing the instructions — read the attribution first, then decide which lever to pull; ` +
+      `do not start by suspecting the prompt is badly written.\n` +
+      `2. Common causes: a prerequisite that will never finish, an assigned workspace with no runner bound, an exhausted provider quota, disk below the floor, a session from the last run still holding the task while making no progress.\n` +
+      `3. Whatever can be fixed at the list's policy level (concurrency cap, pause, instructions), adjust directly; whatever needs a task or a dependency changed, handle with task_update / the dependency tools.\n` +
+      `4. If the cause lies outside the system (for example a person has to clean up disk, sign in again or top up quota), write the conclusion and the manual action needed with task_comment.\n\n` +
+      `When you are done, submit an evidence envelope of your judgment and the changes you made with task_evidence_submit (claim / criterion / checks / gaps; `
+      + `at least one check has to resolve to a row under this task's sessions). Do not use a comment in place of evidence, and do not write ` +
+      `status=DONE: this task's status is derived from the completionCriterion it declares.`
     );
   }
 
@@ -11833,9 +11838,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * the window resets (a weekly limit means days of them).
    *
    * `assignee` is the engine and credential the run would be created on (dispatchEngines). A run on a
-   * key spends the key's own quota, which no runner reports: it is never held here, and never blind
-   * (docs/provider-engine-contract.md §4.5) — the slug of a key is in no runner's snapshot, so judged
-   * like a sign-in it read as a quota nobody reports, and every usage-limit failure damped it.
+   * key spends the key's own quota, which no runner reports: it is never held here, and an API key is
+   * never blind (docs/provider-engine-contract.md §4.5) — the slug of a key is in no runner's snapshot,
+   * so judged like a sign-in it read as a quota nobody reports, and every usage-limit failure damped it.
+   * A key holding a Claude subscription token is the exception: it has the subscription's windows and
+   * prints its "hit your … limit" like a sign-in, so with nothing reporting them it is blind.
    *
    * The quota is the one the task's run would spend: its runner's for its provider, because one
    * runner can host workspaces on several runtimes and only some of their quotas may be spent — and
@@ -11894,9 +11901,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           ).map((w) => [w.id, w]),
     );
     const now = this.now();
-    // One pool read per owner's slug per pass, and one key read.
+    // One pool read per owner's slug per pass, and one key read: null for a slug that is no key.
     const pools = new Map<string, Date | null>();
-    const keys = new Map<string, boolean>();
+    const keys = new Map<string, { subscription: boolean } | null>();
     for (const t of tasks) {
       const assignee = t.assignee;
       if (!assignee?.runnerId) continue;
@@ -11910,18 +11917,21 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         continue;
       }
       // What the runner reports is its own sign-ins' quota. A run on a key spends the key's own, which
-      // no runner sees: it is neither held by the runner's numbers nor blind for the want of them
-      // (docs/provider-engine-contract.md §4.5). Asked only of a credential that is no sign-in and no
-      // pool with something to go by — a pool that reports nothing stays blind, as it always was.
+      // no runner sees: it is never held by the runner's numbers (docs/provider-engine-contract.md
+      // §4.5). An API key is not blind for the want of them either: it is metered per token and has no
+      // window to run out. A Claude subscription token has the subscription's, and hits them like a
+      // sign-in does, so it is blind: a usage limit it hits holds the task off the way one on a sign-in
+      // nobody reports does (QUOTA_BLIND_RETRY_BACKOFF_MS), rather than the sweep re-dispatching it
+      // every minute until the window resets. Asked only of a credential that is no sign-in and no pool
+      // with something to go by — a pool that reports nothing stays blind, as it always was.
       if (assignee.login === false) {
         const key = `${t.ownerId}:${assignee.provider}`;
-        if (!keys.has(key)) {
-          keys.set(key, (await this.prisma.modelProvider.findFirst({
-            where: { slug: assignee.provider, OR: [{ ownerId: t.ownerId }, { ownerId: null }] },
-            select: { id: true },
-          })) !== null);
+        if (!keys.has(key)) keys.set(key, await this.keyQuota(t.ownerId, assignee.provider));
+        const quota = keys.get(key);
+        if (quota) {
+          if (quota.subscription) blind.add(t.id);
+          continue;
         }
-        if (keys.get(key)) continue;
       }
       const runner = runnerById.get(assignee.runnerId);
       // Antigravity's quota travels with its engine health, and is weighed with the rest here.
@@ -11949,6 +11959,23 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * The key `slug` names for `ownerId`, as the quota gate weighs it: whether it holds a Claude
+   * subscription token, or null when the slug is no key of theirs. The compatibility table's own
+   * judgment (keyCredential, shared providerEngines.ts), which needs the key decrypted — so it is
+   * decrypted only for a key on Anthropic's protocol, the one protocol a subscription token runs on.
+   */
+  private async keyQuota(ownerId: string, slug: string): Promise<{ subscription: boolean } | null> {
+    const row = await this.prisma.modelProvider.findFirst({
+      where: { slug, OR: [{ ownerId }, { ownerId: null }] },
+      select: { runtime: true, baseUrl: true, apiKeyEnc: true, presetSlug: true },
+    });
+    if (!row) return null;
+    if (keyDialect(row.runtime) !== 'anthropic') return { subscription: false };
+    const credential = keyCredential(row);
+    return { subscription: credential.kind === 'key' && credential.subscriptionToken };
+  }
+
+  /**
    * Of `taskIds`, which must NOT be auto-run right now because their previous runs failed:
    * either the task is still inside the backoff window for its failure count, or it has
    * burned through MAX_AUTO_RUN_FAILURES and is left for a human. Counting every FAILED
@@ -11961,8 +11988,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * permanently un-runnable after one quota outage — exactly the tasks that should pick
    * themselves back up once the window resets.
    *
-   * `quotaBlindTaskIds` are the ones whose runner reports no quota snapshot to judge by. Only
-   * those get the flat QUOTA_BLIND_RETRY_BACKOFF_MS hold after a usage-limit failure. A task
+   * `quotaBlindTaskIds` are the ones whose quota nothing reports a snapshot of to judge by: a
+   * sign-in its runner reports nothing for, a pool with nothing to go by, or a key holding a Claude
+   * subscription token (quotaGate).
+   * Only those get the flat QUOTA_BLIND_RETRY_BACKOFF_MS hold after a usage-limit failure. A task
    * whose runner *does* report a healthy quota is dispatched at once instead: that report is
    * positive evidence the window reset, and delaying it would be the very "un-runnable fleet"
    * this exemption exists to prevent.
@@ -13580,10 +13609,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // still failed.
     const publicTaskId = uuidToBase62(delivery.taskId);
     const prompt =
-      `你在任务「${comment.taskTitle}」(${publicTaskId}) 的评论区被 @ 提到。\n\n` +
-      `评论内容：\n${comment.body}\n\n` +
-      `请用 task_get(taskId: "${publicTaskId}") 查看该任务的完整信息与历史评论，` +
-      `并用 task_comment(taskId: "${publicTaskId}", body: ...) 在该任务下回复。`;
+      `You were @-mentioned in the comments of task “${comment.taskTitle}” (${publicTaskId}).\n\n` +
+      `The comment:\n${comment.body}\n\n` +
+      `Use task_get(taskId: "${publicTaskId}") to read the task in full with its comment history, ` +
+      `and task_comment(taskId: "${publicTaskId}", body: ...) to reply under the task.`;
 
     // Step 0: where this is going. A remembered binding wins, then the agent's own live run on the
     // task, then a new conversation.
@@ -13814,7 +13843,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       {
         prompt,
         workspaceId: delivery.workspaceId,
-        title: `回应评论：${taskTitle}`,
+        title: `Comment reply: ${taskTitle}`,
         // The MENTIONED AGENT's own seed, never the task's. This session is not running the task,
         // and pinning it to the task's engine would answer a comment on a runtime the agent was
         // never configured for.
@@ -14654,7 +14683,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       kind: 'RUN',
       plan: planned,
       taskId: task.id,
-      title: `执行任务：${task.title}`,
+      title: `Task: ${task.title}`,
       prompt,
       workspaceId: task.assignee!.id,
       runnerId: task.assignee!.runnerId!,
@@ -15209,7 +15238,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         : null;
       planned.items.push({
         taskId: t.id,
-        title: `执行任务：${t.title}`,
+        title: `Task: ${t.title}`,
         prompt,
         workspaceId: workspace.id,
         runnerId: workspace.runnerId,

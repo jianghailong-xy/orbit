@@ -22,8 +22,10 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.OrbitApplication
+import io.orbitd.android.composer.ProviderChoices
 import io.orbitd.android.composer.SessionComposer
 import io.orbitd.android.cards.CardFocus
+import io.orbitd.android.cards.CardReceiptSheet
 import io.orbitd.android.cards.CardReviewSheet
 import io.orbitd.android.cards.LocalSteerDeliveries
 import io.orbitd.android.cards.NeedsYouLogic
@@ -39,6 +41,8 @@ import io.orbitd.android.watch.SessionWatches
 import io.orbitd.android.wiki.PageBar
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.cards.OwnerReview
+import io.orbitd.android.core.cards.AntigravityRepair
+import io.orbitd.android.core.cards.DshRuntime
 import io.orbitd.android.core.cards.SessionRunStart
 import io.orbitd.android.core.net.HttpMethod
 import io.orbitd.android.core.protocol.Wire
@@ -46,6 +50,7 @@ import io.orbitd.android.core.realtime.*
 import io.orbitd.android.directory.*
 import io.orbitd.android.navigation.*
 import io.orbitd.android.text.*
+import io.orbitd.android.ui.typingFold
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import kotlinx.serialization.json.*
@@ -86,6 +91,11 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     }
     // The worktree bar's model: its own reads while an outcome is pending or the session is live, and the store's as they land.
     val worktree = remember(handle, route.id) { WorktreeModel(api, route.id!!, app.processScope) }
+    // What the conversation's repair cards act through: the session's freshest detail, its runner, the composer (A07-4).
+    val latestOpen by rememberUpdatedState(open)
+    val console = remember(handle, route.id) { SessionConsole(app, handle, route.id!!, composer, app.processScope, reloadDetail = { worktree.loadDetail() },
+        openRunner = { runner, engine -> latestOpen(OrbitRoute(Destination.RUNNER, runner, recordId = "engine:$engine")) },
+        openSession = { latestOpen(OrbitRoute(Destination.SESSION, it)) }) }
     val list = rememberLazyListState()
     var follow by rememberSaveable { mutableStateOf(route.recordId == null) }
     var placed by remember(model) { mutableStateOf(false) }
@@ -99,10 +109,6 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     }
     val actions = remember(api) { SessionActions(api, app.processScope) { app.realtime.refreshDirectory(); app.realtime.refreshSession() } }
     val link = remember(handle, route.id) { "${handle.account.server.trimEnd('/')}/sessions/${ObjectId.toPublic(route.id!!)}" }
-    PageBar.Bind(route, title = null, actions = {
-        SessionMenu(listed.takeUnless { state.denied }, state.session?.snapshot?.detail, link, state.session?.fresh == true && data.fresh,
-            actions, open, { action = it }, leave)
-    })
     val currentRows by rememberUpdatedState(rows)
     val nested = remember { object : NestedScrollConnection {
         override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
@@ -156,6 +162,23 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     } }
     val scope = rememberCoroutineScope()
     LaunchedEffect(snapshotDetail) { snapshotDetail?.let(worktree::offer) }
+    val worktreeState by worktree.state.collectAsState()
+    LaunchedEffect(worktreeState.detail, snapshotDetail) { console.detail = worktreeState.detail ?: snapshotDetail }
+    // What a Retry re-sends when it is the reader's: the newest message of a person the window holds.
+    LaunchedEffect(rows) { console.lastUser = rows.lastOrNull { it.event.type == "user" && it.event.personWords().isNotBlank() }?.event }
+    // An Antigravity failure said here is read against the runner and the providers, once, when it first appears.
+    val antigravityFailure = remember(rows, snapshotDetail) {
+        rows.any { it.event.type in setOf("error", "assistant") && AntigravityRepair.of(it.event.body().trim()) != null } ||
+            AntigravityRepair.of(snapshotDetail?.string("error")) != null
+    }
+    LaunchedEffect(antigravityFailure, console.runnerId) { if (antigravityFailure) console.reload() }
+    // So is a DeepSeek Harness one (A07-5) — and, from a server that doesn't say a session's engine, a session on a key or a pool,
+    // whose engine the account's providers say: its cards and its failures follow it.
+    val dshFailure = remember(rows, snapshotDetail) {
+        rows.any { it.event.type == "error" && DshRuntime.repair(it.event.body().trim()) != null } || DshRuntime.repair(snapshotDetail?.string("error")) != null
+    }
+    val engineFromKeys = snapshotDetail?.let(ProviderChoices::engineFromKeys) == true
+    LaunchedEffect(dshFailure || engineFromKeys, console.runnerId) { if (dshFailure || engineFromKeys) console.reload() }
     LaunchedEffect(worktree, state.denied) {
         if (!state.denied) worktree.poll { (worktree.state.value.detail ?: snapshotDetail)?.let { it.string("runStatus") ?: it.string("status") } in
             setOf("RUNNING", "AWAITING_INPUT", "INTERRUPTED") }
@@ -182,6 +205,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     }
     // The conversation's cards, and the review a preview opens (A08-2), held outside the transcript's recyclable rows.
     val cards = rememberSessionCards(app, handle, route.id!!)
+    LaunchedEffect(cards, console.engine) { cards.engine = console.engine }
     val reviewStates = rememberSaveableStateHolder()
     val discussCard: ((String) -> Unit)? = if (!composerState.loaded) null else { context ->
         val prior = composer.state.value.draft.text
@@ -197,12 +221,22 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         state.window.events.filter { it.type == "user_delivery" }
             .mapNotNull { event -> event.fields.string("turnId")?.let { turn -> event.fields.string("delivery")?.let { turn to it } } }.toMap()
     }
-    CompositionLocalProvider(LocalReaderResources provides resources, LocalTaskActivity provides taskActivity, LocalSteerDeliveries provides steerDeliveries) {
+    CompositionLocalProvider(LocalReaderResources provides resources, LocalTaskActivity provides taskActivity, LocalSteerDeliveries provides steerDeliveries,
+        LocalSessionConsole provides console) {
         SessionCardsReads(cards)
         BoxWithConstraints(Modifier.fillMaxSize()) {
         val otherInputHasKeyboard = WindowInsets.ime.getBottom(LocalDensity.current) > 0 && !composerFocused
         val composerHeight = if (otherInputHasKeyboard) 0.dp else if (maxHeight < 320.dp) maxHeight else maxHeight * 0.65f
         val compact = maxWidth < 600.dp
+        // iOS `ConsoleView.foldsChrome`: on a phone, while the composer holds the keyboard the conversation gets the
+        // screen. The shell's bar, the rows under it and the cards above the composer fold away together, and come
+        // back when the keyboard goes; a wide page keeps all of it.
+        val foldsChrome = composerFocused && compact
+        // A05-3: the session's ⋯ in the bar, where its Share button was (iOS d2858a5e8), bound while this page shows.
+        PageBar.Bind(route, title = null, folds = foldsChrome, actions = {
+            SessionMenu(listed.takeUnless { state.denied }, state.session?.snapshot?.detail, link, state.session?.fresh == true && data.fresh,
+                actions, open, { action = it }, leave)
+        })
         Column(Modifier.fillMaxSize()) {
             val session = state.session
             val detail = session?.snapshot?.detail
@@ -210,26 +244,30 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                 StatusMessage("Session unavailable", if (session?.error?.httpStatus == 403) "You don't have permission to access this item." else "This item is no longer available.", model::retry)
             } else {
                 Column(Modifier.weight(1f).fillMaxWidth()) {
-                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(onClick = { details = true }, enabled = detail != null) { Text(detail?.string("title") ?: "Session details") }
-                }
-                // Connection changes must not insert/remove a banner above the reading viewport.
-                val reconnecting = session?.fresh != true && state.window.seeded
-                Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = 16.dp),
-                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                    Text(if (reconnecting) "Saved messages · Reconnecting…" else sessionLabel(session,
-                            data.sessions["open"]?.firstOrNull { ObjectId.same(it.id, route.id) }),
-                        Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
-                    // Reserve the scaled button's height even while fresh, including 200% text.
-                    TextButton(onClick = model::retry, enabled = reconnecting,
-                        modifier = Modifier.alpha(if (reconnecting) 1f else 0f)
-                            .then(if (reconnecting) Modifier else Modifier.clearAndSetSemantics { })) { Text("Retry") }
+                // Folded away with the bar while a phone types (`foldsChrome`), so the dots the reader opened and
+                // the line they read stay under the keyboard without the two rows pushing them off it.
+                if (!foldsChrome) {
+                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(onClick = { details = true }, enabled = detail != null) { Text(detail?.string("title") ?: "Session details") }
+                    }
+                    // Connection changes must not insert/remove a banner above the reading viewport.
+                    val reconnecting = session?.fresh != true && state.window.seeded
+                    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = 16.dp),
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                        Text(if (reconnecting) "Saved messages · Reconnecting…" else sessionLabel(session,
+                                data.sessions["open"]?.firstOrNull { ObjectId.same(it.id, route.id) }),
+                            Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
+                        // Reserve the scaled button's height even while fresh, including 200% text.
+                        TextButton(onClick = model::retry, enabled = reconnecting,
+                            modifier = Modifier.alpha(if (reconnecting) 1f else 0f)
+                                .then(if (reconnecting) Modifier else Modifier.clearAndSetSemantics { })) { Text("Retry") }
+                    }
                 }
                 state.error?.let { StatusMessage("Couldn't load messages", it, model::retry) }
                 // The needs-you bar, under the header and over the transcript (iOS `NeedsYouBannerView` in the console's top
                 // inset). Its press here unpins the reader and shows the waiting card, which the card rail brings into view.
-                SessionNeedsYouBar(app, handle, route.id!!, list, hidden = composerFocused && compact,
+                SessionNeedsYouBar(app, handle, route.id!!, list, hidden = foldsChrome,
                     below = NeedsYouLogic.below(belowRows, readerSide), open = open, onBelow = { row ->
                         follow = false
                         scope.launch {
@@ -249,7 +287,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                 val displayedLoading = state.loading
                 val targetSeq = state.targetSeq
                 // Folds away while a phone's composer holds the keyboard, with the rest of the chrome.
-                StickyQuestion(displayedRows, list, hidden = composerFocused && compact) { row -> model.show(row.event.seq) }
+                StickyQuestion(displayedRows, list, hidden = foldsChrome) { row -> model.show(row.event.seq) }
                 LazyColumn(Modifier.weight(1f).fillMaxWidth().onSizeChanged {
                     if (viewport.resized(it.height, placed && follow && state.window.newerAfter == null)) repin++
                 }.nestedScroll(nested).pointerInput(model) {
@@ -299,21 +337,34 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                         composer.edit(SessionRunStart.chatPrefix, SessionRunStart.chatPrefix.length, SessionRunStart.chatPrefix.length)
                         composerFocused = true; composeFocus++
                     },
-                    sendAgain = { composer.control("retry-message", body = JsonObject(emptyMap())) },
+                    sendAgain = { composer.retryFailed() },
                     openRunner = { runner -> open(OrbitRoute(Destination.RUNNER, runner)) })
-                SessionWatches(app, handle, route.id!!, open = open)
-                // The session's tasks — created here, or waited on by its watches (A08-6) — and its code output, folded with the rest
-                // of the chrome while a phone's composer is focused.
-                if (!(composerFocused && compact)) SessionTasksCard(app, handle, route.id!!, cards, openLink)
-                if (!(composerFocused && compact)) Box(Modifier.padding(horizontal = 16.dp)) { WorktreeBar(worktree, openLink) }
+                // A07-4: a session queued behind the runner's Antigravity gate says what to fix, above the composer (iOS
+                // `queuedAntigravityRepair`).
+                val queuedDetail = console.detail
+                val queued = (queuedDetail?.string("runStatus") ?: queuedDetail?.string("status")) == "PENDING"
+                // A07-5: and behind its DeepSeek Harness gate, first (iOS `queuedDshRepair`).
+                val queuedDsh = DshRuntime.repair(queuedDetail?.string("error"))?.takeIf { console.executesDsh && queued }
+                if (queuedDsh != null) Box(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) { DshRepairCard(queuedDsh, console) }
+                else AntigravityRepair.of(queuedDetail?.string("error"))?.takeIf {
+                    console.executesAntigravity && queued
+                }?.let { Box(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) { AntigravityRepairCard(it, console) } }
+                // What this session waits on, the tasks it created and its code output: folded to no height while a
+                // phone's composer holds the keyboard (iOS `TypingFold`), so an open list or a sheet comes back as it was.
+                Box(Modifier.fillMaxWidth().typingFold(foldsChrome)) { SessionWatches(app, handle, route.id!!, open = open) }
+                Box(Modifier.fillMaxWidth().typingFold(foldsChrome)) { SessionTasksCard(app, handle, route.id!!, cards, openLink) }
+                Box(Modifier.fillMaxWidth().typingFold(foldsChrome)) { Box(Modifier.padding(horizontal = 16.dp)) { WorktreeBar(worktree, openLink) } }
                 // Keep the composer and its activity-result launchers alive while card forms use the IME.
                 // The chip's Open task › pushes the task over this run, so Back returns to it.
                 Box(Modifier.heightIn(max = composerHeight).clipToBounds()) { SessionComposer(app, handle, route.id!!, state.session,
-                    focusRequest = composeFocus, inputFocusChanged = { composerFocused = it }, openTask = { open(OrbitRoute(Destination.TASK, it)) }) }
+                    focusRequest = composeFocus, inputFocusChanged = { composerFocused = it }, foldsChrome = foldsChrome,
+                    openTask = { open(OrbitRoute(Destination.TASK, it)) },
+                    openRunner = { runner, engine -> open(OrbitRoute(Destination.RUNNER, runner, recordId = "engine:$engine")) }) }
             }
         }
         }
         if (!state.denied) CardReviewSheet(cards, reviewStates, openLink, discussCard)
+        if (!state.denied) CardReceiptSheet(cards)
         if (details && !state.denied) SessionDetails(state.session, api, openLink) { details = false }
         action?.let { dialog -> DirectoryActionDialog(dialog, api, data.copy(fresh = data.fresh && state.session?.fresh == true), { action = it }) {
             app.realtime.refreshDirectory(); app.realtime.refreshSession()

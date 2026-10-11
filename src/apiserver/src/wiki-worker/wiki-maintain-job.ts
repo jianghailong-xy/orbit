@@ -1,17 +1,20 @@
 import { createHash } from 'node:crypto';
 import { HttpException, NotFoundException } from '@nestjs/common';
 import {
+  WIKI_ANCHOR_RULES,
+  WIKI_DOCS_BUILD_JOB,
   WIKI_MAINTAIN_JOB,
   WIKI_MAINTENANCE_JOB,
   WIKI_REPO_OPS,
   WIKI_REVIEW_RULES,
   wikiMaintenanceRunSessions,
   type WikiDossier,
+  type WikiPlanTopic,
   type WikiRepoOpKind,
   type WikiReviewMode,
 } from '@orbit/shared';
 import type { PrismaService } from '../prisma/prisma.service';
-import { listWikiAnchorsForJob } from '../wiki/wiki-anchors';
+import { anchorCheckRefs, anchorDiffNames, listWikiAnchorsForJob, type WikiAnchorDiffNames, type WikiAnchorProof } from '../wiki/wiki-anchors';
 import { gatherDocMaterial, storedSessionCondition, type StoredSessionCondition } from '../wiki/wiki-docs-material';
 import { wikiDocsAffected } from '../wiki/wiki-docs-affected';
 import type { WikiDocs } from '../wiki/wiki-docs';
@@ -22,6 +25,8 @@ import { stripNul } from '../runner-api/strip-nul';
 import type { WikiPlans } from '../wiki/wiki-plan';
 import { WikiRefusalError, type WikiPrincipal, type WikiService } from '../wiki/wiki.service';
 import { isWikiJobCancellation, WikiJobContentError, WikiJobInfraError, type WikiJobContext, type WikiJobRunner } from './wiki-job-executor';
+import { readWikiJobCarry, wikiJobCarryWriter } from './wiki-jobs';
+import { wikiJobModelCalls } from './wiki-model-queue';
 import {
   buildWikiMaintainOps,
   mergeWikiMaintainBuilt,
@@ -46,18 +51,18 @@ import {
   assembleWikiMaintainProposal,
   parseWikiMaintainProposal,
   wikiMaintainPlanOf,
+  wikiMaintainProposalPaths,
   wikiMaintainProposalPrompt,
   wikiMaintainProposalRedo,
   WIKI_MAINTAIN_PROPOSAL,
   type WikiMaintainPlanRead,
   type WikiMaintainProposalItem,
-  type WikiMaintainProposalRepo,
   type WikiNewDesignDoc,
   type WikiUnplacedEntry,
 } from './wiki-maintain-plan';
 import { cutRunes, parseWikiImportAnswer, WikiImportRepo, wikiImportIsObject } from './wiki-import-extract';
-import { WikiPlanRepo, type WikiPlanSnapshotIndex } from './wiki-plan-repo';
-import { type WikiAnchorCheckInput, type WikiRepoFileRead } from '@orbit/shared';
+import { type WikiPlanSnapshotIndex } from './wiki-plan-repo';
+import { type WikiAnchorCheckInput, type WikiAnchorDueEntry, type WikiRepoFileRead } from '@orbit/shared';
 import {
   readWikiRepoFiles,
   readWikiRepoReadiness,
@@ -73,9 +78,13 @@ import {
   wikiRepoFileText,
 } from './wiki-repo-ops';
 import {
+  carryWikiDocsSection,
+  mergeWikiDocsBuild,
   WikiDocsCallFailed,
   WikiDocsWriteRefused,
   runWikiDocsBuild,
+  type WikiDocsBuildCarry,
+  type WikiDocsBuildSummary,
   type WikiDocsStoredSection,
   type WikiDocsWriteAnswer,
   type WikiDocsWriteRequest,
@@ -114,6 +123,15 @@ import { verifyWikiOps } from './wiki-verify-job';
  *
  * WHAT IT DOES NOT DO. It asks no provider: the System model's address and key live in this process, and
  * nothing about a space's pinned provider is read. It makes no task and starts no session.
+ *
+ * THE REPORT IS THE WHOLE RUN'S (contract `jobs.carry`). A replay — after a stop handed the job back, or a failure of the
+ * platform — runs every step again, and finds done what the attempt before it finished: the dossiers behind the cursor
+ * it moved, the ops it recorded waiting no longer, the anchors it checked standing at this commit, the sections it
+ * wrote unchanged or no longer touched. So each attempt carries on the job's row what its replay will not do again — the
+ * pipeline up to the cursor's advance, once the advance is written; each verdict as it is recorded; each section as it
+ * is written, with the sections the documents step took up and the paths it withdrew — and the report folds that in.
+ * The anchors checked before are read off the entries themselves: a check made since the run first started is this
+ * run's. Its tokens are the job's own requests, each once, and its seconds run from the run's first start.
  */
 
 /** What the job needs besides its context. */
@@ -169,7 +187,12 @@ export interface WikiMaintainReport {
     waitingForNextRun: number;
     adopted?: { ops: number; verified: number; failed: number };
   };
-  anchors?: { entries: number; changed: number; missing: number };
+  /**
+   * The anchors step's counts (contract `maintenance.job.server.anchors`): the entries whose checks this run
+   * wrote, and — of them — those left changed or missing; `skipped` the entries every anchor of which still
+   * held at the run's commit (`anchorRules.verify.skip`), which were neither sent nor written.
+   */
+  anchors?: { entries: number; changed: number; missing: number; skipped: number };
   docs?: WikiMaintainDocsReport;
   tokens: { input: number; output: number; calls: number };
   seconds: number;
@@ -200,6 +223,49 @@ export interface WikiMaintainDocsReport {
   error?: string;
 }
 
+// ── What a run carries to its replay (contract `jobs.carry.kinds.maintain`) ─────────────────────
+
+/** The pipeline up to the cursor's advance: what the attempts whose advance was written read, took and recorded. */
+type WikiMaintainPipelineCarry = Pick<WikiMaintainReport, 'sessions' | 'dossiers' | 'unchanged' | 'offTopic' | 'entries' | 'ops'> & {
+  refused: string[];
+  advanced: boolean;
+};
+
+/** The documents step's part: the sections it wrote, the ones it took up and why, the paths it withdrew. */
+interface WikiMaintainDocsCarry extends WikiDocsBuildCarry {
+  planVersion: number | null;
+  repoSha: string;
+  affected: { byEntries: string[]; byRepo: string[]; stale: string[]; unwritten: string[]; taken: string[] };
+  withdrawn: { paths: string[]; sentences: number };
+  proposal: WikiMaintainDocsReport['proposal'];
+  seconds: number;
+}
+
+/** What a run carries to its replay: each part once the attempt has finished it. */
+interface WikiMaintainCarry {
+  pipeline?: WikiMaintainPipelineCarry;
+  /** The verdicts recorded: the run's own ops', and the adopted ones'. */
+  verification?: { verified: number; adopted: number };
+  docs?: WikiMaintainDocsCarry;
+}
+
+/** The carry as the job's row holds it, a copy: a job nothing was carried for reads as one with nothing in it. */
+function maintainCarryOf(raw: Record<string, unknown> | null): WikiMaintainCarry {
+  return JSON.parse(JSON.stringify(raw ?? {})) as WikiMaintainCarry;
+}
+
+/** Two counts of the same shape, added up. */
+function addCounts<T extends Record<string, number>>(a: T, b: T): T {
+  const sum = { ...a };
+  for (const key of Object.keys(b) as Array<keyof T>) sum[key] = ((a[key] ?? 0) + b[key]) as T[keyof T];
+  return sum;
+}
+
+/** A list with another's items it lacks appended: a union that keeps the first-seen order. */
+function union(a: readonly string[], b: readonly string[]): string[] {
+  return [...new Set([...a, ...b])];
+}
+
 /** The run's context: what the runner's context route answers, read from the space and the run row. */
 interface WikiMaintainContext {
   title: string;
@@ -227,8 +293,15 @@ interface WikiMaintainSnapshot {
   files: string[];
   sizes: Map<string, number>;
   about: string;
-  gate: WikiPlanRepo;
   anchors: WikiImportRepo;
+}
+
+/** A written section the documents step compares: where it is written, its plan definition, and the paths its sources name. */
+interface WikiMaintainComparedSection {
+  doc: string;
+  key: string;
+  section: WikiDocsPlanDoc['sections'][number];
+  paths: string[];
 }
 
 /** Why a run ends before it succeeded: the step, and what went wrong there. */
@@ -270,7 +343,6 @@ class WikiMaintainRun {
     seconds: 0,
   };
   private readonly refused: string[] = [];
-  private readonly started = Date.now();
   private context!: WikiMaintainContext;
   private plan: WikiMaintainPlanRead | null = null;
   private snapshot: WikiMaintainSnapshot | null = null;
@@ -282,6 +354,17 @@ class WikiMaintainRun {
   private position = '';
   /** Whether the space's runner reads whole files; a bounded one is asked with the old limits. */
   private wholeFile = false;
+  /** When the run first started: what its seconds run from, and what an anchor check of this run's was made after. */
+  private runStarted = new Date();
+  /** What the attempts before this one finished (contract `jobs.carry`): read as the attempt starts, folded into the report. */
+  private earlier: WikiMaintainCarry = {};
+  /** What the run has finished so far, the earlier attempts' and this one's: what the job's row carries. */
+  private carry: WikiMaintainCarry = {};
+  private keep: () => Promise<void> = async () => undefined;
+  /** What this attempt's documents step wrote, as the build summed it; null when it wrote nothing. */
+  private docsSummary: WikiDocsBuildSummary | null = null;
+  /** When this attempt's documents step began writing; null until it does. */
+  private docsStarted: number | null = null;
 
   constructor(
     private readonly jobContext: WikiJobContext,
@@ -300,10 +383,11 @@ class WikiMaintainRun {
     if (!row) throw new WikiJobContentError(`no maintenance run of this space is made by this job (run ${this.runId})`);
     // The run started: the first start is kept, the latest attempt is written, and what the attempt before
     // said of its end is cleared — the row says how its latest attempt ended.
+    this.runStarted = row.startedAt ?? new Date();
     await prisma.wikiMaintenanceRun.updateMany({
       where: { id: row.id },
       data: {
-        startedAt: row.startedAt ?? new Date(),
+        startedAt: this.runStarted,
         lastStartedAt: new Date(),
         attempts: { increment: 1 },
         outcome: null,
@@ -316,6 +400,11 @@ class WikiMaintainRun {
         localEndpoint: this.deps.modelBaseUrl !== null && wikiMaintainEndpointIsLocal(this.deps.modelBaseUrl),
       },
     });
+    // What the attempts before this one finished, which this one's steps will find done (contract `jobs.carry`).
+    const { carry } = await readWikiJobCarry(prisma, job.id);
+    this.earlier = maintainCarryOf(carry);
+    this.carry = maintainCarryOf(carry);
+    this.keep = wikiJobCarryWriter(prisma, job, () => ({ ...this.carry }));
 
     let stop: WikiMaintainStop | null;
     try {
@@ -327,7 +416,6 @@ class WikiMaintainRun {
       if (isWikiJobCancellation(error, this.jobContext.signal)) throw error;
       stop = asStop(error);
     }
-    this.report.seconds = Math.trunc((Date.now() - this.started) / 1000);
     if (stop !== null) this.report.stoppedAt = stop.step;
 
     if (stop !== null && stop.kind === 'infra') {
@@ -336,13 +424,17 @@ class WikiMaintainRun {
       this.jobContext.log(`stopped at ${stop.step} (infra): ${stop.cause.message}`);
       throw new WikiJobInfraError(stop.message);
     }
-    // The run's report and error can quote what the model wrote: without any U+0000 (contract `jobs.serverWrites`).
+    // The whole run's report (contract `jobs.carry`): it is what the run row keeps, and what the articles a run owes are
+    // asked by (it recorded an op, whichever attempt recorded it). Its report and error can quote what the model wrote:
+    // without any U+0000 (contract `jobs.serverWrites`).
+    const report = await this.wholeReport();
+    const refused = [...(this.earlier.pipeline?.refused ?? []), ...this.refused];
     const answer = await finishWikiMaintenanceJob(this.deps.prisma, this.deps.maintenance, job.ownerId, job.spaceId, job.id, {
       to: stop === null ? this.cursor : null,
       outcome: stop === null ? 'succeeded' : 'failed',
       error: stop === null ? null : stripNul(cutRunes(stop.message, 2000)),
       failureKind: stop === null ? null : stop.kind,
-      report: stripNul(this.report as unknown as Record<string, unknown>),
+      report: stripNul(report as unknown as Record<string, unknown>),
     });
     if (stop === null) {
       this.jobContext.log(`every step succeeded: the cursor is at ${answer.state.position ?? '(unmoved)'}`);
@@ -350,10 +442,10 @@ class WikiMaintainRun {
         kind: 'maintain',
         runId: this.runId,
         outcome: 'succeeded',
-        advanced: answer.advanced || this.advanced,
+        advanced: answer.advanced || this.advanced || this.earlier.pipeline?.advanced === true,
         cursor: answer.state.position ?? this.position,
-        refused: this.refused,
-        report: this.report,
+        refused,
+        report,
       };
     }
     this.jobContext.log(`stopped at ${stop.step} (${stop.kind}): ${stop.cause.message}`);
@@ -362,17 +454,137 @@ class WikiMaintainRun {
       runId: this.runId,
       outcome: 'failed',
       failureKind: stop.kind,
-      cursorAdvanced: this.report.cursorAdvanced === true,
-      report: this.report,
+      cursorAdvanced: report.cursorAdvanced === true,
+      report,
     } as unknown as Record<string, unknown>);
+  }
+
+  /**
+   * The report the run ends with (contract `jobs.carry`): this attempt's, with what the attempts before it finished
+   * folded in — the pipeline of each attempt whose advance was written, the verdicts each recorded, the documents each
+   * wrote (`wholeDocs`) — the tokens of every request the job made, each once, and the seconds since the run first
+   * started. What did not get done (a step's failed count, the ops still waiting for the next run) is this attempt's.
+   */
+  private async wholeReport(): Promise<WikiMaintainReport> {
+    const { job } = this.jobContext;
+    const report: WikiMaintainReport = { ...this.report, seconds: Math.max(0, Math.trunc((Date.now() - this.runStarted.getTime()) / 1000)) };
+    const pipeline = this.earlier.pipeline;
+    if (pipeline) {
+      report.sessions += pipeline.sessions;
+      report.dossiers += pipeline.dossiers;
+      report.unchanged += pipeline.unchanged;
+      report.offTopic += pipeline.offTopic;
+      report.entries = addCounts(report.entries, pipeline.entries);
+      report.ops = addCounts(report.ops, pipeline.ops);
+      report.cursorAdvanced = true;
+    }
+    const verdicts = this.earlier.verification;
+    if (verdicts) {
+      const now = report.verification ?? { verified: 0, failed: 0, waitingForNextRun: 0 };
+      report.verification = { ...now, verified: now.verified + verdicts.verified };
+      if (now.adopted || verdicts.adopted > 0) {
+        const adopted = now.adopted ?? { ops: 0, verified: 0, failed: 0 };
+        report.verification.adopted = { ops: adopted.ops + verdicts.adopted, verified: adopted.verified + verdicts.adopted, failed: adopted.failed };
+      }
+    }
+    report.docs = this.wholeDocs();
+    if (report.docs === undefined) delete report.docs;
+    const spent = await wikiJobModelCalls(this.deps.prisma, { jobId: job.id, failed: true });
+    report.tokens = { input: spent.inputTokens, output: spent.outputTokens, calls: spent.calls };
+    if (report.docs) {
+      const step = await wikiJobModelCalls(this.deps.prisma, { jobId: job.id, failed: true, steps: MAINTAIN_DOCS_STEPS });
+      report.docs = { ...report.docs, tokens: { input: step.inputTokens, output: step.outputTokens, calls: step.calls } };
+    }
+    return report;
+  }
+
+  /**
+   * The documents step's report, the whole run's: this attempt's, with what the attempts before it did — a section one
+   * of them wrote is written, once, whether this attempt found it unchanged or did not take it up at all; the sections
+   * each took up and the paths each withdrew, each once; the proposal one of them stored; and the time each spent in the
+   * step. Undefined when no attempt reached the step.
+   */
+  private wholeDocs(): WikiMaintainDocsReport | undefined {
+    const now = this.report.docs;
+    const all = this.carry.docs;
+    if (!all) return now;
+    const earlier = this.earlier.docs;
+    const merged = mergeWikiDocsBuild(this.docsSummary ?? {
+      spaceId: this.jobContext.job.spaceId, planVersion: all.planVersion ?? 0, repoSha: all.repoSha, model: this.deps.model, docs: [],
+      written: 0, unchanged: 0, failed: 0, calls: 0, usage: { inputTokens: 0, outputTokens: 0 }, seconds: 0,
+    }, earlier ?? { docs: [] });
+    return {
+      planVersion: now?.planVersion ?? all.planVersion,
+      ...(now?.skipped !== undefined ? { skipped: now.skipped } : {}),
+      repoSha: now?.repoSha ?? all.repoSha,
+      affected: {
+        byEntries: all.affected.byEntries.length,
+        byRepo: all.affected.byRepo.length,
+        stale: all.affected.stale.length,
+        unwritten: all.affected.unwritten.length,
+        total: all.affected.taken.length,
+      },
+      withdrawn: { paths: all.withdrawn.paths.length, sentences: all.withdrawn.sentences },
+      sections: { written: merged.written, unchanged: merged.unchanged, failed: merged.failed },
+      unplaced: now?.unplaced ?? { designDocs: 0, entries: 0 },
+      proposal: now?.proposal ?? all.proposal,
+      tokens: now?.tokens ?? { input: 0, output: 0, calls: 0 },
+      seconds: (earlier?.seconds ?? 0) + (now?.seconds ?? 0),
+      ...(now?.error !== undefined ? { error: now.error } : {}),
+    };
+  }
+
+  /** The pipeline up to the advance: this attempt's, added to the earlier attempts' whose advance was written. */
+  private pipelineCarry(): WikiMaintainPipelineCarry {
+    const now: WikiMaintainPipelineCarry = {
+      sessions: this.report.sessions, dossiers: this.report.dossiers, unchanged: this.report.unchanged, offTopic: this.report.offTopic,
+      entries: { ...this.report.entries }, ops: { ...this.report.ops }, refused: [...this.refused], advanced: this.advanced,
+    };
+    const before = this.earlier.pipeline;
+    if (!before) return now;
+    return {
+      sessions: before.sessions + now.sessions,
+      dossiers: before.dossiers + now.dossiers,
+      unchanged: before.unchanged + now.unchanged,
+      offTopic: before.offTopic + now.offTopic,
+      entries: addCounts(before.entries, now.entries),
+      ops: addCounts(before.ops, now.ops),
+      refused: [...before.refused, ...now.refused],
+      advanced: before.advanced || now.advanced,
+    };
+  }
+
+  /** Carry a verdict the server just recorded: its op waits no longer, and the replay's list will not hold it. */
+  private async verdictRecorded(adopted: boolean): Promise<void> {
+    const verdicts = (this.carry.verification ??= { verified: 0, adopted: 0 });
+    if (adopted) verdicts.adopted += 1;
+    else verdicts.verified += 1;
+    await this.keep();
+  }
+
+  /** The documents' part of what the run carries, made the first time the step needs it. */
+  private docsCarry(): WikiMaintainDocsCarry {
+    this.carry.docs ??= {
+      docs: [], planVersion: null, repoSha: '', affected: { byEntries: [], byRepo: [], stale: [], unwritten: [], taken: [] },
+      withdrawn: { paths: [], sentences: 0 }, proposal: null, seconds: 0,
+    };
+    return this.carry.docs;
+  }
+
+  /** Keep the documents' part, the step's time so far counted with the earlier attempts'. */
+  private async keepDocs(): Promise<void> {
+    this.docsCarry().seconds = (this.earlier.docs?.seconds ?? 0)
+      + (this.docsStarted === null ? 0 : Math.trunc((Date.now() - this.docsStarted) / 1000));
+    await this.keep();
   }
 
   /**
    * The pipeline in order (`wikiMaintainRun.steps`), answering where it stopped, or null.
    *
    * The repository step is this pipeline's `checkout` and more: a snapshot of origin/main through the
-   * space's runner names the commit, lists every file with its size, and carries the headings, symbols,
-   * contracts and reachable commits the checks below read — where the runner fetched a checkout and read it.
+   * space's runner names the commit, lists every file with its size, and carries the reachable commits the
+   * checks below read, and a file a check reads is read whole at that commit — where the runner fetched a
+   * checkout and read it.
    */
   private async steps(): Promise<WikiMaintainStop | null> {
     let step = 'repo';
@@ -482,7 +694,6 @@ class WikiMaintainRun {
       files,
       sizes,
       about: typeof raw.readme === 'string' ? cutRunes(raw.readme, WIKI_MAINTAIN_JOB.aboutMaxChars) : '',
-      gate: new WikiPlanRepo(raw),
       anchors: new WikiImportRepo({ files, commits: raw.commits ?? [] }, '', repositoryName(this.context.repo.urlNorm)),
     };
     this.jobContext.log(`the repository at ${snapshot.sha.slice(0, 12)} (${files.length} files)`);
@@ -510,10 +721,25 @@ class WikiMaintainRun {
 
   /**
    * The pages from the cursor up to the position the run expects — or, for a run no task expects anything of,
-   * as many sessions as the run may cover — and the dossiers not processed yet.
+   * as many sessions as the run may cover — and the dossiers not processed yet, one a session.
+   *
+   * A PAGE HANDS A SESSION OUT MORE THAN ONCE (2026-10-11, P10 round 93). A page covers facts until it holds
+   * `pageSessions` sessions, and stops at the last fact it covered: a session whose own facts sit either side of
+   * that stop is handed out on this page and again on the next. Asking about it twice asks under the same unit
+   * with the same prompt, which the queue answers from the row the first ask made — no second call reached the
+   * model, and the run's tokens are the run's calls — but the run counted the session, its dossier and its
+   * entries twice: 31 dossiers for 18 sessions in the canary's run 6e6feff0, 30 sessions for 20 in 7cf172e3. And
+   * a record that arrives between the two reads makes the two prompts differ, which the queue refuses as
+   * `already exists with a different call` and fails the whole run.
+   *
+   * What is kept is the newest read of that session, and the page it is taken as read on is the last one it was
+   * handed out on — the rule the breaker already goes by (§19.4 step 6). Nothing is lost by keeping only it: a
+   * page hands out facts past the settle grace alone, so every fact of this run's window was committed before
+   * the first read of the session, and the dossier is built from the records as they stand when it is read.
    */
   private async dossiers(): Promise<WikiDossier[]> {
-    const out: WikiDossier[] = [];
+    /** What this run reads of each session — its newest page's copy, and the page that copy came from. */
+    const read = new Map<string, { dossier: WikiDossier; page: number }>();
     let after = '';
     let sessions = 0;
     for (let pages = 0; ; pages += 1) {
@@ -528,21 +754,27 @@ class WikiMaintainRun {
       this.pages.push({ from: page.from || after, cursor: page.cursor });
       for (const batch of page.batches ?? []) sessions += batch.sessions;
       for (const dossier of page.dossiers) {
-        sessions += 1;
-        this.pageOf.set(dossier.sessionId, this.pages.length - 1);
-        if (dossier.unchanged) {
-          this.report.unchanged += 1;
-          continue;
-        }
-        out.push(dossier);
+        if (!read.has(dossier.sessionId)) sessions += 1;
+        read.set(dossier.sessionId, { dossier, page: this.pages.length - 1 });
       }
       if (!page.more || (page.cursor === after && pages > 0)) break;
       after = page.cursor;
     }
+    const out: WikiDossier[] = [];
+    let unchanged = 0;
+    for (const [sessionId, { dossier, page }] of read) {
+      this.pageOf.set(sessionId, page);
+      if (dossier.unchanged) {
+        unchanged += 1;
+        continue;
+      }
+      out.push(dossier);
+    }
     this.report.sessions = sessions;
+    this.report.unchanged = unchanged;
     this.report.dossiers = out.length;
     this.jobContext.log(`read ${sessions} session(s) after the space's cursor: ${out.length} dossier(s) to extract from, `
-      + `${this.report.unchanged} already processed`);
+      + `${unchanged} already processed`);
     return out;
   }
 
@@ -639,15 +871,13 @@ class WikiMaintainRun {
     return built.ops.slice(0, WIKI_MAINTENANCE_JOB.entriesPerSessionMax);
   }
 
-  /** One model call through the queue, counted into the run's report. */
+  /**
+   * One model call through the queue. Its request is what the report's tokens count (`wikiJobModelCalls`): every call of
+   * the run once, whichever attempt and whichever step made it.
+   */
   private async ask(step: string, unit: string, system: string, prompt: string, maxTokens: number): Promise<{ text: string; inputTokens: number; outputTokens: number }> {
     const settled = await this.jobContext.ask(step, unit, { system, prompt, maxTokens });
-    const inputTokens = settled.inputTokens ?? 0;
-    const outputTokens = settled.outputTokens ?? 0;
-    this.report.tokens.input += inputTokens;
-    this.report.tokens.output += outputTokens;
-    this.report.tokens.calls += 1;
-    return { text: settled.answer ?? '', inputTokens, outputTokens };
+    return { text: settled.answer ?? '', inputTokens: settled.inputTokens ?? 0, outputTokens: settled.outputTokens ?? 0 };
   }
 
   // ── The self-check, the breaker and the proposals ──────────────────────────────────────────────
@@ -816,18 +1046,30 @@ class WikiMaintainRun {
       }
       throw error;
     }
+    // A replay reads from the cursor this moved, past these dossiers: what the pipeline did up to here is carried.
+    this.carry.pipeline = this.pipelineCarry();
+    await this.keep();
   }
 
   // ── Verification and anchors ──────────────────────────────────────────────────────────────────
 
-  /** Verify the run's own ops in an automatic space, then adopt what ended sessions left waiting. */
+  /**
+   * Verify the run's own ops in an automatic space, then adopt what ended sessions and ended runs left waiting. The run's
+   * own are its job's (`maintenance.job.server.verify`), whichever attempt recorded them: a replay after a stop in this
+   * step records none itself — its dossiers are behind the cursor — and the ops the stop left waiting are nobody else's
+   * to verify while the job has not ended.
+   */
   private async verify(): Promise<void> {
     if (this.context.reviewMode !== 'automatic') return;
-    if (this.report.ops.recorded > 0) await this.verifyOwn();
+    await this.verifyOwn();
     await this.adopt();
   }
 
-  /** Verify the ops this run proposed, in two passes at most; what still has no verdict fails nothing. */
+  /**
+   * Verify the run's own ops still waiting for their verdict, in two passes at most — the second under each op's
+   * retry unit (`verifyWikiOps`); what still has no verdict fails nothing, and once this job has ended the space's next
+   * run adopts it ({@link adopt}).
+   */
   private async verifyOwn(): Promise<void> {
     const result = { verified: 0, failed: 0, waitingForNextRun: 0 };
     this.report.verification = result;
@@ -837,10 +1079,8 @@ class WikiMaintainRun {
         sessionId: null,
         jobId: this.jobContext.job.id,
         refused,
+        recorded: () => this.verdictRecorded(false),
       });
-      this.report.tokens.calls += summary.looked;
-      this.report.tokens.input += summary.usage.inputTokens;
-      this.report.tokens.output += summary.usage.outputTokens;
       result.verified += summary.verified;
       result.failed = summary.failed;
       if (summary.failed === 0 || summary.stopped !== null) break;
@@ -856,8 +1096,9 @@ class WikiMaintainRun {
   }
 
   /**
-   * Verify what ended sessions left waiting for their verification in the space — at most `rules.adoptOpsMax`
-   * of them, oldest first, after the run's own. One left without a verdict waits for the next run.
+   * Verify what ended sessions and the space's ended runs — their jobs, never this one — left waiting for their
+   * verification in the space (`reviewModes.verification.adoption`): at most `rules.adoptOpsMax` of them, oldest first,
+   * after the run's own. One left without a verdict waits for the next run.
    */
   private async adopt(): Promise<void> {
     const { job } = this.jobContext;
@@ -866,21 +1107,34 @@ class WikiMaintainRun {
       jobId: job.id,
       adopt: true,
       max: WIKI_MAINTENANCE_JOB.adoptOpsMax,
+      recorded: () => this.verdictRecorded(true),
     });
-    this.report.tokens.calls += summary.looked;
-    this.report.tokens.input += summary.usage.inputTokens;
-    this.report.tokens.output += summary.usage.outputTokens;
     this.report.verification ??= { verified: 0, failed: 0, waitingForNextRun: 0 };
     this.report.verification.adopted = { ops: summary.looked, verified: summary.verified, failed: summary.failed };
     this.report.verification.waitingForNextRun += summary.failed;
-    this.jobContext.log(`adopted ${summary.looked} op(s) ended sessions left waiting for their verification: ${summary.verified} verified, `
+    this.jobContext.log(`adopted ${summary.looked} op(s) ended sessions and runs left waiting for their verification: ${summary.verified} verified, `
       + `${summary.failed} without a verdict, which wait for the next run`);
   }
 
   /**
-   * Re-check the space's anchors (`anchorRules.verify`): one page of the entries that carry one, the checks
-   * as one `wiki_repo_op` the space's runner executes, and each entry's result written back through the
-   * server's own writer.
+   * Re-check the space's anchors (`anchorRules.verify`): a page of the entries that carry one — the most the
+   * anchors list names, `listEntriesMax` — the page's checks as one `wiki_repo_op` the space's runner
+   * executes, and each entry's result written back through the server's own writer in reports of at most
+   * `reportEntriesMax` entries.
+   *
+   * WHY A PAGE IS THE FULL `listEntriesMax` (2026-10-10, the canary's 30-minute rounds). An operation costs
+   * about what its wait costs however few anchors it carries: the runner claims it at its next heartbeat (30 s,
+   * so ~15 s on average), fetches origin/main (~4 s), and answers. The checks themselves are cheap — measured
+   * on this repository, a path anchor's `cat-file -e` is ~1.4 ms, a commit anchor's `merge-base --is-ancestor`
+   * ~1.7 ms, a symbol anchor's `grep` ~35 ms, and a production space carries path and commit anchors and no
+   * symbols. At the list's default page of 50 entries, the canary's 7,600-7,700 anchors (some 4,400 entries,
+   * ~1.7 anchors an entry) went out as ~88 operations, one at a time, and took about 30 minutes. A page of
+   * `listEntriesMax` (200) entries puts the same anchors in ~22 operations: ~250-350 anchors and 20-40 KB of
+   * JSON each, a few hundred milliseconds of git, and ~20 s an operation end to end — ~8 minutes a round. Even
+   * a page whose every entry carries `limits.listMaxItems` (20) anchors — 4,000 anchors, ~500-800 KB, still far
+   * inside `repoOps.operationBytes` — is a few seconds of git, well inside the 300 s the run waits for one
+   * operation (`maintenance.job.server.rules.repoWaitSeconds`). Operations are sent one at a time, and stay
+   * that way while the runner's own fetch lock is one release away (97b8de07f, runner 0.1.228).
    *
    * The page's anchors reach the runner as ONE flat list, so the index the runner echoes is the
    * anchor's place in THAT list — renumbered here as the list is built — and the checks come back
@@ -889,21 +1143,44 @@ class WikiMaintainRun {
    * for its index, a symbol without a baseline adopted a page-mate's region as its own, and a type
    * that no longer matched was refused and failed the run. Every check the report carries also names
    * its anchor (type, path, symbol, sha), and `recordAnchorChecks` writes it only on that anchor.
+   *
+   * AN ENTRY WHOSE CHECKS STILL HOLD IS NOT CHECKED AGAIN (2026-10-10, `anchorRules.verify.skip`). A check's
+   * answer depends on the anchor and what the commit holds of it, so an entry every one of whose anchors was
+   * last checked on exactly this snapshot commit, or found verified on a commit since which nothing its answer
+   * depends on has moved — the path's place in the tree, the symbol's file, the commit's ancestry, read from a
+   * diff to this commit and from the commits the snapshot reaches (`anchorProof`) — owes nothing: what the list
+   * leaves the run (`anchorsDueAt`) is not sent to the runner, not written, and counted in `skipped` alone. A
+   * round on a main that moved by a day re-checks the entries whose files moved, not the whole space's ~7,800.
+   * One anchor that does not hold re-checks the entry whole, as always, and moves its checks onto this commit;
+   * a skipped one keeps its checks where they were. What the counts mean is the contract's
+   * (`maintenance.job.server.anchors`).
+   *
+   * The entries that still owe a check go out together, whichever page they were read on, `listEntriesMax` of
+   * them an operation at most: once most of a page is left alone, its few would otherwise each cost an
+   * operation's wait — ~39 a round for a handful of entries each.
    */
   private async anchors(): Promise<void> {
     const { job } = this.jobContext;
+    const proof = await this.anchorProof();
     let after: string | null = null;
     let entries = 0;
     let changed = 0;
     let missing = 0;
+    let skipped = 0;
     let refused = 0;
     let failed = 0;
+    const skippedIds: string[] = [];
+    const pending: WikiAnchorDueEntry[] = [];
     for (;;) {
-      const page = await listWikiAnchorsForJob(this.deps.prisma, { ownerId: job.ownerId, spaceId: job.spaceId, after, limit: null });
-      if (page.entries.length === 0) break;
+      const page = await listWikiAnchorsForJob(this.deps.prisma, {
+        ownerId: job.ownerId, spaceId: job.spaceId, after, limit: WIKI_ANCHOR_RULES.listEntriesMax, proof,
+      });
       after = page.next;
-      const wanted = page.entries.filter((entry) => entry.anchors.length > 0);
-      if (wanted.length > 0) {
+      for (const entry of page.entries) if (entry.anchors.length === 0) skippedIds.push(entry.entryId);
+      skipped += page.entries.filter((entry) => entry.anchors.length === 0).length;
+      pending.push(...page.entries.filter((entry) => entry.anchors.length > 0));
+      while (pending.length >= WIKI_ANCHOR_RULES.listEntriesMax || (after === null && pending.length > 0)) {
+        const wanted = pending.splice(0, WIKI_ANCHOR_RULES.listEntriesMax);
         // One flat list for the operation: the runner echoes each check's place in this list, so
         // `slots` — not the per-entry index the checks are recorded under — is what maps a check home.
         const slots: Array<{ entry: number; anchor: number }> = [];
@@ -949,40 +1226,84 @@ class WikiMaintainRun {
         if (unanswered > 0) {
           throw new WikiJobContentError(`the anchor checks answered ${unanswered} of the ${flat.length} anchor(s) asked for: the run refuses to guess whose the rest were`);
         }
-        const report = {
-          ref: String(answer.sha ?? this.snapshot?.sha ?? ''),
-          entries: wanted.map((entry, entryAt) => ({
-            entryId: entry.entryId,
-            revision: entry.revision,
-            checks: entry.anchors.flatMap((anchor) => {
-              const check = byEntry[entryAt]!.get(anchor.index);
-              return check ? [check] : [];
-            }),
-          })),
-        };
-        const written = await this.deps.wiki.recordAnchorChecks(
-          { ownerId: job.ownerId, sessionId: null, jobId: job.id },
-          job.spaceId,
-          report,
-        );
-        for (const outcome of written.outcomes) {
-          if (outcome.status !== 'recorded') {
-            if (outcome.status === 'refused') refused += 1;
-            else failed += 1;
-            continue;
+        // The page is written back in reports of at most `reportEntriesMax` entries, the most
+        // `recordAnchorChecks` takes (`anchorReportShape`) — what one page of the list's default size
+        // used to be. Each entry is recorded on its own, so what is written and what is counted below
+        // do not depend on where the page's reports fall.
+        const ref = String(answer.sha ?? this.snapshot?.sha ?? '');
+        const reported = wanted.map((entry, entryAt) => ({
+          entryId: entry.entryId,
+          revision: entry.revision,
+          checks: entry.anchors.flatMap((anchor) => {
+            const check = byEntry[entryAt]!.get(anchor.index);
+            return check ? [check] : [];
+          }),
+        }));
+        for (let from = 0; from < reported.length; from += WIKI_ANCHOR_RULES.reportEntriesMax) {
+          const written = await this.deps.wiki.recordAnchorChecks(
+            { ownerId: job.ownerId, sessionId: null, jobId: job.id },
+            job.spaceId,
+            { ref, entries: reported.slice(from, from + WIKI_ANCHOR_RULES.reportEntriesMax) },
+          );
+          for (const outcome of written.outcomes) {
+            if (outcome.status !== 'recorded') {
+              if (outcome.status === 'refused') refused += 1;
+              else failed += 1;
+              continue;
+            }
+            entries += 1;
+            if (outcome.anchorState === 'changed') changed += 1;
+            if (outcome.anchorState === 'missing') missing += 1;
           }
-          entries += 1;
-          if (outcome.anchorState === 'changed') changed += 1;
-          if (outcome.anchorState === 'missing') missing += 1;
         }
       }
       if (after === null) break;
     }
-    this.report.anchors = { entries, changed, missing };
+    // An entry an earlier attempt of this run checked stands checked at this commit, and this attempt left it alone: it
+    // is the run's, counted checked and not skipped (contract `jobs.carry`). In a run nothing replayed there is none.
+    const before = await anchorsCheckedSince(this.deps.prisma, { ownerId: job.ownerId, spaceId: job.spaceId, entryIds: skippedIds, since: this.runStarted });
+    this.report.anchors = {
+      entries: entries + before.entries,
+      changed: changed + before.changed,
+      missing: missing + before.missing,
+      skipped: skipped - before.entries,
+    };
     if (failed > 0 || refused > 0) {
       throw new WikiJobContentError(`git could not check ${failed} anchor(s), and the server refused ${refused} entr(ies)`);
     }
-    this.jobContext.log(`re-checked the anchors of ${entries} entr(ies): ${changed} changed, ${missing} missing`);
+    this.jobContext.log(`re-checked the anchors of ${entries} entr(ies): ${changed} changed, ${missing} missing; `
+      + `left ${skipped} entr(ies) alone: every anchor of theirs still held at this commit`);
+  }
+
+  /**
+   * What lets the anchors step leave a check standing (`anchorRules.verify.skip`): the snapshot's commit, the commits
+   * it reaches, and the names of one diff to it from each commit the space's anchors were last checked at — the
+   * commits most anchors were checked at first, `anchorDiffsMax` of them at most, each asked once the one before it
+   * has settled. A commit the snapshot does not reach gets none, and neither does one past the cap: their entries are
+   * checked again, which moves their checks onto this commit. A diff the runner could not make vouches for nothing.
+   */
+  private async anchorProof(): Promise<WikiAnchorProof> {
+    const { job } = this.jobContext;
+    const head = this.snapshot?.sha ?? '';
+    const reaches = new Set((this.snapshot?.index.commits ?? []).map((commit) => commit.toLowerCase()));
+    const refs = (await anchorCheckRefs(this.deps.prisma, { ownerId: job.ownerId, spaceId: job.spaceId, sha: head }))
+      .filter((row) => reaches.has(row.ref));
+    const changed = new Map<string, WikiAnchorDiffNames>();
+    for (const { ref } of refs.slice(0, WIKI_MAINTAIN_JOB.anchorDiffsMax)) {
+      const what = `the diff ${ref.slice(0, 12)}..${head.slice(0, 12)}`;
+      const settled = await this.operation('diff', { from: ref, to: head }, what);
+      if (settled.state !== 'succeeded') {
+        this.jobContext.log(`${what} ${settled.state}: the anchors last checked at ${ref.slice(0, 12)} are checked again`);
+        continue;
+      }
+      changed.set(ref, anchorDiffNames(diffAnswerOf(settled).files));
+    }
+    const left = refs.slice(WIKI_MAINTAIN_JOB.anchorDiffsMax);
+    this.jobContext.log(`anchors were last checked at ${refs.length} other commit(s) the snapshot reaches: ${changed.size} diffed`
+      + (left.length > 0
+        ? `, and the ${left.reduce((total, row) => total + row.anchors, 0)} anchor(s) checked at the other ${left.length} are checked again`
+        : ''));
+    return { sha: head, reaches, changed };
   }
 
   // ── The documents ─────────────────────────────────────────────────────────────────────────────
@@ -1007,7 +1328,7 @@ class WikiMaintainRun {
       return;
     }
     const started = Date.now();
-    const before = { ...this.report.tokens };
+    this.docsStarted = started;
     try {
       await this.writeDocs(report);
     } catch (error) {
@@ -1016,11 +1337,7 @@ class WikiMaintainRun {
       report.error = cutRunes((error as Error).message, 600);
       this.jobContext.log(`documents: ${(error as Error).message} — the run goes on; the next run takes them up again`);
     }
-    report.tokens = {
-      input: this.report.tokens.input - before.input,
-      output: this.report.tokens.output - before.output,
-      calls: this.report.tokens.calls - before.calls,
-    };
+    // The step's tokens are its requests', read with the run's (`wholeReport`).
     report.seconds = Math.trunc((Date.now() - started) / 1000);
   }
 
@@ -1053,23 +1370,33 @@ class WikiMaintainRun {
       take.set(doc, keys);
       return true;
     };
+    // Each count's sections by name as well: what the run carries, so that a replay counts each section once.
+    const named = { byEntries: [] as string[], byRepo: [] as string[], stale: [] as string[], unwritten: [] as string[] };
     // The server's half: the entries, and what a withdrawn sentence left stale.
     for (const section of affected.sections) {
       add(section.doc, section.key);
-      if (section.stale) report.affected.stale += 1;
-      else report.affected.byEntries += 1;
+      if (section.stale) {
+        report.affected.stale += 1;
+        named.stale.push(`${section.doc}#${section.key}`);
+      } else {
+        report.affected.byEntries += 1;
+        named.byEntries.push(`${section.doc}#${section.key}`);
+      }
     }
     // The repository's half, here: what changed on origin/main under a written section's feet.
     const { changed, gone } = await this.repoAffected(planVersion, state, head);
     for (const ref of changed) add(ref.doc, ref.key);
     report.affected.byRepo = changed.length;
+    named.byRepo.push(...changed.map((ref) => `${ref.doc}#${ref.key}`));
     if (gone.length > 0) {
       try {
         const answer = await this.deps.docs.withdrawPaths(this.jobPrincipal(), job.spaceId, { repoSha: head, paths: gone });
         report.withdrawn.paths = gone.length;
         report.withdrawn.sentences = answer.withdrawn;
         for (const section of answer.sections) {
-          if (add(section.doc, section.key)) report.affected.stale += 1;
+          if (!add(section.doc, section.key)) continue;
+          report.affected.stale += 1;
+          named.stale.push(`${section.doc}#${section.key}`);
         }
         this.jobContext.log(`withdrew ${answer.withdrawn} sentence(s) citing ${gone.length} file(s) gone from origin/main`);
       } catch (error) {
@@ -1081,7 +1408,9 @@ class WikiMaintainRun {
       for (const doc of this.plan.docs) {
         for (const section of doc.sections) {
           if (stored.get(doc.slug)?.has(section.key)) continue;
-          if (add(doc.slug, section.key)) report.affected.unwritten += 1;
+          if (!add(doc.slug, section.key)) continue;
+          report.affected.unwritten += 1;
+          named.unwritten.push(`${doc.slug}#${section.key}`);
         }
       }
     }
@@ -1089,10 +1418,28 @@ class WikiMaintainRun {
     this.jobContext.log(`documents of plan version ${report.planVersion} at origin/main ${head.slice(0, 12)}: `
       + `${report.affected.total} section(s) to write again — ${report.affected.byEntries} by the entries, ${report.affected.byRepo} by the `
       + `repository, ${report.affected.stale} stale, ${report.affected.unwritten} never written`);
+    // What the step took up and withdrew is carried before it writes: a replay finds the sections written, and does not
+    // take them up again (contract `jobs.carry`).
+    const carried = this.docsCarry();
+    carried.planVersion = report.planVersion;
+    carried.repoSha = head;
+    carried.affected = {
+      byEntries: union(carried.affected.byEntries, named.byEntries),
+      byRepo: union(carried.affected.byRepo, named.byRepo),
+      stale: union(carried.affected.stale, named.stale),
+      unwritten: union(carried.affected.unwritten, named.unwritten),
+      taken: union(carried.affected.taken, [...take].flatMap(([doc, keys]) => [...keys].map((key) => `${doc}#${key}`))),
+    };
+    carried.withdrawn = {
+      paths: union(carried.withdrawn.paths, report.withdrawn.paths > 0 ? gone.map((one) => one.path) : []),
+      sentences: carried.withdrawn.sentences + report.withdrawn.sentences,
+    };
+    await this.keepDocs();
 
     let writeError: Error | null = null;
     if (report.affected.total > 0) {
       const summary = await this.writeSections(planVersion, state, stored, take);
+      this.docsSummary = summary;
       report.sections = { written: summary.written, unchanged: summary.unchanged, failed: summary.failed };
       if (summary.failed > 0) writeError = new Error(`${summary.failed} section(s) were left unwritten`);
     }
@@ -1107,18 +1454,26 @@ class WikiMaintainRun {
     const designs = await this.newDesignDocs(affected.plan.repoSha ?? '', head, cited);
     report.unplaced = { designDocs: designs.length, entries: affected.unplaced.length + affected.unplacedMore };
     if (designs.length > 0 || affected.unplaced.length > 0) {
-      report.proposal = await this.proposePlanChange(designs, affected.unplaced, head);
+      report.proposal = await this.proposePlanChange(designs, affected.unplaced, head, affected.topics);
+      if (report.proposal.outcome === 'proposed') {
+        // Stored: a replay finds its facts proposed, and proposes nothing of them again.
+        this.docsCarry().proposal = report.proposal;
+        await this.keepDocs();
+      }
     }
     if (writeError) throw writeError;
   }
 
-  /** Write the sections the run took up, through the documents' own writer, and say what it did. */
+  /**
+   * Write the sections the run took up, through the documents' own writer, and say what it did. Each section written is
+   * carried as it is (contract `jobs.carry`): a replay finds it written and leaves it alone.
+   */
   private async writeSections(
     planVersion: Awaited<ReturnType<PlansVersion>>,
     state: Awaited<ReturnType<WikiDocs['writerState']>>,
     stored: Map<string, Map<string, WikiDocsStoredSection>>,
     only: Map<string, Set<string>>,
-  ): Promise<{ written: number; unchanged: number; failed: number }> {
+  ): Promise<WikiDocsBuildSummary> {
     const { prisma } = this.deps;
     const { job } = this.jobContext;
     const head = this.snapshot!.sha;
@@ -1193,12 +1548,12 @@ class WikiMaintainRun {
       docs: planDocs,
       stored,
       only,
+      onSection: async (doc, run, answer) => {
+        if (carryWikiDocsSection(this.docsCarry(), doc.slug, run, answer)) await this.keepDocs();
+      },
     });
-    this.report.tokens.calls += summary.calls;
-    this.report.tokens.input += summary.usage.inputTokens;
-    this.report.tokens.output += summary.usage.outputTokens;
     void state;
-    return { written: summary.written, unchanged: summary.unchanged, failed: summary.failed };
+    return summary;
   }
 
   /** The snapshot at one commit, as the documents' writer reads it (`WikiDocsSnapshotRepo`). */
@@ -1262,6 +1617,26 @@ class WikiMaintainRun {
    * at, and the files they cite that are gone. Sections are taken by the commit they were written at: one
    * `diff` a commit, its names matched against the paths those sections name; for a section a path of which
    * changed, its pieces are read at both commits and compared.
+   *
+   * THE FILES ARE READ BY COMMIT, NOT BY SECTION (2026-10-10, P10's rounds f098cd24 and 54755b7b). Every diff is
+   * asked first, and then the files: what every touched section names, in one `read` at the head, and — commit by
+   * commit — what the touched sections of one commit name, in one `read` at that commit, compared as soon as it is
+   * read, so one commit's tree is held at a time. The read cache comes first, and more than one operation only where
+   * `repoOps.read.operationBytes` packs them so (`readWikiRepoFiles`). Each section's files used to be read as the
+   * section was compared, at both ends: two operations a touched section, each mostly the wait for the runner's
+   * next heartbeat — 106-108 reads of one file a round, ~430 of the ~590 seconds the comparison took. The same
+   * files are read at the same commits and the sections compared in the same order, so `changed` and `gone` are
+   * what they were. The diffs stay one a commit — none at the head, none for a commit the snapshot does not
+   * reach — and each operation is still asked once the one before it has settled.
+   *
+   * A RENAME IS TAKEN BY ITS OLD PATH, AND A DELETED FILE IS READ AT ITS COMMIT (2026-10-10), as the runner's
+   * comparison takes them (`wikiGitChanges`, and `newWikiDocRepo` at the commit itself): the names are keyed by the
+   * path at the section's commit (`gitChangesOf`), so either end of a rename touches a section that names it and the
+   * old one is withdrawn, `to` where it went; and the commit's files have what the range deleted or renamed away
+   * (`baseTreeOf`), so a cited file that is gone is read there and its going changes the section's material. The
+   * server used to match a rename by its new path and withdraw that, `to` the old one — a section citing only the old
+   * path was not touched, and no sentence citing it was taken back — and read a deleted file at neither commit, so
+   * its going changed nothing.
    */
   private async repoAffected(
     planVersion: Awaited<ReturnType<PlansVersion>>,
@@ -1272,7 +1647,7 @@ class WikiMaintainRun {
     for (const doc of state.docs) {
       shaOf.set(doc.slug, new Map(doc.sections.map((section) => [section.key, section.repoSha])));
     }
-    const bySha = new Map<string, Array<{ doc: string; key: string; section: WikiDocsPlanDoc['sections'][number]; paths: string[] }>>();
+    const bySha = new Map<string, WikiMaintainComparedSection[]>();
     for (const doc of planVersion.docs) {
       for (const section of doc.sections) {
         const sha = shaOf.get(doc.slug)?.get(section.key);
@@ -1283,7 +1658,15 @@ class WikiMaintainRun {
         bySha.set(sha, list);
       }
     }
-    const changed: Array<{ doc: string; key: string }> = [];
+    // The names: one diff a commit, in the order of their shas — which sections of the commit it touched, and which
+    // of the files they cite it deleted or renamed. A commit the snapshot does not reach has no diff and nothing
+    // to read: its sections are taken as changed.
+    const commits: Array<{
+      sha: string;
+      sections: WikiMaintainComparedSection[];
+      files: Array<{ status: string; path: string; from: string | null }> | null;
+      touched: WikiMaintainComparedSection[];
+    }> = [];
     const goneSeen = new Set<string>();
     const gone: Array<{ path: string; change: string; to?: string }> = [];
     for (const sha of [...bySha.keys()].sort()) {
@@ -1291,33 +1674,50 @@ class WikiMaintainRun {
       if (!(this.snapshot?.index.commits ?? []).some((commit) => commit.toLowerCase() === sha.toLowerCase())) {
         this.jobContext.log(`the snapshot does not have commit ${sha.slice(0, 12)} some sections were written at: `
           + `${sections.length} section(s) are taken as changed`);
-        for (const pending of sections) changed.push({ doc: pending.doc, key: pending.key });
+        commits.push({ sha, sections, files: null, touched: [] });
         continue;
       }
       const diff = await this.diffOf(sha, head);
       if (diff.files.length === 0) continue;
-      const tree = baseTreeOf(this.snapshot!.files, this.snapshot!.sizes, diff.files);
-      const base = this.snapshotRepo(sha, tree.files, tree.sizes);
-      const headRepo = this.snapshotRepo(head, this.snapshot!.files, this.snapshot!.sizes);
+      const changes = gitChangesOf(diff.files);
+      const touched: WikiMaintainComparedSection[] = [];
       for (const pending of sections) {
-        let touched = false;
-        for (const file of diff.files) {
-          if (!pathNamed(file.path, pending.paths)) continue;
-          touched = true;
-          if ((file.status.startsWith('D') || file.status.startsWith('R')) && !goneSeen.has(file.path)) {
-            goneSeen.add(file.path);
-            gone.push(file.status.startsWith('R') ? { path: file.path, change: 'renamed', to: file.from ?? '' } : { path: file.path, change: 'deleted' });
+        let touches = false;
+        for (const [path, change] of changes) {
+          if (!pathNamed(path, pending.paths)) continue;
+          touches = true;
+          if ((change.status === 'D' || change.status === 'R') && !goneSeen.has(path)) {
+            goneSeen.add(path);
+            gone.push(change.status === 'R' ? { path, change: 'renamed', to: change.to } : { path, change: 'deleted' });
           }
         }
-        if (!touched) continue;
-        await base.prepare(pending.paths);
-        await headRepo.prepare(pending.paths);
+        if (touches) touched.push(pending);
+      }
+      commits.push({ sha, sections, files: diff.files, touched });
+    }
+    // The files: what every touched section names, read at the head in one read; then, commit by commit, what the
+    // commit's touched sections name, read there in one read and compared section by section, in the order the
+    // comparison has always gone in.
+    const headRepo = this.snapshotRepo(head, this.snapshot?.files ?? [], this.snapshot?.sizes ?? new Map<string, number>());
+    await headRepo.prepare(commits.flatMap((commit) => commit.touched.flatMap((pending) => pending.paths)));
+    const changed: Array<{ doc: string; key: string }> = [];
+    for (const commit of commits) {
+      if (commit.files === null) {
+        for (const pending of commit.sections) changed.push({ doc: pending.doc, key: pending.key });
+        continue;
+      }
+      if (commit.touched.length === 0) continue;
+      const tree = baseTreeOf(this.snapshot!.files, this.snapshot!.sizes, commit.files);
+      const base = this.snapshotRepo(commit.sha, tree.files, tree.sizes);
+      await base.prepare(commit.touched.flatMap((pending) => pending.paths));
+      for (const pending of commit.touched) {
         const before = wikiDocRepoPieces(base, pending.section as never);
         const after = wikiDocRepoPieces(headRepo, pending.section as never);
         if (!samePieces(before.pieces, after.pieces)) changed.push({ doc: pending.doc, key: pending.key });
       }
     }
-    gone.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+    // By the paths' bytes, as the runner's `sort.Slice` compares Go strings.
+    gone.sort((a, b) => Buffer.compare(Buffer.from(a.path), Buffer.from(b.path)));
     return { changed, gone };
   }
 
@@ -1327,11 +1727,7 @@ class WikiMaintainRun {
     if (settled.state !== 'succeeded') {
       throw new WikiJobInfraError(`REPO_OP_FAILED: the diff ${from.slice(0, 12)}..${to.slice(0, 12)} ${settled.state}: ${settled.error ?? ''}`);
     }
-    const answer = (settled.result?.diff ?? {}) as { files?: Array<{ status?: string; path?: string; from?: string }>; docs?: string[] };
-    return {
-      files: (answer.files ?? []).map((file) => ({ status: String(file.status ?? ''), path: String(file.path ?? ''), from: file.from ?? null })),
-      docs: answer.docs ?? [],
-    };
+    return diffAnswerOf(settled);
   }
 
   /**
@@ -1377,7 +1773,12 @@ class WikiMaintainRun {
   }
 
   /** The run's one plan proposal: the model says where the knowledge belongs, the run checks it, the gate decides. */
-  private async proposePlanChange(designs: readonly WikiNewDesignDoc[], entries: readonly WikiUnplacedEntry[], head: string): Promise<NonNullable<WikiMaintainDocsReport['proposal']>> {
+  private async proposePlanChange(
+    designs: readonly WikiNewDesignDoc[],
+    entries: readonly WikiUnplacedEntry[],
+    head: string,
+    topics: readonly WikiPlanTopic[],
+  ): Promise<NonNullable<WikiMaintainDocsReport['proposal']>> {
     const out: NonNullable<WikiMaintainDocsReport['proposal']> = { outcome: 'failed' };
     if (this.plan === null) {
       out.error = 'no confirmed plan';
@@ -1392,7 +1793,9 @@ class WikiMaintainRun {
       if (items.length === WIKI_MAINTAIN_PROPOSAL.itemsMax) break;
       items.push({ id: `K${items.length + 1}`, entry });
     }
-    const repo = this.proposalRepo();
+    // The answer's references are checked in the files at the snapshot's commit, as the runner checks them in its
+    // checkout (`wikiDocRepo`), not against the snapshot's index.
+    const repo = this.snapshotRepo(head, this.snapshot!.files, this.snapshot!.sizes);
     const prompt = wikiMaintainProposalPrompt(this.plan, items);
     let problems: string[] = [];
     for (let round = 1; round <= WIKI_MAINTAIN_PROPOSAL.roundsMax; round += 1) {
@@ -1407,7 +1810,14 @@ class WikiMaintainRun {
         return out;
       }
       const answer = parseWikiMaintainProposal(text);
-      const { request, problems: check } = assembleWikiMaintainProposal(this.plan, answer, items, repo);
+      try {
+        await repo.prepare(wikiMaintainProposalPaths(answer));
+      } catch (error) {
+        if (isWikiJobCancellation(error, this.jobContext.signal)) throw error;
+        out.error = cutRunes((error as Error).message, 400);
+        return out;
+      }
+      const { request, problems: check } = assembleWikiMaintainProposal(this.plan, answer, items, repo, topics);
       if (check.length > 0) {
         problems = check;
         this.jobContext.log(`  proposal round ${round}: ${check.length} problem(s) found here: ${cutRunes(check.join('; '), 300)}`);
@@ -1442,17 +1852,6 @@ class WikiMaintainRun {
     return out;
   }
 
-  /** The snapshot as the proposal's gate reads it. */
-  private proposalRepo(): WikiMaintainProposalRepo {
-    const gate = this.snapshot!.gate;
-    return {
-      hasDocSection: (path, section) => gate.hasDocSection(path, section),
-      hasPath: (path) => gate.hasPath(path),
-      hasSymbol: (path, symbol) => gate.hasSymbol(path, symbol),
-      hasContract: (path) => gate.hasContract(path),
-    };
-  }
-
   private jobPrincipal(): WikiPrincipal {
     const { job } = this.jobContext;
     return wikiMaintainJobPrincipal(job.ownerId, job.id);
@@ -1464,9 +1863,38 @@ type PlansVersion = WikiPlans['version'];
 
 // ── Helpers ─────────────────────────────────────────────────────────────────────────────────────
 
+/** The documents step's model calls, as the queue files them: its sections' steps and the plan proposal's. */
+const MAINTAIN_DOCS_STEPS: readonly string[] = [...Object.values(WIKI_DOCS_BUILD_JOB.steps), WIKI_MAINTAIN_JOB.steps.planProposal];
+
+/**
+ * Of the entries an anchors step left alone, those whose checks were written since `since` — the run's first start — and
+ * so by an earlier attempt of the same run: one maintenance run of a space runs at a time, and nothing else records a
+ * check of a space the server runs. Counted as that attempt's outcome counted them: by the entry's anchor state.
+ */
+async function anchorsCheckedSince(
+  prisma: PrismaService,
+  input: { ownerId: string; spaceId: string; entryIds: readonly string[]; since: Date },
+): Promise<{ entries: number; changed: number; missing: number }> {
+  if (input.entryIds.length === 0) return { entries: 0, changed: 0, missing: 0 };
+  const [row] = await prisma.$queryRaw<Array<{ entries: number; changed: number; missing: number }>>`
+    SELECT count(*)::int AS "entries",
+           (count(*) FILTER (WHERE e."anchor_state" = 'changed'))::int AS "changed",
+           (count(*) FILTER (WHERE e."anchor_state" = 'missing'))::int AS "missing"
+      FROM "wiki_entry" e
+     WHERE e."owner_id" = ${input.ownerId}::uuid
+       AND e."space_id" = ${input.spaceId}::uuid
+       AND e."id" = ANY(${[...input.entryIds]}::uuid[])
+       AND EXISTS (SELECT 1 FROM jsonb_array_elements(e."anchors") AS a("value")
+                    WHERE CASE WHEN a."value"->'check'->>'at' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T'
+                               THEN (a."value"->'check'->>'at')::timestamptz >= ${input.since}
+                               ELSE false END)`;
+  return { entries: row?.entries ?? 0, changed: row?.changed ?? 0, missing: row?.missing ?? 0 };
+}
+
 /** The plan job's own system prompt, for the one plan change a maintenance run may propose (contract `plan.jobs`). */
-const PLAN_SYSTEM_PROMPT = '你是这个仓库的文档主编。你根据材料规划产品与技术文档。只使用材料里出现的文件路径、'
-  + '章节标题、符号、项目名，不编造。用中文写，代码名、路径、命令保留原文。只输出要求的内容。';
+const PLAN_SYSTEM_PROMPT = "You are the chief editor of this repository's documentation. You plan its product and technical documents from "
+  + 'the materials. Use only the file paths, section headings, symbols and project names that appear in the materials, and invent '
+  + 'none. Write in English; keep code names, paths and commands as they are. Output only what is asked for.';
 
 /** Take the quotes off an add's sources, and the places they were quoted from. */
 function stripQuotes(body: Record<string, unknown>): void {
@@ -1487,6 +1915,15 @@ function sectionPaths(section: { sources?: { docs?: Array<{ path: string }> | nu
   return out;
 }
 
+/** A settled `diff` operation's answer: what `git diff --name-status -M` named, and the documents it added or renamed into place. */
+function diffAnswerOf(settled: WikiRepoOpWait): { files: Array<{ status: string; path: string; from: string | null }>; docs: string[] } {
+  const answer = (settled.result?.diff ?? {}) as { files?: Array<{ status?: string; path?: string; from?: string }>; docs?: string[] };
+  return {
+    files: (answer.files ?? []).map((file) => ({ status: String(file.status ?? ''), path: String(file.path ?? ''), from: file.from ?? null })),
+    docs: answer.docs ?? [],
+  };
+}
+
 /** Whether a changed path is one the section names: the file itself, or a file under a directory it names. */
 function pathNamed(changed: string, named: readonly string[]): boolean {
   for (const path of named) {
@@ -1497,9 +1934,32 @@ function pathNamed(changed: string, named: readonly string[]): boolean {
 }
 
 /**
+ * A diff's names keyed by the path at the commit it starts from, as the runner's `wikiGitChanges` keys `git diff
+ * --name-status -M`: a rename under its old path (R, `to` its new one) and its new path once more, as added (A); a
+ * copy's new path as added; any other change under its path, by its status's first letter.
+ */
+function gitChangesOf(files: ReadonlyArray<{ status: string; path: string; from: string | null }>): Map<string, { status: string; to: string }> {
+  const changes = new Map<string, { status: string; to: string }>();
+  for (const file of files) {
+    const status = file.status.slice(0, 1);
+    if (status === '' || file.path === '') continue;
+    if (status === 'R' && file.from) {
+      changes.set(file.from, { status: 'R', to: file.path });
+      changes.set(file.path, { status: 'A', to: '' });
+    } else if (status === 'C' && file.from) {
+      changes.set(file.path, { status: 'A', to: '' });
+    } else {
+      changes.set(file.path, { status, to: '' });
+    }
+  }
+  return changes;
+}
+
+/**
  * The base commit's file list, as the diff names it: the head's, less what the range added or renamed into
- * place, plus what it deleted or renamed away. The files whose sizes the head does not carry are marked with
- * one byte, which is what lets a read of them answer at all (their content is still whatever git holds).
+ * place, plus what it deleted or renamed away — the files the runner reads at the commit itself, so a deleted
+ * one is read there too. The files whose sizes the head does not carry are marked with one byte, which is what
+ * lets a read of them answer at all (their content is still whatever git holds).
  */
 function baseTreeOf(
   headFiles: readonly string[],
@@ -1509,7 +1969,7 @@ function baseTreeOf(
   const gone = new Set<string>();
   const back = new Set<string>();
   for (const file of files) {
-    if (file.status.startsWith('D')) gone.add(file.path);
+    if (file.status.startsWith('D')) back.add(file.path);
     else if (file.status.startsWith('R')) {
       gone.add(file.path);
       if (file.from) back.add(file.from);

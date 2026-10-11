@@ -181,6 +181,9 @@ export interface PendingDecisionRow {
   ownerCard?: PendingDecisionOwnerCard | null;
   criterion: { key: string; text: string } | null;
   evidenceRevision: string;
+  /** When this version was submitted (ISO): the time a version waiting for its coordinator shows.
+   *  Optional because the cards that drew from `ageSeconds` alone never needed it. */
+  submittedAt?: string;
   ageSeconds: number;
   claim: string;
   gaps: string[];
@@ -202,6 +205,27 @@ export interface PendingDecisionQueue {
   /** What THIS session has already decided, oldest first — the receipts its conversation keeps.
    *  Absent from a server older than the receipts. */
   decided?: RecordedDecisionRow[];
+  /** Versions of the project THIS session coordinates that are waiting for it — it is paused, or
+   *  has not been handed them yet — oldest submission first, each shaped as a `pending` row. Not a
+   *  question this reader is asked, so nothing counts them: the conversation draws each as a folded
+   *  card its owner may still open and decide (`EvidenceDecisionCard.tsx`). Absent from a server
+   *  older than the queue, and read as empty. */
+  waitingOnCoordinator?: PendingDecisionRow[];
+  /** Versions that waited and have since been handed to THIS session, which still holds them —
+   *  neither decided nor replaced by a later revision. Earliest delivery first; absent from a
+   *  server older than the queue, and read as empty. */
+  sentToCoordinator?: SentToCoordinatorRow[];
+}
+
+/** One version that waited for its coordinator and was then delivered to it. */
+export interface SentToCoordinatorRow {
+  taskId: string;
+  title: string;
+  projectId: string | null;
+  /** The revision delivered, in the decimal spelling a pending row uses. */
+  evidenceRevision: string;
+  /** When it was delivered: the moment the coordinator's hold runs from. */
+  deliveredAt: string;
 }
 
 /** One decision recorded from the reading session, as `readPendingEvidenceJudgments` returns it. */
@@ -609,6 +633,8 @@ export function DecisionStrip({
   // The door's own answer, carried on the row and read here rather than re-derived: a row this
   // session may not answer is not a question put to this session. Nor is one whose card another
   // conversation draws: that coordinator's strip counts it, and this one could clear none of it.
+  // Nor is a version waiting for this conversation's coordinator (`waitingOnCoordinator`), even
+  // once its owner opens it to decide: it is not in `pending`, and nobody is being asked it yet.
   const decisions = queue.pending.filter((row) => pointsAtCard(row, hasCard));
   const yours = phone ? [] : (queue.waitingOnYou ?? []);
   // Every card a press can reach, oldest first within each kind, each named in the words its card

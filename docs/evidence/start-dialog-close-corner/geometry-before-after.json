@@ -1,0 +1,6 @@
+{
+  "measured": "real project page + ProjectStartDialog, P4.3b fixtures, 1280x900 @2x, dialog-relative px",
+  "before": { "dialogHeight": 1166.3, "close": { "top": 12, "bottom": 44, "right": 12 }, "card": { "top": 30, "right": 24 } },
+  "after":  { "dialogHeight": 1202.3, "close": { "top": 12, "bottom": 44, "right": 12 }, "card": { "top": 66, "right": 24 } },
+  "note": "before is the tree with .start-card-dialog > .orbit-overlay-header { height: 0 } injected (what the rule replaced); after is the committed rule"
+}

@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
 import { EyeOutlined, LoadingOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
-import { Button, Popover } from 'antd';
 import { Link } from 'react-router-dom';
 import type { WatchTargetView, WatchView } from '@orbit/shared';
 import { watchesQuery } from '../lib/queries';
@@ -34,6 +33,8 @@ import { CountLine } from './SessionCreatedTasksStrip';
 import { TaskStatusPill } from './TaskStatusPill';
 import { WatchEditorModal } from './WatchEditor';
 import { ObserverLink, WatchStatePill, useNow } from './WatchParts';
+import { Button } from './ui/Button';
+import { Popover } from './ui/Popover';
 
 const rowsOf = (data: unknown): WatchView[] => (Array.isArray(data) ? (data as WatchView[]) : []);
 
@@ -147,26 +148,32 @@ export function SessionWatchBadges({ sessionId }: { sessionId: string }) {
     <span className="watch-badges">
       {waitingOn.length > 0 && (
         <Popover
-          trigger="click"
-          placement="bottomLeft"
+          side="bottom"
+          align="start"
           title="This session is waiting on"
-          content={<WatchRowList watches={waitingOn} />}
+          popupClassName="watch-popover"
+          trigger={
+            <button type="button" className="watch-chip">
+              <EyeOutlined /> Following {targets} {targetNoun(waitingOn, targets)}
+            </button>
+          }
         >
-          <button type="button" className="watch-chip">
-            <EyeOutlined /> Following {targets} {targetNoun(waitingOn, targets)}
-          </button>
+          <WatchRowList watches={waitingOn} />
         </Popover>
       )}
       {watchedBy.length > 0 && (
         <Popover
-          trigger="click"
-          placement="bottomLeft"
+          side="bottom"
+          align="start"
           title="Watches on this session"
-          content={<WatchRowList watches={watchedBy} />}
+          popupClassName="watch-popover"
+          trigger={
+            <button type="button" className="watch-chip is-quiet">
+              Followed by {watchedBy.length}
+            </button>
+          }
         >
-          <button type="button" className="watch-chip is-quiet">
-            Followed by {watchedBy.length}
-          </button>
+          <WatchRowList watches={watchedBy} />
         </Popover>
       )}
       <button

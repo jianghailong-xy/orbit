@@ -190,17 +190,39 @@ final class ToolDisplayTests: XCTestCase {
         XCTAssertFalse(d.autoOpen)
     }
 
-    // ...but a plan, a question and a `!`-shell command still open themselves: each is the point of
-    // the turn rather than a step inside it.
-    func testPlansAndQuestionsStillAutoOpen() {
+    // ...but a plan and a `!`-shell command still open themselves: each is the point of the turn
+    // rather than a step inside it.
+    func testPlansStillAutoOpen() {
         let plan = ToolDisplay.describe(name: "ExitPlanMode",
                                         input: obj(["plan": .string("# Do the thing")]),
                                         status: .error, id: "t1")
-        let question = ToolDisplay.describe(name: "AskUserQuestion",
-                                            input: obj(["questions": .array([])]),
-                                            status: .error, id: "t2")
         XCTAssertTrue(plan.autoOpen)
-        XCTAssertTrue(question.autoOpen)
+    }
+
+    // A question no longer does: folded, its card is already the record — what was asked and how it
+    // was answered (`QuestionRecords`) — and a tap replays every option. So its body is the questions
+    // themselves, not prose: the card draws them with their answers.
+    func testQuestionIsItsQuestionsAndStaysFolded() {
+        let question = ToolDisplay.describe(name: "AskUserQuestion", input: obj(["questions": .array([
+            obj(["question": .string("Ship it tonight?"), "header": .string("Ship"), "multiSelect": .bool(false),
+                 "options": .array([obj(["label": .string("Yes")]), obj(["label": .string("No")])])]),
+            obj(["question": .string("Which clients?"), "header": .string("Clients"), "multiSelect": .bool(true),
+                 "options": .array([obj(["label": .string("Web")])])]),
+        ])]), status: .ok, id: "t2")
+        XCTAssertFalse(question.autoOpen)
+        XCTAssertEqual(question.label, "Question")
+        XCTAssertEqual(question.summary, "Ship  ·  Clients")
+        XCTAssertEqual(question.body, .question([
+            AskQuestion(header: "Ship", question: "Ship it tonight?",
+                        options: [AskOption(label: "Yes", description: nil), AskOption(label: "No", description: nil)],
+                        multiSelect: false),
+            AskQuestion(header: "Clients", question: "Which clients?",
+                        options: [AskOption(label: "Web", description: nil)], multiSelect: true),
+        ]))
+        let empty = ToolDisplay.describe(name: "AskUserQuestion", input: obj(["questions": .array([])]),
+                                         status: .error, id: "t3")
+        XCTAssertEqual(empty.body, ToolBody.none)
+        XCTAssertFalse(empty.autoOpen)
     }
 
     func testNumberedAssignsGutterLineNumbers() {

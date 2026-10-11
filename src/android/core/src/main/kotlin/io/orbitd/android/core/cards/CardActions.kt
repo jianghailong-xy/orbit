@@ -137,7 +137,10 @@ class CardAuthority(private val api: OrbitApi, private val handle: SessionHandle
         if (card.family == CardFamily.WIKI || card.family == CardFamily.BACKGROUND) return readAuxiliary(card)
         // Session REST verifies ownership, active approvals, queues and standing questions together.
         val snapshot = RealtimeRest(api).session(handle, card.sessionId)
-        return CardCatalog.session(card.sessionId, snapshot).firstOrNull { it.key == card.key }
+        val current = CardCatalog.session(card.sessionId, snapshot).firstOrNull { it.key == card.key }
+        // A revision waiting for the coordinator is pressed as the evidence card Decide it myself opened it into, while it still
+        // waits; one that has since become the owner's card is that card, and one sent to the coordinator meanwhile is no longer it.
+        return if (CoordinatorQueue.isDecidingMyself(card)) current?.let { CoordinatorQueue.decideMyself(it) ?: it } else current
     }
 
     private suspend fun readAuxiliary(card: InteractionCard): InteractionCard? = when (card.context.text("resource")) {

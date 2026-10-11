@@ -430,7 +430,7 @@ export async function writeOwnerAnswersComment(
   const lines = input.answers.map((answer) => {
     const question = questions.get(answer.key);
     const notShown = answer.source === 'NOT_SHOWN'
-      ? '（owner 的 app 没有显示这个问题，记下的是审查方推荐的选项）'
+      ? " (the owner's app did not show this question; what is recorded is the option the reviewer recommended)"
       : '';
     return `- ${question?.text ?? answer.key} — ${answerInWords(answer, question)}${notShown}`;
   });
@@ -441,9 +441,9 @@ export async function writeOwnerAnswersComment(
       authorType: task.assigneeId ? CreatorType.AGENT : task.creatorType,
       authorId: task.assigneeId ?? task.creatorId,
       body: [
-        '**owner 对审查问题的回答（系统自动记录）**',
+        "**The owner's answers to the review's questions (recorded by Orbit)**",
         '',
-        'owner 确认本任务完成时，对审查方提出的「要你判断」的问题作了如下回答：',
+        'When the owner confirmed this task done, they answered the "Needs you" questions the reviewer raised as follows:',
         '',
         ...lines,
       ].join('\n'),

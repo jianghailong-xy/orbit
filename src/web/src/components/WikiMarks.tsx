@@ -30,7 +30,7 @@ import {
  * ONE VOCABULARY, DRAWN ONCE. The design's own rule (§12.1) is that these five marks read the same on
  * the home page, the topic grid, the drawer and Review, and that the words come from `lib/wiki.ts`
  * rather than from the component — iOS draws the same five from its own copy table, held to this one
- * by a parity test. What is here is the drawing: which AntD glyph stands for a kind, and which tone
+ * by a parity test. What is here is the drawing: which @ant-design/icons glyph stands for a kind, and which tone
  * class a mark takes.
  *
  * The tones are the app's own `.tdp-badge` tones, plus one the task detail panel did not have: the

@@ -1,4 +1,4 @@
 {
-  "rolloutPercent": 100,
+  "rolloutPercent": 60,
   "rollback": null
 }

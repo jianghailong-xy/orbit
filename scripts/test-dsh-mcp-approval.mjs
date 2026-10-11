@@ -50,6 +50,8 @@ export const realScenarios = [
   'TestDshRealDontAskRejectsUnasked',
   'TestDshRealAutoWorkspaceBoundary',
   'TestDshRealAutoRoutineEscalation',
+  'TestDshRealAutoCacheRoot',
+  'TestDshRealDefaultCacheRootDenied',
   'TestDshRealToolGateAsksInAuto',
   'TestDshRealToolGateRefusesInDontAsk',
 ];

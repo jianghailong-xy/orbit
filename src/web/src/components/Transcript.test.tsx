@@ -1223,9 +1223,11 @@ describe('Orbit write tool cards', () => {
     expect(html).toContain('2 in parallel after 1');
     expect(html).not.toContain('mcp__orbit__task_create_batch');
     // Unfolded on sight: the shape is on the row, but the titles are the write, and a reader
-    // scrolling a settled turn has no other place to find them.
+    // scrolling a settled turn has no other place to find them. The picture above them is the
+    // project page's canvas, which a server render never resolves (`BatchGraph`), so what this
+    // render has of the row is the half that is always there.
     expect(html).toContain('准备分片清单');
-    expect(html).toContain('batch-graph');
+    expect(html).toContain('tool-batch');
   });
 
   // The batch tool answers with every field of every row it wrote. Folded, nobody saw it; open by
@@ -1275,9 +1277,10 @@ describe('Orbit write tool cards', () => {
     expect(html).toContain('chat-result');
   });
 
-  // SVG text neither wraps nor ellipsizes: past the box it runs on over the node beside it. The
-  // label budget has to be a width, so a Chinese title gets half the characters a Latin one does.
-  it('clips a wide-glyph label by width, not by character count', () => {
+  // A batch's titles are written out in full, whatever the glyphs cost: the picture above them is
+  // the project page's canvas, whose cards wrap a title rather than clipping it — the hand-rolled
+  // SVG that had to budget title width in half-ems is gone.
+  it('writes every title out in full, wide glyphs included', () => {
     const html = renderToStaticMarkup(
       <MemoryRouter>
         <Transcript
@@ -1293,10 +1296,8 @@ describe('Orbit write tool cards', () => {
       </MemoryRouter>,
     );
 
-    expect(html).toContain('一二三四五六七八九…');
-    expect(html).not.toContain('一二三四五六七八九十…');
-    // Twenty half-ems of Latin is still the twenty characters the old count allowed.
-    expect(html).toContain('>twenty characters ok<');
+    expect(html).toContain('一二三四五六七八九十壹贰叁肆伍');
+    expect(html).toContain('twenty characters ok');
   });
 
   // Fifty is a legal batch (TASK_BATCH_CREATE_MAX) and fifty unfolded rows is a wall dropped into
@@ -1953,6 +1954,21 @@ describe('runtime authentication help', () => {
 
     expect(html).toContain('Provider authentication failed');
     expect(html).not.toContain('opencode auth login');
+  });
+
+  it('names the rejected key by its vendor and its own name, never its slug (board 8)', () => {
+    const html = renderToStaticMarkup(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <AuthErrorCtx.Provider value={{ provider: 'deepseek', keyName: 'the DeepSeek key “DeepSeek”', runtime: 'claude', runnerName: 'box' }}>
+          <Transcript events={[errorEvent(1, AUTH_FAILED)]} />
+        </AuthErrorCtx.Provider>
+      </QueryClientProvider>,
+    );
+    expect(html).toContain('The DeepSeek key “DeepSeek” was rejected. Update it in Infrastructure, then send your message again.');
+    expect(html).not.toContain('<code>deepseek</code>');
+    // A key this account no longer has: still no slug.
+    expect(card('deepseek')).toContain('The API key was rejected.');
+    expect(card('deepseek')).not.toContain('<code>deepseek</code>');
   });
 
   it('takes Antigravity to the encrypted Gemini key in Providers', () => {

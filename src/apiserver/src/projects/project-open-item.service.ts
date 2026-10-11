@@ -72,6 +72,7 @@ import {
 } from './project-open-item';
 import { escalatesAt } from './open-item-escalation.service';
 import { canonicalJson } from './canonical-json';
+import { mainBranchOf } from './project-criterion-landing';
 import {
   RetryableLandingFailureClass,
   SkippedMergeCheckRecord,
@@ -384,6 +385,8 @@ export interface ProjectOpenItems {
   doneRequest: OpenItemRow | null;
   settled: OpenItemRow[];
   closedQuestions: ProjectClosedQuestion<Date>[];
+  /** The main branch a row's merge into main goes into; null with no repository bound. */
+  mainBranch: string | null;
 }
 
 /** How far back `settled` reaches, and how many it holds at most (§4.7 H5): enough for the card a
@@ -832,7 +835,9 @@ export class ProjectOpenItemService {
    * payload carries none, which is also what the two clients draw from.
    *
    * Automatic left out is on: the owner's card opens with it on whatever is sent, and a coordinator
-   * that would keep it off says so in `why`.
+   * that would keep it off says so in `why`. A main branch (`upstreamRef`) is kept as suggested, and
+   * left out suggests none: the card then opens on this project's own choice, or this account's last
+   * for the repository, or main (L6).
    */
   async requestStart(
     ownerId: string,
@@ -845,6 +850,9 @@ export class ProjectOpenItemService {
         'a project that lands directly into main has no project branch to name',
       );
     }
+    if (body.projectBranchName != null && body.projectBranchName === body.upstreamRef) {
+      throw new BadRequestException('a project branch cannot be the upstream it integrates into');
+    }
     const why = body.why?.trim();
     if (!why) {
       throw new BadRequestException(
@@ -854,6 +862,7 @@ export class ProjectOpenItemService {
     const settings: ProjectStartSettings = {
       line: body.line,
       ...(body.projectBranchName != null ? { projectBranchName: body.projectBranchName } : {}),
+      ...(body.upstreamRef != null ? { upstreamRef: body.upstreamRef } : {}),
       automatic: body.automatic ?? true,
       maxConcurrentTasks: body.maxConcurrentTasks,
       mergeCheckCommand: body.mergeCheckCommand?.trim() || null,
@@ -2090,6 +2099,13 @@ export class ProjectOpenItemService {
    * the coordinator's open items about the candidate marked as being handled by that check — still
    * OPEN until it reports. A check that passes makes them HANDLED in the coordinator's name; one that
    * fails again supersedes them with its own item.
+   *
+   * A TIMED-OUT CHECK (§2.2 J-T9). A newest check that is RUNNING but silent past its limit is judged
+   * by the same read the job list draws (`readInFlightJobs`), and a retry of it first ends it as
+   * `ERROR · RUNNER_LOST` — the compare-and-set on the heartbeat it was judged from — then requeues
+   * the check like any other rerun, with the candidate readmitted from CHECKING as well as BLOCKED.
+   * The account owner's door (`retryPromotionCheckAsOwner`) is this same method, held to the same
+   * rules.
    */
   async retryPromotionCheck(
     ownerId: string,
@@ -2130,6 +2146,10 @@ export class ProjectOpenItemService {
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         select: { id: true, kind: true, generation: true, state: true, checks: true },
       });
+      // Whether a RUNNING check timed out, by the rule the job list draws it with (§1.6).
+      const [silent] = newestJob?.state === 'RUNNING'
+        ? await readInFlightJobs(tx, projectId, newestJob.id)
+        : [];
       const openItems = await tx.projectOpenItem.findMany({
         where: { projectId, promotionId, kind: { in: [...INTEGRATION_ITEM_KINDS] }, state: 'OPEN' },
         select: { id: true, kind: true, assignee: true, assigneeReason: true },
@@ -2139,10 +2159,17 @@ export class ProjectOpenItemService {
         requester: ownerRequester ? 'OWNER' : 'COORDINATOR',
         coordinatorEnabled: current.coordinatorEnabled,
         promotionState: locked.state,
-        newestJob,
+        newestJob: newestJob && { ...newestJob, timedOut: silent?.timedOut === true },
         openItems,
       });
       if (!decision.ok) throw new HttpException(decision.body, decision.status);
+      if (decision.endsTimedOutJob && !(silent && await endTimedOutLanding(tx, silent))) {
+        throw new ConflictException({
+          code: INTEGRATION_RETRY_IN_FLIGHT,
+          message: 'this check\'s runner reported again while the retry was being decided, so it has not '
+            + 'timed out any more. Read the project again.',
+        });
+      }
 
       const queued = await requeuePromotionCheck(tx, {
         promotionId,
@@ -2690,6 +2717,7 @@ export class ProjectOpenItemService {
     const deliveredAt = new Map(
       turns.map((turn) => [`${turn.sessionId}:${turn.clientTurnId}`, turn.deliveredAt]),
     );
+    const mainBranch = mainBranchOf(await readProjectCodebase(this.prisma, projectId));
     const view = rows.map((row): OpenItemRow => {
       const [sent] = row.deliveries;
       const handed = sent ? deliveredAt.get(`${sent.sessionId}:${sent.clientTurnId}`) ?? null : null;
@@ -2771,6 +2799,7 @@ export class ProjectOpenItemService {
           state: 'OPEN',
           handledBy: handledBy.get(row.id) ?? [],
           handoverNote: row.handoverNote,
+          mainBranch,
         }),
         primaryAction: primaryAction({
           kind: row.kind,
@@ -2863,6 +2892,7 @@ export class ProjectOpenItemService {
       doneRequest: view.find((row) => row.kind === DONE_REQUEST_KIND) ?? null,
       settled: settledView,
       closedQuestions: await this.closedQuestions(projectId),
+      mainBranch,
     };
   }
 

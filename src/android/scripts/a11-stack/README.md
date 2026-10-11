@@ -14,7 +14,9 @@ on this host, on loopback, at the fixed server SHA `d621e29aaa0178ecf6656c56656b
   `TMPDIR` under the stack directory, and self-update and engine updates are turned off. The only engine on its
   `PATH` is `fake-claude`, installed as `runner-path/claude`. That engine speaks Claude Code's stream-json
   protocol without a model, an account or the network. A task run whose prompt contains `A11-FAIL` fails on
-  purpose. Any other task run appends a line to `A11_STACK_NOTES.md` in its worktree.
+  purpose. In any session, the first message carrying `A07C-QUOTA` is answered with Claude Code's weekly-limit
+  sentence, and the first carrying `A07C-FAIL` fails its turn; the same message sent again is answered. Any other
+  task run appends a line to `A11_STACK_NOTES.md` in its worktree.
 - **seed**: `seed.mjs` and then `seed-blocker.mjs` create everything through the real HTTP API, with no
   direct database writes. They create two accounts, the runner, a workspace with a local bare origin, and
   tasks in every state. They also create three projects: a started manual project with a failed task, a

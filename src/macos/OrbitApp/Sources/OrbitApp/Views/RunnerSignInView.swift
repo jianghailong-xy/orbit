@@ -587,7 +587,9 @@ struct DshRepairCardView: View {
         VStack(alignment: .leading, spacing: 8) {
             Label(title, systemImage: "exclamationmark.triangle.fill")
                 .foregroundStyle(.orange).font(.orbitProse.bold())
-            Text(repair.detail)
+            // A rejected key is named — `the DeepSeek key “DeepSeek 2”` — since one DeepSeek key runs on
+            // Claude Code, OpenCode and DeepSeek Harness alike, and there can be several (board 8).
+            Text(repair.detail(keyName: console.sessionKeyName))
                 .font(.orbitLabel).foregroundStyle(.secondary)
             HStack {
                 if repair.isKeyProblem {

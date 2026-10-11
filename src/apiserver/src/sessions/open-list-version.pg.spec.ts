@@ -202,6 +202,26 @@ test('every source the Open list row shows moves its version', { skip }, async (
     db.project.update({ where: { id: project.id }, data: { coordinatorSessionId: f.sessionId } }));
   await changes(f, 'project renamed', () =>
     db.project.update({ where: { id: project.id }, data: { title: 'olv project 2' } }));
+  // A merge approval on the coordinator's row names the project's main branch
+  // (`ownerItems[].mainBranch`), read off its binding: binding a repository and moving its main
+  // branch both change the row.
+  const now = new Date();
+  await changes(f, 'owner item', () => db.projectOpenItem.create({
+    data: {
+      projectId: project.id, ownerId: f.ownerId, kind: 'PROMOTION_APPROVAL', state: 'OPEN', assignee: 'OWNER',
+      assigneeReason: 'DEFAULT', dedupeKey: `olv:${project.id}`, title: 'Approve merge to main',
+      payload: {}, waitingSince: now, assignedAt: now,
+    },
+  }));
+  await changes(f, 'repository bound', () => db.projectCodebase.create({
+    data: {
+      ownerId: f.ownerId, projectId: project.id, canonicalRepoUrl: `https://github.com/example/olv-${project.id}`,
+      upstreamRef: 'refs/heads/main', integrationRef: 'refs/heads/main', refAuthority: 'REMOTE',
+    },
+  }));
+  await changes(f, 'main branch moved by raw SQL, updated_at untouched', () =>
+    db.$executeRaw`UPDATE project_codebase SET upstream_ref = 'refs/heads/master',
+      integration_ref = 'refs/heads/master' WHERE project_id = ${project.id}::uuid`);
 });
 
 test('a threshold the clock passes moves the version with no write', { skip }, async (t) => {

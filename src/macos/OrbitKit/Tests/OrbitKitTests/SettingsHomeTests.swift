@@ -18,7 +18,7 @@ final class SettingsHomeTests: XCTestCase {
         XCTAssertEqual(SettingsHome.Group.allCases.map(SettingsHome.header),
                        ["Sessions", "Machines & models", "Preferences", "Account"])
         XCTAssertEqual(SettingsHome.rows(.sessions, isAdmin: false),
-                       [.defaultPermission, .orchestration, .modelRouting, .promptSuggestions])
+                       [.defaultPermission, .orchestration, .modelRouting, .promptSuggestions, .recaps])
         // One row: the web's Runners and Providers pages are one page, Infrastructure.
         XCTAssertEqual(SettingsHome.rows(.machines, isAdmin: false), [.infrastructure])
         XCTAssertEqual(SettingsHome.rows(.preferences, isAdmin: false), [.notifications, .appearance])

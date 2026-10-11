@@ -10,6 +10,15 @@ import android.graphics.BitmapFactory
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontFamily
+import io.orbitd.android.text.MarkdownText
+import java.text.NumberFormat
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -30,6 +39,40 @@ import kotlinx.coroutines.*
 import java.io.File
 import java.util.UUID
 
+/**
+ * iOS `MonospaceOutputViewer` for a file (b8d661967): how many lines it has, its text — and for Markdown a Preview / Source choice,
+ * the preview rendered as the transcript renders Markdown, its images opening above the reader. Long files stay smooth: the source
+ * is laid out a line at a time.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TextReader(preview: TextFilePreview, open: (String) -> Unit, modifier: Modifier) {
+    var source by rememberSaveable(preview) { mutableStateOf(false) }
+    Column(modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("${NumberFormat.getIntegerInstance().format(preview.lineCount)} ${if (preview.lineCount == 1) "line" else "lines"}",
+                Modifier.weight(1f), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (preview.isMarkdown) SingleChoiceSegmentedButtonRow(Modifier.widthIn(max = 220.dp)) {
+                listOf(false to "Preview", true to "Source").forEachIndexed { index, (isSource, label) ->
+                    SegmentedButton(selected = source == isSource, onClick = { source = isSource },
+                        shape = SegmentedButtonDefaults.itemShape(index, 2)) { Text(label) }
+                }
+            }
+        }
+        HorizontalDivider()
+        if (preview.isMarkdown && !source) Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(vertical = 12.dp)
+            .testTag("attachment-markdown")) { MarkdownText(preview.text, open = open) }
+        else {
+            val lines = remember(preview) { preview.text.lines() }
+            SelectionContainer {
+                LazyColumn(Modifier.fillMaxSize().testTag("attachment-text"), contentPadding = PaddingValues(vertical = 8.dp)) {
+                    items(lines.size) { index -> Text(lines[index], fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall) }
+                }
+            }
+        }
+    }
+}
+
 /** Only these private handoff files are exposed, through expiring Android URI grants. */
 class AttachmentProvider : FileProvider()
 
@@ -43,18 +86,19 @@ fun clearAttachmentHandoffs(context: Context) {
     root.deleteRecursively()
 }
 
+/** [open]: where a link inside a previewed Markdown file goes. */
 @Composable
 fun AttachmentActions(name: String, mime: String, bytes: suspend () -> ByteArray, closeLabel: String = "Close attachment",
-    previous: (() -> Unit)? = null, next: (() -> Unit)? = null, contentKey: String = name, close: () -> Unit) {
+    previous: (() -> Unit)? = null, next: (() -> Unit)? = null, contentKey: String = name, open: (String) -> Unit = {}, close: () -> Unit) {
     // Keep the Android window while changing images; reset only the file's content and jobs.
     Dialog(close, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        key(contentKey) { AttachmentContent(name, mime, bytes, closeLabel, previous, next, close) }
+        key(contentKey) { AttachmentContent(name, mime, bytes, closeLabel, previous, next, open, close) }
     }
 }
 
 @Composable
 private fun AttachmentContent(name: String, mime: String, bytes: suspend () -> ByteArray, closeLabel: String,
-    previous: (() -> Unit)?, next: (() -> Unit)?, close: () -> Unit) {
+    previous: (() -> Unit)?, next: (() -> Unit)?, open: (String) -> Unit, close: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var error by remember { mutableStateOf<String?>(null) }
@@ -70,6 +114,17 @@ private fun AttachmentContent(name: String, mime: String, bytes: suspend () -> B
                 }
             } catch (cancel: CancellationException) { throw cancel }
             catch (_: Exception) { error = "Couldn't load image. Retry or open the file." }
+        }
+    }
+    // A07-1: a file that is text opens in the reader right here (iOS b8d661967) — an empty one too; anything else keeps the
+    // hand-offs below.
+    val text by produceState<TextFilePreview?>(null, retry) {
+        if (!mime.startsWith("image/")) {
+            try {
+                val data = bytes()
+                value = withContext(Dispatchers.Default) { TextFilePreview.of(data, name) }
+            } catch (cancel: CancellationException) { throw cancel }
+            catch (_: Exception) { error = "Couldn't open that file. Retry or open it in another app." }
         }
     }
     fun run(success: String? = null, action: suspend (ByteArray) -> Unit) {
@@ -144,6 +199,7 @@ private fun AttachmentContent(name: String, mime: String, bytes: suspend () -> B
             TextButton(enabled = previous != null, onClick = { previous?.invoke() }) { Text("Previous image") }
             TextButton(enabled = next != null, onClick = { next?.invoke() }) { Text("Next image") }
         }
+        text?.let { TextReader(it, open, Modifier.weight(1f)) }
         image?.let { bitmap ->
             var scale by remember { mutableFloatStateOf(1f) }
             var x by remember { mutableFloatStateOf(0f) }; var y by remember { mutableFloatStateOf(0f) }

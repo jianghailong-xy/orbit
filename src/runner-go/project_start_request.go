@@ -84,6 +84,11 @@ func projectStartRequestBody(args map[string]interface{}) (map[string]interface{
 		}
 		body["projectBranchName"] = branch
 	}
+	// The main branch is a suggestion with either line, sent as given: whether it names a branch is
+	// the server's to say.
+	if upstream := strings.TrimSpace(getString(args, "upstreamRef")); upstream != "" {
+		body["upstreamRef"] = upstream
+	}
 	if check := strings.TrimSpace(getString(args, "mergeCheckCommand")); check != "" {
 		body["mergeCheckCommand"] = check
 	}

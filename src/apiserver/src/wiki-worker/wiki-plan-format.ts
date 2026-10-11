@@ -329,7 +329,7 @@ export interface WikiPlanUnit {
   sections: WikiPlanSectionDraft[];
   stray: string[];
   hasBody: boolean;
-  /** The catalogue its body was written against, id → slug: what "见 3.3" in it meant then. */
+  /** The catalogue its body was written against, id → slug: what "see 3.3" in it meant then. */
   refs: Map<string, string> | null;
   /** Carried from the version revised: a protected document, as it is; or one a revision keeps whole, less the sections it moved out. */
   protectedDoc: WikiPlanDoc | null;
@@ -356,6 +356,8 @@ const BACKTICKS = /`([^`]*)`/gu;
 const AGENTS = /\[agents\]|［agents］|（给 ?agent）|\(给 ?agent\)/u;
 const AGENTS_ALL = /\[agents\]|［agents］|（给 ?agent）|\(给 ?agent\)/gu;
 const MOVE_LINE = new RegExp(`^[-*]${S}*(\\d+\\.\\d+)${S}*§${S}*(\\d+)${S}*(?:→|->|=>)${S}*(\\d+\\.\\d+)`, 'u');
+/** The heading a revision's list of moved sections starts under: `### Sections moved into the agents' category`. */
+const MOVES_HEADING = /\bmoved\b/iu;
 /** wikiPlanIDs: a document's number, `3.2`. */
 export const WIKI_PLAN_IDS = /\d+\.\d+/gu;
 
@@ -380,8 +382,8 @@ export interface WikiPlanCatalogue {
 }
 
 /**
- * A catalogue: `## n. title `key` —— question [agents]` and `- n.m title `slug`｜question｜含：…` (a revision's also
- * carries `来源：…` and a list of moved sections). Documents are numbered again in order, whatever the model
+ * A catalogue: `## n. title `key` — question [agents]` and `- n.m title `slug` | question | Includes: …` (a revision's
+ * also carries `Sources: …` and a list of moved sections). Documents are numbered again in order, whatever the model
  * numbered them; its own numbers name them only in its list of moves. Null for an answer with no category and
  * no document.
  */
@@ -392,7 +394,7 @@ export function parseWikiPlanCatalogue(text: string): WikiPlanCatalogue | null {
   for (const raw of text.split('\n')) {
     const line = goTrimSpace(raw);
     if (line === '' || line === '---') continue;
-    if (line.startsWith('#') && line.includes('移到')) {
+    if (line.startsWith('#') && MOVES_HEADING.test(line)) {
       inMoves = true;
       continue;
     }
@@ -401,8 +403,8 @@ export function parseWikiPlanCatalogue(text: string): WikiPlanCatalogue | null {
       if (m) {
         out.moves.push({ from: m[1], section: Number.parseInt(m[2], 10), to: m[3], target: null });
       } else {
-        const none = goTrimSpace(goTrimLeft(line, '-*'));
-        if (none !== '无' && none !== '（无）' && !line.startsWith('（')) out.stray.push(line);
+        const none = goTrimSpace(goTrimLeft(line, '-*')).toLowerCase();
+        if (none !== 'none' && none !== '(none)' && !line.startsWith('(')) out.stray.push(line);
       }
       continue;
     }
@@ -426,8 +428,9 @@ export function parseWikiPlanCatalogue(text: string): WikiPlanCatalogue | null {
       const unit = newUnit({ cat: out.cats.length - 1, title: goTrim(doc[2], '* '), slug: goTrimSpace(doc[3]), question: goTrimSpace(doc[4]) });
       for (const part of wikiPlanSplitBar(doc[5])) {
         const [label, value] = wikiPlanLabel(part);
-        if (label === '含') unit.cardScope = wikiPlanSplitList(value);
-        else if (label === '来源') unit.sources = value.match(WIKI_PLAN_IDS) ?? [];
+        const key = label.toLowerCase();
+        if (key === 'includes') unit.cardScope = wikiPlanSplitList(value);
+        else if (key === 'sources') unit.sources = value.match(WIKI_PLAN_IDS) ?? [];
         else unit.stray.push(part);
       }
       modelIds.set(doc[1], unit);
@@ -448,7 +451,7 @@ export function wikiPlanSplitBar(text: string): string[] {
 }
 
 /**
- * `标签：值` split; a line with no label answers '' and itself. The label is looked for within the first
+ * `Label: value` split; a line with no label answers '' and itself. The label is looked for within the first
  * forty bytes of the line, as Go's loop over its runes reads them (a Chinese character is three).
  */
 export function wikiPlanLabel(input: string): [string, string] {
@@ -473,13 +476,19 @@ export function wikiPlanLabel(input: string): [string, string] {
 export function wikiPlanSplitList(text: string): string[] {
   return goFieldsFunc(text, (r) => r === '；' || r === ';')
     .map((part) => goTrimSpace(part))
-    .filter((part) => part !== '' && part !== '无' && part !== '—' && part !== '-');
+    .filter((part) => part !== '' && !wikiPlanNone(part) && part !== '—' && part !== '-');
+}
+
+/** `none` (in any case), or `(none)`: what the model writes for a field it has nothing for. */
+export function wikiPlanNone(text: string): boolean {
+  const lower = text.toLowerCase();
+  return lower === 'none' || lower === '(none)';
 }
 
 /** Names the model wrote with 、,， between them. */
 export function wikiPlanSplitNames(input: string): string[] {
   const text = goTrimSpace(input);
-  if (text === '' || text === '无' || text === '—' || text === '-' || text === '（无）') return [];
+  if (text === '' || wikiPlanNone(text) || text === '—' || text === '-') return [];
   return goFieldsFunc(text, (r) => r === '、' || r === ',' || r === '，')
     .map((part) => goTrim(goTrimSpace(part), '`「」'))
     .filter((part) => part !== '');
@@ -517,40 +526,40 @@ export function parseWikiPlanDocBody(text: string): { header: WikiPlanHeader; se
     if (DOC_HEADING.test(line) && current === null) continue; // `### 3.2 title`: the document's own heading
     const body = goTrimSpace(goTrimLeft(line, '-*•'));
     const [label, value] = wikiPlanLabel(body);
+    // A label is read in any case: `Title:`, `title:` and `TITLE:` are one label.
+    const key = label.toLowerCase();
     if (current === null) {
-      switch (label) {
-        case '标题': header.title = value; break;
-        case '问题': header.question = value; break;
-        case '读者': header.audience = wikiPlanSplitList(value); break;
-        case '含': header.scopeIn = wikiPlanSplitList(value); break;
-        case '不含': header.scopeOut = wikiPlanSplitList(value); break;
-        case '篇幅': header.length = value; break;
-        case '文档': header.keyDocs = wikiPlanPaths(value); break;
-        case '代码': header.keyCode = wikiPlanPaths(value); break;
-        case '契约': header.keyContracts = wikiPlanPaths(value); break;
-        case '主题': header.topics = wikiPlanSplitNames(value); break;
-        case '项目': header.projects = wikiPlanProjectsOf(value); break;
+      switch (key) {
+        case 'title': header.title = value; break;
+        case 'question': header.question = value; break;
+        case 'audience': header.audience = wikiPlanSplitList(value); break;
+        case 'includes': header.scopeIn = wikiPlanSplitList(value); break;
+        case 'excludes': header.scopeOut = wikiPlanSplitList(value); break;
+        case 'length': header.length = value; break;
+        case 'docs': header.keyDocs = wikiPlanPaths(value); break;
+        case 'code': header.keyCode = wikiPlanPaths(value); break;
+        case 'contracts': header.keyContracts = wikiPlanPaths(value); break;
+        case 'topics': header.topics = wikiPlanSplitNames(value); break;
+        case 'projects': header.projects = wikiPlanProjectsOf(value); break;
         default: stray.push(body);
       }
       continue;
     }
-    switch (label) {
-      case '讲什么':
+    switch (key) {
       case 'covers':
         current.covers = value;
         lastCovers = true;
         continue;
-      case '文档':
+      case 'docs':
         current.docs.push(...wikiPlanDocSourcesOf(value));
         break;
-      case '代码':
+      case 'code':
         current.code.push(...wikiPlanCodeSourcesOf(value));
         break;
-      case '契约':
+      case 'contracts':
         current.contracts.push(...wikiPlanPaths(value));
         break;
-      case '会话':
-      case '会话与条目':
+      case 'sessions':
         current.sessions = wikiPlanSessionsOf(value);
         break;
       case '':
@@ -599,7 +608,7 @@ const PATH_EXPANDS_FILES = /\.[a-z]{1,5}\b|\/$|\*/u;
  */
 export function wikiPlanPaths(input: string): string[] {
   let text = goTrimSpace(input);
-  if (text === '' || text === '无' || text === '（无）' || text === '—') return [];
+  if (text === '' || wikiPlanNone(text) || text === '—') return [];
   text = text.replace(PATH_EXPAND, (whole: string, dir: string, inner: string) => {
     const names = wikiPlanSplitNames(inner);
     if (names.length === 0 || !PATH_EXPANDS_FILES.test(inner)) return whole;
@@ -638,7 +647,7 @@ export function wikiPlanDocSourcesOf(text: string): WikiPlanDocSource[] {
   const out: WikiPlanDocSource[] = [];
   for (const section of wikiPlanSectionNames(sections)) {
     const s = wikiPlanUnwrap(section);
-    out.push(WHOLE_DOC.has(s) ? { path: paths[0], section: null } : { path: paths[0], section: s });
+    out.push(WHOLE_DOC.has(s.toLowerCase()) ? { path: paths[0], section: null } : { path: paths[0], section: s });
   }
   return out;
 }
@@ -674,8 +683,8 @@ export function wikiPlanSectionNames(text: string): string[] {
   return out;
 }
 
-/** The names a model gives the whole of a document after `§`: no section. */
-const WHOLE_DOC = new Set(['正文', '全文', '全篇', '整篇']);
+/** The names a model gives the whole of a document after `§`, in any case: no section. */
+const WHOLE_DOC = new Set(['whole', 'whole document', 'entire document', 'full text']);
 
 /**
  * Parentheses a model put around a whole name taken off, and one left unmatched at either end — never the
@@ -775,48 +784,49 @@ export function wikiPlanProjectsOf(text: string): string[] {
   return out.length > 0 ? out : wikiPlanSplitNames(text);
 }
 
-/** `项目「…」；时间 A 至 B；关键词 …；锚点 …；kind …；主题 …；要找：…`. */
+/** Where a session condition's `look for:` starts: what to look for, in any case. */
+const LOOK_FOR = /look for[:：]/iu;
+
+/** `projects 「…」; dates A to B; keywords …; anchors …; kind …; topics …; look for: …`, each word in any case. */
 export function wikiPlanSessionsOf(text: string): WikiPlanSessionsDraft {
   const out: WikiPlanSessionsDraft = {
     projects: [], keywords: [], anchorPaths: [], entryKinds: [], topics: [], since: '', until: '', evidence: '', stray: [],
   };
   let body = text;
-  for (const mark of ['要找：', '要找:']) {
-    const [before, after, ok] = goCut(body, mark);
-    if (ok) {
-      body = before;
-      out.evidence = goTrimSpace(after);
-      break;
-    }
+  const mark = LOOK_FOR.exec(body);
+  if (mark) {
+    out.evidence = goTrimSpace(body.slice(mark.index + mark[0].length));
+    body = body.slice(0, mark.index);
   }
   const kinds = (rest: string): string[] => goFieldsFunc(rest, (r) => r === '/' || r === '、' || r === ',' || r === '，' || r === ' ');
   for (const raw of goFieldsFunc(body, (r) => r === '；' || r === ';')) {
     const part = goTrimSpace(raw);
     if (part === '') continue;
-    if (part.startsWith('项目')) {
-      out.projects = wikiPlanProjectsOf(goTrimSpace(part.slice('项目'.length)));
-    } else if (part.startsWith('时间')) {
+    const lower = part.toLowerCase();
+    if (lower.startsWith('projects')) {
+      out.projects = wikiPlanProjectsOf(goTrimSpace(part.slice('projects'.length)));
+    } else if (lower.startsWith('dates')) {
       const dates: string[] = [...(part.match(DATES) ?? [])];
       if (dates.length > 0) out.since = dates[0];
       if (dates.length > 1) out.until = dates[1];
       if (dates.length === 0) out.stray.push(part);
-    } else if (part.startsWith('关键词')) {
-      out.keywords = wikiPlanSplitNames(part.slice('关键词'.length));
-    } else if (part.startsWith('锚点路径')) {
-      out.anchorPaths = wikiPlanSplitNames(part.slice('锚点路径'.length));
-    } else if (part.startsWith('锚点')) {
-      out.anchorPaths = wikiPlanSplitNames(part.slice('锚点'.length));
-    } else if (part.toLowerCase().startsWith('kind')) {
+    } else if (lower.startsWith('keywords')) {
+      out.keywords = wikiPlanSplitNames(part.slice('keywords'.length));
+    } else if (lower.startsWith('anchor paths')) {
+      out.anchorPaths = wikiPlanSplitNames(part.slice('anchor paths'.length));
+    } else if (lower.startsWith('anchors')) {
+      out.anchorPaths = wikiPlanSplitNames(part.slice('anchors'.length));
+    } else if (lower.startsWith('kind')) {
       for (const k of kinds(part.slice(4))) {
         const kind = goTrimSpace(k);
         if (kind !== '') out.entryKinds.push(kind);
       }
-    } else if (part.startsWith('条目 kind')) {
-      out.entryKinds.push(...kinds(part.slice('条目 kind'.length)));
-    } else if (part.startsWith('现有主题')) {
-      out.topics = wikiPlanSplitNames(part.slice('现有主题'.length));
-    } else if (part.startsWith('主题')) {
-      out.topics = wikiPlanSplitNames(part.slice('主题'.length));
+    } else if (lower.startsWith('entry kind')) {
+      out.entryKinds.push(...kinds(part.slice('entry kind'.length)));
+    } else if (lower.startsWith('existing topics')) {
+      out.topics = wikiPlanSplitNames(part.slice('existing topics'.length));
+    } else if (lower.startsWith('topics')) {
+      out.topics = wikiPlanSplitNames(part.slice('topics'.length));
     } else {
       out.stray.push(part);
     }
@@ -826,14 +836,15 @@ export function wikiPlanSessionsOf(text: string): WikiPlanSessionsDraft {
 
 // ── Numbers of documents in the text ────────────────────────────────────────────────────────────────
 
-/** A pointer to another document written in words: `→ 3.2`, `见 3.2、3.3`, `see 3.2`. */
-const CROSS_REF = new RegExp(`(→|->|参见|见|[Ss]ee)${S}*((?:\\d+\\.\\d+)(?:${S}*(?:[、,，]|和|及|与|and)${S}*\\d+\\.\\d+)*)`, 'gu');
+/**
+ * A pointer to another document written in words: `→ 3.2`, `see 3.2, 3.3`, `see also 3.2`, and the `见 3.2、3.3` of the
+ * plan versions written in Chinese, which a revision still renumbers.
+ */
+const CROSS_REF = /(→|->|参见|见|[Ss]ee(?:[\t\n\f\r ]+also)?)[\t\n\f\r ]*((?:\d+\.\d+)(?:[\t\n\f\r ]*(?:[、,，]|和|及|与|and)[\t\n\f\r ]*\d+\.\d+)*)/gu;
 
-/** The `（见 3.2）` a scope-out item ends with. */
-export const WIKI_PLAN_SCOPE_OUT_REF = new RegExp(
-  `${S}*[（(]${S}*(?:见|参见|→|see)${S}*((?:\\d+\\.\\d+)(?:${S}*(?:[、,，]|和|及|与)${S}*\\d+\\.\\d+)*)${S}*[）)]${S}*$`,
-  'u',
-);
+/** The ` (see 3.2)` a scope-out item ends with — or the `（见 3.2）` of one written in Chinese. */
+export const WIKI_PLAN_SCOPE_OUT_REF =
+  /[\t\n\f\r ]*[（(][\t\n\f\r ]*(?:见|参见|→|[Ss]ee(?:[\t\n\f\r ]+also)?)[\t\n\f\r ]*((?:\d+\.\d+)(?:[\t\n\f\r ]*(?:[、,，]|和|及|与|and)[\t\n\f\r ]*\d+\.\d+)*)[\t\n\f\r ]*[）)][\t\n\f\r ]*$/u;
 
 /**
  * Every document number in text rewritten through rename (its number in the catalogue the text was written
@@ -859,7 +870,7 @@ export function wikiPlanRenumber(text: string, rename: (id: string) => string | 
 
 const NUMBERS = /\d[\d,]*/gu;
 
-/** `1200–2000 字`, `约 1500 字` or `2,000`: the range a document is written to. */
+/** `1200–2000 characters`, `about 1500 characters` or `2,000`: the range a document is written to. */
 export function wikiPlanRange(text: string): { min: number; max: number; ok: boolean } {
   const nums: number[] = [];
   for (const m of (text.match(NUMBERS) ?? []).slice(0, 2)) {
@@ -880,10 +891,10 @@ export function wikiPlanRange(text: string): { min: number; max: number; ok: boo
 export function wikiPlanDocLines(doc: WikiPlanDoc, withHeader: boolean, drop: ReadonlySet<number> | null): string {
   let b = '';
   if (withHeader) {
-    b += `标题：${doc.title}\n问题：${doc.question}\n读者：${doc.audience.join('；')}\n含：${doc.scopeIn.join('；')}\n`;
+    b += `Title: ${doc.title}\nQuestion: ${doc.question}\nAudience: ${doc.audience.join('; ')}\nIncludes: ${doc.scopeIn.join('; ')}\n`;
     const outs = doc.scopeOut.map((out) => out.text);
-    if (outs.length > 0) b += `不含：${outs.join('；')}\n`;
-    b += `篇幅：${doc.length.min}–${doc.length.max} 字\n`;
+    if (outs.length > 0) b += `Excludes: ${outs.join('; ')}\n`;
+    b += `Length: ${doc.length.min}–${doc.length.max} characters\n`;
   }
   let n = 0;
   doc.sections.forEach((section, i) => {
@@ -896,27 +907,27 @@ export function wikiPlanDocLines(doc: WikiPlanDoc, withHeader: boolean, drop: Re
 
 /** One section in the line format. */
 export function wikiPlanSectionLines(n: number, s: WikiPlanSection): string {
-  let b = `\n### ${n}. ${s.title} | ${s.kind} | ${s.length}\n讲什么：${s.covers}\n`;
+  let b = `\n### ${n}. ${s.title} | ${s.kind} | ${s.length}\nCovers: ${s.covers}\n`;
   for (const d of s.sources.docs) {
-    b += d.section !== null && d.section !== '' ? `- 文档：${d.path} § ${d.section}\n` : `- 文档：${d.path}\n`;
+    b += d.section !== null && d.section !== '' ? `- Docs: ${d.path} § ${d.section}\n` : `- Docs: ${d.path}\n`;
   }
   for (const c of s.sources.code) {
-    b += c.symbols.length > 0 ? `- 代码：${c.path}: ${c.symbols.join(', ')}\n` : `- 代码：${c.path}\n`;
+    b += c.symbols.length > 0 ? `- Code: ${c.path}: ${c.symbols.join(', ')}\n` : `- Code: ${c.path}\n`;
   }
-  for (const c of s.sources.contracts) b += `- 契约：${c.path}\n`;
-  if (s.sources.sessions) b += `- 会话：${wikiPlanSessionsLine(s.sources.sessions)}\n`;
+  for (const c of s.sources.contracts) b += `- Contracts: ${c.path}\n`;
+  if (s.sources.sessions) b += `- Sessions: ${wikiPlanSessionsLine(s.sources.sessions)}\n`;
   return b;
 }
 
 export function wikiPlanSessionsLine(s: WikiPlanSessions): string {
   const parts: string[] = [];
-  if (s.projects.length > 0) parts.push(`项目${s.projects.map((p) => `「${p}」`).join('')}`);
-  if (s.since !== null || s.until !== null) parts.push(`时间 ${s.since ?? ''} 至 ${s.until ?? '今'}`);
-  if (s.keywords.length > 0) parts.push(`关键词 ${s.keywords.join('、')}`);
-  if (s.anchorPaths.length > 0) parts.push(`锚点 ${s.anchorPaths.join('、')}`);
+  if (s.projects.length > 0) parts.push(`projects ${s.projects.map((p) => `「${p}」`).join('')}`);
+  if (s.since !== null || s.until !== null) parts.push(`dates ${s.since ?? ''} to ${s.until ?? 'now'}`);
+  if (s.keywords.length > 0) parts.push(`keywords ${s.keywords.join(', ')}`);
+  if (s.anchorPaths.length > 0) parts.push(`anchors ${s.anchorPaths.join(', ')}`);
   if (s.entryKinds.length > 0) parts.push(`kind ${s.entryKinds.join('/')}`);
-  if (s.topics.length > 0) parts.push(`主题 ${s.topics.join('、')}`);
-  let line = parts.join('；');
-  if (s.evidence !== '') line += `；要找：${s.evidence}`;
+  if (s.topics.length > 0) parts.push(`topics ${s.topics.join(', ')}`);
+  let line = parts.join('; ');
+  if (s.evidence !== '') line += `; look for: ${s.evidence}`;
   return line;
 }

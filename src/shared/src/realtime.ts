@@ -246,6 +246,19 @@ export interface ControlSessionSummary {
   /** When enginePhase entered the phase it holds; null whenever enginePhase is. A keepalive that
    *  re-announces the same phase does not move it. Absent from an older control plane. */
   enginePhaseSince?: string | null;
+  /** The rolling recap and when it was written (`Session.recapText`/`recapAt`), the line the list
+   *  prefers to `lastAssistantText`. Sent as null on a session that has none — a value, so a client
+   *  folding this summary into a row clears the recap a manual refresh dropped; only an absent key,
+   *  from an older control plane, means "unchanged". */
+  recapText?: string | null;
+  recapAt?: string | null;
+  /** The row's two reply previews, clipped exactly as `GET /sessions` clips them. They are part of
+   *  the summary because an already-open list learns a new reply from this event alone: without
+   *  them a client that folds the summary in would leave the row previewing the previous turn.
+   *  Null is a value here too — a preview cleared on the server has to clear on the row — and only
+   *  an absent key means an older control plane. */
+  lastAssistantText?: string | null;
+  lastUserText?: string | null;
 }
 
 /** `data` for `session.ended`. */

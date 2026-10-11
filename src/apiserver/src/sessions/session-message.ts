@@ -173,7 +173,7 @@ export function sessionMessageBlock(sender: Sender, request?: RequestForBlock | 
   ];
   return [
     `<${SESSION_MESSAGE_BLOCK_TAG} ${attributes.join(' ')}>`,
-    '这条消息来自另一个 Orbit 会话，不是账号 owner 本人。',
+    'This message comes from another Orbit session, not from the account owner.',
     ...(request ? requestLines(request) : []),
     `</${SESSION_MESSAGE_BLOCK_TAG}>`,
   ].join('\n');
@@ -182,16 +182,22 @@ export function sessionMessageBlock(sender: Sender, request?: RequestForBlock | 
 function requestLines(request: RequestForBlock): string[] {
   const requestId = uuidToBase62(request.id);
   if (request.state !== 'OPEN') {
-    return [`对方曾要求回复，但这条请求已经以 ${request.state} 结案，不必再调用 session_reply。`];
+    return [
+      `The sender asked for a reply, but this request is already closed as ${request.state}; `
+        + 'there is no need to call session_reply.',
+    ];
   }
   const lines = [
-    `对方在等你回复：处理完后调用 session_reply(requestId="${requestId}") 回答；做不到也用它说明原因。`,
-    '如果你空闲下来时还没回复，平台会以 NO_REPLY 结案，并把你最后一段输出转给对方。',
+    `The sender is waiting for your reply: when you have dealt with it, answer with `
+      + `session_reply(requestId="${requestId}"); if you cannot do it, use it to say why.`,
+    'If you go idle without having replied, Orbit closes the request as NO_REPLY and passes your last output '
+      + 'on to the sender.',
   ];
   if (request.options) {
-    lines.push('对方给了几个选项：回复时用 option 传你选的下标，也可以同时用 message 补充说明。');
+    lines.push('The sender offered options: when you reply, pass the index you choose as option; you can add '
+      + 'a note with message as well.');
     request.options.forEach((option, index) => {
-      lines.push(`${index}. ${oneLine(option.label)}${option.description ? `：${oneLine(option.description)}` : ''}`);
+      lines.push(`${index}. ${oneLine(option.label)}${option.description ? `: ${oneLine(option.description)}` : ''}`);
     });
   }
   return lines;

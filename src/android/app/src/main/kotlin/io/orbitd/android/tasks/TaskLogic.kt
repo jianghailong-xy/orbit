@@ -950,3 +950,38 @@ fun mentionedWorkspaceIds(body: String, workspaces: List<JsonObject>): List<Stri
     val pattern = Regex("(?:^|\\s)@" + Regex.escape(name) + "(?![\\w])", RegexOption.IGNORE_CASE)
     workspace.text("id")?.takeIf { pattern.containsMatchIn(body) }
 }
+
+/**
+ * One write of a task's run pins (docs/provider-engine-contract.md §1.2, §3.5): [engine] and [provider] are each left as they are
+ * (null), taken back (`Pin(null)`) or set, three-state on the wire; the model pin goes with every move, since a model id means
+ * something only inside one engine and provider's space.
+ */
+data class TaskPin(val engine: Pin? = null, val provider: Pin? = null) {
+    data class Pin(val value: String?)
+    fun request(): JsonObject = buildJsonObject {
+        engine?.let { put("engine", it.value?.let(::JsonPrimitive) ?: JsonNull) }
+        provider?.let { put("provider", it.value?.let(::JsonPrimitive) ?: JsonNull) }
+        put("model", JsonNull)
+    }
+}
+
+/** What a press on a task's Engine or Provider row writes (board 6; web TaskDetailPanel's pinEngine / pinProvider), or null when it
+ * changes nothing. */
+object TaskPins {
+    /** Pin [engine], or take every pin back (null): the task then runs on what its assignee last ran. A pinned credential the new
+     * engine does not run ([providerRuns] are the engines the pinned one runs on) gives way to that engine's default. */
+    fun engine(engine: String?, pinnedEngine: String?, pinnedProvider: String?, providerRuns: List<String>): TaskPin? = when {
+        engine == pinnedEngine -> null
+        engine == null -> TaskPin(TaskPin.Pin(null), TaskPin.Pin(null))
+        pinnedProvider != null && engine !in providerRuns -> TaskPin(TaskPin.Pin(engine), TaskPin.Pin(null))
+        else -> TaskPin(TaskPin.Pin(engine))
+    }
+
+    /** Pin [slug] with the engine it runs on here, [engine] — a task names the pair — or take the credential pin back (null), which
+     * leaves the engine's default: its own sign-in on the runner, OpenCode's own configuration, the first DeepSeek key. */
+    fun provider(slug: String?, pinnedProvider: String?, engine: String): TaskPin? = when {
+        slug == pinnedProvider -> null
+        slug == null -> TaskPin(provider = TaskPin.Pin(null))
+        else -> TaskPin(TaskPin.Pin(engine), TaskPin.Pin(slug))
+    }
+}

@@ -359,8 +359,13 @@ export const createInteractiveSession = (body: {
   prompt: string;
   assignedRunnerId?: string;
   workspaceId?: string;
-  /** Provider picked on the New Session screen: a built-in engine slug or one of the caller's
-   *  configured providers. Omitted inherits the workspace's, which is the historical behaviour. */
+  /** The engine picked on the New Session screen — the CLI the session runs on for good: `claude`,
+   *  `codex`, `kimi`, `antigravity`, `opencode` or `dsh` (docs/provider-engine-contract.md §6.1). */
+  engine?: string;
+  /** The credential picked for it: the engine's own sign-in (its name), `opencode` for OpenCode's
+   *  own configuration, one of the caller's account pools or keys. It has to be one the engine runs
+   *  (PROVIDER_ENGINE_INCOMPATIBLE otherwise). Omitting both inherits the workspace's last pair, which
+   *  is the historical behaviour. */
   provider?: string;
   model?: string;
   permissionMode?: string;
@@ -1535,6 +1540,9 @@ export interface SessionChangedFile {
  * existing row fields remain open. */
 export type SessionListItem = Record<string, any> & {
   id: string;
+  /** The engine the session runs on, recorded at its creation and never changed (null only when an
+   *  older replica wrote it and nobody can tell). `provider` is the credential it spends. */
+  engine?: string | null;
   /** The folder of its workspace it is filed in; null (or absent, from an older server) for none. */
   folderId?: string | null;
   runState?: string | null;
@@ -1543,6 +1551,11 @@ export type SessionListItem = Record<string, any> & {
   sessionState?: string | null;
   runStatus?: string | null;
   status?: string | null;
+  /** The rolling recap and when the server wrote it (0418), the list's preferred line: shown in
+   *  place of lastAssistantText while it is set. Null (or absent, from an older server) on a
+   *  session no pass has recapped yet. */
+  recapText?: string | null;
+  recapAt?: string | null;
 };
 
 /** The repair conversation attached to a merge recovery on its parent session. */
@@ -1615,12 +1628,19 @@ export interface SessionDetail {
   prompt?: string | null;
   createdAt?: string;
   lastTurnAt?: string | null;
+  /** The rolling recap and when the server wrote it (0418) — the same line the list row carries.
+   *  Null on a session no pass has recapped yet. */
+  recapText?: string | null;
+  recapAt?: string | null;
   startedAt?: string | null;
   finishedAt?: string | null;
   error?: string | null;
   endReason?: string | null;
   source?: string | null;
   assignedRunnerId: string | null;
+  /** The engine the session runs on, fixed for its life; `provider` is the credential it spends,
+   *  which can move to another one the engine runs (docs/provider-engine-contract.md §6.1). */
+  engine?: string | null;
   provider?: string | null;
   /** The routing decision this task run was planned with; null on any other session. */
   route?: TaskRunRoute | null;

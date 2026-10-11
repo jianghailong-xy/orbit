@@ -38,7 +38,10 @@ class ProjectCopyParityTest {
 
     @Test fun projectPageWords() = assertIn(ProjectPage, swift("${kit}ProjectPage.swift", "${kit}ProjectPageSections.swift", "${views}ProjectsView.swift"))
     @Test fun startWords() = assertIn(StartProjectCopy, swift("${kit}StartProject.swift", "${kit}ProjectRunSettings.swift", "${kit}CriteriaDecision.swift"))
-    @Test fun runSettingsWords() = assertIn(RunSettings, swift("${kit}ProjectRunSettings.swift", "${kit}StartProject.swift"))
+    /** The main branch's own words are new on every client at once: MainBranchCopyTest holds them to the web's projectStart.ts,
+     * whose words the Swift parity tests hold OrbitKit's to. */
+    @Test fun runSettingsWords() = assertIn(RunSettings, swift("${kit}ProjectRunSettings.swift", "${kit}StartProject.swift"),
+        composed = setOf("defaultMainBranch", "mainBranch", "mainBranchHint", "lastChosen", "typeABranch"))
     @Test fun markdownWords() = assertIn(ProjectMarkdown, swift("${kit}ShareMarkdown.swift"))
     @Test fun crossingsWords() = assertIn(ProjectCrossings, swift("${kit}ProjectCrossings.swift"))
     @Test fun doneWords() = assertIn(ProjectDone, swift("${kit}ProjectDone.swift"))

@@ -539,13 +539,13 @@ test('(1) an Automatic project hands the revision to its coordinator to decide, 
       const content = message!.content ?? '';
       assert.match(content, /held 要交证据的活/);
       assert.match(content, new RegExp(uuidToBase62(w.taskId)));
-      assert.match(content, /第 1 版/);
-      assert.match(content, /evidenceRevision 传 "1"/);
-      assert.ok(content.includes(`「${STANDARD}」`), 'the quoted criterion is not in it');
+      assert.match(content, /revision 1/);
+      assert.match(content, /evidenceRevision: "1"/);
+      assert.ok(content.includes(`“${STANDARD}”`), 'the quoted criterion is not in it');
       assert.ok(content.includes(w.criterionKey), 'the criterion is not named by its key');
       for (const word of [
         'task_evidence_list', 'task_evidence_decide', 'CONFIRM', 'SEND_BACK', 'note',
-        'exceptionEscalationSeconds', `${ESCALATION_SECONDS} 秒`, 'ask_owner',
+        'exceptionEscalationSeconds', `${ESCALATION_SECONDS} seconds`, 'ask_owner',
       ]) {
         assert.ok(content.includes(word), `the message does not say ${word}`);
       }
