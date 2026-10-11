@@ -182,6 +182,9 @@ class TranscriptDeviceTest {
         compose.onNodeWithText("Startup · model_catalog · codex_model_catalog_auth:", substring = true).assertExists()
         list.performScrollToNode(hasText("exceeded retry limit, last status: 429 Too Many Requests", substring = true))
         compose.onNodeWithText("Provider unavailable").assertIsDisplayed()
+        // The notice is a row of its own, brought into view as the others are: since A07c's auto-retry card, the 429 is
+        // tall enough that the row beside it is not composed at this size.
+        list.performScrollToNode(hasText("Switched to Wikova · Pro", substring = true))
         compose.onNodeWithText("Switched to Wikova · Pro", substring = true).assertExists()
         capture("a06c-engine-rows")
         // A workflow's progress and an agent row that opens to what it did (baseline, A06-6).
